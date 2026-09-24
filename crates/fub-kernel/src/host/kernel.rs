@@ -146,6 +146,18 @@ impl VaultWrite for KernelHost<'_> {
             .map_err(PluginError::from)
     }
 
+    fn write_document_bytes(
+        &mut self,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
+        let id = fenced_doc_id(id)?;
+        self.ws
+            .write_document_bytes(&id, bytes, expected)
+            .map_err(PluginError::from)
+    }
+
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
         let id = fenced_doc_id(id)?;
         self.ws.apply_edit(&id, request).map_err(PluginError::from)

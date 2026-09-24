@@ -61,6 +61,11 @@ fn no_write_of_the_double_exits_the_fence() {
             "write_document",
             name,
         );
+        must_refuse(
+            host.write_document_bytes(&id, &[0], None),
+            "write_document_bytes",
+            name,
+        );
         must_refuse(host.create_document(&id, "text"), "create_document", name);
         must_refuse(
             host.rename_document(&DocId::new("Note.md"), &id),

@@ -37,7 +37,7 @@ import { contrast } from "./contrast";
 import { REQUIRED_THEME_ROLES, THEME_CONTRAST_PAIRS } from "./contrast-fixture";
 import { HOOKS } from "./serie/anatomia";
 
-export type Layer = "caratteri" | "foglio" | "pelle" | "preferenze";
+export type Layer = "caratteri" | "foglio" | "pelle" | "preferenze" | "snippets";
 
 /** I soli token che le preferenze della persona possono ridichiarare. */
 export const PREFERENCE_TOKENS = [
@@ -86,7 +86,7 @@ export type ThemeMountResult =
 export type ThemeTroubleReporter = (trouble: ThemeTrouble) => void;
 
 /** L'ordine dichiarato della cascata. Le preferenze vengono dopo ogni pelle. */
-const ORDER: readonly Layer[] = ["caratteri", "foglio", "pelle", "preferenze"];
+const ORDER: readonly Layer[] = ["caratteri", "foglio", "pelle", "preferenze", "snippets"];
 const PREFERENCE_ALLOWLIST = new Set<string>(PREFERENCE_TOKENS);
 
 /** Sostituisce uno strato e lo inserisce nel punto dichiarato della cascata. */
@@ -359,6 +359,11 @@ export function mountPreferences(tokens: Readonly<Record<string, string>>): void
     .filter((token) => Object.prototype.hasOwnProperty.call(tokens, token))
     .map((token) => `  --${token}: ${tokens[token]};`);
   replace([":root {", ...declarations, "}", ""].join("\n"), "preferenze");
+}
+
+/** Only the user-CSS owner calls this after validating every enabled snippet. */
+export function mountUserSnippets(css: string): void {
+  replace(css, "snippets");
 }
 
 /** Quanti elementi di uno strato sono montati. Nel banco dev'essere sempre 1

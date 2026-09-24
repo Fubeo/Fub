@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fub.app/schema/canvas-v1.json",
+  "title": "JSON Canvas 1.0 (.canvas) as read by Fub",
+  "description": "Structural subset of https://jsoncanvas.org/spec/1.0/ that Fub interprets. Everything else (extra object members at any level) is preserved verbatim and re-emitted on save.",
+  "type": "object",
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "x", "y", "width", "height"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "type": { "enum": ["text", "file", "link", "group"] },
+          "x": { "type": "integer" },
+          "y": { "type": "integer" },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "color": { "$ref": "#/$defs/canvasColor" },
+          "text": { "type": "string", "maxLength": 1048576 },
+          "file": { "type": "string", "minLength": 1, "maxLength": 8192 },
+          "subpath": { "type": "string", "pattern": "^#", "maxLength": 1024 },
+          "url": { "type": "string", "minLength": 1, "maxLength": 8192 },
+          "label": { "type": "string", "maxLength": 65536 },
+          "background": { "type": "string", "maxLength": 8192 },
+          "backgroundStyle": { "enum": ["cover", "ratio", "repeat"] }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "required": ["id", "fromNode", "toNode"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "fromNode": { "$ref": "#/$defs/id" },
+          "fromSide": { "$ref": "#/$defs/side" },
+          "fromEnd": { "$ref": "#/$defs/end" },
+          "toNode": { "$ref": "#/$defs/id" },
+          "toSide": { "$ref": "#/$defs/side" },
+          "toEnd": { "$ref": "#/$defs/end" },
+          "color": { "$ref": "#/$defs/canvasColor" },
+          "label": { "type": "string", "maxLength": 65536 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\u0000-\u001f\u007f-\u009f]+$"
+    },
+    "canvasColor": {
+      "type": "string",
+      "anyOf": [
+        { "enum": ["1", "2", "3", "4", "5", "6"] },
+        { "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" }
+      ]
+    },
+    "side": { "enum": ["top", "right", "bottom", "left"] },
+    "end": { "enum": ["none", "arrow"] }
+  }
+}

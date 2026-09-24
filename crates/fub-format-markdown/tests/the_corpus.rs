@@ -308,8 +308,8 @@ fn the_corpus_produces_every_model_variant() {
 ///
 /// Non è una lacuna del corpus: è dove passa il confine del §3.1
 /// ([0017](../../../docs/decisions/0182-provider-e-porte-generiche.md)).
-/// Tre di questi kind li innesta una `SyntaxRule` registrata — `MathRule`,
-/// `DiagramRule`, `HighlightRule` in `fub-features/src/blocks.rs` — e un
+/// Quattro di questi kind li innesta una `SyntaxRule` registrata — `MathRule`,
+/// `DiagramRule`, `HighlightRule`, `CommentRule` in `fub-features/src/blocks.rs` — e un
 /// provider che li producesse da sé rimetterebbe in piedi le due categorie di
 /// estensioni che quella decisione ha rifiutato. Il loro corpus sta con le
 /// regole, in `fub-features/tests/custom_blocks_e2e.rs`.
@@ -321,7 +321,7 @@ fn the_corpus_produces_every_model_variant() {
 /// toglierlo perché «non serve» vorrebbe dire farlo diventare un `panic` o un
 /// blocco perso.
 fn kind_not_of_the_provider() -> BTreeSet<String> {
-    ["math", "diagram", "highlight", "block"]
+    ["math", "diagram", "highlight", "comment", "block"]
         .iter()
         .map(|s| s.to_string())
         .collect()

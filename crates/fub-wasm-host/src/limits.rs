@@ -122,6 +122,77 @@ static ENGINE: OnceLock<Engine> = OnceLock::new();
 /// e in più i componenti si spartiscono lo stato del compilatore invece di
 /// rifabbricarlo a ogni `.wasm`.
 /// rifabbricarlo a ogni `.wasm`.
+/// Come l'engine compila: nativo Cranelift, o Pulley interprete portatile.
+///
+/// Pulley è l'interprete portabile di wasmtime: stesso formato `.wasm`, nessuna
+/// JIT nativa, quindi gira dove la JIT è vietata (iOS) e su architetture senza
+/// backend Cranelift. Il prezzo è la velocità (interprete contro codice
+/// nativo) e va pagato solo dove serve: la scelta vive in una variabile
+/// d'ambiente letta una volta sola, come il resto di questa configurazione.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum EngineBackend {
+    /// Cranelift nativo: il default su desktop, la via veloce.
+    #[default]
+    Native,
+    /// Pulley interprete: portabile dove la JIT non arriva.
+    Pulley,
+}
+
+impl EngineBackend {
+    /// Il backend configurato: variabile `FUB_WASM_BACKEND` più default di
+    /// piattaforma. Non tocca l'engine e non lo crea: è ciò che la UI deve
+    /// dichiarare come `configured` finché l'engine non esiste.
+    ///
+    /// Su iOS il configurato è sempre Pulley: la JIT nativa è vietata e nessun
+    /// override silenzioso può abilitare Cranelift. Altrove `pulley` sceglie
+    /// l'interprete, ogni altro valore (o l'assenza) sceglie il nativo.
+    fn configured() -> Self {
+        #[cfg(target_os = "ios")]
+        {
+            EngineBackend::Pulley
+        }
+        #[cfg(not(target_os = "ios"))]
+        {
+            match std::env::var("FUB_WASM_BACKEND")
+                .map(|v| v.to_ascii_lowercase())
+                .as_deref()
+            {
+                Ok("pulley") => EngineBackend::Pulley,
+                _ => EngineBackend::Native,
+            }
+        }
+    }
+
+    /// Nome del backend configurato, senza creare l'engine. È ciò che la UI
+    /// mostra come `configured:` quando l'engine non è ancora nato.
+    pub(crate) fn configured_name() -> &'static str {
+        match Self::configured() {
+            EngineBackend::Native => "native",
+            EngineBackend::Pulley => "pulley",
+        }
+    }
+
+    /// Il backend effettivamente usato dall'engine di processo, se l'engine
+    /// esiste già. Non crea l'engine: un getter che lo creasse spaccerebbe
+    /// l'env letto per engine attivo. `None` = engine non ancora nato, la UI
+    /// dichiara solo il configurato.
+    pub(crate) fn active() -> Option<Self> {
+        ACTIVE_BACKEND.get().copied()
+    }
+
+    /// Nome del backend attivo, se l'engine esiste già. `None` = non ancora
+    /// nato: mostrare il configurato, non inventare un attivo.
+    pub(crate) fn active_name() -> Option<&'static str> {
+        Self::active().map(|backend| match backend {
+            EngineBackend::Native => "native",
+            EngineBackend::Pulley => "pulley",
+        })
+    }
+}
+
+static ACTIVE_BACKEND: OnceLock<EngineBackend> = OnceLock::new();
+
+/// L'`Engine` con cui si compila ogni componente.
 pub(crate) fn engine() -> Engine {
     ENGINE
         .get_or_init(|| {
@@ -133,6 +204,19 @@ pub(crate) fn engine() -> Engine {
             // nessun altro modo di farsi sentire dentro un `loop {}`.
             config.epoch_interruption(true);
 
+            // Pulley dove la JIT nativa è vietata o assente (iOS: sempre, senza
+            // override). Si sceglie con `FUB_WASM_BACKEND=pulley` e si prova su
+            // Linux con lo stesso `.wasm`, prima di parlarne su iOS. Il target
+            // `pulley64` è interprete puro: `Engine::new` fallisce qui — una
+            // volta sola, con un messaggio che nomina il backend — invece di
+            // far fallire ogni caricamento con un componente innocente accanto.
+            let backend = EngineBackend::configured();
+            if backend == EngineBackend::Pulley {
+                if let Err(error) = config.target("pulley64") {
+                    panic!("backend Pulley non disponibile in questa build: {error}");
+                }
+            }
+
             // L'`expect` è una scelta, non una scorciatoia. Questa `Config` non
             // ha un solo parametro che venga da fuori: se la combinazione è
             // invalida lo è a ogni avvio del processo e per ogni plugin, non per
@@ -141,14 +225,13 @@ pub(crate) fn engine() -> Engine {
             // un componente che non ha nessuna colpa, e mandare a cercare dalla
             let engine = Engine::new(&config)
                 .expect("WASM engine configuration is set here, not passed in from outside");
+            let _ = ACTIVE_BACKEND.set(backend);
             tick(engine.clone());
             engine
         })
         .clone()
 }
 
-/// Il battito: un thread che dorme e incrementa l'epoca.
-///
 /// Tiene un `Engine` **forte** e non un `EngineWeak`, che sarebbe la forma che
 /// wasmtime suggerisce. La forma debole serve a chi vuole che il thread muoia
 /// con l'ultimo consumatore dell'`Engine`; qui l'`Engine` sta in [`ENGINE`],

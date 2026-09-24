@@ -36,7 +36,7 @@ use fub_abi::edit::Revision;
 use fub_abi::event::{DocChange, DocChanges};
 use fub_abi::model::{
     canonical_anchor, canonical_tag, heading_matches, Anchor, DateFormats, DocId, DocumentModel,
-    Frontmatter, Heading, Link, LinkTarget, Tag,
+    Frontmatter, Heading, Link, LinkTarget, PropertyTypes,
 };
 use fub_abi::query::{
     in_folder, parent_folder, within_folder, Matches, QueryEvaluator, QueryPredicate,
@@ -617,6 +617,21 @@ impl CoreIndex {
         crate::properties::date_formats(declared.as_deref())
     }
 
+    /// La dichiarazione corrente, letta dallo stesso store condiviso delle
+    /// date: nessun valore derivato resta in cache dopo una modifica dei tipi.
+    pub(crate) fn property_types(&self) -> PropertyTypes {
+        let declared = self
+            .settings
+            .read()
+            .ok()
+            .and_then(|s| s.effective(crate::properties::TYPES).ok())
+            .and_then(|(v, _)| match v {
+                SettingValue::Text(s) => Some(s),
+                _ => None,
+            });
+        crate::properties::property_types(declared.as_deref())
+    }
+
     /// kernel sa e [`properties::finish`] no: i formati che il vault dichiara e
     /// dove si legge il frontmatter.
     ///
@@ -641,9 +656,15 @@ impl CoreIndex {
         select: &PropertySelect,
         page: Option<Page>,
     ) -> Paged<DocumentMatch> {
-        properties::finish(matches, sort, select, page, &self.date_formats(), |id| {
-            self.frontmatter(id)
-        })
+        properties::finish_with_types(
+            matches,
+            sort,
+            select,
+            page,
+            &self.date_formats(),
+            &self.property_types(),
+            |id| self.frontmatter(id),
+        )
     }
 
     pub(crate) fn new(
@@ -794,7 +815,7 @@ impl CoreIndex {
             changes.aspects.push(DocChange::Frontmatter);
             changes.properties = keys;
         }
-        let (added, removed) = tag_diff(&self.tags.names_of(&model.id), &model.tags);
+        let (added, removed) = tag_diff(&self.tags.names_of(&model.id), &document_tag_names(model));
         if !added.is_empty() || !removed.is_empty() {
             changes.aspects.push(DocChange::Tags);
             changes.tags_added = added;
@@ -977,6 +998,30 @@ impl CoreIndex {
             LinkTarget::Wiki { heading, block, .. } => {
                 self.position_in(&doc, heading.as_deref(), block.as_deref())
             }
+            LinkTarget::Path(raw) => {
+                // I frammenti URI condividono la ricerca di heading e blocchi
+                // con i wikilink, dopo la decodifica del percent-encoding.
+                let (_, fragment) = fub_abi::rules::path::split_fragment(raw);
+                let point = fragment.strip_prefix('#').unwrap_or("");
+                let decoded;
+                let point = if point.contains('%') {
+                    decoded = fub_abi::rules::path::percent_decode(point);
+                    decoded.as_str()
+                } else {
+                    point
+                };
+                let (head, block) = match point.split_once('^') {
+                    Some((h, b)) => (h, Some(b)),
+                    None => (point, None),
+                };
+                let heading = if head.trim().is_empty() {
+                    None
+                } else {
+                    Some(head.trim())
+                };
+                let block = block.map(|b| b.trim());
+                self.position_in(&doc, heading, block)
+            }
             _ => None,
         };
         Some(ResolvedRef { doc, at })
@@ -1033,6 +1078,29 @@ impl CoreIndex {
         self.graph.linked(doc, direction)
     }
 }
+/// Traduce un glob di path una volta per query. `*` non attraversa cartelle,
+/// `**` sì; nessun pattern può imporre una scansione senza limite di lavoro.
+fn path_glob(glob: &str) -> Result<regex::Regex, PluginError> {
+    if glob.len() > 256 {
+        return Err(PluginError::BadArgs("path glob exceeds 256 bytes".into()));
+    }
+    let mut pattern = String::from("^");
+    let mut chars = glob.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '*' if chars.peek() == Some(&'*') => {
+                chars.next();
+                pattern.push_str(".*");
+            }
+            '*' => pattern.push_str("[^/]*"),
+            '?' => pattern.push_str("[^/]"),
+            other => pattern.push_str(&regex::escape(&other.to_string())),
+        }
+    }
+    pattern.push('$');
+    regex::Regex::new(&pattern)
+        .map_err(|err| PluginError::BadArgs(format!("invalid path glob: {err}").into()))
+}
 
 impl QueryEvaluator for CoreIndex {
     fn universe(&self) -> Result<Matches, PluginError> {
@@ -1043,11 +1111,17 @@ impl QueryEvaluator for CoreIndex {
         match predicate {
             QueryPredicate::Property { filter } => {
                 let formats = self.date_formats();
+                let types = self.property_types();
                 Ok(Matches::of_docs(
                     self.metas
                         .iter()
                         .filter(|(_, metadata)| {
-                            properties::test(&metadata.frontmatter, filter, &formats)
+                            properties::test_with_types(
+                                &metadata.frontmatter,
+                                filter,
+                                &formats,
+                                &types,
+                            )
                         })
                         .map(|(id, _)| id.clone()),
                 ))
@@ -1062,6 +1136,33 @@ impl QueryEvaluator for CoreIndex {
                     .filter(|id| in_folder(id, path, *descendants))
                     .cloned(),
             )),
+            QueryPredicate::Path { glob } => {
+                let pattern = path_glob(glob)?;
+                Ok(Matches::of_docs(
+                    self.metas
+                        .keys()
+                        .filter(|id| pattern.is_match(id.as_str()))
+                        .cloned(),
+                ))
+            }
+            QueryPredicate::File { extension } => {
+                if extension.is_empty()
+                    || extension.len() > 32
+                    || extension.chars().any(|ch| matches!(ch, '/' | '\\' | '.'))
+                {
+                    return Err(PluginError::BadArgs("invalid file extension".into()));
+                }
+                Ok(Matches::of_docs(
+                    self.metas
+                        .keys()
+                        .filter(|id| {
+                            id.as_str()
+                                .rsplit_once('.')
+                                .is_some_and(|(_, suffix)| suffix.eq_ignore_ascii_case(extension))
+                        })
+                        .cloned(),
+                ))
+            }
             QueryPredicate::Linked { doc, direction } => Ok(Matches::of_docs(
                 self.linked(doc, *direction)
                     .into_iter()
@@ -1137,12 +1238,15 @@ impl IndexProvider for CoreIndex {
             QueryRoute::Query(QueryKind::RenderPreview),
             QueryRoute::Query(QueryKind::RenderEmbed),
             QueryRoute::Query(QueryKind::SyntaxForms),
+            QueryRoute::Query(QueryKind::RenderPrint),
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
             // Niente da ricaricare: la memoria di questo indice è il vault, e la
             QueryRoute::Predicate(PredicateKind::Property),
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
+            QueryRoute::Predicate(PredicateKind::Path),
+            QueryRoute::Predicate(PredicateKind::File),
             QueryRoute::Predicate(PredicateKind::Linked),
         ]
     }
@@ -1163,7 +1267,9 @@ impl IndexProvider for CoreIndex {
             self.graph_epoch = self.graph_epoch.wrapping_add(1);
         }
         for doc in docs {
-            self.tags.upsert(&doc.id, &doc.tags);
+            let names = document_tag_names(doc);
+            self.tags
+                .upsert_names(&doc.id, names.iter().map(String::as_str));
             let metadata = DocMeta::from(doc);
             if self.graph_update == GraphUpdate::Incremental {
                 self.graph.upsert(&metadata);
@@ -1277,12 +1383,13 @@ impl IndexProvider for CoreIndex {
                 page,
             } => {
                 let selected = self.expr(&matching)?;
-                let facets = properties::facets(
+                let facets = properties::facets_with_types(
                     selected
                         .ids()
                         .filter_map(|id| self.metas.get(id).map(|m| (id, &m.frontmatter))),
                     &key,
                     &self.date_formats(),
+                    &self.property_types(),
                 );
                 Ok(IndexResult::PropertyValues(Paged::window(facets, page)))
             }
@@ -1404,6 +1511,7 @@ impl IndexProvider for CoreIndex {
             // Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
             IndexQuery::RenderPreview { .. }
             | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::RenderPrint { .. }
             | IndexQuery::SyntaxForms { .. } => Err(PluginError::Internal(
                 "workspace-owned query reached the kernel index".into(),
             )),
@@ -1439,9 +1547,17 @@ fn changed_properties(before: &Frontmatter, after: &Frontmatter) -> Vec<String> 
 
 /// è la grafia che chi si è abbonato ha scritto nella propria automazione.
 /// è la grafia che chi si è abbonato ha scritto nella propria automazione.
-fn tag_diff(before: &[String], after: &[Tag]) -> (Vec<String>, Vec<String>) {
+/// I tag di un documento: quelli nel testo e quelli dichiarati nel
+/// frontmatter (`tags:`), nella regola del contratto.
+fn document_tag_names(doc: &DocumentModel) -> Vec<String> {
+    let mut names: Vec<String> = doc.tags.iter().map(|t| t.name.clone()).collect();
+    names.extend(fub_abi::rules::tag::frontmatter_tags(&doc.frontmatter));
+    names
+}
+
+fn tag_diff(before: &[String], after: &[String]) -> (Vec<String>, Vec<String>) {
     let old: BTreeSet<&String> = before.iter().collect();
-    let new: BTreeSet<&String> = after.iter().map(|t| &t.name).collect();
+    let new: BTreeSet<&String> = after.iter().collect();
     let added: Vec<String> = new.difference(&old).map(|t| (*t).clone()).collect();
     let removed: Vec<String> = old.difference(&new).map(|t| (*t).clone()).collect();
     (added, removed)
@@ -1450,6 +1566,160 @@ fn tag_diff(before: &[String], after: &[Tag]) -> (Vec<String>, Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::Span;
+
+    #[test]
+    fn declared_types_change_property_filter_facets_columns_and_sort_without_reindexing() {
+        use fub_abi::model::PropertyValue;
+        use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral};
+        use fub_abi::traits::{Excerpts, PropertyFilter, PropertyTest};
+
+        let storage = Arc::new(crate::storage::MemStorage::new());
+        let settings = Arc::new(std::sync::RwLock::new(
+            crate::settings::SettingsStore::open(
+                camino::Utf8Path::new("/vault"),
+                storage.clone(),
+                crate::settings::MachineSettings::in_memory(),
+            ),
+        ));
+        settings
+            .write()
+            .unwrap()
+            .declare("fub.core", &crate::properties::properties_settings())
+            .unwrap();
+        let mut index = CoreIndex::new(
+            Arc::new(crate::registry::FormatRegistry::new()),
+            settings.clone(),
+            crate::organization::OrganizationStore::in_memory(),
+            Arc::new(crate::drafts::Drafts::open(
+                camino::Utf8Path::new("/vault"),
+                storage.clone(),
+            )),
+        );
+        for (path, value) in [("a.md", "10"), ("b.md", "2")] {
+            let id = DocId::new(path);
+            let frontmatter = Frontmatter(
+                serde_json::json!({"priority": value})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            );
+            index.metas.insert(
+                id.clone(),
+                DocMeta {
+                    id,
+                    frontmatter,
+                    outline: Vec::new(),
+                    links: Vec::new(),
+                    anchors: Vec::new(),
+                },
+            );
+        }
+
+        let matching = QueryExpr {
+            any: vec![QueryClause {
+                all: vec![QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Property {
+                        filter: PropertyFilter {
+                            key: "priority".into(),
+                            test: PropertyTest::GreaterThan(PropertyValue::Number(3.0)),
+                        },
+                    },
+                }],
+            }],
+        };
+        let filter = || {
+            let IndexResult::Documents(rows) = index
+                .query(IndexQuery::Documents {
+                    matching: matching.clone(),
+                    sort: None,
+                    select: PropertySelect::keys(&["priority"]),
+                    page: None,
+                    excerpts: Excerpts::Omit,
+                })
+                .unwrap()
+            else {
+                panic!("documents response");
+            };
+            rows.items
+        };
+        assert!(filter().is_empty(), "undeclared numeric strings stay text");
+        assert_eq!(index.property_types(), PropertyTypes::default());
+
+        let declaration = r#"{"version":1,"types":{"priority":"number"}}"#;
+        settings
+            .write()
+            .unwrap()
+            .set(
+                crate::properties::TYPES,
+                SettingValue::Text(declaration.into()),
+            )
+            .unwrap();
+        let rows = filter();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].doc, DocId::new("a.md"));
+        assert_eq!(rows[0].properties[0].value, PropertyValue::Number(10.0));
+
+        let IndexResult::PropertyValues(facets) = index
+            .query(IndexQuery::PropertyValues {
+                key: "priority".into(),
+                matching: QueryExpr::default(),
+                page: None,
+            })
+            .unwrap()
+        else {
+            panic!("property values response");
+        };
+        assert_eq!(facets.items.len(), 2);
+        for value in [2.0, 10.0] {
+            assert!(facets
+                .items
+                .iter()
+                .any(|item| item.value == PropertyValue::Number(value) && item.count == 1));
+        }
+
+        let IndexResult::Documents(sorted) = index
+            .query(IndexQuery::Documents {
+                matching: QueryExpr::default(),
+                sort: Some(PropertySort {
+                    key: "priority".into(),
+                    descending: false,
+                }),
+                select: PropertySelect::keys(&["priority"]),
+                page: None,
+                excerpts: Excerpts::Omit,
+            })
+            .unwrap()
+        else {
+            panic!("documents response");
+        };
+        assert_eq!(
+            sorted
+                .items
+                .iter()
+                .map(|row| row.doc.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b.md", "a.md"]
+        );
+        assert_eq!(
+            sorted.items[0].properties[0].value,
+            PropertyValue::Number(2.0)
+        );
+
+        let mut reopened = crate::settings::SettingsStore::open(
+            camino::Utf8Path::new("/vault"),
+            storage,
+            crate::settings::MachineSettings::in_memory(),
+        );
+        reopened
+            .declare("fub.core", &crate::properties::properties_settings())
+            .unwrap();
+        assert_eq!(
+            reopened.effective(crate::properties::TYPES).unwrap().0,
+            SettingValue::Text(declaration.into())
+        );
+    }
 
     fn asset(path: &str) -> VaultEntry {
         VaultEntry {
@@ -1504,5 +1774,102 @@ mod tests {
             resolve_entry_in_folder(&entries, &names, &source, &target, Some("media")),
             Some(DocId::new("media/photo.png"))
         );
+    }
+    #[test]
+    fn a_path_link_with_a_fragment_names_the_same_point_as_a_wikilink() {
+        // Un `[t](Note/Doppia.md#...)` nomina lo stesso punto di `[[Doppia#...]]`:
+        // il frammento si divide con `split_fragment` e `^` separa il blocco
+        // come in `parse_wikilink_inner`. Senza frammento o con un punto che
+        // non c'è più la risposta resta il documento con `at: None`.
+        let registry = std::sync::Arc::new(crate::registry::FormatRegistry::new());
+        let storage = std::sync::Arc::new(crate::storage::MemStorage::new());
+        let machine = crate::settings::MachineSettings::in_memory();
+        let settings = std::sync::Arc::new(std::sync::RwLock::new(
+            crate::settings::SettingsStore::open(
+                camino::Utf8Path::new("/vault"),
+                storage.clone(),
+                machine,
+            ),
+        ));
+        let organization = crate::organization::OrganizationStore::in_memory();
+        let drafts = std::sync::Arc::new(crate::drafts::Drafts::open(
+            camino::Utf8Path::new("/vault"),
+            storage,
+        ));
+        let mut index = CoreIndex::new(registry, settings, organization, drafts);
+        let id = DocId::new("Note/Doppia.md");
+        index.metas.insert(
+            id.clone(),
+            DocMeta {
+                id: id.clone(),
+                frontmatter: Frontmatter::default(),
+                outline: vec![Heading {
+                    level: 1,
+                    text: "Il gatto".to_string(),
+                    slug: "il-gatto".to_string(),
+                    span: Span::new(0, 10),
+                    explicit_anchor: None,
+                }],
+                links: Vec::new(),
+                anchors: vec![Anchor {
+                    id: "risveglio".to_string(),
+                    span: Span::new(11, 20),
+                    marker: Span::new(15, 20),
+                }],
+            },
+        );
+        index.set_entry(VaultEntry {
+            id: id.clone(),
+            kind: EntryKind::Document,
+            size: 20,
+            mtime: 1,
+            fingerprint: Some(Revision::new("rev1")),
+        });
+        index.rebuild_graph();
+        let wiki_section = index
+            .resolve(
+                &LinkTarget::Wiki {
+                    page: "Doppia".into(),
+                    heading: Some("Il gatto".into()),
+                    block: None,
+                },
+                None,
+            )
+            .expect("la nota c'è");
+        let path_section = index
+            .resolve(&LinkTarget::Path("Note/Doppia.md#Il%20gatto".into()), None)
+            .expect("la nota c'è");
+        assert_eq!(path_section.doc, wiki_section.doc);
+        assert_eq!(path_section.at, wiki_section.at);
+        assert_eq!(
+            path_section.at.as_ref().and_then(|p| p.anchor.as_deref()),
+            Some("il-gatto")
+        );
+        let wiki_block = index
+            .resolve(
+                &LinkTarget::Wiki {
+                    page: "Doppia".into(),
+                    heading: None,
+                    block: Some("risveglio".into()),
+                },
+                None,
+            )
+            .expect("la nota c'è");
+        let path_block = index
+            .resolve(&LinkTarget::Path("Note/Doppia.md#^risveglio".into()), None)
+            .expect("la nota c'è");
+        assert_eq!(path_block.at, wiki_block.at);
+        assert_eq!(
+            path_block.at.as_ref().and_then(|p| p.anchor.as_deref()),
+            Some("risveglio")
+        );
+        let vanished = index
+            .resolve(
+                &LinkTarget::Path("Note/Doppia.md#mai-esistito".into()),
+                None,
+            )
+            .expect("la nota c'è lo stesso");
+        assert_eq!(vanished.doc, id);
+        assert_eq!(vanished.at, None);
     }
 }

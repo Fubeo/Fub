@@ -37,6 +37,8 @@ function options() {
     onChange: vi.fn(),
     onSelectionChange: vi.fn(),
     onOpenWikilink: vi.fn(),
+    onOpenPath: vi.fn(),
+    onOpenDocument: vi.fn(),
     onSearchTag: vi.fn(),
     completions: {
       searchNotes: async () => [],

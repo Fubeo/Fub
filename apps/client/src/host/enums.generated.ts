@@ -107,6 +107,16 @@ export type NoteLevel = "info" | "warning" | "error";
 
 export type PaneMode = "source" | "live_preview" | "reading";
 
+export type PropertyType =
+  | "text"
+  | "list"
+  | "number"
+  | "checkbox"
+  | "date"
+  | "date_time"
+  | "tags"
+;
+
 export type RenderTarget = "screen" | "print" | "pdf" | "static_site";
 
 export type SettingScope = "vault" | "machine";
@@ -116,6 +126,8 @@ export type SettingSource = "default" | "machine" | "vault";
 export type Severity = "warning" | "failure";
 
 export type SourceKind = "text" | "bytes";
+
+export type TaskStatus = "open" | "done";
 
 export type TextField = "name" | "body" | "tags" | "heading";
 

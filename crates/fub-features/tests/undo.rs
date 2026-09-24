@@ -373,39 +373,32 @@ fn outcome(
         .unwrap_or_else(|and| panic!("`{command}`: {and}"))
 }
 
-/// **Un'operazione a metà lo dice come dato, non solo come frase.**
-///
-/// Il parziale il vault lo diceva già in tre comandi, e lo diceva **solo dentro
-/// la notifica**: un'automazione che invocava `vault.archive` non aveva modo di
-/// sapere che una nota su due era rimasta indietro, se non leggendo una frase
-/// italiana e cercandoci dentro una parola.
+/// A missing item prevents *all* archive moves during preflight. The partial
+/// result still names the rejected document so an automation can act on it.
 #[test]
-fn an_operation_that_half_succeeded_says_so_as_data() {
+fn archive_preflight_reports_missing_input_without_partial_mutation() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(&DocId::new("a.md"), "prima\n", WriteBase::Dictated)
         .expect("scrive");
 
-    // Due note davanti, una sola esiste: la seconda non si archivia, e il
-    // comando invocato risponde `not-found`.
     let outcome = outcome(
         &mut ws,
         VAULT_ARCHIVE,
         serde_json::json!({ "docs": ["a.md", "b.md"] }),
     );
-    let count = outcome.partial.expect("una su due è a metà, e si dichiara");
-    assert_eq!(
-        (count.attempted, count.done, count.failed()),
-        (2, 1, 1),
-        "due davanti, una archiviata, una caduta"
-    );
+    let count = outcome.partial.expect("preflight rejects the batch");
+    assert_eq!((count.attempted, count.done, count.failed()), (2, 0, 1));
     assert_eq!(
         count.failures[0].subject.as_ref().map(|d| d.as_str()),
-        Some("b.md"),
-        "e il guasto NOMINA la nota: un conto senza il nome non dice quale \
-         riaprire"
+        Some("b.md")
     );
-    assert!(exists(&ws, "Archivio/a.md"), "l'altra è andata davvero");
+    assert!(matches!(
+        count.failures[0].error,
+        fub_abi::PluginError::NotFound(_)
+    ));
+    assert!(exists(&ws, "a.md"), "the valid member stays at its source");
+    assert!(!exists(&ws, "Archivio/a.md"), "preflight performs no moves");
 }
 
 /// **Un'operazione riuscita non si dichiara a metà.**
@@ -437,36 +430,6 @@ fn nothing_missing_means_no_partial_at_all() {
         outcome.partial.is_none(),
         "una nota già in archivio non è un guasto: è niente da fare"
     );
-}
-
-/// **La voce di undo si ricorda che l'operazione era a metà.**
-///
-/// È il danno che la [decisione 0045] aveva dichiarato e nessuno raccoglieva:
-/// *«chi la annulla non sa che stava disfacendo undici note su dodici»*. Il
-/// conto non lo ricopia chi ha scritto il comando — lo appaia l'host quando
-/// mette la voce in pila, che è l'unico momento in cui i due pezzi sono ancora
-/// insieme.
-///
-/// [decisione 0045]: ../../../docs/decisions/0190-sessioni-documento-e-undo.md
-#[test]
-fn undoing_a_half_done_operation_says_it_was_half_done() {
-    let vault = Vault::new();
-    let mut ws = vault.open();
-    ws.write_document(&DocId::new("a.md"), "prima\n", WriteBase::Dictated)
-        .expect("scrive");
-
-    outcome(
-        &mut ws,
-        VAULT_ARCHIVE,
-        serde_json::json!({ "docs": ["a.md", "b.md"] }),
-    );
-    let said = cancels(&mut ws);
-    assert!(
-        said.contains("era già riuscita a metà") && said.contains("1 su 2"),
-        "annullare deve dire che rimette indietro solo la parte che era \
-         andata; ha detto: {said}"
-    );
-    assert!(exists(&ws, "a.md"), "e quella parte torna davvero indietro");
 }
 
 /// **Un annullamento che si ferma a metà lo dice, e non butta ciò che ha

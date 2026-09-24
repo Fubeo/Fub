@@ -28,7 +28,7 @@ vi.mock("../ui/notify", () => ({ notify: fake.notify }));
 vi.mock("../ui/tooltip", () => ({ setTooltip: fake.setTooltip }));
 vi.mock("./document", () => ({ openDocument: fake.openDocument }));
 
-import { closeQuickSwitcher, openQuickSwitcher } from "./quick-switcher";
+import { closeQuickSwitcher, mountQuickSwitcher, openQuickSwitcher } from "./quick-switcher";
 
 const hostEntries = ["notes/Alpha.md", "notes/Beta.md", "notes/Gamma.md"];
 
@@ -63,7 +63,7 @@ beforeEach(() => {
   fake.existingRecentNotes.mockReset();
   fake.recentSearches.mockReset();
   fake.rememberSearch.mockReset();
-  fake.rememberOpens.mockReset();
+  fake.rememberOpens.mockReset().mockReturnValue(() => {});
   fake.forgetAll.mockReset();
   fake.createNote.mockReset();
   fake.openDocument.mockReset();
@@ -140,6 +140,39 @@ describe("combobox del quick switcher", () => {
 
     expect(fake.openDocument).toHaveBeenCalledWith("notes/Beta.md");
     expect(fake.rememberSearch).toHaveBeenCalledWith("");
+  });
+
+  it("dispatches here, split and window from distinct keyboard modifiers", async () => {
+    const dispatch = vi.fn();
+    const unmount = mountQuickSwitcher(dispatch);
+    try {
+      for (const [modifiers, mode] of [
+        [{}, "here"],
+        [{ ctrlKey: true }, "split"],
+        [{ metaKey: true, shiftKey: true }, "window"],
+      ] as const) {
+        const { input } = await openSwitcher(["notes/Alpha.md"]);
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...modifiers }));
+        expect(dispatch).toHaveBeenLastCalledWith("notes/Alpha.md", mode);
+      }
+    } finally {
+      unmount();
+    }
+  });
+
+  it("disposing and remounting a switcher drops the prior dispatcher and overlay", async () => {
+    const first = vi.fn();
+    const stop = mountQuickSwitcher(first);
+    await openSwitcher();
+    stop();
+    expect(document.getElementById("quick-switcher")?.querySelector("input")).toBeNull();
+    const second = vi.fn();
+    const stopAgain = mountQuickSwitcher(second);
+    const { input } = await openSwitcher(["notes/Beta.md"]);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+    stopAgain();
   });
 
   it("chiudendo rimuove la superficie e restituisce il fuoco", async () => {

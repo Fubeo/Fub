@@ -138,3 +138,69 @@ fn a_failed_rename_leaves_the_notes_where_it_was() {
     assert!(ws.documents().contains(&from));
     assert!(!ws.documents().contains(&to));
 }
+
+#[test]
+fn raw_write_keeps_the_preimage_across_detached_work() {
+    let mut ws = vault();
+    let id = DocId::new("nota.fal");
+    let original = b"\xef\xbb\xbffirst\r\n";
+    let base = ws.write_document_bytes(&id, original, None).unwrap();
+    assert_eq!(
+        std::fs::read(ws.root().join(id.as_str())).unwrap(),
+        original
+    );
+    assert_eq!(ws.document_revision(&id).unwrap(), base);
+
+    let prepared = ws.prepare_document_bytes_write(&id, Some(base)).unwrap();
+    let model = prepared.parse(b"my edit\r\n").unwrap();
+    ws.write_byte(id.as_str(), b"external edit\r\n");
+
+    let result = ws.commit_document_bytes_write(prepared, b"my edit\r\n", model, Ok(()));
+    assert!(matches!(result, Err(fub_kernel::KernelError::Stale(_))));
+    assert_eq!(
+        std::fs::read(ws.root().join(id.as_str())).unwrap(),
+        b"external edit\r\n",
+    );
+}
+
+#[test]
+fn raw_creation_cannot_replace_a_file_created_after_preflight() {
+    let mut ws = vault();
+    let id = DocId::new("allegato.bin");
+    let prepared = ws.prepare_document_bytes_write(&id, None).unwrap();
+    let model = prepared.parse(&[0, 255]).unwrap();
+    ws.write_byte(id.as_str(), &[1, 254]);
+
+    let result = ws.commit_document_bytes_write(prepared, &[0, 255], model, Ok(()));
+    assert!(matches!(
+        result,
+        Err(fub_kernel::KernelError::AlreadyExists(_))
+    ));
+    assert_eq!(
+        std::fs::read(ws.root().join(id.as_str())).unwrap(),
+        [1, 254],
+    );
+}
+
+#[test]
+fn opaque_bytes_change_an_entry_not_an_invented_document() {
+    let mut ws = Bench::new().with_spy().mounts();
+    ws.forgets_events();
+    let id = DocId::new("allegato.bin");
+    let bytes: Vec<u8> = (0..=255).collect();
+
+    let revision = ws.write_document_bytes(&id, &bytes, None).unwrap();
+
+    assert_eq!(std::fs::read(ws.root().join(id.as_str())).unwrap(), bytes);
+    assert_eq!(ws.document_revision(&id).unwrap(), revision);
+    assert!(!ws.documents().contains(&id));
+    let events = ws.events();
+    assert!(events.iter().any(|event| matches!(
+        event,
+        fub_abi::Event::EntryChanged { id: changed, .. } if changed == &id
+    )));
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        fub_abi::Event::DocumentChanged { id: changed, .. } if changed == &id
+    )));
+}

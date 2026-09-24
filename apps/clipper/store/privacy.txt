@@ -1,0 +1,54 @@
+Fub Clipper — privacy notice (local text, EN+IT; host the final URL at release).
+
+EN:
+Fub Clipper works fully offline. Captures (article, selection, highlights) are
+converted locally to Markdown and delivered to YOUR Fub app: first via paired
+native messaging (host "local.fub.clipper", installed with
+`fub-cli native-install --extension-id`, paired with `fub-cli pair`), or — as
+explicitly labelled UNAUTHENTICATED imports — via fub://capture URI or
+.fubcapture.json file (`fub-cli capture --file`), each requiring per-capture
+app approval. No analytics or tracking. No third-party network request is
+made by default. Images download only when you check them, only from origins
+you granted in Options > Origins (plus an explicit browser permission), capped
+at 25 MiB of really received bytes. The optional assistant is OFF by default:
+page context is sent to your configured provider only after you preview the
+exact request and press Ask; local providers stay on loopback, remote providers
+require https, a grant and a key. The remote key lives in extension storage
+only, is held in memory for one call, and is never placed in pages, URIs,
+logs or error text. Highlight marks are ephemeral until you opt in for the
+current page in the popup; then their text and page URL are stored locally in
+extension storage, reapplied when you reopen the clipper, and can be exported
+or cleared by you. Checked images can alternatively be attached to your paired
+vault only after a successful authenticated native capture; the host verifies
+the downloaded bytes against their SHA-256 digest before writing. Image URLs
+alone never cause an attachment download.
+
+IT:
+Fub Clipper funziona completamente offline. Le acquisizioni (articolo,
+selezione, evidenziazioni) sono convertite in locale in Markdown e consegnate
+alla TUA app Fub: prima via native messaging abbinato (host
+"local.fub.clipper", installato con `fub-cli native-install --extension-id`,
+abbinato con `fub-cli pair`), oppure — come importazioni NON autenticate
+dichiarate — via URI fub://capture o file .fubcapture.json
+(`fub-cli capture --file`), ciascuna con approvazione esplicita per ogni
+acquisizione. Nessuna statistica o tracciamento. Nessuna richiesta di rete a
+terzi per impostazione predefinita. Le immagini si scaricano solo se le selezioni,
+solo dalle origini consentite in Opzioni > Origini (più permesso browser
+esplicito), con tetto di 25 MiB sui byte realmente ricevuti. L'assistente
+opzionale è DISATTIVATO in partenza: il contesto lascia il dispositivo solo
+dopo anteprima esatta e pressione di Chiedi; i provider locali restano su
+loopback, i remoti richiedono https, consenso e chiave. La chiave remota vive
+solo nello storage dell'estensione, resta in memoria per una chiamata e non
+finisce mai in pagine, URI, log o testi d'errore. Le evidenziazioni sono
+temporanee finché non attivi il salvataggio per quella pagina nel popup: solo
+allora testo e URL vengono conservati nello storage locale dell'estensione,
+riapplicati quando riapri il clipper, esportabili o cancellabili su richiesta.
+Le immagini selezionate possono invece diventare allegati nel vault abbinato
+soltanto dopo l'acquisizione autenticata; l'host verifica il digest SHA-256 dei
+byte ricevuti prima di scriverli. Gli URL da soli non scaricano allegati.
+
+Data controller: local build (no public contact filed).
+Data retention: captures live in your vault only; the extension stores
+templates, selectors, settings, origin grants, opt-in saved highlights and
+(optionally) the remote key in extension storage; you can clear/export saved
+highlights in the popup and forget the key in Options > Forget.

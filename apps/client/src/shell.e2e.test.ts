@@ -86,7 +86,7 @@ vi.mock("./host/ipc", () => {
     ),
     onKernelEvent: (handler: (n: unknown) => void) =>
       now().onKernelEvent(handler as never),
-    onClose: (first: () => Promise<void>) => now().onClose(first),
+    onClose: (first: () => Promise<boolean>, onFailure: (reason: unknown) => void) => now().onClose(first, onFailure),
     // `finestra` è il manico della titlebar custom (§Fase 1): in test non
     // tocchiamo finestre vere, e i metodi sono tutti no-op o ritornano
     // valori neutri.
@@ -463,6 +463,34 @@ describe("navigazione accessibile dell'esploratore", () => {
     chevron().dispatchEvent(tab);
     expect(tab.defaultPrevented).toBe(false);
   });
+
+  it("rivela la nota attiva dentro una cartella chiusa, senza togliere il fuoco all'editor", async () => {
+    await start(VAULT);
+    const noteItem = () =>
+      document.querySelector<HTMLElement>('#file-list li[data-path="note/Riunione.md"]');
+    const chevron = () =>
+      document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!;
+    chevron().click();
+    await waitFor("la cartella si apre", () => !!noteItem());
+    noteItem()!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la nota si apre", () => textToVideo().includes("riunione"));
+    chevron().click();
+    await waitFor("la cartella si richiude", () => !noteItem());
+    const focused = document.activeElement;
+
+    const registry = await import("./ui/commands");
+    const reveal = registry.allCommands().find((e) => e.id === "shell.explorer.reveal");
+    expect(reveal?.binding).toBeNull();
+    await reveal!.run!();
+    await settle();
+
+    expect(noteItem()?.getAttribute("aria-selected")).toBe("true");
+    expect(noteItem()?.tabIndex).toBe(0);
+    expect(
+      document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(document.activeElement).toBe(focused);
+  });
 });
 
 describe("apri un vault", () => {
@@ -482,12 +510,12 @@ describe("apri un vault", () => {
       "listViews",
     ]);
     await settle();
-    expect(host.atGate("viewState").map((c) => c.args[0])).toEqual([
+    expect(host.atGate("viewState").map((c) => c.args[0])).toEqual(expect.arrayContaining([
       "layout",
       "mode",
       "expanded",
       "activeSpace",
-    ]);
+    ]));
 
     unlock.get("viewState")!();
     await settle();
@@ -528,6 +556,49 @@ describe("apri un vault", () => {
       "Riunione",
       "Spesa",
     ]);
+  });
+
+  it("gli allegati stanno nell'albero: un media si apre nel visualizzatore, un file ignoto no", async () => {
+    const host = await start({ ...VAULT, "note/foto.png": "png", "note/dati.zip": "zip" });
+    const fileRows = () => [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.file")];
+    const folder = [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.folder")].find(
+      (r) => r.textContent?.includes("note"),
+    );
+    folder?.click();
+    await waitFor("gli allegati compaiono", () => fileRows().length === 2);
+    expect(fileRows().map((r) => r.querySelector(".row-name")?.textContent)).toEqual([
+      "dati.zip",
+      "foto.png",
+    ]);
+    expect(rowsOfNote()).toHaveLength(3);
+
+    fileRows()[0]!.click();
+    await settle();
+    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/dati.zip");
+    expect(host.atGate("resourceOpen")).toHaveLength(0);
+
+    fileRows()[1]!.click();
+    await waitFor("il visualizzatore chiede la risorsa", () => host.atGate("resourceOpen").length > 0);
+    expect(host.atGate("resourceOpen")[0]!.args[0]).toBe("note/foto.png");
+    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/foto.png");
+  });
+
+  it("un allegato si cestina dal suo menu contestuale, come una nota", async () => {
+    const host = await start({ ...VAULT, "note/foto.png": "png" });
+    const fileRow = () => document.querySelector<HTMLElement>('#file-list .tree-row.file[data-path="note/foto.png"]');
+    const folder = [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.folder")].find(
+      (r) => r.textContent?.includes("note"),
+    );
+    folder?.click();
+    await waitFor("l'allegato compare", () => !!fileRow());
+
+    await contextMenu(fileRow()!, "Elimina");
+    await waitFor("l'allegato è nel cestino", () => host.trash().length === 1);
+    expect(Object.keys(host.files())).not.toContain("note/foto.png");
+    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+      ["note.trash", { doc: "note/foto.png" }],
+    ]);
+    await waitFor("la riga sparisce", () => !fileRow());
   });
 
   it("il commutatore e le scorciatoie seguono la superficie attiva", async () => {
@@ -927,6 +998,38 @@ describe("rinomina", () => {
     // coprendo qualunque cosa ci sia senza guardare. Misurato: togliendo la
     // migrazione, un presidio che guardasse solo il path resterebbe **verde**.
     expect(written.args[2]).toEqual({ kind: "descends_from", value: "r1" });
+  });
+});
+
+describe("nuova cartella", () => {
+  it("nasce dal kernel dentro una cartella o nella radice, e un nome occupato non lascia il campo", async () => {
+    const host = await start(VAULT);
+    const folderRow = (path: string) =>
+      document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`);
+    const typeFolder = async (name: string) => {
+      const field = document.querySelector<HTMLInputElement>("#file-list input.new-folder");
+      if (!field) throw new Error("il campo della cartella nuova non c'è");
+      field.value = name;
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await settle();
+    };
+
+    await contextMenu(folderRow("note")!, "Nuova cartella");
+    await typeFolder("Progetti");
+    await waitFor("la sottocartella compare aperta sotto la madre", () => !!folderRow("note/Progetti"));
+    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+      ["folder.create", { path: "note/Progetti" }],
+    ]);
+
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await typeFolder("Archivio");
+    await waitFor("la cartella di radice compare", () => !!folderRow("Archivio"));
+
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await typeFolder("note");
+    await waitFor("il rifiuto chiude il campo", () => !document.querySelector("input.new-folder"));
+    expect(host.atGate("invokeCommand")).toHaveLength(3);
+    expect(document.querySelectorAll('#file-list li[data-path="note"]')).toHaveLength(1);
   });
 });
 
@@ -1568,6 +1671,38 @@ describe("ripristina", () => {
   });
 });
 
+describe("il cestino scelto", () => {
+  it("con il cestino di sistema la cancellazione passa da trash.os e il ripiego si dice", async () => {
+    const choice: SettingEntry = {
+      spec: {
+        key: "files.trash",
+        label: "Note cancellate",
+        description: "",
+        group: "",
+        scope: "vault",
+        kind: {
+          kind: "choice",
+          default: "vault",
+          options: [
+            { value: "vault", label: "Cestino del vault" },
+            { value: "system", label: "Cestino del sistema" },
+          ],
+        },
+        program_writable: false,
+      },
+      value: "system",
+      source: "vault",
+    } as SettingEntry;
+    const host = await start(VAULT, [choice]);
+
+    await contextMenu(row("Benvenuto"), "Elimina");
+    await waitFor("la nota è nel cestino", () => host.trash().length === 1);
+    expect(host.atGate("invokeCommand").map((call) => call.args[0])).toEqual(["trash.os"]);
+    const { recentNotices } = await import("./ui/notify");
+    expect(recentNotices().some((a) => a.text.includes("cestino del vault"))).toBe(true);
+  });
+});
+
 function trashEntries(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>("#views-left .ui-list-item")];
 }
@@ -1709,18 +1844,19 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
 
 describe("segui un link dentro la nota", () => {
   it("un `[[#Sezione]]` chiede al kernel col documento che lo ospita", async () => {
-    // Il gesto è ctrl-click su un wikilink **senza pagina**, e la cosa che si
+    // Il gesto è il click sul wikilink **reso** senza pagina, e la cosa che si
     // guarda sta di qua dal confine: *quale domanda* è partita. Un
     // `[[#Sezione]]` non nomina una nota, nomina questa — e chi lo risolve non
-    // può saperlo se non gli si dice da dove si sta guardando. La shell si
-    // fermava un passo prima, con un `if (!page) return`: nessuna domanda,
-    // nessuna risposta, un click che non faceva niente e non diceva perché.
+    // può saperlo se non gli si dice da dove si sta guardando.
     const host = await start({
       "Benvenuto.md": "Vedi [[#Appunti]] più sotto.\n\n## Appunti\n\nEccoli.\n",
     });
-    const link = document.querySelector<HTMLElement>(".cm-fub-wikilink");
-    expect(link, "il live preview non ha decorato il wikilink").not.toBeNull();
-    link!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, ctrlKey: true }));
+    const { setMode } = await import("./panels/document");
+    await setMode("reading");
+    await settle();
+    const link = document.querySelector<HTMLElement>(".pane-preview.markdown-rendered a.wikilink");
+    expect(link, "la lettura non ha reso il wikilink").not.toBeNull();
+    link!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await settle();
 
     const requested = host

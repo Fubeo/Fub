@@ -929,6 +929,20 @@ impl<H: VaultWrite, P: Policy> VaultWrite for Guard<H, P> {
         })?;
         self.inner.apply_edit(id, request)
     }
+
+    fn write_document_bytes(
+        &mut self,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
+        // Stessa famiglia della scrittura testuale: i byte non sono un grado
+        // di fiducia in più — vedi `read_document_bytes` sopra.
+        self.check_path(Capability::VaultWrite, id.as_str(), || {
+            format!("writing bytes of `{id}`")
+        })?;
+        self.inner.write_document_bytes(id, bytes, expected)
+    }
 }
 
 impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
@@ -1244,6 +1258,7 @@ impl<H, P: Policy> Guard<H, P> {
             | QueryKind::Folders
             | QueryKind::RenderPreview
             | QueryKind::RenderEmbed
+            | QueryKind::RenderPrint
             | QueryKind::SyntaxForms => (Capability::Query, "querying the index"),
         }
     }
@@ -1834,6 +1849,123 @@ mod tests {
             calls.load(std::sync::atomic::Ordering::SeqCst),
             0,
             "the path gate runs before the wrapped host can pop or replay"
+        );
+    }
+
+    struct CountsByteWrites {
+        writes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl VaultRead for CountsByteWrites {
+        fn read_document(&self, _id: &DocId) -> Result<String, PluginError> {
+            unreachable!("the byte-write authorization benches do not read")
+        }
+
+        fn read_document_bytes(&self, _id: &DocId) -> Result<Vec<u8>, PluginError> {
+            unreachable!("the byte-write authorization benches do not read bytes")
+        }
+
+        fn document_revision(&self, _id: &DocId) -> Result<Revision, PluginError> {
+            unreachable!("the byte-write authorization benches do not read revisions")
+        }
+
+        fn list_documents(&self, _page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
+            unreachable!("the byte-write authorization benches do not list documents")
+        }
+
+        fn free_name(&self, id: &DocId) -> DocId {
+            id.clone()
+        }
+
+        fn read_model(&self, _id: &DocId) -> Result<DocumentModel, PluginError> {
+            unreachable!("the byte-write authorization benches do not parse")
+        }
+
+        fn format_of(&self, _id: &DocId) -> Option<DocumentFormat> {
+            None
+        }
+
+        fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
+            unreachable!("the byte-write authorization benches do not list trash")
+        }
+    }
+
+    impl VaultWrite for CountsByteWrites {
+        fn write_document(
+            &mut self,
+            _id: &DocId,
+            _source: &str,
+            _base: WriteBase,
+        ) -> Result<Revision, PluginError> {
+            unreachable!("the byte-write authorization benches do not write text")
+        }
+
+        fn write_document_bytes(
+            &mut self,
+            _id: &DocId,
+            bytes: &[u8],
+            _expected: Option<Revision>,
+        ) -> Result<Revision, PluginError> {
+            self.writes
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Revision::of_bytes(bytes))
+        }
+
+        fn apply_edit(
+            &mut self,
+            _id: &DocId,
+            _request: EditRequest,
+        ) -> Result<EditReport, PluginError> {
+            unreachable!("the byte-write authorization benches do not edit")
+        }
+    }
+
+    /// Il difetto che questo presidia è aggiungere il metodo al tratto e
+    /// dimenticare il cancello: la scrittura binaria passerebbe dove quella
+    /// testuale è negata, con gli stessi byte e un'altra porta.
+    #[test]
+    fn a_denied_writer_never_reaches_the_inner_byte_sink() {
+        let writes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut guard = Guard::new(
+            CountsByteWrites {
+                writes: std::sync::Arc::clone(&writes),
+            },
+            Negate(Capability::VaultWrite),
+        );
+        let err = guard
+            .write_document_bytes(&DocId::new("Note.md"), &[0, 159, 146, 150], None)
+            .expect_err("without `VaultWrite` raw bytes are not deposited");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "the refusal must be a permission refusal: {err}"
+        );
+        assert_eq!(
+            writes.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the family gate runs before the wrapped host can deposit a byte"
+        );
+    }
+
+    /// Il rovescio: i byte stanno sotto la stessa famiglia del testo, non sotto
+    /// quella della lettura — negare `VaultRead` non chiude il deposito.
+    #[test]
+    fn denying_the_read_leaves_the_byte_sink_open() {
+        let writes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut guard = Guard::new(
+            CountsByteWrites {
+                writes: std::sync::Arc::clone(&writes),
+            },
+            Negate(Capability::VaultRead),
+        );
+        let bytes = [0u8, 159, 146, 150];
+        let revision = guard
+            .write_document_bytes(&DocId::new("Note.md"), &bytes, None)
+            .expect("denying the read has nothing to do with depositing bytes");
+        assert_eq!(revision, Revision::of_bytes(&bytes));
+        assert_eq!(
+            writes.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "the write reaches the wrapped host exactly once"
         );
     }
 

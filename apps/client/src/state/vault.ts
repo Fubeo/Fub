@@ -12,7 +12,7 @@
 // per questo che qui non c'è quasi nulla — la logica sta nelle feature, e
 // questo modulo è solo il posto dove la shell smette di avere scorciatoie.
 import { api } from "../host/ipc";
-import { vaultEntries } from "../host/query";
+import { settings, vaultEntries } from "../host/query";
 import { COMMANDS } from "../host/contract";
 import { emit, state } from "./store";
 import { notify } from "../ui/notify";
@@ -54,6 +54,21 @@ export async function createNote(name?: string): Promise<string | null> {
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
 }
 
+/// Crea una cartella vuota e restituisce il path che il kernel ha scritto.
+///
+/// Il path torna normalizzato (NFC, spazi ai bordi dei segmenti) e può quindi
+/// differire da quello digitato: è quello che l'albero mostrerà. L'albero si
+/// aggiorna da sé con `index_updated`, come per ogni cambio del vault.
+export async function createFolder(path: string): Promise<string> {
+  const outcome = await api.invokeCommand(COMMANDS.createFolder, { path });
+  const effect = outcome.effect;
+  if (effect.kind === "custom" && effect.ns === "fub.folder.created") {
+    const made = (effect.payload as { path?: unknown } | null)?.path;
+    if (typeof made === "string") return made;
+  }
+  return path;
+}
+
 /// Rinomina (o sposta: è la stessa operazione, l'identità è il path).
 ///
 /// Il rename riscrive i wikilink entranti, cioè file di terzi — chi chiama deve
@@ -66,10 +81,26 @@ export async function renameNote(from: string, to: string): Promise<void> {
   refreshDocuments();
 }
 
-/// Sposta una nota nel cestino.
+/// Sposta una nota nel cestino scelto da `files.trash`.
+///
+/// `system` passa da `trash.os`, che prova il cestino del sistema e ripiega su
+/// quello del vault senza perdere la nota: il ripiego si dice, perché chi ha
+/// scelto il cestino di sistema la cercherebbe lì.
 export async function trashNote(id: string): Promise<void> {
-  await api.invokeCommand(COMMANDS.trash, { doc: id });
+  const choice = (await settings()).find((entry) => entry.spec.key === "files.trash")?.value;
+  if (choice !== "system") {
+    await api.invokeCommand(COMMANDS.trash, { doc: id });
+    refreshDocuments();
+    return;
+  }
+  const outcome = await api.invokeCommand(COMMANDS.osTrash, { doc: id });
   refreshDocuments();
+  const effect = outcome.effect;
+  const via =
+    effect.kind === "custom" && effect.ns === "fub.trash.os"
+      ? (effect.payload as { via?: { kind?: unknown } } | null)?.via?.kind
+      : undefined;
+  if (via === "internal_fallback") notify(t("trash.os_fallback", { doc: id }));
 }
 
 // Ripristinare dal cestino, svuotarlo e proporre un nome libero non stanno più

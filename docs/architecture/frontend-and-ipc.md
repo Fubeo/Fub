@@ -259,7 +259,7 @@ dominio:
 
 | Profilo | Responsabilità corrente |
 |---|---|
-| `MarkdownProfile` | `createMarkdownProfile()` monta linguaggio Markdown, comandi, live preview, completamenti e callback per wikilink e tag. |
+| `MarkdownProfile` | `createMarkdownProfile()` monta linguaggio Markdown, comandi, live preview locale, completamenti e callback per wikilink e tag. |
 | `PlainTextProfile` | `createPlainTextProfile()` monta estensioni vuote, senza sintassi o comandi di dominio. |
 | `FormulaProfile` | `createFormulaProfile()` monta lessico, completamenti per funzioni/fogli/nomi e commit/cancel espliciti; `singleLine` è configurabile. |
 
@@ -271,6 +271,27 @@ in `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `apps/client/src/editors/text/profiles/formula.ts`. Le callback
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
 TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
+
+### Markdown: Source, Live e Reading
+
+Source, Live e Reading sono tre viste sullo stesso `TextEngine` e sullo stesso
+buffer della `DocumentSession`: il cambio modo riusa la vista di scrittura e
+Reading ridisegna dal buffer corrente, senza salvataggio imposto.
+
+I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
+`apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
+montaggio in `apps/client/src/ui/markdown.ts`; i blocchi selezionati mostrano
+la sorgente. Il task passa da normale modifica undoabile della sessione e
+`readOnly` disabilita l'input.
+
+Risorse native ed embed in `apps/client/src/ui/markdown-resources.ts` sono
+condivisi per `DocumentSession`, con conteggio dei riferimenti, controllo delle
+esecuzioni superate e invalidazione. I renderer nativi arricchiscono soltanto
+gli span salvati rimasti invariati; gli embed partono dai riferimenti presenti
+nel buffer corrente. Il rendering locale non richiede IPC per battuta.
+
+La risoluzione dei link resta del kernel tramite `resolvedReference`; per i
+percorsi il frontend invia `LinkTarget::Path`.
 
 Ogni superficie dichiara almeno una `SurfaceMode`: id estensibile, etichetta,
 presentazione editabile o resa e proiezione sul `PaneMode` ABI già congelato.

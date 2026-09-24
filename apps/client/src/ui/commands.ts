@@ -47,6 +47,7 @@ import { settings } from "../host/query";
 import { type Key, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
 import { state } from "../state/store";
+import type { Lifetime } from "./lifetime";
 import { SHELL_KEYS, type ShellCommandId } from "./shell-keys.generated";
 
 /// La chiave d'impostazione che tiene la scorciatoia di un comando.
@@ -154,11 +155,12 @@ let overrides = new Map<string, string>();
 /// Il filtro sulla chiave non è un'ottimizzazione: `setting_changed` arriva per
 /// ogni interruttore di questo pannello, e rileggere l'elenco dei comandi a ogni
 /// spunta sarebbe una chiamata al backend per una cosa che non c'entra.
-export function mountKeyOverrides(): void {
-  onEvent("setting_changed", (e) => {
+export function mountKeyOverrides(lifetime: Lifetime): void {
+  if (lifetime.closed) return;
+  lifetime.add(onEvent("setting_changed", (e) => {
     if (commandOfKeybindingKey(e.key) === null) return;
     void loadKeyOverrides();
-  });
+  }));
 }
 
 /// Il comando che una chiave di scorciatoia nomina, o `null`. Gemello di
@@ -317,16 +319,98 @@ export function parseChords(binding: string | null | undefined): Chord[] | null 
   if (!first.mod && !first.shift && !first.alt) return null;
   return chords;
 }
+/// Quante alternative può portare una scorciatoia.
+///
+/// Otto: abbastanza per coprire layout/tastiere diverse senza trasformare una
+/// riga di impostazione in una lista. Oltre è un rifiuto esplicito, non un
+/// troncamento silenzioso.
+export const MAX_ALTERNATIVES = 8;
+
+/// Il separatore fra alternative: `Mod-o || Mod-k o`.
+///
+/// Due barre verticali con spazi attorno nella forma che si legge; in lettura
+/// gli spazi attorno sono tollerati (`Mod-o||Mod-k o` vale lo stesso). La barra
+/// singola non esiste nella grammatica degli accordi, quindi non può apparire
+/// dentro un'alternativa e lo split non è ambiguo.
+export const ALTERNATIVE_SEP = " || ";
+
+/// Le alternative di una scorciatoia, come testo, per chi le mostra.
+///
+/// Forma per la resa soltanto (chip multipli nella palette, conteggio nella
+/// scheda scorciatoie): vuoti e spazi sono tollerati e le parti vuote si
+/// scartano. La validità sta in `parseAlternatives`/`normalizeAlternatives`,
+/// che invece rifiutano esplicitamente una parte vuota o troppe alternative.
+export function splitAlternatives(binding: string | null | undefined): string[] {
+  const text = (binding ?? "").trim();
+  if (text === "") return [];
+  return text
+    .split(/\|\|/)
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
+}
+
+/// Una scorciatoia scomposta nelle sue alternative, o `null` se non è una
+/// scorciatoia che questa shell sa premere.
+///
+/// Ogni alternativa usa esattamente `parseChords`: accordi, sequenze e la regola
+/// del primo tasto con modificatore restano quelli. `null` copre tutti i modi
+/// di non saperla premere — alternativa vuota, troppe alternative, alternativa
+/// malformata — e chi la scrive lo sa da `rejectedChords` invece di scoprirlo
+/// premendo. La stringa vuota (comando disabilitato) torna `null` come
+/// `parseChords`: a distinguerla dall'errore è `binding === null` a valle.
+export function parseAlternatives(binding: string | null | undefined): Chord[][] | null {
+  const text = (binding ?? "").trim();
+  if (text === "") return null;
+  const raw = text.split(/\|\|/);
+  if (raw.length > MAX_ALTERNATIVES) return null;
+  const out: Chord[][] = [];
+  for (const part of raw) {
+    const trimmed = part.trim();
+    if (trimmed === "") return null;
+    const chords = parseChords(trimmed);
+    if (!chords) return null;
+    out.push(chords);
+  }
+  return out;
+}
+
+/// Tutta la scorciatoia in forma canonica, alternative comprese, o `null` se
+/// non è una scorciatoia che questa shell onora.
+///
+/// La forma canonica di ogni alternativa è quella di `normalize` per un accordo
+/// solo; i doppioni normalizzati si contraggono tenendo il primo, nell'ordine
+/// in cui l'utente li ha scritti. Una stringa sola resta quella di prima, così
+/// le righe esistenti non cambiano significato.
+export function normalizeAlternatives(binding: string | null | undefined): string | null {
+  const parsed = parseAlternatives(binding);
+  if (!parsed) return null;
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const chords of parsed) {
+    const key = chords.map(canonicalChord).join(" ");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    canonical.push(key);
+  }
+  return canonical.join(ALTERNATIVE_SEP);
+}
 
 function equalChords(a: Chord, b: Chord): boolean {
   return a.key === b.key && a.mod === b.mod && a.shift === b.shift && a.alt === b.alt;
 }
 
-/// L'accordo che questa combinazione di tasti **è**.
-function pressedChord(e: KeyChord): Chord {
+/** "Mod" is Command on macOS, Control elsewhere; never silently treat Super
+ * as Control on Linux/Windows. "any" retains pure matcher compatibility. */
+export type KeyboardPlatform = "mac" | "other" | "any";
+
+export function keyboardPlatform(platform: string): KeyboardPlatform {
+  return /Mac|iPhone|iPad|iPod/i.test(platform) ? "mac" : "other";
+}
+
+function pressedChord(e: KeyChord, platform: KeyboardPlatform = "any"): Chord {
   return {
     key: e.key.toLowerCase(),
-    mod: e.ctrlKey || e.metaKey,
+    mod: platform === "mac" ? e.metaKey : platform === "other" ? e.ctrlKey : e.ctrlKey || e.metaKey,
     shift: e.shiftKey,
     alt: e.altKey,
   };
@@ -358,10 +442,13 @@ function write(a: Chord): string {
 /// Vale per una scorciatoia di **un accordo solo**: una sequenza non corrisponde
 /// mai a un tasto premuto, perché per definizione ne vuole due, e chi la deve
 /// riconoscere è `advance`.
-export function matchesBinding(e: KeyChord, binding: string | null): boolean {
-  const chords = parseChords(binding);
-  if (!chords || chords.length !== 1) return false;
-  return equalChords(chords[0]!, pressedChord(e));
+export function matchesBinding(
+  e: KeyChord, binding: string | null, platform: KeyboardPlatform = "any",
+): boolean {
+  if ((platform === "mac" && e.ctrlKey) || (platform === "other" && e.metaKey)) return false;
+  const alternatives = parseAlternatives(binding);
+  return alternatives?.some((chords) =>
+    chords.length === 1 && equalChords(chords[0]!, pressedChord(e, platform))) ?? false;
 }
 
 /// Il comando il cui accordo efficace corrisponde, se ce n'è uno.
@@ -450,35 +537,32 @@ export function advance(
   entries: CommandEntry[],
   waiting: Waiting | null,
   e: KeyChord,
+  platform: KeyboardPlatform = "any",
 ): ResultKeys {
   if (MODIFIER_KEYS.has(e.key.toLowerCase())) return { type: "passa" };
-  // `Escape` annulla, e non è una scorciatoia che si possa contendere: una via
-  // d'uscita che un comando potesse rubare non sarebbe una via d'uscita.
   if (waiting && e.key === "Escape") return { type: "annulla" };
+  if ((platform === "mac" && e.ctrlKey) || (platform === "other" && e.metaKey)) {
+    return waiting ? { type: "annulla" } : { type: "passa" };
+  }
 
-  const pressedKey = pressedChord(e);
+  const pressedKey = pressedChord(e, platform);
   const step = waiting ? waiting.pressed.length : 0;
   let longest: Chord[] | null = null;
 
   for (const entry of entries) {
-    const chords = parseChords(entry.binding);
-    if (!chords || chords.length <= step) continue;
-    if (waiting && !waiting.pressed.every((a, i) => equalChords(a, chords[i]!))) continue;
-    if (!equalChords(chords[step]!, pressedKey)) continue;
-    // Completo: si esegue subito, senza finire di guardare gli altri. È la
-    // regola del prefisso, ed è per questo che sta qui e non in un secondo giro.
-    if (chords.length === step + 1) return { type: "esegue", entry };
-    longest ??= chords;
+    for (const chords of parseAlternatives(entry.binding) ?? []) {
+      if (chords.length <= step) continue;
+      if (waiting && !waiting.pressed.every((a, i) => equalChords(a, chords[i]!))) continue;
+      if (!equalChords(chords[step]!, pressedKey)) continue;
+      if (chords.length === step + 1) return { type: "esegue", entry };
+      longest ??= chords;
+    }
   }
 
   if (longest) {
     const pressed = [...(waiting?.pressed ?? []), pressedKey];
     return { type: "attende", waiting: { pressed, label: pressed.map(write).join(" ") } };
   }
-  // In attesa, un tasto che non continua niente **la chiude e si ferma qui**. Il
-  // motivo per cui non arriva alla nota: chi ha premuto `Mod-k` ha già lasciato
-  // il gesto di scrivere, e vedersi comparire una lettera è l'unico esito che
-  // non si può prevedere da fuori.
   return waiting ? { type: "annulla" } : { type: "passa" };
 }
 
@@ -490,16 +574,16 @@ export function advance(
 /// — i modificatori ordinati e minuscoli — o `Shift-Mod-g` e `Mod-Shift-g`
 /// sarebbero due accordi diversi per la tastiera e uguali per le dita.
 export function conflicts(entries: CommandEntry[]): CommandEntry[][] {
-  const for_chord = new Map<string, CommandEntry[]>();
+  const byChord = new Map<string, Map<string, CommandEntry>>();
   for (const entry of entries) {
-    if (!entry.binding) continue;
-    const key = normalize(entry.binding);
-    if (!key) continue;
-    const already = for_chord.get(key);
-    if (already) already.push(entry);
-    else for_chord.set(key, [entry]);
+    for (const chords of parseAlternatives(entry.binding) ?? []) {
+      const key = chords.map(canonicalChord).join(" ");
+      const group = byChord.get(key) ?? new Map<string, CommandEntry>();
+      group.set(entry.id, entry);
+      byChord.set(key, group);
+    }
   }
-  return [...for_chord.values()].filter((g) => g.length > 1);
+  return [...byChord.values()].map((group) => [...group.values()]).filter((group) => group.length > 1);
 }
 
 /// Una scorciatoia in forma canonica: gli accordi in ordine, i modificatori in
@@ -521,18 +605,16 @@ export function normalize(binding: string): string | null {
 export function shadowedPrefixes(
   entries: CommandEntry[],
 ): { short: CommandEntry; long: CommandEntry[] }[] {
-  const read = entries
-    .map((entry) => ({ entry, chords: parseChords(entry.binding) }))
-    .filter((x): x is { entry: CommandEntry; chords: Chord[] } => x.chords !== null);
+  const read = entries.flatMap((entry) =>
+    (parseAlternatives(entry.binding) ?? []).map((chords) => ({ entry, chords })));
   const result: { short: CommandEntry; long: CommandEntry[] }[] = [];
   for (const short of read) {
     const long = read
-      .filter(
-        (long) =>
-          long.chords.length > short.chords.length &&
-          short.chords.every((a, i) => equalChords(a, long.chords[i]!)),
-      )
-      .map((x) => x.entry);
+      .filter((candidate) =>
+        candidate.entry.id !== short.entry.id &&
+        candidate.chords.length > short.chords.length &&
+        short.chords.every((a, i) => equalChords(a, candidate.chords[i]!)))
+      .map((candidate) => candidate.entry);
     if (long.length > 0) result.push({ short: short.entry, long });
   }
   return result;
@@ -546,10 +628,63 @@ export function shadowedPrefixes(
 /// dei conflitti: non erano un conflitto — vero — ma non erano nemmeno una
 /// scorciatoia, e nessuno lo diceva. Un valore scritto e ignorato in silenzio è
 /// peggio di un valore rifiutato.
-export function rejectedChords(entries: CommandEntry[]): CommandEntry[] {
-  return entries.filter((e) => e.binding !== null && normalize(e.binding) === null);
+export type KeybindingValidation =
+  | { readonly valid: true; readonly normalized: string | null }
+  | { readonly valid: false; readonly reason: "empty-alternative" | "too-many" | "invalid-chord" | "duplicate" };
+
+export function validateKeybinding(binding: string): KeybindingValidation {
+  if (binding.trim() === "") return { valid: true, normalized: null };
+  const parts = binding.split(/\|\|/).map((part) => part.trim());
+  if (parts.length > MAX_ALTERNATIVES) return { valid: false, reason: "too-many" };
+  if (parts.some((part) => part.length === 0)) return { valid: false, reason: "empty-alternative" };
+  const normalized: string[] = [];
+  for (const part of parts) {
+    const chord = normalize(part);
+    if (chord === null) return { valid: false, reason: "invalid-chord" };
+    if (normalized.includes(chord)) return { valid: false, reason: "duplicate" };
+    normalized.push(chord);
+  }
+  return { valid: true, normalized: normalized.join(ALTERNATIVE_SEP) };
 }
 
+export function rejectedChords(entries: CommandEntry[]): CommandEntry[] {
+  return entries.filter((e) => e.binding !== null && normalizeAlternatives(e.binding) === null);
+}
+
+export type KeybindingIssue =
+  | { readonly type: "collision"; readonly chord: string; readonly commands: readonly CommandEntry[] }
+  | { readonly type: "shadowed"; readonly chord: string; readonly short: CommandEntry; readonly long: readonly CommandEntry[] }
+  | { readonly type: "invalid"; readonly binding: string; readonly command: CommandEntry };
+
+/** Typed data for the shortcuts panel: filter without parsing localized prose. */
+export function keybindingIssues(entries: CommandEntry[], filter = ""): KeybindingIssue[] {
+  const visible = entries.filter((entry) =>
+    `${entry.id} ${entry.title} ${entry.binding ?? ""}`.toLocaleLowerCase()
+      .includes(filter.toLocaleLowerCase()));
+  const byChord = new Map<string, CommandEntry[]>();
+  for (const entry of entries) {
+    for (const chords of parseAlternatives(entry.binding) ?? []) {
+      const chord = chords.map(canonicalChord).join(" ");
+      const group = byChord.get(chord) ?? [];
+      if (!group.some((item) => item.id === entry.id)) group.push(entry);
+      byChord.set(chord, group);
+    }
+  }
+  const shown = new Set(visible.map((entry) => entry.id));
+  return [
+    ...[...byChord].filter(([, group]) => group.length > 1 &&
+      group.some((entry) => shown.has(entry.id)))
+      .map(([chord, commands]): KeybindingIssue => ({ type: "collision", chord, commands })),
+    ...shadowedPrefixes(entries).filter(({ short, long }) =>
+      shown.has(short.id) || long.some((entry) => shown.has(entry.id)))
+      .map(({ short, long }): KeybindingIssue => ({
+        type: "shadowed", chord: short.binding ?? "", short, long,
+      })),
+    ...rejectedChords(visible).map((command): KeybindingIssue => ({
+      type: "invalid", binding: command.binding ?? "", command,
+    })),
+  ];
+}
 /// Tutto ciò che non torna negli accordi, in una frase, o `null` se torna tutto.
 ///
 /// Le tre cose si dicono insieme perché chiedono la stessa cosa a chi legge —

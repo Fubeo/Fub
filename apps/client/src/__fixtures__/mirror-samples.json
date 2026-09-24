@@ -938,7 +938,8 @@
                   "mode": "terms",
                   "fields": [],
                   "tolerance": "exact",
-                  "partial_last_term": false
+                  "partial_last_term": false,
+                  "case_sensitive": true
                 }
               },
               {
@@ -947,6 +948,37 @@
                   "kind": "tag",
                   "name": "archivio",
                   "descendants": true
+                }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "task",
+                  "status": "open"
+                }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "regex",
+                  "pattern": "TASK\\s+aperta",
+                  "fields": [
+                    "body"
+                  ]
+                }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "path",
+                  "glob": "Work/*.md"
+                }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "file",
+                  "extension": "md"
                 }
               }
             ]
@@ -1116,6 +1148,10 @@
     },
     {
       "kind": "syntax_forms",
+      "doc": "a.md"
+    },
+    {
+      "kind": "render_print",
       "doc": "a.md"
     }
   ],
@@ -1395,6 +1431,13 @@
           }
         }
       ]
+    },
+    {
+      "kind": "render_print",
+      "value": {
+        "html": "",
+        "parts": []
+      }
     }
   ],
   "BacklinkRef": [

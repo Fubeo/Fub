@@ -83,6 +83,7 @@ const ALLOWED_ATTRIBUTES: Record<string, Set<string>> = {
   a: new Set(["href"]),
   img: new Set(["src", "alt", "width", "height"]),
   input: new Set(["type", "checked", "disabled"]),
+  details: new Set(["open"]),
   td: new Set(["style", "colspan", "rowspan"]),
   th: new Set(["style", "colspan", "rowspan", "scope"]),
   col: new Set(["style", "span"]),
@@ -245,6 +246,10 @@ export function isAllowedLink(value: string): boolean {
 /// senza che nessuno clicchi, e dice a chi la serve che quella nota è aperta —
 /// per questo il default è bloccarla (5.3, 23.2) e restano i riferimenti dentro
 /// al vault, che sono relativi.
+/// Dove il sanitizzatore lascia il `src` di un'immagine del vault, in attesa
+/// che la resa lo risolva e lo serva da `fub-asset:`.
+export const VAULT_SRC_ATTRIBUTE = "data-vault-src";
+
 export function isAllowedResource(value: string, remoteAllowed = false): boolean {
   const v = value.trim();
   if (v === "") return false;
@@ -293,6 +298,24 @@ export function sanitizeFragment(html: string): DocumentFragment {
   return out;
 }
 
+/**
+ * HTML authored inside Markdown gets the document allowlist but never the
+ * renderer's private class/data contract. Note markup therefore cannot
+ * impersonate wikilinks, source spans, UI slots, tags, or embed owners.
+ */
+export function sanitizeMarkdownHtml(html: string): DocumentFragment {
+  const fragment = sanitizeFragment(html);
+  for (const element of fragment.querySelectorAll("*")) {
+    element.removeAttribute("class");
+    for (const attribute of Array.from(element.attributes)) {
+      if (attribute.name.toLowerCase().startsWith("data-")) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  }
+  return fragment;
+}
+
 /// Innesta un frammento in un contenitore, sostituendo ciò che c'era.
 ///
 /// È la funzione che i chiamanti usano davvero: `innerHTML = html` diventa
@@ -318,6 +341,15 @@ function sanitizeNode(node: Node): Node | null {
     if (name === "style" && !isAllowedStyle(attr.value)) continue;
     if (name === "href" && !isAllowedLink(attr.value)) continue;
     if (name === "src" && !isAllowedResource(attr.value)) continue;
+    // Un `src` sopravvissuto è un path del vault (i remoti sono già fuori), e un
+    // path del vault non è un URL della webview: messo come `src` su un
+    // elemento creato nel documento farebbe partire subito una richiesta verso
+    // l'origine dell'app. Resta inerte in `data-vault-src` finché la resa non
+    // lo risolve col kernel (`ui/markdown-media.ts`).
+    if (name === "src") {
+      newItem.setAttribute(VAULT_SRC_ATTRIBUTE, attr.value);
+      continue;
+    }
     // Il consenso si decide sul valore **come l'ha scritto il produttore**; la
     // traslazione nello spazio di nomi del contenuto viene dopo, ed è l'ultima
     // cosa che succede a un valore prima che sia nel documento.

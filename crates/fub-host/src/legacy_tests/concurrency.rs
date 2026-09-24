@@ -327,7 +327,7 @@ fn rereading_a_version_does_not_block_writers() {
     // prestito condiviso di Workspace e sul reader del VersionStore.
     workspace.with_host(VERSIONING_ID, |host| {
         store
-            .snapshot(&id, "# Note 0\n\noriginal\n", host)
+            .snapshot(&id, b"# Note 0\n\noriginal\n", host)
             .expect("the seed version is stored");
     });
     let ts = store.list(&id).first().expect("the seed version exists").ts;

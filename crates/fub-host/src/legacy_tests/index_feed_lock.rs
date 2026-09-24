@@ -7,14 +7,15 @@ use fub_abi::command::InvokeMode;
 use fub_abi::edit::{EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::event::{EventKind, EventMask, Notice};
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, LinkRewrite, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
     EventHandler, HostApi, HostCommands, IndexLoss, IndexProvider, IndexQuery, IndexResult,
     PluginManifest, QueryRoute, VaultEntry, VaultStructure, VaultWrite,
 };
-use fub_abi::{Event, FormatError, FormatProvider, PluginError};
+use fub_abi::{Event, Fnv1a, FormatError, FormatProvider, PluginError};
+use fub_features::COMMANDS_ID;
 use fub_format_markdown::MarkdownProvider;
 use fub_host::{Custody, Host, JobHost, NoWatcher};
 use fub_kernel::journal::JournalOp;
@@ -39,6 +40,36 @@ fn vault() -> Vault {
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     std::fs::write(root.join("Note 0.md"), "# Note 0\n").expect("seed note");
     Vault { _dir: dir, root }
+}
+
+fn seed_rename_recovery(
+    root: &camino::Utf8Path,
+    state: &str,
+    from: &str,
+    to: &str,
+    source: &str,
+) -> Utf8PathBuf {
+    let preimage = Revision::of(source);
+    let mut hash = Fnv1a::new();
+    hash.update(from.as_bytes());
+    hash.update(&[0]);
+    hash.update(to.as_bytes());
+    hash.update(&[0]);
+    hash.update(preimage.0.as_bytes());
+    let directory = root.join(".fub/rename-recovery");
+    std::fs::create_dir_all(&directory).expect("rename recovery directory");
+    let path = directory.join(format!("{:016x}.json", hash.value()));
+    let record = serde_json::json!({
+        "schema_version": 1,
+        "state": state,
+        "from": from,
+        "to": to,
+        "preimage": preimage,
+        "rewrites": []
+    });
+    std::fs::write(&path, serde_json::to_vec_pretty(&record).unwrap())
+        .expect("persist simulated rename intent");
+    path
 }
 
 struct IndexFeedLockProbe {
@@ -222,6 +253,15 @@ impl FormatProvider for BacklinkFormatProbe {
 
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
         self.markdown.serialize(model)
+    }
+
+    fn rewrite_links(
+        &self,
+        source: &DocumentSource,
+        context: &ParseContext,
+        rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        self.markdown.rewrite_links(source, context, rewrites)
     }
 }
 
@@ -693,6 +733,228 @@ fn a_panicking_before_write_finishes_the_staged_asset_rename_once() {
         std::fs::read_to_string(v.root.join("Note 0.md")).unwrap(),
         "# subsequent command\n"
     );
+}
+
+#[test]
+fn reopening_resumes_a_rename_after_the_file_move() {
+    let v = vault();
+    std::fs::write(v.root.join("photo.png"), b"PNG").expect("seed asset");
+    std::fs::write(
+        v.root.join("Backlink.md"),
+        "# Backlink\n![photo](photo.png)\n",
+    )
+    .expect("seed backlink");
+
+    let host = Host::without_watcher();
+    host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None).expect("initial indexing finishes");
+    let workspace = host.debug_workspace(None).expect("debug custody");
+    workspace
+        .write()
+        .expect("workspace remains writable")
+        .set_before_write_hook(Some((
+            COMMANDS_ID.to_string(),
+            Arc::new(|_, _| panic!("interrupt after the asset move")),
+        )));
+
+    let error = JobHost::new(workspace, COMMANDS_ID)
+        .rename_document(&DocId::new("photo.png"), &DocId::new("media/photo.png"))
+        .expect_err("the injected interruption leaves the backlink pending");
+    assert!(
+        matches!(error, PluginError::Io(_)),
+        "the provider panic is contained: {error}"
+    );
+    assert!(!v.root.join("photo.png").exists());
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Backlink.md")).unwrap(),
+        "# Backlink\n![photo](photo.png)\n"
+    );
+    assert!(
+        std::fs::read_dir(v.root.join(".fub/rename-recovery"))
+            .expect("durable recovery directory")
+            .next()
+            .is_some(),
+        "the moved file has a durable recovery intent"
+    );
+    let (pending, failures) = host
+        .debug_workspace(None)
+        .expect("debug custody")
+        .read()
+        .expect("workspace readable")
+        .prepare_rename_recovery_scan()
+        .invoke()
+        .expect("recovery intent readable")
+        .into_parts();
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].rewrites().len(), 1);
+    assert_eq!(
+        pending[0].classify().unwrap(),
+        fub_kernel::RenameRecoveryPosition::Destination
+    );
+    assert!(host.close().is_empty(), "interrupted session closes");
+
+    let reopened = Host::without_watcher();
+    reopened.open(&v.root).expect("the vault reopens");
+    reopened
+        .wait_indexed(None)
+        .expect("startup recovery finishes after indexing");
+    assert_eq!(
+        std::fs::read(v.root.join("media/photo.png")).unwrap(),
+        b"PNG"
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Backlink.md")).unwrap(),
+        "# Backlink\n![photo](media/photo.png)\n"
+    );
+    let (remaining, failures) = reopened
+        .debug_workspace(None)
+        .expect("debug custody")
+        .read()
+        .expect("workspace readable")
+        .prepare_rename_recovery_scan()
+        .invoke()
+        .expect("recovery directory remains readable")
+        .into_parts();
+    assert!(failures.is_empty(), "{failures:?}");
+    assert!(
+        remaining.is_empty(),
+        "the completed replay removes only its intent"
+    );
+    assert!(reopened.close().is_empty(), "recovered session closes");
+}
+
+#[test]
+fn reopening_resumes_the_archive_batch_from_disk() {
+    let v = vault();
+    std::fs::write(v.root.join("a.md"), "a").expect("seed a");
+    std::fs::write(v.root.join("b.md"), "b").expect("seed b");
+
+    let first = Host::without_watcher();
+    first.open(&v.root).expect("the vault opens");
+    first.wait_indexed(None).expect("initial indexing finishes");
+    assert!(first.close().is_empty(), "first session closes");
+
+    std::fs::create_dir(v.root.join("Archivio")).expect("archive directory");
+    std::fs::rename(v.root.join("a.md"), v.root.join("Archivio/a.md"))
+        .expect("simulate the first landed move");
+    let data = v.root.join(".fub/plugins").join(COMMANDS_ID);
+    std::fs::create_dir_all(&data).expect("commands data directory");
+    let intent = serde_json::json!({
+        "schema_version": 1,
+        "items": [
+            {
+                "from": "a.md",
+                "to": "Archivio/a.md",
+                "preimage": Revision::of("a"),
+                "status": { "kind": "pending" }
+            },
+            {
+                "from": "b.md",
+                "to": "Archivio/b.md",
+                "preimage": Revision::of("b"),
+                "status": { "kind": "pending" }
+            }
+        ]
+    });
+    std::fs::write(
+        data.join("archive-recovery.json"),
+        serde_json::to_vec(&intent).unwrap(),
+    )
+    .expect("persist simulated interrupted batch");
+
+    let reopened = Host::without_watcher();
+    reopened.open(&v.root).expect("the vault reopens");
+    reopened
+        .wait_indexed(None)
+        .expect("archive recovery finishes after indexing");
+    assert!(!v.root.join("a.md").exists());
+    assert!(!v.root.join("b.md").exists());
+    assert_eq!(std::fs::read(v.root.join("Archivio/a.md")).unwrap(), b"a");
+    assert_eq!(std::fs::read(v.root.join("Archivio/b.md")).unwrap(), b"b");
+    assert!(
+        !data.join("archive-recovery.json").exists(),
+        "the terminal batch intent is removed"
+    );
+    assert!(reopened.close().is_empty(), "recovered session closes");
+}
+
+#[test]
+fn reopening_recovers_a_valid_source_intent_beside_a_future_record() {
+    let v = vault();
+    std::fs::write(v.root.join("a.md"), "alpha").expect("seed source");
+    let first = Host::without_watcher();
+    first.open(&v.root).expect("the vault opens");
+    first.wait_indexed(None).expect("initial indexing finishes");
+    assert!(first.close().is_empty(), "first session closes");
+
+    let valid = seed_rename_recovery(&v.root, "active", "a.md", "b.md", "alpha");
+    let future = v.root.join(".fub/rename-recovery/future.json");
+    let future_record = serde_json::json!({
+        "schema_version": 2,
+        "state": "active",
+        "from": "unrelated.md",
+        "to": "other.md",
+        "preimage": Revision::of("future"),
+        "rewrites": []
+    });
+    std::fs::write(&future, serde_json::to_vec_pretty(&future_record).unwrap())
+        .expect("persist future intent");
+
+    let reopened = Host::without_watcher();
+    reopened.open(&v.root).expect("the vault reopens");
+    reopened
+        .wait_indexed(None)
+        .expect("valid recovery continues beside poison");
+    assert!(!v.root.join("a.md").exists());
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("b.md")).unwrap(),
+        "alpha"
+    );
+    assert!(!valid.exists(), "the valid terminal intent is removed");
+    assert!(future.exists(), "the future record remains inspectable");
+    let (pending, failures) = reopened
+        .debug_workspace(None)
+        .expect("debug custody")
+        .read()
+        .expect("workspace readable")
+        .prepare_rename_recovery_scan()
+        .invoke()
+        .expect("recovery directory remains readable")
+        .into_parts();
+    assert!(pending.is_empty());
+    assert_eq!(failures.len(), 1);
+    assert!(reopened.close().is_empty(), "recovered session closes");
+}
+
+#[test]
+fn reopening_rolls_back_a_cancelled_rename_left_at_its_destination() {
+    let v = vault();
+    std::fs::write(v.root.join("a.md"), "alpha").expect("seed source");
+    let first = Host::without_watcher();
+    first.open(&v.root).expect("the vault opens");
+    first.wait_indexed(None).expect("initial indexing finishes");
+    assert!(first.close().is_empty(), "first session closes");
+
+    std::fs::rename(v.root.join("a.md"), v.root.join("b.md"))
+        .expect("simulate the moved file before rollback");
+    let intent = seed_rename_recovery(&v.root, "cancelled", "a.md", "b.md", "alpha");
+
+    let reopened = Host::without_watcher();
+    reopened.open(&v.root).expect("the vault reopens");
+    reopened
+        .wait_indexed(None)
+        .expect("cancelled recovery rolls back after indexing");
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("a.md")).unwrap(),
+        "alpha"
+    );
+    assert!(!v.root.join("b.md").exists());
+    assert!(
+        !intent.exists(),
+        "the completed rollback removes its intent"
+    );
+    assert!(reopened.close().is_empty(), "recovered session closes");
 }
 
 /// Il rebuild attraversa lo stesso driver staccato sia dall'ingresso utente sia

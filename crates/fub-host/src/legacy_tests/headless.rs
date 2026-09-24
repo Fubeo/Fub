@@ -85,7 +85,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
     assert_eq!(
         info.extensions,
-        vec!["fubsheet", "markdown", "md"],
+        vec!["base", "canvas", "fubsheet", "markdown", "md"],
         "i provider dichiarano le estensioni, non la UI"
     );
 
@@ -111,20 +111,24 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         vec![
             "fub.backlinks",
             "fub.backup",
+            "fub.base",
             "fub.blocks",
             "fub.commands",
             "fub.core",
             "fub.dashboard",
             "fub.graph",
+            "fub.importers",
             "fub.maintenance",
             "fub.markdown",
             "fub.outline",
             "fub.properties",
+            "fub.publish",
             "fub.queries",
             "fub.search",
             "fub.serie",
             "fub.sheet",
             "fub.stats",
+            "fub.sync",
             "fub.tags",
             "fub.template",
             "fub.trash",
@@ -232,7 +236,13 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
         host.read_version(None, &id, ts).unwrap(),
         "# Nota\n\nprima\n"
     );
-    host.restore_version(None, &id, ts).expect("ripristina");
+    host.invoke_user_command(
+        None,
+        "version.restore",
+        serde_json::json!({ "doc": id.as_str(), "ts": ts }),
+        fub_abi::command::InvokeMode::Apply,
+    )
+    .expect("ripristina");
     let ws = host.debug_workspace(None).unwrap();
     let ws = ws.read().unwrap();
     assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");

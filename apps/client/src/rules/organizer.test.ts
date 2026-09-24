@@ -23,6 +23,7 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
       path: "Progetti",
       folders: [folder("Progetti/Zeta", 0, 2), folder("Progetti/Archivio")],
       notes: ["Progetti/beta.md", "Progetti/Alfa.md"],
+      files: ["Progetti/zeta.png", "Progetti/Bozza.pdf"],
       otherFolders: 0,
       otherNote: 0,
     };
@@ -32,6 +33,8 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
       "Progetti/Zeta",
     ]);
     expect(ordered.notes).toEqual(["Progetti/Alfa.md", "Progetti/beta.md"]);
+    expect(ordered.files).toEqual(["Progetti/Bozza.pdf", "Progetti/zeta.png"]);
+    // I file che non sono note si vedono ma non entrano nell'ordine a mano.
     expect(orderedNames(ordered)).toEqual(["Archivio", "Zeta", "Alfa.md", "beta.md"]);
   });
 
@@ -40,6 +43,7 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
       path: "",
       folders: [folder("b"), folder("a")],
       notes: ["z.md", "k.md"],
+      files: [],
       otherFolders: 0,
       otherNote: 0,
     };

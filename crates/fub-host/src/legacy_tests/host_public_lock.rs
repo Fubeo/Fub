@@ -259,6 +259,7 @@ fn host_view_interests_releases_workspace_before_provider_callback() {
 struct JobPlugin {
     entered: Option<mpsc::SyncSender<()>>,
     release: Option<Arc<Mutex<mpsc::Receiver<()>>>>,
+    host: Option<std::sync::Weak<Host>>,
 }
 
 impl Plugin for JobPlugin {
@@ -296,6 +297,14 @@ impl Plugin for JobPlugin {
                     .expect("release signal");
                 Ok(serde_json::json!({"released": true}))
             }
+            "sessions-free" => Ok(serde_json::json!({
+                "sessions_free": self
+                    .host
+                    .as_ref()
+                    .and_then(std::sync::Weak::upgrade)
+                    .expect("host vivo durante la callback")
+                    .debug_sessions_write_available()
+            })),
             "panic" => panic!("planned public invoke panic"),
             _ => Err(PluginError::UnknownJob(job.into())),
         }
@@ -305,6 +314,7 @@ impl Plugin for JobPlugin {
 struct JobBundle {
     entered: Option<mpsc::SyncSender<()>>,
     release: Option<Arc<Mutex<mpsc::Receiver<()>>>>,
+    host: Option<std::sync::Weak<Host>>,
 }
 
 impl Bundle for JobBundle {
@@ -320,6 +330,7 @@ impl Bundle for JobBundle {
         Box::new(JobPlugin {
             entered: self.entered.clone(),
             release: self.release.as_ref().map(Arc::clone),
+            host: self.host.clone(),
         })
     }
 
@@ -342,6 +353,7 @@ fn host_unmount_waits_for_inflight_job_and_invoke_contains_panic() {
         Arc::new(JobBundle {
             entered: Some(entered_tx),
             release: Some(Arc::new(Mutex::new(release_rx))),
+            host: None,
         }),
     )
     .expect("job bundle mounts");
@@ -381,6 +393,7 @@ fn host_unmount_waits_for_inflight_job_and_invoke_contains_panic() {
         Arc::new(JobBundle {
             entered: None,
             release: None,
+            host: None,
         }),
     )
     .expect("panic probe remounts");
@@ -391,6 +404,32 @@ fn host_unmount_waits_for_inflight_job_and_invoke_contains_panic() {
     );
     host.cancel_job(None, job)
         .expect("finished job cancellation is harmless");
+    assert!(host.close().is_empty(), "host closes cleanly");
+}
+
+#[test]
+fn invoke_job_releases_the_session_registry_before_plugin_code() {
+    let (_dir, root) = vault("md");
+    let host = Arc::new(Host::without_watcher().with_job_threads(1));
+    host.open(&root).expect("vault opens");
+    host.wait_indexed(None).expect("opening indexing finishes");
+    host.mount_bundle(
+        None,
+        Arc::new(JobBundle {
+            entered: None,
+            release: None,
+            host: Some(Arc::downgrade(&host)),
+        }),
+    )
+    .expect("probe bundle mounts");
+
+    let result = host
+        .invoke_job(None, PLUGIN, "sessions-free", serde_json::Value::Null)
+        .expect("probe job returns");
+    assert_eq!(
+        result["sessions_free"], true,
+        "bundle code must not run under the host session registry lock"
+    );
     assert!(host.close().is_empty(), "host closes cleanly");
 }
 

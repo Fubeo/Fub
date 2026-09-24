@@ -76,7 +76,9 @@ use fub_kernel::host::{authorize_path, Capability, Guard, Policy};
 use fub_kernel::workspace::{
     DeferredEvents, EventDrain, PreparedMaintenanceRebuild, PreparedPluginDataIo,
 };
-use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
+use fub_kernel::{
+    authorize_query, filter_query_result, ReadOnly, RenameRecoveryPosition, Workspace,
+};
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
 /// condiviso, **senza tenerlo**.
@@ -419,6 +421,105 @@ impl JobHost {
         finish_events(&workspace, deferred)
     }
 
+    /// Completa gli intent di rinomina rimasti da un'interruzione, senza
+    /// tenere `Custody<Workspace>` durante I/O o riscritture provider-owned.
+    pub(crate) fn recover_explicit_renames(&mut self) -> Result<Vec<PluginError>, PluginError> {
+        let scan = self.workspace.read()?.prepare_rename_recovery_scan();
+        let (pending, scan_failures) = scan.invoke().map_err(PluginError::from)?.into_parts();
+        let mut failures = scan_failures
+            .into_iter()
+            .map(PluginError::from)
+            .collect::<Vec<_>>();
+        for recovery in pending {
+            let position = match recovery.classify() {
+                Ok(position) => position,
+                Err(error) => {
+                    failures.push(PluginError::from(error));
+                    continue;
+                }
+            };
+            match position {
+                RenameRecoveryPosition::Cancelled => {
+                    if let Err(error) = recovery.clear() {
+                        failures.push(PluginError::from(error));
+                    }
+                }
+                RenameRecoveryPosition::Rollback => {
+                    let from = recovery.to().clone();
+                    let to = recovery.from().clone();
+                    match self.rename_document(&from, &to) {
+                        Ok(()) => {
+                            if let Err(error) = recovery.clear() {
+                                failures.push(PluginError::from(error));
+                            }
+                        }
+                        Err(error) => failures.push(error),
+                    }
+                }
+                RenameRecoveryPosition::Source => {
+                    let from = recovery.from().clone();
+                    let to = recovery.to().clone();
+                    // `persist` riconosce lo stesso record: il retry non apre mai
+                    // una finestra senza intent fra due avvii.
+                    if let Err(error) = self.rename_document(&from, &to) {
+                        failures.push(error);
+                    }
+                }
+                RenameRecoveryPosition::Destination => {
+                    let mut failure = None;
+                    for rewrite in recovery.rewrites() {
+                        let source = rewrite.source();
+                        let current = match self.document_revision(source) {
+                            Ok(current) => current,
+                            Err(error) => {
+                                failure = Some(error);
+                                break;
+                            }
+                        };
+                        if &current == rewrite.result() {
+                            continue;
+                        }
+                        if current != rewrite.request().base {
+                            failure = Some(PluginError::Conflict(
+                                format!(
+                                    "{} è cambiato durante il recupero della rinomina {} → {}",
+                                    source,
+                                    recovery.from(),
+                                    recovery.to()
+                                )
+                                .into(),
+                            ));
+                            break;
+                        }
+                        if let Err(error) =
+                            self.apply_edit_detached_inner(source, rewrite.request().clone())
+                        {
+                            // L'edit può essere atterrato prima che il chiamante
+                            // osservasse il guasto. La revisione prodotta è la
+                            // prova idempotente; ogni altro stato resta conflitto.
+                            match self.document_revision(source) {
+                                Ok(after) if &after == rewrite.result() => {}
+                                _ => {
+                                    failure = Some(error);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if let Some(error) = failure {
+                        failures.push(error);
+                    } else if let Err(error) = recovery.clear() {
+                        failures.push(PluginError::from(error));
+                    }
+                }
+                RenameRecoveryPosition::Conflict(message) => {
+                    failures.push(PluginError::Conflict(message.into()));
+                }
+            }
+        }
+        Ok(failures)
+    }
+
     /// Una lettura: prestito **condiviso**, e N job che leggono non si aspettano
     /// né fra loro né con le view che disegnano.
     ///
@@ -663,6 +764,58 @@ impl VaultWrite for JobHost {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         self.write_document_detached(id, source, base, Capability::VaultWrite, "writing", false)
+    }
+
+    fn write_document_bytes(
+        &mut self,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultWrite,
+                    id.as_str(),
+                    || format!("writing bytes to `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultWrite,
+                id.as_str(),
+                || format!("writing bytes to `{id}`"),
+            )?;
+            ws.prepare_document_bytes_write(id, expected)
+                .map_err(PluginError::from)?
+        };
+        let model = prepared.parse(bytes).map_err(PluginError::from)?;
+        self.stopped()?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = self.for_provider(owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        self.stopped()?;
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_bytes_write(prepared, bytes, model, before_write)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_write_deferred(pending)
+        };
+        finish_events(&workspace, deferred)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {

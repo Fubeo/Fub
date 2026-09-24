@@ -1,4 +1,907 @@
 {
+  "search_syntax": [
+    {
+      "input": "",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": []
+        }
+      }
+    },
+    {
+      "input": "rosa rossa",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "rosa rossa",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "rosa ros",
+      "typing": true,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "rosa ros",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": true,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "rosa ",
+      "typing": true,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "rosa",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "\"frase esatta\" altro",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "frase esatta",
+                    "mode": "phrase",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "altro",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "-spine tag:#fiori",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "spine",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "tag",
+                    "name": "fiori",
+                    "descendants": true
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "(città OR paese) -mare",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "città",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "mare",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            },
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "paese",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "mare",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "a OR b OR c",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "a",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            },
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "b",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            },
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "c",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "tag:progetto/attivo path:Diario folder:Progetti/ ext:.md",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "tag",
+                    "name": "progetto/attivo",
+                    "descendants": true
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "path",
+                    "glob": "**Diario**"
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "folder",
+                    "path": "Progetti",
+                    "descendants": true
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "file",
+                    "extension": "md"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "path:*.canvas file:\"Città del\" content:note heading:Obiettivi",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "path",
+                    "glob": "*.canvas"
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "Città del",
+                    "mode": "phrase",
+                    "fields": [
+                      "name"
+                    ],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "note",
+                    "mode": "terms",
+                    "fields": [
+                      "body"
+                    ],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "Obiettivi",
+                    "mode": "terms",
+                    "fields": [
+                      "heading"
+                    ],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "task:todo task:done match-case:API",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task",
+                    "status": "open"
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task",
+                    "status": "done"
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "API",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": true
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "/fo+\\/bar/ -/x/",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "regex",
+                    "pattern": "fo+/bar",
+                    "fields": []
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "regex",
+                    "pattern": "x",
+                    "fields": []
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "[stato] [stato:attivo] [priorità:>2] [scadenza:<2026-10-01] [fatto:false]",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "stato",
+                      "test": {
+                        "op": "exists"
+                      }
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "stato",
+                      "test": {
+                        "op": "contains",
+                        "kind": "text",
+                        "value": "attivo"
+                      }
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "priorità",
+                      "test": {
+                        "op": "greater_than",
+                        "kind": "number",
+                        "value": 2.0
+                      }
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "scadenza",
+                      "test": {
+                        "op": "less_than",
+                        "kind": "date",
+                        "value": {
+                          "year": 2026,
+                          "month": 10,
+                          "day": 1,
+                          "time": null
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "fatto",
+                      "test": {
+                        "op": "contains",
+                        "kind": "bool",
+                        "value": false
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "[aliases:\"Home page\"] [n:+.5] [v:1.2.3]",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "aliases",
+                      "test": {
+                        "op": "contains",
+                        "kind": "text",
+                        "value": "Home page"
+                      }
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "n",
+                      "test": {
+                        "op": "contains",
+                        "kind": "number",
+                        "value": 0.5
+                      }
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "v",
+                      "test": {
+                        "op": "contains",
+                        "kind": "text",
+                        "value": "1.2.3"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "ore 10:30 https://esempio.it/x",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "ore 10:30 https://esempio.it/x",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "((a OR b) (c OR d))",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "a",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "c",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            },
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "a",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "d",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            },
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "b",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "c",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            },
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "b",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "d",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "città \"aperta",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unclosed-quote",
+          "at": 6
+        }
+      }
+    },
+    {
+      "input": "città /aperta",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unclosed-regex",
+          "at": 6
+        }
+      }
+    },
+    {
+      "input": "[città",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unclosed-property",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "(città",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unclosed-group",
+          "at": 6
+        }
+      }
+    },
+    {
+      "input": "città)",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unexpected-close",
+          "at": 5
+        }
+      }
+    },
+    {
+      "input": "OR città",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "dangling-or",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "città OR",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "dangling-or",
+          "at": 6
+        }
+      }
+    },
+    {
+      "input": "-(città)",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "negated-group",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "tag:",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "empty-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "task:forse",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "ext:tar.gz",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "[:x]",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "empty-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "[k:]",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "empty-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "[k:>]",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "empty-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "(a OR b) (c OR d) (e OR f) (g OR h) (i OR j) (k OR l)",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "too-complex",
+          "at": 53
+        }
+      }
+    }
+  ],
   "page_name": [
     {
       "id": "note.md",

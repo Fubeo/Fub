@@ -17,7 +17,7 @@
 Il package WIT corrente è:
 
 ```wit
-package fub:abi@0.1.2;
+package fub:abi@0.2.0;
 ```
 
 ## Superficie Rust

@@ -62,14 +62,17 @@ pub mod journal;
 pub mod locale;
 pub mod log;
 pub mod maintenance;
+pub mod mounts;
 mod occurrences;
 pub mod organization;
+pub mod os_trash;
 pub mod plugins;
 pub mod poison;
 pub mod properties;
 mod providers;
 pub mod random;
 pub mod registry;
+mod rename_recovery;
 pub mod renderer;
 pub mod safety;
 pub mod session;
@@ -98,10 +101,17 @@ pub use index::plan::{PlanStep, QueryPlan};
 pub use index::{RouteConflict, CORE_ID};
 pub use journal::{journal_path, JournalOp, JournalRead, JournalRecord};
 pub use locale::SystemLocale;
+pub use mounts::{
+    ExternalMount, MountDiagnostic, MountRegistry, MountRoute, MOUNTS_FILE, MOUNTS_SCHEMA_VERSION,
+};
 pub use organization::{organization_path, OrganizationStore};
 pub use plugins::{PluginInfo, PluginRegistry, Registration, RegistrationKind, RegistryError};
 pub use poison::{Condition, SharedShelter, Shelter};
 pub use registry::{FormatRegistry, RegistryConflict};
+pub use rename_recovery::{
+    PendingRenameRecovery, RenameRecoveryEdit, RenameRecoveryPosition, RenameRecoveryScan,
+    RenameRecoveryScanResult,
+};
 pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererRegistry};
 pub use session::Session;
 pub use settings::{MachineSettings, SettingsStore, SharedSettings};
@@ -122,7 +132,8 @@ pub use workspace::{
     new_doc_id, valid_doc_id, CatchUpSnapshot, CompletedExternalAssetRename, CompletedSyncChange,
     ExternalRenamePlan, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange,
     ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
-    PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedExplicitRename,
-    PreparedExternalAssetRename, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace,
-    INDEX_JOB, MAIN_PANE,
+    PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedDocumentBytesWrite,
+    PreparedExplicitRename, PreparedExternalAssetRename, PreparedResourceOpen,
+    PreparedResourceRead, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB,
+    MAIN_PANE,
 };

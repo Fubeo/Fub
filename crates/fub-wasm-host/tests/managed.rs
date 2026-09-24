@@ -564,3 +564,69 @@ fn a_committed_disable_invalidates_an_opening_snapshot_without_retry() {
             .enabled
     );
 }
+
+#[test]
+fn prepare_limited_skips_every_installation_without_mounting() {
+    let config = tempfile::tempdir().expect("config tempdir");
+    let vault = Vault::new();
+    let manager = Arc::new(InstalledPluginManager::open(root(&config)).expect("manager opens"));
+    let installed = manager
+        .install(&common::ping(""))
+        .expect("component installs");
+    let empty_host = Host::without_watcher();
+    assert!(manager
+        .set_enabled(&empty_host, installed.installation, true)
+        .expect("enabled persists")
+        .is_empty());
+    assert!(manager
+        .set_consent(&empty_host, installed.installation, Consent::Granted)
+        .expect("consent persists")
+        .is_empty());
+    let snapshot = manager
+        .prepare_limited("manutenzione programmata")
+        .expect("limited mode prepares");
+    assert!(snapshot.bundles.is_empty());
+    assert_eq!(snapshot.diagnostics.len(), 1);
+    let message = snapshot.diagnostics[0].message().to_string();
+    assert!(message.contains("manutenzione programmata"), "{message}");
+    assert!(message.contains('1'), "{message}");
+    drop(snapshot);
+    // La modalità limitata non riscrive l'inventario: la scelta resta
+    // richiedibile e il mount normale continua a vedere il bundle.
+    assert!(manager
+        .store()
+        .snapshot()
+        .expect("inventory unchanged")
+        .plugins()[0]
+        .requested_at_startup());
+    let limited_host = Host::without_watcher()
+        .with_job_threads(1)
+        .with_startup_source(manager.limited_startup("ripristino manuale"));
+    limited_host.open(&vault.root).expect("limited vault opens");
+    limited_host
+        .wait_indexed(None)
+        .expect("limited opening finishes");
+    assert!(limited_host
+        .bundles(Some(vault.root.as_str()))
+        .expect("limited runtime inventory")
+        .iter()
+        .all(|bundle| bundle.id != ID));
+    assert!(matches!(
+        limited_host.startup_diagnostics(Some(vault.root.as_str()))
+            .expect("typed limited diagnostics").as_slice(),
+        [PluginError::Cancelled(message)] if message.as_literal().is_some_and(|s| s.contains("ripristino manuale"))
+    ));
+    assert!(limited_host.close().is_empty());
+    let host = managed_host(Arc::clone(&manager));
+    host.open(&vault.root).expect("vault opens");
+    host.wait_indexed(None).expect("opening finishes");
+    assert!(
+        manager
+            .list(&host, Some(vault.root.as_str()))
+            .expect("mounted metadata lists")[0]
+            .bundle
+            .mounted
+    );
+    assert!(host.close().is_empty());
+    manager.shutdown().expect("manager drains");
+}

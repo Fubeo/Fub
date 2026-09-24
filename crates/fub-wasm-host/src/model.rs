@@ -918,7 +918,7 @@ fn to_heading(h: &rm::Heading) -> wm::Heading {
     }
 }
 
-fn to_target(t: &rm::LinkTarget) -> wm::LinkTarget {
+pub(crate) fn to_target(t: &rm::LinkTarget) -> wm::LinkTarget {
     match t {
         rm::LinkTarget::Wiki {
             page,

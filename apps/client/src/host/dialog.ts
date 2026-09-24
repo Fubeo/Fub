@@ -1,13 +1,13 @@
 // Le superfici che l'app chiede al **sistema operativo**, non al kernel: una
-// conferma modale, il selettore di cartella. Non passano dall'IPC di Fub —
-// le disegna la piattaforma — e sono l'altra metà della cucitura.
+// conferma modale, selettori di cartella/file e destinazione di salvataggio.
+// Non passano dall'IPC di Fub: li disegna la piattaforma.
 //
 // Prima questa metà non esisteva: `main.ts` importava `@tauri-apps/plugin-dialog`
 // direttamente, e bastava quella riga perché la shell smettesse di essere
 // portabile (§1.3). Sostituire questo modulo — con `window.confirm` in un PWA,
 // con un foglio nativo su mobile, con un finto negli e2e della shell (§17.2) —
 // è ora un lavoro di un file solo.
-import { confirm as tauriConfirm, open as tauriOpen } from "@tauri-apps/plugin-dialog";
+import { confirm as tauriConfirm, open as tauriOpen, save as tauriSave } from "@tauri-apps/plugin-dialog";
 
 /// Cosa si sta per fare, e quanto è grave. `danger` è ciò che il sistema usa
 /// per l'icona di avviso: distruttivo (svuotare il cestino) contro reversibile
@@ -49,4 +49,14 @@ export async function pickFile(): Promise<string | null> {
     filters: [{ name: "WebAssembly", extensions: ["wasm"] }],
   });
   return typeof choice === "string" ? choice : null;
+}
+
+/// Un file scelto dalla persona per il rapporto di supporto. La scelta puo`
+/// essere annullata, e il backend rifiuta comunque un path dentro un vault.
+export async function pickSupportDestination(): Promise<string | null> {
+  const choice = await tauriSave({
+    defaultPath: "fub-support.json",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  return typeof choice === "string" && choice.trim() ? choice : null;
 }

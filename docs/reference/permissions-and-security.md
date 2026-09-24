@@ -106,6 +106,15 @@ Ogni albero WASM passa dalla validazione non fidata prima della serializzazione
 IPC. Il percorso `ViewProvider` applica lo stesso controllo prima di inoltrare
 la forma alla shell; i provider ancora differiti non creano un bypass.
 
+Alcuni intenti `Custom` fanno eseguire alla shell un'azione con un privilegio
+del processo, cioè scrivere negli appunti: `fub.clipboard.text` e
+`settings.export`. L'elenco è `fub_abi::ui::privileged_intent`. Il kernel
+accetta questi intenti soltanto da provider `Core`, sia come `ViewUpdate` di
+una view sia come `CommandEffect` di un comando, nel percorso sincrono e in
+quello staccato. Da un provider di altro grado l'esito è `PermissionDenied` e
+la shell non riceve niente. Gli intenti `Custom` senza privilegio restano
+aperti a tutti.
+
 ## Webview
 
 La Content Security Policy impedisce script remoti, iframe e oggetti non

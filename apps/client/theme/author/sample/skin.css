@@ -1,7 +1,7 @@
 /* La pelle del tema di serie: il chrome (§29.1).
  *
  * GENERATO da `theme/serie/skin/` — non si modifica qui: si tocca il pezzo e
- * si rigenera con `npm run tema:genera`. Una regola scritta a mano in questo
+ * si rigenera con `npm run theme:generate`. Una regola scritta a mano in questo
  * file sparisce alla prima rigenerazione, e fino ad allora dice il falso sul
  * pezzo che avrebbe dovuto contenerla.
  *
@@ -855,11 +855,17 @@ progress::-moz-progress-bar {
 
 /* Lettura: la superficie del documento, con i colori della superficie del
    documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
-   fare sulla nota, non di che colore è. */
+   fare sulla nota, non di che colore è. La colonna è quella di Live: il frame
+   porta inset e misura, il contenuto non raddoppia il padding. */
 .pane-preview {
-  padding: var(--space-6) var(--space-7) var(--space-10);
+  padding: var(--space-8) var(--space-7) var(--space-10);
   background: var(--doc-bg);
   color: var(--doc-fg);
+  user-select: text;
+}
+.pane-preview.markdown-preview {
+  width: min(100%, var(--content-width));
+  margin-inline: auto;
 }
 
 .grid-surface {
@@ -915,32 +921,48 @@ progress::-moz-progress-bar {
 
 /* ── skin/preview.css ───────────────────────────────────────────────────── */
 
-/* Anteprima markdown: titoli editoriali, non errori di sintassi. I titoli sono
-   testo — inchiostro del documento, non un rosso — e la gerarchia passa da
-   misura e respiro, non dal colore: un solo livello sottolineato, i pesi che
-   calano col livello, h5/h6 maiuscoletti muti. */
+/* Anteprima markdown: i titoli usano l'inchiostro `doc-heading`, uguale in
+   Live, Lettura e Sorgente (il testo del titolo in Sorgente usa `doc-fg`,
+   cioè lo stesso valore). Solo i marcatori `#` restano sintassi: la
+   gerarchia passa da misura e respiro — un solo livello sottolineato, i
+   pesi che calano col livello, h5/h6 maiuscoletti muti. */
+.markdown-rendered h1,
+.markdown-rendered h2,
+.markdown-rendered h3,
+.markdown-rendered h4,
+.markdown-rendered h5,
+.markdown-rendered h6,
 .markdown-preview h1,
 .markdown-preview h2,
 .markdown-preview h3,
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
-  color: var(--doc-fg);
+  color: var(--doc-heading);
   font-weight: var(--weight-bold);
 }
+.markdown-rendered h1,
 .markdown-preview h1 {
   border-bottom: 1px solid var(--doc-rule-soft);
   padding-bottom: var(--space-3);
 }
+/* I link resi usano lo stesso inchiostro dei wikilink: un `[t](url)` e un
+   `[[Nota]]` sono lo stesso gesto di navigazione, e lo stesso viola dello
+   user-agent su uno solo dei due sarebbe una distinzione senza significato.
+   La regola copre ogni `<a>` resa (esterni, ancore, path interni), non solo
+   i wikilink: il colore di default del browser non deve mai comparire. */
+.markdown-rendered a,
+.markdown-preview a {
+  color: var(--doc-link);
+}
+.markdown-rendered a.wikilink,
 .markdown-preview a.wikilink {
   color: var(--doc-link);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.markdown-preview a.wikilink.unresolved {
-  color: var(--doc-danger);
-}
+.markdown-rendered .tag,
 .markdown-preview .tag {
   background: var(--doc-fill);
   border-radius: 1em;
@@ -948,30 +970,98 @@ progress::-moz-progress-bar {
   color: var(--doc-link);
   font-size: 0.95em;
 }
+.markdown-rendered mark,
 .markdown-preview mark {
   background: var(--doc-highlight);
   color: inherit;
 }
+.markdown-rendered code,
 .markdown-preview code {
   background: var(--doc-fill);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
 }
+.markdown-rendered pre,
 .markdown-preview pre {
+  position: relative;
   background: var(--doc-fill-soft);
   padding: var(--space-5);
   border-radius: var(--radius-md);
   overflow-x: auto;
+  font-family: var(--font-mono);
 }
+/* Il bottone copia vive dentro il `pre` senza spostare il codice: assoluto
+   in un angolo, fuori dalla selezione del testo, visibile anche da tastiera. */
+.markdown-rendered .markdown-code-copy,
+.markdown-preview .markdown-code-copy {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  user-select: none;
+}
+.markdown-rendered .markdown-code-copy:hover,
+.markdown-rendered .markdown-code-copy:focus-visible,
+.markdown-preview .markdown-code-copy:hover,
+.markdown-preview .markdown-code-copy:focus-visible {
+  background: var(--overlay-hover);
+}
+/* L'evidenziazione del codice riusa la tavolozza di sintassi dell'editor: gli
+   stessi nomi, nessuna seconda copia dei colori. I selettori ad attributo non
+   aggiungono hook: coprono anche le classi composte (`tok-variableName
+   tok-definition`). */
+.markdown-rendered [class*="tok-keyword"] {
+  color: var(--syn-keyword);
+}
+.markdown-rendered [class*="tok-typeName"] {
+  color: var(--syn-type);
+}
+.markdown-rendered [class*="tok-variableName"] {
+  color: var(--syn-name);
+}
+.markdown-rendered [class*="tok-variableName2"] {
+  color: var(--syn-literal);
+}
+.markdown-rendered [class*="tok-propertyName"] {
+  color: var(--syn-name);
+}
+.markdown-rendered [class*="tok-string"] {
+  color: var(--syn-string);
+}
+.markdown-rendered [class*="tok-comment"] {
+  color: var(--syn-comment);
+}
+.markdown-rendered [class*="tok-number"] {
+  color: var(--syn-type);
+}
+.markdown-rendered [class*="tok-bool"] {
+  color: var(--syn-literal);
+}
+.markdown-rendered [class*="tok-operator"] {
+  color: var(--syn-operator);
+}
+.markdown-rendered [class*="tok-punctuation"] {
+  color: var(--doc-fg);
+}
+.markdown-rendered hr,
 .markdown-preview hr {
   border: none;
   border-top: 1px solid var(--doc-rule);
 }
+.markdown-rendered blockquote,
 .markdown-preview blockquote {
   border-left: 3px solid var(--doc-rule);
   margin: var(--space-3) 0;
   padding-left: var(--space-5);
 }
+.markdown-rendered .callout,
 .markdown-preview .callout {
   border: 1px solid var(--doc-rule-soft);
   border-left: 3px solid var(--doc-rule);
@@ -980,41 +1070,44 @@ progress::-moz-progress-bar {
   margin: var(--space-4) 0;
   background: var(--doc-fill-soft);
 }
+.markdown-rendered .callout-title,
 .markdown-preview .callout-title {
   font-weight: var(--weight-bold);
-  text-transform: capitalize;
   margin-bottom: var(--space-2);
 }
-/* Task e tabelle: da quando il modello le sa dire, l'anteprima le disegna. */
+/* Task e tabelle: la stessa scala in Live e Lettura, un solo valore. */
+.markdown-rendered li.task,
 .markdown-preview li.task {
   list-style: none;
   margin-left: -18px;
 }
+.markdown-rendered li.task > input,
 .markdown-preview li.task > input {
   margin-right: var(--space-3);
 }
-/* Uno stato personalizzato (`[/]`, `[-]`) non è "fatto" e non è "da fare":
-   al posto della casella si vede il simbolo che l'utente ha scritto. */
-.markdown-preview li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"]) > input {
-  display: none;
-}
+/* Gli stati personalizzati conservano il simbolo accanto al controllo. */
+.markdown-rendered li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"])::before,
 .markdown-preview li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"])::before {
   content: "[" attr(data-task) "]";
   color: var(--doc-link);
   font-weight: var(--weight-bold);
   margin-right: var(--space-3);
 }
+.markdown-rendered table,
 .markdown-preview table {
   border-collapse: collapse;
   margin: var(--space-4) 0;
   display: block;
   overflow-x: auto;
 }
+.markdown-rendered th,
+.markdown-rendered td,
 .markdown-preview th,
 .markdown-preview td {
   border: 1px solid var(--doc-rule-soft);
   padding: var(--space-2) var(--space-4);
 }
+.markdown-rendered th,
 .markdown-preview th {
   background: var(--doc-fill-soft);
   font-weight: var(--weight-bold);
@@ -1056,12 +1149,12 @@ progress::-moz-progress-bar {
    `.block-*` resta il degrado di un `custom_kind` che nessuno rivendica, e ha un
    bordo tratteggiato perché *si deve vedere* che è un blocco non disegnato: un
    degrado invisibile è indistinguibile da una resa riuscita. */
-.markdown-preview .ui-slot {
+.markdown-rendered .ui-slot {
   display: block;
   margin: var(--space-4) 0;
 }
-.markdown-preview [class^="block-"],
-.markdown-preview [class*=" block-"] {
+.markdown-rendered [class^="block-"],
+.markdown-rendered [class*=" block-"] {
   border: 1px dashed var(--doc-rule-soft);
   border-radius: var(--radius-sm);
   padding: var(--space-4) var(--space-5);
@@ -1070,19 +1163,38 @@ progress::-moz-progress-bar {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
-/* La formula: c'è il blocco, non c'è il compositore — e si vede. */
-.markdown-preview .math-block {
+/* KaTeX compone solo placeholder inerti prodotti dal renderer condiviso. */
+.markdown-rendered .math-inline {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+.markdown-rendered .math-block {
   display: block;
   margin: var(--space-4) 0;
   padding: var(--space-4) var(--space-6);
+  overflow-x: auto;
   text-align: center;
   background: var(--doc-fill-soft);
   border-radius: var(--radius-sm);
+}
+.markdown-rendered .math-block .katex-display {
+  margin: 0;
+}
+.markdown-rendered .math-inline[data-state="loading"],
+.markdown-rendered .math-inline[data-state="error"],
+.markdown-rendered .math-block[data-state="loading"],
+.markdown-rendered .math-block[data-state="error"] {
+  white-space: pre-wrap;
   font-family: var(--font-mono);
 }
-.markdown-preview .inline-highlight {
-  background: var(--doc-fill-soft);
-  box-shadow: 0 0 0 2px var(--doc-fill-soft);
+.markdown-rendered .math-inline[data-state="error"],
+.markdown-rendered .math-block[data-state="error"] {
+  color: var(--doc-danger);
+}
+.markdown-rendered .inline-highlight {
+  background: var(--doc-highlight);
+  box-shadow: 0 0 0 2px var(--doc-highlight);
   border-radius: var(--radius-xs);
 }
 
@@ -1119,60 +1231,111 @@ progress::-moz-progress-bar {
 }
 
 /* La nota ha un solo vocabolario tipografico in Sorgente, Live e Lettura.
-   CodeMirror porta il corpo del codice; Live prende la misura e il respiro
-   della prosa, mentre Lettura li applica al documento reso. */
-.pane[data-mode="source"] .cm-content {
-  max-width: none;
-}
-.pane[data-mode="live_preview"] .cm-content {
+   Sorgente resta sintassi mono del tema CodeMirror per i colori; corpo, misura
+   e respiro vengono dalla pelle con le preferenze di lettura. Live e Lettura
+   rendono lo stesso `.markdown-rendered`. Il frame (`.cm-content`,
+   `.pane-preview`) porta colonna e inset; il contenuto non raddoppia padding
+   né larghezza. */
+.pane-editor[data-markdown-mode="source"] .cm-content,
+.pane-editor[data-markdown-mode="live_preview"] .cm-content {
   max-width: var(--content-width);
   margin-inline: auto;
   padding: var(--space-8) var(--space-7) var(--space-10);
-  font-family: var(--font-reading);
-  font-size: var(--text-reading);
-  line-height: var(--leading-relaxed);
+  box-sizing: border-box;
 }
-.pane-preview {
-  font-family: var(--font-reading);
-  font-size: var(--text-reading);
-  line-height: var(--leading-relaxed);
-  hyphens: auto;
+/* I widget Live riusano la colonna del frame senza aggiungere la propria:
+   il padding laterale resta del `.cm-content`, non del blocco. */
+.pane-editor[data-markdown-mode="live_preview"] .cm-content .markdown-rendered {
   max-width: 100%;
+  padding: 0 0 var(--space-4);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
+/* Il contenuto reso è lo stesso nei due modi: corpo e respiro delle
+   preferenze, colonna data dal frame. Il codice resta mono. */
+.markdown-rendered,
 .markdown-preview {
-  width: min(100%, var(--content-width));
-  margin-inline: auto;
-  padding-block: var(--space-7) var(--space-10);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+  color: var(--doc-fg);
+  overflow-wrap: break-word;
 }
-.markdown-preview > :first-child {
+.markdown-rendered code,
+.markdown-rendered pre,
+.markdown-preview code,
+.markdown-preview pre {
+  font-family: var(--font-mono);
+}
+.pane-preview.markdown-rendered > * {
+  margin-block: 0 var(--space-4);
+}
+.pane-preview.markdown-rendered > h1,
+.pane-preview.markdown-rendered > h2 {
+  margin-top: var(--space-7);
+}
+.pane-preview.markdown-rendered > :first-child {
   margin-top: 0;
 }
-.markdown-preview > :last-child {
+/* In Live ogni widget è un blocco isolato dentro `.cm-content`: i margini
+   dei figli non escono e i fratelli sono widget, non titoli — quindi il
+   ritmo vive sul widget (`margin` sotto, stacco sopra h1/h2) e i figli
+   stanno a margine zero. In Lettura i figli sono diretti del contenitore
+   e i loro margini lavorano davvero. Il livello lo scrive il renderer
+   condiviso (`data-md-kind`), non un selettore `:has`: la pelle resta nel
+   vocabolario del caricatore. */
+.pane-editor[data-markdown-mode="live_preview"] .cm-markdown-block {
+  margin: 0 0 var(--space-5);
+  padding: 0;
+}
+.pane-editor[data-markdown-mode="live_preview"] .cm-markdown-block > :first-child {
+  margin-top: 0;
+}
+.pane-editor[data-markdown-mode="live_preview"] .cm-markdown-block > :last-child {
   margin-bottom: 0;
 }
+.pane-editor[data-markdown-mode="live_preview"] .cm-markdown-block[data-md-kind="heading-1"],
+.pane-editor[data-markdown-mode="live_preview"] .cm-markdown-block[data-md-kind="heading-2"] {
+  margin-top: var(--space-7);
+}
+.pane-editor[data-markdown-mode="live_preview"] .cm-markdown-block:first-child[data-md-kind="heading-1"],
+.pane-editor[data-markdown-mode="live_preview"] .cm-markdown-block:first-child[data-md-kind="heading-2"] {
+  margin-top: 0;
+}
+.pane-preview.markdown-rendered > :last-child {
+  margin-bottom: 0;
+}
+.markdown-rendered h1,
 .markdown-preview h1 {
   font-size: var(--text-3xl);
   line-height: var(--leading-tight);
   letter-spacing: -0.01em;
   margin: var(--space-8) 0 var(--space-4);
 }
+.markdown-rendered h2,
+.markdown-rendered h3,
 .markdown-preview h2,
 .markdown-preview h3 {
   line-height: var(--leading-tight);
   letter-spacing: -0.005em;
   margin: var(--space-7) 0 var(--space-3);
 }
+.markdown-rendered h2,
 .markdown-preview h2 {
   font-size: var(--text-2xl);
 }
+.markdown-rendered h3,
 .markdown-preview h3 {
   font-size: var(--text-xl);
   font-weight: var(--weight-medium);
 }
+.markdown-rendered h4,
 .markdown-preview h4 {
   font-size: var(--text-lg);
   margin: var(--space-6) 0 var(--space-2);
 }
+.markdown-rendered h5,
+.markdown-rendered h6,
 .markdown-preview h5,
 .markdown-preview h6 {
   font-size: var(--text-sm);
@@ -1181,13 +1344,19 @@ progress::-moz-progress-bar {
   text-transform: uppercase;
   margin: var(--space-6) 0 var(--space-2);
 }
+.markdown-rendered h6,
 .markdown-preview h6 {
   font-weight: var(--weight-medium);
 }
+.markdown-rendered p,
+.markdown-rendered li,
 .markdown-preview p,
 .markdown-preview li {
   line-height: var(--leading-relaxed);
 }
+.markdown-rendered p,
+.markdown-rendered ul,
+.markdown-rendered ol,
 .markdown-preview p,
 .markdown-preview ul,
 .markdown-preview ol {
@@ -1198,31 +1367,45 @@ progress::-moz-progress-bar {
    veste le specie senza riscrivere il modello. Le note informative restano
    neutre — distinguere «nota» con un inchiostro colorato la farebbe leggere
    come avviso — mentre gli avvisi veri prendono gli intenti della shell. */
+.markdown-rendered .callout[data-callout="warning"],
+.markdown-rendered .callout[data-callout="caution"],
+.markdown-rendered .callout[data-callout="attention"],
 .markdown-preview .callout[data-callout="warning"],
 .markdown-preview .callout[data-callout="caution"],
 .markdown-preview .callout[data-callout="attention"] {
   border-left-color: var(--warning);
 }
+.markdown-rendered .callout[data-callout="tip"],
+.markdown-rendered .callout[data-callout="success"],
 .markdown-preview .callout[data-callout="tip"],
 .markdown-preview .callout[data-callout="success"] {
   border-left-color: var(--success);
 }
+.markdown-rendered .callout[data-callout="info"],
+.markdown-rendered .callout[data-callout="note"],
 .markdown-preview .callout[data-callout="info"],
 .markdown-preview .callout[data-callout="note"] {
   border-left-color: var(--info);
 }
+.markdown-rendered .block-footnote-definition,
 .markdown-preview .block-footnote-definition {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
   border-top: 1px solid var(--doc-rule-soft);
   margin-top: var(--space-6);
-  padding-top: var(--space-4);
+  padding: var(--space-4) 0 0;
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
+.markdown-rendered .footnote-ref,
 .markdown-preview .footnote-ref {
   color: var(--doc-link);
   font-size: var(--text-sm);
   line-height: var(--leading-tight);
 }
+.markdown-rendered .block-frontmatter-unparsed,
 .markdown-preview .block-frontmatter-unparsed {
   margin: 0 0 var(--space-5);
   padding: var(--space-4) var(--space-5);
@@ -1233,17 +1416,19 @@ progress::-moz-progress-bar {
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
+.markdown-rendered img,
 .markdown-preview img {
   display: block;
   max-width: 100%;
   height: auto;
   border-radius: var(--radius-sm);
 }
+.markdown-rendered .embed[data-embed-url],
+.markdown-rendered .embed[data-embed-path],
 .markdown-preview .embed[data-embed-url],
 .markdown-preview .embed[data-embed-path] {
   min-height: var(--text-3xl);
 }
-
 /* Il renderer condiviso usa immagini SVG inerti, non SVG attivo nella shell. */
 .mermaid-diagram {
   margin: var(--space-5) 0;
@@ -1288,6 +1473,157 @@ progress::-moz-progress-bar {
 }
 .mermaid-diagram [role="status"] {
   overflow-wrap: anywhere;
+}
+
+/* L'anteprima al passaggio su un wikilink: una scheda sopra il documento,
+   con la resa della Lettura dentro. */
+.link-preview {
+  position: fixed;
+  z-index: 60;
+  width: min(480px, calc(100vw - 16px));
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-md);
+  background: var(--doc-bg, var(--bg));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+.link-preview .doc-preview:focus-visible {
+  outline: none;
+}
+
+/* ── skin/canvas.css ────────────────────────────────────────────────────── */
+
+/* La carta e i controlli Canvas; coordinate e hit area sono della struttura. */
+.canvas-surface {
+  color: var(--text);
+  background: var(--doc-bg);
+}
+.canvas-toolbar {
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.canvas-node {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.canvas-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.canvas-node-group {
+  border-style: dashed;
+}
+.canvas-node-handle {
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.canvas-connect {
+  padding: 0;
+  color: var(--accent-soft);
+}
+.canvas-card-body {
+  padding: var(--space-3);
+  white-space: pre-wrap;
+}
+.canvas-markdown {
+  white-space: normal;
+}
+.canvas-empty,
+.canvas-group-bg {
+  color: var(--muted);
+}
+.canvas-url-text {
+  display: block;
+  margin-bottom: var(--space-3);
+}
+.canvas-text-editor,
+.canvas-field-editor {
+  margin: 0;
+  padding: var(--space-2);
+  color: var(--text);
+  background: var(--doc-bg);
+  border: 1px solid var(--border);
+  font: inherit;
+}
+.canvas-resize::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+}
+.canvas-edge-hit {
+  fill: none;
+  stroke: transparent;
+}
+.canvas-edge-line {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.canvas-edge-line.selected {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.canvas-edge-arrow {
+  fill: var(--muted);
+}
+.canvas-edge-label {
+  fill: var(--text);
+  font-size: var(--text-sm);
+  text-anchor: middle;
+}
+
+/* ── skin/base.css ──────────────────────────────────────────────────────── */
+
+/* Le viste Base consumano ruoli del tema; layout e dimensioni stanno nella struttura. */
+.base-surface {
+  color: var(--text);
+  background: var(--doc-bg);
+}
+.base-toolbar {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.base-status,
+.base-map-attribution { color: var(--muted); }
+.base-table th,
+.base-table td { border-bottom: 1px solid var(--border); }
+.base-table th { background: var(--bg-elev); }
+.base-card,
+.base-kanban-card,
+.base-kanban-column {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+}
+.base-kanban-column { background: var(--doc-bg); }
+.base-cell-error { color: var(--danger); }
+.base-map-atlas {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--muted);
+}
+.base-map-marker {
+  fill: var(--accent);
+  stroke: var(--doc-bg);
+  stroke-width: 2;
+  cursor: pointer;
+}
+.base-map-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── skin/context-menu.css ──────────────────────────────────────────────── */

@@ -13,6 +13,7 @@ import {
 import { expand } from "../i18n/strings";
 import { normalize } from "../ui/commands";
 import { byteToCharIndex, charToByteIndex } from "./offsets";
+import { parseSearch } from "./search-syntax";
 // La fixture è generata dalle regole Rust — vedi
 // `crates/fub-abi/tests/rules_mirror.rs`.
 import cases from "../__fixtures__/rules-samples.json";
@@ -67,6 +68,8 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   topic_matches: (c) => topicMatches(c.prefix, c.topic),
   folder_contains: (c) => folderContains(c.folder, c.id),
   mask_wants: (c) => maskWants(c.mask, c.event),
+  // La sintassi della barra di ricerca (P04): una riga, la stessa `QueryExpr`.
+  search_syntax: (c) => parseSearch(c.input, c.typing),
 };
 
 describe("mirror delle regole TS↔Rust", () => {

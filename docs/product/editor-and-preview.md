@@ -21,10 +21,21 @@ propria superficie; con una sola modalità non mostra un selettore.
 Le scorciatoie seguono il riquadro attivo.
 
 Il tema di serie mantiene il lime per indicatori, focus e azioni primarie.
-La selezione usa un fondo neutro e un segno laterale; i titoli in Live e
-Lettura usano l'inchiostro del documento, mentre Sorgente conserva i colori
-della sintassi. Font, corpo, interlinea e misura rispettano le preferenze di
-lettura.
+La selezione usa un fondo neutro e un segno laterale; i titoli usano
+l'inchiostro del documento in tutte e tre le modalità — solo i `#` restano
+sintassi colorata — e i link resi usano lo stesso inchiostro dei wikilink.
+Il ritmo verticale è lo stesso in Live e Lettura: un passo sotto ogni
+blocco, due passi sopra i titoli di sezione. In Live il ritmo vive sui
+widget (i margini dei figli non escono dal blocco isolato).
+Font, corpo, interlinea e misura rispettano le preferenze di lettura.
+
+L'editor testuale supporta folding, selezioni multiple e rettangolari,
+indentazione, liste intelligenti, matching e chiusura delle parentesi. L'incolla
+da HTML passa dal sanitizzatore e viene convertito in Markdown; testo semplice e
+Markdown dichiarato restano invece input autorevole. Correttore ortografico e
+modalità Vim sono preferenze di macchina aggiornate senza rimontare la sessione.
+La direzione del testo è automatica per riga e la misura leggibile riusa la
+preferenza di aspetto.
 
 ## Codice e diagrammi Mermaid
 
@@ -51,6 +62,51 @@ remote. Il rendering accetta fino a 50.000 caratteri di sorgente per diagramma;
 il limite Mermaid degli archi è 500. Il cambio di superficie rilascia gli
 osservatori e gli URL delle immagini; una risposta vecchia non rimonta il
 diagramma.
+
+I link espliciti contenuti nel diagramma diventano controlli adiacenti
+navigabili soltanto per destinazioni `http`, `https`, `mailto` o frammenti
+locali. Lo SVG resta un'immagine inerte: non porta callback o navigazione propria
+nella webview.
+
+## Formule
+
+Le formule inline usano `$…$`; quelle a blocco `$$…$$`. KaTeX e il suo CSS si
+caricano soltanto quando una superficie contiene una formula. Il renderer non
+considera formule il codice, i dollari escapati o delimitatori incompleti.
+Sorgenti oltre 20.000 caratteri e formule che superano i limiti di espansione o
+dimensione mostrano un errore leggibile conservando il testo originale.
+
+## Sintassi estesa e viste strutturali
+
+La resa condivisa supporta task, highlight, callout annidati e ripiegabili,
+wikilink con alias, heading e block id, tabelle, note a piè di pagina etichettate
+e inline. Nelle immagini Markdown il suffisso dell'alt `|larghezza` o
+`|larghezzaxaltezza` imposta dimensioni numeriche senza entrare nel testo
+alternativo.
+
+I commenti `%%…%%` su una riga restano nel file e nel modello, con i
+delimitatori, ma non compaiono nella resa: in Lettura spariscono insieme a
+link, tag ed evidenziati che contengono, in Live restano visibili e attenuati
+solo sulla riga del cursore.
+
+Immagini e media del vault si risolvono con la regola dei link del kernel:
+un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
+si cerca per nome. I byte arrivano dal
+protocollo `fub-asset:` tramite un lease chiuso quando la resa si smonta; un
+riferimento che non si risolve resta marcato come non risolto. Negli embed
+`![[file|120]]` e `![[file|200x100]]` il suffisso è una dimensione, non
+un'etichetta. Audio e video diventano un player con controlli, un PDF un
+collegamento al visualizzatore dedicato.
+
+In Live i callout diventano un blocco reso quando il cursore è fuori, e i
+recinti con info string dichiarata (Mermaid, formule) si comportano allo stesso
+modo. Le formule in riga sono rese fuori dalla riga attiva e l'ID di blocco
+finale di un blocco è nascosto, come in Lettura.
+
+La vista Struttura può spostare una sezione fra fratelli adiacenti con una
+singola modifica protetta dalla revisione osservata. La vista Note a piè di
+pagina raggruppa riferimenti, definizioni, note inline e orfani; ogni voce
+mantiene lo span UTF-8 usato per rivelare la sorgente.
 
 ## Flusso
 
@@ -149,8 +205,13 @@ la decisione non risolve.
 
 ## Preview e contenuto non fidato
 
-La preview usa le forme prodotte dal provider e le policy della webview. HTML
-grezzo o contenuto attivo non deve diventare automaticamente codice eseguibile.
+La preview usa le forme prodotte dal provider e le policy della webview. I
+blocchi HTML attraversano l'allowlist del sanitizzatore prima di diventare nodi
+DOM; classi e attributi `data-*` scritti nella nota non possono imitare i
+contratti privati della shell. Script, iframe, handler e URL di risorsa remoti
+restano inattivi. Se un blocco non contiene alcun elemento consentito, la
+sorgente resta leggibile invece di produrre un riquadro vuoto. Il Markdown
+dentro un blocco HTML non viene reinterpretato.
 
 La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
 prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per
@@ -176,6 +237,14 @@ Popup e keymap locale precedono i comandi della superficie. La shell ordina poi
 i layer superficie, profilo, documento, riquadro e globale. I comandi
 indisponibili sulla superficie attiva non entrano nella palette né nel router;
 i renderer non installano listener globali propri.
+Note giornaliere, template, note uniche e casuali, inserimento data/ora,
+slash, compositore e statistiche sono comandi e provider ufficiali sullo
+stesso buffer e registro: giornaliere con cartella, formato data e template
+configurabili e orologio deterministico; template con variabili chiuse e merge
+delle proprietà; slash e palette condividono registro, contesto valido e flush
+senza toccare il buffer; estrazione e merge pianificano riferimenti e dati
+prima di eliminare la sorgente; le statistiche contano anche lingue senza
+spazi con aggiornamenti incrementali.
 
 ## Formato pilota `.fubsheet`
 

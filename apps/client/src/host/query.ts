@@ -36,6 +36,8 @@ import type {
   VaultStatus,
 } from "./contract";
 import { EVERY_DOCUMENT, nameQuery, theseDocuments } from "./contract";
+import { parseSearch, type SearchFault, type SearchFaultKind } from "../rules/search-syntax";
+import { t, type Key } from "../i18n/strings";
 
 /// Apre la risposta, o dice **cosa** è arrivato invece.
 ///
@@ -112,6 +114,11 @@ export async function renderPreview(doc: string): Promise<RenderedDocument> {
   return runQuery({ kind: "render_preview", doc });
 }
 
+/// Chiede la proiezione con bersaglio di stampa, non l'anteprima a schermo.
+export async function renderPrint(doc: string): Promise<RenderedDocument> {
+  return runQuery({ kind: "render_print", doc });
+}
+
 /// Rende un ritaglio per un embed, mantenendo l'ancora eventualmente indicata.
 export async function renderEmbed(
   page: string,
@@ -143,6 +150,67 @@ export async function matchingDocuments(
     excerpts,
   };
   return runQuery(query);
+}
+
+/// Il testo libero resta testo: soltanto un'espressione JSON con `any`
+/// esplicito attraversa il planner come albero. RunSearch dei tag usa questa
+/// stessa forma; non si introduce una grammatica `tags:` privata della shell.
+/// Una riga che non è una ricerca: la frase dice cosa manca e in che colonna.
+export class SearchSyntaxError extends Error {
+  constructor(readonly fault: SearchFault) {
+    super(t("search.fault", { reason: t(SEARCH_FAULTS[fault.kind]), column: fault.at + 1 }));
+    this.name = "SearchSyntaxError";
+  }
+}
+
+const SEARCH_FAULTS: Record<SearchFaultKind, Key> = {
+  "unclosed-quote": "search.fault.unclosed_quote",
+  "unclosed-regex": "search.fault.unclosed_regex",
+  "unclosed-property": "search.fault.unclosed_property",
+  "unclosed-group": "search.fault.unclosed_group",
+  "unexpected-close": "search.fault.unexpected_close",
+  "dangling-or": "search.fault.dangling_or",
+  "empty-value": "search.fault.empty_value",
+  "bad-value": "search.fault.bad_value",
+  "negated-group": "search.fault.negated_group",
+  "too-complex": "search.fault.too_complex",
+};
+
+export function searchExpression(input: string, excluded: readonly string[] = [], excludedFolders: readonly string[] = []): QueryExpr {
+  const raw = input.trim();
+  let expr: QueryExpr;
+  if (raw.startsWith('{"any"') || raw.startsWith('{ "any"')) {
+    if (raw.length > 32_768) throw new Error("La query supera 32 KiB");
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !("any" in parsed)
+      || !Array.isArray(parsed.any) || parsed.any.length > 32
+      || !parsed.any.every((clause: unknown) =>
+        !!clause && typeof clause === "object" && "all" in clause
+        && Array.isArray(clause.all) && clause.all.length <= 32)) {
+      throw new Error("Espressione di ricerca non valida");
+    }
+    expr = parsed as QueryExpr;
+  } else {
+    // La sintassi della barra (operatori, OR, gruppi, proprietà): la stessa
+    // regola del contratto, gemella di `fub_abi::rules::search_syntax`.
+    const parsed = parseSearch(raw, true);
+    if ("fault" in parsed) throw new SearchSyntaxError(parsed.fault);
+    expr = parsed.ok;
+  }
+  if (excluded.length === 0 && excludedFolders.length === 0) return expr;
+  const clauses = expr.any.length === 0 ? [{ all: [] }] : expr.any;
+  return {
+    any: clauses.map((clause) => ({
+      all: [
+        ...clause.all,
+        ...(excluded.length ? [{ negated: true, predicate: { kind: "docs" as const, docs: [...excluded] } }] : []),
+        ...excludedFolders.map((path) => ({
+          negated: true,
+          predicate: { kind: "folder" as const, path, descendants: true },
+        })),
+      ],
+    })),
+  };
 }
 
 /// Quante note propone chi propone dei nomi.
@@ -347,24 +415,29 @@ export async function vaultFolders(
 export interface FolderContent {
   folders: VaultFolder[];
   notes: string[];
+  files: string[];
   otherFolders: number;
   otherNote: number;
 }
 
+/// Un livello dell'albero: sottocartelle e **ogni** voce dell'anagrafe, note,
+/// allegati e sconosciuti in una finestra sola. Una domanda per specie
+/// darebbe tre finestre da allargare separatamente per la stessa cartella.
 export async function folderContent(
   path: string,
   window: PageWindow,
 ): Promise<FolderContent> {
   const scope: FolderScope = { path, descendants: false };
-  const [folders, notes] = await Promise.all([
+  const [folders, entries] = await Promise.all([
     vaultFolders(window, scope),
-    vaultEntries(window, "document", scope),
+    vaultEntries(window, undefined, scope),
   ]);
   return {
     folders: folders.items,
-    notes: notes.items.map((e) => e.id),
+    notes: entries.items.filter((e) => e.kind === "document").map((e) => e.id),
+    files: entries.items.filter((e) => e.kind !== "document").map((e) => e.id),
     otherFolders: Math.max(0, folders.total - folders.offset - folders.items.length),
-    otherNote: Math.max(0, notes.total - notes.offset - notes.items.length),
+    otherNote: Math.max(0, entries.total - entries.offset - entries.items.length),
   };
 }
 

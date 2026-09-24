@@ -5,11 +5,12 @@
 // La seconda metà è quella che non si vede provando l'app a mano, perché
 // richiede che uno dei due freni del canale (decisione 0034) abbia buttato
 // qualcosa — cioè un vault sotto carico. Qui è un caso di test.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
 import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
-import { apply, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
+import { apply, exportArtifacts, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
+import { api } from "../host/ipc";
 
 function notice(event: KernelEvent): KernelNotice {
   return { event, origin: { actor: { kind: "kernel" }, batch: null } };
@@ -154,5 +155,60 @@ describe("rimontaggio del centro attività", () => {
 
     expect(document.getElementById("activity-button")?.classList.contains("in-corso")).toBe(true);
     second.close();
+  });
+});
+
+describe("export artifacts from completed transfer jobs", () => {
+  const complete = (artifact: unknown): KernelNotice =>
+    notice({ type: "job_done", id: "9007199254740993", job: "import.transfer",
+      result: { Ok: { artifacts: [artifact], log: [] } } });
+  it("accepts only bounded byte artifacts and decimal-string delivered receipts", () => {
+    expect(exportArtifacts(complete({
+      path: "nested/export.csv", media_type: "text/csv",
+      content: { kind: "bytes", value: [0, 255] },
+    }))).toEqual([{ path: "nested/export.csv", media_type: "text/csv",
+      content: { kind: "bytes", value: [0, 255] } }]);
+    expect(exportArtifacts(complete({
+      path: "nested/export.csv", media_type: "text/csv",
+      content: { kind: "delivered", value: "9007199254740993" },
+    }))?.[0]?.content).toEqual({ kind: "delivered", value: "9007199254740993" });
+    expect(exportArtifacts(complete({
+      path: "../outside.csv", media_type: "text/csv",
+      content: { kind: "bytes", value: [1] },
+    }))).toBeNull();
+    expect(exportArtifacts(complete({
+      path: "out.csv", media_type: "text/csv",
+      content: { kind: "delivered", value: 9007199254740993 },
+    }))).toBeNull();
+  });
+
+  it("offers Save only for bytes; native cancellation leaves bytes available and no success claim", async () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const save = vi.spyOn(api, "saveArtifact")
+      .mockResolvedValueOnce({ status: "cancelled" })
+      .mockResolvedValueOnce({ status: "saved", path: "/chosen/out.csv" });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(complete({
+      path: "nested/out.csv", media_type: "text/csv",
+      content: { kind: "bytes", value: [65, 66] },
+    }));
+    document.getElementById("activity-button")!.click();
+    const saveButton = () => [...document.querySelectorAll<HTMLButtonElement>("#activity-list button")]
+      .find((button) => button.textContent === "Salva…");
+    saveButton()!.click();
+    await vi.waitFor(() => expect(document.getElementById("activity-list")?.textContent).toContain("Salvataggio annullato"));
+    expect(save).toHaveBeenCalledWith("out.csv", "text/csv", [65, 66]);
+    expect(document.getElementById("activity-list")?.textContent).not.toContain("Salvato:");
+    saveButton()!.click();
+    await vi.waitFor(() => expect(document.getElementById("activity-list")?.textContent).toContain("Salvato: /chosen/out.csv"));
+    expect(saveButton()).toBeUndefined();
+    lifetime.close();
+    save.mockRestore();
+    query.mockRestore();
   });
 });

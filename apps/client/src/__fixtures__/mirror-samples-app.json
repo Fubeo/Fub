@@ -160,7 +160,8 @@
           "opacity",
           "transform"
         ]
-      }
+      },
+      "trust": "community"
     }
   ],
   "ThemePayload": [
@@ -206,7 +207,8 @@
       "version": "2.1.0",
       "enabled": true,
       "consent": "granted",
-      "runtime_known": true
+      "runtime_known": true,
+      "revoked": false
     }
   ],
   "VaultEntry": [
@@ -227,6 +229,145 @@
       "favorite": false,
       "last_opened": 1699000000000,
       "keys_seen": {}
+    }
+  ],
+  "DemoOpened": [
+    {
+      "root": "/config/demo-vault",
+      "previous": "/vault"
+    },
+    {
+      "root": "/config/demo-vault",
+      "previous": null
+    }
+  ],
+  "DemoClosed": [
+    {
+      "errors": [
+        {
+          "kind": "io",
+          "message": "flush failed"
+        }
+      ],
+      "current": "/vault"
+    },
+    {
+      "errors": [],
+      "current": null
+    }
+  ],
+  "DiagnosticSummary": [
+    {
+      "kind": "cancelled",
+      "help": "help.cancelled"
+    }
+  ],
+  "VaultSummary": [
+    {
+      "root": "/config/demo-vault",
+      "watching": true,
+      "startup_diagnostics": [
+        {
+          "kind": "cancelled",
+          "help": "help.cancelled"
+        }
+      ]
+    }
+  ],
+  "MachineSummary": [
+    {
+      "settings_keys": [
+        "locale.language"
+      ],
+      "known_vaults": 2,
+      "log_path": null
+    }
+  ],
+  "SupportPreview": [
+    {
+      "v": 1,
+      "at": 1700000000000,
+      "fub": "1.0",
+      "vault": {
+        "root": "/config/demo-vault",
+        "watching": true,
+        "startup_diagnostics": [
+          {
+            "kind": "cancelled",
+            "help": "help.cancelled"
+          }
+        ]
+      },
+      "machine": {
+        "settings_keys": [
+          "locale.language"
+        ],
+        "known_vaults": 2,
+        "log_path": null
+      },
+      "log_tail": [],
+      "note": "redacted"
+    }
+  ],
+  "ExportConsent": [
+    {
+      "acknowledged_preview": true,
+      "include_log": false,
+      "destination": "/outside/support.json"
+    }
+  ],
+  "ConfigFileKind": [
+    "machine_settings",
+    "vault_registry",
+    "view_state"
+  ],
+  "ConfigStatus": [
+    {
+      "kind": "healthy"
+    },
+    {
+      "kind": "missing"
+    },
+    {
+      "kind": "unreadable",
+      "reason": "invalid JSON"
+    },
+    {
+      "kind": "future_version",
+      "found": "9007199254740993",
+      "supported": 1
+    }
+  ],
+  "ConfigReport": [
+    {
+      "kind": "machine_settings",
+      "path": "/config/settings.json",
+      "status": {
+        "kind": "future_version",
+        "found": "9007199254740993",
+        "supported": 1
+      }
+    }
+  ],
+  "RecoverAction": [
+    "backup_only",
+    "reset_empty",
+    {
+      "restore_backup": {
+        "backup": "/config/settings.json.bak"
+      }
+    }
+  ],
+  "RecoverOutcome": [
+    {
+      "backup": "/config/settings.json.bak",
+      "detail": "restored",
+      "restart_required": true
+    },
+    {
+      "backup": null,
+      "detail": "nothing to back up",
+      "restart_required": false
     }
   ]
 }

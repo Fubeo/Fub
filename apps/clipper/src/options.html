@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fub Clipper — Options</title>
+<style>
+:root { color-scheme: light dark; }
+body { font: 13px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 16px; max-width: 640px; background: #fff; color: #111; }
+@media (prefers-color-scheme: dark) { body { background: #1c1c1e; color: #f2f2f7; } }
+h1 { font-size: 16px; }
+section { border-top: 1px solid #8885; padding: 12px 0; }
+label { display: block; margin: 8px 0 2px; font-weight: 600; }
+input[type=text], select, textarea { width: 100%; box-sizing: border-box; background: #fff; color: #111; border: 1px solid #888; }
+@media (prefers-color-scheme: dark) { input[type=text], select, textarea { background: #2c2c2e; color: #f2f2f7; border-color: #636366; } }
+textarea { font-family: ui-monospace, monospace; font-size: 11px; }
+.hint { color: #666; font-size: 12px; }
+@media (prefers-color-scheme: dark) { .hint, .small { color: #aeaeb2; } }
+#status { color: #006400; }
+#error { color: #b00020; white-space: pre-wrap; }
+@media (prefers-color-scheme: dark) { #error { color: #ff6961; } #status { color: #7ee787; } }
+.warn { background: #fff3cd; border: 1px solid #c9a227; padding: 8px; margin: 8px 0; color: #333; }
+.row { margin: 6px 0; }
+.small { font-size: 11px; color: #666; }
+</style>
+</head>
+<body>
+<h1 data-i18n="options.title">Fub Clipper — Options</h1>
+
+<section>
+<h2 data-i18n="options.templates">Templates</h2>
+<p class="hint" data-i18n="options.templates.hint">Import/export templates as JSON. Templates carry triggers, target mode, variables, filters and bounded logic — never arbitrary JavaScript.</p>
+<div class="row"><button id="exportTemplates">Export templates JSON</button>
+<input type="file" id="importFile" accept="application/json,.json"></div>
+<div class="row"><label for="templateText">Templates (JSON array)</label>
+<textarea id="templateText" rows="10"></textarea></div>
+<div class="row"><button id="saveTemplates">Validate &amp; save templates</button></div>
+</section>
+
+<section>
+<h2 data-i18n="options.selectors">Selectors</h2>
+<p class="hint" data-i18n="options.selectors.hint">Up to 16 custom CSS selectors captured with every clip (article context). Invalid selectors are reported, never executed as code.</p>
+
+<div class="row"><label for="selectorsText">Selectors (JSON: [{name, selector}])</label>
+<textarea id="selectorsText" rows="4" placeholder='[{"name":"price","selector":".price"}]'></textarea></div>
+<div class="row"><button id="saveSelectors">Validate &amp; save selectors</button></div>
+</section>
+
+<section>
+<h2 data-i18n="options.ai">Assistant (opt-in)</h2>
+<div class="warn"><strong>Off by default.</strong> When enabled, page context is sent to the configured provider only after you preview the exact request and press Ask — never automatically. Results never write to the vault by themselves.</div>
+<div class="row"><label><input type="checkbox" id="aiEnabled"> Enable assistant (opt-in)</label></div>
+<div class="row"><label for="aiProvider">Provider</label>
+<select id="aiProvider">
+<option value="local">Local model (Ollama-compatible, localhost)</option>
+<option value="remote">Remote OpenAI-compatible endpoint (API key required)</option>
+</select></div>
+<div class="row"><label for="aiLocalBase">Local base URL</label><input type="text" id="aiLocalBase" maxlength="512"></div>
+<div class="row"><label for="aiLocalModel">Local model</label><input type="text" id="aiLocalModel" maxlength="128"></div>
+<div class="row"><label for="aiRemoteBase">Remote base URL (https only recommended)</label><input type="text" id="aiRemoteBase" maxlength="512" placeholder="https://api.example.com"></div>
+<div class="row"><label for="aiRemoteModel">Remote model</label><input type="text" id="aiRemoteModel" maxlength="128"></div>
+<div class="row"><label for="aiKey">Remote API key (stored in extension storage only, never in pages or URIs)</label><input type="text" id="aiKey" maxlength="512" autocomplete="off"></div>
+<div class="row"><label for="aiContext">Default context sent on Ask</label>
+<select id="aiContext">
+<option value="selection">Selection</option>
+<option value="article">Article</option>
+<option value="highlights">Highlights</option>
+<option value="custom">Custom (typed per request)</option>
+</select></div>
+<div class="row"><button id="saveAi">Save assistant settings</button>
+<button id="clearKey">Forget API key</button></div>
+</section>
+
+<section>
+<h2 data-i18n="options.origins">Allowed origins</h2>
+<p class="hint" data-i18n="options.origins.hint">Provider and image hosts need your explicit origin grant (one per line, https://host/ — loopback needs none). Requests to unlisted origins are refused before any network call, and optional_host_permissions mirrors this list so the browser asks first.</p>
+<div class="row"><label for="providerOrigins" data-i18n="options.origins.provider">Provider origins (one per line, https; loopback needs no grant)</label>
+<textarea id="providerOrigins" rows="3"></textarea></div>
+<div class="row"><label for="imageOrigins" data-i18n="options.origins.images">Image origins (explicit downloads)</label>
+<textarea id="imageOrigins" rows="3"></textarea></div>
+<div class="row"><button id="saveOrigins" data-i18n="options.origins.save">Save origins</button>
+<button id="requestPerms" data-i18n="options.origins.request">Request browser permission</button></div>
+<div class="row"><label data-i18n="options.perms">Permission state</label>
+<div id="permState" class="small">(loading…)</div></div>
+</section>
+
+<div class="row" id="status" aria-live="polite"></div>
+<div class="row" id="error" role="alert"></div>
+
+<script src="i18n.js"></script>
+<script src="capture.js"></script>
+<script src="matcher.js"></script>
+<script src="templates.js"></script>
+<script src="interpreter.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

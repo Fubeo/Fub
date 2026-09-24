@@ -331,3 +331,35 @@ describe("il markup letterale non è sintassi Obsidian", () => {
     expect(ofKind(decorate('un <a href="#frag">t</a> qui'), "tag")).toEqual([]);
   });
 });
+
+describe("commenti, formule in riga, ID di blocco ed embed dimensionati", () => {
+  it("un commento sparisce intero fuori dalla riga attiva e con lui ciò che contiene", () => {
+    const doc = "a %%[[Nota]] #tag%% b";
+    const hidden = ofKind(decorate(doc), "hide");
+    expect(hidden).toContainEqual({ from: 2, to: 19, kind: "hide" });
+    expect(ofKind(decorate(doc), "wikilink")).toEqual([]);
+    expect(ofKind(decorate(doc), "tag")).toEqual([]);
+    const active = decorate(doc, [1]);
+    expect(ofKind(active, "hide")).toEqual([]);
+    expect(ofKind(active, "highlight")).toContainEqual({ from: 2, to: 19, kind: "highlight", data: "comment" });
+  });
+
+  it("una formula in riga diventa widget fuori dalla riga attiva, non dentro il codice", () => {
+    const math = ofKind(decorate("x $e^{i\\pi}$ e `$no$`"), "math");
+    expect(math).toEqual([{ from: 2, to: 12, kind: "math", data: "e^{i\\pi}" }]);
+    expect(ofKind(decorate("x $a$", [1]), "math")).toEqual([]);
+  });
+
+  it("l'ID di blocco si nasconde solo dove un blocco finisce", () => {
+    const doc = "riga ^mezzo\nfine ^id\n\naltro";
+    const hidden = ofKind(decorate(doc), "hide");
+    expect(hidden).toContainEqual({ from: 17, to: 20, kind: "hide" });
+    expect(hidden.some((d) => d.from === 5)).toBe(false);
+  });
+
+  it("un embed con dimensione mostra il bersaglio e nasconde la misura", () => {
+    const ds = decorate("![[foto.png|120]]");
+    expect(ofKind(ds, "wikilink").map((d) => [d.from, d.to])).toEqual([[3, 11]]);
+    expect(ofKind(ds, "hide")).toContainEqual({ from: 11, to: 17, kind: "hide" });
+  });
+});

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { CommandPlan, CommandSpec, ParamKind } from "../host/contract";
-import { argsFromForm, filterCommands, fuzzyScore, needsPlan, planLines, scopeLabel } from "./palette";
+import {
+  argsFromForm,
+  filterCommands,
+  fuzzyScore,
+  needsPlan,
+  planApplies,
+  planLines,
+  scopeLabel,
+} from "./palette";
 import type { CommandEntry } from "./commands";
 
 // Le decisioni della palette sono funzioni pure apposta: la regola del consenso
@@ -111,6 +119,17 @@ describe("la regola del consenso", () => {
     expect(
       needsPlan(spec({ scope: { writes: true, reach: "document", reversible: false } })),
     ).toBe(true);
+  });
+
+  it("un piano senza note si applica solo se il comando non tocca note", () => {
+    const empty: CommandPlan = { summary: "Crea la cartella «a»", docs: [], edits: [] };
+    const writing = (reach: CommandSpec["scope"]["reach"]) =>
+      spec({ scope: { writes: true, reach, reversible: true } });
+    expect(planApplies(writing("vault"), empty)).toBe(true);
+    expect(planApplies(writing("settings"), empty)).toBe(true);
+    expect(planApplies(writing("documents"), empty)).toBe(false);
+    expect(planApplies(writing("document"), empty)).toBe(false);
+    expect(planApplies(writing("documents"), { ...empty, docs: ["a.md"] })).toBe(true);
   });
 
   it("il raggio si legge in una riga", () => {

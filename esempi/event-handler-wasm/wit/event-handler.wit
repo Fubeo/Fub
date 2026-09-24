@@ -1,11 +1,14 @@
 package esempio:event-handler@0.1.0;
 
-// Porta inbound intenzionalmente non supportata dal runtime corrente.
+// The handler imports only the capabilities it exercises, not the full world.
 //
 // Il tipo canonico vive nel contratto ABI; il world lo esporta senza aggiungere
 // un'interfaccia locale o uno stub alternativo.
 
 world event-handler {
-    export fub:abi/plugin@0.1.2;
-    export fub:abi/event-handler@0.1.2;
+    import fub:abi/host-vault-read@0.2.0;
+    import fub:abi/host-data-read@0.2.0;
+    import fub:abi/host-data-write@0.2.0;
+    export fub:abi/plugin@0.2.0;
+    export fub:abi/event-handler@0.2.0;
 }

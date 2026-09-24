@@ -1,17 +1,25 @@
-import { createEditor, type Editor } from "../../editor/editor";
+import { createEditor, type Editor, type EditorSlashHost } from "../../editor/editor";
 import type { CompletionSources } from "../../editor/completions";
 import type { SyntaxForm } from "../../host/contract";
+import { api } from "../../host/ipc";
 import type { GridHost } from "../grid/engine";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
+import { mountBaseSurface } from "../base/surface";
+import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
+import { CANVAS_MOUNT, mountCanvasSurface } from "../canvas/surface";
+import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
+import { mediaKindOfId } from "../media/media-types";
+import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
   type SurfaceCallbacks,
-  type SurfaceFamily,
   type SurfaceMountContext,
 } from "./registry";
 
@@ -19,6 +27,7 @@ export interface MarkdownEditorSurface extends EditorSurface {
   readonly family: "text";
   readonly profile: "markdown";
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
+  insertAtCursor(text: string): boolean;
 }
 
 export function isMarkdownSurface(surface: EditorSurface | null): surface is MarkdownEditorSurface {
@@ -26,10 +35,18 @@ export function isMarkdownSurface(surface: EditorSurface | null): surface is Mar
 }
 
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
-  readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void;
+  readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
+  readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
   readonly completions: CompletionSources;
+  readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
+  readonly media?: MediaSurfaceDeps;
+  readonly canvasMedia?: CanvasMediaPort;
+  readonly canvasAttachments?: CanvasAttachmentPort;
+  readonly onCreateCanvasNote?: (text: string) => Promise<string>;
+  readonly renderCanvasMarkdown?: (nodeId: string, text: string, host: HTMLElement, documentId: string) => (() => void) | void;
 }
 
 const MARKDOWN_MODES = [
@@ -60,6 +77,7 @@ const VIEWER_MODES = [
   { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading" },
 ] as const;
 
+
 const ERROR_MODES = [
   { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
 ] as const;
@@ -81,7 +99,7 @@ function markdownSurface(
     modes: MARKDOWN_MODES,
     setMode(mode) {
       requireMode(MARKDOWN_MODES, mode);
-      editor.setLivePreview(mode === "live_preview");
+      editor.setMode(mode as "source" | "live_preview" | "reading");
     },
     setSyntaxForms: (forms) => editor.setSyntaxForms(forms),
     setDoc: (text) => editor.setDoc(text),
@@ -90,6 +108,7 @@ function markdownSurface(
     focus: () => editor.focus(),
     revealByteOffset: (byteOffset) => editor.revealByteOffset(byteOffset),
     selections: () => editor.selections(),
+    insertAtCursor: (text) => editor.insertAtCursor(text),
     setReadOnly: (readOnly) => editor.setReadOnly(readOnly),
     setTheme: (theme) => editor.setTheme(theme),
     destroy: () => editor.destroy(),
@@ -97,7 +116,7 @@ function markdownSurface(
 }
 
 function staticSurface(
-  family: Extract<SurfaceFamily, "viewer" | "error">,
+  family: "viewer" | "error",
   profile: string,
   context: SurfaceMountContext,
   messageKey: Key,
@@ -113,7 +132,9 @@ function staticSurface(
   const redraw = () => {
     if (!active) return;
     const message = t(messageKey);
-    element.textContent = message;
+    element.textContent = family === "error" && context.errorReason
+      ? `${message}: ${context.errorReason}`
+      : message;
     element.setAttribute("aria-label", message);
   };
   redraw();
@@ -153,6 +174,11 @@ function staticSurface(
   };
 }
 
+const loadPdf = makePdfJsLoader(
+  () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
+  pdfWorkerUrl,
+);
+
 /** Registers the shell's built-in surface families; plugins use the same registry seam. */
 export function createDocumentSurfaceRegistry(
   options: SurfaceBootstrapOptions,
@@ -174,8 +200,11 @@ export function createDocumentSurfaceRegistry(
               onChange: (change) => options.onChange(context.paneId, change),
               onSelectionChange: () => options.onSelectionChange(context.paneId),
               onOpenWikilink: options.onOpenWikilink,
+              onOpenPath: options.onOpenPath,
               onSearchTag: options.onSearchTag,
+              documentId: context.documentId,
               completions: options.completions,
+              slash: options.slash,
             }),
             context,
           );
@@ -209,6 +238,23 @@ export function createDocumentSurfaceRegistry(
           setTheme: (theme) => engine.setTheme(theme),
           destroy: () => engine.destroy(),
         };
+      },
+    },
+  });
+  registry.register({
+    owner: BASE_OWNER,
+    family: "structured",
+    defaultProfile: BASE_PROFILE,
+    formats: { [BASE_FORMAT]: BASE_PROFILE },
+    factory: {
+      mount(profile, context) {
+        return mountBaseSurface(profile, context, {
+          queryIndex: api.queryIndex,
+          invokeCommand: api.invokeCommand,
+          viewState: api.viewState,
+          setViewState: api.setViewState,
+          onOpenDocument: options.onOpenDocument,
+        });
       },
     },
   });
@@ -250,13 +296,41 @@ export function createDocumentSurfaceRegistry(
     },
   });
   registry.register({
+    owner: CANVAS_MOUNT.owner,
+    family: CANVAS_MOUNT.family,
+    defaultProfile: CANVAS_MOUNT.defaultProfile,
+    profiles: CANVAS_MOUNT.profiles,
+    formats: CANVAS_MOUNT.formats,
+    factory: {
+      mount(profile, context) {
+        return mountCanvasSurface(profile, context, {
+          onChange: options.onChange,
+          onSelectionChange: options.onSelectionChange,
+          onOpenWikilink: options.onOpenWikilink,
+          onOpenPath: options.onOpenPath,
+          onCreateNote: options.onCreateCanvasNote,
+          renderMarkdownForCard: options.renderCanvasMarkdown
+            ? (nodeId, text, host) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId)
+            : undefined,
+          media: options.canvasMedia,
+          attachments: options.canvasAttachments,
+        });
+      },
+    },
+  });
+  registry.register({
     owner: "fub.shell.viewer",
     family: "viewer",
     defaultProfile: "bytes-read-only",
+    profiles: ["media-image", "media-audio", "media-video", "media-pdf"],
     sources: { bytes: "bytes-read-only" },
+    selectSourceProfile: (request, fallback) =>
+      request.documentId ? profileForKind(mediaKindOfId(pdfIdWithoutFragment(request.documentId))) : fallback,
     factory: {
       mount(profile, context) {
-        return staticSurface("viewer", profile, context, "viewer.unavailable");
+        return options.media
+          ? mountMediaSurface(profile, context, { ...options.media, pdfLoader: options.media.pdfLoader ?? loadPdf })
+          : staticSurface("viewer", profile, context, "viewer.unavailable");
       },
     },
   });

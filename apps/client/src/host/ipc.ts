@@ -1,5 +1,6 @@
 // La cucitura verso il backend Rust: wrapper tipizzati sui comandi e sul canale
-// eventi dell'IPC. I *tipi* stanno in `contract.ts`, qui c'è solo il transito.
+// eventi dell'IPC. I tipi del contratto plugin stanno in `contract.ts`;
+// i record di supporto macchina sono qui, accanto ai comandi locali dell'app.
 //
 // Questo modulo e `dialog.ts` sono gli unici della shell autorizzati a
 // importare `@tauri-apps` (§1.3), e il test `no-tauri-outside-host.test.ts`
@@ -14,6 +15,8 @@ import type {
   CommandOutcome,
   CommandSpec,
   DocumentSource,
+  DocumentWindowEvent,
+  DocumentWindowRequest,
   FieldValue,
   GridApplyRequest,
   GridCommit,
@@ -25,6 +28,7 @@ import type {
   IndexResult,
   InvokeMode,
   KernelNotice,
+  ResourceDescriptor,
   Locale,
   PluginError,
   SettingValue,
@@ -38,7 +42,84 @@ import type {
   ViewSpec,
   ViewUpdate,
   WriteBase,
+  SettingScope,
+  CatalogEntry,
 } from "./contract";
+import { openViewer, saveViewer, writeResource } from "../editors/media/transport";
+import { createMobileBridge } from "../shells/mobile/bridge";
+import type { MobileBridge } from "../shells/mobile/bridge";
+
+/** The Tauri primitives are injected here, never imported by the mobile shell. */
+export function nativeMobileBridge(): MobileBridge {
+  return createMobileBridge(
+    { invoke: <T>(command: string, args?: Record<string, unknown>) => invoke<T>(command, args) },
+    { listen: <T>(event: string, handler: (payload: T) => void) =>
+      listen<T>(event, ({ payload }) => handler(payload)) },
+  );
+}
+
+// Resource transport keeps the only raw-byte protocol in one place.
+const mediaInvoke = <T>(
+  cmd: string,
+  args?: Uint8Array | ArrayBuffer | Record<string, unknown>,
+  options?: { headers?: Record<string, string> },
+): Promise<T> => options?.headers
+  ? invoke<T>(cmd, args, { headers: options.headers })
+  : invoke<T>(cmd, args);
+
+
+// Mirror esatto dei record serde in fub-host::support e fub-app::support.
+// I comandi di supporto sono UI di macchina, non comandi del registro plugin.
+export interface DemoOpened { root: string; previous: string | null }
+export interface DemoClosed { errors: PluginError[]; current: string | null }
+export interface ExportConsent {
+  acknowledged_preview: boolean;
+  include_log: boolean;
+  destination: string;
+}
+export interface DiagnosticSummary { kind: string; help: string }
+export interface SupportPreview {
+  v: number;
+  at: number;
+  fub: string;
+  vault: { root: string; watching: boolean; startup_diagnostics: DiagnosticSummary[] } | null;
+  machine: { settings_keys: string[]; known_vaults: number; log_path: string | null };
+  log_tail: string[];
+  note: string;
+}
+export type ConfigFileKind = "machine_settings" | "vault_registry" | "view_state";
+export type ConfigStatus =
+  | { kind: "healthy" }
+  | { kind: "missing" }
+  | { kind: "unreadable"; reason: string }
+  | { kind: "future_version"; found: string; supported: number };
+export interface ConfigReport {
+  kind: ConfigFileKind;
+  path: string;
+  status: ConfigStatus;
+}
+export type RecoverAction =
+  | "backup_only"
+  | "reset_empty"
+  | { restore_backup: { backup: string } };
+export interface RecoverOutcome {
+  backup: string | null;
+  detail: string;
+  restart_required: boolean;
+}
+export interface SettingsProfiles { active: string; names: string[] }
+export interface FrameCapabilities { system: boolean; custom: boolean; requires_reopen: boolean }
+/** Every counter is a decimal u64 string, including zero. */
+export interface PluginBudgetSnapshot {
+  live_instances: string;
+  total_calls: string;
+  timed_out_calls: string;
+  oom_calls: string;
+}
+export interface PluginLimitedMode { enabled: boolean; reason?: string }
+export interface CatalogUpdateOutcome { plugin: InstalledPluginInfo; diagnostics: PluginError[] }
+export type SaveArtifactOutcome = { status: "saved"; path: string } | { status: "cancelled" };
+
 
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
@@ -48,6 +129,20 @@ export const api = {
   // esista — una spinta a quell'ora sarebbe persa — e la shell la chiede
   // appena il router è in piedi.
   sessionNotice: () => invoke<KernelNotice | null>("session_notice"),
+  demoRoot: () => invoke<string | null>("demo_root"),
+  openDemo: () => invoke<DemoOpened>("open_demo"),
+  closeDemo: (returnTo: string | null) =>
+    invoke<DemoClosed>("close_demo", { returnTo }),
+  resetDemo: () => invoke<string>("reset_demo"),
+  startupDiagnostics: (vault: string | null = null) =>
+    invoke<PluginError[]>("startup_diagnostics", { vault }),
+  supportPreview: (vault: string | null, logLines: number) =>
+    invoke<SupportPreview>("support_preview", { vault, logLines }),
+  supportExport: (preview: SupportPreview, consent: ExportConsent) =>
+    invoke<string>("support_export", { preview, consent }),
+  configHealth: () => invoke<ConfigReport[]>("config_health"),
+  recoverConfig: (path: string, action: RecoverAction) =>
+    invoke<RecoverOutcome>("recover_config", { path, action }),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
   // `listDocuments` **non c'è più** (§14.4): restituiva l'intero vault in un
   // `string[]`, senza finestra e senza saper dire *quale cartella*. Chi vuole
@@ -61,6 +156,20 @@ export const api = {
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
   readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
+  resourceOpen: (id: string, vault: string | null = null) =>
+    invoke<ResourceDescriptor>("resource_open", { id, vault }),
+  resourceReadChunk: (handle: string, offset: number, len: number) =>
+    invoke<ArrayBuffer>("resource_read_chunk", { handle, offset, len }),
+  resourceClose: (handle: string) => invoke<void>("resource_close", { handle }),
+  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string) =>
+    writeResource(mediaInvoke, id, bytes, expected, vault),
+  viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>
+    openViewer(mediaInvoke, url, title, policy),
+  viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
+    saveViewer(mediaInvoke, url, title, allowlist, attachmentFolder, vault),
+  /** Native picker owns the destination. Never accept a destination path from JS. */
+  saveArtifact: (suggestedName: string, mediaType: string, bytes: readonly number[]) =>
+    invoke<SaveArtifactOutcome>("save_artifact", { suggestedName, mediaType, bytes }),
   listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
   openGrid: (surface: string, source: string, revision: string) =>
     invoke<GridSession>("open_grid", { surface, source, revision }),
@@ -198,6 +307,20 @@ export const api = {
   // Azzerare non è scrivere il default: la chiave **ricade** al livello sotto,
   // che è il default solo se non c'era niente in mezzo.
   resetSetting: (key: string) => invoke<void>("reset_setting", { key }),
+  settingsProfiles: (scope: SettingScope, vault?: string) =>
+    invoke<SettingsProfiles>("settings_profiles", { scope, vault: vault ?? null }),
+  exportSettingsProfile: (scope: SettingScope, name: string, vault?: string) =>
+    invoke<string>("export_settings_profile", { scope, name, vault: vault ?? null }),
+  importSettingsProfile: (scope: SettingScope, json: string, vault?: string) =>
+    invoke<void>("import_settings_profile", { scope, json, vault: vault ?? null }),
+  duplicateSettingsProfile: (scope: SettingScope, source: string, name: string, vault?: string) =>
+    invoke<void>("duplicate_settings_profile", { scope, source, name, vault: vault ?? null }),
+  switchSettingsProfile: (scope: SettingScope, name: string, vault?: string) =>
+    invoke<void>("switch_settings_profile", { scope, name, vault: vault ?? null }),
+  resetSettingsProfile: (scope: SettingScope, name: string, vault?: string) =>
+    invoke<void>("reset_settings_profile", { scope, name, vault: vault ?? null }),
+  frameCapabilities: () => invoke<FrameCapabilities>("frame_capabilities"),
+  settingRequiresReopen: (key: string) => invoke<boolean>("setting_requires_reopen", { key }),
   // L'inventario dei temi installati è già filtrato dal backend ai bundle
   // caricabili; il path resta un dettaglio dell'host. Il fascio CSS arriva
   // soltanto per la luce che la shell sta per montare.
@@ -229,6 +352,24 @@ export const api = {
     invoke<PluginError[]>("set_installed_plugin_consent", { installation, consent }),
   removeInstalledPlugin: (installation: string) =>
     invoke<PluginError[]>("remove_installed_plugin", { installation }),
+  catalogSearch: (needle: string) => invoke<CatalogEntry[]>("catalog_search", { needle }),
+  catalogInstall: (id: string, version: string, source: string) =>
+    invoke<InstalledPluginInfo>("catalog_install", { id, version, source }),
+  catalogUpdate: (installation: string, version: string, source: string) =>
+    invoke<CatalogUpdateOutcome>("catalog_update", { installation, version, source }),
+  catalogRollback: (installation: string, priorVersion: string, source: string) =>
+    invoke<CatalogUpdateOutcome>("catalog_rollback", { installation, priorVersion, source }),
+  catalogRevoke: (installation: string) =>
+    invoke<PluginError[]>("catalog_revoke", { installation }),
+  catalogInstallTheme: (id: string, version: string, source: string) =>
+    invoke<string>("catalog_install_theme", { id, version, source }),
+  catalogUpdateTheme: (id: string, version: string, source: string) =>
+    invoke<string>("catalog_update_theme", { id, version, source }),
+  catalogRollbackTheme: (id: string, priorVersion: string, source: string) =>
+    invoke<string>("catalog_rollback_theme", { id, priorVersion, source }),
+  catalogRevokeTheme: (id: string) => invoke<void>("catalog_revoke_theme", { id }),
+  pluginBudgetSnapshot: () => invoke<PluginBudgetSnapshot>("plugin_budget_snapshot"),
+  pluginLimitedMode: () => invoke<PluginLimitedMode>("plugin_limited_mode"),
   // I vault che questa macchina conosce, fra un avvio e l'altro: un elenco di
   // vault non sta in nessun vault, quindi vive nel livello macchina.
   knownVaults: () => invoke<KnownVault[]>("known_vaults"),
@@ -282,6 +423,14 @@ export const api = {
   // file dalla parte di chi lo pota.
   setViewState: (key: string, value: unknown) =>
     invoke<void>("set_view_state", { key, value: value ?? null }),
+  openDocumentWindow: (request: DocumentWindowRequest) =>
+    invoke<{ label: string }>("open_document_window", { request }),
+  closeDocumentWindow: (request: { label: string }) =>
+    invoke<void>("close_document_window", request),
+  onDocumentWindowCloseRequested: (handler: (event: DocumentWindowEvent) => void): Promise<() => void> =>
+    listen<DocumentWindowEvent>("fub://document-window-close-requested", ({ payload }) => handler(payload)),
+  onDocumentWindowClosed: (handler: (event: DocumentWindowEvent) => void): Promise<() => void> =>
+    listen<DocumentWindowEvent>("fub://document-window-closed", ({ payload }) => handler(payload)),
 };
 
 /// Il canale eventi del kernel. Il ritorno è la disiscrizione.
@@ -294,54 +443,36 @@ export function onKernelEvent(handler: (n: KernelNotice) => void): Promise<() =>
   return listen<KernelNotice>("fub://event", (evt) => handler(evt.payload));
 }
 
-/// **Qualcuno ha chiesto di chiudere la finestra**, e la chiusura aspetta.
-///
-/// L'altro capo di `RunEvent::Exit` in `fub-app`: là il backend chiude gli
-/// indici di ogni vault aperto, ma quando quell'evento arriva la webview sta già
-/// morendo e ciò che la shell ha in mano non è più chiedibile a nessuno. Questa
-/// è l'unica finestra in cui lo è: il ponte è vivo, il gesto non è ancora
-/// avvenuto, e `onCloseRequested` aspetta la promessa prima di distruggere.
-///
-/// Iscriversi qui **cambia il significato della X**: dal momento in cui esiste un
-/// ascoltatore JS di `tauri://close-requested`, il backend annulla la chiusura
-/// nativa (`api.prevent_close()`) e l'unica cosa che chiude davvero la finestra è
-/// la `destroy()` che `onCloseRequested` fa in coda al gestore. Quella `destroy()`
-/// è un comando come gli altri e vuole il suo permesso: `core:window:allow-destroy`
-/// nelle capacità di `fub-app`, che **non** è dentro `core:default`. Senza, la X
-/// smetteva di funzionare del tutto — il permesso mancante veniva rifiutato dentro
-/// il gestore di Tauri, dove nessuno lo legge, e la finestra restava aperta muta.
-///
-/// Il gestore **non può alzare**, e non è una cortesia: se rigetta, la chiusura
-/// non arriva mai e la finestra resta lì senza spiegazione. Un salvataggio che
-/// va storto è un fatto normale in questa riga — è precisamente il caso che
-/// rende la bozza utile — e non deve diventare una finestra che non si chiude.
-export function onClose(first: () => Promise<void>): Promise<() => void> {
-  return getCurrentWindow().onCloseRequested(async () => {
-    try {
-      await first();
-    } catch {
-      // Muto per la ragione scritto sopra: chi chiude, chiude.
-    }
+/// Intercetta la X prima che Tauri distrugga la finestra: il drain può
+/// rifiutare la chiusura senza perdere il buffer. Solo il comando nativo
+/// `finish_main_close`, dopo il drain, può distruggere la finestra principale.
+export function onClose(
+  first: () => Promise<boolean>,
+  onFailure: (reason: unknown) => void,
+): Promise<() => void> {
+  let closing: Promise<void> | null = null;
+  return getCurrentWindow().onCloseRequested((event) => {
+    event.preventDefault();
+    if (closing) return closing;
+    closing = (async () => {
+      try {
+        if (await first()) await invoke<void>("finish_main_close");
+      } catch (error) {
+        onFailure(error);
+      }
+    })();
+    return closing.finally(() => { closing = null; });
   });
 }
 
 /// I controlli della finestra custom: la titlebar disegna i propri bottoni
 /// minimizza/massimizza/chiudi e ha bisogno di muovere la finestra vera.
 ///
-/// Sta qui e non in un `#[tauri::command]` per due regole del piano:
-/// - **Cucitura (§1.3)**: questo modulo e `dialog.ts` sono gli unici che
-///   toccano `@tauri-apps`. I controlli finestra vivono sull'API JS di
-///   Tauri 2 (`getCurrentWindow()`), già importata per `allaChiusura`, e
-///   tenerli qui significa che la titlebar non deve importare niente di
-///   Tauri — le passa la `finestra` come qualsiasi altra porta.
-/// - **Dieta IPC (§16.6)**: la dieta dei comandi è chiusa, e queste sono
-///   chiamate all'API nativa del window manager, non comandi del kernel.
-///   Non c'è niente da invocare, niente `#[tauri::command]` da scrivere.
-///
-/// `chiudi` usa `close()` e non `destroy()`: `allaChiusura` intercetta
-/// `tauri://close-requested` e chiama `destroy()` in coda al gestore, e
-/// quella catena deve continuare a funzionare — un `destroy()` diretto
-/// qui la scavalcherebbe e saltarebbe il salvataggio della bozza.
+/// I controlli passano dall'API JS di Tauri soltanto in questo adattatore.
+/// `close()` genera una richiesta intercettabile; il permesso generale
+/// `core:window:allow-destroy` non è concesso alla webview. Dopo il drain,
+/// `onClose` usa soltanto `finish_main_close`, che verifica l'assenza di
+/// finestre documento ancora registrate.
 export const window = {
   minimize: (): Promise<void> => getCurrentWindow().minimize(),
   toggleMaximize: (): Promise<void> => getCurrentWindow().toggleMaximize(),

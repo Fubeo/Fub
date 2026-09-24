@@ -35,7 +35,9 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use crate::model::{DateFormats, DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyValue};
+use crate::model::{
+    DateFormats, DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyTypes, PropertyValue,
+};
 use crate::query::Matches;
 use crate::traits::{
     DocumentMatch, Page, Paged, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
@@ -51,12 +53,21 @@ pub fn facets<'a>(
     key: &str,
     formats: &DateFormats,
 ) -> Vec<PropertyCount> {
+    facets_with_types(docs, key, formats, &PropertyTypes::default())
+}
+
+pub fn facets_with_types<'a>(
+    docs: impl Iterator<Item = (&'a DocId, &'a Frontmatter)>,
+    key: &str,
+    formats: &DateFormats,
+    types: &PropertyTypes,
+) -> Vec<PropertyCount> {
     // Chiave di raggruppamento: la serializzazione del valore normalizzato. Un
     // `PropertyValue` porta un `f64`, quindi non è `Hash` né `Ord`; la sua forma
     // JSON sì, ed è la stessa che attraversa il confine.
     let mut counts: BTreeMap<String, (PropertyValue, u32)> = BTreeMap::new();
     for (_, fm) in docs {
-        let Some(value) = fm.property(key, formats) else {
+        let Some(value) = fm.property_with_types(key, formats, types) else {
             continue;
         };
         // Un elenco è una nota per ciascuno dei suoi elementi.
@@ -92,7 +103,16 @@ pub fn facets<'a>(
 /// applicare, adesso è una funzione che il linguaggio chiama una volta per
 /// letterale — e l'AND, l'OR e la negazione stanno nel contratto.
 pub fn test(fm: &Frontmatter, filter: &PropertyFilter, formats: &DateFormats) -> bool {
-    let value = fm.property(&filter.key, formats);
+    test_with_types(fm, filter, formats, &PropertyTypes::default())
+}
+
+pub fn test_with_types(
+    fm: &Frontmatter,
+    filter: &PropertyFilter,
+    formats: &DateFormats,
+    types: &PropertyTypes,
+) -> bool {
+    let value = fm.property_with_types(&filter.key, formats, types);
     match (&filter.test, value) {
         (PropertyTest::Exists, v) => v.is_some(),
         (PropertyTest::Missing, v) => v.is_none(),
@@ -236,6 +256,15 @@ pub fn entries(
     select: &PropertySelect,
     formats: &DateFormats,
 ) -> Vec<PropertyEntry> {
+    entries_with_types(fm, select, formats, &PropertyTypes::default())
+}
+
+pub fn entries_with_types(
+    fm: &Frontmatter,
+    select: &PropertySelect,
+    formats: &DateFormats,
+    types: &PropertyTypes,
+) -> Vec<PropertyEntry> {
     let select = match select {
         PropertySelect::None => return Vec::new(),
         PropertySelect::All => None,
@@ -243,17 +272,18 @@ pub fn entries(
     };
     let mut entries: Vec<PropertyEntry> = match select {
         None => fm
-            .properties(formats)
+            .properties_with_types(formats, types)
             .into_iter()
             .map(|(key, value)| PropertyEntry { key, value })
             .collect(),
         Some(keys) => keys
             .iter()
             .filter_map(|key| {
-                fm.property(key, formats).map(|value| PropertyEntry {
-                    key: key.clone(),
-                    value,
-                })
+                fm.property_with_types(key, formats, types)
+                    .map(|value| PropertyEntry {
+                        key: key.clone(),
+                        value,
+                    })
             })
             .collect(),
     };
@@ -283,12 +313,32 @@ pub fn finish<'a>(
     formats: &DateFormats,
     frontmatter: impl Fn(&DocId) -> Option<&'a Frontmatter>,
 ) -> Paged<DocumentMatch> {
+    finish_with_types(
+        matches,
+        sort,
+        select,
+        page,
+        formats,
+        &PropertyTypes::default(),
+        frontmatter,
+    )
+}
+
+pub fn finish_with_types<'a>(
+    matches: Matches,
+    sort: Option<&PropertySort>,
+    select: &PropertySelect,
+    page: Option<Page>,
+    formats: &DateFormats,
+    types: &PropertyTypes,
+    frontmatter: impl Fn(&DocId) -> Option<&'a Frontmatter>,
+) -> Paged<DocumentMatch> {
     let mut rows = matches.into_vec();
 
     if !select.is_none() {
         for row in rows.iter_mut() {
             if let Some(fm) = frontmatter(&row.doc) {
-                row.properties = entries(fm, select, formats);
+                row.properties = entries_with_types(fm, select, formats, types);
             }
         }
     }
@@ -304,8 +354,10 @@ pub fn finish<'a>(
                 .then_with(|| a.doc.cmp(&b.doc))
         }),
         Some(sort) => rows.sort_by(|a, b| {
-            let av = frontmatter(&a.doc).and_then(|fm| fm.property(&sort.key, formats));
-            let bv = frontmatter(&b.doc).and_then(|fm| fm.property(&sort.key, formats));
+            let av = frontmatter(&a.doc)
+                .and_then(|fm| fm.property_with_types(&sort.key, formats, types));
+            let bv = frontmatter(&b.doc)
+                .and_then(|fm| fm.property_with_types(&sort.key, formats, types));
             order_of(av.as_ref(), bv.as_ref(), sort.descending).then_with(|| a.doc.cmp(&b.doc))
         }),
     }
@@ -826,6 +878,104 @@ mod tests {
             order(&dmy),
             vec!["c.md", "a.md", "b.md"],
             "il 2020 prima del cinque luglio 2026, che è la risposta vera"
+        );
+    }
+
+    #[test]
+    fn one_registry_drives_filters_columns_facets_and_sort() {
+        let vault = vec![
+            (DocId::new("a.md"), fm(serde_json::json!({"rating": "10"}))),
+            (DocId::new("b.md"), fm(serde_json::json!({"rating": 10}))),
+            (DocId::new("c.md"), fm(serde_json::json!({"rating": "2"}))),
+            (
+                DocId::new("d.md"),
+                fm(serde_json::json!({"rating": "invalid"})),
+            ),
+        ];
+        let mut types = PropertyTypes::default();
+        types
+            .types
+            .insert("rating".into(), crate::model::PropertyType::Number);
+        let equals_ten = filter("rating", PropertyTest::Equals(PropertyValue::Number(10.0)));
+        let selected: Vec<_> = vault
+            .iter()
+            .filter(|(_, fm)| test_with_types(fm, &equals_ten, &DateFormats::ISO, &types))
+            .map(|(id, fm)| (id, fm))
+            .collect();
+        assert_eq!(
+            selected
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a.md", "b.md"]
+        );
+        assert!(!test(&vault[0].1, &equals_ten, &DateFormats::ISO));
+        assert_eq!(
+            facets_with_types(
+                selected.iter().map(|(id, fm)| (*id, *fm)),
+                "rating",
+                &DateFormats::ISO,
+                &types
+            ),
+            vec![PropertyCount {
+                value: PropertyValue::Number(10.0),
+                count: 2
+            }]
+        );
+        assert_eq!(
+            facets(
+                vault.iter().map(|(id, fm)| (id, fm)),
+                "rating",
+                &DateFormats::ISO
+            )
+            .len(),
+            4
+        );
+
+        let sort = PropertySort {
+            key: "rating".into(),
+            descending: false,
+        };
+        let select = PropertySelect::Keys {
+            keys: vec!["rating".into()],
+        };
+        let matches: Matches = vault
+            .iter()
+            .map(|(id, _)| DocumentMatch::of(id.clone()))
+            .collect();
+        let rows = finish_with_types(
+            matches,
+            Some(&sort),
+            &select,
+            None,
+            &DateFormats::ISO,
+            &types,
+            |id| {
+                vault
+                    .iter()
+                    .find(|(other, _)| other == id)
+                    .map(|(_, fm)| fm)
+            },
+        )
+        .items;
+        assert_eq!(ids(&rows), vec!["c.md", "a.md", "b.md", "d.md"]);
+        assert_eq!(
+            rows[0].properties,
+            vec![PropertyEntry {
+                key: "rating".into(),
+                value: PropertyValue::Number(2.0)
+            }]
+        );
+        assert_eq!(
+            rows[3].properties,
+            vec![PropertyEntry {
+                key: "rating".into(),
+                value: PropertyValue::Unknown(serde_json::json!("invalid"))
+            }]
+        );
+        assert_eq!(
+            entries_with_types(&vault[0].1, &PropertySelect::All, &DateFormats::ISO, &types),
+            rows[1].properties
         );
     }
 }

@@ -3,6 +3,7 @@ import {
   Compartment,
   EditorState,
   Prec,
+  Text,
   Transaction,
   type Extension,
 } from "@codemirror/state";
@@ -47,10 +48,13 @@ import {
   redoDepth,
 } from "@codemirror/commands";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { vim } from "@replit/codemirror-vim";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
-import { byteToCharIndex, charToByteIndices } from "../../rules/offsets";
+import { byteToNormalizedCharIndices, charToByteIndices } from "../../rules/offsets";
 import { onLanguage, t } from "../../i18n/strings";
+import { settings } from "../../host/query";
+import { onEvent } from "../../state/kernel";
 import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
@@ -85,12 +89,21 @@ export interface DocumentUpdate {
   readonly operation: TextOperation | null;
 }
 
+/// Ancoraggio di scroll che non tocca selezione né cronologia.
+export interface ScrollAnchor {
+  readonly offset: number;
+  readonly top: number;
+}
+
 export interface TextEngineOptions {
   onChange(change: EditorChange): void;
   onSelectionChange(): void;
   readonly extensions?: () => Extension;
   readonly theme?: Theme;
 }
+// Mirrors the core machine settings read by every mounted text surface.
+export const EDITOR_SPELLCHECK_KEY = "editor.spellcheck";
+export const EDITOR_VIM_KEY = "editor.vim";
 
 type ApplyOrigin = "user" | "sync" | "undo" | "redo" | "replace";
 
@@ -99,6 +112,8 @@ export class TextEngine {
   private readonly theme = new Compartment();
   private readonly readOnly = new Compartment();
   private readonly historyCompartment = new Compartment();
+  private readonly vimCompartment = new Compartment();
+  private readonly spellcheckCompartment = new Compartment();
   private readonly nativeHistoryExtension = nativeHistory({
     minDepth: 100,
     newGroupDelay: 500,
@@ -108,9 +123,18 @@ export class TextEngine {
   private readonly options: TextEngineOptions;
   private readonly listener: Extension;
   private readonly stopLanguage: Teardown;
+  private readonly stopSettings: Teardown;
+  private settingsGeneration = 0;
+  private vimEnabled = false;
+  private spellcheckEnabled = true;
+  private appliedVim = false;
+  private appliedSpellcheck = true;
+  private pendingInput = false;
   private applyOrigin: ApplyOrigin = "user";
   private readOnlyEnabled = false;
   private disposed = false;
+  private scrollFrame: number | null = null;
+  private scrollEpoch = 0;
   private currentTheme: Theme;
   private view: EditorView;
 
@@ -127,6 +151,12 @@ export class TextEngine {
     this.view.contentDOM.tabIndex = -1;
     this.view.scrollDOM.tabIndex = 0;
     this.view.scrollDOM.setAttribute("role", "document");
+    this.stopSettings = onEvent("setting_changed", (event) => {
+      if (event.key === EDITOR_VIM_KEY || event.key === EDITOR_SPELLCHECK_KEY) {
+        void this.loadInputPreferences();
+      }
+    });
+    void this.loadInputPreferences();
     this.stopLanguage = onLanguage(() => this.updateAccessibleLabels());
     this.updateAccessibleLabels();
   }
@@ -232,9 +262,7 @@ export class TextEngine {
   public revealByteOffset(byteOffset: number): void {
     if (this.disposed) return;
     const text = this.rendered();
-    const renderedPos = byteToCharIndex(text, byteOffset);
-    const crlfBefore = text.slice(0, renderedPos + 1).match(/\r\n/g)?.length ?? 0;
-    const pos = Math.min(this.view.state.doc.length, renderedPos - crlfBefore);
+    const pos = byteToNormalizedCharIndices(text, [byteOffset])[0];
     this.view.dispatch({
       selection: { anchor: pos },
       effects: EditorView.scrollIntoView(pos, { y: "start" }),
@@ -270,6 +298,10 @@ export class TextEngine {
   public destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.scrollEpoch += 1;
+    if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
+    this.settingsGeneration += 1;
+    this.stopSettings();
     this.stopLanguage();
     this.footprints.reset();
     this.view.destroy();
@@ -285,6 +317,117 @@ export class TextEngine {
     if (this.disposed || this.readOnlyEnabled === readOnly) return;
     this.readOnlyEnabled = readOnly;
     this.view.dispatch({ effects: this.readOnly.reconfigure(EditorState.readOnly.of(readOnly)) });
+  }
+
+  public setVim(enabled: boolean): void {
+    if (this.disposed || this.vimEnabled === enabled) return;
+    this.vimEnabled = enabled;
+    this.reconfigureInput();
+  }
+
+  public setSpellcheck(enabled: boolean): void {
+    if (this.disposed || this.spellcheckEnabled === enabled) return;
+    this.spellcheckEnabled = enabled;
+    this.reconfigureInput();
+  }
+
+  private reconfigureInput(): void {
+    if (this.view.compositionStarted) {
+      this.pendingInput = true;
+      return;
+    }
+    this.pendingInput = false;
+    if (this.appliedVim !== this.vimEnabled) {
+      this.appliedVim = this.vimEnabled;
+      this.view.dispatch({ effects: this.vimCompartment.reconfigure(this.vimEnabled ? vim() : []) });
+    }
+    if (this.appliedSpellcheck !== this.spellcheckEnabled) {
+      this.appliedSpellcheck = this.spellcheckEnabled;
+      this.view.dispatch({
+        effects: this.spellcheckCompartment.reconfigure(EditorView.contentAttributes.of({
+          spellcheck: String(this.spellcheckEnabled),
+          dir: "auto",
+        })),
+      });
+    }
+  }
+
+  private async loadInputPreferences(): Promise<void> {
+    const generation = ++this.settingsGeneration;
+    try {
+      const entries = await settings();
+      if (this.disposed || generation !== this.settingsGeneration) return;
+      const spellcheck = entries.find((entry) => entry.spec.key === EDITOR_SPELLCHECK_KEY);
+      const vimSetting = entries.find((entry) => entry.spec.key === EDITOR_VIM_KEY);
+      this.setSpellcheck(spellcheck?.value !== false);
+      this.setVim(vimSetting?.value === true);
+    } catch {
+      // Defaults remain available before a vault is open or when settings fail.
+    }
+  }
+
+
+  /// Scrittura chirurgica di una superficie resa (checkbox dei task in Lettura).
+  /// Gli offset sono code unit UTF-16 del documento normalizzato LF, come
+  /// `EditorState.doc`; il testo originale con CRLF resta a `getDoc`/sessione.
+  /// Rispetta i limiti e la sola lettura, passa da `userEvent: "input"` così
+  /// resta annullabile dalla cronologia locale e diffusa come ogni battuta.
+  public applyUserEdit(from: number, to: number, insert: string): boolean {
+    if (this.disposed || this.readOnlyEnabled) return false;
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || typeof insert !== "string") return false;
+    const length = this.view.state.doc.length;
+    if (from < 0 || to < from || to > length) return false;
+    if (insert.includes("\r")) return false;
+    this.view.dispatch({ changes: { from, to, insert: Text.of(insert.split("\n")) }, userEvent: "input" });
+    return true;
+  }
+
+  /// Inserisce testo al cursore principale come battuta dell'utente: stessa
+  /// via di `applyUserEdit` (storia locale, sessione, CRLF interno), senza
+  /// esporre `EditorView` oltre il confine del package.
+  public insertAtCursor(text: string): boolean {
+    if (this.disposed || this.readOnlyEnabled) return false;
+    if (typeof text !== "string" || text.length === 0 || text.includes("\r")) return false;
+    const { from, to } = this.view.state.selection.main;
+    return this.applyUserEdit(from, to, text);
+  }
+
+  /// Il blocco visibile in cima, senza toccare selezione né cronologia.
+  /// `top` è la distanza in pixel fra la cima del blocco e quella della vista.
+  public getScrollAnchor(): ScrollAnchor {
+    if (this.disposed) return { offset: 0, top: 0 };
+    const top = this.view.scrollDOM.getBoundingClientRect().top;
+    const block = this.view.lineBlockAtHeight(Math.max(0, top - this.view.documentTop));
+    return { offset: block.from, top: this.view.documentTop + block.top - top };
+  }
+
+  /// Rimette la vista sull'ancoraggio: solo scorrimento, mai selezione o testo.
+  public restoreScrollAnchor(anchor: ScrollAnchor): void {
+    if (this.disposed || !Number.isSafeInteger(anchor.offset) || !Number.isFinite(anchor.top)) return;
+    const doc = this.view.state.doc;
+    const offset = Math.max(0, Math.min(doc.length, anchor.offset));
+    const epoch = ++this.scrollEpoch;
+    if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
+    this.view.dispatch({ effects: EditorView.scrollIntoView(offset, { y: "start", yMargin: 0 }) });
+    // CodeMirror applica scrollIntoView dopo le richieste di misura del frame.
+    // La correzione in pixel deve quindi avvenire nel frame successivo.
+    this.scrollFrame = requestAnimationFrame(() => {
+      this.scrollFrame = null;
+      if (this.disposed || epoch !== this.scrollEpoch) return;
+      this.view.requestMeasure({
+        key: this,
+        read: (view) => {
+          if (this.disposed || epoch !== this.scrollEpoch || view.state.doc !== doc || !view.dom.getClientRects().length) return null;
+          const block = view.lineBlockAt(offset);
+          return view.documentTop + block.top - view.scrollDOM.getBoundingClientRect().top;
+        },
+        write: (top, view) => {
+          if (top !== null && !this.disposed && epoch === this.scrollEpoch && view.state.doc === doc) {
+            view.scrollDOM.scrollTop += top - anchor.top;
+          }
+        },
+      });
+    });
   }
 
   /// Rimpiazza soltanto l'estensione del profilo: la stessa vista conserva
@@ -440,6 +583,20 @@ export class TextEngine {
     return [
       ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
       this.profile.of(this.profileExtensions()),
+      this.vimCompartment.of(this.vimEnabled ? vim() : []),
+      this.spellcheckCompartment.of(EditorView.contentAttributes.of({
+        spellcheck: String(this.spellcheckEnabled),
+        dir: "auto",
+      })),
+      EditorView.perLineTextDirection.of(true),
+      EditorView.domEventHandlers({
+        compositionend: () => {
+          if (!this.pendingInput) return;
+          queueMicrotask(() => {
+            if (!this.disposed && this.pendingInput) this.reconfigureInput();
+          });
+        },
+      }),
       this.readOnly.of(EditorState.readOnly.of(this.readOnlyEnabled)),
       this.historyCompartment.of(this.nativeHistoryExtension),
       lineNumbers(),

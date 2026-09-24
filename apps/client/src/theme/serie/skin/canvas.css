@@ -1,0 +1,89 @@
+/* La carta e i controlli Canvas; coordinate e hit area sono della struttura. */
+.canvas-surface {
+  color: var(--text);
+  background: var(--doc-bg);
+}
+.canvas-toolbar {
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.canvas-node {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.canvas-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.canvas-node-group {
+  border-style: dashed;
+}
+.canvas-node-handle {
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.canvas-connect {
+  padding: 0;
+  color: var(--accent-soft);
+}
+.canvas-card-body {
+  padding: var(--space-3);
+  white-space: pre-wrap;
+}
+.canvas-markdown {
+  white-space: normal;
+}
+.canvas-empty,
+.canvas-group-bg {
+  color: var(--muted);
+}
+.canvas-url-text {
+  display: block;
+  margin-bottom: var(--space-3);
+}
+.canvas-text-editor,
+.canvas-field-editor {
+  margin: 0;
+  padding: var(--space-2);
+  color: var(--text);
+  background: var(--doc-bg);
+  border: 1px solid var(--border);
+  font: inherit;
+}
+.canvas-resize::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+}
+.canvas-edge-hit {
+  fill: none;
+  stroke: transparent;
+}
+.canvas-edge-line {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.canvas-edge-line.selected {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.canvas-edge-arrow {
+  fill: var(--muted);
+}
+.canvas-edge-label {
+  fill: var(--text);
+  font-size: var(--text-sm);
+  text-anchor: middle;
+}

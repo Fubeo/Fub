@@ -20,10 +20,14 @@ use fub_abi::theme::ThemeLight;
 use fub_abi::traits::PluginPermissions;
 use fub_abi::ui::UiNode;
 use fub_app_lib::{
-    BundleInfo, DocumentSource, EmbedContent, InstalledPluginInfo, OpenVaults, ThemeInfo,
-    ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
+    BundleInfo, DemoClosed, DocumentSource, EmbedContent, InstalledPluginInfo, OpenVaults,
+    ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 use fub_host::registry::BundleKind;
+use fub_host::support::{
+    ConfigFileKind, ConfigReport, ConfigStatus, DemoOpened, DiagnosticSummary, ExportConsent,
+    MachineSummary, RecoverAction, RecoverOutcome, SupportPreview, VaultSummary,
+};
 use fub_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
@@ -174,6 +178,7 @@ fn expected() -> Value {
                     fub_abi::theme::ThemeMotion::Transform,
                 ],
             },
+            trust: "community",
         })],
         "ThemePayload": [to_value(ThemePayload {
             manifest: fub_abi::theme::ThemeManifest {
@@ -208,6 +213,9 @@ fn expected() -> Value {
             version: "2.1.0".into(),
             enabled: true,
             consent: Consent::Granted,
+            catalog: None,
+            revoked: false,
+            revocation: None,
             runtime_known: true,
         })],
         // Il registro dei vault (§11.1): quello appuntato con la sua icona e un
@@ -234,6 +242,81 @@ fn expected() -> Value {
                 last_opened: 1_699_000_000_000,
                 keys_seen: Default::default(),
             }),
+        ],
+        // Comandi locali dell'app: serializzazione reale dei record di supporto,
+        // compresa la versione futura che supera il limite esatto di JS Number.
+        "DemoOpened": [
+            to_value(DemoOpened { root: "/config/demo-vault".into(), previous: Some("/vault".into()) }),
+            to_value(DemoOpened { root: "/config/demo-vault".into(), previous: None }),
+        ],
+        "DemoClosed": [
+            to_value(DemoClosed { errors: vec![PluginError::Io("flush failed".into())], current: Some("/vault".into()) }),
+            to_value(DemoClosed { errors: vec![], current: None }),
+        ],
+        "DiagnosticSummary": [to_value(DiagnosticSummary {
+            kind: "cancelled".into(), help: "help.cancelled".into(),
+        })],
+        "VaultSummary": [to_value(VaultSummary {
+            root: "/config/demo-vault".into(),
+            watching: true,
+            startup_diagnostics: vec![DiagnosticSummary {
+                kind: "cancelled".into(), help: "help.cancelled".into(),
+            }],
+        })],
+        "MachineSummary": [to_value(MachineSummary {
+            settings_keys: vec!["locale.language".into()],
+            known_vaults: 2,
+            log_path: None,
+        })],
+        "SupportPreview": [to_value(SupportPreview {
+            v: 1,
+            at: 1_700_000_000_000,
+            fub: "1.0".into(),
+            vault: Some(VaultSummary {
+                root: "/config/demo-vault".into(),
+                watching: true,
+                startup_diagnostics: vec![DiagnosticSummary {
+                    kind: "cancelled".into(), help: "help.cancelled".into(),
+                }],
+            }),
+            machine: MachineSummary {
+                settings_keys: vec!["locale.language".into()],
+                known_vaults: 2,
+                log_path: None,
+            },
+            log_tail: vec![],
+            note: "redacted".into(),
+        })],
+        "ExportConsent": [to_value(ExportConsent {
+            acknowledged_preview: true, include_log: false,
+            destination: "/outside/support.json".into(),
+        })],
+        "ConfigFileKind": [
+            to_value(ConfigFileKind::MachineSettings),
+            to_value(ConfigFileKind::VaultRegistry),
+            to_value(ConfigFileKind::ViewState),
+        ],
+        "ConfigStatus": [
+            to_value(ConfigStatus::Healthy),
+            to_value(ConfigStatus::Missing),
+            to_value(ConfigStatus::Unreadable { reason: "invalid JSON".into() }),
+            to_value(ConfigStatus::FutureVersion { found: "9007199254740993".into(), supported: 1 }),
+        ],
+        "ConfigReport": [to_value(ConfigReport {
+            kind: ConfigFileKind::MachineSettings,
+            path: "/config/settings.json".into(),
+            status: ConfigStatus::FutureVersion { found: "9007199254740993".into(), supported: 1 },
+        })],
+        "RecoverAction": [
+            to_value(RecoverAction::BackupOnly),
+            to_value(RecoverAction::ResetEmpty),
+            to_value(RecoverAction::RestoreBackup { backup: "/config/settings.json.bak".into() }),
+        ],
+        "RecoverOutcome": [
+            to_value(RecoverOutcome { backup: Some("/config/settings.json.bak".into()),
+                detail: "restored".into(), restart_required: true }),
+            to_value(RecoverOutcome { backup: None,
+                detail: "nothing to back up".into(), restart_required: false }),
         ],
     })
 }

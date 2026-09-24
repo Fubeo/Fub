@@ -43,6 +43,41 @@
 //! ([0064](../../../docs/decisions/0185-capability-un-solo-guard.md)), non
 //! implicito, ed è ciò che a M5 diventerà un preopen WASI sulla stessa cartella
 //! per un componente che avvolga un motore analogo.
+//!
+//! # Operatori: cosa si valuta qui, cosa altrove, cosa manca (P04)
+//!
+//! Inventario delle foglie di [`QueryPredicate`] viste da questo indice:
+//!
+//! - `Text`: termini (`Terms`, un AND di termini in qualunque ordine) o frase
+//!   (`Phrase`, la sequenza esatta); campi `Name`, `Body`, `Tags`, `Heading`,
+//!   default = tutti e quattro coi pesi; tolleranza `Exact`, e `Typos` che cade
+//!   su `Exact` — il verso sicuro: restringe invece di allargare.
+//!   `partial_last_term` vive solo nell'invocazione mentre-si-digita (l'ultimo
+//!   termine è un prefisso), mai salvato. TEXT è termini/frase, mai sintassi di
+//!   motore: nella stringa libera non ci sono operatori da parsare.
+//! - `Tag { descendants }`: termine esatto su `tags`, o su `tag_paths` (sé
+//!   stesso più ogni antenato, via `fub_abi::query::tag_ancestors`) con
+//!   `descendants`; la chiave è canonica via [`canonical_tag`].
+//! - `Folder { descendants }`: termine esatto su `folder_exact`, o su `folder`
+//!   (ogni antenata, via `fub_abi::query::folders_of`) con `descendants`; la
+//!   normalizzazione è `fub_abi::rules::folders::normalized`, la stessa che ha
+//!   scritto il campo.
+//! - `Docs`: è già la risposta, e si legge così com'è.
+//! - `Linked`: non si valuta qui — la serve il pianificatore sul grafo del
+//!   kernel; qui è [`PluginError::Unserved`].
+//! - `Property`: non si valuta qui — la serve chi ha il frontmatter in cache
+//!   (il kernel, regole `QueryEvaluator` in un posto solo); qui è
+//!   [`PluginError::Unserved`].
+//!
+//! La regex dell'utente cerca nei campi memorizzati in chiaro, con limiti su
+//! pattern, numero di documenti e byte letti; il testo case-sensitive usa la
+//! stessa scansione. Entrambi rifiutano la query prima di restituire un insieme
+//! parziale se superano il limite. `Task { Open | Done }` è indicizzato dai
+//! marker delle liste annidate nel modello, senza inferire uno stato dai nomi.
+//! `Path` e `File` spettano al valutatore del kernel, non a Tantivy.
+//!
+//! Nessun secondo indice grafo/tag qui dentro: tag e cartelle si riusano dalle
+//! regole del contratto, i link dal grafo del kernel.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -51,9 +86,10 @@ use std::sync::{Arc, Mutex, RwLock};
 use camino::Utf8Path;
 use fub_abi::edit::{Fnv1a, Revision};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
-use fub_abi::model::{canonical_tag, DocId, DocumentModel, Span};
+use fub_abi::model::{canonical_tag, Block, DocId, DocumentModel, Span};
 use fub_abi::query::{
-    QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery, TextTolerance,
+    QueryClause, QueryExpr, QueryPredicate, TaskStatus, TextField, TextMode, TextQuery,
+    TextTolerance,
 };
 use fub_abi::rules::folders;
 use fub_abi::rules::snippet::SNIPPET_CHARS;
@@ -77,6 +113,15 @@ use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Te
 
 /// Identità della ricerca come plugin: è lo spazio dati che l'host le concede.
 /// La assegna chi registra il provider — non la feature.
+const MAX_SCAN_DOCS: u64 = 2048;
+const MAX_SCAN_BYTES: usize = 8 * 1024 * 1024;
+const MAX_REGEX_BYTES: usize = 256;
+const ALL_TEXT_FIELDS: [TextField; 4] = [
+    TextField::Name,
+    TextField::Body,
+    TextField::Tags,
+    TextField::Heading,
+];
 pub const SEARCH_ID: &str = "fub.search";
 
 /// Versione dello schema dell'indice. **Va incrementata** ad ogni modifica dei
@@ -90,7 +135,10 @@ pub const SEARCH_ID: &str = "fub.search";
 /// linguaggio (§5.3) chiedono e che i campi di prima non sapevano distinguere —
 /// «in questa cartella» contro «in questa o sotto», e lo stesso per un tag.
 /// v5: `headings`, il campo che `TextField::Heading` chiede (decisione 0050).
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
+/// v6: `headings` e `tags` memorizzati per la scansione regex/case-sensitive;
+/// `task_state` per i marker open/done. Gli alias restano in `page_name` e
+/// sono coperti dall'impronta del contenuto.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(6);
 
 /// **La forma che quel numero versiona** (§15.3,
 /// [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)).
@@ -109,8 +157,8 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 /// [`lo_schema_non_cambia_senza_che_il_numero_salga`] non lascia passare.
 #[cfg(test)]
 const FINGERPRINT_OF_THE_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
-body:default:stored tags:raw tag_paths:raw folder:raw folder_exact:raw \
-headings:default";
+body:default:stored tags:raw:stored tag_paths:raw folder:raw folder_exact:raw \
+headings:default:stored task_state:raw";
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -295,6 +343,18 @@ struct Manifest {
 /// due costanti: questi numeri sopravvivono su disco fra un avvio e l'altro, e
 /// una copia che diverge renderebbe illeggibile un indice già scritto senza che
 /// nessun banco se ne accorga — ogni copia resta coerente con sé stessa.
+/// I tag di un documento come li conta il kernel: quelli nel testo e quelli
+/// del frontmatter (`fub_abi::rules::tag::frontmatter_tags`), senza doppioni.
+fn tag_names(doc: &DocumentModel) -> Vec<String> {
+    let mut names: Vec<String> = doc.tags.iter().map(|t| t.name.clone()).collect();
+    for name in fub_abi::rules::tag::frontmatter_tags(&doc.frontmatter) {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
 fn fingerprint(doc: &DocumentModel) -> u64 {
     let mut h = Fnv1a::new();
     // Il path intero e non il solo nome: da quando l'indice porta la cartella
@@ -304,11 +364,54 @@ fn fingerprint(doc: &DocumentModel) -> u64 {
     h.update(&[0]);
     h.update(doc.text.as_bytes());
     h.update(&[0]);
-    for tag in &doc.tags {
-        h.update(tag.name.as_bytes());
+    // I tag del frontmatter entrano nell'impronta come quelli del testo: una
+    // nota indicizzata prima che contassero cambia impronta e si reindicizza
+    // da sola alla prossima apertura.
+    for tag in tag_names(doc) {
+        h.update(tag.as_bytes());
         h.update(&[0x1f]);
     }
+    // Gli alias finiscono nell'indice (dentro `page_name`, vedi
+    // `tantivy_doc`), quindi finiscono nell'impronta: senza, un alias
+    // aggiunto a testo invariato non reindicizzerebbe niente e la ricerca
+    // per nome resterebbe sorda. Stesso separatore dei tag; nessun campo
+    // nuovo, nessuno bump di schema oltre questo commento.
+    for alias in doc.frontmatter.aliases() {
+        h.update(alias.as_bytes());
+        h.update(&[0x1f]);
+    }
+    let (open, done) = task_states(doc);
+    h.update(&[u8::from(open), u8::from(done)]);
     h.value()
+}
+/// Task presenti nell'albero, compresi liste annidate, citazioni e custom
+/// block. Fermarsi quando entrambi gli stati sono noti limita il cammino.
+fn task_states(doc: &DocumentModel) -> (bool, bool) {
+    let mut open = false;
+    let mut done = false;
+    let mut pending: Vec<&Block> = doc.body.iter().collect();
+    while let Some(block) = pending.pop() {
+        match block {
+            Block::List { items, .. } => {
+                for item in items {
+                    if let Some(marker) = item.task {
+                        if marker.checked() {
+                            done = true;
+                        } else {
+                            open = true;
+                        }
+                    }
+                    pending.extend(&item.blocks);
+                }
+            }
+            Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => pending.extend(blocks),
+            _ => {}
+        }
+        if open && done {
+            break;
+        }
+    }
+    (open, done)
 }
 
 /// I campi dello schema, risolti una volta sola.
@@ -335,6 +438,7 @@ struct Fields {
     /// a una cosa non è come una che la nomina di sfuggita, ed è la distinzione
     /// che `TextField::Heading` esiste per dire.
     headings: Field,
+    task_state: Field,
 }
 
 /// La forma dello schema, in una riga: `nome:tokenizer[:stored]` per campo, in
@@ -378,7 +482,7 @@ fn build_schema() -> (Schema, Fields) {
     // diventava una phrase query su due termini — conteggi del pannello e
     // risultati del click non coincidevano mai. Ogni tag entra come termine
     // unico nella forma canonica ([`canonical_tag`]).
-    let tags = b.add_text_field("tags", STRING);
+    let tags = b.add_text_field("tags", STRING | STORED);
     let tag_paths = b.add_text_field("tag_paths", STRING);
     // Come i tag, la cartella è una CHIAVE: termine esatto, non prosa. Non è
     // STORED perché non torna mai indietro — serve solo a filtrare.
@@ -387,7 +491,8 @@ fn build_schema() -> (Schema, Fields) {
     // Prosa, come il corpo: un heading è una frase che qualcuno ha scritto, e
     // si cerca dentro con le stesse regole. Non STORED: da qui non torna
     // indietro niente — gli estratti li genera il corpo.
-    let headings = b.add_text_field("headings", TEXT);
+    let headings = b.add_text_field("headings", TEXT | STORED);
+    let task_state = b.add_text_field("task_state", STRING);
     (
         b.build(),
         Fields {
@@ -399,6 +504,7 @@ fn build_schema() -> (Schema, Fields) {
             folder,
             folder_exact,
             headings,
+            task_state,
         },
     )
 }
@@ -915,6 +1021,14 @@ impl SearchIndex {
         let mut td = TantivyDocument::new();
         td.add_text(f.doc_id, doc.id.as_str());
         td.add_text(f.page_name, doc.id.page_name());
+        // Gli alias del frontmatter stanno nello stesso campo del nome, con lo
+        // stesso tokenizer `default`: `nameQuery` trova per alias senza un
+        // campo nuovo e senza bump di schema (la forma indicizzata non cambia,
+        // cambia solo il contenuto). L'impronta li copre (vedi `fingerprint`),
+        // così un alias aggiunto reindicizza la nota.
+        for alias in doc.frontmatter.aliases() {
+            td.add_text(f.page_name, &alias);
+        }
         td.add_text(f.body, &doc.text);
         // Un valore per heading e non una stringa unita: due titoli attaccati
         // formerebbero una frase che nessuno ha scritto, e una ricerca per
@@ -925,8 +1039,8 @@ impl SearchIndex {
         // Un valore per tag (non una stringa unita): col tokenizer raw ogni
         // valore È un termine, e il termine è la forma canonica — la stessa
         // chiave con cui il kernel aggrega e il pannello interroga.
-        for tag in &doc.tags {
-            let canonical = canonical_tag(&tag.name);
+        for tag in tag_names(doc) {
+            let canonical = canonical_tag(&tag);
             // Ogni antenato è un termine a sé: `#progetto/casa` si lascia
             // trovare da `progetto` con `descendants`, senza che nessuno debba
             // valutare un prefisso documento per documento.
@@ -941,6 +1055,13 @@ impl SearchIndex {
             td.add_text(f.folder, folder);
         }
         td.add_text(f.folder_exact, fub_abi::query::folder_of(&doc.id));
+        let (open, done) = task_states(doc);
+        if open {
+            td.add_text(f.task_state, "open");
+        }
+        if done {
+            td.add_text(f.task_state, "done");
+        }
         td
     }
 
@@ -1313,6 +1434,27 @@ impl SearchIndex {
                 text_parts.push(q.box_clone());
                 Ok(Some(q))
             }
+            QueryPredicate::Task { status } => Ok(Some(term_query(
+                f.task_state,
+                match status {
+                    TaskStatus::Open => "open",
+                    TaskStatus::Done => "done",
+                },
+            ))),
+            QueryPredicate::Regex { pattern, fields } => {
+                if pattern.len() > MAX_REGEX_BYTES {
+                    return Err(PluginError::BadArgs("regex exceeds 256 bytes".into()));
+                }
+                let regex = regex::RegexBuilder::new(pattern)
+                    .multi_line(true)
+                    .size_limit(1 << 20)
+                    .dfa_size_limit(1 << 20)
+                    .build()
+                    .map_err(|err| PluginError::BadArgs(format!("invalid regex: {err}").into()))?;
+                self.scan_fields(fields, |values| {
+                    values.iter().any(|value| regex.is_match(value))
+                })
+            }
             QueryPredicate::Tag { name, descendants } => {
                 let field = if *descendants { f.tag_paths } else { f.tags };
                 Ok(Some(term_query(field, &canonical_tag(name))))
@@ -1342,9 +1484,16 @@ impl SearchIndex {
             }
             // Il routing non manda qui ciò che non è stato dichiarato: se
             // succede è un errore del kernel, non una domanda malposta.
+            // Il `{what}` porta la foglia che non si valuta — il Debug del
+            // predicato (`Linked`, `Property` o `Custom` col suo payload) — e
+            // la chiave è già in catalogo: nessuna nuova stringa fuori da
+            // `catalog()`.
             other => Err(PluginError::Unserved(Text::message(
                 UNSERVED_LEAF,
-                vec![Arg::text(WHAT, format!("{other:?}"))],
+                vec![Arg::text(
+                    WHAT,
+                    format!("{:?} (routes: {:?})", other, self.routes()),
+                )],
             ))),
         }
     }
@@ -1356,7 +1505,48 @@ impl SearchIndex {
     /// l'unico modo perché «Rust» trovi `rust` senza replicare qui le regole
     /// dell'analizzatore.
     fn text_query(&self, text: &TextQuery) -> Result<Option<Box<dyn Query>>, PluginError> {
+        if text.case_sensitive && text.text.len() > MAX_REGEX_BYTES {
+            return Err(PluginError::BadArgs(
+                "case-sensitive text exceeds 256 bytes".into(),
+            ));
+        }
         let f = self.fields;
+        if text.case_sensitive {
+            let parts: Vec<String> = match text.mode {
+                TextMode::Phrase => vec![regex::escape(&text.text)],
+                TextMode::Terms => text
+                    .text
+                    .split(|ch: char| !ch.is_alphanumeric())
+                    .filter(|word| !word.is_empty())
+                    .map(regex::escape)
+                    .collect(),
+            };
+            if parts.is_empty() {
+                return Ok(None);
+            }
+            let last = parts.len() - 1;
+            let expressions = parts
+                .iter()
+                .enumerate()
+                .map(|(at, part)| {
+                    let boundary = if at == last && text.partial_last_term {
+                        ""
+                    } else {
+                        r"\b"
+                    };
+                    format!(r"\b{part}{boundary}")
+                })
+                .map(|pattern| {
+                    regex::Regex::new(&pattern)
+                        .expect("escaped literal has a valid regular expression")
+                })
+                .collect::<Vec<_>>();
+            return self.scan_fields(&text.fields, |values| {
+                expressions
+                    .iter()
+                    .all(|regex| values.iter().any(|value| regex.is_match(value)))
+            });
+        }
         // Una sola lettura per query, e non una per campo: i quattro pesi vanno
         // presi nello stesso istante, o una query lanciata mentre qualcuno
         // muove uno slider potrebbe pesare il nome con la taratura nuova e gli
@@ -1488,6 +1678,64 @@ impl SearchIndex {
         }
     }
 
+    /// Il raw stored è la fonte di verità per regex e grafia case-sensitive:
+    /// l'indice tokenizzato ha già dimenticato punteggiatura e maiuscole. Oltre
+    /// al tetto dichiarato rifiutiamo la domanda, mai una pagina parziale.
+    fn scan_fields(
+        &self,
+        requested: &[TextField],
+        mut matches: impl FnMut(&[&str]) -> bool,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
+        self.commit()?;
+        let searcher = self.reader.searcher();
+        if searcher.num_docs() > MAX_SCAN_DOCS {
+            return Err(PluginError::BadArgs(
+                "regex/case-sensitive search is limited to 2048 indexed documents".into(),
+            ));
+        }
+        let fields = if requested.is_empty() {
+            &ALL_TEXT_FIELDS[..]
+        } else {
+            requested
+        };
+        let mut docs = Vec::new();
+        let mut scanned = 0usize;
+        let candidates = searcher
+            .search(
+                &AllQuery,
+                &tantivy::collector::TopDocs::with_limit(MAX_SCAN_DOCS as usize).order_by_score(),
+            )
+            .map_err(|err| PluginError::Internal(reason(SEARCH, err)))?;
+        for (_, address) in candidates {
+            let doc: TantivyDocument = searcher
+                .doc(address)
+                .map_err(|err| PluginError::Internal(reason(DOC_READ, err)))?;
+            let Some(id) = doc.get_first(self.fields.doc_id).and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let mut values = Vec::new();
+            for field in fields {
+                let stored = match field {
+                    TextField::Name => self.fields.page_name,
+                    TextField::Body => self.fields.body,
+                    TextField::Tags => self.fields.tags,
+                    TextField::Heading => self.fields.headings,
+                };
+                values.extend(doc.get_all(stored).filter_map(|value| value.as_str()));
+            }
+            scanned = scanned.saturating_add(values.iter().map(|s| s.len()).sum::<usize>());
+            if scanned > MAX_SCAN_BYTES {
+                return Err(PluginError::BadArgs(
+                    "regex/case-sensitive search exceeds 8 MiB of indexed text".into(),
+                ));
+            }
+            if matches(&values) {
+                docs.push((Occur::Should, term_query(self.fields.doc_id, id)));
+            }
+        }
+        Ok((!docs.is_empty()).then(|| Box::new(BooleanQuery::new(docs)) as Box<dyn Query>))
+    }
+
     /// Un termine **incompleto**: tutto ciò che comincia così.
     ///
     /// È un automa sul dizionario dei termini — cioè un intervallo aperto nella
@@ -1597,6 +1845,8 @@ impl IndexProvider for SearchIndex {
     fn routes(&self) -> Vec<QueryRoute> {
         vec![
             QueryRoute::Predicate(PredicateKind::Text),
+            QueryRoute::Predicate(PredicateKind::Regex),
+            QueryRoute::Predicate(PredicateKind::Task),
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
         ]
@@ -1883,6 +2133,8 @@ impl IndexProvider for SearchIndex {
             // Prima questo `match` doveva dirlo variante per variante con dei
             // `BadArgs`, perché era così che si scopriva chi servisse cosa;
             // adesso il routing è dichiarato e questo ramo è irraggiungibile.
+            // Il `{what}` porta la famiglia chiesta (`other.kind()`), con la
+            // chiave già in catalogo: nessuna nuova stringa fuori da `catalog()`.
             other => Err(PluginError::Unserved(Text::message(
                 UNSERVED_FAMILY,
                 vec![Arg::text(WHAT, format!("{:?}", other.kind()))],
@@ -2087,6 +2339,58 @@ mod tests {
             DocId::new("nota/Rust.md"),
             "the title weighs more"
         );
+    }
+    /// Gli alias del frontmatter si trovano dal nome (P04): stanno dentro
+    /// `page_name` col tokenizer `default`, senza campo nuovo né bump.
+    #[test]
+    fn page_name_finds_by_frontmatter_alias() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        let mut m = doc("people/Rossi.md", "appunti di cucina");
+        m.frontmatter
+            .0
+            .insert("aliases".into(), serde_json::json!(["Mario"]));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&m));
+
+        // Nei campi di default (nome compreso) l'alias trova la nota.
+        let hits = search(&idx, "Mario");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].doc, DocId::new("people/Rossi.md"));
+        // E il solo campo nome basta: l'alias è lì dentro, non altrove.
+        let only_name = clause(vec![lit(QueryPredicate::Text(TextQuery {
+            fields: vec![TextField::Name],
+            ..TextQuery::terms("Mario")
+        }))]);
+        assert_eq!(page_of(&idx, only_name, None).items.len(), 1);
+        // Il corpo non c'entra: senza alias la stessa nota non si trova.
+        let body_only = clause(vec![lit(QueryPredicate::Text(TextQuery {
+            fields: vec![TextField::Body],
+            ..TextQuery::terms("Mario")
+        }))]);
+        assert!(page_of(&idx, body_only, None).items.is_empty());
+    }
+
+    /// Un alias aggiunto a testo invariato reindicizza la nota: l'impronta
+    /// copre gli alias, altrimenti il salto di `on_documents_indexed`
+    /// crederebbe la nota immutata e la ricerca per nome resterebbe sorda.
+    #[test]
+    fn adding_an_alias_reindexes_the_document() {
+        let (_g, path) = tmp();
+        let (mut idx, _host) = fresh(&path);
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("n.md", "corpo stabile")));
+        assert!(search(&idx, "Mario").is_empty());
+
+        let mut m = doc("n.md", "corpo stabile");
+        m.frontmatter
+            .0
+            .insert("aliases".into(), serde_json::json!(["Mario"]));
+        assert_ne!(
+            fingerprint(&doc("n.md", "corpo stabile")),
+            fingerprint(&m),
+            "stesso testo, alias diverso: impronte diverse"
+        );
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&m));
+        assert_eq!(search(&idx, "Mario").len(), 1);
     }
 
     // -----------------------------------------------------------------------

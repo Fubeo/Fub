@@ -27,7 +27,8 @@
 //! sbagliato. È la ragione per cui gli indici il kernel li alimenta da sé e il
 //! versioning invece passa di qui.
 //!
-//! Ma «perdere uno snapshot» vale solo per [`Event::DocumentChanged`]. Perdere un
+//! La perdita tollerabile riguarda gli eventi di contenuto
+//! ([`Event::DocumentChanged`] e [`Event::EntryChanged`]). Perdere un
 //! evento **strutturale** costa altro, e la distinzione è sostanziale:
 //!
 //! - un [`Event::DocumentRenamed`] perso spezzerebbe la storia in due chiavi
@@ -39,7 +40,7 @@
 //!   ancora viva.
 //!
 //! Per questo l'handler è abbonato anche a [`EventKind::Overflow`] e riconcilia:
-//! `list_documents` dice chi c'è davvero, e ciò che lo store crede vivo e il
+//! `IndexQuery::Entries` elenca i file correnti, e ciò che lo store crede vivo e il
 //! vault non ha più prende un tombstone. La frattura da rename perso degrada a
 //! "nuova storia + tombstone della vecchia" — la cronologia si spezza, ma niente
 //! mente sul presente, e il contenuto vecchio resta leggibile. Vedi
@@ -53,15 +54,12 @@
 //! ```text
 //! versions.json                    indice: doc_id → versioni + tombstone
 //! <dir>/meta.json                  { doc_id, deleted_at }
-//! <dir>/<ts>.md                    il contenuto di una versione
+//! <dir>/<ts>.<ext>                 i byte originali di una versione
 //! ```
 //!
-//! Quello spazio sta sotto la radice dei **derivati**, e gli snapshot non lo
-//! sono: buttarli non costa una ricostruzione, costa la memoria di com'erano i
-//! file. È il difetto che la
-//! [0048](../../../docs/decisions/0188-identita-path-e-rename.md) nomina e non chiude —
-//! la seconda radice per plugin è additiva e arriva dopo M3 —, e questo store è
-//! il primo che ci si sposterà.
+//! Gli snapshot e `meta.json` sono autorevoli; soltanto l'indice si può
+//! ricostruire. La posizione sotto `.fub/plugins` non rende questi file cache
+//! eliminabili.
 //!
 //! `versions.json` è **derivato**: se manca, non si legge o non torna, si
 //! ricostruisce leggendo lo store (ogni cartella dice di chi è, ogni file dice
@@ -77,15 +75,15 @@ use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     InvokeMode, ParamKind, ParamSpec,
 };
-use fub_abi::edit::{Fnv1a, WriteBase};
+use fub_abi::edit::Fnv1a;
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
 use fub_abi::schema::SchemaVersion;
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
-    CommandProvider, EntryKind, EventHandler, HostApi, IndexQuery, IndexResult, ReadApi,
-    ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
+    CommandProvider, EventHandler, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance,
+    ViewInterests, ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
 use fub_abi::PluginError;
@@ -133,6 +131,17 @@ const CURRENT: &str = "current";
 const SIZE: &str = "size";
 const RESTORE_LABEL: &str = "restore";
 const CLOSE_PREVIEW: &str = "close_preview";
+const BINARY_PREVIEW: &str = "binary_preview";
+const COMPARE_LABEL: &str = "compare";
+const COPY_LABEL: &str = "copy";
+const SHOW_TEXT: &str = "show_text";
+const DIFF_SUMMARY: &str = "diff.summary";
+const DIFF_SAME: &str = "diff.same";
+const DIFF_ENDINGS: &str = "diff.endings";
+const DIFF_TOO_LARGE: &str = "diff.too_large";
+const DIFF_SKIPPED: &str = "diff.skipped";
+const DIFF_TRUNCATED: &str = "diff.truncated";
+const DIFF_BINARY: &str = "diff.binary";
 /// Il titolo di una riga e dell'anteprima: **l'istante**, declinato. È una
 /// chiave e non un `Arg::timestamp` nudo perché un `Text::Message` senza
 /// template nel catalogo ricade sulla chiave nuda — e prima di questa chiave
@@ -196,6 +205,32 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SIZE, "{size} byte")
             .with(RESTORE_LABEL, "Ripristina")
             .with(CLOSE_PREVIEW, "Chiudi l'anteprima")
+            .with(
+                BINARY_PREVIEW,
+                "Versione binaria: {size} byte. Puoi ripristinarla senza convertirla in testo.",
+            )
+            .with(COMPARE_LABEL, "Confronta con l'attuale")
+            .with(COPY_LABEL, "Copia il testo")
+            .with(SHOW_TEXT, "Mostra il testo")
+            .with(
+                DIFF_SUMMARY,
+                "Rispetto a questa versione, la nota attuale ha {added} righe in più e {removed} in meno.",
+            )
+            .with(DIFF_SAME, "Nessuna differenza: la nota attuale è identica.")
+            .with(
+                DIFF_ENDINGS,
+                "Stesso testo riga per riga: cambiano solo i terminatori di riga.",
+            )
+            .with(
+                DIFF_TOO_LARGE,
+                "Troppe righe diverse per un confronto riga per riga ({lines}).",
+            )
+            .with(DIFF_SKIPPED, "… {count} righe uguali")
+            .with(DIFF_TRUNCATED, "… altre {count} righe non mostrate")
+            .with(
+                DIFF_BINARY,
+                "Una delle due versioni non è testo: il confronto riga per riga non si applica.",
+            )
             .with(WHEN_TITLE, "Versione del {when}")
             .with(RESTORE_TITLE, "Ripristina una versione")
             .with(
@@ -245,6 +280,32 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SIZE, "{size} bytes")
             .with(RESTORE_LABEL, "Restore")
             .with(CLOSE_PREVIEW, "Close the preview")
+            .with(
+                BINARY_PREVIEW,
+                "Binary version: {size} bytes. You can restore it without converting it to text.",
+            )
+            .with(COMPARE_LABEL, "Compare with current")
+            .with(COPY_LABEL, "Copy the text")
+            .with(SHOW_TEXT, "Show the text")
+            .with(
+                DIFF_SUMMARY,
+                "Compared with this version, the current note has {added} more lines and {removed} fewer.",
+            )
+            .with(DIFF_SAME, "No difference: the current note is identical.")
+            .with(
+                DIFF_ENDINGS,
+                "Same text line by line: only the line terminators change.",
+            )
+            .with(
+                DIFF_TOO_LARGE,
+                "Too many differing lines for a line-by-line comparison ({lines}).",
+            )
+            .with(DIFF_SKIPPED, "… {count} identical lines")
+            .with(DIFF_TRUNCATED, "… {count} more lines not shown")
+            .with(
+                DIFF_BINARY,
+                "One of the two versions is not text: a line-by-line comparison does not apply.",
+            )
             .with(WHEN_TITLE, "Version from {when}")
             .with(RESTORE_TITLE, "Restore a version")
             .with(
@@ -491,6 +552,16 @@ impl VersionStore {
             None => {
                 let rebuilt = rebuild_from_store(host)?;
                 if !rebuilt.is_empty() {
+                    // Ripubblica il derivato quando possibile. Se il cache non
+                    // si può scrivere, i lettori ricostruiscono dagli snapshot.
+                    if let Err(error) = write_index(&rebuilt, host) {
+                        host.emit(Event::Trouble {
+                            severity: Severity::Warning,
+                            subject: None,
+                            error,
+                            gate: None,
+                        });
+                    }
                     tracing::info!(
                         target: "fub.versioning",
                         "indice assente o illeggibile, ricostruito dallo store \
@@ -546,16 +617,9 @@ impl VersionStore {
     /// ne esce: identico byte per byte a quello che sarebbe uscito riscrivendolo
     /// ogni volta, perché è la stessa funzione sullo stesso `docs` finale.
     ///
-    /// # La zona d'ombra, dichiarata
-    ///
-    /// Per la durata del lotto `versions.json` non c'è, e chi legge le versioni
-    /// **dal disco** — [`HistoryView`], che rilegge a ogni disegno — vede una
-    /// cronologia vuota invece di una parziale. All'apertura non lo vede
-    /// nessuno, perché la passata gira nel runner, prima della prima fetta;
-    /// nella
-    /// riconciliazione dopo un `Overflow` è un lampo, e il pannello si ridisegna
-    /// alla prima scrittura che segue. È il prezzo dichiarato di non lasciare in
-    /// giro un indice che si crede la verità.
+    /// Durante il lotto l'indice è assente. I lettori ricostruiscono la vista
+    /// dagli snapshot già persistiti: vedono il progresso durevole, senza
+    /// interpretare l'indice mancante come una cronologia vuota.
     fn in_batch<T>(
         &self,
         host: &mut dyn HostApi,
@@ -584,15 +648,15 @@ impl VersionStore {
     /// Salva una versione, se il contenuto è diverso dall'ultima salvata.
     ///
     /// Restituisce `None` quando il dedup (D6) ha deciso che non c'era niente
-    /// di nuovo: è il caso normale del salvataggio che riscrive lo stesso testo.
+    /// di nuovo: è il caso normale del salvataggio che riscrive gli stessi byte.
     pub fn snapshot(
         &self,
         id: &DocId,
-        source: &str,
+        source: &[u8],
         host: &mut dyn HostApi,
     ) -> Result<Option<VersionRef>, PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
-        let hash = fingerprint(source);
+        let hash = Fnv1a::hash(source);
         let dir_doc = inner.dir_for(id, host)?;
 
         if let Some(doc) = inner.docs.get(id.as_str()) {
@@ -612,10 +676,7 @@ impl VersionStore {
         }
 
         let ts = inner.free_ts(id, host);
-        host.data_write(
-            &blob(&dir_doc, &snapshot_name(ts, id.as_str())),
-            source.as_bytes(),
-        )?;
+        host.data_write(&blob(&dir_doc, &snapshot_name(ts, id.as_str())), source)?;
 
         let version = VersionRef {
             ts,
@@ -748,13 +809,8 @@ impl VersionStore {
     /// in giù non c'è nessuna guardia da tenere: la lettura del blob è di chi ha
     /// il path.
     pub fn read(&self, id: &DocId, ts: u64, host: &dyn ReadApi) -> Result<String, PluginError> {
-        let path = self.inner.lock().expect("mutex").path(id, ts)?;
-        let bytes = host.data_read(&path)?.ok_or_else(|| {
-            PluginError::Internal(Text::message(
-                CONTENT_GONE,
-                vec![Arg::text(PATH, path.clone())],
-            ))
-        })?;
+        let (path, version) = self.inner.lock().expect("mutex").path(id, ts)?;
+        let bytes = read_snapshot(&path, version, host)?;
         String::from_utf8(bytes).map_err(|and| {
             PluginError::Internal(Text::message(
                 UNREADABLE,
@@ -790,7 +846,7 @@ impl Inner {
     /// Esiste per una ragione sola, ed è la stessa per cui [`Inner::apply`] è
     /// il posto unico in cui `docs` cambia: qui il prestito dello store finisce
     /// **prima** dell'I/O, e finisce per costruzione — chi legge il blob riceve
-    /// un `String` e non ha modo di tenere una guardia che non ha mai visto. La
+    /// il path e i metadati di verifica, non una guardia sullo store. La
     /// forma opposta — un `lock()` in testa a [`VersionStore::read`] e un
     /// `data_read` sotto — è quella che due lettori di cronologia si passavano
     /// uno alla volta, ognuno aspettando l'I/O dell'altro.
@@ -800,23 +856,20 @@ impl Inner {
     /// che c'è adesso e si installa solo se il disco l'ha accettato. Toglierlo di
     /// lì non toglierebbe un'attesa: aprirebbe una finestra in cui due
     /// salvataggi pianificano dalla stessa base e il secondo cancella il primo.
-    fn path(&self, id: &DocId, ts: u64) -> Result<String, PluginError> {
+    fn path(&self, id: &DocId, ts: u64) -> Result<(String, VersionRef), PluginError> {
         let doc = self.docs.get(id.as_str()).ok_or_else(|| {
             PluginError::BadArgs(Text::message(
                 NO_VERSIONS,
                 vec![Arg::text(DOC, id.as_str())],
             ))
         })?;
-        if !doc.versions.iter().any(|v| v.ts == ts) {
-            return Err(PluginError::BadArgs(Text::message(
+        let version = doc.versions.iter().find(|v| v.ts == ts).ok_or_else(|| {
+            PluginError::BadArgs(Text::message(
                 NO_SUCH_VERSION,
-                // Un istante, non una data già scritta: il fuso e il calendario
-                // di chi legge li conosce chi risolve, non chi solleva
-                // l'errore. È la ragione per cui `ArgValue::Timestamp` esiste.
                 vec![Arg::timestamp(WHEN, ts), Arg::text(DOC, id.as_str())],
-            )));
-        }
-        Ok(blob(&doc.dir, &snapshot_name(ts, id.as_str())))
+            ))
+        })?;
+        Ok((blob(&doc.dir, &snapshot_name(ts, id.as_str())), *version))
     }
 
     /// La cartella del documento nello spazio dati del plugin.
@@ -1248,7 +1301,14 @@ fn load_index(host: &dyn ReadApi) -> Option<BTreeMap<String, DocVersions>> {
     (index.schema_version == SCHEMA_VERSION).then_some(index.docs)
 }
 
-fn claim_of(dir: &str, host: &dyn HostApi) -> Result<Claim, PluginError> {
+fn read_index(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
+    match load_index(host) {
+        Some(docs) => Ok(docs),
+        None => rebuild_from_store(host),
+    }
+}
+
+fn claim_of(dir: &str, host: &dyn ReadApi) -> Result<Claim, PluginError> {
     let Some(raw) = host.data_read(&blob(dir, METADATA_FILE))? else {
         return Ok(Claim::None);
     };
@@ -1271,7 +1331,7 @@ fn claim_of(dir: &str, host: &dyn HostApi) -> Result<Claim, PluginError> {
 /// gli snapshot non è il prezzo per calcolare l'impronta: è il calcolo. Il conto
 /// — 400 letture per 200 documenti, un `meta.json` e uno snapshot ciascuno,
 /// niente riletto — sta in `fub-features/tests/chi_risponde_apre_i_byte.rs`.
-fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
+fn rebuild_from_store(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
     // I blob sono ordinati, quindi quelli di una stessa cartella sono contigui.
     let mut for_dir: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let blobs = host.data_list("")?;
@@ -1316,13 +1376,10 @@ fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions
             let Some(bytes) = host.data_read(&blob(dir, name))? else {
                 continue;
             };
-            let Ok(source) = String::from_utf8(bytes) else {
-                continue;
-            };
             versions.push(VersionRef {
                 ts,
-                hash: fingerprint(&source),
-                size: source.len() as u64,
+                hash: Fnv1a::hash(&bytes),
+                size: bytes.len() as u64,
             });
         }
         versions.sort_by_key(|v| v.ts);
@@ -1374,7 +1431,7 @@ impl VersioningHandler {
                 }
                 // Una nota illeggibile o non salvabile non deve impedire
                 // l'apertura del vault: il vault è la verità, le versioni no.
-                match host.read_document(&id) {
+                match host.read_document_bytes(&id) {
                     Ok(source) => {
                         if let Err(and) = self.store.snapshot(&id, &source, host) {
                             tracing::warn!(target: "fub.versioning", "versione di {id} non salvata: {and}");
@@ -1443,10 +1500,10 @@ impl VersioningHandler {
     /// divergenza era rara e piccola; qui è la normalità per tutta la durata
     /// dell'indicizzazione. E per questa passata l'anagrafe è la sorgente
     /// giusta anche nel merito: si fotografa ciò che sta **sul disco**, e
-    /// `read_document` legge dal disco, non dall'indice.
+    /// `read_document_bytes` legge dal disco, non dall'indice.
     fn existing(&self, host: &mut dyn HostApi) -> Result<Vec<DocId>, PluginError> {
         let answer = host.query_index(IndexQuery::Entries {
-            of_kind: Some(EntryKind::Document),
+            of_kind: None,
             within: None,
             page: None,
         })?;
@@ -1482,34 +1539,19 @@ impl VersioningHandler {
         self.sweep(host, Pass::OnlyNew)
     }
 
-    /// La fotografia **di una sola nota**, un istante prima che venga
-    /// sovrascritta (0154): è il corpo del gancio che il montaggio registra
-    /// sul workspace, e vive qui perché la logica sia testabile senza un
-    /// workspace intero.
+    /// Conserva i byte correnti prima di ogni sovrascrittura.
     ///
-    /// Tre esiti, e ognuno è una frase:
-    ///
-    /// - la nota ha **già** una storia → non si fa niente, e non si paga
-    ///   nemmeno una lettura: la prima scrittura ha già fotografato
-    ///   l'originale, e le successive trovano la versione di prima;
-    /// - la nota **non esiste** (la scrittura è una creazione) → non si fa
-    ///   niente: non c'è un originale da salvare, e la prima versione sarà
-    ///   quella del testo nuovo, che l'evento `DocumentChanged` fotografa da
-    ///   solo;
-    /// - la nota esiste e non ha storia → si fotografa **adesso**, prima che
-    ///   i byte vadano via: è l'unico istante in cui l'originale è ancora
-    ///   leggibile, e un errore qui ferma la scrittura (il kernel propaga
-    ///   l'errore del gancio) — sovrascrivere senza fotografia sarebbe la
-    ///   finestra che questo meccanismo esiste per chiudere.
-    pub fn photograph_if_unversioned(
+    /// Avere già una storia non prova che il file sia immutato: un writer
+    /// esterno può averlo cambiato senza un evento ancora consegnato. Il dedup
+    /// evita uno snapshot aggiuntivo quando i byte coincidono con l'ultima
+    /// versione. Una creazione non ha preimmagine; ogni altro errore ferma la
+    /// scrittura prima che perda il contenuto precedente.
+    pub fn photograph_before_write(
         &self,
         host: &mut dyn HostApi,
         id: &DocId,
     ) -> Result<(), PluginError> {
-        if self.store.has_versions(id) {
-            return Ok(());
-        }
-        match host.read_document(id) {
+        match host.read_document_bytes(id) {
             Ok(source) => {
                 self.store.snapshot(id, &source, host)?;
                 Ok(())
@@ -1596,6 +1638,9 @@ impl EventHandler for VersioningHandler {
             EventKind::DocumentChanged,
             EventKind::DocumentRenamed,
             EventKind::DocumentRemoved,
+            EventKind::EntryChanged,
+            EventKind::EntryRenamed,
+            EventKind::EntryRemoved,
             // Senza questo, un troncamento della coda passerebbe inosservato e
             // il tombstone di una nota cancellata non arriverebbe mai.
             EventKind::Overflow,
@@ -1604,12 +1649,16 @@ impl EventHandler for VersioningHandler {
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         match &notice.event {
-            Event::DocumentChanged { id, .. } => {
-                let source = host.read_document(id)?;
+            Event::DocumentChanged { id, .. } | Event::EntryChanged { id, .. } => {
+                let source = host.read_document_bytes(id)?;
                 self.store.snapshot(id, &source, host)?;
             }
-            Event::DocumentRenamed { from, to } => self.store.rename(from, to, host)?,
-            Event::DocumentRemoved { id } => self.store.tombstone(id, host)?,
+            Event::DocumentRenamed { from, to } | Event::EntryRenamed { from, to, .. } => {
+                self.store.rename(from, to, host)?;
+            }
+            Event::DocumentRemoved { id } | Event::EntryRemoved { id, .. } => {
+                self.store.tombstone(id, host)?;
+            }
             Event::Overflow { .. } => self.reconcile_after_overflow(host)?,
             _ => {}
         }
@@ -1657,37 +1706,21 @@ const A_PREVIEW: &str = "preview";
 const A_CLOSE_PREVIEW: &str = "close_preview";
 /// Ripristina la versione il cui istante sta nel payload.
 const A_RESTORE: &str = "restore";
+/// Confronta con la nota attuale la versione il cui istante sta nel payload.
+const A_COMPARE: &str = "compare";
+/// Mette negli appunti il testo della versione il cui istante sta nel payload.
+const A_COPY: &str = "copy";
 /// La chiave del payload, e quella sotto cui l'anteprima aperta resta scritta
 /// nello stato di vista dell'esemplare (§11.2).
 const TS: &str = "ts";
 const PREVIEW_STATE: &str = "preview";
-
-/// Le versioni di un documento secondo l'indice **su disco**, dalla più recente
-fn versions_of(host: &dyn ReadApi, id: &DocId) -> Vec<VersionRef> {
-    let docs = load_index(host);
-    versions_of_docs(docs.as_ref().and_then(|docs| docs.get(id.as_str())))
-}
+/// Se l'anteprima aperta mostra il confronto invece del testo.
+const COMPARE_STATE: &str = "compare";
 
 /// Le versioni di un documento secondo la voce già caricata dell'indice.
 fn versions_of_docs(doc: Option<&DocVersions>) -> Vec<VersionRef> {
     doc.map(|d| d.versions.iter().rev().copied().collect())
         .unwrap_or_default()
-}
-
-/// Il contenuto di una versione, letto dallo spazio dati del plugin.
-///
-/// È il gemello in sola lettura di [`VersionStore::read`], e non lo sostituisce:
-/// quello risponde dall'indice in memoria — che è ciò che serve a chi sta
-/// scrivendo uno snapshot — questo dal file, che è ciò che serve a chi disegna.
-fn version_source(host: &dyn ReadApi, id: &DocId, ts: u64) -> Result<String, PluginError> {
-    let docs = load_index(host).unwrap_or_default();
-    let doc = docs.get(id.as_str()).ok_or_else(|| {
-        PluginError::NotFound(Text::message(
-            NO_VERSIONS,
-            vec![Arg::text(DOC, id.as_str())],
-        ))
-    })?;
-    version_source_doc(doc, id, ts, host)
 }
 
 /// Il contenuto di una versione, data la voce già caricata dell'indice.
@@ -1696,7 +1729,7 @@ fn version_source_doc(
     id: &DocId,
     ts: u64,
     host: &dyn ReadApi,
-) -> Result<String, PluginError> {
+) -> Result<Vec<u8>, PluginError> {
     let version = doc.versions.iter().find(|v| v.ts == ts).ok_or_else(|| {
         PluginError::NotFound(Text::message(
             NO_SUCH_VERSION,
@@ -1704,11 +1737,16 @@ fn version_source_doc(
         ))
     })?;
     let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
-    let bytes = host.data_read(&path)?.ok_or_else(|| {
-        PluginError::Internal(Text::message(
-            CONTENT_GONE,
-            vec![Arg::text(PATH, path.clone())],
-        ))
+    read_snapshot(&path, *version, host)
+}
+
+fn read_snapshot(
+    path: &str,
+    version: VersionRef,
+    host: &dyn ReadApi,
+) -> Result<Vec<u8>, PluginError> {
+    let bytes = host.data_read(path)?.ok_or_else(|| {
+        PluginError::Internal(Text::message(CONTENT_GONE, vec![Arg::text(PATH, path)]))
     })?;
     if bytes.len() as u64 != version.size || Fnv1a::hash(&bytes) != version.hash {
         return Err(PluginError::Internal(Text::message(
@@ -1716,12 +1754,7 @@ fn version_source_doc(
             vec![Arg::text(PATH, path)],
         )));
     }
-    String::from_utf8(bytes).map_err(|and| {
-        PluginError::Internal(Text::message(
-            UNREADABLE,
-            vec![Arg::text(PATH, path), Arg::text(REASON, and.to_string())],
-        ))
-    })
+    Ok(bytes)
 }
 
 /// Il pannello cronologia: le versioni della nota aperta, e come tornarci.
@@ -1733,7 +1766,11 @@ impl ViewProvider for HistoryView {
             // Una versione nasce da una scrittura, e da niente altro: la
             // maschera è più stretta di quella dei pannelli che leggono
             // l'indice.
-            refresh: EventMask::of([EventKind::DocumentChanged, EventKind::BatchEnded]),
+            refresh: EventMask::of([
+                EventKind::DocumentChanged,
+                EventKind::EntryChanged,
+                EventKind::BatchEnded,
+            ]),
             // …e la storia è di **quella** nota. Non di dove sta il cursore.
             follows: ContextMask::document(),
         }
@@ -1775,10 +1812,49 @@ impl ViewProvider for HistoryView {
                     return Ok(ViewUpdate::None);
                 };
                 host.set_view_state(PREVIEW_STATE, Some(serde_json::Value::from(ts)))?;
+                host.set_view_state(COMPARE_STATE, None)?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Il confronto è la stessa anteprima vista in un altro modo: resta
+            // nello stato di vista per la stessa ragione, e si chiude con lei.
+            A_COMPARE => {
+                let (Some(_), Some(ts)) = (
+                    same_notes(&action, host),
+                    action.payload.get(TS).and_then(|v| v.as_u64()),
+                ) else {
+                    return Ok(ViewUpdate::None);
+                };
+                host.set_view_state(PREVIEW_STATE, Some(serde_json::Value::from(ts)))?;
+                host.set_view_state(COMPARE_STATE, Some(serde_json::Value::Bool(true)))?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Copiare non scrive niente nel vault: il testo va alla shell, che
+            // possiede gli appunti. Il kernel lascia passare questo intento
+            // solo dai provider del core.
+            A_COPY => {
+                let (Some(doc), Some(ts)) = (
+                    same_notes(&action, host),
+                    action.payload.get(TS).and_then(|v| v.as_u64()),
+                ) else {
+                    return Ok(ViewUpdate::None);
+                };
+                let docs = read_index(host)?;
+                let entry = docs.get(doc.as_str()).ok_or_else(|| {
+                    PluginError::NotFound(Text::message(
+                        NO_VERSIONS,
+                        vec![Arg::text(DOC, doc.as_str())],
+                    ))
+                })?;
+                let text = String::from_utf8(version_source_doc(entry, &doc, ts, host)?)
+                    .map_err(|_| PluginError::BadArgs(Text::key(DIFF_BINARY)))?;
+                Ok(ViewUpdate::Custom {
+                    ns: fub_abi::ui::CLIPBOARD_TEXT_NS.to_string(),
+                    payload: serde_json::json!({ "text": text }),
+                })
             }
             A_CLOSE_PREVIEW => {
                 host.set_view_state(PREVIEW_STATE, None)?;
+                host.set_view_state(COMPARE_STATE, None)?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
             // Ripristinare **non** è una scrittura di questo pannello: è il
@@ -1794,6 +1870,7 @@ impl ViewProvider for HistoryView {
                     return Ok(ViewUpdate::None);
                 };
                 host.set_view_state(PREVIEW_STATE, None)?;
+                host.set_view_state(COMPARE_STATE, None)?;
                 host.run_command(
                     VERSION_RESTORE,
                     serde_json::json!({ DOC: doc.as_str(), TS: ts }),
@@ -1838,8 +1915,8 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     };
     // L'indice si carica una volta sola: la lista e l'anteprima lo leggono
     // entrambe, e rileggerlo per ciascuna era un doppio parse.
-    let docs = load_index(host);
-    let entry = docs.as_ref().and_then(|docs| docs.get(doc.as_str()));
+    let docs = read_index(host)?;
+    let entry = docs.get(doc.as_str());
     let versions = versions_of_docs(entry);
     if versions.is_empty() {
         return Ok(UiNode::empty_state(Text::key(EMPTY)));
@@ -1859,30 +1936,256 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
             .collect(),
     ));
 
-    // L'anteprima, se qualcuno l'ha aperta. Il contenuto è testo di un file, e
-    // testo resta: un `Text` che la shell inserisce come testo, non `Html`.
+    // L'anteprima testuale resta testo, mai HTML. Un contenuto non UTF-8
+    // mostra la dimensione e resta ripristinabile come byte.
     if let Some(ts) = host
         .view_state(PREVIEW_STATE)?
         .and_then(|v| v.as_u64())
         .filter(|ts| versions.iter().any(|v| v.ts == *ts))
     {
+        let bytes = version_source_doc(entry, &doc, ts, host)?;
+        let comparing = host
+            .view_state(COMPARE_STATE)?
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let payload = serde_json::json!({ DOC: doc.as_str(), TS: ts });
+        let (body, toggle) = if comparing {
+            let current = host.read_document_bytes(&doc)?;
+            (
+                comparison(&bytes, &current),
+                UiNode::button(
+                    Text::key(SHOW_TEXT),
+                    Intent::Neutral,
+                    ActionRef::with(A_PREVIEW, payload),
+                ),
+            )
+        } else {
+            let compare = UiNode::button(
+                Text::key(COMPARE_LABEL),
+                Intent::Neutral,
+                ActionRef::with(A_COMPARE, payload.clone()),
+            );
+            match String::from_utf8(bytes) {
+                Ok(text) => (
+                    UiNode::text(text),
+                    UiNode::row(
+                        1,
+                        vec![
+                            compare,
+                            UiNode::button(
+                                Text::key(COPY_LABEL),
+                                Intent::Neutral,
+                                ActionRef::with(A_COPY, payload),
+                            ),
+                        ],
+                    ),
+                ),
+                Err(error) => (
+                    UiNode::text(Text::message(
+                        BINARY_PREVIEW,
+                        vec![Arg::int("size", error.as_bytes().len() as i64)],
+                    )),
+                    compare,
+                ),
+            }
+        };
         children.push(UiNode::keyed(
             format!("preview:{ts}"),
             UiKind::Section {
                 title: Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, ts)]),
                 collapsed: false,
                 children: vec![
-                    UiNode::text(version_source_doc(entry, &doc, ts, host)?),
-                    UiNode::button(
-                        Text::key(CLOSE_PREVIEW),
-                        Intent::Neutral,
-                        ActionRef::new(A_CLOSE_PREVIEW),
+                    body,
+                    UiNode::row(
+                        1,
+                        vec![
+                            toggle,
+                            UiNode::button(
+                                Text::key(CLOSE_PREVIEW),
+                                Intent::Neutral,
+                                ActionRef::new(A_CLOSE_PREVIEW),
+                            ),
+                        ],
                     ),
                 ],
             },
         ));
     }
     Ok(UiNode::column(1, children))
+}
+
+/// Oltre questo prodotto di righe diverse il confronto riga per riga non si
+/// calcola: la tabella costerebbe più di quanto un pannello laterale possa
+/// mostrare, e il pannello si ridisegna a ogni scrittura.
+const DIFF_CELLS: usize = 4_000_000;
+/// Righe uguali mostrate attorno a ogni cambiamento.
+const DIFF_CONTEXT: usize = 2;
+/// Righe disegnate al massimo: il resto si conta, non si tace.
+const DIFF_MAX_LINES: usize = 400;
+
+/// Una riga del confronto fra una versione (`Removed`) e la nota attuale
+/// (`Added`).
+#[derive(Debug, PartialEq, Eq)]
+enum Change<'a> {
+    Same(&'a str),
+    Removed(&'a str),
+    Added(&'a str),
+}
+
+/// Il confronto riga per riga, o `None` quando la parte diversa è troppo grande
+/// per [`DIFF_CELLS`].
+///
+/// Prefisso e suffisso comuni si tolgono prima: una modifica in una nota lunga
+/// tocca di solito poche righe, e la tabella si costruisce solo su quelle.
+/// Il resto è la sottosequenza comune più lunga, che tiene le righe uguali
+/// nel loro ordine.
+fn line_diff<'a>(old: &'a str, new: &'a str) -> Option<Vec<Change<'a>>> {
+    let a: Vec<&str> = old.lines().collect();
+    let b: Vec<&str> = new.lines().collect();
+    let prefix = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let suffix = a[prefix..]
+        .iter()
+        .rev()
+        .zip(b[prefix..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    let (ma, mb) = (&a[prefix..a.len() - suffix], &b[prefix..b.len() - suffix]);
+    if ma.len().saturating_mul(mb.len()) > DIFF_CELLS {
+        return None;
+    }
+    // `lcs[i][j]`: la sottosequenza comune più lunga fra `ma[i..]` e `mb[j..]`.
+    let width = mb.len() + 1;
+    let mut lcs = vec![0u32; (ma.len() + 1) * width];
+    for i in (0..ma.len()).rev() {
+        for j in (0..mb.len()).rev() {
+            lcs[i * width + j] = if ma[i] == mb[j] {
+                lcs[(i + 1) * width + j + 1] + 1
+            } else {
+                lcs[(i + 1) * width + j].max(lcs[i * width + j + 1])
+            };
+        }
+    }
+    let mut out: Vec<Change<'a>> = a[..prefix].iter().map(|l| Change::Same(l)).collect();
+    let (mut i, mut j) = (0, 0);
+    while i < ma.len() || j < mb.len() {
+        if i < ma.len() && j < mb.len() && ma[i] == mb[j] {
+            out.push(Change::Same(ma[i]));
+            i += 1;
+            j += 1;
+        } else if i < ma.len()
+            && (j == mb.len() || lcs[(i + 1) * width + j] >= lcs[i * width + j + 1])
+        {
+            out.push(Change::Removed(ma[i]));
+            i += 1;
+        } else {
+            out.push(Change::Added(mb[j]));
+            j += 1;
+        }
+    }
+    out.extend(a[a.len() - suffix..].iter().map(|l| Change::Same(l)));
+    Some(out)
+}
+
+/// Il confronto fra i byte di una versione e quelli attuali, come albero.
+///
+/// Resta testo e badge, mai HTML: le righe arrivano da un file dell'utente.
+/// Le righe uguali lontane da un cambiamento si riassumono in un conto, e oltre
+/// [`DIFF_MAX_LINES`] righe disegnate il resto si dice con un numero.
+fn comparison(version: &[u8], current: &[u8]) -> UiNode {
+    if version == current {
+        return UiNode::text(Text::key(DIFF_SAME));
+    }
+    let (Ok(old), Ok(new)) = (std::str::from_utf8(version), std::str::from_utf8(current)) else {
+        return UiNode::text(Text::key(DIFF_BINARY));
+    };
+    let Some(changes) = line_diff(old, new) else {
+        let lines = old.lines().count().max(new.lines().count());
+        return UiNode::text(Text::message(
+            DIFF_TOO_LARGE,
+            vec![Arg::int("lines", lines as i64)],
+        ));
+    };
+    let added = changes
+        .iter()
+        .filter(|c| matches!(c, Change::Added(_)))
+        .count();
+    let removed = changes
+        .iter()
+        .filter(|c| matches!(c, Change::Removed(_)))
+        .count();
+    if added == 0 && removed == 0 {
+        return UiNode::text(Text::key(DIFF_ENDINGS));
+    }
+    // Una riga uguale si mostra se sta entro il contesto di un cambiamento.
+    let near: Vec<bool> = (0..changes.len())
+        .map(|at| {
+            let from = at.saturating_sub(DIFF_CONTEXT);
+            let to = (at + DIFF_CONTEXT + 1).min(changes.len());
+            changes[from..to]
+                .iter()
+                .any(|c| !matches!(c, Change::Same(_)))
+        })
+        .collect();
+    let mut lines = Vec::new();
+    let mut shown = 0usize;
+    let mut skipped = 0usize;
+    let mut hidden = 0usize;
+    for (at, change) in changes.iter().enumerate() {
+        if shown == DIFF_MAX_LINES {
+            hidden += usize::from(near[at]);
+            continue;
+        }
+        if !near[at] {
+            skipped += 1;
+            continue;
+        }
+        if skipped > 0 {
+            lines.push(UiNode::text(Text::message(
+                DIFF_SKIPPED,
+                vec![Arg::int("count", skipped as i64)],
+            )));
+            skipped = 0;
+        }
+        shown += 1;
+        lines.push(match change {
+            Change::Same(line) => UiNode::text(format!("  {line}")),
+            Change::Removed(line) => UiNode::row(
+                1,
+                vec![
+                    UiNode::badge("−", Intent::Danger),
+                    UiNode::text(line.to_string()),
+                ],
+            ),
+            Change::Added(line) => UiNode::row(
+                1,
+                vec![
+                    UiNode::badge("+", Intent::Primary),
+                    UiNode::text(line.to_string()),
+                ],
+            ),
+        });
+    }
+    if skipped > 0 && hidden == 0 {
+        lines.push(UiNode::text(Text::message(
+            DIFF_SKIPPED,
+            vec![Arg::int("count", skipped as i64)],
+        )));
+    }
+    if hidden > 0 {
+        lines.push(UiNode::text(Text::message(
+            DIFF_TRUNCATED,
+            vec![Arg::int("count", hidden as i64)],
+        )));
+    }
+    let mut children = vec![UiNode::text(Text::message(
+        DIFF_SUMMARY,
+        vec![
+            Arg::int("added", added as i64),
+            Arg::int("removed", removed as i64),
+        ],
+    ))];
+    children.extend(lines);
+    UiNode::column(0, children)
 }
 
 /// Una versione: quando, quanto grande, e i due gesti che la riguardano.
@@ -1984,27 +2287,43 @@ impl CommandProvider for VersioningCommands {
             return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
         }
 
-        // L'inverso di un ripristino è un altro ripristino: quello alla versione
-        // che il ripristino stesso sta per creare fotografando ciò che c'è
-        // adesso. La si nomina **prima** di scrivere, perché dopo la lista è
-        // cambiata — ed è l'istante dell'ultima versione salvata, non l'ora
-        // corrente: fra le due c'è il dedup (D6), che può non aver fotografato
-        // niente se il file era già uguale.
-        //
-        // `document_revision` è la base del CAS reale di `write_document`:
+        // L'inverso deve nominare la preimmagine catturata dal gancio, anche
+        // quando un writer esterno ha preceduto il comando senza un evento.
+        // `document_revision` è la base del CAS reale di `write_document_bytes`:
         // catturarla prima di leggere lo snapshot fa fallire il ripristino se
         // il documento cambia durante quella lettura, senza sovrascrivere la
         // modifica concorrente.
-        let before = versions_of(host, &doc).first().map(|v| v.ts);
-        let base = host.document_revision(&doc)?;
-        let source = version_source(host, &doc, ts)?;
-        // **Detta**, e qui la parola è precisa: un ripristino non discende dal
-        // testo che c'è adesso — lo sostituisce apposta, ed è il gesto con cui
-        // l'utente dice che quello di adesso non gli va bene. Guardarlo con la
-        // revisione corrente vorrebbe dire rifiutare il ripristino ogni volta
-        // che c'è qualcosa da ripristinare, cioè sempre. Ciò che si copre non
-        // è perduto: il dedup (D6) ne fotografa una versione prima.
-        host.write_document(&doc, &source, WriteBase::DescendsFrom(base))?;
+        {
+            let docs = read_index(host)?;
+            let entry = docs.get(doc.as_str()).ok_or_else(|| {
+                PluginError::NotFound(Text::message(
+                    NO_VERSIONS,
+                    vec![Arg::text(DOC, doc.as_str())],
+                ))
+            })?;
+            let base = host.document_revision(&doc)?;
+            let source = version_source_doc(entry, &doc, ts, host)?;
+            host.write_document_bytes(&doc, &source, Some(base))?;
+        }
+        // Gli eventi restano accodati fino all'uscita del comando: lo snapshot
+        // del risultato non è ancora stato creato, l'ultimo è la preimmagine.
+        // Un errore di lettura qui non può trasformare una scrittura riuscita
+        // in un fallimento: segnala il problema e non promette l'annullamento.
+        let before = match read_index(host) {
+            Ok(history) => history
+                .get(doc.as_str())
+                .and_then(|entry| entry.versions.last())
+                .map(|version| version.ts),
+            Err(error) => {
+                host.emit(Event::Trouble {
+                    severity: Severity::Warning,
+                    subject: Some(doc.clone()),
+                    error,
+                    gate: None,
+                });
+                None
+            }
+        };
 
         let result = CommandOutcome::notify(when_for(DONE_RESTORE, ts));
         Ok(match before {
@@ -2013,9 +2332,7 @@ impl CommandProvider for VersioningCommands {
                 VERSION_RESTORE,
                 serde_json::json!({ DOC: doc.as_str(), TS: before }),
             )),
-            // Nessuna versione prima di questa: non c'è niente a cui tornare, e
-            // dichiarare un annullamento che fallirebbe è peggio che non
-            // dichiararne nessuno.
+            // Nessuna preimmagine leggibile: il ripristino è comunque riuscito.
             None => result,
         })
     }
@@ -2026,7 +2343,8 @@ mod tests {
     use fub_sdk::testing::MemoryHost;
 
     use super::*;
-    use fub_abi::traits::{DataRead, DataWrite, HostEnv, VaultWrite};
+    use fub_abi::edit::WriteBase;
+    use fub_abi::traits::{DataRead, DataWrite, EntryKind, HostEnv, VaultWrite};
 
     fn id(s: &str) -> DocId {
         DocId::new(s)
@@ -2037,9 +2355,13 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
 
-        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("prima").as_bytes(), &mut host)
+            .unwrap();
         host.advance(1_000);
-        store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("seconda").as_bytes(), &mut host)
+            .unwrap();
 
         let versions = store.list(&id("a.md"));
         assert_eq!(versions.len(), 2);
@@ -2056,6 +2378,70 @@ mod tests {
     }
 
     #[test]
+    fn the_line_diff_keeps_order_and_common_lines() {
+        use Change::{Added, Removed, Same};
+        assert_eq!(
+            line_diff("a\nb\nc\n", "a\nx\nc\nd\n").unwrap(),
+            vec![Same("a"), Removed("b"), Added("x"), Same("c"), Added("d")]
+        );
+        assert_eq!(line_diff("", "uno").unwrap(), vec![Added("uno")]);
+        assert_eq!(line_diff("uno", "").unwrap(), vec![Removed("uno")]);
+        // Una parte diversa troppo grande non si calcola: il pannello lo dice.
+        let big_a = (0..3_000).map(|n| format!("a{n}\n")).collect::<String>();
+        let big_b = (0..3_000).map(|n| format!("b{n}\n")).collect::<String>();
+        assert!(line_diff(&big_a, &big_b).is_none());
+    }
+
+    #[test]
+    fn the_comparison_summarises_far_lines_and_says_what_it_leaves_out() {
+        fn texts(node: &UiNode, out: &mut Vec<String>) {
+            match &node.kind {
+                UiKind::Text { content } => out.push(content.to_string()),
+                UiKind::Badge { label, .. } => out.push(label.to_string()),
+                _ => {}
+            }
+            for child in node.children() {
+                texts(child, out);
+            }
+        }
+        let said = |node: UiNode| {
+            let mut out = Vec::new();
+            texts(&node, &mut out);
+            out
+        };
+        let old = (0..20).map(|n| format!("r{n}\n")).collect::<String>();
+        let new = old.replace("r10\n", "dieci\n");
+        let lines = said(comparison(old.as_bytes(), new.as_bytes()));
+        assert!(lines.contains(&"dieci".to_string()), "{lines:?}");
+        assert!(lines.contains(&"r10".to_string()), "{lines:?}");
+        assert!(lines.contains(&"  r8".to_string()), "context: {lines:?}");
+        assert!(
+            !lines.contains(&"  r0".to_string()),
+            "far lines are summarised: {lines:?}"
+        );
+        assert_eq!(
+            said(comparison(b"uguale", b"uguale")),
+            vec![Text::key(DIFF_SAME).to_string()]
+        );
+        assert_eq!(
+            said(comparison(b"a\r\nb", b"a\nb")),
+            vec![Text::key(DIFF_ENDINGS).to_string()]
+        );
+        assert_eq!(
+            said(comparison(&[0xff, 0xfe], b"testo")),
+            vec![Text::key(DIFF_BINARY).to_string()]
+        );
+        let many = (0..1_000).map(|n| format!("n{n}\n")).collect::<String>();
+        let lines = said(comparison(b"", many.as_bytes()));
+        assert!(lines.len() < 2 * DIFF_MAX_LINES + 3, "{}", lines.len());
+        assert!(
+            lines.last().unwrap().contains("600"),
+            "the rest is counted: {:?}",
+            lines.last()
+        );
+    }
+
+    #[test]
     fn every_key_that_the_panel_writes_is_in_the_catalogs_of_the_languages() {
         // Il difetto: le righe dello storico dicevano «when» — la chiave nuda
         // — perché `Text::message` riceveva il nome dell'argomento come chiave
@@ -2066,9 +2452,13 @@ mod tests {
         // la prossima chiave dimenticata rossa qui e non a schermo.
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("prima").as_bytes(), &mut host)
+            .unwrap();
         host.advance(1_000);
-        store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("seconda").as_bytes(), &mut host)
+            .unwrap();
         host.set_active(Some("a.md"));
 
         let mut tree = tree(&host).unwrap();
@@ -2096,10 +2486,14 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
 
-        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("prima").as_bytes(), &mut host)
+            .unwrap();
         // L'orologio torna indietro fra due salvataggi (NTP, fuso, VM).
         host.backtrack(60_000);
-        store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("seconda").as_bytes(), &mut host)
+            .unwrap();
 
         let versions = store.list(&id("a.md"));
         assert_eq!(versions.len(), 2);
@@ -2123,12 +2517,12 @@ mod tests {
         let store = VersionStore::open(&mut host).unwrap();
 
         assert!(store
-            .snapshot(&id("a.md"), "identica", &mut host)
+            .snapshot(&id("a.md"), b"identica", &mut host)
             .unwrap()
             .is_some());
         assert!(
             store
-                .snapshot(&id("a.md"), "identica", &mut host)
+                .snapshot(&id("a.md"), b"identica", &mut host)
                 .unwrap()
                 .is_none(),
             "il dedup per contenuto è ciò che rende sostenibile uno snapshot a ogni evento"
@@ -2141,7 +2535,7 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
-            .snapshot(&id("vecchia.md"), "corpo", &mut host)
+            .snapshot(&id("vecchia.md"), ("corpo").as_bytes(), &mut host)
             .unwrap();
 
         store
@@ -2166,10 +2560,10 @@ mod tests {
         let store = VersionStore::open(&mut host).unwrap();
         // Orologio fermo: due storie diverse, lo stesso identico istante.
         store
-            .snapshot(&id("a.md"), "la storia che arriva", &mut host)
+            .snapshot(&id("a.md"), ("la storia che arriva").as_bytes(), &mut host)
             .unwrap();
         store
-            .snapshot(&id("b.md"), "la storia che c'era", &mut host)
+            .snapshot(&id("b.md"), ("la storia che c'era").as_bytes(), &mut host)
             .unwrap();
 
         store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
@@ -2193,10 +2587,16 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
 
-        store.snapshot(&id("a.md"), "a zero", &mut host).unwrap();
-        store.snapshot(&id("b.md"), "b zero", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("a zero").as_bytes(), &mut host)
+            .unwrap();
+        store
+            .snapshot(&id("b.md"), ("b zero").as_bytes(), &mut host)
+            .unwrap();
         host.advance(1);
-        store.snapshot(&id("a.md"), "a uno", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("a uno").as_bytes(), &mut host)
+            .unwrap();
 
         store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
 
@@ -2222,7 +2622,7 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
-            .snapshot(&id("appunti.md"), "il corpo", &mut host)
+            .snapshot(&id("appunti.md"), ("il corpo").as_bytes(), &mut host)
             .unwrap();
 
         store
@@ -2249,13 +2649,13 @@ mod tests {
 
         // La prima vita di Nota.md, il cestino, e il path che viene rioccupato.
         store
-            .snapshot(&id("Nota.md"), "prima vita\n", &mut host)
+            .snapshot(&id("Nota.md"), ("prima vita\n").as_bytes(), &mut host)
             .unwrap();
         host.advance(1);
         store.tombstone(&id("Nota.md"), &mut host).unwrap();
         host.advance(1);
         store
-            .snapshot(&id("Nota.md"), "usurpatrice\n", &mut host)
+            .snapshot(&id("Nota.md"), ("usurpatrice\n").as_bytes(), &mut host)
             .unwrap();
 
         // Il ripristino è una scrittura normale (D8): sul nuovo path nasce
@@ -2263,7 +2663,7 @@ mod tests {
         // `DocumentRenamed` che ci porta quella vecchia.
         host.advance(1);
         store
-            .snapshot(&id("Nota 1.md"), "prima vita\n", &mut host)
+            .snapshot(&id("Nota 1.md"), ("prima vita\n").as_bytes(), &mut host)
             .unwrap();
         store
             .rename(&id("Nota.md"), &id("Nota 1.md"), &mut host)
@@ -2296,11 +2696,11 @@ mod tests {
         {
             let store = VersionStore::open(&mut host).unwrap();
             store
-                .snapshot(&id("Nota.md"), "prima vita\n", &mut host)
+                .snapshot(&id("Nota.md"), ("prima vita\n").as_bytes(), &mut host)
                 .unwrap();
             host.advance(1);
             store
-                .snapshot(&id("Nota 1.md"), "ripristinata\n", &mut host)
+                .snapshot(&id("Nota 1.md"), ("ripristinata\n").as_bytes(), &mut host)
                 .unwrap();
             store
                 .rename(&id("Nota.md"), &id("Nota 1.md"), &mut host)
@@ -2331,7 +2731,9 @@ mod tests {
     fn a_deletion_leaves_a_tombstone_and_the_content_stays_readable() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("contenuto").as_bytes(), &mut host)
+            .unwrap();
 
         store.tombstone(&id("a.md"), &mut host).unwrap();
 
@@ -2343,7 +2745,9 @@ mod tests {
         );
         // E la nota che torna in vita non è più morta.
         host.advance(1_000);
-        store.snapshot(&id("a.md"), "risorta", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("risorta").as_bytes(), &mut host)
+            .unwrap();
         let inner = store.inner.lock().unwrap();
         assert_eq!(inner.docs["a.md"].deleted_at, None);
     }
@@ -2368,7 +2772,7 @@ mod tests {
         {
             host.advance(salto);
             store
-                .snapshot(&id("a.md"), &format!("versione {n}"), &mut host)
+                .snapshot(&id("a.md"), format!("versione {n}").as_bytes(), &mut host)
                 .unwrap();
         }
 
@@ -2425,7 +2829,7 @@ mod tests {
         for (n, salto) in [0, 60_000].into_iter().enumerate() {
             host.advance(salto);
             store
-                .snapshot(&id("a.md"), &format!("versione {n}"), &mut host)
+                .snapshot(&id("a.md"), format!("versione {n}").as_bytes(), &mut host)
                 .unwrap();
         }
         let before = store.list(&id("a.md")).len();
@@ -2435,7 +2839,7 @@ mod tests {
         // che pota.
         host.denies_write(INDEX_FILE);
         host.advance(2 * MS_DAY);
-        let result = store.snapshot(&id("a.md"), "l'ultima", &mut host);
+        let result = store.snapshot(&id("a.md"), ("l'ultima").as_bytes(), &mut host);
         assert!(result.is_err(), "una scrittura negata non è un successo");
         assert!(
             store.list(&id("a.md")).len() < before + 1,
@@ -2464,14 +2868,16 @@ mod tests {
     fn resurrection_denied(rejects: impl Fn(&MemoryHost, &str)) -> (bool, bool) {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("identico").as_bytes(), &mut host)
+            .unwrap();
         store.tombstone(&id("a.md"), &mut host).unwrap();
         let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
 
         rejects(&host, &dir);
         host.advance(1_000);
         assert!(
-            store.snapshot(&id("a.md"), "identico", &mut host).is_err(),
+            store.snapshot(&id("a.md"), b"identico", &mut host).is_err(),
             "una scrittura negata non è un successo"
         );
 
@@ -2523,11 +2929,15 @@ mod tests {
     fn a_resurrection_the_disk_accepts_is_alive_in_memory_and_on_disk() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("identico").as_bytes(), &mut host)
+            .unwrap();
         store.tombstone(&id("a.md"), &mut host).unwrap();
 
         host.advance(1_000);
-        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("identico").as_bytes(), &mut host)
+            .unwrap();
 
         assert!(!store.is_deleted(&id("a.md")), "la nota è tornata viva");
         // Riaperto, e non da zero: uno store che sul disco non ha trovato
@@ -2551,7 +2961,9 @@ mod tests {
     fn a_tombstone_the_disk_refuses_leaves_the_notes_alive_in_memory_too() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("contenuto").as_bytes(), &mut host)
+            .unwrap();
 
         host.denies_write(INDEX_FILE);
         host.advance(1_000);
@@ -2575,7 +2987,9 @@ mod tests {
         let store = VersionStore::open(&mut host).unwrap();
         host.denies_write(INDEX_FILE);
 
-        assert!(store.snapshot(&id("a.md"), "contenuto", &mut host).is_err());
+        assert!(store
+            .snapshot(&id("a.md"), b"contenuto", &mut host)
+            .is_err());
         assert!(
             store.documents().is_empty(),
             "l'anagrafe nomina un documento che sul disco non esiste"
@@ -2589,7 +3003,7 @@ mod tests {
         {
             let store = VersionStore::open(&mut host).unwrap();
             store
-                .snapshot(&id("nota/Idea.md"), "il contenuto", &mut host)
+                .snapshot(&id("nota/Idea.md"), ("il contenuto").as_bytes(), &mut host)
                 .unwrap();
             store.tombstone(&id("nota/Idea.md"), &mut host).unwrap();
             ts = store.list(&id("nota/Idea.md"))[0].ts;
@@ -2624,7 +3038,7 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
-            .snapshot(&id("a.md"), "la storia di a\n", &mut host)
+            .snapshot(&id("a.md"), ("la storia di a\n").as_bytes(), &mut host)
             .unwrap();
         let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
         store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
@@ -2644,7 +3058,11 @@ mod tests {
         // nel nome.
         host.advance(1_000);
         store
-            .snapshot(&id("a.md"), "una nota tutta nuova\n", &mut host)
+            .snapshot(
+                &id("a.md"),
+                ("una nota tutta nuova\n").as_bytes(),
+                &mut host,
+            )
             .unwrap();
 
         assert_ne!(
@@ -2673,11 +3091,15 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
-            .snapshot(&id("vecchia.md"), "storia che arriva\n", &mut host)
+            .snapshot(
+                &id("vecchia.md"),
+                ("storia che arriva\n").as_bytes(),
+                &mut host,
+            )
             .unwrap();
         host.advance(1_000);
         store
-            .snapshot(&id("Nota.md"), "storia che c'era\n", &mut host)
+            .snapshot(&id("Nota.md"), ("storia che c'era\n").as_bytes(), &mut host)
             .unwrap();
 
         host.advance(1_000);
@@ -2741,13 +3163,15 @@ mod tests {
     fn a_metadata_the_index_did_not_follow_is_ahead_of_the_index_never_behind() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("identico").as_bytes(), &mut host)
+            .unwrap();
         store.tombstone(&id("a.md"), &mut host).unwrap();
 
         host.denies_write(INDEX_FILE);
         host.advance(1_000);
         assert!(
-            store.snapshot(&id("a.md"), "identico", &mut host).is_err(),
+            store.snapshot(&id("a.md"), b"identico", &mut host).is_err(),
             "una scrittura negata non è un successo"
         );
         // Indice e memoria restano indietro **insieme**: è la proprietà che
@@ -2769,7 +3193,9 @@ mod tests {
     fn asking_for_a_version_that_never_existed_says_so() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("contenuto").as_bytes(), &mut host)
+            .unwrap();
 
         assert!(matches!(
             store.read(&id("a.md"), 1, &host),
@@ -2798,7 +3224,9 @@ mod tests {
     fn an_overflow_turns_a_lost_removal_into_a_tombstone() {
         let mut host = MemoryHost::new().with_document("a.md", "contenuto");
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("contenuto").as_bytes(), &mut host)
+            .unwrap();
         let mut handler = VersioningHandler::new(store.clone());
 
         // La nota sparisce e il `DocumentRemoved` va perso nel troncamento.
@@ -2827,7 +3255,9 @@ mod tests {
     fn an_overflow_never_moves_the_moment_of_death() {
         let mut host = MemoryHost::new().with_document("a.md", "contenuto");
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("contenuto").as_bytes(), &mut host)
+            .unwrap();
         host.forgets_document("a.md");
         store.tombstone(&id("a.md"), &mut host).unwrap();
         let dead_to_the = store.inner.lock().unwrap().docs["a.md"].deleted_at;
@@ -2852,7 +3282,7 @@ mod tests {
         let mut host = MemoryHost::new().with_document("vecchia.md", "il corpo");
         let store = VersionStore::open(&mut host).unwrap();
         store
-            .snapshot(&id("vecchia.md"), "il corpo", &mut host)
+            .snapshot(&id("vecchia.md"), ("il corpo").as_bytes(), &mut host)
             .unwrap();
         let previous_ts = store.list(&id("vecchia.md"))[0].ts;
         let mut handler = VersioningHandler::new(store.clone());
@@ -2886,7 +3316,9 @@ mod tests {
     fn an_overflow_recovers_the_snapshot_that_the_lost_event_would_have_taken() {
         let mut host = MemoryHost::new().with_document("a.md", "prima");
         let store = VersionStore::open(&mut host).unwrap();
-        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("prima").as_bytes(), &mut host)
+            .unwrap();
         let mut handler = VersioningHandler::new(store.clone());
 
         // Il contenuto cambia e il `DocumentChanged` va perso.
@@ -2922,7 +3354,7 @@ mod tests {
         // `b.md` una storia ce l'ha già: non deve guadagnare una versione
         // gemella solo perché il vault è stato riaperto.
         store
-            .snapshot(&id("b.md"), "anche questa", &mut host)
+            .snapshot(&id("b.md"), ("anche questa").as_bytes(), &mut host)
             .unwrap();
 
         let handler = VersioningHandler::new(store.clone());
@@ -2947,7 +3379,7 @@ mod tests {
         // Il gancio gira prima della prima scrittura: l'originale entra in
         // storia, e la scrittura che segue aggiunge la sua versione.
         handler
-            .photograph_if_unversioned(&mut host, &id("a.md"))
+            .photograph_before_write(&mut host, &id("a.md"))
             .unwrap();
         host.write_document(&id("a.md"), "adesso", WriteBase::Dictated)
             .unwrap();
@@ -2976,10 +3408,9 @@ mod tests {
             "adesso"
         );
 
-        // Una seconda scrittura non fotografa più: la storia c'è già, e il
-        // gancio non paga nemmeno una lettura.
+        // Il contenuto già fotografato viene deduplicato, non duplicato.
         handler
-            .photograph_if_unversioned(&mut host, &id("a.md"))
+            .photograph_before_write(&mut host, &id("a.md"))
             .unwrap();
         host.write_document(&id("a.md"), "poi", WriteBase::Dictated)
             .unwrap();
@@ -3005,7 +3436,7 @@ mod tests {
         // La nota non esiste: la scrittura è una creazione, non c'è un
         // originale da salvare, e il gancio risponde `Ok` senza fotografare.
         handler
-            .photograph_if_unversioned(&mut host, &id("c.md"))
+            .photograph_before_write(&mut host, &id("c.md"))
             .unwrap();
         host.write_document(&id("c.md"), "nuova", WriteBase::Dictated)
             .unwrap();
@@ -3026,6 +3457,127 @@ mod tests {
             store.read(&id("c.md"), versions[0].ts, &host).unwrap(),
             "nuova",
             "la prima versione è il testo nuovo"
+        );
+    }
+
+    #[test]
+    fn binary_history_survives_rebuild_and_restores_exact_bytes() {
+        let doc = id("image.png");
+        let original = b"\x89PNG\r\n\x1a\n\0\xff";
+        let edited = b"\x89PNG\r\n\x1a\n\xff\0";
+        let mut host = MemoryHost::new();
+        let base = host.write_document_bytes(&doc, original, None).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+        let mut handler = VersioningHandler::new(store.clone());
+        handler.photograph_before_write(&mut host, &doc).unwrap();
+        host.write_document_bytes(&doc, edited, Some(base)).unwrap();
+        host.advance(1_000);
+        handler
+            .handle(
+                &Notice::of(Event::EntryChanged {
+                    id: doc.clone(),
+                    kind: EntryKind::Asset,
+                }),
+                &mut host,
+            )
+            .unwrap();
+        let versions = store.list(&doc);
+        assert_eq!(versions.len(), 2);
+        let docs = read_index(&host).unwrap();
+        let entry = &docs[doc.as_str()];
+        assert_eq!(
+            version_source_doc(entry, &doc, versions[0].ts, &host).unwrap(),
+            edited
+        );
+        assert_eq!(
+            version_source_doc(entry, &doc, versions[1].ts, &host).unwrap(),
+            original
+        );
+
+        host.data_remove(INDEX_FILE).unwrap();
+        host.denies_write(INDEX_FILE);
+        let rebuilt = VersionStore::open(&mut host).unwrap();
+        assert_eq!(rebuilt.list(&doc), versions);
+        VersioningCommands
+            .invoke(
+                VERSION_RESTORE,
+                serde_json::json!({ DOC: doc.as_str(), TS: versions[1].ts }),
+                InvokeMode::Apply,
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(
+            fub_abi::traits::VaultRead::read_document_bytes(&host, &doc).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn a_corrupt_snapshot_cannot_be_read_or_restored() {
+        let doc = id("a.md");
+        let mut host = MemoryHost::new().with_document(doc.as_str(), "current!");
+        let store = VersionStore::open(&mut host).unwrap();
+        let version = store
+            .snapshot(&doc, b"original", &mut host)
+            .unwrap()
+            .unwrap();
+        let docs = load_index(&host).unwrap();
+        let path = blob(
+            &docs[doc.as_str()].dir,
+            &snapshot_name(version.ts, doc.as_str()),
+        );
+        host.data_write(&path, b"tampered").unwrap();
+
+        assert!(matches!(
+            store.read(&doc, version.ts, &host),
+            Err(PluginError::Internal(_))
+        ));
+        assert!(matches!(
+            VersioningCommands.invoke(
+                VERSION_RESTORE,
+                serde_json::json!({ DOC: doc.as_str(), TS: version.ts }),
+                InvokeMode::Apply,
+                &mut host,
+            ),
+            Err(PluginError::Internal(_))
+        ));
+        assert_eq!(
+            fub_abi::traits::VaultRead::read_document(&host, &doc).unwrap(),
+            "current!"
+        );
+    }
+
+    #[test]
+    fn a_write_preserves_an_unobserved_external_preimage() {
+        let doc = id("data.bin");
+        let original = b"\0\xfforiginal";
+        let external = b"\xfe\0external";
+        let next = b"\x80\0saved";
+        let mut host = MemoryHost::new();
+        let base = host.write_document_bytes(&doc, original, None).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&doc, original, &mut host).unwrap();
+        let mut handler = VersioningHandler::new(store.clone());
+        let base = host
+            .write_document_bytes(&doc, external, Some(base))
+            .unwrap();
+        handler.photograph_before_write(&mut host, &doc).unwrap();
+        host.write_document_bytes(&doc, next, Some(base)).unwrap();
+        handler
+            .handle(
+                &Notice::of(Event::EntryChanged {
+                    id: doc.clone(),
+                    kind: EntryKind::Unknown,
+                }),
+                &mut host,
+            )
+            .unwrap();
+        let versions = store.list(&doc);
+        assert_eq!(versions.len(), 3);
+        let docs = read_index(&host).unwrap();
+        assert_eq!(
+            version_source_doc(&docs[doc.as_str()], &doc, versions[1].ts, &host).unwrap(),
+            external
         );
     }
 }

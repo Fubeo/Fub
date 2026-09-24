@@ -40,14 +40,14 @@
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::query::QueryExpr;
+use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate};
 use fub_abi::session::ContextMask;
-use fub_abi::text::{StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     HostApi, IndexQuery, IndexResult, ReadApi, TagCount, ViewInstance, ViewInterests, ViewProvider,
     ViewSpec, ViewSurface,
 };
-use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const TAGS_ID: &str = "fub.tags";
@@ -72,6 +72,41 @@ const FILTER_FIELD: &str = "filter";
 /// campo avrebbe cambiato in silenzio la chiave salvata, e il filtro di chiunque
 /// sarebbe sparito senza che nessuno avesse toccato lo stato di vista.
 const FILTER_STATE: &str = "filter";
+/// Come si mostra l'elenco: piatta o ad albero. Stessa separazione di
+/// [`FILTER_STATE`]: è stato di vista per esemplare (non impostazione, non
+/// blob), quindi due pannelli aperti possono guardare lo stesso vault in due
+/// modi senza litigare.
+const MODE_STATE: &str = "mode";
+/// Come si ordina: per nome (l'ordine canonico del kernel) o per conteggio.
+const SORT_STATE: &str = "sort";
+/// I tag selezionati, come array JSON di nomi interi (`a/b` resta un pezzo
+/// solo). Serve alla «selezione di più tag» (F11): si spunta, poi si cerca la
+/// combinazione con un gesto solo invece di N click.
+const SELECTION_STATE: &str = "selection";
+/// L'azione che cambia il modo (il valore sta nel payload sotto [`MODE_KEY]).
+const MODE: &str = "mode";
+/// La chiave del payload di [`MODE`]: `"flat"` o `"tree"`.
+const MODE_KEY: &str = "mode";
+/// L'azione che cambia l'ordinamento (valore nel payload sotto [`SORT_KEY]).
+const SORT: &str = "sort";
+/// La chiave del payload di [`SORT`]: `"name"` o `"count"`.
+const SORT_KEY: &str = "sort";
+/// Il modo piatto: l'elenco di sempre.
+const MODE_FLAT: &str = "flat";
+/// Il modo albero: `a/b/c` sotto `a` sotto radice.
+const MODE_TREE: &str = "tree";
+/// Ordina per nome (canonico del kernel, stabile e paginabile).
+const SORT_NAME: &str = "name";
+/// Ordina per conteggio (decrescente, a parità per nome).
+const SORT_COUNT: &str = "count";
+/// L'azione che spunta/rimuove un tag dalla selezione; il nome sta nel payload
+/// sotto [`TAG`], come per [`SEARCH`].
+const SELECT: &str = "select";
+/// L'azione che dimentica la selezione intera (come il filtro vuoto dimentica
+/// la chiave invece di scrivere `""`).
+const CLEAR_SELECTION: &str = "clear_selection";
+/// L'azione che cerca la combinazione selezionata con un gesto solo.
+const SEARCH_SELECTED: &str = "search_selected";
 
 /// Il titolo del pannello. Era l'unica stringa di questo file rimasta fuori dal
 /// catalogo, ed era anche la più visibile: un pannello si vede sempre, il suo
@@ -85,6 +120,25 @@ const EMPTY: &str = "empty";
 /// diversamente: cancellare il filtro è un'azione, creare un tag è un'altra.
 const NO_MATCH: &str = "no_match";
 
+/// Etichetta del selettore di modo (piatta o ad albero).
+const MODE_LABEL: &str = "mode_label";
+/// Etichetta del selettore di ordinamento.
+const SORT_LABEL: &str = "sort_label";
+/// Voce «piatta» del selettore di modo.
+const MODE_FLAT_LABEL: &str = "mode_flat";
+/// Voce «albero» del selettore di modo.
+const MODE_TREE_LABEL: &str = "mode_tree";
+/// Voce «per nome» del selettore di ordinamento.
+const SORT_NAME_LABEL: &str = "sort_name";
+/// Voce «per conteggio» del selettore di ordinamento.
+const SORT_COUNT_LABEL: &str = "sort_count";
+/// Quanti tag sono selezionati (`{n}`).
+const SELECTED_LABEL: &str = "selected";
+/// Pulsante che cerca la combinazione selezionata con un gesto solo.
+const SEARCH_SELECTED_LABEL: &str = "search_selected_label";
+/// Pulsante che dimentica la selezione intera.
+const CLEAR_SELECTION_LABEL: &str = "clear_selection_label";
+
 /// Le stringhe del pannello tag. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
 /// componente e non nella shell.
@@ -94,12 +148,30 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Tag")
             .with(FILTER_PLACEHOLDER, "filtra i tag")
             .with(EMPTY, "Nessun tag.")
-            .with(NO_MATCH, "Nessun tag col filtro."),
+            .with(NO_MATCH, "Nessun tag col filtro.")
+            .with(MODE_LABEL, "Vista")
+            .with(MODE_FLAT_LABEL, "Piatta")
+            .with(MODE_TREE_LABEL, "Albero")
+            .with(SORT_LABEL, "Ordina")
+            .with(SORT_NAME_LABEL, "Nome")
+            .with(SORT_COUNT_LABEL, "Conteggio")
+            .with(SELECTED_LABEL, "Selezionati: {n}")
+            .with(SEARCH_SELECTED_LABEL, "Cerca i selezionati")
+            .with(CLEAR_SELECTION_LABEL, "Azzera"),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Tags")
             .with(FILTER_PLACEHOLDER, "filter tags")
             .with(EMPTY, "No tags.")
-            .with(NO_MATCH, "No tags match the filter."),
+            .with(NO_MATCH, "No tags match the filter.")
+            .with(MODE_LABEL, "View")
+            .with(MODE_FLAT_LABEL, "Flat")
+            .with(MODE_TREE_LABEL, "Tree")
+            .with(SORT_LABEL, "Sort")
+            .with(SORT_NAME_LABEL, "Name")
+            .with(SORT_COUNT_LABEL, "Count")
+            .with(SELECTED_LABEL, "Selected: {n}")
+            .with(SEARCH_SELECTED_LABEL, "Search selected")
+            .with(CLEAR_SELECTION_LABEL, "Clear"),
     ]
 }
 
@@ -170,17 +242,130 @@ impl ViewProvider for TagPanelView {
                 host.set_view_state(FILTER_STATE, value)?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
-            // Un tag: cerca le note che lo portano. La query di ricerca è la
-            // stessa che digiterebbe l'utente: `tags` è il campo indicizzato.
+            // RunSearch porta una stringa; il JSON di QueryExpr è la stessa
+            // domanda che Documents riceve, non una sintassi testuale implicita.
             SEARCH => match action.payload.get(TAG).and_then(|v| v.as_str()) {
                 Some(name) => Ok(ViewUpdate::RunSearch {
-                    query: format!("tags:{name}"),
+                    query: selection_query(&[name.to_string()]),
                 }),
                 None => Ok(ViewUpdate::None),
             },
+            // Il modo (piatta o ad albero) cambia per esemplare: si ricorda e
+            // si ridisegna, come il filtro. Un valore fuori dalle due voci
+            // legge come il default alla prossima lettura, senza rifiutare qui.
+            MODE => {
+                let mode = action.payload.get(MODE_KEY).and_then(|v| v.as_str());
+                let value = match mode {
+                    Some(MODE_TREE) => Some(serde_json::Value::from(MODE_TREE)),
+                    Some(MODE_FLAT) => None,
+                    _ => return Ok(ViewUpdate::None),
+                };
+                host.set_view_state(MODE_STATE, value)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // L'ordinamento cambia per esemplare: stessa forma del modo.
+            SORT => {
+                let sort = action.payload.get(SORT_KEY).and_then(|v| v.as_str());
+                let value = match sort {
+                    Some(SORT_COUNT) => Some(serde_json::Value::from(SORT_COUNT)),
+                    Some(SORT_NAME) => None,
+                    _ => return Ok(ViewUpdate::None),
+                };
+                host.set_view_state(SORT_STATE, value)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Spunta o rimuove un tag dalla selezione: la chiave di riga resta
+            // il nome intero (`a/b` è un pezzo solo), e la selezione è in stato
+            // di vista — due pannelli aperti spuntano due insiemi diversi.
+            SELECT => {
+                let Some(name) = action.payload.get(TAG).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                let mut selection = selection_of(host)?;
+                if selection.iter().any(|s| s == name) {
+                    selection.retain(|s| s != name);
+                } else {
+                    selection.push(name.to_string());
+                }
+                remember_selection(host, &selection)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Dimentica la selezione intera: come il filtro vuoto, la chiave
+            // torna a non esserci invece di scrivere un array vuoto.
+            CLEAR_SELECTION => {
+                host.set_view_state(SELECTION_STATE, None)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Cerca la combinazione selezionata con un gesto solo: una
+            // congiunzione di foglie tag, cioè la stessa domanda che N click
+            // farebbero uno alla volta, detta una volta sola.
+            SEARCH_SELECTED => {
+                let selection = selection_of(host)?;
+                if selection.is_empty() {
+                    return Ok(ViewUpdate::None);
+                }
+                Ok(ViewUpdate::RunSearch {
+                    query: selection_query(&selection),
+                })
+            }
             _ => Ok(ViewUpdate::None),
         }
     }
+}
+
+/// Lo stato di presentazione di questo esemplare: modo, ordinamento, selezione.
+/// Il modo di questo esemplare: `"tree"` o `"flat"` (default). Un valore che
+/// non è una stringa — o una stringa diversa dalle due — legge come il default,
+/// per la stessa promessa di [`filter_of`]: il file si apre con un editor di
+/// testo e una sciocchezza scritta a mano non spegne il pannello.
+fn mode_of(host: &dyn ReadApi) -> Result<String, PluginError> {
+    let mode = host
+        .view_state(MODE_STATE)?
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_else(|| MODE_FLAT.to_string());
+    if mode == MODE_TREE {
+        Ok(MODE_TREE.to_string())
+    } else {
+        Ok(MODE_FLAT.to_string())
+    }
+}
+
+/// L'ordinamento di questo esemplare: `"count"` o `"name"` (default). Stessa
+/// tolleranza di [`mode_of`]: ciò che non si capisce è il default, non un
+/// errore.
+fn sort_of(host: &dyn ReadApi) -> Result<String, PluginError> {
+    let sort = host
+        .view_state(SORT_STATE)?
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_else(|| SORT_NAME.to_string());
+    if sort == SORT_COUNT {
+        Ok(SORT_COUNT.to_string())
+    } else {
+        Ok(SORT_NAME.to_string())
+    }
+}
+
+/// I tag selezionati di questo esemplare, nell'ordine in cui sono stati
+/// spuntati. Un valore che non è un array di stringhe legge come vuoto — mai
+/// un pannello che smette di funzionare per una riga scritta a mano.
+fn selection_of(host: &dyn ReadApi) -> Result<Vec<String>, PluginError> {
+    let Some(value) = host.view_state(SELECTION_STATE)? else {
+        return Ok(Vec::new());
+    };
+    let Some(names) = value.as_array() else {
+        return Ok(Vec::new());
+    };
+    Ok(names
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect())
+}
+
+/// Ricorda la selezione; vuota si **dimentica** (come il filtro vuoto), così il
+/// file non si porta dietro una riga per ogni selezione azzerata.
+fn remember_selection(host: &mut dyn HostApi, selection: &[String]) -> Result<(), PluginError> {
+    let value = (!selection.is_empty()).then(|| serde_json::Value::from(selection.to_vec()));
+    host.set_view_state(SELECTION_STATE, value)
 }
 
 /// L'albero del pannello: i tag del vault, filtrati da ciò che si è digitato.
@@ -206,7 +391,13 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
             ))
         }
     };
-    Ok(build_tags_view(&tags.items, &filter_of(host)?))
+    Ok(build_tags_tree(
+        &tags.items,
+        &filter_of(host)?,
+        &mode_of(host)?,
+        &sort_of(host)?,
+        &selection_of(host)?,
+    ))
 }
 
 /// Il filtro che questo esemplare aveva lasciato scritto.
@@ -262,6 +453,11 @@ fn matches_case_insensitive(name: &str, find: &str) -> bool {
 /// Costruisce l'albero `UiNode` del pannello tag. Separato dal provider perché è
 /// pura trasformazione dati→UI: si prova senza un host. I tag arrivano già
 /// ordinati per nome dal kernel.
+///
+/// Resta la forma di sempre (campo + elenco piatto): i presidi esistenti — il
+/// banco delle allocazioni per battuta e le prove di struttura — leggono
+/// questa forma. La vista estesa (modo, ordinamento, selezione) è
+/// [`build_tags_tree`], usata da `tree`.
 pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
     let find = filter.trim().to_lowercase();
     let visible: Vec<&TagCount> = tags
@@ -302,6 +498,236 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
 
     UiNode::column(4, vec![field, body])
 }
+/// La query condivisa, non la scrittura `tags:x` (che una ricerca di testo
+/// cercherebbe letteralmente). La serializzazione attraversa RunSearch senza
+/// introdurre una nuova famiglia IPC; la shell la passa a Documents.
+pub(crate) fn selection_query(selection: &[String]) -> String {
+    serde_json::to_string(&QueryExpr {
+        any: vec![QueryClause {
+            all: selection
+                .iter()
+                .map(|name| QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Tag {
+                        name: name.clone(),
+                        descendants: false,
+                    },
+                })
+                .collect(),
+        }],
+    })
+    .expect("QueryExpr tag is serializable")
+}
+
+/// L'albero completo: filtro, modo (piatta/albero), ordinamento (nome/conteggio)
+/// e selezione multipla. Pura come [`build_tags_view`]: `mode`, `sort` e
+/// `selection` arrivano dallo stato di vista dell'esemplare, letti da `tree`.
+///
+/// L'ordinamento per conteggio non sposta il costo sul kernel: i tag arrivano
+/// già aggregati e ordinati per nome, e riordinare una distribuzione (centinaia
+/// di voci) costa il sort locale — non una seconda interrogazione. I filtri
+/// multipli sono coerenti perché restano foglie della stessa semantica che la
+/// ricerca usa: `tags:a tags:b` in AND seleziona le note che portano entrambi.
+pub fn build_tags_tree(
+    tags: &[TagCount],
+    filter: &str,
+    mode: &str,
+    sort: &str,
+    selection: &[String],
+) -> UiNode {
+    let find = filter.trim().to_lowercase();
+    let mut visible: Vec<&TagCount> = tags
+        .iter()
+        .filter(|t| find.is_empty() || matches_case_insensitive(&t.name, &find))
+        .collect();
+    if sort == SORT_COUNT {
+        visible.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    }
+
+    // Il campo c'è sempre, anche quando l'elenco è vuoto: se sparisse appena il
+    // filtro non trova niente, cancellare l'ultima lettera sarebbe impossibile.
+    let field = UiNode::new(UiKind::TextInput {
+        field: FILTER_FIELD.to_string(),
+        label: None,
+        value: filter.to_string(),
+        placeholder: Some(Text::key(FILTER_PLACEHOLDER)),
+        action: Some(ActionRef::new(FILTER)),
+    })
+    // La chiave è ciò che dice al riconciliatore «questo campo è lo stesso di
+    // prima»: senza, ogni ridisegno gli toglierebbe il focus di sotto.
+    .with_key(FILTER_FIELD);
+
+    // Due selettori, non uno: modo e ordinamento sono dimensioni diverse, e un
+    // selettore che li fondesse («piatta-per-nome», «albero-per-conteggio») ha
+    // quattro voci invece di due+due — e sei alla terza dimensione.
+    let controls = UiNode::row(
+        2,
+        vec![
+            UiNode::button(
+                Text::key(if mode == MODE_TREE {
+                    MODE_TREE_LABEL
+                } else {
+                    MODE_FLAT_LABEL
+                }),
+                Intent::Neutral,
+                ActionRef::with(
+                    MODE,
+                    serde_json::json!({ MODE_KEY: if mode == MODE_TREE { MODE_FLAT } else { MODE_TREE } }),
+                ),
+            )
+            .with_key(MODE),
+            UiNode::button(
+                Text::key(if sort == SORT_COUNT {
+                    SORT_COUNT_LABEL
+                } else {
+                    SORT_NAME_LABEL
+                }),
+                Intent::Neutral,
+                ActionRef::with(
+                    SORT,
+                    serde_json::json!({ SORT_KEY: if sort == SORT_COUNT { SORT_NAME } else { SORT_COUNT } }),
+                ),
+            )
+            .with_key(SORT),
+        ],
+    );
+
+    let selection_row = if selection.is_empty() {
+        UiNode::separator()
+    } else {
+        UiNode::row(
+            2,
+            vec![
+                UiNode::text(Text::message(
+                    SELECTED_LABEL,
+                    vec![Arg::int("n", selection.len() as i64)],
+                )),
+                UiNode::button(
+                    Text::key(SEARCH_SELECTED_LABEL),
+                    Intent::Primary,
+                    ActionRef::new(SEARCH_SELECTED),
+                )
+                .with_key(SEARCH_SELECTED),
+                UiNode::button(
+                    Text::key(CLEAR_SELECTION_LABEL),
+                    Intent::Neutral,
+                    ActionRef::new(CLEAR_SELECTION),
+                )
+                .with_key(CLEAR_SELECTION),
+            ],
+        )
+    };
+
+    let body = if visible.is_empty() {
+        UiNode::empty_state(Text::key(if tags.is_empty() { EMPTY } else { NO_MATCH }))
+    } else if mode == MODE_TREE {
+        tree_body(&visible, selection)
+    } else {
+        flat_body(&visible, selection)
+    };
+
+    UiNode::column(4, vec![field, controls, selection_row, body])
+}
+
+/// L'elenco piatto di sempre, con la spunta di selezione su ogni riga: il
+/// titolo porta `#nome` e il conteggio, e due azioni distinte — cercare il
+/// singolo tag ([`SEARCH`]) o aggiungerlo alla selezione ([`SELECT`]) — perché
+/// sono due gesti diversi e fonderli vorrebbe dire che spuntare cerca.
+fn flat_body(visible: &[&TagCount], selection: &[String]) -> UiNode {
+    UiNode::list(
+        visible
+            .iter()
+            .map(|t| {
+                let selected = selection.iter().any(|s| s == &t.name);
+                UiNode::row(
+                    1,
+                    vec![
+                        UiNode::list_item(
+                            format!("#{}", t.name),
+                            Some(Text::from(t.count.to_string())),
+                            Some(ActionRef::with(SEARCH, serde_json::json!({ TAG: t.name }))),
+                        )
+                        .with_key(t.name.clone()),
+                        UiNode::button(
+                            Text::from(if selected { "[x]" } else { "[ ]" }),
+                            Intent::Neutral,
+                            ActionRef::with(SELECT, serde_json::json!({ TAG: t.name })),
+                        )
+                        .with_key(format!("select:{}", t.name)),
+                    ],
+                )
+                .with_key(t.name.clone())
+            })
+            .collect(),
+    )
+}
+
+/// La vista ad albero: `a/b/c` sotto `a/b` sotto `a`, con i conteggi del
+/// kernel alle foglie e i rami come intestazioni non cliccabili. I rami non
+/// cercano niente — cercare `a` è un gesto sul tag `a`, non sul prefisso che
+/// lo contiene — e i tag senza `/` restano voci piatte: un albero con una sola
+/// radice per voce è l'elenco di prima con un'altra indentazione.
+fn tree_body(visible: &[&TagCount], selection: &[String]) -> UiNode {
+    UiNode::new(UiKind::Tree {
+        roots: tree_roots(visible, selection),
+    })
+}
+
+/// Le radici dell'albero: raggruppa per primo segmento, ordina per nome dentro
+/// ogni livello (l'ordine del kernel, non un secondo ranking), e mantiene la
+/// selezione anche qui — spuntare da una vista e cercare dall'altra non deve
+/// perdere il gesto.
+fn tree_roots(visible: &[&TagCount], selection: &[String]) -> Vec<UiNode> {
+    use std::collections::BTreeMap;
+    let mut roots: BTreeMap<String, Vec<&TagCount>> = BTreeMap::new();
+    let mut plain: Vec<&TagCount> = Vec::new();
+    for tag in visible {
+        match tag.name.split_once('/') {
+            Some((head, _)) => roots.entry(head.to_string()).or_default().push(*tag),
+            None => plain.push(*tag),
+        }
+    }
+    let mut out: Vec<UiNode> = Vec::new();
+    for tag in plain {
+        out.push(tag_leaf(tag, selection));
+    }
+    for (head, leaves) in roots {
+        let children: Vec<UiNode> = leaves.iter().map(|t| tag_leaf(t, selection)).collect();
+        out.push(
+            UiNode::new(UiKind::TreeItem {
+                label: Text::from(head.clone()),
+                expanded: true,
+                action: None,
+                selected: false,
+                children,
+            })
+            .with_key(format!("tree:{head}")),
+        );
+    }
+    out
+}
+
+/// Una foglia dell'albero: la stessa riga della vista piatta (cerca + spunta),
+/// dentro un `TreeItem` senza figli così la chiave resta il nome intero.
+fn tag_leaf(tag: &TagCount, selection: &[String]) -> UiNode {
+    let selected = selection.iter().any(|s| s == &tag.name);
+    UiNode::new(UiKind::TreeItem {
+        label: Text::from(format!("#{} ({})", tag.name, tag.count)),
+        expanded: true,
+        action: Some(ActionRef::with(
+            SEARCH,
+            serde_json::json!({ TAG: tag.name }),
+        )),
+        selected,
+        children: vec![UiNode::button(
+            Text::from(if selected { "[x]" } else { "[ ]" }),
+            Intent::Neutral,
+            ActionRef::with(SELECT, serde_json::json!({ TAG: tag.name })),
+        )
+        .with_key(format!("select:{}", tag.name))],
+    })
+    .with_key(tag.name.clone())
+}
 
 #[cfg(test)]
 mod tests {
@@ -323,6 +749,7 @@ mod tests {
                 UiKind::ListItem { title, .. } => out.push(title.to_string()),
                 UiKind::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
                 UiKind::List { items } => items.iter().for_each(|c| walk(c, out)),
+                UiKind::Row { cells, .. } => cells.iter().for_each(|c| walk(c, out)),
                 _ => {}
             }
         }
@@ -370,11 +797,15 @@ mod tests {
                 &mut host,
             )
             .unwrap();
+        let ViewUpdate::RunSearch { query } = update else {
+            panic!("search");
+        };
         assert_eq!(
-            update,
-            ViewUpdate::RunSearch {
-                query: "tags:rust".into()
-            }
+            serde_json::from_str::<QueryExpr>(&query).unwrap(),
+            QueryExpr::of(QueryPredicate::Tag {
+                name: "rust".into(),
+                descendants: false,
+            })
         );
     }
 
@@ -585,5 +1016,108 @@ mod tests {
         };
         assert!(matches!(&children[0].kind, UiKind::TextInput { .. }));
         assert!(matches!(&children[1].kind, UiKind::EmptyState { .. }));
+    }
+}
+#[cfg(test)]
+mod presentation_tests {
+    use super::*;
+    use fub_abi::traits::ViewStateWrite;
+
+    fn tag(name: &str, count: u32) -> TagCount {
+        TagCount {
+            name: name.into(),
+            count,
+        }
+    }
+
+    fn titles(tree: &UiNode) -> Vec<String> {
+        fn walk(node: &UiNode, out: &mut Vec<String>) {
+            match &node.kind {
+                UiKind::ListItem { title, .. } => out.push(title.to_string()),
+                UiKind::TreeItem {
+                    label, children, ..
+                } => {
+                    out.push(label.to_string());
+                    children.iter().for_each(|c| walk(c, out));
+                }
+                UiKind::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
+                UiKind::List { items } => items.iter().for_each(|c| walk(c, out)),
+                UiKind::Tree { roots } => roots.iter().for_each(|c| walk(c, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        walk(tree, &mut out);
+        out
+    }
+    #[test]
+    fn flat_stays_compatible_with_the_old_builder() {
+        let tags = [tag("rust", 3), tag("a/b", 1)];
+        let old = build_tags_view(&tags, "");
+        let flat = build_tags_tree(&tags, "", MODE_FLAT, SORT_NAME, &[]);
+        // La vista estesa aggiunge controlli e selezione: i titoli delle voci
+        // restano gli stessi, in testa c'è di più.
+        let titles_old = titles(&old);
+        let titles_flat = titles(&flat);
+        assert!(titles_flat.len() >= titles_old.len(), "{titles_flat:?}");
+        for title in titles_old {
+            assert!(
+                titles_flat.contains(&title),
+                "{title} sparito da {titles_flat:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sort_by_count_breaks_ties_by_name() {
+        let tags = [tag("b", 1), tag("a", 1), tag("c", 5)];
+        let tree = build_tags_tree(&tags, "", MODE_FLAT, SORT_COUNT, &[]);
+        let got = titles(&tree);
+        assert!(got.iter().any(|t| t.contains("#c")), "{got:?}");
+        let first = got.iter().position(|t| t.contains("#c")).unwrap();
+        let second = got.iter().position(|t| t.contains("#a")).unwrap();
+        let third = got.iter().position(|t| t.contains("#b")).unwrap();
+        assert!(first < second && second < third, "{got:?}");
+    }
+
+    #[test]
+    fn tree_groups_by_first_segment_and_keeps_plain_tags_flat() {
+        let tags = [tag("a/b", 1), tag("a/c", 2), tag("solo", 3)];
+        let tree = build_tags_tree(&tags, "", MODE_TREE, SORT_NAME, &[]);
+        let got = titles(&tree);
+        assert!(got.iter().any(|t| t == "a"), "{got:?}");
+        assert!(got.iter().any(|t| t.contains("#a/b")), "{got:?}");
+        assert!(got.iter().any(|t| t.contains("#solo")), "{got:?}");
+    }
+
+    #[test]
+    fn selection_query_is_a_conjunction_of_exact_tag_leaves() {
+        let expr: QueryExpr =
+            serde_json::from_str(&selection_query(&["rust".into(), "a/b".into()])).unwrap();
+        assert_eq!(expr.any.len(), 1);
+        assert_eq!(expr.any[0].all.len(), 2);
+        assert_eq!(
+            expr.any[0].all[1].predicate,
+            QueryPredicate::Tag {
+                name: "a/b".into(),
+                descendants: false,
+            }
+        );
+    }
+
+    #[test]
+    fn null_and_garbage_view_state_reads_as_defaults() {
+        let mut host = fub_sdk::testing::MemoryHost::new()
+            .with_tags(&[("rust", 2)])
+            .with_instance("uno");
+        host.set_view_state(MODE_STATE, Some(serde_json::json!(42)))
+            .unwrap();
+        host.set_view_state(SORT_STATE, Some(serde_json::json!({"no": true})))
+            .unwrap();
+        host.set_view_state(SELECTION_STATE, Some(serde_json::json!("rust")))
+            .unwrap();
+        assert_eq!(mode_of(&host).unwrap(), MODE_FLAT);
+        assert_eq!(sort_of(&host).unwrap(), SORT_NAME);
+        assert!(selection_of(&host).unwrap().is_empty());
     }
 }

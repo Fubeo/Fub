@@ -17,7 +17,7 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
-import { createNote, refreshDocuments } from "../state/vault";
+import { createFolder, createNote, refreshDocuments } from "../state/vault";
 import {
   LEVEL_PAGE,
   childName,
@@ -32,6 +32,8 @@ import {
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu } from "../ui/menu";
+import { registerShellCommand } from "../ui/commands";
+import { showPanel } from "./sidebar";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { focusEditor, openDocument } from "./document";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
@@ -42,6 +44,8 @@ import { onLanguage, t, type Key } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
+import { mediaKindOfId } from "../editors/media/media-types";
+import type { ResourceKind } from "../host/contract";
 
 const fileListEl = $("#file-list");
 const filesTitleEl = $("#files-title");
@@ -82,7 +86,23 @@ let lastSignature = "";
 
 export function mountExplorer(lifetime: Lifetime): void {
   lifetime.listen($("#new-note"), "click", () => void newNote());
+  // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
+  // spazio attivo): il suo contestuale crea una cartella lì.
+  lifetime.listen(filesTitleEl, "contextmenu", (e) => {
+    e.preventDefault();
+    showContextMenu(e, [
+      { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
+    ]);
+  });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
+  registerShellCommand({
+    id: "shell.explorer.reveal",
+    title: "commands.explorer.reveal",
+    description: "commands.explorer.reveal.desc",
+    layer: "global",
+    available: () => state.currentDoc !== null,
+    run: () => revealActive(),
+  });
   treeArrows(lifetime);
   wireRootDropTarget(lifetime);
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
@@ -134,6 +154,14 @@ export function mountExplorer(lifetime: Lifetime): void {
   registerPanel(panel);
   lifetime.add(() => {
     if (registeredPanels().some((current) => current === panel)) unregisterPanel(panel.id);
+  });
+  lifetime.add(() => {
+    race.cancel();
+    drag = null;
+    levelWindows.clear();
+    lastSignature = "";
+    view = { folders: new Map(), existing: new Set() };
+    fileListEl.replaceChildren();
   });
 }
 
@@ -215,7 +243,7 @@ async function loadVisible(): Promise<Map<string, FolderContent>> {
 function signatureOf(v: View): string {
   const folders = [...v.folders.entries()].map(
     ([path, c]) =>
-      `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}]`,
+      `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}][${c.files.join(",")}]`,
   );
   return `${folders.join(";")}|${[...v.existing].sort().join(",")}`;
 }
@@ -344,6 +372,12 @@ function treeArrows(lifetime: Lifetime): void {
       openRowMenu(current);
       return;
     }
+    // Shift+arrows reorder the same siblings as drag-before/after.
+    if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      reorderAdjacent(current, e.key === "ArrowUp" ? -1 : 1);
+      return;
+    }
 
     const entries = treeEntries();
     const i = entries.indexOf(current);
@@ -447,6 +481,14 @@ function renderChildren(path: string, ul: HTMLElement): void {
     if (id === state.currentDoc) li.setAttribute("aria-selected", "true");
     ul.appendChild(li);
   }
+  for (const id of node.files) {
+    const li = document.createElement("li");
+    const row = fileRow(id);
+    li.appendChild(row);
+    treeEntry(li, row, id);
+    if (id === state.currentDoc) li.setAttribute("aria-selected", "true");
+    ul.appendChild(li);
+  }
   // Ciò che la finestra ha lasciato fuori **si dice e si può aprire**. Un
   // livello troncato in silenzio è peggio di un livello lento: chi guarda
   // conclude che la cartella contiene ciò che vede, e cerca altrove una nota
@@ -517,6 +559,45 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   return row;
 }
 
+const FILE_ICONS: Record<ResourceKind, string> = {
+  image: "🖼️",
+  audio: "🎵",
+  video: "🎬",
+  pdf: "📕",
+  other: "📎",
+};
+
+/// La riga di un file che non è una nota: c'è sul disco, quindi c'è
+/// nell'albero. Un media noto (immagine, audio, video, PDF) si apre nel
+/// visualizzatore; per il resto la shell non ha una superficie, e lo dice
+/// invece di tentarne la lettura come testo.
+function fileRow(id: string): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "tree-row file";
+  row.dataset.path = id;
+  setTooltip(row, id);
+  const kind = mediaKindOfId(id);
+  row.appendChild(rowIcon(FILE_ICONS[kind]));
+  const name = document.createElement("span");
+  name.className = "row-name";
+  name.textContent = childName(id);
+  row.appendChild(name);
+  row.addEventListener("click", () => {
+    if (kind !== "other") void openDocument(id);
+    else notify(t("explorer.no_viewer", { name: childName(id) }), "info");
+  });
+  // Un allegato si rinomina (l'estensione resta) e si cestina come una nota:
+  // il kernel li tratta allo stesso modo, e il cestino li ripristina uguali.
+  row.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    showContextMenu(e, [
+      { label: t("explorer.rename"), run: () => startRename(row, id) },
+      { label: t("explorer.delete"), danger: true, run: () => void trashWithConfirm(id) },
+    ]);
+  });
+  return row;
+}
+
 /// Le voci del contestuale di una **nota**, dalla stessa strada del click
 /// destro e del tasto Menu/Shift+F10: un punto solo, o le due strade
 /// divergono alla prima voce aggiunta.
@@ -533,7 +614,37 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
     ...(move ? [move] : []),
     { label: t("explorer.delete"), danger: true, run: () => void trashWithConfirm(id) },
+    ...reorderActions(id),
   ]);
+}
+// Returns actions only when another sibling of the same kind is visible.
+function reorderActions(id: string): Array<{ label: string; run: () => void }> {
+  const row = entry(id);
+  if (!row) return [];
+  const siblings = reorderSiblings(row);
+  const index = siblings.indexOf(row);
+  return [
+    ...(index > 0 ? [{ label: t("bookmarks.move_up"), run: () => reorderAdjacent(row, -1) }] : []),
+    ...(index < siblings.length - 1 ? [{ label: t("bookmarks.move_down"), run: () => reorderAdjacent(row, 1) }] : []),
+  ];
+}
+
+function reorderSiblings(row: HTMLElement): HTMLElement[] {
+  const kind = row.querySelector(":scope > .tree-row.folder") ? "folder" : "note";
+  return [...(row.parentElement?.children ?? [])]
+    .filter((node): node is HTMLElement => node instanceof HTMLElement
+      && node.getAttribute("role") === "treeitem"
+      && !!node.querySelector(`:scope > .tree-row.${kind}`));
+}
+
+function reorderAdjacent(row: HTMLElement, delta: -1 | 1): void {
+  const siblings = reorderSiblings(row);
+  const at = siblings.indexOf(row);
+  const other = siblings[at + delta];
+  const source = row.dataset.path;
+  const target = other?.dataset.path;
+  if (!source || !target) return;
+  applyReorder(parentOf(source), childName(source), childName(target), delta < 0);
 }
 
 /// Voce "Sposta in…" senza drag (U10): apre il selettore di destinazione.
@@ -648,8 +759,10 @@ function folderRow(folder: VaultFolder): HTMLElement {
 /// del tasto Menu, un punto solo.
 function folderMenu(at: MouseEvent, path: string): void {
   showContextMenu(at, [
+    { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
     { label: t("explorer.icon"), run: () => chooseIcon(at, path) },
     { label: t("explorer.as_space"), run: () => addSpace(path) },
+    ...reorderActions(path),
   ]);
 }
 
@@ -666,6 +779,36 @@ function toggleFolder(path: string): void {
   if (!state.expanded.delete(path)) state.expanded.add(path);
   saveExpanded();
   void refreshFromKernel(true);
+}
+
+/// Porta in vista nell'albero il documento attivo: esce da uno spazio che non
+/// lo contiene, apre le cartelle che lo contengono e scorre fino alla riga.
+///
+/// Non prende il fuoco: chi rivela sta scrivendo, e il gesto serve a vedere
+/// dove si trova, non a lasciare l'editor. La voce diventa però la fermata del
+/// tab nell'albero, così chi ci entra da tastiera parte da lì.
+async function revealActive(): Promise<void> {
+  const doc = state.currentDoc;
+  if (!doc) return;
+  if (state.activeSpace !== null && !doc.startsWith(`${state.activeSpace}/`)) {
+    state.activeSpace = null;
+    saveActiveSpace();
+  }
+  const root = state.activeSpace ?? "";
+  let opened = false;
+  for (let folder = parentOf(doc); folder !== "" && folder !== root; folder = parentOf(folder)) {
+    if (!state.expanded.has(folder)) {
+      state.expanded.add(folder);
+      opened = true;
+    }
+  }
+  if (opened) saveExpanded();
+  showPanel("files");
+  await refreshFromKernel(true);
+  const li = entry(doc);
+  if (!li) return;
+  roving(doc);
+  li.scrollIntoView?.({ block: "nearest" });
 }
 
 /// Accende la nota aperta, nell'albero e fra le appuntate.
@@ -865,6 +1008,60 @@ async function newNote(): Promise<void> {
   const created = await createNote();
   if (created) await openDocument(created);
   focusEditor();
+}
+
+/// Una cartella nuova dentro `parent` ("" è la radice): un campo in cima al
+/// livello, lo stesso gesto della rinomina in posto.
+///
+/// Il nome passa dal kernel (`folder.create`) e non da una regola della shell:
+/// recinto, nomi riservati e collisioni hanno un giudice solo, e il rifiuto
+/// arriva come errore tipizzato da mostrare. Il campo resta finché il comando
+/// non risponde, così un secondo Invio non parte due volte.
+function startNewFolder(parent: string): void {
+  const field = document.createElement("input");
+  field.className = "new-folder";
+  field.setAttribute("aria-label", t("explorer.new_folder"));
+  field.placeholder = t("explorer.new_folder");
+  const holder = parent ? entry(parent)?.querySelector(":scope > .tree-row") : null;
+  if (holder) {
+    holder.after(field);
+  } else {
+    fileListEl.prepend(field);
+  }
+  field.focus();
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    field.remove();
+  };
+  const confirm = async () => {
+    if (closed || field.disabled) return;
+    const name = field.value.trim();
+    if (!name) return close();
+    field.disabled = true;
+    const wanted = parent ? `${parent}/${name}` : name;
+    try {
+      await createFolder(wanted);
+      if (parent && !state.expanded.has(parent)) {
+        state.expanded.add(parent);
+        saveExpanded();
+      }
+      close();
+      await refreshFromKernel(true);
+    } catch (e) {
+      close();
+      notify(t("explorer.new_folder_failed", { folder: wanted, reason: errorText(e) }), "guasto");
+    }
+  };
+  field.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") void confirm();
+    else if (e.key === "Escape") close();
+  });
+  field.addEventListener("blur", () => {
+    if (!field.disabled) close();
+  });
 }
 
 /// Rinomina in posto: la riga della lista diventa un campo di testo.

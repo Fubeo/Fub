@@ -4,9 +4,10 @@
   "description": "Default capabilities for the main window.",
   "windows": ["main"],
   "permissions": [
+    "default",
     "core:default",
     "dialog:default",
-    "core:window:allow-destroy",
+    "core:app:default",
     "core:window:allow-minimize",
     "core:window:allow-maximize",
     "core:window:allow-unmaximize",

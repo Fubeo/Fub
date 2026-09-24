@@ -1,10 +1,24 @@
 //! Orchestrazione delle installazioni macchina e del loro lifecycle nei vault.
+//!
+//! Installazione, consenso agli esatti byte, scelta `enabled` e mount riuscito
+//! restano distinti. La revoca firmata è un veto ulteriore, persistito: solo
+//! `enabled && Granted && !revoked` propone il mount. Un bundle guasto diventa
+//! una diagnosi in `StartupSnapshot::diagnostics` senza nascondere gli altri;
+//! [`InstalledPluginManager::limited_startup`] sceglie invece esplicitamente
+//! un avvio senza alcun componente e con diagnosi tipizzata.
 
 use std::collections::BTreeMap;
 use std::io;
 use std::sync::{Arc, Condvar, Mutex};
 
-use camino::Utf8Path;
+use crate::budgets::{self, BudgetSnapshot};
+use crate::catalog::{self, CatalogEntry, CatalogError, CatalogKind, CatalogTrust, SignedFeed};
+use crate::installed::{
+    CatalogProvenance, Consent, InstallError, InstalledPlugin, InstalledPluginStore,
+    InventorySnapshot,
+};
+use crate::{LoadError, WasmBundle};
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::PluginError;
 use fub_host::registry::BundleKind;
 use fub_host::{
@@ -13,11 +27,6 @@ use fub_host::{
 };
 use fub_kernel::Trust;
 use serde::Serialize;
-
-use crate::installed::{
-    Consent, InstallError, InstalledPlugin, InstalledPluginStore, InventorySnapshot,
-};
-use crate::{LoadError, WasmBundle};
 
 /// Vista serializzabile di un'installazione e del suo stato runtime nel vault scelto.
 #[derive(Clone, Debug, Serialize)]
@@ -34,6 +43,14 @@ pub struct InstalledPluginInfo {
     pub enabled: bool,
     /// Consenso all'esecuzione degli esatti byte installati.
     pub consent: Consent,
+    /// Provenienza della release verificata nel medesimo commit dell'inventario.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub catalog: Option<CatalogProvenance>,
+    /// Il publisher ha ritirato l'esecuzione di questa release.
+    pub revoked: bool,
+    /// Provenienza del provvedimento di revoca, se presente.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revocation: Option<CatalogProvenance>,
     /// Il vault scelto conosce questo bundle con il claim dell'installazione.
     pub runtime_known: bool,
 }
@@ -112,8 +129,10 @@ impl Drop for Operation {
 /// Possiede l'inventario installato, i claim runtime e i turni delle decisioni.
 pub struct InstalledPluginManager {
     store: InstalledPluginStore,
+    config: Utf8PathBuf,
     state: Custody<ManagerState>,
     validity_turn: Custody<()>,
+    catalog_generation: Mutex<u64>,
     operations: Arc<OperationLifecycle>,
 }
 
@@ -131,6 +150,7 @@ impl InstalledPluginManager {
     pub fn open(config: &Utf8Path) -> Result<Self, PluginError> {
         Ok(Self {
             store: InstalledPluginStore::open(config).map_err(plugin_error)?,
+            config: config.to_owned(),
             state: Custody::new(
                 "installed plugin manager",
                 ManagerState {
@@ -140,6 +160,7 @@ impl InstalledPluginManager {
             ),
             validity_turn: Custody::new("installed plugin startup validity", ()),
             operations: Arc::new(OperationLifecycle::new()),
+            catalog_generation: Mutex::new(0),
         })
     }
 
@@ -171,6 +192,14 @@ impl InstalledPluginManager {
             _admission: self.operations.enter()?,
         })
     }
+    /// Adatta la modalità limitata alla porta startup esistente dell'host:
+    /// la scelta è per apertura, non modifica enabled né consenso persistiti.
+    pub fn limited_startup(self: &Arc<Self>, reason: impl Into<String>) -> Arc<dyn StartupSource> {
+        Arc::new(LimitedStartup {
+            manager: Arc::clone(self),
+            reason: reason.into(),
+        })
+    }
 
     /// Elenca ogni record persistito senza leggere, compilare o eseguire il guest.
     pub fn list(
@@ -196,6 +225,360 @@ impl InstalledPluginManager {
                 self.info(host, vault, plugin, &state.claim)
             })
             .collect()
+    }
+    /// Contatori aggregati: per-call timeout e memoria lineare non sono quote di processo.
+    pub fn process_budgets(&self) -> Result<BudgetSnapshot, PluginError> {
+        let _operation = self.operations.enter()?;
+        Ok(budgets::snapshot())
+    }
+
+    /// Cerca solo dentro un feed Ed25519 verificato: non accede alla rete.
+    pub fn catalog_search(
+        &self,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        needle: &str,
+    ) -> Result<Vec<CatalogEntry>, CatalogError> {
+        let _operation = self.operations.enter()?;
+        let mut generation = self
+            .catalog_generation
+            .lock()
+            .map_err(|_| manager_poisoned())?;
+        let payload = catalog::verify_feed(trust, feed, now_ms)?;
+        require_generation(*generation, payload.generation)?;
+        require_recorded_generation(&self.store.snapshot()?, payload.generation)?;
+        *generation = payload.generation;
+        Ok(catalog::search(&payload, needle)
+            .into_iter()
+            .cloned()
+            .collect())
+    }
+
+    /// Installa byte consegnati dalla shell, selezionati da una voce firmata.
+    /// Non scarica e non monta: digest, dimensione, manifest e CAS sono obbligatori.
+    pub fn catalog_install(
+        &self,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        id: &str,
+        version: &str,
+        bytes: &[u8],
+    ) -> Result<InstalledPluginInfo, CatalogError> {
+        let _operation = self.operations.enter()?;
+        let mut generation = self
+            .catalog_generation
+            .lock()
+            .map_err(|_| manager_poisoned())?;
+        let payload = catalog::verify_feed(trust, feed, now_ms)?;
+        require_generation(*generation, payload.generation)?;
+        let entry = select_entry(&payload, CatalogKind::Plugin, id, version)?;
+        let snapshot = self.store.snapshot()?;
+        require_recorded_generation(&snapshot, payload.generation)?;
+        let installed = catalog::install_entry(
+            &self.store,
+            &snapshot,
+            entry,
+            bytes,
+            provenance(feed, &payload, entry),
+        )?;
+        self.installation_state(installed.installation)?;
+        *generation = payload.generation;
+        Ok(metadata_info(&installed, false, false))
+    }
+
+    /// Aggiorna e ritira i proxy della release precedente; i byte nuovi
+    /// conservano `enabled` ma non il consenso. La vista restituita è metadata-
+    /// only (`mounted=false`): usare `list(host, vault)` per lo stato del vault.
+    /// Gli errori di teardown dopo il commit sono restituiti separatamente.
+    #[allow(clippy::too_many_arguments)]
+    pub fn catalog_update(
+        &self,
+        host: &Host,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        installation: u64,
+        version: &str,
+        bytes: &[u8],
+    ) -> Result<(InstalledPluginInfo, Vec<PluginError>), CatalogError> {
+        let _operation = self.operations.enter()?;
+        self.catalog_update_inner(host, trust, feed, now_ms, installation, version, bytes)
+    }
+
+    /// Rollback esplicito: il chiamante consegna i byte precedenti salvati e
+    /// una voce della versione precedente nel feed firmato corrente.
+    #[allow(clippy::too_many_arguments)]
+    pub fn catalog_rollback(
+        &self,
+        host: &Host,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        installation: u64,
+        prior_version: &str,
+        prior_bytes: &[u8],
+    ) -> Result<(InstalledPluginInfo, Vec<PluginError>), CatalogError> {
+        let _operation = self.operations.enter()?;
+        self.catalog_update_inner(
+            host,
+            trust,
+            feed,
+            now_ms,
+            installation,
+            prior_version,
+            prior_bytes,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn catalog_update_inner(
+        &self,
+        host: &Host,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        installation: u64,
+        version: &str,
+        bytes: &[u8],
+    ) -> Result<(InstalledPluginInfo, Vec<PluginError>), CatalogError> {
+        let mut generation = self
+            .catalog_generation
+            .lock()
+            .map_err(|_| manager_poisoned())?;
+        let payload = catalog::verify_feed(trust, feed, now_ms)?;
+        require_generation(*generation, payload.generation)?;
+        let state = self.installation_state(installation)?;
+        let _turn = state.turn.write_turn();
+        let snapshot = self.store.snapshot()?;
+        require_recorded_generation(&snapshot, payload.generation)?;
+        let before = installed_from(&snapshot, installation)?.clone();
+        let entry = select_entry(&payload, CatalogKind::Plugin, &before.manifest.id, version)?;
+        let updated = catalog::update_entry(
+            &self.store,
+            &snapshot,
+            &before,
+            entry,
+            bytes,
+            provenance(feed, &payload, entry),
+        )?;
+        *generation = payload.generation;
+        let mut diagnostics = Vec::new();
+        if let Err(error) = self.replace_and_invalidate_validity() {
+            diagnostics.push(error);
+        }
+        diagnostics.extend(self.retire_runtime(host, &before, &state));
+        Ok((metadata_info(&updated, false, false), diagnostics))
+    }
+
+    /// Richiede una voce di revoca firmata prima di disabilitare e smontare.
+    /// Non elimina né blob né dati utente.
+    pub fn catalog_revoke(
+        &self,
+        host: &Host,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        installation: u64,
+    ) -> Result<Vec<PluginError>, CatalogError> {
+        let _operation = self.operations.enter()?;
+        let mut generation = self
+            .catalog_generation
+            .lock()
+            .map_err(|_| manager_poisoned())?;
+        let payload = catalog::verify_feed(trust, feed, now_ms)?;
+        require_generation(*generation, payload.generation)?;
+        let state = self.installation_state(installation)?;
+        let _turn = state.turn.write_turn();
+        let snapshot = self.store.snapshot()?;
+        require_recorded_generation(&snapshot, payload.generation)?;
+        let before = installed_from(&snapshot, installation)?.clone();
+        let revoked_entry = payload
+            .entries
+            .iter()
+            .find(|entry| {
+                entry.kind == CatalogKind::Plugin && entry.id == before.manifest.id && entry.revoked
+            })
+            .ok_or_else(|| {
+                CatalogError::Unavailable(format!(
+                    "revoca non firmata per `{}`",
+                    before.manifest.id
+                ))
+            })?;
+        if before
+            .revocation
+            .as_ref()
+            .is_some_and(|prior| payload.generation < prior.generation)
+        {
+            return Err(CatalogError::Stale(
+                "revoca più vecchia di quella installata".into(),
+            ));
+        }
+        catalog::revoke(
+            &self.store,
+            &snapshot,
+            installation,
+            provenance(feed, &payload, revoked_entry),
+        )?;
+        *generation = payload.generation;
+        let mut after = before.clone();
+        after.enabled = false;
+        after.revoked = true;
+        let mut diagnostics = Vec::new();
+        if before.enabled {
+            if let Err(error) = self.replace_and_invalidate_validity() {
+                diagnostics.push(error);
+            }
+        }
+        diagnostics.extend(self.retire_runtime(host, &before, &state));
+        Ok(diagnostics)
+    }
+
+    /// Installa l'albero tema scelto, verificando feed e contenuto prima della
+    /// pubblicazione atomica dell'host. Nessun download implicito.
+    pub fn catalog_install_theme(
+        &self,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        id: &str,
+        version: &str,
+        source: &Utf8Path,
+    ) -> Result<Utf8PathBuf, CatalogError> {
+        let _operation = self.operations.enter()?;
+        let mut generation = self
+            .catalog_generation
+            .lock()
+            .map_err(|_| manager_poisoned())?;
+        let payload = catalog::verify_feed(trust, feed, now_ms)?;
+        require_generation(*generation, payload.generation)?;
+        require_recorded_generation(&self.store.snapshot()?, payload.generation)?;
+        let entry = select_entry(&payload, CatalogKind::Theme, id, version)?;
+        let signed = serde_json::to_value(provenance(feed, &payload, entry))
+            .map_err(|error| CatalogError::Unreadable(error.to_string()))?;
+        let installed = catalog::install_theme_entry(&self.config, entry, source, signed)?;
+        *generation = payload.generation;
+        Ok(installed)
+    }
+
+    /// Sostituisce un tema solo dopo la verifica della sua staging completa.
+    pub fn catalog_update_theme(
+        &self,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        id: &str,
+        version: &str,
+        source: &Utf8Path,
+    ) -> Result<Utf8PathBuf, CatalogError> {
+        let _operation = self.operations.enter()?;
+        self.catalog_update_theme_inner(trust, feed, now_ms, id, version, source)
+    }
+
+    /// Rollback del tema: albero precedente salvato, voce firmata della release
+    /// precedente nel feed corrente; mai una riscrittura silenziosa.
+    pub fn catalog_rollback_theme(
+        &self,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        id: &str,
+        prior_version: &str,
+        prior_source: &Utf8Path,
+    ) -> Result<Utf8PathBuf, CatalogError> {
+        let _operation = self.operations.enter()?;
+        self.catalog_update_theme_inner(trust, feed, now_ms, id, prior_version, prior_source)
+    }
+
+    fn catalog_update_theme_inner(
+        &self,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        id: &str,
+        version: &str,
+        source: &Utf8Path,
+    ) -> Result<Utf8PathBuf, CatalogError> {
+        let mut generation = self
+            .catalog_generation
+            .lock()
+            .map_err(|_| manager_poisoned())?;
+        let payload = catalog::verify_feed(trust, feed, now_ms)?;
+        require_generation(*generation, payload.generation)?;
+        require_recorded_generation(&self.store.snapshot()?, payload.generation)?;
+        let entry = select_entry(&payload, CatalogKind::Theme, id, version)?;
+        let signed = serde_json::to_value(provenance(feed, &payload, entry))
+            .map_err(|error| CatalogError::Unreadable(error.to_string()))?;
+        let updated = catalog::update_theme_entry(&self.config, entry, source, signed)?;
+        *generation = payload.generation;
+        Ok(updated)
+    }
+
+    /// Revoca firmata della superficie tema: la shell non leggerà più il
+    /// bundle; preferenze e file della persona rimangono intatti.
+    pub fn catalog_revoke_theme(
+        &self,
+        trust: &CatalogTrust,
+        feed: &SignedFeed,
+        now_ms: u64,
+        id: &str,
+    ) -> Result<(), CatalogError> {
+        let _operation = self.operations.enter()?;
+        let mut generation = self
+            .catalog_generation
+            .lock()
+            .map_err(|_| manager_poisoned())?;
+        let payload = catalog::verify_feed(trust, feed, now_ms)?;
+        require_generation(*generation, payload.generation)?;
+        require_recorded_generation(&self.store.snapshot()?, payload.generation)?;
+        let revoked_entry = payload
+            .entries
+            .iter()
+            .find(|entry| entry.kind == CatalogKind::Theme && entry.id == id && entry.revoked)
+            .ok_or_else(|| CatalogError::Unavailable(format!("revoca tema `{id}` non firmata")))?;
+        let signed = serde_json::to_value(provenance(feed, &payload, revoked_entry))
+            .map_err(|error| CatalogError::Unreadable(error.to_string()))?;
+        fub_host::theme::set_theme_revoked_with_provenance(&self.config, id, signed)?;
+        *generation = payload.generation;
+        Ok(())
+    }
+
+    /// Provenienza nel puntatore di generazione dell'host, separata dagli
+    /// asset firmati e preservata insieme al cambio di release.
+    pub fn catalog_theme_provenance(
+        &self,
+        id: &str,
+    ) -> Result<Option<CatalogProvenance>, CatalogError> {
+        let _operation = self.operations.enter()?;
+        fub_host::theme::theme_catalog_provenance(&self.config, id)?
+            .map(|value| {
+                serde_json::from_value(value)
+                    .map_err(|error| CatalogError::Unreadable(error.to_string()))
+            })
+            .transpose()
+    }
+
+    /// Provenienza della revoca firmata persistita nello stesso puntatore
+    /// atomico del tema; assente se nessun feed ha ritirato il bundle.
+    pub fn catalog_theme_revocation(
+        &self,
+        id: &str,
+    ) -> Result<Option<CatalogProvenance>, CatalogError> {
+        let _operation = self.operations.enter()?;
+        fub_host::theme::theme_revocation_provenance(&self.config, id)?
+            .map(|value| {
+                serde_json::from_value(value)
+                    .map_err(|error| CatalogError::Unreadable(error.to_string()))
+            })
+            .transpose()
+    }
+
+    /// Diagnostica fail-closed della revoca: `true` anche se un puntatore è
+    /// danneggiato o non leggibile, mai "attivo" per errore di I/O.
+    pub fn catalog_theme_revoked(&self, id: &str) -> Result<bool, CatalogError> {
+        let _operation = self.operations.enter()?;
+        Ok(fub_host::theme::theme_revoked(&self.config, id))
     }
 
     /// Valida e installa una sorgente scelta esplicitamente, senza montarla.
@@ -378,6 +761,38 @@ impl InstalledPluginManager {
         Ok(errors)
     }
 
+    /// Prepara un avvio in modalità limitata: nessun componente viene montato.
+    ///
+    /// Lo snapshot torna con `bundles` e `formats` vuoti e un singolo
+    /// [`PluginError::Cancelled`] in `diagnostics` che cita `reason` e il
+    /// numero di installazioni saltate. La recovery dello startup esistente
+    /// resta invariata e va letta insieme a questo: in
+    /// [`StartupSource::prepare`] un bundle guasto diventa una diagnosi che
+    /// non nasconde gli altri, qui invece si salta tutto esplicitamente e lo
+    /// si dichiara in una sola diagnosi.
+    ///
+    /// Gli stati restano quattro e distinti — installazione (record
+    /// persistito), consenso sugli esatti byte, scelta `enabled`, mount
+    /// riuscito — e restano leggibili da `list`/`info` senza che questa
+    /// chiamata cambi alcuna firma: la modalità limitata non riscrive
+    /// l'inventario, sospende soltanto il mount per questa apertura.
+    pub fn prepare_limited(&self, reason: &str) -> Result<StartupSnapshot, PluginError> {
+        let _operation = self.operations.enter()?;
+        let validity: Arc<StartupValidity> = Arc::clone(&self.state.read()?.validity);
+        let lease = validity.acquire()?;
+        let snapshot = self.store.snapshot().map_err(plugin_error)?;
+        let skipped = snapshot.plugins().len();
+        Ok(StartupSnapshot {
+            bundles: Vec::new(),
+            formats: PreparedFormatSource::empty(),
+            diagnostics: vec![PluginError::Cancelled(
+                format!("modalità limitata ({reason}): {skipped} installazioni saltate").into(),
+            )],
+            validity: Some(validity),
+            lease: Some(lease),
+        })
+    }
+
     fn installation_state(&self, installation: u64) -> Result<Arc<InstallationState>, PluginError> {
         if let Some(state) = self.state.read()?.installations.get(&installation).cloned() {
             return Ok(state);
@@ -407,6 +822,50 @@ impl InstalledPluginManager {
     fn replace_and_invalidate_validity(&self) -> Result<(), PluginError> {
         let _turn = self.validity_turn.write_turn();
         self.replace_validity()?.invalidate()
+    }
+
+    /// Una release aggiornata non deve mai riattivare il `KnownBundle` con gli
+    /// stessi claim ma i byte vecchi: smonta, poi dimentica il proxy precedente.
+    fn retire_runtime(
+        &self,
+        host: &Host,
+        installed: &InstalledPlugin,
+        state: &InstallationState,
+    ) -> Vec<PluginError> {
+        let mut errors = Vec::new();
+        for vault in host.vaults() {
+            let vault = Some(vault.as_str());
+            match host.bundle_is_owned(vault, &installed.manifest.id, &state.claim) {
+                Ok(true) => {}
+                Ok(false) => continue,
+                Err(error) => {
+                    errors.push(error);
+                    continue;
+                }
+            }
+            match host.set_bundle_active(vault, &installed.manifest.id, &state.claim, false) {
+                Ok(mut teardown) => errors.append(&mut teardown),
+                Err(error) => errors.push(error),
+            }
+            match host.is_bundle_active(vault, &installed.manifest.id, &state.claim) {
+                Ok(false) => {
+                    if let Err(error) =
+                        host.forget_bundle(vault, &installed.manifest.id, &state.claim)
+                    {
+                        errors.push(error);
+                    }
+                }
+                Ok(true) => errors.push(PluginError::Conflict(
+                    format!(
+                        "release precedente `{}` ancora attiva nel vault",
+                        installed.manifest.id
+                    )
+                    .into(),
+                )),
+                Err(error) => errors.push(error),
+            }
+        }
+        errors
     }
 
     fn reconcile(
@@ -479,6 +938,76 @@ impl InstalledPluginManager {
         Ok(metadata_info(installed, mounted, runtime_known))
     }
 }
+fn require_generation(seen: u64, candidate: u64) -> Result<(), CatalogError> {
+    if candidate < seen {
+        return Err(CatalogError::Stale(format!(
+            "generazione {candidate} precedente alla generazione verificata {seen}"
+        )));
+    }
+    Ok(())
+}
+
+fn require_recorded_generation(
+    snapshot: &InventorySnapshot,
+    candidate: u64,
+) -> Result<(), CatalogError> {
+    let seen = snapshot
+        .plugins()
+        .iter()
+        .flat_map(|plugin| {
+            [plugin.catalog.as_ref(), plugin.revocation.as_ref()]
+                .into_iter()
+                .flatten()
+                .map(|provenance| provenance.generation)
+        })
+        .max()
+        .unwrap_or_default();
+    require_generation(seen, candidate)
+}
+
+fn select_entry<'a>(
+    payload: &'a catalog::CatalogPayload,
+    kind: CatalogKind,
+    id: &str,
+    version: &str,
+) -> Result<&'a CatalogEntry, CatalogError> {
+    if payload
+        .entries
+        .iter()
+        .any(|entry| entry.kind == kind && entry.id == id && entry.revoked)
+    {
+        return Err(CatalogError::Unavailable(format!("voce `{id}` revocata")));
+    }
+    let mut entries = payload
+        .entries
+        .iter()
+        .filter(|entry| entry.kind == kind && entry.id == id && entry.version == version);
+    let entry = entries.next().ok_or_else(|| {
+        CatalogError::Unavailable(format!("voce `{id}` versione `{version}` assente"))
+    })?;
+    if entries.next().is_some() {
+        return Err(CatalogError::Unreadable(format!(
+            "voce `{id}` versione `{version}` ambigua"
+        )));
+    }
+    Ok(entry)
+}
+
+fn provenance(
+    feed: &SignedFeed,
+    payload: &catalog::CatalogPayload,
+    entry: &CatalogEntry,
+) -> CatalogProvenance {
+    CatalogProvenance {
+        key_id: feed.key_id.clone(),
+        generation: payload.generation,
+        publisher: entry.provenance.clone(),
+        url: entry.url.clone(),
+        license: entry.license.clone(),
+        compatible: entry.compatible.clone(),
+    }
+}
+
 impl InstalledShutdown {
     /// Attende il rilascio dei lease startup acquisiti prima della revoca.
     pub fn finish(self) -> Result<(), PluginError> {
@@ -543,6 +1072,17 @@ impl InstalledOperation {
     /// Rimuove l'installazione sotto l'ammissione già ottenuta.
     pub fn remove(&self, host: &Host, installation: u64) -> Result<Vec<PluginError>, PluginError> {
         self.manager.remove_inner(host, installation)
+    }
+}
+
+struct LimitedStartup {
+    manager: Arc<InstalledPluginManager>,
+    reason: String,
+}
+
+impl StartupSource for LimitedStartup {
+    fn prepare(&self) -> Result<StartupSnapshot, PluginError> {
+        self.manager.prepare_limited(&self.reason)
     }
 }
 
@@ -631,6 +1171,9 @@ fn metadata_info(
         version: installed.manifest.version.clone(),
         enabled: installed.enabled,
         consent: installed.consent,
+        catalog: installed.catalog.clone(),
+        revoked: installed.revoked,
+        revocation: installed.revocation.clone(),
         runtime_known,
     }
 }

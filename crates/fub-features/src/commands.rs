@@ -29,11 +29,10 @@
 //! finché quei sei erano lì valeva solo per le feature che non toccano il
 //! vault).
 //!
-//! E c'è `vault.archive`, che non fa niente di suo: invoca `note.rename` una
-//! volta per nota. È il cliente di `run_command`, e serve a provare le tre cose
-//! che quella capacità decide — il modo che viaggia con l'host (simulare la
-//! macro simula i passi, e il piano che ne esce è l'unione dei loro), l'attore
-//! che non si riazzera, e il lotto che non si moltiplica.
+//! E c'è `vault.archive`: simula i passi invocando `note.rename` tramite
+//! `run_command`, così il piano è l'unione dei loro. In applicazione verifica
+//! tutto il lotto, persiste l'intenzione e sposta una nota alla volta tramite
+//! l'host: il recupero dopo un arresto sa riprendere senza sovrascrivere.
 //!
 //! # Cosa NON c'è qui, e perché
 //!
@@ -42,18 +41,19 @@
 //! un messaggio e un effetto, non dati). Chi deve mostrare il cestino lo legge
 //! dal canale di lettura — la shell dal suo IPC, una view da `list_trash`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
 };
-use fub_abi::edit::{EditRequest, TextEdit};
+use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker};
 use fub_abi::settings::{SettingEntry, SettingKind, SettingSource, SettingValue};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{BacklinkRef, CommandProvider, HostApi, IndexQuery, IndexResult};
+use serde::{Deserialize, Serialize};
 
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
 pub const COMMANDS_ID: &str = "fub.commands";
@@ -74,7 +74,7 @@ pub const NOTES_TRASH: &str = "note.trash";
 pub const TRASH_RESTORE: &str = "trash.restore";
 /// Svuota il cestino.
 pub const TRASH_EMPTY: &str = "trash.empty";
-/// Sposta N note in una cartella, un `note.rename` alla volta.
+/// Sposta N note in una cartella con intento durevole e recupero.
 pub const VAULT_ARCHIVE: &str = "vault.archive";
 /// Spunta (o de-spunta) un task.
 pub const NOTES_TASK_TOGGLE: &str = "note.task.toggle";
@@ -90,7 +90,7 @@ pub const SETTINGS_IMPORT: &str = "settings.import";
 pub const VAULT_UNDO: &str = "vault.undo";
 
 /// Il `ns` con cui l'esito di `settings.export` arriva alla shell.
-pub const SETTINGS_NS: &str = "settings.export";
+pub const SETTINGS_NS: &str = fub_abi::ui::SETTINGS_EXPORT_NS;
 
 /// Il nome di una nota senza nome, e l'estensione che le si dà.
 ///
@@ -299,8 +299,8 @@ fn catalog_it() -> StringCatalog {
         .with("search.open.query.title", "Cerca")
         .with(
             "search.open.query.desc",
-            "La query, nella stessa sintassi della barra di ricerca \
-             (`tags:nome` filtra per tag).",
+            "La query è testo libero oppure JSON di QueryExpr con `any` \
+             esplicito; RunSearch porta la stessa stringa alla barra.",
         )
         .with(
             "selection.wikilink.title",
@@ -355,6 +355,8 @@ fn catalog_it() -> StringCatalog {
             "Il nome o il path della nota, estensione compresa se diversa da \
              `.md`. Assente = «Senza titolo».",
         )
+        .with("note.create.properties.title", "Proprietà iniziali")
+        .with("note.create.properties.desc", "Oggetto JSON testuale delle proprietà iniziali del frontmatter; salvate insieme alla nota.")
         .with("note.rename.title", "Rinomina nota")
         .with(
             "note.rename.desc",
@@ -665,8 +667,8 @@ fn catalog_en() -> StringCatalog {
         .with("search.open.query.title", "Search")
         .with(
             "search.open.query.desc",
-            "The query, in the same syntax as the search bar (`tags:name` \
-             filters by tag).",
+            "The query is free text or QueryExpr JSON with explicit `any`; \
+             RunSearch carries the same string to the search bar.",
         )
         .with(
             "selection.wikilink.title",
@@ -720,6 +722,8 @@ fn catalog_en() -> StringCatalog {
             "The name or the path of the note, extension included if it is not \
              `.md`. Absent = «Untitled».",
         )
+        .with("note.create.properties.title", "Initial properties")
+        .with("note.create.properties.desc", "A JSON object encoded as text with the initial frontmatter properties, saved atomically with the note.")
         .with("note.rename.title", "Rename note")
         .with(
             "note.rename.desc",
@@ -1030,6 +1034,7 @@ impl CoreCommands {
             // gesto giusto. Il perché sta nella 0081.
             command(NOTES_CREATE)
                 .with_param(parameter(NOTES_CREATE, "name", ParamKind::Text))
+                .with_param(parameter(NOTES_CREATE, "properties", ParamKind::Text))
                 // --- strutturali (decisione 0013) ---------------------------------------
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_RENAME)
@@ -1433,12 +1438,73 @@ fn plan(summary: Text, docs: Vec<DocId>) -> CommandOutcome {
     CommandOutcome::done().with_effect(CommandEffect::Plan(plan))
 }
 
+/// The command parameter is text because ParamKind has no object variant.
+/// Reject duplicate keys before JSON-to-map conversion and never interpolate
+/// untrusted strings into YAML: the serializer quotes keys and scalar values.
+fn initial_properties(raw: Option<&str>) -> Result<String, PluginError> {
+    let Some(raw) = raw else {
+        return Ok(String::new());
+    };
+    if raw.len() > 64 * 1024 {
+        return Err(PluginError::BadArgs(
+            "note.create: proprietà troppo grandi".into(),
+        ));
+    }
+    struct UniqueProperties;
+    impl<'de> serde::de::Visitor<'de> for UniqueProperties {
+        type Value = serde_json::Map<String, serde_json::Value>;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("un oggetto JSON di proprietà")
+        }
+        fn visit_map<M: serde::de::MapAccess<'de>>(
+            self,
+            mut map: M,
+        ) -> Result<Self::Value, M::Error> {
+            let mut values = serde_json::Map::new();
+            while let Some((key, value)) = map.next_entry::<String, serde_json::Value>()? {
+                if key.trim().is_empty()
+                    || key.trim() != key
+                    || key.len() > 256
+                    || key.contains('\n')
+                    || key.contains('\r')
+                {
+                    return Err(serde::de::Error::custom("chiave proprietà non valida"));
+                }
+                if values.len() >= 128 {
+                    return Err(serde::de::Error::custom("troppe proprietà"));
+                }
+                if values.insert(key, value).is_some() {
+                    return Err(serde::de::Error::custom("chiave proprietà duplicata"));
+                }
+            }
+            Ok(values)
+        }
+    }
+    let mut deserializer = serde_json::Deserializer::from_str(raw);
+    let values = serde::de::Deserializer::deserialize_map(&mut deserializer, UniqueProperties)
+        .map_err(|e| PluginError::BadArgs(format!("note.create: proprietà JSON: {e}").into()))?;
+    deserializer
+        .end()
+        .map_err(|e| PluginError::BadArgs(format!("note.create: proprietà JSON: {e}").into()))?;
+    if values.is_empty() {
+        return Ok(String::new());
+    }
+    let yaml = serde_yaml_ng::to_string(&values)
+        .map_err(|e| PluginError::BadArgs(format!("note.create: proprietà YAML: {e}").into()))?;
+    if yaml.len() > 64 * 1024 {
+        return Err(PluginError::BadArgs(
+            "note.create: frontmatter troppo grande".into(),
+        ));
+    }
+    Ok(format!("---\n{yaml}---\n"))
+}
 fn notes_create(
     args: Args<'_>,
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
     let requested = args.text("name").map(str::trim).filter(|n| !n.is_empty());
+    let initial = initial_properties(args.text("properties"))?;
     let id = match requested {
         Some(name) => DocId::new(with_extension(name)),
         // Il nome libero lo chiede all'host: la convenzione D3 è una sola, e
@@ -1452,7 +1518,7 @@ fn notes_create(
 
     // `create_document` e non `write_document`: se il path è occupato questo
     // comando deve fallire, non sovrascrivere una nota dell'utente.
-    host.create_document(&id, "")?;
+    host.create_document(&id, &initial)?;
     let notify = one(D_CREATE, A_DOC, id.as_str());
     // L'inverso di «crea» è «cestina», ed è un comando che sta in questo stesso
     // registro: l'annullamento non ha bisogno di un verbo suo (§13.3). Che sia
@@ -1713,23 +1779,152 @@ fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcom
 
 // intero.
 // ---------------------------------------------------------------------------
-// vault.archive — il cliente di `run_command`
-
+// vault.archive — durable batch intent and deterministic recovery
 // ---------------------------------------------------------------------------
 const ARCHIVE: &str = "Archivio";
+const ARCHIVE_RECOVERY: &str = "archive-recovery.json";
+const ARCHIVE_SCHEMA: u32 = 1;
 
-/// La cartella in cui archiviare, quando non è stata detta.
-/// Sposta N note in una cartella **invocando `note.rename`**, non rinominando.
-///
-/// È la forma che la decisione 0013 voleva provare: una macro non rifà ciò che un comando
-/// già sa fare, lo chiama. Tre conseguenze che si vedono solo qui:
-///
-/// - la riscrittura dei wikilink arriva **gratis**, perché la fa il comando
-///   invocato: questa funzione non nomina nemmeno un link;
-/// - simulare la macro simula i passi, perché il modo viaggia con l'host e non
-///   con la chiamata — e il piano che ne esce è l'unione dei loro;
-/// - l'attore e il lotto restano quelli di chi ha chiesto: N rinomine, che sono
-///   N riscritture di M sorgenti, sono **un** `batch-ended` e una riga sola
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ArchiveBatch {
+    schema_version: u32,
+    items: Vec<ArchiveItem>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ArchiveItem {
+    from: DocId,
+    to: DocId,
+    preimage: Revision,
+    status: ArchiveStatus,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "error", rename_all = "snake_case")]
+enum ArchiveStatus {
+    Pending,
+    Done,
+    Failed(PluginError),
+}
+
+/// The completed source paths and typed failures of an archive recovery pass.
+/// Repeated calls after a completed batch return empty vectors.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ArchiveRecovery {
+    pub done: Vec<DocId>,
+    pub failures: Vec<Failure>,
+}
+
+fn archive_store(host: &mut dyn HostApi, batch: &ArchiveBatch) -> Result<(), PluginError> {
+    let bytes = serde_json::to_vec(batch)
+        .map_err(|error| PluginError::Internal(format!("{ARCHIVE_RECOVERY}: {error}").into()))?;
+    host.data_write(ARCHIVE_RECOVERY, &bytes)
+}
+
+fn archive_revision(host: &dyn HostApi, doc: &DocId) -> Result<Option<Revision>, PluginError> {
+    match host.document_revision(doc) {
+        Ok(revision) => Ok(Some(revision)),
+        Err(PluginError::NotFound(_)) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+enum ArchivePosition {
+    Moved,
+    Ready,
+    Conflict,
+}
+
+fn archive_position(
+    host: &dyn HostApi,
+    item: &ArchiveItem,
+) -> Result<ArchivePosition, PluginError> {
+    let source = archive_revision(host, &item.from)?;
+    let destination = archive_revision(host, &item.to)?;
+    Ok(match (source, destination) {
+        (None, Some(revision)) if revision == item.preimage => ArchivePosition::Moved,
+        (Some(revision), None) if revision == item.preimage => ArchivePosition::Ready,
+        _ => ArchivePosition::Conflict,
+    })
+}
+
+fn archive_conflict(item: &ArchiveItem) -> PluginError {
+    PluginError::Conflict(
+        format!(
+            "archiviazione di {} in {}: origine o destinazione cambiata",
+            item.from, item.to
+        )
+        .into(),
+    )
+}
+
+/// Resume one authoritative archive batch. Only an unchanged source with an
+/// empty destination can be moved; an already moved item is never moved twice.
+/// A conflict is terminal for that item, not for the independent tail.
+pub fn recover_archive_batch(host: &mut dyn HostApi) -> Result<ArchiveRecovery, PluginError> {
+    let Some(bytes) = host.data_read(ARCHIVE_RECOVERY)? else {
+        return Ok(ArchiveRecovery::default());
+    };
+    let mut batch: ArchiveBatch = serde_json::from_slice(&bytes)
+        .map_err(|error| PluginError::Internal(format!("{ARCHIVE_RECOVERY}: {error}").into()))?;
+    if batch.schema_version != ARCHIVE_SCHEMA {
+        return Err(PluginError::Internal(
+            format!(
+                "{ARCHIVE_RECOVERY}: unsupported schema {}",
+                batch.schema_version
+            )
+            .into(),
+        ));
+    }
+
+    let mut report = ArchiveRecovery::default();
+    for index in 0..batch.items.len() {
+        let item = &batch.items[index];
+        let status = match &item.status {
+            ArchiveStatus::Done => {
+                report.done.push(item.from.clone());
+                continue;
+            }
+            ArchiveStatus::Failed(error) => {
+                report
+                    .failures
+                    .push(Failure::of(item.from.clone(), error.clone()));
+                continue;
+            }
+            ArchiveStatus::Pending => match archive_position(host, item)? {
+                ArchivePosition::Moved => ArchiveStatus::Done,
+                ArchivePosition::Conflict => ArchiveStatus::Failed(archive_conflict(item)),
+                ArchivePosition::Ready => {
+                    let result = host.rename_document(&item.from, &item.to);
+                    // A backlink update may fail *after* the underlying rename.
+                    // Reclassification, not the returned error, decides whether
+                    // this move belongs to the completed batch.
+                    match archive_position(host, item)? {
+                        ArchivePosition::Moved => ArchiveStatus::Done,
+                        ArchivePosition::Conflict => ArchiveStatus::Failed(archive_conflict(item)),
+                        ArchivePosition::Ready => ArchiveStatus::Failed(
+                            result.err().unwrap_or_else(|| archive_conflict(item)),
+                        ),
+                    }
+                }
+            },
+        };
+        match &status {
+            ArchiveStatus::Done => report.done.push(batch.items[index].from.clone()),
+            ArchiveStatus::Failed(error) => report
+                .failures
+                .push(Failure::of(batch.items[index].from.clone(), error.clone())),
+            ArchiveStatus::Pending => unreachable!(),
+        }
+        batch.items[index].status = status;
+        archive_store(host, &batch)?;
+    }
+    host.data_remove(ARCHIVE_RECOVERY)?;
+    Ok(report)
+}
+
+/// Dry-run composes nested rename plans; apply first records every revision and
+/// destination, then drives the same recovery path used after a restart.
 fn vault_archive(
     args: Args<'_>,
     mode: InvokeMode,
@@ -1746,48 +1941,26 @@ fn vault_archive(
         .trim_end_matches('/')
         .to_string();
 
-    let mut plans: Vec<CommandPlan> = Vec::new();
-    let mut made = 0usize;
-    let mut failed: Vec<Failure> = Vec::new();
-    //   nella storia di chi guarda gli eventi.
-    // I passi dell'annullamento della macro sono quelli dei comandi invocati.
-    // È la terza cosa che si compone gratis passando da `run_command` — dopo il
-    // piano e il lotto — e la sola che questa funzione deve **girare**: si
-    let mut back: Vec<UndoStep> = Vec::new();
-
-    for doc in &docs {
-        let name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
-        let to = format!("{folder}/{name}");
-        if to == doc.as_str() {
-            continue; // già archiviata: non è un errore, è niente da fare
-        }
-        let args = serde_json::json!({ "doc": doc.as_str(), "to": to });
-        match host.run_command(NOTES_RENAME, args) {
-            // torna indietro dall'ultima rinomina, non dalla prima.
-            // In simulazione il comando invocato risponde col proprio piano —
-            // non perché questa funzione glielo abbia chiesto, ma perché
-            Ok(CommandOutcome {
+    if mode.is_dry_run() {
+        let mut plans: Vec<CommandPlan> = Vec::new();
+        for doc in &docs {
+            let name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
+            let to = format!("{folder}/{name}");
+            if to == doc.as_str() {
+                continue;
+            }
+            let args = serde_json::json!({ "doc": doc.as_str(), "to": to });
+            if let Ok(CommandOutcome {
                 effect: CommandEffect::Plan(plan),
                 ..
-            }) => plans.push(plan),
-            Ok(outcome) => {
-                made += 1;
-                if let Some(undo) = outcome.undo {
-                    back.extend(undo.steps);
-                }
+            }) = host.run_command(NOTES_RENAME, args)
+            {
+                plans.push(plan);
             }
-            Err(and) => failed.push(Failure::of(doc.clone(), and)),
         }
-    }
-    back.reverse();
-
-    if mode.is_dry_run() {
-        // l'host in cui gira è già quello di una simulazione.
-        // L'unione dei piani dei passi. `docs` prima di `edits` perché è
-        // l'ordine in cui le cose succederebbero, e `complete()` dell'host
+        // The host propagates dry-run to the nested renames; combine their
+        // plans, preserving the first appearance of each affected document.
         let mut touched_docs: Vec<DocId> = Vec::new();
-        // ricontrolla comunque che nessun edit nomini una nota assente.
-        // La membership sta nell'insieme; l'ordine di prima comparsa lo
         let mut seen: HashSet<DocId> = HashSet::new();
         let mut edits: Vec<PlannedEdit> = Vec::new();
         for plan in plans {
@@ -1805,16 +1978,103 @@ fn vault_archive(
         }
         return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
     }
+    // An earlier invocation owns the single intent slot until recovery has
+    // classified every item. Never replace that record with the new batch, and
+    // never hide a terminal conflict behind the outcome of a later request.
+    let previous = recover_archive_batch(host)?;
+    if !previous.failures.is_empty() {
+        let made = previous.done.len();
+        let total = made + previous.failures.len();
+        let notify = archive(
+            D_ARCHIVE_PARTIAL,
+            made,
+            &folder,
+            Some(why(&previous.failures)),
+        );
+        return Ok(CommandOutcome::notify(notify).partially(Partial::of(
+            total,
+            made,
+            previous.failures,
+        )));
+    }
 
+    let mut batch = ArchiveBatch {
+        schema_version: ARCHIVE_SCHEMA,
+        items: Vec::new(),
+    };
+    let mut failed = Vec::new();
+    let mut candidates = Vec::new();
+    let mut sources = HashMap::<DocId, usize>::new();
+    let mut destinations = HashMap::<DocId, usize>::new();
+    for doc in &docs {
+        let name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
+        let path = format!("{folder}/{name}");
+        if path == doc.as_str() {
+            continue;
+        }
+        let to = DocId::new(with_extension(&path));
+        *sources.entry(doc.clone()).or_default() += 1;
+        *destinations.entry(to.clone()).or_default() += 1;
+        candidates.push((doc.clone(), to));
+    }
+    for (doc, to) in candidates {
+        // Inspect *both* paths of *every* candidate before writing an intent.
+        // In particular an occupied destination cannot be silently replaced.
+        let source = archive_revision(host, &doc);
+        let destination = archive_revision(host, &to);
+        let repeated_source = sources[&doc] > 1;
+        let repeated_destination = destinations[&to] > 1;
+        let error = if repeated_source || repeated_destination || to == doc {
+            Some(PluginError::Conflict(
+                format!("archiviazione ambigua: {} → {}", doc, to).into(),
+            ))
+        } else {
+            match (
+                source.as_ref().map(Option::as_ref),
+                destination.as_ref().map(Option::as_ref),
+            ) {
+                (Err(error), _) | (_, Err(error)) => Some(error.clone()),
+                (Ok(None), _) => Some(PluginError::NotFound(doc.to_string().into())),
+                (_, Ok(Some(_))) => Some(PluginError::AlreadyExists(to.to_string().into())),
+                (Ok(Some(_)), Ok(None)) => None,
+            }
+        };
+        if let Some(error) = error {
+            failed.push(Failure::of(doc.clone(), error));
+        } else if let Ok(Some(preimage)) = source {
+            batch.items.push(ArchiveItem {
+                from: doc.clone(),
+                to,
+                preimage,
+                status: ArchiveStatus::Pending,
+            });
+        }
+    }
+
+    // A bad member rejects the *entire* fresh batch; the failures still name
+    // every invalid member, while successful members remain untouched.
+    let report = if failed.is_empty() && !batch.items.is_empty() {
+        archive_store(host, &batch)?;
+        recover_archive_batch(host)?
+    } else {
+        ArchiveRecovery::default()
+    };
+    let made = report.done.len();
+    failed.extend(report.failures);
+    let mut back = Vec::with_capacity(made);
+    for doc in report.done.into_iter().rev() {
+        let name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
+        let to = with_extension(&format!("{folder}/{name}"));
+        back.push(UndoStep::Command {
+            command: NOTES_RENAME.into(),
+            args: serde_json::json!({ "doc": to, "to": doc.as_str() }),
+        });
+    }
     let notify = if failed.is_empty() {
         archive(D_ARCHIVE, made, &folder, None)
     } else {
         archive(D_ARCHIVE_PARTIAL, made, &folder, Some(why(&failed)))
     };
-    // dà comunque il Vec, che è l'ordine in cui i passi succederebbero.
-    // `docs.len()` e non `fatte + falliti.len()`: le note già nella cartella
-    // sono state guardate e non c'era niente da fare, il che è esattamente il
-    // resto che `Partial` lascia senza un campo. Contarle fuori direbbe «undici
     let count = Partial::of(docs.len(), made, failed);
     Ok(CommandOutcome::notify(notify)
         .undoable(Undo {
@@ -1823,8 +2083,6 @@ fn vault_archive(
         })
         .partially(count))
 }
-
-// su undici» di un gesto che l'utente ha fatto su dodici note.
 // ---------------------------------------------------------------------------
 // note.task.toggle
 
@@ -2387,7 +2645,7 @@ mod tests {
     use fub_abi::session::{SelectionSet, ViewContext};
     use fub_abi::settings::SettingSpec;
     use fub_abi::text::Strings;
-    use fub_abi::traits::VaultRead;
+    use fub_abi::traits::{DataRead, VaultRead};
     use fub_sdk::testing::MemoryHost;
     use serde_json::json;
 
@@ -2406,6 +2664,38 @@ mod tests {
             .expect("comando dichiarato");
         spec.validate_args(&args)?;
         CoreCommands.invoke(command, args, mode, host)
+    }
+    #[test]
+    fn creation_persists_prefilled_properties_atomically_and_rejects_duplicate_keys() {
+        let mut host = MemoryHost::new();
+        let outcome = invoke(&mut host, NOTES_CREATE, json!({
+            "name": "Boards/Card",
+            "properties": r#"{"status":"ready","rating":2,"tags":["a","b"],"metadata":{"owner":"x:y"}}"#
+        }), InvokeMode::Apply).unwrap();
+        assert!(matches!(outcome.effect, CommandEffect::Navigate { .. }));
+        let source = host.read_document(&DocId::new("Boards/Card.md")).unwrap();
+        let content = source
+            .strip_prefix("---\n")
+            .unwrap()
+            .strip_suffix("---\n")
+            .unwrap();
+        let yaml: serde_json::Value = serde_yaml_ng::from_str(content).unwrap();
+        assert_eq!(
+            yaml,
+            json!({"status":"ready","rating":2,"tags":["a","b"],"metadata":{"owner":"x:y"}})
+        );
+        assert!(invoke(
+            &mut host,
+            NOTES_CREATE,
+            json!({
+                "name": "Boards/Duplicate", "properties": r#"{"status":1,"status":2}"#
+            }),
+            InvokeMode::Apply
+        )
+        .is_err());
+        assert!(host
+            .read_document(&DocId::new("Boards/Duplicate.md"))
+            .is_err());
     }
 
     // Come farebbe il kernel: prima la convalida contro la spec, poi la
@@ -2461,14 +2751,14 @@ mod tests {
         let outcome = invoke(
             &mut host,
             SEARCH_OPEN,
-            json!({ "query": "tags:rust" }),
+            json!({ "query": "{\"any\":[{\"all\":[{\"negated\":false,\"predicate\":{\"kind\":\"tag\",\"name\":\"rust\",\"descendants\":false}}]}]}" }),
             InvokeMode::Apply,
         )
         .expect("cerca");
         assert_eq!(
             outcome.effect,
             CommandEffect::RunSearch {
-                query: "tags:rust".into()
+                query: "{\"any\":[{\"all\":[{\"negated\":false,\"predicate\":{\"kind\":\"tag\",\"name\":\"rust\",\"descendants\":false}}]}]}".into()
             }
         );
     }
@@ -2903,5 +3193,217 @@ mod tests {
             plan(&outcome).is_empty(),
             "elenco vuoto = nessuna nota, non «tutte»: è ciò che la spec dichiara"
         );
+    }
+    #[test]
+    fn archive_preflight_rejects_every_invalid_member_without_moving_anything() {
+        let mut host = MemoryHost::new()
+            .with_document("a.md", "a")
+            .with_document("c.md", "c")
+            .with_document("Archivio/c.md", "someone else");
+        let outcome = invoke(
+            &mut host,
+            VAULT_ARCHIVE,
+            json!({ "docs": ["a.md", "missing.md", "c.md"] }),
+            InvokeMode::Apply,
+        )
+        .expect("preflight reports all failures");
+        let partial = outcome.partial.expect("the batch was rejected");
+        assert_eq!((partial.attempted, partial.done), (3, 0));
+        assert_eq!(partial.failures.len(), 2);
+        assert!(matches!(
+            partial.failures[0].error,
+            PluginError::NotFound(_)
+        ));
+        assert!(matches!(
+            partial.failures[1].error,
+            PluginError::AlreadyExists(_)
+        ));
+        assert_eq!(host.read_document(&DocId::new("a.md")).unwrap(), "a");
+        assert!(matches!(
+            host.document_revision(&DocId::new("Archivio/a.md")),
+            Err(PluginError::NotFound(_))
+        ));
+        assert!(host.data_read(ARCHIVE_RECOVERY).unwrap().is_none());
+        assert_eq!(host.writes_on(ARCHIVE_RECOVERY).0, 0);
+    }
+
+    #[test]
+    fn archive_preflight_rejects_two_sources_claiming_one_destination() {
+        let mut host = MemoryHost::new()
+            .with_document("one/same.md", "first")
+            .with_document("two/same.md", "second");
+        let outcome = invoke(
+            &mut host,
+            VAULT_ARCHIVE,
+            json!({ "docs": ["one/same.md", "two/same.md"] }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        let partial = outcome.partial.expect("duplicate destinations conflict");
+        assert_eq!(partial.done, 0);
+        assert_eq!(partial.failures.len(), 2);
+        assert!(partial
+            .failures
+            .iter()
+            .all(|failure| matches!(&failure.error, PluginError::Conflict(_))));
+        assert_eq!(
+            host.read_document(&DocId::new("one/same.md")).unwrap(),
+            "first"
+        );
+        assert_eq!(
+            host.read_document(&DocId::new("two/same.md")).unwrap(),
+            "second"
+        );
+        assert!(host.data_read(ARCHIVE_RECOVERY).unwrap().is_none());
+        assert_eq!(host.writes_on(ARCHIVE_RECOVERY).0, 0);
+    }
+
+    #[test]
+    fn archive_never_renames_without_a_durable_intent() {
+        let mut host = MemoryHost::new().with_document("a.md", "original");
+        host.denies_write(ARCHIVE_RECOVERY);
+        let error = invoke(
+            &mut host,
+            VAULT_ARCHIVE,
+            json!({ "docs": ["a.md"] }),
+            InvokeMode::Apply,
+        )
+        .expect_err("an unwritable intent stops the batch");
+        assert!(matches!(error, PluginError::Io(_)));
+        assert_eq!(host.read_document(&DocId::new("a.md")).unwrap(), "original");
+        assert!(matches!(
+            host.document_revision(&DocId::new("Archivio/a.md")),
+            Err(PluginError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn archive_recovery_resumes_after_persisted_and_unpersisted_moves() {
+        let mut host = MemoryHost::new()
+            .with_document("a.md", "a")
+            .with_document("b.md", "b")
+            .with_document("c.md", "c");
+        let mut items: Vec<ArchiveItem> = ["a.md", "b.md", "c.md"]
+            .into_iter()
+            .map(|from| ArchiveItem {
+                from: DocId::new(from),
+                to: DocId::new(format!("Archivio/{from}")),
+                preimage: host.document_revision(&DocId::new(from)).unwrap(),
+                status: ArchiveStatus::Pending,
+            })
+            .collect();
+        items[0].status = ArchiveStatus::Done;
+        archive_store(
+            &mut host,
+            &ArchiveBatch {
+                schema_version: ARCHIVE_SCHEMA,
+                items,
+            },
+        )
+        .unwrap();
+        host.rename_of_hidden("a.md", "Archivio/a.md");
+        host.rename_of_hidden("b.md", "Archivio/b.md"); // crash before its status write
+
+        let report = recover_archive_batch(&mut host).unwrap();
+        assert_eq!(
+            report.done,
+            ["a.md", "b.md", "c.md"].map(DocId::new).to_vec()
+        );
+        assert!(report.failures.is_empty());
+        assert_eq!(
+            host.read_document(&DocId::new("Archivio/c.md")).unwrap(),
+            "c"
+        );
+        assert!(host.data_read(ARCHIVE_RECOVERY).unwrap().is_none());
+        let again = recover_archive_batch(&mut host).unwrap();
+        assert!(again.done.is_empty() && again.failures.is_empty());
+    }
+
+    #[test]
+    fn archive_recovery_conflicts_on_external_revision_without_overwriting_tail() {
+        let mut host = MemoryHost::new()
+            .with_document("a.md", "original")
+            .with_document("b.md", "tail");
+        let items = ["a.md", "b.md"]
+            .into_iter()
+            .map(|from| ArchiveItem {
+                from: DocId::new(from),
+                to: DocId::new(format!("Archivio/{from}")),
+                preimage: host.document_revision(&DocId::new(from)).unwrap(),
+                status: ArchiveStatus::Pending,
+            })
+            .collect();
+        archive_store(
+            &mut host,
+            &ArchiveBatch {
+                schema_version: ARCHIVE_SCHEMA,
+                items,
+            },
+        )
+        .unwrap();
+        host.forgets_document("a.md");
+        host = host.with_document("a.md", "external edit");
+
+        let report = recover_archive_batch(&mut host).unwrap();
+        assert_eq!(report.done, vec![DocId::new("b.md")]);
+        assert_eq!(report.failures.len(), 1);
+        assert!(matches!(report.failures[0].error, PluginError::Conflict(_)));
+        assert_eq!(
+            host.read_document(&DocId::new("a.md")).unwrap(),
+            "external edit"
+        );
+        assert!(matches!(
+            host.document_revision(&DocId::new("Archivio/a.md")),
+            Err(PluginError::NotFound(_))
+        ));
+        assert_eq!(
+            host.read_document(&DocId::new("Archivio/b.md")).unwrap(),
+            "tail"
+        );
+        assert!(host.data_read(ARCHIVE_RECOVERY).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_new_archive_request_surfaces_an_earlier_conflict_before_starting() {
+        let mut host = MemoryHost::new()
+            .with_document("a.md", "external edit")
+            .with_document("c.md", "fresh request");
+        archive_store(
+            &mut host,
+            &ArchiveBatch {
+                schema_version: ARCHIVE_SCHEMA,
+                items: vec![ArchiveItem {
+                    from: DocId::new("a.md"),
+                    to: DocId::new("Archivio/a.md"),
+                    preimage: Revision::of("original"),
+                    status: ArchiveStatus::Pending,
+                }],
+            },
+        )
+        .unwrap();
+
+        let outcome = invoke(
+            &mut host,
+            VAULT_ARCHIVE,
+            json!({ "docs": ["c.md"] }),
+            InvokeMode::Apply,
+        )
+        .expect("the earlier conflict is an observable partial outcome");
+        let partial = outcome.partial.expect("the previous batch conflicted");
+        assert_eq!((partial.attempted, partial.done), (1, 0));
+        assert_eq!(partial.failures.len(), 1);
+        assert_eq!(partial.failures[0].subject, Some(DocId::new("a.md")));
+        assert!(matches!(
+            partial.failures[0].error,
+            PluginError::Conflict(_)
+        ));
+        assert_eq!(
+            host.read_document(&DocId::new("c.md")).unwrap(),
+            "fresh request"
+        );
+        assert!(matches!(
+            host.document_revision(&DocId::new("Archivio/c.md")),
+            Err(PluginError::NotFound(_))
+        ));
     }
 }

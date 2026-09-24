@@ -31,7 +31,9 @@ import type { Tone } from "./notify";
 import { type Key, t } from "../i18n/strings";
 import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
 import { enterSurface, exitSurface } from "./motion";
-import { state } from "../state/store";
+import { readState, state, writeState } from "../state/store";
+import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
+import { openLifetime, type Lifetime } from "./lifetime";
 
 /// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
 /// all'utente, e mettere in salvo i buffer prima di un comando che scrive. Il
@@ -131,6 +133,18 @@ export function needsPlan(spec: CommandSpec): boolean {
   // sola.
   if (!spec.scope.reversible) return true;
   return spec.scope.reach !== "document";
+}
+
+/// Il piano si può applicare?
+///
+/// Per un comando che tocca note, un piano senza note è «niente da fare»: una
+/// sostituzione senza occorrenze non merita un pulsante. Per chi agisce sul
+/// vault, sulle impostazioni o sulla sessione — una cartella nuova, un
+/// collegamento esterno, un valore di configurazione — l'elenco delle note è
+/// vuoto per natura, e ciò che si approva è il sommario.
+export function planApplies(spec: CommandSpec, plan: CommandPlan): boolean {
+  if (plan.docs.length > 0) return true;
+  return spec.scope.reach !== "document" && spec.scope.reach !== "documents";
 }
 
 /// Il raggio dichiarato, come **chiave** e non come parola.
@@ -257,6 +271,65 @@ export function planLines(plan: CommandPlan): string[] {
     return t("palette.plan_edits", { doc: name, count: n });
   });
 }
+// --- recenti e preferiti (P06/F16), puri e senza DOM -------------------------
+//
+// La palette ricorda ciò che si è lanciato — non ciò che si è digitato — e
+// propone in cima i recenti, poi i preferiti che esistono ancora. Le due
+// liste vivono nello stato di vista della shell (chiave `palette`), con lo
+// stesso tetto di lettura della cronologia note/ricerche: dieci voci che si
+// guardano in un colpo d'occhio. I preferiti li sceglie la persona, i recenti
+// li sceglie l'uso: mescolarli darebbe una lista che non si sa leggere.
+
+/// Quanti comandi si ricordano, per elenco. Dieci come le recenti note/ricerche.
+export const PALETTE_HISTORY_LIMIT = 10;
+
+/// La forma persistita: due elenchi di id di comando, dalla più recente.
+export interface PaletteHistory {
+  recent: string[];
+  favorites: string[];
+}
+
+/// Da JSON alle due liste, scartando ciò che non regge la forma. Severa come
+/// `parseLayout` e `readLists`: il file lo si apre con un editor di testo, e
+/// una voce non-stringa non deve arrivare fino al registro come se fosse un id.
+export function parsePaletteHistory(v: unknown): PaletteHistory {
+  const empty: PaletteHistory = { recent: [], favorites: [] };
+  if (!v || typeof v !== "object") return empty;
+  const o = v as Record<string, unknown>;
+  const list = (x: unknown): string[] =>
+    Array.isArray(x)
+      ? x.filter((e): e is string => typeof e === "string" && e !== "").slice(0, PALETTE_HISTORY_LIMIT)
+      : [];
+  return { recent: list(o.recent), favorites: list(o.favorites) };
+}
+
+/// I comandi in ordine di proposta: prima i preferiti che esistono ancora
+/// (nell'ordine scelto dalla persona), poi i recenti che esistono ancora e
+/// non sono già preferiti, poi tutto il resto nell'ordine del registro.
+/// Pura, per il banco: l'ordine del registro non si tocca, lo si attraversa.
+export function orderCommands(entries: CommandEntry[], history: PaletteHistory): CommandEntry[] {
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const seen = new Set<string>();
+  const out: CommandEntry[] = [];
+  for (const id of history.favorites) {
+    const entry = byId.get(id);
+    if (entry && !seen.has(id)) {
+      seen.add(id);
+      out.push(entry);
+    }
+  }
+  for (const id of history.recent) {
+    const entry = byId.get(id);
+    if (entry && !seen.has(id)) {
+      seen.add(id);
+      out.push(entry);
+    }
+  }
+  for (const entry of entries) {
+    if (!seen.has(entry.id)) out.push(entry);
+  }
+  return out;
+}
 
 // --- la palette vera e propria ---------------------------------------------
 
@@ -266,8 +339,73 @@ const OPTION_ID_PREFIX = `${OVERLAY_ID}-option`;
 
 /// Come si scioglie la trappola del fuoco della palette aperta.
 let releasePalette: (() => void) | null = null;
+let slashOwner: HTMLElement | null = null;
+let slashLife: Lifetime | null = null;
 let paletteGeneration = 0;
+/// I recenti e i preferiti di questa macchina, come letti l'ultima volta.
+/// Partono vuoti: `loadPaletteHistory` li rilegge all'apertura del vault.
+let paletteHistory: PaletteHistory = { recent: [], favorites: [] };
+
+/// Rilegge recenti e preferiti dal disco. Assente non è un errore: è il primo
+/// avvio. Un valore che non regge la forma vale come nessun valore.
+export async function loadPaletteHistory(): Promise<void> {
+  paletteHistory = parsePaletteHistory(await readState<unknown>(PALETTE_KEY));
+}
+
+/// La memoria com'era all'ultimo lancio riuscito, per i banchi.
+export function paletteHistoryForTest(): PaletteHistory {
+  return paletteHistory;
+}
+
+/// Ricorda un lancio riuscito: la cosa in cima, senza doppioni, al tetto.
+/// Pura la regola, impura la scrittura — come `rememberSearch`.
+export function rememberCommand(id: string): void {
+  paletteHistory = {
+    recent: [id, ...paletteHistory.recent.filter((c) => c !== id)].slice(0, PALETTE_HISTORY_LIMIT),
+    favorites: paletteHistory.favorites,
+  };
+  persistPaletteHistory();
+}
+
+/// Preferito o non più: la scelta della persona, non dell'uso. Torna il nuovo stato.
+export function toggleFavorite(id: string): boolean {
+  const favored = !paletteHistory.favorites.includes(id);
+  paletteHistory = {
+    recent: paletteHistory.recent,
+    favorites: favored
+      ? [...paletteHistory.favorites, id].slice(-PALETTE_HISTORY_LIMIT)
+      : paletteHistory.favorites.filter((c) => c !== id),
+  };
+  persistPaletteHistory();
+  return favored;
+}
+
+/// Solo per i banchi: rilegge la memoria senza toccare il disco.
+export function setPaletteHistoryForTest(history: PaletteHistory): void {
+  paletteHistory = parsePaletteHistory(history);
+}
+
+/// Mette via le due liste. Best effort come `writeState`: una memoria di
+/// comandi non deve fermare un lancio.
+function persistPaletteHistory(): void {
+  writeState(
+    PALETTE_KEY,
+    paletteHistory.recent.length === 0 && paletteHistory.favorites.length === 0
+      ? null
+      : paletteHistory,
+  );
+}
+
+/// La chiave dello stato di vista in cui la palette ricorda recenti e
+/// preferiti. Il vault non entra nella chiave: lo mette lo store da sé.
+/// Macchina e non vault: i comandi di shell esistono prima di ogni vault, e
+/// la memoria è di chi guarda, non di ciò che si guarda.
+export const PALETTE_KEY = "palette";
+
 export function closeCommandPalette() {
+  slashLife?.close();
+  slashLife = null;
+  slashOwner = null;
   paletteGeneration += 1;
   const overlay = document.getElementById(OVERLAY_ID);
   releasePalette?.();
@@ -292,7 +430,240 @@ export async function openCommandPalette(host: PaletteHost) {
     return;
   }
   if (generation !== paletteGeneration) return;
-  chooseSpecs(allCommands(), openOverlay(), host);
+  chooseSpecs(orderCommands(allCommands(), paletteHistory), openOverlay(), host);
+}
+
+/// Slash shares the command registry, ordering, save queue and outcome delivery
+/// with the palette. The editor supplies only its current buffer context; the
+/// popup never stores a DOM offset or edits the buffer itself.
+export async function openSlashPalette(
+  owner: HTMLElement,
+  selection: string,
+  isCurrent: () => boolean,
+  host: Pick<PaletteHost, "onEffect" | "notify" | "flushPendingSave"> & {
+    publishContext(): Promise<void>;
+  },
+): Promise<void> {
+  closeCommandPalette();
+  slashOwner = owner;
+  const generation = paletteGeneration;
+  const life = openLifetime();
+  slashLife = life;
+  life.listen(document, "focusin", (event) => {
+    const target = event.target;
+    const overlay = document.getElementById(OVERLAY_ID);
+    if (target instanceof Node && (owner.contains(target) || overlay?.contains(target))) return;
+    closeSlashPalette(owner);
+  });
+  let specs: CommandSpec[];
+  try {
+    specs = await api.listCommands();
+    await loadKeyOverrides();
+  } catch (error) {
+    if (generation === paletteGeneration) {
+      host.notify(t("palette.unavailable", { reason: errorText(error) }), "guasto");
+      closeSlashPalette(owner);
+    }
+    return;
+  }
+  if (generation !== paletteGeneration || !isCurrent()) {
+    closeSlashPalette(owner);
+    return;
+  }
+  state.commandSpecs = specs;
+  const doc = slashContextDoc();
+  const allowed = new Set(
+    slashCandidates(specs)
+      .filter((spec) => slashArgs(spec, selection, doc) !== null)
+      .map((spec) => spec.id),
+  );
+  const entries = orderCommands(allCommands(), paletteHistory).filter((entry) => allowed.has(entry.id));
+  const box = openOverlay(false);
+  box.innerHTML = "";
+  const input = document.createElement("input");
+  input.className = "palette-input";
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-label", t("palette.title"));
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-haspopup", "listbox");
+  const list = document.createElement("ul");
+  list.id = LIST_ID;
+  list.className = "plain-list palette-list";
+  list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", t("palette.title"));
+  input.setAttribute("aria-controls", LIST_ID);
+  box.append(input, list);
+  let visible = entries;
+  let selected = 0;
+  let busy = false;
+  const render = () => {
+    visible = filterCommands(entries, input.value);
+    selected = Math.min(selected, Math.max(visible.length - 1, 0));
+    list.replaceChildren();
+    for (const [index, entry] of visible.entries()) {
+      const item = document.createElement("li");
+      item.id = stableIdentifier(OPTION_ID_PREFIX, entry.id);
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(index === selected));
+      item.textContent = entry.title;
+      item.dataset.commandId = entry.id;
+      list.append(item);
+    }
+    if (visible.length) {
+      input.setAttribute("aria-activedescendant", stableIdentifier(OPTION_ID_PREFIX, visible[selected]!.id));
+    } else {
+      input.removeAttribute("aria-activedescendant");
+      const empty = document.createElement("li");
+      empty.id = `${OPTION_ID_PREFIX}-empty`;
+      empty.setAttribute("role", "option");
+      empty.setAttribute("aria-disabled", "true");
+      empty.setAttribute("aria-selected", "false");
+      empty.className = "palette-empty";
+      empty.textContent = t("palette.empty");
+      list.append(empty);
+    }
+  };
+  const current = () => isCurrent() && generation === paletteGeneration && slashOwner === owner;
+  const returnToList = () => {
+    if (!current()) return;
+    box.replaceChildren(input, list);
+    render();
+    input.focus();
+  };
+  const run = async (entry: CommandEntry, args: Record<string, unknown>, approved = false) => {
+    const spec = entry.spec;
+    if (busy || !current() || !spec) return;
+    busy = true;
+    try {
+      const result = await invokeSlash(
+        spec, args, host.flushPendingSave, current, host.publishContext,
+        needsPlan(spec) && !approved ? "dry_run" : "apply",
+      );
+      if (!current() || "cancelled" in result) return;
+      if ("blocked" in result) {
+        host.notify(t("document.unsaved_blocks", { doc: result.blocked.join(", ") }), "guasto");
+        return;
+      }
+      if (!approved && needsPlan(spec) && result.outcome.effect.kind === "plan") {
+        const plan = result.outcome.effect;
+        const heading = document.createElement("div");
+        heading.className = "palette-heading";
+        heading.textContent = entry.title;
+        const summary = document.createElement("div");
+        summary.className = "palette-summary";
+        summary.textContent = plan.summary;
+        const details = document.createElement("ul");
+        details.className = "plain-list palette-plan";
+        for (const line of planLines(plan)) {
+          const row = document.createElement("li");
+          row.textContent = line;
+          details.append(row);
+        }
+        const actions = document.createElement("div");
+        actions.className = "palette-actions";
+        const apply = document.createElement("button");
+        apply.className = spec.scope.reversible ? "primary" : "danger";
+        apply.textContent = t("palette.apply");
+        apply.disabled = !planApplies(spec, plan);
+        const cancel = document.createElement("button");
+        cancel.textContent = t("app.cancel");
+        cancel.addEventListener("click", returnToList);
+        apply.addEventListener("click", () => void run(entry, args, true));
+        actions.append(apply, cancel);
+        box.replaceChildren(heading, summary, details, actions);
+        apply.focus();
+        return;
+      }
+      closeSlashPalette(owner);
+      await deliverOutcome(result.outcome, host, entry.id);
+    } catch (error) {
+      if (current()) host.notify(errorText(error), "guasto");
+    } finally {
+      busy = false;
+    }
+  };
+  const launch = (entry: CommandEntry) => {
+    const spec = entry.spec;
+    if (busy || !current() || !spec) return;
+    const seed = slashArgs(spec, selection, doc);
+    if (seed === null) return;
+    // Offer every unfilled parameter, including optional format/date/template.
+    // An editor selection never implies a UTF-8 byte offset.
+    const missing = spec.params.filter((param) => !(param.name in seed));
+    if (missing.length === 0) {
+      void run(entry, seed);
+      return;
+    }
+    const heading = document.createElement("div");
+    heading.className = "palette-heading";
+    heading.textContent = entry.title;
+    const form = document.createElement("form");
+    form.className = "palette-form";
+    const fields = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
+    for (const param of missing) {
+      const label = document.createElement("label");
+      const name = document.createElement("span");
+      name.className = "palette-label";
+      name.textContent = param.required ? t("palette.required", { title: param.title }) : param.title;
+      const field = fieldFor(param, "palette-docs");
+      if (param.required) field.required = true;
+      fields.set(param.name, field);
+      label.append(name, field);
+      form.append(label);
+    }
+    const actions = document.createElement("div");
+    actions.className = "palette-actions";
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "primary";
+    submit.textContent = t(needsPlan(spec) ? "palette.preview" : "app.run");
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = t("app.cancel");
+    cancel.addEventListener("click", returnToList);
+    actions.append(submit, cancel);
+    form.append(actions);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!current()) return;
+      const raw: Record<string, string | boolean> = {};
+      for (const [name, field] of fields) {
+        raw[name] = field instanceof HTMLInputElement && field.type === "checkbox"
+          ? field.checked : field.value;
+      }
+      void run(entry, { ...seed, ...argsFromForm({ ...spec, params: missing }, raw) });
+    });
+    box.replaceChildren(heading, form);
+    fields.values().next().value?.focus();
+  };
+  life.listen(list, "click", (event) => {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-command-id]") : null;
+    const entry = visible.find((candidate) => candidate.id === target?.dataset.commandId);
+    if (entry) void launch(entry);
+  });
+  life.listen(input, "input", render);
+  life.listen(input, "keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSlashPalette(owner);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!visible.length) return;
+      selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + visible.length) % visible.length;
+      render();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const entry = visible[selected];
+      if (entry) void launch(entry);
+    }
+  });
+  render();
+  input.focus();
+}
+
+export function closeSlashPalette(owner: HTMLElement): void {
+  if (slashOwner === owner) closeCommandPalette();
 }
 
 /// Fa partire **un** comando, saltando la scelta: è la via della scorciatoia.
@@ -310,8 +681,8 @@ export function startCommand(entry: CommandEntry, host: PaletteHost) {
   start(entry, openOverlay(), host);
 }
 
-function openOverlay(): HTMLElement {
-  closeCommandPalette();
+function openOverlay(closePrevious = true): HTMLElement {
+  if (closePrevious) closeCommandPalette();
   let overlay = document.getElementById(OVERLAY_ID);
   if (!overlay) {
     overlay = document.createElement("div");
@@ -406,13 +777,34 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
         kb.textContent = spec.binding;
         row.appendChild(kb);
       }
+      // Il preferito si vede e si toglie da qui: una stella che resta
+      // dov'è, senza una seconda superficie che deve restare d'accordo.
+      const favored = paletteHistory.favorites.includes(spec.id);
+      if (favored) {
+        const star = document.createElement("span");
+        star.className = "palette-favorite";
+        star.textContent = "★";
+        row.appendChild(star);
+      }
 
       const desc = document.createElement("div");
       desc.className = "palette-desc";
       desc.textContent = spec.description;
 
       li.append(row, desc);
-      li.addEventListener("click", () => start(spec, box, host));
+      li.addEventListener("click", (click) => {
+        // Alt+click = preferito, click = lanciare: due gesti su due oggetti
+        // diversi — la memoria e il comando — e il modificatore li separa senza
+        // una seconda riga che diverge alla prima voce aggiunta.
+        if (click.altKey) {
+          click.preventDefault();
+          click.stopPropagation();
+          toggleFavorite(spec.id);
+          render();
+          return;
+        }
+        start(spec, box, host);
+      });
       list.appendChild(li);
     }
     if (visibleItems.length === 0) {
@@ -433,10 +825,6 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
     }
   };
 
-  input.addEventListener("input", () => {
-    selected = 0;
-    render();
-  });
   const handleKey = (e: KeyboardEvent) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -448,12 +836,20 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
     } else if (e.key === "Enter") {
       e.preventDefault();
       const spec = visibleItems[selected];
+      // Alt+Invio = preferito, Invio = lanciare: stesso gesto del click,
+      // stessa separazione — la memoria non passa dal piano né dai parametri.
+      if (spec && e.altKey) {
+        toggleFavorite(spec.id);
+        render();
+        return;
+      }
       if (spec) start(spec, box, host);
     } else if (e.key === "Escape") {
       closeCommandPalette();
     }
   };
   input.addEventListener("keydown", handleKey);
+  input.addEventListener("input", render);
   list.addEventListener("keydown", handleKey);
 
   render();
@@ -467,6 +863,7 @@ function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
   // da mostrare, perché non tocca il vault.
   if (entry.run) {
     closeCommandPalette();
+    rememberCommand(entry.id);
     void entry.run();
     return;
   }
@@ -644,7 +1041,7 @@ async function execute(
       }
       // Un comando che avrebbe dovuto dire cosa farebbe e ha fatto altro: si
       // consegna il suo esito e non si applica niente di nascosto.
-      await deliverOutcome(outcome, host);
+      await deliverOutcome(outcome, host, spec.id);
       closeCommandPalette();
       return;
     } catch (e) {
@@ -655,7 +1052,7 @@ async function execute(
   try {
     const outcome = await api.invokeCommand(spec.id, args, "apply");
     closeCommandPalette();
-    await deliverOutcome(outcome, host);
+    await deliverOutcome(outcome, host, spec.id);
   } catch (e) {
     failed(e, box, host);
   }
@@ -691,13 +1088,13 @@ function showLayer(
   const apply = document.createElement("button");
   apply.className = spec.scope.reversible ? "primary" : "danger";
   apply.textContent = t("palette.apply");
-  apply.disabled = plan.docs.length === 0;
+  apply.disabled = !planApplies(spec, plan);
   apply.addEventListener("click", async () => {
     apply.disabled = true;
     try {
       const outcome = await api.invokeCommand(spec.id, args, "apply");
       closeCommandPalette();
-      await deliverOutcome(outcome, host);
+      await deliverOutcome(outcome, host, spec.id);
     } catch (e) {
       failed(e, box, host);
     }
@@ -710,7 +1107,11 @@ function showLayer(
   apply.focus();
 }
 
-async function deliverOutcome(outcome: CommandOutcome, host: PaletteHost) {
+async function deliverOutcome(
+  outcome: CommandOutcome,
+  host: Pick<PaletteHost, "onEffect" | "notify">,
+  id?: string,
+) {
   // Un'operazione a metà si **vede** a metà (§23.14). Il `notify` lo dice già a
   // parole — «Note archiviate: 11 · Non spostate: …» — ma con lo stesso colore
   // di un successo pieno, e il colore è la cosa che si legge per prima: chi
@@ -720,6 +1121,7 @@ async function deliverOutcome(outcome: CommandOutcome, host: PaletteHost) {
   // della §23.14 questa riga avrebbe dovuto cercare una parola dentro un
   // messaggio già tradotto per sapere com'era andata.
   if (outcome.notify) host.notify(outcome.notify, outcome.partial ? "guasto" : "info");
+  if (id) rememberCommand(id);
   await host.onEffect(outcome.effect);
 }
 

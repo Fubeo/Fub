@@ -36,16 +36,10 @@
 //! * `emit` finisce in `Dispatcher::emit`, che scrive sul bus e **accoda** agli
 //!   handler senza drenare. Nessun codice di terzi gira dentro la nostra
 //!   chiamata.
-//! * `report_progress` è l'unica delle tre che drena: `note_job_progress`
-//!   chiama `dispatch_pending()`, cioè consegna agli `EventHandler` registrati
-//!   **prima** di tornare. Oggi non c'è modo che uno di quelli sia servito da
-//!   questa istanza: `bundle_mount` registra comandi/view sulla stessa
-//!   `Instance`; il formato è preparato separatamente dallo startup sulla
-//!   stessa `Instance`; nessun `EventHandler` inbound è registrato. Il giro
-//!   quindi si chiude fuori da noi; e, se una chiamata provasse comunque a
-//!   rientrare nella stessa `Instance`, `enter_instance` la rifiuterebbe già.
-//!   Non c'è un futuro caso di reentry da aspettare qui: la guardia impedisce
-//!   il rientro sulla stessa istanza prima che il `Mutex` possa bloccarsi.
+//! * `report_progress` may drain pending notifications. If the same component
+//!   also exports an inbound handler, `enter_instance` rejects a synchronous
+//!   attempt to re-enter it before locking its `Mutex`. This does not replace
+//!   the kernel's queued, non-reentrant delivery contract.
 //!
 //! # Chi può cosa non si decide qui
 //!

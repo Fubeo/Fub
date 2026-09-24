@@ -624,3 +624,219 @@ fn an_unrelated_non_utf8_sibling_cannot_prevent_installing_the_chosen_file() {
     store.install(&store.snapshot().unwrap(), &chosen).unwrap();
     assert_eq!(store.snapshot().unwrap().plugins().len(), 1);
 }
+
+#[test]
+fn update_resets_consent_preserves_enabled_and_allows_a_clean_reinstall() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = root(&dir);
+    let store = InstalledPluginStore::open(config).unwrap();
+    let first = store
+        .install(&store.snapshot().unwrap(), &common::ping(""))
+        .unwrap();
+    let old_bytes = std::fs::read(&blobs(config)[0]).unwrap();
+    store
+        .set_enabled(&store.snapshot().unwrap(), first.installation, true)
+        .unwrap();
+    store
+        .set_consent(
+            &store.snapshot().unwrap(),
+            first.installation,
+            Consent::Granted,
+        )
+        .unwrap();
+    assert!(store.snapshot().unwrap().plugins()[0].requested_at_startup());
+    let updated = store
+        .update(
+            &store.snapshot().unwrap(),
+            first.installation,
+            &common::ping("versione-successiva"),
+        )
+        .unwrap();
+    assert_eq!(updated.installation, first.installation);
+    assert_eq!(updated.manifest.version, "0.2.0");
+    assert!(updated.enabled);
+    assert_eq!(updated.consent, Consent::Undecided);
+    assert!(!updated.requested_at_startup());
+    let current_bytes = std::fs::read(&blobs(config)[0]).unwrap();
+    assert_eq!(updated.digest, Revision::of_bytes(&current_bytes));
+    assert_eq!(blobs(config).len(), 1);
+    assert_ne!(std::fs::read(&blobs(config)[0]).unwrap(), old_bytes);
+    assert_eq!(
+        store.load(&updated).unwrap().validate().unwrap().manifest(),
+        updated.manifest
+    );
+    // La rimozione dopo l'update lascia una reinstallazione pulita: il vecchio
+    // blob è stato ritirato dal commit andato a buon fine.
+    let removed = store
+        .remove(&store.snapshot().unwrap(), updated.installation)
+        .unwrap();
+    assert!(removed.cleanup_error.is_none());
+    assert!(blobs(config).is_empty());
+    let reinstalled = store
+        .install(&store.snapshot().unwrap(), &common::ping(""))
+        .unwrap();
+    assert!(reinstalled.installation > updated.installation);
+    assert_eq!(reinstalled.consent, Consent::Undecided);
+    assert!(!reinstalled.enabled);
+}
+
+#[test]
+fn same_version_incompatible_abi_and_foreign_id_preserve_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = root(&dir);
+    let store = InstalledPluginStore::open(config).unwrap();
+    let installed = store
+        .install(&store.snapshot().unwrap(), &common::ping(""))
+        .unwrap();
+    store
+        .set_enabled(&store.snapshot().unwrap(), installed.installation, true)
+        .unwrap();
+    store
+        .set_consent(
+            &store.snapshot().unwrap(),
+            installed.installation,
+            Consent::Granted,
+        )
+        .unwrap();
+    let before = std::fs::read(inventory(config)).unwrap();
+    let before_bytes = std::fs::read(&blobs(config)[0]).unwrap();
+    match store.update(
+        &store.snapshot().unwrap(),
+        installed.installation,
+        &common::ping(""),
+    ) {
+        Err(InstallError::AlreadyInstalled {
+            id,
+            installed,
+            candidate,
+        }) => {
+            assert_eq!(id, "demo.ping");
+            assert_eq!(installed, "0.1.0");
+            assert_eq!(candidate, "0.1.0");
+        }
+        other => panic!("versione uguale non esplicita: {other:?}"),
+    }
+    assert!(matches!(
+        store.update(
+            &store.snapshot().unwrap(),
+            installed.installation,
+            &common::ping("abi-incompatibile")
+        ),
+        Err(InstallError::Abi(_))
+    ));
+    assert!(matches!(
+        store.update(
+            &store.snapshot().unwrap(),
+            installed.installation,
+            &common::component("eventi-wasm", "eventi_wasm", "")
+        ),
+        Err(InstallError::Invalid(_))
+    ));
+    assert!(matches!(
+        store.update(
+            &store.snapshot().unwrap(),
+            installed.installation + 1000,
+            &common::ping("versione-successiva")
+        ),
+        Err(InstallError::Missing(_))
+    ));
+    assert_eq!(std::fs::read(inventory(config)).unwrap(), before);
+    assert_eq!(std::fs::read(&blobs(config)[0]).unwrap(), before_bytes);
+    let snapshot = store.snapshot().unwrap();
+    let record = &snapshot.plugins()[0];
+    assert!(record.enabled);
+    assert_eq!(record.consent, Consent::Granted);
+    assert_eq!(record.manifest.version, "0.1.0");
+    assert_eq!(
+        store.load(record).unwrap().validate().unwrap().manifest(),
+        installed.manifest
+    );
+}
+
+#[test]
+fn update_round_trip_through_saved_bytes_restores_the_previous_release() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = root(&dir);
+    let store = InstalledPluginStore::open(config).unwrap();
+    let installed = store
+        .install(&store.snapshot().unwrap(), &common::ping(""))
+        .unwrap();
+    let previous_bytes = store.load(&installed).unwrap().bytes().to_vec();
+    let updated = store
+        .update(
+            &store.snapshot().unwrap(),
+            installed.installation,
+            &common::ping("versione-successiva"),
+        )
+        .unwrap();
+    assert_eq!(updated.manifest.version, "0.2.0");
+    assert_eq!(blobs(config).len(), 1);
+    // Rollback manuale e controllato: la release precedente è un update
+    // esplicito con i byte salvati prima di aggiornare.
+    let rollback_dir = tempfile::tempdir().unwrap();
+    let rollback_source = root(&rollback_dir).join("precedente.wasm");
+    std::fs::write(&rollback_source, &previous_bytes).unwrap();
+    let rolled_back = store
+        .update(
+            &store.snapshot().unwrap(),
+            installed.installation,
+            &rollback_source,
+        )
+        .unwrap();
+    assert_eq!(rolled_back.installation, installed.installation);
+    assert_eq!(rolled_back.digest, Revision::of_bytes(&previous_bytes));
+    assert_eq!(rolled_back.manifest, installed.manifest);
+    assert_eq!(rolled_back.consent, Consent::Undecided);
+    assert_eq!(blobs(config).len(), 1);
+    assert_eq!(std::fs::read(&blobs(config)[0]).unwrap(), previous_bytes);
+    assert_eq!(
+        store
+            .load(&rolled_back)
+            .unwrap()
+            .validate()
+            .unwrap()
+            .manifest(),
+        installed.manifest
+    );
+}
+
+#[test]
+fn failed_update_publication_leaves_the_previous_release_visible() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = root(&dir);
+    let store = InstalledPluginStore::open(config).unwrap();
+    let installed = store
+        .install(&store.snapshot().unwrap(), &common::ping(""))
+        .unwrap();
+    let before = std::fs::read(inventory(config)).unwrap();
+    let before_bytes = std::fs::read(&blobs(config)[0]).unwrap();
+    let lock = config.join("wasm-plugins/.inventory.json.lock");
+    std::fs::remove_file(&lock).unwrap();
+    std::fs::create_dir(&lock).unwrap();
+    let failure = store.update(
+        &store.snapshot().unwrap(),
+        installed.installation,
+        &common::ping("versione-successiva"),
+    );
+    assert!(
+        matches!(
+            &failure,
+            Err(InstallError::Operation {
+                operation: "publish-inventory",
+                ..
+            })
+        ),
+        "errore inatteso: {failure:?}"
+    );
+    std::fs::remove_dir(&lock).unwrap();
+    assert_eq!(std::fs::read(inventory(config)).unwrap(), before);
+    assert!(store.load(&installed).is_ok());
+    // Il blob candidato resta orfano e invisibile, come in install: restart e
+    // listing vedono soltanto la release precedente.
+    let restarted = InstalledPluginStore::open(config).unwrap();
+    assert_eq!(restarted.snapshot().unwrap().plugins()[0], installed);
+    assert_eq!(
+        restarted.load(&installed).unwrap().bytes().to_vec(),
+        before_bytes
+    );
+}

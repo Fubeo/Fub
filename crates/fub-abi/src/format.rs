@@ -16,8 +16,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::edit::TextEdit;
 use crate::error::FormatError;
-use crate::model::DocumentModel;
+use crate::model::{DocumentModel, LinkTarget, Span};
 use crate::options::{render_option, syntax, OptionMap};
 
 /// Che cosa un provider si aspetta di ricevere in [`FormatProvider::parse`].
@@ -220,7 +221,8 @@ impl ParseContext {
                 // prodotto due categorie di estensioni invece di una.
                 .on(syntax::DIAGRAMS)
                 .on(syntax::MATH)
-                .on(syntax::HIGHLIGHT),
+                .on(syntax::HIGHLIGHT)
+                .on(syntax::COMMENTS),
         }
     }
 
@@ -280,6 +282,22 @@ impl RenderOptions {
     pub fn enabled(&self, name: &str) -> bool {
         self.options.enabled(name)
     }
+}
+
+/// Una destinazione da aggiornare dentro un riferimento osservato.
+///
+/// Lo span appartiene alla sorgente passata a
+/// [`FormatProvider::rewrite_links`], non a una sua versione decodificata o
+/// normalizzata. Il kernel decide quale identità deve essere raggiunta; il
+/// provider conserva la grammatica e l'escaping della sorgente.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LinkRewrite {
+    pub span: Span,
+    pub target: LinkTarget,
+    /// Per `Wiki`, il nuovo nome pagina: heading, blocco e alias non cambiano.
+    /// Per `Path`, il nuovo percorso URI-like completo, incluso il fragment.
+    /// Non è testo pronto da inserire nella sorgente.
+    pub replacement: String,
 }
 
 /// Il trait centrale. **Object-safe**: nessun metodo generico, nessun `async fn`
@@ -345,4 +363,25 @@ pub trait FormatProvider: Send + Sync {
     /// modifiche programmatiche a un documento esistente si fanno come patch
     /// chirurgiche sulla sorgente, guidate dagli `Span` del modello.
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError>;
+
+    /// Pianifica patch locali dei riferimenti, senza I/O né riserializzazione
+    /// dell'intero documento.
+    ///
+    /// `None` dichiara che il provider non offre questa operazione. L'host non
+    /// può sostituirla con una ricerca e sostituzione grezza: la destinazione
+    /// logica può avere escaping o una rappresentazione diversa sul disco.
+    /// `Some` deve coprire tutte le richieste, oppure restituire un errore;
+    /// non può omettere riferimenti che non riconosce nella sorgente fornita.
+    /// Le patch usano offset UTF-8 e verranno validate e applicate con CAS.
+    ///
+    /// La proiezione WASM è l'export opzionale `format-links`, separato da
+    /// `format` affinché i componenti che non lo esportano restino caricabili.
+    fn rewrite_links(
+        &self,
+        _source: &DocumentSource,
+        _ctx: &ParseContext,
+        _rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        Ok(None)
+    }
 }

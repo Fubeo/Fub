@@ -37,12 +37,12 @@
 //!
 //! # Cosa si torna indietro da qui, e cosa no
 //!
-//! L'inverso di una mutazione **strutturale** si deduce dalla riga: l'inverso di
-//! una rinomina è la rinomina all'incontrario, quello di una cancellazione è un
-//! ripristino dal cestino. È la 0045 letta qui: *l'inverso strutturale è un
-//! comando, non un vocabolario*, e per quelle quattro varianti il registro basta.
+//! L'inverso delle mutazioni strutturali **interne** si deduce dalla riga:
+//! rinominare all'incontrario o ripristinare dal cestino del vault. Il
+//! trasferimento OS registra invece un path esterno per la diagnosi, non un
+//! `DocId` ripristinabile dai comandi del vault.
 //!
-//! Le due che portano testo — [`JournalOp::Written`], il salvataggio
+//! Anche le due che portano testo — [`JournalOp::Written`], il salvataggio
 //! dell'editor, e [`JournalOp::Edited`], la modifica chirurgica — da qui non si
 //! tornano indietro, e [`JournalOp::is_invertible`] lo dice invece di lasciarlo
 //! scoprire. Per la prima è così da sempre; per la seconda è il prezzo della
@@ -263,7 +263,7 @@ pub fn catalog() -> Vec<StringCatalog> {
 
 /// Cosa è successo a un documento.
 ///
-/// Le varianti sono sei e non una sola con dentro un verbo, per la ragione per
+/// Le varianti sono sette e non una sola con dentro un verbo, per la ragione per
 /// cui [`Actor`](fub_abi::event::Actor) è un `enum` chiuso: ciò che ogni
 /// mutazione porta con sé è **diverso**, e un record libero avrebbe lasciato a
 /// ogni punto di mutazione la propria convenzione su come scriverlo.
@@ -274,7 +274,7 @@ pub enum JournalOp {
     Created { doc: DocId, to: Revision },
     /// Un documento riscritto per intero: il salvataggio dell'editor.
     ///
-    /// **È la sola variante senza inverso**, e `from` è ciò che si può dire
+    /// Non porta il contenuto precedente, e `from` è ciò che si può dire
     /// senza rileggere il file — l'impronta che l'anagrafe teneva, oppure
     /// `None` se non la si sapeva. Con l'impronta chi legge sa *se* il
     /// documento è ancora quello che questa riga ha prodotto; per riportarlo
@@ -301,6 +301,9 @@ pub enum JournalOp {
     /// Cestinato: `trash` è il nome che ha assunto nel cestino. L'inverso è un
     /// ripristino verso `doc`.
     Trashed { doc: DocId, trash: DocId },
+    /// Trasferito al cestino del sistema: il path esterno non è un DocId e
+    /// l'host non offre un ripristino automatico da quella destinazione.
+    TrashedOs { doc: DocId, destination: String },
     /// Ripristinato dal cestino. L'inverso è cestinare di nuovo.
     Restored { trash: DocId, doc: DocId },
     /// Rinominato o spostato — vale per un documento come per un allegato
@@ -351,14 +354,14 @@ impl JournalOp {
     /// essere leggibile da chi compone un rollback, invece di essere un ramo
     /// dimenticato in fondo a un `match`.
     ///
-    /// Sono due le varianti che rispondono `false`, e sono **le due che
-    /// porterebbero testo**: la riscrittura integrale da sempre, la modifica
-    /// chirurgica dalla 0103. Non è una coincidenza ed è la regola del modulo
-    /// vista da qui — ciò che per tornare indietro vuole il contenuto di ieri,
-    /// da un registro non torna indietro, perché il contenuto di ieri in un
-    /// registro non ci sta.
+    /// La scrittura e la modifica di testo non conservano i byte precedenti;
+    /// il trasferimento OS non ha un comando interno per ripristinare il path
+    /// esterno. Le altre varianti hanno un inverso nel vocabolario del vault.
     pub fn is_invertible(&self) -> bool {
-        !matches!(self, JournalOp::Written { .. } | JournalOp::Edited { .. })
+        !matches!(
+            self,
+            JournalOp::Written { .. } | JournalOp::Edited { .. } | JournalOp::TrashedOs { .. }
+        )
     }
 }
 

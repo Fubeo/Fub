@@ -37,7 +37,8 @@ use fub_abi::PluginError;
 // l'host *implementa* viaggiano in versi opposti, e confonderli sarebbe
 // esattamente lo scambio che questo modulo esiste per non fare.
 use crate::contract::exports::fub::abi::{
-    command as w_command, format as x_format, grid as w_grid, plugin as w_plugin, view as w_view,
+    command as w_command, format as x_format, format_links as x_links, grid as w_grid,
+    plugin as w_plugin, view as w_view,
 };
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
@@ -450,6 +451,22 @@ pub(crate) fn to_trash(and: fub_abi::traits::TrashEntry) -> w_vault::TrashEntry 
         deleted_at: and.deleted_at,
         size: and.size,
     }
+}
+/// Traduce la richiesta di riscrittura del kernel nell'export opzionale del formato.
+pub(crate) fn to_link_rewrite(rewrite: &fub_abi::format::LinkRewrite) -> x_links::LinkRewrite {
+    x_links::LinkRewrite {
+        span: to_span(rewrite.span),
+        target: crate::model::to_target(&rewrite.target),
+        replacement: rewrite.replacement.clone(),
+    }
+}
+
+/// Converte la patch restituita dal componente; la validazione degli span
+/// avviene soltanto nel percorso di applicazione degli edit.
+pub(crate) fn from_link_edit(
+    edit: w_edit::TextEdit,
+) -> Result<fub_abi::edit::TextEdit, PluginError> {
+    from_text_edit(edit)
 }
 
 // ---------------------------------------------------------------------------

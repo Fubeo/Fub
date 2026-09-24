@@ -346,3 +346,72 @@ fn a_view_nobody_offers_is_unknown_not_empty() {
         vec!["una".to_string()]
     );
 }
+
+fn clipboard(ns: &str) -> ViewUpdate {
+    ViewUpdate::Custom {
+        ns: ns.into(),
+        payload: serde_json::json!({ "text": "testo scelto dal provider" }),
+    }
+}
+
+#[test]
+fn only_the_core_may_ask_the_shell_for_the_clipboard() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    for ns in [
+        fub_abi::ui::CLIPBOARD_TEXT_NS,
+        fub_abi::ui::SETTINGS_EXPORT_NS,
+    ] {
+        let plugin = format!("terzi.appunti{}", ns.len());
+        let plugin: &'static str = Box::leak(plugin.into_boxed_str());
+        let id: &'static str = Box::leak(format!("{plugin}:v").into_boxed_str());
+        mounts(
+            &mut ws,
+            plugin,
+            Trust::Community,
+            Puppet::boxed(id, declarative(), clipboard(ns)),
+        );
+        let err = ws
+            .view_action(&ViewInstance::only(id), UiAction::new("copia"))
+            .expect_err("un provider di terzi non scrive negli appunti");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "{ns}: {err:?}"
+        );
+    }
+
+    mounts(
+        &mut ws,
+        "core.appunti",
+        Trust::Core,
+        Puppet::boxed(
+            "appunti",
+            declarative(),
+            clipboard(fub_abi::ui::CLIPBOARD_TEXT_NS),
+        ),
+    );
+    assert_eq!(
+        ws.view_action(&ViewInstance::only("appunti"), UiAction::new("copia"))
+            .expect("il core può"),
+        clipboard(fub_abi::ui::CLIPBOARD_TEXT_NS)
+    );
+}
+
+#[test]
+fn an_unprivileged_custom_intent_still_passes_from_third_parties() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    mounts(
+        &mut ws,
+        "terzi.intento",
+        Trust::Community,
+        Puppet::boxed(
+            "terzi.intento:v",
+            declarative(),
+            clipboard("terzi.intento.mio"),
+        ),
+    );
+    assert!(ws
+        .view_action(&ViewInstance::only("terzi.intento:v"), UiAction::new("x"))
+        .is_ok());
+}

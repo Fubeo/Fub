@@ -121,7 +121,7 @@ fn clicking_a_tag_asks_the_shell_to_search_for_it() {
     assert_eq!(
         update,
         ViewUpdate::RunSearch {
-            query: "tags:rust".to_string()
+            query: "{\"any\":[{\"all\":[{\"negated\":false,\"predicate\":{\"kind\":\"tag\",\"name\":\"rust\",\"descendants\":false}}]}]}".to_string()
         }
     );
 }

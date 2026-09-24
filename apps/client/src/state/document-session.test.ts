@@ -44,10 +44,8 @@ describe("ownership delle DocumentSession", () => {
     api = fakeApi();
     nextTimer = 0;
     clearTimeout = vi.fn();
-    vi.stubGlobal("window", {
-      setTimeout: vi.fn(() => ++nextTimer),
-      clearTimeout,
-    });
+    vi.stubGlobal("setTimeout", vi.fn(() => ++nextTimer));
+    vi.stubGlobal("clearTimeout", clearTimeout);
   });
 
   afterEach(() => {
@@ -180,10 +178,8 @@ describe("decisioni del ciclo di vita della sessione", () => {
   beforeEach(() => {
     api = fakeApi();
     nextTimer = 0;
-    vi.stubGlobal("window", {
-      setTimeout: vi.fn(() => ++nextTimer),
-      clearTimeout: vi.fn(),
-    });
+    vi.stubGlobal("setTimeout", vi.fn(() => ++nextTimer));
+    vi.stubGlobal("clearTimeout", vi.fn());
   });
 
   afterEach(() => {
@@ -612,13 +608,11 @@ describe("decisioni del ciclo di vita della sessione", () => {
 
   it("sospende una scrittura già accodata prima del comando distruttivo", async () => {
     const timers: Array<() => void> = [];
-    vi.stubGlobal("window", {
-      setTimeout: vi.fn((callback: () => void) => {
-        timers.push(callback);
-        return ++nextTimer;
-      }),
-      clearTimeout: vi.fn(),
-    });
+    vi.stubGlobal("setTimeout", vi.fn((callback: () => void) => {
+      timers.push(callback);
+      return ++nextTimer;
+    }));
+    vi.stubGlobal("clearTimeout", vi.fn());
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
     acceptText(sessions, "nota.md", "scrittura da annullare");
@@ -741,13 +735,11 @@ describe("decisioni del ciclo di vita della sessione", () => {
 
   it("arma la persistenza prima di un observer changed che lancia", async () => {
     const timers: Array<() => void> = [];
-    vi.stubGlobal("window", {
-      setTimeout: vi.fn((callback: () => void) => {
-        timers.push(callback);
-        return ++nextTimer;
-      }),
-      clearTimeout: vi.fn(),
-    });
+    vi.stubGlobal("setTimeout", vi.fn((callback: () => void) => {
+      timers.push(callback);
+      return ++nextTimer;
+    }));
+    vi.stubGlobal("clearTimeout", vi.fn());
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("observer.md");
     api.writeDocument = vi.fn(async () => {
@@ -788,10 +780,8 @@ describe("le superfici sottoscritte alla sessione", () => {
   beforeEach(() => {
     api = fakeApi();
     nextTimer = 0;
-    vi.stubGlobal("window", {
-      setTimeout: vi.fn(() => ++nextTimer),
-      clearTimeout: vi.fn(),
-    });
+    vi.stubGlobal("setTimeout", vi.fn(() => ++nextTimer));
+    vi.stubGlobal("clearTimeout", vi.fn());
   });
 
   afterEach(() => {

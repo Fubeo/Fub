@@ -28,11 +28,25 @@ import type {
   EditorSurface,
   SurfaceMode,
 } from "../editors/core/registry";
+import { mediaKindOfId } from "../editors/media/media-types";
+import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
+import { renderMarkdown } from "../editors/text/profiles/markdown/render";
+import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
+import { mountRecorderSurface } from "../editors/media/recorder-surface";
+import { printDocument } from "../editors/media/print-view";
+import { mountSlidePresentation } from "../ui/slides";
+import { mountMarkdown } from "../ui/markdown";
+import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
+import {
+  invalidateMarkdownResourceDocument,
+  renameMarkdownResourceDocument,
+} from "../ui/markdown-resources";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, notesByName, resolvedReference, vaultTags } from "../host/query";
-import type { PaneMode, SelectionSet, SyntaxForm, ViewContext } from "../host/contract";
+import { WITHOUT_PAGE, notesByName, renderPrint, resolvedReference, settings, vaultTags } from "../host/query";
+import { theseDocuments, type PaneMode, type SelectionSet, type SyntaxForm, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "../state/recent";
 import { onEvent } from "../state/kernel";
 import { emit, on, state } from "../state/store";
@@ -41,6 +55,7 @@ import { syntaxForms, unsavedDrafts } from "../host/query";
 import type { DraftInfo } from "../host/contract";
 import {
   documentSessions,
+  flushPendingSave,
   isDocumentDeletedDuringRead,
   type DocumentSessionEvent,
   type DocumentSurfaceUpdate,
@@ -52,6 +67,15 @@ import {
   activateTab,
   closePane,
   closeTab,
+  closeOthers,
+  closeUnpinned,
+  goBack,
+  goForward,
+  moveTab,
+  moveTabToPane,
+  setPinnedTab,
+  setTabStack,
+  setPaneLink,
   split,
   activeDoc,
   documents,
@@ -75,11 +99,12 @@ import { showContextMenu } from "../ui/menu";
 import { confirm } from "../host/dialog";
 import { allCommands, registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
-import { clearPreview, markReadingVersion, sourceBlockAt, updatePreview } from "./preview";
+import { applyIntent } from "../ui/intents";
+import { slashContextDoc } from "../state/slash";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
-import type { Lifetime } from "../ui/lifetime";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 
 export interface DocumentDeps {
@@ -106,11 +131,17 @@ interface Pane {
   toolbarEl: HTMLElement;
   conflictEl: HTMLElement;
   editorEl: HTMLElement;
-  previewEl: HTMLElement;
   /// Dove finisce una view dichiarata che questo riquadro sta ospitando (§3.3).
-  /// Vuoto quasi sempre: è la terza superficie di un riquadro, accanto
-  /// all'editor e alla lettura, e come loro c'è anche quando non si vede.
+  /// Vuoto quasi sempre: è la seconda superficie di un riquadro, accanto
+  /// all'editor, e come lui c'è anche quando non si vede.
   viewEl: HTMLElement;
+  linksEl: HTMLElement;
+  inlineView: string | null;
+  disposeAttachments: (() => void) | null;
+  disposeRecorder: (() => void) | null;
+  disposeSlides: (() => void) | null;
+  disposePrint: (() => void) | null;
+  noteClassGeneration: number;
   surface: EditorSurface | null;
   /// Cosa c'è **adesso** in questo riquadro. Una linguetta e non un path: dalla §3.3
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
@@ -135,6 +166,7 @@ let sessionEventsStop: (() => void) | undefined;
 let deps: DocumentDeps;
 let surfaceRegistry: DocumentSurfaceRegistry;
 let theme: Theme | null = null;
+let closeDraining = false;
 
 /// La firma dell'albero disegnato adesso. Ricostruire la struttura del DOM a
 /// ogni segnale sarebbe corretto e sbagliato: sposta i nodi degli editor, che
@@ -146,6 +178,115 @@ let treeSignature = "";
 let contextTimer: number | undefined;
 
 // --- montaggio --------------------------------------------------------------
+async function createCanvasNote(text: string): Promise<string> {
+  const doc = await createNote();
+  if (!doc) throw new Error("note.create did not return a created document");
+  const source = await api.readDocument(doc);
+  await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision });
+  return doc;
+}
+
+async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
+  const configured = (await settings()).find((entry) => entry.spec.key === "files.attachment-folder")?.value;
+  const folder = typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER;
+  return {
+    folder,
+    fromDocument: doc,
+    write: (id, bytes) => api.resourceWrite(id, bytes, null),
+  };
+}
+
+/** File/folder entries are expanded before the first asynchronous deposit. */
+async function droppedFiles(data: DataTransfer): Promise<readonly File[]> {
+  const entries = Array.from(data.items, (item) => item.kind === "file" ? item.webkitGetAsEntry?.() : null)
+    .filter((entry): entry is FileSystemEntry => entry !== null && entry !== undefined);
+  if (!entries.length) return Array.from(data.files);
+  const files: File[] = [];
+  async function visit(entry: FileSystemEntry): Promise<void> {
+    if (entry.isFile) {
+      files.push(await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject)));
+      return;
+    }
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    for (;;) {
+      const children = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+      if (!children.length) break;
+      for (const child of children) await visit(child);
+    }
+  }
+  for (const entry of entries) await visit(entry);
+  return files;
+}
+
+function insertAttachmentLinks(r: Pane, doc: string, links: readonly string[]): void {
+  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !isMarkdownSurface(r.surface) ||
+      closeDraining || documentSessions.isDeletionPending(doc)) return;
+  const markdown = links.map((link) => `![](${link})`).join("\n");
+  if (!r.surface.insertAtCursor(markdown)) {
+    throw new Error("Markdown editor is not available for attachment insertion");
+  }
+}
+
+function mountDocumentAttachments(r: Pane, doc: string): void {
+  const surface = r.surface;
+  if (!isMarkdownSurface(surface)) return;
+  const life = openLifetime();
+  r.disposeAttachments = () => life.close();
+  const insert = (links: readonly string[]) => {
+    if (!life.closed) insertAttachmentLinks(r, doc, links);
+  };
+  const fail = (error: unknown) => {
+    if (!life.closed) notify(t("document.attachment_failed", { reason: errorText(error) }), "guasto");
+  };
+  const accept = (files: readonly File[]) => {
+    if (life.closed || r.surface !== surface || closeDraining || documentSessions.isDeletionPending(doc)) {
+      fail(new Error("The document is read-only or no longer open"));
+      return;
+    }
+    void attachmentDeposit(doc).then((target) => {
+      if (!life.closed && r.surface === surface && !closeDraining && !documentSessions.isDeletionPending(doc)) {
+        return depositFiles(files, target, insert);
+      }
+    }).catch(fail);
+  };
+  life.listen(r.editorEl, "dragover", (event) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }, { capture: true });
+  life.listen(r.editorEl, "drop", (event) => {
+    if (!event.dataTransfer?.files.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    accept(Array.from(event.dataTransfer.files));
+  }, { capture: true });
+  life.listen(r.editorEl, "paste", (event) => {
+    if (!event.clipboardData?.files.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    accept(Array.from(event.clipboardData.files));
+  }, { capture: true });
+}
+
+function refreshNoteClasses(r: Pane, doc: string): void {
+  const generation = ++r.noteClassGeneration;
+  void api.queryIndex({
+    kind: "documents", matching: theseDocuments([doc]), sort: null,
+    select: { kind: "keys", keys: ["cssclasses", "cssclass"] },
+    page: { offset: 0, limit: 1 }, excerpts: "omit",
+  }).then((result) => {
+    if (r.noteClassGeneration !== generation || r.shown?.k !== "doc" || r.shown.doc !== doc) return;
+    if (result.kind !== "documents") throw new Error(`expected document properties, got ${result.kind}`);
+    const properties = result.value.items[0]?.properties;
+    const classes = properties?.find((item) => item.key === "cssclasses")?.value
+      ?? properties?.find((item) => item.key === "cssclass")?.value;
+    applyNoteCssClasses(r.root, classes);
+  }).catch((error: unknown) => {
+    if (r.noteClassGeneration === generation) notify(t("document.properties_unavailable", { reason: errorText(error) }), "guasto");
+  });
+}
+
 
 /// Costruisce l'area principale e attacca i riquadri agli eventi che li
 /// riguardano.
@@ -157,22 +298,85 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       if (layout.focus === paneId) scheduleContext();
     },
     onOpenWikilink: (page, heading, block) =>
-      void openWikilink(page, heading ?? undefined, block ?? undefined),
+      openWikilink(page, heading ?? undefined, block ?? undefined),
+    onOpenDocument: (doc) => openDocument(doc),
+    onOpenPath: async (path, from) => {
+      const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
+      if (!target) throw new Error(t("preview.target_missing"));
+      await openDocument(target.doc);
+      if (target.at) revealByteOffset(target.at.span.start);
+    },
+    onCreateCanvasNote: createCanvasNote,
+    renderCanvasMarkdown: (_nodeId, text, host, documentId) => mountMarkdown(host, renderMarkdown(text).html, {
+      documentId,
+      openWikilink: (page, heading, block) => openWikilink(page, heading, block),
+      openPath: async (path, from) => {
+        const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
+        if (!target) throw new Error(t("preview.target_missing"));
+        await openDocument(target.doc);
+        if (target.at) revealByteOffset(target.at.span.start);
+      },
+      searchTag: (tag) => deps.searchTag(tag),
+    }),
+    canvasMedia: {
+      openExternal: async () => { throw new Error("External opening is not available in this host"); },
+      openViewer: async (url) => {
+        try {
+          await api.viewerOpen(url, url, { allowRemote: false, allowlist: [] });
+        } catch (error) {
+          notify(t("document.viewer_unavailable", { reason: errorText(error) }), "guasto");
+        }
+      },
+    },
+    canvasAttachments: {
+      expandFiles: droppedFiles,
+      deposit: async (files, documentId) => {
+        const deposit = await attachmentDeposit(documentId);
+        const paths: string[] = [];
+        for (const file of files) {
+          if (file.size > 64 * 1024 * 1024) throw new Error(`Attachment ${file.name} exceeds the inline deposit limit`);
+          const saved = await depositAttachment(deposit, file.name, new Uint8Array(await file.arrayBuffer()));
+          paths.push(saved.receipt.id);
+        }
+        return paths;
+      },
+    },
     onSearchTag: (tag) => deps.searchTag(tag),
+    slash: {
+      currentDoc: slashContextDoc,
+      onEffect: applyIntent,
+      notify,
+      flushPendingSave,
+      publishContext,
+    },
     completions: {
       searchNotes: (prefix: string) =>
         (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
     },
     gridHost: api,
+    media: {
+      transport: {
+        open: (id, vault) => api.resourceOpen(id, vault ?? null),
+        read_chunk: api.resourceReadChunk,
+        close: api.resourceClose,
+      },
+      copyText: (text) => navigator.clipboard.writeText(text),
+    },
   });
   panesEl = $("#panes");
   sessionEventsStop?.();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
   sessionEventsStop = stopSessionEvents;
   lifetime.add(() => {
+    closeDraining = false;
     stopSessionEvents();
     if (sessionEventsStop === stopSessionEvents) sessionEventsStop = undefined;
+    for (const r of panes.values()) {
+      if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
+      detachSurface(r);
+      destroySurface(r);
+    }
   });
 
 
@@ -192,6 +396,13 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       });
     }),
   );
+  for (const event of ["index_updated", "batch_ended"] as const) {
+    lifetime.add(onEvent(event, () => {
+      for (const r of panes.values()) {
+        if (r.shown?.k === "doc") refreshNoteClasses(r, r.shown.doc);
+      }
+    }));
+  }
 
   lifetime.add(
     onEvent("document_changed", (e, origin) => {
@@ -204,6 +415,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   lifetime.add(
     onEvent("document_removed", (e) => {
       const outcome = documentSessions.handleExternalRemoval(e.id);
+      invalidateMarkdownResourceDocument(e.id);
       invalidateLoads(e.id);
       if (outcome.dirty) notify(t("document.deleted_dirty", { doc: e.id }), "guasto");
       removeEverywhere(e.id);
@@ -214,6 +426,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
     onEvent("document_renamed", (e) => {
       const outcome = documentSessions.rename(e.from, e.to);
       if (outcome.kind !== "collision") {
+        renameMarkdownResourceDocument(e.from, e.to);
         // The layout still names the old path until `rename` below runs. Keep
         // those editors read-only across that tiny migration window.
         setReadOnlyForDocument(e.from, documentSessions.isDeletionPending(e.to));
@@ -375,7 +588,7 @@ async function resolveDiscardingMine(): Promise<void> {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  await redrawReading(doc);
+  redrawReading(doc);
   drawSave();
   redrawTabs(doc);
 }
@@ -412,7 +625,7 @@ async function closeCurrentPane(): Promise<void> {
   else pane.root.focus();
 }
 
-async function closeCurrentTab(): Promise<void> {
+export async function closeCurrentTab(): Promise<void> {
   const id = layout.focus;
   const p = activePane();
   const tab = activeTab(id);
@@ -425,6 +638,55 @@ async function closeCurrentTab(): Promise<void> {
   if (!pane) return;
   if (nextActive >= 0) focusPaneTab(pane, nextActive);
   else pane.root.focus();
+}
+
+/// Appunta o stacca la tab corrente (shell.tab.pin/unpin): stesso `run` di
+/// contestuale, tastiera e palette, per la regola del §18.2.
+export function pinCurrentTab(pinned: boolean): void {
+  const id = layout.focus;
+  const p = paneState(id);
+  if (!p || p.active < 0) return;
+  setPinnedTab(id, p.active, pinned);
+  void synchronize();
+}
+
+/// Sposta la tab corrente di `delta` posizioni (shell.tab.move.left/right):
+/// `-1` a sinistra, `+1` a destra. Fuori dai bordi = niente da fare.
+export function moveCurrentTab(delta: -1 | 1): void {
+  const id = layout.focus;
+  const p = paneState(id);
+  if (!p || p.active < 0) return;
+  if (moveTab(id, p.active, p.active + delta)) void synchronize();
+}
+
+/// Chiude le altre tab tenendo corrente + appuntate (shell.tab.close.others).
+export function closeOtherTabs(): void {
+  const id = layout.focus;
+  const p = paneState(id);
+  if (!p || p.active < 0) return;
+  void closeOthersAndRelease(id, p.active);
+}
+
+/// Chiude le non appuntate del riquadro col fuoco (shell.tab.close.unpinned).
+export function closeUnpinnedTabs(): void {
+  void closeUnpinnedAndRelease(layout.focus);
+}
+
+/// Cronologia avanti/indietro del riquadro col fuoco (shell.pane.back/forward).
+export function paneBack(): void {
+  if (goBack(layout.focus)) void synchronize();
+}
+
+export function paneForward(): void {
+  if (goForward(layout.focus)) void synchronize();
+}
+
+/// Collega o scollega il riquadro col fuoco (shell.pane.link/unlink): il
+/// nome di default è `linked` — un gruppo solo, senza una seconda superficie
+/// che deve restare d’accordo. Nome vuoto = scollegato.
+export function linkCurrentPane(linked: boolean): void {
+  setPaneLink(layout.focus, linked ? "linked" : null);
+  void synchronize();
 }
 
 /// Una linguetta è stata chiusa: si lascia andare ciò che teneva in vita.
@@ -600,12 +862,7 @@ function renderPane(id: string): Pane {
   const editorEl = document.createElement("div");
   editorEl.className = "pane-editor";
 
-  const previewEl = document.createElement("div");
-  previewEl.className = "pane-preview markdown-preview";
-  previewEl.tabIndex = 0;
-  previewEl.setAttribute("role", "document");
-
-  // La terza superficie del riquadro (§3.3). Non è `declared-view` come nella
+  // La seconda superficie del riquadro (§3.3). Non è `declared-view` come nella
   // sidebar e non deve esserlo: là una view è un pannello con un titolo che si
   // apre e si chiude, qui **è** il contenuto del riquadro, e il titolo è già
   // sulla tab.
@@ -619,7 +876,10 @@ function renderPane(id: string): Pane {
   const conflictEl = document.createElement("div");
   conflictEl.hidden = true;
 
-  contentEl.append(editorEl, previewEl, viewEl);
+  const linksEl = document.createElement("section");
+  linksEl.className = "pane-document-links";
+  linksEl.hidden = true;
+  contentEl.append(editorEl, viewEl, linksEl);
   root.append(tabsShell, toolbarEl, conflictEl, contentEl);
   // Toccare un riquadro gli dà il fuoco. `mousedown` e non `click` perché il
   // fuoco deve essere già di questo riquadro quando l'editor riceve l'evento:
@@ -638,8 +898,14 @@ function renderPane(id: string): Pane {
     toolbarEl,
     conflictEl,
     editorEl,
-    previewEl,
     viewEl,
+    linksEl,
+    disposeAttachments: null,
+    disposeRecorder: null,
+    disposeSlides: null,
+    disposePrint: null,
+    noteClassGeneration: 0,
+    inlineView: null,
     surface: null,
     shown: null,
     loadGeneration: 0,
@@ -752,7 +1018,7 @@ function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
   tab.dataset.index = String(index);
   tab.setAttribute("role", "tab");
   tab.setAttribute("aria-controls", panePanelId(r.id));
-  tab.setAttribute("aria-keyshortcuts", "Delete");
+  tab.setAttribute("aria-keyshortcuts", "Delete Shift+F10 Alt+Shift+ArrowLeft Alt+Shift+ArrowRight Alt+Shift+ArrowUp Alt+Shift+ArrowDown");
   const name = document.createElement("span");
   name.className = "tab-name";
   tab.append(name);
@@ -796,7 +1062,32 @@ function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
     }
   });
   tab.addEventListener("click", () => activateTab(r.id, index));
+  tab.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    openTabMenu(r, index, target, event);
+  });
   tab.addEventListener("keydown", (event) => {
+    if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
+      event.preventDefault();
+      const box = tab.getBoundingClientRect();
+      openTabMenu(r, index, target, new MouseEvent("contextmenu", {
+        clientX: box.left + box.width / 2, clientY: box.bottom, bubbles: true,
+      }));
+      return;
+    }
+    if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      const panesInOrder = layoutPanes();
+      const at = panesInOrder.indexOf(r.id);
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        if (moveTab(r.id, index, index + (event.key === "ArrowLeft" ? -1 : 1))) void synchronize();
+      } else if (!target.pinned && (event.key === "ArrowUp" || event.key === "ArrowDown") && panesInOrder.length > 1) {
+        event.preventDefault();
+        const to = panesInOrder[(at + (event.key === "ArrowUp" ? -1 : 1) + panesInOrder.length) % panesInOrder.length]!;
+        if (moveTabToPane(r.id, index, to)) void synchronize();
+      }
+      return;
+    }
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key === "Delete") {
       event.preventDefault();
@@ -815,7 +1106,118 @@ function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
     }
   });
   item.append(tab, close);
+  wireTabDrag(r, item, index, target);
   return item;
+}
+
+/// Il contestuale di una tab (P06/F21): appunta, spunta, chiudi le altre,
+/// chiudi le non appuntate, sposta a sinistra/destra. Le appuntate non si
+/// chiudono per sbaglio: «chiudi le altre» le tiene.
+function openTabMenu(r: Pane, index: number, target: Tab, at: MouseEvent): void {
+  const pinned = target.pinned === true;
+  const paneIds = layoutPanes().filter((id) => id !== r.id);
+  const stacks = [...new Set(paneState(r.id)?.tabs.map((tab) => tab.stack).filter((name): name is string => !!name) ?? [])];
+  showContextMenu(at, [
+    {
+      label: t(pinned ? "tabmenu.unpin" : "tabmenu.pin"),
+      run: () => {
+        setPinnedTab(r.id, index, !pinned);
+        void synchronize();
+      },
+    },
+    {
+      label: t("tabmenu.left"),
+      run: () => {
+        if (moveTab(r.id, index, index - 1)) void synchronize();
+      },
+    },
+    {
+      label: t("tabmenu.right"),
+      run: () => {
+        if (moveTab(r.id, index, index + 1)) void synchronize();
+      },
+    },
+    ...(!pinned ? paneIds.map((id) => ({
+      label: t("tabmenu.to_pane", { pane: id }),
+      run: () => { if (moveTabToPane(r.id, index, id)) void synchronize(); },
+    })) : []),
+    ...stacks.filter((name) => name !== target.stack).map((name) => ({
+      label: t("tabmenu.to_stack", { stack: name }),
+      run: () => setTabStack(r.id, index, name),
+    })),
+    {
+      label: t("tabmenu.new_stack"),
+      run: () => {
+        const name = window.prompt(t("tabmenu.stack_name"));
+        if (name?.trim()) setTabStack(r.id, index, name);
+      },
+    },
+    {
+      label: t("tabmenu.leave_stack"),
+      run: () => setTabStack(r.id, index, null),
+    },
+    {
+      label: t("tabmenu.close_others"),
+      run: () => void closeOthersAndRelease(r.id, index),
+    },
+    {
+      label: t("tabmenu.close_unpinned"),
+      run: () => void closeUnpinnedAndRelease(r.id),
+    },
+  ]);
+}
+
+/// Il drag di una tab (P06/F21): riordino dentro il riquadro, spostamento fra
+/// riquadri. Le appuntate non si trascinano via: restano dov'erano. Il gesto
+/// col mouse ha gli stessi comandi del contestuale e della tastiera, che è la
+/// regola del §18.2 — un gesto che vive solo in un listener non compare da
+/// nessuna parte.
+function wireTabDrag(r: Pane, item: HTMLElement, index: number, target: Tab): void {
+  if (target.pinned) return;
+  item.draggable = true;
+  item.addEventListener("dragstart", (e) => {
+    e.dataTransfer!.effectAllowed = "move";
+    e.dataTransfer!.setData("text/plain", JSON.stringify({ pane: r.id, index }));
+  });
+  item.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = "move";
+  });
+  item.addEventListener("drop", (e) => {
+    e.preventDefault();
+    let payload: { pane: string; index: number } | null = null;
+    try {
+      payload = JSON.parse(e.dataTransfer?.getData("text/plain") ?? "") as { pane: string; index: number };
+    } catch {
+      payload = null;
+    }
+    if (!payload || typeof payload.pane !== "string" || typeof payload.index !== "number") return;
+    if (payload.pane === r.id) {
+      if (moveTab(r.id, payload.index, index)) void synchronize();
+    } else if (moveTabToPane(payload.pane, payload.index, r.id)) {
+      void synchronize();
+    }
+  });
+}
+
+/// Chiude le altre tab tenendo quella a `keep` e le appuntate, rilasciando
+/// sessioni e view come `closeCurrentTab`: un flush per documento, mai un
+/// buffer perso — la sessione chiude solo quando nessuno la guarda più.
+async function closeOthersAndRelease(paneId: string, keep: number): Promise<void> {
+  const tabs = paneState(paneId)?.tabs ?? [];
+  const victims = tabs.filter((tab, index) => index !== keep && !tab.pinned);
+  closeOthers(paneId, keep);
+  for (const tab of victims) await releaseTab(paneId, tab);
+  await synchronize();
+}
+
+/// Chiude le non appuntate di un riquadro, rilasciando come sopra.
+async function closeUnpinnedAndRelease(paneId: string): Promise<void> {
+  const tabs = paneState(paneId)?.tabs ?? [];
+  const victims = tabs.filter((tab) => !tab.pinned);
+  closeUnpinned(paneId);
+  for (const tab of victims) await releaseTab(paneId, tab);
+  await synchronize();
 }
 
 /// Ridipinge etichette e selezione senza ricreare i controlli. Il nome
@@ -824,13 +1226,15 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   const described = describeTab(target);
   tab.classList.toggle("dirty", described.dirty);
   tab.classList.toggle("tab-view", described.kind === "view");
+  tab.classList.toggle("tab-pinned", target.pinned === true);
   tab.setAttribute("aria-selected", String(selected));
   tab.tabIndex = tabStop ? 0 : -1;
-  tab.querySelector<HTMLElement>(".tab-name")!.textContent = described.label;
+  tab.querySelector<HTMLElement>(".tab-name")!.textContent =
+    (target.pinned ? "📌 " : "") + described.label + (target.stack ? ` [${target.stack}]` : "");
   setTooltip(tab, target.k === "doc" ? target.doc : described.label);
   tab.setAttribute(
     "aria-label",
-    described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label,
+    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
   );
   const close = tab.parentElement!.querySelector<HTMLElement>(".tab-close")!;
   close.tabIndex = tab.tabIndex;
@@ -891,7 +1295,10 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   drawSave();
   redrawTabs(event.id);
   drawPaneConflict(event.id);
-  return publishContext().then(() => redrawReading(event.id));
+  if (event.kind === "saved") {
+    redrawReading(event.id);
+  }
+  return publishContext();
 }
 
 /// Ridisegna il banner conflitto dei riquadri che mostrano questo documento.
@@ -905,7 +1312,16 @@ function drawPaneConflict(doc: string): void {
 
 function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
-    panes.get(paneId)?.surface?.setReadOnly?.(readOnly);
+    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining);
+  }
+}
+
+/** Ferma gli input locali prima del drain delle finestre e del salvataggio. */
+export function freezeDocumentSurfaces(frozen: boolean): void {
+  closeDraining = frozen;
+  for (const [paneId, pane] of panes) {
+    const doc = activeDoc(paneId);
+    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc));
   }
 }
 
@@ -950,13 +1366,28 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   r.root.classList.toggle("con-vista", tab?.k === "view");
 
   if (tab?.k === "view") {
-    clearPreview(r.previewEl);
     await mountViewInPane(tab.view, r.id, r.viewEl);
     return;
   }
-  if (!changed) return;
+  if (!changed) {
+    if (tab && isMarkdownSurface(r.surface) && !r.inlineView) void mountInlineLinks(r, tab.doc);
+    return;
+  }
   if (!tab) {
-    clearPreview(r.previewEl);
+    return;
+  }
+
+  // Attachments have no UTF-8 document source. The media surface owns only its
+  // resource lease; the text session remains the sole owner of text documents.
+  if (mediaKindOfId(pdfIdWithoutFragment(tab.doc)) !== "other") {
+    const surface = surfaceRegistry.mount(
+      { formatId: null, sourceKind: "bytes", documentId: tab.doc },
+      { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
+    );
+    r.surface = surface;
+    surface.setMode("view");
+    r.root.dataset.mode = "view";
+    if (theme) surface.setTheme?.(theme);
     return;
   }
 
@@ -969,20 +1400,32 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     ]);
   } catch (error) {
     if (isDocumentDeletedDuringRead(error)) return;
+    if (generation === r.loadGeneration && r.shown === tab && tab.doc.toLowerCase().endsWith(".canvas")) {
+      showCanvasError(r, tab.doc, error);
+      return;
+    }
     throw error;
   }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
 
-  const surface = surfaceRegistry.mount(
-    { formatId: source.formatId, sourceKind: source.sourceKind },
-    {
-      paneId: r.id,
-      documentId: tab.doc,
-      parent: r.editorEl,
-      formatId: source.formatId,
-      revision: source.revision,
-    },
-  );
+  let surface: EditorSurface;
+  try {
+    surface = surfaceRegistry.mount(
+      { formatId: source.formatId, sourceKind: source.sourceKind, documentId: tab.doc },
+      {
+        paneId: r.id,
+        documentId: tab.doc,
+        parent: r.editorEl,
+        formatId: source.formatId,
+        revision: source.revision,
+      },
+    );
+  } catch (error) {
+    r.editorEl.replaceChildren();
+    if (source.formatId !== "canvas") throw error;
+    showCanvasError(r, tab.doc, error);
+    return;
+  }
   r.surface = surface;
   const mode = selectedMode(r);
   if (!mode) {
@@ -993,13 +1436,47 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   r.root.dataset.mode = mode.id;
   if (theme) surface.setTheme?.(theme);
   if (isMarkdownSurface(surface)) surface.setSyntaxForms(forms);
-  surface.setDoc(source.text);
-  surface.setReadOnly?.(documentSessions.isDeletionPending(tab.doc));
+  try {
+    surface.setDoc(source.text);
+  } catch (error) {
+    destroySurface(r);
+    if (source.formatId !== "canvas") throw error;
+    showCanvasError(r, tab.doc, error);
+    return;
+  }
+  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
-  if (mode.presentation === "rendered") await updatePreview(r.previewEl, tab.doc);
-  markReadingVersion(r.previewEl, documentSessions.isDirty(tab.doc));
+  refreshNoteClasses(r, tab.doc);
+  if (isMarkdownSurface(surface)) {
+    mountDocumentAttachments(r, tab.doc);
+    void mountInlineLinks(r, tab.doc);
+  }
+}
+
+async function mountInlineLinks(r: Pane, doc: string): Promise<void> {
+  if (!primaryView("document_links")) return;
+  const instance = `${r.id}:inline:${doc}`;
+  r.inlineView = instance;
+  r.linksEl.hidden = false;
+  try {
+    await mountViewInPane("document_links", instance, r.linksEl, { doc });
+  } catch (error) {
+    if (r.inlineView !== instance) return;
+    notify(t("document.links_unavailable", { reason: errorText(error) }), "guasto");
+  }
+}
+
+function showCanvasError(r: Pane, doc: string, error: unknown): void {
+  const surface = surfaceRegistry.mount(
+    { formatId: null, sourceKind: "text", documentId: doc, override: { family: "error" } },
+    { paneId: r.id, documentId: doc, parent: r.editorEl, errorReason: errorText(error) },
+  );
+  r.surface = surface;
+  surface.setMode("error");
+  r.root.dataset.mode = "error";
+  if (theme) surface.setTheme?.(theme);
 }
 
 /// La sottoscrizione di un riquadro alla sessione del documento mostrato.
@@ -1013,7 +1490,7 @@ function attachSurface(r: Pane, doc: string): void {
     id: surface.surfaceId,
     sync: (update) => applySurfaceUpdate(r, doc, update),
   });
-  surface.setReadOnly?.(documentSessions.isDeletionPending(doc));
+  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(doc));
 }
 
 function detachSurface(r: Pane): void {
@@ -1022,7 +1499,19 @@ function detachSurface(r: Pane): void {
 }
 
 function destroySurface(r: Pane): void {
-  clearPreview(r.previewEl);
+  r.noteClassGeneration++;
+  applyNoteCssClasses(r.root, null);
+  r.disposeAttachments?.();
+  r.disposeAttachments = null;
+  r.disposeRecorder?.();
+  r.disposeRecorder = null;
+  r.disposeSlides?.();
+  r.disposeSlides = null;
+  r.disposePrint?.();
+  r.disposePrint = null;
+  if (r.inlineView) unmountViewFromPane("document_links", r.inlineView);
+  r.inlineView = null;
+  r.linksEl.hidden = true;
   r.surface?.destroy();
   r.surface = null;
   r.editorEl.replaceChildren();
@@ -1038,6 +1527,7 @@ function applySurfaceUpdate(r: Pane, doc: string, update: DocumentSurfaceUpdate)
   r.surface?.syncDoc(
     update.kind === "operation" ? { text: update.text, operation: update.operation } : update.text,
   );
+  refreshNoteClasses(r, doc);
 }
 
 /// Il testo di un documento: dal buffer se qualcuno lo tiene già aperto, dal
@@ -1051,24 +1541,19 @@ async function readBuffer(doc: string): Promise<DocumentSurfaceSource> {
   return documentSessions.readForSurface(doc);
 }
 
-/// Ridisegna ogni presentazione resa che mostra questo documento.
-/// Dopo il render: dichiara la versione col dirty di sessione (U32),
-/// mai seconda verità locale.
-async function redrawReading(doc: string): Promise<void> {
-  await Promise.all(
-    panesWithDoc(doc).map(async (id) => {
-      const r = panes.get(id);
-      if (
-        !r ||
-        selectedMode(r)?.presentation !== "rendered" ||
-        activeDoc(id) !== doc
-      ) return;
-      await updatePreview(r.previewEl, doc);
-      markReadingVersion(r.previewEl, documentSessions.isDirty(doc));
-    }),
-  );
+/// La sessione possiede il testo; questa notifica aggiorna soltanto la resa
+/// delle superfici già aperte, senza ricreare buffer o cronologia.
+function redrawReading(doc: string): void {
+  for (const id of panesWithDoc(doc)) {
+    const r = panes.get(id);
+    if (!r || selectedMode(r)?.presentation !== "rendered" || activeDoc(id) !== doc) {
+      continue;
+    }
+    // `syncDoc` col testo corrente ridisegna senza toccare cronologia o
+    // selezione: la superficie conserva il punto e ricuce gli embed.
+    r.surface?.syncDoc(r.surface.getDoc());
+  }
 }
-
 /// Il modo effettivo è quello persistito quando la superficie lo dichiara,
 /// altrimenti il primo che essa supporta. Il fallback non riscrive il layout:
 /// tornando alla superficie precedente, il riquadro ritrova la sua modalità.
@@ -1099,14 +1584,11 @@ function drawToolbar(r: Pane): void {
     menu.textContent = "…";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
-    const version = document.createElement("span");
-    version.className = "muted";
-    bar.append(crumbs, group, menu, version);
+    bar.append(crumbs, group, menu);
   }
   const crumbs = bar.children[0] as HTMLElement;
   const group = bar.children[1] as HTMLElement;
   const menu = bar.children[2] as HTMLElement;
-  const version = bar.children[3] as HTMLElement;
   const tab = activeTab(r.id);
   const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
   crumbs.textContent = path;
@@ -1134,13 +1616,65 @@ function drawToolbar(r: Pane): void {
     button.textContent = mode.label();
     button.setAttribute("aria-pressed", String(active?.id === mode.id));
   });
-  const dirty = tab?.k === "doc" && documentSessions.isDirty(tab.doc);
-  const rendered = tab?.k === "doc" && active?.presentation === "rendered";
-  version.textContent = rendered
-    ? dirty ? t("document.reading.stale") : t("document.reading.current")
-    : "";
-  if (rendered && dirty) version.dataset.readingDirty = "true";
-  else delete version.dataset.readingDirty;
+}
+
+async function toggleRecorder(r: Pane, doc: string): Promise<void> {
+  if (r.disposeRecorder) {
+    r.disposeRecorder();
+    r.disposeRecorder = null;
+    return;
+  }
+  const surface = r.surface;
+  try {
+    const attachment = await attachmentDeposit(doc);
+    if (r.surface !== surface || r.shown?.k !== "doc" || r.shown.doc !== doc) return;
+    r.disposeRecorder = mountRecorderSurface(r.toolbarEl, {
+      staging: createViewStateCrashDeposit({ get: (key) => api.viewState(key), set: api.setViewState }),
+      attachment,
+      onEmbed: (link) => {
+        if (r.surface !== surface) throw new Error("The document editor has closed");
+        insertAttachmentLinks(r, doc, [link]);
+      },
+    });
+  } catch (error) {
+    notify(t("document.recorder_unavailable", { reason: errorText(error) }), "guasto");
+  }
+}
+
+function presentSlides(r: Pane, doc: string): void {
+  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !isMarkdownSurface(r.surface)) return;
+  r.disposeSlides?.();
+  let scratchStop: (() => void) | null = null;
+  const rendered = selectedMode(r)?.id === "reading"
+    ? r.editorEl.querySelector<HTMLElement>(".pane-preview")
+    : null;
+  const content = rendered ?? document.createElement("div");
+  if (!rendered) {
+    scratchStop = mountMarkdown(content, renderMarkdown(r.surface.getDoc()).html, { documentId: doc });
+  }
+  try {
+    const deck = mountSlidePresentation(document.body, content, {
+      onClose: () => { scratchStop?.(); scratchStop = null; r.disposeSlides = null; },
+    });
+    r.disposeSlides = () => { deck.destroy(); scratchStop?.(); scratchStop = null; };
+  } catch (error) {
+    scratchStop?.();
+    notify(t("document.slides_unavailable", { reason: errorText(error) }), "guasto");
+  }
+}
+
+async function presentPrint(r: Pane, doc: string): Promise<void> {
+  try {
+    const stop = await printDocument(doc, docTitle(doc), renderPrint);
+    if (r.shown?.k !== "doc" || r.shown.doc !== doc) {
+      stop();
+      return;
+    }
+    r.disposePrint?.();
+    r.disposePrint = stop;
+  } catch (error) {
+    notify(t("document.print_unavailable", { reason: errorText(error) }), "guasto");
+  }
 }
 
 /// Menu riquadro con sole azioni esistenti (U25): split/close via comandi
@@ -1149,13 +1683,24 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   const entries = allCommands().filter((entry) =>
     ["shell.pane.split.right", "shell.pane.split.down", "shell.pane.close", "shell.tab.close"].includes(entry.id),
   );
-  showContextMenu(event, entries.map((entry) => ({
-    label: entry.title,
-    run: () => {
-      focusPane(r.id);
-      void entry.run?.();
-    },
-  })));
+  const doc = activeDoc(r.id);
+  showContextMenu(event, [
+    ...entries.map((entry) => ({
+      label: entry.title,
+      run: () => {
+        focusPane(r.id);
+        void entry.run?.();
+      },
+    })),
+    ...(doc && isMarkdownSurface(r.surface) ? [
+      {
+        label: t(r.disposeRecorder ? "pane.recorder.close" : "pane.recorder.open"),
+        run: () => void toggleRecorder(r, doc),
+      },
+      { label: t("pane.slides"), run: () => presentSlides(r, doc) },
+      { label: t("pane.print"), run: () => void presentPrint(r, doc) },
+    ] : []),
+  ]);
 }
 
 /// Presidio locale: nessun mode con id ignoto persiste oltre il riquadro (U24).
@@ -1279,7 +1824,7 @@ export async function recoverDrafts(): Promise<number> {
     notify(`${b.doc}: ${t(CASE_KEY[caseOf(b)])}`, "info");
   }
   drawSave();
-  await Promise.all(rejoined.map((b) => redrawReading(b.doc)));
+  for (const b of rejoined) redrawReading(b.doc);
   // Il conto dice quante sono **rientrate davvero**, non quante erano in fila:
   // la notifica dice «è stato ritrovato, aprile per decidere», e una bozza
   // saltata — il buffer sporco che la precede — non è ritrovata e non ha
@@ -1340,7 +1885,7 @@ export function isOpen(id: string): boolean {
 }
 
 /// Risolve un wikilink e lo apre; se non risolve, crea la nota che manca col
-/// nome scritto nel link (come in Obsidian). Il backlink c'è già prima ancora
+/// nome scritto nel link. Il backlink c'è già prima ancora
 /// che l'utente abbia scritto la prima riga — è il grafo a ricucirlo.
 ///
 /// `heading` e `block` sono il **punto** che il link nomina, quando lo nomina.
@@ -1440,26 +1985,27 @@ const STATE_KEY = {
   "fallito": "save.failed",
   "conflitto": "save.conflitto",
 } as const;
-
 async function applyExternalChange(id: string, outcome: ExternalChangeResult): Promise<void> {
+  if (outcome.kind === "echo") return;
+  invalidateMarkdownResourceDocument(id);
   if (outcome.kind === "warning") {
     if (outcome.cause === "altra_app") {
       notify(t("document.overwritten", { doc: id }), "guasto");
     } else {
       notify(t("document.changed_on_disk", { doc: id }), "info");
     }
-  } else if (outcome.kind === "echo" || outcome.kind === "untracked") {
+  } else if (outcome.kind === "untracked") {
     return;
   }
   // L'editor, quando il testo autorevole è cambiato, è già stato allineato
-  // dalla sessione, che lo ha diffuso alle sue superfici. Qui resta la
-  // lettura, che è del pannello.
-  await redrawReading(id);
+  // dalla sessione, che lo ha diffuso alle sue superfici. La lettura segue
+  // col suo refresh dal buffer corrente.
+  redrawReading(id);
 }
 
 async function reloadDocument(id: string): Promise<void> {
   await documentSessions.reloadIfClean(id);
-  await redrawReading(id);
+  redrawReading(id);
 }
 
 /// Rilegge dal disco il documento attivo (usato dopo un ripristino di versione,
@@ -1468,7 +2014,7 @@ export async function reloadCurrent(): Promise<void> {
   const doc = state.currentDoc;
   if (!doc) return;
   await documentSessions.forceReload(doc);
-  await redrawReading(doc);
+  redrawReading(doc);
   drawSave();
   redrawTabs(doc);
 }
@@ -1571,33 +2117,22 @@ export async function setMode(next: string): Promise<void> {
   const mode = r?.surface?.modes.find((candidate) => candidate.id === next);
   if (!r?.surface || !mode) return;
   const doc = activeDoc();
-  // Una presentazione resa nasce dal sorgente salvato: prima si svuota il
-  // debounce, qualunque nome le abbia dato la superficie.
-  if (mode.presentation === "rendered" && doc) await documentSessions.flush(doc);
+  // Nessun salvataggio per cambiare modo: la lettura si monta dal buffer
+  // corrente, e il cambio è immediato anche con modifiche non salvate.
   setPaneMode(layout.focus, mode.id);
   r.root.dataset.mode = mode.id;
   r.surface.setMode(mode.id);
-  if (mode.presentation === "rendered") {
-    if (doc) await updatePreview(r.previewEl, doc);
-    if (doc) markReadingVersion(r.previewEl, documentSessions.isDirty(doc));
-  } else {
-    clearPreview(r.previewEl);
-    r.surface.focus?.();
-  }
+  if (mode.presentation !== "rendered") r.surface.focus?.();
   drawToolbar(r);
   drawConflict(r, doc);
   await publishContext();
 }
 
 /// Porta la vista su un offset in byte UTF-8 del documento attivo.
+/// La superficie che possiede il modo decide dove scorrere: la lettura dal
+/// suo DOM reso, la scrittura dalla sua vista.
 export function revealByteOffset(byteOffset: number): void {
-  const pane = panes.get(layout.focus);
-  if (!pane) return;
-  if (selectedMode(pane)?.presentation !== "rendered") {
-    pane.surface?.revealByteOffset?.(byteOffset);
-    return;
-  }
-  sourceBlockAt(pane.previewEl, byteOffset)?.scrollIntoView({ block: "start" });
+  panes.get(layout.focus)?.surface?.revealByteOffset?.(byteOffset);
 }
 
 export function focusEditor(): void {

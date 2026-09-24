@@ -13,7 +13,7 @@
 package esempio:modello@0.1.0;
 
 world modello {
-    import fub:abi/host-vault-read@0.1.2;
+    import fub:abi/host-vault-read@0.2.0;
 
-    export fub:abi/plugin@0.1.2;
+    export fub:abi/plugin@0.2.0;
 }

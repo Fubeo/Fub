@@ -1,0 +1,31 @@
+{
+  "source": "manifest.json (MV3, Chromium-first)",
+  "converter": "xcrun safari-web-extension-converter apps/clipper --project-location ./safari-build --app-name \"Fub Clipper\" --bundle-identifier local.fub.clipper --swift --copy-icons",
+  "converterRequires": ["macOS with Xcode 15+", "run on a Mac; cannot be produced from the Linux builder"],
+  "permissionMapping": {
+    "activeTab": "supported via converter",
+    "scripting": "supported on Safari 15.4+; verify executeScript on the target version",
+    "storage": "supported (storage.local)",
+    "downloads": "NOT supported in Safari: channel.js returns a manual-save result; the popup instructs Copy file JSON + `fub-cli capture --file <it>`",
+    "contextMenus": "supported as contextMenus; verify menu labels on target version",
+    "nativeMessaging": "verify converter output: Safari maps to nativeMessaging in the containing app entitlements; NM host manifest installed by `fub-cli native-install` outside the browser",
+    "notifications": "supported; used ONLY as the openPopup fallback (menu gesture lost on some targets), never for capture content",
+    "optional_host_permissions": "verify converter mapping; Options > Origins + explicit browser grant required before any provider/image fetch"
+  },
+  "backgroundNote": "Classic (non-module) service worker was chosen so the converter can map it to a background page on Safari versions without SW support; verify safari-build output before signing.",
+  "runUnsignedLocally": "Safari -> Develop -> Allow Unsigned Extensions (macOS development only, re-allowed every browser launch)",
+  "signing": {
+    "status": "not-performed",
+    "reason": "no Apple Developer identity and no macOS toolchain on this Linux builder",
+    "requiredFor": ["TestFlight / App Store distribution", "running on Safari release without developer mode", "any iOS variant"]
+  },
+  "iosNote": "Out of scope for this extension package: on iOS capture travels via the MobileOwner share sheet producing the same capture-v1 payload; no iOS web-extension target is packaged here.",
+  "missingForStores": [
+    "Firefox AMO signing (addons.mozilla.org submission; unbranded/Firefox ESR loads unsigned unpacked builds) — no submission performed, external credential",
+    "Chrome Web Store publishing (submission + review) — no submission performed, external credential",
+    "Safari App Store signing + listing review — no submission performed, external credential"
+  ],
+  "iconsReady": ["icons/icon16.png", "icons/icon48.png", "icons/icon128.png", "icons/icon.svg (vector source)"],
+  "chromeWebStoreNote": "Load unpacked from apps/clipper with manifest.json; no build step. Minimum Chrome 109.",
+  "firefoxNote": "Load temporary add-on from a scratch copy of apps/clipper with manifest.firefox.json renamed to manifest.json, or submit the zip from npm run package:firefox to AMO for signing. MV2 variant: popup/background use browser.tabs.executeScript fallback in src/popup.js and src/background.js; verify on ESR 115."
+}

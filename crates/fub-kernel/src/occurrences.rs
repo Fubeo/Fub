@@ -266,8 +266,9 @@ fn prefix_len_there(hay: &str, needle: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::model::DocId;
     use fub_abi::query::{QueryClause, QueryLiteral, TextQuery};
-    use fub_abi::traits::Excerpts;
+    use fub_abi::traits::{Excerpts, LinkDirection, PropertyFilter, PropertyTest};
 
     fn text_query(text: &str, mode: TextMode, negated: bool) -> IndexQuery {
         IndexQuery::Documents {
@@ -527,5 +528,83 @@ mod tests {
         );
         // tetto applicato male lo perderebbe.
         assert!(spans.windows(2).all(|w| w[0].start < w[1].start));
+    }
+
+    fn query_of(predicate: QueryPredicate, negated: bool) -> IndexQuery {
+        IndexQuery::Documents {
+            matching: QueryExpr {
+                any: vec![QueryClause {
+                    all: vec![QueryLiteral { negated, predicate }],
+                }],
+            },
+            sort: None,
+            select: fub_abi::traits::PropertySelect::None,
+            page: None,
+            excerpts: Excerpts::Attach,
+        }
+    }
+
+    /// Le foglie che non sono testo non danno aghi: `Docs`, `Tag`, `Folder`,
+    /// `Linked`, `Custom` e `Property` selezionano senza cercare una stringa —
+    /// localizzare vorrebbe dire inventare coordinate senza domanda.
+    #[test]
+    fn non_text_leaves_yield_no_needles() {
+        let leaves = vec![
+            QueryPredicate::Docs {
+                docs: vec![DocId::new("a.md")],
+            },
+            QueryPredicate::Tag {
+                name: "casa".to_string(),
+                descendants: true,
+            },
+            QueryPredicate::Folder {
+                path: "Progetti".to_string(),
+                descendants: false,
+            },
+            QueryPredicate::Linked {
+                doc: DocId::new("a.md"),
+                direction: LinkDirection::Inbound,
+            },
+            QueryPredicate::Custom {
+                ns: "terzo".to_string(),
+                predicate: serde_json::Value::Null,
+            },
+            QueryPredicate::Property {
+                filter: PropertyFilter {
+                    key: "tipo".to_string(),
+                    test: PropertyTest::Exists,
+                },
+            },
+        ];
+        for predicate in leaves {
+            for negated in [false, true] {
+                let q = query_of(predicate.clone(), negated);
+                assert!(
+                    wanted(&q).is_empty(),
+                    "{predicate:?} (negated: {negated}) yields no needles"
+                );
+            }
+        }
+    }
+
+    /// Un ago vuoto si ignora: non localizza niente e non sposta gli altri.
+    #[test]
+    fn an_empty_needle_is_ignored() {
+        assert!(locate("qualcosa", &["".to_string()]).is_empty());
+        let source = "il gatto dorme";
+        assert_eq!(
+            locate(source, &["".to_string(), "gatto".to_string()]),
+            locate(source, &["gatto".to_string()])
+        );
+        assert!(wanted(&text_query("", TextMode::Terms, false)).is_empty());
+        assert!(wanted(&text_query("   ", TextMode::Phrase, false)).is_empty());
+    }
+
+    /// La negazione non si localizza, nella frase come nei termini: `NOT`
+    /// seleziona chi non contiene, e cercarcelo dentro sarebbe cercare ciò che
+    /// si è chiesto di non trovare.
+    #[test]
+    fn a_negated_phrase_is_not_localized() {
+        assert!(wanted(&text_query("gatto dorme", TextMode::Phrase, true)).is_empty());
     }
 }

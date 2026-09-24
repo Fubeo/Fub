@@ -26,7 +26,7 @@ export interface ThemeCssPolicy {
   readonly assetNamespace: string;
   readonly allowedHooks: readonly string[];
   readonly requiredRoles?: readonly string[];
-  readonly kind?: "sheet" | "skin";
+  readonly kind?: "sheet" | "skin" | "snippet";
 }
 
 // The allowlist is intentionally finite.  A theme may paint an existing surface,
@@ -135,6 +135,9 @@ const ALLOWED_PROPERTIES = new Set([
   "transition-property",
   "transition-timing-function",
   "user-select",
+  "vector-effect",
+  "text-anchor",
+  "vertical-align",
   "visibility",
   "white-space",
   "-webkit-appearance",
@@ -169,6 +172,7 @@ const STRUCTURAL_PROPERTIES: Record<string, true> = {
   columns: true,
   border: true,
   "border-width": true,
+  "vertical-align": true,
   "border-style": true,
 };
 const STRUCTURAL_PREFIXES = [
@@ -974,12 +978,31 @@ export function themeCssViolations(css: string, policy: ThemeCssPolicy): ThemeCs
   }
 
   const skin = policy.kind === "skin";
+  const snippet = policy.kind === "snippet";
   const violations: IndexedViolation[] = [
     ...atRuleViolations(css, root, skin ? "skin" : "sheet"),
     ...urlViolations(css, root, policy.assetNamespace),
     ...selectorViolations(css, root, policy.allowedHooks, skin),
     ...declarationViolations(css, root, skin),
   ];
+  if (snippet) {
+    root.walkAtRules((rule) => {
+      violations.push(violation(css, nodeIndex(css, rule), "at-rule", "user CSS cannot declare at-rules"));
+    });
+    for (const url of allUrls(css, root)) {
+      violations.push(violation(css, url.index, "remote-url", "user CSS cannot reference URLs"));
+    }
+    const allowed = new Set(policy.allowedHooks);
+    root.walkRules((rule) => {
+      for (const selector of rule.selector.split(",")) {
+        const classes = selector.trim().match(/^\.([a-z][a-z0-9-]*)(?:\s*\.([a-z][a-z0-9-]*))?$/);
+        if (!classes || !classes.slice(1).filter(Boolean).every((name) => allowed.has(name!))) {
+          violations.push(violation(css, nodeIndex(css, rule), "selector-token",
+            `user CSS selector ${selector.trim()} is outside the class hook allowlist`));
+        }
+      }
+    });
+  }
   if (!skin) {
     const declared = declaredRoles(root);
     for (const role of uniqueInOrder(policy.requiredRoles ?? []).filter((role) => !declared.has(role))) {
@@ -997,4 +1020,18 @@ export function sanitizeThemeCss(css: string, policy: ThemeCssPolicy): string {
   const violations = themeCssViolations(css, policy);
   if (violations.length > 0) throw new ThemeCssError(violations);
   return css;
+}
+
+/** User CSS is a paint-only, local-only subset of the theme-1 sheet contract.
+ * No @-rules, URLs, IDs, elements, attributes, pseudo selectors, or selector
+ * combinators beyond one descendant class are available to snippets. */
+export function sanitizeUserCss(css: string, allowedHooks: readonly string[]): string {
+  if (new TextEncoder().encode(css).length > 64 * 1024) {
+    throw new Error("user CSS exceeds the 64 KiB limit");
+  }
+  return sanitizeThemeCss(css, {
+    kind: "snippet",
+    assetNamespace: "",
+    allowedHooks,
+  });
 }

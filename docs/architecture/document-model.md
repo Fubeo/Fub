@@ -105,12 +105,18 @@ specifica del formato può restare `Custom`.
 
 ## Proprietà
 
-Il frontmatter grezzo resta JSON. `PropertyValue` offre una lettura normalizzata
-per valori comuni, senza cancellare la forma originale.
+Il frontmatter grezzo resta JSON e rimane l'autorità del valore.
+`PropertyValue` è una proiezione ricostruibile per valori comuni: testo, liste
+piatte, numeri, checkbox, date, date-ora, tag e link. Il registro
+`PropertyTypes` associa facoltativamente un tipo al nome in tutto il vault; è
+metadato di interpretazione, non una copia dei valori.
 
-Il parser non indovina uno schema di prodotto: una stringa diventa data soltanto
-quando rispetta la forma prevista; valori annidati non rappresentabili restano
-JSON.
+Senza dichiarazione restano valide le convenzioni `aliases`/`alias`,
+`tags` e `cssclasses`/`cssclass`. Una dichiarazione incompatibile, un valore
+annidato o uno schema futuro non viene convertito: resta JSON autorevole e si
+modifica dalla sorgente. Chi interroga, ordina, conta faccette o mostra colonne
+usa la stessa proiezione tipizzata; assente, `null` e lista vuota restano casi
+distinti.
 
 ## Workbook `.fubsheet`
 

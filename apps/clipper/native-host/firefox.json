@@ -1,0 +1,9 @@
+{
+  "name": "local.fub.clipper",
+  "description": "Fub Clipper native host (fub-clipper-host). Installed by `fub-cli native-install --extension-id <id>`; this template carries placeholders, never real paths.",
+  "path": "REPLACE_WITH_ABSOLUTE_PATH_TO_fub-clipper-host",
+  "type": "stdio",
+  "allowed_extensions": [
+    "clipper@fub.local"
+  ]
+}

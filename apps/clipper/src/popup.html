@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip to Fub</title>
+<style>
+:root { color-scheme: light dark; }
+body { font: 13px/1.45 system-ui, sans-serif; margin: 0; padding: 12px; width: 380px; background: #fff; color: #111; }
+@media (prefers-color-scheme: dark) { body { background: #1c1c1e; color: #f2f2f7; } }
+h1 { font-size: 14px; margin: 0 0 8px; }
+.row { margin: 8px 0; }
+label { display: block; font-weight: 600; margin-bottom: 2px; }
+input[type=text], select, textarea { width: 100%; box-sizing: border-box; background: #fff; color: #111; border: 1px solid #888; }
+@media (prefers-color-scheme: dark) { input[type=text], select, textarea { background: #2c2c2e; color: #f2f2f7; border-color: #636366; } }
+textarea { font-family: ui-monospace, monospace; font-size: 11px; }
+#preview { max-height: 220px; overflow: auto; border: 1px solid #8885; padding: 6px; white-space: pre-wrap; }
+.meta { color: #666; font-size: 12px; }
+@media (prefers-color-scheme: dark) { .meta, .small { color: #aeaeb2; } }
+.btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+button { padding: 6px 10px; }
+#error { color: #b00020; white-space: pre-wrap; }
+#status { color: #006400; white-space: pre-wrap; }
+@media (prefers-color-scheme: dark) { #error { color: #ff6961; } #status { color: #7ee787; } }
+.assets label { font-weight: 400; }
+#aiBox { border-top: 1px solid #8885; margin-top: 10px; padding-top: 8px; }
+#aiRequest { background: #8881; }
+.small { font-size: 11px; color: #666; }
+</style>
+</head>
+<body>
+<h1 data-i18n="popup.title">Clip to Fub</h1>
+<div class="row meta" id="pageMeta">Reading current tab…</div>
+<div class="row">
+  <label for="kind" data-i18n="popup.capture">Capture</label>
+  <select id="kind">
+    <option value="article" data-i18n="popup.capture.article">Article (reader)</option>
+    <option value="selection" data-i18n="popup.capture.selection">Selection</option>
+    <option value="highlights" data-i18n="popup.capture.highlights">Highlights</option>
+  </select>
+</div>
+<div class="row">
+  <label for="template" data-i18n="popup.template">Template</label>
+  <select id="template"><option value="default" data-i18n="popup.template.default">Default clip</option></select>
+  <span class="small" data-i18n="popup.template.hint">Import/export templates in Options.</span>
+</div>
+<div class="row">
+  <label for="title" data-i18n="popup.title.label">Title</label>
+  <input type="text" id="title" maxlength="512">
+</div>
+<div class="row">
+  <label for="mode" data-i18n="popup.mode">Destination mode</label>
+  <select id="mode">
+    <option value="create" data-i18n="popup.mode.create">New note</option>
+    <option value="append" data-i18n="popup.mode.append">Append to note</option>
+    <option value="prepend" data-i18n="popup.mode.prepend">Prepend to note</option>
+    <option value="daily" data-i18n="popup.mode.daily">Daily note</option>
+  </select>
+</div>
+<div class="row">
+  <label for="vault" data-i18n="popup.vault">Vault (optional, confirmed in app)</label>
+  <input type="text" id="vault" maxlength="256" placeholder="e.g. main">
+</div>
+<div class="row">
+  <label for="folder" data-i18n="popup.folder">Folder (optional, relative)</label>
+  <input type="text" id="folder" maxlength="512" placeholder="e.g. Clips/Web">
+</div>
+<div class="row">
+  <label for="note" data-i18n="popup.note">Note (optional, relative path)</label>
+  <input type="text" id="note" maxlength="512" placeholder="e.g. Clips/Web/article.md">
+</div>
+<div class="row">
+  <label data-i18n="popup.preview">Preview (Markdown)</label>
+  <div id="preview" aria-live="polite">(loading…)</div>
+</div>
+<div class="row assets" id="assets"><label data-i18n="popup.images">Images</label><div id="assetList" class="small">No images found.</div></div>
+<div class="row"><label><input type="checkbox" id="attachImages"> <span data-i18n="popup.images.attach">Attach checked images to the paired vault (native channel only, after explicit origin grant; never fetch automatically)</span></label></div>
+<div class="row">
+  <label><input type="checkbox" id="persistHighlights"> <span data-i18n="popup.highlights.persist">Save highlights for this page (off by default; restored when you reopen the clipper)</span></label>
+  <div class="btns">
+    <button id="clearHighlights" type="button" data-i18n="popup.highlights.clear">Clear this page's saved highlights</button>
+    <button id="exportHighlights" type="button" data-i18n="popup.highlights.export">Export saved highlights</button>
+  </div>
+</div>
+<div class="btns">
+  <button id="send" data-i18n="popup.send">Send to Fub</button>
+  <button id="copy" data-i18n="popup.copy">Copy file JSON</button>
+  <button id="highlight" data-i18n="popup.highlight">Highlight selection</button>
+</div>
+<div class="row" id="status" aria-live="polite"></div>
+<div class="row" id="error" role="alert"></div>
+<div id="aiBox">
+  <label data-i18n="popup.ai.title">Assistant (opt-in, off by default)</label>
+  <div class="small" id="aiState">Assistant disabled. Enable it in Options; nothing is sent anywhere until you preview and press Ask.</div>
+  <div class="row"><label for="aiPrompt" data-i18n="popup.ai.prompt">Instruction</label><input type="text" id="aiPrompt" maxlength="2000" placeholder="Summarise"></div>
+  <div class="row"><label for="aiRequest" data-i18n="popup.ai.request">Request preview (exact payload)</label><textarea id="aiRequest" rows="6" readonly></textarea></div>
+  <div class="btns"><button id="aiPreview" data-i18n="popup.ai.preview">Preview request</button><button id="aiAsk" disabled data-i18n="popup.ai.ask">Ask</button></div>
+  <div class="row"><label for="aiResult" data-i18n="popup.ai.result">Result (never writes automatically — copy what you want)</label><textarea id="aiResult" rows="6" readonly></textarea></div>
+</div>
+<script src="i18n.js"></script>
+<script src="capture.js"></script>
+<script src="convert.js"></script>
+<script src="matcher.js"></script>
+<script src="templates.js"></script>
+<script src="selectors.js"></script>
+<script src="images.js"></script>
+<script src="interpreter.js"></script>
+<script src="channel.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

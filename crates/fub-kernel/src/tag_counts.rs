@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use fub_abi::model::{canonical_tag, DocId, Tag};
+use fub_abi::model::{canonical_tag, DocId};
 use fub_abi::rules::tag::is_sub_tag;
 use fub_abi::traits::TagCount;
 
@@ -51,7 +51,8 @@ struct KeyEntry {
 
 impl TagCounts {
     /// Registra (o aggiorna) il contributo di una nota.
-    pub(crate) fn upsert(&mut self, id: &DocId, tags: &[Tag]) {
+    #[cfg(test)]
+    pub(crate) fn upsert(&mut self, id: &DocId, tags: &[fub_abi::model::Tag]) {
         self.upsert_names(id, tags.iter().map(|t| t.name.as_str()));
     }
 
@@ -200,6 +201,7 @@ impl TagCounts {
 mod tests {
     use super::*;
     use fub_abi::model::Span;
+    use fub_abi::model::Tag;
 
     fn tags(names: &[&str]) -> Vec<Tag> {
         names

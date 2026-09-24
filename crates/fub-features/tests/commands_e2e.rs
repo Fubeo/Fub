@@ -833,8 +833,7 @@ fn the_plan_of_a_rename_names_the_notes_that_link_it() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// vault.archive: comporre comandi (decisione 0013, `run_command`)
+// vault.archive: durable renames on apply, nested plans on dry-run
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -877,8 +876,8 @@ fn archiving_n_notes_is_n_renames_one_batch_and_one_actor() {
     assert_eq!(
         ws.read_source(&DocId::new("indice.md")).expect("legge"),
         "vedi [[a]] e [[b]]",
-        "i wikilink per nome pagina restano validi: li ha gestiti `note.rename`, \
-         che questa macro non ha riscritto"
+        "i wikilink per nome pagina restano validi: la rinomina dell'host \
+         gestisce i backlink, non la macro"
     );
 
     let notices: Vec<Notice> = rx.try_iter().collect();

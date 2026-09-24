@@ -315,6 +315,79 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("pending_keybindings", Why::AppSurface),
     ("adopt_keybindings", Why::AppSurface),
     ("discard_keybindings", Why::AppSurface),
+    // --- demo, supporto e finestre: la macchina attorno ai vault --------------
+    //
+    // La demo vive nella cartella di configurazione, la diagnostica nasce dal
+    // bootstrap prima di ogni vault e il recovery tocca i file di macchina con
+    // backup obbligatorio: niente di tutto questo appartiene a un vault, quindi
+    // niente appartiene al registro di un vault. Le finestre documento sono
+    // finestre native aperte dalla shell sopra la sessione autorevole.
+    ("demo_root", Why::AppSurface),
+    ("open_demo", Why::AppSurface),
+    ("close_demo", Why::AppSurface),
+    ("reset_demo", Why::AppSurface),
+    ("startup_diagnostics", Why::AppSurface),
+    ("support_preview", Why::AppSurface),
+    ("support_export", Why::AppSurface),
+    ("config_health", Why::AppSurface),
+    ("recover_config", Why::AppSurface),
+    ("open_document_window", Why::AppSurface),
+    ("close_document_window", Why::AppSurface),
+    ("finish_main_close", Why::AppSurface),
+    // --- mobile (P14/F37): il confine OS sopra lo stesso `Host` ---------------
+    //
+    // Share sheet, storage privato-vs-condiviso, permessi, grant e report
+    // JIT/WASM: la via d'ingresso del sistema operativo, che compone il kernel
+    // invece di viverci dentro — capture validate e poi applicate dall'unico
+    // `Host`, mai un secondo writer.
+    ("mobile_validate_capture", Why::AppSurface),
+    ("mobile_submit_capture", Why::AppSurface),
+    ("mobile_storage_roots", Why::AppSurface),
+    ("mobile_storage_preference", Why::AppSurface),
+    ("mobile_set_storage_preference", Why::AppSurface),
+    ("mobile_wasm_report", Why::AppSurface),
+    ("mobile_classify_opened_url", Why::AppSurface),
+    ("mobile_register_tree_grant", Why::AppSurface),
+    ("mobile_shared_mount_mode", Why::AppSurface),
+    // --- byte e finestre fidate: la porta è la credenziale --------------------
+    //
+    // Risorse, viewer e artefatti toccano byte o finestre native: ogni handler
+    // apre il gate `guard_trusted_local` su label+origin letti lato nativo,
+    // mai su argomenti JS — la legittimità sta in *chi bussa*, non in cosa
+    // chiede. Il deposito resta CAS esplicito via `ResourceWrite`, mai
+    // overwrite silenziosa.
+    ("resource_open", Why::AppSurface),
+    ("resource_read_chunk", Why::AppSurface),
+    ("resource_close", Why::AppSurface),
+    ("resource_write", Why::AppSurface),
+    ("viewer_open", Why::AppSurface),
+    ("viewer_save", Why::AppSurface),
+    ("save_artifact", Why::AppSurface),
+    // --- macchina e catalogo: sopra ogni vault --------------------------------
+    //
+    // Profili d'impostazione, capacità del frame, inventario installato e
+    // catalogo firmato vivono nel livello macchina: esistono prima di ogni
+    // vault e sopravvivono a tutti, quindi non appartengono al registro di
+    // nessun vault.
+    ("settings_profiles", Why::AppSurface),
+    ("export_settings_profile", Why::AppSurface),
+    ("import_settings_profile", Why::AppSurface),
+    ("duplicate_settings_profile", Why::AppSurface),
+    ("switch_settings_profile", Why::AppSurface),
+    ("reset_settings_profile", Why::AppSurface),
+    ("frame_capabilities", Why::AppSurface),
+    ("setting_requires_reopen", Why::AppSurface),
+    ("plugin_budget_snapshot", Why::AppSurface),
+    ("plugin_limited_mode", Why::AppSurface),
+    ("catalog_search", Why::AppSurface),
+    ("catalog_install", Why::AppSurface),
+    ("catalog_update", Why::AppSurface),
+    ("catalog_rollback", Why::AppSurface),
+    ("catalog_revoke", Why::AppSurface),
+    ("catalog_install_theme", Why::AppSurface),
+    ("catalog_update_theme", Why::AppSurface),
+    ("catalog_rollback_theme", Why::AppSurface),
+    ("catalog_revoke_theme", Why::AppSurface),
     // --- i tre ponti, in due metà ciascuno ----------------------------------
     ("list_views", Why::Bridge),
     ("render_view", Why::Bridge),

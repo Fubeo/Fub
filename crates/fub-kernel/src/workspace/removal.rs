@@ -10,6 +10,10 @@ pub struct PreparedDocumentRemoval {
     providers: Vec<(String, SharedIndexProvider)>,
     previous_provider_call: bool,
     watcher: bool,
+    /// `None` per un documento; la specie per una voce dell'anagrafe che
+    /// documento non è (un allegato, un file sconosciuto), che esce con
+    /// `EntryRemoved` invece di `DocumentRemoved`.
+    entry_kind: Option<EntryKind>,
 }
 
 pub struct CompletedDocumentRemoval {
@@ -18,6 +22,7 @@ pub struct CompletedDocumentRemoval {
     previous_provider_call: bool,
     watcher: bool,
     losses: Vec<IndexLoss>,
+    entry_kind: Option<EntryKind>,
 }
 
 impl PreparedDocumentRemoval {
@@ -30,6 +35,7 @@ impl PreparedDocumentRemoval {
             providers,
             previous_provider_call,
             watcher,
+            entry_kind,
         } = self;
         let mut losses = crate::index::forget_handles(&providers, std::slice::from_ref(&id));
         if let Err(error) = crate::index::release_handles(providers) {
@@ -41,6 +47,7 @@ impl PreparedDocumentRemoval {
             previous_provider_call,
             watcher,
             losses,
+            entry_kind,
         }
     }
 }
@@ -87,6 +94,72 @@ pub struct FinalizedDocumentDeletion {
     journal_fault: Option<String>,
 }
 
+/// La variante OS conserva lo stesso snapshot dell'operazione interna, senza
+/// simulare una voce `.trash` che non esiste.
+#[must_use = "la cancellazione OS completata va committata o annullata"]
+pub struct CompletedOsDocumentDeletion(CompletedOsDeletionState);
+
+enum CompletedOsDeletionState {
+    Internal {
+        completed: CompletedDocumentDeletion,
+        reason: crate::os_trash::FallbackReason,
+        size: u64,
+    },
+    Os {
+        workspace_id: u64,
+        id: DocId,
+        entry: Option<VaultEntry>,
+        fingerprint: Option<Revision>,
+        moved: crate::vault::CompletedOsTrash,
+        drafts: Arc<Drafts>,
+        journal: Arc<Journal>,
+        origin: fub_abi::event::Origin,
+    },
+}
+
+impl CompletedOsDocumentDeletion {
+    pub fn rollback(self) -> Result<()> {
+        match self.0 {
+            CompletedOsDeletionState::Internal { completed, .. } => completed.rollback(),
+            CompletedOsDeletionState::Os { moved, .. } => moved.rollback(),
+        }
+    }
+}
+
+#[must_use = "la cancellazione OS committata va finalizzata"]
+pub struct CommittedOsDocumentDeletion(CommittedOsDeletionState);
+
+enum CommittedOsDeletionState {
+    Internal {
+        committed: CommittedDocumentDeletion,
+        reason: crate::os_trash::FallbackReason,
+        size: u64,
+    },
+    Os {
+        removal: PreparedDocumentRemoval,
+        receipt: crate::os_trash::OsTrashReceipt,
+        drafts: Arc<Drafts>,
+        journal: Arc<Journal>,
+        origin: fub_abi::event::Origin,
+    },
+}
+
+pub struct FinalizedOsDocumentDeletion(FinalizedOsDeletionState);
+
+enum FinalizedOsDeletionState {
+    Internal {
+        finalized: FinalizedDocumentDeletion,
+        reason: crate::os_trash::FallbackReason,
+        size: u64,
+    },
+    Os {
+        removal: CompletedDocumentRemoval,
+        receipt: crate::os_trash::OsTrashReceipt,
+        draft_fault: Option<String>,
+        journal_fault: Option<String>,
+    },
+}
+
 impl PreparedDocumentDeletion {
     /// Esegue soltanto la mossa sullo storage e il sidecar, senza workspace.
     pub fn invoke(self) -> Result<CompletedDocumentDeletion> {
@@ -100,6 +173,43 @@ impl PreparedDocumentDeletion {
             journal: self.journal,
             origin: self.origin,
         })
+    }
+
+    pub fn invoke_os(
+        self,
+        backend: &dyn crate::os_trash::OsTrashBackend,
+    ) -> Result<CompletedOsDocumentDeletion> {
+        let moved = self.trash.invoke_os(backend)?;
+        Ok(CompletedOsDocumentDeletion(match moved {
+            crate::vault::CompletedOsTrashMove::Internal {
+                completed,
+                reason,
+                size,
+            } => CompletedOsDeletionState::Internal {
+                completed: CompletedDocumentDeletion {
+                    workspace_id: self.workspace_id,
+                    id: self.id,
+                    entry: self.entry,
+                    fingerprint: self.fingerprint,
+                    trash: completed,
+                    drafts: self.drafts,
+                    journal: self.journal,
+                    origin: self.origin,
+                },
+                reason,
+                size,
+            },
+            crate::vault::CompletedOsTrashMove::Os(moved) => CompletedOsDeletionState::Os {
+                workspace_id: self.workspace_id,
+                id: self.id,
+                entry: self.entry,
+                fingerprint: self.fingerprint,
+                moved,
+                drafts: self.drafts,
+                journal: self.journal,
+                origin: self.origin,
+            },
+        }))
     }
 }
 
@@ -144,6 +254,50 @@ impl CommittedDocumentDeletion {
     }
 }
 
+impl CommittedOsDocumentDeletion {
+    /// Tutto il lavoro sui provider e sugli store avviene fuori custodia.
+    pub fn invoke(self) -> FinalizedOsDocumentDeletion {
+        match self.0 {
+            CommittedOsDeletionState::Internal {
+                committed,
+                reason,
+                size,
+            } => FinalizedOsDocumentDeletion(FinalizedOsDeletionState::Internal {
+                finalized: committed.invoke(),
+                reason,
+                size,
+            }),
+            CommittedOsDeletionState::Os {
+                removal,
+                receipt,
+                drafts,
+                journal,
+                origin,
+            } => {
+                let draft_fault = drafts
+                    .discard(&receipt.id)
+                    .err()
+                    .map(|error| error.to_string());
+                let journal_fault = journal
+                    .append(
+                        origin,
+                        JournalOp::TrashedOs {
+                            doc: receipt.id.clone(),
+                            destination: receipt.dest.to_string(),
+                        },
+                    )
+                    .err();
+                FinalizedOsDocumentDeletion(FinalizedOsDeletionState::Os {
+                    removal: removal.invoke(),
+                    receipt,
+                    draft_fault,
+                    journal_fault,
+                })
+            }
+        }
+    }
+}
+
 impl Workspace {
     /// Non chiama provider. Un rientro che dovrebbe riusare un indice già in
     /// chiamata è rifiutato prima di mutare lo stato autorevole.
@@ -170,6 +324,36 @@ impl Workspace {
             providers: self.indexes.feed_handles(),
             previous_provider_call,
             watcher: false,
+            entry_kind: None,
+        }))
+    }
+
+    /// Si può cestinare: un documento, o una voce dell'anagrafe.
+    fn is_trashable(&self, id: &DocId) -> bool {
+        self.indexes.core.metas.contains_key(id) || self.indexes.core.entries.contains_key(id)
+    }
+
+    /// La rimozione dal core di ciò che la cancellazione ha appena spostato nel
+    /// cestino: il percorso dei documenti se lo è, altrimenti quello della voce.
+    fn prepare_trashed_removal(&mut self, id: &DocId) -> Result<Option<PreparedDocumentRemoval>> {
+        if self.indexes.core.contains(id) {
+            return self.prepare_document_removal(id);
+        }
+        self.indexes.ensure_mutation_available()?;
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        let Some(kind) = self.indexes.core.remove_entry(id) else {
+            self.dispatch.restore_provider_call(previous_provider_call);
+            return Ok(None);
+        };
+        Ok(Some(PreparedDocumentRemoval {
+            workspace_id: self.workspace_id,
+            id: id.clone(),
+            // Gli indici dei provider seguono i documenti: una voce che
+            // documento non è non ha niente da far dimenticare.
+            providers: Vec::new(),
+            previous_provider_call,
+            watcher: false,
+            entry_kind: Some(kind),
         }))
     }
 
@@ -194,6 +378,7 @@ impl Workspace {
             providers: self.indexes.feed_handles(),
             previous_provider_call,
             watcher: true,
+            entry_kind: None,
         }))
     }
 
@@ -273,7 +458,24 @@ impl Workspace {
             .restore_provider_call(completed.previous_provider_call);
         let finish = |ws: &mut Workspace| {
             ws.report_losses(completed.losses);
-            if ws.indexes.core.contains(&completed.id) {
+            if let Some(kind) = completed.entry_kind {
+                if ws.indexes.core.entries.contains_key(&completed.id) {
+                    ws.report_trouble(
+                        Severity::Warning,
+                        Some(completed.id),
+                        PluginError::Conflict(
+                            "la voce è stata ricreata durante la rimozione".into(),
+                        ),
+                        None,
+                    );
+                } else {
+                    ws.emit_event(Event::EntryRemoved {
+                        id: completed.id,
+                        kind,
+                    });
+                    ws.emit_event(Event::IndexUpdated);
+                }
+            } else if ws.indexes.core.contains(&completed.id) {
                 ws.report_trouble(
                     Severity::Warning,
                     Some(completed.id),
@@ -297,7 +499,9 @@ impl Workspace {
     /// Cattura il documento e prepara la mossa senza I/O né mutazioni del core.
     pub fn prepare_document_deletion(&self, id: &DocId) -> Result<PreparedDocumentDeletion> {
         self.indexes.ensure_mutation_available()?;
-        if !self.indexes.core.metas.contains_key(id) {
+        // Un documento o una qualunque voce dell'anagrafe: un allegato si
+        // cestina come una nota (F02), e il cestino non distingue.
+        if !self.is_trashable(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         Ok(PreparedDocumentDeletion {
@@ -321,7 +525,7 @@ impl Workspace {
     {
         let current = completed.workspace_id == self.workspace_id
             && completed.trash.original() == &completed.id
-            && self.indexes.core.metas.contains_key(&completed.id)
+            && self.is_trashable(&completed.id)
             && self.indexes.core.entries.get(&completed.id) == completed.entry.as_ref()
             && self.entry_fingerprint(&completed.id) == completed.fingerprint
             && completed
@@ -338,7 +542,7 @@ impl Workspace {
         if let Err(error) = self.indexes.ensure_mutation_available() {
             return Err(Box::new((error, completed)));
         }
-        let removal = match self.prepare_document_removal(&completed.id) {
+        let removal = match self.prepare_trashed_removal(&completed.id) {
             Ok(Some(removal)) => removal,
             Ok(None) => {
                 return Err(Box::new((
@@ -355,6 +559,173 @@ impl Workspace {
             journal: completed.journal,
             origin: completed.origin,
         })
+    }
+
+    pub fn commit_os_document_deletion(
+        &mut self,
+        completed: CompletedOsDocumentDeletion,
+    ) -> std::result::Result<
+        CommittedOsDocumentDeletion,
+        Box<(KernelError, CompletedOsDocumentDeletion)>,
+    > {
+        let (workspace_id, id, entry, fingerprint, moved, drafts, journal, origin) =
+            match completed.0 {
+                CompletedOsDeletionState::Internal {
+                    completed,
+                    reason,
+                    size,
+                } => {
+                    return self
+                        .commit_document_deletion(completed)
+                        .map(|committed| {
+                            CommittedOsDocumentDeletion(CommittedOsDeletionState::Internal {
+                                committed,
+                                reason,
+                                size,
+                            })
+                        })
+                        .map_err(|failure| {
+                            let (error, completed) = *failure;
+                            Box::new((
+                                error,
+                                CompletedOsDocumentDeletion(CompletedOsDeletionState::Internal {
+                                    completed,
+                                    reason,
+                                    size,
+                                }),
+                            ))
+                        });
+                }
+                CompletedOsDeletionState::Os {
+                    workspace_id,
+                    id,
+                    entry,
+                    fingerprint,
+                    moved,
+                    drafts,
+                    journal,
+                    origin,
+                } => (
+                    workspace_id,
+                    id,
+                    entry,
+                    fingerprint,
+                    moved,
+                    drafts,
+                    journal,
+                    origin,
+                ),
+            };
+        macro_rules! reject {
+            ($error:expr) => {
+                return Err(Box::new((
+                    $error,
+                    CompletedOsDocumentDeletion(CompletedOsDeletionState::Os {
+                        workspace_id,
+                        id,
+                        entry,
+                        fingerprint,
+                        moved,
+                        drafts,
+                        journal,
+                        origin,
+                    }),
+                )))
+            };
+        }
+        let current = workspace_id == self.workspace_id
+            && moved.original() == &id
+            && self.is_trashable(&id)
+            && self.indexes.core.entries.get(&id) == entry.as_ref()
+            && self.entry_fingerprint(&id) == fingerprint
+            && fingerprint
+                .as_ref()
+                .is_none_or(|revision| revision == moved.revision())
+            && moved.is_current();
+        if !current {
+            reject!(KernelError::Stale(id.to_string()));
+        }
+        if let Err(error) = self.indexes.ensure_mutation_available() {
+            reject!(error);
+        }
+        let removal = match self.prepare_trashed_removal(&id) {
+            Ok(Some(removal)) => removal,
+            Ok(None) => reject!(KernelError::Stale(id.to_string())),
+            Err(error) => reject!(error),
+        };
+        Ok(CommittedOsDocumentDeletion(CommittedOsDeletionState::Os {
+            removal,
+            receipt: moved.receipt(),
+            drafts,
+            journal,
+            origin,
+        }))
+    }
+
+    pub fn finish_os_document_deletion(
+        &mut self,
+        finalized: FinalizedOsDocumentDeletion,
+    ) -> std::result::Result<
+        crate::os_trash::OsTrashReceipt,
+        Box<(PluginError, FinalizedOsDocumentDeletion)>,
+    > {
+        match finalized.0 {
+            FinalizedOsDeletionState::Internal {
+                finalized,
+                reason,
+                size,
+            } => {
+                let original = finalized.removal.id.clone();
+                self.finish_document_deletion(finalized)
+                    .map(|trashed| crate::os_trash::OsTrashReceipt {
+                        id: original,
+                        via: crate::os_trash::TrashVia::InternalFallback { reason },
+                        dest: self.docs.vault.root().join(trashed.as_str()),
+                        size,
+                    })
+                    .map_err(|failure| {
+                        let (error, finalized) = *failure;
+                        Box::new((
+                            error,
+                            FinalizedOsDocumentDeletion(FinalizedOsDeletionState::Internal {
+                                finalized,
+                                reason,
+                                size,
+                            }),
+                        ))
+                    })
+            }
+            FinalizedOsDeletionState::Os {
+                removal,
+                receipt,
+                draft_fault,
+                journal_fault,
+            } => {
+                if removal.workspace_id != self.workspace_id {
+                    return Err(Box::new((
+                        PluginError::Conflict(
+                            "la cancellazione appartiene a un altro workspace".into(),
+                        ),
+                        FinalizedOsDocumentDeletion(FinalizedOsDeletionState::Os {
+                            removal,
+                            receipt,
+                            draft_fault,
+                            journal_fault,
+                        }),
+                    )));
+                }
+                self.apply_document_removal(removal);
+                self.dispatch_pending();
+                self.finish_deleted_document(
+                    &receipt.id,
+                    receipt.id.clone(),
+                    None,
+                    draft_fault,
+                    journal_fault,
+                );
+                Ok(receipt)
+            }
+        }
     }
 
     pub fn finish_document_deletion(

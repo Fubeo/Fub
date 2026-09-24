@@ -64,21 +64,22 @@ In `main` sono consegnati:
 - manifest e lifecycle `Plugin`;
 - `CommandProvider`, `FormatProvider`, `ViewProvider` e `GridProvider` nei
   casi esercitati;
+- `IndexProvider` ed `EventHandler` inbound reali, con feed, query, flush,
+  close, `up_to_date`, reconcile e consegna delle notifiche nello stesso
+  registro del nativo;
 - lettura del modello ed eventi host;
 - inventario macchina, installazione, consenso, enabled/disabled, restart e
   remove tramite il percorso desktop;
+- catalogo firmato con installazione, aggiornamento, rollback e revoca;
 - errori e permessi tipizzati;
 - timeout a epoche e limite di memoria;
 - validazione della UI non fidata, teardown e parità nativo/WASM nei casi
   coperti.
 
-`IndexProvider` e `EventHandler` inbound restano deferred. Anche un provider
-consegnato non è montato automaticamente: capability dichiarata, consenso
+Anche un provider consegnato non è montato automaticamente: capability dichiarata, consenso
 `granted`, scelta `enabled` e capability effettiva del `Guard` restano fatti
 distinti. Il percorso è consegnato in `main`; le famiglie ancora differite
 restano elencate nella pagina di stato.
-
-Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 
 ## Compatibilità
 

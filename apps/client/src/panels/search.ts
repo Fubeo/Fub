@@ -1,12 +1,11 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
 import type { DocumentMatch, Span } from "../host/contract";
-import { textQuery } from "../host/contract";
-import { matchingDocuments, vaultStatus } from "../host/query";
+import { matchingDocuments, searchExpression, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { rowsToShow } from "../rules/results";
 import { $ } from "../ui/dom";
 import { setTooltip } from "../ui/tooltip";
-import { refreshOn, registerPanel } from "../ui/panel-host";
+import { refreshOn, registerPanel, unregisterPanel } from "../ui/panel-host";
 import { openDocument, revealByteOffset } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
@@ -17,11 +16,17 @@ import { createNote } from "../state/vault";
 import { notify } from "../ui/notify";
 import { Race } from "../ui/race";
 import { on } from "../state/store";
+import type { Lifetime } from "../ui/lifetime";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
 const searchResultsEl = $("#search-results");
-
+/// Finestra del disegno: quante righe si chiedono al kernel per volta. La forma
+/// delle righe resta in `rules/results.ts`; qui si decide solo il tetto.
+const SEARCH_PAGE = 50;
+const excluded = new Set<string>();
+const excludedFolders = new Set<string>();
+let shownHits: DocumentMatch[] = [];
 let searchTimer: number | undefined;
 /// Una risposta lenta di una query vecchia non deve sovrascrivere i risultati di
 /// una più recente. Il contatore scritto a mano che stava qui è diventato il
@@ -29,13 +34,12 @@ let searchTimer: number | undefined;
 /// tutt'e tre i modi: un giro per ricerca, il controllo anche nel ramo
 /// d'errore, e l'annullamento a mani vuote.
 const race = new Race();
-
 /// La query del vault **di questa sessione**: aprire un risultato non la azzera
 /// (U17) e cambiarla non tocca quella di un altro vault (R07: il cambio vault
 /// passa da `clearSearch`, non da una memoria condivisa).
-export function mountSearch(): void {
-  searchInputEl.addEventListener("input", scheduleSearch);
-  searchInputEl.addEventListener("keydown", (e) => {
+export function mountSearch(lifetime: Lifetime): void {
+  lifetime.listen(searchInputEl, "input", () => { excluded.clear(); excludedFolders.clear(); scheduleSearch(); });
+  lifetime.listen(searchInputEl, "keydown", (e) => {
     // La casella ha i suoi tasti, e sono questi: Invio apre il primo risultato,
     // Escape pulisce l'input e resta nel campo. La navigazione completa della
     // lista (Frecce/Enter/Esc) vive sulla lista, che è una listbox.
@@ -44,12 +48,14 @@ export function mountSearch(): void {
       openFirstResult();
     } else if (e.key === "Escape") {
       searchInputEl.value = "";
+      excluded.clear();
+      excludedFolders.clear();
       race.cancel();
       searchResultsEl.innerHTML = "";
       searchSummaryEl.textContent = "";
     }
   });
-  wireSearchListKeys();
+  wireSearchListKeys(lifetime);
   // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
   // invecchiare sotto gli occhi di chi legge. Dentro un lotto (decisione 0011)
   // `index_updated` non arriva — arriva `batch_ended` — e chi reagisce
@@ -66,7 +72,14 @@ export function mountSearch(): void {
   });
   // Cambio vault (R07): la query non si eredita — si azzera input e risultati,
   // senza forzare i file se l'utente stava guardando una view dichiarata.
-  on("vault", clearSearchState);
+  lifetime.add(on("vault", clearSearchState));
+  lifetime.add(() => {
+    window.clearTimeout(searchTimer);
+    race.cancel();
+    searchResultsEl.replaceChildren();
+    shownHits = [];
+    unregisterPanel("shell:search");
+  });
 }
 
 function scheduleSearch(): void {
@@ -80,6 +93,9 @@ function scheduleSearch(): void {
 function clearSearchState(): void {
   window.clearTimeout(searchTimer);
   searchInputEl.value = "";
+  excluded.clear();
+  excludedFolders.clear();
+  shownHits = [];
   race.cancel();
   searchResultsEl.innerHTML = "";
   searchSummaryEl.textContent = "";
@@ -94,6 +110,8 @@ export function clearSearch(): void {
 /// `CommandEffect::RunSearch`): riempie la barra e usa lo stesso giro
 /// dell'utente, invece di una seconda strada che diverge.
 export function searchFor(query: string): void {
+  excluded.clear();
+  excludedFolders.clear();
   searchInputEl.value = query;
   void runSearch();
 }
@@ -150,9 +168,11 @@ async function runSearch(): Promise<void> {
       type SearchFailure = { error: string };
       const isFailure = (v: SearchPage | SearchFailure): v is SearchFailure => "error" in v;
       const page = await expected(
-        matchingDocuments(textQuery(query, true), { offset: 0, limit: SEARCH_PAGE }).catch(
-          (e: unknown): SearchFailure => ({ error: errorText(e) }),
-        ),
+        Promise.resolve()
+          .then(() => matchingDocuments(
+            searchExpression(query, [...excluded], [...excludedFolders]), { offset: 0, limit: SEARCH_PAGE },
+          ))
+          .catch((e: unknown): SearchFailure => ({ error: errorText(e) })),
       );
       if (isFailure(page)) {
         showSearchResults([], page.error, false, 0);
@@ -226,6 +246,37 @@ function showSearchResults(
         : t("search.count", { count: hits.length });
 
   searchResultsEl.innerHTML = "";
+  shownHits = hits;
+  const tools = document.createElement("li");
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "search-action";
+  copy.textContent = t("search.copy_visible");
+  copy.addEventListener("click", () => {
+    if (!navigator.clipboard) {
+      notify(t("search.clipboard_unavailable"), "guasto");
+      return;
+    }
+    void navigator.clipboard.writeText(shownHits.map((hit) => hit.doc).join("\n"))
+      .catch((err: unknown) => notify(errorText(err), "guasto"));
+  });
+  tools.append(copy);
+  const explain = document.createElement("button");
+  explain.type = "button";
+  explain.className = "search-action";
+  explain.textContent = t("search.explain");
+  explain.addEventListener("click", () => {
+    try {
+      const detail = document.createElement("pre");
+      detail.textContent = JSON.stringify(searchExpression(searchInputEl.value, [...excluded], [...excludedFolders]), null, 2);
+      tools.querySelector("pre")?.remove();
+      tools.append(detail);
+    } catch (err) {
+      notify(errorText(err));
+    }
+  });
+  tools.append(explain);
+  searchResultsEl.append(tools);
   // Le righe si montano **fuori dal documento** e si attaccano in una volta
   // sola. Non è cosmetica: una pagina di cinquanta note con le loro occorrenze
   // sono qualche migliaio di `<li>`, e attaccarli uno per uno a una lista che è
@@ -262,6 +313,32 @@ function showSearchResults(
     }
     openAt(button, row.doc, row.byteOffset);
     li.appendChild(button);
+    if (row.occurrence === undefined) {
+      const omit = document.createElement("button");
+      omit.type = "button";
+      omit.className = "search-action";
+      omit.textContent = t("search.exclude");
+      omit.setAttribute("aria-label", t("search.exclude_doc", { doc: row.doc }));
+      omit.addEventListener("click", () => {
+        excluded.add(row.doc);
+        void runSearch();
+      });
+      li.appendChild(omit);
+      const slash = row.doc.lastIndexOf("/");
+      if (slash >= 0) {
+        const folder = row.doc.slice(0, slash);
+        const omitFolder = document.createElement("button");
+        omitFolder.type = "button";
+        omitFolder.className = "search-action";
+        omitFolder.textContent = t("search.exclude_folder", { folder });
+        omitFolder.setAttribute("aria-label", t("search.exclude_folder", { folder }));
+        omitFolder.addEventListener("click", () => {
+          excludedFolders.add(folder);
+          void runSearch();
+        });
+        li.appendChild(omitFolder);
+      }
+    }
     newItems.appendChild(li);
   }
   if (total > hits.length) {
@@ -284,7 +361,7 @@ function showSearchResults(
   // Il nome non è la query così com'è, e la ragione sta in
   // `rules/nome-cercato.ts`: `note.create` prende un **path**, quindi uno slash
   // cercato creerebbe una cartella che nessuno ha chiesto.
-  if (!error && hits.length === 0 && !indexing) {
+  if (!error && hits.length === 0 && !indexing && !searchInputEl.value.trim().startsWith('{"any"')) {
     const name = searchedName(searchInputEl.value);
     if (name) newItems.appendChild(createRow(name));
   }
@@ -345,9 +422,6 @@ function openAt(el: HTMLElement, doc: string, byteOffset?: number): void {
   });
 }
 
-/// La finestra della ricerca nel vault (U12/R06): prima pagina da 50, poi
-/// pagine successive con la stessa query — mai l'intero vault in memoria.
-const SEARCH_PAGE = 50;
 
 /// Pagina successiva della stessa query: oltre-200 trovabile (R06) senza
 /// caricare tutto il vault — si chiede la finestra dopo, col `total` che il
@@ -355,15 +429,19 @@ const SEARCH_PAGE = 50;
 async function runSearchMore(knownTotal: number): Promise<void> {
   const query = searchInputEl.value.trim();
   if (!query) return;
-  const shown = searchResultsEl.querySelectorAll(".search-result").length;
+  const shown = shownHits.length;
   await race.last(async (expected) => {
     type SearchPage = { items: DocumentMatch[]; total: number };
-    const page: SearchPage = await expected(
-      matchingDocuments(textQuery(query, true), { offset: 0, limit: shown + SEARCH_PAGE }).then((p) => ({
-        items: p.items,
-        total: p.total,
-      })),
+    const page: SearchPage | { error: string } = await expected(
+      Promise.resolve()
+        .then(() => matchingDocuments(searchExpression(query, [...excluded], [...excludedFolders]), { offset: 0, limit: shown + SEARCH_PAGE }))
+        .then((p) => ({ items: p.items, total: p.total }))
+        .catch((e: unknown) => ({ error: errorText(e) })),
     );
+    if ("error" in page) {
+      showSearchResults([], page.error);
+      return;
+    }
     showSearchResults(page.items, null, false, Math.max(knownTotal, page.total));
   });
 }
@@ -378,10 +456,10 @@ function openFirstResult(): void {
 /// Risultati come lista di comandi, non listbox: le righe aprono documenti o
 /// eseguono azioni, non selezionano opzioni. Le frecce spostano il focus fra
 /// i pulsanti nativi; Esc riporta al campo.
-function wireSearchListKeys(): void {
+function wireSearchListKeys(lifetime: Lifetime): void {
   searchResultsEl.setAttribute("aria-label", t("search.results"));
   searchResultsEl.tabIndex = -1;
-  searchResultsEl.addEventListener("keydown", (e) => {
+  lifetime.listen(searchResultsEl, "keydown", (e) => {
     const items = [...searchResultsEl.querySelectorAll<HTMLButtonElement>(".search-result")];
     if (items.length === 0) return;
     const current = document.activeElement;

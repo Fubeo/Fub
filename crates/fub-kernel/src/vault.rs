@@ -306,6 +306,71 @@ pub struct CompletedVaultTrash {
     identity: Option<FileIdentity>,
     sidecar_fault: Option<KernelError>,
 }
+/// Esito detached della scelta OS. Il ramo interno conserva il token storico
+/// (e quindi sidecar e rollback); quello OS non scrive nel cestino del vault.
+pub enum CompletedOsTrashMove {
+    Os(CompletedOsTrash),
+    Internal {
+        completed: CompletedVaultTrash,
+        reason: crate::os_trash::FallbackReason,
+        size: u64,
+    },
+}
+
+pub struct CompletedOsTrash {
+    vault: Vault,
+    original: DocId,
+    destination: Utf8PathBuf,
+    revision: Revision,
+    size: u64,
+}
+
+impl CompletedOsTrash {
+    pub fn original(&self) -> &DocId {
+        &self.original
+    }
+
+    pub fn revision(&self) -> &Revision {
+        &self.revision
+    }
+
+    pub fn is_current(&self) -> bool {
+        !self.vault.exists(&self.original)
+            && std::fs::read(self.destination.as_std_path())
+                .map(|bytes| Revision::of_bytes(&bytes) == self.revision)
+                .unwrap_or(false)
+    }
+
+    pub fn receipt(&self) -> crate::os_trash::OsTrashReceipt {
+        crate::os_trash::OsTrashReceipt {
+            id: self.original.clone(),
+            via: crate::os_trash::TrashVia::Os,
+            dest: self.destination.clone(),
+            size: self.size,
+        }
+    }
+
+    pub fn rollback(self) -> Result<()> {
+        if !self.is_current() {
+            return Err(KernelError::Stale(self.original.to_string()));
+        }
+        crate::storage::FsStorage
+            .rename_no_replace(&self.destination, &self.vault.path_for(&self.original)?)
+            .map_err(|source| KernelError::Io {
+                path: self.destination,
+                source,
+            })
+    }
+}
+
+impl CompletedOsTrashMove {
+    pub fn rollback(self) -> Result<()> {
+        match self {
+            Self::Os(moved) => moved.rollback(),
+            Self::Internal { completed, .. } => completed.rollback(),
+        }
+    }
+}
 
 impl PreparedVaultTrash {
     /// Sposta il file e scrive il sidecar usando soltanto stato owned.
@@ -321,6 +386,65 @@ impl PreparedVaultTrash {
             identity,
             sidecar_fault,
         })
+    }
+
+    /// Tentativo OS esplicito; se il backend lascia intatta la sorgente
+    /// degrada al percorso interno *identico* alla cancellazione normale.
+    pub fn invoke_os(
+        self,
+        backend: &dyn crate::os_trash::OsTrashBackend,
+    ) -> Result<CompletedOsTrashMove> {
+        use crate::os_trash::FallbackReason;
+
+        let original = self.vault.path_for(&self.original)?;
+        let bytes = self.vault.read_bytes(&self.original)?;
+        let revision = Revision::of_bytes(&bytes);
+        let size = bytes.len() as u64;
+        match backend.move_file_to_os_trash(&original) {
+            Ok(destination) => {
+                if !destination.is_absolute()
+                    || destination.starts_with(self.vault.root())
+                    || self.vault.exists(&self.original)
+                    || std::fs::read(destination.as_std_path())
+                        .map(|moved| Revision::of_bytes(&moved) != revision)
+                        .unwrap_or(true)
+                {
+                    return Err(KernelError::Stale(format!(
+                        "{} (destinazione OS: {destination})",
+                        self.original
+                    )));
+                }
+                Ok(CompletedOsTrashMove::Os(CompletedOsTrash {
+                    vault: self.vault,
+                    original: self.original,
+                    destination,
+                    revision,
+                    size,
+                }))
+            }
+            Err(error) => {
+                // Anche un backend rotto che ha spostato prima di rispondere
+                // Err non può far scattare una seconda mossa come fallback.
+                if self
+                    .vault
+                    .read_bytes(&self.original)
+                    .map(|current| Revision::of_bytes(&current) != revision)
+                    .unwrap_or(true)
+                {
+                    return Err(KernelError::Stale(self.original.to_string()));
+                }
+                let reason = if error.kind() == std::io::ErrorKind::Unsupported {
+                    FallbackReason::Unsupported
+                } else {
+                    FallbackReason::Unavailable
+                };
+                Ok(CompletedOsTrashMove::Internal {
+                    completed: self.invoke()?,
+                    reason,
+                    size,
+                })
+            }
+        }
     }
 }
 
@@ -964,6 +1088,22 @@ impl Vault {
                 path: from_path,
                 source: and,
             })
+    }
+
+    /// Crea una cartella vuota, con le cartelle mancanti sopra di lei.
+    ///
+    /// Una voce già presente in quel punto è
+    /// [`KernelError::AlreadyExists`], non un successo: il chiamante sceglieva
+    /// un nome e deve sapere che era occupato.
+    pub fn create_folder(&self, folder: &str) -> Result<()> {
+        let path = self.path_for(&DocId::new(folder))?;
+        match self.storage.create_dir(&path) {
+            Ok(()) => Ok(()),
+            Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => {
+                Err(KernelError::AlreadyExists(folder.to_string()))
+            }
+            Err(and) => Err(KernelError::Io { path, source: and }),
+        }
     }
 
     /// Sposta un documento soltanto se nessuno ha occupato la destinazione.

@@ -97,10 +97,55 @@ nomi simili restano dati dell'utente.
 | `.fub/settings.json` | autorevole | 1 | kernel/host impostazioni |
 | `.fub/workspace.json` | autorevole | 1 | organizzazione |
 | `.fub/journal.jsonl` | autorevole operativo | 1 | registro mutazioni |
+| `.fub/mounts.json` | autorevole | 1 | kernel/host mount esterni espliciti |
 | `.fub/drafts/` | autorevole | 1 | bozze non consolidate |
+| `.fub/rename-recovery/*.json` | autorevole operativo | 1 | kernel/host rinomina |
 | `.fub/data/entries.json` | derivata | 5 | anagrafe dei file |
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
+| `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
+
+`properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
+ha un proprio schema JSON `{ "version": 1, "types": { ... } }`: separa la
+dichiarazione per nome dai valori, che restano nel frontmatter, e dagli indici,
+che sono ricostruibili. Una versione futura o un valore illeggibile non viene
+riscritto durante la lettura; finché non è compreso, il kernel usa
+l'interpretazione convenzionale e l'editor rifiuta di sovrascriverlo.
+Gli intent di rinomina hanno un nome deterministico derivato da sorgente,
+destinazione e revisione della preimmagine. Lo schema 1 conserva stato
+(`active` o `cancelled`), path, preimmagine e riscritture dei backlink con la
+revisione risultante attesa. L'intent viene pubblicato prima di spostare
+side-data o file. Alla riapertura, dopo l'indicizzazione completa, l'host
+classifica i byte osservati: riprende in avanti soltanto una preimmagine ancora
+alla sorgente, completa le riscritture se la stessa preimmagine è già alla
+destinazione e riprende all'indietro uno stato `cancelled`. Collisioni,
+preimmagini cambiate o posizioni ambigue restano conflitti senza
+sovrascrittura. Un record corrotto o con schema futuro resta sul disco e viene
+segnalato senza impedire il recupero degli altri record validi.
+
+`archive-recovery.json` conserva l'intero batch di `vault.archive`: ogni voce
+ha sorgente, destinazione, preimmagine e stato `pending`, `done` o `conflict`.
+Il comando valida tutte le preimmagini e le destinazioni prima della prima
+mutazione, quindi pubblica il record. Dopo ogni rinomina ne aggiorna lo stato;
+alla riapertura riconcilia anche il caso in cui il file sia stato spostato ma
+lo stato non sia ancora stato scritto. Il record terminale viene rimosso. I
+file compagni `*.lock` dello storage non sono intent e vengono ignorati dalla
+scansione.
+
+`mounts.json` è un oggetto JSON con `schema: 1` e `mounts`: ogni voce
+contiene `mount` (`name`, `target` assoluto, `namespace`) e `identity`
+(`volume`, `file`). Il namespace è l'identità stabile di routing; non è un
+`DocId` del vault. L'assenza del file significa nessun mount. Uno schema futuro,
+un file corrotto o duplicati strutturali vengono rifiutati, non reinterpretati
+come registro vuoto né sovrascritti. Una singola destinazione assente, sostituita
+o non più verificabile resta invece configurata ma inattiva: il vault apre,
+pubblica una diagnostica e non espone quella rotta; `mount.remove` continua a
+poterla eliminare senza toccare i byte esterni. Gli aggiornamenti fondono una
+singola aggiunta/rimozione sotto il lock atomico dello storage; l'aggiunta
+rivalida identità e componenti senza symlink prima e dopo il commit e annulla la
+voce se la seconda verifica fallisce. Unmount modifica solo il registro, mai i
+byte nella cartella esterna. I contenuti esterni non sono inclusi nello snapshot
+globale del vault: il backup conserva il riferimento.
 
 Il nome esatto delle chiavi sotto lo storage plugin appartiene al plugin.
 
@@ -123,25 +168,35 @@ essere eliminata e ricostruita dai documenti.
 ├── versions.json
 └── <impronta>/
     ├── meta.json
-    └── <timestamp>.md
+    └── <timestamp>.<estensione>
 ```
 
 `versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
 autorevoli: eliminarli perde la memoria delle versioni. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
-La lettura per anteprima o `version.restore` verifica che il `VersionRef`
-esista, che il blob sia leggibile e che dimensione e impronta corrispondano ai
-byte dello snapshot, prima di decodificarlo come UTF-8. Se anche una sola
-verifica fallisce, l'operazione restituisce un errore senza scrivere il
-documento corrente o l'indice.
+Gli snapshot conservano i byte originali, anche per allegati binari, senza
+convertire BOM o terminatori di riga. Il nome riprende l'estensione del file;
+se manca, contiene soltanto il timestamp.
+
+La lettura verifica che il `VersionRef` esista, che il blob sia leggibile e che
+dimensione e impronta corrispondano ai byte dello snapshot. L'anteprima mostra
+il testo quando è UTF-8, altrimenti indica la dimensione del contenuto binario.
+`version.restore` usa sempre i byte originali, senza decodifica testuale.
+Una verifica fallita non sovrascrive il documento corrente.
+
+Se l'indice manca o non è leggibile, lo store lo ricostruisce dagli snapshot e
+prova a ripubblicarlo. Un errore di scrittura del solo indice genera un avviso:
+view e comandi possono ancora ricostruire e leggere la cronologia dai dati
+autorevoli.
 
 `version.restore` cattura la revisione del documento prima di leggere lo
 snapshot e usa quella revisione per la scrittura condizionata. Il confronto e
 scambio (CAS) impedisce agli writer cooperativi di sovrascrivere una modifica
 intervenuta durante la lettura. Per gli writer esterni è best-effort: una
 modifica già osservabile al confronto produce un conflitto. Il conflitto e gli
-errori di lettura o confronto non modificano documento e indice. Sui file
-regolari sostituibili anche un errore di scrittura preserva i byte precedenti;
+errori di lettura o confronto non sovrascrivono il documento corrente; una
+preimmagine già fotografata resta conservata anche se il commit fallisce.
+Sui file regolari sostituibili anche un errore di scrittura preserva i byte precedenti;
 per symlink, hardlink o conteggio dei nomi non disponibile, la scrittura
 in-place preserva l'identità ma un errore può lasciare i byte modificati.
 Quando riesce, il ripristino è una scrittura normale: fotografa prima il
@@ -162,6 +217,18 @@ Quando Fub cestina `Appunti/Nota.md`:
 Il sidecar conserva provenienza e timbro. Se manca o non corrisponde, il file
 resta ripristinabile con il fallback sicuro previsto; il contenuto non viene
 scartato.
+
+Il comando esplicito `trash.os` (`doc` obbligatorio) tenta invece il cestino
+del sistema. Su Linux usa la directory Trash freedesktop sotto
+`$XDG_DATA_HOME` oppure `$HOME/.local/share`; non crea una voce `.trash/`
+nel vault quando il trasferimento OS riesce. L'esito del comando distingue
+`os` da `internal_fallback` e, in quest'ultimo caso, specifica
+`unsupported` o `unavailable`. Un backend non disponibile o un ambiente XDG
+non valido lascia il file intatto per il percorso normale: `.trash/`, sidecar,
+registro, indici ed eventi restano quelli della cancellazione interna. Su
+Windows e macOS usano il fallback perché il backend OS segnala non supportato.
+Il registro marca il trasferimento OS come non annullabile dai
+comandi interni: il recupero avviene dal cestino del sistema.
 
 ## Versioni di schema
 
@@ -227,6 +294,18 @@ Writer cooperativi ottengono all-or-old-or-new. Writer esterni, filesystem senza
 rename o fsync durevoli e guasti che impediscono il rollback sono fuori dalla
 garanzia universale; l'esito espone una necessità di recovery invece di fingere
 atomicità. Alla riapertura le cache escluse sono invalidate e ricostruite.
+
+I comandi dell'host `vault.snapshot.create` (`target`) e `vault.snapshot.apply`
+(`source`, `backup`) portano questo protocollo nel registro dei comandi. Le
+destinazioni sono path assoluti, nuovi e fuori dal vault. Entrambi chiudono il
+vault, lavorano sotto il claim di applicazione e lo riaprono anche dopo un
+errore, così la recovery dell'apertura completa o annulla la fase osservata.
+Il ripristino legge e valida lo snapshot prima di chiudere il vault. Poi
+cattura lo stato attuale e lo scrive in `backup`, e riallinea la base revision
+dello snapshot su quella appena catturata prima di applicarlo. La prova a vuoto
+esegue gli stessi controlli di destinazione e di lettura senza chiudere niente.
+Dopo il ripristino la shell ricarica la finestra, perché ogni stato in memoria
+appartiene al contenuto sostituito.
 
 Il drill backup/restore dell'issue #7 resta una prova offline separata del
 fixture storico e del restore completo con `Host`; non è l'applicatore globale

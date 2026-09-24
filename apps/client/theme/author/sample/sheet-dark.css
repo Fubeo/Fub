@@ -360,17 +360,13 @@
      perché non sa cosa c'è sotto. Qui sotto ci sta la carta, e si sa: il velo
      si compone e il conto si fa. */
   --doc-link: #6fafff;
-  /* I titoli, resi e in scrittura. Sono della **famiglia della sintassi**
-     perché è il parser a marcarli, e `--syn-heading` li ripete: tenerli fuori
-     vorrebbe dire un titolo che, dentro un blocco di codice, si vede più
-     chiaro o più scuro delle parole intorno.
-
-     Prima la soglia era 3:1 — «un titolo è testo grande» — ed è vero per un
-     `h1` e falso da un `h3` in giù, dove il corpo torna quello del testo. Era
-     uno dei cinque debiti che il banco della 0166 ha trovato misurando la
-     pagina vera, ed è un'assunzione che si può fare solo **prima** di
-     rendere. */
-  --doc-heading: #fb8083;
+  /* Il titolo reso usa l'inchiostro del corpo: la gerarchia passa da
+     misura e respiro, non dal colore. Resta un nome proprio perché la
+     domanda «di che colore è un `<h1>` reso» è diversa da «di che
+     colore è il corpo». `--syn-heading` lo ripete per gli altri
+     linguaggi; il testo del titolo in Sorgente usa `doc-fg`, cioè lo
+     stesso valore. */
+  --doc-heading: #d0d1d9;
   /* Il rosso **del documento**: un wikilink rotto. Non è `--danger`, che è il
      rosso della shell: stessa tinta, fondi diversi, e per questo due valori. */
   --doc-danger: #ff7d75;
@@ -424,7 +420,7 @@
      perché sono due domande diverse: «di che colore è un `<h1>` reso» e «di
      che colore è il testo che il parser ha marcato come titolo». Prima erano
      lo stesso valore ricopiato, e ricopiare è come si diverge. */
-  --syn-heading: #fb8083;
+  --syn-heading: #d0d1d9;
   /* Ciò che il parser non riesce a leggere. Fuori dalla famiglia anche lui, e
      per il verso opposto al commento: deve saltare all'occhio, quindi sta un
      gradino **avanti** alle altre. Al buio era `#ffffff`, che non è un colore

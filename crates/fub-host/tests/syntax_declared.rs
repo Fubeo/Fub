@@ -281,7 +281,7 @@ fn syntax_forms_without_declared_trigger_belong_to_provider() {
         .collect();
     assert_eq!(
         with_trigger,
-        BTreeSet::from(["fub:diagrams", "fub:highlight", "fub:math"]),
+        BTreeSet::from(["fub:comments", "fub:diagrams", "fub:highlight", "fub:math"]),
         "syntax forms with a declared trigger have changed"
     );
 }

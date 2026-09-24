@@ -126,6 +126,35 @@ describe("combobox della palette", () => {
     expect(fake.invokeCommand).toHaveBeenCalledWith("cmd.beta", {}, "apply");
   });
 
+  it("un piano sul vault senza note si approva e poi si applica", async () => {
+    const vaultCommand: CommandSpec = {
+      ...command("vault.cmd", "Sul vault"),
+      scope: { writes: true, reach: "vault", reversible: true },
+    };
+    fake.invokeCommand.mockImplementation(async (_id: string, _args: unknown, mode: string) =>
+      mode === "dry_run"
+        ? {
+            notify: null,
+            effect: { kind: "plan", summary: "Crea la cartella «a»", docs: [], edits: [] },
+            undo: null,
+            partial: null,
+          }
+        : { notify: null, effect: { kind: "done" }, undo: null, partial: null },
+    );
+    const { overlay, input } = await openPalette([vaultCommand]);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(overlay.querySelector(".palette-summary")).not.toBeNull());
+
+    expect(overlay.querySelector(".palette-summary")?.textContent).toBe("Crea la cartella «a»");
+    const apply = overlay.querySelector<HTMLButtonElement>(".palette-actions button.primary")!;
+    expect(apply.disabled).toBe(false);
+    apply.click();
+    await vi.waitFor(() =>
+      expect(fake.invokeCommand).toHaveBeenLastCalledWith("vault.cmd", {}, "apply"),
+    );
+    expect(fake.invokeCommand.mock.calls.map((call) => call[2])).toEqual(["dry_run", "apply"]);
+  });
+
   it("chiudendo rimuove la superficie e restituisce il fuoco", async () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);

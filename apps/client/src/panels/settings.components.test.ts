@@ -67,6 +67,7 @@ vi.mock("../theme/theme", () => ({
 vi.mock("../host/dialog", () => ({
   confirm: () => Promise.resolve(box.confirm),
   pickFile: () => Promise.resolve(box.file),
+  pickFolder: () => Promise.resolve(box.file),
 }));
 vi.mock("../host/query", () => ({ settings: async () => box.entries }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
@@ -97,6 +98,7 @@ function installed(overrides: Partial<InstalledPluginInfo> = {}): InstalledPlugi
     enabled: false,
     consent: "undecided",
     runtime_known: false,
+    revoked: false,
     ...overrides,
   };
 }
@@ -182,10 +184,11 @@ function theme(id: string, lights: Array<"light" | "dark">): ThemeInfo {
       asset_namespace: `theme://${id}/`,
       motion: [],
     },
+    trust: id === "fub.serie" ? "core" : "community",
   };
 }
 
-async function openSettings(entries: SettingEntry[], themes: ThemeInfo[] = []): Promise<void> {
+async function openSettings(entries: SettingEntry[], themes: ThemeInfo[] = [], host?: FakeHost): Promise<void> {
   document.body.innerHTML = `
     <button id="open-settings"></button>
     <section id="settings-panel" hidden>
@@ -196,7 +199,7 @@ async function openSettings(entries: SettingEntry[], themes: ThemeInfo[] = []): 
   box.entries = entries;
   box.themes = themes;
   document.documentElement.dataset.theme = box.themeLight;
-  box.host = createFakeHost({ settings: entries });
+  box.host = host ?? createFakeHost({ settings: entries });
   mountSettings({ openVault: async () => {}, reloadProvider: box.reloadProvider });
   document.querySelector<HTMLButtonElement>("#open-settings")!.click();
   await vi.waitFor(() => {
@@ -284,6 +287,27 @@ describe("inventario dei componenti installati", () => {
     expect(controls[0].checked).toBe(true);
     expect(document.getElementById(`bundle-${plugin.id}`)).not.toBeNull();
     expect(document.getElementById("installed-enabled-41")).not.toBeNull();
+  });
+
+  it("a signed revocation displays provenance and cannot enable or mount", async () => {
+    const revoked = installed({
+      revoked: true, enabled: true, mounted: true,
+      catalog: { key_id: "release-key", generation: "9007199254740993",
+        publisher: "Acme", url: "https://acme.test/plugin", license: "MIT", compatible: ">=0.1" },
+      revocation: { key_id: "revocation-key", generation: "9007199254740994",
+        publisher: "Acme", url: "https://acme.test/feed", license: "MIT", compatible: ">=0.1" },
+    });
+    box.host = createFakeHost({ installedPlugins: [revoked] });
+    await openComponents();
+    const enabled = document.querySelector<HTMLInputElement>("#installed-enabled-41")!;
+    expect(enabled.disabled).toBe(true);
+    expect(enabled.checked).toBe(false);
+    expect(document.querySelector("#settings-body")?.textContent).toContain("revocation-key");
+    expect(document.querySelector("#settings-body")?.textContent).toContain("9007199254740994");
+    await expect(box.host.module.api.setInstalledPluginEnabled("41", true))
+      .rejects.toMatchObject({ kind: "permission_denied" });
+    const [plugin] = await box.host.module.api.listInstalledPlugins("/vault");
+    expect(plugin.mounted).toBe(false);
   });
 
   it("abilitazione e consenso restano scelte distinte e solo insieme montano il runtime", async () => {
@@ -393,6 +417,31 @@ describe("inventario dei componenti installati", () => {
     });
   });
 
+});
+
+describe("settings profile boundary", () => {
+  it("exports and reimports opaque profile JSON without parsing it in the shell", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    const host = createFakeHost({ settings: entries });
+    const payload = '{ "schema": 1, "name": "Default", "values": { "future.key": { "nested": [1, "opaque"] } } }';
+    vi.spyOn(host.module.api, "settingsProfiles").mockResolvedValue({ active: "Default", names: ["Default"] });
+    vi.spyOn(host.module.api, "exportSettingsProfile").mockResolvedValue(payload);
+    const imported = vi.spyOn(host.module.api, "importSettingsProfile").mockResolvedValue(undefined);
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
+
+    const machine = [...document.querySelectorAll<HTMLElement>("section.settings-banner")].find(
+      (section) => section.querySelector(".panel-title")?.textContent === "Profili delle impostazioni della macchina",
+    )!;
+    const action = (label: string) => [...machine.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === label,
+    )!;
+    action("Esporta il profilo scelto come JSON").click();
+    const json = machine.querySelector<HTMLTextAreaElement>('textarea[aria-label="JSON del profilo"]')!;
+    await vi.waitFor(() => expect(json.value).toBe(payload));
+    expect(machine.querySelector('[role="status"]')?.textContent).toContain("pronto da copiare");
+    action("Importa il JSON incollato").click();
+    await vi.waitFor(() => expect(imported).toHaveBeenCalledWith("machine", payload, undefined));
+  });
 });
 
 describe("radiogroup del tema e della luce", () => {

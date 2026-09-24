@@ -1,0 +1,36 @@
+[package]
+name = "fub-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Fub automation: scriptable CLI and native-messaging host over fub-host. No tauri dependency."
+
+# P13: automazione reale sopra Host. I remoti usano i client veri
+# (`fub_host::remote::SyncClient`, `fub_host::publish::site::PublishClient`)
+# e gli helper `fub_host::remote`; nessuna engine duplicata, nessun endpoint
+# inventato. Segreti solo da file/env, mai argv/log.
+[[bin]]
+name = "fub-cli"
+path = "src/main.rs"
+
+# Host NM: stesso crate, solo protocollo native. Non è un alias della CLI:
+# legge stdin framed, scrive il vault dell'authority accoppiata, niente TCP,
+# niente secondo writer oltre quello della CLI.
+[[bin]]
+name = "fub-clipper-host"
+path = "src/native_host.rs"
+
+[dependencies]
+camino = { workspace = true }
+fub-abi = { workspace = true }
+fub-host = { workspace = true, features = ["official-features", "http-client"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Crittografia solo via librerie consolidate: ring (PBKDF2/AES-GCM/SHA-256)
+# e base64 per le buste. Nessuna primitiva inventata.
+ring = { workspace = true }
+base64 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

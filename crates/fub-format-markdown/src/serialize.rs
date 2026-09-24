@@ -697,8 +697,13 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             // `unwrap_or` qui riscriverebbe il richiamo di una nota **con
             // l'etichetta di un'altra**, e saltarlo lo cancellerebbe: nessuna
             // delle due è una scrittura.
-            let label = required_attr(attrs, "label", custom_kind)?;
-            out.push_str(&format!("[^{label}]"));
+            if attrs.get("inline").and_then(|v| v.as_bool()) == Some(true) {
+                let source = required_attr(attrs, "source", custom_kind)?;
+                out.push_str(&format!("^[{source}]"));
+            } else {
+                let label = required_attr(attrs, "label", custom_kind)?;
+                out.push_str(&format!("[^{label}]"));
+            }
         }
         // Il resto lo dice il contratto, come per i blocchi: un inline che
         // porta **sorgente** si copia, e tutto ciò che porta il corpo di una

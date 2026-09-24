@@ -8,10 +8,10 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
-    RenderOptions, RenderTarget,
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, LinkRewrite,
+    ParseContext, RenderOptions, RenderTarget,
 };
-use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, Span};
+use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, LinkTarget, Span};
 use fub_abi::traits::ViewInstance;
 use fub_abi::PluginError;
 use fub_abi::Text;
@@ -532,6 +532,66 @@ fn real_wasm_format_provider_serializes_document_model() {
             .expect("il provider serializza il modello"),
         "fubfmt:testo generato"
     );
+}
+
+#[test]
+fn format_links_guest_rewrites_source_without_flattening_surrounding_syntax() {
+    let wasm = common::component("format-wasm", "format_wasm", "");
+    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("format component loads");
+    let provider = bundle
+        .format_provider()
+        .expect("format provider prepares")
+        .expect("guest exports format");
+    let source = "prima [[Old|alias]] e [label](old/file.md)";
+    let wiki_start = source.find("[[Old|alias]]").expect("wiki source");
+    let path_start = source.find("[label](old/file.md)").expect("path source");
+    let wiki = LinkRewrite {
+        span: Span {
+            start: wiki_start,
+            end: wiki_start + "[[Old|alias]]".len(),
+        },
+        target: LinkTarget::Wiki {
+            page: "Old".into(),
+            heading: None,
+            block: None,
+        },
+        replacement: "New".into(),
+    };
+    let path = LinkRewrite {
+        span: Span {
+            start: path_start,
+            end: path_start + "[label](old/file.md)".len(),
+        },
+        target: LinkTarget::Path("old/file.md".into()),
+        replacement: "new/file.md".into(),
+    };
+    let context = ParseContext::bare("links.fubfmt");
+    let edits = provider
+        .rewrite_links(
+            &DocumentSource::Text(source.into()),
+            &context,
+            &[wiki.clone(), path],
+        )
+        .expect("guest handles the batch")
+        .expect("export supports link rewriting");
+    let mut rewritten = source.to_string();
+    for edit in edits.iter().rev() {
+        rewritten.replace_range(edit.span.start..edit.span.end, &edit.text);
+    }
+    assert_eq!(rewritten, "prima [[New|alias]] e [label](new/file.md)");
+
+    let stale = LinkRewrite {
+        target: LinkTarget::Wiki {
+            page: "Stale".into(),
+            heading: None,
+            block: None,
+        },
+        ..wiki
+    };
+    assert!(matches!(
+        provider.rewrite_links(&DocumentSource::Text(source.into()), &context, &[stale]),
+        Err(FormatError::Parse(_))
+    ));
 }
 
 fn assert_bad_variant_is_recoverable(variant: &str) {

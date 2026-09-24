@@ -38,7 +38,7 @@ const manifest: ThemeManifest = {
   asset_namespace: "theme://acme.paper/",
   motion: ["opacity", "transform"],
 };
-const info: ThemeInfo = { manifest };
+const info: ThemeInfo = { manifest, trust: "community" };
 const payload: ThemePayload = {
   manifest,
   light: "light",
@@ -109,7 +109,7 @@ describe("tema runtime installato", () => {
 
   it("keeps a readable theme available when another bundle cannot be loaded", async () => {
     box.listThemes.mockResolvedValue([
-      { manifest: { ...manifest, id: "acme.broken" } },
+      { manifest: { ...manifest, id: "acme.broken" }, trust: "community" },
       info,
     ]);
     box.readTheme.mockImplementation(async (id) => {

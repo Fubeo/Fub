@@ -22,10 +22,14 @@
 //! **insiemi**, nelle due direzioni, su due giri concentrici:
 //!
 //! - i **bundle** dichiarati sono esattamente le feature dell'inventario più i
-//!   cinque bundle dell'host: `fub.core`, `fub.maintenance`, `fub.markdown`,
-//!   `fub.sheet` e il tema di serie. Una feature registrata a mano è rossa qui;
+//!   bundle infrastrutturali dell'host: `fub.core`, `fub.maintenance`,
+//!   `fub.markdown`, `fub.sheet`, il tema di serie e `fub.importers` (sempre),
+//!   più `fub.sync` e `fub.publish` solo con la cargo feature `http-client`.
+//!   Una feature registrata a mano è rossa qui;
 //! - le **view** montate sono esattamente quelle che i provider dell'inventario
-//!   dichiarano. Una quinta view registrata a mano è rossa qui.
+//!   dichiarano, più `sync.status`/`sync.versions`/`sync.conflicts` e
+//!   `publish.sites` solo con `http-client`. Una view registrata a mano è
+//!   rossa qui.
 //!
 //! I due giri non si implicano: una feature può montarsi senza registrare
 //! niente — è lo stato in cui sta il versioning spento (§11.1) — e una view può
@@ -68,7 +72,8 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
         .map(|bundle| bundle.id)
         .collect();
 
-    let expected: BTreeSet<String> = fub_features::every_official_feature()
+    #[allow(unused_mut)]
+    let mut expected: BTreeSet<String> = fub_features::every_official_feature()
         .iter()
         .map(|feature| feature.id.to_string())
         .chain([
@@ -77,8 +82,14 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
             "fub.markdown".to_string(),
             "fub.sheet".to_string(),
             fub_host::theme::SERIES_ID.to_string(),
+            fub_importers::PLUGIN_ID.to_string(),
         ])
         .collect();
+    #[cfg(feature = "http-client")]
+    {
+        expected.insert(fub_host::remote::views::SYNC_ID.to_string());
+        expected.insert(fub_host::publish::views::PUBLISH_ID.to_string());
+    }
 
     let extra: Vec<&String> = declared.difference(&expected).collect();
     assert!(
@@ -96,8 +107,8 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
 
     assert_eq!(
         declared.len(),
-        fub_features::every_official_feature().len() + 5,
-        "the only bundles outside `fub-features` are core, maintenance, markdown, sheet and the series theme"
+        expected.len(),
+        "the only bundles outside `fub-features` are the host infrastructure bundles"
     );
 }
 
@@ -113,10 +124,18 @@ fn mounted_views_are_exactly_the_inventory_views() {
         .map(|spec| spec.id)
         .collect();
 
-    let promised: BTreeSet<String> = fub_features::every_official_view()
+    #[allow(unused_mut)]
+    let mut promised: BTreeSet<String> = fub_features::every_official_view()
         .flat_map(|feature| (feature.view.expect("is a row with a view"))().views())
         .map(|spec| spec.id)
         .collect();
+    #[cfg(feature = "http-client")]
+    {
+        promised.insert(fub_host::remote::views::SYNC_STATUS_VIEW.to_string());
+        promised.insert(fub_host::remote::views::SYNC_VERSIONS_VIEW.to_string());
+        promised.insert(fub_host::remote::views::SYNC_CONFLICTS_VIEW.to_string());
+        promised.insert(fub_host::publish::views::PUBLISH_SITES_VIEW.to_string());
+    }
 
     assert!(
         !promised.is_empty(),

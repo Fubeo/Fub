@@ -1,6 +1,6 @@
-//! Come **questo vault** scrive le date nel frontmatter (§8.2).
+//! Come **questo vault** interpreta le proprietà del frontmatter (§8.2).
 //!
-//! Una riga sola di impostazione, e il perché è tutto nella riga: la
+//! Il formato delle date resta una dichiarazione separata: la
 //! [0003](../../../docs/decisions/0181-modello-documento-e-arene.md) ha deciso che
 //! *solo l'ISO-8601 a larghezza fissa è una data*, con l'argomento giusto — un
 //! parser tollerante trasformerebbe in date le stringhe dell'utente. Quella
@@ -23,13 +23,19 @@
 //! il suo default non è «come il sistema»: è «solo ISO», cioè nessuna lettura in
 //! più finché qualcuno non se ne prende la responsabilità.
 
-use fub_abi::model::{DateFormats, DateOrder};
+use fub_abi::model::{DateFormats, DateOrder, PropertyTypes};
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::ui::UiOption;
 
 /// L'ordine dei campi delle date non-ISO di questo vault. Vuoto = solo ISO.
 pub const DATE_FORMAT: &str = "properties.date-format";
+
+/// La dichiarazione dei tipi delle proprietà di questo vault.
+pub const TYPES: &str = "properties.types";
+/// Schema iniziale senza dichiarazioni esplicite; le chiavi convenzionali
+/// continuano a essere interpretate da `PropertyTypes::resolve`.
+pub const DEFAULT_TYPES: &str = r#"{"version":1,"types":{}}"#;
 
 /// Il valore che vuol dire **«solo ISO-8601»**, cioè nessuna dichiarazione.
 ///
@@ -40,31 +46,42 @@ pub const ONLY_ISO: &str = "";
 
 /// Le impostazioni che il core dichiara per le proprietà.
 ///
-/// Di livello **vault** e non di macchina, e qui non è per inerzia della 0076:
-/// il formato descrive i file che stanno *in questo vault*, quindi è l'unica
-/// cosa che deve viaggiare con loro. Metterla di macchina vorrebbe dire che lo
-/// stesso vault, aperto su due computer, ha due significati.
+/// Di livello **vault** e non di macchina: queste dichiarazioni descrivono i
+/// file che stanno *in questo vault*. Metterle sulla macchina vorrebbe dire che
+/// lo stesso vault, aperto su due computer, ha due significati.
 ///
-/// **Non** `program_writable`: un componente che potesse dichiarare il formato
-/// del vault cambierebbe il valore di ogni proprietà data di ogni nota, in
-/// silenzio e senza toccare un file.
+/// La dichiarazione dei tipi, a differenza del formato delle date, è anche
+/// scrivibile dal programma: l'editor delle proprietà aggiorna questo stesso
+/// valore tramite il normale store delle impostazioni.
 pub fn properties_settings() -> Vec<SettingSpec> {
-    vec![SettingSpec::new(
-        DATE_FORMAT,
-        Text::key(P_DATE_FORMAT),
-        SettingKind::Choice {
-            default: ONLY_ISO.into(),
-            options: [
-                UiOption::new(ONLY_ISO, Text::key(P_ONLY_ISO)),
-                UiOption::new(DateOrder::Dmy.as_key(), Text::key(P_DMY)),
-                UiOption::new(DateOrder::Mdy.as_key(), Text::key(P_MDY)),
-                UiOption::new(DateOrder::Ymd.as_key(), Text::key(P_YMD)),
-            ]
-            .into(),
-        },
-    )
-    .describing(Text::key(P_DATE_FORMAT_DESC))
-    .grouped(Text::key(P_GROUP))]
+    vec![
+        SettingSpec::new(
+            DATE_FORMAT,
+            Text::key(P_DATE_FORMAT),
+            SettingKind::Choice {
+                default: ONLY_ISO.into(),
+                options: [
+                    UiOption::new(ONLY_ISO, Text::key(P_ONLY_ISO)),
+                    UiOption::new(DateOrder::Dmy.as_key(), Text::key(P_DMY)),
+                    UiOption::new(DateOrder::Mdy.as_key(), Text::key(P_MDY)),
+                    UiOption::new(DateOrder::Ymd.as_key(), Text::key(P_YMD)),
+                ]
+                .into(),
+            },
+        )
+        .describing(Text::key(P_DATE_FORMAT_DESC))
+        .grouped(Text::key(P_GROUP)),
+        SettingSpec::new(
+            TYPES,
+            Text::key(P_TYPES),
+            SettingKind::Text {
+                default: DEFAULT_TYPES.into(),
+            },
+        )
+        .describing(Text::key(P_TYPES_DESC))
+        .grouped(Text::key(P_GROUP))
+        .program_writable(),
+    ]
 }
 
 /// I formati che valgono **adesso**, dal valore dell'impostazione.
@@ -81,7 +98,18 @@ pub fn date_formats(declared: Option<&str>) -> DateFormats {
         .unwrap_or(DateFormats::ISO)
 }
 
+/// La dichiarazione valida dei tipi, o l'interpretazione convenzionale quando
+/// manca, è vuota o usa uno schema che questo kernel non sa leggere.
+pub fn property_types(declared: Option<&str>) -> PropertyTypes {
+    declared
+        .filter(|value| !value.trim().is_empty())
+        .and_then(|value| serde_json::from_str(value).ok())
+        .unwrap_or_default()
+}
+
 const P_GROUP: &str = "properties.group";
+const P_TYPES: &str = "properties.types";
+const P_TYPES_DESC: &str = "properties.types.desc";
 const P_DATE_FORMAT: &str = "properties.date_format";
 const P_DATE_FORMAT_DESC: &str = "properties.date_format.desc";
 const P_ONLY_ISO: &str = "properties.date_format.only_iso";
@@ -98,6 +126,13 @@ pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
             .with(P_GROUP, "Proprietà")
+            .with(P_TYPES, "Tipi delle proprietà")
+            .with(
+                P_TYPES_DESC,
+                "Dichiarazioni dei tipi per questo vault in JSON versionato. \
+                 Senza dichiarazioni le proprietà conservano il loro valore \
+                 originale e le chiavi convenzionali mantengono il loro significato.",
+            )
             .with(P_DATE_FORMAT, "Formato delle date")
             .with(
                 P_DATE_FORMAT_DESC,
@@ -116,6 +151,13 @@ pub fn catalog() -> Vec<StringCatalog> {
         StringCatalog::new("en")
             .with(P_GROUP, "Properties")
             .with(P_DATE_FORMAT, "Date format")
+            .with(P_TYPES, "Property types")
+            .with(
+                P_TYPES_DESC,
+                "Versioned JSON declarations of property types for this vault. \
+                 Without declarations properties keep their original values, \
+                 and conventional keys retain their meaning.",
+            )
             .with(
                 P_DATE_FORMAT_DESC,
                 "How this vault writes the dates that are not ISO-8601 \
@@ -170,14 +212,46 @@ mod tests {
         }
     }
 
-    /// Il formato viaggia col vault e nessun programma lo cambia: dichiararlo
-    /// cambia il valore di ogni proprietà data di ogni nota, senza toccare un
-    /// file.
+    /// Il formato delle date resta dell'utente; la dichiarazione dei tipi è
+    /// aggiornabile dall'editor attraverso il normale store del vault.
     #[test]
-    fn the_format_travels_with_the_vault_and_no_program_writes_it() {
-        for spec in properties_settings() {
-            assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
-            assert!(!spec.program_writable, "{} is writable", spec.key);
+    fn property_settings_have_their_respective_write_permissions() {
+        let specs = properties_settings();
+        assert!(specs
+            .iter()
+            .all(|spec| spec.scope == fub_abi::settings::SettingScope::Vault));
+        assert!(!specs[0].program_writable);
+        assert_eq!(specs[1].key, TYPES);
+        assert!(specs[1].program_writable);
+        assert_eq!(
+            specs[1].kind,
+            SettingKind::Text {
+                default: DEFAULT_TYPES.into(),
+            }
+        );
+        assert_eq!(
+            property_types(Some(DEFAULT_TYPES)),
+            PropertyTypes::default()
+        );
+        assert_eq!(
+            serde_json::to_string(&PropertyTypes::default()).unwrap(),
+            DEFAULT_TYPES
+        );
+    }
+
+    #[test]
+    fn types_declaration_falls_back_only_for_invalid_or_unsupported_schema() {
+        use fub_abi::model::PropertyType;
+        for invalid in [
+            None,
+            Some(""),
+            Some("  "),
+            Some("{"),
+            Some(r#"{"version":2,"types":{"rating":"number"}}"#),
+        ] {
+            assert_eq!(property_types(invalid), PropertyTypes::default());
         }
+        let declared = property_types(Some(r#"{"version":1,"types":{"rating":"number"}}"#));
+        assert_eq!(declared.resolve("rating"), Some(PropertyType::Number));
     }
 }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fub — descrittore widget (MobileOwner P14/F37).
+     Posizione finale: gen/android/app/src/main/res/xml/fub_widget_info.xml.
+     updatePeriodMillis=0: nessun polling, solo tap -> deep link fub://. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/fub_widget"
+    android:description="@string/fub_widget_desc"
+    android:widgetCategory="home_screen"
+    android:resizeMode="horizontal" />

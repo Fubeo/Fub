@@ -26,4 +26,5 @@ export const MARKDOWN_SYNTAX = [
   { name: "fub:diagrams", trigger: { fence: { info: ["mermaid", "plantuml", "graphviz", "dot", "d2"] } } },
   { name: "fub:math", trigger: { fence: { info: ["math", "latex", "tex"] } } },
   { name: "fub:highlight", trigger: { inline: { open: "==", close: "==" } } },
+  { name: "fub:comments", trigger: { inline: { open: "%%", close: "%%" } } },
 ] as const;

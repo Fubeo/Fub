@@ -27,7 +27,7 @@ use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Actor, BatchId, Event, EventKind, EventMask, Notice};
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, LinkRewrite, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fub_abi::options::syntax;
@@ -85,6 +85,35 @@ impl FormatProvider for LinkListProvider {
 
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
         Ok(model.text.clone())
+    }
+
+    fn rewrite_links(
+        &self,
+        source: &DocumentSource,
+        _ctx: &ParseContext,
+        rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        let source = source.text().ok_or_else(|| FormatError::Unsupported {
+            format: self.descriptor().id,
+            got: source.kind(),
+        })?;
+        let mut edits = Vec::with_capacity(rewrites.len());
+        for rewrite in rewrites {
+            let slice = source
+                .get(rewrite.span.start..rewrite.span.end)
+                .ok_or_else(|| {
+                    FormatError::Parse("rewrite span outside link-list source".into())
+                })?;
+            if !matches!(&rewrite.target, LinkTarget::Wiki { .. })
+                || LinkTarget::wiki(slice.trim()) != rewrite.target
+            {
+                return Err(FormatError::Parse(
+                    "link changed under link-list rewrite".into(),
+                ));
+            }
+            edits.push(TextEdit::replace(rewrite.span, rewrite.replacement.clone()));
+        }
+        Ok(Some(edits))
     }
 }
 

@@ -1,0 +1,31 @@
+{
+  "identifier": "dev.fub.app",
+  "productName": "Fub",
+  "version": "0.1.0",
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Fub note",
+        "description": "Note di Fub",
+        "role": "Editor",
+        "mimeType": "text/markdown",
+        "androidIntentActionFilters": ["Send", "SendMultiple", "View"]
+      }
+    ]
+  },
+  "app": {
+    "windows": [
+      { "label": "main", "url": "mobile.html", "title": "Fub" }
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [{ "scheme": ["fub"], "appLink": false }]
+    }
+  },
+  "android": {
+    "minSdkVersion": 24,
+    "autoIncrementVersionCode": false
+  }
+}

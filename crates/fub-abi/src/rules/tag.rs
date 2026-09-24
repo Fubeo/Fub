@@ -25,7 +25,44 @@
 //! dicono due cose diverse sullo stesso testo. Adesso è una, e la gemella
 //! TypeScript è legata a questa dalla fixture di `rules_mirror.rs`.
 
-use crate::model::{Span, Tag};
+use crate::model::{Frontmatter, Span, Tag};
+
+/// I tag che una nota dichiara nel frontmatter, sotto la chiave `tags`.
+///
+/// La chiave è quella che il contratto tipizza già come
+/// [`PropertyType::Tags`](crate::model::PropertyType::Tags). Il valore è un
+/// elenco di stringhe o una stringa sola, dove virgole e spazi separano i tag;
+/// il `#` iniziale è facoltativo. Ciò che non è una stringa si ignora: non è un
+/// tag, e indovinarlo sarebbe inventare un nome. Un nome vale come tag alle
+/// stesse condizioni di [`scan_tags`]: solo caratteri di tag, e non tutto
+/// cifre ASCII — `tags: [1990]` non è un tag nel frontmatter come `#1990` non
+/// lo è nel testo.
+pub fn frontmatter_tags(frontmatter: &Frontmatter) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut push = |raw: &str| {
+        for piece in raw.split(|c: char| c == ',' || c.is_whitespace()) {
+            let name = piece.trim_start_matches('#');
+            if !name.is_empty()
+                && name.chars().all(is_tag_char)
+                && !name.chars().all(|c| c.is_ascii_digit())
+            {
+                out.push(name.to_string());
+            }
+        }
+    };
+    match frontmatter.0.get("tags") {
+        Some(serde_json::Value::String(s)) => push(s),
+        Some(serde_json::Value::Array(items)) => {
+            for item in items {
+                if let serde_json::Value::String(s) = item {
+                    push(s);
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
 
 /// `progetto/casa` sta sotto `progetto`?
 ///
@@ -114,6 +151,31 @@ fn is_tag_char(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frontmatter_tags_accept_lists_strings_and_hashes() {
+        let fm = |v: serde_json::Value| {
+            Frontmatter(serde_json::from_value(serde_json::json!({ "tags": v })).unwrap())
+        };
+        assert_eq!(
+            frontmatter_tags(&fm(serde_json::json!([
+                "progetto",
+                "#area/lavoro",
+                3,
+                ["x"],
+                "1990",
+                "a.b",
+                "città"
+            ]))),
+            vec!["progetto", "area/lavoro", "città"]
+        );
+        assert_eq!(
+            frontmatter_tags(&fm(serde_json::json!("a, #b c"))),
+            vec!["a", "b", "c"]
+        );
+        assert!(frontmatter_tags(&fm(serde_json::json!(null))).is_empty());
+        assert!(frontmatter_tags(&Frontmatter::default()).is_empty());
+    }
 
     fn names(text: &str) -> Vec<String> {
         scan_tags(text).into_iter().map(|t| t.name).collect()

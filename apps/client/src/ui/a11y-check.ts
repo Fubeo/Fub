@@ -226,6 +226,25 @@ export function checkAccessibility(root: ParentNode): AccessibilityIssue[] {
     report("frame senza titolo", el, "dagli un `title`: è l'unico nome che un frame possa avere");
   }
 
+  // Two nodes with the same ID make label/controls references ambiguous:
+  // a screen reader may announce the first, while the user sees the second.
+  const ids = new Set<string>();
+  for (const el of root.querySelectorAll("[id]")) {
+    const id = el.id;
+    if (!id) continue;
+    if (ids.has(id)) report("id duplicato", el, `l'id «${id}» compare più volte`);
+    ids.add(id);
+  }
+
+  // A silent "live" region does not announce status changes. Invalid values
+  // look annotated in DOM yet are ignored by assistive technology.
+  for (const el of root.querySelectorAll("[aria-live]")) {
+    const value = el.getAttribute("aria-live");
+    if (value !== "off" && value !== "polite" && value !== "assertive") {
+      report("aria-live invalido", el, "usa off, polite o assertive");
+    }
+  }
+
   return errors;
 }
 

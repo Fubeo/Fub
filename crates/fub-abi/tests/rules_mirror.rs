@@ -657,8 +657,73 @@ fn expansion_cases() -> Vec<Value> {
         .collect()
 }
 
+/// La sintassi della barra di ricerca (P04): la stessa riga deve diventare la
+/// stessa `QueryExpr` nella shell e nel contratto, e sbagliare nello stesso
+/// punto. I casi coprono ogni ramo del linguaggio, l'Unicode (le posizioni
+/// d'errore sono byte di qua e UTF-16 di là) e i valori tipizzati.
+fn search_syntax_cases() -> Vec<Value> {
+    [
+        ("", false),
+        ("rosa rossa", false),
+        ("rosa ros", true),
+        ("rosa ", true),
+        ("\"frase esatta\" altro", false),
+        ("-spine tag:#fiori", false),
+        ("(città OR paese) -mare", false),
+        ("a OR b OR c", false),
+        (
+            "tag:progetto/attivo path:Diario folder:Progetti/ ext:.md",
+            false,
+        ),
+        (
+            "path:*.canvas file:\"Città del\" content:note heading:Obiettivi",
+            false,
+        ),
+        ("task:todo task:done match-case:API", false),
+        ("/fo+\\/bar/ -/x/", false),
+        (
+            "[stato] [stato:attivo] [priorità:>2] [scadenza:<2026-10-01] [fatto:false]",
+            false,
+        ),
+        ("[aliases:\"Home page\"] [n:+.5] [v:1.2.3]", false),
+        ("ore 10:30 https://esempio.it/x", false),
+        ("((a OR b) (c OR d))", false),
+        ("città \"aperta", false),
+        ("città /aperta", false),
+        ("[città", false),
+        ("(città", false),
+        ("città)", false),
+        ("OR città", false),
+        ("città OR", false),
+        ("-(città)", false),
+        ("tag:", false),
+        ("task:forse", false),
+        ("ext:tar.gz", false),
+        ("[:x]", false),
+        ("[k:]", false),
+        ("[k:>]", false),
+        (
+            "(a OR b) (c OR d) (e OR f) (g OR h) (i OR j) (k OR l)",
+            false,
+        ),
+    ]
+    .into_iter()
+    .map(|(input, typing)| {
+        let out = match fub_abi::rules::search_syntax::parse(input, typing) {
+            Ok(expr) => json!({ "ok": expr }),
+            Err(fault) => json!({ "fault": {
+                "kind": fault.kind.label(),
+                "at": byte_to_utf16(input, fault.at),
+            }}),
+        };
+        json!({ "input": input, "typing": typing, "out": out })
+    })
+    .collect()
+}
+
 fn expected() -> Value {
     json!({
+        "search_syntax": search_syntax_cases(),
         "page_name": page_name_cases(),
         "name_fault": name_fault_cases(),
         "normalized_name": normalized_name_cases(),

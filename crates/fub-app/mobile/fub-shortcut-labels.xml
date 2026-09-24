@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fub_shortcut_new">Nuova nota</string>
+    <string name="fub_shortcut_daily">Giornaliera</string>
+    <string name="fub_shortcut_search">Cerca</string>
+    <string name="fub_shortcut_switcher">Vai alla nota</string>
+</resources>

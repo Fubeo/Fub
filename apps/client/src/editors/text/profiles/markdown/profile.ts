@@ -1,11 +1,20 @@
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import type { Extension } from "@codemirror/state";
+import { Prec, type Extension } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import type { SyntaxForm } from "../../../../host/contract";
 import { markdownEditingExtensions } from "./commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
-import { mermaidPreview } from "./mermaid";
+import { markdownPaste } from "./paste";
+
+const typography = Prec.high(EditorView.theme({
+  ".cm-content": {
+    fontFamily: "var(--font-reading)",
+    fontSize: "var(--text-reading)",
+    lineHeight: "var(--leading-relaxed)",
+  },
+}));
 
 export interface MarkdownProfileOptions {
   readonly callbacks: LivePreviewCallbacks;
@@ -31,9 +40,11 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
   return {
     extensions() {
       return [
+        typography,
         markdownEditingExtensions(),
+        markdownPaste,
         markdown({ base: markdownLanguage, codeLanguages: languages }),
-        previewOn ? [livePreview(options.callbacks, syntaxForms), mermaidPreview()] : [],
+        previewOn ? livePreview(options.callbacks, syntaxForms) : [],
         markdownCompletions(options.completions),
       ];
     },

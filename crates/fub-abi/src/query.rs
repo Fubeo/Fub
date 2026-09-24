@@ -126,6 +126,19 @@ pub enum QueryPredicate {
         ns: String,
         predicate: serde_json::Value,
     },
+    /// Regex sul contenuto intero dei campi richiesti (non sui token).
+    /// Il provider rifiuta pattern invalidi o troppo grandi e limita i documenti
+    /// esaminati; la negazione resta del valutatore comune.
+    Regex {
+        pattern: String,
+        fields: Vec<TextField>,
+    },
+    /// Documento con almeno una task nello stato richiesto.
+    Task { status: TaskStatus },
+    /// Glob sul path relativo completo: `*` non attraversa `/`, `**` sì.
+    Path { glob: String },
+    /// Estensione di file (senza punto), confrontata senza distinzione di caso.
+    File { extension: String },
 }
 
 /// La foglia di testo: cosa cercare, come, e dove.
@@ -164,6 +177,9 @@ pub struct TextQuery {
     /// da nessuna parte.
     #[serde(default)]
     pub partial_last_term: bool,
+    /// Esattezza della grafia, distinta dall'esattezza dei token.
+    #[serde(default)]
+    pub case_sensitive: bool,
 }
 
 impl TextQuery {
@@ -175,6 +191,7 @@ impl TextQuery {
             mode: TextMode::Terms,
             fields: Vec::new(),
             tolerance: TextTolerance::Exact,
+            case_sensitive: false,
             partial_last_term: false,
         }
     }
@@ -246,6 +263,14 @@ pub enum TextField {
     /// il testo di un heading sta anche nel corpo, e trovarlo due volte è
     /// esattamente il segnale che si vuole.
     Heading,
+}
+
+/// Lo stato binario del marcatore di una task (`[x]`/`[X]` = completata).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    Open,
+    Done,
 }
 
 impl QueryExpr {

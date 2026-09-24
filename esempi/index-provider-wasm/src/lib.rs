@@ -1,30 +1,53 @@
-//! Guest che esporta la porta canonica `index` (`IndexProvider`), non ancora
-//! supportata dal runtime WASM.
-//!
-//! I metodi sono trap intenzionali: il test monta il componente e dimostra che
-//! nessun ingresso del lifecycle o delle query raggiunge questa porta differita.
+//! A small persistent inbound index: it owns a custom route and stores the ids
+//! delivered by the host. The JSON reply exposes lifecycle counters to the
+//! integration test without reaching into the guest's memory.
 
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
     world: "esempio:index-provider/index-provider",
     generate_all,
 });
+
+use std::collections::BTreeSet;
+use std::sync::{LazyLock, Mutex};
+
 use exports::fub::abi::index::{
-    Guest as IndexProviderGuest, IndexLoss, IndexQuery, IndexResult, QueryRoute, VaultEntry,
+    Guest as IndexProviderGuest, IndexLoss, IndexQuery, IndexResult, QueryKind, QueryRoute,
+    VaultEntry,
 };
 use exports::fub::abi::plugin::{Guest, PluginManifest, PluginPermissions};
 use fub::abi::errors::PluginError;
 use fub::abi::model::{DocId, DocumentModel};
+use fub::abi::text::Text;
+
+const ID: &str = "demo.index-provider";
+const ROUTE: &str = "demo.index-provider:ids";
+const DATA: &str = "index-ids";
+const CLOSED: &str = "closed";
+
+#[derive(Default)]
+struct Index {
+    docs: BTreeSet<String>,
+    loaded: usize,
+    fed: usize,
+    removed: usize,
+    reconciled: usize,
+    scanned: usize,
+    flushed: usize,
+    closed_before: bool,
+}
+
+static INDEX: LazyLock<Mutex<Index>> = LazyLock::new(|| Mutex::new(Index::default()));
 
 struct Componente;
 
 impl Guest for Componente {
     fn manifest() -> PluginManifest {
         PluginManifest {
-            id: "demo.index-provider".to_string(),
-            name: "Deferred IndexProvider (WASM)".to_string(),
+            id: ID.to_string(),
+            name: "Inbound index (WASM)".to_string(),
             version: "0.1.0".to_string(),
-            abi_version: "0.1.1".to_string(),
+            abi_version: "0.2.0".to_string(),
             permissions: PluginPermissions { granted: vec![] },
             provides: vec![],
             requires: vec![],
@@ -50,39 +73,91 @@ impl Guest for Componente {
 
 impl IndexProviderGuest for Componente {
     fn routes() -> Vec<QueryRoute> {
-        panic!("deferred IndexProvider must never be called")
+        #[cfg(feature = "trap-routes")]
+        panic!("index declaration trap");
+        #[cfg(not(feature = "trap-routes"))]
+        vec![QueryRoute::Query(QueryKind::Custom(ROUTE.to_string()))]
     }
 
     fn activate() -> Result<(), PluginError> {
-        panic!("deferred IndexProvider must never be called")
+        let stored = fub::abi::host_data_read::data_read(DATA)?;
+        let closed_before = fub::abi::host_data_read::data_read(CLOSED)?.as_deref() == Some(b"yes");
+        let mut index = INDEX.lock().expect("index lock");
+        *index = Index::default();
+        index.closed_before = closed_before;
+        if let Some(bytes) = stored {
+            for part in bytes.split(|byte| *byte == 0).filter(|part| !part.is_empty()) {
+                let id = String::from_utf8(part.to_vec()).map_err(|_| {
+                    PluginError::BadArgs(Text::Literal("invalid persisted index id".to_string()))
+                })?;
+                index.docs.insert(id);
+            }
+        }
+        index.loaded = index.docs.len();
+        Ok(())
     }
 
-    fn on_documents_indexed(_docs: Vec<DocumentModel>) -> Vec<IndexLoss> {
-        panic!("deferred IndexProvider must never be called")
+    fn on_documents_indexed(docs: Vec<DocumentModel>) -> Vec<IndexLoss> {
+        let mut index = INDEX.lock().expect("index lock");
+        index.fed += docs.len();
+        for doc in docs {
+            index.docs.insert(doc.id);
+        }
+        vec![]
     }
 
-    fn on_documents_removed(_ids: Vec<DocId>) -> Vec<IndexLoss> {
-        panic!("deferred IndexProvider must never be called")
+    fn on_documents_removed(ids: Vec<DocId>) -> Vec<IndexLoss> {
+        let mut index = INDEX.lock().expect("index lock");
+        index.removed += ids.len();
+        for id in ids {
+            index.docs.remove(&id);
+        }
+        vec![]
     }
 
-    fn reconcile(_ids: Vec<DocId>) -> Vec<IndexLoss> {
-        panic!("deferred IndexProvider must never be called")
+    fn reconcile(ids: Vec<DocId>) -> Vec<IndexLoss> {
+        let mut index = INDEX.lock().expect("index lock");
+        index.reconciled += 1;
+        let existing: BTreeSet<_> = ids.into_iter().collect();
+        index.docs.retain(|id| existing.contains(id));
+        vec![]
     }
 
     fn flush() -> Result<(), PluginError> {
-        panic!("deferred IndexProvider must never be called")
+        let mut index = INDEX.lock().expect("index lock");
+        let mut data = Vec::new();
+        for id in &index.docs {
+            data.extend_from_slice(id.as_bytes());
+            data.push(0);
+        }
+        fub::abi::host_data_write::data_write(DATA, &data)?;
+        index.flushed += 1;
+        Ok(())
     }
 
     fn close() -> Result<(), PluginError> {
-        panic!("deferred IndexProvider must never be called")
+        fub::abi::host_data_write::data_write(CLOSED, b"yes")?;
+        INDEX.lock().expect("index lock").docs.clear();
+        Ok(())
     }
 
-    fn query(_query: IndexQuery) -> Result<IndexResult, PluginError> {
-        panic!("deferred IndexProvider must never be called")
+    fn query(query: IndexQuery) -> Result<IndexResult, PluginError> {
+        if !matches!(&query, IndexQuery::Custom(custom) if custom.ns == ROUTE) {
+            return Err(PluginError::BadArgs(Text::Literal("unexpected index route".to_string())));
+        }
+        let index = INDEX.lock().expect("index lock");
+        Ok(IndexResult::Custom(format!(
+            "{{\"count\":{},\"loaded\":{},\"fed\":{},\"removed\":{},\"reconciled\":{},\"scanned\":{},\"flushed\":{},\"closed_before\":{}}}",
+            index.docs.len(), index.loaded, index.fed, index.removed,
+            index.reconciled, index.scanned, index.flushed, index.closed_before,
+        )))
     }
 
     fn up_to_date(_entries: Vec<VaultEntry>) -> Vec<DocId> {
-        panic!("deferred IndexProvider must never be called")
+        // The fixture keeps ids, not content fingerprints. Never claim an
+        // unchanged document merely because a path is present in the index.
+        INDEX.lock().expect("index lock").scanned += 1;
+        vec![]
     }
 }
 

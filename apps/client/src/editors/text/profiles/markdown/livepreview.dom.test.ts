@@ -22,13 +22,12 @@ function editor(readOnly = false) {
   engine.setDoc(source);
   return {
     engine,
-    checkbox: () => parent.querySelector<HTMLInputElement>(".cm-fub-checkbox")!,
+    checkbox: () => parent.querySelector<HTMLInputElement>('input[type="checkbox"]')!,
     destroy() { engine.destroy(); parent.remove(); },
   };
 }
 
 function click(box: HTMLInputElement) {
-  box.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
   box.click();
 }
 
@@ -58,6 +57,32 @@ describe("checkbox Live Preview", () => {
       expect(mounted.checkbox().checked).toBe(true);
     } finally {
       mounted.destroy();
+    }
+  });
+});
+
+describe("Live ibrida: testo nativo, widget solo non testuali", () => {
+  function editorWith(source: string) {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownLanguage }),
+        livePreview({ openWikilink() {}, searchTag() {} }),
+      ],
+    });
+    engine.setDoc(source);
+    return { parent, engine, cleanup: () => { engine.destroy(); parent.remove(); } };
+  }
+  it("titoli, elenchi e codice restano testo: nessun widget di blocco", () => {
+    const { parent, cleanup } = editorWith("Titolo uno\n\n- uno\n- due\n\n```bash\necho uno\n```\n");
+    try {
+      expect(parent.querySelectorAll(".cm-markdown-block").length).toBe(0);
+      expect(parent.querySelectorAll(".cm-line").length).toBeGreaterThan(3);
+    } finally {
+      cleanup();
     }
   });
 });

@@ -45,6 +45,8 @@ import type {
   InstalledPluginInfo,
   CommandSpec,
   DraftInfo,
+  DocumentWindowEvent,
+  DocumentWindowRequest,
   GridCommit,
   GridSession,
   GridSurfaceSpec,
@@ -68,6 +70,7 @@ import type {
   VaultInfo,
   ViewSpec,
 } from "./contract";
+import type { SaveArtifactOutcome } from "./ipc";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
 ///
@@ -121,6 +124,8 @@ export interface Options {
   grid?: GridFake;
   /// Provider finti per le query custom, indicizzati dal namespace.
   customQueries?: Record<string, (query: unknown) => unknown>;
+  /** Explicit OS save simulation. Unconfigured fake cannot create files. */
+  saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -166,6 +171,8 @@ export interface FakeHost {
   /// fallisce da sé, ed è esattamente il difetto che questo simula (0205).
   close(): Promise<void>;
 
+  /// Simula la chiusura nativa di una finestra documento ancora aperta.
+  requestDocumentWindowClose(label: string): void;
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
@@ -186,6 +193,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const docs = new Map<string, Document>();
   const trash = new Map<string, Trashed>();
   const viewStates = new Map<string, unknown>();
+  const documentWindows = new Map<string, DocumentWindowRequest>();
+  const windowCloseRequested = new Set<(event: DocumentWindowEvent) => void>();
+  const windowClosed = new Set<(event: DocumentWindowEvent) => void>();
+  let nextDocumentWindow = 0;
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
@@ -199,9 +210,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
   );
   const installablePlugins = options.installablePlugins ?? {};
   let listener: ((n: KernelNotice) => void) | null = null;
-  let onClose: (() => Promise<void>) | null = null;
+  let onClose: (() => Promise<boolean>) | null = null;
+  let onCloseFailure: ((reason: unknown) => void) | null = null;
+  let mainClosed = false;
   let revision = 0;
   let trashedCount = 0;
+  /// Le cartelle create vuote: le altre si ricavano dai path dei documenti.
+  const createdFolders = new Set<string>();
 
   for (const [id, text] of Object.entries(options.file ?? {})) write(id, text);
 
@@ -252,6 +267,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
     const throttle = throttles.get(name);
     return throttle ? throttle.then(run) : run();
   }
+  const unavailable = <T>(name: string, args: unknown[]): Promise<T> =>
+    gate(name, args, Promise.reject(new Error(`host fake: ${name} requires a configured native service`)));
+
 
   function installed(id: string): InstalledPluginInfo {
     const plugin = installedPlugins.get(id);
@@ -263,11 +281,16 @@ export function createFakeHost(options: Options = {}): FakeHost {
   }
 
   function copyInstalled(plugin: InstalledPluginInfo): InstalledPluginInfo {
-    return { ...plugin, permissions: { ...plugin.permissions } };
+    return {
+      ...plugin,
+      permissions: { ...plugin.permissions },
+      mounted: plugin.revoked ? false : plugin.mounted,
+      enabled: plugin.revoked ? false : plugin.enabled,
+    };
   }
 
   function reconcile(plugin: InstalledPluginInfo): void {
-    plugin.mounted = plugin.enabled && plugin.consent === "granted";
+    plugin.mounted = !plugin.revoked && plugin.enabled && plugin.consent === "granted";
     if (plugin.mounted) plugin.runtime_known = true;
   }
 
@@ -323,8 +346,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
     const text = docs.get(id)?.text ?? "";
     switch (p.kind) {
       case "text": {
-        const needle = p.text.toLowerCase();
-        return id.toLowerCase().includes(needle) || text.toLowerCase().includes(needle);
+        const haystack = p.case_sensitive ? `${id}\n${text}` : `${id}\n${text}`.toLowerCase();
+        const needle = p.case_sensitive ? p.text : p.text.toLowerCase();
+        return p.mode === "phrase" ? haystack.includes(needle) : needle.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
       }
       case "docs":
         return p.docs.includes(id);
@@ -332,6 +356,16 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return p.descendants ? id.startsWith(`${p.path}/`) : folderOf(id) === p.path;
       case "tag":
         return text.includes(`#${p.name}`);
+      case "regex": {
+        const haystack = p.fields.length === 0 ? [id, text] : p.fields.flatMap((field) => (field === "name" ? [id] : field === "body" ? [text] : []));
+        return haystack.some((value) => new RegExp(p.pattern).test(value));
+      }
+      case "task":
+        return p.status === "open" ? /-\s*\[[ ]\]/.test(text) : /-\s*\[[xX]\]/.test(text);
+      case "path":
+        return new RegExp(`^${p.glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\u0000").replace(/\*/g, "[^/]*").replace(/\u0000/g, ".*").replace(/\?/g, "[^/]")}$`).test(id);
+      case "file":
+        return id.toLowerCase().endsWith(`.${p.extension.toLowerCase()}`);
       default:
         throw new Error(`host fake: non so leggere il predicato ${p.kind}`);
     }
@@ -377,7 +411,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       case "folders": {
         const under = q.under;
         const all = new Set<string>();
-        for (const id of docs.keys()) {
+        for (const id of [...docs.keys(), ...[...createdFolders].map((f) => `${f}/`)]) {
           const parts = id.split("/").slice(0, -1);
           for (let i = 1; i <= parts.length; i += 1) all.add(parts.slice(0, i).join("/"));
         }
@@ -445,6 +479,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
           kind: "render_preview",
           value: { html: docs.get(q.doc)?.text ?? "", parts: [] },
         };
+      case "render_print":
+        return {
+          kind: "render_print",
+          value: { html: docs.get(q.doc)?.text ?? "", parts: [] },
+        };
       case "render_embed":
         return {
           kind: "render_embed",
@@ -493,6 +532,27 @@ export function createFakeHost(options: Options = {}): FakeHost {
         emit({ type: "document_renamed", from, to });
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       }
+      case "trash.os": {
+        // Il finto non ha un cestino di sistema: ripiega, come l'host vero su
+        // una piattaforma senza, e lo dice nell'esito.
+        const doc = String(args?.doc);
+        const before = docs.get(doc);
+        if (!before) throw new Error(`host fake: «${doc}» non esiste`);
+        docs.delete(doc);
+        trashedCount += 1;
+        trash.set(`.trash/${trashedCount}-${doc}`, { original: doc, text: before.text });
+        emit({ type: "document_removed", id: doc });
+        return {
+          notify: null,
+          effect: {
+            kind: "custom" as const,
+            ns: "fub.trash.os",
+            payload: { doc, via: { kind: "internal_fallback", reason: "unsupported" } },
+          },
+          undo: null,
+          partial: null,
+        };
+      }
       case "note.trash": {
         const doc = String(args?.doc);
         const before = docs.get(doc);
@@ -517,6 +577,22 @@ export function createFakeHost(options: Options = {}): FakeHost {
           partial: null,
         };
       }
+      case "folder.create": {
+        const path = String(args?.path ?? "");
+        const taken =
+          docs.has(path) ||
+          createdFolders.has(path) ||
+          [...docs.keys()].some((id) => id.startsWith(`${path}/`));
+        if (!path || taken) throw new Error(`host fake: «${path}» esiste già`);
+        createdFolders.add(path);
+        emit({ type: "index_updated" });
+        return {
+          notify: null,
+          effect: { kind: "custom" as const, ns: "fub.folder.created", payload: { path } },
+          undo: null,
+          partial: null,
+        };
+      }
       case "trash.empty":
         trash.clear();
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
@@ -530,8 +606,19 @@ export function createFakeHost(options: Options = {}): FakeHost {
       initialVault: () => gate("initialVault", [], Promise.resolve(root)),
       sessionNotice: () =>
         gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
+      // Il vault in memoria non ha cartella di configurazione, log o dialog
+      // di sistema. Non simulare un export/recovery riuscito senza disco.
+      demoRoot: () => gate("demoRoot", [], Promise.resolve(null)),
+      openDemo: () => gate("openDemo", [], Promise.reject(new Error("host fake: demo senza configurazione di macchina"))),
+      closeDemo: (returnTo) => gate("closeDemo", [returnTo], Promise.reject(new Error("host fake: nessuna demo aperta"))),
+      resetDemo: () => gate("resetDemo", [], Promise.reject(new Error("host fake: demo senza configurazione di macchina"))),
+      startupDiagnostics: (vault) => gate("startupDiagnostics", [vault], Promise.reject(new Error("host fake: diagnostica di avvio non disponibile"))),
+      supportPreview: (vault, logLines) => gate("supportPreview", [vault, logLines], Promise.reject(new Error("host fake: anteprima di macchina non disponibile"))),
+      supportExport: (preview, consent) => gate("supportExport", [preview, consent], Promise.reject(new Error("host fake: export senza disco"))),
+      configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
+      recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet"], plugins: [], unread: [] };
+        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id) => {
@@ -542,12 +629,31 @@ export function createFakeHost(options: Options = {}): FakeHost {
           revision: doc.revision,
           format_id: id.endsWith(".fubsheet")
             ? "fubsheet"
-            : id.endsWith(".md") || id.endsWith(".markdown")
-              ? "markdown"
-              : null,
+            : id.endsWith(".canvas")
+              ? "canvas"
+              : id.endsWith(".base")
+                ? "base"
+                : id.endsWith(".md") || id.endsWith(".markdown")
+                  ? "markdown"
+                  : null,
           source_kind: "text",
         }));
       },
+      resourceOpen: (id, vault) =>
+        gate("resourceOpen", [id, vault], Promise.reject(new Error("host fake: risorse binarie non disponibili"))),
+      resourceReadChunk: (handle, offset, len) =>
+        gate("resourceReadChunk", [handle, offset, len], Promise.reject(new Error("host fake: risorsa non aperta"))),
+      resourceClose: (handle) => gate("resourceClose", [handle], Promise.resolve()),
+      resourceWrite: (id, bytes, expected, vault) =>
+        gate("resourceWrite", [id, bytes, expected, vault], Promise.reject(new Error("host fake: binary storage is unavailable"))),
+      viewerOpen: (url, title, policy) =>
+        gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
+      viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
+        gate("viewerSave", [url, title, allowlist, attachmentFolder, vault], Promise.reject(new Error("host fake: viewer download is unavailable"))),
+      saveArtifact: (suggestedName, mediaType, bytes) =>
+        options.saveArtifact
+          ? gate("saveArtifact", [suggestedName, mediaType, bytes], options.saveArtifact(suggestedName, mediaType, bytes))
+          : unavailable("saveArtifact", [suggestedName, mediaType, bytes]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
       openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
         if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
@@ -656,6 +762,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
       setSetting: (key, value) =>
         gate("setSetting", [key, value], Promise.resolve(writeSetting(key, value))),
       resetSetting: (key) => gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
+      settingsProfiles: (scope, vault) => unavailable("settingsProfiles", [scope, vault]),
+      exportSettingsProfile: (scope, name, vault) => unavailable("exportSettingsProfile", [scope, name, vault]),
+      importSettingsProfile: (scope, json, vault) => unavailable("importSettingsProfile", [scope, json, vault]),
+      duplicateSettingsProfile: (scope, source, name, vault) => unavailable("duplicateSettingsProfile", [scope, source, name, vault]),
+      switchSettingsProfile: (scope, name, vault) => unavailable("switchSettingsProfile", [scope, name, vault]),
+      resetSettingsProfile: (scope, name, vault) => unavailable("resetSettingsProfile", [scope, name, vault]),
+      frameCapabilities: () => unavailable("frameCapabilities", []),
+      settingRequiresReopen: (key) => unavailable("settingRequiresReopen", [key]),
       listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
       listThemes: () => gate("listThemes", [], Promise.resolve(themes)),
       readTheme: (id, light) => {
@@ -712,6 +826,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
       setInstalledPluginEnabled: (installation, enabled) =>
         installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
           const plugin = installed(installation);
+          if (enabled && plugin.revoked) throw {
+            kind: "permission_denied", message: "revoked catalog release cannot mount",
+          } satisfies PluginError;
           plugin.enabled = enabled;
           reconcile(plugin);
           return [];
@@ -735,6 +852,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
           installedPlugins.delete(installation);
           return [];
         }),
+      catalogSearch: (needle) => unavailable("catalogSearch", [needle]),
+      catalogInstall: (id, version, source) => unavailable("catalogInstall", [id, version, source]),
+      catalogUpdate: (installation, version, source) => unavailable("catalogUpdate", [installation, version, source]),
+      catalogRollback: (installation, priorVersion, source) => unavailable("catalogRollback", [installation, priorVersion, source]),
+      catalogRevoke: (installation) => unavailable("catalogRevoke", [installation]),
+      catalogInstallTheme: (id, version, source) => unavailable("catalogInstallTheme", [id, version, source]),
+      catalogUpdateTheme: (id, version, source) => unavailable("catalogUpdateTheme", [id, version, source]),
+      catalogRollbackTheme: (id, priorVersion, source) => unavailable("catalogRollbackTheme", [id, priorVersion, source]),
+      catalogRevokeTheme: (id) => unavailable("catalogRevokeTheme", [id]),
+      pluginBudgetSnapshot: () => unavailable("pluginBudgetSnapshot", []),
+      pluginLimitedMode: () => unavailable("pluginLimitedMode", []),
       knownVaults: () => gate("knownVaults", [], Promise.resolve([])),
       setVaultFavorite: (path, favorite) =>
         gate("setVaultFavorite", [path, favorite], Promise.resolve()),
@@ -751,6 +879,36 @@ export function createFakeHost(options: Options = {}): FakeHost {
         else viewStates.set(key, value);
         return gate("setViewState", [key, value], Promise.resolve());
       },
+      openDocumentWindow: (request) =>
+        installedOperation("openDocumentWindow", [request], () => {
+          const label = `document-00000000-0000-4000-8000-${String(++nextDocumentWindow).padStart(12, "0")}`;
+          if (request.surface !== "document" || !request.channel || !request.document
+            || !request.vault || !request.session || !request.surfaceId) {
+            throw new Error("host fake: richiesta finestra documento non valida");
+          }
+          documentWindows.set(label, request);
+          return { label };
+        }),
+      closeDocumentWindow: ({ label }) =>
+        installedOperation("closeDocumentWindow", [{ label }], () => {
+          const request = documentWindows.get(label);
+          if (!request) throw new Error(`host fake: finestra «${label}» non aperta`);
+          documentWindows.delete(label);
+          for (const handler of windowClosed) handler({ label, surface: "document" });
+        }),
+      onDocumentWindowCloseRequested: (handler) => {
+        calls.push({ gate: "onDocumentWindowCloseRequested", args: [] });
+        windowCloseRequested.add(handler);
+        return Promise.resolve(() => { windowCloseRequested.delete(handler); });
+      },
+      onDocumentWindowClosed: (handler) => {
+        calls.push({ gate: "onDocumentWindowClosed", args: [] });
+        windowClosed.add(handler);
+        return Promise.resolve(() => { windowClosed.delete(handler); });
+      },
+    },
+    nativeMobileBridge: () => {
+      throw new Error("host fake: mobile native bridge unavailable");
     },
     onKernelEvent: (handler) => {
       listener = handler;
@@ -759,11 +917,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         listener = null;
       });
     },
-    onClose: (before) => {
+    onClose: (before, onFailure) => {
       onClose = before;
+      onCloseFailure = onFailure;
       calls.push({ gate: "allaChiusura", args: [] });
       return Promise.resolve(() => {
         onClose = null;
+        onCloseFailure = null;
       });
     },
     window: {
@@ -801,13 +961,28 @@ export function createFakeHost(options: Options = {}): FakeHost {
       docs.set(to, before);
       emit({ type: "document_renamed", from, to });
     },
+    requestDocumentWindowClose: (label) => {
+      const request = documentWindows.get(label);
+      if (!request) throw new Error(`host fake: finestra «${label}» non aperta`);
+      for (const handler of windowCloseRequested) handler({ label, surface: "document" });
+    },
     files: () => Object.fromEntries([...docs].map(([id, d]) => [id, d.text])),
     trash: () => [...trash].map(([id, d]) => ({ id, original: d.original })),
     calls,
     atGate: (name) => calls.filter((c) => c.gate === name),
     close: async () => {
       if (!onClose) throw new Error("host finto: nessuno ascolta la chiusura della finestra");
-      await onClose();
+      try {
+        if (await onClose()) {
+          await gate("finishMainClose", [], Promise.resolve());
+          if (!mainClosed) {
+            mainClosed = true;
+            window.dispatchEvent(new Event("pagehide"));
+          }
+        }
+      } catch (error) {
+        onCloseFailure?.(error);
+      }
     },
     throttle: (name) => {
       let unlock!: () => void;

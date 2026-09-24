@@ -867,6 +867,26 @@ impl UiAction {
 
 /// Aggiornamento restituito da un `ViewProvider` dopo un'azione.
 ///
+/// Il `ns` dell'intento con cui un provider chiede alla shell di mettere un
+/// testo negli appunti. Il payload è `{ "text": "..." }`.
+pub const CLIPBOARD_TEXT_NS: &str = "fub.clipboard.text";
+/// Il `ns` con cui l'esito di `settings.export` arriva alla shell, che lo
+/// consegna agli appunti.
+pub const SETTINGS_EXPORT_NS: &str = "settings.export";
+/// Il `ns` con cui l'host dice alla shell che il contenuto del vault è stato
+/// sostituito da uno snapshot: ogni stato in memoria della shell è di prima, e
+/// la shell ricarica. Ricaricare fa perdere ciò che non è salvato, quindi è
+/// un intento privilegiato.
+pub const VAULT_RESTORED_NS: &str = "fub.vault.restored";
+
+/// Un intento `Custom` che la shell esegue con un privilegio del processo —
+/// scrivere negli appunti o ricaricare la finestra — e che quindi soltanto un provider col grado
+/// del contenuto attivo può chiedere. Il giudizio sul grado è del kernel;
+/// qui c'è soltanto l'elenco, perché la shell e il kernel devono vederlo uguale.
+pub fn privileged_intent(ns: &str) -> bool {
+    ns == CLIPBOARD_TEXT_NS || ns == SETTINGS_EXPORT_NS || ns == VAULT_RESTORED_NS
+}
+
 /// # Nessuna variante porta un annulla, ed è una decisione
 ///
 /// Le pile sono **due** — quella del testo e quella delle operazioni

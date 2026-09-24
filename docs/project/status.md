@@ -23,7 +23,7 @@ evidenze riferite a codice, test, documentazione e CI.
 ## Release corrente
 
 Non è pubblicata una release. Workspace e shell dichiarano `0.1.0`; il
-contratto plugin è `fub:abi@0.1.2` e include Grid v1 in ABI/WIT e mirror TypeScript.
+contratto plugin è `fub:abi@0.2.0`.
 
 Sono presenti:
 

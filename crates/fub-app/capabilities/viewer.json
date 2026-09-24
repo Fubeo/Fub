@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "viewer",
+  "description": "Remote viewer window has no IPC, dialog, filesystem or asset permissions.",
+  "windows": ["fub-viewer"],
+  "permissions": []
+}

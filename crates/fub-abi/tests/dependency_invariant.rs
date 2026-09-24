@@ -116,6 +116,10 @@ const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
             // questo elenco, per la stessa ragione di quella: la fotografia
             // è del manifesto, non della macchina.
             "libc",
+            // I glob dei path nelle query (`QueryPredicate::Path`, `*`/`**`):
+            // il kernel compila e valida il pattern in `index/core.rs`,
+            // con tetto di 256 byte e ancore complete.
+            "regex",
         ],
     ),
 ];

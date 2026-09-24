@@ -1,0 +1,33 @@
+{
+  "identifier": "dev.fub.app",
+  "productName": "Fub",
+  "version": "0.1.0",
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Fub note",
+        "description": "Note di Fub",
+        "role": "Editor",
+        "mimeType": "text/markdown",
+        "exportedType": {
+          "identifier": "dev.fub.markdown",
+          "conformsTo": ["public.plain-text"]
+        }
+      }
+    ]
+  },
+  "app": {
+    "windows": [
+      { "label": "main", "url": "mobile.html", "title": "Fub" }
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [{ "scheme": ["fub"], "appLink": false }]
+    }
+  },
+  "ios": {
+    "minimumSystemVersion": "14.0"
+  }
+}

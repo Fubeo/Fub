@@ -7,9 +7,9 @@
 //!   [`ViewProvider`](fub_abi::traits::ViewProvider): si prende documento
 //!   attivo e riferimenti dall'[`HostApi`](fub_abi::traits::HostApi), come un
 //!   plugin (M2).
-//! - [`outline`] — il pannello struttura come
-//!   [`ViewProvider`](fub_abi::traits::ViewProvider): legge gli heading del
-//!   documento attivo dal kernel via `IndexQuery::Outline` (M2).
+//! - [`outline`] — struttura e note a piè di pagina dallo stesso
+//!   [`ViewProvider`](fub_abi::traits::ViewProvider): heading via
+//!   `IndexQuery::Outline`, note dalla sorgente parsata (M2).
 //! - [`tags`] — il pannello tag come
 //!   [`ViewProvider`](fub_abi::traits::ViewProvider): aggrega i tag del vault
 //!   via `IndexQuery::Tags`, click→ricerca (M2).
@@ -47,6 +47,8 @@
 pub mod backlinks;
 #[cfg(feature = "backup")]
 pub mod backup;
+#[cfg(feature = "base")]
+pub mod base;
 #[cfg(feature = "blocks")]
 pub mod blocks;
 #[cfg(feature = "commands")]
@@ -81,10 +83,13 @@ pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS
 pub use backup::{
     BackupCommands, BackupView, BACKUP_ID, BACKUP_VIEW, VAULT_BACKUP, VAULT_BACKUP_RESTORE,
 };
+#[cfg(feature = "base")]
+pub use base::{BaseIndex, BASE_ID};
 #[cfg(feature = "blocks")]
 pub use blocks::{
-    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID, DIAGRAMS_RULE,
-    DIAGRAM_NS, DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER, MATH_RULE,
+    CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID,
+    COMMENTS_RULE, DIAGRAMS_RULE, DIAGRAM_NS, DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER,
+    MATH_RULE,
 };
 #[cfg(feature = "commands")]
 pub use commands::{
@@ -99,11 +104,11 @@ pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 pub use graph::{GraphView, GRAPH_ID, GRAPH_NS, GRAPH_VIEW};
 pub use inventory::{every_official_feature, every_official_view, OfficialFeature};
 #[cfg(feature = "outline")]
-pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
+pub use outline::{build_outline_view, OutlineView, FOOTNOTES_VIEW, OUTLINE_ID, OUTLINE_VIEW};
 #[cfg(feature = "properties")]
 pub use properties::{
-    PropertiesCommands, PropertiesView, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
-    PROPERTIES_VIEW,
+    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_PROPERTY_REMOVE,
+    NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
 };
 #[cfg(feature = "queries")]
 pub use queries::{
@@ -120,7 +125,10 @@ pub use stats::{
 pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
 #[cfg(feature = "template")]
 pub use template::{
-    TemplateCommands, TemplateView, NOTES_DAILY, NOTES_FROM_TEMPLATE, TEMPLATE_ID, TEMPLATE_VIEW,
+    TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,
+    DAILY_FOLDER_KEY, DAILY_TEMPLATE_KEY, DATE_FORMAT_KEY, ISO_DATE, NOTES_DAILY, NOTES_EXTRACT,
+    NOTES_FROM_TEMPLATE, NOTES_INSERT_DATETIME, NOTES_INSERT_TEMPLATE, NOTES_MERGE, NOTES_RANDOM,
+    NOTES_UNIQUE, TEMPLATE_ID, TEMPLATE_VIEW, TIME_FORMAT_KEY,
 };
 #[cfg(feature = "trash")]
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};

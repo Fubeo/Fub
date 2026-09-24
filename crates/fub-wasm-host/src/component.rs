@@ -12,7 +12,7 @@ thread_local! {
     static ACTIVE_INSTANCES: RefCell<Vec<*const ()>> = const { RefCell::new(Vec::new()) };
 }
 
-struct InstanceGuard {
+pub(crate) struct InstanceGuard {
     identity: *const (),
 }
 
@@ -30,7 +30,7 @@ impl Drop for InstanceGuard {
     }
 }
 
-fn enter_instance(identity: *const ()) -> Result<InstanceGuard, ()> {
+pub(crate) fn enter_instance(identity: *const ()) -> Result<InstanceGuard, ()> {
     ACTIVE_INSTANCES.with(|active| {
         let mut active = active.borrow_mut();
         if active.contains(&identity) {
@@ -41,15 +41,16 @@ fn enter_instance(identity: *const ()) -> Result<InstanceGuard, ()> {
     })
 }
 
-fn instance_identity(inner: &Mutex<Instance>) -> *const () {
+pub(crate) fn instance_identity(inner: &Mutex<Instance>) -> *const () {
     inner as *const Mutex<Instance> as *const ()
 }
 
 use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::edit::TextEdit;
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
-    RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, LinkRewrite,
+    ParseContext, RenderOptions,
 };
 use fub_abi::grid::{
     validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
@@ -70,11 +71,15 @@ use wasmtime::{Engine, Store};
 
 use crate::borrow::{with_guest, with_read_guest, State};
 use crate::contract::exports::fub::abi::command as w_command;
+use crate::contract::exports::fub::abi::event_handler as w_event_handler;
 use crate::contract::exports::fub::abi::format as w_format;
+use crate::contract::exports::fub::abi::format_links as w_format_links;
 use crate::contract::exports::fub::abi::grid as w_grid;
+use crate::contract::exports::fub::abi::index as w_index;
 use crate::contract::exports::fub::abi::plugin as w_plugin;
 use crate::contract::exports::fub::abi::view as w_view;
 use crate::guest::add_to_linker;
+use crate::inbound::{event_handler_from_inner, index_provider_from_inner};
 use crate::translate as tr;
 /// Famiglie del contratto effettivamente collegate da questo host.
 const FAMILIES_SERVED: &[&str] = &[
@@ -86,15 +91,17 @@ const FAMILIES_SERVED: &[&str] = &[
 ];
 const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
 const FORMAT_INTERFACE: &str = "fub:abi/format";
-const FORMAT_EXPORT: &str = "fub:abi/format@0.1.1";
+const FORMAT_LINKS_INTERFACE: &str = "fub:abi/format-links";
+const FORMAT_LINKS_EXPORT: &str = "fub:abi/format-links@0.2.0";
+const FORMAT_EXPORT: &str = "fub:abi/format@0.2.0";
 const VIEW_INTERFACE: &str = "fub:abi/view";
-const VIEW_EXPORT: &str = "fub:abi/view@0.1.1";
+const VIEW_EXPORT: &str = "fub:abi/view@0.2.0";
 const GRID_INTERFACE: &str = "fub:abi/grid";
-const GRID_EXPORT: &str = "fub:abi/grid@0.1.2";
-
-fn is_supported_grid_export(name: &str) -> bool {
-    name == GRID_INTERFACE || name == GRID_EXPORT
-}
+const GRID_EXPORT: &str = "fub:abi/grid@0.2.0";
+const INDEX_INTERFACE: &str = "fub:abi/index";
+const INDEX_EXPORT: &str = "fub:abi/index@0.2.0";
+const EVENT_HANDLER_INTERFACE: &str = "fub:abi/event-handler";
+const EVENT_HANDLER_EXPORT: &str = "fub:abi/event-handler@0.2.0";
 fn compatible_export_version(name: &str, interface: &str) -> bool {
     let Some(version) = name
         .strip_prefix(interface)
@@ -188,8 +195,11 @@ pub struct Component {
     indices: w_plugin::GuestIndices,
     command_indices: Option<w_command::GuestIndices>,
     format_indices: Option<w_format::GuestIndices>,
+    format_links_indices: Option<w_format_links::GuestIndices>,
     grid_indices: Option<w_grid::GuestIndices>,
     view_indices: Option<w_view::GuestIndices>,
+    index_indices: Option<w_index::GuestIndices>,
+    event_handler_indices: Option<w_event_handler::GuestIndices>,
 }
 
 impl Component {
@@ -232,7 +242,11 @@ impl Component {
             .map(|(name, _)| name)
             .find(|name| {
                 unsupported_versioned_export(name, FORMAT_INTERFACE)
+                    || unsupported_versioned_export(name, FORMAT_LINKS_INTERFACE)
                     || unsupported_versioned_export(name, VIEW_INTERFACE)
+                    || unsupported_versioned_export(name, INDEX_INTERFACE)
+                    || unsupported_versioned_export(name, GRID_INTERFACE)
+                    || unsupported_versioned_export(name, EVENT_HANDLER_INTERFACE)
             })
         {
             return Err(LoadError::UnsupportedExport(name.to_owned()));
@@ -249,6 +263,15 @@ impl Component {
             FORMAT_EXPORT,
         )
         .is_some();
+        let format_links_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            FORMAT_LINKS_INTERFACE,
+            FORMAT_LINKS_EXPORT,
+        )
+        .is_some();
         let view_export_present = select_supported_export(
             component
                 .component_type()
@@ -258,26 +281,60 @@ impl Component {
             VIEW_EXPORT,
         )
         .is_some();
-        let grid_export_present = component
-            .component_type()
-            .exports(&engine)
-            .any(|(name, _)| is_supported_grid_export(name));
+        let index_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            INDEX_INTERFACE,
+            INDEX_EXPORT,
+        )
+        .is_some();
+        let event_handler_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            EVENT_HANDLER_INTERFACE,
+            EVENT_HANDLER_EXPORT,
+        )
+        .is_some();
+        let grid_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            GRID_INTERFACE,
+            GRID_EXPORT,
+        )
+        .is_some();
         let indices = w_plugin::GuestIndices::new(&pre)
             .map_err(|error| LoadError::NotAPlugin(format!("{error:#}")))?;
         let command_indices = w_command::GuestIndices::new(&pre).ok();
         let format_indices =
             resolve_format_indices(format_export_present, || w_format::GuestIndices::new(&pre))?;
+        let format_links_indices = resolve_format_indices(format_links_export_present, || {
+            w_format_links::GuestIndices::new(&pre)
+        })?;
         let grid_indices =
             resolve_format_indices(grid_export_present, || w_grid::GuestIndices::new(&pre))?;
         let view_indices =
             resolve_format_indices(view_export_present, || w_view::GuestIndices::new(&pre))?;
+        let index_indices =
+            resolve_format_indices(index_export_present, || w_index::GuestIndices::new(&pre))?;
+        let event_handler_indices = resolve_format_indices(event_handler_export_present, || {
+            w_event_handler::GuestIndices::new(&pre)
+        })?;
         Ok(Self {
             pre,
             indices,
             command_indices,
             format_indices,
+            format_links_indices,
             grid_indices,
             view_indices,
+            index_indices,
+            event_handler_indices,
         })
     }
 
@@ -308,6 +365,14 @@ impl Component {
             ),
             None => None,
         };
+        let format_links = match &self.format_links_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
         let grid = match &self.grid_indices {
             Some(indices) => Some(
                 indices
@@ -324,14 +389,33 @@ impl Component {
             ),
             None => None,
         };
+        let index = match &self.index_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
+        let event_handler = match &self.event_handler_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
         Ok(Instance {
             store,
             interfaces: Interfaces {
                 plugin,
                 commands,
                 format,
+                format_links,
                 grid,
                 view,
+                index,
+                event_handler,
             },
         })
     }
@@ -393,20 +477,23 @@ fn cap_the_rest(
     Ok(())
 }
 
-struct Interfaces {
+pub(crate) struct Interfaces {
     plugin: w_plugin::Guest,
     commands: Option<w_command::Guest>,
     format: Option<w_format::Guest>,
+    pub(crate) format_links: Option<w_format_links::Guest>,
     grid: Option<w_grid::Guest>,
     view: Option<w_view::Guest>,
+    pub(crate) index: Option<w_index::Guest>,
+    pub(crate) event_handler: Option<w_event_handler::Guest>,
 }
 
-struct Instance {
-    store: Store<State>,
-    interfaces: Interfaces,
+pub(crate) struct Instance {
+    pub(crate) store: Store<State>,
+    pub(crate) interfaces: Interfaces,
 }
 
-fn call<R>(
+pub(crate) fn call<R>(
     inner: &Mutex<Instance>,
     host: &mut dyn HostApi,
     call: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
@@ -453,7 +540,7 @@ fn grid_call<R>(
     call(grid, store)
 }
 
-fn failure(error: wasmtime::Error) -> PluginError {
+pub(crate) fn failure(error: wasmtime::Error) -> PluginError {
     if error.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt) {
         return PluginError::Internal(
             "il componente non ha risposto entro il tempo concesso ed è stato fermato".into(),
@@ -865,6 +952,15 @@ impl FormatProvider for WasmFormatProvider {
             .map_err(|error| FormatError::Serialize(format!("il componente è caduto: {error:#}")))?
             .map_err(tr::from_format_error)
     }
+
+    fn rewrite_links(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+        rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        crate::format_links::call_rewrite_links(&self.inner, source, ctx, rewrites)
+    }
 }
 /// Proxy `ViewProvider` sopra la stessa istanza WASM.
 pub struct WasmViewProvider {
@@ -1152,6 +1248,17 @@ fn bundle_mount(
             Ok(specs) => specs.clone(),
             Err(error) => return RegistrationReport::failed(error.clone()),
         };
+        // Inbound declarations run here — after `Plugin::activate`, on the
+        // same thread that registers — so a trapped component fails with the
+        // declaration error, not a poisoned-instance activation error.
+        let index_provider = match index_provider_from_inner(Arc::clone(&inner)) {
+            Ok(provider) => provider,
+            Err(error) => return RegistrationReport::failed(error),
+        };
+        let event_handler = match event_handler_from_inner(Arc::clone(&inner)) {
+            Ok(handler) => handler,
+            Err(error) => return RegistrationReport::failed(error),
+        };
         if !grid_specs.is_empty() {
             let provider = WasmGridProvider {
                 inner: Arc::clone(&inner),
@@ -1177,6 +1284,16 @@ fn bundle_mount(
             };
             if let Err(error) = registrar.register_view_provider(Box::new(provider)) {
                 return RegistrationReport::failed(format!("view non registrate: {error}"));
+            }
+        }
+        if let Some(provider) = index_provider {
+            if let Err(error) = registrar.register_index_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("indice non registrato: {error}"));
+            }
+        }
+        if let Some(handler) = event_handler {
+            if let Err(error) = registrar.register_event_handler(Box::new(handler)) {
+                return RegistrationReport::failed(format!("eventi non registrati: {error}"));
             }
         }
         RegistrationReport::complete()
@@ -1323,7 +1440,7 @@ mod tests {
         assert!(is_supported_format_export("fub:abi/format"));
         assert!(is_supported_format_export("fub:abi/format@0.1.0"));
         assert!(is_supported_format_export("fub:abi/format@0.1.2"));
-        assert!(!is_supported_format_export("fub:abi/format@0.2.0"));
+        assert!(is_supported_format_export("fub:abi/format@0.2.0"));
         assert!(!is_supported_format_export("fub:abi/format@1.1.1"));
         assert!(!is_supported_format_export("fub:abi/format@9.9.9"));
         assert!(!is_supported_format_export("fub:abi/format@"));
@@ -1353,7 +1470,7 @@ mod tests {
         ];
         assert_eq!(
             select_supported_export(names, FORMAT_INTERFACE, FORMAT_EXPORT),
-            Some("fub:abi/format@0.1.2")
+            Some("fub:abi/format@0.2.0")
         );
         assert_eq!(
             select_supported_export(
@@ -1365,7 +1482,7 @@ mod tests {
         );
         assert_eq!(
             select_supported_export(
-                ["fub:abi/format@9.9.9", "fub:abi/format@0.2.0"],
+                ["fub:abi/format@9.9.9", "fub:abi/format@0.3.0"],
                 FORMAT_INTERFACE,
                 FORMAT_EXPORT
             ),

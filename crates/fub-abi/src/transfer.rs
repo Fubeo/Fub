@@ -753,7 +753,7 @@ pub enum ArtifactContent {
     /// [`ArtifactSink::close_artifact`], che il conto lo ha visto passare. Un
     /// campo che chi scrive il provider potesse riempire da sé sarebbe un conto
     /// che può mentire.
-    Delivered(u64),
+    Delivered(#[serde(with = "crate::ipc::u64_string")] u64),
 }
 
 impl Default for ArtifactContent {

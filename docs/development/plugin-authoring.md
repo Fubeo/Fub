@@ -81,10 +81,11 @@ non fidata e teardown. `GridProvider` è implementato nel protocollo Grid v1:
 provider nativo, proxy WASM, finestre, patch, invalidazioni, fallback e
 ownership sono esercitati dall'esempio `esempi/grid-wasm/`.
 
-`IndexProvider` e `EventHandler` inbound restano deferred finché un componente
-reale non possiede una route e prova feed/query/flush/close o la reazione a
-`Notice`. Non dedurre supporto da un tipo WIT dichiarato: una capability
-disponibile deve avere una famiglia host linkata e una prova end-to-end.
+`IndexProvider` ed `EventHandler` inbound sono implementati: un componente
+reale possiede una route e prova feed/query/flush/close/`up_to_date`/reconcile
+e reazione a `Notice` nello stesso registro del nativo. Non dedurre supporto
+da un tipo WIT dichiarato: una capability disponibile deve avere una famiglia
+host linkata e una prova end-to-end.
 
 ## Componente WASM
 
@@ -95,7 +96,9 @@ Gli esempi correnti sono:
 - `esempi/eventi-wasm/`;
 - `esempi/ciclo-wasm/`;
 - `esempi/format-wasm/` per un provider di formato WASM end-to-end;
-- `esempi/view-wasm/` per un `ViewProvider` WASM end-to-end.
+- `esempi/view-wasm/` per un `ViewProvider` WASM end-to-end;
+- `esempi/index-provider-wasm/` per un `IndexProvider` inbound reale;
+- `esempi/event-handler-wasm/` per un `EventHandler` inbound reale.
 
 Per il formato, usa `esempi/format-wasm/` come riferimento: il percorso
 esercitato copre parse, render, errore dichiarato, modello malformato, trap e
@@ -188,13 +191,7 @@ via WIT; il proxy è opzionale e condivide la stessa istanza del `Plugin`.
 `ViewSpec` espone i parametri (per esempio `mode` obbligatorio e `density`
 opzionale), che l'host valida prima della chiamata.
 
-Il provider dichiara `interests`, che è infallibile: un trap fa paniare il proxy
-e il confine `Workspace` converte il panic in `PluginError::Internal`. Legge il
-modello tramite `ReadApi` in `render_view` e usa l'`HostApi` in `on_action`;
-entrambe sono capacità già protette dal `Guard`, non accessi liberi del guest.
-Le sole forme di aggiornamento dimostrate in parità sono `Replace` e `Patch`;
-`IndexProvider` e `EventHandler` inbound restano deferred.
-
+Le sole forme di aggiornamento dimostrate in parità sono `Replace` e `Patch`.
 Render e action passano il guard di fiducia e il preflight dell'albero:
 root/riferimenti, DAG senza cicli, profondità massima 64 e budget di 8 Mi
 unità pesate. Per `Trust::Community`, `Html` e `WebView` sono rifiutati prima

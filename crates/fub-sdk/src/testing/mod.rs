@@ -125,11 +125,12 @@ pub struct MemoryHost {
     /// Formati finti per [`VaultRead::format_of`], seminati per **estensione**
     /// senza il punto — che è la chiave con cui risponde anche il registro vero.
     formats: Mutex<BTreeMap<String, DocumentFormat>>,
-    /// Il cestino: id nel cestino → (voce, sorgente). È in memoria come il
+    /// Il cestino: id nel cestino → (voce, byte). È in memoria come il
     /// resto, ma ha la stessa forma di quello vero — due id per voce, e il
     /// ripristino che rifiuta un path occupato — perché è quella forma che le
-    /// feature provano.
-    trash: Mutex<BTreeMap<String, (TrashEntry, String)>>,
+    /// feature provano. I byte sono quelli grezzi del vault: un allegato
+    /// cestinato resta byte, non testo.
+    trash: Mutex<BTreeMap<String, (TrashEntry, Vec<u8>)>>,
     /// Acceso, la **prossima** `free_name` occupa il nome che risponde.
     ///
     /// Si spegne da sé, perché la corsa da provare è quella di *una* domanda: un
@@ -664,7 +665,11 @@ impl VaultRead for MemoryHost {
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
-        Ok(Revision::of(&self.read_document(id)?))
+        // Sui byte grezzi, non sul testo: per un sorgente UTF-8 è la stessa
+        // impronta (`of` è `of_bytes` del testo), ma un allegato non è testo e
+        // `read_document` lo rifiuterebbe — mentre la revisione è di ciò che
+        // sta nel vault, non di ciò che si riesce a leggere come testo.
+        Ok(Revision::of_bytes(&self.read_document_bytes(id)?))
     }
 
     /// In ordine di id e a finestra, come il kernel: un doppio che
@@ -803,9 +808,10 @@ impl VaultWrite for MemoryHost {
             ));
         }
         if let WriteBase::DescendsFrom(wait_for) = base {
-            let now = docs
-                .get(id.as_str())
-                .map(|b| Revision::of(&String::from_utf8_lossy(b)));
+            // Sui byte grezzi, come il kernel che confronta col disco: la
+            // `from_utf8_lossy` di prima fondeva byte diversi nello stesso
+            // testo, e una guardia che non distingue non protegge.
+            let now = docs.get(id.as_str()).map(|b| Revision::of_bytes(b));
             if now.as_ref() != Some(&wait_for) {
                 return Err(PluginError::Conflict(
                     format!("`{id}` è cambiato da sotto").into(),
@@ -814,6 +820,49 @@ impl VaultWrite for MemoryHost {
         }
         docs.insert(id.to_string(), source.as_bytes().to_vec());
         Ok(Revision::of(source))
+    }
+    /// Deposita byte grezzi senza conversioni: `None` crea solo se assente
+    /// (atomico), `Some` confronta l'impronta dei byte attuali e risponde
+    /// `Conflict` senza scrivere se non coincide. Niente fallback UTF-8, niente
+    /// variante dettata implicita: la revisione è dei byte grezzi prodotti.
+    /// A differenza della via testuale, qui nessun cancello di formato: un file
+    /// opaco senza provider si deposita comunque, come nel kernel — che per lui
+    /// emette `EntryChanged` senza inventare un modello — e non `Unserved`.
+    fn write_document_bytes(
+        &mut self,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
+        let id = fenced_doc_id(id)?;
+        let id = if expected.is_none() && !self.docs.lock().unwrap().contains_key(id.as_str()) {
+            // Come `write_document` dettato: creare è far nascere un nome, e un
+            // nome che nasce passa la portabilità. Chi esiste resta com'è.
+            born_here(&id)?
+        } else {
+            id
+        };
+        let mut docs = self.docs.lock().unwrap();
+        match (&expected, docs.get(id.as_str())) {
+            (None, Some(_)) => {
+                return Err(PluginError::AlreadyExists(id.to_string().into()));
+            }
+            (None, None) => {}
+            (Some(_), None) => {
+                return Err(PluginError::Conflict(
+                    format!("`{id}` non esiste più").into(),
+                ));
+            }
+            (Some(wait_for), Some(now)) => {
+                if &Revision::of_bytes(now) != wait_for {
+                    return Err(PluginError::Conflict(
+                        format!("`{id}` è cambiato da sotto").into(),
+                    ));
+                }
+            }
+        }
+        docs.insert(id.to_string(), bytes.to_vec());
+        Ok(Revision::of_bytes(bytes))
     }
 
     /// La modifica chirurgica come la fa l'host vero: la base si verifica, gli
@@ -893,7 +942,9 @@ impl VaultStructure for MemoryHost {
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
         let id = &fenced_doc_id(id)?;
-        let source = self.read_document(id)?;
+        // Byte grezzi: come il disco del kernel, un allegato cestinato non è
+        // testo e non deve passare da `read_document` — che lo rifiuterebbe.
+        let bytes = self.read_document_bytes(id)?;
         self.docs.lock().unwrap().remove(id.as_str());
         // La forma dell'id la dà la regola del contratto, la stessa che usa il
         // kernel: un cestino piatto, il timbro prima dell'estensione, e il
@@ -915,16 +966,16 @@ impl VaultStructure for MemoryHost {
                     id: trashed.clone(),
                     original: id.clone(),
                     deleted_at: self.now_unix_millis() / 1000,
-                    size: source.len() as u64,
+                    size: bytes.len() as u64,
                 },
-                source,
+                bytes,
             ),
         );
         Ok(trashed)
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        let (entry, source) = self
+        let (entry, bytes) = self
             .trash
             .lock()
             .unwrap()
@@ -943,7 +994,12 @@ impl VaultStructure for MemoryHost {
         if self.docs.lock().unwrap().contains_key(target.as_str()) {
             return Err(PluginError::AlreadyExists(target.to_string().into()));
         }
-        self.write_document(&target, &source, WriteBase::Dictated)?;
+        // Byte grezzi senza passare dal testo né rigiudicare chi torna a casa:
+        // `None` rimette l'originale com'era (stessa asimmetria del protocollo
+        // staged del kernel), anche se è un allegato che nessuna porta di
+        // scrittura servirebbe. Solo il `to` esplicito è un nome che nasce e
+        // si giudica come tale, già fatto sopra.
+        self.docs.lock().unwrap().insert(target.to_string(), bytes);
         self.trash.lock().unwrap().remove(entry.id.as_str());
         Ok(target)
     }
@@ -1695,6 +1751,80 @@ mod tests {
             matches!(outcome, Err(PluginError::Internal(msg)) if msg.to_string().contains("nota.md"))
         );
     }
+
+    /// I byte grezzi attraversano il doppio senza conversioni: 0..255, BOM e
+    /// CRLF tornano identici, e la revisione è dei byte prodotti.
+    #[test]
+    fn raw_bytes_come_back_untouched() {
+        let mut host = MemoryHost::new();
+        let all: Vec<u8> = (0u8..=255).collect();
+        // `.bin` non è rivendicato da nessun formato seminato: la porta raw lo
+        // deposita comunque, come il kernel che accetta file opachi.
+        let id = DocId::new("allegato.bin");
+        let revision = host.write_document_bytes(&id, &all, None).unwrap();
+        assert_eq!(revision, Revision::of_bytes(&all));
+        assert_eq!(host.read_document_bytes(&id).unwrap(), all);
+        assert_eq!(host.document_revision(&id).unwrap(), revision);
+        assert!(
+            matches!(host.read_document(&id), Err(PluginError::Io(_))),
+            "0..255 non è UTF-8: come il vault vero, si dice di no"
+        );
+
+        let bom_crlf = b"\xef\xbb\xbfprima\r\nseconda\r\n".to_vec();
+        let text_id = DocId::new("nota.md");
+        let text_rev = host
+            .write_document_bytes(&text_id, &bom_crlf, None)
+            .unwrap();
+        assert_eq!(text_rev, Revision::of_bytes(&bom_crlf));
+        assert_eq!(host.read_document_bytes(&text_id).unwrap(), bom_crlf);
+    }
+
+    /// `None` è create-only: la seconda creazione rifiuta e lascia i byte vecchi.
+    #[test]
+    fn creating_twice_keeps_the_first_bytes() {
+        let mut host = MemoryHost::new();
+        let id = DocId::new("allegato.bin");
+        host.write_document_bytes(&id, &[1, 2, 3], None).unwrap();
+        let err = host
+            .write_document_bytes(&id, &[9, 9, 9], None)
+            .unwrap_err();
+        assert!(matches!(err, PluginError::AlreadyExists(_)), "{err:?}");
+        assert_eq!(host.read_document_bytes(&id).unwrap(), vec![1, 2, 3]);
+    }
+
+    /// Una CAS fallita non scrive niente: i byte restano quelli di prima.
+    #[test]
+    fn a_stale_cas_leaves_the_bytes_where_they_were() {
+        let mut host = MemoryHost::new();
+        let id = DocId::new("allegato.bin");
+        let first = host.write_document_bytes(&id, &[1, 2, 3], None).unwrap();
+        let stale = Revision::of_bytes(&[0]);
+        let err = host
+            .write_document_bytes(&id, &[9, 9, 9], Some(stale))
+            .unwrap_err();
+        assert!(matches!(err, PluginError::Conflict(_)), "{err:?}");
+        assert_eq!(host.read_document_bytes(&id).unwrap(), vec![1, 2, 3]);
+        let second = host
+            .write_document_bytes(&id, &[9, 9, 9], Some(first))
+            .unwrap();
+        assert_eq!(second, Revision::of_bytes(&[9, 9, 9]));
+        assert_eq!(host.read_document_bytes(&id).unwrap(), vec![9, 9, 9]);
+    }
+
+    /// Il cestino tiene byte, non testo: un allegato cestinato torna identico.
+    #[test]
+    fn trash_keeps_raw_bytes() {
+        let mut host = MemoryHost::new();
+        let all: Vec<u8> = (0u8..=255).collect();
+        let id = DocId::new("allegato.bin");
+        host.write_document_bytes(&id, &all, None).unwrap();
+        let trashed = host.trash_document(&id).unwrap();
+        assert!(host.read_document_bytes(&id).is_err());
+        let back = host.restore_document(&trashed, None).unwrap();
+        assert_eq!(back, id);
+        assert_eq!(host.read_document_bytes(&id).unwrap(), all);
+    }
+
     #[test]
     fn memory_host_uses_the_grid_protocol_as_a_scripted_provider() {
         let revision = Revision("r1".into());

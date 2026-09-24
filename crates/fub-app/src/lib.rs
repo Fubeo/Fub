@@ -23,8 +23,12 @@
 //! sempre la stessa cosa. Adesso passa un [`PluginError`], che è serializzabile
 //! e **discriminabile**: `{"kind": "already_exists", "message": …}`.
 
+use std::collections::BTreeMap;
+use std::io::Read;
+use std::io::Write;
 use std::sync::Arc;
 
+use camino::Utf8Path;
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
@@ -34,14 +38,16 @@ use fub_abi::grid::{
 };
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
-use fub_abi::settings::SettingValue;
+use fub_abi::settings::{SettingScope, SettingValue};
 use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
 use fub_host::{doc_id, Delivery, EventSink, Host};
+use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
+use parking_lot::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // I tre record che attraversano l'IPC vivono nell'host — un'API locale
@@ -52,6 +58,14 @@ pub use fub_host::{
     BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
+mod document_windows;
+mod mobile;
+mod resources;
+mod support;
+mod web_viewer;
+pub use support::DemoClosed;
+/// Adattatore OS per `fub://` (P13): thin sopra `fub_host::automation`.
+pub mod uri;
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
 /// `apps/client/src/host/contract.ts`.
@@ -126,6 +140,125 @@ where
     })?
 }
 
+/// Catalog trust is selected only by the machine's configuration directory.
+/// No IPC argument names a key, feed, trust path, or remote endpoint.
+struct CatalogConfig(Option<Utf8PathBuf>);
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MachineCatalogTrust {
+    keys: BTreeMap<String, String>,
+    min_generation: String,
+}
+
+fn bounded_config(path: &Utf8Path, limit: u64) -> Result<Vec<u8>, PluginError> {
+    let file = std::fs::File::open(path).map_err(|error| {
+        PluginError::Io(format!("catalog machine configuration unreadable: {error}").into())
+    })?;
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            PluginError::Io(format!("catalog machine configuration unreadable: {error}").into())
+        })?;
+    if bytes.len() as u64 > limit {
+        return Err(PluginError::BadArgs(
+            "catalog configuration exceeds its size limit".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn machine_catalog(config: Option<&Utf8Path>) -> Result<(CatalogTrust, SignedFeed), PluginError> {
+    let dir =
+        config.ok_or_else(|| PluginError::Unserved("catalog trust is not configured".into()))?;
+    let trust_path = dir.join("catalog-trust.json");
+    let bytes = match bounded_config(&trust_path, 64 * 1024) {
+        Err(PluginError::Io(_)) if !trust_path.exists() => {
+            return Err(PluginError::Unserved(
+                "catalog trust is not configured".into(),
+            ));
+        }
+        other => other?,
+    };
+    let configured: MachineCatalogTrust = serde_json::from_slice(&bytes).map_err(|error| {
+        PluginError::BadArgs(format!("invalid machine catalog trust: {error}").into())
+    })?;
+    if configured.keys.is_empty() {
+        return Err(PluginError::Unserved(
+            "catalog trust has no configured keys".into(),
+        ));
+    }
+    let min_generation = parse_installation(&configured.min_generation)?;
+    let mut trust = CatalogTrust {
+        min_generation,
+        ..CatalogTrust::default()
+    };
+    for (id, key) in configured.keys {
+        trust = trust.with_key(id, &key).map_err(catalog_error)?;
+    }
+    // Acquisition is local and explicit: the operator provisions this file,
+    // and a catalog_* command reads it. Never fetch a feed on startup.
+    let feed_path = dir.join("catalog-feed.json");
+    let feed: SignedFeed = serde_json::from_slice(&bounded_config(&feed_path, 4 * 1024 * 1024)?)
+        .map_err(|error| {
+            PluginError::BadArgs(format!("invalid signed catalog feed: {error}").into())
+        })?;
+    Ok((trust, feed))
+}
+
+fn catalog_error(error: CatalogError) -> PluginError {
+    match error {
+        CatalogError::Manager(error) => error,
+        CatalogError::Signature(message) => PluginError::PermissionDenied(message.into()),
+        CatalogError::Stale(message) | CatalogError::Integrity(message) => {
+            PluginError::Conflict(message.into())
+        }
+        CatalogError::Unavailable(message) => PluginError::Unserved(message.into()),
+        CatalogError::Invalid(message) | CatalogError::Unreadable(message) => {
+            PluginError::BadArgs(message.into())
+        }
+        CatalogError::Io(error) => PluginError::Io(error.to_string().into()),
+        CatalogError::Store(error) => PluginError::Io(error.to_string().into()),
+        CatalogError::Theme(error) => PluginError::Io(error.to_string().into()),
+    }
+}
+
+async fn run_catalog<T, F>(app: AppHandle, action: F) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(
+            &InstalledPluginManager,
+            &Host,
+            &CatalogTrust,
+            &SignedFeed,
+            u64,
+        ) -> Result<T, CatalogError>
+        + Send
+        + 'static,
+{
+    let manager = app.state::<InstalledPlugins>().manager()?;
+    let dir = app.state::<CatalogConfig>().0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (trust, feed) = machine_catalog(dir.as_deref())?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| {
+                PluginError::Internal(format!("invalid system clock: {error}").into())
+            })?
+            .as_millis()
+            .try_into()
+            .map_err(|_| {
+                PluginError::Internal("system clock exceeds catalog timestamp range".into())
+            })?;
+        action(&manager, &app.state::<Host>(), &trust, &feed, now).map_err(catalog_error)
+    })
+    .await
+    .map_err(|error| {
+        PluginError::Internal(format!("catalog operation did not complete: {error}").into())
+    })?
+}
+
 /// Il ponte eventi verso il webview: l'unica implementazione di [`EventSink`]
 /// che ha bisogno di Tauri, ed è per questo che sta qui e non nell'host.
 ///
@@ -160,7 +293,9 @@ impl EventSink for WebviewEvents {
             );
             return Delivery::Dropped;
         };
-        match app.emit("fub://event", notice) {
+        // Events can contain vault data: never broadcast them to a document
+        // surface or a remote viewer. The main webview is the only host.
+        match app.emit_to("main", "fub://event", notice) {
             Ok(()) => Delivery::Done,
             Err(and) => {
                 // Un notice che non attraversa l'IPC è un **bug del programma**,
@@ -183,9 +318,55 @@ impl EventSink for WebviewEvents {
     }
 }
 
+/// Keep the inter-process writer lease until Host finishes closing this vault.
+#[derive(Default)]
+struct WriterLocks(Mutex<BTreeMap<Utf8PathBuf, fub_host::automation::VaultWriterLock>>);
+
+fn writer_root(path: &str) -> Result<Utf8PathBuf, PluginError> {
+    let root = std::fs::canonicalize(path).map_err(|error| {
+        PluginError::Io(format!("cannot resolve vault writer root: {error}").into())
+    })?;
+    Utf8PathBuf::from_path_buf(root)
+        .map_err(|_| PluginError::BadArgs("vault path is not UTF-8".into()))
+}
+
+fn open_with_writer(
+    host: &Host,
+    locks: &WriterLocks,
+    path: &str,
+) -> Result<VaultInfo, PluginError> {
+    let root = writer_root(path)?;
+    let mut held = locks.0.lock();
+    if held.contains_key(&root) {
+        return host.open(&root);
+    }
+    let lock = fub_host::automation::lock_vault_writer(root.as_std_path()).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            PluginError::Conflict(format!("vault writer is busy: {root}").into())
+        } else {
+            PluginError::Io(format!("cannot lock vault writer: {error}").into())
+        }
+    })?;
+    let info = host.open(&root)?;
+    held.insert(root, lock);
+    Ok(info)
+}
+
 #[tauri::command]
-fn open_vault(host: State<Host>, path: String) -> Result<VaultInfo, PluginError> {
-    host.open(&Utf8PathBuf::from(path))
+fn open_vault(
+    host: State<Host>,
+    locks: State<WriterLocks>,
+    path: String,
+) -> Result<VaultInfo, PluginError> {
+    #[cfg(mobile)]
+    {
+        let _ = (&host, &locks, &path);
+        return Err(PluginError::Unserved(
+            "mobile vault mount requires native OS grant verification and SystemStorage".into(),
+        ));
+    }
+    #[cfg(not(mobile))]
+    open_with_writer(&host, &locks, &path)
 }
 
 // --- i vault aperti (§9.6) -------------------------------------------------
@@ -219,9 +400,22 @@ fn set_current_vault(host: State<Host>, path: String) -> Result<(), PluginError>
 /// ogni altro errore che esce di qui (decisione 0041): una lista di frasi
 /// avrebbe fatto la stessa figura a schermo e tolto alla shell l'unica cosa su
 /// cui può ramificare.
+/// Una finestra documento attiva trattiene quel vault: chiuderlo prima della
+/// conferma di distruzione nativa perderebbe la sessione autorevole.
 #[tauri::command]
-fn close_vault(host: State<Host>, path: String) -> Result<Vec<PluginError>, PluginError> {
-    host.close_vault(&Utf8PathBuf::from(path))
+fn close_vault(
+    host: State<Host>,
+    windows: State<document_windows::DocumentWindows>,
+    locks: State<WriterLocks>,
+    path: String,
+) -> Result<Vec<PluginError>, PluginError> {
+    let mut held = locks.0.lock();
+    let root = writer_root(&path)?;
+    let outcome = document_windows::close_vault(&host, &windows, &path);
+    if outcome.is_ok() {
+        held.remove(&root);
+    }
+    outcome
 }
 
 /// Path del vault da aprire all'avvio: l'override di ambiente (`FUB_VAULT`)
@@ -229,6 +423,12 @@ fn close_vault(host: State<Host>, path: String) -> Result<Vec<PluginError>, Plug
 /// frontend lo legge e apre il vault senza passare dal dialogo.
 #[tauri::command]
 fn initial_vault(host: State<Host>) -> Option<String> {
+    #[cfg(mobile)]
+    {
+        let _ = host;
+        None
+    }
+    #[cfg(not(mobile))]
     fub_host::initial_vault().or_else(|| host.last_vault())
 }
 
@@ -293,6 +493,119 @@ fn read_document(
         source_kind,
     })
 }
+
+/// Apre un lease sui byte di una risorsa. Il label e l'origin provengono dalla
+/// finestra nativa, non dagli argomenti JavaScript.
+#[tauri::command]
+fn resource_open(
+    host: State<Host>,
+    window: tauri::WebviewWindow,
+    id: String,
+    vault: Option<String>,
+) -> Result<fub_host::resources::ResourceDescriptor, PluginError> {
+    let origin = window.url().map_err(|and| {
+        PluginError::Internal(format!("resource window URL unavailable: {and}").into())
+    })?;
+    resources::resource_open_cmd(
+        &*host,
+        window.label(),
+        origin.as_str(),
+        &id,
+        vault.as_deref(),
+    )
+}
+
+/// Serve un chunk come corpo IPC binario, senza array JSON o base64.
+#[tauri::command]
+fn resource_read_chunk(
+    host: State<Host>,
+    window: tauri::WebviewWindow,
+    handle: fub_host::resources::ResourceHandle,
+    offset: u64,
+    len: u32,
+) -> Result<tauri::ipc::Response, PluginError> {
+    let origin = window.url().map_err(|and| {
+        PluginError::Internal(format!("resource window URL unavailable: {and}").into())
+    })?;
+    resources::resource_read_chunk_cmd(&*host, window.label(), origin.as_str(), handle, offset, len)
+}
+
+/// Rilascia il lease; la chiusura ripetuta resta idempotente.
+#[tauri::command]
+fn resource_close(
+    host: State<Host>,
+    window: tauri::WebviewWindow,
+    handle: fub_host::resources::ResourceHandle,
+) -> Result<(), PluginError> {
+    let origin = window.url().map_err(|and| {
+        PluginError::Internal(format!("resource window URL unavailable: {and}").into())
+    })?;
+    resources::resource_close_cmd(&*host, window.label(), origin.as_str(), handle)
+}
+/// Binary IPC body; metadata lives only in the bounded, strict header.
+#[tauri::command]
+fn resource_write(
+    host: State<Host>,
+    window: tauri::WebviewWindow,
+    request: tauri::ipc::Request<'_>,
+) -> Result<fub_host::resources::ResourceWriteReceipt, PluginError> {
+    let origin = window.url().map_err(|error| {
+        PluginError::Internal(format!("resource window URL unavailable: {error}").into())
+    })?;
+    let bytes = resources::resource_write_body(&request)?;
+    resources::resource_write_cmd(
+        &*host,
+        window.label(),
+        origin.as_str(),
+        request.headers(),
+        bytes,
+    )
+}
+
+struct ViewerConfig(Option<Utf8PathBuf>);
+
+#[tauri::command]
+async fn viewer_open(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    config: State<'_, ViewerConfig>,
+    open: web_viewer::ViewerOpen,
+) -> Result<String, PluginError> {
+    let dir = config.0.clone().ok_or_else(|| {
+        PluginError::Unserved("viewer profile requires a machine configuration directory".into())
+    })?;
+    // Il loader pdf.js atteso dalla shell resta quello in bundle locale, mai una fetch remota.
+    let _loader = resources::make_pdf_loader();
+    resources::open_viewer(app, window, open, dir).await
+}
+
+#[tauri::command]
+async fn viewer_save(
+    host: State<'_, Host>,
+    window: tauri::WebviewWindow,
+    url: String,
+    title: String,
+    allowlist: Vec<String>,
+    vault: Option<String>,
+    attachment_folder: String,
+) -> Result<fub_host::resources::ResourceWriteReceipt, PluginError> {
+    let origin = window.url().map_err(|error| {
+        PluginError::Internal(format!("viewer window URL unavailable: {error}").into())
+    })?;
+    resources::viewer_save(
+        &*host,
+        &fub_host::net::UreqNetwork::new(),
+        window.label(),
+        origin.as_str(),
+        &url,
+        &title,
+        &allowlist,
+        vault.as_deref(),
+        &attachment_folder,
+    )
+    .await
+}
+
 /// Superfici grid dichiarate dai provider montati. La shell negozia famiglia e
 /// versione prima di aprire una sessione.
 #[tauri::command]
@@ -593,6 +906,9 @@ fn list_commands(
 /// aggirerebbe l'unica difesa che 16.2 ha. Gli altri chiamanti del registro (la
 /// CLI di 27.1, l'API locale di 27.2) sono canali diversi e diranno il proprio
 /// attore là dove passano.
+/// Anche `trash.os` passa da qui: la scelta è esplicita nel comando e
+/// l'esito `effect.custom` distingue cestino OS e fallback interno, senza
+/// introdurre un'altra porta Tauri o un writer della shell.
 #[tauri::command]
 fn invoke_command(
     host: State<Host>,
@@ -780,6 +1096,83 @@ fn reset_setting(
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+struct SettingsProfiles {
+    active: String,
+    names: Vec<String>,
+}
+
+#[tauri::command]
+fn settings_profiles(
+    host: State<Host>,
+    scope: SettingScope,
+    vault: Option<String>,
+) -> Result<SettingsProfiles, PluginError> {
+    let (active, names) = host.settings_profiles(vault.as_deref(), scope)?;
+    Ok(SettingsProfiles { active, names })
+}
+
+#[tauri::command]
+fn export_settings_profile(
+    host: State<Host>,
+    scope: SettingScope,
+    name: String,
+    vault: Option<String>,
+) -> Result<String, PluginError> {
+    host.export_settings_profile(vault.as_deref(), scope, &name)
+}
+
+#[tauri::command]
+fn import_settings_profile(
+    host: State<Host>,
+    scope: SettingScope,
+    json: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host.import_settings_profile(vault.as_deref(), scope, &json)
+}
+
+#[tauri::command]
+fn duplicate_settings_profile(
+    host: State<Host>,
+    scope: SettingScope,
+    source: String,
+    name: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host.duplicate_settings_profile(vault.as_deref(), scope, &source, &name)
+}
+
+#[tauri::command]
+fn switch_settings_profile(
+    host: State<Host>,
+    scope: SettingScope,
+    name: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host.switch_settings_profile(vault.as_deref(), scope, &name)
+}
+
+#[tauri::command]
+fn reset_settings_profile(
+    host: State<Host>,
+    scope: SettingScope,
+    name: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host.reset_settings_profile(vault.as_deref(), scope, &name)
+}
+
+#[tauri::command]
+fn frame_capabilities(host: State<Host>) -> fub_host::settings::FrameCapabilities {
+    host.frame_capabilities()
+}
+
+#[tauri::command]
+fn setting_requires_reopen(host: State<Host>, key: String) -> bool {
+    host.setting_requires_reopen(&key)
+}
+
 // --- lo stato di vista della shell (§11.2) ---------------------------------
 //
 // La shell **non è un plugin**: non ha un manifest, non le si concedono
@@ -914,6 +1307,231 @@ async fn remove_installed_plugin(
     run_installed(app, move |manager, host| manager.remove(host, installation)).await
 }
 
+#[derive(serde::Serialize)]
+struct CatalogChange {
+    plugin: InstalledPluginInfo,
+    diagnostics: Vec<PluginError>,
+}
+
+#[tauri::command]
+async fn catalog_search(app: AppHandle, needle: String) -> Result<Vec<CatalogEntry>, PluginError> {
+    run_catalog(app, move |manager, _, trust, feed, now| {
+        manager.catalog_search(trust, feed, now, &needle)
+    })
+    .await
+}
+
+fn catalog_artifact(source: &str) -> Result<Vec<u8>, CatalogError> {
+    let mut file = std::fs::File::open(source)?;
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(64 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > 64 * 1024 * 1024 {
+        return Err(CatalogError::Invalid(
+            "plugin artifact exceeds the local 64 MiB limit".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+#[tauri::command]
+async fn catalog_install(
+    app: AppHandle,
+    id: String,
+    version: String,
+    source: String,
+) -> Result<InstalledPluginInfo, PluginError> {
+    run_catalog(app, move |manager, _, trust, feed, now| {
+        let bytes = catalog_artifact(&source)?;
+        manager.catalog_install(trust, feed, now, &id, &version, &bytes)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn catalog_update(
+    app: AppHandle,
+    installation: String,
+    version: String,
+    source: String,
+) -> Result<CatalogChange, PluginError> {
+    let installation = parse_installation(&installation)?;
+    run_catalog(app, move |manager, host, trust, feed, now| {
+        let bytes = catalog_artifact(&source)?;
+        let (plugin, diagnostics) =
+            manager.catalog_update(host, trust, feed, now, installation, &version, &bytes)?;
+        Ok(CatalogChange {
+            plugin,
+            diagnostics,
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn catalog_rollback(
+    app: AppHandle,
+    installation: String,
+    prior_version: String,
+    source: String,
+) -> Result<CatalogChange, PluginError> {
+    let installation = parse_installation(&installation)?;
+    run_catalog(app, move |manager, host, trust, feed, now| {
+        let bytes = catalog_artifact(&source)?;
+        let (plugin, diagnostics) = manager.catalog_rollback(
+            host,
+            trust,
+            feed,
+            now,
+            installation,
+            &prior_version,
+            &bytes,
+        )?;
+        Ok(CatalogChange {
+            plugin,
+            diagnostics,
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn catalog_revoke(
+    app: AppHandle,
+    installation: String,
+) -> Result<Vec<PluginError>, PluginError> {
+    let installation = parse_installation(&installation)?;
+    run_catalog(app, move |manager, host, trust, feed, now| {
+        manager.catalog_revoke(host, trust, feed, now, installation)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn catalog_install_theme(
+    app: AppHandle,
+    id: String,
+    version: String,
+    source: String,
+) -> Result<String, PluginError> {
+    run_catalog(app, move |manager, _, trust, feed, now| {
+        manager
+            .catalog_install_theme(trust, feed, now, &id, &version, Utf8Path::new(&source))
+            .map(|path| path.into_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn catalog_update_theme(
+    app: AppHandle,
+    id: String,
+    version: String,
+    source: String,
+) -> Result<String, PluginError> {
+    run_catalog(app, move |manager, _, trust, feed, now| {
+        manager
+            .catalog_update_theme(trust, feed, now, &id, &version, Utf8Path::new(&source))
+            .map(|path| path.into_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn catalog_rollback_theme(
+    app: AppHandle,
+    id: String,
+    prior_version: String,
+    source: String,
+) -> Result<String, PluginError> {
+    run_catalog(app, move |manager, _, trust, feed, now| {
+        manager
+            .catalog_rollback_theme(
+                trust,
+                feed,
+                now,
+                &id,
+                &prior_version,
+                Utf8Path::new(&source),
+            )
+            .map(|path| path.into_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn catalog_revoke_theme(app: AppHandle, id: String) -> Result<(), PluginError> {
+    run_catalog(app, move |manager, _, trust, feed, now| {
+        manager.catalog_revoke_theme(trust, feed, now, &id)
+    })
+    .await
+}
+
+#[tauri::command]
+fn plugin_budget_snapshot(
+    installed: State<InstalledPlugins>,
+) -> Result<fub_wasm_host::budgets::BudgetSnapshot, PluginError> {
+    installed.manager()?.process_budgets()
+}
+
+#[derive(Clone, serde::Serialize)]
+struct LimitedMode {
+    enabled: bool,
+    reason: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LimitedStartupChoice {
+    enabled: bool,
+    reason: Option<String>,
+}
+
+fn limited_startup(config: Option<&Utf8Path>) -> LimitedMode {
+    let Some(dir) = config else {
+        return LimitedMode {
+            enabled: false,
+            reason: None,
+        };
+    };
+    let path = dir.join("installed-limited.json");
+    if !path.exists() {
+        return LimitedMode {
+            enabled: false,
+            reason: None,
+        };
+    }
+    match bounded_config(&path, 4096).and_then(|bytes| {
+        serde_json::from_slice::<LimitedStartupChoice>(&bytes).map_err(|error| {
+            PluginError::BadArgs(format!("invalid limited startup configuration: {error}").into())
+        })
+    }) {
+        Ok(choice) if choice.enabled => LimitedMode {
+            enabled: true,
+            reason: Some(
+                choice
+                    .reason
+                    .filter(|reason| !reason.trim().is_empty())
+                    .unwrap_or_else(|| "limited startup selected in machine configuration".into()),
+            ),
+        },
+        Ok(_) => LimitedMode {
+            enabled: false,
+            reason: None,
+        },
+        Err(error) => LimitedMode {
+            enabled: true,
+            reason: Some(format!("invalid limited startup configuration: {error}")),
+        },
+    }
+}
+
+#[tauri::command]
+fn plugin_limited_mode(mode: State<LimitedMode>) -> LimitedMode {
+    mode.inner().clone()
+}
+
 /// Conserva il comando storico per i bundle ufficiali e nativi. Il manager
 /// prende autorità soltanto quando il runtime selezionato appartiene al claim
 /// installato; un record collidente o non noto continua sul percorso nativo.
@@ -1000,6 +1618,320 @@ fn adopt_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), Plu
 fn discard_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), PluginError> {
     host.discard_keybindings(vault.as_deref())
 }
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenedAction {
+    raw: String,
+    kind: &'static str,
+    reason: Option<String>,
+}
+
+fn forward_uri(app: &AppHandle, raw: &str) {
+    let action = match uri::handle_fub_uri(raw) {
+        Ok(uri::UriOutcome::Navigate { .. } | uri::UriOutcome::Search { .. }) => OpenedAction {
+            raw: raw.to_string(),
+            kind: "navigation",
+            reason: None,
+        },
+        Ok(uri::UriOutcome::Create { .. } | uri::UriOutcome::CapturePending { .. }) => {
+            OpenedAction {
+                raw: raw.to_string(),
+                kind: "pending_action",
+                reason: None,
+            }
+        }
+        Err(error) => OpenedAction {
+            raw: raw.to_string(),
+            kind: "invalid",
+            reason: Some(error),
+        },
+    };
+    if let Some(main) = app.get_webview_window("main") {
+        if main
+            .url()
+            .is_ok_and(|url| resources::is_local_origin(url.as_str()))
+        {
+            let _ = main.emit("fub://pending-action", action);
+        }
+    }
+}
+
+// `pending_opened_urls`, `mobile_pending_opened_urls` e `release_info` non ci
+// sono più: nessuna riga di `apps/client/src` li invocava e nessun listener di
+// eventi li drenava (`fub://pending-action` / `fub://opened-url` restano
+// spinte senza coda di recupero). Una porta che nessuno attraversa è una
+// promessa che nessuno mantiene: toglierla è il modo giusto di reggerla.
+
+#[derive(serde::Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum SaveArtifactOutcome {
+    Saved { path: String },
+    Cancelled,
+}
+
+#[tauri::command]
+async fn save_artifact(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    suggested_name: String,
+    media_type: String,
+    bytes: Vec<u8>,
+) -> Result<SaveArtifactOutcome, PluginError> {
+    use tauri_plugin_dialog::DialogExt;
+    let origin = window
+        .url()
+        .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+    resources::guard_trusted_local(window.label(), origin.as_str())?;
+    if window.label() != "main" {
+        return Err(PluginError::PermissionDenied(
+            "only the main shell may save artifacts".into(),
+        ));
+    }
+    if suggested_name.is_empty()
+        || suggested_name == "."
+        || suggested_name == ".."
+        || suggested_name.len() > 255
+        || suggested_name.contains(['/', '\\'])
+        || suggested_name.chars().any(char::is_control)
+    {
+        return Err(PluginError::BadArgs(
+            "artifact name must be a safe basename".into(),
+        ));
+    }
+    if media_type.is_empty()
+        || media_type.len() > 128
+        || !media_type
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'+' | b'-'))
+        || !media_type.contains('/')
+    {
+        return Err(PluginError::BadArgs("invalid artifact media type".into()));
+    }
+    if bytes.len() > 64 * 1024 * 1024 {
+        return Err(PluginError::BadArgs(
+            "artifact exceeds the 64 MiB save limit".into(),
+        ));
+    }
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.dialog()
+        .file()
+        .set_parent(&window)
+        .set_file_name(suggested_name)
+        .save_file(move |selection| {
+            let _ = sender.send(selection);
+        });
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(selected) = receiver
+            .recv()
+            .map_err(|_| PluginError::Internal("native save dialog did not return".into()))?
+        else {
+            return Ok(SaveArtifactOutcome::Cancelled);
+        };
+        let path = selected.into_path().map_err(|error| {
+            PluginError::BadArgs(format!("native save destination unavailable: {error}").into())
+        })?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| PluginError::BadArgs("native save destination has no parent".into()))?;
+        let mut temp = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|error| PluginError::Io(format!("cannot prepare artifact: {error}").into()))?;
+        temp.write_all(&bytes)
+            .and_then(|_| temp.as_file().sync_all())
+            .map_err(|error| PluginError::Io(format!("cannot write artifact: {error}").into()))?;
+        temp.persist(&path)
+            .map_err(|error| PluginError::Io(format!("cannot publish artifact: {error}").into()))?;
+        Ok(SaveArtifactOutcome::Saved {
+            path: path.to_string_lossy().into_owned(),
+        })
+    })
+    .await
+    .map_err(|error| PluginError::Internal(format!("save task did not complete: {error}").into()))?
+}
+
+// --- superficie IPC da `support` (demo, diagnostica, recupero) ----------------
+//
+// Wrapper sottili: la logica resta in `support` come `pub fn` pura,
+// qui solo le firme `#[tauri::command]` che delegano.
+#[tauri::command]
+fn demo_root() -> Option<String> {
+    support::demo_root()
+}
+
+#[tauri::command]
+fn open_demo(
+    host: State<Host>,
+    windows: State<document_windows::DocumentWindows>,
+) -> Result<fub_host::support::DemoOpened, PluginError> {
+    support::open_demo(host, windows)
+}
+
+#[tauri::command]
+fn close_demo(
+    host: State<Host>,
+    windows: State<document_windows::DocumentWindows>,
+    return_to: Option<String>,
+) -> Result<support::DemoClosed, PluginError> {
+    support::close_demo(host, windows, return_to)
+}
+
+#[tauri::command]
+fn reset_demo(
+    host: State<Host>,
+    windows: State<document_windows::DocumentWindows>,
+) -> Result<String, PluginError> {
+    support::reset_demo(host, windows)
+}
+
+#[tauri::command]
+fn startup_diagnostics(
+    host: State<Host>,
+    vault: Option<String>,
+) -> Result<Vec<PluginError>, PluginError> {
+    support::startup_diagnostics(host, vault)
+}
+
+#[tauri::command]
+fn support_preview(
+    host: State<Host>,
+    vault: Option<String>,
+    log_lines: Option<usize>,
+) -> Result<fub_host::support::SupportPreview, PluginError> {
+    support::support_preview(host, vault, log_lines)
+}
+
+#[tauri::command]
+fn support_export(
+    host: State<Host>,
+    preview: fub_host::support::SupportPreview,
+    consent: fub_host::support::ExportConsent,
+) -> Result<String, PluginError> {
+    support::support_export(host, preview, consent)
+}
+
+#[tauri::command]
+fn config_health() -> Vec<fub_host::support::ConfigReport> {
+    support::config_health()
+}
+
+#[tauri::command]
+fn recover_config(
+    path: String,
+    action: fub_host::support::RecoverAction,
+) -> Result<fub_host::support::RecoverOutcome, PluginError> {
+    support::recover_config(path, action)
+}
+
+// --- superficie IPC da `document_windows` (finestre documento) ---------------
+#[tauri::command]
+async fn open_document_window(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    host: State<'_, Host>,
+    registry: State<'_, document_windows::DocumentWindows>,
+    request: document_windows::DocumentWindowRequest,
+) -> Result<document_windows::DocumentWindowOpened, PluginError> {
+    document_windows::open_document_window(app, window, host, registry, request).await
+}
+
+#[tauri::command]
+fn close_document_window(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    registry: State<document_windows::DocumentWindows>,
+    label: String,
+) -> Result<(), PluginError> {
+    document_windows::close_document_window(app, window, registry, label)
+}
+
+#[tauri::command]
+fn finish_main_close(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    registry: State<document_windows::DocumentWindows>,
+) -> Result<(), PluginError> {
+    document_windows::finish_main_close(app, window, registry)
+}
+
+// --- superficie IPC da `mobile` (boundary OS sopra lo stesso Host) ----------
+#[tauri::command]
+fn mobile_validate_capture(payload: mobile::MobileCapturePayload) -> Result<(), PluginError> {
+    mobile::mobile_validate_capture(payload)
+}
+
+#[tauri::command]
+fn mobile_submit_capture(
+    host: State<Host>,
+    payload: mobile::MobileCapturePayload,
+    vault: Option<String>,
+    template: Option<String>,
+) -> Result<String, PluginError> {
+    mobile::mobile_submit_capture(host, payload, vault, template)
+}
+
+#[tauri::command]
+fn mobile_storage_roots(app: AppHandle) -> mobile::MobileStorageInfo {
+    mobile::mobile_storage_roots(app)
+}
+
+#[tauri::command]
+fn mobile_storage_preference(
+    app: AppHandle,
+) -> Result<mobile::MobileStoragePreference, PluginError> {
+    mobile::mobile_storage_preference(app)
+}
+
+#[tauri::command]
+fn mobile_set_storage_preference(
+    app: AppHandle,
+    preference: mobile::MobileStoragePreference,
+) -> Result<mobile::MobileStoragePreference, PluginError> {
+    mobile::mobile_set_storage_preference(app, preference)
+}
+
+#[tauri::command]
+fn mobile_wasm_report() -> mobile::MobileWasmReport {
+    mobile::mobile_wasm_report()
+}
+
+#[tauri::command]
+fn mobile_classify_opened_url(raw: String) -> Result<mobile::MobileOpenedUrl, PluginError> {
+    mobile::mobile_classify_opened_url(raw)
+}
+
+#[tauri::command]
+fn mobile_register_tree_grant(
+    grant: mobile::MobileTreeGrant,
+) -> Result<mobile::MobileTreeGrant, PluginError> {
+    mobile::mobile_register_tree_grant(grant)
+}
+
+#[tauri::command]
+fn mobile_shared_mount_mode(
+    grant: Option<mobile::MobileTreeGrant>,
+    backend_cas: bool,
+    copy_accepted: bool,
+) -> mobile::MobileMountMode {
+    mobile::mobile_shared_mount_mode(grant, backend_cas, copy_accepted)
+}
+
+#[cfg(mobile)]
+fn forward_mobile_opened(app: &AppHandle, raw: &str) {
+    // Spinta senza coda di recupero: la shell mobile riceve `fub://opened-url`
+    // e riclassifica con `mobile_classify_opened_url` prima di ogni gesto.
+    match mobile::classify_opened_url(raw) {
+        Ok(opened) => {
+            if let Some(main) = app.get_webview_window("main") {
+                if main
+                    .url()
+                    .is_ok_and(|url| resources::is_local_origin(url.as_str()))
+                {
+                    let _ = main.emit("fub://opened-url", opened);
+                }
+            }
+        }
+        Err(error) => tracing::warn!(target: "fub.app", "rejected OS URL: {error}"),
+    }
+}
 
 pub fn run() {
     // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
@@ -1029,6 +1961,7 @@ pub fn run() {
         }
         None => InstalledAvailability::NotConfigured,
     };
+    let limited = limited_startup(config_dir.as_deref());
 
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
@@ -1046,26 +1979,132 @@ pub fn run() {
     // Keep the manager alive in `InstalledPlugins`; the startup source is the
     // sole host integration point and its snapshot also carries formats.
     if let InstalledAvailability::Ready(manager) = &installed_availability {
-        host = host.with_startup_source(manager.clone());
+        let source: Arc<dyn fub_host::StartupSource> = if let Some(reason) = &limited.reason {
+            manager.limited_startup(reason.clone())
+        } else {
+            manager.clone()
+        };
+        host = host.with_startup_source(source);
     }
 
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let mut builder = tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("fub-asset", |context, request, responder| {
+            let app = context.app_handle().clone();
+            let label = context.webview_label().to_string();
+            std::thread::spawn(move || {
+                let result = (|| {
+                    let uri = request.uri();
+                    let valid_host =
+                        matches!(uri.host(), Some("localhost" | "fub-asset.localhost"));
+                    // L'URL canonico resta quello costruito da `asset_url`: nessuna forma alternativa.
+                    let _canonical = resources::asset_url(fub_host::resources::ResourceHandle(0));
+                    if !valid_host || uri.query().is_some() {
+                        return Err(PluginError::BadArgs("invalid asset URL authority".into()));
+                    }
+                    let window = app.get_webview_window(&label).ok_or_else(|| {
+                        PluginError::PermissionDenied(
+                            "asset requester has no trusted webview".into(),
+                        )
+                    })?;
+                    let origin = window
+                        .url()
+                        .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+                    let range = request
+                        .headers()
+                        .get(tauri::http::header::RANGE)
+                        .map(|header| {
+                            header
+                                .to_str()
+                                .map_err(|_| PluginError::BadArgs("invalid Range header".into()))
+                        })
+                        .transpose()?;
+                    let served = resources::handle_asset_request(
+                        &*app.state::<Host>(),
+                        &label,
+                        origin.as_str(),
+                        uri.path(),
+                        range,
+                    )?;
+                    resources::asset_http_response(served)
+                })();
+                let response = result.unwrap_or_else(|error| {
+                    let status = match error {
+                        PluginError::PermissionDenied(_) => 403,
+                        PluginError::NotFound(_) | PluginError::BadArgs(_) => 404,
+                        _ => 500,
+                    };
+                    tauri::http::Response::builder()
+                        .status(status)
+                        .header("cache-control", "no-store")
+                        .body(Vec::new())
+                        .expect("static asset error response")
+                });
+                responder.respond(response);
+            });
+        })
         .manage(host)
-        .manage(InstalledPlugins::new(installed_availability));
+        .manage(InstalledPlugins::new(installed_availability))
+        .manage(ViewerConfig(config_dir.clone()))
+        .manage(CatalogConfig(config_dir.clone()))
+        .manage(WriterLocks::default())
+        .manage(limited)
+        .manage(document_windows::DocumentWindows::default())
+        .on_window_event(|window, event| {
+            document_windows::on_window_event(window, event);
+            // La regola pura di sospensione/ripresa resta quella di `mobile::MobileLifecycle`;
+            // il ramo nativo la applica solo dove gli eventi OS esistono (`cfg(mobile)`).
+            let _lifecycle = [
+                mobile::MobileLifecycle::Foreground.step(mobile::MobileLifecycle::Hidden),
+                mobile::MobileLifecycle::Suspended.step(mobile::MobileLifecycle::Foreground),
+            ];
+            #[cfg(mobile)]
+            if let Some(action) = mobile::window_event_action(event) {
+                let name = match action {
+                    mobile::MobileLifecycleAction::KeepOpen => "tauri://suspended",
+                    mobile::MobileLifecycleAction::Rejoin => "tauri://resumed",
+                };
+                let _ = window.emit(name, ());
+            }
+        });
+
+    #[cfg(not(mobile))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            for raw in args.iter().filter(|arg| arg.starts_with("fub://")) {
+                forward_uri(app, raw);
+            }
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.set_focus();
+            }
+        }));
+    }
+    builder = builder
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init());
 
     builder
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
-            let zoom = app
-                .state::<Host>()
-                .machine_settings()
-                .into_iter()
+            let machine = app.state::<Host>().machine_settings();
+            let zoom = machine.iter()
                 .find(|entry| entry.spec.key == fub_host::settings::APPEARANCE_ZOOM)
                 .and_then(|entry| entry.value.as_number())
                 .unwrap_or(fub_host::settings::DEFAULT_ZOOM);
+            #[cfg(not(mobile))]
+            let system_frame = machine.iter()
+                .find(|entry| entry.spec.key == fub_host::settings::CHROME_FRAME)
+                .and_then(|entry| entry.value.as_text())
+                == Some("system");
             for window in app.webview_windows().values() {
                 window.set_zoom(zoom)?;
+                #[cfg(not(mobile))]
+                if window.label() == "main" {
+                    window.set_decorations(system_frame)?;
+                }
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+            for raw in std::env::args().filter(|arg| arg.starts_with("fub://")) {
+                forward_uri(app.handle(), &raw);
             }
             Ok(())
         })
@@ -1079,7 +2118,26 @@ pub fn run() {
             set_current_vault,
             initial_vault,
             session_notice,
+            save_artifact,
+            demo_root,
+            open_demo,
+            close_demo,
+            reset_demo,
+            startup_diagnostics,
+            support_preview,
+            support_export,
+            config_health,
+            recover_config,
+            open_document_window,
+            close_document_window,
+            finish_main_close,
             read_document,
+            resource_open,
+            resource_read_chunk,
+            resource_close,
+            resource_write,
+            viewer_open,
+            viewer_save,
             list_grid_surfaces,
             open_grid,
             grid_window,
@@ -1092,6 +2150,17 @@ pub fn run() {
             list_themes,
             read_theme,
             list_installed_plugins,
+            plugin_budget_snapshot,
+            plugin_limited_mode,
+            catalog_search,
+            catalog_install,
+            catalog_update,
+            catalog_rollback,
+            catalog_revoke,
+            catalog_install_theme,
+            catalog_update_theme,
+            catalog_rollback_theme,
+            catalog_revoke_theme,
             list_views,
             render_view,
             view_action,
@@ -1105,6 +2174,14 @@ pub fn run() {
             set_order,
             set_setting,
             reset_setting,
+            settings_profiles,
+            export_settings_profile,
+            import_settings_profile,
+            duplicate_settings_profile,
+            switch_settings_profile,
+            reset_settings_profile,
+            frame_capabilities,
+            setting_requires_reopen,
             view_state,
             set_view_state,
 
@@ -1120,9 +2197,19 @@ pub fn run() {
             pending_keybindings,
             adopt_keybindings,
             discard_keybindings,
+            mobile_validate_capture,
+            mobile_submit_capture,
+            mobile_storage_roots,
+            mobile_storage_preference,
+            mobile_set_storage_preference,
+            mobile_wasm_report,
+            mobile_classify_opened_url,
+            mobile_register_tree_grant,
+            mobile_shared_mount_mode,
         ])
         .build(tauri::generate_context!())
         .expect("error during Fub startup")
+
         // **Chi chiude sa che sta chiudendo** (§9.5). Il kernel non può saperlo:
         // non sa quando finisce un lotto, e finché l'unico chiamante di
         // `flush_indexes` era il callback del watcher, la durabilità di un
@@ -1134,6 +2221,31 @@ pub fn run() {
         // gli indici di un vault che poi resta aperto sarebbe peggio che non
         // chiuderli.
         .run(|app, event| {
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                for url in urls {
+                    #[cfg(mobile)]
+                    forward_mobile_opened(app, url.as_str());
+                    #[cfg(not(mobile))]
+                    if url.scheme() == uri::URI_SCHEME {
+                        forward_uri(app, url.as_str());
+                    }
+                }
+            }
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                if let Some(main) = app.get_webview_window("main") {
+                    // OS Quit skips the window's CloseRequested event. Redirect
+                    // it through the main webview's drain/flush path instead.
+                    api.prevent_exit();
+                    if let Err(error) = main.close() {
+                        tracing::error!(target: "fub.app", %error, "could not request main window drain");
+                    }
+                } else if app.state::<document_windows::DocumentWindows>().has_children() {
+                    // A force-destroyed main cannot drain surviving children.
+                    api.prevent_exit();
+                    tracing::error!(target: "fub.app", "cannot exit with live document windows and no main window");
+                }
+            }
             if let tauri::RunEvent::Exit = event {
                 let shutdown = app.state::<InstalledPlugins>().begin_shutdown();
                 for and in app.state::<Host>().close() {
@@ -1145,6 +2257,9 @@ pub fn run() {
                     // ancora riparare a schermo spento (0062).
                     tracing::warn!(target: "fub.app", "vault closure: {and}");
                 }
+                // The OS writer lease is released only after the host has
+                // completely torn down all sessions, never before.
+                app.state::<WriterLocks>().0.lock().clear();
                 match shutdown {
                     Ok(Some(shutdown)) => {
                         if let Err(and) = shutdown.finish() {

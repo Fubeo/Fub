@@ -48,6 +48,181 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     }
     or
 }
+/// A source occurrence of a Markdown footnote. Inline notes own their definition
+/// at the reference site; labelled definitions and references share a label.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FootnoteKind {
+    Reference(String),
+    Definition(String),
+    Inline(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FootnoteOccurrence {
+    pub kind: FootnoteKind,
+    pub span: Span,
+}
+
+/// Extract footnote positions from the Markdown parser, including literal
+/// `^[body]` inline notes and unresolved `[^label]` references which comrak
+/// leaves as text. Scan only parser-owned text nodes: code, HTML, and link
+/// destinations must never become footnotes merely because they contain `[^`.
+pub fn collect_footnotes(source: &str) -> Result<Vec<FootnoteOccurrence>, FormatError> {
+    let offsets = Offsets::new(source);
+    let arena = Arena::new();
+    let options = build_options(&ParseContext::obsidian(""));
+    let root = comrak::parse_document(&arena, text_policy::strip_bom(source), &options);
+    if exceeds_max_depth(root) {
+        return Err(FormatError::Parse(format!(
+            "annidamento del documento oltre {MAX_DEPTH} livelli"
+        )));
+    }
+    let mut found = Vec::new();
+    let mut excluded = Vec::new();
+    let mut pending = vec![root];
+    while let Some(node) = pending.pop() {
+        let span = span_of(node, &offsets);
+        match &node.data.borrow().value {
+            NodeValue::FootnoteReference(f) => found.push(FootnoteOccurrence {
+                kind: FootnoteKind::Reference(f.name.clone()),
+                span,
+            }),
+            NodeValue::FootnoteDefinition(f) => found.push(FootnoteOccurrence {
+                kind: FootnoteKind::Definition(f.name.clone()),
+                span,
+            }),
+            NodeValue::Text(_) => {
+                if let Some(slice) = source.get(span.start..span.end) {
+                    let bytes = slice.as_bytes();
+                    let mut at = 0;
+                    while at + 1 < bytes.len() {
+                        let opener = if bytes[at] == b'^' && bytes[at + 1] == b'[' {
+                            Some(true)
+                        } else if bytes[at] == b'[' && bytes[at + 1] == b'^' {
+                            Some(false)
+                        } else {
+                            None
+                        };
+                        if let Some(inline) = opener {
+                            let start = span.start + at;
+                            if !escaped_at(source.as_bytes(), start) {
+                                // A rich inline footnote can contain emphasis or
+                                // code; its closing bracket may lie beyond this
+                                // text node, but never beyond its block.
+                                let limit = node
+                                    .parent()
+                                    .map(|parent| span_of(parent, &offsets).end)
+                                    .unwrap_or(span.end);
+                                if let Some(end) = footnote_close(source, start + 2, limit) {
+                                    let content = &source[start + 2..end - 1];
+                                    if !content.is_empty() {
+                                        found.push(FootnoteOccurrence {
+                                            kind: if inline {
+                                                FootnoteKind::Inline(content.to_string())
+                                            } else {
+                                                FootnoteKind::Reference(content.to_string())
+                                            },
+                                            span: Span::new(start, end),
+                                        });
+                                        at = end.saturating_sub(span.start);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        at += 1;
+                    }
+                }
+            }
+            NodeValue::CodeBlock(_)
+            | NodeValue::Code(_)
+            | NodeValue::HtmlBlock(_)
+            | NodeValue::HtmlInline(_)
+            | NodeValue::FrontMatter(_)
+            | NodeValue::Link(_)
+            | NodeValue::Image(_) => {
+                excluded.push(span);
+                continue;
+            }
+            _ => {}
+        }
+        pending.extend(node.children());
+    }
+    collect_definition_lines(source, &excluded, &mut found);
+    found.sort_by_key(|item| (item.span.start, item.span.end));
+    found.dedup_by(|right, left| right.span == left.span);
+    Ok(found)
+}
+
+fn collect_definition_lines(source: &str, excluded: &[Span], found: &mut Vec<FootnoteOccurrence>) {
+    let mut line_start = 0;
+    while line_start < source.len() {
+        let line_end = source[line_start..]
+            .find('\n')
+            .map_or(source.len(), |offset| line_start + offset);
+        let content_end = line_end
+            .checked_sub(1)
+            .filter(|at| source.as_bytes()[*at] == b'\r')
+            .unwrap_or(line_end);
+        if !excluded
+            .iter()
+            .any(|span| line_start < span.end && content_end > span.start)
+        {
+            let line = &source[line_start..content_end];
+            let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+            if indent <= 3 {
+                let candidate = &line[indent..];
+                if let Some(rest) = candidate.strip_prefix("[^") {
+                    if let Some(label_end) = rest.find("]:") {
+                        let label = &rest[..label_end];
+                        if !label.is_empty() && !label.contains(['[', ']']) {
+                            found.push(FootnoteOccurrence {
+                                kind: FootnoteKind::Definition(label.to_string()),
+                                span: Span::new(line_start + indent, content_end),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        if line_end == source.len() {
+            break;
+        }
+        line_start = line_end + 1;
+    }
+}
+
+fn escaped_at(source: &[u8], at: usize) -> bool {
+    let mut cursor = at;
+    while cursor > 0 && source[cursor - 1] == b'\\' {
+        cursor -= 1;
+    }
+    (at - cursor) % 2 != 0
+}
+
+fn footnote_close(source: &str, start: usize, limit: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut depth = 1;
+    for at in start..limit.min(bytes.len()) {
+        if matches!(bytes[at], b'\r' | b'\n') {
+            return None;
+        }
+        if escaped_at(bytes, at) {
+            continue;
+        }
+        match bytes[at] {
+            b'[' => depth += 1,
+            b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(at + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
 /// Controlla il limite di annidamento senza ricorrere: le passate preliminari
 /// (`recover_definitions`) devono poter rifiutare anche un AST ostile.
 fn exceeds_max_depth<'a>(root: &'a AstNode<'a>) -> bool {
@@ -1283,6 +1458,38 @@ fn push_plain_or_tags(
     acc: &mut Acc,
     out: &mut Vec<Inline>,
 ) -> usize {
+    // Inline Obsidian footnotes are text to comrak. Interpret only a complete
+    // parser text slice, never code/HTML/link nodes, and retain the source span.
+    if ctx.enabled(syntax::FOOTNOTES) {
+        let bytes = slice.as_bytes();
+        let mut at = 0;
+        while at + 2 < bytes.len() {
+            if bytes[at] == b'^' && bytes[at + 1] == b'[' && !is_escaped(source, base + at) {
+                if let Some(end) = footnote_close(source, base + at + 2, base + slice.len()) {
+                    let end = end - base;
+                    if end > at + 3 {
+                        let before = push_plain_or_tags(source, &slice[..at], base, ctx, acc, out);
+                        let body = &slice[at + 2..end - 1];
+                        out.push(Inline::Custom {
+                            custom_kind: custom_kind::FOOTNOTE_REFERENCE.to_string(),
+                            attrs: serde_json::json!({
+                                "label": decode_segment(source, body, base + at + 2),
+                                "source": body,
+                                "inline": true,
+                            }),
+                            span: Span::new(base + at, base + end),
+                        });
+                        let after =
+                            push_plain_or_tags(source, &slice[end..], base + end, ctx, acc, out);
+                        return before
+                            + decode_segment(source, &slice[at..end], base + at).len()
+                            + after;
+                    }
+                }
+            }
+            at += 1;
+        }
+    }
     let tags: Vec<Tag> = if ctx.enabled(syntax::TAGS) {
         scan::scan_tags(slice)
             .into_iter()

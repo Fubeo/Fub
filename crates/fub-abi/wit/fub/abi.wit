@@ -29,7 +29,7 @@
 // destinazioni degli alias, firme complete delle funzioni. Un WIT invalido =
 // test rosso.
 
-package fub:abi@0.1.2;
+package fub:abi@0.2.0;
 
 /// JSON serializzato come stringa: frontmatter, `attrs` dell'escape hatch,
 /// argomenti dei comandi, storage dei plugin.
@@ -486,6 +486,27 @@ interface format {
     /// Generazione, non round-trip: la fonte di verità di un documento
     /// esistente è la sorgente; il kernel non riscrive mai un file da qui.
     serialize: func(model: document-model) -> result<string, format-error>;
+}
+
+/// Riscrittura format-owned dei riferimenti: estensione opzionale di `format`.
+/// Non aggiunge funzioni all'interfaccia esistente, che i guest già compilati
+/// devono continuare a poter esportare senza questa capability.
+interface format-links {
+    use model.{span, link-target};
+    use format.{document-source, parse-context, format-error};
+    use edit.{text-edit};
+
+    record link-rewrite {
+        span: span,
+        target: link-target,
+        /// Nuovo page per Wiki o percorso URI-like completo per Path:
+        /// il provider conserva grammatica ed escaping della sorgente.
+        replacement: string,
+    }
+
+    /// none = operazione non supportata; some = tutte le patch richieste.
+    /// L'assenza non autorizza una sostituzione grezza nel kernel.
+    rewrite-links: func(source: document-source, ctx: parse-context, rewrites: list<link-rewrite>) -> result<option<list<text-edit>>, format-error>;
 }
 
 /// `SyntaxRule`: una sintassi INNESTATA su un formato che non la conosce (§3.1).
@@ -1883,6 +1904,7 @@ interface index {
         fields: list<text-field>,
         tolerance: text-tolerance,
         partial-last-term: bool,
+        case-sensitive: bool,
     }
     /// Un tag canonico (senza `#`); con `descendants` prende la sua gerarchia.
     record tag-predicate {
@@ -1910,6 +1932,14 @@ interface index {
         ns: string,
         predicate: json,
     }
+    record regex-predicate {
+        pattern: string,
+        fields: list<text-field>,
+    }
+    enum task-status { open, done }
+    record task-predicate { status: task-status }
+    record path-predicate { glob: string }
+    record file-predicate { extension: string }
     /// Le foglie: ognuna è un fatto sul vault che qualcuno sa verificare.
     variant query-predicate {
         text(text-query),
@@ -1919,6 +1949,10 @@ interface index {
         linked(linked-predicate),
         docs(docs-predicate),
         custom(custom-predicate),
+        regex(regex-predicate),
+        task(task-predicate),
+        path(path-predicate),
+        file(file-predicate),
     }
     /// Un predicato, eventualmente negato: in forma normale la negazione finisce
     /// sulle foglie, ed è la casella «diverso da» di un builder.
@@ -2232,6 +2266,8 @@ interface index {
         /// Le forme sintattiche effettive del documento, incluse quelle
         /// registrate a runtime.
         syntax-forms(doc-id),
+        /// Il documento intero per la stampa: stessa pipeline, bersaglio print.
+        render-print(doc-id),
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -2293,6 +2329,8 @@ interface index {
         render-embed,
         /// Il kernel compone il provider col registro sintattico runtime.
         syntax-forms,
+        /// La proiezione di stampa composta dal kernel.
+        render-print,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -2302,6 +2340,10 @@ interface index {
         folder,
         linked,
         custom(string),
+        regex,
+        task,
+        path,
+        file,
     }
     /// Cosa un indice dichiara alla registrazione. Una FAMIGLIA ha un
     /// proprietario solo (lì la risposta si compone, e due autori vorrebbero
@@ -2585,6 +2627,8 @@ interface index {
         render-embed(embed-content),
         /// Le forme sintattiche effettive del documento.
         syntax-forms(list<syntax-form>),
+        /// Il documento reso per la stampa.
+        render-print(rendered-document),
     }
 
     /// SU QUESTA IDENTITÀ, L'INDICE ADESSO MENTE (§20.1, decisione 0051).
@@ -4376,4 +4420,5 @@ world plugin-world {
     export service;
     export importer;
     export exporter;
+    export format-links;
 }

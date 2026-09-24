@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { undo, history } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { EditorSelection, EditorState, type StateCommand } from "@codemirror/state";
+import { EditorSelection, EditorState, type StateCommand, type Transaction } from "@codemirror/state";
 import {
   autoPairDecision,
   dedentListItem,
+  deleteTableColumn,
+  deleteTableRow,
+  insertTableColumn,
+  insertTableRow,
+  moveTableColumn,
+  moveTableRow,
+  sortTableRows,
+  sortTableColumns,
   indentListItem,
-  markdownKeymap,
-  obsidianKeymap,
   smartListEnter,
   toggleBold,
   toggleBulletList,
@@ -17,7 +24,6 @@ import {
   toggleStrikethrough,
   toggleWikilink,
 } from "./commands";
-import { textKeymap } from "../../commands";
 
 // I comandi sono `StateCommand` puri: si testano creando un `EditorState` e
 // catturando la transazione dal dispatch, senza mai istanziare una view (i
@@ -438,32 +444,94 @@ describe("autoPairDecision", () => {
   });
 });
 
-describe("composizione keymap Markdown", () => {
-  it("mantiene l'ordine e gli accordi montati dall'editor", () => {
-    expect(obsidianKeymap.map(({ key }) => key)).toEqual([
-      "Mod-b",
-      "Mod-i",
-      "Mod-Shift-x",
-      "Mod-`",
-      "Mod-k",
-      "Enter",
-      "Mod-Enter",
-      "Tab",
-      "Shift-Tab",
-      "Mod-d",
-      "Alt-ArrowUp",
-      "Alt-ArrowDown",
-      "Mod-Shift-8",
-      "Mod-Shift-7",
-    ]);
+describe("operazioni tabella", () => {
+  const table = "| A | B |\n| :--- | ---: |\n| left\\|pipe | 10 |\n| z | 2 |";
+
+  function edit(
+    doc: string,
+    command: StateCommand,
+    at: string,
+    other?: string,
+  ): { handled: boolean; doc: string; undo: string | null; transactions: number } {
+    const locations = [at, ...(other ? [other] : [])].map((text) => {
+      const from = doc.indexOf(text);
+      if (from < 0) throw new Error(`missing selection: ${text}`);
+      return EditorSelection.cursor(from);
+    });
+    let state = EditorState.create({
+      doc,
+      selection: EditorSelection.create(locations),
+      extensions: [
+        markdown({ base: markdownLanguage }),
+        EditorState.allowMultipleSelections.of(true),
+        history(),
+      ],
+    });
+    let transactions = 0;
+    const dispatch = (tr: Transaction) => {
+      state = tr.state;
+      transactions++;
+    };
+    const handled = command({ state, dispatch });
+    const result = state.doc.toString();
+    const undone = undo({ state, dispatch });
+    return { handled, doc: result, undo: undone ? state.doc.toString() : null, transactions };
+  }
+
+  it("inserisce righe dopo il delimitatore, senza cambiare header/allineamenti o testo vicino", () => {
+    const source = `intro\n\n${table}\n\nfine`;
+    const result = edit(source, insertTableRow("before"), "left");
+    expect(result.handled).toBe(true);
+    expect(result.doc).toBe(
+      `intro\n\n| A | B |\n| :--- | ---: |\n| | |\n| left\\|pipe | 10 |\n| z | 2 |\n\nfine`,
+    );
+    expect(result.undo).toBe(source);
+    expect(result.transactions).toBe(2); // one edit, one undo
   });
 
-  it("compone il keymap Markdown con quello condiviso senza duplicati", () => {
-    const expected = [
-      ...markdownKeymap.slice(0, 9),
-      ...textKeymap,
-      ...markdownKeymap.slice(9),
-    ];
-    expect(obsidianKeymap).toEqual(expected);
+  it("sposta e ordina solo le righe del corpo; il separatore non si muove", () => {
+    const moved = edit(table, moveTableRow(-1), "z");
+    expect(moved.doc).toBe("| A | B |\n| :--- | ---: |\n| z | 2 |\n| left\\|pipe | 10 |");
+    expect(moved.undo).toBe(table);
+    const sorted = edit(table, sortTableRows(), "B");
+    expect(sorted.doc).toBe(moved.doc);
+    expect(edit(table, moveTableRow(-1), "left").handled).toBe(false);
+    expect(edit(table, deleteTableRow, ":---").handled).toBe(false);
+    expect(edit(table, deleteTableRow, "A").handled).toBe(false);
+  });
+
+  it("sposta/inserisce/elimina colonne senza dividere escaped pipe né cambiare l'allineamento", () => {
+    expect(edit(table, moveTableColumn(-1), "B").doc).toBe(
+      "| B | A |\n| ---: | :--- |\n| 10 | left\\|pipe |\n| 2 | z |",
+    );
+    expect(edit(table, sortTableColumns(-1), "A").doc).toBe(
+      "| B | A |\n| ---: | :--- |\n| 10 | left\\|pipe |\n| 2 | z |",
+    );
+    expect(edit(table, insertTableColumn("before"), "B").doc).toBe(
+      "| A | | B |\n| :--- | --- | ---: |\n| left\\|pipe | | 10 |\n| z | | 2 |",
+    );
+    const removed = edit(table, deleteTableColumn, "left");
+    expect(removed.doc).toBe("| B |\n| ---: |\n| 10 |\n| 2 |");
+    expect(removed.undo).toBe(table);
+  });
+
+  it("aggregates distinct selections in one undoable table operation", () => {
+    const result = edit(table, deleteTableRow, "left", "z");
+    expect(result.doc).toBe("| A | B |\n| :--- | ---: |");
+    expect(result.undo).toBe(table);
+    expect(result.transactions).toBe(2);
+  });
+
+  it("refuses fenced code, HTML and prose without touching their text", () => {
+    for (const source of [
+      `\`\`\`md\n${table}\n\`\`\``,
+      `<div>\n${table}\n</div>`,
+      "ordinary | prose",
+    ]) {
+      const result = edit(source, deleteTableColumn, source.includes("| A |") ? "A" : "ordinary");
+      expect(result.handled).toBe(false);
+      expect(result.doc).toBe(source);
+      expect(result.transactions).toBe(0);
+    }
   });
 });

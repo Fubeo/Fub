@@ -1,12 +1,8 @@
 //! **Il secondo backend** (§16.1, [M5](../../../docs/project/m5-wasm-runtime.md)):
 //! un componente WASM che il kernel vede come qualunque altro provider.
 //!
-//! Il contratto è congelato dal 2026-08-14 (`fub:abi@0.1.2`), e questo crate è
-//! il primo consumatore che lo attraversa **in esecuzione**. Fino a qui il
-//! confine era stato provato in due modi, tutt'e due statici:
-//! `wit_conformance.rs` legge il WIT e dice che è valido,
-//! `tools/varco-wasm` lo genera e lo compila lato guest e dice che si lascia
-//! attraversare. Nessuno dei due ha mai *chiamato* niente.
+//! Il contratto vivo è `fub:abi@0.2.0`; le baseline congelate e il bridge
+//! legacy 0.1.2 restano separati dal binding host generato dal WIT vivo.
 //!
 //! # La forma, in una riga
 //!
@@ -32,22 +28,41 @@
 #![deny(missing_docs)]
 
 mod borrow;
+pub mod budgets;
+pub mod catalog;
 mod component;
 mod discovery;
 mod events;
+mod format_links;
 mod guest;
+mod inbound;
+mod inbound_convert;
 pub mod installed;
 mod limits;
 pub mod managed;
 mod model;
 mod translate;
 mod ui;
-
 pub use component::{
     Component, LoadError, WasmBundle, WasmCommandProvider, WasmGridProvider, WasmPlugin,
     WasmViewProvider,
 };
 pub use discovery::{discover, DiscoveredPlugin};
+
+/// Nome del backend WASM configurato, senza creare l'engine: `native` o
+/// `pulley`. È ciò che la UI mostra come `configured:` quando l'engine non è
+/// ancora nato; dopo la nascita, il backend effettivo si legge con
+/// [`wasm_backend_active_name`]. Mai spacciare il configurato per attivo.
+pub fn wasm_backend_name() -> &'static str {
+    crate::limits::EngineBackend::configured_name()
+}
+
+/// Nome del backend WASM effettivamente usato dall'engine di processo, se
+/// l'engine esiste già. `None` = engine non ancora nato: mostrare il
+/// configurato, non inventare un attivo.
+pub fn wasm_backend_active_name() -> Option<&'static str> {
+    crate::limits::EngineBackend::active_name()
+}
 
 /// I binding **lato host** di `plugin-world`, generati dal contratto.
 ///

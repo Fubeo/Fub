@@ -36,6 +36,14 @@ pub const QUERIES_DELETE: &str = "queries.delete";
 const STORE: &str = "queries.json";
 const LAST: &str = "last";
 const SCHEMA: u32 = 1;
+/// Il nome della query incorporata in un blocco di codice (`query` per
+/// default): è la convenzione con cui una nota incorpora una ricerca salvata
+/// senza duplicarne l'espressione. La forma resta JSON di [`QueryExpr`] o
+/// testo libero — la stessa di `queries.save`, risolta da [`embed_expr`] — e
+/// la porta esistente è `query_index` con `Documents`: nessun nuovo canale,
+/// nessun nuovo comando.
+#[allow(dead_code)]
+pub const EMBED_DEFAULT_NAME: &str = "query";
 
 const RUN: &str = "run";
 const DELETE: &str = "delete";
@@ -667,6 +675,71 @@ struct SavedQuery {
     expr: QueryExpr,
 }
 
+/// L'espressione di una query incorporata, risolta dalla stessa semantica che
+/// usano globale, salvate, filtri e viste — senza una seconda grammatica.
+///
+/// La forma accetta tre scritture, in ordine di prova:
+///
+/// 1. JSON di [`QueryExpr`] (oggetto con `any`, o stringa che lo contiene);
+/// 2. il nome di una query salvata (`id` o `name` nello store);
+/// 3. testo libero, come termini da cercare.
+///
+/// Pura e senza host oltre al `ReadApi` per lo store: non apre file, non
+/// interroga l'indice — dice *quale domanda* fare, e la domanda la fa chi
+/// incorpora chiamando `query_index` con `Documents`. Così globale, salvata e
+/// incorporata restano una sola semantica: chi cambia il ranking lo cambia una
+/// volta sola.
+pub fn embed_expr(host: &dyn ReadApi, body: &str) -> Result<QueryExpr, PluginError> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return Err(PluginError::BadArgs(Text::key(E_NO_EXPR)));
+    }
+    if let Ok(expr) = serde_json::from_str::<QueryExpr>(trimmed) {
+        return Ok(normalize_embed_expr(expr));
+    }
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if !value.is_null() {
+            if let Ok(expr) = parse_expr(&value) {
+                return Ok(normalize_embed_expr(expr));
+            }
+        }
+    }
+    let store = load(host)?;
+    if let Some(saved) = store
+        .queries
+        .iter()
+        .find(|q| q.id == trimmed || q.name == trimmed)
+    {
+        return Ok(normalize_embed_expr(saved.expr.clone()));
+    }
+    // Né JSON né il nome di una query salvata: è la riga che si scriverebbe
+    // nella barra di ricerca, con la stessa sintassi e la stessa semantica.
+    fub_abi::rules::search_syntax::parse(trimmed, false).map_err(|fault| {
+        PluginError::BadArgs(Text::message(
+            E_BAD_EXPR,
+            vec![Arg::text(
+                "reason",
+                format!("{} (byte {})", fault.kind.label(), fault.at),
+            )],
+        ))
+    })
+}
+
+/// Normalizza un'espressione incorporata prima di eseguirla o salvarla: chi
+/// incorpora ha finito di scrivere, quindi `partial_last_term` torna a `false`
+/// (è proprietà dell'invocazione mentre-si-digita, non della query). Senza
+/// questa riga una query salvata da un embed cercherebbe prefissi per sempre.
+pub fn normalize_embed_expr(mut expr: QueryExpr) -> QueryExpr {
+    for clause in &mut expr.any {
+        for literal in &mut clause.all {
+            if let QueryPredicate::Text(text) = &mut literal.predicate {
+                text.partial_last_term = false;
+            }
+        }
+    }
+    expr
+}
+
 fn load(host: &dyn ReadApi) -> Result<Store, PluginError> {
     match host.data_read(STORE)? {
         None => Ok(Store {
@@ -713,10 +786,90 @@ mod tests {
         };
         assert_eq!(free_id(&store, "Inbox"), "inbox-2");
     }
-
     #[test]
     fn parse_expr_from_object() {
         let v = serde_json::json!({"any": []});
         assert_eq!(parse_expr(&v).unwrap(), QueryExpr::all());
+    }
+
+    #[test]
+    fn embed_text_is_terms_not_syntax() {
+        let host = fub_sdk::testing::MemoryHost::new();
+        let expr = embed_expr(&host, "rust async").unwrap();
+        assert_eq!(
+            expr,
+            QueryExpr::of(QueryPredicate::Text(TextQuery::terms("rust async")))
+        );
+    }
+
+    #[test]
+    fn embed_json_object_is_an_expression() {
+        let host = fub_sdk::testing::MemoryHost::new();
+        let expr = embed_expr(&host, r#"{"any": []}"#).unwrap();
+        assert_eq!(expr, QueryExpr::all());
+    }
+
+    #[test]
+    fn embed_named_query_resolves_from_the_store() {
+        let mut host = fub_sdk::testing::MemoryHost::new();
+        persist(
+            &mut host,
+            &Store {
+                schema_version: 1,
+                queries: vec![SavedQuery {
+                    id: "inbox".into(),
+                    name: "Inbox".into(),
+                    expr: QueryExpr::of(QueryPredicate::Folder {
+                        path: "Inbox".into(),
+                        descendants: true,
+                    }),
+                }],
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            embed_expr(&host, "inbox").unwrap(),
+            QueryExpr::of(QueryPredicate::Folder {
+                path: "Inbox".into(),
+                descendants: true,
+            })
+        );
+        assert_eq!(
+            embed_expr(&host, "Inbox").unwrap(),
+            QueryExpr::of(QueryPredicate::Folder {
+                path: "Inbox".into(),
+                descendants: true,
+            })
+        );
+    }
+
+    #[test]
+    fn embed_normalizes_partial_last_term() {
+        let host = fub_sdk::testing::MemoryHost::new();
+        let mut expr = QueryExpr::of(QueryPredicate::Text(
+            TextQuery::terms("arch").while_typing(),
+        ));
+        expr = normalize_embed_expr(expr);
+        let QueryPredicate::Text(text) = &expr.any[0].all[0].predicate else {
+            panic!("una foglia di testo");
+        };
+        assert!(!text.partial_last_term);
+        let from_body = embed_expr(&host, r#"{"any":[{"all":[{"negated":false,"predicate":{"kind":"text","text":"arch","mode":"terms","fields":[],"tolerance":"exact","partial_last_term":true}}]}]}"#).unwrap();
+        let QueryPredicate::Text(text) = &from_body.any[0].all[0].predicate else {
+            panic!("una foglia di testo");
+        };
+        assert!(
+            !text.partial_last_term,
+            "l'incorporata ha finito di scrivere"
+        );
+    }
+
+    #[test]
+    fn embed_empty_is_bad_args_not_everything() {
+        let host = fub_sdk::testing::MemoryHost::new();
+        assert!(
+            embed_expr(&host, "   ").is_err(),
+            "vuoto non è tutto il vault"
+        );
     }
 }

@@ -2,7 +2,7 @@
 //! eseguibili da chi implementa il contratto.
 //!
 //! È la differenza fra «il contratto è documentato» e «il contratto è
-//! verificabile da chi lo implementa». Sono ventitré funzioni [conta: conformance-functions],
+//! verificabile da chi lo implementa». Sono ventotto funzioni [conta: conformance-functions],
 //! ed è quel numero che [decision 0054] una volta scrisse come «otto» quando
 //! erano già quattordici: d'ora in poi conta la guardia del §16.8, non chi
 //! scrive la frase.
@@ -41,6 +41,7 @@ use std::collections::BTreeSet;
 
 use fub_abi::edit::Revision;
 use fub_abi::error::FormatError;
+use fub_abi::event::{Event, Notice};
 use fub_abi::format::{DocumentSource, ParseContext, SourceKind};
 use fub_abi::grid::{
     GridApplyRequest, GridCellKey, GridCellPatch, GridInvalidation, GridProvider,
@@ -50,7 +51,7 @@ use fub_abi::model::{
     canonical_anchor, heading_slugs, Block, DocId, DocumentModel, Heading, Inline, Link,
     LinkTarget, Span, Tag,
 };
-use fub_abi::traits::{IndexProvider, IndexQuery, ReadApi, ViewProvider};
+use fub_abi::traits::{EventHandler, IndexProvider, IndexQuery, ReadApi, ViewProvider};
 use fub_abi::FormatProvider;
 
 use crate::testing::MemoryHost;
@@ -281,7 +282,7 @@ pub fn view_ids_are_distinct<V: ViewProvider + ?Sized>(view: &V) {
 /// che si apre su un errore.
 pub fn every_declared_view_draws<V: ViewProvider + ?Sized>(view: &V, host: &dyn ReadApi) {
     for spec in view.views() {
-        let instance = fub_abi::traits::ViewInstance::only(spec.id.clone());
+        let instance = instance_for(&spec);
         if let Err(and) = view.render_view(&instance, host) {
             panic!(
                 "`views()` dichiara `{}`, ma `render_view` su quell'id ha risposto\n\
@@ -294,6 +295,41 @@ pub fn every_declared_view_draws<V: ViewProvider + ?Sized>(view: &V, host: &dyn 
     }
 }
 
+/// Istanza valida per la spec: le view parametriche non si disegnano
+/// con `ViewInstance::only` (params `Null` = convalida aggirata).
+/// `Document` punta a una nota nota all'host di prova; altri kind
+/// restano un errore leggibile dell'harness, non un `BadArgs` della view.
+fn instance_for(spec: &fub_abi::traits::ViewSpec) -> fub_abi::traits::ViewInstance {
+    use fub_abi::command::ParamKind;
+    if spec.params.is_empty() {
+        return fub_abi::traits::ViewInstance::only(spec.id.clone());
+    }
+    let mut map = serde_json::Map::new();
+    for param in &spec.params {
+        match &param.kind {
+            ParamKind::Document => {
+                map.insert(
+                    param.name.clone(),
+                    serde_json::Value::String("nota.md".to_string()),
+                );
+            }
+            ParamKind::Text => {
+                map.insert(param.name.clone(), serde_json::Value::String(String::new()));
+            }
+            _ => panic!(
+                "harness `instance_for`: nessun valore finto per il parametro `{}` \
+                 di `{}`: aggiungilo qui prima di dichiarare la view",
+                param.name, spec.id
+            ),
+        }
+    }
+    fub_abi::traits::ViewInstance::new(
+        spec.id.clone(),
+        spec.id.clone(),
+        serde_json::Value::Object(map),
+    )
+}
+
 /// *«Un `ViewProvider` che non muta durante `render_view`.»*
 ///
 /// La forma che il §16.1 chiedeva è **già garantita dal tipo**:
@@ -304,7 +340,7 @@ pub fn every_declared_view_draws<V: ViewProvider + ?Sized>(view: &V, host: &dyn 
 /// proprietà su cui la shell conta per ridisegnare quando vuole.
 pub fn render_view_has_no_memory<V: ViewProvider + ?Sized>(view: &V, host: &dyn ReadApi) {
     for spec in view.views() {
-        let instance = fub_abi::traits::ViewInstance::only(spec.id.clone());
+        let instance = instance_for(&spec);
         let Ok(first) = view.render_view(&instance, host) else {
             continue;
         };
@@ -318,6 +354,91 @@ pub fn render_view_has_no_memory<V: ViewProvider + ?Sized>(view: &V, host: &dyn 
              cache dietro un `Mutex`: la shell ridisegna quando vuole, e conta su\n\
              questo.",
             spec.id
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// EventHandler
+// ---------------------------------------------------------------------------
+
+/// Tutte le proprietà di un [`EventHandler`] verificabili senza sapere
+/// a cosa l'handler è abbonato. Va in panico con un messaggio che nomina la
+/// proprietà violata.
+///
+/// Chiama in ordine:
+/// [`subscribed_masks_are_stable`],
+/// [`redrawing_or_reacting_on_index_updated_declares_batch_ended`] e
+/// [`handle_vault_closed_is_graceful`].
+pub fn an_event_handler_respects_the_contract<H: EventHandler + ?Sized>(handler: &mut H) {
+    subscribed_masks_are_stable(handler);
+    redrawing_or_reacting_on_index_updated_declares_batch_ended(handler);
+    handle_vault_closed_is_graceful(handler);
+}
+
+/// *«Il kernel costruisce il filtro di dispatch dalla maschera, una volta.»*
+///
+/// Il kernel legge `subscribed()` per decidere cosa consegnare, e una maschera
+/// che cambia fra due chiamate lascia il filtro che non corrisponde a sé
+/// stesso: un evento che l'handler voleva non arriva, o arriva uno che non
+/// voleva — e l'autore se ne accorge solo davanti al sintomo, mai qui.
+pub fn subscribed_masks_are_stable<H: EventHandler + ?Sized>(handler: &H) {
+    let first = handler.subscribed();
+    let then = handler.subscribed();
+    assert_eq!(
+        first, then,
+        "`subscribed()` ha risposto due cose diverse a due chiamate di fila.\n\
+         Il kernel costruisce il filtro di dispatch dalla maschera: ciò che\n\
+         dichiari lì è ciò che ricevi per tutta la vita del vault."
+    );
+}
+
+/// *«Un handler che dichiara `IndexUpdated` deve dichiarare anche `BatchEnded`:
+/// dentro un lotto il primo non arriva, ed è il secondo a dirgli che
+/// l'indice si è mosso.»*
+///
+/// È la [decision 0011](../../../../docs/decisions/README.md) letta
+/// dal lato dell'autore dell'handler, ed è il peggior difetto che questa suite
+/// possa vedere: un handler che sbaglia questo **non si rompe**, smette solo
+/// di reagire dentro un lotto — cioè proprio quando l'utente ha appena fatto
+/// la cosa più grossa. Nessun test lo vede fallire, perché fuori dal lotto
+/// funziona.
+pub fn redrawing_or_reacting_on_index_updated_declares_batch_ended<H: EventHandler + ?Sized>(
+    handler: &H,
+) {
+    // La regola vive in **un posto solo** ([decision
+    // 0020](../../../../docs/decisions/README.md)):
+    // `misses_batches` viene dal contratto, e questa funzione la applica
+    // invece di riscriverla. Una seconda idea della stessa regola, scritta
+    // in un banco di test, è il modo in cui due guardie finiscono per
+    // non essere d'accordo.
+    assert!(
+        !handler.subscribed().misses_batches(),
+        "l'handler si abbona a `index-updated` ma non a `batch-ended`.\n\
+         Dentro un lotto `index-updated` non arriva: questo handler smetterà\n\
+         di reagire proprio quando l'utente ha fatto la cosa più grossa, e\n\
+         nessun test lo vedrà fallire perché fuori dal lotto funziona."
+    );
+}
+
+/// *«`vault-closed` è l'ultimo giro utile per rendere durevole ciò che hai in
+/// memoria.»*
+///
+/// Chi lo riceve è ancora registrato, ha ancora l'[`HostApi`](fub_abi::traits::HostApi) e può ancora
+/// scrivere: un handler che lo rifiuta con un errore butta via l'ultima
+/// occasione di salvare il proprio stato — e la chiusura non si annulla, né
+/// aspetta chi non ha fatto in tempo.
+pub fn handle_vault_closed_is_graceful<H: EventHandler + ?Sized>(handler: &mut H) {
+    let mut host = MemoryHost::new();
+    let notice = Notice::of(Event::VaultClosed {
+        root: String::from("vault"),
+    });
+    if let Err(and) = handler.handle(&notice, &mut host) {
+        panic!(
+            "`handle` su `vault-closed` ha risposto con un errore: {and:?}.\n\
+             È l'ultimo giro sincrono in cui il vault è ancora quello di prima:\n\
+             chi lo rifiuta perde ciò che non aveva reso durevole, e la chiusura\n\
+             non si annulla."
         );
     }
 }
@@ -1406,5 +1527,36 @@ pub fn a_grid_supports_the_lifecycle(
                 .is_err(),
             "shutdown must retire every grid instance"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fub_abi::event::{EventKind, EventMask};
+    use fub_abi::traits::HostApi;
+    use fub_abi::PluginError;
+
+    /// Lo stub finto a protezione della regola `IndexUpdated`→`BatchEnded`
+    /// sull'handler: dichiara `index-updated` e dimentica `batch-ended`.
+    struct IndexSenzaBatch;
+
+    impl EventHandler for IndexSenzaBatch {
+        fn subscribed(&self) -> EventMask {
+            EventMask::of([EventKind::IndexUpdated])
+        }
+
+        fn handle(&mut self, _notice: &Notice, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "batch-ended")]
+    fn un_handler_che_dimentica_batch_ended_non_rispetta_il_contratto() {
+        // La regola che si presidia: dentro un lotto `index-updated` non
+        // arriva, ed è `batch-ended` a dire che l'indice si è mosso.
+        let handler = IndexSenzaBatch;
+        redrawing_or_reacting_on_index_updated_declares_batch_ended(&handler);
     }
 }

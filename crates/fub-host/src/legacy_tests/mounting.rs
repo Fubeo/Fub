@@ -287,7 +287,13 @@ fn a_bundle_that_speaks_a_other_contract_not_is_mounts() {
     let journal: Journal = Arc::default();
     let mut registry = BundleRegistry::new();
 
-    let bundle = BundleSpy::new("test.future", &journal).speaking("0.2.0");
+    let (major, rest) = fub_abi::traits::ABI_VERSION
+        .split_once('.')
+        .expect("complete ABI version");
+    let (minor, _) = rest.split_once('.').expect("ABI minor and patch");
+    let future_minor = minor.parse::<u64>().expect("numeric ABI minor") + 1;
+    let bundle =
+        BundleSpy::new("test.future", &journal).speaking(&format!("{major}.{future_minor}.0"));
     let error = registry
         .mount(&bundle, &mut ws)
         .expect_err("a minor version newer than the host is not served");

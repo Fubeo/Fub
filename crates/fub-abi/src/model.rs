@@ -213,17 +213,35 @@ impl Frontmatter {
     /// leggere lo stesso file con due dichiarazioni diverse dà due risposte
     /// diverse, e un chiamante che non se ne accorge è un filtro che non trova.
     pub fn property(&self, key: &str, formats: &DateFormats) -> Option<PropertyValue> {
+        self.property_with_types(key, formats, &PropertyTypes::default())
+    }
+
+    /// Interpreta la sorgente secondo le dichiarazioni del vault, senza mutarla.
+    pub fn property_with_types(
+        &self,
+        key: &str,
+        formats: &DateFormats,
+        types: &PropertyTypes,
+    ) -> Option<PropertyValue> {
         self.0
             .get(key)
-            .map(|v| PropertyValue::normalize(v, formats))
+            .map(|value| normalize_property(key, value, formats, types))
     }
 
     /// Tutte le proprietà normalizzate, **nell'ordine del file** (il workspace
     /// abilita `serde_json/preserve_order`).
     pub fn properties(&self, formats: &DateFormats) -> Vec<(String, PropertyValue)> {
+        self.properties_with_types(formats, &PropertyTypes::default())
+    }
+
+    pub fn properties_with_types(
+        &self,
+        formats: &DateFormats,
+        types: &PropertyTypes,
+    ) -> Vec<(String, PropertyValue)> {
         self.0
             .iter()
-            .map(|(k, v)| (k.clone(), PropertyValue::normalize(v, formats)))
+            .map(|(key, value)| (key.clone(), normalize_property(key, value, formats, types)))
             .collect()
     }
 
@@ -239,6 +257,35 @@ impl Frontmatter {
             _ => Vec::new(),
         }
     }
+}
+
+fn normalize_property(
+    key: &str,
+    value: &serde_json::Value,
+    formats: &DateFormats,
+    types: &PropertyTypes,
+) -> PropertyValue {
+    if !types.types.contains_key(key)
+        && matches!(key, "aliases" | "alias" | "cssclasses" | "cssclass")
+    {
+        return match value {
+            serde_json::Value::Null => PropertyValue::Empty,
+            serde_json::Value::String(s) => {
+                PropertyValue::List(vec![PropertyScalar::Text(s.clone())])
+            }
+            serde_json::Value::Array(items) => PropertyValue::List(
+                items
+                    .iter()
+                    .map(|item| match item {
+                        serde_json::Value::String(s) => PropertyScalar::Text(s.clone()),
+                        _ => PropertyScalar::Unknown(item.clone()),
+                    })
+                    .collect(),
+            ),
+            _ => PropertyValue::Unknown(value.clone()),
+        };
+    }
+    PropertyValue::normalize_as(value, formats, types.resolve(key))
 }
 
 /// Il documento parsato nel modello comune.
@@ -1061,6 +1108,10 @@ pub mod custom_kind {
     pub const DIAGRAM: &str = "diagram";
     /// `==evidenziato==` (inline). `attrs: { text: string }`.
     pub const HIGHLIGHT: &str = "highlight";
+    /// `%%commento%%` (inline): testo dell'autore che la resa non mostra.
+    /// `attrs: { source: string }`, **delimitatori compresi**, perché riscriverlo
+    /// è copiarlo e nascondere un commento non autorizza a perderlo.
+    pub const COMMENT: &str = "comment";
     /// Definition list: i figli sono `DEFINITION_TERM` e `DEFINITION_DESCRIPTION`
     /// alternati, nell'ordine della sorgente.
     pub const DEFINITION_LIST: &str = "definition-list";
@@ -1133,6 +1184,7 @@ pub mod custom_kind {
         (FOOTNOTE_REFERENCE, Payload::Body("label")),
         (DIAGRAM, Payload::Body("source")),
         (HIGHLIGHT, Payload::Body("text")),
+        (COMMENT, Payload::Source("source")),
         (DEFINITION_LIST, Payload::Children),
         (DEFINITION_TERM, Payload::Children),
         (DEFINITION_DESCRIPTION, Payload::Children),
@@ -1172,10 +1224,74 @@ pub mod custom_kind {
 /// quella stringa —, ma [`custom_kind::Payload`] è un **tipo**, e compare nella
 /// firma di [`custom_kind::payload`]: chi la legge deve poterlo nominare senza
 /// sapere in che modulo è stato scritto (`superficie_della_radice.rs`).
-/// Il valore di una proprietà del frontmatter, **normalizzato**.
 pub use custom_kind::Payload;
 
-///
+/// The vault's declared interpretation of a frontmatter key. The JSON source
+/// remains authoritative even when its value cannot be interpreted as this type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PropertyType {
+    Text,
+    List,
+    Number,
+    Checkbox,
+    Date,
+    DateTime,
+    Tags,
+}
+
+/// Versioned, per-vault property declarations. Unrecognized schema versions
+/// cannot be silently interpreted as the current schema.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PropertyTypes {
+    pub version: u32,
+    pub types: std::collections::BTreeMap<String, PropertyType>,
+}
+
+impl Default for PropertyTypes {
+    fn default() -> Self {
+        Self {
+            version: Self::VERSION,
+            types: Default::default(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PropertyTypes {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            version: u32,
+            types: std::collections::BTreeMap<String, PropertyType>,
+        }
+        let wire = Wire::deserialize(deserializer)?;
+        if wire.version != PropertyTypes::VERSION {
+            return Err(serde::de::Error::custom(
+                "unsupported property types version",
+            ));
+        }
+        Ok(Self {
+            version: wire.version,
+            types: wire.types,
+        })
+    }
+}
+
+impl PropertyTypes {
+    pub const VERSION: u32 = 1;
+
+    /// Explicit declarations win over conventional frontmatter field names.
+    pub fn resolve(&self, key: &str) -> Option<PropertyType> {
+        self.types.get(key).copied().or(match key {
+            "tags" => Some(PropertyType::Tags),
+            "aliases" | "alias" | "cssclasses" | "cssclass" => Some(PropertyType::List),
+            _ => None,
+        })
+    }
+}
+
+/// Il valore di una proprietà del frontmatter, **normalizzato**.
 /// Il frontmatter grezzo è JSON piatto, e va benissimo per attraversare il
 /// confine; non va bene come *risposta* alla domanda che tutti gli consumatori
 /// fanno. 8.2 chiede proprietà tipizzate (data, rating, relazione, formula),
@@ -1319,7 +1435,7 @@ impl DateOrder {
         let year = i32::try_from(digits(year, 4)?).ok()?;
         let month = u8::try_from(digits(month, 2)?).ok()?;
         let day = u8::try_from(digits(day, 2)?).ok()?;
-        if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        if !valid_civil_date(year, month, day) {
             return None;
         }
         Some(PropertyDate {
@@ -1398,16 +1514,95 @@ pub struct PropertyTime {
 }
 
 impl PropertyValue {
-    /// vault declare ([`DateFormats`]).
-    /// Normalizza un valore JSON che **non** può essere una lista: una lista
+    /// Inference for undeclared keys, retained for existing consumers.
     pub fn normalize(v: &serde_json::Value, formats: &DateFormats) -> PropertyValue {
-        match v {
-            serde_json::Value::Array(a) => PropertyValue::List(
-                a.iter()
-                    .map(|v| PropertyScalar::normalize(v, formats))
-                    .collect(),
-            ),
-            scalar => PropertyScalar::normalize(scalar, formats).into(),
+        Self::normalize_as(v, formats, None)
+    }
+
+    /// A declaration changes interpretation, never the underlying JSON.
+    pub fn normalize_as(
+        v: &serde_json::Value,
+        formats: &DateFormats,
+        kind: Option<PropertyType>,
+    ) -> PropertyValue {
+        use serde_json::Value as J;
+        use PropertyType as T;
+        if v.is_null() {
+            return PropertyValue::Empty;
+        }
+        match kind {
+            None => match v {
+                J::Array(items) => PropertyValue::List(
+                    items
+                        .iter()
+                        .map(|item| PropertyScalar::normalize(item, formats))
+                        .collect(),
+                ),
+                scalar => PropertyScalar::normalize(scalar, formats).into(),
+            },
+            Some(T::Text) => match v {
+                J::String(s) => PropertyValue::Text(s.clone()),
+                _ => PropertyValue::Unknown(v.clone()),
+            },
+            Some(T::Number) => match v {
+                J::Number(n) => n
+                    .as_f64()
+                    .filter(|n| n.is_finite())
+                    .map(PropertyValue::Number)
+                    .unwrap_or_else(|| PropertyValue::Unknown(v.clone())),
+                J::String(s) => s
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|n| n.is_finite())
+                    .map(PropertyValue::Number)
+                    .unwrap_or_else(|| PropertyValue::Unknown(v.clone())),
+                _ => PropertyValue::Unknown(v.clone()),
+            },
+            Some(T::Checkbox) => match v {
+                J::Bool(b) => PropertyValue::Bool(*b),
+                J::String(s) => match s.as_str() {
+                    "true" => PropertyValue::Bool(true),
+                    "false" => PropertyValue::Bool(false),
+                    _ => PropertyValue::Unknown(v.clone()),
+                },
+                _ => PropertyValue::Unknown(v.clone()),
+            },
+            Some(T::Date | T::DateTime) => match v {
+                J::String(s) => {
+                    let date = parse_iso_date(s.trim()).or_else(|| formats.read(s.trim()));
+                    match date {
+                        Some(date) if date.time.is_some() == (kind == Some(T::DateTime)) => {
+                            PropertyValue::Date(date)
+                        }
+                        _ => PropertyValue::Unknown(v.clone()),
+                    }
+                }
+                _ => PropertyValue::Unknown(v.clone()),
+            },
+            Some(T::List) => match v {
+                J::Array(items) => PropertyValue::List(
+                    items
+                        .iter()
+                        .map(|item| PropertyScalar::normalize(item, formats))
+                        .collect(),
+                ),
+                J::String(s) => PropertyValue::List(vec![PropertyScalar::Text(s.clone())]),
+                _ => PropertyValue::Unknown(v.clone()),
+            },
+            Some(T::Tags) => match v {
+                J::Array(items) => PropertyValue::List(
+                    items
+                        .iter()
+                        .map(|item| match item {
+                            J::String(s) => PropertyScalar::Text(s.clone()),
+                            _ => PropertyScalar::Unknown(item.clone()),
+                        })
+                        .collect(),
+                ),
+                J::String(s) => PropertyValue::List(vec![PropertyScalar::Text(s.clone())]),
+                _ => PropertyValue::Unknown(v.clone()),
+            },
         }
     }
 }
@@ -1473,10 +1668,14 @@ impl From<PropertyScalar> for PropertyValue {
 fn parse_iso_date(s: &str) -> Option<PropertyDate> {
     let (date, rest) = s.split_at_checked(10)?;
     let mut parts = date.split('-');
-    let year: i32 = parts.next()?.parse().ok()?;
+    let year = parts.next()?;
+    if year.len() != 4 {
+        return None;
+    }
+    let year = digits(year, 4)? as i32;
     let month: u8 = fixed_width(parts.next()?, 2)?;
     let day: u8 = fixed_width(parts.next()?, 2)?;
-    if parts.next().is_some() || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    if parts.next().is_some() || !valid_civil_date(year, month, day) {
         return None;
     }
     let time = match rest {
@@ -1489,6 +1688,20 @@ fn parse_iso_date(s: &str) -> Option<PropertyDate> {
         day,
         time,
     })
+}
+
+/// Validità gregoriana condivisa da date ISO, ordini dichiarati e workflow
+/// che usano la data come parte di un path.
+pub fn valid_civil_date(year: i32, month: u8, day: u8) -> bool {
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days).contains(&day)
 }
 
 fn parse_iso_time(s: &str) -> Option<PropertyTime> {
@@ -1977,6 +2190,199 @@ mod tests {
         // La lista di liste non è rappresentabile al confine e non si perde:
         assert!(!m(None).checked() && !m(Some('/')).checked() && !m(Some('-')).checked());
         assert_eq!(m(Some('/')).symbol, Some('/'));
+    }
+
+    #[test]
+    fn property_registry_round_trips_and_rejects_unknown_schemas() {
+        let registry: PropertyTypes = serde_json::from_value(serde_json::json!({
+            "version": 1,
+            "types": {
+                "a": "text", "b": "list", "c": "number", "d": "checkbox",
+                "e": "date", "f": "date_time", "g": "tags"
+            }
+        }))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&registry).unwrap(),
+            serde_json::json!({
+                "version": 1,
+                "types": {
+                    "a": "text", "b": "list", "c": "number", "d": "checkbox",
+                    "e": "date", "f": "date_time", "g": "tags"
+                }
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(PropertyTypes::default()).unwrap(),
+            serde_json::json!({"version": 1, "types": {}})
+        );
+        assert!(serde_json::from_value::<PropertyTypes>(
+            serde_json::json!({"version": 2, "types": {"a": "text"}})
+        )
+        .is_err());
+        assert!(serde_json::from_value::<PropertyTypes>(
+            serde_json::json!({"version": 1, "types": {"a": "dateTime"}})
+        )
+        .is_err());
+        assert_eq!(registry.resolve("tags"), Some(PropertyType::Tags));
+        assert_eq!(registry.resolve("alias"), Some(PropertyType::List));
+    }
+
+    #[test]
+    fn declared_types_interpret_without_rewriting_incompatible_source() {
+        let source = serde_json::json!({
+            "title": "[[Note]]", "list": ["[[Note]]", [1], {"a": 1}, null],
+            "number": "10.5", "bad_number": "twelve", "infinite": "NaN",
+            "checkbox": "false", "bad_checkbox": "yes",
+            "date": "05/07/2026", "date_with_time": "2026-07-05T12:30",
+            "date_time": "2026-07-05T12:30Z", "time_without_time": "2026-07-05",
+            "tags": "Rust", "bad_tags": ["ok", 5, ["nested"]],
+            "aliases": "Other", "alias": ["One", "Two"],
+            "cssclasses": "highlight", "cssclass": ["wide"],
+            "empty": null, "nested": {"original": ["kept"]}, "scalar_list": "not a list"
+        });
+        let mut types = PropertyTypes::default();
+        for (key, kind) in [
+            ("title", PropertyType::Text),
+            ("list", PropertyType::List),
+            ("number", PropertyType::Number),
+            ("bad_number", PropertyType::Number),
+            ("infinite", PropertyType::Number),
+            ("checkbox", PropertyType::Checkbox),
+            ("bad_checkbox", PropertyType::Checkbox),
+            ("date", PropertyType::Date),
+            ("date_with_time", PropertyType::Date),
+            ("date_time", PropertyType::DateTime),
+            ("time_without_time", PropertyType::DateTime),
+            ("tags", PropertyType::Tags),
+            ("bad_tags", PropertyType::Tags),
+            ("empty", PropertyType::Number),
+            ("nested", PropertyType::Text),
+            ("scalar_list", PropertyType::List),
+        ] {
+            types.types.insert(key.into(), kind);
+        }
+        let fm = Frontmatter(source.as_object().unwrap().clone());
+        let dmy = DateFormats::declaring(DateOrder::Dmy);
+        let get = |key| fm.property_with_types(key, &dmy, &types).unwrap();
+        assert_eq!(get("title"), PropertyValue::Text("[[Note]]".into()));
+        assert_eq!(get("number"), PropertyValue::Number(10.5));
+        assert_eq!(get("checkbox"), PropertyValue::Bool(false));
+        for key in [
+            "bad_number",
+            "infinite",
+            "bad_checkbox",
+            "date_with_time",
+            "time_without_time",
+            "nested",
+        ] {
+            assert_eq!(
+                get(key),
+                PropertyValue::Unknown(source[key].clone()),
+                "{key}"
+            );
+        }
+        assert_eq!(get("empty"), PropertyValue::Empty);
+        assert_eq!(
+            get("date"),
+            PropertyValue::Date(PropertyDate {
+                year: 2026,
+                month: 7,
+                day: 5,
+                time: None
+            })
+        );
+        assert!(matches!(
+            get("date_time"),
+            PropertyValue::Date(PropertyDate {
+                time: Some(PropertyTime {
+                    offset_minutes: Some(0),
+                    ..
+                }),
+                ..
+            })
+        ));
+        assert_eq!(
+            get("list"),
+            PropertyValue::List(vec![
+                PropertyScalar::Link(LinkTarget::wiki("Note")),
+                PropertyScalar::Unknown(serde_json::json!([1])),
+                PropertyScalar::Unknown(serde_json::json!({"a": 1})),
+                PropertyScalar::Empty,
+            ])
+        );
+        assert_eq!(
+            get("scalar_list"),
+            PropertyValue::List(vec![PropertyScalar::Text("not a list".into())])
+        );
+        assert_eq!(
+            get("tags"),
+            PropertyValue::List(vec![PropertyScalar::Text("Rust".into())])
+        );
+        assert_eq!(
+            get("bad_tags"),
+            PropertyValue::List(vec![
+                PropertyScalar::Text("ok".into()),
+                PropertyScalar::Unknown(serde_json::json!(5)),
+                PropertyScalar::Unknown(serde_json::json!(["nested"])),
+            ])
+        );
+        for (key, names) in [
+            ("aliases", vec!["Other"]),
+            ("alias", vec!["One", "Two"]),
+            ("cssclasses", vec!["highlight"]),
+            ("cssclass", vec!["wide"]),
+        ] {
+            assert_eq!(
+                get(key),
+                PropertyValue::List(
+                    names
+                        .into_iter()
+                        .map(|name| PropertyScalar::Text(name.into()))
+                        .collect()
+                )
+            );
+        }
+        assert_eq!(fm.get("number"), Some(&serde_json::json!("10.5")));
+        assert_eq!(
+            fm.properties_with_types(&dmy, &types).len(),
+            source.as_object().unwrap().len()
+        );
+        assert_eq!(
+            fm.property("title", &dmy),
+            Some(PropertyValue::Link(LinkTarget::wiki("Note")))
+        );
+    }
+
+    #[test]
+    fn dates_require_real_calendar_days_in_both_syntaxes() {
+        let dmy = DateFormats::declaring(DateOrder::Dmy);
+        for (text, formats) in [
+            ("2026-02-29", &DateFormats::ISO),
+            ("2026-02-31", &DateFormats::ISO),
+            ("2024-04-31", &DateFormats::ISO),
+            ("29/02/2026", &dmy),
+            ("31/04/2024", &dmy),
+        ] {
+            assert_eq!(
+                PropertyValue::normalize(&serde_json::json!(text), formats),
+                PropertyValue::Text(text.into())
+            );
+        }
+        for (text, formats) in [
+            ("2024-02-29", &DateFormats::ISO),
+            ("29/02/2024", &dmy),
+            ("2000-02-29", &DateFormats::ISO),
+        ] {
+            assert!(matches!(
+                PropertyValue::normalize(&serde_json::json!(text), formats),
+                PropertyValue::Date(_)
+            ));
+        }
+        assert_eq!(
+            PropertyValue::normalize(&serde_json::json!("1900-02-29"), &DateFormats::ISO),
+            PropertyValue::Text("1900-02-29".into())
+        );
     }
 
     #[test]

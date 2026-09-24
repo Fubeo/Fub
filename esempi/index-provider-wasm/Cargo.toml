@@ -1,5 +1,4 @@
-# Fixture minimale: espone una porta IndexProvider che il runtime WASM
-# corrente non risolve né registra.
+# Real inbound index fixture using the canonical WIT exports.
 [package]
 name = "index-provider-wasm"
 version = "0.0.0"
@@ -11,6 +10,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wit-bindgen = "0.60"
+
+[features]
+trap-routes = []
 
 [profile.release]
 strip = true

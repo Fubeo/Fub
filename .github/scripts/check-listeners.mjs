@@ -44,6 +44,9 @@ function violations(text, relative) {
     // eseguibile e non devono diventare violazioni della guardia.
     const code = line.replace(/\/\/.*$/, "").trim();
     if (!code) continue;
+    // Anche le righe di un commento a blocco (`/** … */`) descrivono, non
+    // eseguono.
+    if (code.startsWith("*") || code.startsWith("/*")) continue;
 
     if (globalListener.test(code) || mediaListener.test(code)) {
       found.push({ line: index + 1, kind: "global listener", text: line.trim() });
@@ -54,7 +57,12 @@ function violations(text, relative) {
       // Un disposer nominato e assegnato è la forma strutturale minima di
       // ownership: una sottoscrizione anonima non ha una porta di uscita.
       const owned = /(?:const|let|var)\s+\w*(?:stop|dispose|unsubscribe)\w*\s*=\s*[\s\S]*\.subscribe\s*\(/i.test(code) ||
-        /\b\w*(?:stop|dispose|unsubscribe)\w*\s*=\s*[\s\S]*\.subscribe\s*\(/i.test(code);
+        /\b\w*(?:stop|dispose|unsubscribe)\w*\s*=\s*[\s\S]*\.subscribe\s*\(/i.test(code) ||
+        // Il disposer consegnato a un `Lifetime` che lo chiude allo smontaggio.
+        /\b(?:this\s*\.\s*#?)?\w*life\w*\s*\.\s*add\s*\(\s*[\w$.#]+\.subscribe\s*\(/i.test(code) ||
+        // Un metodo che inoltra la sottoscrizione ne restituisce il disposer a
+        // chi chiama, che ne diventa il proprietario.
+        /\bsubscribe\s*:\s*\(?\s*\w*\s*\)?\s*=>\s*[\w$.#]+\.subscribe\s*\(/.test(code);
       if (!owned) {
         found.push({ line: index + 1, kind: "subscription", text: line.trim() });
         continue;
@@ -71,6 +79,11 @@ function violations(text, relative) {
         owned ||= new RegExp(
           String.raw`\b(?:clearTimeout|clearInterval|cancelAnimationFrame)\s*\(\s*${id}\s*\)`,
         ).test(source);
+        // Il timeout di un'attesa conservato nel suo record (`{ …, timer }`) e
+        // cancellato da chi consuma quel record (`clearTimeout(x.timer)`).
+        owned ||= assignment[1] === "timer" &&
+          /\{[^}]*\btimer\s*\}/.test(source) &&
+          /\b(?:clearTimeout|clearInterval)\s*\(\s*[\w$.]+\.timer\s*\)/.test(source);
       }
       if (!owned) {
         found.push({ line: index + 1, kind: "timer", text: line.trim() });

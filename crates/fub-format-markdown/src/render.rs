@@ -308,13 +308,23 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             custom_kind, attrs, ..
         } if custom_kind == custom_kind::FOOTNOTE_REFERENCE => {
             let label = attrs.get("label").and_then(|v| v.as_str()).unwrap_or("");
-            write!(
-                out,
-                "<sup class=\"footnote-ref\"{}>{}</sup>",
-                attr("data-label", label),
-                escape(label)
-            )
-            .unwrap();
+            if attrs.get("inline").and_then(|v| v.as_bool()) == Some(true) {
+                write!(
+                    out,
+                    "<sup class=\"footnote-inline\"{}>{}</sup>",
+                    attr("data-label", label),
+                    escape(label)
+                )
+                .unwrap();
+            } else {
+                write!(
+                    out,
+                    "<sup class=\"footnote-ref\"{}>{}</sup>",
+                    attr("data-label", label),
+                    escape(label)
+                )
+                .unwrap();
+            }
         }
         // Il degrado generico degli inline. **Prima non c'era**: un
         // `Inline::Custom` che il provider non riconosceva spariva dalla
@@ -324,6 +334,10 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
         // che il contratto dichiara (la tabella per il core, `source` per i
         // terzi — §25.7) li mostra dentro uno span con la sua classe: chi ha
         // un tema lo veste, chi non ce l'ha lo legge.
+        // Un commento è testo dell'autore per sé: resta nel file, non nella
+        // resa.
+        Inline::Custom { custom_kind, .. }
+            if custom_kind == fub_abi::model::custom_kind::COMMENT => {}
         Inline::Custom {
             custom_kind, attrs, ..
         } => {

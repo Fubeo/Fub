@@ -40,9 +40,9 @@ use fub::abi::jobs::{JobProgress, JobSpec};
 /// registrazione.
 const ID: &str = "demo.eventi";
 
-/// La versione del contratto contro cui è scritto: la confronta
-/// `abi_compatible` al primo passo del montaggio.
-const ABI: &str = "0.1.1";
+/// La versione effettiva del contratto: la confronta `abi_compatible` al primo
+/// passo del montaggio.
+const ABI: &str = "0.2.0";
 
 struct Componente;
 

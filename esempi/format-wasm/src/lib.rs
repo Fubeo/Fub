@@ -7,6 +7,9 @@ use exports::fub::abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatError, FormatErrorUnsupported,
     Guest as FormatGuest, ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
+use exports::fub::abi::format_links::{
+    Guest as FormatLinksGuest, LinkRewrite, TextEdit as LinksTextEdit,
+};
 use exports::fub::abi::plugin::{Guest as PluginGuest, PluginManifest, PluginPermissions};
 use fub::abi::errors::PluginError;
 use fub::abi::model::{Block, BlockParagraph, DocumentModel, DocumentTree, Inline, Span};
@@ -27,7 +30,7 @@ impl PluginGuest for Componente {
             id: ID.to_string(),
             name: "Example Format".to_string(),
             version: "0.1.0".to_string(),
-            abi_version: "0.1.1".to_string(),
+            abi_version: "0.2.0".to_string(),
             permissions: PluginPermissions { granted: vec![] },
             provides: vec![],
             requires: vec![],
@@ -139,6 +142,128 @@ impl FormatGuest for Componente {
 
     fn serialize(model: DocumentModel) -> Result<String, FormatError> {
         Ok(format!("fubfmt:{}", model.text))
+    }
+}
+
+impl FormatLinksGuest for Componente {
+    fn rewrite_links(
+        source: DocumentSource,
+        _ctx: ParseContext,
+        rewrites: Vec<LinkRewrite>,
+    ) -> Result<Option<Vec<LinksTextEdit>>, FormatError> {
+        let text = match source {
+            DocumentSource::Text(text) => text,
+            DocumentSource::Bytes(_) => {
+                return Err(FormatError::Unsupported(FormatErrorUnsupported {
+                    format: ID.to_string(),
+                    got: SourceKind::Bytes,
+                }))
+            }
+        };
+        let mut edits = Vec::with_capacity(rewrites.len());
+        for rewrite in &rewrites {
+            edits.push(rewrite_one(&text, rewrite)?);
+        }
+        edits.sort_by_key(|edit| (edit.span.start, edit.span.end));
+        for pair in edits.windows(2) {
+            if pair[1].span.start < pair[0].span.end {
+                return Err(FormatError::Parse(
+                    "format link rewrites overlap; refusing a partial rename".to_string(),
+                ));
+            }
+        }
+        Ok(Some(edits))
+    }
+}
+
+/// Una riscrittura: Wiki cambia il page e lascia heading/blocco/alias intatti,
+/// Path riscrive l'intero URI-like. La grammatica è quella di `fubfmt`, un
+/// testo con wikilink `[[..]]`/`![[..]]` e link `(path)`: lo span copre il
+/// riferimento intero nei byte della sorgente, come il kernel lo osserva.
+fn rewrite_one(source: &str, rewrite: &LinkRewrite) -> Result<LinksTextEdit, FormatError> {
+    use fub::abi::model::{LinkTarget, Span as ModelSpan};
+    let span = ModelSpan {
+        start: rewrite.span.start,
+        end: rewrite.span.end,
+    };
+    let slice = source.get(span.start as usize..span.end as usize).ok_or_else(|| {
+        FormatError::Parse("link rewrite span is outside the source".to_string())
+    })?;
+    match &rewrite.target {
+        LinkTarget::Wiki(w) => {
+            let (open, close) = if let Some(rest) = slice.strip_prefix("![[") {
+                ("![[", rest)
+            } else if let Some(rest) = slice.strip_prefix("[[") {
+                ("[[", rest)
+            } else {
+                return Err(FormatError::Parse(
+                    "link rewrite span does not cover a wikilink".to_string(),
+                ));
+            };
+            let _ = close.strip_suffix("]]").ok_or_else(|| {
+                FormatError::Parse("link rewrite span does not cover a wikilink".to_string())
+            })?;
+            let inner = &slice[open.len()..slice.len() - 2];
+            let parsed = fub_abi::model::parse_wikilink_inner(inner);
+            let same = match &parsed.target {
+                fub_abi::model::LinkTarget::Wiki { page, heading, block } => {
+                    page == &w.page && heading == &w.heading && block == &w.block
+                }
+                _ => false,
+            };
+            if !same {
+                return Err(FormatError::Parse(
+                    "link rewrite target changed under us".to_string(),
+                ));
+            }
+            let mut base = rewrite.replacement.clone();
+            if let fub_abi::model::LinkTarget::Wiki { heading, block, .. } = &parsed.target {
+                if let Some(heading) = heading {
+                    base.push('#');
+                    base.push_str(heading);
+                }
+                if let Some(block) = block {
+                    if heading.is_none() {
+                        base.push('#');
+                    }
+                    base.push('^');
+                    base.push_str(block);
+                }
+            }
+            if let Some(alias) = parsed.alias {
+                base.push('|');
+                base.push_str(&alias);
+            }
+            let inner_start = span.start as usize + open.len();
+            let inner_end = span.end as usize - 2;
+            Ok(LinksTextEdit {
+                span: ModelSpan {
+                    start: inner_start as u64,
+                    end: inner_end as u64,
+                },
+                text: base,
+            })
+        }
+        LinkTarget::Path(_) => {
+            let (open, close) = slice.split_once('(').ok_or_else(|| {
+                FormatError::Parse("link rewrite span does not cover a path link".to_string())
+            })?;
+            let (current, _) = close.split_once(')').ok_or_else(|| {
+                FormatError::Parse("link rewrite span does not cover a path link".to_string())
+            })?;
+            let start = span.start as usize + open.len() + 1;
+            let end = start + current.len();
+            Ok(LinksTextEdit {
+                span: ModelSpan {
+                    start: start as u64,
+                    end: end as u64,
+                },
+                text: rewrite.replacement.clone(),
+            })
+        }
+        LinkTarget::Url(_) => Err(FormatError::Parse(
+            "format rewrite of a remote URL is not a vault rename".to_string(),
+        )),
     }
 }
 

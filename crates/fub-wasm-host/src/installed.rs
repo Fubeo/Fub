@@ -36,6 +36,24 @@ pub enum Consent {
     /// Esecuzione approvata; i permessi restano una decisione separata.
     Granted,
 }
+/// Provenienza verificata della release installata, pubblicata nello stesso CAS
+/// del manifest e del digest. Le installazioni manuali non ne hanno una.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CatalogProvenance {
+    /// Chiave attendibile che ha firmato il feed.
+    pub key_id: String,
+    /// Generazione firmata, in forma stringa anche oltre 2^53.
+    #[serde(with = "fub_abi::ipc::u64_string")]
+    pub generation: u64,
+    /// Editore dichiarato nel feed firmato.
+    pub publisher: String,
+    /// Sorgente dichiarata dell'artefatto, mai aperta dallo store.
+    pub url: String,
+    /// Licenza dichiarata, informativa.
+    pub license: String,
+    /// Vincolo di compatibilità dichiarato.
+    pub compatible: String,
+}
 
 /// Un'installazione persistita. Non rappresenta un'istanza montata.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -51,13 +69,22 @@ pub struct InstalledPlugin {
     pub enabled: bool,
     /// Consenso legato a questa installazione e al suo digest.
     pub consent: Consent,
+    /// Assente per installazioni manuali; non concede capacità.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog: Option<CatalogProvenance>,
+    /// Revoca firmata; nessun dato utente viene eliminato.
+    #[serde(default)]
+    pub revoked: bool,
+    /// Feed che ha revocato questa release, distinto dal publisher originale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revocation: Option<CatalogProvenance>,
 }
 
 impl InstalledPlugin {
     /// La scelta permette di proporre il mount. Non certifica permessi,
     /// dipendenze, attivazione o presenza di un'istanza.
     pub fn requested_at_startup(&self) -> bool {
-        self.enabled && self.consent == Consent::Granted
+        self.enabled && !self.revoked && self.consent == Consent::Granted
     }
 }
 
@@ -261,7 +288,165 @@ impl InstalledPluginStore {
         base: &InventorySnapshot,
         source: &Utf8Path,
     ) -> Result<InstalledPlugin, InstallError> {
+        let bytes = self.read_candidate_bytes(source)?;
+        self.install_bytes(base, &bytes, None)
+    }
+
+    /// I byte già verificati dal catalogo sono ricontrollati dal manifest qui,
+    /// senza uno staging file modificabile fra verifica e pubblicazione.
+    pub(crate) fn install_bytes(
+        &self,
+        base: &InventorySnapshot,
+        bytes: &[u8],
+        catalog: Option<CatalogProvenance>,
+    ) -> Result<InstalledPlugin, InstallError> {
         self.ensure_base(base)?;
+        let bundle = WasmBundle::from_bytes(bytes, Trust::Community)?;
+        let manifest = bundle.manifest();
+        validate_manifest(&manifest)?;
+        if let Some(existing) = base.plugins().iter().find(|p| p.manifest.id == manifest.id) {
+            return Err(InstallError::AlreadyInstalled {
+                id: manifest.id,
+                installed: existing.manifest.version.clone(),
+                candidate: manifest.version,
+            });
+        }
+        self.ensure_base(base)?;
+        let mut next = base.inventory.clone();
+        let plugin = InstalledPlugin {
+            installation: next.next_installation,
+            manifest,
+            digest: Revision::of_bytes(bytes),
+            enabled: false,
+            consent: Consent::Undecided,
+            catalog,
+            revoked: false,
+            revocation: None,
+        };
+        next.next_installation = next
+            .next_installation
+            .checked_add(1)
+            .ok_or_else(|| InstallError::Invalid("identità delle installazioni esaurite".into()))?;
+        // Anche un blob orfano è preservato se non corrisponde esattamente.
+        // Se invece coincide, una seconda CAS con quei byte come precondizione
+        // passa comunque dalla scrittura normale: è lei a rifiutare symlink,
+        // hardlink e target non regolari prima di sostituire l'orfano sicuro.
+        let path = self.component_path(&plugin);
+        self.publish_component(&path, bytes, plugin.installation)?;
+        next.plugins.push(plugin.clone());
+        self.commit(base, &next)?;
+        Ok(plugin)
+    }
+
+    /// Sostituisce i byte di un'installazione esistente, senza montarla.
+    ///
+    /// La sorgente segue la stessa disciplina di [`Self::install`]: directory
+    /// esplicita del chiamante, file regolare diretto, niente symlink o
+    /// hardlink e nessuna scansione dei sibling. I byte candidati si leggono e
+    /// verificano con `WasmBundle::from_bytes`, senza eseguire il guest.
+    ///
+    /// Il record mantiene la sua `installation`; manifest, digest e versione si
+    /// aggiornano, `enabled` è preservato e `consent` torna sempre a
+    /// [`Consent::Undecided`]: il consenso è legato a questi esatti byte e non
+    /// si eredita fra digest diversi. L'id deve coincidere con quello del
+    /// record (`Invalid` altrimenti), l'ABI deve restare compatibile e la
+    /// versione deve differire (uguale → `AlreadyInstalled`, come in `install`).
+    ///
+    /// Il commit è CAS come in `install`: se fallisce, il nuovo blob resta
+    /// orfano e invisibile all'inventario. Dopo un commit riuscito il vecchio
+    /// blob si rimuove best-effort; se la pulizia fallisce resta un orfano
+    /// invisibile, senza annullare l'aggiornamento già pubblicato.
+    ///
+    /// Il rollback è un update esplicito con la sorgente precedente salvata,
+    /// manuale e controllato: prima di aggiornare, conservare i byte correnti
+    /// (letti con [`Self::load`] o dal file della release precedente); per
+    /// tornare indietro, chiamare `update` con quei byte. Anche il rollback
+    /// azzera il consenso e preserva `enabled`: i byte precedenti vanno
+    /// riapprovati come qualunque altra versione.
+    /// Una revoca firmata non si cancella col percorso manuale: serve una
+    /// release successiva in un feed firmato più recente della revoca.
+    pub fn update(
+        &self,
+        base: &InventorySnapshot,
+        installation: u64,
+        source: &Utf8Path,
+    ) -> Result<InstalledPlugin, InstallError> {
+        let bytes = self.read_candidate_bytes(source)?;
+        self.update_bytes(base, installation, &bytes, None)
+    }
+
+    /// Come `update`, con provenance firmata nello stesso commit atomico.
+    pub(crate) fn update_bytes(
+        &self,
+        base: &InventorySnapshot,
+        installation: u64,
+        bytes: &[u8],
+        catalog: Option<CatalogProvenance>,
+    ) -> Result<InstalledPlugin, InstallError> {
+        self.ensure_base(base)?;
+        let current = base
+            .plugins()
+            .iter()
+            .find(|plugin| plugin.installation == installation)
+            .ok_or(InstallError::Missing(installation))?
+            .clone();
+        if current.revoked
+            && catalog.as_ref().is_none_or(|candidate| {
+                current
+                    .revocation
+                    .as_ref()
+                    .is_none_or(|revocation| candidate.generation <= revocation.generation)
+            })
+        {
+            return Err(InstallError::Invalid(
+                "una release revocata richiede un feed firmato più recente della revoca".into(),
+            ));
+        }
+        let bundle = WasmBundle::from_bytes(bytes, Trust::Community)?;
+        let manifest = bundle.manifest();
+        validate_manifest(&manifest)?;
+        if manifest.id != current.manifest.id {
+            return Err(InstallError::Invalid(format!(
+                "l'aggiornamento non cambia l'identità: atteso `{}`, candidato `{}`",
+                current.manifest.id, manifest.id
+            )));
+        }
+        if manifest.version == current.manifest.version {
+            return Err(InstallError::AlreadyInstalled {
+                id: manifest.id,
+                installed: current.manifest.version.clone(),
+                candidate: manifest.version,
+            });
+        }
+        self.ensure_base(base)?;
+        let old_path = self.component_path(&current);
+        let mut next = base.inventory.clone();
+        let updated = {
+            let record = record_mut(&mut next, installation)?;
+            record.manifest = manifest;
+            record.digest = Revision::of_bytes(bytes);
+            record.consent = Consent::Undecided;
+            record.catalog = catalog;
+            record.revoked = false;
+            record.revocation = None;
+            record.clone()
+        };
+        let new_path = self.component_path(&updated);
+        self.publish_component(&new_path, bytes, installation)?;
+        self.commit(base, &next)?;
+        if new_path != old_path {
+            // Best-effort dopo un commit già pubblicato: un fallimento lascia
+            // un blob orfano invisibile all'inventario, come i byte di
+            // un'installazione fallita, senza annullare l'aggiornamento.
+            let _ = self.storage.remove(&old_path);
+        }
+        Ok(updated)
+    }
+
+    /// Legge i byte candidati con la disciplina capability della sorgente:
+    /// directory esplicita del chiamante, file regolare diretto, niente
+    /// symlink o hardlink e nessuna scansione dei sibling.
+    fn read_candidate_bytes(&self, source: &Utf8Path) -> Result<Vec<u8>, InstallError> {
         let parent = source
             .parent()
             .filter(|p| !p.as_str().is_empty())
@@ -302,43 +487,27 @@ impl InstalledPluginStore {
                 operation: "source-read",
                 source,
             })?;
-        let bundle = WasmBundle::from_bytes(&bytes, Trust::Community)?;
-        let manifest = bundle.manifest();
-        validate_manifest(&manifest)?;
-        if let Some(existing) = base.plugins().iter().find(|p| p.manifest.id == manifest.id) {
-            return Err(InstallError::AlreadyInstalled {
-                id: manifest.id,
-                installed: existing.manifest.version.clone(),
-                candidate: manifest.version,
-            });
-        }
-        self.ensure_base(base)?;
-        let mut next = base.inventory.clone();
-        let plugin = InstalledPlugin {
-            installation: next.next_installation,
-            manifest,
-            digest: Revision::of_bytes(&bytes),
-            enabled: false,
-            consent: Consent::Undecided,
-        };
-        next.next_installation = next
-            .next_installation
-            .checked_add(1)
-            .ok_or_else(|| InstallError::Invalid("identità delle installazioni esaurite".into()))?;
-        // Anche un blob orfano è preservato se non corrisponde esattamente.
-        // Se invece coincide, una seconda CAS con quei byte come precondizione
-        // passa comunque dalla scrittura normale: è lei a rifiutare symlink,
-        // hardlink e target non regolari prima di sostituire l'orfano sicuro.
-        let path = self.component_path(&plugin);
+        Ok(bytes)
+    }
+
+    /// Pubblica il blob sotto lock CAS senza mai reinterpretare un orfano:
+    /// un contenuto preesistente diverso è `Integrity`, una corsa persa è
+    /// `Conflict`. La scrittura rifiuta symlink, hardlink e target non regolari.
+    fn publish_component(
+        &self,
+        path: &Utf8Path,
+        bytes: &[u8],
+        installation: u64,
+    ) -> Result<(), InstallError> {
         let first = self
             .storage
-            .write_if_unchanged(&path, None, &bytes)
+            .write_if_unchanged(path, None, bytes)
             .map_err(|source| InstallError::Operation {
                 operation: "publish-component",
                 source,
             })?;
         if first == ConditionalWrite::Changed {
-            let existing = match self.storage.read(&path) {
+            let existing = match self.storage.read(path) {
                 Ok(existing) => existing,
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
                     return Err(InstallError::Conflict);
@@ -350,12 +519,12 @@ impl InstalledPluginStore {
                     });
                 }
             };
-            if existing != bytes {
-                return Err(InstallError::Integrity(plugin.installation));
+            if existing.as_slice() != bytes {
+                return Err(InstallError::Integrity(installation));
             }
             if self
                 .storage
-                .write_if_unchanged(&path, Some(&existing), &bytes)
+                .write_if_unchanged(path, Some(&existing), bytes)
                 .map_err(|source| InstallError::Operation {
                     operation: "publish-component",
                     source,
@@ -365,9 +534,32 @@ impl InstalledPluginStore {
                 return Err(InstallError::Conflict);
             }
         }
-        next.plugins.push(plugin.clone());
-        self.commit(base, &next)?;
-        Ok(plugin)
+        Ok(())
+    }
+
+    /// Revoca ed enabled=false sono un solo CAS: byte ritirati non ripartono
+    /// tramite un toggle e nessun dato utente è toccato.
+    pub(crate) fn revoke(
+        &self,
+        base: &InventorySnapshot,
+        installation: u64,
+        provenance: CatalogProvenance,
+    ) -> Result<(), InstallError> {
+        self.ensure_base(base)?;
+        let mut next = base.inventory.clone();
+        let record = record_mut(&mut next, installation)?;
+        if record.revoked
+            && record
+                .revocation
+                .as_ref()
+                .is_some_and(|prior| provenance.generation <= prior.generation)
+        {
+            return Ok(());
+        }
+        record.revoked = true;
+        record.revocation = Some(provenance);
+        record.enabled = false;
+        self.commit(base, &next)
     }
 
     /// Aggiorna soltanto la scelta enabled; non rappresenta un mount riuscito.
@@ -379,7 +571,13 @@ impl InstalledPluginStore {
     ) -> Result<(), InstallError> {
         self.ensure_base(base)?;
         let mut next = base.inventory.clone();
-        record_mut(&mut next, installation)?.enabled = enabled;
+        let record = record_mut(&mut next, installation)?;
+        if enabled && record.revoked {
+            return Err(InstallError::Invalid(
+                "il componente è revocato: serve una nuova release firmata".into(),
+            ));
+        }
+        record.enabled = enabled;
         self.commit(base, &next)
     }
 
@@ -500,6 +698,11 @@ fn validate_inventory(inventory: &Inventory) -> Result<(), InstallError> {
                 .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
         {
             return Err(InstallError::Invalid("digest non canonico".into()));
+        }
+        if plugin.revoked != plugin.revocation.is_some() || (plugin.revoked && plugin.enabled) {
+            return Err(InstallError::Invalid(
+                "revoca incoerente con provenance o abilitazione".into(),
+            ));
         }
         validate_manifest(&plugin.manifest)?;
     }

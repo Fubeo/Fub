@@ -35,8 +35,8 @@ use fub::abi::errors::PluginError;
 /// che non è il componente interrotto.
 const ID: &str = "demo.ciclo";
 
-/// La versione del contratto contro cui è scritto, come in `ping-wasm`.
-const ABI: &str = "0.1.1";
+/// La versione effettiva del contratto, come in `ping-wasm`.
+const ABI: &str = "0.2.0";
 
 /// Il bersaglio della scrittura `volatile` del ciclo.
 ///

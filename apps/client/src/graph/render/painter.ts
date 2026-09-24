@@ -25,6 +25,7 @@ export interface DrawState {
   s: Structure;
   camera: Camera;
   openDocuments: ReadonlySet<string>;
+  visible?: ReadonlySet<string>;
   hovered: number;
   dragged: number;
   /// Il nodo selezionato da tastiera (frecce): è «focus» quanto l'hover per
@@ -230,12 +231,29 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     const cy = (y1 + y2) / 2 + (dx / L) * off;
     ctx.moveTo(x1 * c.scale + c.tx, y1 * c.scale + c.ty);
     ctx.quadraticCurveTo(cx * c.scale + c.tx, cy * c.scale + c.ty, x2 * c.scale + c.tx, y2 * c.scale + c.ty);
+    // Freccia nella tangente finale della Bézier, arretrata rispetto al disco
+    // di destinazione. Stessa path e stesso stroke dell'arco: un solo batch per
+    // livello di focus, non un draw call per arco (anche su 10k archi).
+    if (L * c.scale < 24) return;
+    const tx = x2 - cx;
+    const ty = y2 - cy;
+    const tangent = Math.hypot(tx, ty);
+    if (tangent < 0.001) return;
+    const ux = tx / tangent;
+    const uy = ty / tangent;
+    const tipX = x2 * c.scale + c.tx - ux * (s.radius[s.to[e]] * c.scale + 4);
+    const tipY = y2 * c.scale + c.ty - uy * (s.radius[s.to[e]] * c.scale + 4);
+    const baseX = tipX - ux * 9;
+    const baseY = tipY - uy * 9;
+    ctx.moveTo(baseX - uy * 5, baseY + ux * 5);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(baseX + uy * 5, baseY - ux * 5);
   }
 
   function redraw(state: DrawState): void {
     previousState = state;
     if (!ctx) return;
-    const { s, camera: c, openDocuments, hovered, dragged, focused, alpha, tier, elapsedMs, reducedMotion } = state;
+    const { s, camera: c, openDocuments, visible, hovered, dragged, focused, alpha, tier, elapsedMs, reducedMotion } = state;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Trail: finché la simulazione è calda il canvas si sporca di
@@ -274,6 +292,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     if (focus >= 0) {
       ctx.beginPath();
       for (let e = 0; e < s.m; e++) {
+        if (visible && (!visible.has(s.id[s.from[e]]) || !visible.has(s.id[s.to[e]]))) continue;
         if (mark[s.from[e]] || mark[s.to[e]]) continue;
         if (!edgeInView(s, c, e, curv)) continue;
         addEdge(ctx, s, c, e, curv);
@@ -285,6 +304,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     }
     ctx.beginPath();
     for (let e = 0; e < s.m; e++) {
+      if (visible && (!visible.has(s.id[s.from[e]]) || !visible.has(s.id[s.to[e]]))) continue;
       if (focus >= 0 && !(mark[s.from[e]] || mark[s.to[e]])) continue;
       if (!edgeInView(s, c, e, curv)) continue;
       addEdge(ctx, s, c, e, curv);
@@ -302,6 +322,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     if (focus >= 0) {
       ctx.globalAlpha = BACKGROUND_ALPHA;
       for (let i = 0; i < s.n; i++) {
+        if (visible && !visible.has(s.id[i])) continue;
         if (i === focus || mark[i]) continue;
         const sx = s.x[i] * c.scale + c.tx;
         const sy = s.y[i] * c.scale + c.ty;
@@ -313,6 +334,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     ctx.globalAlpha = 1;
     for (let i = 0; i < s.n; i++) {
       if (focus >= 0 && i !== focus && !mark[i]) continue;
+      if (visible && !visible.has(s.id[i])) continue;
       const sx = s.x[i] * c.scale + c.tx;
       const sy = s.y[i] * c.scale + c.ty;
       const rS = s.radius[i] * c.scale;
@@ -353,6 +375,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       ctx.textBaseline = "middle";
       ctx.fillStyle = tints.text;
       for (let i = 0; i < s.n; i++) {
+        if (visible && !visible.has(s.id[i])) continue;
         const accent = i === focus || openDocuments.has(s.id[i]);
         if (accent) continue;
         if (tier !== 1 && s.degree[i] < threshold) continue;
@@ -372,6 +395,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       }
       ctx.globalAlpha = 1;
       for (let i = 0; i < s.n; i++) {
+        if (visible && !visible.has(s.id[i])) continue;
         const accent = i === focus || openDocuments.has(s.id[i]);
         if (!accent) continue;
         const sx = s.x[i] * c.scale + c.tx;

@@ -477,6 +477,19 @@ impl VaultStorage for RootedFsStorage {
         self.dir.read(self.rel(path)?)
     }
 
+    /// Seek + lettura limitata dentro la capability: apre via `Dir`, salta a
+    /// `offset`, legge al massimo `len` byte. `len == 0` non apre oltre la
+    /// stat; oltre la fine torna vuoto. Mai path ambientali.
+    fn read_at(&self, path: &Utf8Path, offset: u64, len: usize) -> io::Result<Vec<u8>> {
+        if len == 0 {
+            self.stat_following(path)?;
+            return Ok(Vec::new());
+        }
+        let file = self.dir.open(self.rel(path)?)?;
+        let size = file.metadata()?.len();
+        super::read_bounded(file, size, offset, len)
+    }
+
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
         self.write_inner(path, bytes, true)
     }
@@ -646,6 +659,23 @@ impl VaultStorage for RootedFsStorage {
     fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
         self.stat_following(path)
     }
+    fn stat_no_follow(&self, path: &Utf8Path) -> io::Result<Stat> {
+        if path == self.root {
+            let metadata = self.dir.dir_metadata()?;
+            return Ok(Self::stat_metadata(&metadata, EntryKind::Dir));
+        }
+        let metadata = self.dir.symlink_metadata(self.rel(path)?)?;
+        let kind = if metadata.file_type().is_symlink() {
+            EntryKind::Other
+        } else if metadata.is_dir() {
+            EntryKind::Dir
+        } else if metadata.is_file() {
+            EntryKind::File
+        } else {
+            EntryKind::Other
+        };
+        Ok(Self::stat_metadata(&metadata, kind))
+    }
 
     fn exists(&self, path: &Utf8Path) -> bool {
         if path == self.root {
@@ -711,6 +741,13 @@ impl VaultStorage for RootedFsStorage {
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
         self.dir.remove_dir(self.rel(dir)?)?;
+        self.sync_parents(dir, None);
+        Ok(())
+    }
+
+    fn create_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+        self.create_parent(dir)?;
+        self.dir.create_dir(self.rel(dir)?)?;
         self.sync_parents(dir, None);
         Ok(())
     }

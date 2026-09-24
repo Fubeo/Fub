@@ -459,7 +459,7 @@ export class DocumentSession implements DraftBuffer {
     if (this.#state.result === "conflitto") return;
     this.#clearSaveTimer();
     const id = this.#id;
-    this.#saveTimer = window.setTimeout(() => {
+    this.#saveTimer = globalThis.setTimeout(() => {
       this.#saveTimer = undefined;
       void this.#saveNow(id);
     }, SAVE_MS);
@@ -469,7 +469,7 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen() || this.#state.suspended || this.#state.pendingDeletion) return;
     this.#clearDraftTimer();
     const id = this.#id;
-    this.#draftTimer = window.setTimeout(() => {
+    this.#draftTimer = globalThis.setTimeout(() => {
       this.#draftTimer = undefined;
       void this.#writeDraft(id);
     }, DRAFT_MS);
@@ -652,13 +652,13 @@ export class DocumentSession implements DraftBuffer {
 
   #clearSaveTimer(): void {
     if (this.#saveTimer === undefined) return;
-    window.clearTimeout(this.#saveTimer);
+    globalThis.clearTimeout(this.#saveTimer);
     this.#saveTimer = undefined;
   }
 
   #clearDraftTimer(): void {
     if (this.#draftTimer === undefined) return;
-    window.clearTimeout(this.#draftTimer);
+    globalThis.clearTimeout(this.#draftTimer);
     this.#draftTimer = undefined;
   }
 
@@ -830,6 +830,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
   isDirty(id: string): boolean {
     return this.#sessions.get(id)?.dirty === true;
+  }
+  /** Conservative fallback if a lifecycle flush rejects before reporting failures. */
+  dirtyIds(): string[] {
+    const ids: string[] = [];
+    for (const [id, session] of this.#sessions) if (session.dirty) ids.push(id);
+    return ids;
   }
   isDeletionPending(id: string): boolean {
     const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);

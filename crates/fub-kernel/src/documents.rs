@@ -93,6 +93,10 @@ impl PreparedParse {
         Ok(model)
     }
 
+    pub(crate) fn source_kind(&self) -> fub_abi::format::SourceKind {
+        self.descriptor.source
+    }
+
     /// Rende un modello con la stessa fotografia di provider usata dal parse.
     /// Il chiamante può così tenere l'intera proiezione oltre il confine di un
     /// lock senza risolvere di nuovo un provider nel frattempo.

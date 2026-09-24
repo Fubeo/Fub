@@ -29,12 +29,17 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use camino::Utf8Path;
-
+use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::edit::Revision;
+use fub_abi::model::DocId;
 use fub_abi::transfer::{
     ArtifactContent, ArtifactHandle, ArtifactSink, ExportArtifact, SourceHandle,
 };
 use fub_abi::PluginError;
+
+use crate::error::KernelError;
+use crate::storage::{FileIdentity, Stat, VaultStorage};
+use crate::vault::Vault;
 
 /// Quanti byte di assaggio l'host legge all'apertura, per il dispatch.
 ///
@@ -476,6 +481,157 @@ fn check_path(path: &str) -> Result<(), PluginError> {
         return Err(PluginError::PermissionDenied(
             format!("`{path}` is not a valid location inside an export output").into(),
         ));
+    }
+    Ok(())
+}
+/// Lease kernel stabile di una risorsa binaria: l'unica `ResourceLease` del
+/// progetto. Vive qui (non in host): il kernel ne possiede invarianti e
+/// metadati, l'host `ResourceTable` la possiede direttamente come tipo opaco —
+/// nessuna struct duplicata, nessuna serializzazione in IPC (solo Descriptor).
+///
+/// La lease non è un reader aperto: è metadata/open-lease (root canonica, path
+/// relativo, identità, stat, change, revision eventuale). Ogni chunk di
+/// [`resource_read_at`] riverifica stat+identity+change prima E dopo la lettura:
+/// mismatch su qualsiasi dei quattro => `Stale`, mai contenuti misti, mai hash
+/// intero all'open. `revision` è `Some` solo se il fingerprint è già noto in
+/// anagrafe, mai un finto hash.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResourceLease {
+    /// Radice canonica del vault (assoluta).
+    pub root: Utf8PathBuf,
+    /// Path relativo al vault, separatori `/`.
+    pub path: String,
+    /// Identità filesystem fotografata all'open (volume/file).
+    pub identity: Option<FileIdentity>,
+    /// Stat fotografato all'open (specie/dimensione/data).
+    pub stat: Stat,
+    /// Timbro di cambiamento (ctime Unix / ChangeTime Windows), se noto.
+    pub change: Option<u64>,
+    /// Impronta contenuto, solo se già nota — mai calcolata aprendo.
+    pub revision: Option<Revision>,
+}
+
+/// Metadata/open-lease di una risorsa, senza hash intero e senza aprire reader.
+///
+/// Backend senza `identity`/`change_stamp`: NON falsa apertura — `Err` esplicito
+/// all'open oppure lease supportata solo se il backend può garantire la formula
+/// robusta; mai una lease il cui primo read fallisce sempre.
+pub fn resource_open(root: &Utf8Path, id: &DocId) -> Result<ResourceLease, KernelError> {
+    let vault = Vault::open(root)?;
+    resource_open_on(&vault, id)
+}
+
+/// Come [`resource_open`], sul vault già aperto (riuso diretto, niente
+/// riapertura): la radice è quella del vault, già assoluta e recintata.
+pub fn resource_open_on(vault: &Vault, id: &DocId) -> Result<ResourceLease, KernelError> {
+    let path = vault.path_for(id)?;
+    let stat = vault
+        .storage()
+        .stat(&path)
+        .map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+    if !stat.is_file() {
+        return Err(KernelError::NotFound(id.to_string()));
+    }
+    let identity = vault
+        .storage()
+        .file_identity(&path)
+        .map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+    let change = vault
+        .storage()
+        .change_stamp(&path)
+        .map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+    if identity.is_none() || change.is_none() {
+        return Err(KernelError::Io {
+            path,
+            source: std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "il backend non espone identità e timbro di cambiamento: \
+                 lease non supportata, niente falsa apertura",
+            ),
+        });
+    }
+    Ok(ResourceLease {
+        root: vault.root().to_owned(),
+        path: id.as_str().to_string(),
+        identity,
+        stat,
+        change,
+        revision: None,
+    })
+}
+
+/// Range stabile su lease: verifica stat+identity+change prima E dopo la lettura
+/// del chunk; mismatch => `Stale`. Mai intero file in memoria: legge solo il
+/// chunk chiesto dal supporto (il supporto resta l'unico a toccare i byte).
+pub fn resource_read_at(
+    storage: &dyn VaultStorage,
+    lease: &ResourceLease,
+    offset: u64,
+    len: usize,
+) -> Result<Vec<u8>, KernelError> {
+    let path = lease.root.join(lease.path.as_str());
+    let before = storage.stat(&path).map_err(|source| KernelError::Io {
+        path: path.clone(),
+        source,
+    })?;
+    verify_lease(lease, &before, storage, &path)?;
+    let bytes = storage
+        .read_at(&path, offset, len)
+        .map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+    let after = storage.stat(&path).map_err(|source| KernelError::Io {
+        path: path.clone(),
+        source,
+    })?;
+    verify_lease(lease, &after, storage, &path)?;
+    if before != after {
+        return Err(KernelError::Stale(lease.path.clone()));
+    }
+    Ok(bytes)
+}
+
+/// Formula robusta: stat(size+mtime) + identity(volume/file) + change(ctime /
+/// ChangeTime) devono combaciare con la lease. `change` qui è il Windows
+/// ChangeTime (non creation_time) e il ctime Unix: escludono rewrite in-place a
+/// pari size+mtime; identity esclude replace/rename; stat esclude mutazione di
+/// specie/dimensione/data.
+fn verify_lease(
+    lease: &ResourceLease,
+    stat: &Stat,
+    storage: &dyn VaultStorage,
+    path: &Utf8Path,
+) -> Result<(), KernelError> {
+    if *stat != lease.stat {
+        return Err(KernelError::Stale(lease.path.clone()));
+    }
+    let identity = storage
+        .file_identity(path)
+        .map_err(|source| KernelError::Io {
+            path: path.to_owned(),
+            source,
+        })?;
+    if identity != lease.identity {
+        return Err(KernelError::Stale(lease.path.clone()));
+    }
+    let change = storage
+        .change_stamp(path)
+        .map_err(|source| KernelError::Io {
+            path: path.to_owned(),
+            source,
+        })?;
+    if change != lease.change {
+        return Err(KernelError::Stale(lease.path.clone()));
     }
     Ok(())
 }

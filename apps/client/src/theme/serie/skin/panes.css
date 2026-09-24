@@ -150,11 +150,17 @@
 
 /* Lettura: la superficie del documento, con i colori della superficie del
    documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
-   fare sulla nota, non di che colore è. */
+   fare sulla nota, non di che colore è. La colonna è quella di Live: il frame
+   porta inset e misura, il contenuto non raddoppia il padding. */
 .pane-preview {
-  padding: var(--space-6) var(--space-7) var(--space-10);
+  padding: var(--space-8) var(--space-7) var(--space-10);
   background: var(--doc-bg);
   color: var(--doc-fg);
+  user-select: text;
+}
+.pane-preview.markdown-preview {
+  width: min(100%, var(--content-width));
+  margin-inline: auto;
 }
 
 .grid-surface {

@@ -31,18 +31,10 @@
 //
 // # Cosa **non** sta qui
 //
-// I workspace **salvati con un nome**. La casa è decisa — sarebbero nel vault,
-// come le note e le scorciatoie (0076), perché li ha creati l'utente apposta —
-// ma il formato aspetta di vedere assetti veri, e un formato indovinato prima
-// del primo cliente è un formato da migrare. Ciò che sta qui è l'altra cosa, che
-// **non ha un nome**: com'era aperta la finestra l'ultima volta. Quello è stato
-// di vista (0037), va nel file della macchina e non viaggia col vault, perché
-// dipende dal monitor che uno ha davanti.
-//
-// È la distinzione che la 0036 aveva scritto senza applicarla: *un'impostazione
-// ha un valore alla volta, un layout ne ha uno per nome*. Il primo oggetto un
-// nome non ce l'ha, quindi non è un layout in quel senso — ed è così che il
-// «terzo stato senza contenitore» del §11.2 si scopre non essere terzo.
+// I workspace **salvati con un nome** vivono in `state/workspaces.ts`: salvano
+// copie versionate di questo albero insieme alla geometria della shell. Qui
+// vive invece il layout anonimo della finestra corrente, nello stato di vista
+// della macchina. La stessa regola di tab, split e focus vale per entrambi.
 import { MAIN_PANE } from "../host/contract";
 import { emit, readState, writeState } from "./store";
 
@@ -63,10 +55,10 @@ import { emit, readState, writeState } from "./store";
 /// risposta: un path, o niente.
 export type Tab =
   /// Un documento del vault, per path.
-  | { k: "doc"; doc: string }
+  | { k: "doc"; doc: string; pinned?: boolean; stack?: string }
   /// Una view **dichiarata** dal backend, per id di `ViewSpec` (§3.3). Il
   /// riquadro non sa cosa disegni: la monta `ui/views.ts` come le altre.
-  | { k: "view"; view: string };
+  | { k: "view"; view: string; pinned?: boolean; stack?: string };
 
 /// Cosa tiene aperto un riquadro.
 export interface PaneState {
@@ -85,7 +77,27 @@ export interface PaneState {
   /// congelato dell'ABI. La proiezione sul vecchio contesto è responsabilità
   /// della superficie attiva.
   mode: string;
+  /// Cronologia avanti/indietro di questo riquadro (P06/F21): le tab visitate.
+  /// Assente = nessuna navigazione (primo avvio, riquadro nuovo, layout migrato).
+  /// Sono identità di tab, non testi: il buffer resta unico nella sessione.
+  history?: PaneHistory;
+  /// Gruppo di riquadri collegati (P06/F21): i riquadri con lo stesso `link`
+  /// non nullo seguono le aperture. Assente o null = non collegato. Persistito,
+  /// senza secondo buffer: le sessioni restano uniche, le superfici N.
+  link?: string | null;
 }
+
+/// Il passato e il futuro di un riquadro: chi c'era prima di quella attiva,
+/// e chi c'era prima di tornare indietro. Tetto in `HISTORY_LIMIT`: una
+/// cronologia illimitata è una perdita di memoria travestita da funzionalità.
+export interface PaneHistory {
+  past: Tab[];
+  future: Tab[];
+}
+
+/// Quante tappe si ricordano per riquadro. Cinquanta coprono una sessione di
+/// lavoro e stanno in un file di stato senza pesare: oltre si butta la più vecchia.
+export const HISTORY_LIMIT = 50;
 
 /// Come sono disposti i riquadri.
 export type LayoutNode =
@@ -116,6 +128,14 @@ export function defaultLayout(mode: string = DEFAULT_MODE): Layout {
 /// Il layout corrente. Mutabile e condiviso come `state`, per la stessa ragione:
 /// è ciò che la finestra *è* adesso, e ogni pannello che disegna lo legge.
 export let layout: Layout = defaultLayout();
+
+/// Sostituisce l’assetto live con uno validato (ripristino workspace, F22):
+/// un annuncio solo e una scrittura sola, come `removeEverywhere`. La forma
+/// è già validata da `parseLayout` a monte: qui si clona e si pubblica.
+export function setLayout(next: Layout): void {
+  layout = JSON.parse(JSON.stringify(next)) as Layout;
+  changed();
+}
 
 // --- leggere ----------------------------------------------------------------
 
@@ -277,18 +297,136 @@ export function openViewIn(id: string, view: string, l: Layout = layout): void {
 function openTabIn(id: string, tab: Tab, l: Layout): void {
   const p = l.panes[id];
   if (!p) return;
+  pushHistory(p, p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null);
   const already = p.tabs.findIndex((t) => sameTab(t, tab));
   p.active = already >= 0 ? already : p.tabs.push(tab) - 1;
   l.focus = id;
   changed();
+  propagateToLinked(id, tab, l);
+}
+
+/// Registra la tab che si sta lasciando nella cronologia del riquadro:
+/// indietro ci si torna, avanti si azzera — una strada nuova cancella il
+/// futuro, come in ogni browser. Tetto in `HISTORY_LIMIT`: oltre cade la più vecchia.
+function pushHistory(p: PaneState, current: Tab | null): void {
+  if (!current) return;
+  if (!p.history) p.history = { past: [], future: [] };
+  const past = p.history.past;
+  const last = past.length > 0 ? past[past.length - 1]! : null;
+  if (!last || !sameTab(last, current)) {
+    past.push(current);
+    if (past.length > HISTORY_LIMIT) past.splice(0, past.length - HISTORY_LIMIT);
+  }
+  p.history.future = [];
+}
+
+/// Le aperture seguono i riquadri collegati (P06/F21): chi apre in un riquadro
+/// con un `link` apre la stessa tab negli altri riquadri con lo stesso nome,
+/// senza spostare il fuoco e senza rimbalzi. Sessioni uniche, superfici N:
+/// la sessione resta una, gli editor mostrano lo stesso testo.
+function propagateToLinked(source: string, tab: Tab, l: Layout): void {
+  const name = l.panes[source]?.link ?? null;
+  if (!name) return;
+  for (const id of panes(l)) {
+    if (id === source) continue;
+    const p = l.panes[id];
+    if ((p.link ?? null) !== name) continue;
+    const already = p.tabs.findIndex((t) => sameTab(t, tab));
+    if (already >= 0) {
+      p.active = already;
+    } else {
+      p.tabs.push(tab);
+      p.active = p.tabs.length - 1;
+    }
+  }
 }
 
 /// Due tab sono la stessa cosa aperta? Serve a non aprirne una seconda, ed è
-/// l'unico posto in cui le due specie si confrontano fra loro.
+/// l'unico posto in cui le due specie si confrontano fra loro. Pin e stack
+/// non fanno parte dell'identità: una nota appuntata resta quella nota.
 export function sameTab(a: Tab, b: Tab): boolean {
   if (a.k === "doc" && b.k === "doc") return a.doc === b.doc;
   if (a.k === "view" && b.k === "view") return a.view === b.view;
   return false;
+}
+
+/// Ordina una tab dentro il suo riquadro: la toglie da dove sta e la rimette
+/// a `to`, senza cambiare l'attiva oltre il ricalcolo. Torna `false` se gli
+/// indici non reggono.
+export function moveTab(id: string, from: number, to: number, l: Layout = layout): boolean {
+  const p = l.panes[id];
+  if (!p || from < 0 || to < 0 || from >= p.tabs.length || to >= p.tabs.length || from === to) {
+    return false;
+  }
+  const [tab] = p.tabs.splice(from, 1);
+  p.tabs.splice(to, 0, tab!);
+  if (p.active === from) p.active = to;
+  else if (p.active > from && p.active <= to) p.active -= 1;
+  else if (p.active < from && p.active >= to) p.active += 1;
+  changed();
+  return true;
+}
+
+/// Sposta una tab da un riquadro a un altro (drag fra gruppi, P06/F21): la
+/// toglie dalla sorgente e la mette in coda alla destinazione, rendendola
+/// attiva. Le appuntate non si spostano per sbaglio: restano dov'erano.
+/// Torna `false` se la tab è appuntata o gli id non reggono.
+export function moveTabToPane(from: string, index: number, to: string, l: Layout = layout): boolean {
+  const src = l.panes[from];
+  const dst = l.panes[to];
+  if (!src || !dst || from === to) return false;
+  if (index < 0 || index >= src.tabs.length) return false;
+  const tab = src.tabs[index]!;
+  if (tab.pinned) return false;
+  if (!removeTab(from, index, l)) return false;
+  dst.tabs.push(tab);
+  dst.active = dst.tabs.length - 1;
+  l.focus = to;
+  changed();
+  return true;
+}
+
+/// Appunta o spunta una tab (P06/F21): le appuntate restano a sinistra e non
+/// si chiudono con «chiudi le altre». Il pin non cambia l'identità.
+export function setPinnedTab(id: string, index: number, pinned: boolean, l: Layout = layout): void {
+  const p = l.panes[id];
+  if (!p || index < 0 || index >= p.tabs.length) return;
+  const tab = p.tabs[index]!;
+  if ((tab.pinned === true) === pinned) return;
+  p.tabs[index] = tab.k === "doc"
+    ? { k: "doc", doc: tab.doc, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) }
+    : { k: "view", view: tab.view, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
+  changed();
+}
+
+/// Mette una tab in un gruppo (stack, P06/F21): le tab con lo stesso `stack`
+/// non nullo si disegnano insieme. Nome vuoto o spazi = fuori dal gruppo.
+export function setTabStack(id: string, index: number, stack: string | null, l: Layout = layout): void {
+  const p = l.panes[id];
+  if (!p || index < 0 || index >= p.tabs.length) return;
+  const name = (stack ?? "").trim();
+  const tab = p.tabs[index]!;
+  const next = name === "" ? null : name;
+  if ((tab.stack ?? null) === next) return;
+  const base = tab.k === "doc" ? { k: "doc" as const, doc: tab.doc } : { k: "view" as const, view: tab.view };
+  p.tabs[index] = {
+    ...base,
+    ...(tab.pinned ? { pinned: true } : {}),
+    ...(next ? { stack: next } : {}),
+  } as Tab;
+  changed();
+}
+
+/// Collega o scollega un riquadro a un gruppo di riquadri collegati
+/// (P06/F21): stesso nome = stesse aperture. Nome vuoto = scollegato.
+export function setPaneLink(id: string, link: string | null, l: Layout = layout): void {
+  const p = l.panes[id];
+  if (!p) return;
+  const trimmed = (link ?? "").trim();
+  const next = trimmed === "" ? null : trimmed;
+  if ((p.link ?? null) === next) return;
+  p.link = next;
+  changed();
 }
 
 /// Toglie una tab da un riquadro.
@@ -318,27 +456,114 @@ function removeTab(id: string, index: number, l: Layout): boolean {
   return true;
 }
 
-/// Rende attiva una tab per indice.
+/// Chiude le tab non appuntate di un riquadro (P06/F21): le appuntate restano.
+/// Torna quante ne ha chiuse. Un annuncio solo, come `removeEverywhere`.
+export function closeUnpinned(id: string, l: Layout = layout): number {
+  const p = l.panes[id];
+  if (!p) return 0;
+  let closed = 0;
+  for (let i = p.tabs.length - 1; i >= 0; i--) {
+    if (p.tabs[i]!.pinned) continue;
+    if (removeTab(id, i, l)) closed += 1;
+  }
+  if (closed > 0) changed();
+  return closed;
+}
+
+/// Chiude le altre tab di un riquadro (P06/F21): tiene quella a `keep` e le
+/// appuntate. Torna quante ne ha chiuse. Un annuncio solo.
+export function closeOthers(id: string, keep: number, l: Layout = layout): number {
+  const p = l.panes[id];
+  if (!p || keep < 0 || keep >= p.tabs.length) return 0;
+  let closed = 0;
+  for (let i = p.tabs.length - 1; i >= 0; i--) {
+    if (i === keep || p.tabs[i]!.pinned) continue;
+    if (removeTab(id, i, l)) closed += 1;
+  }
+  if (closed > 0) changed();
+  return closed;
+}
+
+/// Rende attiva una tab per indice. Anche il cambio tab è navigazione: la tab
+/// che si lascia entra nella cronologia del riquadro, e il futuro si azzera.
 export function activateTab(id: string, index: number, l: Layout = layout): void {
   const p = l.panes[id];
   if (!p || index < 0 || index >= p.tabs.length) return;
+  if (p.active >= 0 && p.active < p.tabs.length && p.active !== index) {
+    pushHistory(p, p.tabs[p.active]!);
+  }
   p.active = index;
   l.focus = id;
   changed();
 }
 
+/// Torna indietro nella cronologia del riquadro (P06/F21): la tab attiva va
+/// nel futuro, e si mostra l'ultima del passato. Torna `false` se non c'è
+/// un passato — niente da fare, niente scritto.
+export function goBack(id: string, l: Layout = layout): boolean {
+  const p = l.panes[id];
+  if (!p || !p.history || p.history.past.length === 0) return false;
+  const current = p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null;
+  const prev = p.history.past.pop()!;
+  if (current) p.history.future.push(current);
+  const at = p.tabs.findIndex((t) => sameTab(t, prev));
+  if (at >= 0) {
+    p.active = at;
+  } else {
+    p.tabs.push(prev);
+    p.active = p.tabs.length - 1;
+  }
+  l.focus = id;
+  changed();
+  return true;
+}
+
+/// Va avanti nella cronologia del riquadro (P06/F21): speculare a `goBack`.
+/// Torna `false` se non c'è un futuro.
+export function goForward(id: string, l: Layout = layout): boolean {
+  const p = l.panes[id];
+  if (!p || !p.history || p.history.future.length === 0) return false;
+  const current = p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null;
+  const next = p.history.future.pop()!;
+  if (current) {
+    if (!p.history) p.history = { past: [], future: [] };
+    p.history.past.push(current);
+  }
+  const at = p.tabs.findIndex((t) => sameTab(t, next));
+  if (at >= 0) {
+    p.active = at;
+  } else {
+    p.tabs.push(next);
+    p.active = p.tabs.length - 1;
+  }
+  l.focus = id;
+  changed();
+  return true;
+}
+
 /// Il documento è stato rinominato: l'identità è il path (0043), quindi le tab
 /// che lo mostravano seguono. Vale in **tutti** i riquadri, non solo in quello
-/// col fuoco: un rename non guarda chi sta guardando.
+/// col fuoco: un rename non guarda chi sta guardando. Pin, stack e cronologia
+/// seguono l'identità: una tab appuntata rinominata resta appuntata.
 export function rename(from: string, a: string, l: Layout = layout): void {
   let wasTouched = false;
+  const renamed = (t: Tab): Tab =>
+    t.k === "doc" && t.doc === from
+      ? { k: "doc", doc: a, ...(t.pinned ? { pinned: true } : {}), ...(t.stack ? { stack: t.stack } : {}) }
+      : t;
   for (const id of panes(l)) {
     const p = l.panes[id];
     p.tabs = p.tabs.map((t) => {
-      if (t.k !== "doc" || t.doc !== from) return t;
-      wasTouched = true;
-      return { k: "doc", doc: a };
+      const next = renamed(t);
+      if (next !== t) wasTouched = true;
+      return next;
     });
+    if (p.history) {
+      p.history = {
+        past: p.history.past.map(renamed),
+        future: p.history.future.map(renamed),
+      };
+    }
   }
   if (wasTouched) changed();
 }
@@ -359,6 +584,15 @@ export function removeEverywhere(doc: string, l: Layout = layout): void {
     for (let i = tabs.length - 1; i >= 0; i--) {
       const t = tabs[i];
       if (t.k === "doc" && t.doc === doc) wasTouched = removeTab(id, i, l) || wasTouched;
+    }
+  }
+  for (const id of panes(l)) {
+    const p = l.panes[id];
+    if (!p.history) continue;
+    const past = p.history.past.filter((t) => !(t.k === "doc" && t.doc === doc));
+    const future = p.history.future.filter((t) => !(t.k === "doc" && t.doc === doc));
+    if (past.length !== p.history.past.length || future.length !== p.history.future.length) {
+      p.history = { past, future };
     }
   }
   if (wasTouched) changed();
@@ -564,6 +798,16 @@ function parsePane(v: unknown): PaneState | null {
     tabs.push(tab);
   }
   const active = typeof o.active === "number" ? o.active : -1;
+  const history = parseHistory(o.history);
+  if (o.history !== undefined && !history) return null;
+  // Assente o nullo = non collegato (la forma che si scrive); un nome non
+  // vuoto = gruppo collegato; qualunque altra cosa è file rovinato, come
+  // una tab rotta. Una stringa di soli spazi vale come assente.
+  let link: string | undefined;
+  if (o.link === undefined || o.link === null) link = undefined;
+  else if (typeof o.link === "string" && o.link.trim() !== "") link = o.link.trim();
+  else if (typeof o.link === "string") return null;
+  else return null;
   return {
     tabs,
     // Un indice fuori dalle tab è la forma più probabile di file rovinato a
@@ -571,18 +815,69 @@ function parsePane(v: unknown): PaneState | null {
     // il riquadro c'è, le tab ci sono, non si sa quale era davanti.
     active: Number.isInteger(active) && active >= 0 && active < tabs.length ? active : tabs.length > 0 ? 0 : -1,
     mode: validMode(o.mode),
+    ...(history ? { history } : {}),
+    ...(typeof link === "string" ? { link } : {}),
+  };
+}
+
+/// Da JSON a cronologia di riquadro: due elenchi di tab, o niente. Severa
+/// come il resto del parser — una tappa rotta vale come file rovinato —
+/// con una sola clemenza: assente non è un errore, è un layout scritto
+/// prima della cronologia. Liste troppo lunghe si potano al tetto invece
+/// di buttare tutto: il riquadro c'è, le tab ci sono, la memoria è troppa.
+function parseHistory(v: unknown): PaneHistory | null {
+  if (v === undefined) return null;
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (!Array.isArray(o.past) || !Array.isArray(o.future)) return null;
+  const past: Tab[] = [];
+  for (const t of o.past) {
+    const tab = parseTab(t);
+    if (!tab) return null;
+    past.push(tab);
+  }
+  const future: Tab[] = [];
+  for (const t of o.future) {
+    const tab = parseTab(t);
+    if (!tab) return null;
+    future.push(tab);
+  }
+  return {
+    past: past.slice(-HISTORY_LIMIT),
+    future: future.slice(-HISTORY_LIMIT),
   };
 }
 
 /// Una tab, nella forma nuova o in quella di prima.
 ///
-/// Severa come tutto il resto di questo parser, e con una sola clemenza: una
-/// **stringa** è un documento, che è ciò che c'era scritto fino a ieri.
+/// Severa come tutto il resto di questo parser, e con due clemenze: una
+/// **stringa** è un documento, che è ciò che c'era scritto fino a ieri; un
+/// oggetto senza pin/stack è una tab non appuntata fuori dai gruppi, che è
+/// ciò che c'era scritto prima del pin. Pin e stack rotti — non booleani,
+/// non stringhe — valgono come file rovinato, non come «non appuntata».
 function parseTab(v: unknown): Tab | null {
   if (typeof v === "string") return v ? { k: "doc", doc: v } : null;
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  if (o.k === "doc") return typeof o.doc === "string" && o.doc ? { k: "doc", doc: o.doc } : null;
-  if (o.k === "view") return typeof o.view === "string" && o.view ? { k: "view", view: o.view } : null;
+  const pinned = o.pinned === undefined
+    ? {}
+    : o.pinned === true
+      ? { pinned: true }
+      : o.pinned === false
+        ? {}
+        : null;
+  if (!pinned) return null;
+  const stack = o.stack === undefined
+    ? {}
+    : typeof o.stack === "string" && o.stack.trim() !== ""
+      ? { stack: o.stack.trim() }
+      : null;
+  if (!stack) return null;
+  if (o.k === "doc") {
+    return typeof o.doc === "string" && o.doc ? { k: "doc", doc: o.doc, ...pinned, ...stack } : null;
+  }
+  if (o.k === "view") {
+    return typeof o.view === "string" && o.view ? { k: "view", view: o.view, ...pinned, ...stack } : null;
+  }
   return null;
 }

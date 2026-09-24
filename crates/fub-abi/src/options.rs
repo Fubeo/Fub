@@ -322,6 +322,8 @@ pub mod syntax {
     pub const DEFINITION_LISTS: &str = "fub:definition-lists";
     /// `==evidenziato==`.
     pub const HIGHLIGHT: &str = "fub:highlight";
+    /// `%%commento%%`: testo che la resa nasconde.
+    pub const COMMENTS: &str = "fub:comments";
     /// I diagrammi a blocco recintato: mermaid, PlantUML, Graphviz, D2.
     pub const DIAGRAMS: &str = "fub:diagrams";
 }

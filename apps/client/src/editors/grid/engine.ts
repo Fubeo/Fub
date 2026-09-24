@@ -146,6 +146,11 @@ function viewportRange(
     end: Math.max(0, Math.min(total - 1, last + GRID_OVERSCAN)),
   };
 }
+/** Shared, read-only fixed-row window for query-backed tables. It reuses the
+ * Grid overscan geometry but never opens a mutative workbook session. */
+export function uniformRowRange(total: number, scrollTop: number, viewportHeight: number, rowHeight: number): { start: number; end: number } | null {
+  return viewportRange(total, { offsets: [], sizes: [], total: 0 }, scrollTop, viewportHeight, 0, rowHeight);
+}
 function clamp(value: number, maximum: number): number {
   return Math.max(0, Math.min(maximum, value));
 }

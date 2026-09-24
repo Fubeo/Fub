@@ -1,0 +1,10 @@
+// Mondo legacy pinnato a `fub:abi@0.1.2`: nessun import di capacità, i soli
+// export che un formato 0.1.2 dichiara. Niente `format-links`: quella
+// capability nasce in `0.2.0`, e questo guest prova che l'host la tratta come
+// assente (`Ok(None)`) senza fallback raw.
+package esempio:legacy-format@0.1.0;
+
+world legacy-format {
+    export fub:abi/plugin@0.1.2;
+    export fub:abi/format@0.1.2;
+}

@@ -18,6 +18,10 @@
 //! proponeva, perché **un costruttore di view non è codice di prova**: sotto
 //! `testing` sarebbe stato a disposizione di un provider solo nei suoi test, che
 //! è il posto in cui non serve.
+//! Le collocazioni StatusBar e Ribbon non sono famiglie API aggiuntive: un
+//! `ViewProvider` restituisce `ViewSpec::new(id, title, ViewSurface::StatusBar)`
+//! (o `ViewSurface::Ribbon`) e usa le normali `render_view` / `on_action`.
+//! `esempi/view-wasm` mostra entrambi con `UiTree` e un pulsante Ribbon.
 
 use fub_abi::text::Text;
 use fub_abi::ui::{ActionRef, UiNode};

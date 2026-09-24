@@ -322,6 +322,51 @@ fn deleting_a_notes_moves_it_to_the_trash_and_tells_the_index() {
         }));
 }
 
+/// Un allegato si cestina come una nota (F02): lascia l'anagrafe con
+/// `EntryRemoved` e la sua specie, non tocca gli indici dei provider (che
+/// seguono i documenti), e il ripristino lo rimette dov'era, byte per byte.
+#[test]
+fn an_attachment_goes_to_the_trash_and_comes_back_byte_for_byte() {
+    let fx = Fixture::new();
+    fx.put_bytes("img/logo.png", &[0x89, b'P', b'N', b'G', 0, 1, 2]);
+    fx.put("Idea.txt", "an idea");
+    let mut ws = fx.workspace();
+    let events = ws.bus().subscribe();
+
+    let trashed = ws.delete_document(&DocId::new("img/logo.png")).unwrap();
+
+    assert!(!fx.exists("img/logo.png"));
+    assert_eq!(
+        fx.read_bytes(trashed.as_str()),
+        [0x89, b'P', b'N', b'G', 0, 1, 2]
+    );
+    assert!(
+        fx.calls().is_empty(),
+        "provider indexes follow documents only"
+    );
+    let notices: Vec<_> = events.try_iter().map(|n| n.event).collect();
+    assert!(
+        notices.iter().any(|e| matches!(e,
+        Event::EntryRemoved { id, kind: EntryKind::Asset } if id.as_str() == "img/logo.png")),
+        "{notices:?}"
+    );
+    assert!(!notices
+        .iter()
+        .any(|e| matches!(e, Event::DocumentRemoved { .. })));
+    assert_eq!(
+        ws.documents(),
+        vec![DocId::new("Idea.txt")],
+        "the notes are untouched"
+    );
+
+    let restored = restore_document(&mut ws, &trashed, None).unwrap();
+    assert_eq!(restored, DocId::new("img/logo.png"));
+    assert_eq!(
+        fx.read_bytes("img/logo.png"),
+        [0x89, b'P', b'N', b'G', 0, 1, 2]
+    );
+}
+
 #[test]
 fn a_notes_trashed_from_a_folder_returns_to_its_folder() {
     let fx = Fixture::new();

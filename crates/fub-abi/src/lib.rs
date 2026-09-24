@@ -96,7 +96,7 @@ pub use event::{
 };
 pub use format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
-    ParseContext, RenderOptions, RenderTarget, SourceKind,
+    LinkRewrite, ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 pub use gate::Gate;
 pub use grid::{
@@ -114,14 +114,15 @@ pub use model::Payload;
 pub use model::{
     Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
     HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate, PropertyScalar,
-    PropertyTime, PropertyValue, Span, TableCell, TableRow, Tag, TaskMarker,
+    PropertyTime, PropertyType, PropertyTypes, PropertyValue, Span, TableCell, TableRow, Tag,
+    TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::{OptionMap, OptionStatus};
 pub use organization::Organization;
 pub use query::{
-    Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TextField,
-    TextMode, TextQuery, TextTolerance,
+    Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus,
+    TextField, TextMode, TextQuery, TextTolerance,
 };
 pub use render::{EmbedContent, RenderedDocument, RenderedPart};
 pub use schema::SchemaVersion;

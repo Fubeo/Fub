@@ -31,6 +31,9 @@ serde.workspace = true
 serde_json.workspace = true
 serde_ignored.workspace = true
 thiserror.workspace = true
+# Firma Ed25519 e digest dei cataloghi; chiavi e firme sono codificate in base64.
+ring = { workspace = true }
+base64 = { workspace = true }
 # Il runtime dei componenti. `default-features = false` più le tre che servono
 # davvero: `cranelift` (compilare), `runtime` (eseguire), `component-model` (il
 # modello dei componenti, che è ciò che il contratto parla). Restano fuori

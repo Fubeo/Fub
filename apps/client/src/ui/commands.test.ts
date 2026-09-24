@@ -18,6 +18,8 @@ import {
   registerShellCommand,
   resetShellCommands,
   loadKeyOverrides,
+  validateKeybinding,
+  keyboardPlatform,
   type CommandEntry,
 } from "./commands";
 
@@ -538,5 +540,25 @@ describe("i conflitti", () => {
     expect(conflictMessage([entry({ binding: "Mod-g" })])).toBeNull();
     // E un comando senza accordo non litiga con gli altri senza accordo.
     expect(conflicts([entry({ id: "a" }), entry({ id: "b" })])).toHaveLength(0);
+  });
+});
+
+describe("alternative keyboard gestures", () => {
+  it("dispatches every alternative, including a sequence, without stealing Meta on Linux", () => {
+    const choice = entry({ binding: "Mod-x || Mod-k d" });
+    expect(advance([choice], null, chord({ key: "x", ctrlKey: true }), "other").type).toBe("esegue");
+    const first = advance([choice], null, chord({ key: "k", ctrlKey: true }), "other");
+    expect(first.type).toBe("attende");
+    expect(advance([choice], first.type === "attende" ? first.waiting : null, chord({ key: "d" }), "other").type).toBe("esegue");
+    expect(advance([choice], null, chord({ key: "x", metaKey: true }), "other").type).toBe("passa");
+    expect(keyboardPlatform("MacIntel")).toBe("mac");
+  });
+
+  it("rejects duplicate or truncated alternative bindings before saving", () => {
+    expect(validateKeybinding("Mod-x || Mod-k d").valid).toBe(true);
+    expect(validateKeybinding("Mod-x || Mod-x")).toEqual({ valid: false, reason: "duplicate" });
+    expect(validateKeybinding("Mod-x || ")).toEqual({ valid: false, reason: "empty-alternative" });
+    expect(validateKeybinding(Array.from({ length: 9 }, (_, i) => `Mod-${i}`).join(" || ")))
+      .toEqual({ valid: false, reason: "too-many" });
   });
 });

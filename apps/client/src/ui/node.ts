@@ -414,7 +414,10 @@ function update(
       // possa dire di lui è se il `payload` è cambiato. Se non lo è, lo lascia
       // in pace: è ciò che tiene in vita una simulazione mentre il resto della
       // view si ridisegna intorno.
-      if (customRenderer(next.ns)) {
+      const previousRenderer = customRenderer(prev.ns, prev.payload);
+      const nextRenderer = customRenderer(next.ns, next.payload);
+      if (previousRenderer !== nextRenderer) return false;
+      if (nextRenderer) {
         return JSON.stringify(prev.payload) === JSON.stringify(next.payload);
       }
       children(el, next.fallback, onAction);
@@ -894,7 +897,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // M5, non un caso d'errore.
       const el = div("ui-custom");
       el.dataset.ns = node.ns;
-      const draw = customRenderer(node.ns);
+      const draw = customRenderer(node.ns, node.payload);
       if (draw) {
         // Lo smontaggio torna dal renderer e si mette da parte: un canvas con
         // un `requestAnimationFrame` in volo su un elemento che nessuno guarda

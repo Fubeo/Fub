@@ -188,12 +188,29 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         Reason::TheFormatThatImplementsIt,
     ),
     (
+        // Come il markdown: il corpo del metodo delega al modulo `serialize`
+        // del proprio crate; un provider non ha `HostApi` fra le mani e da lì
+        // nessun file esistente si riscrive comunque.
+        "crates/fub-format-canvas/src/lib.rs",
+        "serialize::serialize",
+        1,
+        Reason::TheFormatThatImplementsIt,
+    ),
+    (
         // La riga del journal dell'anagrafe, non un documento: `serialize`
         // compone i record `Record { v, mutation }` del formato di storage
         // del kernel, uno per riga, e la scrittura è l'append della coda o
         // lo snapshot della compattazione — serde, come gli altri tre.
         "crates/fub-kernel/src/entries.rs",
         "serialize",
+        1,
+        Reason::AnotherSerialize,
+    ),
+    (
+        // Come gli altri `u64_string`: l'handle opaco viaggia in JSON come
+        // stringa (oltre 2^53 un `number` perde bit in silenzio).
+        "crates/fub-host/src/resources.rs",
+        "u64_string::serialize",
         1,
         Reason::AnotherSerialize,
     ),

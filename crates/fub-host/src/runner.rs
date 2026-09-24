@@ -771,6 +771,52 @@ impl Shared {
         // Il flush è una fase esterna separata: il token conserva gli indici,
         // mentre i lettori e la re-entry possono progredire senza guard Workspace.
         let _ = crate::teardown::flush_indexes(&self.workspace)?;
+        if !opening.interrupted {
+            // Gli intent possono dipendere dai provider di formato: il replay
+            // parte soltanto dopo l'indice completo e senza il lock Workspace.
+            // Il protocollo kernel resta disponibile anche nelle build senza
+            // la feature comandi; soltanto il batch `vault.archive` è opzionale.
+            let mut recovery_host = JobHost::new(self.workspace.clone(), crate::settings::CORE_ID);
+            let _resume_archive = match recovery_host.recover_explicit_renames() {
+                Ok(failures) => {
+                    for error in &failures {
+                        tracing::warn!(
+                            target: "fub.host",
+                            "rinomina lasciata in recupero per conflitto: {error}"
+                        );
+                    }
+                    failures.is_empty()
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "fub.host",
+                        "scansione degli intent di rinomina non completata: {error}"
+                    );
+                    false
+                }
+            };
+            #[cfg(feature = "commands")]
+            if _resume_archive {
+                let mut archive_host =
+                    JobHost::new(self.workspace.clone(), fub_features::COMMANDS_ID);
+                match fub_features::commands::recover_archive_batch(&mut archive_host) {
+                    Ok(report) => {
+                        for failure in report.failures {
+                            tracing::warn!(
+                                target: "fub.host",
+                                subject = ?failure.subject,
+                                "elemento archive lasciato in conflitto: {}",
+                                failure.error
+                            );
+                        }
+                    }
+                    Err(error) => tracing::warn!(
+                        target: "fub.host",
+                        "batch archive non recuperato: {error}"
+                    ),
+                }
+            }
+        }
         // **La persistenza dell'anagrafe e la raccolta dello spazio per-documento,
         // entrambe sotto prestito condiviso.**
         // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo
@@ -1304,6 +1350,42 @@ pub struct JobRunner {
     workers: Vec<JoinHandle<()>>,
 }
 
+/// Handle clonabile per l'invocazione sincrona.
+///
+/// Non possiede i thread del pool: serve all'host per staccare l'`Arc` del
+/// runner dal registro delle sessioni e rilasciare quel lock prima di eseguire
+/// codice del bundle.
+#[derive(Clone)]
+pub(crate) struct JobInvoker {
+    shared: Arc<Shared>,
+}
+
+impl JobInvoker {
+    pub(crate) fn invoke_job(
+        &self,
+        plugin: &str,
+        job: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError> {
+        if self.shared.bundles.read()?.body(plugin).is_none() {
+            return Err(PluginError::NotFound(
+                format!("plugin not mounted: {plugin}").into(),
+            ));
+        }
+        let pending = {
+            let mut workspace = self.shared.workspace.write()?;
+            workspace.issue_direct_job(
+                plugin,
+                JobSpec {
+                    job: job.into(),
+                    payload,
+                },
+            )?
+        };
+        self.shared.run_direct(pending)
+    }
+}
+
 impl JobRunner {
     /// Avvia il pool su un vault **scansionato**, e gli affida la seconda fase
     /// dell'apertura (§15.7).
@@ -1449,6 +1531,13 @@ impl JobRunner {
         // fermato da sé, e la riga che spiega perché è già stata scritta.
         let _ = self.shared.cancel(id);
     }
+    /// Restituisce il solo handle owned necessario a invocare un job.
+    pub(crate) fn invoker(&self) -> JobInvoker {
+        JobInvoker {
+            shared: Arc::clone(&self.shared),
+        }
+    }
+
     /// Esegue direttamente un job richiesto dall'host, senza creare una
     /// seconda contabilità: l'id viene riservato dal workspace e il corpo passa
     /// dalla stessa `Shared::outcome` usata dai worker.
@@ -1458,22 +1547,7 @@ impl JobRunner {
         job: impl Into<String>,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        if self.shared.bundles.read()?.body(plugin).is_none() {
-            return Err(PluginError::NotFound(
-                format!("plugin not mounted: {plugin}").into(),
-            ));
-        }
-        let pending = {
-            let mut workspace = self.shared.workspace.write()?;
-            workspace.issue_direct_job(
-                plugin,
-                JobSpec {
-                    job: job.into(),
-                    payload,
-                },
-            )?
-        };
-        self.shared.run_direct(pending)
+        self.invoker().invoke_job(plugin, job, payload)
     }
 
     /// **Ferma i job di un componente**, e torna quando nessuno è più dentro il

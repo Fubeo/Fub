@@ -160,7 +160,11 @@ fn a_save_writes_a_index_that_names_all() {
     // l'indice si riscrive qui.
     let id = DocId::new("note/0007.md");
     store
-        .snapshot(&id, "# Nota 7\n\nriscritta a mano\n", &mut host)
+        .snapshot(
+            &id,
+            ("# Nota 7\n\nriscritta a mano\n").as_bytes(),
+            &mut host,
+        )
         .expect("la fotografia")
         .expect("il contenuto è cambiato, quindi una versione c'è");
     drop(store);
@@ -214,7 +218,7 @@ fn a_index_rejected_does_not_leaves_in_memory_a_version_that_does_not_exists() {
     let before = store.list(&id);
     host.denies_write(INDEX_FILE);
 
-    let outcome = store.snapshot(&id, "# Nota 3\n\nun testo nuovo\n", &mut host);
+    let outcome = store.snapshot(&id, ("# Nota 3\n\nun testo nuovo\n").as_bytes(), &mut host);
 
     assert!(
         outcome.is_err(),

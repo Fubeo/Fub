@@ -97,6 +97,9 @@ export interface Chart {
   /// Sostituisce l'insieme delle note aperte (per il quartiere acceso). Un
   /// cambio reale ridisegna una volta; un no-change non fa nulla.
   setOpenDocuments(openDocuments: ReadonlySet<string>): void;
+  /// Maschera temporale di sola presentazione; la simulazione conserva il layout.
+  /// `null` mostra tutti i nodi. I nodi nascosti non ricevono focus/click.
+  setVisibleNodes(visible: ReadonlySet<string> | null): void;
   /// Applica una conf nuova: la fisica è sostituita (nuovo oggetto, clampato),
   /// la grafica è fusa nell'oggetto vivo che il pittore chiude (così non si
   /// perde la grafica sostituendo il riferimento). Il preset non è tracciato
@@ -149,6 +152,7 @@ export function createChart(options: ChartOptions = {}): Chart {
   let unsubscribeReducedMotion: (() => void) | null = null;
 
   const openDocuments = new Set<string>();
+  let visibleNodes: ReadonlySet<string> | null = null;
   const engineState: EngineState = { alpha: 1, quietSince: 0 };
   // L'hover letto dai nostri listener sul canvas: l'interazione non lo espone,
   // e il pittore lo vuole per il focus. −1 = nessuno.
@@ -175,7 +179,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
-    const h = nodeAt(s, cameraState.state(), x, y);
+    const h = nodeAt(s, cameraState.state(), x, y, isVisible);
     if (h !== hovered) {
       hovered = h;
       requestRedraw();
@@ -198,6 +202,12 @@ export function createChart(options: ChartOptions = {}): Chart {
   /// la selezione da sola (click, frecce, Esc) e il frame la inoltra qui —
   /// il confronto evita di notificare a ogni frame lo stesso indice.
   let lastNotifiedFocus = -2;
+
+  /// Visibilità condivisa da hit-test, focus e pittore: senza filtraggio ogni
+  /// nodo esiste. Il callback è stabile per tutta la vita dell'interazione.
+  function isVisible(index: number): boolean {
+    return !visibleNodes || (!!s && visibleNodes.has(s.id[index]));
+  }
 
   /// Richiede un frame se non ne è già in volo uno. È il battito del loop:
   /// ogni gesto (drag, hover, cambio conf, resize) lo chiama, e il frame si
@@ -315,6 +325,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       s,
       camera: cam,
       openDocuments,
+      visible: visibleNodes ?? undefined,
       hovered,
       dragged: s.dragged,
       focused: interaction.getFocusedNode(),
@@ -361,6 +372,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       canvas: interactionCanvas,
       structureRef: () => s as Structure,
       cameraState,
+      isVisible,
       actions: {
         open: (id: string) => openExternal(id),
         warm: (level: number) => warm(level),
@@ -400,6 +412,17 @@ export function createChart(options: ChartOptions = {}): Chart {
     s = null;
     pool = null;
     host = null;
+  }
+
+  function setVisibleNodes(visible: ReadonlySet<string> | null): void {
+    visibleNodes = visible;
+    if (interaction && interaction.getFocusedNode() >= 0 && !isVisible(interaction.getFocusedNode())) {
+      interaction.focusedNode(-1);
+      lastNotifiedFocus = -1;
+      focusExternal(-1);
+    }
+    if (hovered >= 0 && !isVisible(hovered)) hovered = -1;
+    requestRedraw();
   }
 
   function setOpenDocuments(newItem: ReadonlySet<string>): void {
@@ -459,6 +482,7 @@ export function createChart(options: ChartOptions = {}): Chart {
   function focusNode(index: number): void {
     if (!s || !interaction) return;
     if (!Number.isInteger(index) || index < 0 || index >= s.n) return;
+    if (!isVisible(index)) return;
     interaction.focusedNode(index);
     // La notifica all'elenco è immediata: l'interazione ha già ridisegnato
     // e il frame la ripeterebbe al prossimo giro — il confronto là sopra
@@ -500,6 +524,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       focusExternal = fn;
     },
     setOpenDocuments,
+    setVisibleNodes,
     setConfig,
     warm,
     unpinNodes,

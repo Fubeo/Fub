@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fub — scorciatoie app (MobileOwner P14/F37).
+     Posizione finale: gen/android/app/src/main/res/xml/shortcuts.xml,
+     referenziato da MainActivity via meta-data android.app.shortcuts
+     (fusione a cura di mobile/install-mobile.sh).
+     Stessi 4 comandi reali del widget e delle azioni rapide. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="fub-new"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/fub_shortcut_new">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="fub://new" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="fub-daily"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/fub_shortcut_daily">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="fub://daily" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="fub-search"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/fub_shortcut_search">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="fub://mobile-search" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="fub-switcher"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/fub_shortcut_switcher">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="fub://mobile-switcher" />
+    </shortcut>
+</shortcuts>

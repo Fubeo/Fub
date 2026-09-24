@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fub — Info.plist snippet (template, MobileOwner P14/F37).
+     Fusione a cura di NativeIntegration dentro gen/ios (tauri.ios.conf.json
+     `infoPlist` o Info.plist del progetto) dopo `cargo tauri ios init`
+     (NON eseguito qui). Solo aggiunte dichiarative: nessuno script, nessun
+     entitlement JIT (vietato dallo store: i plugin WASM girano su Pulley). -->
+<plist version="1.0">
+<dict>
+  <!-- Deep link fub://open|new|daily|unique|search|capture -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>dev.fub.app.capture</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>fub</string>
+      </array>
+    </dict>
+  </array>
+  <!-- Tipo esportato: note markdown di Fub (UTI proprietario, conforme a testo). -->
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>dev.fub.markdown</string>
+      <key>UTTypeDescription</key>
+      <string>Fub note</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.plain-text</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>md</string>
+          <string>markdown</string>
+        </array>
+        <key>public.mime-type</key>
+        <string>text/markdown</string>
+      </dict>
+    </dict>
+  </array>
+  <!-- Aprire .md da Files / share sheet di altre app. -->
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Fub note</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSHandlerRank</key>
+      <string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>dev.fub.markdown</string>
+        <string>public.plain-text</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

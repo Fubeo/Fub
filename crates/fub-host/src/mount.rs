@@ -14,15 +14,18 @@ use fub_abi::format::FormatDescriptor;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::{Plugin, PluginManifest};
+#[cfg(feature = "base")]
+use fub_features::{BaseIndex, BASE_ID};
 #[cfg(feature = "blocks")]
 use fub_features::{
-    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID,
+    CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID,
 };
 #[cfg(feature = "search")]
 use fub_features::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::{MarkdownExport, MarkdownImport, MarkdownProvider};
+use fub_importers as importers;
 #[cfg(feature = "search")]
 use fub_kernel::RegistryError;
 use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
@@ -140,6 +143,44 @@ impl Bundle for CoreBundle {
     }
 }
 
+/// Native transfer bundle: each importer/exporter and the conversion commands
+/// share one owner, with the explicitly restricted network manifest.
+struct ImportersBundle;
+
+impl Bundle for ImportersBundle {
+    fn manifest(&self) -> PluginManifest {
+        importers::manifest()
+    }
+
+    fn trust(&self) -> Trust {
+        Trust::Core
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        importers::ImportPlugin::boxed()
+    }
+
+    fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
+        let mut failures = Vec::new();
+        for provider in importers::import_providers() {
+            if let Err(error) = registrar.register_import_provider(provider) {
+                failures.push(format!("import provider not registered: {error}"));
+            }
+        }
+        for provider in importers::export_providers() {
+            if let Err(error) = registrar.register_export_provider(provider) {
+                failures.push(format!("export provider not registered: {error}"));
+            }
+        }
+        if let Err(error) =
+            registrar.register_command_provider(Box::new(importers::command_provider()))
+        {
+            failures.push(format!("import commands not registered: {error}"));
+        }
+        failures
+    }
+}
+
 pub fn mount(
     root: &Utf8Path,
     machine: Arc<MachineSettings>,
@@ -154,6 +195,8 @@ pub fn mount(
         system_locale,
         levels,
         crate::PreparedFormatSource::empty(),
+        #[cfg(feature = "http-client")]
+        None,
     )
 }
 
@@ -174,15 +217,22 @@ pub(crate) fn mount_with_formats(
     system_locale: Arc<SystemLocale>,
     levels: &fub_kernel::log::Levels,
     prepared_formats: crate::PreparedFormatSource,
+    #[cfg(feature = "http-client")] config_root: Option<&Utf8Path>,
 ) -> Result<Mounted, String> {
     let (providers, resources) = prepared_formats.into_parts();
     let mut format_resources = Some(resources);
     let mut formats = FormatRegistry::new();
-    if let Err(error) = formats.register(MarkdownProvider::boxed()) {
-        return Err(mount_error_with_resource_disposal(
-            format!("format provider conflict: {error}"),
-            format_resources.take().unwrap_or_default(),
-        ));
+    for provider in [
+        MarkdownProvider::boxed(),
+        fub_format_canvas::CanvasProvider::boxed(),
+        fub_format_base::BaseProvider::boxed(),
+    ] {
+        if let Err(error) = formats.register(provider) {
+            return Err(mount_error_with_resource_disposal(
+                format!("format provider conflict: {error}"),
+                format_resources.take().unwrap_or_default(),
+            ));
+        }
     }
     if let Err(error) = formats.register_source(FormatDescriptor::text(
         fub_format_sheet::FORMAT_ID,
@@ -234,16 +284,26 @@ pub(crate) fn mount_with_formats(
                     core_catalog_assembled(),
                 ),
         ),
-        Arc::new(CoreBundle::new(
-            fub_kernel::maintenance::MAINTENANCE_ID,
-            "Maintenance",
-            register_maintenance,
-        )),
+        Arc::new(
+            CoreBundle::new(
+                fub_kernel::maintenance::MAINTENANCE_ID,
+                "Maintenance",
+                register_maintenance,
+            )
+            // Senza il catalogo i titoli dei comandi di manutenzione uscivano
+            // come chiavi grezze (`cmd.vault.rebuild-index.title`) in palette
+            // e CLI: il catalogo esisteva, nessuno lo presentava al kernel.
+            .speaking(
+                crate::settings::CORE_DEFAULT_LOCALE,
+                fub_kernel::maintenance::catalog(),
+            ),
+        ),
         Arc::new(CoreBundle::new(
             MARKDOWN_ID,
             "Markdown",
             register_markdown_transfer,
         )),
+        Arc::new(ImportersBundle),
         Arc::new(crate::theme::ThemeBundle::series()),
         Arc::new(CoreBundle::new(
             crate::sheet::SHEET_ID,
@@ -291,6 +351,10 @@ pub(crate) fn mount_with_formats(
             );
         }
 
+        #[cfg(feature = "base")]
+        if feature.id == BASE_ID {
+            irregular = Some(CoreBundle::new(feature.id, feature.name, register_base));
+        }
         #[cfg(feature = "blocks")]
         if feature.id == BLOCKS_ID {
             irregular = Some(CoreBundle::new(feature.id, feature.name, register_blocks));
@@ -334,6 +398,16 @@ pub(crate) fn mount_with_formats(
             bundle = bundle.requiring(COMMANDS_SERVICE);
         }
         bundles.push(Arc::new(bundle));
+    }
+
+    #[cfg(feature = "http-client")]
+    {
+        bundles.push(Arc::new(crate::remote::bundle::SyncBundle::new(
+            config_root.map(|root| root.join("sync")),
+        )));
+        bundles.push(Arc::new(crate::publish::commands::PublishBundle::new(
+            config_root.map(|root| root.join("publish")),
+        )));
     }
 
     let mut registry = BundleRegistry::new();
@@ -416,6 +490,22 @@ pub(crate) fn mount_with_formats(
     })
 }
 
+#[cfg(feature = "base")]
+fn register_base(registrar: &mut Registrar<'_>) -> Vec<String> {
+    let mut failures = Vec::new();
+    if let Err(error) = registrar.register_index_provider(Box::new(BaseIndex::new())) {
+        failures.push(format!("base index not registered: {error}"));
+    }
+    if let Err(error) = registrar.register_syntax_rule(Box::new(fub_format_base::BaseRule)) {
+        failures.push(format!("base syntax rule not registered: {error}"));
+    }
+    if let Err(error) = registrar.register_custom_renderer(Box::new(fub_format_base::BaseRenderer))
+    {
+        failures.push(format!("base renderer not registered: {error}"));
+    }
+    failures
+}
+
 #[cfg(feature = "search")]
 fn register_search(registrar: &mut Registrar<'_>) -> Vec<String> {
     let index = match registrar.search_data_dir().and_then(|dir| {
@@ -468,7 +558,7 @@ fn register_versioning(
         return vec![format!("versioning not registered: {error}")];
     }
     if let Err(error) = registrar.set_before_write_hook(Arc::new(move |host, id| {
-        VersioningHandler::new(hook_store.clone()).photograph_if_unversioned(host, id)
+        VersioningHandler::new(hook_store.clone()).photograph_before_write(host, id)
     })) {
         return vec![format!("versioning hook not registered: {error}")];
     }
@@ -537,6 +627,7 @@ fn register_blocks(registrar: &mut Registrar<'_>) -> Vec<String> {
         Box::new(DiagramRule) as Box<dyn fub_abi::custom::SyntaxRule>,
         Box::new(MathRule),
         Box::new(HighlightRule),
+        Box::new(CommentRule),
     ] {
         if let Err(error) = registrar.register_syntax_rule(rule) {
             failures.push(format!("syntax rule not grafted: {error}"));

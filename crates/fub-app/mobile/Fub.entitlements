@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fub — entitlements (template, MobileOwner P14/F37).
+     Team e gruppo risolti da Xcode al signing (nessun valore inventato qui):
+     `$(TeamIdentifierPrefix)` e `$(AppIdentifierPrefix)` sono variabili di
+     build, non credenziali. Niente entitlement JIT/debug: vietati dallo store.
+     I segreti di firma restano quelli di DistributionOwner
+     (APPLE_DEVELOPMENT_TEAM, profili, certificati): mai in questo file. -->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>group.dev.fub.app</string>
+  </array>
+</dict>
+</plist>

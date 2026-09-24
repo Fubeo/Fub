@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-mobile"
+description = "Mobile shell adapters; no shared mount authority without native OS verification."
+commands.allow = [
+  "mobile_validate_capture",
+  "mobile_submit_capture",
+  "mobile_storage_roots",
+  "mobile_storage_preference",
+  "mobile_set_storage_preference",
+  "mobile_wasm_report",
+  "mobile_classify_opened_url",
+  "mobile_register_tree_grant",
+  "mobile_shared_mount_mode",
+]

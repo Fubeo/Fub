@@ -95,6 +95,7 @@ pub mod media;
 pub mod path;
 pub mod path_policy;
 pub mod properties;
+pub mod search_syntax;
 pub mod snippet;
 pub mod tag;
 pub mod text_policy;

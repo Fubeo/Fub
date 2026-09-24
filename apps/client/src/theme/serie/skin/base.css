@@ -1,0 +1,38 @@
+/* Le viste Base consumano ruoli del tema; layout e dimensioni stanno nella struttura. */
+.base-surface {
+  color: var(--text);
+  background: var(--doc-bg);
+}
+.base-toolbar {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.base-status,
+.base-map-attribution { color: var(--muted); }
+.base-table th,
+.base-table td { border-bottom: 1px solid var(--border); }
+.base-table th { background: var(--bg-elev); }
+.base-card,
+.base-kanban-card,
+.base-kanban-column {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+}
+.base-kanban-column { background: var(--doc-bg); }
+.base-cell-error { color: var(--danger); }
+.base-map-atlas {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--muted);
+}
+.base-map-marker {
+  fill: var(--accent);
+  stroke: var(--doc-bg);
+  stroke-width: 2;
+  cursor: pointer;
+}
+.base-map-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

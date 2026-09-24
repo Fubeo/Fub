@@ -4,6 +4,7 @@ import { emit } from "../state/store";
 import type * as Store from "../state/store";
 import { customRenderer } from "../ui/custom";
 import { GRAPH_NS, mountGraph } from "./graph";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 interface FakeChart {
   onFocusChange: ((index: number) => void) | undefined;
@@ -12,6 +13,7 @@ interface FakeChart {
   nodeId: Mock;
   nodeCount: Mock;
   setOpenDocuments: Mock;
+  setVisibleNodes: Mock;
   unmount: Mock;
 }
 
@@ -25,6 +27,7 @@ const fakes = vi.hoisted(() => ({
   charts: [] as FakeChart[],
   panels: [] as FakePanel[],
   languageListeners: [] as Array<() => void>,
+  lifetimes: [] as Lifetime[],
   layoutRegistrations: [] as Array<{
     listener: Mock;
     disposer: () => void;
@@ -62,6 +65,7 @@ vi.mock("../graph/chart", () => ({
       focusedNode: vi.fn(() => -1),
       nodeId: vi.fn(() => null),
       nodeCount: vi.fn(() => 0),
+      setVisibleNodes: vi.fn(),
       setOpenDocuments: vi.fn(),
       setA11yLabel: vi.fn(),
       setConfig: vi.fn(),
@@ -116,6 +120,7 @@ vi.mock("../state/layout", () => ({
 afterEach(async () => {
   await vi.dynamicImportSettled();
   for (const { disposer } of fakes.layoutRegistrations) disposer();
+  for (const lifetime of fakes.lifetimes.splice(0)) lifetime.close();
   fakes.layoutRegistrations.length = 0;
   document.body.replaceChildren();
 });
@@ -128,14 +133,20 @@ beforeEach(() => {
   fakes.layoutRegistrations.length = 0;
 });
 
+function mountTestGraph(): void {
+  const lifetime = openLifetime();
+  fakes.lifetimes.push(lifetime);
+  mountGraph(lifetime);
+}
+
 describe("lifecycle del renderer graph", () => {
   it("stacca il layout e tutte le risorse a ogni mount/destroy", async () => {
     const button = document.createElement("button");
     button.id = "show-graph";
     document.body.append(button);
-    mountGraph();
+    mountTestGraph();
 
-    const render = customRenderer(GRAPH_NS);
+    const render = customRenderer(GRAPH_NS, null);
     expect(render).toBeDefined();
 
     for (let i = 0; i < 3; i += 1) {
@@ -163,8 +174,8 @@ describe("lifecycle del renderer graph", () => {
     const button = document.createElement("button");
     button.id = "show-graph";
     document.body.append(button);
-    mountGraph();
-    const render = customRenderer(GRAPH_NS)!;
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
     const opened: string[] = [];
     const host = document.createElement("div");
     document.body.append(host);
@@ -205,14 +216,43 @@ describe("lifecycle del renderer graph", () => {
     unmount!();
   });
 
+  it("filtra nodi e archi per data indicizzata senza ricostruire il layout", async () => {
+    const button = document.createElement("button");
+    button.id = "show-graph";
+    document.body.append(button);
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const stop = render(host, {
+      nodes: ["a.md", "b.md"],
+      edges: [{ from: "a.md", to: "b.md" }],
+      modified: { "a.md": "1000", "b.md": "2000" },
+    }, vi.fn())!;
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1];
+    chart.nodeCount.mockReturnValue(2);
+    chart.nodeId.mockImplementation((i: number) => ["a.md", "b.md"][i] ?? null);
+    const slider = host.querySelector<HTMLInputElement>(".graph-timeline input")!;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["a.md"]));
+    expect(host.querySelectorAll(".graph-list-open")).toHaveLength(1);
+    slider.value = "2";
+    slider.dispatchEvent(new Event("input"));
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(null);
+    expect(host.querySelectorAll(".graph-list-open")).toHaveLength(2);
+    stop();
+  });
+
   it("non monta un motore arrivato dopo lo smontaggio della superficie", async () => {
     const button = document.createElement("button");
     button.id = "show-graph";
     document.body.append(button);
-    mountGraph();
+    mountTestGraph();
     const host = document.createElement("div");
     document.body.append(host);
-    const render = customRenderer(GRAPH_NS)!;
+    const render = customRenderer(GRAPH_NS, null)!;
     const stop = render(host, { nodes: ["a"], edges: [] }, vi.fn())!;
     stop();
     await vi.dynamicImportSettled();

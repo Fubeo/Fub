@@ -47,6 +47,7 @@ pub const BLOCKS_ID: &str = "fub.blocks";
 pub const DIAGRAMS_RULE: &str = "fub:diagrams";
 pub const MATH_RULE: &str = "fub:math";
 pub const HIGHLIGHT_RULE: &str = "fub:highlight";
+pub const COMMENTS_RULE: &str = "fub:comments";
 pub const DIAGRAM_RENDERER: &str = "fub:diagram";
 pub const MATH_RENDERER: &str = "fub:math";
 
@@ -293,6 +294,42 @@ impl SyntaxRule for HighlightRule {
         Ok(Some(SyntaxProduct::Inline {
             custom_kind: custom_kind::HIGHLIGHT.into(),
             attrs: json!({ "text": m.text }),
+        }))
+    }
+}
+
+/// `%%commento%%` in una riga: il testo resta nel file e nel modello, la resa
+/// non lo mostra. Il prodotto porta la **sorgente intera**, delimitatori
+/// compresi (`Payload::Source`), così chi serializza la ricopia senza doverla
+/// ricostruire.
+pub struct CommentRule;
+
+impl SyntaxRule for CommentRule {
+    fn spec(&self) -> SyntaxRuleSpec {
+        SyntaxRuleSpec {
+            id: COMMENTS_RULE.into(),
+            format: MARKDOWN.into(),
+            trigger: SyntaxTrigger::Inline {
+                open: "%%".into(),
+                close: "%%".into(),
+            },
+            order: 0,
+            option: Some(syntax::COMMENTS.into()),
+            produces: vec![custom_kind::COMMENT.into()],
+        }
+    }
+
+    fn apply(
+        &self,
+        m: &SyntaxMatch,
+        _ctx: &ParseContext,
+    ) -> Result<Option<SyntaxProduct>, FormatError> {
+        if m.text.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(SyntaxProduct::Inline {
+            custom_kind: custom_kind::COMMENT.into(),
+            attrs: json!({ "source": format!("%%{}%%", m.text) }),
         }))
     }
 }

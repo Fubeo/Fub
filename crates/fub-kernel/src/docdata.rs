@@ -73,11 +73,34 @@ pub(crate) fn migrate_data(
     let mut errors = Vec::new();
     for root in roots {
         let source = space_dir(root, from);
-        if !storage.stat(&source).is_ok_and(|s| s.is_dir()) {
+        let destination = space_dir(root, to);
+        let aside = move_aside(&source);
+        let plugin = root.file_name().unwrap_or(root.as_str());
+        let source_ready = match storage.stat(&source) {
+            Ok(stat) if stat.is_dir() => true,
+            Ok(_) => {
+                errors.push(format!("{plugin}: {source} is not a folder"));
+                continue;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => {
+                errors.push(format!("{plugin}: {error}"));
+                continue;
+            }
+        };
+        if !source_ready {
+            match storage.stat(&aside) {
+                Ok(stat) if stat.is_dir() => {
+                    if let Err(error) = storage.rename_no_replace(&aside, &destination) {
+                        errors.push(format!("{plugin}: {error}"));
+                    }
+                }
+                Ok(_) => errors.push(format!("{plugin}: {aside} is not a folder")),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => errors.push(format!("{plugin}: {error}")),
+            }
             continue;
         }
-        let destination = space_dir(root, to);
-        let plugin = root.file_name().unwrap_or(root.as_str());
         if let Err(and) = move_space(storage, &source, &destination) {
             errors.push(format!("{plugin}: {and}"));
         }
@@ -115,13 +138,11 @@ pub(crate) fn migrate_data(
 /// cartella, su un'operazione che avviene una volta per rinomina e solo per i
 /// plugin che hanno dati su quel documento.
 ///
-/// Un crash fra le due lascia una cartella `.in-corso`, e quei dati sono persi
-/// comunque: il documento è già stato rinominato, il nome vecchio non lo nomina
-/// più nessuno, e nessuno andrebbe a cercarli lì. La raccolta la legge come lo
-/// spazio di un documento che non c'è — `.in-corso` attraversa `encode`/`decode`
-/// senza cambiare — e al prossimo giro la toglie, che è l'unica cosa che resti
-/// da fare. È la stessa finestra che c'è già fra la rinomina del documento e
-/// questa migrazione.
+/// Un crash fra le due mosse lascia la sorgente sotto il nome deterministico
+/// `.in-progress`. La rinomina recuperabile ripete la migrazione prima di
+/// muovere il documento: se il nome originale manca e quello intermedio esiste,
+/// completa la mossa con `rename_no_replace`. Una destinazione comparsa nel
+/// frattempo resta intatta e l'intermedio conserva i dati da recuperare.
 ///
 /// # La collisione: vince la destinazione, ciò che resta si nomina
 ///
@@ -139,6 +160,11 @@ pub(crate) fn migrate_data(
 /// codice può indovinare. Un file sulla destinazione resta ugualmente
 /// intatto e viene nominato nell'errore.
 ///
+fn move_aside(source: &Utf8Path) -> Utf8PathBuf {
+    let name = source.file_name().unwrap_or("space");
+    source.with_file_name(format!("{name}.in-progress"))
+}
+
 fn move_space(
     storage: &dyn VaultStorage,
     source: &Utf8Path,
@@ -165,13 +191,22 @@ fn move_space(
         Err(and) => return Err(and),
     };
 
-    let name = source.file_name().unwrap_or("space");
-    let aside = source.with_file_name(format!("{name}.in-progress"));
+    let aside = move_aside(source);
+    match storage.stat(&aside) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Ok(_) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{aside} contains an interrupted document-space move"),
+            ))
+        }
+        Err(error) => return Err(error),
+    }
     storage.rename(source, &aside)?;
     if to_clear && storage.exists(destination) {
         storage.remove_dir_all(destination)?;
     }
-    storage.rename(&aside, destination)
+    storage.rename_no_replace(&aside, destination)
 }
 
 // distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
@@ -370,6 +405,64 @@ mod tests {
             annotation(&storage, &root, "a.md").as_deref(),
             Some(&b"data of a"[..]),
             "the source remains available under its named old path"
+        );
+    }
+
+    #[test]
+    fn an_interrupted_document_space_move_resumes_from_the_aside_name() {
+        let storage = MemStorage::new();
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
+        let roots = vec![root.clone()];
+        let from = DocId::new("a.md");
+        let to = DocId::new("b.md");
+        let source = space_dir(&root, &from);
+        let aside = move_aside(&source);
+        storage
+            .write(&source.join("annotation"), b"data of a")
+            .expect("written");
+        storage
+            .rename(&source, &aside)
+            .expect("fault lands after the first move");
+
+        let errors = migrate_data(&storage, &roots, &from, &to);
+
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(
+            annotation(&storage, &root, "b.md").as_deref(),
+            Some(&b"data of a"[..])
+        );
+        assert!(!storage.exists(&aside));
+    }
+
+    #[test]
+    fn recovery_never_overwrites_a_destination_that_appeared_after_the_aside_move() {
+        let storage = MemStorage::new();
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
+        let roots = vec![root.clone()];
+        let from = DocId::new("a.md");
+        let to = DocId::new("b.md");
+        let source = space_dir(&root, &from);
+        let aside = move_aside(&source);
+        storage
+            .write(&source.join("annotation"), b"data of a")
+            .expect("written");
+        storage
+            .rename(&source, &aside)
+            .expect("fault lands after the first move");
+        storage
+            .write(&space_dir(&root, &to).join("annotation"), b"external")
+            .expect("external destination");
+
+        let errors = migrate_data(&storage, &roots, &from, &to);
+
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(
+            annotation(&storage, &root, "b.md").as_deref(),
+            Some(&b"external"[..])
+        );
+        assert_eq!(
+            storage.read(&aside.join("annotation")).unwrap(),
+            b"data of a"
         );
     }
 

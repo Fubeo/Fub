@@ -172,9 +172,9 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
     let from_redraw = ws.set_active_context(Some(cursor(12)));
     assert_eq!(
         from_redraw,
-        vec![OUTLINE_VIEW.to_string()],
-        "l'outline dichiara di seguire documento e selezione: è l'unica \
-         registrata qui, e va ridisegnata"
+        vec![OUTLINE_VIEW.to_string(), "footnotes".to_string()],
+        "outline e note a piè di pagina seguono documento e selezione: sono le due \
+         registrate qui, e vanno ridisegnate"
     );
     assert_eq!(
         marked(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),

@@ -42,7 +42,9 @@ use fub_abi::grid::{
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
-use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
+use fub_abi::query::{
+    QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField, TextQuery,
+};
 use fub_abi::render::{EmbedContent, RenderedDocument};
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,
@@ -684,20 +686,49 @@ fn to_value<T: serde::Serialize>(v: T) -> Value {
 /// Un campione per **ogni** variante del canale dati, domanda e risposta.
 /// L'esaustività la garantisce il `match` senza `_`.
 fn index_query_samples() -> Vec<Value> {
-    // Una query composta: testo AND tag negato. È la forma che il §5.3 rende
-    // esprimibile, ed è quella che il mirror deve saper costruire.
+    // Una query composta: testo case-sensitive AND tag negato AND task AND
+    // regex AND path AND file. Copre le foglie P04 e i flag del testo, così il
+    // mirror TS deve saper costruire e leggere ogni discriminante.
     let composed = QueryExpr {
         any: vec![QueryClause {
             all: vec![
                 QueryLiteral {
                     negated: false,
-                    predicate: QueryPredicate::Text(TextQuery::terms("rust")),
+                    predicate: QueryPredicate::Text(TextQuery {
+                        case_sensitive: true,
+                        ..TextQuery::terms("rust")
+                    }),
                 },
                 QueryLiteral {
                     negated: true,
                     predicate: QueryPredicate::Tag {
                         name: "archivio".into(),
                         descendants: true,
+                    },
+                },
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Task {
+                        status: TaskStatus::Open,
+                    },
+                },
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Regex {
+                        pattern: "TASK\\s+aperta".into(),
+                        fields: vec![TextField::Body],
+                    },
+                },
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Path {
+                        glob: "Work/*.md".into(),
+                    },
+                },
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::File {
+                        extension: "md".into(),
                     },
                 },
             ],
@@ -826,6 +857,9 @@ fn index_query_samples() -> Vec<Value> {
         IndexQuery::SyntaxForms {
             doc: DocId::new("a.md"),
         },
+        IndexQuery::RenderPrint {
+            doc: DocId::new("a.md"),
+        },
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -849,7 +883,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Drafts { .. }
             | IndexQuery::RenderPreview { .. }
             | IndexQuery::RenderEmbed { .. }
-            | IndexQuery::SyntaxForms { .. } => {}
+            | IndexQuery::SyntaxForms { .. }
+            | IndexQuery::RenderPrint { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -1026,6 +1061,7 @@ fn index_result_samples() -> Vec<Value> {
                 close: "||".into(),
             }),
         }]),
+        IndexResult::RenderPrint(RenderedDocument::default()),
     ];
     for r in &all {
         match r {
@@ -1047,7 +1083,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Drafts(_)
             | IndexResult::RenderPreview(_)
             | IndexResult::RenderEmbed(_)
-            | IndexResult::SyntaxForms(_) => {}
+            | IndexResult::SyntaxForms(_)
+            | IndexResult::RenderPrint(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()

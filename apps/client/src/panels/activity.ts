@@ -148,6 +148,60 @@ function describeOutcome(error: unknown): string {
   }
   return String(error);
 }
+
+export type ExportContent =
+  | { kind: "bytes"; value: readonly number[] }
+  | { kind: "delivered"; value: string };
+export interface ExportArtifact {
+  path: string;
+  media_type: string;
+  content: ExportContent;
+}
+
+/** Only typed successful transfer results can offer a native Save action.
+ * Delivered content is a receipt, never a second promise to write bytes. */
+export function exportArtifacts(notice: KernelNotice): ExportArtifact[] | null {
+  if (notice.event.type !== "job_done" ||
+      !["import.transfer", "export.run"].includes(notice.event.job)) return null;
+  const result = notice.event.result;
+  if (!result || typeof result !== "object" || !("Ok" in result)) return null;
+  const report = result.Ok;
+  if (!report || typeof report !== "object" || !("artifacts" in report)) return null;
+  const artifacts = report.artifacts;
+  if (!Array.isArray(artifacts) || artifacts.length > 128) return null;
+  let total = 0;
+  const parsed: ExportArtifact[] = [];
+  for (const artifact of artifacts) {
+    if (!artifact || typeof artifact !== "object") return null;
+    const value = artifact as Record<string, unknown>;
+    const content = value.content;
+    if (typeof value.path !== "string" || !value.path ||
+        value.path.startsWith("/") || value.path.includes("\\") ||
+        value.path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
+        typeof value.media_type !== "string" ||
+        !/^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+$/.test(value.media_type) ||
+        !content || typeof content !== "object") return null;
+    const body = content as Record<string, unknown>;
+    if (body.kind === "bytes" && Array.isArray(body.value) &&
+        body.value.every((byte: unknown) => Number.isInteger(byte) && (byte as number) >= 0 && (byte as number) <= 255)) {
+      total += body.value.length;
+      if (total > 32 * 1024 * 1024) return null;
+      parsed.push({ path: value.path, media_type: value.media_type, content: { kind: "bytes", value: body.value } });
+    } else if (body.kind === "delivered" && typeof body.value === "string" && /^(0|[1-9][0-9]*)$/.test(body.value)) {
+      parsed.push({ path: value.path, media_type: value.media_type, content: { kind: "delivered", value: body.value } });
+    } else return null;
+  }
+  return parsed;
+}
+
+interface FinishedArtifact extends ExportArtifact {
+  state: "ready" | "saving" | "saved" | "failed";
+  detail: string;
+}
+interface FinishedExport {
+  id: string;
+  artifacts: FinishedArtifact[];
+}
 // --- da qui in giù è disegno ------------------------------------------------
 
 let jobs: JobRow[] = [];
@@ -163,6 +217,8 @@ let staleReason = "";
 let generation = 0;
 /// Chi ha aperto per ultimo il pannello, per riportargli il fuoco (C04).
 let opener: HTMLElement | null = null;
+let finished: FinishedExport[] = [];
+let activityEpoch = 0;
 
 /// Testi di stato con chiavi dedicate (U64): `activity.stale` non riusa
 /// `activity.none` — «nessun lavoro» e «lista non aggiornata» sono due fatti
@@ -183,6 +239,13 @@ function activityText(key: P8Key, args: Record<string, string | number> = {}): s
   }
 }
 export function mountActivity(lifetime: Lifetime): void {
+  const epoch = ++activityEpoch;
+  lifetime.add(() => {
+    if (epoch !== activityEpoch) return;
+    activityEpoch++;
+    finished = [];
+    open = false;
+  });
   lifetime.listen($("#activity-button"), "click", () => {
     if (open) closeActivity();
     else {
@@ -222,9 +285,29 @@ export function mountActivity(lifetime: Lifetime): void {
       if (eventNotice.event.type === "vault_opened" || eventNotice.event.type === "vault_closed") {
         stale = false;
         staleReason = "";
+        finished = [];
       }
       const result = apply(jobs, eventNotice);
       jobs = result.jobs;
+      const completed = eventNotice.event;
+      if (completed.type === "job_done") {
+        const artifacts = exportArtifacts(eventNotice);
+        if (artifacts && artifacts.length > 0 &&
+            !finished.some((report) => report.id === completed.id)) {
+          finished.push({
+            id: completed.id,
+            artifacts: artifacts.map((artifact) => ({ ...artifact, state: "ready", detail: "" })),
+          });
+          // Keep at most two completed exports; byte-bearing reports are
+          // bounded by the producer's 32 MiB cap and released on vault close.
+          if (finished.length > 2) finished.shift();
+        } else if (completed.job === "export.run" &&
+            artifacts === null && completed.result &&
+            typeof completed.result === "object" &&
+            "Ok" in completed.result) {
+          notify(t("activity.artifact_invalid"), "guasto");
+        }
+      }
       // Un evento autorevole chiude la finestra di dubbio: la lista torna quella
       // che il kernel racconta adesso, non quella dell'ultima query fallita.
       if (result.reconcile) {
@@ -311,16 +394,71 @@ function redraw(): void {
   // Nessun-job e lista-non-aggiornata restano due righe diverse: la prima dice
   // che non gira niente, la seconda che non lo si sa più.
   if (stale) list.appendChild(staleNote());
-  if (jobs.length === 0) {
+  if (jobs.length === 0 && finished.length === 0) {
     const empty = document.createElement("li");
     empty.className = "muted";
     empty.textContent = t("activity.none");
     list.appendChild(empty);
-    return;
   }
-  for (const job of jobs) {
-    list.appendChild(row(job));
+  for (const job of jobs) list.appendChild(row(job));
+  for (const report of finished) {
+    for (const artifact of report.artifacts) {
+      const item = document.createElement("li");
+      item.className = "activity-row";
+      const label = document.createElement("span");
+      label.className = "activity-label";
+      label.textContent = artifact.path;
+      item.append(label);
+      const status = document.createElement("span");
+      status.setAttribute("role", "status");
+      if (artifact.state === "saved") {
+        status.textContent = t("activity.artifact_saved", { path: artifact.detail });
+      } else if (artifact.content.kind === "delivered") {
+        status.textContent = t("activity.artifact_delivered", { size: artifact.content.value });
+      } else {
+        status.textContent = artifact.state === "saving" ? t("activity.artifact_saving") :
+          artifact.state === "failed" ? t("activity.artifact_failed", { reason: artifact.detail }) :
+            artifact.detail || t("activity.artifact_ready");
+        const save = document.createElement("button");
+        save.type = "button";
+        save.className = "link-button";
+        save.textContent = t("activity.artifact_save");
+        save.disabled = artifact.state === "saving";
+        save.addEventListener("click", () => void persistArtifact(report, artifact));
+        item.append(save);
+      }
+      item.append(status);
+      list.append(item);
+    }
   }
+}
+
+async function persistArtifact(report: FinishedExport, artifact: FinishedArtifact): Promise<void> {
+  if (artifact.state === "saving" || artifact.content.kind !== "bytes" ||
+      !finished.includes(report)) return;
+  const bytes = artifact.content.value;
+  const epoch = activityEpoch;
+  artifact.state = "saving";
+  artifact.detail = "";
+  redraw();
+  try {
+    const basename = artifact.path.slice(artifact.path.lastIndexOf("/") + 1);
+    const outcome = await api.saveArtifact(basename, artifact.media_type, bytes);
+    if (epoch !== activityEpoch || !finished.includes(report)) return;
+    if (outcome.status === "saved") {
+      artifact.state = "saved";
+      artifact.detail = outcome.path;
+      artifact.content = { kind: "delivered", value: String(bytes.length) };
+    } else {
+      artifact.state = "ready";
+      artifact.detail = t("activity.artifact_cancelled");
+    }
+  } catch (error) {
+    if (epoch !== activityEpoch || !finished.includes(report)) return;
+    artifact.state = "failed";
+    artifact.detail = errorText(error);
+  }
+  redraw();
 }
 
 /// La riga «non aggiornata»: testo + tooltip sullo stesso fatto, azione Riprova

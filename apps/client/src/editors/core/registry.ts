@@ -17,6 +17,8 @@ export interface SurfaceOverride {
 export interface SurfaceRequest {
   readonly formatId: string | null;
   readonly sourceKind: SourceKind;
+  /** Optional vault id for source-family profile selection (e.g. local media). */
+  readonly documentId?: string;
   readonly override?: SurfaceOverride;
 }
 
@@ -34,6 +36,8 @@ export interface SurfaceMountContext {
   readonly parent: HTMLElement;
   readonly formatId?: string | null;
   readonly revision?: string;
+  /** Detail of a rejected document, displayed only by the inert error surface. */
+  readonly errorReason?: string;
 }
 /** A mounted shell-owned surface. No DOM or CodeMirror value crosses its boundary. */
 export interface EditorSurface {
@@ -66,6 +70,8 @@ export interface SurfaceRegistration {
   readonly factory: SurfaceFactory;
   readonly formats?: Readonly<Record<string, string>>;
   readonly sources?: Readonly<Partial<Record<SourceKind, string>>>;
+  /** Select a registered profile when the source binding alone is too broad. */
+  readonly selectSourceProfile?: (request: SurfaceRequest, fallback: string) => string;
 }
 
 export interface ResolvedSurface {
@@ -170,6 +176,7 @@ export class DocumentSurfaceRegistry {
       factory: registration.factory,
       formats,
       sources,
+      selectSourceProfile: registration.selectSourceProfile,
     };
     this.#families.set(family, record);
     for (const [format, profile] of Object.entries(formats)) {
@@ -200,7 +207,13 @@ export class DocumentSurfaceRegistry {
       if (exact) return this.#resolved(exact.registration, exact.profile);
     }
     const source = this.#sources.get(request.sourceKind);
-    if (source) return this.#resolved(source.registration, source.profile);
+    if (source) {
+      const profile = source.registration.selectSourceProfile?.(request, source.profile) ?? source.profile;
+      if (!source.registration.profileSet.has(profile)) {
+        throw new Error(`surface owner ${source.registration.owner} selected unregistered profile ${profile}`);
+      }
+      return this.#resolved(source.registration, profile);
+    }
     const error = this.#families.get("error");
     return error ? this.#resolved(error, error.defaultProfile) : null;
   }

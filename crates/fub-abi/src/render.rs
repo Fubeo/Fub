@@ -1,8 +1,9 @@
-//! **La resa di un documento** (§16.6): l'anteprima composta e l'embed.
+//! **La resa di un documento** (§16.6): anteprima, stampa ed embed.
 //!
 //! Questi tipi vivono nel contratto e non nel kernel perché sono la risposta
-//! di [`IndexQuery::RenderPreview`](crate::traits::IndexQuery::RenderPreview) e
-//! [`IndexQuery::RenderEmbed`](crate::traits::IndexQuery::RenderEmbed): un
+//! di [`IndexQuery::RenderPreview`](crate::traits::IndexQuery::RenderPreview),
+//! [`IndexQuery::RenderEmbed`](crate::traits::IndexQuery::RenderEmbed) e
+//! [`IndexQuery::RenderPrint`](crate::traits::IndexQuery::RenderPrint): un
 //! `ViewProvider` deve poter chiedere un documento reso come lo chiede la
 //! shell, e la forma della risposta è un tipo del contratto. Prima della 0163
 //! erano due comandi IPC bespoke della shell (`render_preview`/`render_embed`)
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ui::UiNode;
 
-/// Un'anteprima composta: l'HTML, e le parti **dichiarative** che la shell
+/// Un documento reso: l'HTML, e le parti **dichiarative** che la shell
 /// monta da sé.
 ///
 /// Non è una stringa sola perché `CustomRendering::Ui` non è una stringa: è un
@@ -40,7 +41,7 @@ pub struct RenderedPart {
 }
 
 impl RenderedDocument {
-    /// L'anteprima di prima di questa seduta: solo HTML, nessuna parte.
+    /// Un documento con solo HTML, senza parti dichiarative.
     pub fn html(html: impl Into<String>) -> Self {
         RenderedDocument {
             html: html.into(),

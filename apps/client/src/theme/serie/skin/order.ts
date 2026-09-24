@@ -42,6 +42,8 @@ export const ORDER = [
   "segmented",
   "panes",
   "preview",
+  "canvas",
+  "base",
   "context-menu",
   "graph",
   "modals",
@@ -66,7 +68,7 @@ export const SKIN = "skin.css";
 const HEADER = `/* La pelle del tema di serie: il chrome (§29.1).
  *
  * GENERATO da \`theme/serie/skin/\` — non si modifica qui: si tocca il pezzo e
- * si rigenera con \`npm run tema:genera\`. Una regola scritta a mano in questo
+ * si rigenera con \`npm run theme:generate\`. Una regola scritta a mano in questo
  * file sparisce alla prima rigenerazione, e fino ad allora dice il falso sul
  * pezzo che avrebbe dovuto contenerla.
  *

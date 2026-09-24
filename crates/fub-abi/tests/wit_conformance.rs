@@ -74,7 +74,7 @@ use fub_abi::event::{
 };
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
-    ParseContext, RenderOptions, RenderTarget, SourceKind,
+    LinkRewrite, ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
@@ -92,8 +92,8 @@ use fub_abi::net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 use fub_abi::options::OptionMap;
 use fub_abi::organization::Organization;
 use fub_abi::query::{
-    QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
-    TextTolerance,
+    QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField, TextMode,
+    TextQuery, TextTolerance,
 };
 use fub_abi::render::{EmbedContent, RenderedDocument, RenderedPart};
 use fub_abi::session::{
@@ -350,6 +350,7 @@ wit_kebab! {
     SourceKind,
     DocumentSource,
     FormatError,
+    LinkRewrite,
 
     GridSurfaceSpec,
     GridSession,
@@ -478,6 +479,7 @@ wit_kebab! {
     TextMode,
     TextField,
     TextTolerance,
+    TaskStatus,
     QueryKind,
     PredicateKind,
     QueryRoute,
@@ -2155,6 +2157,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
             ],
         ),
         IndexQuery::SyntaxForms { doc } => case_ty("syntax-forms", wit(doc)),
+        IndexQuery::RenderPrint { doc } => case_ty("render-print", wit(doc)),
     }
 }
 
@@ -2184,6 +2187,22 @@ fn query_predicate_case(p: &QueryPredicate) -> Case {
             "custom",
             "custom-predicate",
             vec![("ns", wit(ns)), ("predicate", wit(predicate))],
+        ),
+        QueryPredicate::Regex { pattern, fields } => case_rec(
+            "regex",
+            "regex-predicate",
+            vec![("pattern", wit(pattern)), ("fields", wit(fields))],
+        ),
+        QueryPredicate::Task { status } => {
+            case_rec("task", "task-predicate", vec![("status", wit(status))])
+        }
+        QueryPredicate::Path { glob } => {
+            case_rec("path", "path-predicate", vec![("glob", wit(glob))])
+        }
+        QueryPredicate::File { extension } => case_rec(
+            "file",
+            "file-predicate",
+            vec![("extension", wit(extension))],
         ),
     }
 }
@@ -2219,6 +2238,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::RenderPreview => case("render-preview"),
         QueryKind::RenderEmbed => case("render-embed"),
         QueryKind::SyntaxForms => case("syntax-forms"),
+        QueryKind::RenderPrint => case("render-print"),
     }
 }
 
@@ -2230,6 +2250,10 @@ fn predicate_kind_case(k: &PredicateKind) -> Case {
         PredicateKind::Folder => case("folder"),
         PredicateKind::Linked => case("linked"),
         PredicateKind::Custom(ns) => case_ty("custom", wit(ns)),
+        PredicateKind::Regex => case("regex"),
+        PredicateKind::Task => case("task"),
+        PredicateKind::Path => case("path"),
+        PredicateKind::File => case("file"),
     }
 }
 
@@ -2261,6 +2285,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::RenderPreview(v) => case_ty("render-preview", wit(v)),
         IndexResult::RenderEmbed(v) => case_ty("render-embed", wit(v)),
         IndexResult::SyntaxForms(v) => case_ty("syntax-forms", wit(v)),
+        IndexResult::RenderPrint(v) => case_ty("render-print", wit(v)),
     }
 }
 
@@ -2902,6 +2927,9 @@ fn conform(source: &str) -> Result<(), String> {
             index_query_case(&IndexQuery::SyntaxForms {
                 doc: DocId::new("a"),
             }),
+            index_query_case(&IndexQuery::RenderPrint {
+                doc: DocId::new("a"),
+            }),
         ],
     );
 
@@ -2931,6 +2959,7 @@ fn conform(source: &str) -> Result<(), String> {
                 content: RenderedDocument::default(),
             })),
             index_result_case(&IndexResult::SyntaxForms(vec![])),
+            index_result_case(&IndexResult::RenderPrint(RenderedDocument::default())),
         ],
     );
 
@@ -2961,6 +2990,19 @@ fn conform(source: &str) -> Result<(), String> {
             query_predicate_case(&QueryPredicate::Custom {
                 ns: String::new(),
                 predicate: serde_json::Value::Null,
+            }),
+            query_predicate_case(&QueryPredicate::Regex {
+                pattern: String::new(),
+                fields: vec![],
+            }),
+            query_predicate_case(&QueryPredicate::Task {
+                status: TaskStatus::Open,
+            }),
+            query_predicate_case(&QueryPredicate::Path {
+                glob: String::new(),
+            }),
+            query_predicate_case(&QueryPredicate::File {
+                extension: String::new(),
             }),
         ],
     );
@@ -2998,6 +3040,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::RenderPreview),
             query_kind_case(&QueryKind::RenderEmbed),
             query_kind_case(&QueryKind::SyntaxForms),
+            query_kind_case(&QueryKind::RenderPrint),
         ],
     );
 
@@ -3011,6 +3054,10 @@ fn conform(source: &str) -> Result<(), String> {
             predicate_kind_case(&PredicateKind::Folder),
             predicate_kind_case(&PredicateKind::Linked),
             predicate_kind_case(&PredicateKind::Custom(String::new())),
+            predicate_kind_case(&PredicateKind::Regex),
+            predicate_kind_case(&PredicateKind::Task),
+            predicate_kind_case(&PredicateKind::Path),
+            predicate_kind_case(&PredicateKind::File),
         ],
     );
 
@@ -3028,6 +3075,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.enumeration_from("text-field", ("query.rs", "TextField"));
 
     contract.enumeration_from("text-tolerance", ("query.rs", "TextTolerance"));
+    contract.enumeration_from("task-status", ("query.rs", "TaskStatus"));
 
     contract.variant_src(
         "property-test",
@@ -3392,6 +3440,24 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record(
         "render-options",
         &[("target", wit(&target)), ("options", wit(&options))],
+    );
+
+    let LinkRewrite {
+        span,
+        target,
+        replacement,
+    } = LinkRewrite {
+        span: Span::new(0, 0),
+        target: LinkTarget::wiki(""),
+        replacement: String::new(),
+    };
+    contract.record(
+        "link-rewrite",
+        &[
+            ("span", wit(&span)),
+            ("target", wit(&target)),
+            ("replacement", wit(&replacement)),
+        ],
     );
 
     let GridSurfaceSpec {
@@ -4497,6 +4563,7 @@ fn conform(source: &str) -> Result<(), String> {
         fields,
         tolerance,
         partial_last_term,
+        case_sensitive,
     } = TextQuery::terms("");
     contract.record(
         "text-query",
@@ -4506,8 +4573,19 @@ fn conform(source: &str) -> Result<(), String> {
             ("fields", wit(&fields)),
             ("tolerance", wit(&tolerance)),
             ("partial-last-term", wit(&partial_last_term)),
+            ("case-sensitive", wit(&case_sensitive)),
         ],
     );
+    contract.record(
+        "regex-predicate",
+        &[
+            ("pattern", wit(&String::new())),
+            ("fields", wit(&Vec::<TextField>::new())),
+        ],
+    );
+    contract.record("task-predicate", &[("status", wit(&TaskStatus::Open))]);
+    contract.record("path-predicate", &[("glob", wit(&String::new()))]);
+    contract.record("file-predicate", &[("extension", wit(&String::new()))]);
 
     let PropertyFilter { key, test } = PropertyFilter {
         key: String::new(),
@@ -5305,6 +5383,18 @@ fn conform(source: &str) -> Result<(), String> {
             ) -> Result<String, FormatError>,
         &["model"],
     );
+    contract.method(
+        "format-links",
+        "rewrite-links",
+        <dyn FormatProvider>::rewrite_links
+            as fn(
+                &'static dyn FormatProvider,
+                &'static DocumentSource,
+                &'static ParseContext,
+                &'static [LinkRewrite],
+            ) -> Result<Option<Vec<TextEdit>>, FormatError>,
+        &["source", "ctx", "rewrites"],
+    );
 
     contract.method(
         "grid",
@@ -5976,6 +6066,7 @@ fn conform(source: &str) -> Result<(), String> {
         "service",
         "importer",
         "exporter",
+        "format-links",
     ]
     .iter()
     .map(|s| s.to_string())

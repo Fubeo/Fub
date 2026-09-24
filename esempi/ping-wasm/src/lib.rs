@@ -51,13 +51,14 @@ use fub::abi::options::OptionEntry;
 /// job che risponde si chiama `ping` come là.
 const ID: &str = "demo.ping";
 
-/// La versione del contratto contro cui è scritto. La confronta
-/// `fub_abi::traits::abi_compatible` al primo passo del montaggio: major
-/// diversa → rifiuto, minor più alta dell'host → rifiuto.
+/// La versione del contratto contro cui è scritto: quella effettiva di
+/// `fub-abi`, confrontata con `abi_compatible` al primo passo del montaggio
+/// (major diversa → rifiuto, minor più alta dell'host → rifiuto). La variante
+/// `abi-incompatibile` resta una major diversa e rifiutata.
 const ABI: &str = if cfg!(feature = "abi-incompatibile") {
     "99.0.0"
 } else {
-    "0.1.1"
+    "0.2.0"
 };
 
 /// Quando ci siamo attivati, in millisecondi. Il diario del plugin nativo era

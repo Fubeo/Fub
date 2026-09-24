@@ -41,22 +41,29 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::command::{
+    CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
+    InvokeMode, ParamKind, ParamSpec,
+};
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::grid::{
     GridApplyRequest, GridCommit, GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
 };
 use fub_abi::model::DocId;
+use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
+use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{JobId, JobSpec, ViewInstance, ViewSpec};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Actor, Notice, PluginError};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
+use fub_kernel::host::authorize_path;
+use fub_kernel::os_trash::{FallbackReason, OsTrashBackend, OsTrashReceipt, TrashVia};
 use fub_kernel::{
-    Capability, Guard, JournalRead, MachineSettings, Policy, ReadOnly, Subscription, SystemLocale,
-    ViewStates, Workspace,
+    Capability, Guard, JournalRead, MachineSettings, MountRegistry, MountRoute, Policy, ReadOnly,
+    Subscription, SystemLocale, ViewStates, Workspace,
 };
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
@@ -72,6 +79,268 @@ use crate::registry::{
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry, VaultRegistryHandle};
 use crate::watcher::{OpeningWatcher, RunningWatcher, WatcherFactory};
+
+const OS_TRASH_COMMAND: &str = "trash.os";
+const MOUNT_ADD: &str = "mount.add";
+const MOUNT_REMOVE: &str = "mount.remove";
+const MOUNT_LIST: &str = "mount.list";
+const FOLDER_CREATE: &str = "folder.create";
+const SNAPSHOT_CREATE: &str = "vault.snapshot.create";
+const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
+
+/// Lo stesso catalogo host-owned serve l'elenco e la scelta del dispatcher.
+fn mount_specs() -> [CommandSpec; 3] {
+    [
+        CommandSpec::new(MOUNT_ADD, Text::key("host.mount.add.title"))
+            .describing(Text::key("host.mount.add.desc"))
+            .with_param(
+                ParamSpec::new("name", Text::key("host.param.name"), ParamKind::Text).required(),
+            )
+            .with_param(
+                ParamSpec::new(
+                    "target",
+                    Text::key("host.param.absolute_folder"),
+                    ParamKind::Text,
+                )
+                .required(),
+            )
+            .with_param(
+                ParamSpec::new(
+                    "namespace",
+                    Text::key("host.param.namespace"),
+                    ParamKind::Text,
+                )
+                .required(),
+            )
+            .with_scope(CommandScope::writing(CommandReach::Settings)),
+        CommandSpec::new(MOUNT_REMOVE, Text::key("host.mount.remove.title"))
+            .describing(Text::key("host.mount.remove.desc"))
+            .with_param(
+                ParamSpec::new("name", Text::key("host.param.name"), ParamKind::Text).required(),
+            )
+            .with_scope(CommandScope::writing(CommandReach::Settings)),
+        CommandSpec::new(MOUNT_LIST, Text::key("host.mount.list.title"))
+            .describing(Text::key("host.mount.list.desc")),
+    ]
+}
+
+fn mount_io_error(error: std::io::Error) -> PluginError {
+    let message = error.to_string().into();
+    match error.kind() {
+        std::io::ErrorKind::AlreadyExists => PluginError::AlreadyExists(message),
+        std::io::ErrorKind::NotFound => PluginError::NotFound(message),
+        std::io::ErrorKind::PermissionDenied => PluginError::PermissionDenied(message),
+        _ => PluginError::Io(message),
+    }
+}
+
+/// Una cartella vuota è struttura del vault, non un documento: nessun provider
+/// la possiede, quindi il comando sta con gli altri host-owned e passa dal
+/// `Guard` come la cestinatura.
+fn folder_create_spec() -> CommandSpec {
+    CommandSpec::new(FOLDER_CREATE, Text::key("host.folder.title"))
+        .describing(Text::key("host.folder.desc"))
+        .with_param(
+            ParamSpec::new("path", Text::key("host.param.folder"), ParamKind::Text).required(),
+        )
+        .with_scope(CommandScope::writing(CommandReach::Vault))
+}
+
+/// Lo snapshot completo offline (on-disk-layout, «Snapshot globale offline»).
+/// Sono dell'host perché chiudono e riaprono la sessione: nessun provider
+/// può farlo, e nessuno dei due passa con il vault aperto.
+fn snapshot_specs() -> [CommandSpec; 2] {
+    [
+        CommandSpec::new(SNAPSHOT_CREATE, Text::key("host.snapshot.create.title"))
+            .describing(Text::key("host.snapshot.create.desc"))
+            .with_param(
+                ParamSpec::new(
+                    "target",
+                    Text::key("host.param.snapshot_target"),
+                    ParamKind::Text,
+                )
+                .required(),
+            )
+            .with_scope(CommandScope::writing(CommandReach::Vault)),
+        CommandSpec::new(SNAPSHOT_APPLY, Text::key("host.snapshot.apply.title"))
+            .describing(Text::key("host.snapshot.apply.desc"))
+            .with_param(
+                ParamSpec::new(
+                    "source",
+                    Text::key("host.param.snapshot_source"),
+                    ParamKind::Text,
+                )
+                .required(),
+            )
+            .with_param(
+                ParamSpec::new(
+                    "backup",
+                    Text::key("host.param.snapshot_backup"),
+                    ParamKind::Text,
+                )
+                .required(),
+            )
+            .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
+    ]
+}
+
+/// Una cartella esterna **nuova** per uno snapshot: path assoluto, genitore
+/// esistente, nome libero e fuori dal vault (anche attraverso symlink del
+/// genitore, che si risolve prima del confronto).
+fn snapshot_destination(root: &Utf8Path, raw: &str) -> Result<Utf8PathBuf, PluginError> {
+    let path = Utf8Path::new(raw.trim());
+    if !path.is_absolute() {
+        return Err(PluginError::BadArgs(path_text(
+            "host.path.not_absolute",
+            path,
+        )));
+    }
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(PluginError::BadArgs(path_text("host.path.invalid", path)));
+    };
+    if !parent.is_dir() {
+        return Err(PluginError::NotFound(path_text(
+            "host.path.missing_parent",
+            parent,
+        )));
+    }
+    let destination = canonical(parent)?.join(name);
+    if std::fs::symlink_metadata(destination.as_std_path()).is_ok() {
+        return Err(PluginError::AlreadyExists(path_text(
+            "host.path.exists",
+            &destination,
+        )));
+    }
+    if destination.starts_with(root) {
+        return Err(PluginError::BadArgs(path_text(
+            "host.path.inside_vault",
+            &destination,
+        )));
+    }
+    Ok(destination)
+}
+
+/// Una frase del catalogo del core che nomina un path.
+fn path_text(key: &str, path: &Utf8Path) -> Text {
+    Text::message(key, vec![Arg::text("path", path.as_str())])
+}
+
+/// Uno snapshot da leggere: path assoluto di una cartella fuori dal vault.
+fn snapshot_source(root: &Utf8Path, raw: &str) -> Result<Utf8PathBuf, PluginError> {
+    let path = Utf8Path::new(raw.trim());
+    if !path.is_absolute() || !path.is_dir() {
+        return Err(PluginError::NotFound(path_text(
+            "host.snapshot.unreadable",
+            path,
+        )));
+    }
+    let source = canonical(path)?;
+    if source.starts_with(root) {
+        return Err(PluginError::BadArgs(path_text(
+            "host.path.inside_vault",
+            &source,
+        )));
+    }
+    Ok(source)
+}
+
+fn snapshot_error(error: fub_kernel::snapshot::SnapshotError) -> PluginError {
+    use fub_kernel::snapshot::SnapshotError as E;
+    let message = error.to_string().into();
+    match error {
+        E::BaseRevisionStale { .. } | E::AlreadyExists(_) | E::RecoveryNeeded { .. } => {
+            PluginError::Conflict(message)
+        }
+        E::FutureSchema { .. } => PluginError::Unserved(message),
+        E::Io { .. } => PluginError::Io(message),
+        _ => PluginError::BadArgs(message),
+    }
+}
+
+fn snapshot_host_error(error: SnapshotHostError) -> PluginError {
+    match error {
+        SnapshotHostError::Snapshot(error) => snapshot_error(error),
+        SnapshotHostError::Lifecycle(error) | SnapshotHostError::Reopen(error) => error,
+    }
+}
+
+/// Unica dichiarazione della porta host-owned: elencazione e dispatch usano
+/// questa stessa spec, mentre l'IPC Tauri resta `invoke_command`.
+fn os_trash_spec() -> CommandSpec {
+    CommandSpec::new(OS_TRASH_COMMAND, Text::key("host.trash_os.title"))
+        .describing(Text::key("host.trash_os.desc"))
+        .with_param(
+            ParamSpec::new("doc", Text::key("host.param.doc"), ParamKind::Document).required(),
+        )
+        .with_scope(CommandScope::writing(CommandReach::Document))
+}
+
+fn os_trash_outcome(receipt: OsTrashReceipt) -> CommandOutcome {
+    let via = match receipt.via {
+        TrashVia::Os => serde_json::json!({ "kind": "os" }),
+        TrashVia::InternalFallback { reason } => serde_json::json!({
+            "kind": "internal_fallback",
+            "reason": match reason {
+                FallbackReason::Unsupported => "unsupported",
+                FallbackReason::Unavailable => "unavailable",
+            }
+        }),
+    };
+    CommandOutcome::done().with_effect(CommandEffect::Custom {
+        ns: "fub.trash.os".into(),
+        payload: serde_json::json!({
+            "doc": receipt.id,
+            "destination": receipt.dest,
+            "bytes": receipt.size,
+            "via": via,
+        }),
+    })
+}
+
+/// `folder.create`: preflight del kernel e del `Guard` anche a vuoto, poi la
+/// creazione sotto il turno di scrittura con gli eventi drenati dopo.
+fn invoke_folder_create(
+    workspace: &Custody<Workspace>,
+    args: serde_json::Value,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, PluginError> {
+    folder_create_spec().validate_args(&args)?;
+    let name = args["path"].as_str().expect("spec validata");
+    let authorize = |ws: &Workspace, folder: &str| {
+        authorize_path(
+            &ws.granted_policy(crate::settings::CORE_ID),
+            Capability::VaultStructure,
+            folder,
+            || format!("creating folder `{folder}`"),
+        )
+    };
+    if mode.is_dry_run() {
+        let ws = workspace.read()?;
+        let folder = ws.check_new_folder(name).map_err(PluginError::from)?;
+        authorize(&ws, folder.as_str())?;
+        let plan = CommandPlan::of_edits(
+            Text::message(
+                "host.folder.plan",
+                vec![Arg::text("folder", folder.as_str())],
+            ),
+            Vec::new(),
+        );
+        return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
+    }
+    let made = with_event_drain(workspace, |ws| {
+        let folder = ws.check_new_folder(name).map_err(PluginError::from)?;
+        authorize(ws, folder.as_str())?;
+        ws.create_folder(folder.as_str()).map_err(PluginError::from)
+    })??;
+    Ok(CommandOutcome::notify(Text::message(
+        "host.folder.done",
+        vec![Arg::text("folder", made.as_str())],
+    ))
+    .with_effect(CommandEffect::Custom {
+        ns: "fub.folder.created".into(),
+        payload: serde_json::json!({ "path": made }),
+    }))
+}
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
 ///
@@ -133,6 +402,9 @@ pub struct VaultSession {
     /// rispettiva guardia. Quel banco non osserva il `Custody<Workspace>` privato
     /// e quindi non dimostra un rapporto di velocità del lock interno.
     workspace: Custody<Workspace>,
+    /// Rotte esterne esplicite, fuori dal lock workspace. Il turno serializza
+    /// add/remove, non trattiene mai il prestito durante stat del target.
+    mounts: Custody<MountRegistry>,
     /// **Chi possiede i bundle** di questo vault (§9.3): i plugin montati, in
     /// ordine di montaggio. Vive quanto la sessione perché è chi chiama
     /// `Plugin::deactivate` quando si chiude — il kernel quei plugin non li ha
@@ -397,6 +669,7 @@ impl<'a> OpeningTransaction<'a> {
         unread: Custody<Vec<UnreadDoc>>,
         indexed: Arc<(Mutex<bool>, std::sync::Condvar)>,
         #[cfg(feature = "versioning")] versions: Option<VersionStore>,
+        mounts: MountRegistry,
     ) {
         assert!(
             self.session.is_none() && self.watcher.is_some() && self.runner.is_some(),
@@ -412,6 +685,7 @@ impl<'a> OpeningTransaction<'a> {
             root,
             workspace: self.workspace.clone(),
             registry: self.registry.clone(),
+            mounts: Custody::new("i mount esterni", mounts),
             startup_diagnostics: std::mem::take(&mut self.startup_diagnostics),
             _format_resources: std::mem::take(&mut self.format_resources),
             unread,
@@ -558,22 +832,37 @@ impl Drop for ApplyClaim<'_> {
 /// che una chiusura vecchia possa rimuovere lo slot di un'operazione successiva.
 struct CloseClaim<'a> {
     sessions: &'a Custody<Sessions>,
+    resources: Option<&'a Custody<crate::resources::ResourceTable>>,
     root: Utf8PathBuf,
     token: Arc<ClosingToken>,
     session: Option<VaultSession>,
 }
 
 impl CloseClaim<'_> {
+    fn revoke_resources(&mut self) -> Result<(), PluginError> {
+        if let Some(resources) = self.resources.take() {
+            resources.write()?.drain_vault(self.root.as_str());
+        }
+        Ok(())
+    }
+
     fn close(mut self) -> Vec<PluginError> {
-        self.session
-            .take()
-            .expect("una pretesa di chiusura possiede la sessione")
-            .close()
+        let mut errors: Vec<_> = self.revoke_resources().err().into_iter().collect();
+        errors.extend(
+            self.session
+                .take()
+                .expect("una pretesa di chiusura possiede la sessione")
+                .close(),
+        );
+        errors
     }
 }
 
 impl Drop for CloseClaim<'_> {
     fn drop(&mut self) {
+        // Anche i claim non ancora visitati durante un unwind revocano le
+        // lease; Custody conserva la diagnosi dell'eventuale avvelenamento.
+        let _ = self.revoke_resources();
         let Ok(mut sessions) = self.sessions.write() else {
             return;
         };
@@ -623,6 +912,17 @@ impl Sessions {
             .map(|(root, _)| root)
     }
 
+    fn session(&self, root: &Utf8Path) -> Result<&VaultSession, PluginError> {
+        match self.slots.get(root) {
+            Some(SessionSlot::Open(session)) => Ok(session),
+            Some(SessionSlot::Closing(_)) => Err(closing_conflict(root)),
+            Some(SessionSlot::Applying(_)) => Err(applying_conflict(root)),
+            None => Err(PluginError::NotFound(
+                format!("Nessun vault aperto su {root}.").into(),
+            )),
+        }
+    }
+
     /// Questo vault è il più recente. `Ok(false)` se non è aperto; una
     /// chiusura ancora in corso resta invece un conflitto osservabile.
     fn make_current(&mut self, root: &Utf8Path) -> Result<bool, PluginError> {
@@ -643,8 +943,11 @@ impl Sessions {
 /// Chi monta Fub e tiene aperti i vault.
 pub struct Host {
     sessions: Custody<Sessions>,
+    /// Unica sequenza di handle: una riapertura non riutilizza identità vecchie.
+    resources: Custody<crate::resources::ResourceTable>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
+    os_trash: Arc<dyn OsTrashBackend>,
     startup_source: Option<Arc<dyn StartupSource>>,
     /// Sorgente dei provider di formato, interrogata prima del workspace.
     format_source: Option<Arc<dyn crate::FormatSource>>,
@@ -780,7 +1083,9 @@ impl Host {
         let watcher: Box<dyn WatcherFactory> = Box::new(crate::watcher::NoWatcher);
         Self {
             sessions: Custody::empty("le sessioni aperte"),
+            resources: Custody::empty("le risorse binarie aperte"),
             watcher,
+            os_trash: Arc::new(fub_kernel::FsStorage),
             sink: None,
             format_source: None,
             startup_source: None,
@@ -793,6 +1098,12 @@ impl Host {
             system_locale: Arc::new(SystemLocale::default()),
             levels: Arc::new(fub_kernel::log::Levels::default()),
         }
+    }
+
+    /// Sostituisce il solo backend OS; il writer interno resta quello del vault.
+    pub fn with_os_trash_backend(mut self, backend: Arc<dyn OsTrashBackend>) -> Self {
+        self.os_trash = backend;
+        self
     }
 
     /// Il locale di sistema condiviso: la shell ci scrive ciò che il sistema
@@ -843,6 +1154,11 @@ impl Host {
         self.view_states = view_states;
         self.config_dir = Some(dir.to_owned());
         self
+    }
+
+    /// Radice scelta per questa istanza, senza ricalcolare ambiente o directory utente.
+    pub fn configuration_root(&self) -> Option<&Utf8Path> {
+        self.config_dir.as_deref()
     }
 
     /// Sostituisce i livelli del log. Lo chiama chi ha installato il collettore
@@ -924,6 +1240,9 @@ impl Host {
         })
     }
     /// Invokes one plugin job through the runner's normal admission boundary.
+    ///
+    /// L'handle del runner viene clonato sotto il prestito delle sessioni; il
+    /// codice del bundle gira dopo che quel prestito è stato rilasciato.
     pub fn invoke_job(
         &self,
         vault: Option<&str>,
@@ -931,9 +1250,8 @@ impl Host {
         job: &str,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        self.in_session(vault, |session| {
-            session.runner.invoke_job(plugin, job, payload)
-        })
+        let runner = self.with_session(vault, |session| session.runner.invoker())?;
+        runner.invoke_job(plugin, job, payload)
     }
 
     /// Subscribes to events from the selected vault without exposing its bus.
@@ -1294,6 +1612,8 @@ impl Host {
         applying: Option<Arc<ApplyingToken>>,
     ) -> Result<VaultInfo, PluginError> {
         let root = root.to_owned();
+        let external_mounts =
+            MountRegistry::load(&fub_kernel::FsStorage, &root).map_err(PluginError::from)?;
         let startup = self
             .startup_source
             .as_ref()
@@ -1308,7 +1628,7 @@ impl Host {
         let StartupSnapshot {
             bundles: startup_bundles,
             formats: mut prepared_formats,
-            diagnostics: startup_diagnostics,
+            diagnostics: mut startup_diagnostics,
             validity: startup_validity,
             lease: startup_lease,
         } = match startup {
@@ -1325,6 +1645,15 @@ impl Host {
                 StartupSnapshot::new(Vec::new())
             }
         };
+        startup_diagnostics.extend(external_mounts.diagnostics().iter().map(|diagnostic| {
+            PluginError::Io(
+                format!(
+                    "mount {} disattivato ({}): {}",
+                    diagnostic.name, diagnostic.target, diagnostic.message
+                )
+                .into(),
+            )
+        }));
         for diagnostic in &startup_diagnostics {
             tracing::warn!(
                 target: "fub.host",
@@ -1370,6 +1699,8 @@ impl Host {
             Arc::clone(&self.system_locale),
             &self.levels,
             prepared_formats,
+            #[cfg(feature = "http-client")]
+            self.configuration_root(),
         )
         // Le tre cose che fanno fallire il montaggio sono un provider di
         // formato in conflitto con sé stesso, un bundle di core che non si
@@ -1532,6 +1863,7 @@ impl Host {
             indexed,
             #[cfg(feature = "versioning")]
             versions,
+            external_mounts,
         );
 
         // **Chi arriva secondo lascia cadere ciò che ha montato.** Il controllo
@@ -2215,6 +2547,139 @@ impl Host {
         self.if_key_remember_it(vault, key)
     }
 
+    /// Surface-specific frame support and restart metadata for user settings.
+    pub fn frame_capabilities(&self) -> crate::settings::FrameCapabilities {
+        crate::settings::frame_capabilities()
+    }
+
+    pub fn setting_requires_reopen(&self, key: &str) -> bool {
+        crate::settings::setting_requires_reopen(key)
+    }
+
+    /// Profile operations are user-only, never delegated to plugin commands.
+    pub fn settings_profiles(
+        &self,
+        vault: Option<&str>,
+        scope: fub_abi::settings::SettingScope,
+    ) -> Result<(String, Vec<String>), PluginError> {
+        match scope {
+            fub_abi::settings::SettingScope::Machine => Ok((
+                self.machine
+                    .active_profile()
+                    .map_err(|e| PluginError::Internal(e.into()))?,
+                self.machine
+                    .profiles()
+                    .map_err(|e| PluginError::Internal(e.into()))?,
+            )),
+            fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
+                let ws = session.workspace.read()?;
+                Ok((ws.active_settings_profile()?, ws.settings_profiles()?))
+            }),
+        }
+    }
+
+    pub fn export_settings_profile(
+        &self,
+        vault: Option<&str>,
+        scope: fub_abi::settings::SettingScope,
+        name: &str,
+    ) -> Result<String, PluginError> {
+        match scope {
+            fub_abi::settings::SettingScope::Machine => self
+                .machine
+                .export_profile(name)
+                .map_err(|e| PluginError::BadArgs(e.into())),
+            fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
+                session.workspace.read()?.export_settings_profile(name)
+            }),
+        }
+    }
+
+    pub fn import_settings_profile(
+        &self,
+        vault: Option<&str>,
+        scope: fub_abi::settings::SettingScope,
+        json: &str,
+    ) -> Result<(), PluginError> {
+        match scope {
+            fub_abi::settings::SettingScope::Machine => self
+                .machine
+                .import_profile(json)
+                .map_err(|e| PluginError::BadArgs(e.into())),
+            fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
+                with_event_drain(&session.workspace, |ws| ws.import_settings_profile(json))?
+            }),
+        }
+    }
+
+    pub fn duplicate_settings_profile(
+        &self,
+        vault: Option<&str>,
+        scope: fub_abi::settings::SettingScope,
+        source: &str,
+        name: &str,
+    ) -> Result<(), PluginError> {
+        match scope {
+            fub_abi::settings::SettingScope::Machine => self
+                .machine
+                .duplicate_profile(source, name)
+                .map_err(|e| PluginError::BadArgs(e.into())),
+            fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
+                with_event_drain(&session.workspace, |ws| {
+                    ws.duplicate_settings_profile(source, name)
+                })?
+            }),
+        }
+    }
+
+    pub fn switch_settings_profile(
+        &self,
+        vault: Option<&str>,
+        scope: fub_abi::settings::SettingScope,
+        name: &str,
+    ) -> Result<(), PluginError> {
+        match scope {
+            fub_abi::settings::SettingScope::Machine => {
+                self.machine
+                    .switch_profile(name)
+                    .map_err(|e| PluginError::BadArgs(e.into()))?;
+                // A profile can alter any machine key; subscribers must reread the index.
+                for entry in self.machine.entries() {
+                    self.tell_observer(&entry.spec.key)?;
+                }
+                Ok(())
+            }
+            fub_abi::settings::SettingScope::Vault => {
+                self.in_session(vault, |session| {
+                    with_event_drain(&session.workspace, |ws| ws.switch_settings_profile(name))?
+                })?;
+                self.remember_seen_keys(vault)
+            }
+        }
+    }
+
+    pub fn reset_settings_profile(
+        &self,
+        vault: Option<&str>,
+        scope: fub_abi::settings::SettingScope,
+        name: &str,
+    ) -> Result<(), PluginError> {
+        match scope {
+            fub_abi::settings::SettingScope::Machine => {
+                self.machine
+                    .reset_profile(name)
+                    .map_err(|e| PluginError::BadArgs(e.into()))?;
+                for entry in self.machine.entries() {
+                    self.tell_observer(&entry.spec.key)?;
+                }
+                Ok(())
+            }
+            fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
+                with_event_drain(&session.workspace, |ws| ws.reset_settings_profile(name))?
+            }),
+        }
+    }
+
     /// Le impostazioni **che esistono senza un vault**: le righe del livello
     /// macchina, risolte (§16.3).
     ///
@@ -2477,6 +2942,7 @@ impl Host {
         // runner e provider terminano tutti fuori dal lock delle sessioni.
         Ok(CloseClaim {
             sessions: &self.sessions,
+            resources: Some(&self.resources),
             root,
             token,
             session: Some(session),
@@ -2523,6 +2989,7 @@ impl Host {
             .into_iter()
             .map(|(root, token, session)| CloseClaim {
                 sessions: &self.sessions,
+                resources: Some(&self.resources),
                 root,
                 token,
                 session: Some(session),
@@ -2601,14 +3068,7 @@ impl Host {
                 .cloned()
                 .ok_or_else(|| PluginError::NotFound("Nessun vault aperto.".into()))?,
         };
-        match sessions.slots.get(&key) {
-            Some(SessionSlot::Open(session)) => Ok(f(session)),
-            Some(SessionSlot::Closing(_)) => Err(closing_conflict(&key)),
-            Some(SessionSlot::Applying(_)) => Err(applying_conflict(&key)),
-            None => Err(PluginError::NotFound(
-                format!("Nessun vault aperto su {key}.").into(),
-            )),
-        }
+        Ok(f(sessions.session(&key)?))
     }
 
     /// Come [`with_session`](Host::with_session), per chi **dentro** la sessione
@@ -2794,6 +3254,42 @@ impl Host {
         self.write_document_in(workspace, id, source, base)
     }
 
+    /// Deposita byte grezzi: creazione esclusiva oppure CAS della revisione raw.
+    /// Parser, hook e indici attraversano il loro confine senza custodia.
+    pub fn write_document_bytes(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            ws.prepare_document_bytes_write(id, expected)
+                .map_err(PluginError::from)?
+        };
+        let model = prepared.parse(bytes).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = JobHost::new(workspace.clone(), owner);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_bytes_write(prepared, bytes, model, before_write)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_write_deferred(pending)
+        };
+        finish_events(&workspace, deferred)
+    }
+
     /// Scrive sul vault già risolto dal chiamante. Le operazioni composte
     /// (come il ripristino di una versione) usano questa porta per non
     /// risolvere due volte il vault corrente fra lettura e scrittura.
@@ -2904,7 +3400,326 @@ impl Host {
     }
 
     pub fn commands(&self, vault: Option<&str>) -> Result<Vec<CommandSpec>, PluginError> {
-        self.read_workspace(vault, |workspace| Ok(workspace.commands()))
+        self.read_workspace(vault, |workspace| {
+            let mut specs = workspace.commands();
+            let mounts = mount_specs();
+            specs.retain(|spec| {
+                spec.id != OS_TRASH_COMMAND
+                    && spec.id != FOLDER_CREATE
+                    && !mounts.iter().any(|own| own.id == spec.id)
+            });
+            specs.retain(|spec| spec.id != SNAPSHOT_CREATE && spec.id != SNAPSHOT_APPLY);
+            let mut own = vec![os_trash_spec(), folder_create_spec()];
+            own.extend(mounts);
+            own.extend(snapshot_specs());
+            // I comandi dell'host parlano col catalogo del core, nella lingua di
+            // chi guarda, come quelli che passano dal registro.
+            for spec in &mut own {
+                workspace.localize_as(crate::settings::CORE_ID, spec);
+            }
+            specs.extend(own);
+            Ok(specs)
+        })
+    }
+    /// Tabella tipizzata, aggiornata dal documento autorevole prima di ogni lettura.
+    pub fn mount_routes(&self, vault: Option<&str>) -> Result<Vec<MountRoute>, PluginError> {
+        let mounts = self.with_session(vault, |session| session.mounts.clone())?;
+        let _turn = mounts.write_turn();
+        let root = mounts.read()?.root().to_owned();
+        let fresh =
+            MountRegistry::load(&fub_kernel::FsStorage, &root).map_err(PluginError::from)?;
+        let routes = fresh.routing_table();
+        *mounts.write()? = fresh;
+        Ok(routes)
+    }
+
+    fn invoke_mount_command(
+        &self,
+        mounts: Custody<MountRegistry>,
+        spec: CommandSpec,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> Result<CommandOutcome, PluginError> {
+        spec.validate_args(&args)?;
+        let _turn = mounts.write_turn();
+        let root = mounts.read()?.root().to_owned();
+        let storage = fub_kernel::FsStorage;
+        let mut fresh = MountRegistry::load(&storage, &root).map_err(PluginError::from)?;
+        match spec.id.as_str() {
+            MOUNT_ADD => {
+                let name = args["name"].as_str().expect("spec validata");
+                let target = Utf8Path::new(args["target"].as_str().expect("spec validata"));
+                let namespace = args["namespace"].as_str().expect("spec validata");
+                fresh
+                    .mount(&storage, name, target, namespace)
+                    .map_err(PluginError::from)?;
+                if mode.is_dry_run() {
+                    let summary = Text::message(
+                        "host.mount.plan.add",
+                        vec![
+                            Arg::text("name", name),
+                            Arg::text("target", target.as_str()),
+                            Arg::text("namespace", namespace),
+                        ],
+                    );
+                    return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(
+                        CommandPlan::of_edits(summary, Vec::new()),
+                    )));
+                }
+                fresh.persist_add(&storage, name).map_err(mount_io_error)?;
+                fresh = MountRegistry::load(&storage, &root).map_err(PluginError::from)?;
+            }
+            MOUNT_REMOVE => {
+                let name = args["name"].as_str().expect("spec validata");
+                if mode.is_dry_run() {
+                    if !fresh.is_configured(name) {
+                        return Err(PluginError::NotFound(Text::message(
+                            "host.mount.absent",
+                            vec![Arg::text("name", name)],
+                        )));
+                    }
+                    let summary =
+                        Text::message("host.mount.plan.remove", vec![Arg::text("name", name)]);
+                    return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(
+                        CommandPlan::of_edits(summary, Vec::new()),
+                    )));
+                }
+                fresh
+                    .persist_remove(&storage, name)
+                    .map_err(mount_io_error)?;
+                fresh = MountRegistry::load(&storage, &root).map_err(PluginError::from)?;
+            }
+            MOUNT_LIST => {}
+            _ => unreachable!("dispatch scelto dalle spec mount"),
+        }
+        let routes = fresh.routing_table();
+        let diagnostics = fresh.diagnostics().to_vec();
+        *mounts.write()? = fresh;
+        Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
+            ns: "fub.mount.routes".into(),
+            payload: serde_json::json!({
+                "routes": routes,
+                "diagnostics": diagnostics,
+            }),
+        }))
+    }
+
+    /// Crea o applica uno snapshot completo. Il vault si chiude prima di
+    /// toccare il disco e si riapre **comunque** alla fine, anche dopo un
+    /// errore: l'apertura esegue la recovery di ciò che un guasto a metà ha
+    /// lasciato. Tutto l'I/O offline avviene sotto il claim `Applying`, così
+    /// nessun'altra apertura della stessa radice può infilarsi in mezzo.
+    fn invoke_snapshot_command(
+        &self,
+        root: Utf8PathBuf,
+        spec: CommandSpec,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> Result<CommandOutcome, PluginError> {
+        spec.validate_args(&args)?;
+        let text = |key: &str| args[key].as_str().expect("spec validata").to_owned();
+        if spec.id == SNAPSHOT_CREATE {
+            let target = snapshot_destination(&root, &text("target"))?;
+            if mode.is_dry_run() {
+                let summary = Text::message(
+                    "host.snapshot.plan.create",
+                    vec![
+                        Arg::text("root", root.as_str()),
+                        Arg::text("target", target.as_str()),
+                    ],
+                );
+                return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(
+                    CommandPlan::of_edits(summary, Vec::new()),
+                )));
+            }
+            let faults = self.close_vault(&root)?;
+            for fault in faults {
+                tracing::warn!(target: "fub.snapshot", "chiusura prima dello snapshot: {fault}");
+            }
+            let captured = (|| {
+                let _claim = self.claim_snapshot(&root).map_err(snapshot_host_error)?;
+                let bundle =
+                    fub_kernel::snapshot::SnapshotBundle::capture(&root).map_err(snapshot_error)?;
+                bundle.write_to(&target).map_err(snapshot_error)?;
+                Ok::<usize, PluginError>(bundle.len())
+            })();
+            self.open(&root)?;
+            let entries = captured?;
+            return Ok(CommandOutcome::notify(Text::message(
+                "host.snapshot.done.create",
+                vec![
+                    Arg::text("target", target.as_str()),
+                    Arg::int("count", entries as i64),
+                ],
+            ))
+            .with_effect(CommandEffect::Custom {
+                ns: "fub.vault.snapshot".into(),
+                payload: serde_json::json!({ "target": target, "entries": entries }),
+            }));
+        }
+
+        let source = snapshot_source(&root, &text("source"))?;
+        let backup = snapshot_destination(&root, &text("backup"))?;
+        if source.starts_with(&backup) || backup.starts_with(&source) {
+            return Err(PluginError::BadArgs(Text::key("host.snapshot.distinct")));
+        }
+        // La lettura valida manifest, digest e payload prima di chiudere
+        // qualsiasi cosa: uno snapshot rotto non costa una chiusura del vault.
+        let bundle =
+            fub_kernel::snapshot::SnapshotBundle::read_from(&source).map_err(snapshot_error)?;
+        if mode.is_dry_run() {
+            let summary = Text::message(
+                "host.snapshot.plan.apply",
+                vec![
+                    Arg::text("root", root.as_str()),
+                    Arg::int("count", bundle.len() as i64),
+                    Arg::text("source", source.as_str()),
+                    Arg::text("backup", backup.as_str()),
+                ],
+            );
+            return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(
+                CommandPlan::of_edits(summary, Vec::new()),
+            )));
+        }
+        let faults = self.close_vault(&root)?;
+        for fault in faults {
+            tracing::warn!(target: "fub.snapshot", "chiusura prima del ripristino: {fault}");
+        }
+        let applied = (|| {
+            let claim = self.claim_snapshot(&root).map_err(snapshot_host_error)?;
+            let current =
+                fub_kernel::snapshot::SnapshotBundle::capture(&root).map_err(snapshot_error)?;
+            current.write_to(&backup).map_err(snapshot_error)?;
+            let rebased = bundle
+                .rebased(current.base_revision().clone())
+                .map_err(snapshot_error)?;
+            let report =
+                fub_kernel::snapshot::apply_snapshot(&root, &rebased).map_err(snapshot_error)?;
+            self.mounts_after_apply(&root, claim.token())?;
+            drop(claim);
+            Ok::<_, PluginError>(report)
+        })();
+        let report = match applied {
+            Ok(report) => {
+                self.become_current(&root)?;
+                report
+            }
+            Err(error) => {
+                // Riapre per la via normale, che completa o annulla ciò che il
+                // record persistente dice: l'errore resta quello del ripristino.
+                if let Err(reopen) = self.open(&root) {
+                    tracing::error!(target: "fub.snapshot", "riapertura dopo errore: {reopen}");
+                }
+                return Err(error);
+            }
+        };
+        Ok(CommandOutcome::notify(Text::message(
+            "host.snapshot.done.apply",
+            vec![
+                Arg::text("source", source.as_str()),
+                Arg::int("count", report.entries as i64),
+                Arg::text("backup", backup.as_str()),
+            ],
+        ))
+        .with_effect(CommandEffect::Custom {
+            ns: fub_abi::ui::VAULT_RESTORED_NS.into(),
+            payload: serde_json::json!({
+                "root": root,
+                "entries": report.entries,
+                "backup": backup,
+            }),
+        }))
+    }
+
+    fn invoke_os_trash_command(
+        &self,
+        workspace: &Custody<Workspace>,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> Result<CommandOutcome, PluginError> {
+        let spec = os_trash_spec();
+        spec.validate_args(&args)?;
+        let id = args
+            .get("doc")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| PluginError::BadArgs("doc obbligatorio".into()))?;
+        let id = fenced_doc_id(&DocId::new(id))?;
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            authorize_path(
+                &ws.granted_policy(crate::settings::CORE_ID),
+                Capability::VaultStructure,
+                id.as_str(),
+                || format!("trashing `{id}`"),
+            )?;
+            if mode.is_dry_run() {
+                return Ok(CommandOutcome::done()
+                    .with_effect(CommandEffect::Plan(CommandPlan::default().with_doc(id))));
+            }
+            ws.prepare_document_deletion(&id)
+                .map_err(PluginError::from)?
+        };
+        let completed = prepared
+            .invoke_os(self.os_trash.as_ref())
+            .map_err(PluginError::from)?;
+        let committed = {
+            let mut ws = workspace.write()?;
+            ws.commit_os_document_deletion(completed)
+                .map_err(|failure| *failure)
+        };
+        let committed = match committed {
+            Ok(committed) => committed,
+            Err((error, completed)) => {
+                completed.rollback().map_err(PluginError::from)?;
+                return Err(PluginError::from(error));
+            }
+        };
+        let finalized = committed.invoke();
+        let receipt = with_event_drain(workspace, |ws| ws.finish_os_document_deletion(finalized))?
+            .map_err(|failure| {
+                let (error, _) = *failure;
+                error
+            })?;
+        Ok(os_trash_outcome(receipt))
+    }
+
+    /// L'esito (o l'errore) di un comando dell'host nella lingua di chi guarda,
+    /// col catalogo del core. Non **aspetta** il workspace: `mount.*` deve
+    /// finire anche mentre un altro writer lo tiene, quindi se il lock non è
+    /// libero la frase esce nella lingua predefinita del catalogo, mai come
+    /// chiave grezza. Dopo uno snapshot la sessione è quella riaperta.
+    fn localized_host_result(
+        &self,
+        vault: Option<&str>,
+        mut result: Result<CommandOutcome, PluginError>,
+    ) -> Result<CommandOutcome, PluginError> {
+        let workspace = self
+            .with_session(vault, |session| session.workspace.clone())
+            .ok();
+        match workspace
+            .as_ref()
+            .and_then(|workspace| workspace.try_read())
+        {
+            Some(ws) => match &mut result {
+                Ok(outcome) => ws.localize_as(crate::settings::CORE_ID, outcome),
+                Err(error) => ws.localize_as(crate::settings::CORE_ID, error),
+            },
+            None => {
+                let catalogs = crate::settings::core_catalog_assembled();
+                let locale = fub_abi::locale::Locale::default();
+                let strings = fub_abi::text::Strings::new(
+                    &catalogs,
+                    crate::settings::CORE_DEFAULT_LOCALE,
+                    &locale,
+                );
+                match &mut result {
+                    Ok(outcome) => strings.localize(outcome),
+                    Err(error) => strings.localize(error),
+                }
+            }
+        }
+        result
     }
 
     pub fn invoke_user_command(
@@ -2916,7 +3731,26 @@ impl Host {
     ) -> Result<CommandOutcome, PluginError> {
         // La sessione si risolve prima e si conserva soltanto la Custody: il
         // registro delle sessioni non attraversa codice del provider.
-        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        if let Some(spec) = snapshot_specs().into_iter().find(|spec| spec.id == command) {
+            let root = self.with_session(vault, |session| session.root.clone())?;
+            let result = self.invoke_snapshot_command(root, spec, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        let (workspace, mounts) = self.with_session(vault, |session| {
+            (session.workspace.clone(), session.mounts.clone())
+        })?;
+        if let Some(spec) = mount_specs().into_iter().find(|spec| spec.id == command) {
+            let result = self.invoke_mount_command(mounts, spec, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if command == os_trash_spec().id {
+            let result = self.invoke_os_trash_command(&workspace, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if command == FOLDER_CREATE {
+            let result = invoke_folder_create(&workspace, args, mode);
+            return self.localized_host_result(vault, result);
+        }
         // Il turno serializza gli altri writer ma **non** è il RwLock del
         // workspace: fra prepare e finalize i reader possono entrare, e il
         // callback può rientrare sullo stesso thread per singola capacità.
@@ -2997,6 +3831,11 @@ impl Host {
     ) -> Result<Custody<Workspace>, PluginError> {
         self.with_session(vault, |session| session.workspace.clone())
     }
+
+    #[cfg(test)]
+    pub(crate) fn debug_sessions_write_available(&self) -> bool {
+        self.sessions.try_write().is_some()
+    }
     pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
         self.with_session(vault, |s| s.root.clone())
     }
@@ -3060,30 +3899,6 @@ impl Host {
         read_version_with_workspace(workspace, store, id, ts)
     }
 
-    /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
-    /// grafo, indici ed eventi come ogni altra modifica — e siccome passa dagli
-    /// eventi, genera a sua volta uno snapshot. Il ripristino è annullabile.
-    #[cfg(feature = "versioning")]
-    pub fn restore_version(
-        &self,
-        vault: Option<&str>,
-        id: &DocId,
-        ts: u64,
-    ) -> Result<(), PluginError> {
-        let (workspace, store) = self.in_session(vault, |session| {
-            let store = session
-                .versions
-                .clone()
-                .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))?;
-            Ok((session.workspace.clone(), store))
-        })?;
-        let source = read_version_with_workspace(workspace.clone(), store, id, ts)?;
-        // **Detta**, come l'importer (§18.1): un ripristino non discende dal
-        // testo che c'è adesso — lo sostituisce **apposta**.
-        self.write_document_in(workspace, id, &source, WriteBase::Dictated)
-            .map(|_| ())
-    }
-
     // --- organizzazione del vault (§11.3) ----------------------------------
     //
     // **Leggerla non è qui**: passa da `query_index` (`IndexQuery::Organization`),
@@ -3134,6 +3949,83 @@ impl Host {
     ) -> Result<(), PluginError> {
         let workspace = self.with_session(vault, |session| session.workspace.clone())?;
         update_organization(&workspace, |store| store.set_order(folder, names))
+    }
+}
+
+impl crate::resources::ResourceHost for Host {
+    fn resource_open(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<crate::resources::ResourceDescriptor, PluginError> {
+        self.in_session(vault, |session| {
+            let prepared = {
+                let workspace = session.workspace.read()?;
+                workspace
+                    .prepare_resource_open(id)
+                    .map_err(PluginError::from)?
+            };
+            let lease = prepared.invoke().map_err(PluginError::from)?;
+            let id = DocId::new(lease.path.clone());
+            let mime = crate::resources::resource_mime_or_octet(&id).to_owned();
+            self.resources
+                .write()?
+                .open(session.root.to_string(), id, lease, mime)
+        })
+    }
+
+    fn resource_read(
+        &self,
+        handle: crate::resources::ResourceHandle,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, PluginError> {
+        // Ordine unico Sessions -> Resources. Il registro delle sessioni tiene
+        // viva l'apertura; né workspace né tabella risorse attraversano l'I/O.
+        let sessions = self.sessions.read()?;
+        let lease = self.resources.read()?.lease(handle)?;
+        let session = sessions.session(&lease.root)?;
+        let prepared = {
+            let workspace = session.workspace.read()?;
+            workspace
+                .prepare_resource_read(lease, offset, crate::resources::clamp_chunk(len) as usize)
+                .map_err(PluginError::from)?
+        };
+        let bytes = prepared.invoke().map_err(PluginError::from)?;
+        // resource_close può revocare anche una lettura in volo. L'handle non
+        // si riusa: una riapertura non può rendere valido questo risultato.
+        if self.resources.read()?.resolve(handle).is_none() {
+            return Err(PluginError::BadArgs(
+                format!("resource handle `{}` is not open", handle.0).into(),
+            ));
+        }
+        Ok(bytes)
+    }
+
+    fn resource_descriptor(
+        &self,
+        handle: crate::resources::ResourceHandle,
+    ) -> Result<Option<crate::resources::ResourceDescriptor>, PluginError> {
+        Ok(self.resources.read()?.descriptor(handle))
+    }
+
+    fn resource_close(&self, handle: crate::resources::ResourceHandle) -> Result<(), PluginError> {
+        self.resources.write()?.close(handle);
+        Ok(())
+    }
+}
+
+impl crate::resources::ResourceWrite for Host {
+    fn resource_write(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<crate::resources::ResourceWriteReceipt, PluginError> {
+        let id = doc_id(id.as_str())?;
+        let revision = self.write_document_bytes(vault, &id, bytes, expected)?;
+        Ok(crate::resources::ResourceWriteReceipt { id, revision })
     }
 }
 
@@ -3640,7 +4532,7 @@ mod tests {
         let id = DocId::new("Nota.md");
         workspace
             .with_host(VERSIONING_ID, |host| {
-                store.snapshot(&id, "# Nota\n\nversione\n", host)
+                store.snapshot(&id, b"# Nota\n\nversione\n", host)
             })
             .expect("the seed version is stored");
         let ts = store.list(&id).first().expect("the seed version exists").ts;
@@ -3825,5 +4717,621 @@ mod independent_service_lock_tests {
             service.is_shutdown(),
             "dropping the owner explicitly shuts down the shared service"
         );
+    }
+}
+
+#[cfg(test)]
+mod os_trash_command_tests {
+    use super::*;
+    use fub_kernel::JournalOp;
+
+    struct FakeTrash {
+        destination: Utf8PathBuf,
+        unsupported: bool,
+        workspace: std::sync::OnceLock<Custody<Workspace>>,
+    }
+
+    impl OsTrashBackend for FakeTrash {
+        fn move_file_to_os_trash(&self, from: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+            assert!(
+                self.workspace
+                    .get()
+                    .expect("workspace aperto")
+                    .try_read()
+                    .is_some(),
+                "nessun prestito workspace attraversa il backend OS"
+            );
+            if self.unsupported {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "non supportato",
+                ));
+            }
+            std::fs::rename(from, &self.destination)?;
+            Ok(self.destination.clone())
+        }
+    }
+
+    fn fixture(unsupported: bool) -> (tempfile::TempDir, tempfile::TempDir, Host) {
+        let vault = tempfile::tempdir().expect("vault");
+        let os = tempfile::tempdir().expect("cestino OS");
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).expect("utf8");
+        let destination = Utf8PathBuf::from_path_buf(os.path().join("Nota.md")).expect("utf8");
+        std::fs::write(root.join("Nota.md"), b"# bytes preziosi\n").expect("nota");
+        let backend = Arc::new(FakeTrash {
+            destination,
+            unsupported,
+            workspace: std::sync::OnceLock::new(),
+        });
+        let host = Host::without_watcher().with_os_trash_backend(backend.clone());
+        host.open(&root).expect("vault aperto");
+        host.wait_indexed(None).expect("indicizzazione");
+        backend
+            .workspace
+            .set(
+                host.with_session(None, |s| s.workspace.clone())
+                    .expect("sessione"),
+            )
+            .ok()
+            .expect("unica sessione");
+        (vault, os, host)
+    }
+
+    fn invoke(host: &Host) -> serde_json::Value {
+        let spec = host
+            .commands(None)
+            .expect("registro")
+            .into_iter()
+            .find(|spec| spec.id == OS_TRASH_COMMAND)
+            .expect("comando OS elencato");
+        assert_eq!(spec.params.len(), 1);
+        let outcome = host
+            .invoke_user_command(
+                None,
+                OS_TRASH_COMMAND,
+                serde_json::json!({ "doc": "Nota.md" }),
+                InvokeMode::Apply,
+            )
+            .expect("cestina");
+        let CommandEffect::Custom { ns, payload } = outcome.effect else {
+            panic!("l'esito deve essere tipizzato")
+        };
+        assert_eq!(ns, "fub.trash.os");
+        payload
+    }
+
+    #[test]
+    fn p01_os_trash_does_not_run_internal_trash_after_success() {
+        let (vault, os, host) = fixture(false);
+        let outcome = invoke(&host);
+        assert_eq!(outcome["via"]["kind"], "os");
+        assert_eq!(
+            std::fs::read(os.path().join("Nota.md")).unwrap(),
+            b"# bytes preziosi\n"
+        );
+        assert!(!vault.path().join("Nota.md").exists());
+        assert!(
+            host.with_session(None, |s| s.workspace.read().unwrap().list_trash().unwrap())
+                .unwrap()
+                .is_empty(),
+            "nessuna copia fittizia nel cestino interno"
+        );
+        let journal = host.journal(None).expect("registro");
+        assert!(journal.records.iter().any(|r| matches!(
+            &r.op,
+            JournalOp::TrashedOs { doc, .. } if doc.as_str() == "Nota.md"
+        )));
+    }
+
+    #[test]
+    fn p01_unsupported_backend_uses_full_internal_trash() {
+        let (vault, _os, host) = fixture(true);
+        let outcome = invoke(&host);
+        assert_eq!(outcome["via"]["kind"], "internal_fallback");
+        assert_eq!(outcome["via"]["reason"], "unsupported");
+        let trashed = host
+            .with_session(None, |s| s.workspace.read().unwrap().list_trash().unwrap())
+            .unwrap();
+        assert_eq!(trashed.len(), 1);
+        assert_eq!(trashed[0].original.as_str(), "Nota.md");
+        assert_eq!(
+            std::fs::read(vault.path().join(trashed[0].id.as_str())).unwrap(),
+            b"# bytes preziosi\n"
+        );
+        let journal = host.journal(None).expect("registro");
+        assert!(journal.records.iter().any(|r| matches!(
+            &r.op,
+            JournalOp::Trashed { doc, .. } if doc.as_str() == "Nota.md"
+        )));
+    }
+}
+
+#[cfg(test)]
+mod mount_command_tests {
+    use super::*;
+
+    #[test]
+    fn registry_add_list_remove_preserves_external_file_and_survives_reopen() {
+        let vault = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        let target = Utf8PathBuf::from_path_buf(external.path().to_path_buf()).unwrap();
+        let file = target.join("do-not-delete.txt");
+        std::fs::write(&file, b"mine").unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        let specs = host.commands(None).unwrap();
+        for id in [MOUNT_ADD, MOUNT_LIST, MOUNT_REMOVE] {
+            assert!(specs.iter().any(|spec| spec.id == id), "{id} non elencato");
+        }
+        assert!(host.mount_routes(None).unwrap().is_empty());
+        let args =
+            serde_json::json!({ "name": "archivio", "target": target, "namespace": "external" });
+        let plan = host
+            .invoke_user_command(None, MOUNT_ADD, args.clone(), InvokeMode::DryRun)
+            .unwrap();
+        let CommandEffect::Plan(plan) = plan.effect else {
+            panic!("la prova a vuoto deve dare un piano")
+        };
+        assert!(
+            plan.summary.to_string().contains("archivio"),
+            "il piano dice cosa collega: {:?}",
+            plan.summary
+        );
+        assert!(host.mount_routes(None).unwrap().is_empty());
+        let added = host
+            .invoke_user_command(None, MOUNT_ADD, args, InvokeMode::Apply)
+            .unwrap();
+        assert!(matches!(added.effect, CommandEffect::Custom { .. }));
+        assert_eq!(host.mount_routes(None).unwrap()[0].namespace, "external");
+        let listed = host
+            .invoke_user_command(None, MOUNT_LIST, serde_json::Value::Null, InvokeMode::Apply)
+            .unwrap();
+        let CommandEffect::Custom { ns, payload } = listed.effect else {
+            panic!("lista non tipizzata")
+        };
+        assert_eq!(ns, "fub.mount.routes");
+        assert_eq!(payload["routes"][0]["name"], "archivio");
+        host.close_vault(&root).unwrap();
+        host.open(&root).unwrap();
+        assert_eq!(host.mount_routes(None).unwrap()[0].target, target);
+        host.invoke_user_command(
+            None,
+            MOUNT_REMOVE,
+            serde_json::json!({ "name": "archivio" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert!(host.mount_routes(None).unwrap().is_empty());
+        assert_eq!(std::fs::read(file).unwrap(), b"mine");
+    }
+
+    #[test]
+    fn mounting_external_path_does_not_take_workspace_lock() {
+        let vault = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        let target = Utf8PathBuf::from_path_buf(external.path().to_path_buf()).unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        let workspace = host
+            .with_session(None, |session| session.workspace.clone())
+            .unwrap();
+        let guard = workspace.write().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| {
+            let worker = scope.spawn(|| {
+                let result = host.invoke_user_command(
+                    None, MOUNT_ADD,
+                    serde_json::json!({ "name": "remote", "target": target, "namespace": "remote" }),
+                    InvokeMode::Apply,
+                );
+                tx.send(result).unwrap();
+            });
+            let completed = rx.recv_timeout(std::time::Duration::from_secs(3));
+            drop(guard);
+            worker.join().unwrap();
+            assert!(completed.expect("mount attende il lock workspace").is_ok());
+        });
+    }
+
+    #[test]
+    fn unavailable_mount_degrades_to_diagnostic_and_remains_removable() {
+        let vault = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        let target = Utf8PathBuf::from_path_buf(external.path().join("usb")).unwrap();
+        std::fs::create_dir(&target).unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        host.invoke_user_command(
+            None,
+            MOUNT_ADD,
+            serde_json::json!({ "name": "usb", "target": target, "namespace": "usb" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        host.close_vault(&root).unwrap();
+        std::fs::remove_dir(&target).unwrap();
+
+        host.open(&root)
+            .expect("un mount scollegato non blocca il vault");
+        assert!(host.mount_routes(None).unwrap().is_empty());
+        assert!(host
+            .startup_diagnostics(None)
+            .unwrap()
+            .iter()
+            .any(|diagnostic| diagnostic.to_string().contains("mount usb disattivato")));
+        let plan = host
+            .invoke_user_command(
+                None,
+                MOUNT_REMOVE,
+                serde_json::json!({ "name": "usb" }),
+                InvokeMode::DryRun,
+            )
+            .unwrap();
+        assert!(matches!(plan.effect, CommandEffect::Plan(_)));
+        host.invoke_user_command(
+            None,
+            MOUNT_REMOVE,
+            serde_json::json!({ "name": "usb" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert!(host
+            .startup_diagnostics(None)
+            .unwrap()
+            .iter()
+            .any(|diagnostic| { diagnostic.to_string().contains("mount usb disattivato") }));
+        let list = host
+            .invoke_user_command(None, MOUNT_LIST, serde_json::Value::Null, InvokeMode::Apply)
+            .unwrap();
+        let CommandEffect::Custom { payload, .. } = list.effect else {
+            panic!("lista non tipizzata")
+        };
+        assert_eq!(payload["diagnostics"], serde_json::json!([]));
+    }
+}
+
+#[cfg(test)]
+mod folder_create_command_tests {
+    use super::*;
+    use fub_abi::traits::{IndexQuery, IndexResult};
+
+    fn folders(host: &Host) -> Vec<String> {
+        let IndexResult::Folders(page) = host
+            .query_index(
+                None,
+                IndexQuery::Folders {
+                    under: None,
+                    page: None,
+                },
+            )
+            .unwrap()
+        else {
+            panic!("cartelle attese")
+        };
+        page.items.into_iter().map(|folder| folder.path).collect()
+    }
+
+    #[test]
+    fn dry_run_plans_apply_creates_and_a_taken_name_conflicts() {
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        std::fs::write(root.join("nota.md"), b"testo").unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        assert!(host
+            .commands(None)
+            .unwrap()
+            .iter()
+            .any(|spec| spec.id == FOLDER_CREATE));
+
+        let args = serde_json::json!({ "path": "Progetti/2026" });
+        let plan = host
+            .invoke_user_command(None, FOLDER_CREATE, args.clone(), InvokeMode::DryRun)
+            .unwrap();
+        assert!(matches!(plan.effect, CommandEffect::Plan(_)));
+        assert!(
+            !root.join("Progetti").exists(),
+            "la prova a vuoto non scrive"
+        );
+
+        let made = host
+            .invoke_user_command(None, FOLDER_CREATE, args.clone(), InvokeMode::Apply)
+            .unwrap();
+        let CommandEffect::Custom { ns, payload } = made.effect else {
+            panic!("esito non tipizzato")
+        };
+        assert_eq!(ns, "fub.folder.created");
+        assert_eq!(payload["path"], "Progetti/2026");
+        assert!(root.join("Progetti/2026").is_dir());
+        assert_eq!(folders(&host), vec!["Progetti", "Progetti/2026"]);
+
+        for taken in [args, serde_json::json!({ "path": "nota.md" })] {
+            for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+                let err = host
+                    .invoke_user_command(None, FOLDER_CREATE, taken.clone(), mode)
+                    .unwrap_err();
+                assert!(matches!(err, PluginError::AlreadyExists(_)), "{err:?}");
+            }
+        }
+        assert_eq!(std::fs::read(root.join("nota.md")).unwrap(), b"testo");
+    }
+
+    #[test]
+    fn a_fenced_name_is_rejected_before_touching_the_disk() {
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().join("vault")).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        for bad in ["../fuori", ".fub/x", ""] {
+            let err = host
+                .invoke_user_command(
+                    None,
+                    FOLDER_CREATE,
+                    serde_json::json!({ "path": bad }),
+                    InvokeMode::Apply,
+                )
+                .unwrap_err();
+            assert!(matches!(err, PluginError::BadArgs(_)), "{bad:?}: {err:?}");
+        }
+        assert!(!vault.path().join("fuori").exists());
+        assert!(folders(&host).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod snapshot_command_tests {
+    use super::*;
+
+    fn fixture() -> (tempfile::TempDir, Utf8PathBuf, Utf8PathBuf, Host) {
+        let dir = tempfile::tempdir().unwrap();
+        let base = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let root = base.join("vault");
+        let outside = base.join("fuori");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(root.join("nota.md"), "uno\n").unwrap();
+        std::fs::create_dir_all(root.join("allegati")).unwrap();
+        std::fs::write(root.join("allegati/foto.png"), [0u8, 159, 146, 150]).unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        let root = canonical(&root).unwrap();
+        let outside = canonical(&outside).unwrap();
+        (dir, root, outside, host)
+    }
+
+    #[test]
+    fn a_snapshot_goes_out_and_comes_back_leaving_the_replaced_state_in_a_backup() {
+        let (_dir, root, outside, host) = fixture();
+        let target = outside.join("snap");
+        let args = serde_json::json!({ "target": target });
+
+        let plan = host
+            .invoke_user_command(None, SNAPSHOT_CREATE, args.clone(), InvokeMode::DryRun)
+            .unwrap();
+        assert!(matches!(plan.effect, CommandEffect::Plan(_)));
+        assert!(!target.exists(), "la prova a vuoto non scrive");
+
+        host.invoke_user_command(None, SNAPSHOT_CREATE, args, InvokeMode::Apply)
+            .unwrap();
+        assert!(target.join("manifest.json").is_file());
+        // Il vault è di nuovo aperto e corrente: i comandi rispondono.
+        assert!(host.commands(None).is_ok());
+
+        std::fs::write(root.join("nota.md"), "due\n").unwrap();
+        std::fs::write(root.join("nuova.md"), "dopo\n").unwrap();
+
+        let backup = outside.join("prima-del-ripristino");
+        let args = serde_json::json!({ "source": target, "backup": backup });
+        let plan = host
+            .invoke_user_command(None, SNAPSHOT_APPLY, args.clone(), InvokeMode::DryRun)
+            .unwrap();
+        assert!(matches!(plan.effect, CommandEffect::Plan(_)));
+        assert_eq!(
+            std::fs::read_to_string(root.join("nota.md")).unwrap(),
+            "due\n"
+        );
+
+        let restored = host
+            .invoke_user_command(None, SNAPSHOT_APPLY, args, InvokeMode::Apply)
+            .unwrap();
+        let CommandEffect::Custom { ns, .. } = restored.effect else {
+            panic!("il ripristino dice alla shell di ricaricare")
+        };
+        assert_eq!(ns, fub_abi::ui::VAULT_RESTORED_NS);
+        assert_eq!(
+            std::fs::read_to_string(root.join("nota.md")).unwrap(),
+            "uno\n"
+        );
+        assert!(!root.join("nuova.md").exists());
+        assert_eq!(
+            std::fs::read(root.join("allegati/foto.png")).unwrap(),
+            [0u8, 159, 146, 150]
+        );
+        // Ciò che il ripristino ha sostituito non è perso: è nel backup.
+        let saved = fub_kernel::snapshot::SnapshotBundle::read_from(&backup).unwrap();
+        assert_eq!(saved.bytes("nota.md"), Some("due\n".as_bytes()));
+        assert_eq!(saved.bytes("nuova.md"), Some("dopo\n".as_bytes()));
+        assert!(host.commands(None).is_ok(), "il vault è riaperto");
+    }
+
+    #[test]
+    fn destinations_inside_the_vault_or_taken_are_refused_before_closing() {
+        let (_dir, root, outside, host) = fixture();
+        std::fs::create_dir(outside.join("occupata")).unwrap();
+        for (target, expected) in [
+            (root.join("dentro"), "bad"),
+            (outside.join("occupata"), "exists"),
+            (Utf8PathBuf::from("relativo/snap"), "bad"),
+            (outside.join("manca/snap"), "missing"),
+        ] {
+            let err = host
+                .invoke_user_command(
+                    None,
+                    SNAPSHOT_CREATE,
+                    serde_json::json!({ "target": target }),
+                    InvokeMode::Apply,
+                )
+                .unwrap_err();
+            let ok = match expected {
+                "bad" => matches!(err, PluginError::BadArgs(_)),
+                "exists" => matches!(err, PluginError::AlreadyExists(_)),
+                _ => matches!(err, PluginError::NotFound(_)),
+            };
+            assert!(ok, "{target}: {err:?}");
+        }
+        assert!(!root.join("dentro").exists());
+        assert!(host.commands(None).is_ok(), "il vault non è stato chiuso");
+    }
+
+    #[test]
+    fn a_damaged_snapshot_is_refused_and_the_vault_keeps_its_content() {
+        let (_dir, root, outside, host) = fixture();
+        let target = outside.join("snap");
+        host.invoke_user_command(
+            None,
+            SNAPSHOT_CREATE,
+            serde_json::json!({ "target": target }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        std::fs::write(target.join("payload/nota.md"), "manomesso\n").unwrap();
+        std::fs::write(root.join("nota.md"), "attuale\n").unwrap();
+
+        let err = host
+            .invoke_user_command(
+                None,
+                SNAPSHOT_APPLY,
+                serde_json::json!({ "source": target, "backup": outside.join("b") }),
+                InvokeMode::Apply,
+            )
+            .unwrap_err();
+        assert!(matches!(err, PluginError::BadArgs(_)), "{err:?}");
+        assert_eq!(
+            std::fs::read_to_string(root.join("nota.md")).unwrap(),
+            "attuale\n"
+        );
+        assert!(
+            !outside.join("b").exists(),
+            "nessun backup senza ripristino"
+        );
+        assert!(host.commands(None).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod command_titles_tests {
+    use super::*;
+
+    /// Un titolo che esce come chiave di catalogo (`cmd.x.title`) è un
+    /// catalogo che nessuno ha presentato al kernel: palette e CLI lo
+    /// mostrerebbero così com'è.
+    #[test]
+    fn every_listed_command_has_a_translated_title() {
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        let raw: Vec<String> = host
+            .commands(None)
+            .unwrap()
+            .into_iter()
+            .filter(|spec| {
+                let title = spec.title.to_string();
+                title.ends_with(".title")
+                    || (!title.contains(' ') && title.matches('.').count() >= 2)
+            })
+            .map(|spec| format!("{} → {}", spec.id, spec.title))
+            .collect();
+        assert!(raw.is_empty(), "titoli non tradotti: {raw:?}");
+    }
+
+    /// Piani, esiti ed errori dei comandi dell'host escono come frasi del
+    /// catalogo del core, mai come chiavi — anche quando il workspace è tenuto
+    /// da un altro writer e la lingua ripiega su quella predefinita.
+    #[test]
+    fn host_owned_outcomes_speak_sentences_not_keys() {
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        let text_of = |outcome: CommandOutcome| match outcome.effect {
+            CommandEffect::Plan(plan) => plan.summary.to_string(),
+            _ => outcome.notify.map(|t| t.to_string()).unwrap_or_default(),
+        };
+        let plan = host
+            .invoke_user_command(
+                None,
+                FOLDER_CREATE,
+                serde_json::json!({ "path": "Nuova" }),
+                InvokeMode::DryRun,
+            )
+            .unwrap();
+        let said = text_of(plan);
+        assert!(!said.contains("host.") && said.contains("Nuova"), "{said}");
+        let err = host
+            .invoke_user_command(
+                None,
+                SNAPSHOT_CREATE,
+                serde_json::json!({ "target": "relativo" }),
+                InvokeMode::DryRun,
+            )
+            .unwrap_err()
+            .to_string();
+        assert!(!err.contains("host.") && err.contains("relativo"), "{err}");
+
+        // Con il workspace tenuto da un altro writer: la lingua predefinita.
+        let external = tempfile::tempdir().unwrap();
+        let target = Utf8PathBuf::from_path_buf(external.path().to_path_buf()).unwrap();
+        let workspace = host
+            .with_session(None, |session| session.workspace.clone())
+            .unwrap();
+        let _held = workspace.write().unwrap();
+        let plan = host
+            .invoke_user_command(
+                None,
+                MOUNT_ADD,
+                serde_json::json!({ "name": "fuori", "target": target, "namespace": "fuori" }),
+                InvokeMode::DryRun,
+            )
+            .unwrap();
+        let said = text_of(plan);
+        assert!(!said.contains("host.") && said.contains("fuori"), "{said}");
+    }
+
+    /// Gli intenti privilegiati passano solo dal core: se il bundle dei
+    /// comandi ufficiali smettesse di essere registrato come tale,
+    /// `settings.export` fallirebbe con `PermissionDenied` e nessuno lo
+    /// vedrebbe finché un utente non prova a esportare.
+    #[test]
+    fn the_core_still_hands_its_privileged_intents_to_the_shell() {
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        let host = Host::without_watcher();
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        let outcome = host
+            .invoke_user_command(
+                None,
+                "settings.export",
+                serde_json::Value::Null,
+                InvokeMode::Apply,
+            )
+            .expect("l'export del core passa");
+        let CommandEffect::Custom { ns, .. } = outcome.effect else {
+            panic!("l'export consegna un intento")
+        };
+        assert_eq!(ns, fub_abi::ui::SETTINGS_EXPORT_NS);
     }
 }

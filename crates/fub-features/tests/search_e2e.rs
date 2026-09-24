@@ -104,6 +104,99 @@ fn found(ws: &Workspace, query: &str) -> Vec<String> {
 }
 
 #[test]
+fn advanced_leaves_share_dnf_and_keep_negation_exact() {
+    use fub_abi::query::{QueryClause, QueryLiteral, TaskStatus, TextField};
+    let v = Vault::new();
+    v.put("Work/A.md", "- [ ] TASK aperta\n- [x] fatta\n");
+    v.put("Work/B.md", "- [x] fatta\n");
+    v.put("Work/C.md", "solo testo TASK\n");
+    v.put("Archive/D.md", "TASK senza lista\n");
+    let ws = v.open();
+    let ids = |expr| {
+        let mut names = matching(&ws, expr)
+            .into_iter()
+            .map(|m| m.doc.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(
+        ids(QueryExpr::of(QueryPredicate::Task {
+            status: TaskStatus::Open
+        })),
+        ["Work/A.md"]
+    );
+    assert_eq!(
+        ids(QueryExpr::of(QueryPredicate::Regex {
+            pattern: r"TASK\s+aperta".into(),
+            fields: vec![TextField::Body],
+        })),
+        ["Work/A.md"]
+    );
+    assert_eq!(
+        ids(QueryExpr::of(QueryPredicate::Text(TextQuery {
+            case_sensitive: true,
+            fields: vec![TextField::Body],
+            ..TextQuery::terms("TASK")
+        }))),
+        ["Archive/D.md", "Work/A.md", "Work/C.md"]
+    );
+    assert!(ids(QueryExpr::of(QueryPredicate::Text(TextQuery {
+        case_sensitive: true,
+        fields: vec![TextField::Body],
+        ..TextQuery::terms("task")
+    })))
+    .is_empty());
+    assert_eq!(
+        ids(QueryExpr::of(QueryPredicate::Path {
+            glob: "Work/*.md".into()
+        })),
+        ["Work/A.md", "Work/B.md", "Work/C.md"]
+    );
+    assert_eq!(
+        ids(QueryExpr {
+            any: vec![QueryClause {
+                all: vec![
+                    QueryLiteral {
+                        negated: false,
+                        predicate: QueryPredicate::Path {
+                            glob: "Work/*.md".into()
+                        }
+                    },
+                    QueryLiteral {
+                        negated: true,
+                        predicate: QueryPredicate::Task {
+                            status: TaskStatus::Done
+                        }
+                    },
+                ]
+            }]
+        }),
+        ["Work/C.md"]
+    );
+    assert_eq!(
+        ids(QueryExpr::of(QueryPredicate::File {
+            extension: "MD".into()
+        }))
+        .len(),
+        4
+    );
+    assert!(matches!(
+        ws.query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Regex {
+                pattern: "(".into(),
+                fields: vec![]
+            }),
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(20)),
+            excerpts: Excerpts::Omit,
+        }),
+        Err(fub_abi::PluginError::BadArgs(_))
+    ));
+}
+
+#[test]
 fn finds_notes_by_content_title_and_tag() {
     let v = Vault::new();
     v.put(
@@ -547,5 +640,47 @@ fn omitting_excerpts_keeps_relevance() {
     assert!(
         without.iter().all(|h| h.score.is_some()),
         "la rilevanza resta: serve a ordinare, non a raccontare"
+    );
+}
+
+/// La riga della barra, compilata dalla regola del contratto, sul vault vero:
+/// i tag del frontmatter contano come quelli nel testo, e le proprietà
+/// tipizzate si confrontano per specie.
+#[test]
+fn the_search_syntax_runs_on_the_real_index_with_frontmatter_tags() {
+    let v = Vault::new();
+    v.put(
+        "Progetti/Città.md",
+        "---\ntags: [progetto, area/lavoro]\npriorità: 3\nscadenza: 2026-10-01\n---\n# Città\n- [ ] da fare\n",
+    );
+    v.put(
+        "Diario/oggi.md",
+        "---\ntags: diario\n---\nTesto con #inline.\n",
+    );
+    v.put("Altro.md", "Nessun tag, ma la parola città.\n");
+    let ws = v.open();
+    let ids = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, false).expect("sintassi valida");
+        let mut names = matching(&ws, expr)
+            .into_iter()
+            .map(|m| m.doc.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(ids("tag:progetto"), ["Progetti/Città.md"]);
+    assert_eq!(
+        ids("tag:area"),
+        ["Progetti/Città.md"],
+        "i discendenti del frontmatter"
+    );
+    assert_eq!(ids("tag:diario"), ["Diario/oggi.md"]);
+    assert_eq!(ids("tag:inline"), ["Diario/oggi.md"]);
+    assert_eq!(ids("[priorità:>2] task:todo"), ["Progetti/Città.md"]);
+    assert_eq!(ids("[scadenza:<2026-12-31]"), ["Progetti/Città.md"]);
+    assert_eq!(ids("città -tag:progetto"), ["Altro.md"]);
+    assert_eq!(
+        ids("tag:diario OR folder:Progetti"),
+        ["Diario/oggi.md", "Progetti/Città.md"]
     );
 }

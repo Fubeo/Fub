@@ -82,6 +82,8 @@ use fub_abi::traits::{CommandProvider, ViewProvider};
 use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
 #[cfg(feature = "backup")]
 use crate::backup::{self, BackupCommands, BackupView, BACKUP_ID};
+#[cfg(feature = "base")]
+use crate::base::BASE_ID;
 #[cfg(feature = "blocks")]
 use crate::blocks::{self, BLOCKS_ID};
 #[cfg(feature = "commands")]
@@ -264,6 +266,14 @@ static OFFICIALS: &[OfficialFeature] = &[
         name: "Statistics",
         catalog: stats::catalog,
         view: Some(|| Box::new(StatsView)),
+        commands: None,
+    },
+    #[cfg(feature = "base")]
+    OfficialFeature {
+        id: BASE_ID,
+        name: "Base",
+        catalog: fub_format_base::embed_catalog,
+        view: None,
         commands: None,
     },
     #[cfg(feature = "commands")]

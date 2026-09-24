@@ -28,7 +28,7 @@
 //! fabbrica tagliando il file, che è l'effetto osservabile del crash e non il
 //! crash.
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::model::DocId;
@@ -53,6 +53,15 @@ fn ops(ws: &Workspace) -> Vec<JournalOp> {
         .into_iter()
         .map(|r| r.op)
         .collect()
+}
+
+struct JournalOsBackend(Utf8PathBuf);
+
+impl fub_kernel::os_trash::OsTrashBackend for JournalOsBackend {
+    fn move_file_to_os_trash(&self, source: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+        std::fs::rename(source, &self.0)?;
+        Ok(self.0.clone())
+    }
 }
 
 #[test]
@@ -480,7 +489,7 @@ fn the_journal_does_not_carry_the_document_inside() {
     let mut bench = Bench::new().mounts();
     let secret = "a phrase that lives only inside the note";
     let id = doc("a.md");
-    // **Tutte e sei le varianti**, e non una sola. È la riga per cui questo
+    // **Tutte e sette le varianti**, e non una sola. È la riga per cui questo
     // presidio esisteva e non presidiava: fino alla 0103 esercitava le sole
     // `write_document`, cioè `Created` e `Written`, che per costruzione portano
     // impronte — e restava verde mentre `Edited`, cinquanta righe più su in
@@ -515,11 +524,24 @@ fn the_journal_does_not_carry_the_document_inside() {
         })
         .expect("the deletion left its line");
     restore_document(&mut bench, &trashed, None).unwrap();
+    let external = tempfile::tempdir().expect("cestino esterno");
+    let destination = Utf8PathBuf::from_path_buf(external.path().join("b.md")).expect("utf8");
+    let completed = bench
+        .prepare_document_deletion(&doc("b.md"))
+        .unwrap()
+        .invoke_os(&JournalOsBackend(destination))
+        .unwrap();
+    let committed = bench
+        .commit_os_document_deletion(completed)
+        .unwrap_or_else(|_| panic!("commit del fatto OS"));
+    bench
+        .finish_os_document_deletion(committed.invoke())
+        .unwrap_or_else(|_| panic!("rimozione OS finalizzata"));
 
     // Che ci siano davvero passate tutte: senza questa riga il presidio
     // tornerebbe a dire «le varianti che mi è capitato di produrre», che è
     // esattamente il difetto che aveva. Il `match` è **esaustivo e senza `_`**,
-    // così una settima variante non si può aggiungere senza passare di qui a
+    // così un'ottava variante non si può aggiungere senza passare di qui a
     // dichiarare cosa porta.
     let mut seen = std::collections::BTreeSet::new();
     for op in ops(&bench) {
@@ -528,13 +550,14 @@ fn the_journal_does_not_carry_the_document_inside() {
             JournalOp::Written { .. } => "written",
             JournalOp::Edited { .. } => "edited",
             JournalOp::Trashed { .. } => "trashed",
+            JournalOp::TrashedOs { .. } => "trashed_os",
             JournalOp::Restored { .. } => "restored",
             JournalOp::Renamed { .. } => "renamed",
         });
     }
     assert_eq!(
         seen.len(),
-        6,
+        7,
         "the bench must exercise every variant, not just the ones it can: {seen:?}"
     );
 

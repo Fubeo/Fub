@@ -29,7 +29,8 @@ use fub_abi::traits::PluginManifest;
 use fub_abi::ui::{UiKind, UiNode};
 use fub_abi::FormatProvider;
 use fub_features::{
-    DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID, DIAGRAM_NS,
+    CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID,
+    DIAGRAM_NS,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, RenderedDocument, SyntaxRegistry, Trust, Workspace};
@@ -67,6 +68,8 @@ impl Vault {
             .expect("formule");
         ws.register_syntax_rule(BLOCKS_ID, Box::new(HighlightRule))
             .expect("evidenziato");
+        ws.register_syntax_rule(BLOCKS_ID, Box::new(CommentRule))
+            .expect("commenti");
         ws.register_custom_renderer(BLOCKS_ID, Box::new(DiagramRenderer))
             .expect("renderer dei diagrammi");
         ws.register_custom_renderer(BLOCKS_ID, Box::new(MathRenderer))
@@ -78,6 +81,20 @@ impl Vault {
 
 fn preview(ws: &Workspace, id: &str) -> RenderedDocument {
     ws.render_preview(&DocId::new(id)).expect("anteprima")
+}
+
+fn custom_span(ws: &Workspace, id: &str, kind: &str) -> fub_abi::model::Span {
+    ws.read_model(&DocId::new(id))
+        .expect("modello")
+        .body
+        .into_iter()
+        .find_map(|block| match block {
+            Block::Custom {
+                custom_kind, span, ..
+            } if custom_kind == kind => Some(span),
+            _ => None,
+        })
+        .expect("blocco custom")
 }
 
 #[test]
@@ -98,6 +115,13 @@ fn a_diagram_exits_as_part_declarative_not_as_markup() {
         out.html
     );
     assert!(out.html.contains("data-custom-kind=\"diagram\""));
+    let span = custom_span(&ws, "nota.md", custom_kind::DIAGRAM);
+    assert!(out.html.contains(&format!(
+        "data-fub-renderer=\"{}\" data-fub-source-start=\"{}\" data-fub-source-end=\"{}\"",
+        custom_kind::DIAGRAM,
+        span.start,
+        span.end,
+    )));
     // E ciò che sta prima e dopo lo ha reso il provider, nell'ordine giusto:
     // la composizione spezza il corpo, non fa chirurgia sulla stringa.
     let slot = out.html.find("data-ui-slot").unwrap();
@@ -130,6 +154,13 @@ fn a_formula_exits_as_html_inside_the_stream() {
         out.html
     );
     assert!(out.html.contains("data-tex=\"E = mc^2"));
+    let span = custom_span(&ws, "f.md", custom_kind::MATH);
+    assert!(out.html.contains(&format!(
+        "data-fub-renderer=\"{}\" data-fub-source-start=\"{}\" data-fub-source-end=\"{}\"",
+        custom_kind::MATH,
+        span.start,
+        span.end,
+    )));
     // La via HTML non produce parti: è markup, e sta nel flusso.
     assert!(out.parts.is_empty());
     // E soprattutto NON è più un blocco di codice.
@@ -201,6 +232,28 @@ fn highlighted_arrives_from_the_model_and_not_disappears_more() {
         out.html
     );
     assert!(out.html.contains(" nel testo."));
+}
+
+#[test]
+fn a_comment_stays_in_the_file_and_leaves_the_rendering() {
+    let v = Vault::new();
+    let source = "Prima %%da non mostrare%% dopo.\n";
+    v.put("c.md", source);
+    let ws = v.open();
+    let out = preview(&ws, "c.md");
+    assert!(!out.html.contains("da non mostrare"), "html: {}", out.html);
+    assert!(
+        out.html.contains("Prima ") && out.html.contains(" dopo."),
+        "{}",
+        out.html
+    );
+
+    // Il modello lo porta con la sorgente intera, e riscriverlo è copiarlo.
+    let model = ws.read_model(&DocId::new("c.md")).expect("modello");
+    let rewritten = MarkdownProvider::new()
+        .serialize(&model)
+        .expect("serializzato");
+    assert_eq!(rewritten, source);
 }
 
 #[test]

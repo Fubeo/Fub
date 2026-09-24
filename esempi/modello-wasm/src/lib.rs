@@ -30,9 +30,9 @@ use fub::abi::options::OptionEntry;
 /// L'id del plugin. Il namespace del §7.4 è suo.
 const ID: &str = "demo.modello";
 
-/// La versione del contratto contro cui è scritto: la confronta
-/// `abi_compatible` al primo passo del montaggio.
-const ABI: &str = "0.1.1";
+/// La versione effettiva del contratto: la confronta `abi_compatible` al primo
+/// passo del montaggio.
+const ABI: &str = "0.2.0";
 
 /// Quanto in giù questo componente accetta di camminare l'arena che riceve.
 ///

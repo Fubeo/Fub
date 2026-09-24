@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { byteToCharIndex, charToByteIndex, charToByteIndices } from "./offsets";
+import {
+  byteToCharIndex,
+  byteToNormalizedCharIndices,
+  charToByteIndex,
+  charToByteIndices,
+  normalizeLineBreaks,
+} from "./offsets";
 
 // Il ponte byte UTF-8 → code unit UTF-16 è codice load-bearing: uno scroll
 // dell'outline (o, a M3, una decorazione di vivi-preview) calcolato su un
@@ -138,5 +144,20 @@ describe("charToByteIndices", () => {
     expect(charToByteIndices(doc, [])).toEqual([]);
     expect(charToByteIndices(doc, [-3, 9999])).toEqual([0, charToByteIndex(doc, 9999)]);
     expect(charToByteIndices("", [0, 5])).toEqual([0, 0]);
+  });
+});
+
+describe("offset byte su testo normalizzato", () => {
+  const doc = "à\r\n🎯\rx";
+
+  it("converte CRLF, CR isolati e Unicode senza perdere l'ordine richiesto", () => {
+    const offsets = [9, 0, 4, 8, 1, 999];
+    expect(byteToNormalizedCharIndices(doc, offsets)).toEqual([5, 0, 2, 4, 1, 6]);
+    expect(normalizeLineBreaks(doc)).toBe("à\n🎯\nx");
+  });
+
+  it("arrotonda un byte interno al code point e limita gli estremi", () => {
+    expect(byteToNormalizedCharIndices(doc, [-1, 1, Number.NaN, Number.POSITIVE_INFINITY]))
+      .toEqual([0, 1, 6, 6]);
   });
 });

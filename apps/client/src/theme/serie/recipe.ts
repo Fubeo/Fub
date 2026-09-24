@@ -790,23 +790,15 @@ const COLOR: readonly Group[] = [
       },
       {
         name: "doc-heading",
-        type: "inchiostro",
-        h: 20,
-        c: 0.15,
-        above: PAPER,
-        targetContrast: { dark: 5.5, light: 5 },
-        family: "sintassi",
+        type: "eco",
+        source: "doc-fg",
         prose:
-          "I titoli, resi e in scrittura. Sono della **famiglia della sintassi**\n" +
-          "perché è il parser a marcarli, e `--syn-heading` li ripete: tenerli fuori\n" +
-          "vorrebbe dire un titolo che, dentro un blocco di codice, si vede più\n" +
-          "chiaro o più scuro delle parole intorno.\n" +
-          "\n" +
-          "Prima la soglia era 3:1 — «un titolo è testo grande» — ed è vero per un\n" +
-          "`h1` e falso da un `h3` in giù, dove il corpo torna quello del testo. Era\n" +
-          "uno dei cinque debiti che il banco della 0166 ha trovato misurando la\n" +
-          "pagina vera, ed è un'assunzione che si può fare solo **prima** di\n" +
-          "rendere.",
+          "Il titolo reso usa l'inchiostro del corpo: la gerarchia passa da\n" +
+          "misura e respiro, non dal colore. Resta un nome proprio perché la\n" +
+          "domanda «di che colore è un `<h1>` reso» è diversa da «di che\n" +
+          "colore è il corpo». `--syn-heading` lo ripete per gli altri\n" +
+          "linguaggi; il testo del titolo in Sorgente usa `doc-fg`, cioè lo\n" +
+          "stesso valore.",
       },
       {
         name: "doc-danger",

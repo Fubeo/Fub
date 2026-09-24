@@ -266,6 +266,21 @@ fn slot_html(slot: u32, kind: &str) -> String {
     )
 }
 
+fn append_renderer_html(out: &mut String, kind: &str, span: fub_abi::model::Span, html: &str) {
+    std::fmt::Write::write_fmt(
+        out,
+        format_args!(
+            "<div{} data-fub-source-start=\"{}\" data-fub-source-end=\"{}\">",
+            fub_abi::html::attr("data-fub-renderer", kind),
+            span.start,
+            span.end,
+        ),
+    )
+    .expect("writing to a String cannot fail");
+    out.push_str(html);
+    out.push_str("</div>");
+}
+
 /// Rende un modello componendo provider e renderer registrati.
 ///
 /// `trust_of_ui` è la validazione del confine: un albero che arriva da un
@@ -348,7 +363,7 @@ pub(crate) fn compose(
             CustomRendering::Fallback => run.push(block.clone()),
             CustomRendering::Html(html) => {
                 flush(&mut run, model, provider_id, provider, opts, &mut out.html)?;
-                out.html.push_str(&html);
+                append_renderer_html(&mut out.html, custom_kind, *span, &html);
             }
             CustomRendering::Ui(node) => {
                 // Stessa regola delle view: da chi non è il core, niente
@@ -358,7 +373,12 @@ pub(crate) fn compose(
                     continue;
                 }
                 flush(&mut run, model, provider_id, provider, opts, &mut out.html)?;
-                out.html.push_str(&slot_html(slot, custom_kind));
+                append_renderer_html(
+                    &mut out.html,
+                    custom_kind,
+                    *span,
+                    &slot_html(slot, custom_kind),
+                );
                 out.parts.push(RenderedPart {
                     slot,
                     kind: custom_kind.clone(),

@@ -22,6 +22,8 @@ use fub::abi::ui::{ActionRef, Axis, FieldValue, UiKind, UiNode, UiTree, UiValue,
 
 const PLUGIN_ID: &str = "example.view";
 const VIEW_ID: &str = "example.view:panel";
+const STATUS_ID: &str = "example.view:status";
+const TOOLBAR_ID: &str = "example.view:toolbar";
 static mut ACTIVATED: bool = false;
 
 fn literal(value: impl Into<String>) -> Text {
@@ -65,7 +67,7 @@ impl PluginGuest for Component {
             id: PLUGIN_ID.to_string(),
             name: "Example Declarative View".to_string(),
             version: "0.1.0".to_string(),
-            abi_version: "0.1.1".to_string(),
+            abi_version: "0.2.0".to_string(),
             permissions: PluginPermissions {
                 granted: vec![OptionEntry {
                     key: "fub:read-vault".to_string(),
@@ -159,6 +161,42 @@ impl ViewGuest for Component {
             open_by_default: true,
             preferred_size: Some(360),
             closable: true,
+        },
+        ViewSpec {
+            id: STATUS_ID.to_string(),
+            title: literal("Document status"),
+            surface: ViewSurface::StatusBar,
+            refresh: fub::abi::events::EventMask {
+                kinds: vec![fub::abi::events::EventKind::DocumentChanged],
+                topics: vec![],
+                subjects: vec![],
+                changes: vec![],
+            },
+            follows: vec![fub::abi::session::ContextKind::Document],
+            params: vec![],
+            icon: None,
+            order: 10,
+            open_by_default: true,
+            preferred_size: None,
+            closable: false,
+        },
+        ViewSpec {
+            id: TOOLBAR_ID.to_string(),
+            title: literal("Document toolbar"),
+            surface: ViewSurface::Ribbon,
+            refresh: fub::abi::events::EventMask {
+                kinds: vec![],
+                topics: vec![],
+                subjects: vec![],
+                changes: vec![],
+            },
+            follows: vec![fub::abi::session::ContextKind::Document],
+            params: vec![],
+            icon: None,
+            order: 11,
+            open_by_default: true,
+            preferred_size: None,
+            closable: false,
         }]
     }
 
@@ -178,6 +216,22 @@ impl ViewGuest for Component {
     }
 
     fn render_view(instance: ViewInstance) -> Result<UiTree, PluginError> {
+        if instance.view == STATUS_ID {
+            let doc = fub::abi::host_env::active_context()
+                .and_then(|context| context.doc)
+                .unwrap_or_else(|| "No document".to_string());
+            return Ok(tree(vec![node(
+                "statusbar-text",
+                UiKind::Text(literal(format!("Document: {doc}"))),
+            )]));
+        }
+        if instance.view == TOOLBAR_ID {
+            return Ok(tree(vec![labelled_action(
+                "toolbar-refresh",
+                "{}",
+                "Refresh document status",
+            )]));
+        }
         let active = unsafe { ACTIVATED };
         let now = fub::abi::host_env::now_unix_millis();
         let context = fub::abi::host_env::active_context();
@@ -261,7 +315,7 @@ impl ViewGuest for Component {
     }
 
     fn on_action(
-        _instance: ViewInstance,
+        instance: ViewInstance,
         input: fub::abi::ui::UiAction,
     ) -> Result<ViewUpdate, PluginError> {
         let fields = input
@@ -274,6 +328,12 @@ impl ViewGuest for Component {
             "action={};payload={};fields=[{}]",
             input.action, input.payload, fields
         );
+        if instance.view == TOOLBAR_ID && input.action == "toolbar-refresh" {
+            return Ok(ViewUpdate::Replace(tree(vec![node(
+                "toolbar-message",
+                UiKind::Text(literal("Status refreshed")),
+            )])));
+        }
         match input.action.as_str() {
             "replace" => Ok(ViewUpdate::Replace(tree(vec![
                 node(

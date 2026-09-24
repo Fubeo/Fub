@@ -83,18 +83,109 @@ use fub_abi::schema::SchemaVersion;
 /// La chiave è dichiarata dal bundle core (`fub-host`) ma il kernel la legge
 /// quando risolve un wikilink a un allegato.
 pub const ATTACHMENT_FOLDER: &str = "files.attachment-folder";
+/// Cartella predefinita per le note create senza un path esplicito.
+///
+/// Il valore vuoto significa radice del vault. La chiave è dichiarata dal
+/// bundle core; il kernel la applica insieme alla scelta del nome, sotto la
+/// custodia esclusiva del workspace.
+pub const NEW_NOTE_FOLDER: &str = "files.new-note-folder";
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
 /// giorno**, perché il file che non ce l'ha è quello che poi non si sa da che
 /// versione viene.
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
 
 /// Il file di un livello, com'è su disco.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 struct SettingsFile {
     version: SchemaVersion,
     #[serde(default, deserialize_with = "values_without_duplicates")]
-    values: BTreeMap<String, SettingValue>,
+    values: BTreeMap<String, serde_json::Value>,
+    #[serde(default = "default_profile_name")]
+    active_profile: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    active_profile_extra: BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    profiles: BTreeMap<String, SettingsProfile>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, serde_json::Value>,
+}
+
+fn default_profile_name() -> String {
+    "Default".into()
+}
+
+/// Portable snapshot. Unknown keys and values remain JSON, never coerced into a SettingKind.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SettingsProfile {
+    pub version: SchemaVersion,
+    pub name: String,
+    pub values: BTreeMap<String, serde_json::Value>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+fn check_profile(profile: &SettingsProfile) -> Result<(), String> {
+    if profile.version > SCHEMA_VERSION {
+        return Err(format!(
+            "profile version {} is newer than supported {SCHEMA_VERSION}",
+            profile.version
+        ));
+    }
+    if profile.name.trim().is_empty() || profile.name != profile.name.trim() {
+        return Err("profile name must not be empty or padded".into());
+    }
+    Ok(())
+}
+
+impl SettingsFile {
+    fn profile(&self, name: &str) -> Option<SettingsProfile> {
+        if name == self.active_profile {
+            Some(SettingsProfile {
+                version: SCHEMA_VERSION,
+                name: name.into(),
+                values: self.values.clone(),
+                extra: self.active_profile_extra.clone(),
+            })
+        } else {
+            self.profiles.get(name).cloned()
+        }
+    }
+
+    fn switch_profile(&mut self, name: &str) -> Result<(), String> {
+        if name == self.active_profile {
+            return Ok(());
+        }
+        let target = self
+            .profiles
+            .remove(name)
+            .ok_or_else(|| format!("unknown profile `{name}`"))?;
+        check_profile(&target)?;
+        let previous = self
+            .profile(&self.active_profile)
+            .ok_or_else(|| "active profile is missing".to_string())?;
+        self.profiles.insert(self.active_profile.clone(), previous);
+        self.values = target.values;
+        self.active_profile_extra = target.extra;
+        self.active_profile = name.into();
+        Ok(())
+    }
+}
+
+fn profile_names(file: &SettingsFile) -> Vec<String> {
+    let mut names: Vec<String> = file.profiles.keys().cloned().collect();
+    names.push(file.active_profile.clone());
+    names.sort();
+    names
+}
+
+fn add_profile(file: &mut SettingsFile, profile: SettingsProfile) -> Result<(), String> {
+    check_profile(&profile)?;
+    if file.profile(&profile.name).is_some() {
+        return Err(format!("profile `{}` already exists", profile.name));
+    }
+    file.profiles.insert(profile.name.clone(), profile);
+    Ok(())
 }
 
 /// Le chiavi del file, **una per nome** (difetto 0174).
@@ -119,37 +210,30 @@ struct SettingsFile {
 /// illeggibile» ha un autore solo: il livello della macchina e quello del vault
 /// la ereditano insieme, e il nome della chiave ripetuta esce nel messaggio,
 /// che è l'unica cosa che serve per andare a togliere la riga di troppo.
-fn values_without_duplicates<'de, D>(d: D) -> Result<BTreeMap<String, SettingValue>, D::Error>
+fn values_without_duplicates<'de, D>(d: D) -> Result<BTreeMap<String, serde_json::Value>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    struct Visitor;
-
-    impl<'de> serde::de::Visitor<'de> for Visitor {
-        type Value = BTreeMap<String, SettingValue>;
-
+    use serde::de::{MapAccess, Visitor};
+    struct Unique;
+    impl<'de> Visitor<'de> for Unique {
+        type Value = BTreeMap<String, serde_json::Value>;
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("le impostazioni, una per chiave")
+            f.write_str("a map with unique settings keys")
         }
-
-        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-        where
-            A: serde::de::MapAccess<'de>,
-        {
-            let mut values = BTreeMap::new();
-            while let Some((key, value)) = map.next_entry::<String, SettingValue>()? {
-                if values.insert(key.clone(), value).is_some() {
+        fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
+            let mut result = BTreeMap::new();
+            while let Some((key, value)) = map.next_entry::<String, serde_json::Value>()? {
+                if result.insert(key.clone(), value).is_some() {
                     return Err(serde::de::Error::custom(format!(
-                        "la chiave `{key}` è scritta due volte, e quale delle \
-                         due valga non lo dice nessuno"
+                        "`{key}` è scritta due volte"
                     )));
                 }
             }
-            Ok(values)
+            Ok(result)
         }
     }
-
-    d.deserialize_map(Visitor)
+    d.deserialize_map(Unique)
 }
 
 /// Legge un file di livello. **Assente = mai configurato**, che è un esito
@@ -163,10 +247,10 @@ where
 /// perché sta fuori da ogni vault. La regola con cui si giudica ciò che si è
 /// letto è però la stessa, e scriverla due volte sarebbe due idee di cosa vuol
 /// dire «configurazione illeggibile».
-fn load_from(
+fn load_raw_from(
     path: &Utf8Path,
     read: impl FnOnce(&Utf8Path) -> std::io::Result<Vec<u8>>,
-) -> Result<BTreeMap<String, SettingValue>, String> {
+) -> Result<SettingsFile, String> {
     match read(path) {
         Ok(raw) => {
             let file: SettingsFile = serde_json::from_slice(&raw)
@@ -178,16 +262,32 @@ fn load_from(
                     file.version
                 ));
             }
-            Ok(file.values)
+            Ok(file)
         }
-        Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(SettingsFile {
+            active_profile: default_profile_name(),
+            ..SettingsFile::default()
+        }),
         Err(and) => Err(format!("non riesco a leggere {path}: {and}")),
     }
 }
 
-/// Il livello della macchina, che un supporto non ce l'ha.
-fn load(path: &Utf8Path) -> Result<BTreeMap<String, SettingValue>, String> {
-    load_from(path, |p| std::fs::read(p))
+fn supported_values(file: &SettingsFile) -> BTreeMap<String, SettingValue> {
+    file.values
+        .iter()
+        .filter_map(|(key, value)| {
+            serde_json::from_value(value.clone())
+                .ok()
+                .map(|v| (key.clone(), v))
+        })
+        .collect()
+}
+
+fn load_from(
+    path: &Utf8Path,
+    read: impl FnOnce(&Utf8Path) -> std::io::Result<Vec<u8>>,
+) -> Result<BTreeMap<String, SettingValue>, String> {
+    load_raw_from(path, read).map(|file| supported_values(&file))
 }
 
 /// I byte di un file di livello.
@@ -200,12 +300,8 @@ fn load(path: &Utf8Path) -> Result<BTreeMap<String, SettingValue>, String> {
 /// troncato da un crash è una configurazione che al riavvio è *malformata* —
 /// cioè, per la regola di [`load_from`], un errore che blocca la lettura di
 /// tutte le altre chiavi.
-fn encode(values: &BTreeMap<String, SettingValue>) -> Result<Vec<u8>, String> {
-    let file = SettingsFile {
-        version: SCHEMA_VERSION,
-        values: values.clone(),
-    };
-    serde_json::to_vec_pretty(&file).map_err(|and| and.to_string())
+fn encode(file: &SettingsFile) -> Result<Vec<u8>, String> {
+    serde_json::to_vec_pretty(file).map_err(|and| and.to_string())
 }
 
 /// Scrive **una chiave** del livello della macchina, fondendola con ciò che sul
@@ -225,21 +321,24 @@ fn store(
 ) -> Result<BTreeMap<String, SettingValue>, String> {
     update_atomic(
         path,
-        // La rilettura è il cancello: ciò che non si capisce adesso non si
-        // sovrascrive adesso.
-        || load(path).map_err(|and| do_not_overwrite(&and, LOSS)),
+        || load_raw_from(path, |p| std::fs::read(p)).map_err(|and| do_not_overwrite(&and, LOSS)),
         |disk| {
-            match value {
+            match &value {
                 Some(v) => {
-                    disk.insert(key.to_string(), v);
+                    disk.values.insert(
+                        key.to_string(),
+                        serde_json::to_value(v).map_err(|e| e.to_string())?,
+                    );
                 }
                 None => {
-                    disk.remove(key);
+                    disk.values.remove(key);
                 }
             }
+            disk.version = SCHEMA_VERSION;
             encode(disk)
         },
     )
+    .map(|disk| supported_values(&disk))
 }
 
 /// Scrive **una chiave** del livello del vault, fondendola con ciò che sul
@@ -278,7 +377,7 @@ fn store_vault(
     // dice la cosa sbagliata: il file non si è potuto **leggere**.
     let mut failure = None;
     let outcome = storage.update(path, &mut |current| {
-        let new = load_from(path, |_| match current {
+        let new = load_raw_from(path, |_| match current {
             Some(bytes) => Ok(bytes.to_vec()),
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -294,12 +393,16 @@ fn store_vault(
         };
         match &value {
             Some(v) => {
-                disk.insert(key.to_string(), v.clone());
+                disk.values.insert(
+                    key.to_string(),
+                    serde_json::to_value(v).map_err(std::io::Error::other)?,
+                );
             }
             None => {
-                disk.remove(key);
+                disk.values.remove(key);
             }
         }
+        disk.version = SCHEMA_VERSION;
         let bytes = match encode(&disk) {
             Ok(bytes) => bytes,
             Err(and) => {
@@ -307,7 +410,7 @@ fn store_vault(
                 return Err(std::io::Error::other("il file non si è potuto comporre"));
             }
         };
-        zone = Some(disk);
+        zone = Some(supported_values(&disk));
         Ok(Some(bytes))
     });
     match (outcome, failure) {
@@ -323,6 +426,47 @@ fn store_vault(
             format!("{path}: il supporto ha detto di aver scritto senza fondere niente")
         }),
     }
+}
+
+fn change_vault_profiles(
+    storage: &dyn VaultStorage,
+    path: &Utf8Path,
+    change: impl Fn(&mut SettingsFile) -> Result<(), String>,
+) -> Result<SettingsFile, String> {
+    let mut written = None;
+    let mut failure = None;
+    let outcome = storage.update(path, &mut |current| {
+        let mut file = match load_raw_from(path, |_| match current {
+            Some(bytes) => Ok(bytes.to_vec()),
+            None => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+        }) {
+            Ok(file) => file,
+            Err(error) => {
+                failure = Some(do_not_overwrite(&error, LOSS));
+                return Err(std::io::Error::other("unreadable settings"));
+            }
+        };
+        if let Err(error) = change(&mut file) {
+            failure = Some(error);
+            return Err(std::io::Error::other("invalid profile operation"));
+        }
+        file.version = SCHEMA_VERSION;
+        match encode(&file) {
+            Ok(bytes) => {
+                written = Some(file);
+                Ok(Some(bytes))
+            }
+            Err(error) => {
+                failure = Some(error);
+                Err(std::io::Error::other("unserializable settings"))
+            }
+        }
+    });
+    if let Some(error) = failure {
+        return Err(error);
+    }
+    outcome.map_err(|e| format!("non riesco a scrivere {path}: {e}"))?;
+    written.ok_or_else(|| format!("{path}: settings were not written"))
 }
 
 /// Ciò che si perderebbe sovrascrivendo un file di livello che non si rilegge:
@@ -387,6 +531,7 @@ pub struct MachineSettings {
     /// la stessa ragione: l'`Arc` è condiviso da ogni vault aperto, e chi
     /// dichiara è l'host una volta sola all'avvio.
     specs: RwLock<BTreeMap<String, SettingSpec>>,
+    profile_state: RwLock<SettingsFile>,
 }
 
 impl MachineSettings {
@@ -395,10 +540,17 @@ impl MachineSettings {
     /// livello resta vuoto — perché la configurazione della macchina è la meno
     /// autorevole delle due, e perdere il tema non vale un'app che non parte.
     pub fn open(path: &Utf8Path) -> (Arc<Self>, Option<String>) {
-        let (values, warning) = match load(path) {
-            Ok(values) => (values, None),
-            Err(and) => (BTreeMap::new(), Some(and)),
+        let (file, warning) = match load_raw_from(path, |p| std::fs::read(p)) {
+            Ok(file) => (file, None),
+            Err(and) => (
+                SettingsFile {
+                    active_profile: default_profile_name(),
+                    ..SettingsFile::default()
+                },
+                Some(and),
+            ),
         };
+        let values = supported_values(&file);
         (
             Arc::new(MachineSettings {
                 path: Some(path.to_owned()),
@@ -407,6 +559,7 @@ impl MachineSettings {
                 revisions: RwLock::new(BTreeMap::new()),
                 next_revision: AtomicU64::new(1),
                 specs: RwLock::new(BTreeMap::new()),
+                profile_state: RwLock::new(file),
             }),
             warning,
         )
@@ -421,6 +574,106 @@ impl MachineSettings {
             revisions: RwLock::new(BTreeMap::new()),
             next_revision: AtomicU64::new(1),
             specs: RwLock::new(BTreeMap::new()),
+            profile_state: RwLock::new(SettingsFile {
+                active_profile: default_profile_name(),
+                ..SettingsFile::default()
+            }),
+        })
+    }
+
+    fn profile_file(&self) -> Result<SettingsFile, String> {
+        match &self.path {
+            Some(path) => load_raw_from(path, |p| std::fs::read(p)),
+            None => Ok(self.profile_state.read().expect("machine profiles").clone()),
+        }
+    }
+
+    fn change_profiles(
+        &self,
+        change: impl FnOnce(&mut SettingsFile) -> Result<(), String>,
+    ) -> Result<(), String> {
+        let _turn = self.write.acquire();
+        let file = if let Some(path) = &self.path {
+            update_atomic(
+                path,
+                || {
+                    load_raw_from(path, |p| std::fs::read(p))
+                        .map_err(|e| do_not_overwrite(&e, LOSS))
+                },
+                |file| {
+                    change(file)?;
+                    file.version = SCHEMA_VERSION;
+                    encode(file)
+                },
+            )?
+        } else {
+            let mut file = self.profile_state.read().expect("machine profiles").clone();
+            change(&mut file)?;
+            file
+        };
+        *self.values.write().expect("livello macchina") = supported_values(&file);
+        *self.profile_state.write().expect("machine profiles") = file;
+        Ok(())
+    }
+
+    pub fn active_profile(&self) -> Result<String, String> {
+        Ok(self.profile_file()?.active_profile)
+    }
+
+    pub fn profiles(&self) -> Result<Vec<String>, String> {
+        Ok(profile_names(&self.profile_file()?))
+    }
+
+    pub fn export_profile(&self, name: &str) -> Result<String, String> {
+        let file = self.profile_file()?;
+        let profile = file
+            .profile(name)
+            .ok_or_else(|| format!("unknown profile `{name}`"))?;
+        serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())
+    }
+
+    pub fn import_profile(&self, json: &str) -> Result<(), String> {
+        let profile: SettingsProfile = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        self.change_profiles(|file| add_profile(file, profile))
+    }
+
+    pub fn duplicate_profile(&self, source: &str, name: &str) -> Result<(), String> {
+        self.change_profiles(|file| {
+            let mut profile = file
+                .profile(source)
+                .ok_or_else(|| format!("unknown profile `{source}`"))?;
+            profile.name = name.into();
+            add_profile(file, profile)
+        })
+    }
+
+    pub fn switch_profile(&self, name: &str) -> Result<(), String> {
+        self.change_profiles(|file| file.switch_profile(name))
+    }
+
+    /// Reset only declared, representable settings; foreign values survive.
+    pub fn reset_profile(&self, name: &str) -> Result<(), String> {
+        let declared = self.specs.read().expect("schema della macchina").clone();
+        self.change_profiles(|file| {
+            if file.profile(name).is_none() {
+                return Err(format!("unknown profile `{name}`"));
+            }
+            let reset = |values: &mut BTreeMap<String, serde_json::Value>| {
+                values.retain(|key, raw| {
+                    !declared.get(key).is_some_and(|spec| {
+                        serde_json::from_value::<SettingValue>(raw.clone())
+                            .ok()
+                            .is_some_and(|value| spec.kind.rejects(&value).is_none())
+                    })
+                });
+            };
+            if name == file.active_profile {
+                reset(&mut file.values);
+            } else {
+                let profile = file.profiles.get_mut(name).expect("checked above");
+                reset(&mut profile.values);
+            }
+            Ok(())
         })
     }
 
@@ -654,10 +907,25 @@ impl MachineSettings {
                 }
             }
             drop(values);
+            let mut file = self.profile_state.write().expect("machine profiles");
+            match self.values.read().expect("livello macchina").get(key) {
+                Some(v) => {
+                    file.values.insert(
+                        key.to_string(),
+                        serde_json::to_value(v).map_err(|e| e.to_string())?,
+                    );
+                }
+                None => {
+                    file.values.remove(key);
+                }
+            }
             return Ok(self.note_write(key));
         };
         let zone = store(path, key, value)?;
         *self.values.write().expect("livello macchina") = zone;
+        if let Ok(file) = load_raw_from(path, |p| std::fs::read(p)) {
+            *self.profile_state.write().expect("machine profiles") = file;
+        }
         Ok(self.note_write(key))
     }
 
@@ -804,6 +1072,84 @@ impl SettingsStore {
     /// carico, e un avviso mostrato due volte è peggio di uno mostrato una.
     pub fn take_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.warnings)
+    }
+
+    fn profile_file(&self) -> Result<SettingsFile, String> {
+        load_raw_from(&self.vault_path, |p| self.storage.read(p))
+    }
+
+    fn change_profiles(
+        &mut self,
+        change: impl Fn(&mut SettingsFile) -> Result<(), String>,
+    ) -> Result<(), String> {
+        let file = change_vault_profiles(self.storage.as_ref(), &self.vault_path, change)?;
+        let values = supported_values(&file);
+        self.vault.update(|| Ok::<_, String>(values))?;
+        Ok(())
+    }
+
+    pub fn active_profile(&self) -> Result<String, String> {
+        Ok(self.profile_file()?.active_profile)
+    }
+
+    pub fn profiles(&self) -> Result<Vec<String>, String> {
+        Ok(profile_names(&self.profile_file()?))
+    }
+
+    pub fn export_profile(&self, name: &str) -> Result<String, String> {
+        let file = self.profile_file()?;
+        let profile = file
+            .profile(name)
+            .ok_or_else(|| format!("unknown profile `{name}`"))?;
+        serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())
+    }
+
+    pub fn import_profile(&mut self, json: &str) -> Result<(), String> {
+        let profile: SettingsProfile = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        self.change_profiles(|file| add_profile(file, profile.clone()))
+    }
+
+    pub fn duplicate_profile(&mut self, source: &str, name: &str) -> Result<(), String> {
+        self.change_profiles(|file| {
+            let mut profile = file
+                .profile(source)
+                .ok_or_else(|| format!("unknown profile `{source}`"))?;
+            profile.name = name.into();
+            add_profile(file, profile)
+        })
+    }
+
+    pub fn switch_profile(&mut self, name: &str) -> Result<(), String> {
+        self.change_profiles(|file| file.switch_profile(name))
+    }
+
+    pub fn reset_profile(&mut self, name: &str) -> Result<(), String> {
+        let declared: BTreeMap<String, SettingSpec> = self
+            .specs
+            .iter()
+            .filter(|(_, d)| d.spec.scope == SettingScope::Vault)
+            .map(|(key, d)| (key.clone(), d.spec.clone()))
+            .collect();
+        self.change_profiles(|file| {
+            if file.profile(name).is_none() {
+                return Err(format!("unknown profile `{name}`"));
+            }
+            let reset = |values: &mut BTreeMap<String, serde_json::Value>| {
+                values.retain(|key, raw| {
+                    !declared.get(key).is_some_and(|spec| {
+                        serde_json::from_value::<SettingValue>(raw.clone())
+                            .ok()
+                            .is_some_and(|value| spec.kind.rejects(&value).is_none())
+                    })
+                });
+            };
+            if name == file.active_profile {
+                reset(&mut file.values);
+            } else {
+                reset(&mut file.profiles.get_mut(name).expect("checked").values);
+            }
+            Ok(())
+        })
     }
 
     /// Dichiara le chiavi di un plugin. Un doppione è un errore **del
@@ -1469,7 +1815,10 @@ mod tests {
         };
 
         let expiration = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while load(&path).expect("leggibile").is_empty() {
+        while load_from(&path, |p| std::fs::read(p))
+            .expect("leggibile")
+            .is_empty()
+        {
             assert!(
                 std::time::Instant::now() < expiration,
                 "la scrittura non è arrivata al disco finché un lettore teneva il \
@@ -1848,5 +2197,39 @@ mod tests {
             .filter(|n| n != "stato.json")
             .collect();
         assert!(leftovers.is_empty(), "temporanei rimasti: {leftovers:?}");
+    }
+    #[test]
+    fn profiles_preserve_unrepresentable_values_and_refuse_future_files() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("settings.json");
+        std::fs::write(&path, r#"{"version":1,"values":{"known":true,"foreign":{"nested":[1,null]}},"futureField":{"x":42}}"#).unwrap();
+        let (machine, warning) = MachineSettings::open(&path);
+        assert!(warning.is_none());
+        machine
+            .declare(&[SettingSpec::toggle("known", "Known", false).for_machine()])
+            .unwrap();
+        machine.duplicate_profile("Default", "Copy").unwrap();
+        machine.reset_profile("Copy").unwrap();
+        machine.switch_profile("Copy").unwrap();
+        let copied: serde_json::Value =
+            serde_json::from_str(&machine.export_profile("Copy").unwrap()).unwrap();
+        assert!(copied["values"].get("known").is_none());
+        assert_eq!(
+            copied["values"]["foreign"],
+            serde_json::json!({"nested":[1,null]})
+        );
+        machine.set("known", SettingValue::Toggle(false)).unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(saved["futureField"], serde_json::json!({"x":42}));
+        assert_eq!(
+            saved["profiles"]["Default"]["values"]["foreign"],
+            serde_json::json!({"nested":[1,null]})
+        );
+
+        let future = r#"{"version":999,"values":{"known":true,"foreign":{"nested":[1,null]}}}"#;
+        std::fs::write(&path, future).unwrap();
+        assert!(machine.set("known", SettingValue::Toggle(true)).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), future);
     }
 }

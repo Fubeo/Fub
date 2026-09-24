@@ -21,6 +21,7 @@ import {
   type ThemeMountResult,
 } from "./loader";
 import { accentPalette, type ContrastLevel } from "./serie/recipe";
+import { mountCssSnippets } from "./snippets";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
@@ -375,6 +376,12 @@ export async function themeCatalog(): Promise<ThemeInfo[]> {
   return readCatalog();
 }
 
+/** Core is bundled with the host. Installed themes are not executable code,
+ * but remain community-owned CSS subject to the theme-1 trust gate. */
+export function themeTrust(id: string): "core" | "community" {
+  return id === SERIES_THEME_ID ? "core" : "community";
+}
+
 /** L'identità effettivamente scelta, non solo la luce che le appartiene. */
 export function currentThemeId(): string {
   return selectedThemeId;
@@ -512,6 +519,7 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   suppressInitialWarning = !hadMountedTheme;
   warn = onChange;
   mount(fonts, "caratteri");
+  mountCssSnippets(lifetime);
   void apply();
   for (const query of [DARK_QUERY, CONTRAST_QUERY]) {
     const media = window.matchMedia?.(query);

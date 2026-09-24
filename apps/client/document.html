@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link id="document-theme-dark" rel="stylesheet" href="/src/theme/serie/sheet-dark.css" media="(prefers-color-scheme: dark)" />
+    <link id="document-theme-light" rel="stylesheet" href="/src/theme/serie/sheet-light.css" media="(prefers-color-scheme: light)" />
+    <title>Fub — documento</title>
+  </head>
+  <body>
+    <main id="document-window" class="document-window-root">
+      <p id="document-window-state" role="status" aria-live="polite"></p>
+      <div id="document-window-conflict" class="document-window-conflict" hidden>
+        <button id="document-window-keep" type="button"></button>
+        <button id="document-window-discard" type="button"></button>
+      </div>
+    </main>
+    <script type="module" src="/src/shells/document/entry.ts"></script>
+  </body>
+</html>

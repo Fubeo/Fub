@@ -127,6 +127,18 @@ pub const APPEARANCE_MEASURE: &str = "appearance.measure";
 pub const APPEARANCE_FONT: &str = "appearance.font";
 pub const APPEARANCE_ACCENT: &str = "appearance.accent";
 pub const APPEARANCE_ZOOM: &str = "appearance.zoom";
+pub const APPEARANCE_CSS_SNIPPETS: &str = "appearance.css-snippets";
+/// Machine-owned shell chrome; layout schema travels with its values.
+pub const CHROME_SCHEMA: &str = "chrome.schema";
+pub const CHROME_RAIL_VISIBLE: &str = "chrome.rail.visible";
+pub const CHROME_RAIL_ORDER: &str = "chrome.rail.order";
+pub const CHROME_STATUS_VISIBLE: &str = "chrome.status.visible";
+pub const CHROME_TOOLBAR_VISIBLE: &str = "chrome.toolbar.visible";
+pub const CHROME_FRAME: &str = "chrome.frame";
+pub const CHROME_SCHEMA_VERSION: f64 = 1.0;
+/// Preferenze locali del motore testuale, non comandi del documento.
+pub const EDITOR_SPELLCHECK: &str = "editor.spellcheck";
+pub const EDITOR_VIM: &str = "editor.vim";
 pub const DEFAULT_ZOOM: f64 = 1.0;
 /// La cartella del vault in cui la shell deposita e cerca gli allegati.
 ///
@@ -135,6 +147,17 @@ pub const DEFAULT_ZOOM: f64 = 1.0;
 pub const ATTACHMENT_FOLDER: &str = fub_kernel::settings::ATTACHMENT_FOLDER;
 /// Il valore predefinito resta una cartella vera dentro il vault.
 pub const DEFAULT_ATTACHMENT_FOLDER: &str = "attachments";
+/// Cartella predefinita delle note create senza un path esplicito.
+pub const NEW_NOTE_FOLDER: &str = fub_kernel::settings::NEW_NOTE_FOLDER;
+/// Il valore vuoto conserva il comportamento interoperabile della radice.
+pub const DEFAULT_NEW_NOTE_FOLDER: &str = "";
+/// Dove va una nota cancellata dalla shell: `vault` è il cestino interno
+/// (`.trash/`, ripristinabile da Fub), `system` il cestino del sistema
+/// operativo tramite `trash.os`, che ripiega sull'interno se il sistema non ne
+/// offre uno. È del vault, come le altre scelte sui suoi file.
+pub const FILES_TRASH: &str = "files.trash";
+pub const FILES_TRASH_VAULT: &str = "vault";
+pub const FILES_TRASH_SYSTEM: &str = "system";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -171,6 +194,13 @@ pub const LOG_LEVEL: &str = "log.level";
 /// questo componente*.
 pub const LOG_VERBOSE: &str = "log.verbose";
 
+/// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.
+pub const SYNC_SERVER_URL: &str = "sync.server_url";
+pub const SYNC_PAUSED: &str = "sync.paused";
+pub const SYNC_EXCLUDE: &str = "sync.exclude";
+/// Endpoint locale di pubblicazione; credenziali e segreti restano fuori dai settings.
+pub const PUBLISH_SERVER_URL: &str = "publish.server_url";
+
 /// Le impostazioni del bundle di core.
 ///
 /// Le chiavi `locale.*` (§12.3) stanno qui e non in una feature per la stessa
@@ -198,6 +228,32 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_ATTACHMENT_FOLDER_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
+    settings.push(
+        SettingSpec::new(
+            NEW_NOTE_FOLDER,
+            Text::key(C_NEW_NOTE_FOLDER),
+            SettingKind::Text {
+                default: DEFAULT_NEW_NOTE_FOLDER.into(),
+            },
+        )
+        .describing(Text::key(C_NEW_NOTE_FOLDER_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_TRASH,
+            Text::key(C_FILES_TRASH),
+            SettingKind::Choice {
+                default: FILES_TRASH_VAULT.into(),
+                options: vec![
+                    UiOption::new(FILES_TRASH_VAULT, Text::key(C_FILES_TRASH_VAULT)),
+                    UiOption::new(FILES_TRASH_SYSTEM, Text::key(C_FILES_TRASH_SYSTEM)),
+                ],
+            },
+        )
+        .describing(Text::key(C_FILES_TRASH_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
     // **Non** `program_writable`, ed è la riga che conta: un componente che
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
@@ -213,9 +269,13 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // «scuro al tramonto», è un pezzo di 6.2, dove si decide se un componente
     // possa avere in mano l'aspetto e con che permesso.
     settings.extend(appearance_settings());
+    settings.extend(chrome_settings());
+    settings.extend(editor_settings());
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
+    #[cfg(feature = "http-client")]
+    settings.extend(service_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -248,6 +308,26 @@ pub fn core_machine_settings() -> Vec<SettingSpec> {
         .into_iter()
         .filter(|spec| spec.scope == fub_abi::settings::SettingScope::Machine)
         .collect()
+}
+
+fn editor_settings() -> Vec<SettingSpec> {
+    [
+        (
+            EDITOR_SPELLCHECK,
+            C_EDITOR_SPELLCHECK,
+            C_EDITOR_SPELLCHECK_DESC,
+            true,
+        ),
+        (EDITOR_VIM, C_EDITOR_VIM, C_EDITOR_VIM_DESC, false),
+    ]
+    .into_iter()
+    .map(|(key, label, description, default)| {
+        SettingSpec::toggle(key, Text::key(label), default)
+            .describing(Text::key(description))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine()
+    })
+    .collect()
 }
 
 fn appearance_settings() -> Vec<SettingSpec> {
@@ -347,6 +427,16 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
+        SettingSpec::new(
+            APPEARANCE_CSS_SNIPPETS,
+            Text::key(C_CSS_SNIPPETS),
+            SettingKind::Text {
+                default: r#"{"version":1,"snippets":[]}"#.into(),
+            },
+        )
+        .describing(Text::key(C_CSS_SNIPPETS_DESC))
+        .grouped(Text::key(C_GROUP_APPEARANCE))
+        .for_machine(),
         number(
             APPEARANCE_ACCENT,
             C_ACCENT,
@@ -356,6 +446,122 @@ fn appearance_settings() -> Vec<SettingSpec> {
             360.0,
         ),
         number(APPEARANCE_ZOOM, C_ZOOM, C_ZOOM_DESC, DEFAULT_ZOOM, 0.5, 2.0),
+    ]
+}
+
+fn chrome_settings() -> Vec<SettingSpec> {
+    let toggle = |key, label, description| {
+        SettingSpec::toggle(key, Text::key(label), true)
+            .describing(Text::key(description))
+            .grouped(Text::key(C_GROUP_CHROME))
+            .for_machine()
+    };
+    vec![
+        SettingSpec::new(
+            CHROME_SCHEMA,
+            Text::key(C_CHROME_SCHEMA),
+            SettingKind::Number {
+                default: CHROME_SCHEMA_VERSION,
+                min: Some(CHROME_SCHEMA_VERSION),
+                max: Some(CHROME_SCHEMA_VERSION),
+            },
+        )
+        .describing(Text::key(C_CHROME_SCHEMA_DESC))
+        .grouped(Text::key(C_GROUP_CHROME))
+        .for_machine(),
+        toggle(CHROME_RAIL_VISIBLE, C_CHROME_RAIL, C_CHROME_RAIL_DESC),
+        SettingSpec::new(
+            CHROME_RAIL_ORDER,
+            Text::key(C_CHROME_ORDER),
+            SettingKind::List {
+                default: vec!["files".into(), "search".into(), "graph".into()],
+            },
+        )
+        .describing(Text::key(C_CHROME_ORDER_DESC))
+        .grouped(Text::key(C_GROUP_CHROME))
+        .for_machine(),
+        toggle(CHROME_STATUS_VISIBLE, C_CHROME_STATUS, C_CHROME_STATUS_DESC),
+        toggle(
+            CHROME_TOOLBAR_VISIBLE,
+            C_CHROME_TOOLBAR,
+            C_CHROME_TOOLBAR_DESC,
+        ),
+        SettingSpec::new(
+            CHROME_FRAME,
+            Text::key(C_CHROME_FRAME),
+            SettingKind::Choice {
+                default: "custom".into(),
+                options: vec![
+                    UiOption::new("system", Text::key(C_FRAME_SYSTEM)),
+                    UiOption::new("custom", Text::key(C_FRAME_CUSTOM)),
+                ],
+            },
+        )
+        .describing(Text::key(C_CHROME_FRAME_DESC))
+        .grouped(Text::key(C_GROUP_CHROME))
+        .for_machine(),
+    ]
+}
+
+/// Changing decorations requires rebuilding the native window. The shell must
+/// not claim a live frame switch until the platform adapter explicitly applies it.
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+pub struct FrameCapabilities {
+    pub system: bool,
+    pub custom: bool,
+    pub requires_reopen: bool,
+}
+
+pub fn frame_capabilities() -> FrameCapabilities {
+    let desktop = cfg!(not(any(target_os = "android", target_os = "ios")));
+    FrameCapabilities {
+        system: desktop,
+        custom: desktop,
+        requires_reopen: desktop,
+    }
+}
+
+pub fn setting_requires_reopen(key: &str) -> bool {
+    matches!(key, CHROME_FRAME | CHROME_SCHEMA)
+}
+
+#[cfg(feature = "http-client")]
+fn service_settings() -> Vec<SettingSpec> {
+    vec![
+        SettingSpec::new(
+            SYNC_SERVER_URL,
+            Text::key(C_SYNC_SERVER_URL),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_SYNC_SERVER_URL_DESC))
+        .grouped(Text::key(C_GROUP_SYNC))
+        .for_machine(),
+        SettingSpec::toggle(SYNC_PAUSED, Text::key(C_SYNC_PAUSED), false)
+            .describing(Text::key(C_SYNC_PAUSED_DESC))
+            .grouped(Text::key(C_GROUP_SYNC))
+            .for_machine(),
+        SettingSpec::new(
+            SYNC_EXCLUDE,
+            Text::key(C_SYNC_EXCLUDE),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_SYNC_EXCLUDE_DESC))
+        .grouped(Text::key(C_GROUP_SYNC))
+        .for_machine(),
+        SettingSpec::new(
+            PUBLISH_SERVER_URL,
+            Text::key(C_PUBLISH_SERVER_URL),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_PUBLISH_SERVER_URL_DESC))
+        .grouped(Text::key(C_GROUP_PUBLISH))
+        .for_machine(),
     ]
 }
 
@@ -439,8 +645,19 @@ const C_GROUP_COMPONENTS: &str = "core.group.components";
 const C_GROUP_FILES: &str = "core.group.files";
 const C_ATTACHMENT_FOLDER: &str = "core.attachment_folder";
 const C_ATTACHMENT_FOLDER_DESC: &str = "core.attachment_folder.desc";
+const C_NEW_NOTE_FOLDER: &str = "core.new_note_folder";
+const C_NEW_NOTE_FOLDER_DESC: &str = "core.new_note_folder.desc";
+const C_FILES_TRASH: &str = "core.files_trash";
+const C_FILES_TRASH_DESC: &str = "core.files_trash.desc";
+const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
+const C_FILES_TRASH_SYSTEM: &str = "core.files_trash.system";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
+const C_GROUP_EDITOR: &str = "core.group.editor";
+const C_EDITOR_SPELLCHECK: &str = "core.editor.spellcheck";
+const C_EDITOR_SPELLCHECK_DESC: &str = "core.editor.spellcheck.desc";
+const C_EDITOR_VIM: &str = "core.editor.vim";
+const C_EDITOR_VIM_DESC: &str = "core.editor.vim.desc";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
 const C_GROUP_PRIVACY: &str = "core.group.privacy";
 const C_HISTORY: &str = "core.history";
@@ -458,6 +675,8 @@ const C_CONTRAST_HIGH: &str = "core.contrast.high";
 const C_DENSITY: &str = "core.density";
 const C_DENSITY_DESC: &str = "core.density.desc";
 const C_DENSITY_COMPACT: &str = "core.density.compact";
+const C_CSS_SNIPPETS: &str = "core.css_snippets";
+const C_CSS_SNIPPETS_DESC: &str = "core.css_snippets.desc";
 const C_DENSITY_COMFORTABLE: &str = "core.density.comfortable";
 const C_DENSITY_RELAXED: &str = "core.density.relaxed";
 const C_BODY: &str = "core.body";
@@ -475,10 +694,35 @@ const C_ACCENT: &str = "core.accent";
 const C_ACCENT_DESC: &str = "core.accent.desc";
 const C_ZOOM: &str = "core.zoom";
 const C_ZOOM_DESC: &str = "core.zoom.desc";
+const C_GROUP_CHROME: &str = "core.group.chrome";
+const C_CHROME_SCHEMA: &str = "core.chrome.schema";
+const C_CHROME_SCHEMA_DESC: &str = "core.chrome.schema.desc";
+const C_CHROME_RAIL: &str = "core.chrome.rail";
+const C_CHROME_RAIL_DESC: &str = "core.chrome.rail.desc";
+const C_CHROME_ORDER: &str = "core.chrome.order";
+const C_CHROME_ORDER_DESC: &str = "core.chrome.order.desc";
+const C_CHROME_STATUS: &str = "core.chrome.status";
+const C_CHROME_STATUS_DESC: &str = "core.chrome.status.desc";
+const C_CHROME_TOOLBAR: &str = "core.chrome.toolbar";
+const C_CHROME_TOOLBAR_DESC: &str = "core.chrome.toolbar.desc";
+const C_CHROME_FRAME: &str = "core.chrome.frame";
+const C_CHROME_FRAME_DESC: &str = "core.chrome.frame.desc";
+const C_FRAME_SYSTEM: &str = "core.chrome.frame.system";
+const C_FRAME_CUSTOM: &str = "core.chrome.frame.custom";
 const C_LOG_LEVEL: &str = "core.log.level";
 const C_LOG_LEVEL_DESC: &str = "core.log.level.desc";
 const C_LOG_VERBOSE: &str = "core.log.verbose";
 const C_LOG_VERBOSE_DESC: &str = "core.log.verbose.desc";
+const C_GROUP_SYNC: &str = "core.group.sync";
+const C_SYNC_SERVER_URL: &str = "core.sync.server_url";
+const C_SYNC_SERVER_URL_DESC: &str = "core.sync.server_url.desc";
+const C_SYNC_PAUSED: &str = "core.sync.paused";
+const C_SYNC_PAUSED_DESC: &str = "core.sync.paused.desc";
+const C_SYNC_EXCLUDE: &str = "core.sync.exclude";
+const C_SYNC_EXCLUDE_DESC: &str = "core.sync.exclude.desc";
+const C_GROUP_PUBLISH: &str = "core.group.publish";
+const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
+const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 
 /// L'etichetta italiana di un gradino del log. È prosa e non il nome tecnico:
 /// «info» dice poco a chi non sviluppa, «Info, avvisi ed errori» dice cosa
@@ -546,13 +790,83 @@ pub fn core_catalog() -> Vec<StringCatalog> {
     // che le fa coincidere con lo schema senza che nessuno le riconfronti.
     let mut it = StringCatalog::new("it")
         .with(C_GROUP_COMPONENTS, "Componenti")
+        .with("host.mount.add.title", "Collega una cartella esterna")
+        .with("host.mount.add.desc", "Registra una cartella assoluta già scelta dall'utente, senza symlink.")
+        .with("host.mount.remove.title", "Scollega una cartella esterna")
+        .with("host.mount.remove.desc", "Rimuove soltanto la rotta; lascia intatti i file esterni.")
+        .with("host.mount.list.title", "Elenca cartelle esterne")
+        .with("host.mount.list.desc", "Mostra la tabella delle rotte esterne attive.")
+        .with("host.mount.plan.add", "Collega «{name}» ({target}) nel namespace «{namespace}»")
+        .with("host.mount.plan.remove", "Scollega «{name}»; i file esterni restano dove sono")
+        .with("host.mount.absent", "Nessuna cartella esterna si chiama «{name}».")
+        .with("host.param.name", "Nome")
+        .with("host.param.absolute_folder", "Cartella assoluta")
+        .with("host.param.namespace", "Namespace")
+        .with("host.param.folder", "Cartella")
+        .with("host.param.doc", "Documento")
+        .with("host.trash_os.title", "Sposta nel cestino di sistema")
+        .with("host.trash_os.desc", "Prova il cestino del sistema; se non c'è usa il cestino interno senza perdere dati.")
+        .with("host.folder.title", "Nuova cartella")
+        .with("host.folder.desc", "Crea una cartella vuota nel vault; un nome occupato è un conflitto.")
+        .with("host.folder.plan", "Crea la cartella «{folder}»")
+        .with("host.folder.done", "Cartella «{folder}» creata")
+        .with("host.snapshot.create.title", "Snapshot completo del vault")
+        .with("host.snapshot.create.desc", "Chiude il vault, ne copia ogni voce autorevole in una cartella esterna nuova e lo riapre.")
+        .with("host.snapshot.apply.title", "Ripristina uno snapshot completo")
+        .with("host.snapshot.apply.desc", "Salva lo stato attuale in una cartella esterna nuova, poi sostituisce il contenuto del vault con lo snapshot e lo riapre.")
+        .with("host.param.snapshot_target", "Cartella di destinazione (path assoluto)")
+        .with("host.param.snapshot_source", "Snapshot da ripristinare (path assoluto)")
+        .with("host.param.snapshot_backup", "Dove salvare lo stato attuale (path assoluto)")
+        .with("host.snapshot.plan.create", "Copia ogni voce autorevole di «{root}» in «{target}». Il vault si chiude e si riapre.")
+        .with("host.snapshot.plan.apply", "Sostituisce il contenuto di «{root}» con le {count} voci di «{source}». Lo stato attuale viene salvato prima in «{backup}».")
+        .with("host.snapshot.done.create", "Snapshot completo scritto in «{target}»: {count} voci.")
+        .with("host.snapshot.done.apply", "Vault ripristinato da «{source}»: {count} voci. Lo stato precedente è in «{backup}».")
+        .with("host.snapshot.distinct", "Lo snapshot e il backup devono essere cartelle distinte.")
+        .with("host.snapshot.unreadable", "Non è uno snapshot leggibile: {path}")
+        .with("host.path.not_absolute", "Serve un path assoluto: {path}")
+        .with("host.path.invalid", "Non è una destinazione valida: {path}")
+        .with("host.path.missing_parent", "La cartella {path} non esiste.")
+        .with("host.path.exists", "{path} esiste già: uno snapshot non sovrascrive.")
+        .with("host.path.inside_vault", "{path} è dentro il vault.")
         .with(C_GROUP_FILES, "File")
         .with(C_ATTACHMENT_FOLDER, "Cartella degli allegati")
         .with(
             C_ATTACHMENT_FOLDER_DESC,
             "La cartella del vault in cui cercare e depositare gli allegati.",
         )
+        .with(C_NEW_NOTE_FOLDER, "Cartella delle nuove note")
+        .with(
+            C_NEW_NOTE_FOLDER_DESC,
+            "La cartella del vault per le note create senza un path esplicito; vuota indica la radice.",
+        )
+        .with(C_FILES_TRASH, "Note cancellate")
+        .with(
+            C_FILES_TRASH_DESC,
+            "Dove finisce una nota cancellata: il cestino del vault o quello del sistema. Se il sistema non ne ha uno, si usa il cestino del vault.",
+        )
+        .with(C_FILES_TRASH_VAULT, "Cestino del vault")
+        .with(C_FILES_TRASH_SYSTEM, "Cestino del sistema")
         .with(C_GROUP_APPEARANCE, "Aspetto")
+        .with(C_GROUP_CHROME, "Scocca")
+        .with(C_CHROME_SCHEMA, "Versione configurazione scocca")
+        .with(C_CHROME_SCHEMA_DESC, "Versione del formato locale; per cambiare versione è necessaria una riapertura.")
+        .with(C_CHROME_RAIL, "Mostra barra laterale")
+        .with(C_CHROME_RAIL_DESC, "Mostra le scorciatoie ai pannelli nella scocca.")
+        .with(C_CHROME_ORDER, "Ordine della barra laterale")
+        .with(C_CHROME_ORDER_DESC, "ID dei pannelli nell'ordine desiderato; quelli non elencati restano visibili.")
+        .with(C_CHROME_STATUS, "Mostra barra di stato")
+        .with(C_CHROME_STATUS_DESC, "Mostra le informazioni di stato della finestra.")
+        .with(C_CHROME_TOOLBAR, "Mostra strumenti del pannello")
+        .with(C_CHROME_TOOLBAR_DESC, "Mostra i comandi contestuali del pannello.")
+        .with(C_CHROME_FRAME, "Cornice finestra")
+        .with(C_CHROME_FRAME_DESC, "Il cambio di cornice richiede la riapertura e dipende dalle capacità del sistema.")
+        .with(C_FRAME_SYSTEM, "Del sistema")
+        .with(C_FRAME_CUSTOM, "Personalizzata")
+        .with(C_GROUP_EDITOR, "Editor")
+        .with(C_EDITOR_SPELLCHECK, "Controllo ortografico")
+        .with(C_EDITOR_SPELLCHECK_DESC, "Usa il controllo ortografico del sistema mentre scrivi.")
+        .with(C_EDITOR_VIM, "Modalità Vim")
+        .with(C_EDITOR_VIM_DESC, "Usa i comandi Vim nel motore testuale; spenta per impostazione predefinita.")
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Ricerche e note recenti")
         .with(
@@ -616,6 +930,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_ZOOM, "Zoom interfaccia")
         .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
+        .with(C_CSS_SNIPPETS, "Frammenti CSS locali")
+        .with(C_CSS_SNIPPETS_DESC, "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.")
+        .with(C_GROUP_SYNC, "Sincronizzazione")
+        .with(C_SYNC_SERVER_URL, "Server di sincronizzazione")
+        .with(
+            C_SYNC_SERVER_URL_DESC,
+            "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
+        )
+        .with(C_SYNC_PAUSED, "Sospendi sincronizzazione")
+        .with(
+            C_SYNC_PAUSED_DESC,
+            "Ferma le nuove operazioni di replica senza cancellare i dati o la coda locale.",
+        )
+        .with(C_SYNC_EXCLUDE, "Esclusioni aggiuntive")
+        .with(
+            C_SYNC_EXCLUDE_DESC,
+            "Elementi da non replicare. Le esclusioni di sicurezza restano sempre attive.",
+        )
+        .with(C_GROUP_PUBLISH, "Pubblicazione")
+        .with(C_PUBLISH_SERVER_URL, "Server di pubblicazione")
+        .with(
+            C_PUBLISH_SERVER_URL_DESC,
+            "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
+        )
         .with(C_GROUP_DIAGNOSTICS, "Diagnostica")
         .with(C_LOG_LEVEL, "Livello del log")
         .with(
@@ -640,13 +978,83 @@ pub fn core_catalog() -> Vec<StringCatalog> {
 
     let mut en = StringCatalog::new("en")
         .with(C_GROUP_COMPONENTS, "Components")
+        .with("host.mount.add.title", "Link an external folder")
+        .with("host.mount.add.desc", "Registers an absolute folder already chosen by the user, without symlinks.")
+        .with("host.mount.remove.title", "Unlink an external folder")
+        .with("host.mount.remove.desc", "Removes only the route; external files stay untouched.")
+        .with("host.mount.list.title", "List external folders")
+        .with("host.mount.list.desc", "Shows the table of active external routes.")
+        .with("host.mount.plan.add", "Link “{name}” ({target}) in namespace “{namespace}”")
+        .with("host.mount.plan.remove", "Unlink “{name}”; external files stay where they are")
+        .with("host.mount.absent", "No external folder is called “{name}”.")
+        .with("host.param.name", "Name")
+        .with("host.param.absolute_folder", "Absolute folder")
+        .with("host.param.namespace", "Namespace")
+        .with("host.param.folder", "Folder")
+        .with("host.param.doc", "Document")
+        .with("host.trash_os.title", "Move to the system trash")
+        .with("host.trash_os.desc", "Tries the system trash; if there is none, uses the internal trash without losing data.")
+        .with("host.folder.title", "New folder")
+        .with("host.folder.desc", "Creates an empty folder in the vault; a taken name is a conflict.")
+        .with("host.folder.plan", "Create folder “{folder}”")
+        .with("host.folder.done", "Folder “{folder}” created")
+        .with("host.snapshot.create.title", "Full vault snapshot")
+        .with("host.snapshot.create.desc", "Closes the vault, copies every authoritative entry into a new external folder and reopens it.")
+        .with("host.snapshot.apply.title", "Restore a full snapshot")
+        .with("host.snapshot.apply.desc", "Saves the current state into a new external folder, then replaces the vault content with the snapshot and reopens it.")
+        .with("host.param.snapshot_target", "Destination folder (absolute path)")
+        .with("host.param.snapshot_source", "Snapshot to restore (absolute path)")
+        .with("host.param.snapshot_backup", "Where to save the current state (absolute path)")
+        .with("host.snapshot.plan.create", "Copies every authoritative entry of “{root}” into “{target}”. The vault closes and reopens.")
+        .with("host.snapshot.plan.apply", "Replaces the content of “{root}” with the {count} entries of “{source}”. The current state is saved first in “{backup}”.")
+        .with("host.snapshot.done.create", "Full snapshot written to “{target}”: {count} entries.")
+        .with("host.snapshot.done.apply", "Vault restored from “{source}”: {count} entries. The previous state is in “{backup}”.")
+        .with("host.snapshot.distinct", "The snapshot and the backup must be different folders.")
+        .with("host.snapshot.unreadable", "Not a readable snapshot: {path}")
+        .with("host.path.not_absolute", "An absolute path is required: {path}")
+        .with("host.path.invalid", "Not a valid destination: {path}")
+        .with("host.path.missing_parent", "The folder {path} does not exist.")
+        .with("host.path.exists", "{path} already exists: a snapshot never overwrites.")
+        .with("host.path.inside_vault", "{path} is inside the vault.")
         .with(C_GROUP_FILES, "Files")
+        .with(C_GROUP_CHROME, "Window chrome")
+        .with(C_CHROME_SCHEMA, "Chrome configuration version")
+        .with(C_CHROME_SCHEMA_DESC, "Local format version; a version change requires reopening.")
+        .with(C_CHROME_RAIL, "Show side rail")
+        .with(C_CHROME_RAIL_DESC, "Show panel shortcuts in the window chrome.")
+        .with(C_CHROME_ORDER, "Side rail order")
+        .with(C_CHROME_ORDER_DESC, "Panel IDs in preferred order; unlisted panels remain visible.")
+        .with(C_CHROME_STATUS, "Show status bar")
+        .with(C_CHROME_STATUS_DESC, "Show window status information.")
+        .with(C_CHROME_TOOLBAR, "Show pane tools")
+        .with(C_CHROME_TOOLBAR_DESC, "Show contextual pane commands.")
+        .with(C_CHROME_FRAME, "Window frame")
+        .with(C_CHROME_FRAME_DESC, "Frame changes require reopening and depend on platform capabilities.")
+        .with(C_FRAME_SYSTEM, "System")
+        .with(C_FRAME_CUSTOM, "Custom")
         .with(C_ATTACHMENT_FOLDER, "Attachment folder")
         .with(
             C_ATTACHMENT_FOLDER_DESC,
             "The vault folder where attachments are found and deposited.",
         )
+        .with(C_NEW_NOTE_FOLDER, "New note folder")
+        .with(
+            C_NEW_NOTE_FOLDER_DESC,
+            "The vault folder for notes created without an explicit path; empty means the vault root.",
+        )
+        .with(C_FILES_TRASH, "Deleted notes")
+        .with(
+            C_FILES_TRASH_DESC,
+            "Where a deleted note goes: the vault trash or the system trash. If the system has none, the vault trash is used.",
+        )
+        .with(C_FILES_TRASH_VAULT, "Vault trash")
+        .with(C_FILES_TRASH_SYSTEM, "System trash")
         .with(C_GROUP_APPEARANCE, "Appearance")
+        .with(C_GROUP_EDITOR, "Editor")
+        .with(C_EDITOR_SPELLCHECK, "Spellcheck")
+        .with(C_EDITOR_SPELLCHECK_DESC, "Use the system spellchecker while editing.")
+        .with(C_EDITOR_VIM, "Vim mode")
+        .with(C_EDITOR_VIM_DESC, "Use Vim commands in text editors; off by default.")
         .with(C_PLUGINS_DISABLED, "Disabled components")
         .with(
             C_PLUGINS_DISABLED_DESC,
@@ -704,6 +1112,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_ZOOM, "Interface zoom")
         .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
+        .with(C_CSS_SNIPPETS, "Local CSS snippets")
+        .with(C_CSS_SNIPPETS_DESC, "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.")
+        .with(C_GROUP_SYNC, "Synchronization")
+        .with(C_SYNC_SERVER_URL, "Synchronization server")
+        .with(
+            C_SYNC_SERVER_URL_DESC,
+            "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
+        .with(C_SYNC_PAUSED, "Pause synchronization")
+        .with(
+            C_SYNC_PAUSED_DESC,
+            "Stop new replication operations without deleting data or the local queue.",
+        )
+        .with(C_SYNC_EXCLUDE, "Additional exclusions")
+        .with(
+            C_SYNC_EXCLUDE_DESC,
+            "Items not to replicate. Security exclusions always remain active.",
+        )
+        .with(C_GROUP_PUBLISH, "Publishing")
+        .with(C_PUBLISH_SERVER_URL, "Publishing server")
+        .with(
+            C_PUBLISH_SERVER_URL_DESC,
+            "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
         .with(C_GROUP_DIAGNOSTICS, "Diagnostics")
         .with(C_LOG_LEVEL, "Log level")
         .with(
@@ -928,5 +1360,31 @@ mod tests {
             panic!("la cartella degli allegati è testo");
         };
         assert_eq!(default, DEFAULT_ATTACHMENT_FOLDER);
+    }
+
+    #[test]
+    fn new_note_folder_is_a_vault_text_setting_defaulting_to_root() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == NEW_NOTE_FOLDER)
+            .expect("il core dichiara la cartella delle nuove note");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
+        let SettingKind::Text { default } = spec.kind else {
+            panic!("la cartella delle nuove note è testo");
+        };
+        assert_eq!(default, DEFAULT_NEW_NOTE_FOLDER);
+    }
+
+    #[test]
+    fn text_input_preferences_are_machine_settings_with_opt_in_vim() {
+        let machine = core_machine_settings();
+        for (key, expected) in [(EDITOR_SPELLCHECK, true), (EDITOR_VIM, false)] {
+            let spec = machine
+                .iter()
+                .find(|spec| spec.key == key)
+                .expect("preferenza testuale");
+            assert!(matches!(&spec.kind, SettingKind::Toggle { default } if *default == expected));
+            assert!(!spec.program_writable);
+        }
     }
 }

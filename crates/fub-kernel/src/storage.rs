@@ -58,7 +58,7 @@
 
 use std::collections::BTreeMap;
 use std::io;
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::sync::MutexGuard;
 
 use crate::poison::Shelter;
@@ -213,6 +213,22 @@ pub enum ConditionalWrite {
 pub trait VaultStorage: Send + Sync {
     /// I byte a questo path.
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>>;
+
+    /// I byte `[offset..offset+len)` a questo path, senza leggere il resto.
+    ///
+    /// Seek + lettura limitata reale: mai l'intero file in memoria, mai oltre
+    /// `len` + overhead costante. `len == 0` torna vuoto senza aprire il file;
+    /// `offset` oltre la fine torna vuoto, non un errore; a fine file il
+    /// risultato si ritaglia. Il default è `Err(Unsupported)` esplicito — mai
+    /// un full-read travestito, mai falsa apertura: ogni backend concreto
+    /// implementa seek/read limitato reale.
+    fn read_at(&self, path: &Utf8Path, offset: u64, len: usize) -> io::Result<Vec<u8>> {
+        let _ = (path, offset, len);
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "read_at non supportato dal backend",
+        ))
+    }
 
     /// Scrive i byte, **creando le cartelle che mancano**, e **o c'è o non
     /// c'è**: chi rilegge dopo un crash trova questi byte o quelli di prima,
@@ -386,6 +402,19 @@ pub trait VaultStorage: Send + Sync {
 
     /// Specie, dimensione e data di **un** path.
     fn stat(&self, path: &Utf8Path) -> io::Result<Stat>;
+    /// Specie di un path senza seguire collegamenti o reparse point.
+    ///
+    /// È una capacità di sicurezza: chi deve dimostrare che nessun componente
+    /// di un target esterno reindirizza altrove non può ricostruirla da
+    /// [`stat`](VaultStorage::stat), che segue i collegamenti. Il default
+    /// rifiuta esplicitamente invece di trasformare «non lo so» in «sicuro».
+    fn stat_no_follow(&self, path: &Utf8Path) -> io::Result<Stat> {
+        let _ = path;
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "stat senza seguire collegamenti non supportato dal backend",
+        ))
+    }
 
     /// C'è qualcosa a questo path?
     ///
@@ -515,6 +544,23 @@ pub trait VaultStorage: Send + Sync {
     /// Toglie una cartella **vuota**. Esiste solo per dare un fondo al default
     /// di [`VaultStorage::remove_dir_all`]: chi la sovrascrive non la usa.
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()>;
+
+    /// Crea una cartella **vuota**, con le cartelle mancanti sopra di lei.
+    ///
+    /// L'ultimo segmento deve essere libero: se c'è già una voce — cartella o
+    /// file — la risposta è `AlreadyExists` e niente cambia. Una cartella già
+    /// presente non è un successo silenzioso, perché chi chiede di crearla sta
+    /// scegliendo un nome e merita di sapere che era occupato.
+    ///
+    /// Il default è `Unsupported`: un supporto che non sa rappresentare una
+    /// cartella senza file dentro lo dice, invece di inventarne una che
+    /// sparisce alla prossima camminata.
+    fn create_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!("{dir}: il supporto non crea cartelle vuote"),
+        ))
+    }
 }
 
 // --- il filesystem ---------------------------------------------------------
@@ -1536,9 +1582,38 @@ pub(crate) fn rename_no_replace_path(from: &Utf8Path, to: &Utf8Path) -> io::Resu
     }
 }
 
+fn read_bounded(
+    mut file: impl io::Read + io::Seek,
+    size: u64,
+    offset: u64,
+    len: usize,
+) -> io::Result<Vec<u8>> {
+    if offset >= size {
+        return Ok(Vec::new());
+    }
+    let len = (size - offset).min(len as u64) as usize;
+    file.seek(io::SeekFrom::Start(offset))?;
+    let mut out = Vec::with_capacity(len);
+    file.take(len as u64).read_to_end(&mut out)?;
+    Ok(out)
+}
+
 impl VaultStorage for FsStorage {
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
         std::fs::read(path)
+    }
+
+    /// Seek + `take(len)`: apre, salta a `offset`, legge al massimo `len`
+    /// byte. `len == 0` non apre il file ma verifica che esista (stat);
+    /// oltre la fine torna vuoto.
+    fn read_at(&self, path: &Utf8Path, offset: u64, len: usize) -> io::Result<Vec<u8>> {
+        if len == 0 {
+            std::fs::metadata(path)?;
+            return Ok(Vec::new());
+        }
+        let file = std::fs::File::open(path)?;
+        let size = file.metadata()?.len();
+        read_bounded(file, size, offset, len)
     }
 
     /// Temporaneo accanto, `fsync`, rename, `fsync` della cartella — **salvo**
@@ -1840,9 +1915,37 @@ impl VaultStorage for FsStorage {
     fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
         std::fs::metadata(path).map(|metadata| stat_of(&metadata))
     }
+    fn stat_no_follow(&self, path: &Utf8Path) -> io::Result<Stat> {
+        let metadata = std::fs::symlink_metadata(path)?;
+        let file_type = metadata.file_type();
+        #[cfg(windows)]
+        let reparse = {
+            use std::os::windows::fs::MetadataExt;
+            metadata.file_attributes() & 0x400 != 0
+        };
+        #[cfg(not(windows))]
+        let reparse = false;
+        let kind = if file_type.is_symlink() || reparse {
+            EntryKind::Other
+        } else if metadata.is_dir() {
+            EntryKind::Dir
+        } else if metadata.is_file() {
+            EntryKind::File
+        } else {
+            EntryKind::Other
+        };
+        Ok(stat_with(kind, &metadata))
+    }
 
     fn exists(&self, path: &Utf8Path) -> bool {
         path.exists()
+    }
+
+    fn file_identity(&self, path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
+        Ok(identity_of_the_file(path).map(|identity| FileIdentity {
+            volume: identity.volume,
+            file: identity.file,
+        }))
     }
 
     fn change_stamp(&self, path: &Utf8Path) -> io::Result<Option<u64>> {
@@ -1917,6 +2020,17 @@ impl VaultStorage for FsStorage {
     /// che il registro dice e ciò che c'è.
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
         std::fs::remove_dir(dir)?;
+        for above in folders_to_sync(dir, None) {
+            sync_folder(&above);
+        }
+        Ok(())
+    }
+
+    fn create_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+        if let Some(parent) = dir.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::create_dir(dir)?;
         for above in folders_to_sync(dir, None) {
             sync_folder(&above);
         }
@@ -2353,6 +2467,7 @@ impl MemStorage {
     /// disco.
     /// L'atomicità che [`VaultStorage::write`] promette qui è gratis e non
     /// significa niente: la mappa si aggiorna sotto il lucchetto, quindi non
+    /// esiste un lettore che veda una scrittura a metà — e non esiste niente a
     fn lock(&self) -> MutexGuard<'_, Mem> {
         self.inner.acquire()
     }
@@ -2365,6 +2480,23 @@ impl VaultStorage for MemStorage {
             .get(path)
             .map(|(bytes, _)| bytes.clone())
             .ok_or_else(|| not_found(path))
+    }
+
+    /// Fetta `[start..end)` sui byte in memoria: `start` è `offset` saturato
+    /// sulla lunghezza, `end` è `start+len` saturato. Nessuna apertura, nessuna
+    /// lettura intera oltre la copia del pezzo.
+    fn read_at(&self, path: &Utf8Path, offset: u64, len: usize) -> io::Result<Vec<u8>> {
+        if len == 0 {
+            if !self.lock().files.contains_key(path) {
+                return Err(not_found(path));
+            }
+            return Ok(Vec::new());
+        }
+        let mem = self.lock();
+        let (bytes, _) = mem.files.get(path).ok_or_else(|| not_found(path))?;
+        let start = offset.min(bytes.len() as u64) as usize;
+        let end = start.saturating_add(len).min(bytes.len());
+        Ok(bytes[start..end].to_vec())
     }
 
     /// esiste un lettore che veda una scrittura a metà — e non esiste niente a
@@ -2519,17 +2651,52 @@ impl VaultStorage for MemStorage {
                 format!("{to}: esiste già"),
             ));
         }
-        let Some(entry) = mem.files.remove(from) else {
-            return Err(not_found(from));
-        };
         let now = mem.now();
-        if let Some(parent) = to.parent() {
-            if let Err(error) = mem.make_dirs(parent, now) {
-                mem.files.insert(from.to_owned(), entry);
-                return Err(error);
+        if let Some(entry) = mem.files.remove(from) {
+            if let Some(parent) = to.parent() {
+                if let Err(error) = mem.make_dirs(parent, now) {
+                    mem.files.insert(from.to_owned(), entry);
+                    return Err(error);
+                }
             }
+            mem.files.insert(to.to_owned(), entry);
+            mem.touches_the_parent(from, now);
+            mem.touches_the_parent(to, now);
+            return Ok(());
         }
-        mem.files.insert(to.to_owned(), entry);
+        if !mem.dirs.contains_key(from) {
+            return Err(not_found(from));
+        }
+        if let Some(parent) = to.parent() {
+            mem.make_dirs(parent, now)?;
+        }
+        let relocate = |old: &Utf8Path| -> Option<Utf8PathBuf> {
+            old.strip_prefix(from).ok().map(|rest| {
+                if rest.as_str().is_empty() {
+                    to.to_owned()
+                } else {
+                    to.join(rest)
+                }
+            })
+        };
+        let files: Vec<_> = mem
+            .files
+            .keys()
+            .filter_map(|path| relocate(path).map(|new| (path.clone(), new)))
+            .collect();
+        for (old, new) in files {
+            let entry = mem.files.remove(&old).expect("appena elencato");
+            mem.files.insert(new, entry);
+        }
+        let dirs: Vec<_> = mem
+            .dirs
+            .iter()
+            .filter_map(|(path, when)| relocate(path).map(|new| (path.clone(), new, *when)))
+            .collect();
+        for (old, new, when) in dirs {
+            mem.dirs.remove(&old);
+            mem.dirs.insert(new, when);
+        }
         mem.touches_the_parent(from, now);
         mem.touches_the_parent(to, now);
         Ok(())
@@ -2606,6 +2773,9 @@ impl VaultStorage for MemStorage {
         }
         Err(not_found(path))
     }
+    fn stat_no_follow(&self, path: &Utf8Path) -> io::Result<Stat> {
+        self.stat(path)
+    }
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
         let mut mem = self.lock();
@@ -2628,12 +2798,81 @@ impl VaultStorage for MemStorage {
         mem.touches_the_parent(dir, now);
         Ok(())
     }
+
+    fn create_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+        let mut mem = self.lock();
+        if mem.files.contains_key(dir) || mem.dirs.contains_key(dir) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("{dir}: esiste già"),
+            ));
+        }
+        let now = mem.now();
+        mem.make_dirs(dir, now)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn bounded_reads_check_eof_before_seeking_or_allocating() {
+        for rooted in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = Utf8Path::from_path(temp.path()).unwrap();
+            let storage: Box<dyn VaultStorage> = if rooted {
+                Box::new(rooted::RootedFsStorage::open(root).unwrap())
+            } else {
+                Box::new(FsStorage)
+            };
+            let path = root.join("bytes.bin");
+            storage.write(&path, b"0123456789").unwrap();
+            assert!(storage.read_at(&path, u64::MAX, 1).unwrap().is_empty());
+            assert_eq!(storage.read_at(&path, 8, usize::MAX).unwrap(), b"89");
+        }
+    }
+
+    /// I tre supporti rispondono allo stesso modo: la cartella nasce con gli
+    /// antenati, e un nome occupato — da una cartella o da un file — è
+    /// `AlreadyExists` senza toccare ciò che c'era.
+    #[test]
+    fn create_dir_makes_ancestors_and_refuses_a_taken_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(temp.path()).unwrap();
+        for which in ["fs", "rooted", "mem"] {
+            let root = base.join(which);
+            std::fs::create_dir(&root).unwrap();
+            let storage: Box<dyn VaultStorage> = match which {
+                "fs" => Box::new(FsStorage),
+                "rooted" => Box::new(rooted::RootedFsStorage::open(&root).unwrap()),
+                _ => Box::new(MemStorage::new()),
+            };
+            let dir = root.join("a/b");
+            storage.create_dir(&dir).unwrap();
+            assert_eq!(storage.stat(&dir).unwrap().kind, EntryKind::Dir, "{which}");
+            assert_eq!(
+                storage.stat(&root.join("a")).unwrap().kind,
+                EntryKind::Dir,
+                "{which}"
+            );
+            assert!(storage.list(&dir).unwrap().is_empty(), "{which}");
+            assert_eq!(
+                storage.create_dir(&dir).unwrap_err().kind(),
+                io::ErrorKind::AlreadyExists,
+                "{which}"
+            );
+            let file = root.join("a/nota.md");
+            storage.write(&file, b"testo").unwrap();
+            assert_eq!(
+                storage.create_dir(&file).unwrap_err().kind(),
+                io::ErrorKind::AlreadyExists,
+                "{which}"
+            );
+            assert_eq!(storage.read(&file).unwrap(), b"testo", "{which}");
+        }
+    }
 
     /// Sta qui e non nel banco appaiato di `tests/il_supporto.rs` per la
     /// ragione che rende utile un contatore: di là c'è un orologio vero, e due

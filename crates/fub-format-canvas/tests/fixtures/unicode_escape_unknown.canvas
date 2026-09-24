@@ -1,0 +1,9 @@
+{
+  "unrecognizedRoot": [1, {"preserve":true}],
+  "title": "Città 🗺️",
+  "nodes": [
+    {"id":"f","type":"file","x":0,"y":0,"width":200,"height":100,"file":"allegati/\u0055nicodé.png","unknown":{"keep":"value"}},
+    {"id":"t","type":"text","x":220,"y":0,"width":200,"height":100,"text":"Riga uno\n[[Caff\u00e9#Sezione|alias]]","vendor":{"emoji":"🧭"}}
+  ],
+  "edges": []
+}

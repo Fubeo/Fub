@@ -130,6 +130,8 @@ describe("DocumentSurfaceRegistry", () => {
       onChange: vi.fn(),
       onSelectionChange: vi.fn(),
       onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(),
+      onOpenDocument: vi.fn(),
       onSearchTag: vi.fn(),
       completions: {
         searchNotes: async () => [],
@@ -142,6 +144,131 @@ describe("DocumentSurfaceRegistry", () => {
       family: "grid",
       profile: "sheet",
     });
+  });
+
+  it("selects canvas and local media profiles without a network fallback", () => {
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    expect(registry.resolve({ formatId: "canvas", sourceKind: "text", documentId: "board.canvas" }))
+      .toMatchObject({ owner: "fub.shell.canvas", family: "canvas", profile: "canvas" });
+    for (const [id, profile] of [
+      ["photo.PNG", "media-image"], ["recording.m4a", "media-audio"],
+      ["movie.webm", "media-video"], ["report.pdf", "media-pdf"], ["report.pdf#page=3", "media-pdf"],
+      ["unknown.bin", "bytes-read-only"],
+    ]) {
+      expect(registry.resolve({ formatId: null, sourceKind: "bytes", documentId: id }))
+        .toMatchObject({ family: "viewer", profile });
+    }
+    const parent = document.createElement("div");
+    const viewer = registry.mount(
+      { formatId: null, sourceKind: "bytes", documentId: "photo.PNG" },
+      { paneId: "photo", documentId: "photo.PNG", parent },
+    );
+    expect(parent.querySelector(".document-surface-viewer")?.textContent)
+      .toBeTruthy();
+    expect(parent.querySelector("img, audio, video, iframe")).toBeNull();
+    viewer.destroy();
+    const board = registry.mount(
+      { formatId: "canvas", sourceKind: "text", documentId: "board.canvas" },
+      { paneId: "board", documentId: "board.canvas", parent },
+    );
+    board.setDoc(JSON.stringify({
+      nodes: [{ id: "remote", type: "link", x: 0, y: 0, width: 100, height: 100, url: "https://example.com" }],
+      edges: [],
+    }));
+    expect(parent.querySelector<HTMLButtonElement>(".canvas-open-url")?.disabled).toBe(true);
+    expect(parent.querySelector("iframe, video, audio")).toBeNull();
+    board.destroy();
+  });
+
+  it("keeps unknown canvas fields when an edit flows through the source surface", () => {
+    const changes: Array<{ text: string }> = [];
+    const registry = createDocumentSurfaceRegistry({
+      onChange: (_pane, change) => changes.push(change),
+      onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(), onOpenPath: vi.fn(),
+      onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const parent = document.createElement("div");
+    const surface = registry.mount(
+      { formatId: "canvas", sourceKind: "text", documentId: "board.canvas" },
+      { paneId: "board", documentId: "board.canvas", parent, formatId: "canvas" },
+    );
+    const original = JSON.stringify({
+      nodes: [{ id: "n", type: "text", x: 40, y: 40, width: 100, height: 100, text: "hello", vendorNode: { kept: 1 } }],
+      edges: [], vendorRoot: ["preserved"],
+    });
+    surface.setDoc(original);
+    expect(surface.getDoc()).toBe(original);
+    const viewport = parent.querySelector<HTMLElement>(".canvas-viewport")!;
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(changes).toHaveLength(1);
+    expect(JSON.parse(changes[0]!.text)).toMatchObject({
+      vendorRoot: ["preserved"], nodes: [{ x: 48, vendorNode: { kept: 1 } }],
+    });
+    surface.destroy();
+  });
+
+  it("rejects corrupt canvas without changing its source and selects the existing error surface", () => {
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const parent = document.createElement("div");
+    const board = registry.mount(
+      { formatId: "canvas", sourceKind: "text", documentId: "bad.canvas" },
+      { paneId: "bad", documentId: "bad.canvas", parent },
+    );
+    expect(() => board.setDoc("{")).toThrow("canvas JSON");
+    expect(board.getDoc()).toBe("");
+    board.destroy();
+    const failure = registry.mount(
+      { formatId: null, sourceKind: "text", override: { family: "error" } },
+      { paneId: "bad", documentId: "bad.canvas", parent, errorReason: "canvas JSON non valido" },
+    );
+    expect(failure.family).toBe("error");
+    expect(parent.querySelector('[role="alert"]')?.textContent).toContain("canvas JSON non valido");
+    failure.destroy();
+  });
+
+  it("closes a media handle when its surface closes during a pending read", async () => {
+    let finishRead!: (bytes: ArrayBuffer) => void;
+    const read = new Promise<ArrayBuffer>((resolve) => { finishRead = resolve; });
+    const close = vi.fn(async () => {});
+    const readChunk = vi.fn(() => read);
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+      media: {
+        transport: {
+          open: async () => ({
+            handle: "7", id: "recording.mp3", len: 8,
+            mime: "audio/mpeg", kind: "audio", revision: null,
+          }),
+          read_chunk: readChunk,
+          close,
+        },
+      },
+    });
+    const parent = document.createElement("div");
+    const audio = registry.mount(
+      { formatId: null, sourceKind: "bytes", documentId: "recording.mp3" },
+      { paneId: "audio", documentId: "recording.mp3", parent },
+    );
+    await vi.waitFor(() => expect(parent.querySelector(".media-surface")).not.toBeNull());
+    await vi.waitFor(() => expect(readChunk).toHaveBeenCalledTimes(1));
+    audio.destroy();
+    await vi.waitFor(() => expect(close).toHaveBeenCalledWith("7"));
+    finishRead(new Uint8Array(8).buffer);
+    await Promise.resolve();
+    expect(parent.querySelector("audio, video, img")).toBeNull();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("ignores an unavailable override instead of leaving the pane empty", () => {
@@ -288,6 +415,8 @@ describe("DocumentSurfaceRegistry", () => {
       onChange: vi.fn(),
       onSelectionChange: vi.fn(),
       onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(),
+      onOpenDocument: vi.fn(),
       onSearchTag: vi.fn(),
       completions: {
         searchNotes: async () => [],

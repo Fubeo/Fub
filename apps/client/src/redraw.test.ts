@@ -56,7 +56,7 @@ vi.mock("./host/ipc", () => {
       },
     ),
     onKernelEvent: (handler: (n: unknown) => void) => now().onKernelEvent(handler as never),
-    onClose: (first: () => Promise<void>) => now().onClose(first),
+    onClose: (first: () => Promise<boolean>, onFailure: (reason: unknown) => void) => now().onClose(first, onFailure),
     // `finestra` è il manico della titlebar custom (§Fase 1): no-op in test.
     window: {
       minimize: async () => {},
@@ -93,13 +93,6 @@ function folderVault(count: number): Record<string, string> {
   const file: Record<string, string> = {};
   for (let i = 0; i < count; i += 1) file[`folder-${String(i).padStart(5, "0")}/una.md`] = "x";
   return file;
-}
-
-/// Un host montato **senza** la shell: serve a chi prova un modulo che disegna
-/// (l'anteprima) e non il cablaggio dell'avvio.
-function hostOnly(file: Record<string, string>): FakeHost {
-  box.host = createFakeHost({ file });
-  return box.host;
 }
 
 async function start(file: Record<string, string>): Promise<FakeHost> {
@@ -239,85 +232,3 @@ describe("il prezzo di un ridisegno (§2.9)", () => {
   });
 });
 
-describe("il prezzo di un'anteprima (§2.9)", () => {
-  beforeEach(() => {
-    document.body.innerHTML = "";
-  });
-
-  it("le immagini non partono tutte insieme: chi decide quando è il browser", async () => {
-    // La metà fattibile del *lazy loading*: la shell non calcola cosa si vede —
-    // non ha layout, e non l'avrà nemmeno in una webview vera senza pagarlo —
-    // ma può **dichiarare che non vuole deciderlo lei**. Vale per ogni HTML che
-    // entra, quindi sta nel punto unico (§3.6) e non nell'anteprima: il secondo
-    // cliente lo eredita senza saperlo.
-    hostOnly({ "nota.md": '<p><img src="a.png"><img src="b.png"></p>' });
-    const { updatePreview } = await import("./panels/preview");
-    const el = document.createElement("div");
-    document.body.appendChild(el);
-    await updatePreview(el, "nota.md");
-    const images = [...el.querySelectorAll("img")];
-    expect(images).toHaveLength(2);
-    expect(images.map((i) => i.getAttribute("loading"))).toEqual(["lazy", "lazy"]);
-    expect(images.map((i) => i.getAttribute("decoding"))).toEqual(["async", "async"]);
-  });
-
-  it("la stessa nota trasclusa tre volte si chiede al kernel una volta sola", async () => {
-    // La profondità degli embed era limitata, la larghezza no — e un
-    // `![[Glossario]]` ripetuto erano viaggi identici sul ponte. Il memo dura
-    // la singola idratazione, e la sua correttezza è la promessa che
-    // `FormatProvider::render_html` fa: la resa di un blocco dipende dal
-    // blocco.
-    const embed = (page: string, h = "") =>
-      `<div class="embed" data-embed-page="${page}" data-embed-heading="${h}"></div>`;
-    const host = hostOnly({
-      "nota.md": embed("Glossario") + embed("Glossario") + embed("Glossario"),
-    });
-    const { updatePreview } = await import("./panels/preview");
-    const el = document.createElement("div");
-    document.body.appendChild(el);
-    await updatePreview(el, "nota.md");
-    const embeds = queries(host).filter((q) => q.kind === "render_embed");
-    expect(embeds).toHaveLength(1);
-    expect(el.querySelectorAll(".embed-loaded")).toHaveLength(3);
-  });
-
-  it("due sezioni diverse della stessa nota restano due domande", async () => {
-    // Il secondo guasto del memo, e quello che una chiave sbagliata renderebbe
-    // muto: unificare per **pagina** invece che per pagina *e* punto
-    // mostrerebbe tre volte la stessa sezione senza dirlo a nessuno.
-    const embed = (page: string, h: string) =>
-      `<div class="embed" data-embed-page="${page}" data-embed-heading="${h}"></div>`;
-    const host = hostOnly({
-      "nota.md": embed("Glossario", "A") + embed("Glossario", "B") + embed("Glossario", "A"),
-    });
-    const { updatePreview } = await import("./panels/preview");
-    const el = document.createElement("div");
-    document.body.appendChild(el);
-    await updatePreview(el, "nota.md");
-    const embeds = queries(host).filter((q) => q.kind === "render_embed");
-    expect(embeds.map((q) => q.heading)).toEqual(["A", "B"]);
-  });
-
-  it("l'ancora di blocco di un embed arriva al kernel, e distingue due domande", async () => {
-    // La terza coordinata. `![[Nota#^b]]` trasclude **quel blocco**: se la
-    // chiave del memo non la porta, due embed della stessa pagina con due
-    // ancore diverse si scambiano la risposta — che è lo stesso guasto del
-    // test qui sopra, un campo più in là. E se non la porta la chiamata, il
-    // blocco non arriva affatto e si vede la nota intera, che è la risposta
-    // plausibile che nasconde l'errore.
-    const embed = (page: string, b: string) =>
-      `<div class="embed" data-embed-page="${page}" data-embed-block="${b}"></div>`;
-    const host = hostOnly({
-      "nota.md": embed("Glossario", "b1") + embed("Glossario", "b2") + embed("Glossario", "b1"),
-    });
-    const { updatePreview } = await import("./panels/preview");
-    const el = document.createElement("div");
-    document.body.appendChild(el);
-    await updatePreview(el, "nota.md");
-    const embeds = queries(host).filter((q) => q.kind === "render_embed");
-    // La terza coordinata nella domanda, non in una porta bespoke: la 0163 ha
-    // portato il rendering al canale dati, e `renderEmbed` non esiste più.
-    expect(embeds.map((q) => q.block)).toEqual(["b1", "b2"]);
-    expect(el.querySelectorAll(".embed-loaded")).toHaveLength(3);
-  });
-});

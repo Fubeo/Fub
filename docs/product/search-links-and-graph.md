@@ -13,6 +13,39 @@ dell'indicizzazione. Un indice assente o incompatibile può essere rigenerato.
 
 Le query attraversano la porta generica dell'indice; non nasce un comando IPC
 per ogni filtro.
+Il linguaggio è un albero di clausole in OR e letterali in AND con negazione
+per foglia. Le foglie testo, regex e task vivono nell'indice full-text;
+proprietà, tag, cartella, path, estensione e link usano i metadati e il grafo
+del kernel. Testo significa termini in AND o frase esatta, con tolleranza
+esatta o refusi che restringono invece di allargare; `case_sensitive` e le
+regex lavorano sui campi memorizzati con limiti dichiarati di pattern,
+documenti e byte. La stessa espressione vale per ricerca globale, viste,
+query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
+proprietario e ricompone l'AND/OR senza divergenze.
+
+La riga della barra di ricerca ha una sintassi propria, compilata in quella
+stessa espressione dalla regola `fub_abi::rules::search_syntax`. La sua gemella
+TypeScript è legata da una fixture, così la barra della shell, `fub-cli search`
+e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
+
+- parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR`
+  maiuscolo fra alternative e `( … )` per raggruppare;
+- `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`,
+  `[chiave:>v]`, `[chiave:<v]`, con valori numerici, booleani o date ISO
+  confrontati per specie;
+- gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`,
+  `ext:`, `task:todo`, `task:done` e `match-case:`, con valore anche fra
+  virgolette.
+
+Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
+URL non producono un errore. Un errore di sintassi porta la specie e la
+colonna, e la barra lo mostra al posto dei risultati. Un gruppo negato non è
+ammesso, e un'espressione che dopo la distribuzione supera 32 alternative viene
+rifiutata.
+
+I tag di una nota sono quelli nel testo e quelli dichiarati dalla chiave `tags`
+del frontmatter, come elenco o come stringa separata da virgole o spazi. Il
+kernel e l'indice full-text applicano la stessa regola.
 
 ## Link
 
@@ -27,6 +60,20 @@ Il provider estrae dalla sorgente l'intento del link:
 Il kernel risolve l'intento rispetto al vault e agli indici correnti. La
 sorgente conserva ciò che l'utente ha scritto; la risoluzione è un dato
 derivato.
+Wikilink e path seguono regole diverse: il primo risolve per path con slash,
+nome e alias con priorità deterministica fra omonimi; il secondo solo per
+path relativo al documento. Heading e blocchi condividono slug e ancore
+canoniche; un punto rinominato apre la nota senza inventare una destinazione.
+Completamento e cambio rapido propongono nomi per pertinenza senza riordinare
+nella shell, e la rinomina riscrive soltanto i wikilink che nominavano la nota.
+Il pannello mostra incoming, outgoing con contesto per riferimento, menzioni
+non collegate in entrata e in uscita con filtro, e la conversione esplicita
+della menzione in `[[bersaglio]]` con revisione e span dichiarati.
+Il pannello tag mostra gerarchia piatta o ad albero, ordinamento per nome o
+conteggio e selezione multipla per esemplare; click e selezione lanciano la
+stessa domanda tag dell'indice tramite RunSearch. Pannelli collegati e backlink
+nel documento sono opzioni di presentazione degli stessi dati, non indici
+duplicati.
 
 ```mermaid
 flowchart LR
@@ -36,6 +83,12 @@ flowchart LR
     RESOLVE --> BACKLINK["backlink"]
     RESOLVE --> GRAPH["arco del grafo"]
 ```
+
+Passando sopra un wikilink in Lettura, dopo un breve ritardo compare la nota
+collegata in una scheda di sola lettura; in Live serve Ctrl/Cmd, per non
+disturbare chi scrive. La scheda legge dal canale dati come gli embed, non apre
+sessioni né buffer, e si chiude uscendo dal link e dalla scheda o con Esc. Un
+link che non si risolve non apre niente.
 
 ## Backlink e vicini
 
@@ -49,7 +102,10 @@ dichiara invece di inventare un grafo completo.
 
 Il provider ufficiale prepara un payload dichiarativo con nodi e archi. La
 shell possiede il renderer Canvas e l'interazione. Il kernel non conosce pixel,
-camera o animazioni.
+camera o animazioni. Il payload dichiara vista locale fino a tre passi, gruppi
+per cartella o primo tag, filtri per orfani e allegati e timestamp di modifica;
+assenti valgono il grafo globale. Posizione e animazione restano stato effimero
+della shell.
 
 Questo confine deve restare stabile:
 

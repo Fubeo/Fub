@@ -25,6 +25,10 @@ export interface FolderContent {
   /// DocId completi delle note dirette (folder note inclusa: la nasconde chi
   /// disegna).
   notes: string[];
+  /// DocId completi dei file diretti che **non** sono note: allegati e file
+  /// che nessun provider riconosce. Stanno nell'albero perché sul disco ci
+  /// sono; non hanno folder note, rinomina di pagina né ordine a mano.
+  files: string[];
   /// Quante ne ha lasciate fuori la finestra (§2.9): un livello troncato **si
   /// dice**, e per dirlo bisogna portarselo fin qui. Zero è il caso normale.
   otherFolders: number;
@@ -65,6 +69,7 @@ export function sortContent(content: FolderContent, meta: Organization): FolderC
       compareNames(childName(a.path), childName(b.path), custom),
     ),
     notes: [...content.notes].sort((a, b) => compareNames(childName(a), childName(b), custom)),
+    files: [...content.files].sort((a, b) => collator.compare(childName(a), childName(b))),
     otherFolders: content.otherFolders,
     otherNote: content.otherNote,
   };

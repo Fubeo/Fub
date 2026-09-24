@@ -1,0 +1,14 @@
+[package]
+name = "fub-format-base"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Native .base document format: YAML view definitions over note properties, with a bounded non-eval formula engine."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+thiserror = { workspace = true }
+fub-abi = { workspace = true }

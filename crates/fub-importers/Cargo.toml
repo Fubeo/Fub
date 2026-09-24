@@ -1,0 +1,19 @@
+[package]
+name = "fub-importers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "P10 official import/export providers: local parsers (HTML/CSV/ZIP/Textbundle/ENEX/XML/JSON), authorized API connectors, faithful CSV/PDF export. No new ABI families."
+
+[dependencies]
+fub-abi = { workspace = true }
+fub-format-markdown = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+flate2 = { workspace = true }
+quick-xml = { workspace = true }
+
+[dev-dependencies]
+fub-sdk = { workspace = true }
+serde_json = { workspace = true }

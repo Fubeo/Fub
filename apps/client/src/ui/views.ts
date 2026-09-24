@@ -147,6 +147,7 @@ export async function mountViewInPane(
   view: string,
   pane: string,
   container: HTMLElement,
+  params: unknown = null,
 ): Promise<void> {
   const spec = primarySpecs.get(view);
   if (!spec) return;
@@ -161,7 +162,7 @@ export async function mountViewInPane(
       view,
       container,
       instance: pane,
-      params: null,
+      params,
       epoch: ++mountedEpoch,
       race: new Race(),
     });
@@ -175,6 +176,10 @@ export async function mountViewInPane(
       view,
       render: () => renderDeclaredView(id),
     });
+  } else if (already.params !== params) {
+    already.race.cancel();
+    already.epoch++;
+    already.params = params;
   }
   await refreshPanel(id);
 }

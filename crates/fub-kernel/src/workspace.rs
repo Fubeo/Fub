@@ -74,11 +74,14 @@ use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandSpec, Failure, InvokeMode, Partial, UndoStep, Undone,
 };
 use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
-use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
+use fub_abi::error::FormatError;
 use fub_abi::event::DocChanges;
-use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions, SourceKind};
+use fub_abi::format::{
+    DocumentFormat, DocumentSource, FormatProvider, LinkRewrite, ParseContext, RenderOptions,
+    RenderTarget, SourceKind,
+};
 use fub_abi::locale::Locale;
-use fub_abi::model::{canonical_anchor, heading_matches, DocId, DocumentModel, LinkTarget, Span};
+use fub_abi::model::{canonical_anchor, heading_matches, DocId, DocumentModel, LinkTarget};
 use fub_abi::query::{Matches, QueryEvaluator, QueryPredicate};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::{
@@ -97,7 +100,10 @@ use fub_abi::transfer::{
     ImportReport, ImportRequest, ImportSource, SourceContent, SourceHandle, StreamedSource,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fub_abi::{Actor, Event, Notice, PluginError, Severity};
+use fub_abi::{
+    Actor, EditReport, EditRequest, Event, Notice, PluginError, Revision, Severity, TextEdit,
+    WriteBase,
+};
 use serde::{Deserialize, Serialize};
 
 use fub_abi::render::EmbedContent;
@@ -130,11 +136,12 @@ use crate::providers::{
     ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredGrid, RegisteredView,
 };
 use crate::registry::FormatRegistry;
+use crate::rename_recovery::{self, RenameRecoveryEdit, RenameRecoveryReceipt, RenameRecoveryScan};
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
-use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
+use crate::transfer::{MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
 use crate::vault::{PreparedIgnoreCheck, PreparedTrashSweep, TrashEntry};
 use crate::viewstate::ViewStates;
@@ -319,6 +326,7 @@ pub struct PreparedExplicitRename {
     source_kind: SourceKind,
     rewrites: Vec<PreparedExplicitLinkRewrite>,
     side_data: PreparedRenameSideData,
+    recovery_root: Utf8PathBuf,
 }
 /// Piano owned di una rinomina esplicita di una voce senza provider di formato.
 ///
@@ -332,6 +340,7 @@ pub struct PreparedExplicitAssetRename {
     storage: Arc<dyn crate::storage::VaultStorage>,
     rewrites: Vec<PreparedExplicitLinkRewrite>,
     side_data: PreparedAssetRenameSideData,
+    recovery_root: Utf8PathBuf,
 }
 
 /// Asset già spostato e fotografato esattamente, ancora da riconvalidare nel core.
@@ -344,6 +353,7 @@ pub struct MovedExplicitAssetRename {
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
     side_data: CompletedAssetRenameSideData,
+    recovery: RenameRecoveryReceipt,
 }
 
 /// Core della rinomina asset installato, con callback ancora da invocare.
@@ -353,6 +363,7 @@ pub struct PendingExplicitAssetRename {
     installed: VaultEntry,
     rewrites: Vec<(DocId, EditRequest)>,
     side_data: CompletedAssetRenameSideData,
+    recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
     origin: fub_abi::event::Origin,
     from: DocId,
@@ -383,6 +394,7 @@ pub struct ParsedExplicitRename {
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
     side_data: CompletedRenameSideData,
+    recovery: RenameRecoveryReceipt,
 }
 /// Core della rinomina esplicita già installato, con gli handle degli indici
 /// ancora da invocare fuori dal workspace.
@@ -391,6 +403,7 @@ pub struct PendingExplicitRename {
     identity: PendingIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
     side_data: CompletedRenameSideData,
+    recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
     origin: fub_abi::event::Origin,
     from: DocId,
@@ -403,6 +416,7 @@ pub struct CompletedExplicitRename {
     identity: CompletedIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
     side_data: CompletedRenameSideData,
+    recovery: RenameRecoveryReceipt,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
     journal_fault: Option<String>,
@@ -441,14 +455,20 @@ struct ExplicitRenameSnapshot {
 struct PreparedExplicitLinkRewrite {
     source_path: Utf8PathBuf,
     destination: DocId,
-    edits: Vec<PreparedExplicitLinkEdit>,
+    provider: Option<std::sync::Arc<dyn FormatProvider>>,
+    provider_id: String,
+    ctx: ParseContext,
+    source_kind: SourceKind,
+    rewrites: Vec<LinkRewrite>,
 }
 
-struct PreparedExplicitLinkEdit {
-    span: Span,
-    written: String,
-    replacement: String,
-    from_end: bool,
+/// Fotografia provider-owned di una sorgente da riscrivere: handle condiviso,
+/// id formato, contesto parse e specie sorgente. Solo dati owned, nessun lock.
+struct RewritePlan {
+    provider: std::sync::Arc<dyn FormatProvider>,
+    provider_id: String,
+    ctx: ParseContext,
+    source_kind: SourceKind,
 }
 
 /// Routing owned di una rinomina consegnata dal watcher.
@@ -717,8 +737,8 @@ impl SyncPlan {
 
 impl PreparedExplicitRename {
     /// Legge e parsa una versione stabile della sorgente, costruisce le
-    /// richieste CAS dei backlink, poi migra i side-data e infine sposta il
-    /// file. Tutto avviene senza un prestito del workspace.
+    /// richieste CAS dei backlink e persiste l'intent recuperabile prima di
+    /// migrare side-data o file. Tutto avviene senza un prestito del workspace.
     pub fn invoke(self) -> Result<ParsedExplicitRename> {
         let PreparedExplicitRename {
             snapshot,
@@ -727,6 +747,7 @@ impl PreparedExplicitRename {
             source_kind,
             rewrites,
             side_data,
+            recovery_root,
         } = self;
 
         let path = snapshot.from_path.clone();
@@ -777,22 +798,36 @@ impl PreparedExplicitRename {
             SourceKind::Bytes => DocumentSource::Bytes(bytes),
         };
         let model = parser.invoke(source)?;
-
-        let rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites);
+        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
 
         let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
         if !same_file && storage.exists(&snapshot.to_path) {
             return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
         }
+        let mut recovery = rename_recovery::persist(
+            Arc::clone(&storage),
+            &recovery_root,
+            snapshot.from.clone(),
+            snapshot.to.clone(),
+            fingerprint.clone(),
+            durable_rewrites.clone(),
+        )?;
+        let rewrites = durable_rewrites
+            .iter()
+            .map(|rewrite| (rewrite.source().clone(), rewrite.request().clone()))
+            .collect();
         let side_data = side_data.invoke();
         if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
-            let rollback_errors = side_data.rollback();
+            let mut rollback_errors = side_data.rollback();
+            if let Err(error) = recovery.cancel() {
+                rollback_errors.push(format!("intent di recupero non cancellato: {error}"));
+            }
             if source.kind() == std::io::ErrorKind::AlreadyExists {
                 let to = if rollback_errors.is_empty() {
                     snapshot.to.to_string()
                 } else {
                     format!(
-                        "{}; anche il rollback dei side-data è fallito: {}",
+                        "{}; anche il rollback è fallito: {}",
                         snapshot.to,
                         rollback_errors.join("; ")
                     )
@@ -805,7 +840,7 @@ impl PreparedExplicitRename {
                 std::io::Error::new(
                     source.kind(),
                     format!(
-                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        "{source}; anche il rollback è fallito: {}",
                         rollback_errors.join("; ")
                     ),
                 )
@@ -824,6 +859,7 @@ impl PreparedExplicitRename {
             identity,
             rewrites,
             side_data,
+            recovery,
         })
     }
 }
@@ -838,6 +874,7 @@ impl ParsedExplicitRename {
             fingerprint,
             identity,
             side_data,
+            mut recovery,
             ..
         } = self;
         let before = storage
@@ -880,20 +917,35 @@ impl ParsedExplicitRename {
         {
             return Err(KernelError::Stale(snapshot.to.to_string()));
         }
-        storage
-            .rename_no_replace(&snapshot.to_path, &snapshot.from_path)
-            .map_err(|source| KernelError::Io {
-                path: snapshot.to_path.clone(),
+        recovery.mark_cancelled()?;
+        let mut rollback_errors = side_data.rollback();
+        if let Err(source) = storage.rename_no_replace(&snapshot.to_path, &snapshot.from_path) {
+            let source = if rollback_errors.is_empty() {
+                source
+            } else {
+                std::io::Error::new(
+                    source.kind(),
+                    format!(
+                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        rollback_errors.join("; ")
+                    ),
+                )
+            };
+            return Err(KernelError::Io {
+                path: snapshot.to_path,
                 source,
-            })?;
-        let rollback_errors = side_data.rollback();
+            });
+        }
+        if let Err(error) = recovery.complete() {
+            rollback_errors.push(format!("intent di recupero non rimosso: {error}"));
+        }
         if rollback_errors.is_empty() {
             Ok(())
         } else {
             Err(KernelError::Io {
                 path: snapshot.from_path,
                 source: std::io::Error::other(format!(
-                    "il file è stato ripristinato, ma il rollback dei side-data è fallito: {}",
+                    "il file è stato ripristinato, ma il rollback è fallito: {}",
                     rollback_errors.join("; ")
                 )),
             })
@@ -908,6 +960,7 @@ impl PendingExplicitRename {
             identity,
             rewrites,
             side_data,
+            recovery,
             journal,
             origin,
             from,
@@ -922,6 +975,7 @@ impl PendingExplicitRename {
             identity,
             rewrites,
             side_data,
+            recovery,
             owns_batch,
             rewrite_failures: Vec::new(),
             journal_fault,
@@ -944,57 +998,155 @@ impl CompletedExplicitRename {
                 self.rewrite_failures.push(format!("{source}: {error}"));
             }
         }
+        if self.rewrite_failures.is_empty() {
+            if let Err(error) = self.recovery.complete() {
+                self.rewrite_failures
+                    .push(format!("intent di recupero: {error}"));
+            }
+        }
         self
     }
 }
+/// Riscrittura format-owned, batch detached per sorgente.
+///
+/// Il kernel non conosce grammatica né escaping di alcun formato: per ogni
+/// sorgente legge i byte nella forma del suo provider, invoca una volta
+/// [`FormatProvider::rewrite_links`] sotto [`Gate::FormatParse`] e valida il
+/// vincolo d'output — ogni [`TextEdit`] entro uno span osservato, bounds UTF-8,
+/// patch non sovrapposte (validatore [`EditRequest`] esistente); ogni richiesta
+/// effettiva coperta oppure errore esplicito. `None` = capability mancante, mai
+/// fallback raw: errore tipizzato per la sorgente. Niente parsing JSON/Markdown
+/// nel kernel, nessun provider sotto lock, nessuna omissione silenziosa.
+/// La CAS di [`EditRequest`] resta la preimmagine per-file; i conflitti restano
+/// [`KernelError::Stale`]/`AlreadyExists`, senza protocollo parallelo.
 fn invoke_prepared_link_rewrites(
     storage: &dyn crate::storage::VaultStorage,
     rewrites: Vec<PreparedExplicitLinkRewrite>,
-) -> Vec<(DocId, EditRequest)> {
-    rewrites
-        .into_iter()
-        .filter_map(|prepared| {
-            let bytes = storage.read(&prepared.source_path).ok()?;
-            let source = fub_abi::rules::text_policy::decode(&bytes).ok()?;
-            let mut edits = Vec::new();
-            for prepared_edit in prepared.edits {
-                let Some(slice) = source.get(prepared_edit.span.start..prepared_edit.span.end)
-                else {
-                    continue;
-                };
-                let found = if prepared_edit.from_end {
-                    slice.rfind(&prepared_edit.written)
-                } else {
-                    slice.find(&prepared_edit.written)
-                };
-                let Some(relative) = found else {
-                    continue;
-                };
-                let start = prepared_edit.span.start + relative;
-                edits.push(TextEdit::replace(
-                    Span::new(start, start + prepared_edit.written.len()),
-                    prepared_edit.replacement,
-                ));
+) -> Result<Vec<RenameRecoveryEdit>> {
+    let mut out = Vec::new();
+    for prepared in rewrites {
+        let bytes = storage
+            .read(&prepared.source_path)
+            .map_err(|source| KernelError::Io {
+                path: prepared.source_path.clone(),
+                source,
+            })?;
+        let source = match prepared.source_kind {
+            SourceKind::Text => {
+                let text =
+                    fub_abi::rules::text_policy::decode(&bytes).map_err(|at| KernelError::Io {
+                        path: prepared.source_path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("il file non è UTF-8: il primo byte non valido è a {at}"),
+                        ),
+                    })?;
+                DocumentSource::Text(text.to_string())
             }
-            (!edits.is_empty()).then(|| {
-                (
-                    prepared.destination,
-                    EditRequest::new(Revision::of(source), edits),
-                )
-            })
+            SourceKind::Bytes => DocumentSource::Bytes(bytes),
+        };
+        let revision = match &source {
+            DocumentSource::Text(text) => Revision::of(text),
+            DocumentSource::Bytes(bytes) => Revision::of_bytes(bytes),
+        };
+        let Some(provider) = prepared.provider.clone() else {
+            return Err(KernelError::Format(FormatError::Parse(format!(
+                "il formato di {} non offre la riscrittura dei link",
+                prepared.destination
+            ))));
+        };
+        let provider_id = prepared.provider_id.clone();
+        let destination = prepared.destination.clone();
+        let ctx = prepared.ctx.clone();
+        let wanted = prepared.rewrites.clone();
+        let edits = crate::safety::caught(
+            &provider_id,
+            Gate::FormatParse,
+            destination.as_str(),
+            FormatError::Parse,
+            || provider.rewrite_links(&source, &ctx, &wanted),
+        )?
+        .ok_or_else(|| {
+            KernelError::Format(FormatError::Parse(format!(
+                "il formato di {destination} non offre la riscrittura dei link"
+            )))
+        })?;
+        validate_rewrite_output(&wanted, &edits, &source, &destination)?;
+        if edits.is_empty() {
+            continue;
+        }
+        let request = EditRequest::new(revision, edits);
+        let result = match &source {
+            DocumentSource::Text(text) => {
+                let (next, _) = request
+                    .apply_to(text)
+                    .map_err(|error| KernelError::BadEdit {
+                        doc: destination.to_string(),
+                        why: error.to_string(),
+                    })?;
+                Revision::of(&next)
+            }
+            DocumentSource::Bytes(_) => {
+                unreachable!("validate_rewrite_output rejects edits over a byte source")
+            }
+        };
+        out.push(RenameRecoveryEdit::new(destination, request, result));
+    }
+    Ok(out)
+}
+
+/// Vincolo d'output della porta format-owned: copertura totale, confini
+/// dichiarati, validità UTF-8 e non sovrapposizione. Riusa il validatore
+/// [`EditRequest`]; qui si aggiunge solo il recinto (entro span osservati) e la
+/// copertura (ogni richiesta effettiva servita oppure errore esplicito).
+fn validate_rewrite_output(
+    wanted: &[LinkRewrite],
+    edits: &[TextEdit],
+    source: &DocumentSource,
+    destination: &DocId,
+) -> Result<()> {
+    let text = match source {
+        DocumentSource::Text(text) => text.as_str(),
+        DocumentSource::Bytes(_) => {
+            return Err(KernelError::Format(FormatError::Parse(format!(
+                "riscrittura dei link non applicabile a una sorgente non testuale in {destination}"
+            ))));
+        }
+    };
+    if !wanted.is_empty() && edits.is_empty() {
+        return Err(KernelError::Format(FormatError::Parse(format!(
+            "il formato di {destination} non ha riscritto alcun riferimento richiesto"
+        ))));
+    }
+    for edit in edits {
+        let inside = wanted
+            .iter()
+            .any(|want| edit.span.start >= want.span.start && edit.span.end <= want.span.end);
+        if !inside {
+            return Err(KernelError::Format(FormatError::Parse(format!(
+                "il formato di {destination} ha scritto fuori dai riferimenti dichiarati"
+            ))));
+        }
+    }
+    EditRequest::new(Revision::of(text), edits.to_vec())
+        .apply_to(text)
+        .map(|_| ())
+        .map_err(|and| KernelError::BadEdit {
+            doc: destination.to_string(),
+            why: and.to_string(),
         })
-        .collect()
 }
 
 impl PreparedExplicitAssetRename {
-    /// Verifica l'identità dell'asset, prepara le CAS dei riferimenti, migra i
-    /// side-data e sposta il file senza trattenere il workspace.
+    /// Verifica l'identità dell'asset, prepara le CAS dei riferimenti e
+    /// persiste l'intent recuperabile prima di migrare side-data o file.
     pub fn invoke(self) -> Result<MovedExplicitAssetRename> {
         let PreparedExplicitAssetRename {
             snapshot,
             storage,
             rewrites,
             side_data,
+            recovery_root,
         } = self;
         let path = snapshot.from_path.clone();
         let before = storage.stat(&path).map_err(|source| KernelError::Io {
@@ -1029,20 +1181,35 @@ impl PreparedExplicitAssetRename {
         }
         let identity = identity_after;
         let fingerprint = Revision::of_bytes(&bytes);
-        let rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites);
+        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
         let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
         if !same_file && storage.exists(&snapshot.to_path) {
             return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
         }
+        let mut recovery = rename_recovery::persist(
+            Arc::clone(&storage),
+            &recovery_root,
+            snapshot.from.clone(),
+            snapshot.to.clone(),
+            fingerprint.clone(),
+            durable_rewrites.clone(),
+        )?;
+        let rewrites = durable_rewrites
+            .iter()
+            .map(|rewrite| (rewrite.source().clone(), rewrite.request().clone()))
+            .collect();
         let side_data = side_data.invoke();
         if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
-            let rollback_errors = side_data.rollback();
+            let mut rollback_errors = side_data.rollback();
+            if let Err(error) = recovery.cancel() {
+                rollback_errors.push(format!("intent di recupero non cancellato: {error}"));
+            }
             if source.kind() == std::io::ErrorKind::AlreadyExists {
                 let to = if rollback_errors.is_empty() {
                     snapshot.to.to_string()
                 } else {
                     format!(
-                        "{}; anche il rollback dei side-data è fallito: {}",
+                        "{}; anche il rollback è fallito: {}",
                         snapshot.to,
                         rollback_errors.join("; ")
                     )
@@ -1055,7 +1222,7 @@ impl PreparedExplicitAssetRename {
                 std::io::Error::new(
                     source.kind(),
                     format!(
-                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        "{source}; anche il rollback è fallito: {}",
                         rollback_errors.join("; ")
                     ),
                 )
@@ -1073,6 +1240,7 @@ impl PreparedExplicitAssetRename {
             identity,
             rewrites,
             side_data,
+            recovery,
         })
     }
 }
@@ -1087,6 +1255,7 @@ impl MovedExplicitAssetRename {
             stat,
             identity,
             side_data,
+            mut recovery,
             ..
         } = self;
         let before = storage
@@ -1130,20 +1299,35 @@ impl MovedExplicitAssetRename {
         {
             return Err(KernelError::Stale(snapshot.to.to_string()));
         }
-        storage
-            .rename_no_replace(&snapshot.to_path, &snapshot.from_path)
-            .map_err(|source| KernelError::Io {
-                path: snapshot.to_path.clone(),
+        recovery.mark_cancelled()?;
+        let mut rollback_errors = side_data.rollback();
+        if let Err(source) = storage.rename_no_replace(&snapshot.to_path, &snapshot.from_path) {
+            let source = if rollback_errors.is_empty() {
+                source
+            } else {
+                std::io::Error::new(
+                    source.kind(),
+                    format!(
+                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        rollback_errors.join("; ")
+                    ),
+                )
+            };
+            return Err(KernelError::Io {
+                path: snapshot.to_path,
                 source,
-            })?;
-        let rollback_errors = side_data.rollback();
+            });
+        }
+        if let Err(error) = recovery.complete() {
+            rollback_errors.push(format!("intent di recupero non rimosso: {error}"));
+        }
         if rollback_errors.is_empty() {
             Ok(())
         } else {
             Err(KernelError::Io {
                 path: snapshot.from_path,
                 source: std::io::Error::other(format!(
-                    "l'asset è stato ripristinato, ma il rollback dei side-data è fallito: {}",
+                    "l'asset è stato ripristinato, ma il rollback è fallito: {}",
                     rollback_errors.join("; ")
                 )),
             })
@@ -1165,6 +1349,7 @@ impl PendingExplicitAssetRename {
             installed,
             rewrites,
             side_data,
+            recovery,
             journal,
             origin,
             from,
@@ -1184,6 +1369,11 @@ impl PendingExplicitAssetRename {
         for (source, request) in &rewrites {
             if let Err(error) = apply(source, request) {
                 rewrite_failures.push(format!("{source}: {error}"));
+            }
+        }
+        if rewrite_failures.is_empty() {
+            if let Err(error) = recovery.complete() {
+                rewrite_failures.push(format!("intent di recupero: {error}"));
             }
         }
         CompletedExplicitAssetRename {
@@ -2089,6 +2279,31 @@ pub struct PreparedDocumentWrite {
     before_write: Option<(String, BeforeWriteHook)>,
 }
 
+/// Scrittura raw preparata senza eseguire provider. La preimmagine resta quella
+/// verificata all'apertura del turno, anche se il file cambia durante il parse.
+pub struct PreparedDocumentBytesWrite {
+    id: DocId,
+    path: Utf8PathBuf,
+    from: Option<Revision>,
+    expected_bytes: Option<Vec<u8>>,
+    parser: Option<PreparedParse>,
+    before_write: Option<(String, BeforeWriteHook)>,
+}
+
+/// Apertura metadata sullo storage attivo, eseguibile senza custodia workspace.
+pub struct PreparedResourceOpen {
+    vault: crate::vault::Vault,
+    id: DocId,
+}
+
+/// Lettura bounded su lease condivisa: non copia path o buffer dell'allegato.
+pub struct PreparedResourceRead {
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    lease: Arc<ResourceLease>,
+    offset: u64,
+    len: usize,
+}
+
 /// Una proiezione locale risolta fino al confine dei provider. Sorgente,
 /// parser, regole e renderer sono valori posseduti: nessuno porta con sé una
 /// guardia del workspace.
@@ -2126,6 +2341,7 @@ pub struct CompletedDocumentModel {
 
 enum LocalProjectionKind {
     Preview,
+    Print,
     Embed {
         heading: Option<String>,
         block: Option<String>,
@@ -2160,8 +2376,9 @@ impl PreparedLocalProjection {
             projection_generation,
         } = self;
         let model = parser.invoke(source).map_err(PluginError::from)?;
-        let (model, result_kind) = match kind {
-            LocalProjectionKind::Preview => (model, None),
+        let (model, result_kind, print) = match kind {
+            LocalProjectionKind::Preview => (model, None, false),
+            LocalProjectionKind::Print => (model, None, true),
             LocalProjectionKind::Embed { block, heading } => {
                 let clipped = match (block.as_deref(), heading.as_deref()) {
                     (Some(block), _) => block_of(&model, block)
@@ -2170,18 +2387,29 @@ impl PreparedLocalProjection {
                         .ok_or_else(|| PluginError::NotFound(format!("{id}#{heading}").into()))?,
                     (None, None) => model,
                 };
-                (clipped, Some(id.0.clone()))
+                (clipped, Some(id.0.clone()), false)
             }
         };
+        let options = if print {
+            RenderOptions {
+                target: RenderTarget::Print,
+                ..Default::default()
+            }
+        } else {
+            RenderOptions::preview()
+        };
         let rendered = parser
-            .render(&model, &renderers, &RenderOptions::preview())
+            .render(&model, &renderers, &options)
             .map_err(PluginError::from)?;
-        let result = match result_kind {
-            None => IndexResult::RenderPreview(rendered.into()),
-            Some(doc_id) => IndexResult::RenderEmbed(EmbedContent {
+        let result = if print {
+            IndexResult::RenderPrint(rendered.into())
+        } else if let Some(doc_id) = result_kind {
+            IndexResult::RenderEmbed(EmbedContent {
                 doc_id,
                 content: rendered.into(),
-            }),
+            })
+        } else {
+            IndexResult::RenderPreview(rendered.into())
         };
         Ok(CompletedLocalProjection {
             id,
@@ -2436,7 +2664,7 @@ impl PreparedIndexBatchFeed {
 
 pub struct PreparedDocumentFeed {
     id: DocId,
-    model: DocumentModel,
+    model: Option<DocumentModel>,
     changes: DocChanges,
     revision: Revision,
     journal: JournalOp,
@@ -2595,13 +2823,12 @@ impl PreparedEventDelivery {
 impl PreparedDocumentFeed {
     pub fn invoke_indexes(mut self) -> Self {
         let providers = std::mem::take(&mut self.providers);
-        self.losses.extend(feed_index_handles(
-            &providers,
-            std::slice::from_ref(&self.model),
-        ));
-        if let Err(error) = release_index_handles(providers) {
+        if let Some(model) = &self.model {
             self.losses
-                .push(IndexLoss::new(self.model.id.clone(), error));
+                .extend(feed_index_handles(&providers, std::slice::from_ref(model)));
+        }
+        if let Err(error) = release_index_handles(providers) {
+            self.losses.push(IndexLoss::new(self.id.clone(), error));
         }
         self
     }
@@ -2637,6 +2864,59 @@ impl PreparedDocumentWrite {
             }
             None => Ok(()),
         }
+    }
+}
+impl PreparedDocumentBytesWrite {
+    /// Produce il modello attraverso la stessa pipeline dei salvataggi testuali.
+    /// I file senza provider restano opachi; nessun buffer viene allocato per loro.
+    pub fn parse(&self, bytes: &[u8]) -> Result<Option<DocumentModel>> {
+        let Some(parser) = &self.parser else {
+            return Ok(None);
+        };
+        let source = match parser.source_kind() {
+            SourceKind::Bytes => DocumentSource::Bytes(bytes.to_vec()),
+            SourceKind::Text => {
+                let text =
+                    fub_abi::rules::text_policy::decode(bytes).map_err(|at| KernelError::Io {
+                        path: self.path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("invalid UTF-8 at byte {at}"),
+                        ),
+                    })?;
+                DocumentSource::Text(text.to_string())
+            }
+        };
+        parser.invoke(source).map(Some)
+    }
+
+    /// Esegue soltanto il gancio esterno fra parse e disco, come la via testuale.
+    pub fn invoke_before_write(
+        &self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<(), PluginError> {
+        match &self.before_write {
+            Some((owner, hook)) => {
+                crate::safety::calling_callback(owner, "BeforeWriteHook", || hook(host, &self.id))
+            }
+            None => Ok(()),
+        }
+    }
+
+    pub fn before_write_owner(&self) -> Option<&str> {
+        self.before_write.as_ref().map(|(owner, _)| owner.as_str())
+    }
+}
+
+impl PreparedResourceOpen {
+    pub fn invoke(self) -> Result<ResourceLease> {
+        crate::transfer::resource_open_on(&self.vault, &self.id)
+    }
+}
+
+impl PreparedResourceRead {
+    pub fn invoke(self) -> Result<Vec<u8>> {
+        crate::transfer::resource_read_at(self.storage.as_ref(), &self.lease, self.offset, self.len)
     }
 }
 
@@ -3275,6 +3555,14 @@ impl Workspace {
     /// catalogo tocca: farlo passare di qui non sarebbe sbagliato, sarebbe
     /// rumore che suggerisce una traduzione che non avviene.
     /// Il locale di sistema condiviso: chi monta lo passa alla shell perché ci
+    /// Localizza per conto di `plugin` ciò che la composizione ha costruito
+    /// con le chiavi del suo catalogo. I comandi posseduti dall'host non
+    /// passano dal registro, ma devono parlare con le stesse frasi e nella
+    /// stessa lingua di quelli che ci passano.
+    pub fn localize_as<T: Localize + ?Sized>(&self, plugin: &str, value: &mut T) {
+        self.localize(plugin, value);
+    }
+
     pub(crate) fn localized(&self, plugin: &str, mut and: PluginError) -> PluginError {
         self.localize(plugin, &mut and);
         and
@@ -3301,6 +3589,15 @@ impl Workspace {
 
     pub fn root(&self) -> &Utf8Path {
         self.docs.vault.root()
+    }
+
+    /// Prepara la scansione degli intent di rinomina senza fare I/O sotto il
+    /// lock del workspace. La lettura del disco avviene in `invoke`.
+    pub fn prepare_rename_recovery_scan(&self) -> RenameRecoveryScan {
+        RenameRecoveryScan::new(
+            Arc::clone(self.docs.vault.storage()),
+            self.docs.vault.root().to_owned(),
+        )
     }
 
     //
@@ -5202,6 +5499,53 @@ impl Workspace {
     pub fn read_source_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
         self.docs.vault.read_bytes(id)
     }
+    /// Apre una lease di risorsa sul VERO Vault/storage di sessione/mount: recinto
+    /// via `fenced_doc_id` + `resource_open_on`, mai `Vault::open` nuovo, mai
+    /// getter grezzi. `revision` resta `None`: NON si copia l'eventuale
+    /// `Entries.fingerprint`, che per testo puo essere hash decodificato e NON
+    /// hash raw/BOM/CRLF. Dopo una write il chiamante usa il raw noto.
+    pub fn open_resource(&self, id: &DocId) -> Result<ResourceLease> {
+        self.prepare_resource_open(id)?.invoke()
+    }
+
+    pub fn prepare_resource_open(&self, id: &DocId) -> Result<PreparedResourceOpen> {
+        Ok(PreparedResourceOpen {
+            vault: self.docs.vault.clone(),
+            id: valid_doc_id(id.as_str())?,
+        })
+    }
+
+    fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {
+        if lease.root != *self.docs.vault.root() {
+            return Err(KernelError::OutsideVault(
+                lease.root.join(lease.path.as_str()),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn prepare_resource_read(
+        &self,
+        lease: Arc<ResourceLease>,
+        offset: u64,
+        len: usize,
+    ) -> Result<PreparedResourceRead> {
+        self.check_resource_lease(&lease)?;
+        Ok(PreparedResourceRead {
+            storage: Arc::clone(self.docs.vault.storage()),
+            lease,
+            offset,
+            len,
+        })
+    }
+
+    /// Range stabile su lease del VERO storage attivo: rifiuta root diversa dalla
+    /// propria, poi `resource_read_at` (stat+identity+change prima/dopo, Stale su
+    /// mismatch). Mai intero file in memoria oltre il chunk.
+    pub fn read_resource(&self, lease: &ResourceLease, offset: u64, len: usize) -> Result<Vec<u8>> {
+        self.check_resource_lease(lease)?;
+        crate::transfer::resource_read_at(self.docs.vault.storage().as_ref(), lease, offset, len)
+    }
 
     /// gli eventi (il grafo per-documento, [`GraphUpdate`]) — dicendo **da cosa
     /// si parte** (§18.1).
@@ -5364,7 +5708,7 @@ impl Workspace {
         };
         Ok(PreparedDocumentFeed {
             id,
-            model,
+            model: Some(model),
             changes,
             revision,
             journal,
@@ -5440,6 +5784,150 @@ impl Workspace {
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<Revision> {
         let pending = self.commit_document_write(prepared, source, model, before_write)?;
+        let pending = pending.invoke_indexes();
+        self.finalize_document_write(pending)
+    }
+    /// Pipeline RAW per allegati/binari/opachi: `None` = create-only atomico,
+    /// `Some(expected)` = CAS raw atomica. Nessuna variante Dictated, nessun
+    /// fallback UTF-8 verso il disco: BOM/CRLF/binari restano identici;
+    /// `Revision` raw (`of_bytes`) e testuale NON sono intercambiabili.
+    /// Il parse gira detached in `PreparedDocumentBytesWrite::parse` (mai
+    /// provider sotto lock); il commit usa `write_if_unchanged` in un colpo
+    /// solo. `model: None` = file opaco senza provider: anagrafe + `EntryChanged`,
+    /// nessun `DocumentChanged` inventato. Un preflight fallito non chiama hook.
+    pub fn prepare_document_bytes_write(
+        &self,
+        id: &DocId,
+        expected: Option<Revision>,
+    ) -> Result<PreparedDocumentBytesWrite> {
+        self.indexes.ensure_mutation_available()?;
+        let id = valid_doc_id(id.as_str())?;
+        let (id, from, expected_bytes) = match expected {
+            Some(want) => {
+                let current = crate::error::optional(self.docs.vault.read_bytes(&id))?
+                    .ok_or_else(|| KernelError::Stale(id.to_string()))?;
+                let actual = Revision::of_bytes(&current);
+                if want != actual {
+                    return Err(KernelError::Stale(id.to_string()));
+                }
+                (id, Some(actual), Some(current))
+            }
+            None => {
+                if self.is_taken(&id) {
+                    return Err(KernelError::AlreadyExists(id.to_string()));
+                }
+                (new_doc_id(id.as_str())?, None, None)
+            }
+        };
+        let path = self.docs.vault.path_for(&id)?;
+        let parser = match self.docs.prepare_parse(&id) {
+            Ok(parser) => Some(parser),
+            Err(KernelError::NoProvider(_)) => None,
+            Err(error) => return Err(error),
+        };
+        Ok(PreparedDocumentBytesWrite {
+            id,
+            path,
+            from,
+            expected_bytes,
+            parser,
+            before_write: self.before_write.clone(),
+        })
+    }
+
+    /// Commit atomico raw: UNICA `write_if_unchanged(path, None|Some, bytes)` —
+    /// `None` = create-only atomico (`Changed` => `AlreadyExists`), `Some` = CAS
+    /// (`Changed` => `Stale`). Mai `exists` + `write`. Il modello arriva dal
+    /// parse detached; qui solo anagrafe/journal/feed.
+    pub fn commit_document_bytes_write(
+        &mut self,
+        prepared: PreparedDocumentBytesWrite,
+        bytes: &[u8],
+        model: Option<DocumentModel>,
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<PreparedDocumentFeed> {
+        self.indexes.ensure_mutation_available()?;
+        let PreparedDocumentBytesWrite {
+            id,
+            path,
+            from,
+            expected_bytes,
+            ..
+        } = prepared;
+        if let Err(error) = before_write {
+            return Err(Self::before_write_error(&id, error));
+        }
+        let stored = self
+            .docs
+            .vault
+            .storage()
+            .write_if_unchanged(&path, expected_bytes.as_deref(), bytes)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let stat = match stored {
+            crate::storage::ConditionalWrite::Written(stat) => stat,
+            crate::storage::ConditionalWrite::Changed => {
+                return Err(if expected_bytes.is_some() {
+                    KernelError::Stale(id.to_string())
+                } else {
+                    KernelError::AlreadyExists(id.to_string())
+                });
+            }
+        };
+        let revision = Revision::of_bytes(bytes);
+        let (changes, losses, providers) = match &model {
+            Some(model) => (
+                self.indexes.core.changes_for(model, &revision),
+                self.indexes
+                    .core
+                    .on_documents_indexed(std::slice::from_ref(model)),
+                self.indexes.feed_handles(),
+            ),
+            None => (DocChanges::default(), Vec::new(), Vec::new()),
+        };
+        self.set_entry(&id, stat.size, stat.mtime, Some(revision.clone()));
+        let journal = if expected_bytes.is_some() {
+            JournalOp::Written {
+                doc: id.clone(),
+                from,
+                to: revision.clone(),
+            }
+        } else {
+            JournalOp::Created {
+                doc: id.clone(),
+                to: revision.clone(),
+            }
+        };
+        Ok(PreparedDocumentFeed {
+            id,
+            model,
+            changes,
+            revision,
+            journal,
+            providers,
+            losses,
+        })
+    }
+
+    /// Via breve raw: prepara detached, parsa fuori lock, committa atomico,
+    /// finalizza; su CAS fallita niente eventi.
+    pub fn write_document_bytes(
+        &mut self,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<Revision> {
+        let prepared = self.prepare_document_bytes_write(id, expected)?;
+        let model = prepared.parse(bytes)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut host = self.host_for(&owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut host)
+        } else {
+            Ok(())
+        };
+        let pending = self.commit_document_bytes_write(prepared, bytes, model, before_write)?;
         let pending = pending.invoke_indexes();
         self.finalize_document_write(pending)
     }
@@ -5643,16 +6131,16 @@ impl Workspace {
         })
     }
 
-    /// una modifica chirurgica va calcolata (decisione 0008).
+    /// La revisione dei byte sorgente, anche senza un provider di formato.
     ///
     /// Si legge dal **disco**, come ogni altra lettura del kernel: la verità di
     /// un documento è il file, e una revisione derivata da una cache sarebbe
     /// vera solo finché la cache lo è.
-    /// Applica una modifica chirurgica: gli edit della richiesta, tutti o
     pub fn document_revision(&self, id: &DocId) -> Result<Revision> {
-        Ok(Revision::of(&self.read_source(id)?))
+        Ok(Revision::of_bytes(&self.read_source_bytes(id)?))
     }
 
+    /// Applica una modifica chirurgica: gli edit della richiesta, tutti o
     /// nessuno, sul sorgente che la sua `base` nomina.
     ///
     /// È l'altra scrittura del kernel accanto a
@@ -5770,7 +6258,7 @@ impl Workspace {
         let providers = self.indexes.feed_handles();
         PreparedDocumentFeed {
             id: id.clone(),
-            model,
+            model: Some(model),
             changes,
             revision: fingerprint,
             journal,
@@ -5803,25 +6291,40 @@ impl Workspace {
 
     fn finish_index_feed(&mut self, pending: PreparedDocumentFeed) {
         self.report_losses(pending.losses);
-        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+        if pending.model.is_some() && self.indexes.core.graph_update == GraphUpdate::FullRebuild {
             self.indexes.core.rebuild_graph();
         }
         self.session
             .invalidate(&pending.id, ContextChange::Rewritten);
-        self.emit_event(Event::DocumentChanged {
-            id: pending.id,
-            changes: Some(pending.changes),
-        });
-        self.emit_event(Event::IndexUpdated);
+        let changes = pending.model.map(|_| pending.changes);
+        self.announce_file_change(pending.id, changes);
     }
 
     /// Accoda il fatto già committato prima che gli indici esterni possano
     /// rientrare e produrre una modifica successiva dello stesso documento.
     fn announce_index_feed(&mut self, pending: &PreparedDocumentFeed) {
-        self.emit_event(Event::DocumentChanged {
-            id: pending.id.clone(),
-            changes: Some(pending.changes.clone()),
-        });
+        let changes = pending.model.as_ref().map(|_| pending.changes.clone());
+        self.announce_file_change(pending.id.clone(), changes);
+    }
+
+    fn announce_file_change(&mut self, id: DocId, changes: Option<DocChanges>) {
+        let event = match changes {
+            Some(changes) => Event::DocumentChanged {
+                id,
+                changes: Some(changes),
+            },
+            None => {
+                let kind = self
+                    .indexes
+                    .core
+                    .entries
+                    .get(&id)
+                    .map(|entry| entry.kind)
+                    .unwrap_or(EntryKind::Unknown);
+                Event::EntryChanged { id, kind }
+            }
+        };
+        self.emit_event(event);
         self.emit_event(Event::IndexUpdated);
     }
 
@@ -6113,7 +6616,7 @@ impl Workspace {
             .on_documents_indexed(std::slice::from_ref(&model));
         let feed = PreparedDocumentFeed {
             id: snapshot.to_id.clone(),
-            model: *model,
+            model: Some(*model),
             changes,
             revision: fingerprint,
             journal: JournalOp::Renamed {
@@ -6827,12 +7330,12 @@ impl Workspace {
     }
 
     ///
-    /// Senza `name` nasce `Senza titolo` nella radice — e se il nome è già
-    /// preso, `Senza titolo 1`, `2`, … (D3): l'utente la rinomina subito, con
-    /// il rename che i link se li porta dietro. Con `name` è il flusso "crea
-    /// nota da link non risolto": il nome arriva dal wikilink, e una collisione
-    /// è un errore, non un nome da aggiustare in silenzio — se quel path
-    /// esistesse, il link non sarebbe stato non risolto.
+    /// Senza `name` nasce `Senza titolo` nella cartella configurata da
+    /// `files.new-note-folder` — o nella radice se il valore è vuoto — e se il
+    /// nome è già preso usa `Senza titolo 1`, `2`, … (D3). Con `name` è il
+    /// flusso "crea nota da link non risolto": un nome semplice usa la stessa
+    /// cartella configurata, mentre un path esplicito resta nel path indicato.
+    /// Una collisione è un errore, non un nome aggiustato in silenzio.
     ///
     /// Il nome libero si calcola qui dentro, dove il workspace è preso in
     /// esclusiva: cercarlo dal chiamante e poi scrivere sarebbe una corsa fra
@@ -6847,19 +7350,12 @@ impl Workspace {
                 }
                 id
             }
-            None => {
-                let ext = self
-                    .docs
-                    .registry
-                    .default_extension()
-                    .ok_or(KernelError::NoDefaultFormat)?;
-                self.free_name(&DocId::new(format!("{UNTITLED}.{ext}")))
-            }
+            None => self.free_name(&self.new_notes_id(UNTITLED)?),
         };
-        // la vedono nascere per la via normale. `Dictated` perché il nome
-        // appena scelto è libero — `free_name` l'ha appena stabilito — e una
-        // base sarebbe la revisione di un file che non esiste.
-        // Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
+        // La vedono nascere per la via normale. `Dictated` perché il nome
+        // appena scelto è libero — `free_name` o il controllo sopra l'hanno
+        // appena stabilito — e una base sarebbe la revisione di un file che non
+        // esiste.
         self.write_document(&id, "", WriteBase::Dictated)?;
         Ok(id)
     }
@@ -6899,13 +7395,66 @@ impl Workspace {
         self.indexes.core.metas.contains_key(id) || self.docs.vault.exists(id)
     }
 
+    /// Crea una cartella vuota nel vault e la fa comparire nell'albero (§14.3).
+    ///
+    /// Il nome passa dalla stessa regola di un documento che nasce
+    /// ([`new_doc_id`]): recinto, spazio macchina, caratteri riservati e forma
+    /// NFC. Una cartella esclusa dalla politica del vault è rifiutata: la
+    /// scansione non la vedrebbe, e l'albero mostrerebbe una voce che alla
+    /// riapertura sparisce. Una voce già presente — cartella o file — è
+    /// [`KernelError::AlreadyExists`] e il disco resta com'era.
+    ///
+    /// Torna il path normalizzato, che è quello che l'albero mostrerà.
+    pub fn create_folder(&mut self, name: &str) -> Result<String> {
+        let id = self.check_new_folder(name)?;
+        self.docs.vault.create_folder(id.as_str())?;
+        self.indexes.core.ensure_folders_of(&id);
+        self.indexes.core.set_folder(id.as_str());
+        self.emit_event(Event::IndexUpdated);
+        Ok(id.as_str().to_string())
+    }
+
+    /// Il preflight di [`create_folder`](Workspace::create_folder), senza
+    /// scrivere: lo stesso giudizio che darebbe la creazione adesso, e il path
+    /// normalizzato che nascerebbe. Serve alla prova a vuoto di un comando;
+    /// fra la domanda e la scrittura il nome può ancora occuparsi, e a quel
+    /// punto è la creazione a dirlo.
+    pub fn check_new_folder(&self, name: &str) -> Result<DocId> {
+        let id = new_doc_id(name)?;
+        let abs = self.docs.vault.path_for(&id)?;
+        if self.docs.vault.is_ignored(&abs) {
+            return Err(KernelError::BadName {
+                name: name.to_string(),
+                why: "la cartella è esclusa dal vault".to_string(),
+            });
+        }
+        if self.docs.vault.exists(&id) {
+            return Err(KernelError::AlreadyExists(id.to_string()));
+        }
+        Ok(id)
+    }
+
     /// e, se il nome non porta già un'estensione gestita, quella di default.
+    /// Un nome semplice viene collocato nella cartella configurata; un path
+    /// esplicito non viene mai ribasato.
     // Un nome che nasce: la tolleranza stretta del §15.5.
     fn new_notes_id(&self, name: &str) -> Result<DocId> {
-        // --- cestino -----------------------------------------------------------
-        let id = new_doc_id(name)?;
-        let has_extension = self.docs.has_provider_for(&id);
-        if has_extension {
+        let mut id = new_doc_id(name)?;
+        if !id.as_str().contains('/') {
+            let folder = self
+                .settings
+                .read()
+                .expect("store di configurazione")
+                .effective(crate::settings::NEW_NOTE_FOLDER)
+                .ok()
+                .and_then(|(value, _)| value.as_text().map(str::to_owned))
+                .unwrap_or_default();
+            let folder = fub_abi::rules::folders::normalized(&folder);
+            if !folder.is_empty() {
+                id = new_doc_id(&format!("{folder}/{}", id.as_str()))?;
+            }
+        }
+        if self.docs.has_provider_for(&id) {
             return Ok(id);
         }
         let ext = self
@@ -7138,6 +7687,7 @@ impl Workspace {
             source_kind: descriptor.source,
             rewrites: self.prepare_explicit_link_rewrites(from, &to),
             side_data: self.prepare_rename_side_data(from, &to),
+            recovery_root: self.docs.vault.root().to_owned(),
         }))
     }
 
@@ -7204,6 +7754,7 @@ impl Workspace {
             identity: _,
             rewrites,
             side_data,
+            recovery,
         } = parsed;
         let identity = self
             .migrate_identity_core(&snapshot.from, &snapshot.to, model, fingerprint)
@@ -7212,6 +7763,7 @@ impl Workspace {
             identity,
             rewrites,
             side_data,
+            recovery,
             journal: Arc::clone(&self.journal),
             origin: self.dispatch.origin(),
             from: snapshot.from,
@@ -7239,6 +7791,7 @@ impl Workspace {
             identity,
             rewrites: _,
             side_data,
+            recovery: _,
             owns_batch,
             rewrite_failures,
             journal_fault,
@@ -7312,6 +7865,7 @@ impl Workspace {
                 storage: Arc::clone(self.docs.vault.storage()),
                 doc_data_roots: self.docs.plugin_data_roots(),
             },
+            recovery_root: self.docs.vault.root().to_owned(),
         }))
     }
 
@@ -7379,6 +7933,7 @@ impl Workspace {
             identity: _,
             rewrites,
             side_data,
+            recovery,
         } = moved;
         let installed = VaultEntry {
             id: snapshot.to.clone(),
@@ -7395,6 +7950,7 @@ impl Workspace {
             installed,
             rewrites,
             side_data,
+            recovery,
             journal: Arc::clone(&self.journal),
             origin: self.dispatch.origin(),
             from: snapshot.from,
@@ -7499,7 +8055,6 @@ impl Workspace {
     /// Le sorgenti non si chiedono al grafo: un allegato non è un nodo del
     /// grafo, perché non ha link uscenti. Si cammina quindi la cache dei
     /// metadati e si consegnano path, span e testo atteso al token owned, che
-    /// leggerà le sorgenti e costruirà le CAS fuori dal workspace.
     fn prepare_explicit_entry_link_rewrites(
         &self,
         from: &DocId,
@@ -7507,45 +8062,30 @@ impl Workspace {
     ) -> Vec<PreparedExplicitLinkRewrite> {
         let mut plan = Vec::new();
         for (src, metadata) in &self.indexes.core.metas {
-            let mut edits = Vec::new();
+            let mut rewrites = Vec::new();
             for link in &metadata.links {
                 if self.indexes.core.resolve_entry(src, &link.target).as_ref() != Some(from) {
                     continue;
                 }
-                let (written, replacement, from_end) = match &link.target {
-                    // del file con la sua estensione. Se il vault ha già un
-                    // omonimo del nome d'arrivo si scrive il path intero, che è
-                    // sempre univoco — la stessa regola delle note.
-                    // Né il nome d'arrivo né quello di partenza contano
-                    LinkTarget::Wiki { page, .. } => {
+                let replacement = match &link.target {
+                    LinkTarget::Wiki { .. } => {
                         let name = to.as_str().rsplit('/').next().unwrap_or(to.as_str());
                         let contended = self.indexes.core.entries.keys().any(|id| {
-                            // come omonimi: il piano si calcola con il vecchio
-                            // path **ancora in anagrafe**, e senza escluderlo
-                            // uno spostamento che non cambia il nome del file
-                            // risulterebbe conteso da sé stesso — cioè ogni
-                            // `![[foto.png]]` diventerebbe un path intero anche
-                            // quando nel vault c'è una foto sola.
-                            // Un link dalla radice resta dalla radice: è una
                             id != to
                                 && id != from
                                 && fub_abi::rules::path::resolution_key(
                                     id.as_str().rsplit('/').next().unwrap_or(id.as_str()),
                                 ) == fub_abi::rules::path::resolution_key(name)
                         });
-                        let new = if contended {
+                        if contended {
                             to.as_str().to_string()
                         } else {
                             name.to_string()
-                        };
-                        (page.clone(), new, false)
+                        }
                     }
                     LinkTarget::Path(written) => {
                         let (path, fragment) = rules_path::split_fragment(written);
                         let new = if path.trim_start().starts_with('/') {
-                            // scelta di stile di chi scrive, e il rename non è il
-                            // momento di discuterla.
-                            // Migra l'identità di un documento il cui file è **già** al path nuovo:
                             format!("/{}", rules_path::percent_encode_path(to.as_str()))
                         } else {
                             rules_path::relative_ref(src, to)
@@ -7554,30 +8094,60 @@ impl Workspace {
                         if rewritten == *written {
                             continue;
                         }
-                        (written.clone(), rewritten, true)
+                        rewritten
                     }
                     LinkTarget::Url(_) => continue,
                 };
-                edits.push(PreparedExplicitLinkEdit {
+                rewrites.push(LinkRewrite {
                     span: link.span,
-                    written,
+                    target: link.target.clone(),
                     replacement,
-                    from_end,
                 });
             }
-            if edits.is_empty() {
+            if rewrites.is_empty() {
                 continue;
             }
             let Ok(source_path) = self.docs.vault.path_for(src) else {
                 continue;
             };
-            plan.push(PreparedExplicitLinkRewrite {
-                source_path,
-                destination: src.clone(),
-                edits,
-            });
+            match self.rewrite_plan_for(src) {
+                Some(format_plan) => plan.push(PreparedExplicitLinkRewrite {
+                    source_path,
+                    destination: src.clone(),
+                    provider: Some(format_plan.provider),
+                    provider_id: format_plan.provider_id,
+                    ctx: format_plan.ctx,
+                    source_kind: format_plan.source_kind,
+                    rewrites,
+                }),
+                None => plan.push(PreparedExplicitLinkRewrite {
+                    source_path,
+                    destination: src.clone(),
+                    provider: None,
+                    provider_id: String::new(),
+                    ctx: ParseContext::obsidian(src.as_str()),
+                    source_kind: SourceKind::Text,
+                    rewrites,
+                }),
+            };
         }
         plan
+    }
+    /// Fotografia provider-owned per una sorgente del piano di riscrittura:
+    /// `Arc` + id + contesto + specie, senza eseguire codice esterno sotto lock.
+    /// `None` = nessuna riscrittura format-owned possibile per questa sorgente
+    /// (nessun provider): il chiamante decide se errore esplicito o skip, mai
+    /// fallback raw silenzioso.
+    fn rewrite_plan_for(&self, source: &DocId) -> Option<RewritePlan> {
+        let ext = extension_of(source).unwrap_or_default();
+        let provider = self.docs.registry.provider_arc_for_ext(&ext)?;
+        let descriptor = self.docs.registry.descriptor_for_ext(&ext)?.clone();
+        Some(RewritePlan {
+            provider,
+            provider_id: descriptor.id,
+            ctx: ParseContext::obsidian(source.as_str()),
+            source_kind: descriptor.source,
+        })
     }
 
     /// Installa il cambio d'identità nel core e fotografa gli handle esterni
@@ -7607,7 +8177,7 @@ impl Workspace {
             .on_documents_indexed(std::slice::from_ref(&model));
         let feed = PreparedDocumentFeed {
             id: to.clone(),
-            model,
+            model: Some(model),
             changes,
             revision: fingerprint,
             journal: JournalOp::Renamed {
@@ -8038,9 +8608,9 @@ impl Workspace {
             let Some(metadata) = self.indexes.core.metas.get(&source) else {
                 continue;
             };
-            let mut edits = Vec::new();
+            let mut rewrites = Vec::new();
             for link in &metadata.links {
-                let (written, replacement, from_end) = match &link.target {
+                let replacement = match &link.target {
                     LinkTarget::Wiki { page, .. } => {
                         let key = resolution_key(page);
                         let by_name = key == from_name;
@@ -8051,7 +8621,7 @@ impl Workspace {
                         {
                             continue;
                         }
-                        (page.clone(), new_ref.clone(), false)
+                        new_ref.clone()
                     }
                     LinkTarget::Path(written) => {
                         let Some(new_target) = self.rebased_path_link(from, to, &source, written)
@@ -8063,29 +8633,47 @@ impl Workspace {
                         if rewritten == *written {
                             continue;
                         }
-                        (written.clone(), rewritten, true)
+                        rewritten
                     }
                     LinkTarget::Url(_) => continue,
                 };
-                edits.push(PreparedExplicitLinkEdit {
+                rewrites.push(LinkRewrite {
                     span: link.span,
-                    written,
+                    target: link.target.clone(),
                     replacement,
-                    from_end,
                 });
             }
-            if edits.is_empty() {
+            if rewrites.is_empty() {
                 continue;
             }
             let Ok(source_path) = self.docs.vault.path_for(&source) else {
                 continue;
             };
-            let destination = if &source == from { to.clone() } else { source };
-            prepared.push(PreparedExplicitLinkRewrite {
-                source_path,
-                destination,
-                edits,
-            });
+            let destination = if &source == from {
+                to.clone()
+            } else {
+                source.clone()
+            };
+            match self.rewrite_plan_for(&destination) {
+                Some(rewrite) => prepared.push(PreparedExplicitLinkRewrite {
+                    source_path,
+                    destination,
+                    provider: Some(rewrite.provider),
+                    provider_id: rewrite.provider_id,
+                    ctx: rewrite.ctx,
+                    source_kind: rewrite.source_kind,
+                    rewrites,
+                }),
+                None => prepared.push(PreparedExplicitLinkRewrite {
+                    source_path,
+                    destination: destination.clone(),
+                    provider: None,
+                    provider_id: String::new(),
+                    ctx: ParseContext::obsidian(destination.as_str()),
+                    source_kind: SourceKind::Text,
+                    rewrites,
+                }),
+            };
         }
         prepared
     }
@@ -8299,13 +8887,17 @@ impl Workspace {
     /// serve bene, mentre la cache calda serve le mutazioni.
     /// Rende il contenuto di un embed `![[page#heading]]` o `![[page#^blocco]]`:
     pub fn render_preview(&self, id: &DocId) -> Result<RenderedDocument> {
+        self.render_document(id, RenderOptions::preview())
+    }
+
+    fn render_document(&self, id: &DocId, options: RenderOptions) -> Result<RenderedDocument> {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         let source = self.docs.source_from_disk(id)?;
         let parser = self.docs.prepare_parse(id)?;
         let model = parser.invoke(source)?;
-        parser.render(&model, &self.docs.renderers, &RenderOptions::preview())
+        parser.render(&model, &self.docs.renderers, &options)
     }
 
     /// risolve la pagina e rende l'intero documento, o la sola sezione del
@@ -8454,6 +9046,7 @@ impl Workspace {
     pub fn prepare_detached_index_query(&self, query: &IndexQuery) -> Option<PreparedIndexQuery> {
         match query {
             IndexQuery::RenderPreview { .. }
+            | IndexQuery::RenderPrint { .. }
             | IndexQuery::RenderEmbed { .. }
             | IndexQuery::Settings { .. }
             | IndexQuery::SyntaxForms { .. }
@@ -8477,6 +9070,7 @@ impl Workspace {
         }
         let (id, resolved_page, kind) = match query {
             IndexQuery::RenderPreview { doc } => (doc.clone(), None, LocalProjectionKind::Preview),
+            IndexQuery::RenderPrint { doc } => (doc.clone(), None, LocalProjectionKind::Print),
             IndexQuery::RenderEmbed {
                 page,
                 heading,
@@ -8629,6 +9223,16 @@ impl Workspace {
         match query {
             IndexQuery::RenderPreview { doc } => Ok(IndexResult::RenderPreview(
                 self.render_preview(&doc)?.into(),
+            )),
+            IndexQuery::RenderPrint { doc } => Ok(IndexResult::RenderPrint(
+                self.render_document(
+                    &doc,
+                    RenderOptions {
+                        target: RenderTarget::Print,
+                        ..Default::default()
+                    },
+                )?
+                .into(),
             )),
             IndexQuery::RenderEmbed {
                 page,
@@ -9120,6 +9724,9 @@ impl Workspace {
             if let Some(tree) = tree {
                 guard_ui(prepared.trust, tree)?;
             }
+            if let ViewUpdate::Custom { ns, .. } = &update {
+                guard_intent(prepared.trust, ns)?;
+            }
             self.localize(&prepared.owner, &mut update);
             Ok(update)
         })();
@@ -9601,6 +10208,10 @@ impl Workspace {
         let popped = self.providers.command_stack.pop();
         debug_assert_eq!(popped.as_deref(), Some(prepared.command.as_str()));
 
+        let outcome = outcome.and_then(|outcome| {
+            self.guard_command_intent(&prepared.owner, &outcome)
+                .map(|()| outcome)
+        });
         let result = match outcome {
             Err(and) => Err(self.localized(&prepared.owner, and)),
             Ok(mut outcome) => {
@@ -9624,6 +10235,22 @@ impl Workspace {
             outcome: result,
             previous_actor: prepared.previous_actor,
             journal: None,
+        }
+    }
+
+    /// Il grado di chi ha scritto il comando decide se il suo intento
+    /// `Custom` può arrivare alla shell ([`guard_intent`]). Vale per il
+    /// percorso sincrono e per quello staccato, che finiscono entrambi qui.
+    fn guard_command_intent(
+        &self,
+        owner: &str,
+        outcome: &CommandOutcome,
+    ) -> std::result::Result<(), PluginError> {
+        match &outcome.effect {
+            CommandEffect::Custom { ns, .. } => {
+                guard_intent(self.trust_of(owner).unwrap_or_default(), ns)
+            }
+            _ => Ok(()),
         }
     }
 
@@ -9789,6 +10416,7 @@ impl Workspace {
         self.providers.command_stack.pop();
 
         let mut outcome = outcome.map_err(|and| self.localized(&owner, and))?;
+        self.guard_command_intent(&owner, &outcome)?;
         if let CommandEffect::Plan(plan) = &mut outcome.effect {
             // l'host, invece di fidarsi che chi ha scritto il piano si sia
             // ricordato di elencare ogni documento che i suoi edit nominano.
@@ -11019,6 +11647,101 @@ impl Workspace {
         }
     }
 
+    /// Named vault preferences live in the settings file, not in view state.
+    pub fn settings_profiles(&self) -> std::result::Result<Vec<String>, PluginError> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .profiles()
+            .map_err(|e| PluginError::Internal(e.into()))
+    }
+
+    pub fn active_settings_profile(&self) -> std::result::Result<String, PluginError> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .active_profile()
+            .map_err(|e| PluginError::Internal(e.into()))
+    }
+
+    pub fn export_settings_profile(&self, name: &str) -> std::result::Result<String, PluginError> {
+        self.settings
+            .read()
+            .expect("store di configurazione")
+            .export_profile(name)
+            .map_err(|e| PluginError::BadArgs(e.into()))
+    }
+
+    pub fn import_settings_profile(&mut self, json: &str) -> std::result::Result<(), PluginError> {
+        self.settings
+            .write()
+            .expect("store di configurazione")
+            .import_profile(json)
+            .map_err(|e| PluginError::BadArgs(e.into()))
+    }
+
+    pub fn duplicate_settings_profile(
+        &mut self,
+        source: &str,
+        name: &str,
+    ) -> std::result::Result<(), PluginError> {
+        self.settings
+            .write()
+            .expect("store di configurazione")
+            .duplicate_profile(source, name)
+            .map_err(|e| PluginError::BadArgs(e.into()))
+    }
+
+    pub fn switch_settings_profile(&mut self, name: &str) -> std::result::Result<(), PluginError> {
+        let before = self
+            .settings
+            .read()
+            .expect("store di configurazione")
+            .entries(None);
+        let after = {
+            let mut settings = self.settings.write().expect("store di configurazione");
+            settings
+                .switch_profile(name)
+                .map_err(|e| PluginError::BadArgs(e.into()))?;
+            settings.entries(None)
+        };
+        for (old, new) in before.into_iter().zip(after) {
+            if old.value != new.value || old.source != new.source {
+                self.announce_setting(&new.spec.key, new.spec.scope);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn reset_settings_profile(&mut self, name: &str) -> std::result::Result<(), PluginError> {
+        let active = self.active_settings_profile()? == name;
+        let before = if active {
+            self.settings
+                .read()
+                .expect("store di configurazione")
+                .entries(None)
+        } else {
+            Vec::new()
+        };
+        let after = {
+            let mut settings = self.settings.write().expect("store di configurazione");
+            settings
+                .reset_profile(name)
+                .map_err(|e| PluginError::BadArgs(e.into()))?;
+            if active {
+                settings.entries(None)
+            } else {
+                Vec::new()
+            }
+        };
+        for (old, new) in before.into_iter().zip(after) {
+            if old.value != new.value || old.source != new.source {
+                self.announce_setting(&new.spec.key, new.spec.scope);
+            }
+        }
+        Ok(())
+    }
+
     /// chiave → accordo. La chiede chi monta, per sapere cosa questo vault
     /// propone alla tastiera di chi lo apre.
     /// Sospende il valore del vault di queste chiavi (§23.13): finché sono
@@ -11960,6 +12683,20 @@ pub(crate) use fub_abi::rules::path_policy::fenced_doc_id;
 /// è nell'algoritmo (sta in [`UiNode::validate_untrusted`]), è nel fatto che
 /// esista un unico varco attraverso cui gli alberi entrano.
 /// Un componente di path che un plugin può nominare: non vuoto, non `.`, non
+/// Un intento che la shell esegue con un privilegio suo
+/// ([`fub_abi::ui::privileged_intent`]) passa solo da chi ha il grado del
+/// contenuto attivo: è la stessa linea di [`guard_ui`], applicata a ciò che un
+/// provider chiede alla shell invece che a ciò che le fa disegnare.
+fn guard_intent(trust: Trust, ns: &str) -> std::result::Result<(), PluginError> {
+    if fub_abi::ui::privileged_intent(ns) && !trust.allows_active_content() {
+        Err(PluginError::PermissionDenied(
+            format!("l'intento `{ns}` è riservato ai provider del core").into(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn guard_ui(trust: Trust, tree: &UiNode) -> std::result::Result<(), PluginError> {
     if trust.allows_active_content() {
         Ok(())
@@ -12011,6 +12748,27 @@ pub(crate) fn collect_data_files(
 /// quella che il link apre sarebbe la stessa scritta che mostra due cose.
 /// Sottomodello con il solo blocco che porta l'ancora `^id`.
 fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
+    // A file-backed Base exposes its named views through the same custom block
+    // that the renderer consumes. Markdown headings still take the normal path;
+    // fenced Base blocks have no `views` manifest and cannot intercept them.
+    if let [fub_abi::model::Block::Custom {
+        custom_kind, attrs, ..
+    }] = model.body.as_slice()
+    {
+        if model.id.0.ends_with(".base") && custom_kind == "base" {
+            if let Some(views) = attrs.get("views").and_then(serde_json::Value::as_array) {
+                if !views.iter().any(|name| name.as_str() == Some(heading)) {
+                    return None;
+                }
+                let mut selected = DocumentModel::empty(model.id.clone());
+                selected.body.push(model.body[0].clone());
+                if let fub_abi::model::Block::Custom { attrs, .. } = &mut selected.body[0] {
+                    attrs["view"] = serde_json::Value::String(heading.to_owned());
+                }
+                return Some(selected);
+            }
+        }
+    }
     let idx = model
         .outline
         .iter()

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { EditorView, keymap } from "@codemirror/view";
+import { getCM } from "@replit/codemirror-vim";
 import { insertNewlineAndIndent, redoDepth, undoDepth } from "@codemirror/commands";
 import { EditorSelection, EditorState, StateField, Transaction, type Extension } from "@codemirror/state";
 import { createTextEngine, type EditorChange, type TextEngine } from "./engine";
@@ -94,6 +95,41 @@ describe("setDoc", () => {
     expect(ed.getDoc()).toBe("Xbase");
     expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("base");
+  });
+});
+
+describe("applyUserEdit", () => {
+  it("conserva CRLF quando una superficie resa inserisce righe ed è annullabile", () => {
+    const changes: EditorChange[] = [];
+    const { ed } = editor((change) => changes.push(change));
+    ed.setDoc("a\r\nb\r\n");
+
+    expect(ed.applyUserEdit(1, 1, "\nX")).toBe(true);
+    expect(ed.getDoc()).toBe("a\r\nX\r\nb\r\n");
+    expect(changes[changes.length - 1]?.text).toBe("a\r\nX\r\nb\r\n");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("a\r\nb\r\n");
+    ed.destroy();
+  });
+  it("insertAtCursor scrive alla selezione principale ed è annullabile", () => {
+    const changes: EditorChange[] = [];
+    const { ed, view } = editor((change) => changes.push(change));
+    ed.setDoc("a\r\nb\r\n");
+    view().dispatch({ selection: { anchor: 3 } });
+    expect(ed.insertAtCursor("![x](a.png)")).toBe(true);
+    expect(ed.getDoc()).toBe("a\r\nb![x](a.png)\r\n");
+    expect(changes[changes.length - 1]?.text).toBe("a\r\nb![x](a.png)\r\n");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("a\r\nb\r\n");
+    ed.destroy();
+  });
+  it("insertAtCursor rifiuta sola lettura e testo con CR", () => {
+    const { ed } = editor();
+    ed.setDoc("abc");
+    expect(ed.insertAtCursor("")).toBe(false);
+    expect(ed.insertAtCursor("a\rb")).toBe(false);
+    expect(ed.getDoc()).toBe("abc");
+    ed.destroy();
   });
 });
 
@@ -914,6 +950,66 @@ describe("sola lettura", () => {
     expect(ed.getDoc()).toBe("terza");
     expect(view()).toBe(initialView);
     expect(initialView.state.readOnly).toBe(true);
+  });
+});
+
+describe("preferenze di input del motore", () => {
+  it("toggles real Vim and spellcheck without replacing the document, selection, or undo", () => {
+    const { ed, view, parent } = editor();
+    ed.setDoc("abc");
+    const initial = view();
+    initial.dispatch({
+      changes: { from: 1, insert: "X" },
+      selection: EditorSelection.cursor(2),
+      userEvent: "input.type",
+    });
+    const documentBefore = initial.state.doc;
+    const selectionBefore = initial.state.selection;
+    const depthBefore = undoDepth(initial.state);
+
+    ed.setSpellcheck(false);
+    expect(initial.contentDOM.getAttribute("spellcheck")).toBe("false");
+    ed.setVim(true);
+    expect(getCM(initial)).not.toBeNull();
+    expect(view()).toBe(initial);
+    expect(initial.state.doc).toBe(documentBefore);
+    expect(initial.state.selection.eq(selectionBefore)).toBe(true);
+    expect(undoDepth(initial.state)).toBe(depthBefore);
+
+    ed.setVim(false);
+    ed.setSpellcheck(true);
+    expect(getCM(initial)).toBeNull();
+    expect(initial.contentDOM.getAttribute("spellcheck")).toBe("true");
+    expect(initial.state.doc).toBe(documentBefore);
+    expect(initial.state.selection.eq(selectionBefore)).toBe(true);
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("abc");
+    ed.destroy();
+    expect(getCM(initial)).toBeNull();
+    parent.remove();
+  });
+
+  it("keeps RTL text and an in-progress IME composition while switching input mode", async () => {
+    const { ed, view, parent } = editor();
+    ed.setDoc("שלום\r\nمرحبا");
+    const initial = view();
+    expect(initial.contentDOM.getAttribute("dir")).toBe("auto");
+    expect(initial.state.facet(EditorView.perLineTextDirection)).toBe(true);
+    initial.dispatch({ selection: EditorSelection.cursor(3) });
+    const selectionBefore = ed.selections();
+
+    initial.contentDOM.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    expect(initial.compositionStarted).toBe(true);
+    ed.setVim(true);
+    expect(getCM(initial)).toBeNull();
+    initial.contentDOM.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+    await Promise.resolve();
+    expect(getCM(initial)).not.toBeNull();
+    expect(view()).toBe(initial);
+    expect(ed.selections()).toEqual(selectionBefore);
+    expect(ed.getDoc()).toBe("שלום\r\nمرحبا");
+    ed.destroy();
+    parent.remove();
   });
 });
 

@@ -17,9 +17,10 @@ import { MARKDOWN_SYNTAX } from "./syntax.generated";
 // si vedeva il difetto, e vanno letti come tali.
 
 describe("la dichiarazione, interpretata", () => {
-  it("`==` non è scritto nella shell: viene dal trigger di HighlightRule", () => {
+  it("`==` e `%%` non sono scritti nella shell: vengono dai trigger di HighlightRule e CommentRule", () => {
     expect(inlineDelimiters()).toEqual([
       { name: "fub:highlight", open: "==", close: "==" },
+      { name: "fub:comments", open: "%%", close: "%%" },
     ]);
     // E la prova che è *generato* e non copiato: cambiando la dichiarazione
     // cambia il risultato, senza toccare una riga di questo modulo.

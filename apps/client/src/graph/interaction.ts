@@ -35,6 +35,7 @@ export interface InteractionOptions {
   structureRef: () => Structure;
   cameraState: CameraState;
   actions: InteractionActions;
+  isVisible?: (index: number) => boolean;
 }
 
 export interface Interaction {
@@ -52,10 +53,11 @@ export interface Interaction {
 /// — 6 px di tolleranza **di schermo**, non di mondo. Senza la scala il
 /// hit-test era giusto solo a scala 1 e il click mancava i nodi zoommati.
 /// Ritorna l'indice del nodo più vicino entro soglia, −1 se nessuno.
-export function nodeAt(s: Structure, c: Camera, x: number, y: number): number {
+export function nodeAt(s: Structure, c: Camera, x: number, y: number, isVisible?: (index: number) => boolean): number {
   let best = -1;
   let bestD = Infinity;
   for (let i = 0; i < s.n; i++) {
+    if (isVisible && !isVisible(i)) continue;
     const dx = s.x[i] * c.scale + c.tx - x;
     const dy = s.y[i] * c.scale + c.ty - y;
     const threshold = s.radius[i] * c.scale + 6;
@@ -155,13 +157,14 @@ export function updateDrag(
 /// Il nodo più vicino al focalizzato nella direzione (dx, dy) di una freccia:
 /// la scelta del «nearest» è il coseno dell'angolo col vettore — il nodo che
 /// sta più sulla linea della freccia, non il più vicino in assoluto.
-function nodeInDirection(s: Structure, i: number, dx: number, dy: number): number {
+function nodeInDirection(s: Structure, i: number, dx: number, dy: number, isVisible: (index: number) => boolean): number {
   let best = -1;
   let bestCos = -Infinity;
   const xf = s.x[i];
   const yf = s.y[i];
   for (let k = 0; k < s.n; k++) {
     if (k === i) continue;
+    if (!isVisible(k)) continue;
     const vx = s.x[k] - xf;
     const vy = s.y[k] - yf;
     const len = Math.hypot(vx, vy);
@@ -213,10 +216,10 @@ const KEYBOARD_PAN_PX = 40;
 const KEYBOARD_ZOOM = 1.2;
 
 export function createInteraction(options: InteractionOptions): Interaction {
-  const { canvas, structureRef, cameraState, actions } = options;
+  const { canvas, structureRef, cameraState, actions, isVisible = () => true } = options;
 
   const s2m = (x: number, y: number): Point => screenToWorld(cameraState.state(), { x, y });
-  const hit = (x: number, y: number): number => nodeAt(structureRef(), cameraState.state(), x, y);
+  const hit = (x: number, y: number): number => nodeAt(structureRef(), cameraState.state(), x, y, isVisible);
   const viewport = (): { w: number; h: number } => {
     const r = canvas.getBoundingClientRect();
     return { w: Math.max(1, r.width), h: Math.max(1, r.height) };
@@ -389,7 +392,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
       const q = pendingClick;
       pendingClick = null;
       if (!q) return;
-      const i = nodeAt(structureRef(), cameraState.state(), q.x, q.y);
+      const i = hit(q.x, q.y);
       if (i >= 0) {
         // Il click è anche un focus: chi arriva da tastiera dopo un click
         // trova il nodo già focalizzato e può riaprirlo con Invio.
@@ -405,7 +408,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
     clickTimeout = undefined;
     pendingClick = null;
     const p = localPoint(e);
-    const i = nodeAt(structureRef(), cameraState.state(), p.x, p.y);
+    const i = hit(p.x, p.y);
     if (i >= 0) {
       const s = structureRef();
       // Pin: doppio click blocca il nodo, un altro lo sblocca. Il pin è un
@@ -424,7 +427,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
     if (k in ARROW_DIRECTIONS) {
       const [dx, dy] = ARROW_DIRECTIONS[k];
       if (focused >= 0) {
-        const newItem = nodeInDirection(structureRef(), focused, dx, dy);
+        const newItem = nodeInDirection(structureRef(), focused, dx, dy, isVisible);
         if (newItem >= 0) {
           focused = newItem;
         }
@@ -525,7 +528,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
       canvas.setAttribute("aria-label", text);
     },
     focusedNode(i: number) {
-      focused = i;
+      focused = i < 0 || isVisible(i) ? i : -1;
       actions.requestRedraw();
     },
     getFocusedNode() {

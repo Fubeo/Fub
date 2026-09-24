@@ -1,0 +1,323 @@
+import { activeTab, documents, layout, pane } from "./layout";
+import {
+  addBookmark,
+  bookmarkLoadSnapshot,
+  addGroup,
+  listBookmarks,
+  listGroups,
+  loadBookmarks,
+  moveBookmark,
+  removeBookmark,
+  removeGroup,
+  renameBookmark,
+  renameGroup,
+  saveTabsAsBookmark,
+  setBookmarkGroup,
+  type Bookmark,
+  type BookmarkTarget,
+} from "./bookmarks";
+import { on } from "./store";
+import { onEvent } from "./kernel";
+import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
+import { showContextMenu } from "../ui/menu";
+import { notify } from "../ui/notify";
+import { t } from "../i18n/strings";
+import { setTooltip } from "../ui/tooltip";
+import { openBookmarkTarget } from "./shell-commands";
+import { state } from "./store";
+import { currentWorkspaceId } from "./workspaces-ui";
+
+let visible = false;
+let lifetime: Lifetime | null = null;
+
+function panel(): HTMLElement | null {
+  return document.getElementById("bookmarks-panel");
+}
+
+function ensurePanel(): HTMLElement {
+  let el = panel();
+  if (el) return el;
+  const sidebar = document.getElementById("sidebar");
+  el = document.createElement("section");
+  el.id = "bookmarks-panel";
+  el.className = "bookmarks-panel";
+  el.setAttribute("aria-label", t("bookmarks.title"));
+  el.hidden = true;
+  sidebar?.appendChild(el);
+  return el;
+}
+
+async function refresh(): Promise<void> {
+  const el = ensurePanel();
+  if (el.hidden) return;
+  const status = bookmarkLoadSnapshot();
+  el.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "panel-title";
+  const title = document.createElement("span");
+  title.textContent = t("bookmarks.title");
+  head.appendChild(title);
+  const actions = document.createElement("div");
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = t("bookmarks.save_tabs");
+  setTooltip(save, t("bookmarks.save_tabs_hint"));
+  save.addEventListener("click", () => {
+    const p = pane(layout.focus);
+    if (!p) return;
+    const name = window.prompt(t("bookmarks.name_title"), t("bookmarks.default_tabs"));
+    if (name === null) return;
+    const created = saveTabsAsBookmark(name, [...p.tabs]);
+    if (!created) notify(t("bookmarks.save_failed"), "guasto");
+    else void refresh();
+  });
+  const add = document.createElement("button");
+  add.type = "button";
+  add.textContent = t("bookmarks.add");
+  add.setAttribute("aria-label", t("bookmarks.add_hint"));
+  add.addEventListener("click", (event) => {
+    const doc = activeTab();
+    const options: Array<{ label: string; target: BookmarkTarget }> = [];
+    if (doc?.k === "doc") {
+      options.push({ label: t("bookmarks.type.file"), target: { k: "doc", doc: doc.doc } });
+      options.push({ label: t("bookmarks.type.heading"), target: { k: "doc", doc: doc.doc, heading: "" } });
+      options.push({ label: t("bookmarks.type.block"), target: { k: "doc", doc: doc.doc, block: "" } });
+    }
+    if (doc?.k === "view") options.push({ label: t("bookmarks.type.view"), target: { k: "view", view: doc.view } });
+    const query = document.getElementById("search-input");
+    if (query instanceof HTMLInputElement && query.value.trim())
+      options.push({ label: t("bookmarks.type.search"), target: { k: "search", query: query.value.trim() } });
+    if (state.activeSpace) options.push({ label: t("bookmarks.type.folder"), target: { k: "folder", path: state.activeSpace } });
+    const workspaceId = currentWorkspaceId();
+    if (workspaceId) options.push({ label: t("bookmarks.type.workspace"), target: { k: "workspace", workspace: workspaceId } });
+    showContextMenu(event, options.map(({ label, target }) => ({
+      label,
+      run: () => {
+        if (target.k === "doc" && "heading" in target) {
+          const heading = window.prompt(t("bookmarks.type.heading"), "");
+          if (!heading) return;
+          target.heading = heading;
+        }
+        if (target.k === "doc" && "block" in target) {
+          const block = window.prompt(t("bookmarks.type.block"), "");
+          if (!block) return;
+          target.block = block;
+        }
+        const title = window.prompt(t("bookmarks.name_title"), label);
+        if (title === null) return;
+        if (!addBookmark(title, target)) notify(t("bookmarks.save_failed"), "guasto");
+        else void refresh();
+      },
+    })));
+  });
+  const group = document.createElement("button");
+  group.type = "button";
+  group.textContent = t("bookmarks.new_group");
+  group.addEventListener("click", () => void newBookmarkGroup().then(() => refresh()));
+  actions.append(save, add, group);
+  head.appendChild(actions);
+  el.appendChild(head);
+  if (status.kind === "future") {
+    const warn = document.createElement("p");
+    warn.className = "palette-desc";
+    warn.textContent = t("bookmarks.future", { version: status.version });
+    el.appendChild(warn);
+    return;
+  }
+  if (status.kind === "corrupt") {
+    const warn = document.createElement("p");
+    warn.className = "palette-desc";
+    warn.textContent = t("bookmarks.corrupt");
+    el.appendChild(warn);
+    return;
+  }
+  const groups = listGroups();
+  const bookmarks = listBookmarks();
+  if (groups.length > 0) {
+    const glist = document.createElement("ul");
+    glist.className = "plain-list";
+    for (const g of groups) {
+      const li = document.createElement("li");
+      const row = document.createElement("div");
+      row.className = "palette-row";
+      const name = document.createElement("span");
+      name.className = "palette-title";
+      name.textContent = g.title;
+      row.appendChild(name);
+      const count = document.createElement("span");
+      count.className = "palette-desc";
+      count.textContent = String(g.bookmarkIds.length);
+      row.appendChild(count);
+      row.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showContextMenu(e, [
+          { label: t("bookmarks.rename"), run: () => {
+            const next = window.prompt(t("bookmarks.rename_title"), g.title);
+            if (next === null) return;
+            renameGroup(g.id, next);
+            void refresh();
+          } },
+          { label: t("bookmarks.delete"), danger: true, run: () => {
+            if (!window.confirm(t("bookmarks.delete_group_confirm", { title: g.title }))) return;
+            removeGroup(g.id);
+            void refresh();
+          } },
+        ]);
+      });
+      li.appendChild(row);
+      const members = document.createElement("ul");
+      members.className = "plain-list";
+      for (const id of g.bookmarkIds) {
+        const b = bookmarks.find((x) => x.id === id);
+        if (!b) continue;
+        members.appendChild(rowFor(b));
+      }
+      li.appendChild(members);
+      glist.appendChild(li);
+    }
+    el.appendChild(glist);
+  }
+  const ungrouped = bookmarks.filter((b) => !groups.some((g) => g.bookmarkIds.includes(b.id)));
+  const list = document.createElement("ul");
+  list.className = "plain-list";
+  for (const b of ungrouped) list.appendChild(rowFor(b));
+  el.appendChild(list);
+  if (bookmarks.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "palette-desc";
+    empty.textContent = t("bookmarks.empty");
+    el.appendChild(empty);
+  }
+}
+
+function rowFor(b: Bookmark): HTMLElement {
+  const li = document.createElement("li");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "search-result";
+  const title = document.createElement("span");
+  title.className = "palette-title";
+  title.textContent = b.title;
+  const where = document.createElement("span");
+  where.className = "palette-desc";
+  where.textContent = describeTarget(b);
+  button.append(title, where);
+  setTooltip(button, describeTarget(b));
+  button.addEventListener("click", () => void openBookmarkTarget(b.target));
+  button.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    showContextMenu(e, [
+      { label: t("bookmarks.open"), run: () => void openBookmarkTarget(b.target) },
+      { label: t("bookmarks.rename"), run: () => {
+        const next = window.prompt(t("bookmarks.rename_title"), b.title);
+        if (next === null) return;
+        renameBookmark(b.id, next);
+        void refresh();
+      } },
+      { label: t("bookmarks.move_up"), run: () => {
+        const list = listBookmarks();
+        const at = list.findIndex((x) => x.id === b.id);
+        if (moveBookmark(b.id, Math.max(0, at - 1))) void refresh();
+      } },
+      { label: t("bookmarks.move_down"), run: () => {
+        const list = listBookmarks();
+        const at = list.findIndex((x) => x.id === b.id);
+        if (moveBookmark(b.id, Math.min(list.length - 1, at + 1))) void refresh();
+      } },
+      { label: t("bookmarks.assign_group"), run: () => void assignGroupFlow(b.id).then(() => refresh()) },
+      { label: t("bookmarks.delete"), danger: true, run: () => {
+        if (!window.confirm(t("bookmarks.delete_confirm", { title: b.title }))) return;
+        removeBookmark(b.id);
+        void refresh();
+      } },
+    ]);
+  });
+  li.appendChild(button);
+  return li;
+}
+
+function describeTarget(b: Bookmark): string {
+  const target = b.target;
+  if (target.k === "doc") return target.doc;
+  if (target.k === "folder") return target.path === "" ? "/" : target.path;
+  if (target.k === "search") return target.query;
+  if (target.k === "view") return target.view;
+  if (target.k === "workspace") return target.workspace;
+  if (target.k === "web") return target.url;
+  return `${target.tabs.length} tab`;
+}
+
+async function assignGroupFlow(bookmarkId: string): Promise<void> {
+  const groups = listGroups();
+  if (groups.length === 0) {
+    const created = await newBookmarkGroup();
+    if (created) setBookmarkGroup(bookmarkId, created.id);
+    return;
+  }
+  const names = groups.map((g, i) => `${i + 1}. ${g.title}`).join("\n");
+  const choice = window.prompt(t("bookmarks.assign_title", { groups: names }), "1");
+  if (choice === null) return;
+  const at = Number.parseInt(choice.trim(), 10) - 1;
+  if (!Number.isInteger(at) || at < 0 || at >= groups.length) return;
+  setBookmarkGroup(bookmarkId, groups[at]!.id);
+}
+
+export async function newBookmarkGroup(): Promise<{ id: string } | null> {
+  const name = window.prompt(t("bookmarks.group_title"), "");
+  if (name === null) return null;
+  const group = addGroup(name);
+  if (!group) {
+    notify(t("bookmarks.group_failed"), "guasto");
+    return null;
+  }
+  return { id: group.id };
+}
+
+export function openBookmarksPanel(): void {
+  visible = true;
+  const el = ensurePanel();
+  el.hidden = false;
+  void refresh();
+}
+
+export function toggleBookmarksPanel(): void {
+  visible = !visible;
+  const el = ensurePanel();
+  el.hidden = !visible;
+  if (visible) void refresh();
+}
+
+export function mountBookmarksPanel(parent: Lifetime): Teardown {
+  lifetime?.close();
+  const life = openLifetime();
+  lifetime = life;
+  const dispose = () => {
+    if (life.closed) return;
+    life.close();
+    if (lifetime === life) {
+      lifetime = null;
+      panel()?.remove();
+      visible = false;
+    }
+  };
+  parent.add(dispose);
+  life.add(on("vault", () => {
+    void loadBookmarks().then(() => { if (!life.closed) void refresh(); });
+  }));
+  life.add(on("documents", () => void refresh()));
+  life.add(onEvent("document_renamed", () => void refresh()));
+  void loadBookmarks().then(() => { if (!life.closed) void refresh(); });
+  return dispose;
+}
+
+export function currentOpenDocs(): string[] {
+  const out: string[] = [];
+  for (const id of Object.keys(layout.panes)) {
+    const p = pane(id);
+    if (!p) continue;
+    for (const doc of documents(p)) {
+      if (!out.includes(doc)) out.push(doc);
+    }
+  }
+  return out;
+}

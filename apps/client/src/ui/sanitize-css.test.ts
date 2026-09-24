@@ -4,6 +4,7 @@ import {
   ThemeCssError,
   missingThemeRoles,
   sanitizeThemeCss,
+  sanitizeUserCss,
   themeCssViolations,
   unknownThemeHooks,
   type ThemeCssPolicy,
@@ -186,5 +187,18 @@ describe("presidi puri del contratto", () => {
   it("elenca solo gli hook fuori vocabolario, una volta sola", () => {
     expect(unknownThemeHooks(".brand.bad, .bad:hover, .worse {}", ["brand"]))
       .toEqual(["bad", "worse"]);
+  });
+});
+
+describe("user CSS trust boundary", () => {
+  const hooks = ["markdown-preview", "fub-note--wide"];
+
+  it("allows local note paint while refusing network and structural escapes", () => {
+    const safe = ".markdown-preview .fub-note--wide { color: #eee; }";
+    expect(sanitizeUserCss(safe, hooks)).toBe(safe);
+    expect(() => sanitizeUserCss(".markdown-preview { background: url(https://example.test/secret); }", hooks)).toThrow(ThemeCssError);
+    expect(() => sanitizeUserCss("@import 'https://example.test/secret';", hooks)).toThrow(ThemeCssError);
+    expect(() => sanitizeUserCss(".markdown-preview { display: none; }", hooks)).toThrow(ThemeCssError);
+    expect(() => sanitizeUserCss(".markdown-preview[data-private] { color: red; }", hooks)).toThrow(ThemeCssError);
   });
 });

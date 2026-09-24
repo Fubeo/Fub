@@ -1,0 +1,98 @@
+/* Only the mobile entry sets clientShell=mobile; desktop keeps its own chrome. */
+:root[data-client-shell="mobile"] {
+  --mobile-keyboard-inset: 0px;
+}
+
+:root[data-client-shell="mobile"] #app {
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--mobile-keyboard-inset));
+}
+
+:root[data-client-shell="mobile"] button,
+:root[data-client-shell="mobile"] [role="button"],
+:root[data-client-shell="mobile"] input[type="checkbox"],
+:root[data-client-shell="mobile"] input[type="radio"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:root[data-client-shell="mobile"] .mobile-incoming {
+  position: fixed;
+  z-index: var(--z-modal);
+  inset-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
+  bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + var(--mobile-keyboard-inset));
+  display: grid;
+  gap: 8px;
+  max-height: min(70dvh, 560px);
+  overflow: auto;
+  padding: 16px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+}
+
+:root[data-client-shell="mobile"] .mobile-incoming textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+:root[data-client-shell="mobile"][data-mobile-form-factor="tablet"] .mobile-incoming {
+  width: min(520px, 90vw);
+  inset-inline: auto 16px;
+}
+
+:root[data-client-shell="mobile"][data-mobile-orientation="landscape"] .mobile-incoming {
+  max-height: 55dvh;
+}
+
+:root[data-client-shell="mobile"] .mobile-storage {
+  position: fixed;
+  z-index: var(--z-picker);
+  right: max(8px, env(safe-area-inset-right, 0px));
+  bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + var(--mobile-keyboard-inset));
+  width: min(400px, calc(100vw - 16px));
+  max-height: 50dvh;
+  overflow: auto;
+  padding: 8px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+}
+
+:root[data-client-shell="mobile"] .mobile-storage button {
+  display: block;
+  width: 100%;
+  margin-block: 6px;
+}
+
+:root[data-client-shell="mobile"] .mobile-backend {
+  position: fixed;
+  z-index: var(--z-picker);
+  top: calc(env(safe-area-inset-top, 0px) + 48px);
+  right: max(8px, env(safe-area-inset-right, 0px));
+  font-size: 12px;
+  background: Canvas;
+  color: CanvasText;
+}
+
+/* The existing declared ViewSurface::StatusBar host lives beside #statusbar.
+   desktop-shell's mountDeclaredViews owns its lifetime on mobile too. */
+:root[data-client-shell="mobile"] #views-status {
+  display: flex;
+  flex-wrap: wrap;
+  max-height: 30dvh;
+  overflow: auto;
+  padding-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px));
+}
+
+:root[data-client-shell="mobile"] #statusbar {
+  min-height: 44px;
+  height: auto;
+  max-height: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

@@ -125,14 +125,19 @@ modello malformato, trap e serialize; non documenta una parità ulteriore.
 
 `FormatProvider` è implementato e ha parità nativo/WASM per le operazioni
 coperte `parse`, `render_html` e `serialize`. Errori dichiarati dal guest,
-modelli malformati e trap sono coperti end-to-end nel percorso WASM e vengono
-recuperati come `FormatError`, ma non costituiscono un confronto di parità
-nativo/WASM.
+modelli malformati e trap vengono recuperati come `FormatError`, ma non
+costituiscono un confronto di parità nativo/WASM.
 
-`IndexProvider` non viene aggiunto senza un componente che ne possieda una
-route e provi il feed, la query, il flush e la close. `EventHandler` inbound
-resta deferred finché un componente deve reagire a `Notice`; non va confuso
-con `host-events`, già supportato per il percorso outbound verso il guest.
+`IndexProvider` inbound è implementato: un componente reale possiede una route
+e prova feed, query, flush, close, `up_to_date` e reconcile nello stesso
+registro del nativo, con teardown e rollback del mount su dichiarazione in
+trappola (`crates/fub-wasm-host/tests/deferred_providers.rs`). La domanda
+`up_to_date` resta un'intersezione su tutti gli indici montati: i provider
+nativi conservativi rispondono vuoto, quindi il guest non viene consultato su
+un'apertura a freddo e il documento viene sempre alimentato.
+`EventHandler` inbound è implementato: un componente reale dichiara la
+maschera e riceve `Notice` attraverso lo stesso registro del nativo, con
+`Guard` applicato alle letture del guest.
 
 ## Provider WASM
 
@@ -180,16 +185,18 @@ Render e aggiornamenti passano dallo stesso `Guard` di fiducia: `Html` e
 prima della shell; i provider `Trust::Core` possono produrli. Il confine
 preflight controlla root e riferimenti, cicli, profondità massima 64 e un budget
 di 8 Mi unità pesate.
-
 La stessa istanza non è rientrante: una chiamata guest che prova a rientrare
 nel proprio provider riceve un errore tipizzato. Un trap invalida il guest ma
 lascia vivo l'host; il teardown può riportare il trap come errore osservabile.
 
-`IndexProvider` e `EventHandler` inbound non fanno parte di questo percorso:
-restano deferred.
+Le dichiarazioni inbound (`routes` dell'indice, maschera degli eventi) vengono
+lette dentro la closure di mount, dopo `Plugin::activate`: un componente in
+trappola fallisce con l'errore di dichiarazione, mai con un errore di istanza
+avvelenata dovuto alla lettura anticipata.
 
-La parità dimostrata è limitata a spec/interests/render/`Replace`/`Patch`, non
-implica parità per provider non esercitati.
+La parità dimostrata è limitata a spec/interests/render/`Replace`/`Patch` per
+le view e a feed/query/flush/close/`up_to_date`/reconcile/notice per gli
+inbound, non implica parità per provider non esercitati.
 
 ## Esempio minimo
 
@@ -307,6 +314,23 @@ percorso `ViewProvider` WASM ogni albero prodotto da un provider non fidato
 (`Trust::Community`) passa da `UiNode::validate_untrusted()` prima della shell;
 la stessa regola vale per `render_view` e per gli aggiornamenti restituiti da
 `on_action`. I provider `Trust::Core` possono produrre `Html` e `WebView`.
+
+## Renderer nativi
+
+I renderer nativi `Html`/`Ui` restano sul percorso kernel in
+`crates/fub-kernel/src/renderer.rs`: il kernel compone i blocchi del provider
+con i renderer registrati e degrada al provider in caso di errore. `Ui` applica
+la stessa regola delle view: da chi non è fidato, niente contenuto attivo. Il
+kernel aggiunge i marker interni `data-fub-renderer`,
+`data-fub-source-start` e `data-fub-source-end` con gli span UTF-8 del modello:
+sono metadato interno di arricchimento per la shell, non una nuova API per
+plugin. ABI, WIT e IPC restano invariati; il lifecycle dei componenti
+(`parts`/`slot`, mount e unmount della shell) resta quello esistente.
+
+La shell registra `fub:diagram` per i payload Mermaid e riusa lo stesso viewer
+dei recinti Markdown. I motori non supportati e i payload non riconosciuti
+mantengono il fallback dichiarativo; il passaggio fra viewer e fallback
+smonta il componente precedente.
 
 ## Inventario installato
 

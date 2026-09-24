@@ -772,3 +772,47 @@ fn a_reveal_from_a_command_speaks_in_bytes_of_the_new_text() {
     assert_eq!(json["doc"], "a.md");
     assert_eq!(json["span"]["start"], 3);
 }
+
+/// Un comando che chiede alla shell di scrivere negli appunti.
+struct AsksClipboard;
+
+impl CommandProvider for AsksClipboard {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new("terzi.copia:copia", "Copia")]
+    }
+
+    fn invoke(
+        &self,
+        _command: &str,
+        _args: serde_json::Value,
+        _mode: InvokeMode,
+        _host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
+            ns: fub_abi::ui::CLIPBOARD_TEXT_NS.into(),
+            payload: serde_json::json!({ "text": "scelto dal comando" }),
+        }))
+    }
+}
+
+#[test]
+fn a_third_party_command_cannot_ask_the_shell_for_the_clipboard() {
+    let (_dir, mut ws) = vault();
+    ws.register_plugin(
+        fub_abi::traits::PluginManifest::new("terzi.copia", "terzi.copia"),
+        fub_kernel::Trust::Community,
+    )
+    .expect("declared");
+    ws.register_command_provider("terzi.copia", Box::new(AsksClipboard))
+        .expect("registered");
+
+    let err = ws
+        .invoke_command(
+            "terzi.copia:copia",
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("the clipboard intent is reserved to the core");
+    assert!(matches!(err, PluginError::PermissionDenied(_)), "{err:?}");
+}

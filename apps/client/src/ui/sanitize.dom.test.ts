@@ -126,3 +126,15 @@ describe("il censimento dei nomi della shell", () => {
     expect(inside, "un nome della shell è finito sotto il prefisso del contenuto").toEqual([]);
   });
 });
+
+describe("le immagini del vault restano inerti", () => {
+  it("il src di un path del vault diventa data-vault-src e il remoto sparisce", async () => {
+    const { sanitizeFragment, VAULT_SRC_ATTRIBUTE } = await import("./sanitize");
+    const fragment = sanitizeFragment('<img src="Risorse/a.png" alt="a"><img src="https://x.it/b.png" alt="b">');
+    const [local, remote] = Array.from(fragment.querySelectorAll("img"));
+    expect(local!.hasAttribute("src")).toBe(false);
+    expect(local!.getAttribute(VAULT_SRC_ATTRIBUTE)).toBe("Risorse/a.png");
+    expect(remote!.hasAttribute("src")).toBe(false);
+    expect(remote!.hasAttribute(VAULT_SRC_ATTRIBUTE)).toBe(false);
+  });
+});

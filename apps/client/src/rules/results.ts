@@ -18,6 +18,10 @@ export interface ResultRow {
   /// Il numero dell'occorrenza (2, 3, …) per le righe che ne sono una; assente
   /// per la riga della nota.
   occurrence?: number;
+  /// Quante occorrenze ha la nota in tutto: serve a dire «2 di 5» senza
+  /// rileggere gli hits. Assente = non calcolate (come `occurrences` assente).
+  /// Solo lettura per i pannelli; mai una seconda query per battuta.
+  total?: number;
   snippet?: string;
   highlights?: Span[];
 }
@@ -35,14 +39,24 @@ export function rowsToShow(hits: DocumentMatch[]): ResultRow[] {
   const rows: ResultRow[] = [];
   for (const hit of hits) {
     const occurrences = hit.occurrences ?? [];
+    // `total` si valorizza solo quando il kernel ha calcolato le occorrenze:
+    // `occurrences` assente = «nessuno le ha calcolate» (riga sola, nessun
+    // totale), non «zero occorrenze».
+    const total = hit.occurrences === undefined ? undefined : occurrences.length;
     rows.push({
       doc: hit.doc,
       byteOffset: occurrences[0]?.span.start,
       snippet: hit.snippet,
       highlights: hit.highlights,
+      ...(total === undefined ? {} : { total }),
     });
     occurrences.slice(1).forEach((position, i) => {
-      rows.push({ doc: hit.doc, byteOffset: position.span.start, occurrence: i + 2 });
+      rows.push({
+        doc: hit.doc,
+        byteOffset: position.span.start,
+        occurrence: i + 2,
+        ...(total === undefined ? {} : { total }),
+      });
     });
   }
   return rows;

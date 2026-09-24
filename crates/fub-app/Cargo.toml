@@ -55,10 +55,14 @@ serde_json = { workspace = true }
 camino = { workspace = true }
 tauri = { version = "2.11.5", features = [] }
 tracing = { workspace = true }
-tauri-plugin-dialog = "2.7.2"
-
-[dev-dependencies]
+uuid = { workspace = true }
+parking_lot = { workspace = true }
 tempfile = { workspace = true }
+tauri-plugin-dialog = "2.7.2"
+tauri-plugin-deep-link = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }

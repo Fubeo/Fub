@@ -9,6 +9,7 @@ import {
 } from "@codemirror/state";
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { indentUnit, syntaxTree } from "@codemirror/language";
+import type { SyntaxNodeRef } from "@lezer/common";
 import { taskChecked } from "../../../../rules/mirrored";
 import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
@@ -434,6 +435,207 @@ function setListKind(kind: "bullet" | "ordered"): StateCommand {
 export const toggleBulletList = setListKind("bullet");
 export const toggleOrderedList = setListKind("ordered");
 
+// ── Tabelle GFM ──────────────────────────────────────────────────────────────
+
+type TableAction =
+  | { kind: "insertRow"; side: "before" | "after" }
+  | { kind: "deleteRow" | "moveRow"; direction?: -1 | 1 }
+  | { kind: "sortRows"; direction: -1 | 1 }
+  | { kind: "insertColumn"; side: "before" | "after" }
+  | { kind: "deleteColumn" | "moveColumn"; direction?: -1 | 1 }
+  | { kind: "sortColumns"; direction: -1 | 1 };
+
+/// The pipe positions belong to the source, not to the rendered cells. In
+/// particular, an escaped pipe is data, including when preceded by \\.
+function tableCells(text: string): { cells: string[]; starts: number[]; prefix: string; suffix: string } {
+  const parts: string[] = [];
+  const starts: number[] = [];
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "|") continue;
+    let slashes = 0;
+    for (let j = i - 1; j >= 0 && text[j] === "\\"; j--) slashes++;
+    if (slashes % 2) continue;
+    parts.push(text.slice(start, i));
+    starts.push(start);
+    start = i + 1;
+  }
+  parts.push(text.slice(start));
+  starts.push(start);
+  const left = parts.length > 1 && parts[0]!.trim() === "";
+  const right = parts.length > 1 && parts[parts.length - 1]!.trim() === "";
+  const first = left ? 1 : 0;
+  const last = right ? parts.length - 1 : parts.length;
+  return {
+    cells: parts.slice(first, last),
+    starts: starts.slice(first, last),
+    prefix: left ? `${parts[0]}|` : "",
+    suffix: right ? `|${parts[parts.length - 1]}` : "",
+  };
+}
+
+function tableLine(cells: string[], source: string): string {
+  const { prefix, suffix } = tableCells(source);
+  return `${prefix}${cells.join("|")}${suffix}`;
+}
+
+function tableCommand(action: TableAction): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const tree = syntaxTree(state);
+    let table: SyntaxNodeRef | null = null;
+    const rows = new Set<number>();
+    const columns = new Set<number>();
+    for (const range of state.selection.ranges) {
+      let node = tree.resolve(Math.min(range.from, state.doc.length), 1);
+      while (node.name !== "Table" && node.parent) node = node.parent;
+      if (node.name !== "Table" || (table && (table.from !== node.from || table.to !== node.to))) return false;
+      if (range.from < node.from || range.to > node.to) return false;
+      table = node;
+      const line = state.doc.lineAt(Math.min(range.head, node.to));
+      const firstLine = state.doc.lineAt(node.from).number;
+      const index = line.number - firstLine;
+      if (index < 0 || line.from > node.to) return false;
+      const endLine = state.doc.lineAt(range.to);
+      const endIndex = endLine.number - firstLine -
+        (!range.empty && range.to === endLine.from ? 1 : 0);
+      const startIndex = state.doc.lineAt(range.from).number - firstLine;
+      if ((action.kind === "deleteRow" || action.kind === "moveRow") && startIndex === 0) return false;
+      for (let row = startIndex; row <= endIndex; row++) {
+        if (row >= 2) rows.add(row);
+      }
+      const parsed = tableCells(line.text);
+      if (!parsed.cells.length) return false;
+      const relative = range.head - line.from;
+      let column = parsed.starts.findIndex((start, i) =>
+        relative >= start && relative <= start + parsed.cells[i]!.length
+      );
+      if (column < 0) column = relative < parsed.starts[0]! ? 0 : parsed.cells.length - 1;
+      columns.add(column);
+    }
+    if (!table) return false;
+    const first = state.doc.lineAt(table.from);
+    const last = state.doc.lineAt(table.to);
+    const lines = Array.from(
+      { length: last.number - first.number + 1 },
+      (_, i) => state.doc.line(first.number + i).text,
+    );
+    if (lines.length < 2 || !table.node.getChild("TableHeader") || !table.node.getChild("TableDelimiter")) return false;
+    const width = tableCells(lines[0]!).cells.length;
+    if (!width || lines.some((line) => tableCells(line).cells.length !== width)) return false;
+    const targets = [...rows].sort((a, b) => a - b);
+    const cols = [...columns].sort((a, b) => a - b);
+    switch (action.kind) {
+      case "insertRow": {
+        // A header cursor inserts in the body; the delimiter never moves.
+        for (const index of targets.length ? targets.reverse() : [2]) {
+          const at = targets.length ? index + (action.side === "after" ? 1 : 0) : 2;
+          const template = lines[Math.min(Math.max(at, 2), lines.length - 1)] ?? lines[0]!;
+          lines.splice(Math.max(2, at), 0, tableLine(Array(width).fill(" "), template));
+        }
+        break;
+      }
+      case "deleteRow":
+        if (!targets.length) return false;
+        for (const index of targets.reverse()) lines.splice(index, 1);
+        break;
+      case "moveRow": {
+        if (!targets.length) return false;
+        const chosen = new Set(targets);
+        const direction = action.direction ?? -1;
+        const indices = direction < 0 ? targets : targets.reverse();
+        let moved = false;
+        for (const index of indices) {
+          const neighbor = index + direction;
+          if (neighbor < 2 || neighbor >= lines.length || chosen.has(neighbor)) continue;
+          [lines[index], lines[neighbor]] = [lines[neighbor]!, lines[index]!];
+          chosen.delete(index);
+          chosen.add(neighbor);
+          moved = true;
+        }
+        if (!moved) return false;
+        break;
+      }
+      case "sortRows": {
+        const col = cols[0] ?? 0;
+        const body = lines.slice(2).map((line, index) => ({ line, index }));
+        body.sort((a, b) =>
+          action.direction * tableCells(a.line).cells[col]!.trim().localeCompare(
+            tableCells(b.line).cells[col]!.trim(), undefined, { numeric: true },
+          ) || a.index - b.index
+        );
+        lines.splice(2, body.length, ...body.map(({ line }) => line));
+        break;
+      }
+      case "sortColumns": {
+        const headings = tableCells(lines[0]!).cells;
+        const order = Array.from({ length: width }, (_, index) => index);
+        order.sort((a, b) =>
+          action.direction * headings[a]!.trim().localeCompare(
+            headings[b]!.trim(), undefined, { numeric: true },
+          ) || a - b
+        );
+        for (let i = 0; i < lines.length; i++) {
+          const source = lines[i]!;
+          const cells = tableCells(source).cells;
+          lines[i] = tableLine(order.map((index) => cells[index]!), source);
+        }
+        break;
+      }
+      case "insertColumn":
+      case "deleteColumn":
+      case "moveColumn": {
+        if (action.kind === "deleteColumn" && cols.length >= width) return false;
+        let touched = false;
+        for (let i = 0; i < lines.length; i++) {
+          const original = lines[i]!;
+          const cells = tableCells(original).cells;
+          if (action.kind === "insertColumn") {
+            for (const col of [...cols].reverse()) {
+              cells.splice(col + (action.side === "after" ? 1 : 0), 0, i === 1 ? " --- " : " ");
+              touched = true;
+            }
+          } else if (action.kind === "deleteColumn") {
+            for (const col of [...cols].reverse()) cells.splice(col, 1);
+            touched = true;
+          } else {
+            const direction = action.direction ?? -1;
+            const chosen = new Set(cols);
+            for (const col of direction < 0 ? cols : [...cols].reverse()) {
+              const neighbor = col + direction;
+              if (neighbor < 0 || neighbor >= width || chosen.has(neighbor)) continue;
+              [cells[col], cells[neighbor]] = [cells[neighbor]!, cells[col]!];
+              chosen.delete(col);
+              chosen.add(neighbor);
+              touched = true;
+            }
+          }
+          lines[i] = tableLine(cells, original);
+        }
+        if (!touched) return false;
+        break;
+      }
+    }
+    const insert = lines.join(state.lineBreak);
+    if (insert === state.sliceDoc(first.from, last.to)) return false;
+    dispatch(state.update({
+      changes: { from: first.from, to: last.to, insert },
+      scrollIntoView: true,
+      userEvent: "input",
+    }));
+    return true;
+  };
+}
+
+export const insertTableRow = (side: "before" | "after" = "after") => tableCommand({ kind: "insertRow", side });
+export const deleteTableRow = tableCommand({ kind: "deleteRow" });
+export const moveTableRow = (direction: -1 | 1) => tableCommand({ kind: "moveRow", direction });
+export const sortTableRows = (direction: -1 | 1 = 1) => tableCommand({ kind: "sortRows", direction });
+export const insertTableColumn = (side: "before" | "after" = "after") => tableCommand({ kind: "insertColumn", side });
+export const deleteTableColumn = tableCommand({ kind: "deleteColumn" });
+export const moveTableColumn = (direction: -1 | 1) => tableCommand({ kind: "moveColumn", direction });
+export const sortTableColumns = (direction: -1 | 1 = 1) => tableCommand({ kind: "sortColumns", direction });
+
 // ── Auto-pair dei marcatori ──────────────────────────────────────────────────
 
 /// Cosa fare al posto della battuta: `insert` la sostituisce (col cursore a
@@ -529,6 +731,20 @@ const markdownKeymapPrefix: KeyBinding[] = [
 const markdownKeymapSuffix: KeyBinding[] = [
   { key: "Mod-Shift-8", run: toggleBulletList },
   { key: "Mod-Shift-7", run: toggleOrderedList },
+  { key: "Mod-Alt-ArrowUp", run: moveTableRow(-1) },
+  { key: "Mod-Alt-ArrowDown", run: moveTableRow(1) },
+  { key: "Mod-Alt-Shift-ArrowUp", run: insertTableRow("before") },
+  { key: "Mod-Alt-Shift-ArrowDown", run: insertTableRow("after") },
+  { key: "Mod-Alt-Backspace", run: deleteTableRow },
+  { key: "Mod-Alt-ArrowLeft", run: moveTableColumn(-1) },
+  { key: "Mod-Alt-ArrowRight", run: moveTableColumn(1) },
+  { key: "Mod-Alt-Shift-ArrowLeft", run: insertTableColumn("before") },
+  { key: "Mod-Alt-Shift-ArrowRight", run: insertTableColumn("after") },
+  { key: "Mod-Alt-Shift-Backspace", run: deleteTableColumn },
+  { key: "Mod-Alt-s", run: sortTableRows() },
+  { key: "Mod-Alt-Shift-s", run: sortTableRows(-1) },
+  { key: "Mod-Alt-c", run: sortTableColumns() },
+  { key: "Mod-Alt-Shift-c", run: sortTableColumns(-1) },
 ];
 
 export const markdownKeymap: KeyBinding[] = [...markdownKeymapPrefix, ...markdownKeymapSuffix];

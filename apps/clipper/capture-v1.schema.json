@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fub://schemas/capture-v1",
+  "title": "Fub capture v1 (clipper/mobile -> app)",
+  "description": "Artefact condiviso ClipperOwner/AutomationOwner/MobileOwner. Limiti normativi: title 1..512 caratteri, markdown 1..1048576 byte UTF-8, source_url solo http/https max 2048, target.folder/note relativi senza '..'/assoluti/drive, mode uno di 4. I limiti in byte sono applicati dal codice (lo schema conta caratteri); l'app rivalida tutto alla ricezione. Nessun segreto in questo documento: niente token, niente API key, niente query fub:// con credenziali.",
+  "type": "object",
+  "required": ["kind", "v", "envelope", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "fub-capture-v1" },
+    "v": { "const": 1 },
+    "envelope": { "$ref": "#/$defs/envelope" },
+    "payload": { "$ref": "#/$defs/payload" }
+  },
+  "$defs": {
+    "mode": {
+      "type": "string",
+      "enum": ["create", "append", "prepend", "daily"]
+    },
+    "relpath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "not": { "anyOf": [{ "$ref": "#/$defs/traversal" }] },
+      "description": "Path relativo dentro il vault: niente '..', niente assoluti, niente drive letter, niente backslash."
+    },
+    "traversal": {
+      "anyOf": [
+        { "pattern": "(^|[\\/])\\.\\.(\\/|$)" },
+        { "pattern": "^[\\/]" },
+        { "pattern": "^[A-Za-z]:[\\/]" },
+        { "pattern": "\\\\" },
+        { "pattern": "\\x00" }
+      ]
+    },
+    "target": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "vault": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "folder": { "$ref": "#/$defs/relpath" },
+        "note": { "$ref": "#/$defs/relpath" },
+        "mode": { "$ref": "#/$defs/mode" }
+      }
+    },
+    "propertyValue": {
+      "anyOf": [
+        { "type": "string", "maxLength": 4096, "description": "Frammento YAML lessicale per note.property.set; le stringhe dinamiche vanno quotate (p.es. JSON.stringify), non appiattite." },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "array", "maxItems": 32, "items": { "type": "string", "maxLength": 4096 } }
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "required": ["v", "title", "markdown", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "v": { "const": 1 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "markdown": { "type": "string", "minLength": 1, "maxLength": 1048576 },
+        "source_url": { "type": "string", "maxLength": 2048, "pattern": "^https?://[^\\s]+$" },
+        "properties": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "additionalProperties": { "$ref": "#/$defs/propertyValue" }
+        },
+        "target": { "$ref": "#/$defs/target" }
+      }
+    },
+    "envelope": {
+      "type": "object",
+      "required": ["nonce", "origin"],
+      "additionalProperties": false,
+      "properties": {
+        "nonce": { "type": "string", "minLength": 8, "maxLength": 256 },
+        "origin": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "extension_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "timestamp_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

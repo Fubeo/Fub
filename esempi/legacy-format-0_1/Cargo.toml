@@ -1,0 +1,18 @@
+[package]
+name = "legacy-format-0_1"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+# Come ping-wasm: nessuna dipendenza da `fub-abi`. Un guest legacy ha in mano
+# il WIT `0.1.2` e nient'altro, e la prova di terzietà sta proprio qui.
+
+[profile.release]
+strip = true
+opt-level = "s"

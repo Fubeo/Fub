@@ -1,0 +1,18 @@
+{
+  "name": "fub-clipper",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "description": "Fub browser clipper (Chromium/Firefox/Safari): article/selection/highlights capture to capture-v1. Zero runtime dependencies; loads unpacked without a build step.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "check": "node --check src/capture.js && node --check src/convert.js && node --check src/templates.js && node --check src/matcher.js && node --check src/i18n.js && node --check src/images.js && node --check src/interpreter.js && node --check src/channel.js && node --check src/extract.js && node --check src/selectors.js && node --check src/background.js && node --check src/popup.js && node --check src/options.js && node --check tests/security-limits.test.mjs && node --check smoke-headless.mjs",
+    "test": "node --test",
+    "smoke": "node --test && node smoke-headless.mjs",
+    "proof:browser": "node browser-proof.mjs --browser all",
+    "package:chromium": "zip -r fub-clipper-chromium.zip manifest.json src icons capture-v1.schema.json native-host",
+    "package:firefox": "rm -rf dist-firefox && mkdir -p dist-firefox && cp -r src icons capture-v1.schema.json native-host dist-firefox/ && cp manifest.firefox.json dist-firefox/manifest.json && cd dist-firefox && zip -r ../fub-clipper-firefox.zip manifest.json src icons capture-v1.schema.json native-host"
+  }
+}

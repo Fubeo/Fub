@@ -50,7 +50,10 @@ export type CustomRenderer = (
   onAction: OnAction,
 ) => (() => void) | void;
 
-const registry = new Map<string, CustomRenderer>();
+const registry = new Map<string, {
+  render: CustomRenderer;
+  accepts?: (payload: unknown) => boolean;
+}>();
 
 /// Dichiara che questa shell sa disegnare `ns`.
 ///
@@ -58,12 +61,17 @@ const registry = new Map<string, CustomRenderer>();
 /// si registrano una volta al montaggio — ed è la stessa scelta di
 /// `registerPanel`: la mappa è un registro, e un registro che rifiuta la seconda
 /// scrittura obbliga chi rimonta a ricordarsi di svuotarla.
-export function registerCustomRenderer(ns: string, render: CustomRenderer): void {
-  registry.set(ns, render);
+export function registerCustomRenderer(
+  ns: string,
+  render: CustomRenderer,
+  accepts?: (payload: unknown) => boolean,
+): void {
+  registry.set(ns, { render, accepts });
 }
 
-export function customRenderer(ns: string): CustomRenderer | undefined {
-  return registry.get(ns);
+export function customRenderer(ns: string, payload: unknown): CustomRenderer | undefined {
+  const entry = registry.get(ns);
+  return entry && (!entry.accepts || entry.accepts(payload)) ? entry.render : undefined;
 }
 
 /// I `ns` che questa shell riconosce. Per chi deve mostrarli o contarli.

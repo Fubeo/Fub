@@ -392,11 +392,50 @@ fn wasm_view_mounts_specs_renders_and_actions_match_native() {
         .expect("wasm patch");
     assert!(matches!(wasm_replace, ViewUpdate::Replace { .. }));
     assert!(matches!(wasm_patch, ViewUpdate::Patch { ref key, .. } if key == "status"));
+    // Status bar and toolbar are placements of the same generic ViewSurface
+    // provider: no separate status/toolbar IPC or registration family.
+    for (id, surface) in [
+        ("example.view:status", ViewSurface::StatusBar),
+        ("example.view:toolbar", ViewSurface::Ribbon),
+    ] {
+        let spec = host
+            .views(None)
+            .expect("generic view listing")
+            .into_iter()
+            .find(|spec| spec.id == id)
+            .expect("surface was registered");
+        assert_eq!(spec.surface, surface);
+        let instance = ViewInstance::new(id, format!("{id}.main"), serde_json::json!({}));
+        let rendered = host
+            .render_view(None, &instance)
+            .expect("generic view render");
+        if surface == ViewSurface::StatusBar {
+            assert!(
+                matches!(&rendered.kind, UiKind::Text { content: Text::Literal(text) }
+                if text.starts_with("Document: "))
+            );
+        } else {
+            assert!(matches!(&rendered.kind, UiKind::Button { action, .. }
+                if action.action.0 == "toolbar-refresh"));
+            assert!(matches!(
+                host.view_action(None, &instance, UiAction::new("toolbar-refresh"))
+                    .expect("generic toolbar action"),
+                ViewUpdate::Replace { .. }
+            ));
+        }
+    }
     unmount(&host);
     assert!(matches!(
         host.render_view(None, &instance()),
         Err(PluginError::UnknownView(_))
     ));
+    for id in ["example.view:status", "example.view:toolbar"] {
+        let surface = ViewInstance::new(id, format!("{id}.main"), serde_json::json!({}));
+        assert!(matches!(
+            host.render_view(None, &surface),
+            Err(PluginError::UnknownView(_))
+        ));
+    }
 
     mount(&host, Arc::new(native));
     let native_spec = host

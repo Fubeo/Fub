@@ -667,3 +667,123 @@ fn restore_reports_io_and_changes_nothing_if_document_write_fails() {
         "un guasto I/O non emette eventi"
     );
 }
+
+/// Il bottone disegnato con quell'etichetta, col payload che il pannello gli ha
+/// messo addosso.
+fn button(tree: &UiNode, wanted: &str) -> Option<ActionRef> {
+    fn walk(node: &UiNode, wanted: &str, out: &mut Option<ActionRef>) {
+        if let UiKind::Button { label, action, .. } = &node.kind {
+            if label == wanted && out.is_none() {
+                *out = Some(action.clone());
+            }
+        }
+        for child in node.children() {
+            walk(child, wanted, out);
+        }
+    }
+    let mut out = None;
+    walk(tree, wanted, &mut out);
+    out
+}
+
+#[test]
+fn the_comparison_shows_what_changed_since_that_version_and_survives_a_redraw() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(
+        &DocId::new("Uno.md"),
+        "titolo\ncom'era\nfine\n",
+        WriteBase::Dictated,
+    )
+    .expect("creata");
+    watches(&mut ws, "Uno.md");
+    ws.write_document(
+        &DocId::new("Uno.md"),
+        "titolo\ncom'è\nfine\n",
+        WriteBase::Dictated,
+    )
+    .expect("riscritta");
+
+    let tree = ws.render_view(&instance()).unwrap();
+    let action = last_action(&tree);
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(action.action.0).with_payload(action.payload),
+        )
+        .expect("anteprima")
+    else {
+        panic!("l'anteprima si disegna")
+    };
+    let compare = button(&root, "Confronta con l'attuale").expect("il confronto si offre");
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(compare.action.0).with_payload(compare.payload),
+        )
+        .expect("confronto")
+    else {
+        panic!("il confronto si disegna")
+    };
+    let text = said(&root);
+    assert!(text.contains("1 righe in più e 1 in meno"), "{text}");
+    assert!(text.contains("com'era") && text.contains("com'è"), "{text}");
+    assert!(button(&root, "Mostra il testo").is_some());
+
+    // Come l'anteprima, il confronto sta nello stato di vista: una scrittura
+    // ridisegna il pannello e il confronto segue il contenuto attuale.
+    ws.write_document(
+        &DocId::new("Uno.md"),
+        "titolo\ncom'era\nfine\n",
+        WriteBase::Dictated,
+    )
+    .expect("riportata");
+    let text = said(&ws.render_view(&instance()).unwrap());
+    assert!(text.contains("identica"), "{text}");
+
+    ws.view_action(&instance(), UiAction::new("close_preview"))
+        .expect("chiusa");
+    assert!(!said(&ws.render_view(&instance()).unwrap()).contains("identica"));
+}
+
+#[test]
+fn copying_a_version_hands_its_text_to_the_shell_without_writing() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, "Uno.md");
+    ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+
+    let tree = ws.render_view(&instance()).unwrap();
+    let action = last_action(&tree);
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(action.action.0).with_payload(action.payload),
+        )
+        .expect("anteprima")
+    else {
+        panic!("l'anteprima si disegna")
+    };
+    let copy = button(&root, "Copia il testo").expect("una versione di testo si copia");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new(copy.action.0).with_payload(copy.payload),
+        )
+        .expect("copia");
+    assert_eq!(
+        update,
+        ViewUpdate::Custom {
+            ns: fub_abi::ui::CLIPBOARD_TEXT_NS.to_string(),
+            payload: serde_json::json!({ "text": "com'era\n" }),
+        }
+    );
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "com'è\n",
+        "copiare non tocca la nota"
+    );
+}

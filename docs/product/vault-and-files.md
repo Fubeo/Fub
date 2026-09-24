@@ -43,6 +43,60 @@ Le operazioni principali emettono eventi tipizzati. Rename e cancellazione
 aggiornano identità, indici e sessioni attraverso il kernel e l'host, invece di
 essere semplici chiamate filesystem dalla UI.
 
+## Rinomine e archiviazione recuperabili
+
+Prima di una rinomina Fub fotografa la revisione del file e le modifiche
+necessarie ai backlink. Pubblica quindi un intent schema 1 sotto `.fub/` prima
+di spostare dati per-documento o contenuto. Se il processo si interrompe, la
+riapertura attende l'indice completo e confronta i byte osservati con la
+preimmagine: riprende la rinomina in avanti, completa i backlink già preparati
+oppure termina un rollback già dichiarato.
+
+La posizione dei file non basta a giustificare una sovrascrittura. Se compare
+una destinazione, cambia la sorgente o entrambe le posizioni sono ambigue, Fub
+lascia l'intent ispezionabile e segnala un conflitto. Un record illeggibile o
+prodotto da uno schema futuro non blocca il recupero degli altri record.
+
+`vault.archive` applica la stessa regola a un insieme di file. Verifica tutte le
+sorgenti, le revisioni e le destinazioni prima della prima mossa e pubblica un
+record durevole dell'intero batch. Dopo ogni file registra l'avanzamento. Una
+riapertura può quindi riconciliare sia una mossa già registrata sia una mossa
+conclusa appena prima dell'interruzione, senza ripeterla e senza toccare una
+destinazione estranea. I file completati formano un'unica operazione annullabile
+nell'esito del comando.
+
+## Destinazione delle nuove note
+
+`files.new-note-folder` è un'impostazione del vault. Il valore vuoto crea le
+note nella radice; un nome semplice viene creato nella cartella configurata,
+mentre un path esplicito conserva la propria cartella. La scelta del nome libero
+e il controllo delle collisioni avvengono nel kernel insieme alla scrittura,
+senza una verifica separata nella shell.
+
+## Albero dei file
+
+L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene
+ogni voce del disco e non solo i documenti. Dopo sottocartelle e note mostra
+quindi anche allegati e file che nessun provider riconosce. Immagini, audio,
+video e PDF si aprono nel visualizzatore in sola lettura. Per gli altri file la
+shell avvisa che non c'è un visualizzatore e non tenta di leggerli come testo.
+La finestra di duecento voci per livello vale per note e file insieme.
+Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
+cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
+il ripristino lo rimette dov'era, byte per byte.
+
+## Cartelle nuove
+
+Il comando `folder.create` (`path` obbligatorio) crea una cartella vuota,
+insieme alle cartelle mancanti sopra di lei. L'explorer lo invoca dal menu
+contestuale di una cartella o del titolo del pannello; la palette lo raggiunge
+come ogni altro comando. Il nome segue le regole di un documento che nasce:
+recinto del vault, `.fub/`, nomi nascosti e caratteri riservati sono
+rifiutati, e una cartella esclusa dalle impostazioni non viene creata. Se il
+path è già occupato da una cartella o da un file, l'esito è un conflitto e il
+disco resta invariato. La prova a vuoto esegue lo stesso controllo senza
+scrivere. La creazione non è annullabile dal registro dei comandi.
+
 ## Bozze
 
 Una bozza protegge testo che non è ancora diventato una scrittura riuscita sul
@@ -61,6 +115,13 @@ Il sidecar è un aiuto, non l'unica copia della nota. Se manca o non è
 compatibile, il comportamento di degrado deve preservare il contenuto e usare
 una destinazione sicura.
 
+L'impostazione di vault `files.trash` sceglie dove finisce una nota cancellata
+dalla shell. `vault` (default) usa il cestino interno. `system` usa il comando
+`trash.os`, che prova il cestino del sistema operativo e, se non è disponibile,
+sposta la nota nel cestino interno; la shell segnala il ripiego. In entrambi i
+casi la cancellazione chiede conferma, e svuotare il cestino interno resta un
+comando irreversibile separato.
+
 ## Versioning
 
 Il versioning conserva snapshot del contenuto. `version.restore` cattura la
@@ -77,9 +138,31 @@ per i file regolari sostituibili il valore precedente resta intatto; symlink,
 hardlink e filesystem senza conteggio dei nomi richiedono invece la scrittura
 in-place descritta nel riferimento tecnico.
 
+Il pannello cronologia mostra il testo di una versione oppure il suo confronto
+riga per riga con la nota attuale. Il testo di una versione si può anche
+copiare negli appunti, senza scrivere nel vault. Il confronto riassume le righe uguali
+lontane dai cambiamenti e dichiara quante righe non mostra oltre il limite del
+pannello. Se una delle due versioni non è testo, o la parte diversa è troppo
+grande, il pannello lo dice invece di calcolarlo.
+
 Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
+
+## Cartelle esterne
+
+Le cartelle esterne non vengono scoperte né collegate automaticamente. Dopo aver
+scelto un path assoluto, l'utente può usare i comandi generici `mount.add`
+(`name`, `target`, `namespace`), `mount.list` e `mount.remove` (`name`).
+L'elenco restituisce rotte tipizzate con namespace stabile e target; i path
+relativi risolti nel namespace restano recintati, senza attraversare `..`,
+separatori Windows o symlink. Sono rifiutati target e antenati symlink/reparse,
+root del vault, `.fub/`, cartelle sovrapposte, alias e filesystem che non
+forniscono identità e stat senza seguire i collegamenti. Se una destinazione
+registrata è scollegata o cambia identità, Fub apre comunque il vault con la
+rotta inattiva e una diagnostica; `mount.remove` resta disponibile. Il registro
+resta nel vault, ma il contenuto esterno resta fuori da scansione e snapshot:
+scollegarlo o rimuovere la rotta non cancella né sposta alcun file esterno.
 
 ## Cartella `.fub/`
 
@@ -99,6 +182,14 @@ La regola importante è per voce, non per cartella:
 Fub comprende convenzioni usate nei vault Markdown, tra cui frontmatter YAML,
 wikilink, tag, heading, ancore ed embed. Il provider decide la semantica del
 formato; il kernel conserva path e sorgente senza incorporare regole Markdown.
+
+Le proprietà del frontmatter restano nel file. Un vault può dichiararne il tipo
+per nome nell'impostazione versionata `properties.types`; questa dichiarazione
+sceglie widget e semantica di query, ma non rinomina chiavi convenzionali né
+sposta valori in un database. Gli aggiornamenti strutturati modificano la sola
+chiave interessata e conservano commenti, ordine, virgolette, terminatori e
+corpo non coinvolti. YAML incompatibile o non rappresentabile resta disponibile
+in modalità sorgente.
 
 ## Snapshot globale e backup
 

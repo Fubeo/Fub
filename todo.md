@@ -5,7 +5,7 @@ Questo piano definisce come completare Fub come ambiente local-first per scrittu
 ## Stato, perimetro e metodo
 
 - **Data della ricognizione:** 23 settembre 2026.
-- **Stato:** piano approvato per l'attuazione; implementazione in corso nel working tree. Non è un'attestazione di integrazione in `main`, compatibilità pubblica o rilascio. Stato al 24 settembre 2026: `cargo test --workspace --no-fail-fast` verde in unica invocazione (2565 passed, 0 failed, exit 0, toolchain 1.89.0, `CARGO_TARGET_DIR` esterno e `TMPDIR` fuori `/tmp`); mirate verdi (host `desktop_daily_path` 2/2, `desktop_profiles_recovery` 3/3, sheet `session_commit` 6/6, kernel lib 368/368, `fub-app` lib 33/33, frontend `typecheck`+`build`+1612/1612 Vitest, `fmt`, `deny`, guard doc filtrati, confine CodeMirror, `clippy --workspace --all-targets -D warnings`). P18 resta aperto sui soli residui non azionabili localmente: artifact firmati, issue chiuse dopo integrazione su `main`, baseline visuali rigenerate nel runner.
+- **Stato:** piano approvato per l'attuazione; implementazione in corso nel working tree. Non è un'attestazione di integrazione in `main`, compatibilità pubblica o rilascio. Stato al 24 settembre 2026: `cargo test --workspace --no-fail-fast` verde in unica invocazione (2565 passed, 0 failed, exit 0, toolchain 1.89.0, `CARGO_TARGET_DIR` esterno e `TMPDIR` fuori `/tmp`); mirate verdi (host `desktop_daily_path` 2/2, `desktop_profiles_recovery` 3/3, sheet `session_commit` 6/6, kernel lib 368/368, `fub-app` lib 33/33, frontend `typecheck`+`build`+1612/1612 Vitest, `fmt`, `deny`, guard doc filtrati, confine CodeMirror, `clippy --workspace --all-targets -D warnings`). P18 resta aperto sui soli residui non azionabili localmente: artifact firmati, issue chiuse dopo integrazione su `main`, baseline visuali rigenerate nel runner. Aggiornamento dello stesso giorno, dopo le slice P01–P06/P12 della sessione successiva: `cargo test --workspace` 2592 passed, 0 failed; Vitest 1637/1637; `bench:a11y` 44/44 scene pulite; `bench:verify` non eseguito perché alcune scene di Lettura cambiano di proposito e le baseline si rigenerano solo sul runner Linux. Le scelte aperte e il metodo per proseguire sono nelle due sezioni che seguono il traguardo operativo.
 - **Baseline:** codice del working tree, documentazione canonica e issue pertinenti. Sono presenti modifiche preesistenti, anche non tracciate, soprattutto nell'editor e nel rendering. Non vanno sovrascritte né considerate automaticamente integrate o certificate.
 - **Copertura:** esperienza desktop e mobile, sintassi, tutti i moduli nativi censiti, moduli ufficiali aggiuntivi, servizi remoti, strumenti di acquisizione e automazione. Sono inclusi anche i percorsi documentati come sperimentali, distinguendoli dalle capacità stabili.
 - **Ecosistema:** il risultato comprende la piattaforma per estensioni di terzi; non implica ricreare un insieme illimitato e mutevole di plugin esterni né eseguire senza adattamento codice scritto per un altro runtime.
@@ -60,6 +60,88 @@ component model compatibile con il contratto WIT di Fub. Il formato workbook
 |---|---|---|
 | FUBCALC-01 | verificato | Ricognizione senza trasferire sorgenti privati: `calc-core` resta il solo candidato autorevole per parsing, calcolo e transizioni del `Workbook`; un adattatore fidato implementa `GridProvider`, mentre `DocumentSession` di Fub resta il solo owner di byte, revisione CAS, dirty, coda di salvataggio e recovery. La shell possiede esclusivamente selezione, viewport e history locale per superficie: undo/redo produce nuove patch con preimmagine attraverso il provider, senza un secondo writer. Errori attraversano il contratto tipizzato e il teardown chiude l'istanza grid. La fixture sintetica indipendente è `crates/fub-format-sheet/tests/session_commit.rs`: modifica una cella, invalida e ricalcola dipendenze, produce un edit sorgente verificabile e rifiuta revisioni/preimmagini stale atomicamente. `calc-wasm` basato su `wasm-bindgen` non viene presentato come componente WIT confinato. |
 | FUBCALC-02 | differito con motivazione | Dopo la base desktop e FUBCALC-01, aprire in Fub un workbook piccolo resta da provare contro sorgente privata reale: la fixture sintetica `session_commit.rs` (6 test verdi) prova modifica/invalidazione/ricalcolo/CAS senza copiare sorgenti private; `cargo check -p fub-app` verde. Collocazione adattatore e visibilità restano da definire con autorizzazione prima di qualsiasi trasferimento. |
+
+## Decisioni aperte del proprietario
+
+Scelte che il lavoro non può prendere da solo, perché cambiano un contratto,
+un comportamento predefinito o qualcosa fuori dal repository. Ogni riga dice
+cosa resta fermo finché la scelta manca; la raccomandazione è una proposta,
+non una decisione presa.
+
+### Contratti e comportamento
+
+| ID | Decisione | Opzioni | Raccomandazione | Cosa blocca |
+|---|---|---|---|---|
+| D01 | Link entranti dopo `note.merge` con cestino della sorgente (P05.5) | a) lasciare il rifiuto attuale; b) nuova capacità `HostApi` che ridirige i riferimenti da una nota a un'altra, con WIT additivo, `Guard`, `MemoryHost`, conformità e proxy WASM | b, riusando la pianificazione `rewrite_links` della rinomina | Chiusura di P05.5 e F19 |
+| D02 | Resa delle note a piè di pagina inline `^[…]` | a) in riga come apice (attuale, coperto da test); b) numerate insieme alle classiche, con il testo in fondo | b, più vicina alla resa che gli utenti conoscono | Chiusura della parte note di P02.2 |
+| D03 | Commenti `%%…%%` su più righe | a) solo su una riga (attuale, Rust e shell); b) anche a blocco, con regola nel provider Markdown e gemella della shell | b | Completezza di P02.2 |
+| D04 | Prefisso predefinito della nota univoca | a) `YYYYMMDDHHmm` attivo (attuale); b) spento, opt-in | a | Nessuno: cambia solo il default |
+| D05 | Cestino predefinito `files.trash` | a) `vault` (attuale); b) `system` | a: il ripristino interno resta disponibile | Nessuno |
+| D06 | Sintassi di ricerca mentre si digita | a) errore mostrato subito (attuale); b) tolleranza per virgolette, regex e gruppi non ancora chiusi in fondo alla riga, con la stessa regola nelle due gemelle | b | Rifinitura di P04.2 |
+| D07 | Callout in Live preview | a) blocco reso fuori dal cursore (attuale); b) testo decorato come prima | a | Nessuno |
+| D08 | Grado di fiducia per gli intenti privilegiati (appunti, `settings.export`, ricarica) | a) solo `Core` (attuale); b) anche `Verified` | a finché non esiste un consenso per capacità | Plugin di terzi che vogliono copiare negli appunti |
+| D09 | Anteprima al passaggio in Live preview | a) solo con Ctrl/Cmd (attuale); b) anche senza modificatore, con impostazione | a, poi impostazione se richiesta | Nessuno |
+| D10 | Comando di rinomina dei tag | a) nessuno (attuale); b) comando che riscrive tag inline e `tags:` del frontmatter con piano e annullamento | b dopo P03 | Completezza di F11 |
+
+### Interfaccia e flussi
+
+| ID | Decisione | Opzioni | Raccomandazione | Cosa blocca |
+|---|---|---|---|---|
+| D11 | Snapshot completo offline: destinazione | a) path assoluto digitato nella palette (attuale); b) dialogo di sistema nel selettore dei vault e nel menu File | b, senza nuova porta IPC: il dialogo passa il path al comando esistente | Uso quotidiano di P01.5 |
+| D12 | Formato del contenitore snapshot | a) cartella `manifest.json` + `payload/` (attuale); b) archivio unico | a, finché un archivio non ha un caso reale | Nessuno |
+| D13 | Banco visuale della shell mobile | a) nessun bridge mobile finto (attuale: `mobile.html` non parte nel banco); b) bridge finto nel banco | b se servono foto e a11y mobile in CI | Prove visive di P14 fuori dai dispositivi |
+
+### Repository e processo
+
+| ID | Decisione | Opzioni | Raccomandazione | Cosa blocca |
+|---|---|---|---|---|
+| D14 | Come integrare il working tree (circa 390 path fra modifiche preesistenti, crate non tracciati e lavoro delle sessioni recenti) | a) commit unico; b) serie di commit per pacchetto su un branch, con PR; c) più PR indipendenti | b | Ogni chiusura di issue e l'integrazione in `main` |
+| D15 | Rigenerazione delle baseline visuali dopo i cambi voluti (titoli dei callout, evidenziato in Lettura, larghezza Mermaid) | a) job manuale sul runner Linux; b) aggiornamento automatico nella PR | a, con foglio di contatto rivisto a mano | `bench:verify` in CI |
+| D16 | Artefatti `.fub/` dentro `docs/` (snapshot di versioning creati aprendo `docs/` come vault) | a) cancellarli; b) escluderli nei guard documentali; c) spostarli fuori dal repository | a o c: sono dati di un'app, non documentazione | `check-doc-links` e `check-doc-orphans` locali |
+| D17 | I 11 casi di `check-listeners` | Risolta nella revisione: 9 avevano già un proprietario espresso in una forma che il guard non riconosceva (ora `Lifetime.listen`, timer nominato, record con `timer` cancellato, disposer dato a `life.add`, inoltro), 1 era un commento a blocco letto come codice, 1 osservatore creato in un ternario | — | Nessuno: il guard è verde |
+| D18 | Scritture su GitHub (chiudere #77–#93, commentare lo stato) | Sì/no, e quando | Dopo l'integrazione (D14) | Tracciamento operativo |
+
+### Fuori dal repository
+
+| ID | Decisione | Cosa serve | Cosa blocca |
+|---|---|---|---|
+| D19 | Infrastruttura dei servizi remoti (account, MFA, regioni, quote, backup, retention, costi) | Scelta del provider e del modello operativo | P16, P17, F36, F40–F44 |
+| D20 | Modello crittografico e gestione chiavi | Revisione dedicata prima del primo dato remoto | P16 |
+| D21 | Firma e canali di distribuzione (certificati desktop, account store mobile, store browser) | Account e certificati | P14, P15, P18 |
+| D22 | Importatori con API di terzi (Notion, Airtable, OneNote) | App registrate e credenziali di prova | Parte API di P10 |
+| D23 | Dispositivi ed emulatori iOS/Android | Macchina di prova con toolchain mobile | P14 |
+
+## Annotazioni per proseguire
+
+- **Metodo che ha funzionato.** Sondare il comportamento reale prima di
+  scrivere: la resa della shell con uno script Playwright che usa
+  `apps/client/bench/stage.mjs` e l'host finto del banco, i provider Rust con
+  `fub-cli --vault DIR --no-watcher --format json` su un vault temporaneo. I
+  difetti più seri trovati in questo modo (tag del frontmatter ignorati,
+  immagini locali invisibili, titoli dei comandi non tradotti) non erano
+  coperti da nessun test.
+- **Verifica.** Cargo 1.89 da `~/.cargo/bin`, `CARGO_TARGET_DIR` e `TMPDIR`
+  fuori dal repository e da `/tmp`; la suite completa richiede circa dieci
+  minuti e conviene in background. Il ciclo completo è quello di
+  `CONTRIBUTING.md`, più `bench:a11y`.
+- **Trappole note.** Un CSS del tema su un hook non dichiarato in
+  `apps/client/src/theme/serie/anatomia.ts` fa rifiutare l'intero tema. I
+  presidi strutturali di `fub-abi` (regole nominate, `custom_kind` del corpus,
+  numeri di riga delle costanti di schema in
+  `docs/development/versioning-and-releases.md`) si rompono aggiungendo codice
+  che sembra innocuo: leggerne il messaggio, non aggirarlo. I file generati si
+  rigenerano con `UPDATE_MIRROR=1` dal test indicato nella loro testata.
+- **Ordine consigliato.** Prima D14 e D17, che sbloccano CI e integrazione;
+  poi le rifiniture locali D01–D03 e D06; poi le aree non ancora sondate con
+  file reali (importatori P10, lavagne P09, basi P08, pannello plugin P11, CLI
+  e URI P13); infine ciò che richiede D19–D23.
+- **Parziali dichiarati.** P05.5 (D01), commenti su più righe (D03), shell
+  mobile non provata né su dispositivo né nel banco (D13, D23), servizi remoti
+  senza infrastruttura (D19–D20). Nessuno va presentato come consegnato.
+- **Cosa non fare.** Non rigenerare le baseline visuali fuori dal runner, non
+  modificare `bench/corpus.ts` per provare una resa (cambia tutte le foto),
+  non promuovere nel contratto una forma che non ha ancora un consumatore
+  reale.
 
 ## Baseline del progetto
 

@@ -145,6 +145,35 @@ describe("una view dell'area principale", () => {
     ]);
   });
 
+  it("keeps per-document inline parameters separate and replaces a reused instance", async () => {
+    listViews.mockResolvedValueOnce([spec("document_links", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    const first = document.createElement("div");
+    const second = document.createElement("div");
+    document.body.append(first, second);
+    renderView.mockResolvedValueOnce(emptyTree("Links for Alpha"));
+    renderView.mockResolvedValueOnce(emptyTree("Links for Beta"));
+    const alpha = { doc: "Alpha.md" };
+    const beta = { doc: "Beta.md" };
+    await views.mountViewInPane("document_links", "main:inline:Alpha.md", first, alpha);
+    await views.mountViewInPane("document_links", "pane-2:inline:Beta.md", second, beta);
+    expect(first.textContent).toContain("Links for Alpha");
+    expect(second.textContent).toContain("Links for Beta");
+    expect(renderView.mock.calls.slice(-2)).toEqual([
+      ["document_links", "main:inline:Alpha.md", alpha],
+      ["document_links", "pane-2:inline:Beta.md", beta],
+    ]);
+    renderView.mockResolvedValueOnce(emptyTree("Links after replacement"));
+    const changed = { doc: "Gamma.md" };
+    await views.mountViewInPane("document_links", "main:inline:Alpha.md", first, changed);
+    expect(first.textContent).toContain("Links after replacement");
+    expect(renderView).toHaveBeenLastCalledWith("document_links", "main:inline:Alpha.md", changed);
+    views.unmountViewFromPane("document_links", "main:inline:Alpha.md");
+    expect(first.childElementCount).toBe(0);
+    expect(second.textContent).toContain("Links for Beta");
+  });
+
   it("una view che nessuno dichiara non si monta", async () => {
     listViews.mockResolvedValueOnce([]);
     const views = await loadViews();

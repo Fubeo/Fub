@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fub</title>
+  </head>
+  <body>
+    <!-- Il salto al contenuto (§12.4). È il primo elemento del documento e si
+         vede solo quando prende il fuoco: senza, chi naviga da tastiera deve
+         attraversare la topbar, la ricerca e l'intero albero delle note — che
+         su un vault vero sono centinaia di fermate — prima di arrivare al
+         posto dove si scrive. -->
+    <a href="#panes" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
+    <div id="app" class="app">
+      <header id="topbar" class="titlebar" data-tauri-drag-region="deep">
+        <!-- #titlebar-left: il marchio e la menubar applicativa. -->
+        <div id="titlebar-left" class="titlebar-side titlebar-side--left" data-tauri-drag-region="deep">
+          <span class="brand" data-tauri-drag-region="deep">Fub</span>
+          <button
+            id="app-menu-toggle"
+            type="button"
+            class="titlebar-btn titlebar-btn--icon app-menu-toggle"
+            data-i18n="app.menu"
+            data-i18n-label="app.menu"
+            aria-label="Menu"
+            aria-expanded="false"
+            aria-controls="app-menu"
+            hidden
+          >Menu</button>
+          <nav id="app-menu" class="app-menu" role="menubar" data-i18n-label="region.menu" aria-label="Menu applicazione" data-tauri-drag-region="deep"></nav>
+          <!-- `#open-vault` resta un bottone cliccabile con il suo id, perché
+               il comando `shell.vault.open` e `mountAppMenu` lo cercano. Non è
+               visibile: la voce del menu File che apre il vault chiama lo
+               stesso handler, e il bottone è il manico che l'handler trova. -->
+          <button id="open-vault" data-i18n="app.open_vault" hidden type="button">Apri vault…</button>
+          <!-- Il contenitore per le view che dichiarano ViewSurface::Menu
+               (§2.2). La shell le ospita qui, in fondo alla menubar. -->
+          <div id="app-menu-extra" data-tauri-drag-region="deep"></div>
+        </div>
+        <!-- #titlebar-center: il trigger di ricerca + il percorso del vault. -->
+        <div id="titlebar-center" class="titlebar-center" data-tauri-drag-region="deep">
+          <!-- Il trigger fa focus su #search-input — la ricerca onesta, già
+               lì — e il title dice che la palette è Mod-Shift-P. -->
+          <button
+            id="command-search"
+            type="button"
+            data-i18n="command-search.placeholder"
+            data-i18n-title="command-search.hint"
+            data-i18n-label="command-search.placeholder"
+            aria-label="Cerca nel vault…"
+            class="titlebar-btn titlebar-btn--wide"
+          >
+            Cerca nel vault…
+          </button>
+            <kbd id="command-search-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-F</kbd>
+          <span id="vault-path" class="muted" data-tauri-drag-region="deep"></span>
+        </div>
+        <!-- #titlebar-right: palette, impostazioni e controlli finestra. -->
+        <div id="titlebar-right" class="titlebar-side">
+          <button
+            id="open-palette"
+            type="button"
+            data-i18n-title="commands.palette"
+            data-i18n-label="commands.palette"
+            class="titlebar-btn titlebar-btn--icon"
+            aria-label="Apri la palette dei comandi"
+          ></button>
+            <kbd id="open-palette-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-P</kbd>
+          <button
+            id="open-settings"
+            type="button"
+            data-i18n-title="app.settings.hint"
+            data-i18n-label="app.settings"
+            class="titlebar-btn titlebar-btn--icon"
+            aria-label="Impostazioni"
+          ></button>
+          <span id="window-controls" class="window-controls" role="group" data-i18n-label="region.window_controls" aria-label="Controlli finestra">
+            <button id="win-min" type="button" class="win-ctrl" data-i18n-label="window.min" aria-label="Minimizza"></button>
+            <button id="win-max" type="button" class="win-ctrl" data-i18n-label="window.max" aria-label="Ingrandisci"></button>
+            <button id="win-close" type="button" class="win-ctrl win-ctrl--close" data-i18n-label="window.close" aria-label="Chiudi"></button>
+          </span>
+        </div>
+      </header>
+      <main id="workspace">
+        <h1 id="app-heading" class="sr-only">Fub</h1>
+        <!-- La rail: icone a sinistra, sempre visibile. Le icone shell
+             (Note, Cerca, Grafo) le monta `panels/rail.ts` dentro
+             `#rail-shell`; le view dichiarate con `left_sidebar` le appende
+             `ui/views.ts` nello stesso contenitore, dopo le shell. L'ordine
+             DOM è shell prima, declared dopo. -->
+        <div
+          id="views-ribbon"
+          class="rail views-ribbon"
+          role="toolbar"
+          data-i18n-label="region.rail"
+          aria-label="Navigazione"
+        >
+          <div id="rail-shell" class="rail-shell"></div>
+        </div>
+        <div id="layout">
+        <aside id="sidebar" class="sidebar" data-i18n-label="region.notes" aria-label="Note e ricerca">
+          <input
+            id="search-input"
+            class="search-input"
+            type="search"
+            data-i18n-placeholder="search.placeholder"
+            placeholder="Cerca nel vault…"
+            data-i18n-label="search.hint"
+            aria-label="Cerca nel vault"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div id="search-panel" hidden>
+            <div
+              class="panel-title"
+              id="search-summary"
+              role="heading"
+              aria-level="2"
+              data-i18n="search.results"
+            >
+              Risultati
+            </div>
+            <ul id="search-results" class="plain-list search-results" role="list"></ul>
+          </div>
+          <div id="files-panel" class="files-panel">
+            <div id="space-strip" class="space-strip"></div>
+            <div class="panel-title" id="files-title" role="heading" aria-level="2">
+              <span id="space-title" class="space-title">Note</span>
+              <button
+                id="new-note"
+                class="link-button"
+                data-i18n="explorer.new"
+                data-i18n-title="explorer.new.hint"
+              >
+                + Nuova
+              </button>
+            </div>
+            <div class="panel-title" id="pinned-title" role="heading" aria-level="2" hidden>
+              <span data-i18n="explorer.pinned">Appuntate</span>
+            </div>
+            <ul id="pinned-list" class="plain-list" role="list" hidden></ul>
+            <ul
+              id="file-list"
+              class="plain-list"
+              role="tree"
+              data-i18n-label="explorer.notes.hint"
+              aria-label="Note del vault"
+            ></ul>
+          </div>
+          <div id="views-left"></div>
+          <div
+            id="sidebar-scrim"
+            class="drawer-scrim"
+            data-drawer-scrim="sidebar"
+            hidden
+          ></div>
+        </aside>
+        <div
+          id="divider-sidebar"
+          class="layout-divider"
+          role="separator"
+          aria-orientation="vertical"
+          data-i18n-label="layout.divider.sidebar"
+          aria-label="Ridimensiona la barra laterale"
+          tabindex="0"
+        ></div>
+        <!-- L'area principale: **vuota nell'HTML**, e non per pigrizia.
+             Fino a ieri qui c'erano un editor e un'anteprima, uno ciascuno, ed
+             era il modello di layout scritto in un file statico: due riquadri
+             non si potevano avere perché non c'era dove metterli. Adesso i
+             riquadri li disegna `panels/document.ts` dall'albero che
+             `state/layout.ts` tiene — quanti sono e come sono disposti è uno
+             stato che si ricorda fra un avvio e l'altro, e uno stato non si
+             scrive nel markup. -->
+        <section
+          id="panes"
+          class="panes"
+          tabindex="-1"
+          data-i18n-label="region.document"
+          aria-label="Documento"
+        >
+          <!-- Schermata senza vault (A01): titolo, spiegazione, CTA primaria
+               + secondaria, recenti reali dall'host, stato di apertura/errore.
+               Nascosta quando un vault è aperto: `desktop-shell.ts` la mostra
+               solo a `state.vaultRoot` vuoto. -->
+          <div id="onboarding" class="onboarding" hidden>
+            <h2 id="onboarding-title" data-i18n="onboarding.title">Apri il tuo spazio di lavoro</h2>
+            <p id="onboarding-detail" data-i18n="onboarding.detail">Un vault è una cartella di file sul tuo dispositivo</p>
+            <div class="onboarding-actions">
+              <button id="onboarding-open" class="primary" type="button" data-i18n="app.open_vault">Apri vault…</button>
+              <button id="onboarding-settings" type="button" data-i18n="app.settings">Impostazioni</button>
+            </div>
+            <p id="onboarding-status" class="onboarding-status" role="status" hidden></p>
+            <div id="onboarding-error" class="onboarding-error" hidden>
+              <p id="onboarding-error-text"></p>
+              <div class="onboarding-actions">
+                <button id="onboarding-retry" type="button" data-i18n="app.retry">Riprova</button>
+                <button id="onboarding-choose" type="button" data-i18n="app.open_vault">Apri vault…</button>
+              </div>
+            </div>
+            <div id="onboarding-recent-wrap" hidden>
+              <h3 id="onboarding-recent-title" data-i18n="onboarding.recent">Vault recenti</h3>
+              <ul id="onboarding-recent" class="plain-list onboarding-recent" role="list"></ul>
+            </div>
+          </div>
+        </section>
+        <div
+          id="divider-inspector"
+          class="layout-divider"
+          role="separator"
+          aria-orientation="vertical"
+          data-i18n-label="layout.divider.inspector"
+          aria-label="Ridimensiona l'ispettore"
+          tabindex="0"
+        ></div>
+        <section id="right-pane" class="inspector inspector-pane" data-i18n-label="inspector.region" aria-label="Ispettore">
+          <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
+               qui per placement: gli id e i titoli li dichiara il backend.
+               L'inspector a tab — una view alla volta — lo costruisce
+               `ui/views.ts` sopra questo contenitore. -->
+          <div id="views-right"></div>
+          <div
+            id="inspector-scrim"
+            class="drawer-scrim"
+            data-drawer-scrim="inspector"
+            hidden
+          ></div>
+        </section>
+        <section
+          id="views-bottom"
+          class="views-bottom"
+          data-i18n-label="region.bottom"
+          aria-label="Pannelli in basso"
+          hidden
+        ></section>
+        </div>
+      </main>
+      <!-- Era un `<footer>`, ed erano due: questo e `#statusbar`. Un documento
+           con due `contentinfo` è un documento in cui chi naviga per punti di
+           riferimento ne trova due chiamati uguale e deve aprirli entrambi per
+           sapere quale sia quello che cerca. Quello **della shell** resta il
+           `<footer>`; questo, che è la superficie delle view dichiarate, è una
+           regione col suo nome. -->
+      <div
+        id="views-status"
+        class="views-status"
+        role="region"
+        data-i18n-label="region.status"
+        aria-label="Stato dei componenti"
+        hidden
+      ></div>
+      <!-- La barra di stato della shell (§10.3), che è un'altra cosa da
+           `#views-status`: quella la riempiono le view dichiarate, questa è
+           **della shell** e c'è sempre. Ci stanno le due cose che l'utente deve
+           poter guardare in qualunque momento senza che nulla lo interrompa:
+           cosa sta girando, e cosa gli è stato detto. -->
+      <footer id="statusbar" class="statusbar" data-i18n-label="region.statusbar" aria-label="Barra di stato">
+        <!-- Lo stato del salvataggio del documento che si sta guardando
+             (§20.4). Senza `data-i18n`, per la ragione dei due pulsanti qui
+             sotto: il testo lo scrive chi conosce lo stato — `panels/document.ts`
+             — e un secondo proprietario lo cancellerebbe al primo cambio di
+             lingua. `role="status"`: cambia da sé mentre si scrive, e chi legge
+             con uno screen reader deve poterlo sapere senza che gli si tolga la
+             parola di bocca. -->
+        <span id="save-state" class="save-state" role="status"></span>
+        <!-- «Sto aspettando il tasto successivo» (§18.2). Vive due secondi ed è
+             la differenza fra una sequenza e una tastiera che ogni tanto non
+             risponde: chi ha premuto `Mod-k` deve poter vedere che l'app ha
+             capito. `role="status"` per la ragione di `#save-state`: cambia da
+             sé, e chi legge con uno screen reader deve saperlo senza che gli si
+             tolga la parola di bocca. Lo riempie `ui/keyboard.ts`, che è
+             l'unico a sapere quando l'attesa è aperta. -->
+        <span id="key-pending" class="key-pending" role="status" hidden></span>
+        <span id="statusbar-fill"></span>
+        <!-- Il **testo** di questi due pulsanti non porta un `data-i18n`, e non
+             è una dimenticanza: ci sta un conteggio («Attività 3»), quindi lo
+             scrive chi conosce il numero — `panels/activity.ts` e
+             `ui/notify.ts`, che si iscrivono a `onLanguage` e si rifanno da sé.
+             Due proprietari per la stessa parola vorrebbero dire che l'ultimo
+             a girare cancella il conteggio dell'altro. Il `title`, che di
+             numeri non ne ha, resta qui. -->
+        <button
+          id="activity-button"
+          type="button"
+          aria-expanded="false"
+          aria-controls="activity-panel"
+          data-i18n-title="activity.hint"
+        >
+          Attività
+        </button>
+        <button
+          id="notify-button"
+          type="button"
+          aria-expanded="false"
+          aria-controls="notify-panel"
+          data-i18n-title="notices.hint"
+        >
+          Avvisi
+        </button>
+      </footer>
+      <div
+        id="activity-panel"
+        class="dock-panel dock-panel--activity"
+        role="region"
+        data-i18n-label="activity.title"
+        aria-label="Attività"
+        hidden
+      >
+        <div class="panel-title" role="heading" aria-level="2">
+          <span data-i18n="activity.title">Attività</span>
+          <button
+            id="activity-close"
+            class="link-button"
+            data-i18n="app.close"
+            data-i18n-title="app.close"
+          >
+            Chiudi
+          </button>
+        </div>
+        <ul id="activity-list" class="plain-list" role="list"></ul>
+      </div>
+      <!-- Gli avvisi si **annunciano**: è l'unica superficie che dice qualcosa
+           che l'utente non ha chiesto, e `aria-live="polite"` è ciò che la fa
+           arrivare anche a chi non la sta guardando — al primo momento in cui
+           non sta leggendo altro, che è quello che «polite» significa. -->
+      <div
+        id="notify-panel"
+        class="dock-panel dock-panel--notify"
+        role="region"
+        data-i18n-label="notices.title"
+        aria-label="Avvisi"
+        aria-live="polite"
+        aria-relevant="additions"
+        hidden
+      >
+        <div class="panel-title" role="heading" aria-level="2">
+          <span data-i18n="notices.title">Avvisi</span>
+          <button
+            id="notify-clear"
+            class="link-button"
+            data-i18n="notices.clear"
+            data-i18n-title="notices.clear.hint"
+          >
+            Pulisci
+          </button>
+          <button
+            id="notify-close"
+            class="link-button"
+            data-i18n="app.close"
+            data-i18n-title="app.close"
+          >
+            Chiudi
+          </button>
+        </div>
+        <ul id="notify-list" class="plain-list notify-list" role="list"></ul>
+      </div>
+      <!-- Il pannello delle impostazioni (§11.1). Le tre schede sono le tre
+           cose che questa voce fa esistere: la configurazione (form generato
+           dallo schema che i componenti dichiarano), i componenti accesi e
+           spenti, e i vault che questa macchina conosce — l'elenco che non
+           poteva stare in nessun vault.
+           È una **modale**: mentre è aperta, è quello che si sta facendo. Il
+           fuoco ci resta dentro e Escape la chiude (`ui/a11y.ts`). -->
+      <div
+        id="settings-panel"
+        class="settings-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        tabindex="-1"
+        hidden
+      >
+        <div class="panel-title">
+          <span id="settings-title" data-i18n="settings.title">Impostazioni</span>
+          <span
+            id="settings-tabs"
+            class="segmented segmented--wide settings-tabs"
+            role="tablist"
+            data-i18n-label="settings.tabs"
+            aria-label="Sezioni delle impostazioni"
+          >
+            <button
+              data-tab="settings"
+              class="segmented-option"
+              role="tab"
+              aria-selected="true"
+              data-i18n="settings.tab.config"
+            >
+              Configurazione
+            </button>
+            <button
+              data-tab="components"
+              class="segmented-option"
+              role="tab"
+              aria-selected="false"
+              data-i18n="settings.tab.components"
+            >
+              Componenti
+            </button>
+            <button
+              data-tab="shortcuts"
+              class="segmented-option"
+              role="tab"
+              aria-selected="false"
+              data-i18n="settings.tab.shortcuts"
+            >
+              Scorciatoie
+            </button>
+            <button
+              data-tab="vault"
+              class="segmented-option"
+              role="tab"
+              aria-selected="false"
+              data-i18n="settings.tab.vaults"
+            >
+              Vault
+            </button>
+          </span>
+          <button
+            id="settings-close"
+            class="link-button"
+            data-i18n="app.close"
+            data-i18n-title="app.close"
+          >
+            Chiudi
+          </button>
+        </div>
+        <div id="settings-body" class="settings-body"></div>
+        <!-- La superficie `settings_tab` del contratto (§2.2), che questa shell
+             dichiarava non ospitata: le view che la chiedono si montano qui,
+             sotto il form. Una scheda per view vuole il modello di layout
+             (§1.2, FEATURES 3.3), che non c'è: intanto la superficie esiste e
+             una view che la chiede si vede, invece di finire in un avviso in
+             console. -->
+        <div id="views-settings"></div>
+      </div>
+      <!-- L'`aria-label` è il **ripiego**: il nome vero è il titolo della view
+           che occupa la superficie, e glielo lega `ui/views.ts` con un
+           `aria-labelledby` — che vince su questo quando c'è. Qui resta per il
+           momento in cui non c'è nessuno: una modale vuota è nascosta, ma un
+           nome che esiste solo quando il contenuto è arrivato è un nome che
+           manca proprio nell'istante in cui qualcosa va storto. -->
+      <div
+        id="views-modal"
+        class="views-modal"
+        role="dialog"
+        data-i18n-label="app.dialog"
+        aria-label="Finestra di dialogo"
+        aria-modal="true"
+        tabindex="-1"
+        hidden
+      ></div>
+    </div>
+    <script type="module" src="/src/entrypoints/mobile-main.ts"></script>
+  </body>
+</html>

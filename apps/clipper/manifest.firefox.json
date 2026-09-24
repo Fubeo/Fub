@@ -1,0 +1,43 @@
+{
+  "manifest_version": 2,
+  "name": "Fub Clipper",
+  "version": "0.1.0",
+  "description": "Clip articles, selections and highlights to Fub. Works fully offline without any assistant; optional assistant is opt-in and never sends anything by itself.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "clipper@fub.local",
+      "strict_min_version": "115.0"
+    }
+  },
+  "browser_action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Clip to Fub",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "options_ui": {
+    "page": "src/options.html"
+  },
+  "background": {
+    "scripts": ["src/background.js"]
+  },
+  "permissions": ["activeTab", "tabs", "storage", "downloads", "menus", "nativeMessaging", "notifications"],
+  "optional_permissions": ["<all_urls>"],
+  "commands": {
+    "fub-clip": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Open the Fub clipper popup"
+    }
+  }
+}

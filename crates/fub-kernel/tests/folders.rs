@@ -171,6 +171,82 @@ fn the_folder_survives_when_its_last_notes_goes_to_trash() {
 }
 
 #[test]
+fn a_created_folder_is_on_disk_in_the_tree_and_announced() {
+    let v = Vault::new();
+    v.write("radice.md", "a");
+    let mut ws = v.open();
+    let rx = ws.bus().subscribe();
+
+    let made = ws.create_folder("Progetti/2026").expect("created");
+
+    assert_eq!(made, "Progetti/2026");
+    assert!(v.root.join("Progetti/2026").is_dir(), "the disk has it");
+    let all = folders(&ws, None);
+    assert_eq!(
+        paths(&all),
+        vec!["Progetti", "Progetti/2026"],
+        "the tree has it and its ancestor, without reopening"
+    );
+    assert_eq!((all[1].folders, all[1].entries), (0, 0));
+    assert!(
+        rx.try_iter()
+            .any(|n| matches!(n.event, fub_abi::Event::IndexUpdated)),
+        "the tree is told to refresh"
+    );
+    // E la riapertura, che rilegge il disco, dice la stessa cosa.
+    drop(ws);
+    assert_eq!(
+        paths(&folders(&v.open(), None)),
+        vec!["Progetti", "Progetti/2026"]
+    );
+}
+
+#[test]
+fn a_taken_name_is_a_conflict_and_leaves_the_disk_alone() {
+    let v = Vault::new();
+    v.write("Esistente/dentro.md", "contenuto");
+    v.write("nota.md", "testo");
+    let mut ws = v.open();
+
+    for taken in ["Esistente", "nota.md"] {
+        let err = ws.create_folder(taken).expect_err("occupied");
+        assert!(
+            matches!(err, fub_kernel::KernelError::AlreadyExists(_)),
+            "{taken}: {err:?}"
+        );
+    }
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Esistente/dentro.md")).unwrap(),
+        "contenuto",
+        "the existing folder keeps what it had"
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("nota.md")).unwrap(),
+        "testo",
+        "a file with that name is not replaced by a folder"
+    );
+}
+
+#[test]
+fn a_folder_name_obeys_the_rules_of_a_new_name() {
+    let v = Vault::new();
+    let mut ws = v.open();
+
+    for bad in ["", "../fuori", ".fub/x", ".nascosta", "a//b", "con:due"] {
+        let err = ws.create_folder(bad).expect_err(bad);
+        assert!(
+            matches!(err, fub_kernel::KernelError::BadName { .. }),
+            "{bad:?}: {err:?}"
+        );
+    }
+    assert!(
+        !v.root.parent().unwrap().join("fuori").exists(),
+        "nothing escaped the vault"
+    );
+    assert!(folders(&ws, None).is_empty(), "nothing was created");
+}
+
+#[test]
 fn a_created_notes_brings_along_the_folders_it_traverses() {
     let v = Vault::new();
     v.write("radice.md", "a");

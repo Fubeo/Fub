@@ -267,8 +267,8 @@ export async function loadHistory(): Promise<void> {
 /// fuoco: «aperto di recente» vuol dire *guardato*, e il fuoco è chi lo sa —
 /// non `openDocument`, che non viene chiamato quando si torna su una linguetta già
 /// aperta o si cambia riquadro.
-export function rememberOpens(): void {
-  on("active-doc", (doc) => {
+export function rememberOpens(): () => void {
+  const stopActive = on("active-doc", (doc) => {
     if (doc === null) return;
     opens = withOnTop(opens, doc);
     persist();
@@ -276,12 +276,17 @@ export function rememberOpens(): void {
   // Un vault che si apre: si scordano le cose dell'altro e si rileggono le sue.
   // Le due metà nello stesso punto, perché fra l'una e l'altra la memoria è di
   // nessuno e chi la guardasse lì in mezzo vedrebbe l'archivio sbagliato.
-  on("vault", () => {
+  const stopVault = on("vault", () => {
     forgetRecent();
     void loadHistory();
   });
   // L'interruttore che cambia: da questo pannello, da un'altra finestra, da un
   // `settings.json` riscritto sotto. L'evento non porta il valore (§11.1), e
   // quindi si rilegge.
-  onEvent("setting_changed", () => void rereadToggle());
+  const stopSetting = onEvent("setting_changed", () => void rereadToggle());
+  return () => {
+    stopActive();
+    stopVault();
+    stopSetting();
+  };
 }

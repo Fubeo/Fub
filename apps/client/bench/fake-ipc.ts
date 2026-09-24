@@ -570,6 +570,15 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     const html = OUTPUT[doc] ?? `<p>${(CORPUS[doc] ?? "").split("\n")[0] ?? ""}</p>`;
     return { kind: "render_preview", value: { html, parts: [] } };
   },
+  render_embed: (q) => {
+    if (q.kind !== "render_embed") throw new Error("Richiesta embed non valida");
+    const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
+    const doc = Object.keys(CORPUS).find((id) => id === page || id.endsWith(`/${page}`));
+    if (!doc || OUTPUT[doc] === undefined || q.heading || q.block) {
+      throw new Error(`Embed non dichiarato nel banco: ${q.page}`);
+    }
+    return { kind: "render_embed", value: { doc_id: doc, html: OUTPUT[doc], parts: [] } };
+  },
   tags: () => ({ kind: "tags", value: { items: TAG, offset: 0, total: TAG.length } }),
   organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),

@@ -23,6 +23,7 @@ import {
   WAIT_MS,
   allCommands,
   advance,
+  keyboardPlatform,
   type Waiting,
   type CommandEntry,
 } from "./commands";
@@ -46,7 +47,7 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
       stopWaiting();
       return;
     }
-    const result = advance(allCommands(), waiting, e);
+    const result = advance(allCommands(), waiting, e, keyboardPlatform(navigator.platform));
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
     if (result.type === "passa") return;

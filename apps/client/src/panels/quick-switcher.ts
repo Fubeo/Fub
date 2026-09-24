@@ -59,11 +59,15 @@ import { stableIdentifier, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
+import { cancelScheduledPreview, hidePreview, schedulePreview, showStickyPreview } from "../state/preview";
 import { openDocument } from "./document";
 
 const OVERLAY_ID = "quick-switcher";
 const LIST_ID = `${OVERLAY_ID}-list`;
 const OPTION_ID_PREFIX = `${OVERLAY_ID}-option`;
+export type SwitcherOpenMode = "here" | "split" | "window";
+let dispatchOpen: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void =
+  (doc) => openDocument(doc);
 
 function entryKey(entry: Entry): string {
   return `${entry.k}:${entry.k === "doc" ? entry.doc : entry.k === "query" ? entry.q : entry.name}`;
@@ -94,10 +98,14 @@ let invalidate: (() => void) | null = null;
 export function closeQuickSwitcher(): void {
   invalidate?.();
   invalidate = null;
+  hidePreview();
   const overlay = document.getElementById(OVERLAY_ID);
   release?.();
   release = null;
-  if (overlay) exitSurface(overlay, () => overlay.remove());
+  if (overlay) {
+    overlay.querySelector(".palette-box")?.replaceChildren();
+    exitSurface(overlay, () => overlay.remove());
+  }
 }
 
 /// Il comando, dichiarato da chi ce l'ha (§18.2).
@@ -110,8 +118,11 @@ export function closeQuickSwitcher(): void {
 ///
 /// Qui parte anche la memoria corta: la mette in ascolto chi ha interesse, che è
 /// questo pannello e nessun altro.
-export function mountQuickSwitcher(): void {
-  rememberOpens();
+export function mountQuickSwitcher(
+  open: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void = (doc) => openDocument(doc),
+): () => void {
+  dispatchOpen = open;
+  const stopRemembering = rememberOpens();
   registerShellCommand({
     id: "shell.switcher",
     title: "commands.switcher",
@@ -143,6 +154,11 @@ export function mountQuickSwitcher(): void {
       notify(t("history.cleared"), "info");
     },
   });
+  return () => {
+    stopRemembering();
+    closeQuickSwitcher();
+    if (dispatchOpen === open) dispatchOpen = (doc) => openDocument(doc);
+  };
 }
 
 export function openQuickSwitcher(): void {
@@ -163,7 +179,9 @@ export function openQuickSwitcher(): void {
   // della superficie con i suoi effetti (aprire, non cercare nel testo).
   const scope = document.createElement("p");
   scope.className = "palette-desc";
-  scope.textContent = t("switcher.title");
+  scope.id = `${OVERLAY_ID}-instructions`;
+  scope.textContent = `${t("switcher.title")} · ${t("switcher.actions_hint")}`;
+  input.setAttribute("aria-describedby", scope.id);
   const list = document.createElement("ul");
   list.id = LIST_ID;
   list.className = "plain-list palette-list";
@@ -189,6 +207,7 @@ export function openQuickSwitcher(): void {
     alive = false;
     race.cancel();
     if (timer !== undefined) window.clearTimeout(timer);
+    hidePreview();
   };
 
   const render = () => {
@@ -224,7 +243,19 @@ export function openQuickSwitcher(): void {
         where.textContent = t("switcher.create");
       }
       button.append(title, where);
-      button.addEventListener("click", () => active(entry));
+      button.addEventListener("click", (e) => active(entry,
+        e.ctrlKey || e.metaKey ? e.shiftKey ? "window" : "split" : "here"));
+      if (entry.k === "doc") {
+        // Anteprima read-only con lifecycle (F16/shell.preview.*): hover
+        // 350 ms, modificatore = subito, uscita = teardown. Stessi verbi
+        // della lettura, nessuna sessione, nessun dirty toccato.
+        button.addEventListener("mouseenter", (e) => {
+          schedulePreview(entry.doc, box, e.ctrlKey || e.metaKey);
+        });
+        button.addEventListener("focus", () => schedulePreview(entry.doc, box, false));
+        button.addEventListener("mouseleave", cancelScheduledPreview);
+        button.addEventListener("blur", cancelScheduledPreview);
+      }
       li.append(button);
       newItems.appendChild(li);
     }
@@ -252,14 +283,17 @@ export function openQuickSwitcher(): void {
   /// aprire qualcosa, che è ciò che uno si aspetta da una cronologia — la si
   /// ripesca per rifarla, non per finire dritto da qualche parte; una nota da
   /// creare si crea e si apre.
-  const active = (entry: Entry) => {
+  const active = (entry: Entry, mode: SwitcherOpenMode = "here") => {
+    // La scheda non sopravvive alla scelta: aprire chiude anche lei, mai
+    // orfana senza il suo modale.
+    hidePreview();
     if (entry.k === "doc") {
       // La ricerca che ha portato qui si ricorda **adesso**, non a ogni tasto:
       // la memoria è di ciò che si è cercato, e ciò che si è cercato è il testo
       // che ha prodotto un'apertura. Ricordare mentre si digita riempirebbe la
       // lista di «r», «ri», «riu».
       rememberSearch(input.value);
-      open(entry.doc);
+      open(entry.doc, mode);
       return;
     }
     if (entry.k === "query") {
@@ -271,9 +305,9 @@ export function openQuickSwitcher(): void {
     void create(entry.name);
   };
 
-  const open = (doc: string) => {
+  const open = (doc: string, mode: SwitcherOpenMode = "here") => {
     closeQuickSwitcher();
-    void openDocument(doc);
+    void Promise.resolve(dispatchOpen(doc, mode)).catch((error: unknown) => notify(errorText(error), "guasto"));
   };
 
   /// La nota che la ricerca non ha trovato.
@@ -367,10 +401,17 @@ export function openQuickSwitcher(): void {
     } else if (e.key === "Enter") {
       e.preventDefault();
       const entry = visibleItems[selected];
-      if (entry) active(entry);
+      if (entry && entry.k === "doc" && e.altKey) {
+        hidePreview();
+        void showStickyPreview(entry.doc, box);
+        return;
+      }
+      if (entry) active(entry, e.ctrlKey || e.metaKey ? e.shiftKey ? "window" : "split" : "here");
     } else if (e.key === "Escape") {
       // U16: Escape chiude la superficie appropriata, il focus resta dov'era
-      // prima dell'apertura (lo rimette `trapFocus` sciogliendosi).
+      // prima dell'apertura (lo rimette `trapFocus` sciogliendosi). Con una
+      // scheda aperta, prima si chiude lei: mai orfana senza modale.
+      hidePreview();
       closeQuickSwitcher();
     }
   });

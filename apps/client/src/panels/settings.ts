@@ -26,16 +26,17 @@
 // stessa strada, o l'utente non potrebbe cambiare le proprie impostazioni di
 // privacy, o un plugin potrebbe.
 import { api } from "../host/ipc";
-import { confirm, pickFile } from "../host/dialog";
+import { confirm, pickFile, pickFolder } from "../host/dialog";
 import { Race } from "../ui/race";
 import { settings } from "../host/query";
 import type {
   BundleInfo,
   InstalledPluginInfo,
-  PluginError,
+  CatalogEntry,
   SettingEntry,
   SettingValue,
   ThemeInfo,
+  SettingScope,
   KnownVault,
 } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -43,7 +44,7 @@ import { state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
-import { allCommands, keybindingKey } from "../ui/commands";
+import { allCommands, keybindingIssues, keybindingKey, validateKeybinding, type CommandEntry } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
@@ -60,6 +61,11 @@ import {
 } from "../theme/theme";
 import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
+import {
+  CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
+  cssSnippetCatalog, disableCssSnippet, parseCssSnippets, previewCssSnippets,
+  saveCssSnippets,
+} from "../theme/snippets";
 import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
@@ -215,7 +221,10 @@ function installRadioGroup(
 }
 
 function selectTab(next: SettingsTab, focus: boolean): void {
-  if (tab === "settings" && next !== "settings") void cancelThemePreview();
+  if (tab === "settings" && next !== "settings") {
+    void cancelThemePreview();
+    cancelCssSnippetsPreview();
+  }
   tab = next;
   componentsGeneration++;
   const owner = settingsLifetime;
@@ -283,6 +292,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
   const stopVault = onEvent("vault_closed", () => close());
   if (typeof stopVault === "function") lifetime.add(stopVault);
   lifetime.add(() => {
+    cancelCssSnippetsPreview();
     race.cancel();
     release?.();
     release = null;
@@ -317,6 +327,7 @@ async function open(): Promise<void> {
 function close(): void {
   release?.();
   race.cancel();
+  cancelCssSnippetsPreview();
   void cancelThemePreview();
   componentsGeneration++;
   pendingRows.clear();
@@ -411,22 +422,204 @@ async function renderForm(): Promise<HTMLElement[]> {
   const entries = (await settings()).filter(
     (e) => !shortcuts.has(e.spec.key) && !isPermissionKey(e.spec.key),
   );
-  if (entries.length === 0) {
-    return [row("muted", t("settings.none"))];
-  }
   const nodes: HTMLElement[] = [];
+  if (entries.length === 0) nodes.push(row("muted", t("settings.none")));
   for (const group of groupEntries(entries)) {
     const title = document.createElement("div");
     title.className = "panel-title";
     title.textContent = group.title;
     nodes.push(title);
-    for (const entry of group.rows) nodes.push(renderRow(entry));
+    for (const entry of group.rows) {
+      if (entry.spec.key === CSS_SNIPPETS_KEY) continue;
+      const item = renderRow(entry);
+      if (entry.spec.key === "chrome.frame") {
+        const [capabilities, reopen] = await Promise.allSettled([
+          Promise.resolve().then(() => api.frameCapabilities()),
+          Promise.resolve().then(() => api.settingRequiresReopen(entry.spec.key)),
+        ]);
+        if (capabilities.status === "fulfilled") {
+          const select = item.querySelector("select");
+          for (const option of select?.options ?? []) {
+            if (option.value === "system") option.disabled = !capabilities.value.system;
+            if (option.value === "custom") option.disabled = !capabilities.value.custom;
+          }
+          if (!capabilities.value.system && !capabilities.value.custom && select) select.disabled = true;
+        } else {
+          const select = item.querySelector("select");
+          if (select) select.disabled = true;
+          item.append(row("setting-source", `Frame capabilities unavailable: ${errorText(capabilities.reason)}`));
+        }
+        if (reopen.status === "fulfilled" && reopen.value) {
+          item.append(row("setting-source", "Changing the window frame takes effect after reopening this window."));
+        }
+      }
+      nodes.push(item);
+    }
   }
   const themes = await themeCatalog().catch(() => []);
   if (themes.length > 0 && entries.some((entry) => entry.spec.key === THEME_KEY)) {
     nodes.push(renderThemeCatalog(themes));
   }
+  const css = entries.find((entry) => entry.spec.key === CSS_SNIPPETS_KEY);
+  if (css) nodes.push(renderCssSnippets(css));
+  nodes.push(...await renderProfiles());
   return nodes;
+}
+
+function renderCssSnippets(entry: SettingEntry): HTMLElement {
+  const panel = document.createElement("section");
+  panel.className = "setting-row setting-row--theme";
+  panel.dataset.settingKey = CSS_SNIPPETS_KEY;
+  panel.append(row("panel-title", entry.spec.label));
+  panel.append(row("muted", t("settings.css.hint")));
+  const source = document.createElement("textarea");
+  source.setAttribute("aria-label", entry.spec.label);
+  source.rows = 7;
+  source.value = typeof entry.value === "string" ? entry.value : DEFAULT_CSS_SNIPPETS;
+  const status = row("setting-source", t("settings.css.trust"));
+  status.setAttribute("role", "status");
+  const actions = document.createElement("div");
+  actions.className = "settings-banner-actions";
+  const preview = document.createElement("button");
+  preview.type = "button";
+  preview.textContent = t("settings.css.preview");
+  preview.addEventListener("click", () => {
+    try {
+      previewCssSnippets(source.value);
+      status.textContent = t("settings.css.preview_active");
+    } catch (error) {
+      status.textContent = t("settings.css.rejected", { reason: errorText(error) });
+    }
+  });
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = t("settings.css.cancel_preview");
+  cancel.addEventListener("click", () => {
+    cancelCssSnippetsPreview();
+    status.textContent = t("settings.css.preview_cancelled");
+  });
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = t("settings.css.save");
+  save.addEventListener("click", () => {
+    save.disabled = true;
+    void saveCssSnippets(source.value).then(() => {
+      if (panel.isConnected) void render();
+    }).catch((error: unknown) => {
+      status.textContent = t("settings.css.not_saved", { reason: errorText(error) });
+    }).finally(() => { save.disabled = false; });
+  });
+  actions.append(preview, cancel, save);
+  panel.append(source, actions, status);
+  try {
+    const snippets = parseCssSnippets(source.value);
+    const errors = new Map(cssSnippetCatalog().map((item) => [item.id, item.error]));
+    for (const snippet of snippets.snippets) {
+      const line = document.createElement("div");
+      line.className = "setting-row setting-sub";
+      line.append(row("setting-source", t(snippet.enabled ? "settings.css.snippet_on" : "settings.css.snippet_off", { id: snippet.id }) + (errors.get(snippet.id) ? ` · ${errors.get(snippet.id)}` : "")));
+      if (snippet.enabled) {
+        const off = document.createElement("button");
+        off.type = "button";
+        off.textContent = t("settings.css.disable", { id: snippet.id });
+        off.addEventListener("click", () => void write(() => disableCssSnippet(snippet.id)));
+        line.append(off);
+      }
+      panel.append(line);
+    }
+  } catch (error) {
+    panel.append(row("setting-source", t("settings.css.needs_repair", { reason: errorText(error) })));
+  }
+  return panel;
+}
+
+async function renderProfiles(): Promise<HTMLElement[]> {
+  const scopes: { scope: SettingScope; vault?: string }[] = [{ scope: "machine" }];
+  if (state.vaultRoot) scopes.push({ scope: "vault", vault: state.vaultRoot });
+  const results = await Promise.allSettled(scopes.map(({ scope, vault }) =>
+    Promise.resolve().then(() => api.settingsProfiles(scope, vault))));
+  return scopes.map(({ scope, vault }, index) => {
+    const box = document.createElement("section");
+    box.className = "settings-banner";
+    box.append(row("panel-title", t(scope === "machine" ? "settings.profiles.machine" : "settings.profiles.vault")));
+    const result = results[index]!;
+    if (result.status === "rejected") {
+      box.append(row("muted", t("settings.profiles.unavailable", { reason: errorText(result.reason) })));
+      return box;
+    }
+    const { active, names } = result.value;
+    const choice = document.createElement("select");
+    choice.setAttribute("aria-label", t("settings.profiles.choice"));
+    for (const name of names) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      option.selected = name === active;
+      choice.append(option);
+    }
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.placeholder = t("settings.profiles.new_name");
+    nameInput.setAttribute("aria-label", t("settings.profiles.new_name"));
+    const json = document.createElement("textarea");
+    json.rows = 5;
+    json.placeholder = t("settings.profiles.json_placeholder");
+    json.setAttribute("aria-label", t("settings.profiles.json"));
+    const feedback = row("setting-source", t("settings.profiles.hint"));
+    feedback.setAttribute("role", "status");
+    let busy = false;
+    const perform = async (action: () => Promise<unknown>, redraw = true) => {
+      if (busy) return;
+      busy = true;
+      for (const control of box.querySelectorAll<HTMLButtonElement>("button")) control.disabled = true;
+      try {
+        await action();
+        if (settingsLifetime?.closed || !box.isConnected) return;
+        if (redraw) {
+          feedback.textContent = t("settings.profiles.saved");
+          await render();
+        }
+      } catch (error) {
+        if (box.isConnected) feedback.textContent = t("settings.profiles.not_changed", { reason: errorText(error) });
+      } finally {
+        busy = false;
+        for (const control of box.querySelectorAll<HTMLButtonElement>("button")) control.disabled = false;
+      }
+    };
+    const button = (title: string, action: () => void) => {
+      const control = document.createElement("button");
+      control.type = "button";
+      control.textContent = title;
+      control.addEventListener("click", action);
+      box.append(control);
+    };
+    box.append(choice, nameInput, json, feedback);
+    box.append(row("muted", t("settings.profiles.frame_hint")));
+    button(t("settings.profiles.switch"), () => void perform(() => api.switchSettingsProfile(scope, choice.value, vault)));
+    button(t("settings.profiles.duplicate"), () => {
+      if (!nameInput.value.trim()) { feedback.textContent = t("settings.profiles.name_required"); return; }
+      void perform(() => api.duplicateSettingsProfile(scope, choice.value, nameInput.value.trim(), vault));
+    });
+    button(t("settings.profiles.export"), () => void perform(async () => {
+      json.value = await api.exportSettingsProfile(scope, choice.value, vault);
+      feedback.textContent = t("settings.profiles.exported");
+    }, false));
+    button(t("settings.profiles.import"), () => {
+      if (!json.value.trim()) { feedback.textContent = t("settings.profiles.json_required"); return; }
+      // Pass the source verbatim. Parsing/reserializing here would discard
+      // opaque values the native profile store knows how to retain.
+      void perform(() => api.importSettingsProfile(scope, json.value, vault));
+    });
+    button(t("settings.profiles.reset"), () => {
+      void (async () => {
+        const accepted = await confirm(t("settings.profiles.reset_confirm", { profile: choice.value }), {
+          title: t("settings.profiles.reset_title"), okLabel: t("settings.profiles.reset_ok"), danger: true,
+        });
+        if (accepted && box.isConnected) await perform(() => api.resetSettingsProfile(scope, choice.value, vault));
+      })().catch((error: unknown) => { feedback.textContent = t("settings.profiles.reset_cancelled", { reason: errorText(error) }); });
+    });
+    return box;
+  });
 }
 
 function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
@@ -464,7 +657,7 @@ function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
           light === "dark" ? "settings.themes.light.dark" : "settings.themes.light.light",
         ),
       });
-      button.textContent = label;
+      button.textContent = `${label} · ${t(TRUST_LABELS[theme.trust])}`;
       button.dataset.themeId = theme.manifest.id;
       button.dataset.themeLight = light;
       button.setAttribute("role", "radio");
@@ -778,6 +971,11 @@ function field(entry: SettingEntry): HTMLElement {
       input.id = id;
       input.value = String(entry.value);
       input.addEventListener("change", () => {
+        const shortcut = allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
+        if (shortcut && !validateKeybinding(input.value).valid) {
+          input.setAttribute("aria-invalid", "true");
+          return;
+        }
         void writeRow(entry.spec.key, input.value, () => api.setSetting(entry.spec.key, input.value));
       });
       return input;
@@ -1100,43 +1298,84 @@ async function drawSuggestedKeys(): Promise<HTMLElement[]> {
   return [box];
 }
 
+let shortcutFilter = "";
+
+function shortcutDiagnostic(command: CommandEntry, binding: string, commands: CommandEntry[]): string {
+  const validation = validateKeybinding(binding);
+  if (!validation.valid) {
+    const descriptions = {
+      "empty-alternative": "An alternative is empty",
+      "too-many": "Too many alternatives",
+      "invalid-chord": "Unrecognized chord",
+      duplicate: "Duplicate alternative",
+    };
+    return `Invalid shortcut: ${descriptions[validation.reason]}. Nothing was saved.`;
+  }
+  const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
+  return keybindingIssues(proposed)
+    .filter((issue) => issue.type === "invalid"
+      ? issue.command.id === command.id
+      : issue.type === "shadowed"
+        ? issue.short.id === command.id || issue.long.some((other) => other.id === command.id)
+        : issue.commands.some((other) => other.id === command.id))
+    .map((issue) => issue.type === "collision"
+      ? `${issue.chord} is also assigned to ${issue.commands.filter((other) => other.id !== command.id).map((other) => other.title).join(", ")}`
+      : issue.type === "shadowed"
+        ? `${issue.short.title} shadows ${issue.long.map((other) => other.title).join(", ")}`
+        : `Invalid shortcut: ${issue.binding}`)
+    .join("; ");
+}
+
 async function renderShortcuts(): Promise<HTMLElement[]> {
   const [entries, suggested] = await Promise.all([settings(), drawSuggestedKeys()]);
-  const byKey = new Map(entries.map((e) => [e.spec.key, e]));
-  const nodes: HTMLElement[] = [...suggested, row("muted", t("settings.shortcuts_hint"))];
-  // Quanti nodi c'erano **prima** delle righe vere: il banner dei tasti proposti
-  // ne aggiunge uno o nessuno, e un conto cablato direbbe «nessuna scorciatoia»
-  // esattamente nel vault che ne propone.
-  const header = nodes.length;
+  const byKey = new Map(entries.map((entry) => [entry.spec.key, entry]));
   const commands = allCommands();
-  // In ordine di **comando**, non di chiave: chi cerca «Nuova nota» la cerca
-  // dove la palette gliela mostra.
-  for (const command of commands) {
-    if (!command.spec) continue;
+  const nodes: HTMLElement[] = [...suggested, row("muted", t("settings.shortcuts_hint"))];
+  const filter = document.createElement("input");
+  filter.type = "search";
+  filter.value = shortcutFilter;
+  filter.placeholder = t("settings.shortcuts.filter_placeholder");
+  filter.setAttribute("aria-label", t("settings.shortcuts.filter"));
+  nodes.push(filter);
+  const lines: { element: HTMLElement; search: string }[] = [];
+  const addCommand = (command: CommandEntry, label?: string, description?: string) => {
     const entry = byKey.get(keybindingKey(command.id));
-    if (entry) nodes.push(renderRow(entry));
-  }
-  const fromShell = commands.filter((c) => c.run !== null);
-  if (fromShell.length > 0) {
-    const title = document.createElement("div");
-    title.className = "panel-title";
-    title.textContent = t("settings.shortcuts.shell");
-    nodes.push(title);
-    // **Righe come le altre**, dalla 0116: la chiave che le tiene è
-    // `keys.shell.*`, dichiarata dal bundle di core e di scope macchina perché
-    // un comando di shell esiste prima di ogni vault. Il campo di testo, la
-    // sourceLabel e l'«azzera» arrivano dalla stessa `renderRow` di tutte le
-    // altre; quello che il pannello ci mette è il **nome**, che di là non c'è.
-    //
-    // Una riga che non arrivasse — un id in tabella che il montaggio non
-    // dichiara — si salta invece di disegnare un campo che non scrive da
-    // nessuna parte.
-    for (const command of fromShell) {
-      const entry = byKey.get(keybindingKey(command.id));
-      if (entry) nodes.push(renderRow(entry, command.title, command.description));
+    if (!entry) return;
+    const element = renderRow(entry, label, description);
+    const input = element.querySelector<HTMLInputElement>("input[type=text]");
+    const diagnostic = row("setting-source", "");
+    diagnostic.setAttribute("role", "status");
+    if (input) {
+      diagnostic.id = `shortcut-issue-${command.id.replace(/[^a-z0-9_-]/gi, "-")}`;
+      input.setAttribute("aria-describedby", diagnostic.id);
+      const update = () => {
+        diagnostic.textContent = shortcutDiagnostic(command, input.value, commands);
+        if (validateKeybinding(input.value).valid) input.removeAttribute("aria-invalid");
+        else input.setAttribute("aria-invalid", "true");
+      };
+      input.addEventListener("input", update);
+      update();
+      element.querySelector(".setting-text")?.append(diagnostic);
     }
+    nodes.push(element);
+    lines.push({ element, search: `${command.id} ${command.title} ${String(entry.value)}`.toLocaleLowerCase() });
+  };
+  for (const command of commands) {
+    if (command.spec) addCommand(command);
   }
-  if (nodes.length === header) nodes.push(row("muted", t("settings.shortcuts.none")));
+  const fromShell = commands.filter((command) => command.run !== null);
+  if (fromShell.length > 0) {
+    nodes.push(sectionTitle("settings.shortcuts.shell"));
+    for (const command of fromShell) addCommand(command, command.title, command.description);
+  }
+  if (lines.length === 0) nodes.push(row("muted", t("settings.shortcuts.none")));
+  const updateFilter = () => {
+    shortcutFilter = filter.value;
+    const needle = shortcutFilter.toLocaleLowerCase();
+    for (const line of lines) line.element.hidden = !line.search.includes(needle);
+  };
+  filter.addEventListener("input", updateFilter);
+  updateFilter();
   return nodes;
 }
 
@@ -1150,10 +1389,12 @@ async function renderComponents(): Promise<HTMLElement[]> {
   // visibili anche una scelta negata, un componente spento e un vault chiuso.
   // Le letture legate al vault sono indipendenti: se non c'è un guest, la loro
   // diagnosi non deve trasformare l'inventario macchina in una scheda vuota.
-  const [installedResult, bundleResult, entryResult] = await Promise.allSettled([
+  const [installedResult, bundleResult, entryResult, budgetResult, limitedResult] = await Promise.allSettled([
     api.listInstalledPlugins(state.vaultRoot || undefined),
     api.listBundles(),
     settings(),
+    Promise.resolve().then(() => api.pluginBudgetSnapshot()),
+    Promise.resolve().then(() => api.pluginLimitedMode()),
   ]);
   const installed = installedResult.status === "fulfilled" ? installedResult.value : [];
   const bundles = bundleResult.status === "fulfilled" ? bundleResult.value : [];
@@ -1170,8 +1411,18 @@ async function renderComponents(): Promise<HTMLElement[]> {
   );
   const nodes: HTMLElement[] = [
     installAction(),
+    renderCatalogSearch(installed),
     row("muted", t("settings.components_hint")),
   ];
+  if (limitedResult.status === "fulfilled") {
+    nodes.push(row("setting-source", limitedResult.value.enabled
+      ? `Plugin limited mode: ${limitedResult.value.reason ?? "execution disabled"}`
+      : "Plugin limited mode: off"));
+  } else nodes.push(row("setting-source", `Limited-mode status unavailable: ${errorText(limitedResult.reason)}`));
+  if (budgetResult.status === "fulfilled") {
+    const b = budgetResult.value;
+    nodes.push(row("setting-source", `WASM budget · live ${b.live_instances} · calls ${b.total_calls} · timeout ${b.timed_out_calls} · out of memory ${b.oom_calls}`));
+  } else nodes.push(row("setting-source", `WASM budget unavailable: ${errorText(budgetResult.reason)}`));
   if (bundleResult.status === "rejected") {
     nodes.push(row("muted", t("settings.read_failed", { reason: errorText(bundleResult.reason) })));
   }
@@ -1193,6 +1444,106 @@ async function renderComponents(): Promise<HTMLElement[]> {
     for (const plugin of installed) nodes.push(...renderInstalledComponent(plugin, forKey));
   }
   return nodes;
+}
+
+function renderCatalogSearch(installed: InstalledPluginInfo[]): HTMLElement {
+  const panel = document.createElement("section");
+  panel.className = "settings-banner";
+  panel.append(row("panel-title", t("settings.catalog.title")));
+  panel.append(row("muted", t("settings.catalog.hint")));
+  const search = document.createElement("input");
+  search.type = "search";
+  search.placeholder = t("settings.catalog.search_placeholder");
+  search.setAttribute("aria-label", t("settings.catalog.search"));
+  const run = document.createElement("button");
+  run.type = "button";
+  run.textContent = t("settings.catalog.run");
+  const status = row("setting-source", "");
+  status.setAttribute("role", "status");
+  const results = document.createElement("div");
+  const generation = componentsGeneration;
+  let request = 0;
+  run.addEventListener("click", () => {
+    const mine = ++request;
+    run.disabled = true;
+    status.textContent = t("settings.catalog.checking");
+    void Promise.resolve().then(() => api.catalogSearch(search.value)).then((entries) => {
+      if (generation !== componentsGeneration || mine !== request || !panel.isConnected) return;
+      results.replaceChildren(...entries.map((entry) => renderCatalogEntry(entry, installed)));
+      status.textContent = t("settings.catalog.count", { count: entries.length });
+    }).catch((error: unknown) => {
+      if (generation === componentsGeneration && mine === request && panel.isConnected) {
+        status.textContent = t("settings.catalog.unavailable", { reason: errorText(error) });
+      }
+    }).finally(() => {
+      if (generation === componentsGeneration && mine === request) run.disabled = false;
+    });
+  });
+  search.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); run.click(); }
+  });
+  panel.append(search, run, status, results);
+  return panel;
+}
+
+function renderCatalogEntry(entry: CatalogEntry, installed: InstalledPluginInfo[]): HTMLElement {
+  const item = document.createElement("section");
+  item.className = "setting-row";
+  const details = document.createElement("div");
+  details.className = "setting-text";
+  details.append(
+    row("panel-title", `${entry.name} · ${entry.version} · ${entry.kind}`),
+    row("setting-source", t("settings.catalog.provenance", { publisher: entry.provenance, license: entry.license, compatible: String(entry.compatible) })),
+    row("setting-source", t("settings.catalog.digest", { digest: entry.digest, size: String(entry.size), abi: String(entry.abi) })),
+    row("setting-source", entry.revoked
+      ? t("settings.catalog.revoked")
+      : t("settings.catalog.permissions", { permissions: entry.permissions.join(", ") || t("settings.catalog.no_permissions") })),
+  );
+  item.append(details);
+  const current = installed.find((plugin) => plugin.id === entry.id);
+  const action = (label: string, operation: (source: string) => Promise<unknown>, requiresSource = true, danger = false) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      const generation = componentsGeneration;
+      button.disabled = true;
+      void (async () => {
+        const accepted = await confirm(t(entry.revoked ? "settings.catalog.confirm_revoked" : "settings.catalog.confirm", { action: label, name: entry.name, version: entry.version, publisher: entry.provenance, license: entry.license, digest: entry.digest }), {
+          title: label, okLabel: label, danger,
+        });
+        if (!accepted || generation !== componentsGeneration || !item.isConnected) return;
+        const source = requiresSource
+          ? entry.kind === "theme" ? await pickFolder() : await pickFile()
+          : "";
+        if (requiresSource && source === null) return;
+        if (generation !== componentsGeneration || !item.isConnected) return;
+        await completeComponentAction(`catalog:${entry.id}`, [item],
+          () => operation(source ?? ""), "settings.component_not_changed");
+      })().catch((error: unknown) =>
+        notify(t("settings.catalog.failed", { reason: errorText(error) }), "guasto"))
+        .finally(() => { if (item.isConnected) button.disabled = false; });
+    });
+    item.append(button);
+  };
+  if (!entry.revoked) {
+    if (entry.kind === "plugin") {
+      if (!current) action(t("settings.catalog.install"), (source) => api.catalogInstall(entry.id, entry.version, source));
+      else {
+        action(t("settings.catalog.update"), (source) => api.catalogUpdate(current.installation, entry.version, source));
+        action(t("settings.catalog.rollback"), (source) => api.catalogRollback(current.installation, entry.version, source));
+      }
+    } else {
+      action(t("settings.catalog.install_theme"), (source) => api.catalogInstallTheme(entry.id, entry.version, source));
+      action(t("settings.catalog.update_theme"), (source) => api.catalogUpdateTheme(entry.id, entry.version, source));
+      action(t("settings.catalog.rollback_theme"), (source) => api.catalogRollbackTheme(entry.id, entry.version, source));
+    }
+  } else if (entry.kind === "plugin" && current) {
+    action(t("settings.catalog.revoke"), () => api.catalogRevoke(current.installation), false, true);
+  } else if (entry.kind === "theme") {
+    action(t("settings.catalog.revoke_theme"), () => api.catalogRevokeTheme(entry.id), false, true);
+  }
+  return item;
 }
 
 function sectionTitle(key: Key): HTMLElement {
@@ -1330,6 +1681,12 @@ function renderInstalledComponent(plugin: InstalledPluginInfo, forKey: EntryMap)
       t(plugin.mounted ? "settings.components.runtime.mounted" : "settings.components.runtime.off"),
     ),
   );
+  if (plugin.catalog) text.append(
+    row("setting-source", `Signed by ${plugin.catalog.key_id} · generation ${plugin.catalog.generation} · publisher ${plugin.catalog.publisher} · license ${plugin.catalog.license} · compatible ${plugin.catalog.compatible} · source ${plugin.catalog.url}`),
+  );
+  if (plugin.revoked) text.append(
+    row("setting-source", `Revoked: this component cannot mount${plugin.revocation ? ` · signed by ${plugin.revocation.key_id} at generation ${plugin.revocation.generation}` : ""}.`),
+  );
   header.append(text);
   nodes.push(header);
 
@@ -1346,7 +1703,7 @@ function renderInstalledComponent(plugin: InstalledPluginInfo, forKey: EntryMap)
   enabled.type = "checkbox";
   enabled.id = enabledId;
   enabled.checked = plugin.enabled;
-  enabled.disabled = pending;
+  enabled.disabled = pending || plugin.revoked;
   enabled.addEventListener("change", () => {
     beginComponentAction(
       key,
@@ -1472,9 +1829,12 @@ async function completeComponentAction(
 ): Promise<void> {
   try {
     const result = await action();
-    if (Array.isArray(result)) {
-      for (const error of result as PluginError[]) notify(errorText(error), "guasto");
-    }
+    const diagnostics = Array.isArray(result)
+      ? result
+      : result && typeof result === "object" && "diagnostics" in result && Array.isArray(result.diagnostics)
+        ? result.diagnostics
+        : [];
+    for (const diagnostic of diagnostics) notify(errorText(diagnostic), "guasto");
   } catch (error) {
     notify(t(failure, { reason: errorText(error) }), "guasto");
   }

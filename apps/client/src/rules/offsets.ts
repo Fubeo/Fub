@@ -102,3 +102,34 @@ export function charToByteIndex(text: string, charIndex: number): number {
   }
   return bytes; // oltre la fine → tutto il documento
 }
+
+/** The text indexed by Markdown surfaces; persistence keeps the original separators. */
+export function normalizeLineBreaks(text: string): string {
+  return text.replace(/\r\n?/g, "\n");
+}
+
+/** UTF-8 source spans to normalized UTF-16 offsets, in one source traversal. */
+export function byteToNormalizedCharIndices(text: string, byteOffsets: readonly number[]): number[] {
+  const ordered = byteOffsets.map((offset, index) => ({
+    offset: Number.isNaN(offset) ? Infinity : Math.max(0, offset),
+    index,
+  })).sort((a, b) => a.offset - b.offset);
+  const result = new Array<number>(ordered.length);
+  let bytes = 0;
+  let original = 0;
+  let normalized = 0;
+  for (const target of ordered) {
+    while (original < text.length && bytes < target.offset) {
+      const point = text.codePointAt(original)!;
+      const units = point > 0xffff ? 2 : 1;
+      if (point !== 10 || original === 0 || text.charCodeAt(original - 1) !== 13) {
+        normalized += units;
+      }
+      bytes += utf8Len(point);
+      original += units;
+    }
+    result[target.index] = normalized;
+  }
+  return result;
+}
+

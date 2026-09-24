@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 const CHUNK_BUDGET = 500_000;
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
@@ -56,6 +57,11 @@ export default defineConfig({
     // il limite ordinario più stretto e vieta il parser nel percorso eager.
     chunkSizeWarningLimit: MERMAID_PARSER_BUDGET / 1000,
     rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        document: fileURLToPath(new URL("./document.html", import.meta.url)),
+        mobile: fileURLToPath(new URL("./mobile.html", import.meta.url)),
+      },
       output: {
         // Confini riusabili, non fasce di byte. I linguaggi e i diagrammi
         // opzionali restano separati: non finiscono nel runtime iniziale.

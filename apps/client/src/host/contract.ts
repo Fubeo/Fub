@@ -35,6 +35,7 @@ import type {
   SettingSource,
   Severity,
   SourceKind,
+  TaskStatus,
   TextField,
   TextMode,
   TextTolerance,
@@ -63,6 +64,8 @@ export interface ThemeManifest {
 /** Un tema installato che il backend può consegnare alla shell. */
 export interface ThemeInfo {
   manifest: ThemeManifest;
+  /** Bundled series is core; an installed theme is community code. */
+  trust: Trust;
 }
 
 /** Una luce di un tema installato, già letta dal backend. */
@@ -884,6 +887,34 @@ export interface DocumentSource {
   source_kind: SourceKind;
 }
 
+/** Specie dei byte aperti dal resource host; rispecchia `ResourceKind`. */
+export type ResourceKind = "image" | "audio" | "video" | "pdf" | "other";
+
+/** Descrittore piccolo dell'IPC risorse. I byte viaggiano separatamente. */
+export interface ResourceDescriptor {
+  handle: string;
+  id: string;
+  len: number;
+  mime: string;
+  kind: ResourceKind;
+  revision: string | null;
+}
+
+/** IPC della sola finestra documento locale. Il vault è fissato dal parent. */
+export interface DocumentWindowRequest {
+  surface: "document";
+  channel: string;
+  document: string;
+  vault: string;
+  session: string;
+  surfaceId: string;
+}
+
+export interface DocumentWindowEvent {
+  label: string;
+  surface: "document";
+}
+
 export interface SheetCellKey {
   sheet: string;
   row: string;
@@ -1117,7 +1148,7 @@ export type { TextMode } from "./enums.generated";
 // Dove cercare il testo. Vuoto = i campi che il provider indicizza.
 // `heading` pesa a parte: distingue una nota che PARLA di una cosa da una che
 // ci ha dedicato una sezione.
-export type { TextField } from "./enums.generated";
+export type { TaskStatus, TextField } from "./enums.generated";
 
 // Quanto si vuole essere indovinati: un'INTENZIONE, mai una distanza di edit.
 // Chi non sa onorare `typos` risponde come per `exact` — restringe, non allarga.
@@ -1128,6 +1159,7 @@ export interface TextQuery {
   mode: TextMode;
   fields: TextField[];
   tolerance: TextTolerance;
+  case_sensitive: boolean;
   // L'ultimo termine è ancora in corso di scrittura. È una proprietà
   // dell'INVOCAZIONE e non della query: chi **salva** una query — una
   // collezione, una vista, un template — la normalizza a `false` prima di
@@ -1151,7 +1183,11 @@ export type QueryPredicate =
   | { kind: "folder"; path: string; descendants: boolean }
   | { kind: "linked"; doc: string; direction: LinkDirection }
   | { kind: "docs"; docs: string[] }
-  | { kind: "custom"; ns: string; predicate: unknown };
+  | { kind: "custom"; ns: string; predicate: unknown }
+  | { kind: "regex"; pattern: string; fields: TextField[] }
+  | { kind: "task"; status: TaskStatus }
+  | { kind: "path"; glob: string }
+  | { kind: "file"; extension: string };
 
 export interface QueryLiteral {
   negated: boolean;
@@ -1192,6 +1228,7 @@ export function textQuery(text: string, whileTyping = false): QueryExpr {
               mode: "terms",
               fields: [],
               tolerance: "exact",
+              case_sensitive: false,
               partial_last_term: whileTyping,
             },
           },
@@ -1234,6 +1271,7 @@ export function textInDocument(
               mode: "terms",
               fields: [],
               tolerance: "exact",
+              case_sensitive: false,
               partial_last_term: whileTyping,
             },
           },
@@ -1271,6 +1309,7 @@ export function nameQuery(text: string, whileTyping = true): QueryExpr {
               mode: "terms",
               fields: ["name"],
               tolerance: "exact",
+              case_sensitive: false,
               partial_last_term: whileTyping,
             },
           },
@@ -1506,7 +1545,9 @@ export type IndexQuery =
   // (`render_embed`) e ora passa dal canale dati.
   | { kind: "render_embed"; page: string; heading?: string | null; block?: string | null }
   // Le forme sintattiche effettive, incluse quelle registrate a runtime.
-  | { kind: "syntax_forms"; doc: string };
+  | { kind: "syntax_forms"; doc: string }
+  // Il bersaglio di stampa percorre gli stessi provider senza usare l'anteprima.
+  | { kind: "render_print"; doc: string };
 
 // La risposta (rispecchia fub_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -1538,7 +1579,8 @@ export type IndexResult =
   // Il ritaglio reso (risposta a `render_embed`, 0163): il documento reso e il
   // suo id, perché chi monta un embed deve sapere da quale nota viene.
   | { kind: "render_embed"; value: EmbedContent }
-  | { kind: "syntax_forms"; value: SyntaxForm[] };
+  | { kind: "syntax_forms"; value: SyntaxForm[] }
+  | { kind: "render_print"; value: RenderedDocument };
 
 // CHE SPECIE DI FILE È (§14.1). Non è una proprietà del file: è una proprietà
 // del file dato chi è registrato adesso — un `.canvas` è `unknown` finché
@@ -1674,6 +1716,33 @@ export interface BundleInfo {
 // usa per le righe native, ma tiene separate le tre decisioni che non sono lo
 // stesso stato: preferenza persistita, consenso all'esecuzione e montaggio
 // effettivo nel vault corrente.
+/** Verified feed provenance; generation is a decimal u64 string, not a JS number. */
+export interface CatalogProvenance {
+  key_id: string;
+  generation: string;
+  publisher: string;
+  url: string;
+  license: string;
+  compatible: string;
+}
+
+/** Entry from a natively verified signed feed. Size is a decimal u64 string. */
+export interface CatalogEntry {
+  id: string;
+  kind: "plugin" | "theme";
+  name: string;
+  version: string;
+  abi: string;
+  url: string;
+  digest: string;
+  size: string;
+  permissions: string[];
+  license: string;
+  compatible: string;
+  provenance: string;
+  revoked: boolean;
+}
+
 export interface InstalledPluginInfo extends BundleInfo {
   // Identità u64 dell'installazione, serializzata come stringa per non perdere
   // bit nel passaggio JSON. È questa, non `id`, che autorizza le mutazioni.
@@ -1685,6 +1754,9 @@ export interface InstalledPluginInfo extends BundleInfo {
   // duplicato da `listBundles` senza filtrare un bundle ufficiale omonimo.
   runtime_known: boolean;
   consent: "undecided" | "denied" | "granted";
+  catalog?: CatalogProvenance;
+  revoked: boolean;
+  revocation?: CatalogProvenance;
 }
 
 
@@ -1817,4 +1889,6 @@ export const COMMANDS = {
   trash: "note.trash",
   restore: "trash.restore",
   clear: "trash.empty",
+  createFolder: "folder.create",
+  osTrash: "trash.os",
 } as const;

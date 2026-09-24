@@ -7,16 +7,18 @@
 mod offsets;
 mod parse;
 mod render;
+mod rewrite;
 mod serialize;
 mod transfer;
 mod util;
 
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, LinkRewrite, ParseContext, RenderOptions,
 };
 use fub_abi::model::DocumentModel;
 use fub_abi::options::syntax;
-use fub_abi::{FormatError, FormatProvider};
+use fub_abi::{FormatError, FormatProvider, TextEdit};
+pub use parse::{collect_footnotes, FootnoteKind, FootnoteOccurrence};
 
 pub use transfer::{MarkdownExport, MarkdownImport, TARGET_FILES, TARGET_SINGLE};
 
@@ -80,6 +82,19 @@ impl FormatProvider for MarkdownProvider {
 
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
         serialize::serialize(model)
+    }
+
+    fn rewrite_links(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+        rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        let text = source.text().ok_or_else(|| FormatError::Unsupported {
+            format: self.descriptor().id,
+            got: source.kind(),
+        })?;
+        rewrite::rewrite_links(text, ctx, rewrites).map(Some)
     }
 }
 
@@ -1105,6 +1120,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn inline_footnote_is_source_spanned_rendered_and_serializable() {
+        let source = "Testo 🎯 ^[nota &amp; segreti] e [^n].\n\n[^n]: definizione\n";
+        let model = parse(source);
+        let Some(Block::Paragraph { inlines, .. }) = model.body.first() else {
+            panic!("expected paragraph")
+        };
+        let start = source.find("^[nota").unwrap();
+        assert!(inlines.iter().any(|inline| matches!(
+            inline,
+            Inline::Custom { custom_kind, attrs, span }
+                if custom_kind == custom_kind::FOOTNOTE_REFERENCE
+                    && attrs.get("inline").and_then(|value| value.as_bool()) == Some(true)
+                    && *span == Span::new(start, start + "^[nota &amp; segreti]".len())
+        )));
+        let html = MarkdownProvider::new()
+            .render_html(&model, &RenderOptions::default())
+            .unwrap();
+        assert!(html.contains("class=\"footnote-inline\""), "{html}");
+        assert!(html.contains("nota &amp; segreti"), "{html}");
+        let serialized = MarkdownProvider::new().serialize(&model).unwrap();
+        assert!(serialized.contains("^[nota &amp; segreti]"), "{serialized}");
+    }
+
+    #[test]
+    fn footnote_extraction_skips_literals_and_reports_unresolved_refs() {
+        let source = "Été [^known] [^missing] ^[inline 🎯] ^[**rich**] \\[^escaped]\n\n[^known]: yes\n[^unused]: no\n\n```\n[^code] ^[code]\n```\n\n<div>\n[^html]\n</div>\n";
+        let occurrences = collect_footnotes(source).unwrap();
+        let slices: Vec<&str> = occurrences
+            .iter()
+            .map(|item| &source[item.span.start..item.span.end])
+            .collect();
+        for expected in [
+            "[^known]",
+            "[^missing]",
+            "^[inline 🎯]",
+            "^[**rich**]",
+            "[^unused]: no",
+        ] {
+            assert!(slices.contains(&expected), "{slices:?}");
+        }
+        for excluded in ["[^escaped]", "[^code]", "^[code]", "[^html]"] {
+            assert!(!slices.contains(&excluded), "{slices:?}");
+        }
+        assert!(occurrences.iter().any(|item| matches!(
+            &item.kind,
+            FootnoteKind::Inline(body) if body == "inline 🎯"
+        )));
+    }
+
     /// Il buco che rendeva 13.1 irraggiungibile: un'immagine non entrava
     /// **affatto** in `links`, quindi nessun riferimento ad allegato veniva
     /// aggiornato al rename né compariva fra gli orfani.
@@ -1139,7 +1204,9 @@ mod tests {
     /// costruito a mano: è il giro completo YAML → JSON → `PropertyValue`.
     #[test]
     fn frontmatter_properties_as_out_typed() {
-        let doc = parse("---\nscadenza: 2026-07-25\nrating: 4\nautore: \"[[Mario]]\"\ntag: [a, b]\n---\n\nCorpo.");
+        let doc = parse(
+            "---\nscadenza: 2026-07-25\nrating: 4\nautore: \"[[Mario]]\"\ntag: [a, b]\n---\n\nCorpo.",
+        );
         assert!(matches!(
             doc.frontmatter.property("scadenza", &DateFormats::ISO),
             Some(PropertyValue::Date(d)) if (d.year, d.month, d.day) == (2026, 7, 25)

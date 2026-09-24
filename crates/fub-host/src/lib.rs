@@ -78,6 +78,9 @@
 //!
 //! Il §8.2 elencava anche lo storage del §15.1.
 
+/// Automazione locale P13: parser `fub://`, callback, capture v1, pairing e
+/// framing NM. Puro: nessuna I/O, nessun vault, nessuna rete.
+pub mod automation;
 mod bridge;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
@@ -90,14 +93,20 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+#[cfg(feature = "http-client")]
+pub mod publish;
 mod query;
 pub mod records;
 pub mod registry;
+#[cfg(feature = "http-client")]
+pub mod remote;
+pub mod resources;
 pub mod runner;
 pub mod session;
 pub mod settings;
 pub mod sheet;
 pub mod shell;
+pub mod support;
 mod teardown;
 pub mod theme;
 pub mod vaults;
@@ -119,6 +128,10 @@ pub use records::{EmbedContent, UnreadDoc, VaultInfo};
 pub use registry::{
     Bundle, BundleClaim, BundleError, BundleInfo, BundleRegistry, OnlyProviders, StartupBundle,
     StartupLease, StartupSnapshot, StartupSource, StartupValidity,
+};
+pub use resources::{
+    ResourceDescriptor, ResourceHandle, ResourceHost, ResourceKind, ResourceLease, ResourceTable,
+    ResourceWrite, ResourceWriteReceipt,
 };
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, SnapshotHostError, VaultSession};

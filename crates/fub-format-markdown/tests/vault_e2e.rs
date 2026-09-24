@@ -4,9 +4,10 @@
 use camino::Utf8PathBuf;
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
-use fub_abi::traits::BacklinkRef;
+use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
+use fub_abi::traits::{BacklinkRef, PluginManifest};
 use fub_format_markdown::MarkdownProvider;
-use fub_kernel::{FormatRegistry, KernelError, Workspace};
+use fub_kernel::{settings::NEW_NOTE_FOLDER, FormatRegistry, KernelError, Trust, Workspace};
 
 fn sample_root() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/sample-vault")
@@ -306,6 +307,38 @@ fn a_notes_created_in_a_folder_stays_there() {
     let created = ws.create_notes(Some("Progetti/Beta")).unwrap();
     assert_eq!(created, DocId::new("Progetti/Beta.md"));
     assert_eq!(ws.resolve_link("Beta"), Some(created));
+}
+
+#[test]
+fn configured_folder_receives_only_notes_without_an_explicit_path() {
+    let (_scratch, mut ws) = open_scratch();
+    ws.register_plugin(
+        PluginManifest::core("fub.core-test", "Core test").configuring(vec![SettingSpec::new(
+            NEW_NOTE_FOLDER,
+            "Cartella nuove note",
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )]),
+        Trust::Core,
+    )
+    .expect("setting dichiarata");
+    ws.set_setting(NEW_NOTE_FOLDER, SettingValue::Text("Ingresso".to_string()))
+        .expect("setting scritta");
+
+    assert_eq!(
+        ws.create_notes(None).unwrap(),
+        DocId::new("Ingresso/Senza titolo.md")
+    );
+    assert_eq!(
+        ws.create_notes(Some("Idea")).unwrap(),
+        DocId::new("Ingresso/Idea.md")
+    );
+    assert_eq!(
+        ws.create_notes(Some("Progetti/Esplicita")).unwrap(),
+        DocId::new("Progetti/Esplicita.md"),
+        "un path esplicito non viene ribasato"
+    );
 }
 
 /// I link markdown ordinari (decisione 0004) sul parser vero: gli `Span` sono quelli di

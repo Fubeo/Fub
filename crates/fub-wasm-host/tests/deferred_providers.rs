@@ -1,17 +1,23 @@
-//! Prove the deferred provider boundary of the current WASM runtime.
-//!
-//! `IndexProvider` and inbound `EventHandler` exports are deliberately not part
-//! of the runtime surface yet. A guest can carry those exports, but they must
-//! not become registrations by accident. Separately, a genuinely unserved host
-//! family must be rejected before any mount state is published.
+//! Real inbound components cross the same host registration and lifecycle as
+//! native providers; a trapped declaration must not leave a mounted owner.
 
 mod common;
 
-use camino::Utf8PathBuf;
-use fub_host::Host;
-use fub_kernel::{RegistrationKind, Trust};
-use fub_wasm_host::{LoadError, WasmBundle};
 use std::sync::Arc;
+
+use camino::Utf8PathBuf;
+use fub_abi::command::InvokeMode;
+use fub_abi::edit::WriteBase;
+use fub_abi::model::DocId;
+use fub_abi::traits::{IndexQuery, IndexResult};
+use fub_host::{BundleClaim, Host, StartupBundle};
+use fub_kernel::Trust;
+use fub_wasm_host::{LoadError, WasmBundle};
+use serde_json::{json, Value};
+
+const INDEX: &str = "demo.index-provider";
+const ROUTE: &str = "demo.index-provider:ids";
+const EVENT: &str = "demo.event-handler";
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -34,73 +40,177 @@ fn host(vault: &Vault) -> Host {
     host
 }
 
-fn assert_deferred_export_is_not_registered(
-    vault: &Vault,
-    example: &str,
-    artifact: &str,
-    plugin_id: &str,
-    _deferred_kind: RegistrationKind,
-) {
+fn startup(vault: &Vault, example: &str, artifact: &str) -> Host {
     let wasm = common::component(example, artifact, "");
-    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("guest loads");
-    let host = host(vault);
-    host.mount_bundle(None, Arc::new(bundle))
-        .expect("plugin itself mounts");
-    assert!(
-        host.plugin_ids(None)
-            .expect("plugin inventory")
-            .iter()
-            .any(|id| id == plugin_id),
-        "mounted guest is declared"
-    );
-    assert!(
-        host.bundles(Some(vault.root.as_str()))
-            .expect("runtime inventory")
-            .iter()
-            .any(|bundle| bundle.id == plugin_id),
-        "the runtime bundle is published"
-    );
-    assert!(host.close_vault(&vault.root).expect("teardown").is_empty());
+    let bundle = Arc::new(WasmBundle::from_file(&wasm, Trust::Community).expect("guest loads"));
+    let source = Arc::new(vec![StartupBundle::new(bundle, true, BundleClaim::new())]);
+    let host = Host::without_watcher()
+        .with_job_threads(1)
+        .with_startup_source(source);
+    host.open(&vault.root)
+        .expect("vault opens with inbound provider");
+    host.wait_indexed(None).expect("opening finishes");
+    host
+}
+
+fn index_state(host: &Host) -> Value {
+    match host
+        .query_index(
+            None,
+            IndexQuery::Custom {
+                ns: ROUTE.to_string(),
+                query: Value::Null,
+            },
+        )
+        .expect("WASM index owns its declared route")
+    {
+        IndexResult::Custom(value) => value,
+        other => panic!("unexpected index reply: {other:?}"),
+    }
+}
+
+#[test]
+fn index_feed_query_flush_close_and_empty_reconcile_cross_the_component() {
+    let vault = Vault::new();
+    let host = startup(&vault, "index-provider-wasm", "index_provider_wasm");
+    let state = index_state(&host);
+    assert_eq!(state["count"], 1, "initial scan feeds the guest: {state}");
+    // `up_to_date` is an intersection across every mounted index: native
+    // providers conservatively answer nothing, so the guest's scan request
+    // is never consulted on a cold open — the document is always fed.
+
+    host.write_document(
+        None,
+        &DocId("Nota.md".into()),
+        "# Nota\nseconda versione\n",
+        WriteBase::Dictated,
+    )
+    .expect("write feeds the index");
+    let written = index_state(&host);
+    assert_eq!(written["count"], 1);
+    assert!(written["fed"].as_u64().unwrap() > state["fed"].as_u64().unwrap());
+
+    assert!(host
+        .close_vault(&vault.root)
+        .expect("close vault")
+        .is_empty());
     assert!(
         host.bundles(None).is_err(),
-        "teardown removes the deferred guest session"
+        "closed session owns no registrations"
     );
-
     host.open(&vault.root)
-        .expect("host reopens after deferred teardown");
-    host.wait_indexed(None).expect("reopened vault indexes");
-    let valid = WasmBundle::from_file(&common::ping(""), Trust::Community)
-        .expect("a supported guest remains loadable");
+        .expect("reopen loads persisted index");
+    host.wait_indexed(None).expect("reopen indexes");
+    let reopened = index_state(&host);
+    assert_eq!(reopened["loaded"], 1, "flush persisted the accepted id");
+    assert_eq!(reopened["closed_before"], true, "close ran after flush");
+
+    assert!(host
+        .close_vault(&vault.root)
+        .expect("second close")
+        .is_empty());
+    std::fs::remove_file(vault.root.join("Nota.md")).expect("delete while closed");
+    host.open(&vault.root).expect("reopen empty vault");
+    host.wait_indexed(None).expect("empty scan completes");
+    let empty = index_state(&host);
+    assert_eq!(
+        empty["loaded"], 1,
+        "index retained the old id before reconciliation"
+    );
+    assert_eq!(empty["count"], 0, "an empty reconcile removes stale ids");
+    assert!(empty["reconciled"].as_u64().unwrap() >= 1);
+    assert!(host.close().is_empty());
+}
+
+#[test]
+fn index_removal_feed_crosses_the_component() {
+    let vault = Vault::new();
+    let host = startup(&vault, "index-provider-wasm", "index_provider_wasm");
+    assert_eq!(index_state(&host)["count"], 1);
+    host.invoke_user_command(
+        None,
+        "note.trash",
+        json!({"doc": "Nota.md"}),
+        InvokeMode::Apply,
+    )
+    .expect("the official trash command removes a document");
+    let removed = index_state(&host);
+    assert_eq!(removed["count"], 0);
+    assert!(removed["removed"].as_u64().unwrap() >= 1);
+    assert!(host.close().is_empty());
+}
+
+#[test]
+fn subscribed_notices_reach_guest_and_guard_denies_missing_read_permission() {
+    let vault = Vault::new();
+    let host = startup(&vault, "event-handler-wasm", "event_handler_wasm");
+    let before = host
+        .invoke_job(None, EVENT, "snapshot", json!({}))
+        .expect("event snapshot");
+    host.write_document(
+        None,
+        &DocId("Nota.md".into()),
+        "# Nota\nevento\n",
+        WriteBase::Dictated,
+    )
+    .expect("document change is committed");
+    let after = host
+        .invoke_job(None, EVENT, "snapshot", json!({}))
+        .expect("event snapshot");
+    assert!(after["changed"].as_u64().unwrap() > before["changed"].as_u64().unwrap());
+    assert!(after["denied"].as_u64().unwrap() > before["denied"].as_u64().unwrap());
+
+    assert!(host
+        .close_vault(&vault.root)
+        .expect("close vault")
+        .is_empty());
+    assert!(
+        host.bundles(None).is_err(),
+        "handler is unregistered at teardown"
+    );
+    host.open(&vault.root).expect("reopen handler");
+    host.wait_indexed(None).expect("reopen scan");
+    let reopened = host
+        .invoke_job(None, EVENT, "snapshot", json!({}))
+        .expect("event snapshot");
+    assert_eq!(
+        reopened["closed_before"], true,
+        "VaultClosed reached the old handler"
+    );
+    assert!(host.close().is_empty());
+}
+
+#[test]
+fn trapped_index_declaration_rolls_back_without_a_route_or_plugin() {
+    let vault = Vault::new();
+    let host = host(&vault);
+    let wasm = common::component("index-provider-wasm", "index_provider_wasm", "trap-routes");
+    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("guest loads");
+    let error = host
+        .mount_bundle(None, Arc::new(bundle))
+        .expect_err("route declaration traps");
+    assert!(
+        error.to_string().contains("indice non dichiarato"),
+        "{error}"
+    );
+    assert!(!host
+        .plugin_ids(None)
+        .expect("inventory")
+        .iter()
+        .any(|id| id == INDEX));
+    assert!(host
+        .query_index(
+            None,
+            IndexQuery::Custom {
+                ns: ROUTE.into(),
+                query: Value::Null
+            }
+        )
+        .is_err());
+    let valid = WasmBundle::from_file(&common::ping(""), Trust::Community).expect("valid guest");
     host.mount_bundle(None, Arc::new(valid))
-        .expect("supported guest mounts after teardown");
-    let plugins = host.plugin_ids(None).expect("plugin inventory");
-    assert!(plugins.iter().any(|id| id == "demo.ping"));
-    assert!(!plugins.iter().any(|id| id == plugin_id));
-    assert!(host.close().is_empty(), "reopened host closes cleanly");
-}
-
-#[test]
-fn index_provider_export_is_deferred_without_a_registration_or_residue() {
-    let vault = Vault::new();
-    assert_deferred_export_is_not_registered(
-        &vault,
-        "index-provider-wasm",
-        "index_provider_wasm",
-        "demo.index-provider",
-        RegistrationKind::Index,
-    );
-}
-
-#[test]
-fn inbound_event_handler_export_is_deferred_without_a_registration_or_residue() {
-    let vault = Vault::new();
-    assert_deferred_export_is_not_registered(
-        &vault,
-        "event-handler-wasm",
-        "event_handler_wasm",
-        "demo.event-handler",
-        RegistrationKind::EventHandler,
-    );
+        .expect("host remains reusable");
+    assert!(host.close().is_empty());
 }
 
 #[test]
@@ -113,40 +223,27 @@ fn an_unserved_host_family_names_itself_and_leaves_a_reusable_host() {
     let message = rejected.to_string();
     assert!(
         matches!(rejected, LoadError::UnservedFamilies(_)),
-        "the failure remains the named-family model: {message}"
+        "{message}"
     );
-    assert!(
-        message.contains("host-network"),
-        "the rejection names the unserved family: {message}"
-    );
-    assert!(
-        !host
-            .plugin_ids(None)
-            .expect("plugin inventory")
-            .iter()
-            .any(|id| id == "demo.ping"),
-        "rejected guest publishes no plugin declaration or claim"
-    );
-    assert!(
-        !host
-            .bundles(None)
-            .expect("bundle inventory")
-            .iter()
-            .any(|bundle| bundle.id == "demo.ping"),
-        "rejected guest publishes no runtime bundle"
-    );
-
-    let valid = WasmBundle::from_file(&common::ping(""), Trust::Community)
-        .expect("supported guest remains loadable after rejection");
-    host.mount_bundle(None, Arc::new(valid))
-        .expect("host mounts a supported guest after rejection");
-    assert!(host
+    assert!(message.contains("host-network"), "{message}");
+    assert!(!host
         .plugin_ids(None)
-        .expect("plugin inventory")
+        .expect("inventory")
         .iter()
         .any(|id| id == "demo.ping"));
-    assert!(
-        host.close().is_empty(),
-        "host closes without rollback residue"
-    );
+    assert!(!host
+        .bundles(None)
+        .expect("bundles")
+        .iter()
+        .any(|bundle| bundle.id == "demo.ping"));
+
+    let valid = WasmBundle::from_file(&common::ping(""), Trust::Community).expect("valid guest");
+    host.mount_bundle(None, Arc::new(valid))
+        .expect("supported guest mounts after rejection");
+    assert!(host
+        .plugin_ids(None)
+        .expect("inventory")
+        .iter()
+        .any(|id| id == "demo.ping"));
+    assert!(host.close().is_empty());
 }

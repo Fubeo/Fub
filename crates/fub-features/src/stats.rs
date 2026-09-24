@@ -55,6 +55,12 @@ pub struct TextStats {
 /// ancora non c'è (§4.1). È una differenza di pochi punti percentuali su una
 /// nota vera, e dichiararla costa meno che fingere una precisione che non c'è.
 ///
+/// Le parole sono **consapevoli del CJK**: nelle lingue senza spazi (cinese,
+/// giapponese, coreano) ogni ideogramma/sillaba vale una parola, mentre la
+/// punteggiatura CJK fa da separatore senza contare. Il latino resta contato
+/// come prima — sequenze di non-spazi — così `split_whitespace` e questo
+/// contatore coincidono su testo senza CJK. I caratteri restano code point.
+///
 /// # Le due passate restano due, ed è misurato
 ///
 /// A prima vista questo attraversa il testo due volte e si fonderebbe in un
@@ -83,11 +89,85 @@ pub struct TextStats {
 /// emoji, legature) per una regola che oggi arriva gratis e giusta dalla libreria
 /// standard. Non vale il cambio: **se qualcuno torna a proporlo, questo commento
 /// è la risposta, e i numeri sopra sono il modo di smentirlo.**
+///
+/// Il giro delle parole qui sotto costa come `split_whitespace` — un passaggio
+/// sui `char` con un controllo di intervallo intero in più, e `is_alphabetic`
+/// solo sui caratteri dentro un blocco CJK (rari in prosa latina) — quindi la
+/// misura sopra resta l'ordine di grandezza giusto anche con il CJK dentro.
 pub fn count(text: &str) -> TextStats {
     TextStats {
-        words: text.split_whitespace().count(),
+        words: count_words(text),
         chars: text.chars().count(),
     }
+}
+
+/// Parole con regola CJK: ogni ideogramma/sillaba (compresi radicali e
+/// caratteri CJK racchiusi, classificati Symbol da Unicode) vale una parola;
+/// punteggiatura e segni combinanti separano senza contare. Il resto mantiene
+/// le sequenze di non-spazi come `split_whitespace`.
+fn count_words(text: &str) -> usize {
+    let mut words = 0usize;
+    let mut in_word = false;
+    for c in text.chars() {
+        if c.is_whitespace() {
+            in_word = false;
+            continue;
+        }
+        if is_cjk_block(c) {
+            // Ideogramma/sillaba = una parola; punteggiatura CJK = separatore
+            // che non conta ma interrompe comunque la parola latina in corso.
+            if c.is_alphabetic() || is_cjk_symbol(c) {
+                words += 1;
+            }
+            in_word = false;
+            continue;
+        }
+        if !in_word {
+            words += 1;
+            in_word = true;
+        }
+    }
+    words
+}
+
+fn is_cjk_symbol(c: char) -> bool {
+    matches!(c, '\u{2E80}'..='\u{2EFF}' | '\u{2F00}'..='\u{2FDF}'
+        | '\u{3200}'..='\u{32FF}' | '\u{3300}'..='\u{33FF}')
+}
+
+/// I blocchi Unicode che contano come CJK per le parole: hiragana/katakana,
+/// ideogrammi unificati ed estensioni, hangul, radicali e compatibilità CJK,
+/// più la punteggiatura CJK (U+3000–U+303F) che fa da separatore.
+///
+/// U+3000 (spazio ideografico) è già `is_whitespace`; il resto di U+3000–U+303F
+/// (、。〃…) non è alfabetico, quindi separa senza contare. I fullwidth latini
+/// (U+FF00–U+FF5F) restano fuori di proposito: sono latini, e si contano a
+/// sequenze come il resto. La kana halfwidth (U+FF66–U+FF9F) è dentro perché è
+/// kana fonetica.
+fn is_cjk_block(c: char) -> bool {
+    matches!(c,
+        '\u{2E80}'..='\u{2EFF}'
+        | '\u{2F00}'..='\u{2FDF}'
+        | '\u{3000}'..='\u{303F}'
+        | '\u{3040}'..='\u{309F}'
+        | '\u{30A0}'..='\u{30FF}'
+        | '\u{3100}'..='\u{312F}'
+        | '\u{3130}'..='\u{318F}'
+        | '\u{3190}'..='\u{319F}'
+        | '\u{31F0}'..='\u{31FF}'
+        | '\u{3200}'..='\u{32FF}'
+        | '\u{3300}'..='\u{33FF}'
+        | '\u{3400}'..='\u{4DBF}'
+        | '\u{4E00}'..='\u{9FFF}'
+        | '\u{AC00}'..='\u{D7AF}'
+        | '\u{A960}'..='\u{A97F}'
+        | '\u{D7B0}'..='\u{D7FF}'
+        | '\u{F900}'..='\u{FAFF}'
+        | '\u{FE30}'..='\u{FE4F}'
+        | '\u{FF66}'..='\u{FF9F}'
+        | '\u{20000}'..='\u{2EBEF}'
+        | '\u{30000}'..='\u{323AF}'
+    )
 }
 
 /// Minuti di lettura, arrotondati per eccesso. Un testo non vuoto non legge mai
@@ -188,19 +268,26 @@ impl ViewProvider for StatsView {
 /// dell'altra.
 fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStats)> {
     let set = selections.as_ref()?;
-    let pieces: Vec<TextStats> = set
-        .texts()
-        .into_iter()
-        .filter(|t| !t.is_empty())
-        .map(count)
-        .collect();
-    let sum = pieces
-        .iter()
-        .fold(TextStats::default(), |acc, s| TextStats {
-            words: acc.words + s.words,
-            chars: acc.chars + s.chars,
-        });
-    (!pieces.is_empty()).then_some((pieces.len(), sum))
+    fn sum<'a>(texts: impl Iterator<Item = &'a str>) -> Option<(usize, TextStats)> {
+        let mut pieces = 0;
+        let mut total = TextStats::default();
+        for text in texts {
+            if text.is_empty() {
+                continue;
+            }
+            let part = count(text);
+            pieces += 1;
+            total.words += part.words;
+            total.chars += part.chars;
+        }
+        (pieces > 0).then_some((pieces, total))
+    }
+    match set {
+        SelectionSet::Anchored(s) => sum(std::iter::once(s.primary.text.as_str())
+            .chain(s.secondary.iter().map(|part| part.text.as_str()))),
+        SelectionSet::Floating(s) => sum(std::iter::once(s.primary.text.as_str())
+            .chain(s.secondary.iter().map(|part| part.text.as_str()))),
+    }
 }
 
 /// Costruisce l'albero della view. Separato dal provider perché è pura
@@ -371,6 +458,31 @@ mod tests {
         );
         assert_eq!(count(""), TextStats::default());
         assert_eq!(count("   \n  ").words, 0);
+    }
+
+    #[test]
+    fn counts_cjk_without_spaces_one_word_per_ideograph() {
+        // Lingue senza spazi: ogni ideogramma/sillaba vale una parola, la
+        // punteggiatura CJK separa senza contare. Il latino resta a sequenze.
+        assert_eq!(count("日本語").words, 3);
+        assert_eq!(count("日本語 テスト").words, 6);
+        assert_eq!(count("ciao日本").words, 3);
+        assert_eq!(count("、。").words, 0);
+        assert_eq!(count("日　本").words, 2);
+        assert_eq!(count("ｱｲｳ").words, 3);
+        assert_eq!(count("日本語").chars, 3);
+    }
+
+    #[test]
+    fn multilingual_boundaries_count_glyphs_once() {
+        assert_eq!(count("hi日、ガｱ㊀㌀⺀ힰ𱍐 there").words, 10);
+        assert_eq!(count("abc。def").words, 2);
+        assert_eq!(
+            count("ガ").words,
+            1,
+            "combining dakuten is not another syllable"
+        );
+        assert_eq!(count("ＡＢ").words, 1, "fullwidth Latin stays a sequence");
     }
 
     #[test]

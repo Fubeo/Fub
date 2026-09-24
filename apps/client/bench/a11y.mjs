@@ -166,6 +166,7 @@ async function inspectSemantics(page) {
       if (tag === "button" || tag === "summary") return "button";
       if (tag === "select") return el.multiple ? "listbox" : "combobox";
       if (tag === "textarea") return "textbox";
+      if (tag === "table") return "table";
       if (tag === "input") {
         const type = (el.getAttribute("type") ?? "text").toLowerCase();
         if (["submit", "reset", "button", "image", "file"].includes(type)) return "button";
@@ -311,7 +312,9 @@ async function inspectSemantics(page) {
 /// prodotta da Invio/Spazio. I click vengono fermati in cattura: si osserva
 /// l'evento browser senza aprire modali, cambiare note o mutare la scena.
 async function inspectKeyboard(page) {
-  const candidates = await page.evaluate(() => {
+  const refreshProbes = () => page.evaluate(async () => {
+    // Lo scroll può montare o smontare controlli virtualizzati.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const hidden = (el) => {
       if (!el.checkVisibility()) return true;
       for (let n = el; n; n = n.parentElement) {
@@ -351,40 +354,6 @@ async function inspectKeyboard(page) {
       link: el.tagName === "A" && el.hasAttribute("href"),
     }));
   });
-  // Le superfici dei riquadri possono ridisegnare le tab quando ricevono il
-  // fuoco. Riassegnare i marcatori sulla DOM corrente evita di confondere una
-  // sostituzione lecita del nodo con una perdita del fuoco.
-  const refreshProbes = () => page.evaluate(() => {
-    const hidden = (el) => {
-      if (!el.checkVisibility()) return true;
-      for (let n = el; n; n = n.parentElement) {
-        if (n.hidden || n.inert || n.getAttribute("aria-hidden") === "true") return true;
-        const style = getComputedStyle(n);
-        if (style.display === "none" || style.visibility === "hidden") return true;
-      }
-      const rect = el.getBoundingClientRect();
-      return rect.width === 0 || rect.height === 0;
-    };
-    const modal = [...document.querySelectorAll("[aria-modal=\"true\"], [role=\"menu\"]")]
-      .filter((el) => !hidden(el))
-      .at(-1);
-    const scope = modal ?? document;
-    const nodes = [...scope.querySelectorAll("*")].filter(
-      (el) => !hidden(el) && !el.matches(":disabled") && el.tabIndex >= 0,
-    );
-    const ordered = nodes
-      .map((el, index) => ({ el, index, tabIndex: el.tabIndex }))
-      .sort((a, b) => {
-        const ap = a.tabIndex > 0;
-        const bp = b.tabIndex > 0;
-        if (ap !== bp) return ap ? -1 : 1;
-        if (ap && a.tabIndex !== b.tabIndex) return a.tabIndex - b.tabIndex;
-        return a.index - b.index;
-      });
-    ordered.forEach(({ el }, index) => {
-      el.dataset.a11yProbe = String(index);
-    });
-  });
   const failures = [];
 
   try {
@@ -401,6 +370,17 @@ async function inspectKeyboard(page) {
       body.focus({ preventScroll: true });
       if (previousTabIndex === null) body.removeAttribute("tabindex");
       else body.setAttribute("tabindex", previousTabIndex);
+    });
+    await page.evaluate(() => {
+      window.__a11yKeyboardProbe = { active: false, target: null, clicks: 0 };
+      window.__a11yKeyboardListener = (event) => {
+        const probe = window.__a11yKeyboardProbe;
+        if (!probe?.active || event.target !== probe.target) return;
+        probe.clicks += 1;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      };
+      document.addEventListener("click", window.__a11yKeyboardListener, true);
     });
     // Un composito (la griglia: una sola fermata del Tab, il discendente
     // attivo avanza dentro con `aria-activedescendant`) trattiene il fuoco
@@ -457,10 +437,19 @@ async function inspectKeyboard(page) {
           composite: el.getAttribute("role") === "grid" && descendant !== null,
         };
       });
-    for (const expected of candidates) {
+    let candidates = await refreshProbes();
+    for (let index = 0, visited = 0; index < candidates.length; visited += 1) {
+      if (visited >= 10_000) {
+        failures.push({ source: "browser", rule: "tab-order", where: "document", reason: "Il percorso Tab non termina" });
+        break;
+      }
+      const expected = candidates[index];
       await page.keyboard.press("Tab");
-      await refreshProbes();
       let actual = await readActual();
+      if (actual?.probe === null) {
+        await refreshProbes();
+        actual = await readActual();
+      }
       if (
         actual?.composite &&
         actual.probe !== expected.probe &&
@@ -489,26 +478,9 @@ async function inspectKeyboard(page) {
           reason: "il fuoco da tastiera non ha un indicatore visibile",
         });
       }
-      previousProbe = actual.probe;
-      previousDescendant = actual.descendant;
-    }
-
-    await page.evaluate(() => {
-      window.__a11yKeyboardProbe = { active: false, target: null, clicks: 0 };
-      window.__a11yKeyboardListener = (event) => {
-        const probe = window.__a11yKeyboardProbe;
-        if (!probe?.active || event.target !== probe.target) return;
-        probe.clicks += 1;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      };
-      document.addEventListener("click", window.__a11yKeyboardListener, true);
-    });
-    for (const candidate of candidates) {
+      const candidate = expected;
       const keys = candidate.link ? ["Enter"] : candidate.command ? ["Enter", "Space"] : [];
-      if (!keys.length) continue;
       for (const key of keys) {
-        await refreshProbes();
         await page.evaluate((probe) => {
           const target = document.querySelector(`[data-a11y-probe="${probe}"]`);
           if (!(target instanceof HTMLElement)) return;
@@ -545,6 +517,15 @@ async function inspectKeyboard(page) {
           });
         }
       }
+      candidates = await refreshProbes();
+      const focused = await readActual();
+      if (focused?.probe == null) {
+        failures.push({ source: "browser", rule: "keyboard-focus", where: "document", reason: "Il controllo perde il fuoco dopo l'attivazione" });
+        break;
+      }
+      previousProbe = focused.probe;
+      previousDescendant = focused.descendant;
+      index = Number(focused.probe) + 1;
     }
   } finally {
     await page.evaluate(() => {

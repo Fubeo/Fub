@@ -79,6 +79,10 @@ import type {
   PluginError,
   PluginErrorKind,
 } from "./contract";
+import type {
+  ConfigFileKind, ConfigReport, ConfigStatus, DemoClosed, DemoOpened, DiagnosticSummary,
+  ExportConsent, RecoverAction, RecoverOutcome, SupportPreview,
+} from "./ipc";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
 // `crates/fub-features/tests/ts_mirror.rs` (tipi del contratto) e
 // `crates/fub-app/tests/ts_mirror_app.rs` (tipi dell'app).
@@ -430,6 +434,7 @@ function touchIndexQuery(q: IndexQuery): void {
     case "render_preview":
     case "render_embed":
     case "syntax_forms":
+    case "render_print":
       return;
     default:
       assertNever(q);
@@ -473,6 +478,10 @@ function touchQueryExpr(e: QueryExpr): void {
         case "linked":
         case "docs":
         case "custom":
+        case "regex":
+        case "task":
+        case "path":
+        case "file":
           continue;
         default:
           assertNever(p);
@@ -521,6 +530,7 @@ function touchIndexResult(r: IndexResult): void {
     case "render_preview":
     case "render_embed":
     case "syntax_forms":
+    case "render_print":
       return;
     default:
       assertNever(r);
@@ -797,26 +807,13 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     trust: true,
     permissions: true,
   }),
-  ThemeInfo: keysOf<ThemeInfo>({ manifest: true }),
+  ThemeInfo: keysOf<ThemeInfo>({ manifest: true, trust: true }),
   ThemePayload: keysOf<ThemePayload>({
     manifest: true,
     light: true,
     sheet: true,
     skin: true,
     assets: true,
-  }),
-  InstalledPluginInfo: keysOf<InstalledPluginInfo>({
-    id: true,
-    name: true,
-    mounted: true,
-    kind: true,
-    trust: true,
-    permissions: true,
-    installation: true,
-    version: true,
-    enabled: true,
-    consent: true,
-    runtime_known: true,
   }),
   // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
   // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
@@ -830,7 +827,74 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     last_opened: true,
     keys_seen: true,
   }),
+  DemoOpened: keysOf<DemoOpened>({ root: true, previous: true }),
+  DemoClosed: keysOf<DemoClosed>({ errors: true, current: true }),
+  DiagnosticSummary: keysOf<DiagnosticSummary>({ kind: true, help: true }),
+  VaultSummary: keysOf<NonNullable<SupportPreview["vault"]>>({
+    root: true, watching: true, startup_diagnostics: true,
+  }),
+  MachineSummary: keysOf<SupportPreview["machine"]>({
+    settings_keys: true, known_vaults: true, log_path: true,
+  }),
+  SupportPreview: keysOf<SupportPreview>({
+    v: true, at: true, fub: true, vault: true, machine: true, log_tail: true, note: true,
+  }),
+  ExportConsent: keysOf<ExportConsent>({
+    acknowledged_preview: true, include_log: true, destination: true,
+  }),
+  ConfigReport: keysOf<ConfigReport>({ kind: true, path: true, status: true }),
+  RecoverOutcome: keysOf<RecoverOutcome>({ backup: true, detail: true, restart_required: true }),
 };
+const APP_OPTIONAL_KEYS = {
+  InstalledPluginInfo: {
+    all: keysOf<InstalledPluginInfo>({
+      id: true, name: true, mounted: true, kind: true, trust: true,
+      permissions: true, installation: true, version: true, enabled: true,
+      consent: true, runtime_known: true, catalog: true, revoked: true,
+      revocation: true,
+    }),
+    required: [
+      "id", "name", "mounted", "kind", "trust", "permissions",
+      "installation", "version", "enabled", "consent", "runtime_known", "revoked",
+    ],
+  },
+};
+
+function touchConfigFileKind(kind: ConfigFileKind): void {
+  switch (kind) {
+    case "machine_settings": case "vault_registry": case "view_state": return;
+    default: return assertNever(kind);
+  }
+}
+
+function touchConfigStatus(status: ConfigStatus): void {
+  switch (status.kind) {
+    case "healthy": case "missing": return;
+    case "unreadable":
+      expect(status.reason).toBeTypeOf("string");
+      return;
+    case "future_version":
+      expect(status.found).toBeTypeOf("string");
+      expect(status.supported).toBeTypeOf("number");
+      return;
+    default: return assertNever(status);
+  }
+}
+
+function touchRecoverAction(action: RecoverAction): void {
+  if (typeof action === "string") {
+    switch (action) {
+      case "backup_only": case "reset_empty": return;
+      default: return assertNever(action);
+    }
+  }
+  if ("restore_backup" in action) {
+    expect(Object.keys(action).sort()).toEqual(["restore_backup"]);
+    expect(Object.keys(action.restore_backup).sort()).toEqual(["backup"]);
+    return;
+  }
+  return assertNever(action);
+}
 
 describe("mirror TS↔Rust", () => {
   it("la fixture copre tutti i tipi mirrorati, e nessuno è vuoto", () => {
@@ -867,7 +931,11 @@ describe("mirror TS↔Rust", () => {
       expect(fixture[type], `manca il type ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
-    for (const type of Object.keys(APP_RECORD_KEYS)) {
+    for (const type of [...Object.keys(APP_RECORD_KEYS), ...Object.keys(APP_OPTIONAL_KEYS)]) {
+      expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
+      expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
+    }
+    for (const type of ["ConfigFileKind", "ConfigStatus", "RecoverAction"]) {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
@@ -1054,6 +1122,47 @@ describe("mirror TS↔Rust", () => {
       for (const sample of appFixture[type]) {
         expect(Object.keys(sample as object).sort()).toEqual(keys);
       }
+    }
+    for (const [type, { all, required }] of Object.entries(APP_OPTIONAL_KEYS)) {
+      for (const sample of appFixture[type]) {
+        const keys = Object.keys(sample as object);
+        for (const key of keys) expect(all, `${type}.${key} not in TS mirror`).toContain(key);
+        for (const key of required) expect(keys, `${type}.${key} missing`).toContain(key);
+      }
+    }
+  });
+
+  it("il supporto serializzato conserva azioni, versioni future e campi sensibili tipizzati", () => {
+    for (const kind of appFixture.ConfigFileKind as ConfigFileKind[]) touchConfigFileKind(kind);
+    for (const action of appFixture.RecoverAction as RecoverAction[]) touchRecoverAction(action);
+    const fields: Record<ConfigStatus["kind"], string[]> = {
+      healthy: keysOf<Extract<ConfigStatus, { kind: "healthy" }>>({ kind: true }),
+      missing: keysOf<Extract<ConfigStatus, { kind: "missing" }>>({ kind: true }),
+      unreadable: keysOf<Extract<ConfigStatus, { kind: "unreadable" }>>({
+        kind: true, reason: true,
+      }),
+      future_version: keysOf<Extract<ConfigStatus, { kind: "future_version" }>>({
+        kind: true, found: true, supported: true,
+      }),
+    };
+    const statuses = appFixture.ConfigStatus as ConfigStatus[];
+    for (const status of statuses) {
+      touchConfigStatus(status);
+      expect(Object.keys(status).sort()).toEqual(fields[status.kind]);
+    }
+    expect(new Set(statuses.map(status => status.kind))).toEqual(new Set(Object.keys(fields)));
+    const future = statuses.find(status => status.kind === "future_version");
+    expect(future?.kind).toBe("future_version");
+    if (future?.kind === "future_version") {
+      expect(future.found).toBe("9007199254740993");
+      expect(BigInt(future.found)).toBeGreaterThan(BigInt(Number.MAX_SAFE_INTEGER));
+    }
+    for (const sample of appFixture.SupportPreview as SupportPreview[]) {
+      expect(sample.vault?.startup_diagnostics.every(summary =>
+        summary.kind === "cancelled" && summary.help === "help.cancelled"
+          && Object.keys(summary).sort().join(",") === "help,kind",
+      )).toBe(true);
+      expect(sample.machine.settings_keys.every(key => typeof key === "string")).toBe(true);
     }
   });
 

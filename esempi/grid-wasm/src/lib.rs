@@ -226,7 +226,7 @@ impl PluginGuest for Component {
             id: PLUGIN_ID.to_owned(),
             name: "Canonical grid component".to_owned(),
             version: "0.1.0".to_owned(),
-            abi_version: "0.1.1".to_owned(),
+            abi_version: "0.2.0".to_owned(),
             permissions: PluginPermissions { granted: vec![] },
             provides: vec!["example.grid:grid".to_owned()],
             requires: vec![],

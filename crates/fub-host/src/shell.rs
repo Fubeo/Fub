@@ -59,6 +59,9 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.vault.open", Some("Mod-Shift-o")),
     ("shell.palette", Some("Mod-Shift-p")),
     ("shell.panel.files", Some("Mod-Shift-e")),
+    // Mostra nell'albero il documento attivo. **Senza accordo**: è un gesto di
+    // orientamento raro, e `Mod-Shift-e` porta già l'albero sotto gli occhi.
+    ("shell.explorer.reveal", None),
     // L'accordo che era conteso. Lo tiene la shell: qui il gesto è completo —
     // si preme e la ricerca è sotto gli occhi — mentre di là serviva compilare
     // un parametro obbligatorio prima di vedere qualcosa (0081).
@@ -87,6 +90,27 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // per sbaglio sceglierebbe al posto suo.
     ("shell.doc.conflict.mine", None),
     ("shell.doc.conflict.theirs", None),
+    ("shell.tab.pin", None),
+    ("shell.tab.unpin", None),
+    ("shell.tab.move.left", None),
+    ("shell.tab.move.right", None),
+    ("shell.tab.close.others", None),
+    ("shell.tab.close.unpinned", None),
+    ("shell.pane.back", None),
+    ("shell.pane.forward", None),
+    ("shell.pane.link", None),
+    ("shell.pane.unlink", None),
+    ("shell.bookmarks.toggle", None),
+    ("shell.bookmarks.save", None),
+    ("shell.bookmarks.open", None),
+    ("shell.bookmarks.group", None),
+    ("shell.workspace.save", None),
+    ("shell.workspace.load", None),
+    ("shell.workspace.update", None),
+    ("shell.workspace.rename", None),
+    ("shell.workspace.delete", None),
+    ("shell.preview.show", None),
+    ("shell.preview.hide", None),
 ];
 
 /// Le impostazioni `keys.shell.*`, una per comando di shell (§16.3).

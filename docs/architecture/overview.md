@@ -35,6 +35,11 @@ flowchart TD
     features["fub-features"]
     markdown["fub-format-markdown"]
     sheet["fub-format-sheet"]
+    base["fub-format-base"]
+    canvas["fub-format-canvas"]
+    importers["fub-importers"]
+    cli["fub-cli"]
+    services["fub-services"]
     wasmhost["fub-wasm-host"]
     sdk["fub-sdk"]
     testkit["fub-testkit"]
@@ -46,11 +51,24 @@ flowchart TD
     app --> kernel
     app --> wasmhost
     host --> abi
+    host --> base
+    host --> canvas
     host --> features
+    host --> importers
     host --> markdown
     host --> sheet
     host --> kernel
+    cli --> abi
+    cli --> host
+    services --> abi
+    base --> abi
+    canvas --> abi
+    canvas --> markdown
+    importers --> abi
+    importers --> markdown
     features --> abi
+    features --> base
+    features --> markdown
     markdown --> abi
     markdown --> sdk
     wasmhost --> abi
@@ -62,13 +80,14 @@ flowchart TD
     testkit --> kernel
 
     features -.-> kernel
-    features -.-> markdown
     features -.-> sdk
     features -.-> testkit
     markdown -.-> kernel
     kernel -.-> testkit
+    host -.-> sdk
     host -.-> testkit
     wasmhost -.-> testkit
+    importers -.-> sdk
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso

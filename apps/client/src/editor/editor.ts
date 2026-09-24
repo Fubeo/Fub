@@ -1,11 +1,23 @@
-// Compatibilità per l'editor Markdown corrente: la meccanica vive in
-// `TextEngine`, mentre qui resta soltanto la configurazione del profilo.
+// La superficie Markdown: una scrittura e una lettura sullo stesso buffer,
+// senza salvataggi per cambiare modo.
+//
+// Il `TextEngine` resta l'unico proprietario di testo, selezione e cronologia:
+// qui si decide soltanto cosa si vede — sorgente, resa inline o documento
+// reso — e la lettura si rimonta dal buffer corrente a ogni cambio che la
+// riguarda. La vista di scrittura non si ricrea mai al cambio di modo.
 import { currentTheme as getCurrentTheme, type Theme } from "../theme/theme";
 import { createMarkdownProfile } from "../editors/text/profiles/markdown/profile";
+import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import type { CompletionSources } from "./completions";
 import { createTextEngine } from "../editors/text/engine";
 import type { DocumentUpdate, EditorChange, EditorSelections } from "../editors/text/engine";
 import type { SyntaxForm } from "../host/contract";
+import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../rules/offsets";
+import { taskChecked } from "../rules/mirrored";
+import { mountMarkdown, sourceElementAt } from "../ui/markdown";
+import { acquireMarkdownResources } from "../ui/markdown-resources";
+import { openLifetime } from "../ui/lifetime";
+import { closeSlashPalette, openSlashPalette } from "../ui/palette";
 
 export type {
   DocumentUpdate,
@@ -14,6 +26,14 @@ export type {
   EditorRange,
   EditorSelections,
 } from "../editors/text/engine";
+
+/// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
+/// scrivono nella stessa vista; `reading` la nasconde e mostra il reso.
+export type MarkdownMode = "source" | "live_preview" | "reading";
+/// Le sole capacità di shell necessarie alla palette slash.
+export type EditorSlashHost = Parameters<typeof openSlashPalette>[3] & {
+  currentDoc(): string | null;
+};
 
 export interface Editor {
   /// Aggiorna la dichiarazione sintattica letta dal canale runtime.
@@ -30,9 +50,12 @@ export interface Editor {
   revealByteOffset(byteOffset: number): void;
   /// Le selezioni correnti in byte UTF-8.
   selections(): EditorSelections;
-  /// Accende o spegne la resa inline.
-  setLivePreview(on: boolean): void;
-  /// Accende o spegne il blocco degli input utente senza ricostruire la vista.
+  /// Inserisce testo al cursore come battuta dell'utente (undo, sessione,
+  /// conversione CRLF/offset interne al motore). Ritorna false se sola
+  /// lettura, smontato o intervallo invalido.
+  insertAtCursor(text: string): boolean;
+  /// Cambia modo sul buffer corrente, senza ricreare la vista di scrittura.
+  setMode(mode: MarkdownMode): void;
   setReadOnly(readOnly: boolean): void;
   /// Smonta l'editor e rilascia la vista e i suoi ascoltatori.
   destroy(): void;
@@ -45,49 +68,291 @@ export interface EditorOptions {
   onChange(change: EditorChange): void;
   /// Invocato quando cambia la selezione.
   onSelectionChange(): void;
-  /// Mod-click su un wikilink nella vivi preview.
-  onOpenWikilink(page: string, heading: string | null, block: string | null): void;
-  /// Click su un `#tag` nella vivi preview.
+  /// Click su un wikilink nella resa.
+  onOpenWikilink(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  onOpenPath(path: string, from?: string): void | Promise<void>;
+  /// Click su un `#tag` nella resa.
   onSearchTag(tag: string): void;
+  /// Il documento reso, per gli embed: arriva dal contesto di montaggio.
+  documentId?: string;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
+  /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
+  slash?: EditorSlashHost;
 }
+
 
 /// Costruisce l'adapter compatibile con i chiamanti esistenti.
 export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
+  const resources = opts.documentId ? acquireMarkdownResources(opts.documentId) : undefined;
+  const openWikilink = (page: string, heading?: string | null, block?: string | null) =>
+    opts.onOpenWikilink(page, heading ?? null, block ?? null);
   const profile = createMarkdownProfile({
     callbacks: {
-      openWikilink: opts.onOpenWikilink,
+      openWikilink,
       searchTag: opts.onSearchTag,
+      mountRendered: (container, html, actions) => mountMarkdown(container, html, {
+        ...actions,
+        get documentId() { return resources?.documentId ?? opts.documentId; },
+        resources,
+        openWikilink,
+        openPath: opts.onOpenPath,
+        searchTag: opts.onSearchTag,
+        toggleTask: readOnly ? undefined : actions.toggleTask,
+      }),
     },
     completions: opts.completions,
   });
+  let mode: MarkdownMode = "live_preview";
+  let forms: readonly SyntaxForm[] | undefined;
+  let readOnly = false;
+  let unmountReading: (() => void) | null = null;
+  const life = openLifetime();
+  life.listen(parent, "keydown", (event) => {
+    const slash = opts.slash;
+    if (
+      !slash || event.key !== "/" || event.defaultPrevented || event.isComposing ||
+      event.altKey || event.ctrlKey || event.metaKey || readOnly || mode === "reading" ||
+      !(event.target instanceof Element) || !event.target.closest(".cm-content")
+    ) return;
+    const doc = opts.documentId;
+    if (doc && slash.currentDoc() !== doc) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const text = engine.getDoc();
+    void openSlashPalette(
+      parent,
+      engine.selections().primary.text,
+      () => !life.closed && parent.isConnected && engine.getDoc() === text &&
+        (!doc || slash.currentDoc() === doc),
+      slash,
+    );
+  }, { capture: true });
+
   const engine = createTextEngine(parent, {
-    onChange: opts.onChange,
-    onSelectionChange: opts.onSelectionChange,
+    onChange: (change) => {
+      closeSlashPalette(parent);
+      opts.onChange(change);
+      // Una modifica locale in lettura (il task cliccato, un undo da
+      // scorciatoia) ridisegna la resa dal buffer corrente.
+      if (mode === "reading") renderReading();
+    },
+    onSelectionChange: () => {
+      closeSlashPalette(parent);
+      opts.onSelectionChange();
+    },
     theme: getCurrentTheme(),
     extensions: () => profile.extensions(),
   });
 
-  return {
-    setSyntaxForms(forms) {
-      profile.setSyntaxForms(forms);
+  const reading = document.createElement("div");
+  reading.className = "pane-preview markdown-preview markdown-rendered";
+  reading.tabIndex = 0;
+  reading.setAttribute("role", "document");
+  parent.append(reading);
+  parent.dataset.markdownMode = mode;
+
+  // Reading owns browser selection; only history commands reach the hidden editor.
+  life.listen(reading, "keydown", (event) => {
+    if (event.defaultPrevented || (!event.ctrlKey && !event.metaKey) || event.altKey) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("[data-ui-slot], input:not([type=checkbox]), textarea, [contenteditable=true]")) return;
+    const key = event.key.toLowerCase();
+    if (key === "z" || key === "y") {
+      event.preventDefault();
+      if (!readOnly) {
+        if (key === "y" || event.shiftKey) engine.redo();
+        else engine.undo();
+      }
+    } else if (key === "a" && !event.shiftKey) {
+      event.preventDefault();
+      const selection = window.getSelection();
+      if (!selection) return;
+      const range = document.createRange();
+      range.selectNodeContents(reading);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  });
+
+  /// Il primo blocco visibile della lettura e la sua distanza dalla cima:
+  /// l'ancoraggio che conserva la posizione al ridisegno.
+  function captureReadingAnchor(): { from: number; top: number } | null {
+    const rect = reading.getBoundingClientRect();
+    for (const element of reading.querySelectorAll<HTMLElement>("[data-md-from]")) {
+      // Transclusions and provider components own another coordinate space.
+      if (element.parentElement?.closest(".embed-loaded") || element.closest("[data-ui-slot]")) continue;
+      if (!/^\d+$/.test(element.dataset.mdFrom ?? "")) continue;
+      const box = element.getBoundingClientRect();
+      if (box.bottom > rect.top) {
+        return { from: Number(element.dataset.mdFrom), top: box.top - rect.top };
+      }
+    }
+    return null;
+  }
+
+  function scrollReadingTo(from: number, top: number): void {
+    const element = sourceElementAt(reading, from);
+    if (!element) return;
+    element.scrollIntoView({ block: "start" });
+    if (!Number.isFinite(top)) return;
+    try {
+      const rect = reading.getBoundingClientRect();
+      const box = element.getBoundingClientRect();
+      reading.scrollTop += box.top - rect.top - top;
+    } catch {
+      // La misura è decorativa: l'ancoraggio per blocco è già a posto.
+    }
+  }
+
+  /// Scrive il simbolo dentro `[ ]`/`[x]`: solo quel carattere, solo se il
+  /// buffer ha ancora una casella lì. Resta una battuta come le altre —
+  /// annullabile e diffusa alla sessione.
+  function toggleTaskAt(symbolOffset: number): void {
+    if (readOnly) return;
+    const text = normalizeLineBreaks(engine.getDoc());
+    if (!Number.isSafeInteger(symbolOffset) || symbolOffset < 0 || symbolOffset >= text.length) {
+      return;
+    }
+    if (!/^\[[^\]\r\n]\]$/u.test(text.slice(symbolOffset - 1, symbolOffset + 2))) return;
+    const symbol = text[symbolOffset] ?? "";
+    engine.applyUserEdit(
+      symbolOffset,
+      symbolOffset + 1,
+      taskChecked(symbol) ? " " : "x",
+    );
+    reading.focus({ preventScroll: true });
+  }
+
+
+  /// Rimonta la lettura dal buffer corrente. Chi chiama conserva la
+  /// posizione; qui si ridisegna e basta.
+  function renderReading(): void {
+    const text = normalizeLineBreaks(engine.getDoc());
+    const anchor = captureReadingAnchor();
+    unmountReading?.();
+    unmountReading = mountMarkdown(reading, renderMarkdown(text, forms).html, {
+      get documentId() { return resources?.documentId ?? opts.documentId; },
+      resources,
+      openWikilink,
+      openPath: opts.onOpenPath,
+      searchTag: opts.onSearchTag,
+      // In sola lettura vera le caselle risultano disabilitate, così la
+      // superficie non sembra interattiva mentre la cancellazione è sospesa.
+      toggleTask: readOnly ? undefined : toggleTaskAt,
+    });
+    if (anchor) scrollReadingTo(anchor.from, anchor.top);
+  }
+
+
+  function setMode(next: MarkdownMode): void {
+    closeSlashPalette(parent);
+    if (next === mode) return;
+    const previous = mode;
+    if (previous !== "reading" && next === "reading") {
+      const anchor = engine.getScrollAnchor();
+      mode = next;
+      parent.dataset.markdownMode = next;
+      profile.setLivePreview(false);
       engine.reconfigure();
+      renderReading();
+      scrollReadingTo(anchor.offset, anchor.top);
+      return;
+    }
+    if (previous === "reading" && next !== "reading") {
+      const anchor = captureReadingAnchor();
+      mode = next;
+      parent.dataset.markdownMode = next;
+      unmountReading?.();
+      unmountReading = null;
+      profile.setLivePreview(next === "live_preview");
+      engine.reconfigure();
+      // La selezione di scrittura non si è mai mossa: la lettura non la
+      // tocca, e qui si rimette solo la vista dov'era.
+      if (anchor) {
+        engine.restoreScrollAnchor({
+          offset: anchor.from,
+          top: anchor.top,
+        });
+      }
+      return;
+    }
+    const anchor = engine.getScrollAnchor();
+    mode = next;
+    parent.dataset.markdownMode = next;
+    profile.setLivePreview(next === "live_preview");
+    engine.reconfigure();
+    engine.restoreScrollAnchor(anchor);
+  }
+
+  function syncReading(): void {
+    if (mode !== "reading") return;
+    renderReading();
+  }
+
+  return {
+    setSyntaxForms(next) {
+      if (forms !== undefined && forms !== next) resources?.invalidate();
+      forms = next;
+      profile.setSyntaxForms(next);
+      engine.reconfigure();
+      syncReading();
     },
-    setDoc: (text) => engine.setDoc(text),
-    syncDoc: (update) => engine.syncDoc(update),
+    setDoc: (text) => {
+      closeSlashPalette(parent);
+      engine.setDoc(text);
+      syncReading();
+    },
+    syncDoc: (update) => {
+      closeSlashPalette(parent);
+      // La sincronizzazione esterna in lettura conserva il punto: l'ancoraggio
+      // si cattura sul testo di prima e si rimette dopo il ridisegno.
+      const anchor = mode === "reading" ? captureReadingAnchor() : null;
+      engine.syncDoc(update);
+      if (mode !== "reading") return;
+      renderReading();
+      if (anchor) scrollReadingTo(anchor.from, anchor.top);
+    },
     undo: () => engine.undo(),
     redo: () => engine.redo(),
     getDoc: () => engine.getDoc(),
-    focus: () => engine.focus(),
-    revealByteOffset: (byteOffset) => engine.revealByteOffset(byteOffset),
-    selections: () => engine.selections(),
-    setLivePreview(on) {
-      profile.setLivePreview(on);
-      engine.reconfigure();
+    focus: () => {
+      if (mode === "reading") reading.focus();
+      else engine.focus();
     },
-    setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
-    destroy: () => engine.destroy(),
+    revealByteOffset: (byteOffset) => {
+      // In lettura la selezione di scrittura non si tocca: scorre il DOM reso,
+      // convertendo i byte UTF-8 del testo originale nell'offset UTF-16 del
+      // normalizzato LF. Le selezioni native della lettura non diventano mai
+      // contesto di scrittura.
+      if (mode === "reading") {
+        const original = engine.getDoc();
+        const normalized = byteToNormalizedCharIndices(original, [byteOffset])[0];
+        sourceElementAt(reading, normalized)?.scrollIntoView({ block: "start" });
+        return;
+      }
+      engine.revealByteOffset(byteOffset);
+    },
+    selections: () => engine.selections(),
+    insertAtCursor: (text) => engine.insertAtCursor(text),
+    setMode,
+    setReadOnly: (value) => {
+      closeSlashPalette(parent);
+      readOnly = value;
+      engine.setReadOnly(value);
+      // Senza callback le caselle risultano disabilitate.
+      syncReading();
+    },
+    destroy: () => {
+      closeSlashPalette(parent);
+      life.close();
+      unmountReading?.();
+      unmountReading = null;
+      reading.remove();
+      engine.destroy();
+      resources?.release();
+      delete parent.dataset.markdownMode;
+    },
     setTheme: (theme) => engine.setTheme(theme),
   };
 }

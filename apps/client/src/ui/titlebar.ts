@@ -73,14 +73,10 @@ export function mountTitlebar(lifetime: Lifetime): void {
     void window.close();
   });
 
-  // Doppio click sulla barra (non sui controlli): alterna la massimizzazione.
-  // I controlli fermano la propagazione sopra, quindi un doppio click su di
-  // essi non arriva qui — ed è ciò che si vuole: chi clicca il bottone vuole
-  // il bottone.
-  topbar.addEventListener("dblclick", (e) => {
-    if (e.target instanceof HTMLElement && e.target.closest("button")) return;
-    void window.toggleMaximize();
-  });
+  // Il doppio click lo gestisce Tauri (`drag.js`: `internal_toggle_maximize`
+  // sulle drag-region): un listener JS qui chiamerebbe `toggleMaximize` una
+  // seconda volta, annullando il maximize nativo. I controlli fermano la
+  // propagazione sopra, come prima.
 
   // L'icona del max segue lo stato. La si ridisegna adesso e a ogni cambio:
   // un'icona vecchia direbbe «premi per ingrandire» quando la finestra è già

@@ -33,14 +33,15 @@ default = [
     "graph",
     "commands",
     "blocks",
+    "base",
 ]
-search = ["dep:tantivy"]
+search = ["dep:tantivy", "dep:regex"]
 versioning = []
 backlinks = []
-outline = []
+outline = ["dep:fub-format-markdown"]
 tags = []
 properties = ["dep:serde_yaml_ng"]
-template = []
+template = ["dep:serde_yaml_ng", "dep:jiff"]
 queries = []
 dashboard = []
 backup = []
@@ -55,18 +56,23 @@ trash = ["commands"]
 graph = []
 commands = []
 blocks = []
+base = ["dep:fub-format-base"]
 
 [dependencies]
 camino.workspace = true
 fub-abi = { workspace = true }
 serde = { workspace = true }
+fub-format-base = { workspace = true, optional = true }
+fub-format-markdown = { workspace = true, optional = true }
 serde_json = { workspace = true }
 # Dietro `properties`: stessa crate/versione del provider markdown, usata solo
 # per riscrivere la mappa del frontmatter (mai `FormatProvider::serialize`).
 serde_yaml_ng = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true }
 # Opzionale, e dietro `search`: è l'unica dipendenza pesante del crate ed è di
 # una feature sola.
 tantivy = { version = "0.26", optional = true }
+regex = { workspace = true, optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.

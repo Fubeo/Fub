@@ -21,12 +21,12 @@ use fub_abi::edit::WriteBase;
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, LinkRewrite, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fub_abi::options::syntax;
 use fub_abi::traits::{EventHandler, HostApi, JobSpec};
-use fub_abi::FormatProvider;
+use fub_abi::{FormatProvider, TextEdit};
 use fub_kernel::{FormatRegistry, Workspace};
 
 struct LinkListProvider;
@@ -92,6 +92,62 @@ impl FormatProvider for LinkListProvider {
 
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
         Ok(model.text.clone())
+    }
+
+    fn rewrite_links(
+        &self,
+        source: &DocumentSource,
+        _ctx: &ParseContext,
+        rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        let source = source.text().ok_or_else(|| FormatError::Unsupported {
+            format: self.descriptor().id,
+            got: source.kind(),
+        })?;
+        let mut edits = Vec::with_capacity(rewrites.len());
+        for rewrite in rewrites {
+            let slice = source
+                .get(rewrite.span.start..rewrite.span.end)
+                .ok_or_else(|| {
+                    FormatError::Parse("rewrite span outside link-list source".into())
+                })?;
+            let edit = match &rewrite.target {
+                LinkTarget::Wiki { .. } => {
+                    if LinkTarget::wiki(slice.trim()) != rewrite.target {
+                        return Err(FormatError::Parse(
+                            "wikilink changed under link-list rewrite".into(),
+                        ));
+                    }
+                    TextEdit::replace(rewrite.span, rewrite.replacement.clone())
+                }
+                LinkTarget::Path(expected) => {
+                    if markdown_dest(slice) != Some(expected.as_str()) {
+                        return Err(FormatError::Parse(
+                            "path link changed under link-list rewrite".into(),
+                        ));
+                    }
+                    let start = slice
+                        .find("](")
+                        .map(|at| at + 2)
+                        .ok_or_else(|| FormatError::Parse("missing path destination".into()))?;
+                    let end = slice
+                        .rfind(')')
+                        .filter(|end| *end >= start)
+                        .ok_or_else(|| FormatError::Parse("missing path terminator".into()))?;
+                    TextEdit::replace(
+                        Span::new(rewrite.span.start + start, rewrite.span.start + end),
+                        rewrite.replacement.clone(),
+                    )
+                }
+                LinkTarget::Url(_) => {
+                    return Err(FormatError::Parse(
+                        "remote URLs are not vault rename targets".into(),
+                    ));
+                }
+            };
+            edits.push(edit);
+        }
+        Ok(Some(edits))
     }
 }
 

@@ -34,6 +34,7 @@ import { registerCustomRenderer, type OnAction } from "../ui/custom";
 import { registerShellCommand } from "../ui/commands";
 import { $ } from "../ui/dom";
 import { on } from "../state/store";
+import type { Lifetime } from "../ui/lifetime";
 import { onLanguage, t } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
@@ -67,12 +68,14 @@ const DOC = "doc";
 interface GraphData {
   nodes: string[];
   edges: { from: string; to: string }[];
+  /** Indexed current last-modification time, not historical graph snapshots. */
+  modified: Record<string, number>;
 }
 
 /// Attacca la metà shell del grafo: il renderer del suo `ns` e il comando che lo
 /// apre.
-export function mountGraph(): void {
-  $("#show-graph").addEventListener("click", () => openGraph());
+export function mountGraph(lifetime: Lifetime): void {
+  lifetime.listen($("#show-graph"), "click", () => openGraph());
 
   // Il grafo come **comando** (§18.2): era un bottone nella barra, e chi non lo
   // trovava con il mouse non lo trovava. L'id e la scorciatoia sono quelli di
@@ -126,15 +129,24 @@ function openDocuments(): Set<string> {
 /// Legge il payload del provider, con la tolleranza che si deve a un dato che
 /// viene da fuori.
 function readData(payload: unknown): GraphData {
-  const o = (payload ?? {}) as Partial<GraphData>;
-  const nodes = Array.isArray(o.nodes) ? o.nodes.filter((n) => typeof n === "string") : [];
+  const o = (payload ?? {}) as { nodes?: unknown; edges?: unknown; modified?: unknown };
+  const nodes = Array.isArray(o.nodes) ? [...new Set(o.nodes.filter((n): n is string => typeof n === "string"))].sort() : [];
+  const rawTimes: Record<string, unknown> = o.modified && typeof o.modified === "object" && !Array.isArray(o.modified)
+    ? o.modified as Record<string, unknown> : {};
+  const modified: Record<string, number> = Object.create(null);
+  for (const id of nodes) {
+    const raw = rawTimes[id];
+    if (typeof raw !== "string" || !/^\d+$/.test(raw)) continue;
+    const value = Number(raw);
+    if (Number.isSafeInteger(value)) modified[id] = value;
+  }
   const edges = Array.isArray(o.edges)
     ? o.edges.filter(
         (e): e is { from: string; to: string } =>
           !!e && typeof e.from === "string" && typeof e.to === "string",
       )
     : [];
-  return { nodes, edges };
+  return { nodes, edges, modified };
 }
 
 /// Costruisce i testi del pannello nella lingua corrente. Le chiavi dei campi
@@ -223,6 +235,10 @@ function panelCopy(): PanelCopy {
 function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): () => void {
   const data = readData(payload);
   const config = loadConfig();
+  const times = [...new Set(Object.values(data.modified))].sort((a, b) => a - b);
+  const visible = new Set(data.nodes);
+  let cutoffIndex = times.length;
+  let playTimer: number | undefined;
   // La superficie locale del grafo: l'host è il riquadro della view, e i
   // canvas del pittore sono absolute inset-0 sul loro contenitore — se quel
   // contenitore fosse l'host, coprirebbero anche stato ed elenco (il click
@@ -233,6 +249,11 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   // testing. Geometria inline e non in pelle: il vocabolario degli hook è
   // chiuso (`theme/serie/anatomia.ts`) e questa è geometria della superficie,
   // come gli stili inline con cui il pittore sovrappone i suoi canvas.
+  const previousStyle = {
+    display: host.style.display,
+    flexDirection: host.style.flexDirection,
+    minHeight: host.style.minHeight,
+  };
   host.style.display = "flex";
   host.style.flexDirection = "column";
   host.style.minHeight = "0";
@@ -256,6 +277,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   const settleEngine = (engine: GraphEngine): void => {
     if (disposed) return;
     const next = engine.createChart({ config, data });
+    next.setVisibleNodes(cutoffIndex === times.length ? null : visible);
     chart = next;
     const created = engine.createPhysicsPanel({
       config,
@@ -348,15 +370,22 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     // del provider, mai un lancio.
     const live = chart;
     const total = live && typeof live.nodeCount === "function" ? live.nodeCount() : data.nodes.length;
-    const pages = Math.max(1, Math.ceil(total / PAGE));
+    const indices: number[] = [];
+    for (let i = 0; i < total; i++) {
+      const id = live && typeof live.nodeId === "function" ? live.nodeId(i) : data.nodes[i];
+      if (id && visible.has(id)) indices.push(i);
+    }
+    const shown = indices.length;
+    const pages = Math.max(1, Math.ceil(shown / PAGE));
     if (page > pages - 1) page = pages - 1;
     if (page < 0) page = 0;
     const start = page * PAGE;
-    const end = Math.min(total, start + PAGE);
+    const end = Math.min(shown, start + PAGE);
     for (const release of listDisposers.splice(0)) release();
     listBox.replaceChildren();
     const selected = live && typeof live.focusedNode === "function" ? live.focusedNode() : -1;
-    for (let i = start; i < end; i++) {
+    for (let position = start; position < end; position++) {
+      const i = indices[position];
       const id = live && typeof live.nodeId === "function" ? live.nodeId(i) : (data.nodes[i] ?? null);
       if (id === null) continue;
       const li = document.createElement("li");
@@ -374,7 +403,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
       li.append(open);
       listBox.append(li);
     }
-    if (total === 0) {
+    if (shown === 0) {
       const li = document.createElement("li");
       li.className = "graph-list-empty";
       li.textContent = testoP8("graph.list.empty");
@@ -409,12 +438,12 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     // Riga "altre": quante restano fuori dalla pagina (U12: mai tacere il
     // totale oltre la finestra), con azione che avanza di una pagina —
     // stesso meccanismo della lista, mai un retry loop nuovo.
-    if (end < total) {
+    if (end < shown) {
       const li = document.createElement("li");
       li.className = "graph-list-more";
       const more = document.createElement("button");
       more.type = "button";
-      more.textContent = testoP8("graph.list.more", "", total - end);
+      more.textContent = testoP8("graph.list.more", "", shown - end);
       trackListButton(more, () => {
         page = Math.min(pages - 1, page + 1);
         drawList();
@@ -440,7 +469,74 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     live.setOpenDocuments(openDocuments());
     live.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
   }
-  host.append(viewport, empty, status, list);
+  // Filter over current indexed last-modification dates, not old graph snapshots.
+  // Keep simulation/layout stable while revealing nodes.
+  const timeline = document.createElement("div");
+  timeline.className = "graph-timeline";
+  timeline.hidden = times.length === 0;
+  const timeLabel = document.createElement("label");
+  const timeInput = document.createElement("input");
+  timeInput.type = "range";
+  timeInput.min = "0";
+  timeInput.max = String(times.length);
+  timeInput.value = String(cutoffIndex);
+  timeLabel.append(timeInput);
+  const timeValue = document.createElement("span");
+  const play = document.createElement("button");
+  play.type = "button";
+  timeline.append(timeLabel, timeValue, play);
+  function timeText(): string {
+    return cutoffIndex === times.length
+      ? t("graph.time.all")
+      : t("graph.time.by", { date: new Date(times[cutoffIndex]).toISOString().slice(0, 10) });
+  }
+  function updateTimeline(): void {
+    visible.clear();
+    const cutoff = cutoffIndex === times.length ? Infinity : times[cutoffIndex];
+    for (const id of data.nodes) {
+      if (data.modified[id] === undefined || data.modified[id] <= cutoff) visible.add(id);
+    }
+    chart?.setVisibleNodes(cutoffIndex === times.length ? null : visible);
+    timeInput.value = String(cutoffIndex);
+    timeValue.textContent = timeText();
+    const edges = data.edges.filter((edge) => visible.has(edge.from) && visible.has(edge.to)).length;
+    count.textContent = t("graph.count", { note: visible.size, edges });
+    empty.hidden = visible.size > 0;
+    drawList();
+  }
+  timeLabel.setAttribute("aria-label", t("graph.time.label"));
+  timeValue.textContent = timeText();
+  play.textContent = t("graph.time.play");
+  const onTimeInput = (): void => {
+    clearInterval(playTimer);
+    playTimer = undefined;
+    play.textContent = t("graph.time.play");
+    cutoffIndex = Number(timeInput.value);
+    updateTimeline();
+  };
+  const onPlay = (): void => {
+    if (playTimer !== undefined) {
+      clearInterval(playTimer);
+      playTimer = undefined;
+      play.textContent = t("graph.time.play");
+      return;
+    }
+    if (cutoffIndex === times.length) cutoffIndex = 0;
+    updateTimeline();
+    play.textContent = t("graph.time.pause");
+    playTimer = window.setInterval(() => {
+      cutoffIndex++;
+      updateTimeline();
+      if (cutoffIndex >= times.length) {
+        clearInterval(playTimer);
+        playTimer = undefined;
+        play.textContent = t("graph.time.play");
+      }
+    }, 500);
+  };
+  timeInput.addEventListener("input", onTimeInput);
+  play.addEventListener("click", onPlay);
+  host.append(viewport, timeline, empty, status, list);
   drawList();
   // `on` restituisce il disposer della registrazione: il renderer deve
   // rimuovere il listener quando il grafo viene smontato, non solo ignorare
@@ -451,7 +547,11 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   });
   const unsubscribeLanguage = onLanguage(() => {
     if (disposed) return;
-    count.textContent = t("graph.count", { note: data.nodes.length, edges: data.edges.length });
+    const visibleEdges = data.edges.filter((edge) => visible.has(edge.from) && visible.has(edge.to)).length;
+    count.textContent = t("graph.count", { note: visible.size, edges: visibleEdges });
+    timeLabel.setAttribute("aria-label", t("graph.time.label"));
+    timeValue.textContent = timeText();
+    play.textContent = t(playTimer === undefined ? "graph.time.play" : "graph.time.pause");
     empty.textContent = testoP8("graph.empty");
     summary.textContent = testoP8("graph.list.label");
     listBox.setAttribute("aria-label", testoP8("graph.list.label"));
@@ -460,8 +560,14 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     chart?.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
     panel?.updateLanguage();
   });
+  // A single owner closes both the synchronous chrome and the pending import.
+  // Mark disposed first: a settled lazy import must not mount into a removed pane.
   return () => {
+    if (disposed) return;
     disposed = true;
+    clearInterval(playTimer);
+    timeInput.removeEventListener("input", onTimeInput);
+    play.removeEventListener("click", onPlay);
     unsubscribeLayout();
     unsubscribeLanguage();
     for (const release of listDisposers.splice(0)) release();
@@ -469,5 +575,13 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     chart = null;
     panel?.destroy();
     panel = null;
+    viewport.remove();
+    timeline.remove();
+    empty.remove();
+    status.remove();
+    list.remove();
+    host.style.display = previousStyle.display;
+    host.style.flexDirection = previousStyle.flexDirection;
+    host.style.minHeight = previousStyle.minHeight;
   };
 }

@@ -274,14 +274,7 @@ impl LinkGraph {
                                     let mut out = Vec::with_capacity(refs.len());
                                     let mut backlinks = Vec::new();
                                     for link in refs {
-                                        let resolved = match link.kind {
-                                            RefKind::Wiki => {
-                                                graph_ref.resolve_key(&link.key, &link.exact)
-                                            }
-                                            RefKind::Path => {
-                                                graph_ref.resolve_path_key(&link.key, &link.exact)
-                                            }
-                                        };
+                                        let resolved = graph_ref.resolve_ref(link);
                                         if let Some(target) = resolved {
                                             if &target != id {
                                                 backlinks.push((
@@ -418,6 +411,41 @@ impl LinkGraph {
     /// Chi vuole l'insieme chiami [`linked`](Self::linked).
     pub fn outgoing(&self, source: &DocId) -> Vec<DocId> {
         self.outgoing.get(source).cloned().unwrap_or_default()
+    }
+
+    /// Risolve un link già registrato, con le stesse regole Obsidian di
+    /// `link_document`: wikilink per chiave globale, path per chiave di path.
+    /// È l'unico punto che distingue le due specie — tutto il resto riusa.
+    fn resolve_ref(&self, link: &LinkRef) -> Option<DocId> {
+        match link.kind {
+            RefKind::Wiki => self.resolve_key(&link.key, &link.exact),
+            RefKind::Path => self.resolve_path_key(&link.key, &link.exact),
+        }
+    }
+
+    /// Link uscenti con il loro contesto, **nello stesso ordine e con gli stessi
+    /// duplicati** di `outgoing`.
+    ///
+    /// Riusa il `context` dei `LinkRef` già registrati e la stessa risoluzione
+    /// di `link_document` (stesse `resolve_key`/`resolve_path_key`, stesse
+    /// regole Obsidian): nessuna seconda risoluzione, nessun secondo indice,
+    /// nessuno stato in più. Il costo è proporzionale ai link del documento,
+    /// non al vault — è una derivazione on-demand, non un mantenimento.
+    ///
+    /// I non risolti si saltano e il self-link resta, come in `outgoing`: le
+    /// due risposte dicono la stessa cosa, una con le coordinate per riga.
+    pub fn outgoing_with_context(&self, source: &DocId) -> Vec<(DocId, Option<String>)> {
+        let Some(refs) = self.links.get(source) else {
+            return Vec::new();
+        };
+        let mut out = Vec::with_capacity(refs.len());
+        for link in refs {
+            let Some(target) = self.resolve_ref(link) else {
+                continue;
+            };
+            out.push((target, link.context.clone()));
+        }
+        out
     }
 
     /// **I documenti in relazione di link con `doc`, una volta ciascuno.**
@@ -773,11 +801,7 @@ impl LinkGraph {
         };
         let mut out = Vec::with_capacity(refs.len());
         for link in refs {
-            let resolved = match link.kind {
-                RefKind::Wiki => self.resolve_key(&link.key, &link.exact),
-                RefKind::Path => self.resolve_path_key(&link.key, &link.exact),
-            };
-            let Some(target) = resolved else {
+            let Some(target) = self.resolve_ref(&link) else {
                 continue;
             };
             if target != *id {
@@ -1462,5 +1486,133 @@ mod tests {
         let mut graph = LinkGraph::build([&a]);
         graph.remove(&DocId::new("mai-esistito.md"));
         assert_eq!(graph.documents(), [DocId::new("a.md")]);
+    }
+
+    /// `outgoing_with_context` dice la stessa cosa di `outgoing`, riga per
+    /// riga: stesso ordine del sorgente, stessi duplicati, e il contesto di
+    /// ogni link.
+    #[test]
+    fn outgoing_with_context_preserves_source_order_and_duplicates() {
+        let mut m = DocumentModel::empty(DocId::new("a.md"));
+        m.links = vec![
+            Link {
+                target: LinkTarget::wiki("Nota"),
+                embed: false,
+                span: Span::EMPTY,
+                context: Some("primo".to_string()),
+            },
+            Link {
+                target: LinkTarget::wiki("Altra"),
+                embed: false,
+                span: Span::EMPTY,
+                context: None,
+            },
+            Link {
+                target: LinkTarget::wiki("Nota"),
+                embed: false,
+                span: Span::EMPTY,
+                context: Some("terzo".to_string()),
+            },
+            Link {
+                target: LinkTarget::wiki("Inesistente"),
+                embed: false,
+                span: Span::EMPTY,
+                context: Some("mai risolta".to_string()),
+            },
+        ];
+        let targets = [
+            DocumentModel::empty(DocId::new("Nota.md")),
+            DocumentModel::empty(DocId::new("Altra.md")),
+        ];
+        let graph = LinkGraph::build([&m, &targets[0], &targets[1]]);
+        let source = DocId::new("a.md");
+
+        let with_context = graph.outgoing_with_context(&source);
+        // I non risolti si saltano, l'ordine e i duplicati restano.
+        assert_eq!(
+            with_context,
+            vec![
+                (DocId::new("Nota.md"), Some("primo".to_string())),
+                (DocId::new("Altra.md"), None),
+                (DocId::new("Nota.md"), Some("terzo".to_string())),
+            ]
+        );
+        let plain: Vec<DocId> = with_context.into_iter().map(|(t, _)| t).collect();
+        assert_eq!(plain, graph.outgoing(&source));
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn full_snapshot(
+        graph: &LinkGraph,
+        docs: &[DocId],
+    ) -> Vec<(DocId, Vec<DocId>, Vec<(DocId, Option<String>)>)> {
+        let mut snap: Vec<(DocId, Vec<DocId>, Vec<(DocId, Option<String>)>)> = docs
+            .iter()
+            .map(|id| {
+                (
+                    id.clone(),
+                    graph.outgoing(id),
+                    graph.outgoing_with_context(id),
+                )
+            })
+            .collect();
+        snap.sort();
+        snap
+    }
+
+    fn doc_with_aliases_and_links(id: &str, aliases: &[&str], links: &[&str]) -> DocumentModel {
+        let mut m = doc_with_links(id, links);
+        m.frontmatter
+            .0
+            .insert("aliases".into(), serde_json::json!(aliases));
+        m
+    }
+
+    /// `upsert` dopo alias, omonimi e rename produce lo stesso osservabile di
+    /// `build`: `outgoing` e `outgoing_with_context` compresi. È la metà che il
+    /// test di proprietà in `tests/graph_incremental.rs` copre in casuale —
+    /// qui il caso è deterministico: alias che rubano la risoluzione, omonimi
+    /// a profondità diverse, rename come `remove`+`upsert`.
+    #[test]
+    fn upsert_matches_build_after_aliases_homonyms_and_rename() {
+        let a = doc_with_links("a.md", &["Mario", "Nota"]);
+        let rossi = doc_with_aliases_and_links("people/Rossi.md", &["Mario"], &["Nota"]);
+        let deep = DocumentModel::empty(DocId::new("x/y/Nota.md"));
+        let shallow = DocumentModel::empty(DocId::new("Nota.md"));
+
+        // Stato iniziale: l'alias pesca Rossi, il nome la nota in radice.
+        let mut graph = LinkGraph::build([&a, &rossi, &deep, &shallow]);
+        assert_eq!(
+            graph.resolve_wiki("Mario"),
+            Some(DocId::new("people/Rossi.md"))
+        );
+
+        // Rossi perde l'alias: `Mario` non risolve più, e l'osservabile è
+        // quello di un rebuild senza alias.
+        let rossi_plain = DocumentModel::empty(DocId::new("people/Rossi.md"));
+        graph.upsert(&rossi_plain);
+        let oracle = LinkGraph::build([&a, &rossi_plain, &deep, &shallow]);
+        let ids: Vec<DocId> = ["a.md", "people/Rossi.md", "x/y/Nota.md", "Nota.md"]
+            .into_iter()
+            .map(DocId::new)
+            .collect();
+        assert_eq!(full_snapshot(&graph, &ids), full_snapshot(&oracle, &ids));
+
+        // Rename di Rossi in `team/Rossi.md` come remove+upsert: la risoluzione
+        // per path cambia, quella per nome degli omonimi resta, e l'oracolo è
+        // d'accordo su outgoing e contesti.
+        graph.remove(&DocId::new("people/Rossi.md"));
+        let rossi_moved = doc_with_aliases_and_links("team/Rossi.md", &["Mario"], &["Nota"]);
+        graph.upsert(&rossi_moved);
+        let oracle = LinkGraph::build([&a, &rossi_moved, &deep, &shallow]);
+        let ids: Vec<DocId> = ["a.md", "team/Rossi.md", "x/y/Nota.md", "Nota.md"]
+            .into_iter()
+            .map(DocId::new)
+            .collect();
+        assert_eq!(full_snapshot(&graph, &ids), full_snapshot(&oracle, &ids));
+        assert_eq!(
+            graph.resolve_wiki("Mario"),
+            Some(DocId::new("team/Rossi.md"))
+        );
     }
 }

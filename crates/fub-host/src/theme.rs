@@ -302,6 +302,8 @@ impl ThemeBundle {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ThemeInfo {
     pub manifest: ThemeManifest,
+    /// The core series is bundled by the host; installed bundles remain community code.
+    pub trust: &'static str,
 }
 
 /// Il fascio trasferito alla shell per una luce già scelta.
@@ -435,7 +437,7 @@ pub fn discover_themes(config_dir: &Utf8Path) -> (Vec<ThemeBundle>, Vec<ThemeErr
             });
             continue;
         }
-        match ThemeBundle::load(&canonical) {
+        match installed_theme_dir(config_dir, &name).and_then(|dir| ThemeBundle::load(&dir)) {
             Ok(theme) => ok.push(theme),
             Err(error) => errors.push(error),
         }
@@ -462,7 +464,10 @@ pub fn list_themes(config_dir: &Utf8Path) -> Vec<ThemeInfo> {
                 .map(|file| file.is_some())
                 .unwrap_or(false)
             });
-            loadable.then_some(ThemeInfo { manifest })
+            loadable.then_some(ThemeInfo {
+                manifest,
+                trust: "community",
+            })
         })
         .collect()
 }
@@ -479,7 +484,32 @@ fn installed_theme_dir(config_dir: &Utf8Path, id: &str) -> Result<Utf8PathBuf, T
             path: canonical.to_string(),
         });
     }
-    Ok(canonical)
+    match read_theme_pointer(&canonical, id)? {
+        Some(pointer) if pointer.revoked => {
+            Err(ThemeError::Malformed(format!("theme `{id}` is revoked")))
+        }
+        Some(pointer) => selected_theme_dir(&canonical, id, &pointer),
+        None => Ok(canonical),
+    }
+}
+
+fn selected_theme_dir(
+    root: &Utf8Path,
+    id: &str,
+    pointer: &ThemePointer,
+) -> Result<Utf8PathBuf, ThemeError> {
+    if pointer.generation.is_empty() {
+        return Ok(root.to_owned());
+    }
+    let versions = root.join(".generations");
+    if canonical_theme_root(&versions, id)? != versions {
+        return Err(ThemeError::Traversal {
+            id: id.into(),
+            path: versions.to_string(),
+        });
+    }
+    let generation = versions.join(&pointer.generation);
+    canonical_theme_root(&generation, id)
 }
 
 /// Legge una luce di un tema installato senza accettare path dal chiamante.
@@ -1441,6 +1471,210 @@ fn check_id(id: &str) -> Result<(), ThemeError> {
         Err(ThemeError::InvalidId(id.to_string()))
     }
 }
+const POINTER_FILE: &str = ".fub-current.json";
+
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ThemePointer {
+    version: u32,
+    generation: String,
+    #[serde(default)]
+    provenance: Option<serde_json::Value>,
+    #[serde(default)]
+    previous: Option<ThemeVersion>,
+    #[serde(default)]
+    revoked: bool,
+    #[serde(default)]
+    revocation_generation: Option<String>,
+    #[serde(default)]
+    revocation_provenance: Option<serde_json::Value>,
+}
+
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ThemeVersion {
+    generation: String,
+    provenance: Option<serde_json::Value>,
+}
+
+fn check_generation(name: &str) -> Result<(), ThemeError> {
+    if name.is_empty()
+        || name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        Ok(())
+    } else {
+        Err(ThemeError::Malformed(
+            "invalid theme generation pointer".into(),
+        ))
+    }
+}
+
+fn read_theme_pointer(root: &Utf8Path, id: &str) -> Result<Option<ThemePointer>, ThemeError> {
+    let path = root.join(POINTER_FILE);
+    let Some(mut file) = open_regular(&path, root, id, MAX_THEME_MANIFEST_BYTES, false)? else {
+        return Ok(None);
+    };
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|e| ThemeError::Io(format!("{path}: {e}")))?;
+    let pointer: ThemePointer = serde_json::from_slice(&bytes)
+        .map_err(|e| ThemeError::Malformed(format!("{path}: {e}")))?;
+    if pointer.version != 1 {
+        return Err(ThemeError::Malformed(format!(
+            "unsupported theme pointer version {}",
+            pointer.version
+        )));
+    }
+    check_generation(&pointer.generation)?;
+    if let Some(previous) = &pointer.previous {
+        check_generation(&previous.generation)?;
+    }
+    Ok(Some(pointer))
+}
+
+fn write_theme_pointer(root: &Utf8Path, pointer: &ThemePointer) -> Result<(), ThemeError> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| ThemeError::Io(e.to_string()))?
+        .as_nanos();
+    let temp = root.join(format!(".fub-current-{}-{stamp}.json", std::process::id()));
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(|e| ThemeError::Io(format!("{temp}: {e}")))?;
+        let bytes =
+            serde_json::to_vec(pointer).map_err(|e| ThemeError::Malformed(e.to_string()))?;
+        file.write_all(&bytes)
+            .map_err(|e| ThemeError::Io(format!("{temp}: {e}")))?;
+        file.sync_all()
+            .map_err(|e| ThemeError::Io(format!("{temp}: {e}")))?;
+        std::fs::rename(&temp, root.join(POINTER_FILE))
+            .map_err(|e| ThemeError::Io(format!("{root}: {e}")))
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
+}
+
+fn publish_theme_pointer(
+    root: &Utf8Path,
+    pointer: &ThemePointer,
+    expected: Option<&ThemePointer>,
+) -> Result<(), ThemeError> {
+    let path = root.join(POINTER_FILE);
+    let id = root.file_name().unwrap_or("(theme)");
+    fub_kernel::storage::update_atomic(
+        &path,
+        || read_theme_pointer(root, id).map_err(|e| e.to_string()),
+        |current| {
+            if current.as_ref() != expected {
+                return Err(
+                    "theme pointer changed concurrently; retry against the new generation".into(),
+                );
+            }
+            *current = Some(pointer.clone());
+            serde_json::to_vec(pointer).map_err(|e| e.to_string())
+        },
+    )
+    .map(|_| ())
+    .map_err(ThemeError::Io)
+}
+
+fn tree_paths(dir: &Utf8Path, paths: &mut Vec<Utf8PathBuf>) -> Result<(), ThemeError> {
+    for entry in std::fs::read_dir(dir).map_err(|e| ThemeError::Io(format!("{dir}: {e}")))? {
+        let entry = entry.map_err(|e| ThemeError::Io(format!("{dir}: {e}")))?;
+        let path = Utf8PathBuf::from_path_buf(entry.path())
+            .map_err(|p| ThemeError::Io(format!("non-UTF-8 theme path: {}", p.display())))?;
+        let kind = entry
+            .file_type()
+            .map_err(|e| ThemeError::Io(format!("{path}: {e}")))?;
+        if kind.is_symlink() {
+            return Err(ThemeError::Traversal {
+                id: "(digest)".into(),
+                path: path.to_string(),
+            });
+        }
+        if kind.is_dir() {
+            tree_paths(&path, paths)?;
+        } else if kind.is_file() {
+            paths.push(path);
+        } else {
+            return Err(ThemeError::Malformed(format!("{path}: not a regular file")));
+        }
+    }
+    Ok(())
+}
+
+/// SHA256 over a sorted, length-framed copy of every file in a theme tree.
+/// The exact same function checks both source and staged bytes before publish.
+pub fn theme_tree_digest(root: &Utf8Path) -> Result<String, ThemeError> {
+    let id = root.file_name().unwrap_or("(digest)");
+    let canonical = canonical_theme_root(root, id)?;
+    validate_asset_limits(&canonical, id)?;
+    let mut paths = Vec::new();
+    tree_paths(&canonical, &mut paths)?;
+    let mut named = paths
+        .into_iter()
+        .map(|path| {
+            let relative = path
+                .strip_prefix(&canonical)
+                .expect("enumerated beneath root");
+            let mut components = Vec::new();
+            for component in relative.components() {
+                let part = component.as_str();
+                if part.contains('\\') {
+                    return Err(ThemeError::Malformed(format!(
+                        "{path}: ambiguous theme path"
+                    )));
+                }
+                components.push(part.to_owned());
+            }
+            Ok((components.join("/"), path))
+        })
+        .collect::<Result<Vec<_>, ThemeError>>()?;
+    named.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut digest = ring::digest::Context::new(&ring::digest::SHA256);
+    digest.update(b"fub-theme-tree-v1\0");
+    for (index, (relative, path)) in named.iter().enumerate() {
+        if index > 0 && named[index - 1].0 == *relative {
+            return Err(ThemeError::Malformed(format!(
+                "duplicate theme path {relative}"
+            )));
+        }
+        let mut file = open_regular(path, &canonical, id, MAX_THEME_ASSET_BYTES, true)?
+            .ok_or_else(|| ThemeError::Malformed(format!("{path}: disappeared")))?;
+        let size = file
+            .metadata()
+            .map_err(|e| ThemeError::Io(format!("{path}: {e}")))?
+            .len();
+        digest.update(&(relative.len() as u64).to_le_bytes());
+        digest.update(relative.as_bytes());
+        digest.update(&size.to_le_bytes());
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            let read = file
+                .read(&mut buffer)
+                .map_err(|e| ThemeError::Io(format!("{path}: {e}")))?;
+            if read == 0 {
+                break;
+            }
+            digest.update(&buffer[..read]);
+        }
+    }
+    let bytes = digest.finish();
+    let mut hex = String::with_capacity(71);
+    hex.push_str("sha256:");
+    for byte in bytes.as_ref() {
+        use std::fmt::Write as _;
+        write!(hex, "{byte:02x}").expect("hex");
+    }
+    Ok(hex)
+}
 
 /// Installa un tema da una cartella, **atomico**: valida prima, copia in una
 /// cartella temporanea dentro `themes/`, poi un `rename` la pubblica. Un
@@ -1460,10 +1694,25 @@ fn check_id(id: &str) -> Result<(), ThemeError> {
 /// 4. la copia rifiuta i link simbolici e un file che, per path canonico,
 ///    esce dalla cartella (traversal);
 /// 5. la pubblicazione è un `rename` dentro la stessa filesystem: atomico.
-pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8PathBuf, ThemeError> {
+fn install_theme_internal(
+    config_dir: &Utf8Path,
+    source: &Utf8Path,
+    checked: Option<(&str, &str, &str, &serde_json::Value)>,
+) -> Result<Utf8PathBuf, ThemeError> {
     let source_id = source.file_name().unwrap_or_default().to_string();
     let source_root = canonical_theme_root(source, &source_id)?;
     let theme = ThemeBundle::load(&source_root)?;
+    if let Some((_, _, _, provenance)) = checked {
+        provenance_generation(provenance)?;
+    }
+    if let Some((expected_id, expected_version, _, _)) = checked {
+        if theme.manifest.id != expected_id || theme.manifest.version != expected_version {
+            return Err(ThemeError::Malformed(format!(
+                "signed theme identity {}@{} differs from staged {}@{}",
+                expected_id, expected_version, theme.manifest.id, theme.manifest.version,
+            )));
+        }
+    }
     if theme.manifest.id == SERIES_ID {
         return Err(ThemeError::InvalidId(SERIES_ID.to_string()));
     }
@@ -1506,6 +1755,25 @@ pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8Pat
                 published.manifest.id, theme.manifest.id
             )));
         }
+        if let Some((_, _, expected_digest, provenance)) = checked {
+            if theme_tree_digest(&staging)? != expected_digest {
+                return Err(ThemeError::Malformed(
+                    "staged theme digest differs from signed catalog".into(),
+                ));
+            }
+            write_theme_pointer(
+                &staging,
+                &ThemePointer {
+                    version: 1,
+                    generation: String::new(),
+                    provenance: Some(provenance.clone()),
+                    previous: None,
+                    revoked: false,
+                    revocation_generation: None,
+                    revocation_provenance: None,
+                },
+            )?;
+        }
         match std::fs::rename(&staging, &dest) {
             Ok(()) => Ok(()),
             Err(and) => match std::fs::symlink_metadata(&dest) {
@@ -1521,6 +1789,245 @@ pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8Pat
         let _ = themes_root.dir.remove_dir_all(&staging_name);
     }
     result.map(|()| dest)
+}
+
+pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8PathBuf, ThemeError> {
+    install_theme_internal(config_dir, source, None)
+}
+
+pub fn install_theme_checked(
+    config_dir: &Utf8Path,
+    source: &Utf8Path,
+    expected_id: &str,
+    expected_version: &str,
+    expected_digest: &str,
+    provenance: serde_json::Value,
+) -> Result<Utf8PathBuf, ThemeError> {
+    install_theme_internal(
+        config_dir,
+        source,
+        Some((expected_id, expected_version, expected_digest, &provenance)),
+    )
+}
+
+fn provenance_generation(provenance: &serde_json::Value) -> Result<u64, ThemeError> {
+    provenance
+        .get("generation")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| value.parse::<u64>().ok())
+        .ok_or_else(|| {
+            ThemeError::Malformed(
+                "signed theme provenance requires a decimal-string generation".into(),
+            )
+        })
+}
+
+/// The pointer is published with one rename after the immutable generation
+/// has been copied and verified. Readers observe the old or the new tree.
+pub fn update_theme(
+    config_dir: &Utf8Path,
+    source: &Utf8Path,
+    expected_id: &str,
+    expected_version: &str,
+    expected_digest: &str,
+    provenance: serde_json::Value,
+) -> Result<Utf8PathBuf, ThemeError> {
+    check_id(expected_id)?;
+    if expected_id == SERIES_ID {
+        return Err(ThemeError::InvalidId(expected_id.into()));
+    }
+    let source_id = source.file_name().unwrap_or_default();
+    let source_root = canonical_theme_root(source, source_id)?;
+    let manifest = ThemeBundle::load(&source_root)?.manifest;
+    if manifest.id != expected_id || manifest.version != expected_version {
+        return Err(ThemeError::Malformed(
+            "signed theme identity differs from source manifest".into(),
+        ));
+    }
+    let root = crate::config::themes_dir(config_dir).join(expected_id);
+    let root = canonical_theme_root(&root, expected_id)?;
+    let previous_pointer = read_theme_pointer(&root, expected_id)?;
+    let current_dir = match &previous_pointer {
+        Some(pointer) => selected_theme_dir(&root, expected_id, pointer)?,
+        None => root.clone(),
+    };
+    let current_version = ThemeBundle::load(&current_dir)?.manifest.version;
+    if current_version == expected_version {
+        return Err(ThemeError::Malformed(
+            "signed theme update must select a different version".into(),
+        ));
+    }
+    let old = previous_pointer.clone().unwrap_or(ThemePointer {
+        version: 1,
+        generation: String::new(),
+        provenance: None,
+        previous: None,
+        revoked: false,
+        revocation_generation: None,
+        revocation_provenance: None,
+    });
+    let next_generation = provenance_generation(&provenance)?;
+    if let Some(current) = &old.provenance {
+        let current_generation = provenance_generation(current)?;
+        if next_generation < current_generation {
+            return Err(ThemeError::Malformed(
+                "catalog generation predates installed theme".into(),
+            ));
+        }
+    }
+    if old.revoked {
+        let revoked_at = old
+            .revocation_generation
+            .as_deref()
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or_else(|| ThemeError::Malformed("revoked theme has no valid generation".into()))?;
+        if next_generation <= revoked_at {
+            return Err(ThemeError::Malformed(
+                "catalog generation does not supersede revocation".into(),
+            ));
+        }
+    }
+    let versions = root.join(".generations");
+    match std::fs::create_dir(&versions) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(ThemeError::Io(format!("{versions}: {e}"))),
+    }
+    if canonical_theme_root(&versions, expected_id)? != versions {
+        return Err(ThemeError::Traversal {
+            id: expected_id.into(),
+            path: versions.to_string(),
+        });
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| ThemeError::Io(e.to_string()))?
+        .as_nanos();
+    let generation = format!("{}-{stamp}", std::process::id());
+    let staged = versions.join(&generation);
+    std::fs::create_dir(&staged).map_err(|e| ThemeError::Io(format!("{staged}: {e}")))?;
+    let result = (|| {
+        copy_tree(&source_root, &staged, &source_root)?;
+        let staged_theme = ThemeBundle::load(&staged)?;
+        if staged_theme.manifest.id != expected_id
+            || staged_theme.manifest.version != expected_version
+        {
+            return Err(ThemeError::Malformed(
+                "staged theme identity changed during copy".into(),
+            ));
+        }
+        if theme_tree_digest(&staged)? != expected_digest {
+            return Err(ThemeError::Malformed(
+                "staged theme digest differs from signed catalog".into(),
+            ));
+        }
+        publish_theme_pointer(
+            &root,
+            &ThemePointer {
+                version: 1,
+                generation: generation.clone(),
+                provenance: Some(provenance),
+                previous: Some(ThemeVersion {
+                    generation: old.generation,
+                    provenance: old.provenance,
+                }),
+                revoked: false,
+                revocation_generation: old.revocation_generation,
+                revocation_provenance: old.revocation_provenance,
+            },
+            previous_pointer.as_ref(),
+        )
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(&staged);
+    }
+    result.map(|()| staged)
+}
+
+pub fn theme_catalog_provenance(
+    config_dir: &Utf8Path,
+    id: &str,
+) -> Result<Option<serde_json::Value>, ThemeError> {
+    check_id(id)?;
+    let root = canonical_theme_root(&crate::config::themes_dir(config_dir).join(id), id)?;
+    Ok(read_theme_pointer(&root, id)?.and_then(|pointer| pointer.provenance))
+}
+
+pub fn theme_revocation_provenance(
+    config_dir: &Utf8Path,
+    id: &str,
+) -> Result<Option<serde_json::Value>, ThemeError> {
+    check_id(id)?;
+    let root = canonical_theme_root(&crate::config::themes_dir(config_dir).join(id), id)?;
+    Ok(read_theme_pointer(&root, id)?.and_then(|pointer| pointer.revocation_provenance))
+}
+
+pub fn theme_revoked(config_dir: &Utf8Path, id: &str) -> bool {
+    canonical_theme_root(&crate::config::themes_dir(config_dir).join(id), id)
+        .and_then(|root| read_theme_pointer(&root, id))
+        .map(|pointer| pointer.is_some_and(|pointer| pointer.revoked))
+        .unwrap_or(true)
+}
+
+pub fn set_theme_revoked(config_dir: &Utf8Path, id: &str, revoked: bool) -> Result<(), ThemeError> {
+    check_id(id)?;
+    let root = canonical_theme_root(&crate::config::themes_dir(config_dir).join(id), id)?;
+    let previous_pointer = read_theme_pointer(&root, id)?;
+    let mut pointer = previous_pointer.clone().unwrap_or(ThemePointer {
+        version: 1,
+        generation: String::new(),
+        provenance: None,
+        previous: None,
+        revoked: false,
+        revocation_generation: None,
+        revocation_provenance: None,
+    });
+    if !revoked && pointer.revocation_generation.is_some() {
+        return Err(ThemeError::Malformed(
+            "signed revocation cannot be cleared without a newer release".into(),
+        ));
+    }
+    pointer.revoked = revoked;
+    publish_theme_pointer(&root, &pointer, previous_pointer.as_ref())
+}
+
+pub fn set_theme_revoked_with_provenance(
+    config_dir: &Utf8Path,
+    id: &str,
+    provenance: serde_json::Value,
+) -> Result<(), ThemeError> {
+    check_id(id)?;
+    let incoming = provenance_generation(&provenance)?;
+    let root = canonical_theme_root(&crate::config::themes_dir(config_dir).join(id), id)?;
+    let previous_pointer = read_theme_pointer(&root, id)?;
+    let mut pointer = previous_pointer.clone().unwrap_or(ThemePointer {
+        version: 1,
+        generation: String::new(),
+        provenance: None,
+        previous: None,
+        revoked: false,
+        revocation_generation: None,
+        revocation_provenance: None,
+    });
+    if let Some(current) = &pointer.provenance {
+        if incoming < provenance_generation(current)? {
+            return Err(ThemeError::Malformed(
+                "revocation predates installed theme".into(),
+            ));
+        }
+    }
+    if let Some(previous) = &pointer.revocation_generation {
+        let previous = previous
+            .parse::<u64>()
+            .map_err(|_| ThemeError::Malformed("invalid revocation generation".into()))?;
+        if incoming < previous {
+            return Err(ThemeError::Malformed("older revocation generation".into()));
+        }
+    }
+    pointer.revoked = true;
+    pointer.revocation_generation = Some(incoming.to_string());
+    pointer.revocation_provenance = Some(provenance);
+    publish_theme_pointer(&root, &pointer, previous_pointer.as_ref())
 }
 
 /// Disinstalla un tema installato: toglie `<config>/themes/<id>/` e basta.
@@ -1638,4 +2145,37 @@ fn copy_tree(
             .map_err(|and| ThemeError::Io(format!("{}: {and}", to)))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod pointer_tests {
+    use super::*;
+
+    #[test]
+    fn stale_publication_cannot_replace_visible_generation() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().join("theme")).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        let pointer = |generation: &str| ThemePointer {
+            version: 1,
+            generation: generation.into(),
+            provenance: None,
+            previous: None,
+            revoked: false,
+            revocation_generation: None,
+            revocation_provenance: None,
+        };
+        let first = pointer("first");
+        let second = pointer("second");
+        publish_theme_pointer(&root, &first, None).unwrap();
+        publish_theme_pointer(&root, &second, Some(&first)).unwrap();
+        assert!(publish_theme_pointer(&root, &pointer("stale"), Some(&first)).is_err());
+        assert_eq!(
+            read_theme_pointer(&root, "theme")
+                .unwrap()
+                .unwrap()
+                .generation,
+            "second"
+        );
+    }
 }

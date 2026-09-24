@@ -232,6 +232,17 @@ impl SnapshotBundle {
         Ok(bundle)
     }
 
+    /// Lo stesso contenuto, preparato contro un'altra revisione di base.
+    ///
+    /// Serve a chi ripristina uno snapshot vecchio: la base registrata alla
+    /// cattura non è più quella del vault, e l'applicazione la rifiuterebbe.
+    /// Il chiamante la sostituisce con quella appena osservata sotto il proprio
+    /// claim, così il confronto sotto lock continua a proteggere dalle
+    /// scritture avvenute dopo l'osservazione.
+    pub fn rebased(self, base_revision: Revision) -> Result<Self, SnapshotError> {
+        Self::new(self.manifest, base_revision, self.files)
+    }
+
     /// Legge un contenitore snapshot (`manifest.json` + `payload/`).
     pub fn read_from(path: &Utf8Path) -> Result<Self, SnapshotError> {
         let metadata = symlink_metadata(path)?;

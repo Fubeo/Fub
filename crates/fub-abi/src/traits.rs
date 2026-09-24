@@ -380,8 +380,7 @@ pub trait VaultRead: Send + Sync {
     /// può leggere una nota può già leggerne i byte decodificandoli lui.
     fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError>;
 
-    /// La revisione del sorgente di un documento: l'identità del testo su cui
-    /// si sta per calcolare una modifica.
+    /// La revisione dei byte sorgente di un documento, anche opaco o binario.
     ///
     /// È una capacità e non un calcolo perché la [`Revision`] è **opaca** (solo
     /// l'uguaglianza è contratto) e come l'host la derivi non è promesso a
@@ -572,6 +571,24 @@ pub trait VaultWrite: VaultRead {
         id: &DocId,
         source: &str,
         base: WriteBase,
+    ) -> Result<Revision, PluginError>;
+
+    /// Deposita byte grezzi senza conversioni di codifica o terminatori.
+    ///
+    /// `None` crea soltanto se il documento non esiste; `Some` richiede
+    /// l'impronta dei byte attuali e risponde `Conflict` senza modifiche se
+    /// non coincide. Il controllo e la scrittura sono atomici. Non esiste
+    /// una sovrascrittura cieca implicita.
+    ///
+    /// La revisione restituita identifica i byte depositati. La precondizione
+    /// si ottiene da `document_revision` o da una scrittura precedente, non
+    /// ricodificando una rappresentazione che potrebbe aver cambiato i byte.
+    /// Permessi e simulazione seguono la stessa regola di `write_document`.
+    fn write_document_bytes(
+        &mut self,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
     ) -> Result<Revision, PluginError>;
 
     /// Cambia **un pezzo** di documento: gli edit della richiesta, tutti o
@@ -2976,6 +2993,9 @@ pub enum IndexQuery {
     /// Le sintassi effettive di un documento, con la forma dichiarata dal
     /// provider o dalla regola registrata a runtime (§4.4).
     SyntaxForms { doc: DocId },
+    /// Rende un documento per la stampa, applicando il bersaglio Print a ogni
+    /// provider e renderer. L'anteprima resta una domanda distinta e invariata.
+    RenderPrint { doc: DocId },
 }
 
 impl IndexQuery {
@@ -3000,6 +3020,7 @@ impl IndexQuery {
             | IndexQuery::Resolve { .. }
             | IndexQuery::RenderPreview { .. }
             | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::RenderPrint { .. }
             | IndexQuery::SyntaxForms { .. } => None,
         }
     }
@@ -3033,6 +3054,7 @@ impl IndexQuery {
             // non quali documenti combaciano.
             | IndexQuery::RenderPreview { .. }
             | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::RenderPrint { .. }
             | IndexQuery::SyntaxForms { .. } => None,
         }
     }
@@ -3100,6 +3122,7 @@ impl IndexQuery {
             IndexQuery::RenderPreview { .. } => QueryKind::RenderPreview,
             IndexQuery::RenderEmbed { .. } => QueryKind::RenderEmbed,
             IndexQuery::SyntaxForms { .. } => QueryKind::SyntaxForms,
+            IndexQuery::RenderPrint { .. } => QueryKind::RenderPrint,
         }
     }
 }
@@ -3185,6 +3208,8 @@ pub enum QueryKind {
     /// Chi risponde a «quali forme sintattiche capisce questo documento?».
     /// Il kernel, perché compone il provider col registro aggiornato a runtime.
     SyntaxForms,
+    /// Resa per la stampa, distinta dall'anteprima anche nel routing.
+    RenderPrint,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -3198,12 +3223,20 @@ pub enum PredicateKind {
     Folder,
     Linked,
     Custom(String),
+    Regex,
+    Task,
+    Path,
+    File,
 }
 
 impl PredicateKind {
     pub fn of(predicate: &QueryPredicate) -> Option<PredicateKind> {
         match predicate {
             QueryPredicate::Text(_) => Some(PredicateKind::Text),
+            QueryPredicate::Regex { .. } => Some(PredicateKind::Regex),
+            QueryPredicate::Task { .. } => Some(PredicateKind::Task),
+            QueryPredicate::Path { .. } => Some(PredicateKind::Path),
+            QueryPredicate::File { .. } => Some(PredicateKind::File),
             QueryPredicate::Property { .. } => Some(PredicateKind::Property),
             QueryPredicate::Tag { .. } => Some(PredicateKind::Tag),
             QueryPredicate::Folder { .. } => Some(PredicateKind::Folder),
@@ -3445,6 +3478,8 @@ pub enum IndexResult {
     RenderEmbed(EmbedContent),
     /// Le forme sintattiche effettive (risposta a [`IndexQuery::SyntaxForms`]).
     SyntaxForms(Vec<SyntaxForm>),
+    /// Il documento reso per la stampa.
+    RenderPrint(RenderedDocument),
 }
 
 impl IndexResult {
@@ -3489,6 +3524,7 @@ impl IndexResult {
             IndexResult::RenderPreview(_) => "render-preview",
             IndexResult::RenderEmbed(_) => "render-embed",
             IndexResult::SyntaxForms(_) => "syntax-forms",
+            IndexResult::RenderPrint(_) => "render-print",
         }
     }
 }
@@ -3935,7 +3971,7 @@ impl PluginPermissions {
 
 /// La versione del contratto che QUESTO abi definisce. È la stessa del
 /// `package fub:abi@…` nel WIT (il test di conformità le confronta).
-pub const ABI_VERSION: &str = "0.1.2";
+pub const ABI_VERSION: &str = "0.2.0";
 
 // Niente `Eq`: i permessi portano un parametro JSON, e `serde_json::Value` non
 // è `Eq` (contiene numeri in virgola mobile). È lo stesso motivo per cui
@@ -4740,8 +4776,11 @@ mod tests {
                 "forma non canonica accettata: {version:?}"
             );
         }
+        let (major, rest) = ABI_VERSION.split_once('.').expect("versione ABI completa");
+        let (minor, _) = rest.split_once('.').expect("minor e patch ABI");
+        let future_minor = minor.parse::<u64>().expect("minor numerica") + 1;
         assert!(
-            !abi_compatible("0.2.0"),
+            !abi_compatible(&format!("{major}.{future_minor}.0")),
             "una minor superiore usa cose che l'host non ha"
         );
         assert!(!abi_compatible("1.0.0"), "una major diversa è un rifiuto");

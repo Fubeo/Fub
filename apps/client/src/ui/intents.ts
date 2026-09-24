@@ -16,6 +16,37 @@ import { notify } from "./notify";
 /// (decisione 0013), e dove salvare lo sa **chi ha il dialogo di sistema**.
 export const SETTINGS_EXPORT_NS = "settings.export";
 
+/// Il namespace con cui un provider del core chiede di mettere un testo negli
+/// appunti (`fub_abi::ui::CLIPBOARD_TEXT_NS`, payload `{ text }`). Che venga
+/// soltanto dal core lo garantisce il kernel, prima che l'intento arrivi qui.
+export const CLIPBOARD_TEXT_NS = "fub.clipboard.text";
+
+/// Il vault è stato sostituito da uno snapshot (`fub_abi::ui::VAULT_RESTORED_NS`):
+/// ogni buffer, sessione e vista in memoria è del contenuto di prima, e l'unica
+/// risposta che non ne salva un pezzo per sbaglio è ricaricare la finestra.
+export const VAULT_RESTORED_NS = "fub.vault.restored";
+
+/// La chiave con cui un avviso sopravvive alla ricarica che lo ha causato.
+const NOTICE_AFTER_RELOAD = "fub.notice-after-reload";
+
+let reload: () => void = () => window.location.reload();
+
+/// Solo per i banchi: una ricarica vera smonterebbe l'ambiente di test.
+export function setReloaderForTests(fn: () => void): void {
+  reload = fn;
+}
+
+/// L'avviso lasciato da una ricarica voluta, una volta sola.
+export function takeNoticeAfterReload(): string | null {
+  try {
+    const notice = sessionStorage.getItem(NOTICE_AFTER_RELOAD);
+    sessionStorage.removeItem(NOTICE_AFTER_RELOAD);
+    return notice;
+  } catch {
+    return null;
+  }
+}
+
 /// I due tipi veri del confine, meno il caso che qui non c'entra: `replace`
 /// riguarda la view che lo ha mandato, e lo gestisce chi la monta. Scritto come
 /// unione dei tipi rispecchiati e non a mano, così un caso nuovo in Rust arriva
@@ -43,6 +74,19 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
         await collectExport(intent.payload);
         break;
       }
+      if (intent.ns === CLIPBOARD_TEXT_NS) {
+        await copyText(intent.payload);
+        break;
+      }
+      if (intent.ns === VAULT_RESTORED_NS) {
+        try {
+          sessionStorage.setItem(NOTICE_AFTER_RELOAD, t("vault.restored"));
+        } catch {
+          // Senza storage la ricarica resta giusta: si perde solo l'avviso.
+        }
+        reload();
+        break;
+      }
       // Intento con namespace che questa shell non prevede: da contratto
       // non fa nulla (degrado garbato) — chi lo emette conta su una shell
       // che lo capisce, non su questa.
@@ -55,6 +99,22 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
     case "none":
     case "done":
       break;
+  }
+}
+
+/// Un testo negli appunti, e lo si dice: una copia silenziosa è una copia
+/// che l'utente non sa di avere, e una fallita è una che crede di avere.
+async function copyText(payload: unknown): Promise<void> {
+  const text = (payload as { text?: unknown } | null)?.text;
+  if (typeof text !== "string") {
+    console.info("Fub: intento appunti senza testo, ignorato.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    notify(t("clipboard.copied"));
+  } catch {
+    notify(t("clipboard.failed"), "guasto");
   }
 }
 

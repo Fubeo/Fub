@@ -278,3 +278,26 @@ fn a_document_is_one_node_however_many_times_it_is_linked() {
     let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
     assert_eq!(nodes(&p), ["A.md", "B.md"]);
 }
+
+#[test]
+fn tag_groups_are_memberships_of_each_node_not_a_shared_facet() {
+    let vault = Vault::new();
+    vault.put("A.md", "#alfa #zeta\n");
+    vault.put("B.md", "#beta\n");
+    vault.put("C.md", "senza tag\n");
+    let mut ws = vault.open();
+    let instance = ViewInstance::only(GRAPH_VIEW);
+    let update = ws
+        .view_action(
+            &instance,
+            UiAction::new("group_by").with_payload(serde_json::json!({ "group_by": "tag" })),
+        )
+        .unwrap();
+    let ViewUpdate::Replace { root } = update else {
+        panic!("graph redraw")
+    };
+    let p = payload(&root);
+    assert_eq!(p["groups"]["A.md"], "alfa");
+    assert_eq!(p["groups"]["B.md"], "beta");
+    assert_eq!(p["groups"]["C.md"], "");
+}

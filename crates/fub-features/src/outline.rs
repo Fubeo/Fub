@@ -15,21 +15,27 @@
 //! (insieme di selezioni non ancorato) gli offset del modello sono di un altro testo,
 //! e segnare la sezione sbagliata è peggio che non segnarne nessuna.
 
+use std::collections::HashSet;
+
+use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::model::{Heading, Span};
+use fub_abi::model::{DocId, Heading, Span};
 use fub_abi::session::{ContextKind, ContextMask, SelectionSet};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{
     HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
     ViewSurface,
 };
-use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_format_markdown::{collect_footnotes, FootnoteKind, FootnoteOccurrence};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const OUTLINE_ID: &str = "fub.outline";
 /// Id della `ViewSpec`: è ciò con cui la shell chiede questa view al kernel.
 pub const OUTLINE_VIEW: &str = "outline";
+/// The footnote projection shares this provider and its active document.
+pub const FOOTNOTES_VIEW: &str = "footnotes";
 
 /// L'azione di salto a un heading. L'intervallo viaggia nel payload
 /// (`{"doc":…,"start":…,"end":…}`) e non concatenato nell'id (§2.7).
@@ -45,6 +51,18 @@ const REVEAL: &str = "reveal";
 const DOC: &str = "doc";
 const START: &str = "start";
 const END: &str = "end";
+const BASE: &str = "base";
+const INDEX: &str = "index";
+const MOVE_UP: &str = "move_up";
+const MOVE_DOWN: &str = "move_down";
+const FOOTNOTES_TITLE: &str = "footnotes_title";
+const FOOTNOTES_EMPTY: &str = "footnotes_empty";
+const REFERENCES: &str = "references";
+const DEFINITIONS: &str = "definitions";
+const ORPHANS: &str = "orphans";
+const INLINE: &str = "inline";
+const UP: &str = "up";
+const DOWN: &str = "down";
 
 /// Il pannello struttura. Senza stato: heading e documento attivo li chiede
 /// all'host a ogni chiamata.
@@ -65,19 +83,27 @@ impl ViewProvider for OutlineView {
     }
 
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec::new(
-            OUTLINE_VIEW,
-            Text::key(VIEW_TITLE),
-            ViewSurface::RightSidebar,
-        )
-        .with_icon("struttura")
-        .ordered(1)
-        .open_by_default()]
+        vec![
+            ViewSpec::new(
+                OUTLINE_VIEW,
+                Text::key(VIEW_TITLE),
+                ViewSurface::RightSidebar,
+            )
+            .with_icon("struttura")
+            .ordered(1)
+            .open_by_default(),
+            ViewSpec::new(
+                FOOTNOTES_VIEW,
+                Text::key(FOOTNOTES_TITLE),
+                ViewSurface::RightSidebar,
+            )
+            .ordered(2),
+        ]
     }
 
     fn render_view(
         &self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         let Some(context) = host.active_context() else {
@@ -86,6 +112,19 @@ impl ViewProvider for OutlineView {
         let Some(active) = context.doc else {
             return Ok(placeholder(NO_ACTIVE_DOC));
         };
+        if instance.view == FOOTNOTES_VIEW {
+            let markdown = host
+                .format_of(&active)
+                .is_some_and(|format| format.descriptor.id == "markdown");
+            if !markdown {
+                return Ok(placeholder(FOOTNOTES_EMPTY));
+            }
+            let base = host.document_revision(&active)?;
+            let source = host.read_document(&active)?;
+            let footnotes = collect_footnotes(&source)
+                .map_err(|error| PluginError::BadArgs(error.to_string().into()))?;
+            return Ok(build_footnotes_view(&footnotes, active.as_str(), &base.0));
+        }
         let headings = match host.query_index(IndexQuery::Outline {
             doc: active.clone(),
         })? {
@@ -93,23 +132,34 @@ impl ViewProvider for OutlineView {
             other => {
                 return Err(PluginError::Internal(
                     format!("query outline: risposta fuori tema: {other:?}").into(),
-                ))
+                ));
             }
         };
-        Ok(build_outline_view(
+        Ok(build_outline_view_at(
             &headings,
             caret_of(&context.selections),
             active.as_str(),
+            Some(&host.document_revision(&active)?.0),
         ))
     }
 
     fn on_action(
         &mut self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
-        // `reveal` col suo intervallo → salta lì, nel documento attivo.
+        if matches!(action.action.0.as_str(), MOVE_UP | MOVE_DOWN) {
+            if instance.view != OUTLINE_VIEW {
+                return Err(PluginError::BadArgs(
+                    "Section moves belong to the outline.".into(),
+                ));
+            }
+            move_section(&action, host)?;
+            return Ok(ViewUpdate::Replace {
+                root: self.render_view(instance, host)?,
+            });
+        }
         if action.action.0 != REVEAL {
             return Ok(ViewUpdate::None);
         }
@@ -136,13 +186,177 @@ impl ViewProvider for OutlineView {
         // del numero d'ordine: qui un contatore non servirebbe, perché ciò che
         // dice se la risposta è scaduta è già un dato del dominio.
         match host.active_context().and_then(|c| c.doc) {
-            Some(active) if active.as_str() == drawn => Ok(ViewUpdate::Reveal {
-                doc_id: active.as_str().to_string(),
-                span,
-            }),
+            Some(active) if active.as_str() == drawn => {
+                if let Some(base) = action.payload.get(BASE).and_then(|value| value.as_str()) {
+                    if host.document_revision(&active)?.0 != base {
+                        return Err(PluginError::Conflict("The shown span is stale.".into()));
+                    }
+                }
+                Ok(ViewUpdate::Reveal {
+                    doc_id: active.as_str().to_string(),
+                    span,
+                })
+            }
             _ => Ok(ViewUpdate::None),
         }
     }
+}
+/// Adjacent sibling subtrees are swapped as one verified edit. The section
+/// begins at its heading line and ends at the next heading of the same or a
+/// shallower level; blank lines and child blocks travel with their section.
+fn section_end(headings: &[Heading], index: usize) -> usize {
+    let level = headings[index].level;
+    (index + 1..headings.len())
+        .find(|&next| headings[next].level <= level)
+        .unwrap_or(headings.len())
+}
+
+fn sibling(headings: &[Heading], index: usize, up: bool) -> Option<usize> {
+    let other = if up {
+        (0..index)
+            .rev()
+            .find(|&candidate| headings[candidate].level <= headings[index].level)?
+    } else {
+        section_end(headings, index)
+    };
+    (other < headings.len() && headings[other].level == headings[index].level).then_some(other)
+}
+
+fn move_section(action: &UiAction, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    let payload = &action.payload;
+    let (Some(id), Some(base), Some(index), Some(span)) = (
+        payload.get(DOC).and_then(|v| v.as_str()),
+        payload.get(BASE).and_then(|v| v.as_str()),
+        payload.get(INDEX).and_then(|v| v.as_u64()),
+        payload_span(payload),
+    ) else {
+        return Err(PluginError::BadArgs("Invalid section move.".into()));
+    };
+    let index = usize::try_from(index)
+        .map_err(|_| PluginError::BadArgs("Invalid section index.".into()))?;
+    if host
+        .active_context()
+        .and_then(|c| c.doc)
+        .as_ref()
+        .map(DocId::as_str)
+        != Some(id)
+    {
+        return Err(PluginError::Conflict("The active document changed.".into()));
+    }
+    let doc = DocId::new(id);
+    let base = Revision::new(base);
+    if host.document_revision(&doc)? != base {
+        return Err(PluginError::Conflict("The outline is stale.".into()));
+    }
+    let model = host.read_model(&doc)?;
+    let headings = &model.outline;
+    if headings.get(index).map(|heading| heading.span) != Some(span) {
+        return Err(PluginError::Conflict("The section changed.".into()));
+    }
+    let up = action.action.0 == MOVE_UP;
+    let neighbor = sibling(headings, index, up)
+        .ok_or_else(|| PluginError::BadArgs("Sections must be adjacent siblings.".into()))?;
+    let first = index.min(neighbor);
+    let second = index.max(neighbor);
+    if section_end(headings, first) != second {
+        return Err(PluginError::BadArgs("Sections overlap.".into()));
+    }
+    let source = host.read_document(&doc)?;
+    let a = headings[first].span.start;
+    let b = headings[second].span.start;
+    let c = headings
+        .get(section_end(headings, second))
+        .map_or(source.len(), |h| h.span.start);
+    // Non-root headings (e.g. in quotes/lists), invalid parser positions, or
+    // cuts in the middle of a CRLF are not safe to move as whole source lines.
+    let line_start = |offset: usize| {
+        offset == 0
+            || (source.starts_with('\u{feff}') && offset == '\u{feff}'.len_utf8())
+            || source.as_bytes().get(offset - 1) == Some(&b'\n')
+    };
+    if !(a < b
+        && b < c
+        && c <= source.len()
+        && [a, b, c].into_iter().all(|at| source.is_char_boundary(at))
+        && [a, b].into_iter().all(line_start)
+        && (c == source.len() || line_start(c))
+        && headings[first].span.end <= b
+        && headings[second].span.end <= c)
+    {
+        return Err(PluginError::BadArgs(
+            "Section boundaries are invalid.".into(),
+        ));
+    }
+    let replacement = format!("{}{}", &source[b..c], &source[a..b]);
+    host.apply_edit(
+        &doc,
+        EditRequest::new(base, vec![TextEdit::replace(Span::new(a, c), replacement)]),
+    )?;
+    Ok(())
+}
+
+/// The footnote view groups each source occurrence by its actual role, not by
+/// a text search: fenced code, HTML and escaped markers never enter this list.
+fn build_footnotes_view(occurrences: &[FootnoteOccurrence], doc: &str, base: &str) -> UiNode {
+    if occurrences.is_empty() {
+        return placeholder(FOOTNOTES_EMPTY);
+    }
+    let defined: HashSet<String> = occurrences
+        .iter()
+        .filter_map(|item| match &item.kind {
+            FootnoteKind::Definition(label) => Some(label.to_lowercase()),
+            _ => None,
+        })
+        .collect();
+    let used: HashSet<String> = occurrences
+        .iter()
+        .filter_map(|item| match &item.kind {
+            FootnoteKind::Reference(label) => Some(label.to_lowercase()),
+            _ => None,
+        })
+        .collect();
+    let mut references = Vec::new();
+    let mut definitions = Vec::new();
+    let mut orphans = Vec::new();
+    let mut inline = Vec::new();
+    for item in occurrences {
+        let (label, role, bucket) = match &item.kind {
+            FootnoteKind::Reference(label) if defined.contains(&label.to_lowercase()) => {
+                (label.as_str(), REFERENCES, &mut references)
+            }
+            FootnoteKind::Definition(label) if used.contains(&label.to_lowercase()) => {
+                (label.as_str(), DEFINITIONS, &mut definitions)
+            }
+            FootnoteKind::Reference(label) => (label.as_str(), REFERENCES, &mut orphans),
+            FootnoteKind::Definition(label) => (label.as_str(), DEFINITIONS, &mut orphans),
+            FootnoteKind::Inline(label) => (label.as_str(), INLINE, &mut inline),
+        };
+        bucket.push(UiNode::new(UiKind::ListItem {
+            title: label.into(),
+            subtitle: Some(Text::key(role)),
+            action: Some(ActionRef::with(
+                REVEAL,
+                serde_json::json!({ DOC: doc, BASE: base, START: item.span.start, END: item.span.end }),
+            )),
+            selected: false,
+        }));
+    }
+    let mut sections = Vec::new();
+    for (key, items) in [
+        (REFERENCES, references),
+        (DEFINITIONS, definitions),
+        (ORPHANS, orphans),
+        (INLINE, inline),
+    ] {
+        if !items.is_empty() {
+            sections.push(UiNode::new(UiKind::Section {
+                title: Text::key(key),
+                collapsed: false,
+                children: vec![UiNode::new(UiKind::List { items })],
+            }));
+        }
+    }
+    UiNode::column(2, sections)
 }
 
 /// Dove sta il cursore, in byte del sorgente **che il kernel conosce**.
@@ -164,9 +378,9 @@ fn caret_of(selections: &Option<SelectionSet>) -> Option<usize> {
 /// `{"start":…,"end":…}` → `Span`, o `None` se il payload non è quello che
 /// questa view ha attaccato al nodo.
 fn payload_span(payload: &serde_json::Value) -> Option<Span> {
-    let start = payload.get(START)?.as_u64()? as usize;
-    let end = payload.get(END)?.as_u64()? as usize;
-    Some(Span::new(start, end))
+    let start = usize::try_from(payload.get(START)?.as_u64()?).ok()?;
+    let end = usize::try_from(payload.get(END)?.as_u64()?).ok()?;
+    (start <= end).then(|| Span::new(start, end))
 }
 
 /// Il segnaposto. Prende una **chiave**, non una stringa: la prosa sta nel
@@ -191,10 +405,28 @@ pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Struttura")
+            .with(FOOTNOTES_TITLE, "Note a piè di pagina")
+            .with(FOOTNOTES_EMPTY, "Nessuna nota a piè di pagina.")
+            .with(REFERENCES, "Riferimenti")
+            .with(DEFINITIONS, "Definizioni")
+            .with(ORPHANS, "Orfani")
+            .with(INLINE, "Note inline")
+            .with(UP, "Su")
+            .with(DOWN, "Giù")
+            .with("reorder", "Riordina sezioni")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
             .with(EMPTY, "Nessun heading."),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Outline")
+            .with(FOOTNOTES_TITLE, "Footnotes")
+            .with(FOOTNOTES_EMPTY, "No footnotes.")
+            .with(REFERENCES, "References")
+            .with(DEFINITIONS, "Definitions")
+            .with(ORPHANS, "Orphans")
+            .with(INLINE, "Inline notes")
+            .with(UP, "Up")
+            .with(DOWN, "Down")
+            .with("reorder", "Reorder sections")
             .with(NO_ACTIVE_DOC, "No note open.")
             .with(EMPTY, "No headings."),
     ]
@@ -226,12 +458,56 @@ fn section_of(headings: &[Heading], caret: usize) -> Option<usize> {
 /// e la sezione col cursore è `selected` invece di essere un sottotitolo che
 /// dice «cursore qui».
 pub fn build_outline_view(headings: &[Heading], caret: Option<usize>, doc: &str) -> UiNode {
+    build_outline_view_at(headings, caret, doc, None)
+}
+
+fn build_outline_view_at(
+    headings: &[Heading],
+    caret: Option<usize>,
+    doc: &str,
+    base: Option<&str>,
+) -> UiNode {
     if headings.is_empty() {
         return placeholder(EMPTY);
     }
     let current = caret.and_then(|c| section_of(headings, c));
-    let (roots, _) = subtree(headings, 0, 0, current, doc);
-    UiNode::column(2, vec![UiNode::new(UiKind::Tree { roots })])
+    let (roots, _) = subtree(headings, 0, 0, current, doc, base);
+    let mut children = vec![UiNode::new(UiKind::Tree { roots })];
+    if let Some(base) = base {
+        let mut rows = Vec::new();
+        for (index, heading) in headings.iter().enumerate() {
+            let mut buttons = vec![UiNode::text(heading.text.clone())];
+            for (up, label, id) in [(true, UP, MOVE_UP), (false, DOWN, MOVE_DOWN)] {
+                if sibling(headings, index, up).is_some() {
+                    buttons.push(UiNode::button(
+                        Text::key(label),
+                        Intent::Neutral,
+                        ActionRef::with(
+                            id,
+                            serde_json::json!({
+                                DOC: doc,
+                                BASE: base,
+                                INDEX: index,
+                                START: heading.span.start,
+                                END: heading.span.end,
+                            }),
+                        ),
+                    ));
+                }
+            }
+            if buttons.len() > 1 {
+                rows.push(UiNode::row(1, buttons).with_key(heading.slug.clone()));
+            }
+        }
+        if !rows.is_empty() {
+            children.push(UiNode::new(UiKind::Section {
+                title: Text::key("reorder"),
+                collapsed: true,
+                children: rows,
+            }));
+        }
+    }
+    UiNode::column(2, children)
 }
 
 /// Gli heading da `at` in poi che stanno **sotto** `parent_level`, e l'indice
@@ -249,6 +525,7 @@ fn subtree(
     parent_level: u8,
     current: Option<usize>,
     doc: &str,
+    base: Option<&str>,
 ) -> (Vec<UiNode>, usize) {
     let mut nodes = Vec::new();
     let mut the = at;
@@ -256,7 +533,7 @@ fn subtree(
         if h.level <= parent_level {
             break;
         }
-        let (children, next) = subtree(headings, the + 1, h.level, current, doc);
+        let (children, next) = subtree(headings, the + 1, h.level, current, doc, base);
         nodes.push(
             UiNode::new(UiKind::TreeItem {
                 label: h.text.clone().into(),
@@ -264,7 +541,7 @@ fn subtree(
                 expanded: true,
                 action: Some(ActionRef::with(
                     REVEAL,
-                    serde_json::json!({ DOC: doc, START: h.span.start, END: h.span.end }),
+                    serde_json::json!({ DOC: doc, BASE: base, START: h.span.start, END: h.span.end }),
                 )),
                 selected: Some(the) == current,
                 children,
@@ -282,7 +559,7 @@ fn subtree(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fub_abi::model::Span;
+    use fub_abi::traits::{VaultRead, VaultWrite};
     use fub_sdk::testing::MemoryHost;
 
     fn h(level: u8, text: &str, start: usize, end: usize) -> Heading {
@@ -424,7 +701,9 @@ mod tests {
 
     #[test]
     fn a_dirty_buffer_marks_nothing() {
-        let host = MemoryHost::new().with_outline("nota.md", &[h(1, "Uno", 0, 5)]);
+        let host = MemoryHost::new()
+            .with_document("nota.md", "# Uno\n")
+            .with_outline("nota.md", &[h(1, "Uno", 0, 5)]);
         host.set_active(Some("nota.md"));
         // Il cursore c'è, ma il buffer ha modifiche non salvate: lo span non
         // attraversa il confine, e la view non ha dove segnare.
@@ -441,8 +720,9 @@ mod tests {
 
     #[test]
     fn render_reads_active_doc_and_queries_the_host() {
-        let host =
-            MemoryHost::new().with_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 10, 15)]);
+        let host = MemoryHost::new()
+            .with_document("nota.md", "# Uno\n\n## Due\n")
+            .with_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 10, 15)]);
         host.set_active(Some("nota.md"));
         let tree = OutlineView
             .render_view(&ViewInstance::only(OUTLINE_VIEW), &host)
@@ -498,7 +778,9 @@ mod tests {
     /// **dall'albero disegnato**, che è l'unico modo di legare le due metà.
     #[test]
     fn the_drawn_tree_carries_the_document_it_was_drawn_from() {
-        let host = MemoryHost::new().with_outline("nota.md", &[h(1, "Uno", 10, 15)]);
+        let host = MemoryHost::new()
+            .with_document("nota.md", "preambolo\n# Uno\n")
+            .with_outline("nota.md", &[h(1, "Uno", 10, 15)]);
         host.set_active(Some("nota.md"));
         let tree = OutlineView
             .render_view(&ViewInstance::only(OUTLINE_VIEW), &host)
@@ -579,5 +861,175 @@ mod tests {
             )
             .unwrap();
         assert_eq!(update, ViewUpdate::None);
+    }
+
+    fn seeded_markdown(source: &str) -> MemoryHost {
+        use fub_abi::format::ParseContext;
+        use fub_abi::FormatProvider;
+        let model = fub_format_markdown::MarkdownProvider::new()
+            .parse(&source.into(), &ParseContext::obsidian("nota.md"))
+            .unwrap();
+        let outline = model.outline.clone();
+        let host = MemoryHost::new()
+            .with_document("nota.md", source)
+            .with_outline("nota.md", &outline)
+            .with_model("nota.md", model);
+        host.set_active(Some("nota.md"));
+        host
+    }
+
+    fn action_named(node: &UiNode, id: &str, index: usize) -> Option<UiAction> {
+        match &node.kind {
+            UiKind::Button { action, .. }
+                if action.action.0 == id
+                    && action.payload.get(INDEX).and_then(|v| v.as_u64()) == Some(index as u64) =>
+            {
+                return Some(UiAction::new(id).with_payload(action.payload.clone()));
+            }
+            _ => {}
+        }
+        node.children()
+            .iter()
+            .find_map(|child| action_named(child, id, index))
+    }
+
+    #[test]
+    fn nested_section_move_preserves_all_unmoved_bytes_and_crlf() {
+        let before = "---\r\ntitle: été\r\n---\r\n\r\n# Uno\r\nintro\r\n## À\r\nA\r\n### Sotto\r\nx\r\n## B\r\nB\r\n```md\r\n## Ignora\r\n```\r\n# Due\r\nfine\r\n";
+        let after = "---\r\ntitle: été\r\n---\r\n\r\n# Uno\r\nintro\r\n## B\r\nB\r\n```md\r\n## Ignora\r\n```\r\n## À\r\nA\r\n### Sotto\r\nx\r\n# Due\r\nfine\r\n";
+        let mut host = seeded_markdown(before);
+        let instance = ViewInstance::only(OUTLINE_VIEW);
+        let tree = OutlineView.render_view(&instance, &host).unwrap();
+        let action = action_named(&tree, MOVE_DOWN, 1).expect("nested sibling can move down");
+        assert!(matches!(
+            OutlineView.on_action(&instance, action, &mut host).unwrap(),
+            ViewUpdate::Replace { .. }
+        ));
+        assert_eq!(host.read_document(&DocId::new("nota.md")).unwrap(), after);
+    }
+
+    #[test]
+    fn stale_and_non_sibling_section_moves_are_typed_and_do_not_write() {
+        use fub_abi::edit::WriteBase;
+        let before = "# Uno\n## A\n### Figlio\n## B\n# Due\n";
+        let mut host = seeded_markdown(before);
+        let instance = ViewInstance::only(OUTLINE_VIEW);
+        let tree = OutlineView.render_view(&instance, &host).unwrap();
+        let action = action_named(&tree, MOVE_DOWN, 1).unwrap();
+        host.write_document(&DocId::new("nota.md"), "# Altro\n", WriteBase::Dictated)
+            .unwrap();
+        assert!(matches!(
+            OutlineView.on_action(&instance, action, &mut host),
+            Err(PluginError::Conflict(_))
+        ));
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            "# Altro\n"
+        );
+
+        let mut host = seeded_markdown(before);
+        let revision = host.document_revision(&DocId::new("nota.md")).unwrap();
+        let model = host.read_model(&DocId::new("nota.md")).unwrap();
+        let headings = &model.outline;
+        let forged = UiAction::new(MOVE_DOWN).with_payload(serde_json::json!({
+            DOC: "nota.md", BASE: revision.0.clone(), INDEX: 2,
+            START: headings[2].span.start, END: headings[2].span.end,
+        }));
+        assert!(matches!(
+            OutlineView.on_action(&instance, forged, &mut host),
+            Err(PluginError::BadArgs(_))
+        ));
+        let wrong_span = UiAction::new(MOVE_DOWN).with_payload(serde_json::json!({
+            DOC: "nota.md", BASE: revision.0, INDEX: 1,
+            START: headings[1].span.start + 1, END: headings[1].span.end,
+        }));
+        assert!(matches!(
+            OutlineView.on_action(&instance, wrong_span, &mut host),
+            Err(PluginError::Conflict(_))
+        ));
+        assert_eq!(host.read_document(&DocId::new("nota.md")).unwrap(), before);
+    }
+
+    #[test]
+    fn previously_drawn_reveal_rejects_changed_source_in_same_document() {
+        use fub_abi::edit::WriteBase;
+        let mut host = seeded_markdown("# Été\n\n## Segue\n");
+        let instance = ViewInstance::only(OUTLINE_VIEW);
+        let tree = OutlineView.render_view(&instance, &host).unwrap();
+        let action = first_action(&tree).unwrap();
+        let click = UiAction::new(REVEAL).with_payload(action.payload.clone());
+        host.write_document(
+            &DocId::new("nota.md"),
+            "preambolo\n# Été\n\n## Segue\n",
+            WriteBase::Dictated,
+        )
+        .unwrap();
+        assert!(matches!(
+            OutlineView.on_action(&instance, click, &mut host),
+            Err(PluginError::Conflict(_))
+        ));
+    }
+
+    #[test]
+    fn footnotes_view_reveals_utf8_byte_spans_and_groups_orphans() {
+        let source = "# Été\nSee[^used] [^missing] and ^[emoji 🎯].\n\n[^used]: text\n[^alone]: text\n\n```\n[^code]\n```\n";
+        let mut host = seeded_markdown(source);
+        let instance = ViewInstance::only(FOOTNOTES_VIEW);
+        let tree = OutlineView.render_view(&instance, &host).unwrap();
+        let UiKind::Stack { children, .. } = &tree.kind else {
+            panic!("footnotes have sections")
+        };
+        let labels: Vec<&str> = children
+            .iter()
+            .filter_map(|node| match &node.kind {
+                UiKind::Section {
+                    title: Text::Message(message),
+                    ..
+                } => Some(message.key.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(labels, [REFERENCES, DEFINITIONS, ORPHANS, INLINE]);
+        let inline = children
+            .iter()
+            .find_map(|node| match &node.kind {
+                UiKind::Section {
+                    title: Text::Message(message),
+                    children,
+                    ..
+                } if message.key == INLINE => Some(&children[0]),
+                _ => None,
+            })
+            .unwrap();
+        let UiKind::List { items } = &inline.kind else {
+            panic!("inline notes are list entries")
+        };
+        let UiKind::ListItem {
+            action: Some(action),
+            ..
+        } = &items[0].kind
+        else {
+            panic!("inline note is actionable")
+        };
+        let start = source.find("^[emoji 🎯]").unwrap();
+        assert_eq!(action.payload[START].as_u64(), Some(start as u64));
+        assert_eq!(
+            action.payload[END].as_u64(),
+            Some((start + "^[emoji 🎯]".len()) as u64)
+        );
+        let update = OutlineView
+            .on_action(
+                &instance,
+                UiAction::new(REVEAL).with_payload(action.payload.clone()),
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(
+            update,
+            ViewUpdate::Reveal {
+                doc_id: "nota.md".into(),
+                span: Span::new(start, start + "^[emoji 🎯]".len()),
+            }
+        );
     }
 }
