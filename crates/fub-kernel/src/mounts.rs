@@ -112,6 +112,11 @@ fn reject_symlink_components(storage: &dyn VaultStorage, target: &Utf8Path) -> R
     let mut prefix = Utf8PathBuf::new();
     for component in target.components() {
         prefix.push(component.as_str());
+        // `C:` è la cartella corrente di quel disco e `\\?\C:` il volume:
+        // nessuno dei due è un componente che un link possa sostituire.
+        if matches!(component, Utf8Component::Prefix(_)) {
+            continue;
+        }
         match storage.stat_no_follow(&prefix) {
             Ok(stat) if stat.kind == EntryKind::Other => {
                 return Err(KernelError::Io {
@@ -149,6 +154,68 @@ fn identity_of(storage: &dyn VaultStorage, path: &Utf8Path) -> Result<FileIdenti
                 "backend senza FileIdentity: mount rifiutato",
             ),
         })
+}
+
+fn refused_link(path: &Utf8Path, why: &str) -> KernelError {
+    KernelError::Io {
+        path: path.to_owned(),
+        source: io::Error::new(io::ErrorKind::PermissionDenied, why.to_string()),
+    }
+}
+
+/// Il nome reale della cartella scelta: gli antenati si risolvono, la cartella
+/// no.
+///
+/// Un antenato che è un collegamento è quasi sempre del sistema (`/var` →
+/// `/private/var` su macOS, `/tmp`, un profilo spostato): risolverlo una volta
+/// lascia al controllo severo di [`MountRegistry::mount`] un nome che non ne
+/// contiene. La cartella scelta che è essa stessa un collegamento, invece, è un
+/// reindirizzamento deciso da chi controlla il link, e resta rifiutata anche
+/// se penzola. Il nome reale della foglia porta comunque le maiuscole del
+/// disco, così il confronto con la radice non si inganna su un filesystem
+/// insensibile al caso.
+fn real_target(storage: &dyn VaultStorage, chosen: &Utf8Path) -> Result<Utf8PathBuf> {
+    if non_normalized(chosen) {
+        return Err(KernelError::BadName {
+            name: chosen.to_string(),
+            why: "il target deve essere assoluto e normalizzato, senza `.` o `..`".into(),
+        });
+    }
+    let io_at = |path: &Utf8Path, source| KernelError::Io {
+        path: path.to_owned(),
+        source,
+    };
+    let (Some(parent), Some(leaf)) = (chosen.parent(), chosen.file_name()) else {
+        return storage
+            .real_path(chosen)
+            .map_err(|source| io_at(chosen, source));
+    };
+    let real_parent = storage
+        .real_path(parent)
+        .map_err(|source| io_at(parent, source))?;
+    let in_place = real_parent.join(leaf);
+    match storage.stat_no_follow(&in_place) {
+        Ok(stat) if stat.kind == EntryKind::Other => {
+            return Err(refused_link(
+                chosen,
+                "la cartella scelta è un symlink o un reparse point",
+            ))
+        }
+        Ok(_) => {}
+        Err(source) => return Err(io_at(chosen, source)),
+    }
+    let real = storage
+        .real_path(&in_place)
+        .map_err(|source| io_at(chosen, source))?;
+    // Fra lo stat e la risoluzione la cartella può essere stata sostituita da
+    // un link: il nome reale non starebbe più sotto lo stesso genitore.
+    if real.parent() != Some(real_parent.as_path()) {
+        return Err(refused_link(
+            chosen,
+            "la cartella scelta è cambiata durante la risoluzione",
+        ));
+    }
+    Ok(real)
 }
 
 fn invalid_doc(config: &Utf8Path, error: impl std::fmt::Display) -> io::Error {
@@ -243,7 +310,26 @@ impl MountRegistry {
         self.mounts.contains_key(name) || self.inactive.contains_key(name)
     }
 
+    /// L'ingresso di chi sceglie una cartella: la risolve al suo nome reale
+    /// ([`real_target`]), la prepara con [`mount`](Self::mount) e restituisce
+    /// il nome che verrà salvato. Da lì in poi ogni controllo è severo.
+    pub fn register(
+        &mut self,
+        storage: &dyn VaultStorage,
+        name: &str,
+        chosen: &Utf8Path,
+        namespace: &str,
+    ) -> Result<Utf8PathBuf> {
+        let real = real_target(storage, chosen)?;
+        self.mount(storage, name, &real, namespace)?;
+        Ok(real)
+    }
+
     /// Prepara senza pubblicare: nessuna route finché il commit non riesce.
+    ///
+    /// Il target è già reale: un collegamento in un suo componente lo fa
+    /// rifiutare. È il controllo che [`load`](Self::load) ripete a ogni
+    /// apertura.
     pub fn mount(
         &mut self,
         storage: &dyn VaultStorage,
@@ -273,7 +359,15 @@ impl MountRegistry {
             return Err(KernelError::OutsideVault(target.to_owned()));
         }
         reject_symlink_components(storage, target)?;
-        if overlaps(target, &self.root) || target.starts_with(self.root.join(FUB_DIR)) {
+        // La radice può arrivare in una forma e il target nell'altra (`/var`
+        // e `/private/var`, `C:\` e `\\?\C:\`): il recinto vale per entrambe.
+        let real_root = storage
+            .real_path(&self.root)
+            .unwrap_or_else(|_| self.root.clone());
+        if [&self.root, &real_root]
+            .into_iter()
+            .any(|root| overlaps(target, root) || target.starts_with(root.join(FUB_DIR)))
+        {
             return Err(KernelError::OutsideVault(target.to_owned()));
         }
         if self.mounts.values().any(|m| overlaps(target, &m.target)) {
@@ -338,7 +432,12 @@ impl MountRegistry {
         if identity_of(storage, &mount.target).ok()? != self.identities[&mount.name] {
             return None;
         }
-        let path = mount.target.join(rel);
+        // Un componente alla volta: nella forma estesa di Windows `/` non
+        // separa.
+        let mut path = mount.target.clone();
+        for part in rel.split('/') {
+            path.push(part);
+        }
         reject_symlink_components(storage, &path).ok()?;
         Some(path)
     }
@@ -510,12 +609,27 @@ mod tests {
 
     const TEST_VOL: u64 = 0x4944_4D45_4D00_0001;
 
+    /// Un path assoluto su ogni piattaforma: su Windows sta sul disco `C:`.
+    fn abs(path: &str) -> Utf8PathBuf {
+        if cfg!(windows) {
+            Utf8PathBuf::from(format!("C:{}", path.replace('/', "\\")))
+        } else {
+            path.into()
+        }
+    }
+
+    fn denied(error: &KernelError) -> bool {
+        matches!(error, KernelError::Io { source, .. } if source.kind() == io::ErrorKind::PermissionDenied)
+    }
+
     /// MemStorage con identita dev+ino sintetica ma deterministica (FNV del
-    /// path canonico) piu alias espliciti per dimostrare i cicli. Tutto il
+    /// path canonico) piu alias espliciti per dimostrare i cicli, e link
+    /// simbolici simulati per i nomi che passano da un collegamento. Tutto il
     /// resto delega all'inner: e un doppio di prova, non un backend.
     struct IdMem {
         inner: MemStorage,
         extra: BTreeMap<Utf8PathBuf, Utf8PathBuf>,
+        links: BTreeMap<Utf8PathBuf, Utf8PathBuf>,
     }
 
     impl IdMem {
@@ -523,7 +637,27 @@ mod tests {
             Self {
                 inner: MemStorage::new(),
                 extra: BTreeMap::new(),
+                links: BTreeMap::new(),
             }
+        }
+
+        /// Un link simbolico: `link` e ogni path sotto di lui portano a `real`.
+        fn link(&mut self, link: &Utf8Path, real: &Utf8Path) {
+            self.links.insert(link.to_owned(), real.to_owned());
+        }
+
+        fn follow(&self, path: &Utf8Path) -> Utf8PathBuf {
+            self.links
+                .iter()
+                .find_map(|(link, real)| {
+                    let rest = path.strip_prefix(link).ok()?;
+                    Some(if rest.as_str().is_empty() {
+                        real.clone()
+                    } else {
+                        real.join(rest)
+                    })
+                })
+                .unwrap_or_else(|| path.to_owned())
         }
 
         fn mkdir(&self, dir: &Utf8Path) {
@@ -537,10 +671,8 @@ mod tests {
         }
 
         fn canon(&self, path: &Utf8Path) -> Utf8PathBuf {
-            self.extra
-                .get(path)
-                .cloned()
-                .unwrap_or_else(|| path.to_owned())
+            let path = self.follow(path);
+            self.extra.get(&path).cloned().unwrap_or(path)
         }
     }
 
@@ -581,7 +713,19 @@ mod tests {
             self.inner.stat(&self.canon(path))
         }
         fn stat_no_follow(&self, path: &Utf8Path) -> io::Result<crate::storage::Stat> {
+            if self.links.contains_key(path) {
+                return Ok(crate::storage::Stat {
+                    kind: EntryKind::Other,
+                    size: 0,
+                    mtime: 0,
+                });
+            }
             self.inner.stat(&self.canon(path))
+        }
+        fn real_path(&self, path: &Utf8Path) -> io::Result<Utf8PathBuf> {
+            let real = self.follow(path);
+            self.inner.stat(&real)?;
+            Ok(real)
         }
 
         fn file_identity(&self, path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
@@ -602,12 +746,12 @@ mod tests {
 
     fn setup() -> (IdMem, Utf8PathBuf) {
         let mem = IdMem::new();
-        let root = Utf8PathBuf::from("/vault");
+        let root = abs("/vault");
         mem.inner
             .write(&root.join("probe.md"), b"x")
             .expect("radice di prova");
-        mem.mkdir(Utf8Path::new("/ext/a"));
-        mem.mkdir(Utf8Path::new("/ext/b"));
+        mem.mkdir(&abs("/ext/a"));
+        mem.mkdir(&abs("/ext/b"));
         (mem, root)
     }
 
@@ -616,18 +760,18 @@ mod tests {
         let (mem, root) = setup();
         let mut reg = MountRegistry::new(&root);
         assert!(reg.is_empty());
-        reg.mount(&mem, "foto", Utf8Path::new("/ext/a"), "media")
+        reg.mount(&mem, "foto", &abs("/ext/a"), "media")
             .expect("mount valido");
         assert_eq!(reg.len(), 1);
         assert_eq!(reg.get("foto").expect("presente").namespace, "media");
 
-        let abs = reg
+        let routed = reg
             .resolve(&mem, "media", "a/b.md")
             .expect("dentro il namespace");
-        assert_eq!(abs, Utf8PathBuf::from("/ext/a/a/b.md"));
+        assert_eq!(routed, abs("/ext/a/a/b.md"));
         // La rotta e usabile davvero: ci si scrive e rilegge.
-        mem.write(&abs, b"dati").expect("scrittura instradata");
-        assert_eq!(mem.read(&abs).expect("rilettura"), b"dati");
+        mem.write(&routed, b"dati").expect("scrittura instradata");
+        assert_eq!(mem.read(&routed).expect("rilettura"), b"dati");
 
         assert!(reg.resolve(&mem, "sconosciuto", "a.md").is_none());
         assert!(reg.resolve(&mem, "media", "../fuori.md").is_none());
@@ -640,7 +784,7 @@ mod tests {
             vec![MountRoute {
                 name: "foto".into(),
                 namespace: "media".into(),
-                target: Utf8PathBuf::from("/ext/a"),
+                target: abs("/ext/a"),
             }]
         );
 
@@ -653,19 +797,17 @@ mod tests {
     fn target_must_exist_and_be_dir_with_identity() {
         let (mem, root) = setup();
         let mut reg = MountRegistry::new(&root);
-        let err = reg
-            .mount(&mem, "x", Utf8Path::new("/ext/manca"), "n")
-            .unwrap_err();
+        let err = reg.mount(&mem, "x", &abs("/ext/manca"), "n").unwrap_err();
         assert!(
             matches!(err, KernelError::Io { .. }),
             "target assente: {err:?}"
         );
 
         mem.inner
-            .write(Utf8Path::new("/ext/file.txt"), b"f")
+            .write(&abs("/ext/file.txt"), b"f")
             .expect("file esterno");
         let err = reg
-            .mount(&mem, "x", Utf8Path::new("/ext/file.txt"), "n")
+            .mount(&mem, "x", &abs("/ext/file.txt"), "n")
             .unwrap_err();
         assert!(
             matches!(err, KernelError::Io { .. }),
@@ -674,16 +816,10 @@ mod tests {
 
         // Backend senza FileIdentity: Err esplicito, mai falsa registrazione.
         let plain = MemStorage::new();
-        plain
-            .write(Utf8Path::new("/vault2/p.md"), b"x")
-            .expect("radice");
-        plain
-            .write(Utf8Path::new("/ext2/d/.keep"), b"")
-            .expect("target");
-        let mut reg2 = MountRegistry::new(Utf8Path::new("/vault2"));
-        let err = reg2
-            .mount(&plain, "x", Utf8Path::new("/ext2/d"), "n")
-            .unwrap_err();
+        plain.write(&abs("/vault2/p.md"), b"x").expect("radice");
+        plain.write(&abs("/ext2/d/.keep"), b"").expect("target");
+        let mut reg2 = MountRegistry::new(&abs("/vault2"));
+        let err = reg2.mount(&plain, "x", &abs("/ext2/d"), "n").unwrap_err();
         assert!(
             matches!(err, KernelError::Io { .. }),
             "senza identita: {err:?}"
@@ -700,30 +836,27 @@ mod tests {
             reg.mount(&mem, "self", &root, "n0").unwrap_err(),
             KernelError::OutsideVault(_)
         ));
-        mem.mkdir(Utf8Path::new("/vault/sub"));
+        mem.mkdir(&abs("/vault/sub"));
         assert!(matches!(
-            reg.mount(&mem, "in", Utf8Path::new("/vault/sub"), "n1")
-                .unwrap_err(),
+            reg.mount(&mem, "in", &abs("/vault/sub"), "n1").unwrap_err(),
             KernelError::OutsideVault(_)
         ));
         // La root dentro il target: "/" esiste in memoria come antenato.
         assert!(matches!(
-            reg.mount(&mem, "over", Utf8Path::new("/"), "n2")
-                .unwrap_err(),
+            reg.mount(&mem, "over", &abs("/"), "n2").unwrap_err(),
             KernelError::OutsideVault(_)
         ));
 
-        reg.mount(&mem, "a", Utf8Path::new("/ext/a"), "n3")
+        reg.mount(&mem, "a", &abs("/ext/a"), "n3")
             .expect("primo mount");
-        mem.mkdir(Utf8Path::new("/ext/a/sub"));
+        mem.mkdir(&abs("/ext/a/sub"));
         assert!(matches!(
-            reg.mount(&mem, "sub", Utf8Path::new("/ext/a/sub"), "n4")
+            reg.mount(&mem, "sub", &abs("/ext/a/sub"), "n4")
                 .unwrap_err(),
             KernelError::OutsideVault(_)
         ));
         assert!(matches!(
-            reg.mount(&mem, "over", Utf8Path::new("/ext"), "n5")
-                .unwrap_err(),
+            reg.mount(&mem, "over", &abs("/ext"), "n5").unwrap_err(),
             KernelError::OutsideVault(_)
         ));
         // Il primo mount resta l'unico registrato.
@@ -734,25 +867,22 @@ mod tests {
     fn names_namespaces_targets_are_validated() {
         let (mem, root) = setup();
         let mut reg = MountRegistry::new(&root);
-        reg.mount(&mem, "a", Utf8Path::new("/ext/a"), "n1")
-            .expect("primo");
+        reg.mount(&mem, "a", &abs("/ext/a"), "n1").expect("primo");
         assert!(matches!(
-            reg.mount(&mem, "a", Utf8Path::new("/ext/b"), "n2")
-                .unwrap_err(),
+            reg.mount(&mem, "a", &abs("/ext/b"), "n2").unwrap_err(),
             KernelError::AlreadyExists(_)
         ));
         assert!(matches!(
-            reg.mount(&mem, "b", Utf8Path::new("/ext/b"), "n1")
-                .unwrap_err(),
+            reg.mount(&mem, "b", &abs("/ext/b"), "n1").unwrap_err(),
             KernelError::AlreadyExists(_)
         ));
         for bad in ["", " ", "a/b", "..", "."] {
             assert!(
-                reg.mount(&mem, bad, Utf8Path::new("/ext/b"), "nx").is_err(),
+                reg.mount(&mem, bad, &abs("/ext/b"), "nx").is_err(),
                 "nome {bad:?} accettato"
             );
             assert!(
-                reg.mount(&mem, "ok", Utf8Path::new("/ext/b"), bad).is_err(),
+                reg.mount(&mem, "ok", &abs("/ext/b"), bad).is_err(),
                 "namespace {bad:?} accettato"
             );
         }
@@ -781,29 +911,86 @@ mod tests {
     #[test]
     fn cycles_via_identity_are_rejected() {
         let (mut mem, root) = setup();
-        mem.mkdir(Utf8Path::new("/ext/real"));
-        mem.alias(Utf8Path::new("/ext/alias"), Utf8Path::new("/ext/real"));
-        mem.alias(Utf8Path::new("/vault-link"), Utf8Path::new("/vault"));
+        mem.mkdir(&abs("/ext/real"));
+        mem.alias(&abs("/ext/alias"), &abs("/ext/real"));
+        mem.alias(&abs("/vault-link"), &abs("/vault"));
         let mut reg = MountRegistry::new(&root);
-        reg.mount(&mem, "a", Utf8Path::new("/ext/real"), "n1")
+        reg.mount(&mem, "a", &abs("/ext/real"), "n1")
             .expect("originale");
         // Stesso dev+ino con altro nome: disgiunto per prefisso, ciclo per identita.
-        let err = reg
-            .mount(&mem, "b", Utf8Path::new("/ext/alias"), "n2")
-            .unwrap_err();
+        let err = reg.mount(&mem, "b", &abs("/ext/alias"), "n2").unwrap_err();
         assert!(
             matches!(err, KernelError::AlreadyExists(_)),
             "alias non rilevato: {err:?}"
         );
         // Alias della root: ciclo immediato.
-        let err = reg
-            .mount(&mem, "c", Utf8Path::new("/vault-link"), "n3")
-            .unwrap_err();
+        let err = reg.mount(&mem, "c", &abs("/vault-link"), "n3").unwrap_err();
         assert!(
             matches!(err, KernelError::AlreadyExists(_)),
             "ciclo su root non rilevato: {err:?}"
         );
         assert_eq!(reg.len(), 1);
+    }
+
+    /// Un antenato che è un link (su macOS `/var` → `/private/var`) si risolve
+    /// alla registrazione: il nome salvato non ne contiene, e al caricamento
+    /// il controllo severo lo accetta.
+    #[test]
+    fn an_ancestor_link_is_resolved_once_at_registration() {
+        let (mut mem, root) = setup();
+        mem.mkdir(&abs("/private/var/x"));
+        mem.link(&abs("/var"), &abs("/private/var"));
+        let mut reg = MountRegistry::new(&root);
+        let err = reg.mount(&mem, "x", &abs("/var/x"), "n").unwrap_err();
+        assert!(denied(&err), "il controllo severo resta: {err:?}");
+
+        let real = reg
+            .register(&mem, "x", &abs("/var/x"), "n")
+            .expect("antenato risolto");
+        assert_eq!(real, abs("/private/var/x"));
+        reg.persist_add(&mem, "x").unwrap();
+        let loaded = MountRegistry::load(&mem, &root).unwrap();
+        assert!(
+            loaded.diagnostics().is_empty(),
+            "{:?}",
+            loaded.diagnostics()
+        );
+        assert_eq!(loaded.routing_table()[0].target, real);
+    }
+
+    #[test]
+    fn the_chosen_folder_that_is_a_link_stays_refused() {
+        let (mut mem, root) = setup();
+        mem.link(&abs("/ext/link"), &abs("/ext/a"));
+        mem.link(&abs("/ext/dangling"), &abs("/ext/manca"));
+        let mut reg = MountRegistry::new(&root);
+        for chosen in [abs("/ext/link"), abs("/ext/dangling")] {
+            let err = reg.register(&mem, "l", &chosen, "n").unwrap_err();
+            assert!(denied(&err), "{chosen}: {err:?}");
+        }
+        assert!(reg.is_empty());
+    }
+
+    /// La radice nominata attraverso un link e il target reale sono due forme
+    /// dello stesso albero: il recinto le confronta entrambe.
+    #[test]
+    fn the_fence_holds_when_the_root_is_named_through_a_link() {
+        let mut mem = IdMem::new();
+        mem.inner
+            .write(&abs("/data/vault/probe.md"), b"x")
+            .expect("radice di prova");
+        mem.mkdir(&abs("/data/vault/sub"));
+        mem.link(&abs("/lnk"), &abs("/data"));
+        let mut reg = MountRegistry::new(&abs("/lnk/vault"));
+        for chosen in [abs("/lnk/vault/sub"), abs("/lnk/vault/.fub"), abs("/data")] {
+            mem.mkdir(&mem.follow(&chosen));
+            let err = reg.register(&mem, "in", &chosen, "n").unwrap_err();
+            assert!(
+                matches!(err, KernelError::OutsideVault(_)),
+                "{chosen}: {err:?}"
+            );
+        }
+        assert!(reg.is_empty());
     }
 
     #[cfg(unix)]
@@ -828,21 +1015,22 @@ mod tests {
         .expect("symlink penzolante");
 
         let storage = crate::storage::FsStorage;
+        let real_base = storage.real_path(&base).expect("base reale");
         let mut reg = MountRegistry::new(&root);
         for target in [&link, &dangling] {
-            let err = reg.mount(&storage, "s", target, "n").unwrap_err();
-            match err {
-                KernelError::Io { source, .. } => assert_eq!(
-                    source.kind(),
-                    io::ErrorKind::PermissionDenied,
-                    "symlink non rifiutato come tale"
-                ),
-                other => panic!("symlink accettato o errore sbagliato: {other:?}"),
-            }
+            let err = reg.register(&storage, "s", target, "n").unwrap_err();
+            assert!(denied(&err), "symlink scelto: {err:?}");
+            let in_place = real_base.join(target.file_name().unwrap());
+            let err = reg.mount(&storage, "s", &in_place, "n").unwrap_err();
+            assert!(denied(&err), "symlink già reale: {err:?}");
         }
         assert!(reg.is_empty());
-        // Controllo: un mount normale passa ancora usando lo stesso backend.
-        reg.mount(&storage, "a", &real, "n").expect("controllo");
+        // Controllo: una cartella vera sotto il link passa col suo nome reale.
+        std::fs::create_dir(real.join("child")).expect("sottocartella");
+        let registered = reg
+            .register(&storage, "a", &link.join("child"), "n")
+            .expect("controllo");
+        assert_eq!(registered, real_base.join("real/child"));
     }
 
     #[test]
@@ -850,25 +1038,15 @@ mod tests {
         let (mem, root) = setup();
         let config = MountRegistry::config_path(&root);
         let mut first = MountRegistry::new(&root);
-        first
-            .mount(&mem, "a", Utf8Path::new("/ext/a"), "n1")
-            .unwrap();
+        first.mount(&mem, "a", &abs("/ext/a"), "n1").unwrap();
         first.persist_add(&mem, "a").unwrap();
         let mut second = MountRegistry::new(&root);
-        second
-            .mount(&mem, "b", Utf8Path::new("/ext/b"), "n2")
-            .unwrap();
+        second.mount(&mem, "b", &abs("/ext/b"), "n2").unwrap();
         second.persist_add(&mem, "b").unwrap();
         let loaded = MountRegistry::load(&mem, &root).unwrap();
         assert_eq!(loaded.len(), 2);
-        assert_eq!(
-            loaded.resolve(&mem, "n1", "file"),
-            Some(Utf8PathBuf::from("/ext/a/file"))
-        );
-        assert_eq!(
-            loaded.resolve(&mem, "n2", "file"),
-            Some(Utf8PathBuf::from("/ext/b/file"))
-        );
+        assert_eq!(loaded.resolve(&mem, "n1", "file"), Some(abs("/ext/a/file")));
+        assert_eq!(loaded.resolve(&mem, "n2", "file"), Some(abs("/ext/b/file")));
 
         for broken in [b"{no".as_slice(), br#"{"schema":2,"mounts":[]}"#.as_slice()] {
             mem.write(&config, broken).unwrap();
@@ -886,16 +1064,16 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let external = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
-        let target = Utf8PathBuf::from_path_buf(external.path().join("real")).unwrap();
-        std::fs::create_dir(&target).unwrap();
-        let file = target.join("treasure.txt");
-        std::fs::write(&file, b"precious").unwrap();
+        let chosen = Utf8PathBuf::from_path_buf(external.path().join("real")).unwrap();
+        std::fs::create_dir(&chosen).unwrap();
         let storage = crate::storage::FsStorage;
         let mut prepared = MountRegistry::new(&root);
         assert!(prepared.routing_table().is_empty());
-        prepared
-            .mount(&storage, "external", &target, "photos")
+        let target = prepared
+            .register(&storage, "external", &chosen, "photos")
             .unwrap();
+        let file = target.join("treasure.txt");
+        std::fs::write(&file, b"precious").unwrap();
         prepared.persist_add(&storage, "external").unwrap();
         let loaded = MountRegistry::load(&storage, &root).unwrap();
         let mut with_existing = loaded.clone();
@@ -936,12 +1114,12 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let external = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
-        let target = Utf8PathBuf::from_path_buf(external.path().join("chosen")).unwrap();
-        std::fs::create_dir(&target).unwrap();
+        let chosen = Utf8PathBuf::from_path_buf(external.path().join("chosen")).unwrap();
+        std::fs::create_dir(&chosen).unwrap();
         let storage = crate::storage::FsStorage;
         let mut prepared = MountRegistry::new(&root);
-        prepared
-            .mount(&storage, "chosen", &target, "chosen")
+        let target = prepared
+            .register(&storage, "chosen", &chosen, "chosen")
             .unwrap();
         std::fs::rename(&target, target.with_file_name("original")).unwrap();
         std::fs::create_dir(&target).unwrap();
@@ -954,11 +1132,11 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let external = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
-        let target = Utf8PathBuf::from_path_buf(external.path().join("removable")).unwrap();
-        std::fs::create_dir(&target).unwrap();
+        let chosen = Utf8PathBuf::from_path_buf(external.path().join("removable")).unwrap();
+        std::fs::create_dir(&chosen).unwrap();
         let storage = crate::storage::FsStorage;
         let mut prepared = MountRegistry::new(&root);
-        prepared.mount(&storage, "usb", &target, "usb").unwrap();
+        let target = prepared.register(&storage, "usb", &chosen, "usb").unwrap();
         prepared.persist_add(&storage, "usb").unwrap();
         std::fs::remove_dir(&target).unwrap();
 

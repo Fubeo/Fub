@@ -134,10 +134,12 @@ scansione.
 
 `mounts.json` è un oggetto JSON con `schema: 1` e `mounts`: ogni voce
 contiene `mount` (`name`, `target` assoluto, `namespace`) e `identity`
-(`volume`, `file`). Il namespace è l'identità stabile di routing; non è un
-`DocId` del vault. L'assenza del file significa nessun mount. Uno schema futuro,
-un file corrotto o duplicati strutturali vengono rifiutati, non reinterpretati
-come registro vuoto né sovrascritti. Una singola destinazione assente, sostituita
+(`volume`, `file`). `target` è il path reale, risolto una volta alla
+registrazione: senza collegamenti negli antenati, nella forma di
+`canonicalize` (su Windows quella estesa `\\?\`). Il namespace è l'identità
+stabile di routing; non è un `DocId` del vault. L'assenza del file significa
+nessun mount. Uno schema futuro, un file corrotto o duplicati strutturali
+vengono rifiutati, non reinterpretati come registro vuoto né sovrascritti. Una singola destinazione assente, sostituita
 o non più verificabile resta invece configurata ma inattiva: il vault apre,
 pubblica una diagnostica e non espone quella rotta; `mount.remove` continua a
 poterla eliminare senza toccare i byte esterni. Gli aggiornamenti fondono una

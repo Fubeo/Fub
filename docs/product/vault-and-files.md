@@ -159,8 +159,11 @@ scelto un path assoluto, l'utente può usare i comandi generici `mount.add`
 (`name`, `target`, `namespace`), `mount.list` e `mount.remove` (`name`).
 L'elenco restituisce rotte tipizzate con namespace stabile e target; i path
 relativi risolti nel namespace restano recintati, senza attraversare `..`,
-separatori Windows o symlink. Sono rifiutati target e antenati symlink/reparse,
-root del vault, `.fub/`, cartelle sovrapposte, alias e filesystem che non
+separatori Windows o symlink. Alla registrazione gli antenati del path scelto
+si risolvono una volta (su macOS `/var` è `/private/var`) e si salva il path
+reale; da lì in poi un antenato che diventa symlink/reparse rende la rotta
+inattiva. Sono rifiutati un target che è esso stesso symlink/reparse, anche
+penzolante, root del vault in qualunque forma la si nomini, `.fub/`, cartelle sovrapposte, alias e filesystem che non
 forniscono identità e stat senza seguire i collegamenti. Se una destinazione
 registrata è scollegata o cambia identità, Fub apre comunque il vault con la
 rotta inattiva e una diagnostica; `mount.remove` resta disponibile. Il registro

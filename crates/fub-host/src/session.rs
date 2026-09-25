@@ -3452,10 +3452,11 @@ impl Host {
         match spec.id.as_str() {
             MOUNT_ADD => {
                 let name = args["name"].as_str().expect("spec validata");
-                let target = Utf8Path::new(args["target"].as_str().expect("spec validata"));
+                let chosen = Utf8Path::new(args["target"].as_str().expect("spec validata"));
                 let namespace = args["namespace"].as_str().expect("spec validata");
-                fresh
-                    .mount(&storage, name, target, namespace)
+                // Il piano mostra il nome che verrà salvato, non quello scelto.
+                let target = fresh
+                    .register(&storage, name, chosen, namespace)
                     .map_err(PluginError::from)?;
                 if mode.is_dry_run() {
                     let summary = Text::message(
@@ -4899,7 +4900,11 @@ mod mount_command_tests {
         assert_eq!(payload["routes"][0]["name"], "archivio");
         host.close_vault(&root).unwrap();
         host.open(&root).unwrap();
-        assert_eq!(host.mount_routes(None).unwrap()[0].target, target);
+        // Si salva il nome reale: su macOS il tempdir passa da `/var`.
+        assert_eq!(
+            host.mount_routes(None).unwrap()[0].target,
+            canonical(&target).unwrap()
+        );
         host.invoke_user_command(
             None,
             MOUNT_REMOVE,
@@ -4937,7 +4942,8 @@ mod mount_command_tests {
             let completed = rx.recv_timeout(std::time::Duration::from_secs(3));
             drop(guard);
             worker.join().unwrap();
-            assert!(completed.expect("mount attende il lock workspace").is_ok());
+            let result = completed.expect("mount attende il lock workspace");
+            assert!(result.is_ok(), "{result:?}");
         });
     }
 

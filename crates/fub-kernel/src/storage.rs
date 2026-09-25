@@ -415,6 +415,20 @@ pub trait VaultStorage: Send + Sync {
             "stat senza seguire collegamenti non supportato dal backend",
         ))
     }
+    /// Il nome reale di un path che esiste: assoluto, con ogni collegamento
+    /// risolto e le maiuscole del disco.
+    ///
+    /// Serve a chi registra un nome che poi controllerà in modo severo: un
+    /// antenato di sistema (`/var` → `/private/var` su macOS) si risolve una
+    /// volta, all'ingresso, invece di far rifiutare ogni path sotto di lui.
+    /// Il default rifiuta, come [`stat_no_follow`](VaultStorage::stat_no_follow).
+    fn real_path(&self, path: &Utf8Path) -> io::Result<Utf8PathBuf> {
+        let _ = path;
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "risoluzione del path reale non supportata dal backend",
+        ))
+    }
 
     /// C'è qualcosa a questo path?
     ///
@@ -1944,6 +1958,12 @@ impl VaultStorage for FsStorage {
         };
         Ok(stat_with(kind, &metadata))
     }
+    /// È `canonicalize` di `std`: su Windows la forma è quella estesa
+    /// (`\\?\C:\…`), la stessa con cui l'host nomina la radice del vault.
+    fn real_path(&self, path: &Utf8Path) -> io::Result<Utf8PathBuf> {
+        let real = std::fs::canonicalize(path)?;
+        Utf8PathBuf::from_path_buf(real).map_err(|path| not_utf8(&path))
+    }
 
     fn exists(&self, path: &Utf8Path) -> bool {
         path.exists()
@@ -2783,6 +2803,11 @@ impl VaultStorage for MemStorage {
     }
     fn stat_no_follow(&self, path: &Utf8Path) -> io::Result<Stat> {
         self.stat(path)
+    }
+    /// In memoria non ci sono collegamenti: un path che esiste è già reale.
+    fn real_path(&self, path: &Utf8Path) -> io::Result<Utf8PathBuf> {
+        self.stat(path)?;
+        Ok(path.to_owned())
     }
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
