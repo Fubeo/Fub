@@ -173,7 +173,8 @@ di default e sbiadisce verso il trasparente, senza coprire la griglia.
 
 Il loop segue il refresh dello schermo, qualunque sia: il passo della fisica è
 il tempo reale fra due fotogrammi, e la scia sbiadisce a tempo, non a
-fotogrammi. L'impostazione **Aspetto → Fotogrammi al secondo**
+fotogrammi. Col moto ridotto il passo è invece quello nominale (1/60 s): conta
+lo stato d'arrivo, e il grafo si ferma nello stesso punto a ogni ritmo. L'impostazione **Aspetto → Fotogrammi al secondo**
 (`appearance.frame-rate`) mette un tetto al ritmo; il default è il massimo
 dello schermo. Il livello della fisica dipende solo dal numero di nodi. Quando
 i fotogrammi durano stabilmente più del budget (il periodo del tetto, mai sotto

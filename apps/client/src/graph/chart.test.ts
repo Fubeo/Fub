@@ -12,6 +12,7 @@ import { defaultGraphicsConfig, organicConfig } from "./sim/types";
 import type { InteractionActions, Interaction, InteractionOptions } from "./interaction";
 import { createInteraction } from "./interaction";
 import type { Painter, DrawState } from "./render/painter";
+import { setReducedMotionPreference } from "../theme/reduced-motion";
 
 // --- i dati di prova --------------------------------------------------------
 
@@ -438,6 +439,33 @@ describe("createChart", () => {
     expect(Math.abs(drawn.length - callbacks / 4)).toBeLessThanOrEqual(1);
     // ogni fotogramma disegnato dura un periodo del tetto
     for (const state of drawn.slice(2)) expect(state.frameMs).toBeCloseTo(1000 / 30, 6);
+  });
+
+  it("col moto ridotto lo stato d'arrivo non dipende dal ritmo dei fotogrammi", () => {
+    // Chi chiede meno moto vede il grafo fermo, non la sua corsa: lo stesso
+    // grafo su due schermi con fotogrammi diversi deve fermarsi nello stesso
+    // punto. È anche ciò che rende ripetibile la foto del banco visivo.
+    g.unmount();
+    setReducedMotionPreference(true);
+    try {
+      const rest = (periods: number[]): number[] => {
+        const w = emptyWindow();
+        const chart = createChart(baseOptions(w));
+        chart.mount(fakeHost());
+        let k = 0;
+        while (w.queue.length > 0 && k < 5000) {
+          const cb = w.queue.shift()!;
+          w.t += periods[k++ % periods.length]!;
+          cb();
+        }
+        const s = lastPainter!.states[lastPainter!.states.length - 1]!.s;
+        chart.unmount();
+        return [...s.x, ...s.y];
+      };
+      expect(rest([16.7, 17.1, 16.2])).toEqual(rest([1000 / 144, 8.1, 6.5, 7.3]));
+    } finally {
+      setReducedMotionPreference(false);
+    }
   });
 
   it("i risvegli del loop non contano come frame lenti: il livello resta quello del grafo", () => {

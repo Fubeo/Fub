@@ -24,7 +24,7 @@ import {
 } from "./sim/types";
 import type { Quadtree } from "./sim/quadtree";
 import { QuadtreePool, build } from "./sim/quadtree";
-import { DT_MAX, baseTier, calculateTier, step, type EngineState } from "./sim/engine";
+import { DT, DT_MAX, baseTier, calculateTier, step, type EngineState } from "./sim/engine";
 import type { WorldBound, Camera, CameraState, Viewport } from "./render/camera";
 import { createCameraState, fit } from "./render/camera";
 import type { Painter, DrawState } from "./render/painter";
@@ -382,7 +382,10 @@ export function createChart(options: ChartOptions = {}): Chart {
     const woke = resuming;
     resuming = false;
     const intervalMs = woke ? pacer.periodMs() : Math.max(0, t - lastTime);
-    const dtS = Math.min(intervalMs / 1000, DT_MAX);
+    // Col moto ridotto conta lo stato d'arrivo, non la corsa: il passo è
+    // quello nominale, così il grafo si ferma nello stesso punto a qualunque
+    // ritmo di fotogrammi. Camera ed evidenza lì già saltano all'arrivo.
+    const dtS = reduced ? DT : Math.min(intervalMs / 1000, DT_MAX);
     const dtMs = dtS * 1000;
     lastTime = t;
     const elapsedMs = t - firstTime;
