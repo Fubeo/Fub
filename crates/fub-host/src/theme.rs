@@ -1511,6 +1511,8 @@ fn check_generation(name: &str) -> Result<(), ThemeError> {
     }
 }
 
+/// `root` è già canonica ([`canonical_theme_root`]): il controllo di fuga
+/// confronta il path canonico del puntatore con lei.
 fn read_theme_pointer(root: &Utf8Path, id: &str) -> Result<Option<ThemePointer>, ThemeError> {
     let path = root.join(POINTER_FILE);
     let Some(mut file) = open_regular(&path, root, id, MAX_THEME_MANIFEST_BYTES, false)? else {
@@ -1561,6 +1563,7 @@ fn write_theme_pointer(root: &Utf8Path, pointer: &ThemePointer) -> Result<(), Th
     result
 }
 
+/// `root` è già canonica, come per [`read_theme_pointer`].
 fn publish_theme_pointer(
     root: &Utf8Path,
     pointer: &ThemePointer,
@@ -2156,6 +2159,8 @@ mod pointer_tests {
         let temp = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(temp.path().join("theme")).unwrap();
         std::fs::create_dir(&root).unwrap();
+        // Come ogni chiamante: su macOS il tempdir passa da `/var`.
+        let root = canonical_theme_root(&root, "theme").unwrap();
         let pointer = |generation: &str| ThemePointer {
             version: 1,
             generation: generation.into(),

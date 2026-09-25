@@ -1009,12 +1009,13 @@ mod tests {
         let note = root.join("important.md");
         std::fs::write(&note, "contenuto da conservare").unwrap();
         let host = Host::without_watcher().with_config_dir(config);
-        host.open(&root).unwrap();
+        // La sessione ha la chiave canonica: su macOS il tempdir passa da `/var`.
+        let key = Utf8PathBuf::from(host.open(&root).unwrap().root);
         let known_before = host.known_vaults();
         assert!(ensure_seeded(Some(config)).is_err());
         assert!(reset_demo(&host, config).is_err());
         assert_eq!(host.known_vaults(), known_before);
-        assert!(host.vaults().contains(&root));
+        assert!(host.vaults().contains(&key));
         assert_eq!(
             std::fs::read_to_string(note).unwrap(),
             "contenuto da conservare"
