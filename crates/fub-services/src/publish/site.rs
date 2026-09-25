@@ -751,17 +751,37 @@ fn sync_tree(dir: &Path) -> Result<(), SiteError> {
     sync_dir(dir)
 }
 
+/// Toglie un collegamento senza seguirlo. Per Windows un link a una cartella
+/// è una cartella: `remove_file` lo rifiuta, si toglie con `remove_dir`.
+fn remove_link(link: &Path, meta: &fs::Metadata) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+        if meta.file_type().is_symlink_dir() {
+            return fs::remove_dir(link);
+        }
+    }
+    let _ = meta;
+    fs::remove_file(link)
+}
+
 fn remove_live(dir: &Path) -> Result<(), SiteError> {
     let live = dir.join("live");
     match fs::symlink_metadata(&live) {
         Ok(meta) if meta.file_type().is_symlink() || meta.is_file() => {
-            fs::remove_file(&live).map_err(SiteError::Io)?
+            remove_link(&live, &meta).map_err(SiteError::Io)?
         }
         Ok(_) => fs::remove_dir_all(&live).map_err(SiteError::Io)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(SiteError::Io(error)),
     }
     sync_dir(dir)
+}
+
+/// Il contenuto del link `live`, relativo alla cartella del sito. Col
+/// separatore del sistema: Windows non risolve un link che contiene `/`.
+fn bundle_link_target(version: u64) -> PathBuf {
+    Path::new("bundles").join(version.to_string())
 }
 
 #[cfg(unix)]
@@ -778,7 +798,7 @@ fn replace_live(dir: &Path, version: u64) -> Result<(), SiteError> {
     ensure_bundle(dir, version)?;
     let live = dir.join("live");
     let temp = dir.join(format!(".live-link-{}", unique_suffix()));
-    link_bundle(&PathBuf::from(format!("bundles/{version}")), &temp).map_err(SiteError::Io)?;
+    link_bundle(&bundle_link_target(version), &temp).map_err(SiteError::Io)?;
     if fs::symlink_metadata(&live).is_ok_and(|meta| meta.is_dir() && !meta.file_type().is_symlink())
     {
         fs::rename(&live, dir.join(".live-previous")).map_err(SiteError::Io)?;
@@ -880,7 +900,7 @@ pub fn recover_interrupted_commit(
             Ok(None)
         }
         Some(version) => {
-            let target = PathBuf::from(format!("bundles/{version}"));
+            let target = bundle_link_target(version);
             if fs::read_link(&live).is_ok_and(|link| link == target) && live.is_dir() {
                 discard_legacy_backup(&dir)?;
                 return Ok(None);
@@ -1434,7 +1454,7 @@ mod lifecycle_tests {
         assert_eq!(publish(&data, "<h1>public</h1>"), 1);
         unpublish_site(&data, "blog").unwrap();
         let dir = site_dir(&data, "blog");
-        link_bundle(Path::new("bundles/1"), &dir.join("live")).unwrap();
+        link_bundle(&bundle_link_target(1), &dir.join("live")).unwrap();
         assert_eq!(recover_interrupted_commit(&data, "blog").unwrap(), None);
         assert!(matches!(
             resolve_static(&data, "blog", "index.html"),
@@ -1456,7 +1476,7 @@ mod lifecycle_tests {
         assert_eq!(publish(&data, "two"), 2);
         let dir = site_dir(&data, "blog");
         let temp = dir.join(".simulated-swap");
-        link_bundle(Path::new("bundles/1"), &temp).unwrap();
+        link_bundle(&bundle_link_target(1), &temp).unwrap();
         fs::rename(&temp, dir.join("live")).unwrap(); // crash before record update
         assert_eq!(recover_interrupted_commit(&data, "blog").unwrap(), Some(2));
         assert!(
@@ -1479,7 +1499,7 @@ mod lifecycle_tests {
             crate::site_isolation::ServeDecision::DenyOrigin => panic!("local site denied"),
         }
         rollback_site(&data, "blog", 1).unwrap();
-        link_bundle(Path::new("bundles/2"), &temp).unwrap();
+        link_bundle(&bundle_link_target(2), &temp).unwrap();
         fs::rename(&temp, dir.join("live")).unwrap(); // stale live after committed rollback
         assert_eq!(recover_interrupted_commit(&data, "blog").unwrap(), Some(1));
         assert!(
