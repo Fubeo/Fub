@@ -108,6 +108,9 @@ pub(crate) fn migrate_data(
     errors
 }
 
+/// Il suffisso dello spazio messo di lato durante una migrazione.
+const ASIDE_SUFFIX: &str = ".in-progress";
+
 /// dice.
 /// Sposta una cartella di spazio per-documento, **passando di lato**.
 ///
@@ -160,9 +163,6 @@ pub(crate) fn migrate_data(
 /// codice può indovinare. Un file sulla destinazione resta ugualmente
 /// intatto e viene nominato nell'errore.
 ///
-/// Il suffisso dello spazio messo di lato durante una migrazione.
-const ASIDE_SUFFIX: &str = ".in-progress";
-
 fn move_aside(source: &Utf8Path) -> Utf8PathBuf {
     let name = source.file_name().unwrap_or("space");
     source.with_file_name(format!("{name}{ASIDE_SUFFIX}"))
