@@ -55,7 +55,9 @@ oppure termina un rollback già dichiarato.
 La posizione dei file non basta a giustificare una sovrascrittura. Se compare
 una destinazione, cambia la sorgente o entrambe le posizioni sono ambigue, Fub
 lascia l'intent ispezionabile e segnala un conflitto. Un record illeggibile o
-prodotto da uno schema futuro non blocca il recupero degli altri record.
+prodotto da uno schema futuro non blocca il recupero degli altri record. Lo
+spazio per-documento rimasto a metà di una migrazione (`*.in-progress`) è
+l'unica copia di quei dati: la raccolta degli spazi orfani non lo cancella.
 
 `vault.archive` applica la stessa regola a un insieme di file. Verifica tutte le
 sorgenti, le revisioni e le destinazioni prima della prima mossa e pubblica un

@@ -152,7 +152,7 @@ pub(crate) fn migrate_data(
 /// cartella, la migrazione si rifiuta **prima** di muovere la sorgente: la
 /// destinazione resta la scelta viva e l'errore nomina entrambi i path, così il
 /// chiamante lo espone in `doc_data_warnings`. Il sorgente resta intatto invece
-/// di finire in `.in-progress`, dove la raccolta lo perderebbe senza contesto.
+/// di finire in `.in-progress`, dove resterebbe senza contesto.
 ///
 /// L'unica cartella che si può sgomberare è quella che `same_file` riconosce
 /// come la sorgente stessa su un filesystem insensibile al caso. In ogni altro
@@ -160,9 +160,12 @@ pub(crate) fn migrate_data(
 /// codice può indovinare. Un file sulla destinazione resta ugualmente
 /// intatto e viene nominato nell'errore.
 ///
+/// Il suffisso dello spazio messo di lato durante una migrazione.
+const ASIDE_SUFFIX: &str = ".in-progress";
+
 fn move_aside(source: &Utf8Path) -> Utf8PathBuf {
     let name = source.file_name().unwrap_or("space");
-    source.with_file_name(format!("{name}.in-progress"))
+    source.with_file_name(format!("{name}{ASIDE_SUFFIX}"))
 }
 
 fn move_space(
@@ -264,6 +267,13 @@ pub(crate) fn collect(
             if entry.stat.kind != EntryKind::Dir
                 || doc_data::encode(&doc_data::decode(name)) != name
             {
+                continue;
+            }
+            // Uno spazio messo di lato da una migrazione rimasta a metà è
+            // l'unica copia dei suoi dati: la ripresa lo completa, la raccolta
+            // non lo tocca. Il prezzo è che lo spazio di una nota che si chiama
+            // davvero `*.in-progress` non si raccoglie più.
+            if name.ends_with(ASIDE_SUFFIX) {
                 continue;
             }
             let doc = DocId::new(doc_data::decode(name));
@@ -532,6 +542,27 @@ mod tests {
         assert!(
             annotation(&storage, &root, "gone.md").is_some(),
             "the data is still there, and that is precisely what nobody was saying"
+        );
+    }
+
+    /// La mossa di lato è riuscita e la seconda no: senza crash non c'è niente
+    /// da riprendere all'apertura, e la cartella di lato è l'unica copia.
+    #[test]
+    fn the_sweep_keeps_a_space_left_aside_by_a_half_done_move() {
+        let storage = MemStorage::new();
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
+        let roots = vec![root.clone()];
+        let aside = move_aside(&space_dir(&root, &DocId::new("a.md")));
+        storage
+            .write(&aside.join("annotation"), b"data of a")
+            .expect("written");
+
+        let removed = collect(&storage, &roots, &|_| false).expect("sweep");
+
+        assert_eq!(removed, 0);
+        assert_eq!(
+            storage.read(&aside.join("annotation")).unwrap(),
+            b"data of a"
         );
     }
 
