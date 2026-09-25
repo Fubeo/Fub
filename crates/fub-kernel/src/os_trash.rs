@@ -7,7 +7,7 @@ use std::io;
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::DocId;
 
-use crate::storage::{FsStorage, VaultStorage};
+use crate::storage::FsStorage;
 
 /// Il backend sposta un file e restituisce il path effettivo. Un errore deve
 /// lasciare la sorgente intatta: il chiamante lo verifica prima del fallback.
@@ -83,6 +83,7 @@ fn escaped_trash_path(path: &Utf8Path) -> String {
 
 #[cfg(target_os = "linux")]
 fn linux_move_to_trash(abs: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    use crate::storage::VaultStorage as _;
     use std::io::Write;
 
     let base = trash_base()?;
