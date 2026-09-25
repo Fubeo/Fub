@@ -207,9 +207,13 @@ impl RootedFsStorage {
             use std::mem::MaybeUninit;
             use std::os::windows::io::AsRawHandle;
             use windows_sys::Win32::Storage::FileSystem::{
-                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
             };
-            let file = self.dir.open(self.rel(path)?)?;
+            // Anche una cartella ha un'identità (lo spazio per-documento che
+            // cambia solo le maiuscole): senza il flag si apre solo un file.
+            let mut options = OpenOptions::new();
+            options.read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS);
+            let file = self.dir.open_with(self.rel(path)?, &options)?;
             let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
             // SAFETY: l'handle resta vivo e il puntatore indica storage valido.
             let ok =

@@ -897,14 +897,22 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
     }
     #[cfg(windows)]
     {
+        use std::os::windows::fs::OpenOptionsExt;
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
         };
 
         // Come per il conteggio dei nomi (§23.16), su questa piattaforma
         // l'identità sta dietro un handle: i metadati di `std` non la portano.
-        let file = std::fs::File::open(path).ok()?;
+        // L'handle chiede solo gli attributi, e il flag lo apre anche su una
+        // cartella (la radice di un mount): senza, una cartella risponde
+        // «accesso negato» e non ha identità. Segue i link, come `metadata`.
+        let file = std::fs::OpenOptions::new()
+            .access_mode(0)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
+            .ok()?;
         let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
         // SAFETY: l'handle è vivo per tutta la chiamata (`file` non cade prima),
         // e `info` è una struttura del chiamante che la funzione riempie.
@@ -2871,6 +2879,37 @@ mod tests {
                 "{which}"
             );
             assert_eq!(storage.read(&file).unwrap(), b"testo", "{which}");
+        }
+    }
+
+    /// Una cartella ha un'identità come un file: la radice di un mount la
+    /// chiede, e senza un mount su Windows non si registra.
+    #[test]
+    fn a_folder_has_an_identity_on_disk() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(temp.path()).unwrap();
+        std::fs::create_dir(base.join("a")).unwrap();
+        std::fs::create_dir(base.join("b")).unwrap();
+        let rooted = rooted::RootedFsStorage::open(base).unwrap();
+        for (which, storage) in [
+            ("fs", &FsStorage as &dyn VaultStorage),
+            ("rooted", &rooted as &dyn VaultStorage),
+        ] {
+            let a = storage
+                .file_identity(&base.join("a"))
+                .unwrap_or_else(|error| panic!("{which}: {error}"))
+                .unwrap_or_else(|| panic!("{which}: nessuna identità"));
+            let b = storage.file_identity(&base.join("b")).unwrap().unwrap();
+            assert_ne!(a, b, "{which}");
+            assert_eq!(
+                storage.file_identity(&base.join("a")).unwrap(),
+                Some(a),
+                "{which}"
+            );
+            assert!(
+                !storage.same_file(&base.join("a"), &base.join("b")),
+                "{which}"
+            );
         }
     }
 
