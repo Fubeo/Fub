@@ -315,9 +315,7 @@ pub(crate) fn pause_policy(
         super::atomic_state_write(root, "sync-paused", b"paused\n")?;
     } else if flag.exists() {
         std::fs::remove_file(&flag).map_err(|_| PluginError::Io("sync resume failed".into()))?;
-        std::fs::File::open(root)
-            .and_then(|dir| dir.sync_all())
-            .map_err(|_| PluginError::Io("sync resume flush failed".into()))?;
+        super::sync_dir(root).map_err(|_| PluginError::Io("sync resume flush failed".into()))?;
     }
     Ok(())
 }

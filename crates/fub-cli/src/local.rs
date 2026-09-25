@@ -1584,6 +1584,9 @@ pub fn save_owner_file(path: &std::path::Path, bytes: &[u8]) -> Result<(), Failu
         file.write_all(bytes)?;
         file.sync_all()?;
         std::fs::rename(&tmp, path)?;
+        // Su Windows una cartella non si apre come file: la rename resta
+        // quella ordinaria (decisione 0202).
+        #[cfg(not(windows))]
         std::fs::File::open(parent)?.sync_all()?;
         Ok(())
     })();

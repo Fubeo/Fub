@@ -714,10 +714,23 @@ fn ensure_bundle(dir: &Path, version: u64) -> Result<(), SiteError> {
     sync_dir(&dir.join("bundles"))
 }
 
+/// Rende durevole l'elenco di una cartella dopo una rename.
+///
+/// Su Windows una cartella non si apre come file (`File::open` risponde
+/// «accesso negato»): la rename resta quella ordinaria, il limite di
+/// piattaforma della decisione 0202 che vale anche per gli snapshot del
+/// kernel. Un errore vero sui metadati resta un errore.
 fn sync_dir(dir: &Path) -> Result<(), SiteError> {
-    fs::File::open(dir)
-        .and_then(|file| file.sync_all())
-        .map_err(SiteError::Io)
+    #[cfg(windows)]
+    {
+        fs::symlink_metadata(dir).map(drop).map_err(SiteError::Io)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::File::open(dir)
+            .and_then(|file| file.sync_all())
+            .map_err(SiteError::Io)
+    }
 }
 
 fn sync_tree(dir: &Path) -> Result<(), SiteError> {
@@ -726,7 +739,11 @@ fn sync_tree(dir: &Path) -> Result<(), SiteError> {
         if path.is_dir() {
             sync_tree(&path)?;
         } else {
-            fs::File::open(&path)
+            // Scrivibile: su Windows lo fsync di uno handle di sola lettura
+            // fallisce.
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
                 .and_then(|file| file.sync_all())
                 .map_err(SiteError::Io)?;
         }

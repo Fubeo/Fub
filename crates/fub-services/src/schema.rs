@@ -123,14 +123,17 @@ pub fn config_path(base: &Path) -> PathBuf {
 
 /// Scrittura atomica (tmp + rename + fsync dir): code durevoli, ack durevoli.
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     let tmp = path.with_extension("tmp");
-    fs::write(&tmp, bytes)?;
-    let f = fs::File::open(&tmp)?;
-    f.sync_all()?;
-    drop(f);
+    // Lo fsync passa dallo handle che ha scritto: su Windows `FlushFileBuffers`
+    // rifiuta un handle aperto in sola lettura.
+    let mut file = fs::File::create(&tmp)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    drop(file);
     fs::rename(&tmp, path)?;
     if let Some(parent) = path.parent() {
         if let Ok(dir) = fs::File::open(parent) {

@@ -294,14 +294,29 @@ pub fn atomic_state_write(
             .map_err(|e| fub_abi::PluginError::Io(format!("sync state flush: {e}").into()))?;
         std::fs::rename(&tmp, &path)
             .map_err(|e| fub_abi::PluginError::Io(format!("sync state commit: {e}").into()))?;
-        std::fs::File::open(root)
-            .and_then(|dir| dir.sync_all())
+        sync_dir(root)
             .map_err(|e| fub_abi::PluginError::Io(format!("sync state dir flush: {e}").into()))
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     result
+}
+
+/// Rende durevole l'elenco di una cartella dopo una rename o una rimozione.
+///
+/// Su Windows una cartella non si apre come file (`File::open` risponde
+/// «accesso negato»): la rename resta quella ordinaria, il limite di
+/// piattaforma della decisione 0202 che vale anche per gli snapshot del kernel.
+pub(crate) fn sync_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        std::fs::symlink_metadata(dir).map(drop)
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::File::open(dir)?.sync_all()
+    }
 }
 
 pub fn new_replica_id() -> String {
@@ -1111,5 +1126,20 @@ pub mod u64_string {
             One::Number(n) => Ok(n),
             One::String(s) => s.trim().parse().map_err(serde::de::Error::custom),
         }
+    }
+}
+
+#[cfg(test)]
+mod state_write_tests {
+    /// Lo stato della sync si scrive e si sostituisce anche dove una cartella
+    /// non si apre come file (Windows), senza lasciare temporanei.
+    #[test]
+    fn sync_state_is_written_replaced_and_leaves_no_temporary() {
+        let dir = tempfile::tempdir().unwrap();
+        super::atomic_state_write(dir.path(), "cursor", b"1").unwrap();
+        super::atomic_state_write(dir.path(), "cursor", b"2").unwrap();
+        assert_eq!(std::fs::read(dir.path().join("cursor")).unwrap(), b"2");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+        super::sync_dir(dir.path()).unwrap();
     }
 }
