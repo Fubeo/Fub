@@ -20,15 +20,20 @@ fn config_dir() -> Option<Utf8PathBuf> {
     fub_host::config_dir()
 }
 
+/// Il nome con cui l'host conosce una radice: la forma canonica quando la
+/// cartella esiste. Le finestre documento si confrontano con quella (su Windows
+/// `\\?\C:\…`, su macOS `/private/var/…`), non col path costruito qui.
+fn host_key(root: &Utf8Path) -> String {
+    std::fs::canonicalize(root.as_std_path())
+        .ok()
+        .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
+        .unwrap_or_else(|| root.to_owned())
+        .to_string()
+}
+
 /// La radice demo di questa installazione, anche quando la demo non e` aperta.
 pub fn demo_root() -> Option<String> {
-    support::demo_root(config_dir().as_deref()).map(|root| {
-        std::fs::canonicalize(root.as_std_path())
-            .ok()
-            .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
-            .unwrap_or(root)
-            .to_string()
-    })
+    support::demo_root(config_dir().as_deref()).map(|root| host_key(&root))
 }
 
 /// Apre la demo isolata (`<config>/demo-vault`) e dice da dove si veniva.
@@ -40,7 +45,7 @@ pub fn open_demo(
     let root = support::demo_root(dir.as_deref()).ok_or_else(|| {
         PluginError::Unserved("demo non disponibile senza una cartella di configurazione".into())
     })?;
-    document_windows::with_vault_transition(&host, &windows, root.as_str(), || {
+    document_windows::with_vault_transition(&host, &windows, &host_key(&root), || {
         support::open_demo(&host, dir.as_deref())
     })
 }
@@ -64,9 +69,9 @@ pub fn close_demo(
             "demo non disponibile senza una cartella di configurazione".into(),
         ));
     };
-    let root = dir.join(support::DEMO_DIR_NAME);
+    let root = host_key(&dir.join(support::DEMO_DIR_NAME));
     let prev = return_to.map(Utf8PathBuf::from);
-    document_windows::with_vault_transition(&host, &windows, root.as_str(), || {
+    document_windows::with_vault_transition(&host, &windows, &root, || {
         let errors = support::close_demo(&host, dir.as_path(), prev.as_deref())?;
         Ok(DemoClosed {
             errors,
@@ -85,15 +90,9 @@ pub fn reset_demo(
             "demo non disponibile senza una cartella di configurazione".into(),
         ));
     };
-    let root = dir.join(support::DEMO_DIR_NAME);
-    document_windows::with_vault_transition(&host, &windows, root.as_str(), || {
-        support::reset_demo(&host, dir.as_path()).map(|root| {
-            std::fs::canonicalize(root.as_std_path())
-                .ok()
-                .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
-                .unwrap_or(root)
-                .to_string()
-        })
+    let root = host_key(&dir.join(support::DEMO_DIR_NAME));
+    document_windows::with_vault_transition(&host, &windows, &root, || {
+        support::reset_demo(&host, dir.as_path()).map(|root| host_key(&root))
     })
 }
 
@@ -197,6 +196,23 @@ pub fn recover_config(path: String, action: RecoverAction) -> Result<RecoverOutc
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Le finestre documento si confrontano con la chiave dell'host: una radice
+    /// nominata in un'altra forma (su macOS `/var`, su Windows senza `\\?\`)
+    /// sembrerebbe un altro vault, e chiudere la demo verrebbe rifiutato.
+    #[test]
+    fn the_transition_names_the_demo_as_the_host_knows_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let raw = Utf8PathBuf::from_path_buf(dir.path().join("demo-vault")).unwrap();
+        std::fs::create_dir(&raw).unwrap();
+        let host = Host::without_watcher();
+        let opened = host.open(&raw).unwrap();
+        assert_eq!(host_key(&raw), opened.root);
+        assert!(host
+            .vaults()
+            .iter()
+            .any(|vault| vault.as_str() == host_key(&raw)));
+    }
 
     #[test]
     fn future_machine_schema_is_never_reset() {
