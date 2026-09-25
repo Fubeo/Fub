@@ -51,6 +51,12 @@ import type { FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec, KnownVault } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
+// Ogni gesto monta la shell vera: qui un giro sta fra 0,5 e 3 s, sul runner CI
+// è circa tre volte più lento e i 5 s del default li superava ora un gesto ora
+// un altro. Il tetto vale per il file intero; un blocco vero resta fermo ben
+// oltre.
+vi.setConfig({ testTimeout: 20_000 });
+
 // L'host finto vive in una scatola che `vi.mock` possa vedere: i factory dei
 // mock sono issati sopra gli import, quindi non possono chiudere su una
 // variabile normale di questo modulo. La scatola sì, perché a leggerla è la
@@ -293,9 +299,6 @@ beforeEach(() => {
 });
 
 describe("la menubar applicativa", () => {
-  // Monta la shell intera due volte: qui ~3 s, sul runner CI più lento ha
-  // superato i 5 s del default. Il tetto largo non nasconde un blocco, che
-  // resterebbe fermo ben oltre.
   it("apre File, seleziona una voce, si chiude e si rimonta senza errori", async () => {
     const first = await mount({});
     const stopFirst = await first.startup;
@@ -355,7 +358,7 @@ describe("la menubar applicativa", () => {
 
     expect(errors).toEqual([]);
     expect(rejections).toEqual([]);
-  }, 20_000);
+  });
 });
 
 describe("il pannello delle impostazioni", () => {
