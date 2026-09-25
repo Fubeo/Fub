@@ -2,6 +2,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
 use fub_abi::{HostApi, Plugin, PluginError, PluginManifest};
@@ -40,13 +41,21 @@ impl Drop for Body {
     fn drop(&mut self) {
         let workspace = self.0.workspace.lock().unwrap().as_ref().unwrap().clone();
         let registry = self.0.registry.lock().unwrap().as_ref().unwrap().clone();
-        self.0.free.store(
-            workspace.try_read().is_some()
+        // I worker dell'host restano vivi e prendono il workspace in lettura
+        // per un istante: quella contesa passa, e la sonda riprova. Un guard
+        // tenuto da questo thread durante il drop invece non si libera mai.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let free = loop {
+            let free = workspace.try_read().is_some()
                 && workspace.try_write().is_some()
                 && registry.try_read().is_some()
-                && registry.try_write().is_some(),
-            Ordering::SeqCst,
-        );
+                && registry.try_write().is_some();
+            if free || Instant::now() >= deadline {
+                break free;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        self.0.free.store(free, Ordering::SeqCst);
         self.0.dropped.fetch_add(1, Ordering::SeqCst);
         if self.0.panic_on_drop {
             panic!("missing owner disposer");
