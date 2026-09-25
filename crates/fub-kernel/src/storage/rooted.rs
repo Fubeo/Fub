@@ -44,7 +44,8 @@ fn rename_no_replace_windows(
     };
     use windows_sys::Win32::Foundation::RtlNtStatusToDosError;
     use windows_sys::Win32::Storage::FileSystem::{
-        FILE_GENERIC_READ, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ, FILE_SHARE_DELETE, FILE_SHARE_READ,
+        FILE_SHARE_WRITE,
     };
     use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
 
@@ -52,7 +53,11 @@ fn rename_no_replace_windows(
     options
         .read(true)
         .access_mode(FILE_GENERIC_READ | windows_sys::Win32::Storage::FileSystem::DELETE)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        // Anche le cartelle si spostano (lo spazio per-documento di una nota):
+        // senza questo flag CreateFileAtW apre con FILE_NON_DIRECTORY_FILE e
+        // una cartella risponde «accesso negato».
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS);
     let source = source_dir.open_with(from, &options)?;
     let name: Vec<u16> = destination_name.as_os_str().encode_wide().collect();
     let name_bytes = std::mem::size_of_val(name.as_slice());

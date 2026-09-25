@@ -380,7 +380,7 @@ pub trait VaultStorage: Send + Sync {
     /// per un file come per una cartella.
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()>;
 
-    /// Sposta un **file** soltanto se la destinazione non esiste. L'unica
+    /// Sposta un file o una cartella soltanto se la destinazione non esiste. L'unica
     /// eccezione è una correzione del caso sullo stesso nome (`nota` → `Nota`),
     /// che alcuni filesystem espongono come destinazione già esistente.
     ///
@@ -2871,6 +2871,64 @@ mod tests {
                 "{which}"
             );
             assert_eq!(storage.read(&file).unwrap(), b"testo", "{which}");
+        }
+    }
+
+    // Lo spazio per-documento di una nota è una cartella, e la migrazione lo
+    // sposta con `rename_no_replace`: ogni supporto deve saperlo fare, e
+    // rifiutare una destinazione presa senza toccare nessuna delle due. Su
+    // Windows il supporto radicato apriva la sorgente come file soltanto, e lo
+    // spazio restava a metà strada, dove la raccolta lo cancellava.
+    #[test]
+    fn rename_no_replace_moves_a_folder_and_refuses_a_taken_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(temp.path()).unwrap();
+        for which in ["fs", "rooted", "mem"] {
+            let root = base.join(which);
+            std::fs::create_dir(&root).unwrap();
+            let storage: Box<dyn VaultStorage> = match which {
+                "fs" => Box::new(FsStorage),
+                "rooted" => Box::new(rooted::RootedFsStorage::open(&root).unwrap()),
+                _ => Box::new(MemStorage::new()),
+            };
+            let aside = root.join("doc/a.md.in-progress");
+            let moved = root.join("doc/b.md");
+            let taken = root.join("doc/c.md");
+            storage.write(&aside.join("annotazione"), b"a").unwrap();
+            storage.write(&taken.join("annotazione"), b"c").unwrap();
+
+            storage
+                .rename_no_replace(&aside, &moved)
+                .unwrap_or_else(|error| panic!("{which}: {error}"));
+            assert_eq!(
+                storage.read(&moved.join("annotazione")).unwrap(),
+                b"a",
+                "{which}"
+            );
+            assert_eq!(
+                storage.stat(&aside).unwrap_err().kind(),
+                io::ErrorKind::NotFound,
+                "{which}"
+            );
+
+            assert_eq!(
+                storage
+                    .rename_no_replace(&moved, &taken)
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::AlreadyExists,
+                "{which}"
+            );
+            assert_eq!(
+                storage.read(&moved.join("annotazione")).unwrap(),
+                b"a",
+                "{which}"
+            );
+            assert_eq!(
+                storage.read(&taken.join("annotazione")).unwrap(),
+                b"c",
+                "{which}"
+            );
         }
     }
 
