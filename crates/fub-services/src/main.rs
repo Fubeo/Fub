@@ -851,14 +851,11 @@ mod sync_http_tests {
 
     impl TempDir {
         fn new() -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "fub-services-sync-http-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            ));
+            // Un nome univoco, non l'ora: su Windows l'orologio è grossolano, e
+            // due test paralleli finivano nella stessa cartella, che il primo a
+            // finire cancellava sotto l'altro.
+            let path = std::env::temp_dir()
+                .join(format!("fub-services-sync-http-{}", uuid::Uuid::new_v4()));
             std::fs::create_dir_all(&path).unwrap();
             Self(path)
         }
