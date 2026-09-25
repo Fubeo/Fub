@@ -1549,8 +1549,17 @@ mod tests {
             validate_mobile_callback("fub://search?q=ciao", &mobile_callback_policy()).is_err()
         );
         assert_eq!(classify_shared_name("nota.md", &[]), "unknown");
+        // Cosa manca dipende dalla macchina (il runner macOS ha SDK Android,
+        // adb e Xcode): si pretende che l'elenco dica lo stesso delle sonde.
         let prereqs = probe_mobile_prereqs();
-        assert!(prereqs.missing_for_android.len() + prereqs.missing_for_ios.len() >= 2);
+        assert_eq!(
+            prereqs.missing_for_android.is_empty(),
+            prereqs.android_sdk_present && prereqs.adb_present
+        );
+        assert_eq!(
+            prereqs.missing_for_ios.is_empty(),
+            prereqs.xcodebuild_present && prereqs.swift_present
+        );
     }
 
     #[test]

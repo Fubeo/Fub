@@ -293,6 +293,9 @@ beforeEach(() => {
 });
 
 describe("la menubar applicativa", () => {
+  // Monta la shell intera due volte: qui ~3 s, sul runner CI più lento ha
+  // superato i 5 s del default. Il tetto largo non nasconde un blocco, che
+  // resterebbe fermo ben oltre.
   it("apre File, seleziona una voce, si chiude e si rimonta senza errori", async () => {
     const first = await mount({});
     const stopFirst = await first.startup;
@@ -352,7 +355,7 @@ describe("la menubar applicativa", () => {
 
     expect(errors).toEqual([]);
     expect(rejections).toEqual([]);
-  });
+  }, 20_000);
 });
 
 describe("il pannello delle impostazioni", () => {

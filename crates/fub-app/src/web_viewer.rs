@@ -215,7 +215,10 @@ mod tests {
 
     #[test]
     fn the_viewer_profile_lives_outside_the_vault() {
-        let dir = viewer_data_dir(camino::Utf8Path::new("/cfg"));
-        assert_eq!(dir.as_str(), "/cfg/web-viewer");
+        // Il separatore è quello del sistema: `\` su Windows.
+        let config = camino::Utf8Path::new("/cfg");
+        let dir = viewer_data_dir(config);
+        assert_eq!(dir.parent(), Some(config));
+        assert_eq!(dir.file_name(), Some("web-viewer"));
     }
 }
