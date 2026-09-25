@@ -61,9 +61,9 @@ export function mountBaseSurface(
   search.type = "search";
   search.className = "base-search";
   const newNote = button("+", () => void createNote());
-  const copyCsv = button("Copy CSV", () => void copyResults());
+  const copyCsv = button(t("base.csv.copy"), () => void copyResults());
   copyCsv.className = "base-csv-copy";
-  const downloadCsv = button("Export CSV", () => exportResults());
+  const downloadCsv = button(t("base.csv.export"), () => exportResults());
   downloadCsv.className = "base-csv";
   const status = document.createElement("div");
   status.className = "base-status";
@@ -328,7 +328,7 @@ export function mountBaseSurface(
             finished = true;
             const next = input.value.trim();
             if (!next || next === name) { draw(); return; }
-            if (next.length > 256 || groups.has(next)) { status.textContent = "base: corsia duplicata o troppo lunga"; draw(); return; }
+            if (next.length > 256 || groups.has(next)) { status.textContent = t("base.lane.taken"); draw(); return; }
             remember(next);
             localLanes.get(view)?.delete(name);
             saveLanes(view);
@@ -348,7 +348,7 @@ export function mountBaseSurface(
           input.addEventListener("blur", () => { if (input.isConnected) commit(); });
         }));
       }
-      if (writable) lane.append(button("+ Card", () => void createNote(name)));
+      if (writable) lane.append(button(t("base.card.add"), () => void createNote(name)));
       for (const row of members) {
         const card = document.createElement("article");
         card.className = "base-kanban-card";
@@ -374,7 +374,7 @@ export function mountBaseSurface(
       add.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         const name = add.value.trim();
-        if (!name || name.length > 256 || groups.has(name)) { status.textContent = "base: corsia duplicata o vuota"; return; }
+        if (!name || name.length > 256 || groups.has(name)) { status.textContent = t("base.lane.taken"); return; }
         remember(name);
         draw();
       });
@@ -506,7 +506,11 @@ export function mountBaseSurface(
         ? t("base.map.tiles_denied")
         : BASE_MAP_ATTRIBUTION_FALLBACK;
     }
-    wrapper.append(button("+", () => zoomBy(1.2)), button("−", () => zoomBy(1 / 1.2)), atlas, attribution);
+    const zoomIn = button("+", () => zoomBy(1.2));
+    zoomIn.setAttribute("aria-label", t("base.map.zoom_in"));
+    const zoomOut = button("−", () => zoomBy(1 / 1.2));
+    zoomOut.setAttribute("aria-label", t("base.map.zoom_out"));
+    wrapper.append(zoomIn, zoomOut, atlas, attribution);
     body.append(wrapper);
   };
   const draw = (): void => {
@@ -547,7 +551,7 @@ export function mountBaseSurface(
     finally { newNote.disabled = readOnly; }
   }
   async function copyResults(): Promise<void> {
-    try { await navigator.clipboard.writeText(baseRowsToCsv(filteredRows(), plan?.columns ?? [])); status.textContent = "CSV"; }
+    try { await navigator.clipboard.writeText(baseRowsToCsv(filteredRows(), plan?.columns ?? [])); status.textContent = t("base.csv.copied"); }
     catch (failure) { presentError(failure); }
   }
   function exportResults(): void {
@@ -594,7 +598,8 @@ export function mountBaseSurface(
     search.setAttribute("aria-label", labels().search);
     search.placeholder = labels().search;
     newNote.setAttribute("aria-label", t("explorer.new.hint"));
-    copyCsv.setAttribute("aria-label", "CSV");
+    copyCsv.textContent = t("base.csv.copy");
+    downloadCsv.textContent = t("base.csv.export");
     if (!error && rows.length) draw();
   };
   const stopLanguage = onLanguage(relabel);

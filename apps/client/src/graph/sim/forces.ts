@@ -45,8 +45,10 @@ export const REPULSION_REFERENCE = 120;
 /// Con 1/d la densità d'equilibrio non dipende dal numero di note, e un grafo
 /// da mille nodi è solo più grande di uno da cento. `d2` è il quadrato della
 /// distanza; il `+ 64` ammorbidisce la singolarità a 8 px, come prima.
-function repulsionMagnitude(strength: number, d2: number): number {
-  return strength / (REPULSION_REFERENCE * Math.sqrt(d2 + 64));
+/// Restituisce il modulo già diviso per la distanza, il fattore che moltiplica
+/// (dx, dy): una radice sola per coppia invece di due.
+function repulsionOverDistance(strength: number, d2: number): number {
+  return strength / (REPULSION_REFERENCE * Math.sqrt((d2 + 64) * d2));
 }
 
 /// Il dt del passo corrente: la molla del puntatore ne ha bisogno per
@@ -72,10 +74,9 @@ function bhRepulsion(dx: number, dy: number, d2: number, mass: number): void {
   const s = forceStructure!;
   // dx,dy puntano dal nodo di query (i) al nodo j (x_j − x_i). La repulsione
   // spinge i LONTANO da j: lungo −(dx,dy), cioè verso (x_i − x_j).
-  const f = repulsionMagnitude(forceRepulsion * mass, d2);
-  const inv = 1 / Math.sqrt(d2);
-  s.fx[forceIndex] -= f * dx * inv;
-  s.fy[forceIndex] -= f * dy * inv;
+  const scale = repulsionOverDistance(forceRepulsion * mass, d2);
+  s.fx[forceIndex] -= scale * dx;
+  s.fy[forceIndex] -= scale * dy;
 }
 
 /// Azzera `fx`/`fy` e le riempie con repulsione + molle + gravità + molla
@@ -123,16 +124,16 @@ export function accumulateForces(
           dy = 0.5 - (j % 3) * 0.1;
           d2 = dx * dx + dy * dy;
         }
-        const inv = 1 / Math.sqrt(d2);
         // dx,dy = x_j − x_i (da i a j). Repulsione: i si allontana da j
         // (lungo −û), j si allontana da i (lungo +û). La massa del vicino
         // entra: un hub respinge di più.
-        const fi = repulsionMagnitude(repulsion * s.mass[j], d2);
-        const fj = repulsionMagnitude(repulsion * s.mass[i], d2);
-        fx[i] -= fi * dx * inv;
-        fy[i] -= fi * dy * inv;
-        fx[j] += fj * dx * inv;
-        fy[j] += fj * dy * inv;
+        const scale = repulsionOverDistance(repulsion, d2);
+        const fi = scale * s.mass[j];
+        const fj = scale * s.mass[i];
+        fx[i] -= fi * dx;
+        fy[i] -= fi * dy;
+        fx[j] += fj * dx;
+        fy[j] += fj * dy;
       }
     }
   }

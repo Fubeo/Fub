@@ -70,15 +70,22 @@ const DOWN: &str = "down";
 pub struct OutlineView;
 
 impl ViewProvider for OutlineView {
-    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+    fn interests(&self, instance: &ViewInstance) -> ViewInterests {
+        // Del contesto la struttura segue il documento (di chi è la struttura)
+        // e la selezione (in quale sezione sta il cursore). Non la modalità: in
+        // lettura la selezione sparisce, e sparisce con lei il segno. Le note
+        // a piè di pagina non segnano il cursore: seguirlo le rileggeva e
+        // riparsava a ogni pausa della tastiera.
+        let follows = if instance.view == FOOTNOTES_VIEW {
+            vec![ContextKind::Document]
+        } else {
+            vec![ContextKind::Document, ContextKind::Selection]
+        };
         ViewInterests {
             // Gli heading cambiano quando cambia il documento: `IndexUpdated`
             // copre ogni scrittura (anche quelle arrivate dal watcher).
             refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
-            // Del contesto segue il documento (di chi è la struttura) e la
-            // selezione (in quale sezione sta il cursore). Non la modalità: in
-            // lettura la selezione sparisce, e sparisce con lei il segno.
-            follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
+            follows: ContextMask(follows),
         }
     }
 
@@ -969,6 +976,18 @@ mod tests {
             OutlineView.on_action(&instance, click, &mut host),
             Err(PluginError::Conflict(_))
         ));
+    }
+
+    #[test]
+    fn only_the_outline_follows_the_selection() {
+        let follows = |view: &str| OutlineView.interests(&ViewInstance::only(view)).follows.0;
+        assert_eq!(
+            follows(OUTLINE_VIEW),
+            vec![ContextKind::Document, ContextKind::Selection]
+        );
+        // Le note non segnano il cursore: una selezione che si sposta non le
+        // riparsa.
+        assert_eq!(follows(FOOTNOTES_VIEW), vec![ContextKind::Document]);
     }
 
     #[test]

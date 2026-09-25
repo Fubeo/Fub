@@ -59,6 +59,7 @@ pub use fub_host::{
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod document_windows;
+mod frame_rate;
 mod mobile;
 mod resources;
 mod support;
@@ -1075,6 +1076,10 @@ fn set_setting(
             PluginError::Internal(format!("native zoom not applied: {and}").into())
         })?;
     }
+    if key == fub_host::settings::APPEARANCE_FRAME_RATE {
+        let beyond_60 = frame_rate::beyond_60(&host.machine_settings());
+        frame_rate::apply_all(window.app_handle(), beyond_60);
+    }
     Ok(())
 }
 
@@ -1092,6 +1097,10 @@ fn reset_setting(
         window
             .set_zoom(fub_host::settings::DEFAULT_ZOOM)
             .map_err(|and| PluginError::Internal(format!("native zoom not reset: {and}").into()))?;
+    }
+    if key == fub_host::settings::APPEARANCE_FRAME_RATE {
+        let beyond_60 = frame_rate::beyond_60(&host.machine_settings());
+        frame_rate::apply_all(window.app_handle(), beyond_60);
     }
     Ok(())
 }
@@ -1125,11 +1134,13 @@ fn export_settings_profile(
 #[tauri::command]
 fn import_settings_profile(
     host: State<Host>,
+    window: tauri::WebviewWindow,
     scope: SettingScope,
     json: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.import_settings_profile(vault.as_deref(), scope, &json)
+    host.import_settings_profile(vault.as_deref(), scope, &json)?;
+    reapply_native(&host, &window)
 }
 
 #[tauri::command]
@@ -1146,21 +1157,41 @@ fn duplicate_settings_profile(
 #[tauri::command]
 fn switch_settings_profile(
     host: State<Host>,
+    window: tauri::WebviewWindow,
     scope: SettingScope,
     name: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.switch_settings_profile(vault.as_deref(), scope, &name)
+    host.switch_settings_profile(vault.as_deref(), scope, &name)?;
+    reapply_native(&host, &window)
 }
 
 #[tauri::command]
 fn reset_settings_profile(
     host: State<Host>,
+    window: tauri::WebviewWindow,
     scope: SettingScope,
     name: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.reset_settings_profile(vault.as_deref(), scope, &name)
+    host.reset_settings_profile(vault.as_deref(), scope, &name)?;
+    reapply_native(&host, &window)
+}
+
+/// Zoom e tetto dei fotogrammi sono side effect nativi: un profilo cambiato,
+/// importato o azzerato cambia il valore di macchina, e le finestre devono
+/// seguirlo subito come dopo `set_setting`, non al prossimo avvio.
+fn reapply_native(host: &Host, window: &tauri::WebviewWindow) -> Result<(), PluginError> {
+    let machine = host.machine_settings();
+    frame_rate::apply_all(window.app_handle(), frame_rate::beyond_60(&machine));
+    let zoom = machine
+        .iter()
+        .find(|entry| entry.spec.key == fub_host::settings::APPEARANCE_ZOOM)
+        .and_then(|entry| entry.value.as_number())
+        .unwrap_or(fub_host::settings::DEFAULT_ZOOM);
+    window
+        .set_zoom(zoom)
+        .map_err(|and| PluginError::Internal(format!("native zoom not applied: {and}").into()))
 }
 
 #[tauri::command]
@@ -2083,6 +2114,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init());
 
     builder
+        // Ogni webview, anche le finestre aperte dopo, prende il tetto dei
+        // fotogrammi prima di disegnare.
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                let machine = webview.app_handle().state::<Host>().machine_settings();
+                frame_rate::apply(webview, frame_rate::beyond_60(&machine));
+            }
+        })
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
             let machine = app.state::<Host>().machine_settings();

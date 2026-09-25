@@ -22,6 +22,8 @@ import {
 } from "./loader";
 import { accentPalette, type ContrastLevel } from "./serie/recipe";
 import { mountCssSnippets } from "./snippets";
+import { setReducedMotionPreference } from "./reduced-motion";
+import { setFrameRatePreference } from "./frame-rate";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
@@ -42,6 +44,9 @@ export const MEASURE_KEY = "appearance.measure";
 export const FONT_KEY = "appearance.font";
 export const ACCENT_KEY = "appearance.accent";
 export const ZOOM_KEY = "appearance.zoom";
+export const THEME_ID_KEY = "appearance.theme-id";
+export const MOTION_KEY = "appearance.motion";
+export const FRAME_RATE_KEY = "appearance.frame-rate";
 const THEME_CACHE = "fub.appearance.theme";
 export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
@@ -102,6 +107,10 @@ let mountedLight: Theme | null = null;
 let suppressInitialWarning = false;
 let applyGeneration = 0;
 let selectionGeneration = 0;
+/// Quante `selectTheme` stanno scrivendo. Una selezione scrive due chiavi
+/// (luce e id), e un `reread` fra le due vedrebbe metà scelta: finché
+/// scrivono, la selezione in memoria è loro e `reread` non la tocca.
+let selecting = 0;
 let warn: (theme: Theme) => void = () => {};
 export function effectiveTheme(choice: unknown, systemDark: boolean): Theme {
   if (choice === "light" || choice === "dark") return choice;
@@ -300,9 +309,13 @@ async function reread(): Promise<void> {
   const contrast = valueOf(entries, CONTRAST_KEY);
   const previousChoice = themeChoice;
   const previousId = selectedThemeId;
-  themeChoice = normalizedThemeChoice(theme);
-  if (theme === "lime") themeChoice = "dark";
+  if (selecting === 0) {
+    themeChoice = normalizedThemeChoice(theme);
+    if (theme === "lime") themeChoice = "dark";
+  }
   contrastChoice = typeof contrast === "string" ? contrast : "";
+  setReducedMotionPreference(valueOf(entries, MOTION_KEY) === "reduced");
+  setFrameRatePreference(valueOf(entries, FRAME_RATE_KEY));
   preferences = normalizedPreferences({
     density: valueOf(entries, DENSITY_KEY) as Density,
     body: valueOf(entries, BODY_KEY) as number,
@@ -311,7 +324,24 @@ async function reread(): Promise<void> {
     font: valueOf(entries, FONT_KEY) as ReadingFont,
     accent: valueOf(entries, ACCENT_KEY) as number,
   });
-  if (
+  // L'id scritto nelle impostazioni della macchina è autorevole. Se non è mai
+  // stato scritto (una shell precedente lo teneva solo nella cache), vale la
+  // regola di prima: un tema installato resta finché la luce non cambia.
+  const idEntry = entries.find((entry) => entry.spec.key === THEME_ID_KEY);
+  const storedId = idEntry && idEntry.source !== "default" && typeof idEntry.value === "string" && idEntry.value !== ""
+    ? idEntry.value
+    : null;
+  if (selecting > 0) {
+    // La selezione in volo decide da sé.
+  } else if (storedId !== null) {
+    const usable = storedId === SERIES_THEME_ID || installedThemes.some((installed) =>
+      installed.manifest.id === storedId && installed.manifest.lights.includes(themeChoice as Theme));
+    const next = usable ? storedId : SERIES_THEME_ID;
+    if (next !== selectedThemeId) {
+      selectionGeneration++;
+      selectedThemeId = next;
+    }
+  } else if (
     previousId !== SERIES_THEME_ID &&
     (previousChoice !== themeChoice ||
       !installedThemes.some((installed) => installed.manifest.id === previousId))
@@ -432,11 +462,15 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
   previewSelection = null;
   selectedThemeId = id;
   themeChoice = light;
+  selecting++;
   try {
     // Aggiorna lo stato vivo prima del comando: il backend emette
     // `setting_changed` durante la scrittura e il reread concorrente deve
     // osservare questa selezione esplicita, non quella appena precedente.
     await api.setSetting(THEME_KEY, light);
+    // L'id segue la luce nelle impostazioni della macchina. Se l'host non lo
+    // dichiara (uno precedente), resta la cache: la luce è già scritta.
+    await api.setSetting(THEME_ID_KEY, id).catch(() => {});
     if (generation !== selectionGeneration) return;
     persistSelection();
     await apply();
@@ -448,6 +482,8 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
       await apply();
     }
     throw error;
+  } finally {
+    selecting--;
   }
 }
 

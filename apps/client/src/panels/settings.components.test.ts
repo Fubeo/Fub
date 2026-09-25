@@ -8,6 +8,8 @@ import { permissionKey } from "../ui/permissions";
 const box = vi.hoisted(() => ({
   host: null as FakeHost | null,
   confirm: true,
+  /// Le domande fatte alla modale di conferma, nell'ordine.
+  asked: [] as string[],
   file: null as string | null,
   entries: [] as SettingEntry[],
   themes: [] as ThemeInfo[],
@@ -65,7 +67,10 @@ vi.mock("../theme/theme", () => ({
   themeCatalog: async () => box.themes,
 }));
 vi.mock("../host/dialog", () => ({
-  confirm: () => Promise.resolve(box.confirm),
+  confirm: (message: string) => {
+    box.asked.push(message);
+    return Promise.resolve(box.confirm);
+  },
   pickFile: () => Promise.resolve(box.file),
   pickFolder: () => Promise.resolve(box.file),
 }));
@@ -330,6 +335,23 @@ describe("inventario dei componenti installati", () => {
       expect(plugin).toMatchObject({ enabled: true, consent: "granted", mounted: true });
     });
   });
+  it("concedere il consenso chiede prima, elencando i permessi; un no non concede niente", async () => {
+    box.host = createFakeHost({ installedPlugins: [installed()] });
+    box.asked = [];
+    box.confirm = false;
+    await openComponents();
+
+    const consent = document.querySelector<HTMLSelectElement>("#installed-consent-41")!;
+    consent.value = "granted";
+    consent.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(box.asked.length).toBe(1));
+    expect(box.asked[0]).toContain("•");
+    await vi.waitFor(() => expect(consent.value).toBe("undecided"));
+    const [plugin] = await box.host.module.api.listInstalledPlugins("/vault");
+    expect(plugin).toMatchObject({ consent: "undecided", mounted: false });
+    box.confirm = true;
+  });
+
   it("dopo una mutazione fallita rilegge la scelta autorevole senza lasciare il controllo ottimista", async () => {
     box.host = createFakeHost({ installedPlugins: [installed({ consent: "denied" })] });
     const repair = box.host.fault("setInstalledPluginConsent", "disco non scrivibile");

@@ -18,7 +18,11 @@ famiglia Grid; se il provider Grid non è servito, la stessa superficie resta
 navigabile e mostra gli input grezzi senza un secondo valutatore formule.
 Il commutatore nella barra di ciascun riquadro legge la dichiarazione della
 propria superficie; con una sola modalità non mostra un selettore.
-Le scorciatoie seguono il riquadro attivo.
+Le scorciatoie seguono il riquadro attivo. La modalità di una finestra nuova
+viene da `editor.default-mode`; un riquadro diviso eredita quella del riquadro
+da cui nasce. I divisori fra riquadri si trascinano, si spostano con le frecce
+e tornano a parti uguali con un doppio clic; le proporzioni restano nel layout
+finché la fila non cambia.
 
 Il tema di serie è quieto: neutri caldi, una carta antracite al buio e avorio
 in luce (mai il nero o il bianco puri), e un accento salvia desaturato per
@@ -35,9 +39,14 @@ Font, corpo, interlinea e misura rispettano le preferenze di lettura.
 
 L'editor testuale supporta folding, selezioni multiple e rettangolari,
 indentazione, liste intelligenti, matching e chiusura delle parentesi. L'incolla
-da HTML passa dal sanitizzatore e viene convertito in Markdown; testo semplice e
-Markdown dichiarato restano invece input autorevole. Correttore ortografico e
-modalità Vim sono preferenze di macchina aggiornate senza rimontare la sessione.
+da HTML passa dal sanitizzatore e viene convertito in Markdown, tabelle,
+barrato ed elenchi di attività GFM compresi; testo semplice e Markdown
+dichiarato restano invece input autorevole. Un allegato depositato incollando o
+trascinando si incorpora se la lettura lo sa mostrare (immagini, audio, video,
+PDF) e diventa un link col suo nome altrimenti; una nota trascinata dall'albero
+diventa un wikilink nel punto in cui cade. Correttore ortografico, modalità
+Vim, numeri di riga (visibili in Sorgente), a capo automatico e unità di
+rientro sono preferenze di macchina aggiornate senza rimontare la sessione.
 La direzione del testo è automatica per riga e la misura leggibile riusa la
 preferenza di aspetto.
 
@@ -262,8 +271,9 @@ riordinare una riga sposta l'indirizzo senza cambiare l'identità della cella.
 
 La superficie mostra intestazioni, celle e selezione rettangolare in una
 viewport virtualizzata. Supporta tastiera, editor in-cell, formula bar,
-copia/incolla TSV e undo/redo del workbook. Commit, cancel e blur sono
-espliciti; una modifica peer strutturata conserva la bozza locale, mentre una
+copia/incolla TSV e undo/redo del workbook. Invio conferma la cella, Esc
+annulla la modifica e uscire dalla cella (o dalla formula bar) la conferma;
+una modifica peer strutturata conserva la bozza locale, mentre una
 riscrittura completa autorevole la annulla.
 
 Tab e Maiusc+Tab percorrono le celle visibili; raggiunti i due estremi,

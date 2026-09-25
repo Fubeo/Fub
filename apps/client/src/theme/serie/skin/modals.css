@@ -104,6 +104,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Le parole scritte dentro il nome proposto: in colore d'accento, senza il
+   fondo pieno degli estratti — sono lettere di un nome, non una citazione. */
+.modale .palette-title mark {
+  background: transparent;
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
 
 .modale .palette-scope,
 .modale .palette-desc,
@@ -231,4 +238,26 @@
   color: var(--danger);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
+}
+
+/* Il confronto di due testi (`ui/compare.ts`): una riga per riga, il segno e
+   il fondo dicono da che parte sta. */
+.modale .compare-box {
+  width: min(900px, 94vw);
+  max-height: 80vh;
+}
+.modale .compare-lines {
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+}
+.modale .compare-line {
+  padding: 0 var(--space-3);
+}
+.modale .compare-line[data-side="mine"] {
+  background: var(--success-wash);
+}
+.modale .compare-line[data-side="theirs"] {
+  background: var(--danger-wash);
 }

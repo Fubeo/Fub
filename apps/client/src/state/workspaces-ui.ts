@@ -6,6 +6,7 @@
 // mostra il report (doc mancanti, view non dichiarate, history potata).
 // Chiude in sé: `currentWorkspaceId` è l’ultimo applicato in questa
 // sessione, non una verità persistita.
+import { confirmInShell, promptText } from "../ui/dialogs";
 import { layout } from "./layout";
 import { state } from "./store";
 import {
@@ -109,10 +110,11 @@ export async function refreshWorkspacesPanel(): Promise<void> {
     button.className = "search-result";
     const name = document.createElement("span");
     name.className = "palette-title";
-    name.textContent = `${currentId === w.id ? "● " : ""}${w.name}`;
+    name.textContent = w.name;
+    if (currentId === w.id) button.setAttribute("aria-current", "true");
     const meta = document.createElement("span");
     meta.className = "palette-desc";
-    meta.textContent = `${w.panes} riquadri · ${w.tabs} tab`;
+    meta.textContent = t("workspaces.summary", { panes: w.panes, tabs: w.tabs });
     button.append(name, meta);
     button.addEventListener("click", () => void applyWorkspaceById(w.id));
     button.addEventListener("contextmenu", (e) => {
@@ -120,14 +122,20 @@ export async function refreshWorkspacesPanel(): Promise<void> {
       showContextMenu(e, [
         { label: t("workspaces.load"), run: () => void applyWorkspaceById(w.id) },
         { label: t("workspaces.update"), run: () => void updateWorkspaceFlow(w.id) },
-        { label: t("workspaces.rename"), run: () => {
-          const next = window.prompt(t("workspaces.rename_title"), w.name);
+        { separator: true, label: t("workspaces.rename"), run: async () => {
+          const next = await promptText({ title: t("workspaces.rename"), label: t("workspaces.rename_title"), value: w.name });
           if (next === null) return;
           if (renameWorkspace(w.id, next)) void refreshWorkspacesPanel();
           else notify(t("workspaces.rename_failed"), "guasto");
         } },
-        { label: t("workspaces.delete"), danger: true, run: () => {
-          if (!window.confirm(t("workspaces.delete_confirm", { name: w.name }))) return;
+        { separator: true, label: t("workspaces.delete"), danger: true, run: async () => {
+          const ok = await confirmInShell({
+            title: t("workspaces.delete"),
+            message: t("workspaces.delete_confirm", { name: w.name }),
+            okLabel: t("workspaces.delete"),
+            danger: true,
+          });
+          if (!ok) return;
           if (deleteWorkspace(w.id)) {
             if (currentId === w.id) currentId = null;
             void refreshWorkspacesPanel();
@@ -142,7 +150,7 @@ export async function refreshWorkspacesPanel(): Promise<void> {
 }
 
 export async function saveWorkspaceFlow(): Promise<WorkspaceEntry | null> {
-  const name = window.prompt(t("workspaces.save_title"), "");
+  const name = await promptText({ title: t("commands.workspace.save"), label: t("workspaces.save_title") });
   if (name === null) return null;
   const entry = saveWorkspace(name, layout, [...state.expanded], state.activeSpace, captureShellGeometry());
   if (!entry) {

@@ -2522,11 +2522,13 @@ impl Host {
     ) -> Result<(), PluginError> {
         if self.machine_only(vault, key) {
             self.machine.set(key, value)?;
+            crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
             return self.tell_observer(key);
         }
         self.in_session(vault, |session| {
             with_event_drain(&session.workspace, |ws| ws.set_setting(key, value))?
         })?;
+        crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
         self.if_key_remember_it(vault, key)
     }
 
@@ -2539,11 +2541,13 @@ impl Host {
     ) -> Result<(), PluginError> {
         if self.machine_only(vault, key) {
             self.machine.reset(key)?;
+            crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
             return self.tell_observer(key);
         }
         self.in_session(vault, |session| {
             with_event_drain(&session.workspace, |ws| ws.reset_setting(key))?
         })?;
+        crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
         self.if_key_remember_it(vault, key)
     }
 

@@ -399,8 +399,8 @@ describe("autoPairDecision", () => {
   });
 
   it("il carattere subito dopo il codice torna al comportamento normale", () => {
-    expect(decide("`codice`|", "$")).toEqual({ action: "insert", text: "$$", cursor: 1 });
-    expect(decide("```\ncodice\n```|", "$")).toEqual({ action: "insert", text: "$$", cursor: 1 });
+    expect(decide("`codice`|", "[")).toBeNull();
+    expect(decide("```\ncodice\n```\n$|", "$")).toEqual({ action: "insert", text: "$$$", cursor: 1 });
     expect(decide("`codice`|]", "]")).toEqual({ action: "skip" });
     expect(decide("```\ncodice\n```\n[|]", "]")).toEqual({ action: "skip" });
   });
@@ -427,10 +427,12 @@ describe("autoPairDecision", () => {
     expect(decide("==|", "=")).toBeNull();
   });
 
-  it("$ si chiude, scavalca, e $|$ sale al blocco", () => {
-    expect(decide("costa |", "$")).toEqual({ action: "insert", text: "$$", cursor: 1 });
-    expect(decide("$|$", "$")).toEqual({ action: "insert", text: "$$", cursor: 1 });
+  it("un $ da solo resta una valuta; $$ a inizio riga apre il blocco; si scavalca la chiusura", () => {
+    expect(decide("costa |", "$")).toBeNull();
+    expect(decide("5|", "$")).toBeNull();
+    expect(decide("$|", "$")).toEqual({ action: "insert", text: "$$$", cursor: 1 });
     expect(decide("$x|$", "$")).toEqual({ action: "skip" });
+    expect(decide("costa 5$ e poi |$", "$")).toBeNull();
   });
 
   it("niente auto-pair con selezione attiva o input multi-carattere", () => {

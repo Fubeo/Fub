@@ -53,6 +53,55 @@ html, body, .app {
   padding-block: var(--space-4);
 }
 
+/* Un recente: il nome apre, il percorso lo distingue da un omonimo, la ×
+   lo toglie dall'elenco. */
+.onboarding-recent-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-3);
+  padding-block: var(--space-2);
+}
+.onboarding-recent-item > .link-button {
+  min-width: 0;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.onboarding-recent-item > .onboarding-forget {
+  margin-left: auto;
+}
+.onboarding-recent-item > .muted {
+  flex-basis: 100%;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.onboarding-forget {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+}
+.onboarding-forget:hover {
+  color: var(--text);
+  background: var(--overlay-hover);
+}
+
+/* Diagnostica e recupero: una riga chiusa sotto tutto il resto. */
+.onboarding-trouble {
+  width: 100%;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.onboarding-trouble > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.onboarding-trouble[open] > summary {
+  margin-bottom: var(--space-4);
+}
+
 
 /* Il salto al contenuto, nella sua superficie: il meccanismo (fisso, fuori
    dallo schermo, rivelato dal fuoco) è della struttura; gli offset sono la
@@ -189,6 +238,9 @@ button.primary:active,
 .inspector-pane {
   border-right: 1px solid var(--border);
   padding: var(--space-5);
+  /* Il fondo della pagina, dichiarato: da cassetto (finestra stretta) il
+     pannello sta sopra i riquadri, e senza fondo si leggerebbe attraverso. */
+  background: var(--elevation-base-surface);
 }
 .inspector-pane {
   border-right: none;
@@ -230,6 +282,12 @@ button.primary:active,
   color: var(--danger);
 }
 
+/* Il velo sotto un cassetto laterale aperto a finestra stretta: dice che il
+   resto è dietro, e un clic lì chiude il cassetto. */
+.drawer-scrim {
+  background: var(--scrim);
+}
+
 /* ── skin/tree.css ──────────────────────────────────────────────────────── */
 
 /* Una lista che non è un elenco puntato. Erano cinque regole identiche sotto
@@ -267,6 +325,14 @@ button.primary:active,
 }
 .tree-row:hover {
   background: var(--bg-hover);
+}
+/* Una foglia nell'albero tiene il posto del chevron delle cartelle sorelle:
+   i nomi dello stesso livello cominciano alla stessa colonna. */
+.tree-row.leaf {
+  padding-left: calc(var(--space-5) + var(--space-7) + var(--space-3));
+}
+.tree-row.no-icon .row-name {
+  margin-left: calc(1.3em + var(--space-3));
 }
 /* La nota aperta. Lo stato si legge da dove è annunciato e non da una classe
    scritta accanto: nell'albero è il `treeitem` a essere selezionato — è lui a
@@ -324,6 +390,16 @@ button.primary:active,
 .drop-into {
   outline: 2px solid var(--accent);
   border-radius: var(--radius-sm);
+}
+
+/* L'albero vuoto: una frase e il primo gesto, dove sarebbero le note. */
+.tree-empty {
+  padding: var(--space-4) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.tree-empty p {
+  margin: 0 0 var(--space-2);
 }
 
 /* ── skin/spaces.css ────────────────────────────────────────────────────── */
@@ -447,6 +523,20 @@ select {
   transition:
     background var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease);
+}
+
+/* Un campo che non regge ciò che c'è scritto lo dice anche a colpo d'occhio:
+   `aria-invalid` lo annuncia al lettore di schermo, il bordo lo mostra a chi
+   guarda. Prima lo sapeva solo chi ascoltava. */
+:where(input, textarea, select)[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+/* Un campo che non si può cambiare lo sembra: senza questa riga un campo di
+   sola lettura di una view era identico a uno scrivibile, fino al click. */
+:where(input, textarea, select):disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 input::placeholder,
@@ -603,6 +693,82 @@ progress::-moz-progress-bar {
   padding: 0 var(--space-1);
 }
 
+/* La voce corrente di un elenco di scelte (il workspace caricato): lo dice il
+   fondo, e `aria-current` lo dice a chi ascolta. */
+.search-result[aria-current="true"] {
+  background: var(--bg-active);
+}
+
+/* Le azioni di una riga (escludi la nota, escludi la cartella): piccole, in
+   fila sotto il risultato, e visibili solo sulla riga che si sta guardando o
+   su cui c'è il fuoco — dieci righe di bottoni sempre accesi erano un muro. */
+.search-results li .search-action {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.search-results li:not(.search-tools):not(:hover):not(:focus-within) .search-action {
+  display: none;
+}
+.search-results li .search-action:hover {
+  color: var(--text);
+  background: var(--overlay-hover);
+}
+/* La riga degli strumenti (copia, sintassi): non è un risultato. */
+.search-results li.search-tools {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: 0;
+  padding-block: var(--space-1);
+  cursor: default;
+}
+.search-results li.search-tools:hover,
+.search-results li.search-tools:focus-within {
+  background: transparent;
+}
+.search-syntax {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-4);
+  width: 100%;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+}
+.search-syntax dd {
+  margin: 0;
+  color: var(--muted);
+}
+.search-syntax code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+/* Le esclusioni in corso, come etichette che si tolgono. */
+.search-exclusions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+.search-chip {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.search-chip:hover {
+  background: var(--overlay-hover);
+}
+
 /* ── skin/segmented.css ─────────────────────────────────────────────────── */
 
 /* Le tre modalità del pannello (FEATURES 4.1). In lettura l'editor non c'è —
@@ -693,14 +859,30 @@ progress::-moz-progress-bar {
 .panes {
   border-right: 1px solid var(--border);
 }
-/* Il bordo lo porta il secondo figlio in poi, non il contenitore: così una
-   divisione a tre ha due righe di separazione e non tre, e nessun riquadro ha
-   un bordo che dà sul vuoto. */
-.pane-split.row > * + * {
-  border-left: 1px solid var(--border);
+/* La riga fra due riquadri la disegna il divisore, che è anche la maniglia per
+   ridimensionarli: un pixel di bordo al centro della sua area di presa, e
+   l'accento quando lo si prende o ci si arriva da tastiera. */
+.pane-divider {
+  background-color: var(--border);
+  background-clip: content-box;
+  transition: background-color var(--duration-fast) var(--ease);
 }
-.pane-split.col > * + * {
-  border-top: 1px solid var(--border);
+.pane-divider:hover,
+.pane-divider:focus-visible,
+.pane-divider[data-dragging] {
+  background-color: var(--accent);
+}
+/* Da tastiera serve un anello vero: una riga di un pixel che cambia colore
+   non si vede abbastanza per dire dove sta il fuoco. */
+.pane-divider:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.pane-split.row > .pane-divider {
+  cursor: col-resize;
+}
+.pane-split.col > .pane-divider {
+  cursor: row-resize;
 }
 
 /* Le tab di un riquadro. La striscia sparisce quando non c'è niente aperto:
@@ -759,6 +941,11 @@ progress::-moz-progress-bar {
   color: var(--accent);
 }
 .tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -766,9 +953,20 @@ progress::-moz-progress-bar {
      AA (2,8:1 nel chiaro). Il minimo per il peggior fondo è 0,63; 0,7 ci
      lascia il margine. Al passaggio torna pieno. */
   opacity: 0.7;
-  padding: 0 var(--space-2);
+  padding: 0;
   border-radius: var(--radius-xs);
   color: inherit;
+}
+.tab-close svg {
+  width: 12px;
+  height: 12px;
+}
+.tab-pin {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-1);
+  align-self: center;
 }
 .tab-close:hover {
   opacity: 1;
@@ -814,6 +1012,54 @@ progress::-moz-progress-bar {
 .pane-toolbar > button:hover {
   background: var(--overlay-hover);
   color: var(--text);
+}
+/* Indietro e avanti: due fantasmi come il menu, spenti quando non c'è strada. */
+.pane-nav {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+.pane-nav button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.pane-nav button:hover:not(:disabled) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.pane-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Il riquadro senza tab: una frase e due gesti al centro, sommessi. */
+.pane-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  color: var(--muted);
+  text-align: center;
+}
+.pane-empty-title {
+  margin: 0;
+  font-size: var(--text-base);
+}
+.pane-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-5);
+  font-size: var(--text-sm);
 }
 
 /* Qui c'erano due regole che davano all'editor il fondo e l'inchiostro della
@@ -897,6 +1143,38 @@ progress::-moz-progress-bar {
   background: var(--doc-bg);
 }
 
+/* Il conflitto di salvataggio sopra la nota: un bordo del colore del guasto e
+   un fondo appena tinto, perché è una scelta che aspetta e non un errore
+   passato. Ridotto («Decidi dopo») resta una riga. */
+.conflict-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-3) var(--space-4) 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--danger);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-wash);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.conflict-banner p {
+  margin: 0;
+}
+.conflict-banner[data-collapsed] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-5);
+}
+.conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /* ── skin/preview.css ───────────────────────────────────────────────────── */
 
 /* Anteprima markdown: i titoli usano l'inchiostro `doc-heading`, uguale in
@@ -969,8 +1247,22 @@ progress::-moz-progress-bar {
   overflow-x: auto;
   font-family: var(--font-mono);
 }
+/* Dentro un blocco il codice non è un codice in riga: niente fondo e niente
+   margini per riga, o il blocco si legge a toppe. */
+.markdown-rendered pre code,
+.markdown-preview pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
 /* Il bottone copia vive dentro il `pre` senza spostare il codice: assoluto
-   in un angolo, fuori dalla selezione del testo, visibile anche da tastiera. */
+   in un angolo, fuori dalla selezione del testo, visibile anche da tastiera.
+   Resta nascosto finché il blocco non è sotto il puntatore o il fuoco, così
+   non copre la prima riga mentre la si legge. */
+.markdown-rendered pre:not(:hover):not(:focus-within) .markdown-code-copy,
+.markdown-preview pre:not(:hover):not(:focus-within) .markdown-code-copy {
+  opacity: 0;
+}
 .markdown-rendered .markdown-code-copy,
 .markdown-preview .markdown-code-copy {
   position: absolute;
@@ -1084,6 +1376,11 @@ progress::-moz-progress-bar {
 .markdown-preview td {
   border: 1px solid var(--doc-rule-soft);
   padding: var(--space-2) var(--space-4);
+  /* Una cella non spezza le parole (né i numeri) a metà: col testo che va a
+     capo ovunque la colonna più lunga si prendeva tutto e le altre finivano
+     una lettera per riga. Se la tabella non ci sta, scorre (`overflow-x`). */
+  overflow-wrap: normal;
+  min-width: 4ch;
 }
 .markdown-rendered th,
 .markdown-preview th {
@@ -1194,15 +1491,32 @@ progress::-moz-progress-bar {
   background: var(--doc-fill-soft);
   border-radius: var(--radius-sm);
 }
+/* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`):
+   un ciclo e una catena troppo profonda sono due cose diverse. */
 .embed-cycle::after,
 .embed-too-deep::after {
-  content: " (embed ricorsivo)";
+  content: " (" attr(data-embed-note) ")";
   opacity: 0.7;
   font-size: var(--text-sm);
 }
 .embed.unresolved {
   border-left-color: var(--doc-rule-soft);
   opacity: 0.7;
+}
+/* L'immagine che non si vede: il suo testo alternativo e il path, dove
+   sarebbe stata, invece dell'icona rotta del browser. */
+.image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: 1px dashed var(--doc-rule);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.image-missing::before {
+  content: "🖼";
 }
 
 /* Il cestino e la cronologia non hanno più regole proprie: sono due view
@@ -1291,9 +1605,13 @@ progress::-moz-progress-bar {
 .pane-preview.markdown-rendered > :last-child {
   margin-bottom: 0;
 }
+/* La scala dei titoli è **relativa al corpo di lettura** (`em`) e scende
+   sempre, in misura e in peso: legata ai gradini dell'interfaccia, un H3 valeva
+   quanto il corpo e un H4 meno. È la stessa scala della Live
+   (`livepreview.ts`), così cambiare modalità non fa saltare la pagina. */
 .markdown-rendered h1,
 .markdown-preview h1 {
-  font-size: var(--text-3xl);
+  font-size: max(1.75em, var(--text-3xl));
   line-height: var(--leading-tight);
   letter-spacing: -0.01em;
   margin: var(--space-8) 0 var(--space-4);
@@ -1308,23 +1626,24 @@ progress::-moz-progress-bar {
 }
 .markdown-rendered h2,
 .markdown-preview h2 {
-  font-size: var(--text-2xl);
+  font-size: max(1.45em, var(--text-2xl));
 }
 .markdown-rendered h3,
 .markdown-preview h3 {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-medium);
+  font-size: 1.22em;
+  font-weight: 650;
 }
 .markdown-rendered h4,
 .markdown-preview h4 {
-  font-size: var(--text-lg);
+  font-size: 1.08em;
+  font-weight: 650;
   margin: var(--space-6) 0 var(--space-2);
 }
 .markdown-rendered h5,
 .markdown-rendered h6,
 .markdown-preview h5,
 .markdown-preview h6 {
-  font-size: var(--text-sm);
+  font-size: 0.85em;
   font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
@@ -1333,6 +1652,7 @@ progress::-moz-progress-bar {
 .markdown-rendered h6,
 .markdown-preview h6 {
   font-weight: var(--weight-medium);
+  color: var(--muted);
 }
 .markdown-rendered p,
 .markdown-rendered li,
@@ -1608,7 +1928,7 @@ progress::-moz-progress-bar {
   cursor: pointer;
 }
 .base-map-marker:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1627,9 +1947,13 @@ progress::-moz-progress-bar {
   border: 1px solid var(--elevation-floating-border);
   border-radius: var(--radius-md);
   box-shadow: var(--elevation-floating-shadow);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 .context-menu button {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
   width: 100%;
   text-align: left;
   background: transparent;
@@ -1652,6 +1976,30 @@ progress::-moz-progress-bar {
 }
 .context-menu button.danger {
   color: var(--danger);
+}
+.context-menu .menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.context-menu .menu-hint {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.context-menu button[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+}
+.context-menu button[aria-disabled="true"]:hover {
+  background: transparent;
+}
+.context-menu .menu-separator {
+  height: 1px;
+  margin: var(--space-2) var(--space-1);
+  background: var(--border);
 }
 .context-menu button.danger:hover,
 .context-menu button.danger:focus-visible {
@@ -1795,10 +2143,10 @@ progress::-moz-progress-bar {
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
 }
-.graph-panel-toggle {
+.graph-panel-check {
   grid-template-columns: 1fr auto;
 }
-.graph-panel-toggle input[type="checkbox"] {
+.graph-panel-check input[type="checkbox"] {
   grid-column: 2;
 }
 .graph-panel-azioni {
@@ -1888,6 +2236,95 @@ progress::-moz-progress-bar {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
+}
+
+/* La barra dei controlli sopra il grafo: grafo locale, profondità, colori,
+   filtri. Una riga che va a capo, sommessa come la toolbar del riquadro. */
+.graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.graph-toolbar button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.graph-toolbar button:hover:not(:disabled) {
+  background: var(--overlay-hover);
+}
+.graph-toolbar button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.graph-toolbar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.graph-toolbar-field select {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+.graph-refresh {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* La legenda dei colori per gruppo: un pallino e il nome. */
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.graph-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.graph-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+}
+/* La timeline per data di modifica, sotto il grafo. */
+.graph-timeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.graph-timeline label {
+  flex: 1;
+  display: flex;
+}
+.graph-timeline input[type="range"] {
+  width: 100%;
+}
+.graph-timeline button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
 }
 
 /* ── skin/modals.css ────────────────────────────────────────────────────── */
@@ -1997,6 +2434,13 @@ progress::-moz-progress-bar {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Le parole scritte dentro il nome proposto: in colore d'accento, senza il
+   fondo pieno degli estratti — sono lettere di un nome, non una citazione. */
+.modale .palette-title mark {
+  background: transparent;
+  color: var(--accent);
+  font-weight: var(--weight-bold);
 }
 
 .modale .palette-scope,
@@ -2127,6 +2571,28 @@ progress::-moz-progress-bar {
   line-height: var(--leading-normal);
 }
 
+/* Il confronto di due testi (`ui/compare.ts`): una riga per riga, il segno e
+   il fondo dicono da che parte sta. */
+.modale .compare-box {
+  width: min(900px, 94vw);
+  max-height: 80vh;
+}
+.modale .compare-lines {
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+}
+.modale .compare-line {
+  padding: 0 var(--space-3);
+}
+.modale .compare-line[data-side="mine"] {
+  background: var(--success-wash);
+}
+.modale .compare-line[data-side="theirs"] {
+  background: var(--danger-wash);
+}
+
 /* ── skin/notices.css ───────────────────────────────────────────────────── */
 
 /* --------------------------------------------------------------------------
@@ -2153,12 +2619,57 @@ progress::-moz-progress-bar {
   box-shadow: var(--shadow-md);
   font-size: var(--text-base);
   animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+/* Il testo va a capo dove l'avviso lo dice: un elenco di motivi resta un
+   elenco. */
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-line;
+}
+.toast-action,
+.toast-more {
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.toast-action {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: var(--weight-medium);
+}
+.toast-action:hover,
+.toast-more:hover {
+  background: var(--overlay-hover);
+}
+.toast-close {
+  flex: 0 0 auto;
+  min-width: 24px;
+  min-height: 24px;
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-3)) 0 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.toast-close:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 
 /* Il tono è un bordo, non un fondo: un guasto deve saltare all'occhio senza
    diventare illeggibile, e il colore lo decide il tema (un provider sceglie
    intenti semantici, mai colori). */
-.toast[data-tono="guasto"] {
+.toast[data-tone="guasto"] {
   border-color: var(--doc-danger);
 }
 
@@ -2252,9 +2763,10 @@ progress::-moz-progress-bar {
 
 .notify-testo {
   flex: 1;
+  white-space: pre-line;
 }
 
-.notify-list li[data-tono="guasto"] .notify-testo {
+.notify-list li[data-tone="guasto"] .notify-testo {
   color: var(--doc-danger);
 }
 
@@ -2317,6 +2829,20 @@ progress::-moz-progress-bar {
 .views-status .declared-view .ui-stack {
   gap: var(--space-5);
 }
+/* Una riga sola nella toolbar: la regola generica delle pile in riga va a
+   capo, e qui due righe escono dalla barra sopra il documento. */
+.views-status,
+.views-status .declared-view .ui-stack[data-dir="row"] {
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.views-status .declared-view .ui-stack[data-dir="row"] > .ui-text {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* La ribbon: i pulsanti che aprono qualcosa. La colonna e la larghezza le
    dà la struttura (`.rail`, che `#views-ribbon` porta nel markup); qui è
@@ -2362,6 +2888,13 @@ progress::-moz-progress-bar {
    più. */
 .panel-title.clickable {
   cursor: pointer;
+}
+
+/* Un'azione in volo: il bottone resta dov'è, ma dice che sta lavorando e non
+   accetta un secondo click finché il provider non risponde. */
+.clickable[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 /* ── skin/nodes.css ─────────────────────────────────────────────────────── */

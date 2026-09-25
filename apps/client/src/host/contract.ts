@@ -1891,4 +1891,5 @@ export const COMMANDS = {
   clear: "trash.empty",
   createFolder: "folder.create",
   osTrash: "trash.os",
+  undo: "vault.undo",
 } as const;

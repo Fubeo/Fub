@@ -118,10 +118,12 @@ fn clicking_a_tag_asks_the_shell_to_search_for_it() {
             UiAction::new("search").with_payload(serde_json::json!({"tag": "rust"})),
         )
         .expect("view_action");
+    // La query è quella che si digiterebbe nella barra: cliccare un tag e
+    // scriverlo danno gli stessi risultati, sotto-tag compresi.
     assert_eq!(
         update,
         ViewUpdate::RunSearch {
-            query: "{\"any\":[{\"all\":[{\"negated\":false,\"predicate\":{\"kind\":\"tag\",\"name\":\"rust\",\"descendants\":false}}]}]}".to_string()
+            query: "tag:rust".to_string()
         }
     );
 }

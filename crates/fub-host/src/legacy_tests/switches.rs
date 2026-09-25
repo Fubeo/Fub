@@ -651,6 +651,7 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
         ("FONT_KEY", fub_host::settings::APPEARANCE_FONT),
         ("ACCENT_KEY", fub_host::settings::APPEARANCE_ACCENT),
         ("ZOOM_KEY", fub_host::settings::APPEARANCE_ZOOM),
+        ("FRAME_RATE_KEY", fub_host::settings::APPEARANCE_FRAME_RATE),
     ];
     let core = fub_host::settings::core_settings();
 
@@ -668,6 +669,7 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
         assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
         if rust_key == fub_host::settings::APPEARANCE_THEME
             || rust_key == fub_host::settings::APPEARANCE_CONTRAST
+            || rust_key == fub_host::settings::APPEARANCE_FRAME_RATE
         {
             assert_eq!(
                 spec.kind.default_value(),
@@ -676,6 +678,28 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
             );
         }
     }
+}
+
+/// I tetti dei fotogrammi sono scritti due volte, come le chiavi: il core li
+/// offre nel pannello, la shell li riconosce. Un tetto che la shell non
+/// conoscesse resterebbe nel menu e non limiterebbe niente.
+#[test]
+fn the_frame_rate_caps_are_the_same_here_and_there() {
+    let frame_rate_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/theme/frame-rate.ts");
+    let source = std::fs::read_to_string(&frame_rate_ts)
+        .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", frame_rate_ts.display()));
+    let declared: Vec<u32> = source
+        .lines()
+        .find_map(|row| {
+            row.strip_prefix("const CAPS: readonly number[] = [")?
+                .strip_suffix("];")
+        })
+        .expect("the shell no longer declares CAPS")
+        .split(',')
+        .map(|cap| cap.trim().parse().expect("a cap is a number"))
+        .collect();
+    assert_eq!(declared, fub_host::settings::FRAME_RATE_CAPS.to_vec());
 }
 
 /// Come il tema, e per una posta più alta: l'interruttore della **memoria**

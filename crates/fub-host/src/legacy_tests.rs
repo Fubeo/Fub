@@ -36,5 +36,6 @@ mod the_first_plugin;
 mod the_runner;
 mod the_watcher_batch;
 mod the_watcher_window;
+mod unlinked_mentions;
 mod view_provider_stale;
 mod watcher_factory_lock;

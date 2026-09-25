@@ -32,6 +32,27 @@ import { api } from "../host/ipc";
 import { notify } from "../ui/notify";
 import type { SettingEntry } from "../host/contract";
 import { onEvent } from "../state/kernel";
+import { revealSidePanel, sidePanelVisible, toggleSidePanel } from "../ui/side-panels";
+import { allCommands, displayBinding } from "../ui/commands";
+
+/// Il comando che ogni icona shell esegue, per scriverne l'accordo nel
+/// suggerimento.
+const RAIL_COMMANDS: Record<string, string> = {
+  files: "shell.panel.files",
+  search: "shell.panel.search",
+  graph: "shell.graph",
+};
+
+/// Il clic su un'icona della rail: mostra il pannello, e se è già quello
+/// davanti chiude la barra — come in ogni editor con una barra di attività.
+function railClick(panel: string): void {
+  if (sidePanelVisible("sidebar") && lastShownPanel() === panel) {
+    toggleSidePanel("sidebar");
+    return;
+  }
+  revealSidePanel("sidebar");
+  showPanel(panel);
+}
 
 const CHROME_VERSION = "chrome.schema";
 const RAIL_VISIBLE = "chrome.rail.visible";
@@ -90,6 +111,9 @@ function arrangeRail(): void {
     button.hidden = hiddenPanels.includes(button.dataset.panel!);
     ribbon.append(button);
   }
+  // «Configura» sta in fondo, dopo le icone che configura.
+  const manage = ribbon.querySelector<HTMLButtonElement>(".rail-btn-manage");
+  if (manage) ribbon.append(manage);
 }
 
 export function configureRail(geometry: ShellGeometry): void {
@@ -107,7 +131,7 @@ function manageRail(at: MouseEvent, selected?: string): void {
     const id = button.dataset.panel!;
     const name = names[index]!;
     return [
-      { label: t(button.hidden ? "rail.show" : "rail.hide", { name }), run: () => {
+      { separator: index > 0, label: t(button.hidden ? "rail.show" : "rail.hide", { name }), run: () => {
         hiddenPanels = button.hidden ? hiddenPanels.filter((value) => value !== id) : [...hiddenPanels, id];
         arrangeRail();
         persistRail();
@@ -190,7 +214,7 @@ export function mountRail(): Teardown {
     const btn = createRailButton(entry.icon, entry.label, entry.hint);
     btn.dataset.panel = entry.id;
     btn.setAttribute("aria-pressed", String(entry.id === "files"));
-    btn.addEventListener("click", () => showPanel(entry.id));
+    btn.addEventListener("click", () => railClick(entry.id));
     wireConfiguration(btn);
     shell.append(btn);
   }
@@ -206,12 +230,14 @@ export function mountRail(): Teardown {
 
   const manage = document.createElement("button");
   manage.type = "button";
-  manage.className = "rail-btn";
+  manage.className = "rail-btn rail-btn-manage";
   manage.textContent = "⋯";
   manage.setAttribute("aria-label", t("rail.manage"));
+  setTooltip(manage, t("rail.manage"));
   manage.addEventListener("click", (event) => manageRail(event));
   shell.append(manage);
   arrangeRail();
+  updateLabel();
   // I label della rail seguono la lingua. Si iscrivono qui e si smontano
   // col ritorno.
   const offLanguage = onLanguage(() => updateLabel());
@@ -225,14 +251,34 @@ export function mountRail(): Teardown {
 /// Aggiorna i label dei bottoni rail quando la lingua cambia.
 function updateLabel(): void {
   const shell = $("#views-ribbon");
-  for (const btn of shell.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
-    const key = btn.dataset.label;
-    const hint = btn.dataset.hint;
-    if (key) setTooltip(btn, t(key as never));
-    if (hint) btn.setAttribute("aria-label", t(hint as never));
+  for (const btn of shell.querySelectorAll<HTMLButtonElement>(".rail-btn:not(.rail-btn-view)")) {
+    // Il nome accessibile è la frase («Il grafo dei collegamenti»), come prima:
+    // l'icona non ha testo, e la parola sola dice meno di ciò che il bottone fa.
+    const key = btn.dataset.hint ?? btn.dataset.label;
+    if (key) labelRailButton(btn, t(key as never), btn.dataset.panel);
   }
-  const manage = document.querySelector<HTMLButtonElement>("#rail-shell .rail-btn:not([data-panel])");
-  if (manage) manage.setAttribute("aria-label", t("rail.manage"));
+  const manage = document.querySelector<HTMLButtonElement>("#views-ribbon .rail-btn-manage");
+  if (manage) {
+    manage.setAttribute("aria-label", t("rail.manage"));
+    setTooltip(manage, t("rail.manage"));
+  }
+}
+
+/// Nome e suggerimento di un'icona sono la stessa frase («Il grafo dei
+/// collegamenti»), e il suggerimento aggiunge la scorciatoia che fa la stessa
+/// cosa.
+export function labelRailButton(btn: HTMLElement, name: string, panel?: string): void {
+  btn.setAttribute("aria-label", name);
+  const id = panel ? RAIL_COMMANDS[panel] : undefined;
+  const chord = id ? displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null) : "";
+  setTooltip(btn, chord ? `${name} (${chord})` : name);
+  if (chord) btn.setAttribute("aria-keyshortcuts", chord);
+  else btn.removeAttribute("aria-keyshortcuts");
+}
+
+/// Riscrive i suggerimenti quando le scorciatoie cambiano.
+export function refreshRailShortcuts(): void {
+  updateLabel();
 }
 
 /// Riscopre le view `left_sidebar` montate in `#views-left` e aggiunge un
@@ -265,7 +311,7 @@ export function syncRail(): void {
     setTooltip(btn, name);
     btn.setAttribute("aria-label", name);
     btn.setAttribute("aria-pressed", "false");
-    btn.addEventListener("click", () => showPanel(viewId));
+    btn.addEventListener("click", () => railClick(viewId));
     ribbon.append(btn);
     wireConfiguration(btn);
   }
@@ -288,8 +334,7 @@ function createRailButton(
   btn.className = "rail-btn";
   btn.dataset.label = label;
   btn.dataset.hint = hint;
-  setTooltip(btn, t(label as never));
-  btn.setAttribute("aria-label", t(hint as never));
+  labelRailButton(btn, t(hint as never));
   const svg = iconEl(icon) ?? iconEl("outline");
   if (svg) btn.append(svg);
   return btn;

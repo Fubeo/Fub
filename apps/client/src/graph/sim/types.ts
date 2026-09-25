@@ -134,10 +134,12 @@ export function organicConfig(): PhysicsConfig {
 }
 
 export function defaultGraphicsConfig(): GraphicsConfig {
+  // La scia è una scelta, non il default: mentre il grafo si distende
+  // impastava archi ed etichette in una macchia.
   return {
     glow: true,
     pulse: true,
-    trail: true,
+    trail: false,
     grid: true,
     edgeCurvature: 1,
     labelDensity: 0.5,

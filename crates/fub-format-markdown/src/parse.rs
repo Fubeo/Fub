@@ -1831,6 +1831,12 @@ fn recover_definitions<'a>(
     offsets: &Offsets<'_>,
     options: &Options<'_>,
 ) -> Vec<Definition> {
+    // Una definizione comincia con `[etichetta]:`, i due caratteri attaccati
+    // anche quando l'etichetta va a capo: senza `]:` nella sorgente non ce n'è
+    // nessuna, e non si paga il secondo parse dell'ombra.
+    if !source.contains("]:") {
+        return Vec::new();
+    }
     let mut defs = Vec::new();
     let mut containers: Vec<Container> = Vec::new();
     // Gli span dei paragrafi **prima** della correzione dei misti: è contro

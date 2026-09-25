@@ -6,6 +6,7 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createChart, type Chart, type ChartOptions } from "./chart";
+import { createFramePacer } from "../theme/frame-rate";
 import type { GraphicsConfig, GraphConfig, GraphData, Structure } from "./sim/types";
 import { defaultGraphicsConfig, organicConfig } from "./sim/types";
 import type { InteractionActions, Interaction, InteractionOptions } from "./interaction";
@@ -413,6 +414,32 @@ describe("createChart", () => {
     expect(Math.abs(after.ty - moved.ty)).toBeLessThan(1);
   });
 
+  it("a 144 Hz il livello resta quello del grafo: nessuna repulsione esatta su mille nodi", () => {
+    // I frame da 7 ms portavano l'EMA sotto 12 ms e il livello sopra la base:
+    // mille nodi tornavano alla repulsione esatta, rallentavano, e il livello
+    // rimbalzava.
+    g.unmount();
+    const nodes = Array.from({ length: 1000 }, (_, i) => "n" + i);
+    g = createChart({ ...baseOptions(f), data: { nodes, edges: [] } });
+    g.mount(fakeHost());
+    runAt(f, 1000 / 144, 60);
+    const tiers = new Set(lastPainter!.states.map((state) => state.tier));
+    expect([...tiers]).toEqual([2]);
+  });
+
+  it("col tetto dei fotogrammi il loop salta i callback di troppo e la sim avanza per tempo", () => {
+    g.unmount();
+    g = createChart({ ...baseOptions(f), pacer: createFramePacer(() => 30) });
+    g.mount(fakeHost());
+    // uno schermo a 120 Hz: un callback su quattro diventa un fotogramma
+    const callbacks = runAt(f, 1000 / 120);
+    const drawn = lastPainter!.states;
+    expect(drawn.length).toBeGreaterThan(10);
+    expect(Math.abs(drawn.length - callbacks / 4)).toBeLessThanOrEqual(1);
+    // ogni fotogramma disegnato dura un periodo del tetto
+    for (const state of drawn.slice(2)) expect(state.frameMs).toBeCloseTo(1000 / 30, 6);
+  });
+
   it("i risvegli del loop non contano come frame lenti: il livello resta quello del grafo", () => {
     // Ogni risveglio misurava la pausa come un frame da 33 ms: dopo qualche
     // hover o click la media superava 22 ms e un grafo di quattro note
@@ -482,5 +509,114 @@ describe("createChart", () => {
     const announced = seen.length;
     run(f, 5);
     expect(seen).toHaveLength(announced);
+  });
+
+  it("un layout ripreso rimette posizioni, pin e vista senza rifare la semina", () => {
+    // Tornare alla linguetta del grafo ricreava tutto: la stessa animazione
+    // da capo, la vista reinquadrata e i pin persi.
+    expect(g.snapshot()).toBeNull();
+    const host = fakeHost();
+    host.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600);
+    g.mount(host);
+    run(f);
+    const first = lastInteraction!.structure();
+    first.fixed[1] = 1;
+    const x = Array.from(first.x);
+    const y = Array.from(first.y);
+    const seen = lastPainter!.states[lastPainter!.states.length - 1].camera;
+    const center = { x: (400 - seen.tx) / seen.scale, y: (300 - seen.ty) / seen.scale };
+    const saved = g.snapshot()!;
+    g.unmount();
+
+    g = createChart({ ...baseOptions(f), layout: saved });
+    const wider = fakeHost();
+    wider.getBoundingClientRect = () => new DOMRect(0, 0, 1000, 700);
+    g.mount(wider);
+    const frames = run(f);
+
+    // Un grafo già fermo resta fermo: un fotogramma, poi il loop dorme.
+    expect(frames).toBe(1);
+    expect(f.queue).toHaveLength(0);
+    const again = lastInteraction!.structure();
+    expect(Array.from(again.x)).toEqual(x);
+    expect(Array.from(again.y)).toEqual(y);
+    expect(again.fixed[1]).toBe(1);
+    // La stessa inquadratura, al centro della vista di adesso.
+    const camera = lastPainter!.states[lastPainter!.states.length - 1].camera;
+    expect(camera.scale).toBe(seen.scale);
+    expect((500 - camera.tx) / camera.scale).toBeCloseTo(center.x, 6);
+    expect((350 - camera.ty) / camera.scale).toBeCloseTo(center.y, 6);
+  });
+
+  it("il quartiere si accende e si spegne in dissolvenza, poi il loop dorme", () => {
+    // Acceso e spento di colpo, passare col puntatore su un grafo fitto lo
+    // faceva lampeggiare a ogni nodo attraversato.
+    const host = fakeHost();
+    g.mount(host);
+    run(f);
+    const canvas = host.querySelector<HTMLCanvasElement>("canvas.graph-main")!;
+    const s = lastInteraction!.structure();
+    const last = (): DrawState => lastPainter!.states[lastPainter!.states.length - 1];
+
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: s.x[0], clientY: s.y[0] }));
+    run(f, 1);
+    const node = last().hovered;
+    expect(node).toBeGreaterThanOrEqual(0);
+    expect(last().highlightNode).toBe(node);
+    expect(last().highlight).toBeGreaterThan(0);
+    expect(last().highlight).toBeLessThan(1);
+    run(f);
+    expect(last().highlight).toBe(1);
+    expect(f.queue).toHaveLength(0);
+
+    canvas.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+    run(f, 1);
+    // Il puntatore se n'è andato, ma il quartiere sfuma attorno allo stesso nodo.
+    expect(last().hovered).toBe(-1);
+    expect(last().highlightNode).toBe(node);
+    expect(last().highlight).toBeGreaterThan(0);
+    expect(last().highlight).toBeLessThan(1);
+    run(f);
+    expect(last().highlight).toBe(0);
+    expect(last().highlightNode).toBe(-1);
+    expect(f.queue).toHaveLength(0);
+  });
+
+  it("un resize tiene fermo il centro della vista e ridisegna subito", () => {
+    // Ridimensionare un canvas lo svuota: aspettare il rAF successivo
+    // lasciava un fotogramma vuoto, e dividere il riquadro faceva scivolare
+    // il grafo verso l'angolo in alto a sinistra.
+    let observed: (() => void) | null = null;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          observed = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+    g.unmount();
+    g = createChart(baseOptions(f));
+    let rect = new DOMRect(0, 0, 800, 600);
+    const host = fakeHost();
+    host.getBoundingClientRect = () => rect;
+    g.mount(host);
+    run(f);
+    const before = lastPainter!.states[lastPainter!.states.length - 1].camera;
+    const center = { x: (400 - before.tx) / before.scale, y: (300 - before.ty) / before.scale };
+    const drawn = lastPainter!.states.length;
+
+    rect = new DOMRect(0, 0, 500, 600);
+    observed!();
+
+    expect(lastPainter!.states.length).toBe(drawn + 1);
+    // A meno della coda dell'inseguimento della camera: senza la correzione
+    // il centro scivolava di 150 px di schermo.
+    const after = lastPainter!.states[lastPainter!.states.length - 1].camera;
+    expect(after.scale).toBeCloseTo(before.scale, 3);
+    expect(Math.abs((250 - after.tx) / after.scale - center.x)).toBeLessThan(0.5);
+    expect(Math.abs((300 - after.ty) / after.scale - center.y)).toBeLessThan(0.5);
   });
 });

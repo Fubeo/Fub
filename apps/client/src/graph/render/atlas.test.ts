@@ -26,8 +26,9 @@ describe("radiusBucket", () => {
     expect(radiusBucket(RADIUS_BUCKETS, 6.5)).toBe(1);
     expect(radiusBucket(RADIUS_BUCKETS, 9)).toBe(1);
     expect(radiusBucket(RADIUS_BUCKETS, 13)).toBe(2);
+    expect(radiusBucket(RADIUS_BUCKETS, 30)).toBe(3);
     // oltre l'ultimo bucket: l'ultimo (nessun indice fuori range)
-    expect(radiusBucket(RADIUS_BUCKETS, 100)).toBe(2);
+    expect(radiusBucket(RADIUS_BUCKETS, 100)).toBe(3);
     expect(radiusBucket([], 5)).toBe(-1); // bucket vuoti → -1, gestito dal chiamante
   });
 });
@@ -39,6 +40,7 @@ describe("atlasKey", () => {
     hover: "#c00",
     text: "#eee",
     background: "#000",
+    groups: [],
     source: "aaa|b00|c00|eee|000",
   };
   it("cambia se cambia la fonte (tema)", () => {
@@ -112,6 +114,7 @@ describe("generateAtlas e drawNode (degradazione no-op)", () => {
       hover: "#98c379",
       text: "#e6e6ea",
       background: "#000",
+      groups: [],
       source: "f",
     };
     const atlas = generateAtlas(t, RADIUS_BUCKETS);
@@ -123,17 +126,19 @@ describe("generateAtlas e drawNode (degradazione no-op)", () => {
   });
 
   it("drawNode con ctx null o atlas senza canvas non lancia", () => {
-    const t: Tints = { node: "#aaa", active: "#bbb", hover: "#ccc", text: "#ddd", background: "#000", source: "f" };
+    const t: Tints = { node: "#aaa", active: "#bbb", hover: "#ccc", text: "#ddd", background: "#000", groups: [], source: "f" };
     const atlas = generateAtlas(t, RADIUS_BUCKETS);
     expect(() => drawNode(null, atlas, 0, 0, 6, "node")).not.toThrow();
     const fake = {} as unknown as CanvasRenderingContext2D;
     expect(() => drawNode(fake, atlas, 0, 0, 6, "node", 0.5)).not.toThrow();
   });
 
-  it("drawNode con canvas finto fa drawImage con la cella giusta", () => {
-    // La scelta di sorgente (riga = ruolo, colonna = bucket) è il contratto
+  it("drawNode con canvas finto fa drawImage col ritaglio dello sprite", () => {
+    // La scelta di sorgente (riga = ruolo, colonna = livello) è il contratto
     // dell'atlas: un drawImage con coordinate sbagliate pescherebbe lo
-    // sprite di un altro colore/raggio.
+    // sprite di un altro colore/raggio. Il ritaglio è il lato dello sprite
+    // del livello, non la cella intera: la cella è grande quanto lo sprite
+    // maggiore, e disegnarla tutta rimpiccioliva i nodi dei livelli minori.
     const atlas: Atlas = { canvas: {}, bucket: RADIUS_BUCKETS, source: "f", cell: 64, cells: 3, rows: 3 } as unknown as Atlas;
     const calls: unknown[] = [];
     const fake = {
@@ -142,19 +147,79 @@ describe("generateAtlas e drawNode (degradazione no-op)", () => {
         calls.push(args);
       },
     } as unknown as CanvasRenderingContext2D;
-    // raggio 7 → bucket 1, ruolo "hover" → riga 2: sx = 1·64, sy = 2·64
+    // raggio 7 → livello 1 (core 12, lato 2·⌈12·1.8⌉+2 = 46), ruolo "hover"
+    // → riga 2: sx = 1·64 + (64−46)/2, sy = 2·64 + (64−46)/2
     drawNode(fake, atlas, 10, 20, 7, "hover");
     expect(calls).toHaveLength(1);
     // drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) — 9 argomenti
-    const [src, sx, sy, sw, sh, dx, dy] = calls[0] as unknown[];
+    const [src, sx, sy, sw, sh, dx, dy, dw, dh] = calls[0] as number[];
     expect(src).toBe(atlas.canvas);
-    expect(sx).toBe(64);
-    expect(sy).toBe(128);
-    expect(sw).toBe(64);
-    expect(sh).toBe(64);
-    // il target: raggio 7 → GLOW 1.8 → taglia 25.2, centrato su (10, 20)
-    expect(dx).toBeCloseTo(10 - 25.2 / 2, 6);
-    expect(dy).toBeCloseTo(20 - 25.2 / 2, 6);
+    expect(sx).toBe(73);
+    expect(sy).toBe(137);
+    expect(sw).toBe(46);
+    expect(sh).toBe(46);
+    // il core dello sprite (12) diventa il raggio chiesto (7): lato 46·7/12,
+    // centrato su (10, 20)
+    const size = (46 * 7) / 12;
+    expect(dw).toBeCloseTo(size, 6);
+    expect(dh).toBeCloseTo(size, 6);
+    expect(dx).toBeCloseTo(10 - size / 2, 6);
+    expect(dy).toBeCloseTo(20 - size / 2, 6);
+  });
+
+  it("drawNode sceglie il livello dai pixel del dispositivo", () => {
+    // Lo stesso nodo da 5px CSS su uno schermo a densità 2 è largo 10 pixel
+    // veri: lo sprite da core 6 lo sgranerebbe, serve quello da 12.
+    const atlas: Atlas = { canvas: {}, bucket: RADIUS_BUCKETS, source: "f", cell: 64, cells: 4, rows: 3 } as unknown as Atlas;
+    const calls: number[][] = [];
+    const fake = {
+      globalAlpha: 1,
+      drawImage(...args: unknown[]) {
+        calls.push(args.slice(1) as number[]);
+      },
+    } as unknown as CanvasRenderingContext2D;
+    drawNode(fake, atlas, 0, 0, 5, "node", undefined, 1);
+    drawNode(fake, atlas, 0, 0, 5, "node", undefined, 2);
+    // livello 0: lato 2·⌈6·1.8⌉+2 = 24, colonna 0; livello 1: lato 46, colonna 1
+    expect(calls[0].slice(0, 3)).toEqual([20, 20, 24]);
+    expect(calls[1].slice(0, 3)).toEqual([73, 9, 46]);
+    // la misura sullo schermo resta in px CSS: 5px di raggio in entrambi
+    expect(calls[0][6]).toBeCloseTo((24 * 5) / 6, 6);
+    expect(calls[1][6]).toBeCloseTo((46 * 5) / 12, 6);
+  });
+
+  it("drawNode oltre l'ultimo livello disegna vettoriale, senza ingrandire lo sprite", () => {
+    const atlas: Atlas = {
+      canvas: {},
+      bucket: RADIUS_BUCKETS,
+      source: "f",
+      cell: 176,
+      cells: 4,
+      rows: 3,
+      colors: { node: "#808080", active: "#00ff00", hover: "#0000ff" },
+    } as unknown as Atlas;
+    const images: unknown[] = [];
+    const rects: number[][] = [];
+    const stops: string[] = [];
+    const fake = {
+      globalAlpha: 1,
+      fillStyle: "",
+      drawImage(...args: unknown[]) {
+        images.push(args);
+      },
+      createRadialGradient() {
+        return { addColorStop: (_at: number, color: string) => stops.push(color) };
+      },
+      fillRect(...args: number[]) {
+        rects.push(args);
+      },
+    } as unknown as CanvasRenderingContext2D;
+    drawNode(fake, atlas, 100, 100, 60, "active");
+    expect(images).toHaveLength(0);
+    // core e alone, centrati sul nodo: il core copre il raggio pieno
+    expect(rects).toHaveLength(2);
+    expect(rects[0]).toEqual([40, 40, 120, 120]);
+    expect(stops[0]).toBe("rgba(0, 255, 0, 1)");
   });
 
   it("drawNode con alone modula globalAlpha e rifà drawImage", () => {

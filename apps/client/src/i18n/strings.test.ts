@@ -24,7 +24,7 @@
 //    riscrive un pannello, la chiave resta, e la si traduce per anni.
 import { describe, expect, it } from "vitest";
 import html from "../../index.html?raw";
-import { applyStrings, catalogFor, expand, effectiveLanguage, t } from "./strings";
+import { applyStrings, catalogFor, catalogLanguage, expand, effectiveLanguage, plural, t } from "./strings";
 
 /// Gli attributi con cui `index.html` nomina una chiave. Lo stesso elenco sta
 /// in `strings.ts`, come `CHIAVE_TEMA` sta in due posti e per la stessa
@@ -186,6 +186,20 @@ describe("la scala di ripiego, che è quella del contratto", () => {
     expect(catalogFor("de")).toBe(IT);
     expect(catalogFor("ja-JP")).toBe(IT);
     expect(catalogFor("")).toBe(IT);
+  });
+
+  it("la lingua del catalogo è quella con cui si legge il testo", () => {
+    // È la lingua giusta per `lang`: un sistema in tedesco legge l'italiano
+    // del ripiego, e lo deve leggere con la voce italiana.
+    expect(catalogLanguage("de-DE")).toBe("it");
+    expect(catalogLanguage("en_GB")).toBe("en");
+    expect(catalogLanguage("IT")).toBe("it");
+  });
+
+  it("un conteggio sceglie la forma singolare o plurale della lingua", () => {
+    expect(plural(1, "vault.partial.one", "vault.partial")).toContain("Una nota");
+    expect(plural(3, "vault.partial.one", "vault.partial")).toContain("3 note");
+    expect(plural(0, "vault.partial.one", "vault.partial")).toContain("0 note");
   });
 
   it("l'ultimo gradino è la chiave nuda, ed è brutto apposta", () => {

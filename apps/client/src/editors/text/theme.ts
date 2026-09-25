@@ -68,7 +68,7 @@ const syntaxStyle = HighlightStyle.define([
   },
   { tag: [t.meta, t.comment], color: "var(--syn-comment)" },
   { tag: t.strong, fontWeight: "bold" },
-  { tag: t.monospace, color: "var(--doc-fg)", backgroundColor: "var(--doc-fill)" },
+  { tag: t.monospace, color: "var(--doc-fg)", backgroundColor: "var(--doc-fill)", fontFamily: "var(--font-mono)" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
   { tag: t.link, color: "var(--doc-link)", textDecoration: "underline" },

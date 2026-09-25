@@ -37,7 +37,7 @@
 // [decisione 0052]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 // [decisione 0080]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 
-import { onLanguage, t, type Key } from "../i18n/strings";
+import { onLanguage, resolvedLanguage, t, type Key } from "../i18n/strings";
 import type { Gate, KernelEvent } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "./lifetime";
@@ -134,18 +134,26 @@ function notifyText(key: P8Key, args: Record<string, string | number> = {}): str
 
 /// Dice un messaggio all'utente. È la porta di tutta la shell, e resta una
 /// riga: chi chiama non sa che esistono uno storico e un raggruppamento.
-export function notify(message: string, tone: Tone = "info"): void {
+export function notify(message: string, tone: Tone = "info", action?: NoticeAction): void {
   history = collect(history, { text: message, tone, when: Date.now(), times: 1 });
   if (!open) unreadCount += 1;
-  show(history[0]);
+  announce(history[0]!);
+  show(history[0]!, action);
   redraw();
+}
+
+/// Un gesto che l'avviso offre accanto al testo: «Annulla», «Apri», «Riprova».
+/// Vive quanto il toast; lo storico conserva il testo, non il gesto.
+export interface NoticeAction {
+  readonly label: string;
+  readonly run: () => void | Promise<void>;
 }
 
 /** Porta i rifiuti locali dei temi nello stesso centro dei guasti del kernel. */
 export function reportThemeTrouble(trouble: ThemeTrouble): void {
   notify(
     [
-      `Tema «${trouble.theme}» rifiutato:`,
+      t("theme.rejected", { theme: trouble.theme }),
       ...trouble.reasons.map((reason) => `- ${reason}`),
     ].join("\n"),
     "guasto",
@@ -305,27 +313,110 @@ function hasDom(): boolean {
 /// occupano lo stesso angolo e dicono la stessa cosa: a pannello aperto la riga
 /// nuova compare in cima da sé, e un rettangolo sopra la lista coprirebbe
 /// proprio ciò che l'utente è andato a leggere.
-function show(notice: Notice): void {
+function show(notice: Notice, action?: NoticeAction): void {
   if (open || !hasDom()) return;
   const old = document.getElementById("toast");
   if (old) old.remove();
+  clearToastTimer();
   const toast = document.createElement("div");
   toast.id = "toast";
   toast.className = "toast";
-  // Il toast è **l'unica** cosa che compare senza che l'utente l'abbia chiesta,
-  // e sparisce da sola dopo qualche secondo: chi non guarda lo schermo non ha
-  // nessun altro modo di saperlo. `status` e non `alert` per la stessa ragione
-  // per cui non ruba il fuoco — informa senza interrompere (§10.3), e `alert`
-  // taglierebbe la parola a metà frase.
-  toast.setAttribute("role", "status");
+  // Gli annunci passano dalla regione viva persistente (`announce`): una
+  // regione inserita nel DOM insieme al suo testo molti lettori non la
+  // leggono. Qui c'è ciò che si vede e i gesti.
   toast.dataset.tone = notice.tone;
+  // Una regione con un nome e non una regione viva: chi usa un lettore di
+  // schermo ci arriva dai punti di riferimento per usarne i gesti (Annulla,
+  // Riprova), senza che il testo venga letto due volte.
+  toast.setAttribute("role", "region");
+  toast.setAttribute("aria-label", t("notices.toast"));
+  const text = document.createElement("span");
+  text.className = "toast-text";
   // Testo semplice: ciò che arriva da un provider non diventa mai markup
   // (stessa regola di `SearchHit.snippet` e `UiNode` non fidato).
-  toast.textContent = lineOf(notice);
+  text.textContent = lineOf(notice);
+  toast.append(text);
+  if (action) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = action.label;
+    button.addEventListener("click", () => {
+      dismissToast(toast);
+      void Promise.resolve(action.run()).catch((error: unknown) => notify(String(error), "guasto"));
+    });
+    toast.append(button);
+  }
+  // Gli altri avvisi arrivati mentre questo era a galla: non si perdono
+  // dietro all'ultimo, si contano e si aprono.
+  if (unreadCount > 1) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "toast-more";
+    more.textContent = t("notices.more", { count: unreadCount - 1 });
+    more.addEventListener("click", () => {
+      dismissToast(toast);
+      openHistory(true);
+    });
+    toast.append(more);
+  }
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "toast-close";
+  close.textContent = "×";
+  close.setAttribute("aria-label", t("notices.dismiss"));
+  setTooltip(close, t("notices.dismiss"));
+  close.addEventListener("click", () => dismissToast(toast));
+  toast.append(close);
   document.body.appendChild(toast);
+  // Un guasto resta finché non lo si chiude: sparire da solo dopo cinque
+  // secondi è il modo in cui un errore non viene letto. Un'informazione se ne
+  // va, ma non mentre la si sta leggendo (puntatore o fuoco sopra).
+  if (notice.tone === "guasto") return;
+  const arm = () => {
+    clearToastTimer();
+    toastTimer = window.setTimeout(() => dismissToast(toast), TOAST_DURATION_MS);
+  };
+  toast.addEventListener("mouseenter", clearToastTimer);
+  toast.addEventListener("focusin", clearToastTimer);
+  toast.addEventListener("mouseleave", arm);
+  toast.addEventListener("focusout", arm);
+  arm();
+}
+
+let toastTimer: number | null = null;
+
+function clearToastTimer(): void {
+  if (toastTimer !== null) window.clearTimeout(toastTimer);
+  toastTimer = null;
+}
+
+function dismissToast(toast: HTMLElement): void {
+  if (document.getElementById("toast") !== toast) return;
+  clearToastTimer();
+  toast.remove();
+}
+
+/// La regione viva: una sola, creata una volta e mai sostituita, a cui cambia
+/// soltanto il testo. È la forma che ogni lettore di schermo annuncia.
+function announce(notice: Notice): void {
+  if (!hasDom()) return;
+  let live = document.getElementById("notify-live");
+  if (!live) {
+    live = document.createElement("div");
+    live.id = "notify-live";
+    live.className = "sr-only";
+    live.setAttribute("role", "status");
+    live.setAttribute("aria-live", "polite");
+    document.body.appendChild(live);
+  }
+  const region = live;
+  // Svuotare e riscrivere al giro dopo: lo stesso testo due volte di fila è
+  // un secondo avviso, e va annunciato di nuovo.
+  region.textContent = "";
   window.setTimeout(() => {
-    if (document.getElementById("toast") === toast) toast.remove();
-  }, TOAST_DURATION_MS);
+    region.textContent = notice.tone === "guasto" ? `${t("notices.problem")}: ${lineOf(notice)}` : lineOf(notice);
+  }, 30);
 }
 function redraw(): void {
   if (!hasDom()) return;
@@ -392,8 +483,9 @@ function noticeRow(notice: Notice): HTMLLIElement {
   setTooltip(text, lineOf(notice));
   const time = document.createElement("span");
   time.className = "muted notify-ora";
-  time.textContent = new Date(notice.when).toLocaleTimeString();
-  setTooltip(time, new Date(notice.when).toLocaleString());
+  // Nella lingua che la shell parla, non in quella del sistema.
+  time.textContent = new Date(notice.when).toLocaleTimeString(resolvedLanguage());
+  setTooltip(time, new Date(notice.when).toLocaleString(resolvedLanguage()));
   row.append(text, time);
   return row;
 }

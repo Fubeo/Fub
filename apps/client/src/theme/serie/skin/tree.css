@@ -34,6 +34,14 @@
 .tree-row:hover {
   background: var(--bg-hover);
 }
+/* Una foglia nell'albero tiene il posto del chevron delle cartelle sorelle:
+   i nomi dello stesso livello cominciano alla stessa colonna. */
+.tree-row.leaf {
+  padding-left: calc(var(--space-5) + var(--space-7) + var(--space-3));
+}
+.tree-row.no-icon .row-name {
+  margin-left: calc(1.3em + var(--space-3));
+}
 /* La nota aperta. Lo stato si legge da dove è annunciato e non da una classe
    scritta accanto: nell'albero è il `treeitem` a essere selezionato — è lui a
    contenere il sottoalbero — fra le appuntate è la riga a essere «quella
@@ -90,4 +98,14 @@
 .drop-into {
   outline: 2px solid var(--accent);
   border-radius: var(--radius-sm);
+}
+
+/* L'albero vuoto: una frase e il primo gesto, dove sarebbero le note. */
+.tree-empty {
+  padding: var(--space-4) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.tree-empty p {
+  margin: 0 0 var(--space-2);
 }

@@ -32,7 +32,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fub_abi::settings::{SettingKind, SettingSpec};
-use fub_abi::text::{StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::ui::UiOption;
 
 /// Le scorciatoie che questo vault propone e che **nessuno ha ancora guardato**
@@ -119,6 +119,11 @@ pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 /// per la stessa idea si sarebbero pagate al primo componente che ne legge una
 /// aspettandosi l'altra.
 pub const APPEARANCE_THEME: &str = "appearance.theme";
+/// Quale tema è montato: `fub.serie` o l'id di un tema installato. Sta accanto
+/// alla luce perché viaggino insieme — nei profili, e fra una finestra e
+/// l'altra — invece di vivere nella cache della webview. La disegna il
+/// catalogo dei temi, non il form generico.
+pub const APPEARANCE_THEME_ID: &str = "appearance.theme-id";
 pub const APPEARANCE_CONTRAST: &str = "appearance.contrast";
 pub const APPEARANCE_DENSITY: &str = "appearance.density";
 pub const APPEARANCE_BODY: &str = "appearance.body";
@@ -139,6 +144,23 @@ pub const CHROME_SCHEMA_VERSION: f64 = 1.0;
 /// Preferenze locali del motore testuale, non comandi del documento.
 pub const EDITOR_SPELLCHECK: &str = "editor.spellcheck";
 pub const EDITOR_VIM: &str = "editor.vim";
+pub const EDITOR_LINE_NUMBERS: &str = "editor.line-numbers";
+pub const EDITOR_LINE_WRAP: &str = "editor.line-wrap";
+/// Cosa inserisce Tab e con cosa si rientrano gli elenchi: `tab`, `2` o `4`
+/// spazi. Il default è quello che CodeMirror usava prima che fosse una scelta.
+pub const EDITOR_INDENT: &str = "editor.indent";
+/// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
+/// `reading`, gli id delle modalità della superficie testuale.
+pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
+/// Le animazioni della shell: `""` segue il sistema, `reduced` le spegne
+/// anche quando il sistema non lo chiede.
+pub const APPEARANCE_MOTION: &str = "appearance.motion";
+/// Il tetto dei fotogrammi: `""` segue il refresh dello schermo, qualunque
+/// sia; un numero di [`FRAME_RATE_CAPS`] è un tetto in fotogrammi al secondo.
+/// Lo rispettano i loop di disegno della shell e, su macOS, la webview.
+pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
+/// I tetti offerti dal pannello, dal più alto.
+pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
 pub const DEFAULT_ZOOM: f64 = 1.0;
 /// La cartella del vault in cui la shell deposita e cerca gli allegati.
 ///
@@ -208,15 +230,13 @@ pub const PUBLISH_SERVER_URL: &str = "publish.server_url";
 /// componente, è dell'applicazione — e appenderle a una feature vorrebbe dire
 /// che spegnendo quella feature sparisce la lingua.
 pub fn core_settings() -> Vec<SettingSpec> {
-    let mut settings = vec![SettingSpec::new(
-        PLUGINS_DISABLED,
-        Text::key(C_PLUGINS_DISABLED),
-        SettingKind::List {
-            default: Vec::new(),
-        },
-    )
-    .describing(Text::key(C_PLUGINS_DISABLED_DESC))
-    .grouped(Text::key(C_GROUP_COMPONENTS))];
+    // L'ordine di questo elenco è l'ordine del pannello (le righe escono in
+    // ordine di dichiarazione, e i gruppi in ordine di prima apparizione):
+    // prima ciò che si guarda e si tocca più spesso, cioè l'aspetto e la
+    // scrittura, poi i file, e in fondo ciò che si tocca per diagnosticare.
+    let mut settings = appearance_settings();
+    settings.extend(chrome_settings());
+    settings.extend(editor_settings());
     settings.push(
         SettingSpec::new(
             ATTACHMENT_FOLDER,
@@ -258,19 +278,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
     // accende e spegne è la persona davanti allo schermo, e passa dalla shell.
-    // Tema, contrasto e preferenze di lettura sono della macchina: descrivono
-    // la persona davanti allo schermo e restano vere passando da un vault o da
-    // un tema all'altro. Il livello macchina le rende leggibili anche prima di
-    // aprire un vault.
-    //
-    // **Non** `program_writable`, e questa resta: un tema è reversibile e si
-    // vede subito, quindi il danno di un componente che lo cambia è piccolo. La
-    // ragione non è il danno, è che *nessuno lo ha chiesto* — il caso vero,
-    // «scuro al tramonto», è un pezzo di 6.2, dove si decide se un componente
-    // possa avere in mano l'aspetto e con che permesso.
-    settings.extend(appearance_settings());
-    settings.extend(chrome_settings());
-    settings.extend(editor_settings());
+    settings.push(
+        SettingSpec::new(
+            PLUGINS_DISABLED,
+            Text::key(C_PLUGINS_DISABLED),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_PLUGINS_DISABLED_DESC))
+        .grouped(Text::key(C_GROUP_COMPONENTS)),
+    );
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
@@ -311,25 +329,89 @@ pub fn core_machine_settings() -> Vec<SettingSpec> {
 }
 
 fn editor_settings() -> Vec<SettingSpec> {
-    [
-        (
-            EDITOR_SPELLCHECK,
-            C_EDITOR_SPELLCHECK,
-            C_EDITOR_SPELLCHECK_DESC,
-            true,
-        ),
-        (EDITOR_VIM, C_EDITOR_VIM, C_EDITOR_VIM_DESC, false),
-    ]
-    .into_iter()
-    .map(|(key, label, description, default)| {
-        SettingSpec::toggle(key, Text::key(label), default)
-            .describing(Text::key(description))
+    let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
+        SettingSpec::new(
+            key,
+            Text::key(label),
+            SettingKind::Choice {
+                default: default.into(),
+                options,
+            },
+        )
+        .describing(Text::key(description))
+        .grouped(Text::key(C_GROUP_EDITOR))
+        .for_machine()
+    };
+    let mut settings = vec![choice(
+        EDITOR_DEFAULT_MODE,
+        C_EDITOR_DEFAULT_MODE,
+        C_EDITOR_DEFAULT_MODE_DESC,
+        "live_preview",
+        vec![
+            UiOption::new("live_preview", Text::key(C_MODE_LIVE)),
+            UiOption::new("source", Text::key(C_MODE_SOURCE)),
+            UiOption::new("reading", Text::key(C_MODE_READING)),
+        ],
+    )];
+    settings.extend(
+        [
+            (
+                EDITOR_SPELLCHECK,
+                C_EDITOR_SPELLCHECK,
+                C_EDITOR_SPELLCHECK_DESC,
+                true,
+            ),
+            (
+                EDITOR_LINE_WRAP,
+                C_EDITOR_LINE_WRAP,
+                C_EDITOR_LINE_WRAP_DESC,
+                true,
+            ),
+            (
+                EDITOR_LINE_NUMBERS,
+                C_EDITOR_LINE_NUMBERS,
+                C_EDITOR_LINE_NUMBERS_DESC,
+                true,
+            ),
+        ]
+        .into_iter()
+        .map(|(key, label, description, default)| {
+            SettingSpec::toggle(key, Text::key(label), default)
+                .describing(Text::key(description))
+                .grouped(Text::key(C_GROUP_EDITOR))
+                .for_machine()
+        }),
+    );
+    settings.push(choice(
+        EDITOR_INDENT,
+        C_EDITOR_INDENT,
+        C_EDITOR_INDENT_DESC,
+        "2",
+        vec![
+            UiOption::new("tab", Text::key(C_EDITOR_INDENT_TAB)),
+            UiOption::new("2", Text::key(C_EDITOR_INDENT_2)),
+            UiOption::new("4", Text::key(C_EDITOR_INDENT_4)),
+        ],
+    ));
+    settings.push(
+        SettingSpec::toggle(EDITOR_VIM, Text::key(C_EDITOR_VIM), false)
+            .describing(Text::key(C_EDITOR_VIM_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
-            .for_machine()
-    })
-    .collect()
+            .for_machine(),
+    );
+    settings
 }
 
+/// Tema, contrasto e preferenze di lettura sono della macchina: descrivono la
+/// persona davanti allo schermo e restano vere passando da un vault o da un
+/// tema all'altro. Il livello macchina le rende leggibili anche prima di aprire
+/// un vault.
+///
+/// **Non** `program_writable`: un tema è reversibile e si vede subito, quindi
+/// il danno di un componente che lo cambia è piccolo. La ragione non è il
+/// danno, è che *nessuno lo ha chiesto* — il caso vero, «scuro al tramonto», è
+/// un pezzo di 6.2, dove si decide se un componente possa avere in mano
+/// l'aspetto e con che permesso.
 fn appearance_settings() -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
@@ -377,6 +459,16 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("dark", Text::key(C_THEME_DARK)),
             ],
         ),
+        SettingSpec::new(
+            APPEARANCE_THEME_ID,
+            Text::key(C_THEME_ID),
+            SettingKind::Text {
+                default: "fub.serie".into(),
+            },
+        )
+        .describing(Text::key(C_THEME_ID_DESC))
+        .grouped(Text::key(C_GROUP_APPEARANCE))
+        .for_machine(),
         choice(
             APPEARANCE_CONTRAST,
             C_CONTRAST,
@@ -388,6 +480,14 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("high", Text::key(C_CONTRAST_HIGH)),
             ],
         ),
+        number(
+            APPEARANCE_ACCENT,
+            C_ACCENT,
+            C_ACCENT_DESC,
+            130.0,
+            0.0,
+            360.0,
+        ),
         choice(
             APPEARANCE_DENSITY,
             C_DENSITY,
@@ -397,6 +497,42 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("compact", Text::key(C_DENSITY_COMPACT)),
                 UiOption::new("comfortable", Text::key(C_DENSITY_COMFORTABLE)),
                 UiOption::new("relaxed", Text::key(C_DENSITY_RELAXED)),
+            ],
+        ),
+        number(APPEARANCE_ZOOM, C_ZOOM, C_ZOOM_DESC, DEFAULT_ZOOM, 0.5, 2.0),
+        choice(
+            APPEARANCE_MOTION,
+            C_MOTION,
+            C_MOTION_DESC,
+            fub_kernel::locale::AS_SYSTEM,
+            vec![
+                system(),
+                UiOption::new("reduced", Text::key(C_MOTION_REDUCED)),
+            ],
+        ),
+        choice(
+            APPEARANCE_FRAME_RATE,
+            C_FRAME_RATE,
+            C_FRAME_RATE_DESC,
+            "",
+            std::iter::once(UiOption::new("", Text::key(C_FRAME_RATE_DISPLAY)))
+                .chain(FRAME_RATE_CAPS.iter().map(|cap| {
+                    UiOption::new(
+                        cap.to_string(),
+                        Text::message(C_FRAME_RATE_CAP, vec![Arg::int("fps", i64::from(*cap))]),
+                    )
+                }))
+                .collect(),
+        ),
+        choice(
+            APPEARANCE_FONT,
+            C_FONT,
+            C_FONT_DESC,
+            "literata",
+            vec![
+                UiOption::new("literata", Text::key(C_FONT_LITERATA)),
+                UiOption::new("inter", Text::key(C_FONT_INTER)),
+                UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
         number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 16.0, 12.0, 28.0),
@@ -416,17 +552,6 @@ fn appearance_settings() -> Vec<SettingSpec> {
             40.0,
             100.0,
         ),
-        choice(
-            APPEARANCE_FONT,
-            C_FONT,
-            C_FONT_DESC,
-            "literata",
-            vec![
-                UiOption::new("literata", Text::key(C_FONT_LITERATA)),
-                UiOption::new("inter", Text::key(C_FONT_INTER)),
-                UiOption::new("system", Text::key(C_FONT_SYSTEM)),
-            ],
-        ),
         SettingSpec::new(
             APPEARANCE_CSS_SNIPPETS,
             Text::key(C_CSS_SNIPPETS),
@@ -437,15 +562,6 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_CSS_SNIPPETS_DESC))
         .grouped(Text::key(C_GROUP_APPEARANCE))
         .for_machine(),
-        number(
-            APPEARANCE_ACCENT,
-            C_ACCENT,
-            C_ACCENT_DESC,
-            130.0,
-            0.0,
-            360.0,
-        ),
-        number(APPEARANCE_ZOOM, C_ZOOM, C_ZOOM_DESC, DEFAULT_ZOOM, 0.5, 2.0),
     ]
 }
 
@@ -519,6 +635,16 @@ pub fn frame_capabilities() -> FrameCapabilities {
         custom: desktop,
         requires_reopen: desktop,
     }
+}
+
+/// Il tetto in fotogrammi al secondo di un valore di [`APPEARANCE_FRAME_RATE`].
+/// `None` è il massimo dello schermo: il default, e anche un valore che non
+/// è fra i tetti offerti.
+pub fn frame_rate_cap(value: &str) -> Option<u32> {
+    value
+        .parse()
+        .ok()
+        .filter(|cap| FRAME_RATE_CAPS.contains(cap))
 }
 
 pub fn setting_requires_reopen(key: &str) -> bool {
@@ -658,6 +784,20 @@ const C_EDITOR_SPELLCHECK: &str = "core.editor.spellcheck";
 const C_EDITOR_SPELLCHECK_DESC: &str = "core.editor.spellcheck.desc";
 const C_EDITOR_VIM: &str = "core.editor.vim";
 const C_EDITOR_VIM_DESC: &str = "core.editor.vim.desc";
+const C_EDITOR_LINE_NUMBERS: &str = "core.editor.line_numbers";
+const C_EDITOR_LINE_NUMBERS_DESC: &str = "core.editor.line_numbers.desc";
+const C_EDITOR_LINE_WRAP: &str = "core.editor.line_wrap";
+const C_EDITOR_LINE_WRAP_DESC: &str = "core.editor.line_wrap.desc";
+const C_EDITOR_INDENT: &str = "core.editor.indent";
+const C_EDITOR_INDENT_DESC: &str = "core.editor.indent.desc";
+const C_EDITOR_INDENT_TAB: &str = "core.editor.indent.tab";
+const C_EDITOR_INDENT_2: &str = "core.editor.indent.2";
+const C_EDITOR_INDENT_4: &str = "core.editor.indent.4";
+const C_EDITOR_DEFAULT_MODE: &str = "core.editor.default_mode";
+const C_EDITOR_DEFAULT_MODE_DESC: &str = "core.editor.default_mode.desc";
+const C_MODE_SOURCE: &str = "core.mode.source";
+const C_MODE_LIVE: &str = "core.mode.live";
+const C_MODE_READING: &str = "core.mode.reading";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
 const C_GROUP_PRIVACY: &str = "core.group.privacy";
 const C_HISTORY: &str = "core.history";
@@ -694,6 +834,15 @@ const C_ACCENT: &str = "core.accent";
 const C_ACCENT_DESC: &str = "core.accent.desc";
 const C_ZOOM: &str = "core.zoom";
 const C_ZOOM_DESC: &str = "core.zoom.desc";
+const C_THEME_ID: &str = "core.theme_id";
+const C_THEME_ID_DESC: &str = "core.theme_id.desc";
+const C_MOTION: &str = "core.motion";
+const C_MOTION_DESC: &str = "core.motion.desc";
+const C_MOTION_REDUCED: &str = "core.motion.reduced";
+const C_FRAME_RATE: &str = "core.frame_rate";
+const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
+const C_FRAME_RATE_DISPLAY: &str = "core.frame_rate.display";
+const C_FRAME_RATE_CAP: &str = "core.frame_rate.cap";
 const C_GROUP_CHROME: &str = "core.group.chrome";
 const C_CHROME_SCHEMA: &str = "core.chrome.schema";
 const C_CHROME_SCHEMA_DESC: &str = "core.chrome.schema.desc";
@@ -847,11 +996,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FILES_TRASH_VAULT, "Cestino del vault")
         .with(C_FILES_TRASH_SYSTEM, "Cestino del sistema")
         .with(C_GROUP_APPEARANCE, "Aspetto")
-        .with(C_GROUP_CHROME, "Scocca")
-        .with(C_CHROME_SCHEMA, "Versione configurazione scocca")
+        .with(C_GROUP_CHROME, "Interfaccia")
+        .with(C_CHROME_SCHEMA, "Versione configurazione dell'interfaccia")
         .with(C_CHROME_SCHEMA_DESC, "Versione del formato locale; per cambiare versione è necessaria una riapertura.")
         .with(C_CHROME_RAIL, "Mostra barra laterale")
-        .with(C_CHROME_RAIL_DESC, "Mostra le scorciatoie ai pannelli nella scocca.")
+        .with(C_CHROME_RAIL_DESC, "Mostra la colonna di icone che apre i pannelli.")
         .with(C_CHROME_ORDER, "Ordine della barra laterale")
         .with(C_CHROME_ORDER_DESC, "ID dei pannelli nell'ordine desiderato; quelli non elencati restano visibili.")
         .with(C_CHROME_STATUS, "Mostra lo stato del documento")
@@ -867,6 +1016,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SPELLCHECK_DESC, "Usa il controllo ortografico del sistema mentre scrivi.")
         .with(C_EDITOR_VIM, "Modalità Vim")
         .with(C_EDITOR_VIM_DESC, "Usa i comandi Vim nel motore testuale; spenta per impostazione predefinita.")
+        .with(C_EDITOR_LINE_NUMBERS, "Numeri di riga")
+        .with(C_EDITOR_LINE_NUMBERS_DESC, "Mostra i numeri di riga in modalità Sorgente.")
+        .with(C_EDITOR_LINE_WRAP, "A capo automatico")
+        .with(C_EDITOR_LINE_WRAP_DESC, "Manda a capo le righe lunghe invece di farle scorrere in orizzontale.")
+        .with(C_EDITOR_INDENT, "Rientro")
+        .with(C_EDITOR_INDENT_DESC, "Cosa inserisce Tab e come si rientrano gli elenchi.")
+        .with(C_EDITOR_INDENT_TAB, "Tabulazione")
+        .with(C_EDITOR_INDENT_2, "2 spazi")
+        .with(C_EDITOR_INDENT_4, "4 spazi")
+        .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
+        .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
+        .with(C_MODE_SOURCE, "Sorgente")
+        .with(C_MODE_LIVE, "Live")
+        .with(C_MODE_READING, "Lettura")
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Ricerche e note recenti")
         .with(
@@ -901,7 +1064,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY, "Densità")
         .with(
             C_DENSITY_DESC,
-            "Compatta o allarga la spaziatura dei componenti senza muovere la scocca.",
+            "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.",
         )
         .with(C_DENSITY_COMPACT, "Compatta")
         .with(C_DENSITY_COMFORTABLE, "Comoda")
@@ -930,6 +1093,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_ZOOM, "Zoom interfaccia")
         .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
+        .with(C_THEME_ID, "Tema installato")
+        .with(C_THEME_ID_DESC, "L'id del tema montato; si sceglie dal catalogo dei temi.")
+        .with(C_MOTION, "Animazioni")
+        .with(C_MOTION_DESC, "Segue la preferenza del sistema, oppure riduce sempre le animazioni dell'interfaccia.")
+        .with(C_MOTION_REDUCED, "Ridotte")
+        .with(C_FRAME_RATE, "Fotogrammi al secondo")
+        .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
+        .with(C_FRAME_RATE_DISPLAY, "Massimo dello schermo")
+        .with(C_FRAME_RATE_CAP, "{fps} fps")
         .with(C_CSS_SNIPPETS, "Frammenti CSS locali")
         .with(C_CSS_SNIPPETS_DESC, "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.")
         .with(C_GROUP_SYNC, "Sincronizzazione")
@@ -1017,11 +1189,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.path.exists", "{path} already exists: a snapshot never overwrites.")
         .with("host.path.inside_vault", "{path} is inside the vault.")
         .with(C_GROUP_FILES, "Files")
-        .with(C_GROUP_CHROME, "Window chrome")
-        .with(C_CHROME_SCHEMA, "Chrome configuration version")
+        .with(C_GROUP_CHROME, "Interface")
+        .with(C_CHROME_SCHEMA, "Interface configuration version")
         .with(C_CHROME_SCHEMA_DESC, "Local format version; a version change requires reopening.")
         .with(C_CHROME_RAIL, "Show side rail")
-        .with(C_CHROME_RAIL_DESC, "Show panel shortcuts in the window chrome.")
+        .with(C_CHROME_RAIL_DESC, "Show the column of icons that opens panels.")
         .with(C_CHROME_ORDER, "Side rail order")
         .with(C_CHROME_ORDER_DESC, "Panel IDs in preferred order; unlisted panels remain visible.")
         .with(C_CHROME_STATUS, "Show document status")
@@ -1055,6 +1227,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SPELLCHECK_DESC, "Use the system spellchecker while editing.")
         .with(C_EDITOR_VIM, "Vim mode")
         .with(C_EDITOR_VIM_DESC, "Use Vim commands in text editors; off by default.")
+        .with(C_EDITOR_LINE_NUMBERS, "Line numbers")
+        .with(C_EDITOR_LINE_NUMBERS_DESC, "Show line numbers in Source mode.")
+        .with(C_EDITOR_LINE_WRAP, "Wrap lines")
+        .with(C_EDITOR_LINE_WRAP_DESC, "Wrap long lines instead of scrolling horizontally.")
+        .with(C_EDITOR_INDENT, "Indentation")
+        .with(C_EDITOR_INDENT_DESC, "What Tab inserts and how lists are indented.")
+        .with(C_EDITOR_INDENT_TAB, "Tab")
+        .with(C_EDITOR_INDENT_2, "2 spaces")
+        .with(C_EDITOR_INDENT_4, "4 spaces")
+        .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
+        .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
+        .with(C_MODE_SOURCE, "Source")
+        .with(C_MODE_LIVE, "Live")
+        .with(C_MODE_READING, "Reading")
         .with(C_PLUGINS_DISABLED, "Disabled components")
         .with(
             C_PLUGINS_DISABLED_DESC,
@@ -1089,7 +1275,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY, "Density")
         .with(
             C_DENSITY_DESC,
-            "Tighten or loosen component spacing without moving the window shell.",
+            "Tighten or loosen control spacing without changing the panel layout.",
         )
         .with(C_DENSITY_COMPACT, "Compact")
         .with(C_DENSITY_COMFORTABLE, "Comfortable")
@@ -1112,6 +1298,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_ZOOM, "Interface zoom")
         .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
+        .with(C_THEME_ID, "Installed theme")
+        .with(C_THEME_ID_DESC, "The id of the mounted theme; chosen from the theme catalog.")
+        .with(C_MOTION, "Animations")
+        .with(C_MOTION_DESC, "Follow the system preference, or always reduce interface animations.")
+        .with(C_MOTION_REDUCED, "Reduced")
+        .with(C_FRAME_RATE, "Frame rate")
+        .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")
+        .with(C_FRAME_RATE_DISPLAY, "Display maximum")
+        .with(C_FRAME_RATE_CAP, "{fps} fps")
         .with(C_CSS_SNIPPETS, "Local CSS snippets")
         .with(C_CSS_SNIPPETS_DESC, "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.")
         .with(C_GROUP_SYNC, "Synchronization")
@@ -1288,16 +1483,36 @@ pub fn initial_vault() -> Option<String> {
 ///
 /// [`Level`]: fub_kernel::log::Level
 pub fn apply_log_levels(ws: &fub_kernel::Workspace, levels: &fub_kernel::log::Levels) {
-    let level = ws
-        .setting(LOG_LEVEL)
-        .ok()
+    set_log_levels(|key| ws.setting(key).ok(), levels);
+}
+
+/// Riapplica i livelli dopo che l'utente ha scritto `log.level` o
+/// `log.verbose`: senza, il cambio valeva solo alla prossima apertura di un
+/// vault, e il pannello non lo diceva. Le due chiavi sono di macchina, quindi
+/// si leggono dal livello macchina con un vault aperto o senza.
+pub fn reapply_log_levels(
+    key: &str,
+    machine: &fub_kernel::settings::MachineSettings,
+    levels: &fub_kernel::log::Levels,
+) {
+    if key == LOG_LEVEL || key == LOG_VERBOSE {
+        set_log_levels(
+            |key| machine.effective(key).ok().map(|(value, _)| value),
+            levels,
+        );
+    }
+}
+
+fn set_log_levels(
+    read: impl Fn(&str) -> Option<fub_abi::settings::SettingValue>,
+    levels: &fub_kernel::log::Levels,
+) {
+    let level = read(LOG_LEVEL)
         .and_then(|v| v.as_text().map(|s| s.to_string()))
         .and_then(|s| fub_kernel::log::Level::parse(&s))
         .unwrap_or_default();
     levels.set_global(level);
-    let verbose = ws
-        .setting(LOG_VERBOSE)
-        .ok()
+    let verbose = read(LOG_VERBOSE)
         .and_then(|v| v.as_list().map(|the| the.to_vec()))
         .unwrap_or_default();
     levels.set_verbose(verbose);
@@ -1386,5 +1601,29 @@ mod tests {
             assert!(matches!(&spec.kind, SettingKind::Toggle { default } if *default == expected));
             assert!(!spec.program_writable);
         }
+    }
+
+    /// Il default è il massimo dello schermo, e ogni tetto offerto dal pannello
+    /// si legge come tale: un'opzione che `frame_rate_cap` non riconoscesse
+    /// resterebbe nel menu e non limiterebbe niente.
+    #[test]
+    fn frame_rate_defaults_to_the_display_and_every_option_is_a_cap() {
+        let spec = core_machine_settings()
+            .into_iter()
+            .find(|spec| spec.key == APPEARANCE_FRAME_RATE)
+            .expect("il core dichiara il tetto dei fotogrammi");
+        let SettingKind::Choice { default, options } = spec.kind else {
+            panic!("il tetto dei fotogrammi è una scelta");
+        };
+        assert_eq!(default, "");
+        assert_eq!(frame_rate_cap(&default), None);
+        let caps: Vec<Option<u32>> = options
+            .iter()
+            .skip(1)
+            .map(|option| frame_rate_cap(&option.value))
+            .collect();
+        assert_eq!(caps, FRAME_RATE_CAPS.map(Some).to_vec());
+        assert_eq!(frame_rate_cap("59"), None);
+        assert_eq!(frame_rate_cap("veloce"), None);
     }
 }

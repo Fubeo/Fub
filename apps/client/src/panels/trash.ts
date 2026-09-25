@@ -19,43 +19,57 @@
 // provider non ha modo di fare. Il comando che scrive, invece, è del registro
 // (`note.trash`) e lo era già.
 import { confirm } from "../host/dialog";
-import { beforeNote, refreshDocuments, trashNote } from "../state/vault";
+import { refreshDocuments, trashesToSystem, trashNote, undoLastOperation } from "../state/vault";
 import { pageName } from "../rules/organizer";
-import { activeDoc } from "../state/layout";
-import { closeDocument, isOpen, openDocument } from "./document";
+import { closeDocument, isOpen } from "./document";
 import { documentSessions } from "../state/document-session";
 import { t } from "../i18n/strings";
+import { notify } from "../ui/notify";
+import { errorText } from "../host/errors";
 
-/// Cestina una nota, chiedendo prima conferma. La sessione sospende i ritardi
-/// durante la domanda e invalida il documento prima del comando distruttivo.
+/// Cestina una nota. Il cestino del vault è reversibile — dall'«Annulla»
+/// dell'avviso o dal pannello Cestino — quindi non chiede conferma; quello del
+/// sistema porta la nota fuori dal vault, e lì la domanda resta. La sessione
+/// sospende i ritardi durante la domanda e invalida il documento prima del
+/// comando distruttivo.
 export async function trashWithConfirm(id: string): Promise<void> {
   // A second gesture for the same open document must not create a second
   // confirmation or race the first destructive command. An unopened document
   // has no owner, so its `beginDeletion` rejection is intentionally ignored.
   if (documentSessions.isDeletionPending(id)) return;
   documentSessions.beginDeletion(id);
-  const wasOpen = isOpen(id);
 
-  const ok = await confirm(t("trash.confirm_delete", { doc: pageName(id) }), {
-    title: t("trash.delete_title"),
-    danger: true,
-    okLabel: t("explorer.delete"),
-  });
-  if (!ok) {
-    documentSessions.cancelDeletion(id);
-    return;
+  if (await trashesToSystem()) {
+    const ok = await confirm(t("trash.confirm_delete", { doc: pageName(id) }), {
+      title: t("trash.delete_title"),
+      okLabel: t("explorer.delete"),
+    });
+    if (!ok) {
+      documentSessions.cancelDeletion(id);
+      return;
+    }
   }
 
-  const outcome = await documentSessions.delete(id, (currentId) => trashNote(currentId));
+  let undo: Awaited<ReturnType<typeof trashNote>> = null;
+  const outcome = await documentSessions.delete(id, async (currentId) => {
+    undo = await trashNote(currentId);
+  });
   if (outcome.kind !== "deleted") return;
   // La sessione ha già invalidato buffer, ritardi e bozza; qui restano soltanto
-  // gli effetti delle superfici e dell'elenco delle note.
+  // gli effetti delle superfici e dell'elenco delle note. Il riquadro rimasto
+  // senza tab mostra il suo stato vuoto: aprire una nota qualunque al posto di
+  // quella cestinata sarebbe una scelta che nessuno ha fatto.
   if (isOpen(id)) closeDocument(id);
   refreshDocuments();
-  if (wasOpen && !activeDoc()) {
-    // La prima nota che c'è, chiesta con una finestra da uno, prendere il primo
-    // elemento di un elenco intero era chiedere il vault per aprirne una (§14.4).
-    const first = await beforeNote();
-    if (first) await openDocument(first);
-  }
+  notify(
+    t("trash.moved", { doc: pageName(id) }),
+    "info",
+    undo
+      ? {
+        label: t("app.undo"),
+        run: () => undoLastOperation().catch((error: unknown) =>
+          notify(t("trash.undo_failed", { reason: errorText(error) }), "guasto")),
+      }
+      : undefined,
+  );
 }

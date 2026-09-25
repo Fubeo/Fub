@@ -12,6 +12,7 @@
 // nudi: la guardia check-listeners pretende un proprietario).
 import { openLifetime } from "./lifetime";
 import { t } from "../i18n/strings";
+import { setTooltip } from "./tooltip";
 
 /** Spezza il contenuto reso in slide sui soli `hr` di primo livello. */
 export function splitRenderedSlides(content: HTMLElement): HTMLElement[] {
@@ -58,7 +59,9 @@ export function mountSlideDeck(
   deck.className = "slide-deck";
   deck.setAttribute("role", "dialog");
   deck.setAttribute("aria-modal", "true");
-  deck.style.cssText = "position:fixed;inset:0;z-index:2147483000;overflow:auto;background:var(--surface, #fff);color:var(--text, #111);padding:2rem";
+  deck.setAttribute("aria-label", t("slides.title"));
+  // La carta del documento, non un bianco fisso: al buio il testo resta chiaro.
+  deck.style.cssText = "position:fixed;inset:0;z-index:var(--z-modal, 90);overflow:auto;background:var(--doc-bg, #fff);color:var(--doc-fg, #111);padding:2rem";
   deck.tabIndex = -1;
 
   const status = document.createElement("p");
@@ -80,9 +83,13 @@ export function mountSlideDeck(
   const prev = document.createElement("button");
   prev.type = "button";
   prev.textContent = "‹";
+  prev.setAttribute("aria-label", t("slides.previous"));
+  setTooltip(prev, t("slides.previous"));
   const next = document.createElement("button");
   next.type = "button";
   next.textContent = "›";
+  next.setAttribute("aria-label", t("slides.next"));
+  setTooltip(next, t("slides.next"));
   const close = document.createElement("button");
   close.type = "button";
   close.textContent = t("slides.close");

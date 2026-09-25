@@ -68,10 +68,15 @@ Completamento e cambio rapido propongono nomi per pertinenza senza riordinare
 nella shell, e la rinomina riscrive soltanto i wikilink che nominavano la nota.
 Il pannello mostra incoming, outgoing con contesto per riferimento, menzioni
 non collegate in entrata e in uscita con filtro, e la conversione esplicita
-della menzione in `[[bersaglio]]` con revisione e span dichiarati.
+della menzione in wikilink con revisione e span dichiarati. Il riferimento
+scritto è il più corto che la risoluzione del vault manda davvero alla nota
+(il nome, poi il percorso senza estensione, poi il percorso intero); se la
+parola trovata è scritta altrimenti, per esempio un alias, resta come testo del
+link (`[[Rossi|Mario]]`).
 Il pannello tag mostra gerarchia piatta o ad albero, ordinamento per nome o
-conteggio e selezione multipla per esemplare; click e selezione lanciano la
-stessa domanda tag dell'indice tramite RunSearch. Pannelli collegati e backlink
+conteggio e selezione multipla per esemplare; click e selezione lanciano
+tramite RunSearch la stessa ricerca che si scriverebbe nella barra
+(`tag:nome`, sotto-tag compresi). Pannelli collegati e backlink
 nel documento sono opzioni di presentazione degli stessi dati, non indici
 duplicati.
 
@@ -98,14 +103,17 @@ query per vicini e direzione usano gli stessi dati di identità del grafo.
 Il pannello Collegamenti mostra una sezione per parte (entranti, uscenti,
 menzioni non collegate nei due versi) con il numero nel titolo; una parte vuota
 resta chiusa su una riga. Il contesto si legge come testo: un wikilink compare
-col suo alias o col nome della nota, non con la sua sintassi. Il filtro per
-espressione di query sta in fondo, in una sezione chiusa finché non è attivo.
+col suo alias o col nome della nota, non con la sua sintassi. Il filtro delle
+menzioni sta in fondo, in una sezione chiusa finché non è attivo, e usa la
+sintassi della barra di ricerca (un filtro salvato come JSON vale ancora); un
+filtro che non si legge lo dice accanto al campo, col carattere a cui si ferma.
 
 Il pannello Cronologia elenca le versioni della nota con l'istante e la
 variazione di dimensione rispetto alla precedente. Una versione si sceglie col
 click: la sua anteprima parte dal confronto con la nota attuale e porta i
 gesti — ripristino, testo intero, copia —; la versione attuale non offre il
-ripristino.
+ripristino. Ripristinare chiede conferma al posto del bottone, perché riscrive
+la nota; il testo di prima resta nella cronologia.
 
 Un file non letto o non parsato non può produrre link affidabili; l'apertura lo
 dichiara invece di inventare un grafo completo.
@@ -116,8 +124,8 @@ Il provider ufficiale prepara un payload dichiarativo con nodi e archi. La
 shell possiede il renderer Canvas e l'interazione. Il kernel non conosce pixel,
 camera o animazioni. Il payload dichiara vista locale fino a tre passi, gruppi
 per cartella o primo tag, filtri per orfani e allegati e timestamp di modifica;
-assenti valgono il grafo globale. Posizione e animazione restano stato effimero
-della shell.
+assenti valgono il grafo globale. Posizione e animazione restano stato della
+shell, in memoria e mai nel vault.
 
 Questo confine deve restare stabile:
 
@@ -133,6 +141,13 @@ iniziale attende che la superficie abbia dimensioni valide, poi segue il grafo
 mentre si distende; smette al primo gesto dell'utente sulla vista o quando la
 simulazione si spegne, e un riscaldo successivo non la riprende.
 
+Tornando alla linguetta del grafo, o rifacendo la vista dalla barra, la shell
+riprende posizioni, pin, temperatura e inquadratura del montaggio precedente se
+i due insiemi di nodi coincidono almeno al 60% in entrambi i versi; i nodi
+nuovi nascono accanto ai vicini già piazzati. Sotto la soglia, per esempio
+passando dal grafo globale a quello locale, il layout riparte dalla semina.
+Ridimensionare il riquadro tiene fermo il centro della vista.
+
 La simulazione integra in secondi: attrito e raffreddamento valgono per
 secondo, e i coefficienti della configurazione sono scalati da una costante di
 tempo, così un vault di qualche centinaio di note si assesta in pochi secondi a
@@ -145,6 +160,25 @@ preso; sotto la soglia il gesto è un click. Al rilascio il nodo conserva poca
 della velocità del trascinamento. Il pan segue il puntatore senza inerzia e,
 al rilascio, prosegue con la velocità reale del gesto. La rotella normalizza
 righe e pagine in pixel, e il pinch del trackpad ha una sensibilità propria.
+
+I nodi scalano con lo zoom come archi e distanze, con un raggio minimo
+visibile; lo sprite si sceglie sui pixel del dispositivo e, oltre il livello
+più grande, il nodo si disegna vettoriale. La griglia di sfondo è ancorata al
+mondo e segue pan e zoom. Le etichette non si sovrappongono: quella del nodo a
+fuoco e quelle delle note aperte hanno la precedenza e restano leggibili a ogni
+zoom, le altre compaiono per grado e si saltano se cadrebbero su una già
+scritta. Il quartiere del nodo a fuoco si accende e si spegne in dissolvenza,
+senza transizione col moto ridotto. La scia del movimento è un'opzione spenta
+di default e sbiadisce verso il trasparente, senza coprire la griglia.
+
+Il loop segue il refresh dello schermo, qualunque sia: il passo della fisica è
+il tempo reale fra due fotogrammi, e la scia sbiadisce a tempo, non a
+fotogrammi. L'impostazione **Aspetto → Fotogrammi al secondo**
+(`appearance.frame-rate`) mette un tetto al ritmo; il default è il massimo
+dello schermo. Il livello della fisica dipende solo dal numero di nodi. Quando
+i fotogrammi durano stabilmente più del budget (il periodo del tetto, mai sotto
+i 60 fps), il grafo nasconde le etichette dei nodi di grado basso. Le rimette
+dopo cinque secondi di fotogrammi di nuovo nel budget.
 
 La modularizzazione del renderer è tracciata nell'issue
 [#12](https://github.com/Fubeo/Fub/issues/12). La prova di scala e durata è

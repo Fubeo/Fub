@@ -80,6 +80,7 @@ impl PublishBundle {
 
     fn manifest_inner(&self) -> fub_abi::PluginManifest {
         fub_abi::PluginManifest::core("fub.publish", "Publish")
+            .speaking("it", super::views::catalog())
     }
 }
 
@@ -132,20 +133,85 @@ fn spec(
     scope: CommandScope,
     params: Vec<ParamSpec>,
 ) -> CommandSpec {
-    let mut out = CommandSpec::new(id, Text::from(title)).describing(Text::from(description));
+    let mut out = CommandSpec::new(id, Text::key(title)).describing(Text::key(description));
     for param in params {
         out = out.with_param(param);
     }
     out.with_scope(scope)
 }
 
+/// Le stringhe dei comandi, aggiunte ai cataloghi del bundle
+/// ([`super::views::catalog`]).
+pub(crate) fn catalog_rows(
+    it: fub_abi::text::StringCatalog,
+    en: fub_abi::text::StringCatalog,
+) -> (fub_abi::text::StringCatalog, fub_abi::text::StringCatalog) {
+    let it = it
+        .with("cmd.dry_run", "Pubblicazione: prova")
+        .with(
+            "cmd.dry_run.desc",
+            "Mostra cosa verrebbe pubblicato, senza pubblicare niente.",
+        )
+        .with("cmd.commit", "Pubblicazione: pubblica")
+        .with(
+            "cmd.commit.desc",
+            "Pubblica il sito com'è nell'ultima prova, tutto insieme.",
+        )
+        .with("cmd.unpublish", "Pubblicazione: ritira il sito")
+        .with(
+            "cmd.unpublish.desc",
+            "Toglie il sito dalla rete; versioni e registro restano. Non si annulla.",
+        )
+        .with("cmd.rollback", "Pubblicazione: torna a una versione")
+        .with(
+            "cmd.rollback.desc",
+            "Rimette online una versione pubblicata prima.",
+        )
+        .with("param.site", "Sito")
+        .with("param.version", "Versione")
+        .with(
+            "dry_run",
+            "Prova: il sito {site} si metterebbe in coda, ma non si pubblica niente.",
+        )
+        .with("queued", "Pubblicazione di {site} in coda.");
+    let en = en
+        .with("cmd.dry_run", "Publish: dry run")
+        .with(
+            "cmd.dry_run.desc",
+            "Show what would be published, without publishing anything.",
+        )
+        .with("cmd.commit", "Publish: commit")
+        .with(
+            "cmd.commit.desc",
+            "Publish the site as in the last dry run, all at once.",
+        )
+        .with("cmd.unpublish", "Publish: unpublish")
+        .with(
+            "cmd.unpublish.desc",
+            "Take the site offline; versions and record stay. Cannot be undone.",
+        )
+        .with("cmd.rollback", "Publish: rollback")
+        .with(
+            "cmd.rollback.desc",
+            "Put a previously published version back online.",
+        )
+        .with("param.site", "Site")
+        .with("param.version", "Version")
+        .with(
+            "dry_run",
+            "Dry run: site {site} would be queued, nothing is published.",
+        )
+        .with("queued", "Publishing of {site} queued.");
+    (it, en)
+}
+
 fn site_param() -> ParamSpec {
-    ParamSpec::new("site", Text::from("Site"), ParamKind::Text).required()
+    ParamSpec::new("site", Text::key("param.site"), ParamKind::Text).required()
 }
 
 fn version_param() -> ParamSpec {
     // Versions travel as strings (u64-as-string): free text, validated here.
-    ParamSpec::new("to_version", Text::from("Version"), ParamKind::Text).required()
+    ParamSpec::new("to_version", Text::key("param.version"), ParamKind::Text).required()
 }
 
 impl CommandProvider for PublishCommands {
@@ -153,29 +219,29 @@ impl CommandProvider for PublishCommands {
         vec![
             spec(
                 PUBLISH_DRY_RUN,
-                "Publish: dry run",
-                "Preview what a selective manifest would publish (no side effects).",
+                "cmd.dry_run",
+                "cmd.dry_run.desc",
                 CommandScope::read_only(),
                 vec![site_param()],
             ),
             spec(
                 PUBLISH_COMMIT,
-                "Publish: commit",
-                "Atomically publish the selective manifest for a site.",
+                "cmd.commit",
+                "cmd.commit.desc",
                 CommandScope::writing(CommandReach::Vault),
                 vec![site_param()],
             ),
             spec(
                 PUBLISH_UNPUBLISH,
-                "Publish: unpublish",
-                "Remove the live tree (versions and record stay). Irreversible.",
+                "cmd.unpublish",
+                "cmd.unpublish.desc",
                 CommandScope::writing(CommandReach::Vault).irreversible(),
                 vec![site_param()],
             ),
             spec(
                 PUBLISH_ROLLBACK,
-                "Publish: rollback",
-                "Restore the live tree to a prior snapshot version.",
+                "cmd.rollback",
+                "cmd.rollback.desc",
                 CommandScope::writing(CommandReach::Vault),
                 vec![site_param(), version_param()],
             ),
@@ -219,13 +285,14 @@ impl CommandProvider for PublishCommands {
             _ => return Err(PluginError::UnknownCommand(command.to_string().into())),
         };
         if dry {
-            return Ok(CommandOutcome::notify(Text::from(format!(
-                "{command}: would queue publish.pass for {site}"
-            ))));
+            return Ok(CommandOutcome::notify(Text::message(
+                "dry_run",
+                vec![fub_abi::text::Arg::text("site", site)],
+            )));
         }
         // No state_dir/site path in the payload — only validated site/op
         // params. The runner inherits the TRUSTED root from the bundle.
-        let id = host.spawn_job(JobSpec {
+        host.spawn_job(JobSpec {
             job: PUBLISH_PASS_JOB.to_string(),
             payload: serde_json::json!({
                 "site_id": site,
@@ -233,10 +300,10 @@ impl CommandProvider for PublishCommands {
                 "extra": extra,
             }),
         })?;
-        Ok(CommandOutcome::notify(Text::from(format!(
-            "{command} on {site} queued (job {})",
-            id.0
-        ))))
+        Ok(CommandOutcome::notify(Text::message(
+            "queued",
+            vec![fub_abi::text::Arg::text("site", site)],
+        )))
     }
 }
 
@@ -311,6 +378,7 @@ impl PublishPlugin {
 impl fub_abi::traits::Plugin for PublishPlugin {
     fn manifest(&self) -> fub_abi::PluginManifest {
         fub_abi::PluginManifest::core("fub.publish", "Publish")
+            .speaking("it", super::views::catalog())
     }
 
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {

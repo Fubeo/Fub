@@ -8,6 +8,7 @@
 // con un foglio nativo su mobile, con un finto negli e2e della shell (§17.2) —
 // è ora un lavoro di un file solo.
 import { confirm as tauriConfirm, open as tauriOpen, save as tauriSave } from "@tauri-apps/plugin-dialog";
+import { t } from "../i18n/strings";
 
 /// Cosa si sta per fare, e quanto è grave. `danger` è ciò che il sistema usa
 /// per l'icona di avviso: distruttivo (svuotare il cestino) contro reversibile
@@ -25,7 +26,7 @@ export function confirm(message: string, opts: ConfirmOptions): Promise<boolean>
     title: opts.title,
     kind: opts.danger ? "warning" : "info",
     okLabel: opts.okLabel,
-    cancelLabel: opts.cancelLabel ?? "Annulla",
+    cancelLabel: opts.cancelLabel ?? t("app.cancel"),
   });
 }
 
@@ -34,8 +35,8 @@ export function confirm(message: string, opts: ConfirmOptions): Promise<boolean>
 /// Il tipo di ritorno del plugin è più largo (una scelta multipla dà un array):
 /// qui si stringe a ciò che l'unico chiamante chiede — una cartella sola — così
 /// il resto della shell non deve conoscere le forme del plugin.
-export async function pickFolder(): Promise<string | null> {
-  const choice = await tauriOpen({ directory: true, multiple: false });
+export async function pickFolder(title?: string): Promise<string | null> {
+  const choice = await tauriOpen({ directory: true, multiple: false, ...(title ? { title } : {}) });
   return typeof choice === "string" ? choice : null;
 }
 

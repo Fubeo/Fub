@@ -67,10 +67,16 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // un parametro obbligatorio prima di vedere qualcosa (0081).
     ("shell.panel.search", Some("Mod-Shift-f")),
     ("shell.graph", Some("Mod-Shift-g")),
+    // Alterna Lettura e l'ultima modalità di scrittura del riquadro.
     ("shell.mode.reading", Some("Mod-e")),
-    ("shell.mode.live", Some("Mod-Shift-l")),
+    // **Senza accordo**: `Mod-Shift-l` dentro l'editor è di CodeMirror
+    // (`selectSelectionMatches`) e vinceva sempre; `Mod-e` alterna già.
+    ("shell.mode.live", None),
+    ("shell.mode.source", None),
     ("shell.pane.split.right", Some("Mod-\\")),
-    ("shell.pane.split.down", Some("Mod-Shift-\\")),
+    // **Senza accordo**: `Mod-Shift-\` dentro l'editor è
+    // `cursorMatchingBracket`, e lo split non partiva mai mentre si scriveva.
+    ("shell.pane.split.down", None),
     ("shell.pane.close", Some("Mod-Shift-w")),
     ("shell.tab.close", Some("Mod-w")),
     ("shell.doc.search", Some("Mod-f")),
@@ -96,6 +102,9 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.tab.move.right", None),
     ("shell.tab.close.others", None),
     ("shell.tab.close.unpinned", None),
+    // **Senza accordo**: `Mod-Alt-←/→` dentro l'editor sono di CodeMirror.
+    // Indietro e avanti passano dai tasti laterali del mouse e dai due
+    // bottoni nella toolbar del riquadro.
     ("shell.pane.back", None),
     ("shell.pane.forward", None),
     ("shell.pane.link", None),
@@ -111,6 +120,23 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.workspace.delete", None),
     ("shell.preview.show", None),
     ("shell.preview.hide", None),
+    // Il salvataggio è automatico; `Mod-s` svuota subito la coda e riprova
+    // dopo un guasto, il gesto che le dita fanno comunque.
+    ("shell.doc.save", Some("Mod-s")),
+    ("shell.note.new", Some("Mod-n")),
+    ("shell.settings", Some("Mod-,")),
+    // I pannelli laterali si mostrano e si nascondono; a finestra stretta
+    // aprono il cassetto invece di restare irraggiungibili.
+    ("shell.sidebar.toggle", Some("Mod-Alt-b")),
+    ("shell.inspector.toggle", Some("Mod-Alt-i")),
+    ("shell.tab.reopen", Some("Mod-Shift-t")),
+    ("shell.tab.next", Some("Mod-PageDown")),
+    ("shell.tab.previous", Some("Mod-PageUp")),
+    ("shell.zoom.in", Some("Mod-=")),
+    ("shell.zoom.out", Some("Mod--")),
+    ("shell.zoom.reset", Some("Mod-0")),
+    // La scrittura senza cornice: via pannelli, rail e toolbar.
+    ("shell.focus.toggle", None),
 ];
 
 /// Le impostazioni `keys.shell.*`, una per comando di shell (§16.3).

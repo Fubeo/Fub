@@ -219,6 +219,26 @@ fn restores(ws: &mut Workspace) -> (UiNode, Option<ActionRef>) {
     (tree, button(&root, "Ripristina"))
 }
 
+/// «Ripristina» chiede prima di scrivere: il click porta la domanda, e il sì
+/// è il bottone che ripristina davvero. Torna il sì, col suo payload.
+fn confirms(ws: &mut Workspace, restore: ActionRef) -> ActionRef {
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(restore.action.0).with_payload(restore.payload),
+        )
+        .expect("la domanda")
+    else {
+        panic!("la domanda si disegna")
+    };
+    assert!(
+        said(&root).contains("Riportare la nota a questa versione?"),
+        "{}",
+        said(&root)
+    );
+    button(&root, "Sì, ripristina").expect("il sì c'è")
+}
+
 /// Ogni testo dell'albero, per chiedere *cosa dice* senza legarsi alla forma.
 fn said(tree: &UiNode) -> String {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
@@ -429,14 +449,64 @@ fn restore_passes_from_the_record_and_is_cancels() {
 
     let (_, action) = restores(&mut ws);
     let action = action.expect("il bottone c'è");
+    let yes = confirms(&mut ws, action);
+    // La domanda da sola non scrive niente.
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "com'è\n"
+    );
     ws.view_action(
         &instance(),
-        UiAction::new(action.action.0).with_payload(action.payload),
+        UiAction::new(yes.action.0).with_payload(yes.payload),
     )
     .expect("ripristino");
     assert_eq!(
         std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
         "com'era\n"
+    );
+}
+
+#[test]
+fn a_restore_asked_and_cancelled_leaves_the_note_alone() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, "Uno.md");
+    ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+
+    let action = restores(&mut ws).1.expect("il bottone c'è");
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(action.action.0).with_payload(action.payload),
+        )
+        .expect("la domanda")
+    else {
+        panic!("la domanda si disegna")
+    };
+    let no = button(&root, "Annulla").expect("il no c'è");
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(no.action.0).with_payload(no.payload),
+        )
+        .expect("annullato")
+    else {
+        panic!("il pannello si ridisegna")
+    };
+    assert!(
+        button(&root, "Ripristina").is_some(),
+        "torna il bottone di prima"
+    );
+    assert!(
+        !said(&root).contains("Riportare la nota"),
+        "la domanda sparisce"
+    );
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "com'è\n"
     );
 }
 
@@ -468,8 +538,9 @@ fn a_restore_drawn_on_another_notes_not_writes_on_this() {
         .expect("riscritta");
 
     // 1. Il pannello si disegna su `Uno.md`, e il bottone si porta dietro la
-    //    nota su cui è stato disegnato.
-    let action = restores(&mut ws).1.expect("il bottone c'è");
+    //    nota su cui è stato disegnato — fino al sì della domanda.
+    let restore = restores(&mut ws).1.expect("il bottone c'è");
+    let action = confirms(&mut ws, restore);
     // 2. La nota attiva cambia. Il ridisegno arriverà, ma non è ancora arrivato.
     watches(&mut ws, "Due.md");
     // 3. Il click parte dal pannello vecchio.

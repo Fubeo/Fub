@@ -40,7 +40,7 @@
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate};
+use fub_abi::query::QueryExpr;
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -242,8 +242,8 @@ impl ViewProvider for TagPanelView {
                 host.set_view_state(FILTER_STATE, value)?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
-            // RunSearch porta una stringa; il JSON di QueryExpr è la stessa
-            // domanda che Documents riceve, non una sintassi testuale implicita.
+            // RunSearch porta la stringa che la barra saprebbe leggere:
+            // `tag:nome`, la stessa sintassi che l'utente scrive.
             SEARCH => match action.payload.get(TAG).and_then(|v| v.as_str()) {
                 Some(name) => Ok(ViewUpdate::RunSearch {
                     query: selection_query(&[name.to_string()]),
@@ -498,25 +498,27 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
 
     UiNode::column(4, vec![field, body])
 }
-/// La query condivisa, non la scrittura `tags:x` (che una ricerca di testo
-/// cercherebbe letteralmente). La serializzazione attraversa RunSearch senza
-/// introdurre una nuova famiglia IPC; la shell la passa a Documents.
+/// La ricerca dei tag scelti, scritta **come la scriverebbe chi usa la barra**:
+/// `tag:rust tag:"a b"`. La barra la legge con la stessa grammatica di
+/// `rules::search_syntax` (e la shell con la sua gemella), quindi cliccare un
+/// tag e digitarlo danno gli stessi risultati — sotto-tag compresi — e chi
+/// ritocca la query ritocca parole, non JSON.
 pub(crate) fn selection_query(selection: &[String]) -> String {
-    serde_json::to_string(&QueryExpr {
-        any: vec![QueryClause {
-            all: selection
-                .iter()
-                .map(|name| QueryLiteral {
-                    negated: false,
-                    predicate: QueryPredicate::Tag {
-                        name: name.clone(),
-                        descendants: false,
-                    },
-                })
-                .collect(),
-        }],
-    })
-    .expect("QueryExpr tag is serializable")
+    selection
+        .iter()
+        .map(|name| {
+            let plain = !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| !c.is_whitespace() && !matches!(c, '"' | '(' | ')' | '[' | ']'));
+            if plain {
+                format!("tag:{name}")
+            } else {
+                format!("tag:\"{}\"", name.replace('"', ""))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// L'albero completo: filtro, modo (piatta/albero), ordinamento (nome/conteggio)
@@ -732,6 +734,7 @@ fn tag_leaf(tag: &TagCount, selection: &[String]) -> UiNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::query::QueryPredicate;
     use fub_abi::traits::{ViewStateRead, ViewStateWrite};
     use fub_sdk::testing::MemoryHost;
 
@@ -800,11 +803,12 @@ mod tests {
         let ViewUpdate::RunSearch { query } = update else {
             panic!("search");
         };
+        assert_eq!(query, "tag:rust");
         assert_eq!(
-            serde_json::from_str::<QueryExpr>(&query).unwrap(),
+            fub_abi::rules::search_syntax::parse(&query, false).unwrap(),
             QueryExpr::of(QueryPredicate::Tag {
                 name: "rust".into(),
-                descendants: false,
+                descendants: true,
             })
         );
     }
@@ -1021,6 +1025,7 @@ mod tests {
 #[cfg(test)]
 mod presentation_tests {
     use super::*;
+    use fub_abi::query::QueryPredicate;
     use fub_abi::traits::ViewStateWrite;
 
     fn tag(name: &str, count: u32) -> TagCount {
@@ -1091,16 +1096,17 @@ mod presentation_tests {
     }
 
     #[test]
-    fn selection_query_is_a_conjunction_of_exact_tag_leaves() {
-        let expr: QueryExpr =
-            serde_json::from_str(&selection_query(&["rust".into(), "a/b".into()])).unwrap();
+    fn selection_query_is_a_conjunction_of_tag_operators() {
+        let query = selection_query(&["rust".into(), "a/b".into()]);
+        assert_eq!(query, "tag:rust tag:a/b");
+        let expr = fub_abi::rules::search_syntax::parse(&query, false).unwrap();
         assert_eq!(expr.any.len(), 1);
         assert_eq!(expr.any[0].all.len(), 2);
         assert_eq!(
             expr.any[0].all[1].predicate,
             QueryPredicate::Tag {
                 name: "a/b".into(),
-                descendants: false,
+                descendants: true,
             }
         );
     }

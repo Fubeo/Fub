@@ -181,6 +181,9 @@ export const SCENE = [
       // pannello e vive cinque secondi: fotografarlo qui vorrebbe dire una
       // scena che contiene due superfici e non sapere quale si stava
       // guardando — e il toast ha già la sua, qui sopra.
+      // Un guasto non sparisce da solo (resta finché non lo si legge): si
+      // chiude dalla sua ×, come farebbe chi lo ha letto.
+      await page.click("#toast .toast-close");
       await page.waitForSelector("#toast", { state: "detached", timeout: 15_000 });
       await page.click("#notify-button");
       await page.waitForSelector("#notify-list li");

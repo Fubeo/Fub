@@ -59,7 +59,7 @@ export interface Quadtree {
   /// Overflow delle foglie a profondità massima: lista concatenata per nodo.
   overflowHead: Int32Array;
   overflowNext: Int32Array;
-  /// Stack riusato dalla DFS di `nearest`.
+  /// Stack riusato dalle DFS di `visit` e `nearest`.
   stack: Int32Array;
   /// Contatore di allocazione: a ogni costruzione riparte da 0 e gli slot
   /// vecchi vengono sovrascritti in ordine — mai azzerare tutto il pool.
@@ -274,57 +274,61 @@ export function build(s: Structure, pool: QuadtreePool): Quadtree {
 /// forza. Con theta → 0 si scende sempre: il risultato replica l'O(n²).
 export function visit(q: Quadtree, theta: number, x: number, y: number, f: VisitFn): void {
   if (q.used === 0 || q.s === null) return;
+  const s = q.s;
   const t2 = theta * theta;
-  visitNode(q, 0, t2, x, y, f);
-}
-
-function visitNode(q: Quadtree, i: number, t2: number, x: number, y: number, f: VisitFn): void {
-  const s = q.s!;
-  if (q.children[i * 4] < 0) {
-    // Foglia: forza esatta per ogni nodo, tranne il punto di query (la
-    // posizione Float32 coincide solo con il nodo stesso; i nodi
-    // coincidenti sono esclusi anche loro — li separa la collisione).
-    const c = i * LEAF_CAPACITY;
-    const nc = q.contentCount[i];
-    for (let k = 0; k < nc; k++) {
-      const j = q.contents[c + k];
-      if (s.x[j] === x && s.y[j] === y) continue;
-      const dx = s.x[j] - x;
-      const dy = s.y[j] - y;
-      f(dx, dy, dx * dx + dy * dy, s.mass[j]);
-    }
-    let o = q.overflowHead[i];
-    while (o >= 0) {
-      if (!(s.x[o] === x && s.y[o] === y)) {
-        const dx = s.x[o] - x;
-        const dy = s.y[o] - y;
-        f(dx, dy, dx * dx + dy * dy, s.mass[o]);
+  // DFS con lo stack del pool, non ricorsiva: la visita gira n volte per
+  // passo, e una chiamata per cella aperta ne era quasi un terzo del costo.
+  // Lo stack non trabocca: a ogni livello restano al più 3 fratelli, e la
+  // profondità è limitata da MAX_DEPTH.
+  const stack = q.stack;
+  let sp = 0;
+  stack[sp++] = 0;
+  while (sp > 0) {
+    const i = stack[--sp];
+    const b = i * 4;
+    if (q.children[b] < 0) {
+      // Foglia: forza esatta per ogni nodo, tranne il punto di query (la
+      // posizione Float32 coincide solo con il nodo stesso; i nodi
+      // coincidenti sono esclusi anche loro — li separa la collisione).
+      const c = i * LEAF_CAPACITY;
+      const nc = q.contentCount[i];
+      for (let k = 0; k < nc; k++) {
+        const j = q.contents[c + k];
+        if (s.x[j] === x && s.y[j] === y) continue;
+        const dx = s.x[j] - x;
+        const dy = s.y[j] - y;
+        f(dx, dy, dx * dx + dy * dy, s.mass[j]);
       }
-      o = q.overflowNext[o];
-    }
-    return;
-  }
-  // Interno: il figlio che contiene il punto di query si scende sempre;
-  // gli altri si approssimano se s/d < theta (in quadrato: s² < theta²·d²).
-  const kq = (x >= q.cx[i] ? 1 : 0) | (y >= q.cy[i] ? 2 : 0);
-  const b = i * 4;
-  for (let k = 0; k < 4; k++) {
-    const fk = q.children[b + k];
-    if (fk < 0) continue;
-    if (k === kq) {
-      visitNode(q, fk, t2, x, y, f);
+      let o = q.overflowHead[i];
+      while (o >= 0) {
+        if (!(s.x[o] === x && s.y[o] === y)) {
+          const dx = s.x[o] - x;
+          const dy = s.y[o] - y;
+          f(dx, dy, dx * dx + dy * dy, s.mass[o]);
+        }
+        o = q.overflowNext[o];
+      }
       continue;
     }
-    const dx = q.cmx[fk] - x;
-    const dy = q.cmy[fk] - y;
-    const d2 = dx * dx + dy * dy;
-    // Il criterio classico: lato della cella su distanza, non semilato — col
-    // semilato un theta di 0.9 valeva 1.8 e l'errore raddoppiava.
-    const side = 2 * q.halfSize[fk];
-    if (side * side < t2 * d2) {
-      f(dx, dy, d2, q.mass[fk]);
-    } else {
-      visitNode(q, fk, t2, x, y, f);
+    // Interno: il figlio che contiene il punto di query si scende sempre;
+    // gli altri si approssimano se s/d < theta (in quadrato: s² < theta²·d²).
+    const kq = (x >= q.cx[i] ? 1 : 0) | (y >= q.cy[i] ? 2 : 0);
+    for (let k = 0; k < 4; k++) {
+      const fk = q.children[b + k];
+      if (fk < 0) continue;
+      if (k !== kq) {
+        const dx = q.cmx[fk] - x;
+        const dy = q.cmy[fk] - y;
+        const d2 = dx * dx + dy * dy;
+        // Il criterio classico: lato della cella su distanza, non semilato —
+        // col semilato un theta di 0.9 valeva 1.8 e l'errore raddoppiava.
+        const side = 2 * q.halfSize[fk];
+        if (side * side < t2 * d2) {
+          f(dx, dy, d2, q.mass[fk]);
+          continue;
+        }
+      }
+      stack[sp++] = fk;
     }
   }
 }

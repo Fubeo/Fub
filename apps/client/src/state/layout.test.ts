@@ -26,7 +26,10 @@ import {
   rename,
   activeTab,
   removeEverywhere,
+  normalizedSizes,
+  setSplitSizes,
   type Layout,
+  type SplitNode,
 } from "./layout";
 
 const viewState = vi.fn();
@@ -419,5 +422,55 @@ describe("rileggere la finestra com'era", () => {
     void loadLayout();
     for (let i = 0; i < 4; i++) await Promise.resolve();
     expect(viewState.mock.calls.map((c) => c[0])).toEqual(["layout", "mode"]);
+  });
+});
+
+describe("le proporzioni di una divisione", () => {
+  const splitOf = (l: Layout): SplitNode => {
+    if (l.tree.k !== "split") throw new Error("la radice non è una divisione");
+    return l.tree;
+  };
+
+  it("si ricordano, e una forma che non regge vale parti uguali", () => {
+    const l = defaultLayout();
+    split("main", "row", l);
+    const saved = JSON.parse(JSON.stringify(l)) as { tree: { sizes?: unknown } };
+    saved.tree.sizes = [0.7, 0.3];
+    expect(splitOf(parseLayout(saved)!).sizes).toEqual([0.7, 0.3]);
+    for (const wrong of [[0.5], [1, -1], ["a", "b"], [0.5, Number.NaN]]) {
+      saved.tree.sizes = wrong;
+      expect(splitOf(parseLayout(saved)!).sizes).toBeUndefined();
+    }
+  });
+
+  it("un riquadro in più o in meno nella stessa fila riparte da parti uguali", () => {
+    const l = defaultLayout();
+    const second = split("main", "row", l)!;
+    splitOf(l).sizes = [0.8, 0.2];
+    split(second, "row", l);
+    expect(splitOf(l).children).toHaveLength(3);
+    expect(splitOf(l).sizes).toBeUndefined();
+    splitOf(l).sizes = [0.5, 0.25, 0.25];
+    closePane(second, l);
+    expect(splitOf(l).sizes).toBeUndefined();
+  });
+
+  it("dividere dentro un figlio in verso diverso lascia le proporzioni della fila", () => {
+    const l = defaultLayout();
+    const second = split("main", "row", l)!;
+    splitOf(l).sizes = [0.8, 0.2];
+    split(second, "col", l);
+    expect(splitOf(l).sizes).toEqual([0.8, 0.2]);
+  });
+
+  it("normalizza a somma uno e non lascia un riquadro sotto il minimo", () => {
+    expect(normalizedSizes([2, 2], 2)).toEqual([0.5, 0.5]);
+    const clamped = normalizedSizes([0.99, 0.01], 2)!;
+    expect(clamped[1]).toBeGreaterThan(0.08);
+    expect(clamped[0]! + clamped[1]!).toBeCloseTo(1);
+    const l = defaultLayout();
+    split("main", "col", l);
+    setSplitSizes(splitOf(l), [3, 1]);
+    expect(splitOf(l).sizes).toEqual([0.75, 0.25]);
   });
 });

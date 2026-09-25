@@ -388,3 +388,27 @@ fn a_notice_of_session_is_says_a_time_single() {
         "una volta per sessione: la seconda chiamata non deliver"
     );
 }
+
+/// Il livello del log vale **subito**, con o senza vault: prima lo leggeva solo
+/// il montaggio, e il pannello mostrava «debug» mentre il log restava a «info»
+/// fino alla prossima apertura.
+#[test]
+fn the_log_level_applies_when_written() {
+    let (_config_tmp, config) = folders();
+    let levels = std::sync::Arc::new(fub_kernel::log::Levels::default());
+    let host = installed(&config).with_levels(std::sync::Arc::clone(&levels));
+    let debug = fub_kernel::log::Level::Debug;
+    assert_ne!(levels.global(), debug);
+    host.set_setting_for_user(None, "log.level", SettingValue::Text("debug".into()))
+        .expect("scrittura senza vault");
+    assert_eq!(levels.global(), debug);
+    host.reset_setting_for_user(None, "log.level")
+        .expect("azzeramento senza vault");
+    assert_eq!(levels.global(), fub_kernel::log::Level::default());
+
+    let (_vault_tmp, root) = vault();
+    host.open(&root).expect("opens");
+    host.set_setting_for_user(None, "log.level", SettingValue::Text("debug".into()))
+        .expect("scrittura col vault");
+    assert_eq!(levels.global(), debug);
+}

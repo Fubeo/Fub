@@ -8,6 +8,7 @@
 import type { Lifetime } from "../../ui/lifetime";
 import type { ResourceDescriptor } from "./media-types";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 
 /// Required local pdf.js version. Composition installs/bundles the dependency
 /// and worker; this module never fetches a CDN or fabricates a loader.
@@ -202,7 +203,7 @@ export function mountPdfView(
 
   function invokeAction(action: () => void | Promise<void>): void {
     void Promise.resolve().then(action).catch((error) => {
-      if (!destroyed) status.textContent = `PDF action failed: ${String(error)}`;
+      if (!destroyed) status.textContent = t("media.pdf.failed", { reason: errorText(error) });
     });
   }
 

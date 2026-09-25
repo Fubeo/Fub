@@ -531,6 +531,10 @@ pub struct MachineSettings {
     /// la stessa ragione: l'`Arc` è condiviso da ogni vault aperto, e chi
     /// dichiara è l'host una volta sola all'avvio.
     specs: RwLock<BTreeMap<String, SettingSpec>>,
+    /// Le chiavi nell'ordine in cui sono state dichiarate: è l'ordine in cui
+    /// [`MachineSettings::entries`] le restituisce. Si scrive solo tenendo il
+    /// lock di `specs`, così le due viste non divergono.
+    order: RwLock<Vec<String>>,
     profile_state: RwLock<SettingsFile>,
 }
 
@@ -559,6 +563,7 @@ impl MachineSettings {
                 revisions: RwLock::new(BTreeMap::new()),
                 next_revision: AtomicU64::new(1),
                 specs: RwLock::new(BTreeMap::new()),
+                order: RwLock::new(Vec::new()),
                 profile_state: RwLock::new(file),
             }),
             warning,
@@ -574,6 +579,7 @@ impl MachineSettings {
             revisions: RwLock::new(BTreeMap::new()),
             next_revision: AtomicU64::new(1),
             specs: RwLock::new(BTreeMap::new()),
+            order: RwLock::new(Vec::new()),
             profile_state: RwLock::new(SettingsFile {
                 active_profile: default_profile_name(),
                 ..SettingsFile::default()
@@ -688,6 +694,7 @@ impl MachineSettings {
     /// default, e a vincere sarebbe l'ordine di montaggio.
     pub fn declare(&self, specs: &[SettingSpec]) -> Result<(), String> {
         let mut declared = self.specs.write().expect("schema della macchina");
+        let mut order = self.order.write().expect("ordine della macchina");
         for spec in specs {
             if spec.scope != SettingScope::Machine {
                 return Err(format!(
@@ -702,6 +709,7 @@ impl MachineSettings {
                 ));
             }
             declared.insert(spec.key.clone(), spec.clone());
+            order.push(spec.key.clone());
         }
         Ok(())
     }
@@ -716,15 +724,16 @@ impl MachineSettings {
             .contains_key(key)
     }
 
-    /// Tutte le righe di macchina risolte, in ordine di chiave.
+    /// Tutte le righe di macchina risolte, in ordine di dichiarazione.
     ///
     /// La stessa forma di [`SettingsStore::entries`], e i valori sono gli stessi
     /// che vede un vault aperto: la mappa è una sola.
     pub fn entries(&self) -> Vec<SettingEntry> {
-        self.specs
-            .read()
-            .expect("schema della macchina")
-            .values()
+        let specs = self.specs.read().expect("schema della macchina");
+        let order = self.order.read().expect("ordine della macchina");
+        order
+            .iter()
+            .filter_map(|key| specs.get(key))
             .map(|spec| {
                 let (value, source) = self.resolve(spec);
                 SettingEntry {
@@ -962,11 +971,18 @@ impl MachineSettingRevision {
 struct Declared {
     spec: SettingSpec,
     plugin: String,
+    /// Il posto nella sequenza delle dichiarazioni: chi dichiara scrive le
+    /// proprie chiavi nell'ordine in cui vanno lette, e
+    /// [`SettingsStore::entries`] le restituisce così.
+    seq: u64,
 }
 
 /// Lo store di configurazione di **un vault**.
 pub struct SettingsStore {
     specs: BTreeMap<String, Declared>,
+    /// Il prossimo [`Declared::seq`]. Solo cresce: una chiave ritirata e poi
+    /// ridichiarata va in fondo, come un componente appena acceso.
+    next_seq: u64,
     vault_path: Utf8PathBuf,
     /// Il supporto del vault (§15.1). `settings.json` sta dentro `.fub/`, cioè
     /// **dentro il vault**: passa da qui e non da `std::fs`, o il giorno in cui
@@ -1010,6 +1026,7 @@ impl SettingsStore {
         };
         SettingsStore {
             specs: BTreeMap::new(),
+            next_seq: 0,
             vault_path,
             storage,
             vault: Durable::new(vault),
@@ -1207,11 +1224,14 @@ impl SettingsStore {
                     spec.key
                 ));
             }
+            let seq = self.next_seq;
+            self.next_seq += 1;
             self.specs.insert(
                 spec.key.clone(),
                 Declared {
                     spec: spec.clone(),
                     plugin: plugin.to_string(),
+                    seq,
                 },
             );
         }
@@ -1282,7 +1302,9 @@ impl SettingsStore {
         self.specs.get(key).map(|d| &d.spec)
     }
 
-    /// Tutte le righe risolte, o quelle di un plugin, in ordine di chiave.
+    /// Tutte le righe risolte, o quelle di un plugin, in ordine di
+    /// dichiarazione: un plugin le elenca nel suo manifest nell'ordine in cui
+    /// vanno lette, e un ordine per chiave metterebbe «accento» prima di «tema».
     pub fn entries(&self, plugin: Option<&str>) -> Vec<SettingEntry> {
         self.entries_by_owner(plugin)
             .into_iter()
@@ -1294,9 +1316,14 @@ impl SettingsStore {
     /// [`SettingSpec`] (e non ci deve stare, vedi [`Declared`]), ma è ciò che
     /// dice quale catalogo di stringhe risolve le sue etichette (§12.1).
     pub fn entries_by_owner(&self, plugin: Option<&str>) -> Vec<(String, SettingEntry)> {
-        self.specs
+        let mut declared: Vec<&Declared> = self
+            .specs
             .values()
             .filter(|d| plugin.is_none_or(|p| d.plugin == p))
+            .collect();
+        declared.sort_by_key(|d| d.seq);
+        declared
+            .into_iter()
             .map(|d| {
                 let (value, source) = self.resolve(d);
                 (
@@ -1705,6 +1732,50 @@ mod tests {
         let (value, source) = store.effective("versioning.enabled").unwrap();
         assert_eq!(value, SettingValue::Toggle(true));
         assert_eq!(source, SettingSource::Default);
+    }
+
+    /// Le righe escono nell'ordine in cui sono state dichiarate, non per
+    /// chiave: chi dichiara le scrive nell'ordine in cui vanno lette. Una chiave
+    /// ritirata e ridichiarata torna in fondo, come un componente riacceso.
+    #[test]
+    fn entries_follow_the_declaration_order() {
+        let (_tmp, dir) = tempdir();
+        let mut store = store_on(&dir);
+        store
+            .declare(
+                "fub.a",
+                &[
+                    SettingSpec::toggle("zeta.theme", "Z", true),
+                    SettingSpec::toggle("alpha.accent", "A", true),
+                ],
+            )
+            .unwrap();
+        store
+            .declare("fub.b", &[SettingSpec::toggle("beta.other", "B", true)])
+            .unwrap();
+        let keys = |store: &SettingsStore| -> Vec<String> {
+            store
+                .entries(None)
+                .into_iter()
+                .map(|e| e.spec.key)
+                .collect()
+        };
+        assert_eq!(keys(&store), ["zeta.theme", "alpha.accent", "beta.other"]);
+        store.withdraw("fub.a");
+        store
+            .declare("fub.a", &[SettingSpec::toggle("zeta.theme", "Z", true)])
+            .unwrap();
+        assert_eq!(keys(&store), ["beta.other", "zeta.theme"]);
+
+        let machine = MachineSettings::in_memory();
+        machine
+            .declare(&[
+                SettingSpec::toggle("zeta.theme", "Z", true).for_machine(),
+                SettingSpec::toggle("alpha.accent", "A", true).for_machine(),
+            ])
+            .unwrap();
+        let machine_keys: Vec<String> = machine.entries().into_iter().map(|e| e.spec.key).collect();
+        assert_eq!(machine_keys, ["zeta.theme", "alpha.accent"]);
     }
 
     /// Una chiave di vault legge **solo** il file del vault (0076): il livello

@@ -14,6 +14,7 @@ vi.mock("../host/ipc", () => ({
 const {
   SERIES_THEME_ID,
   THEME_KEY,
+  THEME_ID_KEY,
   cancelThemePreview,
   currentThemeId,
   currentThemePreview,
@@ -76,7 +77,9 @@ describe("anteprima tema effimera", () => {
     expect(currentThemePreview()).toBeNull();
     expect(currentThemeId()).toBe(SERIES_THEME_ID);
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(host.setSetting).toHaveBeenCalledTimes(1);
+    // La luce e, accanto, l'id del tema: viaggiano insieme nelle impostazioni.
+    expect(host.setSetting).toHaveBeenCalledTimes(2);
     expect(host.setSetting).toHaveBeenCalledWith(THEME_KEY, "dark");
+    expect(host.setSetting).toHaveBeenCalledWith(THEME_ID_KEY, SERIES_THEME_ID);
   });
 });

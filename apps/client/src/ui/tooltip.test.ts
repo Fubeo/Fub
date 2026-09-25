@@ -19,14 +19,20 @@ describe("il suggerimento della shell", () => {
     vi.useRealTimers();
   });
 
-  it("si apre sul fuoco dopo il ritardo e dichiara il ruolo ARIA", () => {
+  it("si apre sul fuoco dopo il ritardo, ma descrive il controllo subito", () => {
     const button = document.createElement("button");
     document.body.append(button);
     const dispose = attachTooltip(button, "Apri la palette");
 
     button.dispatchEvent(new FocusEvent("focus"));
+    // Il lettore di schermo annuncia al fuoco: la descrizione c'è già, anche
+    // se il suggerimento non si vede ancora.
+    const early = document.querySelector<HTMLElement>('[role="tooltip"]');
+    expect(early?.hidden).toBe(true);
+    expect(early?.textContent).toBe("Apri la palette");
+    expect(button.getAttribute("aria-describedby")).toBe(early?.id);
     vi.advanceTimersByTime(TOOLTIP_DELAY_MS - 1);
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    expect(early?.hidden).toBe(true);
 
     vi.advanceTimersByTime(1);
     const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]');

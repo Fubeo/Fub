@@ -478,6 +478,9 @@ export const window = {
   toggleMaximize: (): Promise<void> => getCurrentWindow().toggleMaximize(),
   close: (): Promise<void> => getCurrentWindow().close(),
   isMaximized: (): Promise<boolean> => getCurrentWindow().isMaximized(),
+  /// Il titolo della finestra nativa (barra delle applicazioni, Alt+Tab): la
+  /// webview non lo prende da `document.title` da sola.
+  setTitle: (title: string): Promise<void> => getCurrentWindow().setTitle(title),
   /// La titlebar deve ridisegnare l'icona max/restore quando lo stato cambia.
   /// Tauri 2 non espone un `onMaximize`/`onUnmaximize` separato: `onResized`
   /// copre sia il resize manuale sia il maximize/unmaximize. Se l'ascolto non

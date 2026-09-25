@@ -48,7 +48,7 @@ import {
   undoDepth,
 } from "./editors/text/test-support";
 import type { FakeHost } from "./host/fake";
-import type { KernelNotice, SettingEntry, CommandSpec } from "./host/contract";
+import type { KernelNotice, SettingEntry, CommandSpec, KnownVault } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
 // L'host finto vive in una scatola che `vi.mock` possa vedere: i factory dei
@@ -60,6 +60,8 @@ const box = vi.hoisted(() => ({
   /// Cosa risponde la modale di conferma del sistema. È l'unica altra cosa che
   /// la shell chiede al di là del confine (§1.3), e negli e2e è un `true`.
   confirm: true,
+  /// I vault che la macchina ricorda, per la schermata senza vault.
+  known: [] as KnownVault[],
 }));
 
 let activeStop: (() => void) | null = null;
@@ -95,6 +97,7 @@ vi.mock("./host/ipc", () => {
       toggleMaximize: async () => {},
       close: async () => {},
       isMaximized: async () => false,
+      setTitle: async () => {},
       onResize: async () => async () => {},
     },
   };
@@ -139,7 +142,9 @@ async function mount(
     root,
     sessionNotice: notice,
     commands,
+    knownVaults: box.known,
   });
+  box.known = [];
   box.host = host;
   const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
   mountShell();
@@ -215,9 +220,11 @@ async function contextMenu(on: HTMLElement, entry: string): Promise<void> {
   const menu = document.getElementById("context-menu");
   if (!menu) throw new Error("il menu contestuale non si è aperto");
   const buttons = [...menu.querySelectorAll("button")];
-  const selected = buttons.find((b) => b.textContent === entry);
+  // L'etichetta, non il testo intero: accanto può esserci la scorciatoia.
+  const label = (b: Element) => b.querySelector(".menu-label")?.textContent ?? b.textContent;
+  const selected = buttons.find((b) => label(b) === entry);
   if (!selected) {
-    throw new Error(`nel menu non c'è «${entry}», ci sono: ${buttons.map((b) => b.textContent)}`);
+    throw new Error(`nel menu non c'è «${entry}», ci sono: ${buttons.map(label)}`);
   }
   selected.click();
   await settle();
@@ -526,10 +533,13 @@ describe("apri un vault", () => {
     await startup;
     await settle();
 
-    // Il vault che l'host propone all'avvio, non uno scelto da qui.
-    expect(document.querySelector("#vault-path")?.textContent).toBe("/vault");
+    // Il vault che l'host propone all'avvio, non uno scelto da qui: la barra
+    // ne mostra il nome (il percorso intero sta nel suggerimento), e il titolo
+    // della finestra dice nota e vault.
+    expect(document.querySelector("#vault-path")?.textContent).toBe("vault");
     expect(rowsOfNote().map((r) => r.textContent?.trim())).toEqual(["Benvenuto"]);
     expect(textToVideo()).toContain("Il primo documento");
+    expect(document.title).toBe("Benvenuto — vault — Fub");
 
     // **Con una finestra da uno** (§14.4): l'apertura non chiede il vault
     // intero per aprire una nota. È la specie di fatto che si vede solo da
@@ -1189,7 +1199,11 @@ describe("chiudere linguette e superfici", () => {
       ? document.querySelector<HTMLElement>(`.pane .tab-close[data-tab-id="${tabId}"]`)
       : null;
     expect(close?.classList.contains("tab-close")).toBe(true);
+    // La chiusura scatta al `click` e non al `mousedown` (WCAG 2.5.2): premere
+    // e trascinare fuori dalla × annulla il gesto.
     close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    expect(document.querySelectorAll(".pane .tab")).toHaveLength(2);
+    close?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await waitFor(
       "resta la linguetta iniziale",
       () => document.querySelectorAll(".pane .tab").length === 1,
@@ -1821,6 +1835,25 @@ describe("la finestra senza vault", () => {
   });
 });
 
+describe("i vault recenti nella schermata senza vault", () => {
+  it("si tolgono dall'elenco senza toccare la cartella, e il fuoco resta nell'elenco", async () => {
+    const vault = (root: string, name: string): KnownVault => ({
+      root, name, icon: null, favorite: false, last_opened: 0, keys_seen: {},
+    });
+    box.known = [vault("/Vecchio", "Vecchio"), vault("/Appunti", "Appunti")];
+    const host = await start({}, [], null);
+    await waitFor("i recenti", () => document.querySelectorAll("#onboarding-recent li").length === 2);
+    const forget = document.querySelector<HTMLButtonElement>("#onboarding-recent li .onboarding-forget")!;
+    expect(forget.getAttribute("aria-label")).toContain("Vecchio");
+    forget.focus();
+    forget.click();
+    await waitFor("l'elenco ridisegnato", () => document.querySelectorAll("#onboarding-recent li").length === 1);
+    expect(host.atGate("forgetVault").map((call) => call.args[0])).toEqual(["/Vecchio"]);
+    expect(document.querySelector("#onboarding-recent li")?.textContent).toContain("Appunti");
+    await waitFor("il fuoco nell'elenco", () => document.activeElement?.closest("#onboarding-recent") !== null);
+  });
+});
+
 describe("una rinomina che questa finestra non ha chiesto", () => {
   it("porta con sé il buffer sporco, e il salvataggio in attesa con lui", async () => {
     // Un `mv` da terminale, un'altra applicazione, un sync: la rinomina arriva
@@ -2004,7 +2037,7 @@ describe("i riquadri dopo un'attesa", () => {
     await waitFor("entrambe le note vanno in conflitto", () => banners().every((b) => b && !b.hidden));
 
     // Il fuoco resta sul secondo riquadro: si sceglie dal banner del primo.
-    const useDisk = banners()[0]!.querySelectorAll<HTMLButtonElement>("button")[1]!;
+    const useDisk = banners()[0]!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!;
     useDisk.click();
     await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
     await settle();

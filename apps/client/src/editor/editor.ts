@@ -54,6 +54,9 @@ export interface Editor {
   /// conversione CRLF/offset interne al motore). Ritorna false se sola
   /// lettura, smontato o intervallo invalido.
   insertAtCursor(text: string): boolean;
+  /// Inserisce testo nel punto dello schermo `(x, y)`: è il gesto del
+  /// trascinamento, che lascia qualcosa dove cade e non dove sta il cursore.
+  insertAtPoint(x: number, y: number, text: string): boolean;
   /// Cambia modo sul buffer corrente, senza ricreare la vista di scrittura.
   setMode(mode: MarkdownMode): void;
   setReadOnly(readOnly: boolean): void;
@@ -81,6 +84,16 @@ export interface EditorOptions {
   slash?: EditorSlashHost;
 }
 
+
+/// La palette slash si apre a inizio riga o dopo uno spazio: dentro una
+/// parola il `/` è testo («e/o», «km/h», 24/09).
+export function slashOpensAt(lineBefore: string): boolean {
+  return lineBefore === "" || /\s$/.test(lineBefore);
+}
+
+/// La finestra in cui la lettura raccoglie le modifiche arrivate da un altro
+/// riquadro prima di ridisegnarsi.
+const READING_SYNC_MS = 120;
 
 /// Costruisce l'adapter compatibile con i chiamanti esistenti.
 export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
@@ -117,15 +130,24 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     ) return;
     const doc = opts.documentId;
     if (doc && slash.currentDoc() !== doc) return;
+    // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
+    // una selezione oppure a inizio parola, fuori da codice e link.
+    const context = engine.cursorContext();
+    if (context.empty && (context.literal || !slashOpensAt(context.lineBefore))) return;
     event.preventDefault();
     event.stopPropagation();
     const text = engine.getDoc();
+    const typed = context.empty;
     void openSlashPalette(
       parent,
       engine.selections().primary.text,
       () => !life.closed && parent.isConnected && engine.getDoc() === text &&
         (!doc || slash.currentDoc() === doc),
       slash,
+      // Chiusa senza scelta, la palette restituisce la battuta.
+      typed ? () => {
+        if (!life.closed && engine.getDoc() === text) engine.insertAt(context.head, "/");
+      } : undefined,
     );
   }, { capture: true });
 
@@ -225,9 +247,23 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   }
 
 
+  /// Le sincronizzazioni da un altro riquadro arrivano a ogni sua battuta; la
+  /// lettura le raccoglie e si ridisegna al più una volta per finestra.
+  /// Ridisegnarla (Markdown intero, diagrammi, embed) a ogni carattere teneva
+  /// occupato anche il riquadro che scrive.
+  let readingSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function cancelReadingSync(): void {
+    if (readingSyncTimer === null) return;
+    clearTimeout(readingSyncTimer);
+    readingSyncTimer = null;
+  }
+
   /// Rimonta la lettura dal buffer corrente. Chi chiama conserva la
-  /// posizione; qui si ridisegna e basta.
+  /// posizione; qui si ridisegna e basta. Il punto di lettura si cattura sul
+  /// DOM disegnato, che è ancora quello del testo di prima.
   function renderReading(): void {
+    cancelReadingSync();
     const text = normalizeLineBreaks(engine.getDoc());
     const anchor = captureReadingAnchor();
     unmountReading?.();
@@ -305,13 +341,14 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     },
     syncDoc: (update) => {
       closeSlashPalette(parent);
-      // La sincronizzazione esterna in lettura conserva il punto: l'ancoraggio
-      // si cattura sul testo di prima e si rimette dopo il ridisegno.
-      const anchor = mode === "reading" ? captureReadingAnchor() : null;
       engine.syncDoc(update);
-      if (mode !== "reading") return;
-      renderReading();
-      if (anchor) scrollReadingTo(anchor.from, anchor.top);
+      if (mode !== "reading" || readingSyncTimer !== null) return;
+      // La sincronizzazione esterna in lettura conserva il punto: il
+      // ridisegno lo cattura sul DOM di prima e lo rimette dopo.
+      readingSyncTimer = setTimeout(() => {
+        readingSyncTimer = null;
+        if (mode === "reading") renderReading();
+      }, READING_SYNC_MS);
     },
     undo: () => engine.undo(),
     redo: () => engine.redo(),
@@ -335,6 +372,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     },
     selections: () => engine.selections(),
     insertAtCursor: (text) => engine.insertAtCursor(text),
+    insertAtPoint: (x, y, text) => engine.insertAtPoint(x, y, text),
     setMode,
     setReadOnly: (value) => {
       closeSlashPalette(parent);
@@ -345,6 +383,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     },
     destroy: () => {
       closeSlashPalette(parent);
+      cancelReadingSync();
       life.close();
       unmountReading?.();
       unmountReading = null;

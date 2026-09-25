@@ -111,6 +111,13 @@ Il contratto operativo per cardinalità è:
 - tier 2, `401..2000`: Barnes–Hut con costo atteso `O(n log n)` e collisioni;
 - tier 3, `> 2000`: Barnes–Hut atteso, collisioni saltate.
 
+Il tier della fisica dipende solo dalla cardinalità, a ogni refresh dello
+schermo. Il tier della resa parte dallo stesso valore e scende di un gradino
+quando il frame time medio supera 1,3 volte il budget. Risale sotto 1,1 volte,
+dopo almeno 5 s. Il budget è il periodo del tetto `appearance.frame-rate`, mai
+sotto 1000/60 ms. Il gradino più economico nasconde soltanto le etichette di
+grado basso.
+
 Un quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore
 `O(n²)`. Il risultato a 10k è quindi soltanto quello della fixture deterministica
 con seed 6, non una garanzia per un grafo arbitrario. Digest, pass, interazione,

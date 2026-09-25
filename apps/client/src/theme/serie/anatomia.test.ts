@@ -8,6 +8,15 @@ const skinParts = import.meta.glob("./skin/*.css", {
   eager: true,
 }) as Record<string, string>;
 
+const shellSources = import.meta.glob(["../../**/*.ts", "!../../**/*.test.ts", "../../../index.html"], {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+/// Attributi scritti dai renderer Rust (HTML reso), non dalla shell.
+const RENDERED_ATTRIBUTES = new Set(["embed-url", "embed-path"]);
+
 function selectorClasses(): Set<string> {
   const classes = new Set<string>();
   for (const css of Object.values(skinParts)) {
@@ -25,6 +34,19 @@ describe("anatomia chiusa della shell", () => {
     for (const component of COMPONENTS) {
       for (const hook of component.hooks) expect(HOOKS).toContain(hook);
     }
+  });
+
+  it("veste soltanto attributi data-* che qualcuno scrive", () => {
+    const css = Object.values(skinParts).join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+    const source = Object.values(shellSources).join("\n");
+    const camel = (name: string) => name.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+    const orphans = [...new Set([...css.matchAll(/\[data-([a-z0-9-]+)/g)].map((m) => m[1]!))]
+      .filter((name) => !RENDERED_ATTRIBUTES.has(name))
+      .filter((name) =>
+        !source.includes(`data-${name}`) && !source.includes(`dataset.${camel(name)}`) &&
+        !source.includes(`"${camel(name)}"`)
+      );
+    expect(orphans).toEqual([]);
   });
 
   it("ha stati ammessi e almeno un componente per ciascuno", () => {

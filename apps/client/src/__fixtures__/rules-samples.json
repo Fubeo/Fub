@@ -3116,6 +3116,22 @@
       "out": "alt-mod-shift-p"
     },
     {
+      "binding": "Mod--",
+      "out": "mod--"
+    },
+    {
+      "binding": "Mod-Shift--",
+      "out": "mod-shift--"
+    },
+    {
+      "binding": "Mod-+",
+      "out": "mod-="
+    },
+    {
+      "binding": "Mod-=",
+      "out": "mod-="
+    },
+    {
       "binding": "Ctrl-k",
       "out": null
     },
@@ -3129,6 +3145,10 @@
     },
     {
       "binding": "Mod-Mod-k",
+      "out": null
+    },
+    {
+      "binding": "-",
       "out": null
     },
     {

@@ -2589,7 +2589,7 @@ interface index {
         /// I lavori lunghi vivi, in ordine di richiesta. Senza finestra come
         /// l'outline e per la stessa ragione: non cresce col vault.
         jobs(list<job-status>),
-        /// Le impostazioni risolte, in ordine di chiave. Senza finestra: il
+        /// Le impostazioni risolte, in ordine di dichiarazione. Senza finestra: il
         /// loro numero cresce con i plugin montati, non col vault.
         settings(list<setting-entry>),
         /// L'organizzazione del vault: un RECORD e non una lista, perché è una

@@ -249,6 +249,7 @@ async function hydrateEmbeds(
     if (slot.dataset.embedPage && mediaKindOfId(slot.dataset.embedPage) !== "other") return;
     if (chain.size > MAX_EMBED_DEPTH) {
       slot.classList.add("embed-too-deep");
+      slot.dataset.embedNote = t("markdown.embed_too_deep");
       return;
     }
     const heading = slot.dataset.embedHeading ?? null;
@@ -269,6 +270,7 @@ async function hydrateEmbeds(
     const identity = JSON.stringify([content.doc_id, heading, block]);
     if (chain.has(identity)) {
       slot.classList.add("embed-cycle");
+      slot.dataset.embedNote = t("markdown.embed_cycle");
       return;
     }
     // Embedded offsets never mutate the containing note.

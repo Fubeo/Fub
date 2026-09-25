@@ -198,7 +198,16 @@ type Entry = Readonly<
       { type: "letterale"; value: string | Readonly<Record<Light, string>> }
     /// Un gradino della scala delle superfici: quanti passi sopra la carta.
     /// La chiarezza è l'unica cosa che si dichiara, e si dichiara in passi.
-    | { type: "gradino"; steps: number; chroma?: number }
+    ///
+    /// `high` è ciò che il gradino deve reggere in alto contrasto, se lì il
+    /// passo della scala non basta: si cerca la chiarezza come per un
+    /// inchiostro, e solo in quel foglio.
+    | {
+        type: "gradino";
+        steps: number;
+        chroma?: number;
+        high?: { above: readonly string[]; targetContrast: number };
+      }
     /// Un gradino che cambia passo fra le due luci: la tabella d'elevazione
     /// al buio separa con la luce, in chiaro lascia il lavoro all'ombra.
     | { type: "elevazione"; steps: Readonly<Record<Light, number>>; chroma?: number }
@@ -536,12 +545,15 @@ const COLOR: readonly Group[] = [
         name: "border",
         type: "gradino",
         steps: 9,
+        high: { above: SURFACES, targetContrast: 3 },
         prose:
           "Il filetto è **il gradino dopo lo stato**, a due passi di distanza: un\n" +
           "bordo separa due superfici, quindi deve stare oltre la più lontana delle\n" +
           "due, e la scala sa già dov'è. Non gli si chiede 3:1 — un filetto non è un\n" +
           "controllo e pretenderglielo trasformerebbe l'interfaccia in un\n" +
-          "wireframe — ma nemmeno lo si sceglie a mano.",
+          "wireframe — ma nemmeno lo si sceglie a mano.\n" +
+          "In alto contrasto sì: lì il filetto è anche il contorno di ogni campo, e\n" +
+          "chi ha chiesto più contrasto deve vedere dove si scrive (WCAG 1.4.11).",
       },
     ],
   },
@@ -1139,7 +1151,12 @@ function resolveValue(
 
     case "gradino": {
       const chroma = entry.chroma ?? neutralChroma(entry.steps);
-      return toHex({ l: stepClarity(light, entry.steps), c: chroma, h: NEUTRAL });
+      const step = toHex({ l: stepClarity(light, entry.steps), c: chroma, h: NEUTRAL });
+      if (level === "normal" || entry.high === undefined) return step;
+      const backgrounds = entry.high.above.map((f) => backgroundOf(f, resolved));
+      if (backgrounds.every((f) => contrast(step, f) >= entry.high!.targetContrast)) return step;
+      const color = { c: chroma, h: NEUTRAL };
+      return toHex({ ...color, l: search(color, backgrounds, entry.high.targetContrast, light) });
     }
 
     case "elevazione": {

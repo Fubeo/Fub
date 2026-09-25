@@ -65,7 +65,7 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../../crates/fub-kernel/src/viewstate.rs) | 1 | posizione e stato per esemplare di vista |
 | anagrafe | [`crates/fub-kernel/src/entries.rs:147`](../../crates/fub-kernel/src/entries.rs) | 5 | metadati indicizzati delle voci |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:96`](../../crates/fub-kernel/src/settings.rs) | 2 | valori per vault e macchina |
-| versioning | [`crates/fub-features/src/versioning.rs:345`](../../crates/fub-features/src/versioning.rs) | 1 | snapshot dei file |
+| versioning | [`crates/fub-features/src/versioning.rs:360`](../../crates/fub-features/src/versioning.rs) | 1 | snapshot dei file |
 | snapshot globale | [`crates/fub-kernel/src/snapshot.rs:27`](../../crates/fub-kernel/src/snapshot.rs) | 1 | manifest autorevole, contenitore e record di recovery |
 | indice di ricerca | [`crates/fub-features/src/search.rs:141`](../../crates/fub-features/src/search.rs) | 6 | campi, opzioni e tokenizer dell'indice |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../../crates/fub-kernel/src/journal.rs) | 1 | mutazioni applicate al vault |

@@ -35,6 +35,9 @@ import { openLifetime, type Teardown } from "./lifetime";
 /// passa qui dentro.
 export interface MenuHost {
   run(id: ShellCommandId): void;
+  /// La scorciatoia del comando come la si preme, se ne ha una: la mostra la
+  /// voce accanto al nome, come in ogni menu che insegna le scorciatoie.
+  shortcut?(id: ShellCommandId): string;
 }
 
 
@@ -46,16 +49,22 @@ export interface MenuHost {
 /// Una voce è un comando di shell, o un click su un bottone che già c'è.
 /// Impostazioni non è un comando di shell (la dieta è chiusa): è il bottone
 /// `#open-settings`, e il menu lo preme invece di inventarsi un id.
-type MenuEntry =
+/// `separator` mette una riga prima della voce, per raggruppare i gesti affini.
+type MenuEntry = (
   | { label: string; command: ShellCommandId }
-  | { label: string; click: string };
+  | { label: string; click: string }
+) & { separator?: boolean };
 
 const MENU: { title: string; entries: MenuEntry[] }[] = [
   {
     title: "menu.file",
     entries: [
-      { label: "menu.file.open_vault", command: "shell.vault.open" },
-      { label: "menu.tools.settings", click: "#open-settings" },
+      { label: "menu.file.new_note", command: "shell.note.new" },
+      { label: "menu.file.save", command: "shell.doc.save" },
+      { label: "menu.file.open_vault", command: "shell.vault.open", separator: true },
+      { label: "menu.file.reopen_tab", command: "shell.tab.reopen", separator: true },
+      { label: "menu.file.close_tab", command: "shell.tab.close" },
+      { label: "menu.tools.settings", command: "shell.settings", separator: true },
     ],
   },
   {
@@ -71,12 +80,28 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
       { label: "menu.view.files", command: "shell.panel.files" },
       { label: "menu.view.search", command: "shell.panel.search" },
       { label: "menu.view.graph", command: "shell.graph" },
+      { label: "menu.view.sidebar", command: "shell.sidebar.toggle", separator: true },
+      { label: "menu.view.inspector", command: "shell.inspector.toggle" },
+      { label: "menu.view.focus", command: "shell.focus.toggle" },
+      { label: "menu.view.mode_live", command: "shell.mode.live", separator: true },
+      { label: "menu.view.mode_source", command: "shell.mode.source" },
       { label: "menu.view.mode_reading", command: "shell.mode.reading" },
-      { label: "menu.view.mode_live", command: "shell.mode.live" },
+      { label: "menu.view.zoom_in", command: "shell.zoom.in", separator: true },
+      { label: "menu.view.zoom_out", command: "shell.zoom.out" },
+      { label: "menu.view.zoom_reset", command: "shell.zoom.reset" },
     ],
   },
-  { title: "menu.go", entries: [{ label: "menu.go.switcher", command: "shell.switcher" }] },
-  { title: "menu.tools", entries: [{ label: "menu.tools.settings", click: "#open-settings" }] },
+  {
+    title: "menu.go",
+    entries: [
+      { label: "menu.go.switcher", command: "shell.switcher" },
+      { label: "menu.go.back", command: "shell.pane.back", separator: true },
+      { label: "menu.go.forward", command: "shell.pane.forward" },
+      { label: "menu.go.next_tab", command: "shell.tab.next", separator: true },
+      { label: "menu.go.previous_tab", command: "shell.tab.previous" },
+    ],
+  },
+  { title: "menu.tools", entries: [{ label: "menu.tools.settings", command: "shell.settings" }] },
 ];
 const mountedMenus = new WeakMap<HTMLElement, Teardown>();
 
@@ -263,6 +288,8 @@ export function mountAppMenu(host: MenuHost): Teardown {
     const entries = MENU[index]!.entries;
     const items: MenuItem[] = entries.map((v) => ({
       label: t(v.label as never),
+      separator: v.separator,
+      hint: "command" in v ? host.shortcut?.(v.command) || undefined : undefined,
       run: () => {
         // Il runner può essere raggiunto dopo un click nativo o da un test che
         // lo richiami direttamente: chiudere qui è quindi deliberatamente

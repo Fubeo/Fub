@@ -2805,7 +2805,8 @@ pub enum IndexQuery {
     /// primo caso in cui la shell e un plugin chiedono la stessa cosa a due
     /// porte diverse.
     ///
-    /// `plugin` assente = tutte, in ordine di chiave. Con un id, solo quelle
+    /// `plugin` assente = tutte, nell'ordine in cui sono state dichiarate (chi
+    /// dichiara le scrive nell'ordine in cui vanno lette). Con un id, solo quelle
     /// dichiarate da lui: è ciò che serve al pannello di **un** plugin, e ciò
     /// che permette a chi disegna di non filtrare per prefisso — la chiave di
     /// una feature del core non ha un prefisso da confrontare.

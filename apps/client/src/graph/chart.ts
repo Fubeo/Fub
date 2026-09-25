@@ -24,14 +24,17 @@ import {
 } from "./sim/types";
 import type { Quadtree } from "./sim/quadtree";
 import { QuadtreePool, build } from "./sim/quadtree";
-import { DT, DT_MAX, calculateTier, step, type EngineState } from "./sim/engine";
+import { DT_MAX, baseTier, calculateTier, step, type EngineState } from "./sim/engine";
 import type { WorldBound, Camera, CameraState, Viewport } from "./render/camera";
 import { createCameraState, fit } from "./render/camera";
 import type { Painter, DrawState } from "./render/painter";
 import { createPainter } from "./render/painter";
 import type { Interaction, InteractionOptions } from "./interaction";
 import { createInteraction, nodeAt } from "./interaction";
+import type { SavedLayout } from "./sim/memory";
+import { restoreLayout, snapshotLayout } from "./sim/memory";
 import { onReducedMotionChange, reducedMotion } from "../theme/reduced-motion";
+import { createFramePacer, type FramePacer } from "../theme/frame-rate";
 
 /// L'alpha sotto cui il disegno è statico: il pittore non traccia trail né
 /// pulse sotto questa soglia (sono le sue `TRAIL_THRESHOLD`/`PULSE_THRESHOLD`), quindi
@@ -46,6 +49,16 @@ const MIN_VIEW_SIZE = 50;
 /// Fattore dell'EMA dei millisecondi per frame: un filtro lento, perché il
 /// tier non deve oscillare a ogni capriccio del GC.
 const EMA_ALPHA = 0.1;
+/// Un campione dell'EMA non supera questi budget: una pausa (scheda nascosta)
+/// non vale mille frame lenti.
+const EMA_CEILING = 3;
+/// Costante di tempo dell'accensione del quartiere, in millisecondi: il resto
+/// del grafo scende in filigrana in un attimo, e attraversare col puntatore un
+/// grafo fitto non lo fa lampeggiare a ogni nodo.
+const HIGHLIGHT_MS = 90;
+/// La temperatura minima di un layout ripreso con nodi nuovi: abbastanza
+/// perché si sistemino fra i vicini, poca perché il resto non si rimescoli.
+const RESTORE_WARMTH = 0.3;
 
 /// Una factory di pittore iniettabile per i test (happy-dom: `getContext`
 /// ritorna null e il pittore vero è un no-op sicuro; i test vogliono però
@@ -53,7 +66,9 @@ const EMA_ALPHA = 0.1;
 export type PainterFactory = (host: HTMLElement, config: GraphicsConfig) => Painter;
 export type FactoryInteraction = (options: InteractionOptions) => Interaction;
 export type Speaker = () => number;
-export type Scheduler = (cb: () => void) => number;
+/// Il callback riceve l'istante del fotogramma, come `requestAnimationFrame`;
+/// uno scheduler di test può ometterlo e vale l'orologio.
+export type Scheduler = (cb: (now?: number) => void) => number;
 export type Canceller = (id: number) => void;
 
 export interface ChartOptions {
@@ -70,9 +85,16 @@ export interface ChartOptions {
   /// `performance.now` né `requestAnimationFrame` reali.
   createPainter?: PainterFactory;
   createInteraction?: FactoryInteraction;
+  /// Il layout del montaggio precedente (`snapshot`): se il grafo è ancora
+  /// abbastanza lo stesso, posizioni, pin e vista si riprendono da lì invece
+  /// di ripartire dalla semina.
+  layout?: SavedLayout | null;
   clock?: Speaker;
   schedule?: Scheduler;
   cancel?: Canceller;
+  /// Il ritmo dei fotogrammi; il predefinito segue lo schermo e il tetto di
+  /// `appearance.frame-rate`.
+  pacer?: FramePacer;
 }
 
 export interface Chart {
@@ -96,6 +118,10 @@ export interface Chart {
   /// Maschera temporale di sola presentazione; la simulazione conserva il layout.
   /// `null` mostra tutti i nodi. I nodi nascosti non ricevono focus/click.
   setVisibleNodes(visible: ReadonlySet<string> | null): void;
+  /// Colora i nodi per gruppo (id → nome del gruppo). I gruppi più numerosi
+  /// prendono i colori della tavolozza, gli altri restano senza. Restituisce i
+  /// gruppi colorati, in ordine di colore, per la legenda. `null` spegne.
+  setGroups(groups: Readonly<Record<string, string>> | null): string[];
   /// Applica una conf nuova: la fisica è sostituita (nuovo oggetto, clampato),
   /// la grafica è fusa nell'oggetto vivo che il pittore chiude (così non si
   /// perde la grafica sostituendo il riferimento). Il preset non è tracciato
@@ -116,6 +142,8 @@ export interface Chart {
   nodeId(index: number): string | null;
   /// Quanti nodi ha la struttura (0 prima del mount). Lettura per l'elenco paginato.
   nodeCount(): number;
+  /// Fotografa il layout per il prossimo montaggio. `null` prima del mount.
+  snapshot(): SavedLayout | null;
 }
 
 export function createChart(options: ChartOptions = {}): Chart {
@@ -126,6 +154,7 @@ export function createChart(options: ChartOptions = {}): Chart {
   const clock = options.clock ?? (() => (typeof performance !== "undefined" ? performance.now() : Date.now()));
   const schedule = options.schedule ?? ((cb: () => void) => requestAnimationFrame(cb));
   const cancel = options.cancel ?? ((id: number) => cancelAnimationFrame(id));
+  const pacer = options.pacer ?? createFramePacer();
 
   // La fisica è sostituita a ogni `setConfig`: parte clampata, nuova quando
   // cambia. La grafica è un oggetto **vivo** che il pittore chiude per
@@ -149,11 +178,19 @@ export function createChart(options: ChartOptions = {}): Chart {
 
   const openDocuments = new Set<string>();
   let visibleNodes: ReadonlySet<string> | null = null;
+  let groupNames: Readonly<Record<string, string>> | null = null;
+  let groupIndex: Int16Array | null = null;
+  /// Quanti colori ha la tavolozza dei gruppi (i token di sintassi del tema).
+  const GROUP_COLORS = 8;
   const engineState: EngineState = { alpha: 1, quietSince: 0 };
   // L'hover letto dai nostri listener sul canvas: l'interazione non lo espone,
   // e il pittore lo vuole per il focus. −1 = nessuno.
   let hovered = -1;
-  let emaFrameMs = 16.7;
+  let emaFrameMs = 1000 / 60;
+  /// Il tier di resa e da quando (ms) vale: il gradino economico tiene un
+  /// minimo prima di risalire.
+  let tier: Tier = 1;
+  let tierSince = 0;
   let firstTime = 0;
   let lastTime = 0;
   /// Il loop si era spento: il prossimo frame lo riaccende, e il tempo
@@ -161,6 +198,7 @@ export function createChart(options: ChartOptions = {}): Chart {
   let resuming = true;
   let W = -1;
   let H = -1;
+  let currentDpr = 1;
   let initialFitDone = false;
   /// Mentre il grafo si distende la vista lo segue: il fit iniziale è sulla
   /// semina, più stretta della forma finale. Finisce quando la sim si spegne
@@ -169,6 +207,14 @@ export function createChart(options: ChartOptions = {}): Chart {
   /// L'utente ha già mosso la vista (pan, zoom, centra, fit)? Da quel momento
   /// l'inquadratura è sua: la vista smette di seguire il grafo.
   let cameraTouched = false;
+  /// L'inquadratura ritrovata da un montaggio precedente: prende il posto del
+  /// fit iniziale.
+  let restoredCamera: SavedLayout["camera"] = null;
+  /// Il quartiere acceso e quanto è acceso (0..1), animati verso il focus.
+  /// Il nodo resta quello di prima mentre si spegne, così la filigrana
+  /// sfuma invece di sparire di colpo.
+  let highlight = 0;
+  let highlightNode = -1;
   // I listener che aggiungiamo al canvas per l'hover; tenuti per rimuoverli.
   const onMove = (e: PointerEvent): void => {
     if (!s || !cameraState) return;
@@ -219,7 +265,11 @@ export function createChart(options: ChartOptions = {}): Chart {
   /// autoprogramma solo se c'è ancora qualcosa da animare.
   function requestRedraw(): void {
     if (unmounted) return;
-    if (rafId === null) rafId = schedule(frame);
+    if (rafId === null) rafId = schedule(tick);
+  }
+
+  function tick(now?: number): void {
+    frame(false, now);
   }
 
   /// Il bound del grafo in coordinate mondo. Duplicato minimo del calcolo
@@ -242,6 +292,13 @@ export function createChart(options: ChartOptions = {}): Chart {
     return { minX, minY, maxX, maxY };
   }
 
+  /// Il nodo che accende il quartiere: il trascinato, poi l'hover, poi la
+  /// selezione da tastiera.
+  function highlightTarget(): number {
+    if (!s || !interaction) return -1;
+    return s.dragged >= 0 ? s.dragged : hovered >= 0 ? hovered : interaction.getFocusedNode();
+  }
+
   function viewport(): Viewport | null {
     if (!host) return null;
     const r = host.getBoundingClientRect();
@@ -252,15 +309,31 @@ export function createChart(options: ChartOptions = {}): Chart {
   /// ResizeObserver presente scatta solo al primo frame e su resize reale;
   /// senza (happy-dom senza RO) è il fallback per-frame, ma il confronto
   /// evita di ridipingere a parità di dimensioni.
-  function resizeIfNeeded(v: Viewport | null): void {
-    if (!v || !painter) return;
-    if (W < 0 || v.w !== W || v.h !== H) {
-      W = v.w;
-      H = v.h;
-      const dpr = (typeof window !== "undefined" && typeof window.devicePixelRatio === "number") ? window.devicePixelRatio : 1;
-      painter.resize(W, H, dpr);
-      painter.redrawBackground();
+  function resizeIfNeeded(v: Viewport | null): boolean {
+    if (!v || !painter) return false;
+    const dpr = (typeof window !== "undefined" && typeof window.devicePixelRatio === "number") ? window.devicePixelRatio : 1;
+    if (W >= 0 && v.w === W && v.h === H && dpr === currentDpr) return false;
+    // Il centro della vista resta il centro: dividere il riquadro o chiudere
+    // una barra laterale non deve far scivolare il grafo verso un angolo.
+    if (initialFitDone && cameraState && W >= MIN_VIEW_SIZE && H >= MIN_VIEW_SIZE) {
+      cameraState.pan((v.w - W) / 2, (v.h - H) / 2);
     }
+    W = v.w;
+    H = v.h;
+    currentDpr = dpr;
+    painter.resize(W, H, dpr);
+    painter.redrawBackground();
+    return true;
+  }
+
+  /// Disegna subito, senza aspettare il prossimo rAF. Serve dopo un resize:
+  /// ridimensionare un canvas lo svuota, e l'osservatore scatta dopo i rAF
+  /// del fotogramma — aspettare il prossimo lasciava un fotogramma vuoto, che
+  /// trascinando un divisore diventava uno sfarfallio continuo.
+  function drawNow(): void {
+    if (rafId !== null) cancel(rafId);
+    rafId = null;
+    frame(true);
   }
 
   /// Il loop è attivo finché c'è movimento visibile: la sim calda (alpha),
@@ -270,20 +343,32 @@ export function createChart(options: ChartOptions = {}): Chart {
   /// nodi aperti e grafo fermo, senza produrre nulla.
   function active(): boolean {
     if (!s || !cameraState) return false;
-    return engineState.alpha > ACTIVE_THRESHOLD || !cameraState.ready() || s.dragged >= 0;
+    return (
+      engineState.alpha > ACTIVE_THRESHOLD ||
+      !cameraState.ready() ||
+      s.dragged >= 0 ||
+      highlight !== (highlightTarget() >= 0 ? 1 : 0)
+    );
   }
 
   /// Il frame: misura il dt, fa un passo di fisica se la sim è calda, un
   /// passo di camera sempre (l'inseguimento deve concludersi anche a grafo
   /// fermo), e disegna. Alla fine si riprogramma se c'è ancora movimento.
-  function frame(): void {
+  /// `forced` è il disegno subito dopo un resize, che non aspetta il tetto.
+  function frame(forced = false, now?: number): void {
     const id = rafId;
     rafId = null;
     if (unmounted || !host || !painter || !interaction || !cameraState || !s) {
       if (id !== null) cancel(id);
       return;
     }
-    const t = clock();
+    const t = now ?? clock();
+    // Il tetto dei fotogrammi: un callback scartato tiene il loop acceso e
+    // riprova al prossimo fotogramma dello schermo.
+    if (!forced && !pacer.admit(t)) {
+      requestRedraw();
+      return;
+    }
     if (firstTime === 0) {
       firstTime = t;
       lastTime = t;
@@ -292,9 +377,12 @@ export function createChart(options: ChartOptions = {}): Chart {
     // frame lungo, alzava la media dei tempi a ogni risveglio, e dopo qualche
     // gesto il grafo passava al livello «lento» — Barnes-Hut e le etichette
     // dei nodi minori spente — anche con sei note.
+    // Il suo dt è il periodo del fotogramma: quello dello schermo, qualunque
+    // sia, o del tetto.
     const woke = resuming;
     resuming = false;
-    const dtS = woke ? DT : Math.min(Math.max(0, (t - lastTime) / 1000), DT_MAX);
+    const intervalMs = woke ? pacer.periodMs() : Math.max(0, t - lastTime);
+    const dtS = Math.min(intervalMs / 1000, DT_MAX);
     const dtMs = dtS * 1000;
     lastTime = t;
     const elapsedMs = t - firstTime;
@@ -305,20 +393,37 @@ export function createChart(options: ChartOptions = {}): Chart {
     if (!resizeObserver || W < 0) resizeIfNeeded(v);
 
     // Fit iniziale differito: solo quando c'è una superficie vera. Il salta
-    // evita che il primo frame insegua una camera che parte da (1,0,0).
+    // evita che il primo frame insegua una camera che parte da (1,0,0). Un
+    // layout ripreso rimette la sua inquadratura, centrata nella vista di
+    // adesso.
     if (v && !initialFitDone && v.w >= MIN_VIEW_SIZE && v.h >= MIN_VIEW_SIZE) {
-      cameraState.set(fit(bound(), v), true);
+      const kept = restoredCamera;
+      cameraState.set(
+        kept ? { scale: kept.scale, tx: v.w / 2 - kept.centerX * kept.scale, ty: v.h / 2 - kept.centerY * kept.scale } : fit(bound(), v),
+        true,
+      );
       initialFitDone = true;
     }
 
-    const tier: Tier = calculateTier(s.n, emaFrameMs);
-    let q: Quadtree | null = null;
-    if (tier >= 2 && s.n > 0) {
-      if (!pool) pool = new QuadtreePool();
-      q = build(s, pool);
+    const capMs = pacer.capPeriodMs();
+    if (!woke) {
+      const budget = Math.max(capMs, 1000 / 60);
+      emaFrameMs = emaFrameMs * (1 - EMA_ALPHA) + Math.min(intervalMs, budget * EMA_CEILING) * EMA_ALPHA;
+    }
+    const nextTier = calculateTier(s.n, tier, emaFrameMs, capMs, t - tierSince);
+    if (nextTier !== tier) {
+      tier = nextTier;
+      tierSince = t;
     }
 
     if (engineState.alpha > ACTIVE_THRESHOLD) {
+      // L'albero serve solo alla repulsione, e solo da Barnes-Hut in su:
+      // a sim ferma (camera, quartiere) non si costruisce.
+      let q: Quadtree | null = null;
+      if (baseTier(s.n) >= 2) {
+        if (!pool) pool = new QuadtreePool();
+        q = build(s, pool);
+      }
       step(s, physics, engineState, q, dtS);
       // La vista segue il grafo che si distende: il bersaglio è il fit di
       // adesso e la camera lo insegue morbida. L'ultimo giro, a sim spenta,
@@ -334,7 +439,16 @@ export function createChart(options: ChartOptions = {}): Chart {
     }
 
     const cam: Camera = cameraState.step(dtMs);
-    if (!woke) emaFrameMs = emaFrameMs * (1 - EMA_ALPHA) + dtMs * EMA_ALPHA;
+
+    const target = highlightTarget();
+    if (target >= 0) highlightNode = target;
+    const goal = target >= 0 ? 1 : 0;
+    if (reduced) highlight = goal;
+    else {
+      highlight += (goal - highlight) * (1 - Math.exp(-dtMs / HIGHLIGHT_MS));
+      if (Math.abs(goal - highlight) < 0.02) highlight = goal;
+    }
+    if (highlight === 0) highlightNode = -1;
 
     const state: DrawState = {
       s,
@@ -347,7 +461,11 @@ export function createChart(options: ChartOptions = {}): Chart {
       alpha: engineState.alpha,
       tier,
       elapsedMs,
+      frameMs: intervalMs,
       reducedMotion: reduced,
+      groups: groupIndex,
+      highlightNode,
+      highlight,
     };
     painter.redraw(state);
     // U46: la selezione può cambiare dentro l'interazione (click, frecce,
@@ -360,13 +478,28 @@ export function createChart(options: ChartOptions = {}): Chart {
     }
 
     if (active()) requestRedraw();
-    else resuming = true;
+    else {
+      resuming = true;
+      pacer.pause();
+    }
   }
 
   function mount(h: HTMLElement): void {
     if (unmounted || host) return;
     host = h;
     s = createStructure(data, physics, seedOf(data));
+    tier = baseTier(s.n);
+    const saved = options.layout;
+    const added = saved ? restoreLayout(s, saved, physics.baseLength) : null;
+    if (saved && added !== null) {
+      // Il grafo è ancora quello: riprende temperatura e vista da dove le
+      // aveva lasciate. Con nodi nuovi si scalda quel tanto che basta a
+      // sistemarli.
+      engineState.alpha = added > 0 ? Math.max(saved.alpha, RESTORE_WARMTH) : saved.alpha;
+      restoredCamera = saved.camera;
+      followingLayout = saved.following;
+    }
+    computeGroups();
     cameraState = createCameraState(reduced);
     unsubscribeReducedMotion = onReducedMotionChange((value) => {
       reduced = value;
@@ -412,8 +545,8 @@ export function createChart(options: ChartOptions = {}): Chart {
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
         if (unmounted) return;
-        resizeIfNeeded(viewport());
-        requestRedraw();
+        if (resizeIfNeeded(viewport())) drawNow();
+        else requestRedraw();
       });
       resizeObserver.observe(host);
     }
@@ -444,8 +577,42 @@ export function createChart(options: ChartOptions = {}): Chart {
     host = null;
   }
 
+  /// L'indice di gruppo per nodo, dai nomi: i gruppi più numerosi (a pari
+  /// merito, in ordine di nome) prendono i primi colori.
+  function computeGroups(): string[] {
+    groupIndex = null;
+    if (!groupNames || !s) return [];
+    const counts = new Map<string, number>();
+    for (let i = 0; i < s.n; i++) {
+      const name = groupNames[s.id[i]];
+      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const ranked = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, GROUP_COLORS)
+      .map(([name]) => name);
+    const index = new Map(ranked.map((name, i) => [name, i]));
+    groupIndex = new Int16Array(s.n).fill(-1);
+    for (let i = 0; i < s.n; i++) {
+      const name = groupNames[s.id[i]];
+      if (name !== undefined) groupIndex[i] = index.get(name) ?? -1;
+    }
+    return ranked;
+  }
+
+  function setGroups(groups: Readonly<Record<string, string>> | null): string[] {
+    groupNames = groups;
+    const ranked = computeGroups();
+    requestRedraw();
+    return ranked;
+  }
+
   function setVisibleNodes(visible: ReadonlySet<string> | null): void {
     visibleNodes = visible;
+    if (highlightNode >= 0 && !isVisible(highlightNode)) {
+      highlight = 0;
+      highlightNode = -1;
+    }
     if (interaction && interaction.getFocusedNode() >= 0 && !isVisible(interaction.getFocusedNode())) {
       interaction.focusedNode(-1);
       lastNotifiedFocus = -1;
@@ -537,6 +704,16 @@ export function createChart(options: ChartOptions = {}): Chart {
     return s ? s.n : 0;
   }
 
+  function snapshot(): SavedLayout | null {
+    if (!s) return null;
+    let camera: SavedLayout["camera"] = null;
+    if (initialFitDone && cameraState && W > 0 && H > 0) {
+      const c = cameraState.state();
+      camera = { scale: c.scale, centerX: (W / 2 - c.tx) / c.scale, centerY: (H / 2 - c.ty) / c.scale };
+    }
+    return snapshotLayout(s, engineState.alpha, camera, followingLayout && !cameraTouched);
+  }
+
   return {
     mount,
     unmount,
@@ -556,6 +733,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     },
     setOpenDocuments,
     setVisibleNodes,
+    setGroups,
     setConfig,
     warm,
     unpinNodes,
@@ -564,5 +742,6 @@ export function createChart(options: ChartOptions = {}): Chart {
     focusedNode,
     nodeId,
     nodeCount,
+    snapshot,
   };
 }

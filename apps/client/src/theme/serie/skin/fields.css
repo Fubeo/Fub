@@ -24,6 +24,20 @@ select {
     border-color var(--duration-fast) var(--ease);
 }
 
+/* Un campo che non regge ciò che c'è scritto lo dice anche a colpo d'occhio:
+   `aria-invalid` lo annuncia al lettore di schermo, il bordo lo mostra a chi
+   guarda. Prima lo sapeva solo chi ascoltava. */
+:where(input, textarea, select)[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+/* Un campo che non si può cambiare lo sembra: senza questa riga un campo di
+   sola lettura di una view era identico a uno scrivibile, fino al click. */
+:where(input, textarea, select):disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--muted);

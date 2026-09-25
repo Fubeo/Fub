@@ -110,6 +110,32 @@ describe("Markdown clipboard paste", () => {
     expect(markdownFromClipboard(data)).toBe("vedi ![logo \\[x\\]](<Risorse/logo [1].png>) e");
   });
 
+  it("pastes GFM tables, strikethrough and tasks as GFM", () => {
+    const clipboard = (html: string) => ({
+      getData: (type: string) => (type === "text/html" ? html : ""),
+    }) as unknown as DataTransfer;
+    const table = markdownFromClipboard(clipboard(
+      '<table><thead><tr><th>Nome</th><th align="right">Voto</th></tr></thead>' +
+      "<tbody><tr><td>Anna <b>B.</b></td><td>9</td></tr><tr><td>a|b</td><td>7</td></tr></tbody></table>",
+    ))!;
+    expect(table.trim().split("\n")).toEqual([
+      "| Nome | Voto |",
+      "| --- | ---: |",
+      "| Anna **B.** | 9 |",
+      "| a\\|b | 7 |",
+    ]);
+    expect(markdownFromClipboard(clipboard("<p>era <del>vecchio</del> nuovo</p>"))).toBe("era ~~vecchio~~ nuovo");
+    const tasks = markdownFromClipboard(clipboard(
+      '<ul><li><input type="checkbox" checked> fatto</li><li><input type="checkbox"> da fare</li></ul>',
+    ))!;
+    expect(tasks).toContain("[x] fatto");
+    expect(tasks).toContain("[ ] da fare");
+    // L'involucro di Google Docs non è un grassetto.
+    expect(markdownFromClipboard(clipboard(
+      '<b style="font-weight:normal;" id="docs-internal-guid-1"><p>testo <b>forte</b></p></b>',
+    ))).toBe("testo **forte**");
+  });
+
   it("does not intercept HTML paste during composition", () => {
     const { engine, view, host } = paste("<b>bold</b>", "bold", "", undefined, false);
     view.contentDOM.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));

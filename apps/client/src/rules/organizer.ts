@@ -62,7 +62,12 @@ export function parentOf(path: string): string {
 /// Lo stesso contenuto, nell'ordine in cui la sidebar lo mostra: prima chi
 /// compare nell'ordine scelto a mano, poi gli altri in alfabetico.
 export function sortContent(content: FolderContent, meta: Organization): FolderContent {
-  const custom = meta.order[content.path] ?? [];
+  // La posizione nell'ordine a mano, cercata una volta per nome: il
+  // comparatore la chiede O(n log n) volte.
+  const custom = new Map<string, number>();
+  for (const [index, name] of (meta.order[content.path] ?? []).entries()) {
+    if (!custom.has(name)) custom.set(name, index);
+  }
   return {
     path: content.path,
     folders: [...content.folders].sort((a, b) =>
@@ -137,11 +142,11 @@ export function orderedNames(content: FolderContent): string[] {
 /// Prima chi compare nell'ordine scelto a mano, nella sua posizione; poi gli
 /// altri, in alfabetico. Così una lista d'ordine parziale (o invecchiata) non
 /// fa mai sparire nessuno.
-function compareNames(a: string, b: string, custom: string[]): number {
-  const pa = custom.indexOf(a);
-  const pb = custom.indexOf(b);
-  if (pa !== -1 && pb !== -1) return pa - pb;
-  if (pa !== -1) return -1;
-  if (pb !== -1) return 1;
+function compareNames(a: string, b: string, custom: ReadonlyMap<string, number>): number {
+  const pa = custom.get(a);
+  const pb = custom.get(b);
+  if (pa !== undefined && pb !== undefined) return pa - pb;
+  if (pa !== undefined) return -1;
+  if (pb !== undefined) return 1;
   return collator.compare(a, b);
 }

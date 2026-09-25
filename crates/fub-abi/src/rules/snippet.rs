@@ -88,11 +88,12 @@ pub fn window(text: &str, link: Range<usize>) -> String {
     let start = floor_char_boundary(text, start);
     let end = ceil_char_boundary(text, end);
 
-    let n = text.chars().count();
-    if n <= SNIPPET_CHARS {
+    // Tutto si conta attorno al link, mai lungo il blocco intero: un paragrafo
+    // lungo e fitto di link pagava una scansione completa per ogni link.
+    if text.chars().nth(SNIPPET_CHARS).is_none() {
         return text.trim().to_string();
     }
-    let link_chars = text[start..end].chars().count();
+    let link_chars = text[start..end].chars().take(SNIPPET_CHARS).count();
     let (from, to) = if link_chars >= SNIPPET_CHARS {
         // L'etichetta non sta nel tetto: la finestra è il link intero, col
         // resto del testo come margine. Caso dichiarato e provato, non una
@@ -103,16 +104,13 @@ pub fn window(text: &str, link: Range<usize>) -> String {
         // due: `link_chars < SNIPPET_CHARS` per il ramo qui sopra, quindi
         // questa sottrazione non può andare sottozero.
         let margin = (SNIPPET_CHARS - link_chars) / 2;
-        let link_start = text[..start].chars().count();
-        let mut from = link_start.saturating_sub(margin);
-        let mut to = from + SNIPPET_CHARS;
-        if to > n {
+        let from = chars_back(text, start, margin);
+        match chars_forward(text, from, SNIPPET_CHARS) {
+            Some(to) => (from, to),
             // Il link è a meno di una finestra dalla fine: la finestra
             // retrocede per non sprecare il tetto, e l'ellissi passa in testa.
-            to = n;
-            from = to.saturating_sub(SNIPPET_CHARS);
+            None => (chars_back(text, text.len(), SNIPPET_CHARS), text.len()),
         }
-        (char_nth_byte(text, from), char_nth_byte(text, to))
     };
     let slice = text[from..to].trim();
     if slice.is_empty() {
@@ -129,12 +127,26 @@ pub fn window(text: &str, link: Range<usize>) -> String {
     out
 }
 
-/// L'offset in byte del carattere `k`-esimo (0-based) di `text`.
-fn char_nth_byte(text: &str, k: usize) -> usize {
-    text.char_indices()
-        .nth(k)
-        .map(|(the, _)| the)
-        .unwrap_or(text.len())
+/// L'offset in byte di `k` caratteri prima di `at`, o 0 se prima ce ne sono
+/// meno.
+fn chars_back(text: &str, at: usize, k: usize) -> usize {
+    if k == 0 {
+        return at;
+    }
+    text[..at]
+        .char_indices()
+        .rev()
+        .nth(k - 1)
+        .map_or(0, |(the, _)| the)
+}
+
+/// L'offset in byte di `k` caratteri dopo `at`, se dopo ce ne sono almeno `k`.
+fn chars_forward(text: &str, at: usize, k: usize) -> Option<usize> {
+    let rest = &text[at..];
+    match rest.char_indices().nth(k) {
+        Some((the, _)) => Some(at + the),
+        None => (rest.chars().count() == k).then_some(text.len()),
+    }
 }
 
 /// Il confine di carattere più vicino a `the` senza superarlo.
@@ -162,6 +174,76 @@ fn ceil_char_boundary(text: &str, the: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// La finestra com'era prima di contare solo attorno al link: conta il
+    /// blocco intero. È l'oracolo della versione limitata.
+    fn window_by_counting_everything(text: &str, link: Range<usize>) -> String {
+        let (start, end) = (link.start, link.end);
+        let nth = |k: usize| {
+            text.char_indices()
+                .nth(k)
+                .map_or(text.len(), |(the, _)| the)
+        };
+        let n = text.chars().count();
+        if n <= SNIPPET_CHARS {
+            return text.trim().to_string();
+        }
+        let link_chars = text[start..end].chars().count();
+        let (from, to) = if link_chars >= SNIPPET_CHARS {
+            (start, end)
+        } else {
+            let margin = (SNIPPET_CHARS - link_chars) / 2;
+            let mut from = text[..start].chars().count().saturating_sub(margin);
+            let mut to = from + SNIPPET_CHARS;
+            if to > n {
+                to = n;
+                from = to.saturating_sub(SNIPPET_CHARS);
+            }
+            (nth(from), nth(to))
+        };
+        let slice = text[from..to].trim();
+        if slice.is_empty() {
+            return String::new();
+        }
+        let mut out = String::new();
+        if from > 0 {
+            out.push('…');
+        }
+        out.push_str(slice);
+        if to < text.len() {
+            out.push('…');
+        }
+        out
+    }
+
+    #[test]
+    fn counting_around_the_link_gives_the_same_window() {
+        let alphabet = ['a', ' ', 'è', '字', '🙂', 'z', '\t'];
+        let mut seed = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = |below: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % below as u64) as usize
+        };
+        for _ in 0..2_000 {
+            let len = next(700);
+            let text: String = (0..len).map(|_| alphabet[next(alphabet.len())]).collect();
+            let bounds: Vec<usize> = text
+                .char_indices()
+                .map(|(the, _)| the)
+                .chain([text.len()])
+                .collect();
+            let a = bounds[next(bounds.len())];
+            let b = bounds[next(bounds.len())];
+            let link = a.min(b)..a.max(b);
+            assert_eq!(
+                window(&text, link.clone()),
+                window_by_counting_everything(&text, link.clone()),
+                "{text:?} {link:?}"
+            );
+        }
+    }
 
     #[test]
     fn short_text_comes_back_trimmed_untouched() {

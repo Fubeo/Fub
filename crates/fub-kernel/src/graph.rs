@@ -324,6 +324,7 @@ impl LinkGraph {
     pub fn upsert<S: GraphSource + ?Sized>(&mut self, doc: &S) {
         let mut touched = HashSet::new();
         let id = doc.graph_id().clone();
+        let before = self.keys.get(&id).cloned();
 
         // Fuori: vecchie chiavi, vecchi link, vecchi archi uscenti.
         self.detach_indexes(&id, &mut touched);
@@ -333,6 +334,13 @@ impl LinkGraph {
         // Dentro: nuove chiavi e nuovi link (ancora senza risolvere).
         self.attach_indexes(doc, &mut touched);
         self.register_links(doc);
+
+        // Una chiave uguale prima e dopo, nello stesso indice, lascia l'indice
+        // com'era: chi la usa risolve come prima. Salvare una nota che mille
+        // altre citano ri-collegava tutte le mille.
+        if let (Some(before), Some(after)) = (&before, self.keys.get(&id)) {
+            touched = changed_keys(before, after);
+        }
 
         // Ri-collega il documento e chiunque dipendesse dalle chiavi toccate.
         let mut dirty = self.dependents(&touched);
@@ -821,6 +829,24 @@ impl LinkGraph {
     }
 }
 
+/// Le chiavi il cui indice cambia passando da `before` ad `after`, per ruolo:
+/// la stessa stringa passata da alias a nome cambia la risoluzione, e conta.
+fn changed_keys(before: &DocKeys, after: &DocKeys) -> HashSet<String> {
+    let mut touched = HashSet::new();
+    if before.name != after.name {
+        touched.insert(before.name.clone());
+        touched.insert(after.name.clone());
+    }
+    if before.path != after.path {
+        touched.insert(before.path.clone());
+        touched.insert(after.path.clone());
+    }
+    let old: HashSet<&String> = before.aliases.iter().collect();
+    let new: HashSet<&String> = after.aliases.iter().collect();
+    touched.extend(old.symmetric_difference(&new).map(|key| (*key).clone()));
+    touched
+}
+
 /// Le voci d'indice da cui dipende la risoluzione di una chiave di link.
 /// `resolve_key` guarda `path_index[strip_ext(key)]`, `name_index[key]` e
 /// `alias_index[key]`; `resolve_path_key` guarda `path_index` su entrambe. In
@@ -896,6 +922,31 @@ mod tests {
             .0
             .insert("aliases".into(), serde_json::json!(aliases));
         m
+    }
+
+    /// Salvare un hub con le stesse chiavi non tocca chi lo cita: nessuna
+    /// chiave cambia indice. Cambiare un alias tocca solo quell'alias.
+    #[test]
+    fn only_keys_that_change_index_are_touched() {
+        let keys = |aliases: &[&str]| DocKeys {
+            name: "hub".into(),
+            path: "hub".into(),
+            aliases: aliases.iter().map(|a| a.to_string()).collect(),
+        };
+        assert!(changed_keys(&keys(&["a", "b"]), &keys(&["b", "a"])).is_empty());
+        assert_eq!(
+            changed_keys(&keys(&["a", "b"]), &keys(&["b", "c"])),
+            HashSet::from(["a".to_string(), "c".to_string()])
+        );
+        let moved = DocKeys {
+            name: "altro".into(),
+            path: "dir/altro".into(),
+            aliases: Vec::new(),
+        };
+        assert_eq!(
+            changed_keys(&keys(&[]), &moved),
+            HashSet::from(["hub", "altro", "dir/altro"].map(String::from))
+        );
     }
 
     fn sources(graph: &LinkGraph, target: &str) -> Vec<String> {

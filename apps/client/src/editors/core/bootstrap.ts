@@ -28,6 +28,7 @@ export interface MarkdownEditorSurface extends EditorSurface {
   readonly profile: "markdown";
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   insertAtCursor(text: string): boolean;
+  insertAtPoint(x: number, y: number, text: string): boolean;
 }
 
 export function isMarkdownSurface(surface: EditorSurface | null): surface is MarkdownEditorSurface {
@@ -109,6 +110,7 @@ function markdownSurface(
     revealByteOffset: (byteOffset) => editor.revealByteOffset(byteOffset),
     selections: () => editor.selections(),
     insertAtCursor: (text) => editor.insertAtCursor(text),
+    insertAtPoint: (x, y, text) => editor.insertAtPoint(x, y, text),
     setReadOnly: (readOnly) => editor.setReadOnly(readOnly),
     setTheme: (theme) => editor.setTheme(theme),
     destroy: () => editor.destroy(),

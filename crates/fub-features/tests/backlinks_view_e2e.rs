@@ -157,3 +157,24 @@ fn clicking_a_backlink_routes_navigate_back_through_the_kernel() {
         }
     );
 }
+
+#[test]
+fn outbound_mentions_find_aliases_read_from_the_kernel_index() {
+    let vault = Vault::new();
+    vault.put("Diario.md", "oggi il Capo è passato da Roma\n");
+    vault.put("Mario Rossi.md", "---\naliases: [Capo]\n---\n# Mario\n");
+    vault.put("Città.md", "---\nalias: Roma\n---\n");
+    vault.put("Estranea.md", "---\naliases: [Milano]\n---\n");
+    let ws = vault.open();
+    ws.set_active_document(Some(DocId::new("Diario.md")));
+
+    // Gli alias vengono dall'indice, non dal modello di ogni candidata: le
+    // due forme (`aliases` in elenco, `alias` testo) arrivano entrambe.
+    let tree = ws
+        .render_view(&ViewInstance::only(BACKLINKS_VIEW))
+        .expect("render con attivo");
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(json.contains("Mario Rossi.md"), "{json}");
+    assert!(json.contains("Città.md"), "{json}");
+    assert!(!json.contains("Estranea.md"), "{json}");
+}

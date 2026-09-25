@@ -22,12 +22,57 @@
   box-shadow: var(--shadow-md);
   font-size: var(--text-base);
   animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+/* Il testo va a capo dove l'avviso lo dice: un elenco di motivi resta un
+   elenco. */
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-line;
+}
+.toast-action,
+.toast-more {
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.toast-action {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: var(--weight-medium);
+}
+.toast-action:hover,
+.toast-more:hover {
+  background: var(--overlay-hover);
+}
+.toast-close {
+  flex: 0 0 auto;
+  min-width: 24px;
+  min-height: 24px;
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-3)) 0 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.toast-close:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 
 /* Il tono è un bordo, non un fondo: un guasto deve saltare all'occhio senza
    diventare illeggibile, e il colore lo decide il tema (un provider sceglie
    intenti semantici, mai colori). */
-.toast[data-tono="guasto"] {
+.toast[data-tone="guasto"] {
   border-color: var(--doc-danger);
 }
 
@@ -121,9 +166,10 @@
 
 .notify-testo {
   flex: 1;
+  white-space: pre-line;
 }
 
-.notify-list li[data-tono="guasto"] .notify-testo {
+.notify-list li[data-tone="guasto"] .notify-testo {
   color: var(--doc-danger);
 }
 

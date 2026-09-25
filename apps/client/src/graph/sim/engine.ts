@@ -53,9 +53,10 @@ export function step(
 ): void {
   const dtEff = dt < DT_MAX ? dt : DT_MAX;
   setDt(dtEff);
-  // Il tier dipende solo da n: il motore non riceve l'EMA dei frame (quello
-  // è un filtro del chiamante); qui si usa la base di `calculateTier`.
-  const tier: Tier = s.n <= 400 ? 1 : s.n <= 2000 ? 2 : 3;
+  // La fisica segue solo n: il contratto per cardinalità non cambia con lo
+  // schermo né col carico. Il gradino economico di `calculateTier` tocca la
+  // resa, non l'algoritmo.
+  const tier = baseTier(s.n);
   accumulateForces(s, config, q, tier);
 
   const n = s.n;
@@ -116,15 +117,43 @@ export function energy(s: Structure): number {
   return e / s.n;
 }
 
-/// Tier di repulsione dal numero di nodi e dall'EMA dei millisecondi per
-/// frame. Base: n ≤ 400 → 1 (esatta), ≤ 2000 → 2 (Barnes-Hut), oltre → 3.
-/// Frame lenti (ema > 22 ms) degradano al tier superiore (più economico),
-/// frame veloci (ema < 12 ms) migliorano al tier inferiore (più preciso).
-/// Clamp a [1, 3]. La funzione è stateless: il «per 5 s» è un filtro EMA
-/// del chiamante, non roba del motore.
-export function calculateTier(n: number, emaFrameMs: number): Tier {
-  let t = n <= 400 ? 1 : n <= 2000 ? 2 : 3;
-  if (emaFrameMs > 22) t++;
-  else if (emaFrameMs < 12) t--;
-  return (t < 1 ? 1 : t > 3 ? 3 : t) as Tier;
+/// Il tier per cardinalità: n ≤ 400 → 1 (repulsione esatta), ≤ 2000 → 2
+/// (Barnes-Hut e collisioni), oltre → 3 (Barnes-Hut, niente collisioni).
+export function baseTier(n: number): Tier {
+  return n <= 400 ? 1 : n <= 2000 ? 2 : 3;
+}
+
+/// Il budget minimo di un fotogramma per il tier: quello a 60 Hz. Uno schermo
+/// più veloce dà più fluidità quando il lavoro ci sta, mai un grafo più povero.
+export const TIER_BUDGET_MS = 1000 / 60;
+/// Frame più lunghi di così, rispetto al budget, sono lenti: a 60 Hz è la
+/// soglia di 22 ms di sempre.
+export const TIER_SLOW = 1.3;
+/// Sotto questo rapporto i frame sono tornati nel budget.
+export const TIER_FAST = 1.1;
+/// Quanto resta il gradino economico prima di poter risalire. Il gradino
+/// rimette i frame nel budget da sé: senza attesa si revocherebbe a ogni
+/// manciata di fotogrammi, e le etichette lampeggerebbero.
+export const TIER_HOLD_MS = 5000;
+
+/// Il tier di resa, dal numero di nodi e dall'EMA della durata dei frame. Si
+/// parte dalla base per cardinalità e si scende di un gradino (più economico)
+/// quando i frame durano più di `TIER_SLOW` budget; si risale quando tornano
+/// sotto `TIER_FAST`, ma non prima di `TIER_HOLD_MS` dall'ultimo cambio. Mai
+/// sopra la base: un frame veloce su uno schermo a 144 Hz rimetteva la
+/// repulsione esatta su duemila nodi, che rallentava, e il tier rimbalzava.
+/// Il budget è il periodo del tetto dei fotogrammi, mai sotto `TIER_BUDGET_MS`.
+export function calculateTier(
+  n: number,
+  current: Tier,
+  emaFrameMs: number,
+  budgetMs: number,
+  heldMs: number,
+): Tier {
+  const base = baseTier(n);
+  const cheap = (base < 3 ? base + 1 : 3) as Tier;
+  const budget = budgetMs > TIER_BUDGET_MS ? budgetMs : TIER_BUDGET_MS;
+  if (current !== cheap || cheap === base) return emaFrameMs > budget * TIER_SLOW ? cheap : base;
+  if (heldMs < TIER_HOLD_MS) return cheap;
+  return emaFrameMs < budget * TIER_FAST ? base : cheap;
 }

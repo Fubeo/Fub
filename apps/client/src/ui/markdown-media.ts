@@ -7,6 +7,7 @@
 // wikilink) e i byte arrivano dal protocollo `fub-asset:` attraverso un lease
 // `resource_open`, chiuso quando la resa si smonta. Nessun path diventa URL, e
 // un riferimento che non si risolve resta dichiarato non risolto.
+import { t } from "../i18n/strings";
 import type { LinkTarget } from "../host/contract";
 import { api } from "../host/ipc";
 import { resolvedReference } from "../host/query";
@@ -57,6 +58,21 @@ async function lease(
   return assetUrl(descriptor.handle);
 }
 
+/// Un'immagine che non si vede: al suo posto il testo alternativo e il path,
+/// in un riquadro che si legge come «qui c'era un'immagine». L'`img` resta nel
+/// DOM, nascosta, con i suoi attributi: chi la cerca per path la ritrova.
+function showMissingImage(img: HTMLImageElement, path: string): void {
+  if (img.nextElementSibling?.classList.contains("image-missing")) return;
+  const box = document.createElement("span");
+  box.className = "image-missing";
+  box.setAttribute("role", "img");
+  const alt = img.getAttribute("alt")?.trim();
+  box.setAttribute("aria-label", t("markdown.image_missing", { name: alt || path }));
+  box.textContent = alt ? `${alt} · ${path}` : path;
+  img.hidden = true;
+  img.after(box);
+}
+
 /// Idrata le immagini con `src` locale e gli embed di media del vault.
 export async function hydrateVaultMedia(
   container: HTMLElement,
@@ -79,9 +95,13 @@ export async function hydrateVaultMedia(
         img.dataset.vaultMedia = "unresolved";
         img.classList.add("unresolved");
         img.dataset.vaultMissing = raw;
+        showMissingImage(img, raw);
         return;
       }
       img.dataset.vaultMedia = "loaded";
+      // Un file che c'è ma non si decodifica è un'immagine rotta anche lui:
+      // il segnaposto dice quale, invece dell'icona del browser.
+      life.listen(img, "error", () => showMissingImage(img, raw), { once: true });
       img.src = url;
     }),
     ...embeds.map(async (slot) => {

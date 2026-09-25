@@ -243,8 +243,26 @@ export function openInDocumentSearch(): void {
       void search();
     }, 180);
   });
-  // U16: Frecce/Enter/Esc senza rubare il focus — il focus resta nel campo,
-  // le frecce spostano la selezione fra i bottoni della lista.
+  // U16: Frecce/Enter/Esc. Le frecce passano il fuoco fra i bottoni della
+  // lista, e continuano a funzionare **dalla lista** (dopo la prima freccia il
+  // fuoco non è più nel campo); Esc dalla lista torna al campo.
+  list.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const items = [...list.querySelectorAll<HTMLButtonElement>(".search-result:not([disabled])")];
+      if (items.length === 0) return;
+      const at = items.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.key === "ArrowUp" && at <= 0) {
+        input.focus();
+        return;
+      }
+      const next = e.key === "ArrowDown" ? (at + 1) % items.length : at - 1;
+      items[next]?.focus();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      input.focus();
+    }
+  });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();

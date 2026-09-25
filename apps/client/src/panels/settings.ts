@@ -47,7 +47,7 @@ import { notify } from "../ui/notify";
 import { allCommands, keybindingIssues, keybindingKey, validateKeybinding, type CommandEntry } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { errorText } from "../host/errors";
-import { t, type Key } from "../i18n/strings";
+import { LANGUAGE_KEY, catalogLanguages, t, type Key } from "../i18n/strings";
 import {
   CONTRAST_KEY,
   SERIES_THEME_ID,
@@ -73,7 +73,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
 type EntryMap = Map<string, SettingEntry>;
 
 /// Un gruppo del form: l'intestazione e le sue righe, nell'ordine in cui il
-/// canale dati le ha date (che è l'ordine di chiave).
+/// canale dati le ha date (che è l'ordine in cui sono state dichiarate).
 export interface Group {
   title: string;
   rows: SettingEntry[];
@@ -420,15 +420,12 @@ async function renderForm(): Promise<HTMLElement[]> {
   // disegna la scheda dei componenti, accanto a chi le ha chieste, che è
   // l'unico posto in cui significano qualcosa.
   const entries = (await settings()).filter(
-    (e) => !shortcuts.has(e.spec.key) && !isPermissionKey(e.spec.key),
+    (e) => !shortcuts.has(e.spec.key) && !isPermissionKey(e.spec.key) && !MANAGED_ELSEWHERE.has(e.spec.key),
   );
   const nodes: HTMLElement[] = [];
   if (entries.length === 0) nodes.push(row("muted", t("settings.none")));
   for (const group of groupEntries(entries)) {
-    const title = document.createElement("div");
-    title.className = "panel-title";
-    title.textContent = group.title;
-    nodes.push(title);
+    nodes.push(groupTitle(group));
     for (const entry of group.rows) {
       if (entry.spec.key === CSS_SNIPPETS_KEY) continue;
       const item = renderRow(entry);
@@ -447,10 +444,12 @@ async function renderForm(): Promise<HTMLElement[]> {
         } else {
           const select = item.querySelector("select");
           if (select) select.disabled = true;
-          item.append(row("setting-source", `Frame capabilities unavailable: ${errorText(capabilities.reason)}`));
+          item.querySelector(".setting-text")?.append(
+            row("setting-source", t("settings.frame.unavailable", { reason: errorText(capabilities.reason) })),
+          );
         }
         if (reopen.status === "fulfilled" && reopen.value) {
-          item.append(row("setting-source", "Changing the window frame takes effect after reopening this window."));
+          item.querySelector(".setting-text")?.append(row("setting-source", t("settings.frame.reopen")));
         }
       }
       nodes.push(item);
@@ -464,6 +463,54 @@ async function renderForm(): Promise<HTMLElement[]> {
   if (css) nodes.push(renderCssSnippets(css));
   nodes.push(...await renderProfiles());
   return nodes;
+}
+
+/// Le chiavi che hanno un gesto loro altrove, e che nel form generico sarebbero
+/// un campo da non toccare a mano: la versione del formato dell'interfaccia,
+/// i componenti spenti (la scheda Componenti), l'ordine della barra laterale
+/// (si trascina nella barra), i tipi delle proprietà (il pannello Proprietà) e
+/// l'id del tema installato (il catalogo dei temi qui sotto).
+const MANAGED_ELSEWHERE = new Set([
+  "chrome.schema",
+  "plugins.disabled",
+  "chrome.rail.order",
+  "properties.types",
+  "appearance.theme-id",
+]);
+
+/// L'intestazione di un gruppo, con «Ripristina gruppo» quando nel gruppo c'è
+/// qualcosa di diverso dal default: riportare indietro una sezione intera era
+/// un «Azzera» riga per riga.
+function groupTitle(group: Group): HTMLElement {
+  const title = document.createElement("div");
+  title.className = "panel-title";
+  const name = document.createElement("span");
+  name.setAttribute("role", "heading");
+  name.setAttribute("aria-level", "3");
+  name.textContent = group.title;
+  title.append(name);
+  const changed = group.rows.filter((entry) => entry.source !== "default");
+  if (changed.length > 0) {
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "link-button";
+    reset.textContent = t("settings.group.reset");
+    setTooltip(reset, t("settings.group.reset.hint", { group: group.title }));
+    reset.addEventListener("click", () => {
+      void (async () => {
+        const accepted = await confirm(
+          t("settings.group.reset.confirm", { group: group.title, count: changed.length }),
+          { title: t("settings.group.reset"), okLabel: t("settings.group.reset.ok"), danger: true },
+        );
+        if (!accepted || settingsLifetime?.closed) return;
+        await write(async () => {
+          for (const entry of changed) await api.resetSetting(entry.spec.key);
+        });
+      })();
+    });
+    title.append(reset);
+  }
+  return title;
 }
 
 function renderCssSnippets(entry: SettingEntry): HTMLElement {
@@ -757,15 +804,32 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   label.htmlFor = `setting-${entry.spec.key}`;
   text.append(label);
   const below = description ?? entry.spec.description;
+  const controlId = `setting-${entry.spec.key}`;
+  const described: string[] = [];
   if (below) {
-    text.append(row("muted", below));
+    const desc = row("muted", below);
+    desc.id = `${controlId}-desc`;
+    described.push(desc.id);
+    text.append(desc);
   }
-  text.append(row("setting-source", sourceLabel(entry)));
+  const source = row("setting-source", sourceLabel(entry));
+  source.id = `${controlId}-source`;
+  described.push(source.id);
+  text.append(source);
   const pending = pendingRows.has(entry.spec.key);
   const failure = rowErrors.get(entry.spec.key);
   if (pending) el.setAttribute("aria-busy", "true");
 
   const control = field(entry);
+  // Chi arriva al campo col lettore di schermo sente anche cosa fa e dove
+  // vale, non solo l'etichetta: la prosa sotto la riga era solo per gli occhi.
+  const focusable = control.matches("input, select, textarea, [role=radiogroup]")
+    ? control
+    : control.querySelector<HTMLElement>("input, select, textarea");
+  if (focusable) {
+    const existing = focusable.getAttribute("aria-describedby");
+    focusable.setAttribute("aria-describedby", [...described, ...(existing ? [existing] : [])].join(" "));
+  }
   el.append(text, control);
   if (pending) text.append(rowPending());
   else if (failure) text.append(rowErrorNode(failure));
@@ -966,19 +1030,25 @@ function field(entry: SettingEntry): HTMLElement {
       return input;
     }
     case "text": {
+      if (entry.spec.key === LANGUAGE_KEY) return languageField(entry, id);
       const input = document.createElement("input");
       input.type = "text";
       input.id = id;
       input.value = String(entry.value);
+      const zones = entry.spec.key === TIMEZONE_KEY ? timezoneSuggestions(input) : null;
       input.addEventListener("change", () => {
         const shortcut = allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
         if (shortcut && !validateKeybinding(input.value).valid) {
           input.setAttribute("aria-invalid", "true");
           return;
         }
+        input.removeAttribute("aria-invalid");
         void writeRow(entry.spec.key, input.value, () => api.setSetting(entry.spec.key, input.value));
       });
-      return input;
+      if (!zones) return input;
+      const wrap = document.createElement("span");
+      wrap.append(input, zones);
+      return wrap;
     }
     case "choice": {
       // Il tema non è una tendina: tre scelte si vedono meglio come tre
@@ -1021,6 +1091,63 @@ function field(entry: SettingEntry): HTMLElement {
         ? listField(entry, id)
         : readonlyListField(entry, id);
   }
+}
+
+/// La lingua come scelta fra quelle in cui la shell sa parlare, invece di un
+/// campo in cui indovinare un tag BCP 47. La chiave resta testo (il kernel
+/// accetta `it-CH`): un valore scritto altrove resta visibile come scelta a sé.
+function languageField(entry: SettingEntry, id: string): HTMLElement {
+  const select = document.createElement("select");
+  select.id = id;
+  const current = typeof entry.value === "string" ? entry.value : "";
+  const options: [string, string][] = [["", t("settings.as_system")]];
+  for (const code of catalogLanguages()) options.push([code, endonym(code)]);
+  if (!options.some(([value]) => value === current)) {
+    options.push([current, t("settings.off_choices", { value: current })]);
+  }
+  for (const [value, label] of options) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.append(option);
+  }
+  select.value = current;
+  select.addEventListener("change", () => {
+    void writeRow(entry.spec.key, select.selectedOptions[0]?.textContent ?? select.value, () =>
+      api.setSetting(entry.spec.key, select.value),
+    );
+  });
+  return select;
+}
+
+/// Il nome di una lingua nella lingua stessa («italiano», «English»): chi ha
+/// sbagliato lingua deve riconoscere la propria senza leggere quella sbagliata.
+function endonym(code: string): string {
+  try {
+    const name = new Intl.DisplayNames([code], { type: "language" }).of(code) ?? code;
+    return name.charAt(0).toLocaleUpperCase(code) + name.slice(1);
+  } catch {
+    return code;
+  }
+}
+
+const TIMEZONE_KEY = "locale.timezone";
+
+/// I fusi IANA che il motore conosce, come suggerimenti del campo: resta un
+/// campo di testo (vuoto è «come il sistema»), ma non va più scritto a memoria.
+function timezoneSuggestions(input: HTMLInputElement): HTMLDataListElement | null {
+  const zones = (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
+  input.placeholder = t("settings.as_system");
+  if (zones.length === 0) return null;
+  const list = document.createElement("datalist");
+  list.id = `${input.id}-zones`;
+  for (const zone of zones) {
+    const option = document.createElement("option");
+    option.value = zone;
+    list.append(option);
+  }
+  input.setAttribute("list", list.id);
+  return list;
 }
 
 /// Il tema come segmented control: i bottoni dello schema — sistema, chiaro,
@@ -1141,7 +1268,11 @@ async function writeRow(
   const snapshot = focusSnapshot();
   pendingRows.add(key);
   rowErrors.delete(key);
-  await render();
+  // Dopo il gesto che l'ha chiesta, non dentro: un radiogroup attiva e poi
+  // sposta il fuoco nello stesso giro, e un bottone disabilitato lì in mezzo
+  // perderebbe il fuoco prima di averlo.
+  await Promise.resolve();
+  if (pendingRows.has(key)) markPending(key);
   try {
     await action();
     rowErrors.delete(key);
@@ -1157,6 +1288,20 @@ async function writeRow(
   // spostato (o il watcher ha ridisegnato per un'altra chiave), il focus
   // attuale non si tocca.
   if (document.activeElement === document.body) restoreFocus(snapshot);
+}
+
+/// Il giro di pending **sulla riga sola**: ridisegnare l'intero pannello per
+/// disabilitare un controllo faceva lampeggiare tutto e perdere lo scroll. Il
+/// ridisegno completo resta uno, dopo l'esito, perché cambia la provenienza.
+function markPending(key: string): void {
+  const el = bodyEl.querySelector<HTMLElement>(`[data-setting-key="${key}"]`);
+  if (!el) return;
+  el.setAttribute("aria-busy", "true");
+  el.querySelector(".setting-error")?.remove();
+  el.querySelector(".setting-text")?.append(rowPending());
+  for (const node of el.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>("input, select, button")) {
+    node.disabled = true;
+  }
 }
 
 /// Scrive senza una riga (banner dei tasti proposti, catalogo dei temi,
@@ -1303,13 +1448,13 @@ let shortcutFilter = "";
 function shortcutDiagnostic(command: CommandEntry, binding: string, commands: CommandEntry[]): string {
   const validation = validateKeybinding(binding);
   if (!validation.valid) {
-    const descriptions = {
-      "empty-alternative": "An alternative is empty",
-      "too-many": "Too many alternatives",
-      "invalid-chord": "Unrecognized chord",
-      duplicate: "Duplicate alternative",
+    const descriptions: Record<typeof validation.reason, Key> = {
+      "empty-alternative": "settings.shortcut.empty_alternative",
+      "too-many": "settings.shortcut.too_many",
+      "invalid-chord": "settings.shortcut.invalid_chord",
+      duplicate: "settings.shortcut.duplicate",
     };
-    return `Invalid shortcut: ${descriptions[validation.reason]}. Nothing was saved.`;
+    return t("settings.shortcut.invalid_unsaved", { reason: t(descriptions[validation.reason]) });
   }
   const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
   return keybindingIssues(proposed)
@@ -1319,10 +1464,16 @@ function shortcutDiagnostic(command: CommandEntry, binding: string, commands: Co
         ? issue.short.id === command.id || issue.long.some((other) => other.id === command.id)
         : issue.commands.some((other) => other.id === command.id))
     .map((issue) => issue.type === "collision"
-      ? `${issue.chord} is also assigned to ${issue.commands.filter((other) => other.id !== command.id).map((other) => other.title).join(", ")}`
+      ? t("settings.shortcut.collision", {
+          chord: issue.chord,
+          commands: issue.commands.filter((other) => other.id !== command.id).map((other) => other.title).join(", "),
+        })
       : issue.type === "shadowed"
-        ? `${issue.short.title} shadows ${issue.long.map((other) => other.title).join(", ")}`
-        : `Invalid shortcut: ${issue.binding}`)
+        ? t("settings.shortcut.shadowed", {
+            command: issue.short.title,
+            commands: issue.long.map((other) => other.title).join(", "),
+          })
+        : t("settings.shortcut.invalid", { binding: issue.binding }))
     .join("; ");
 }
 
@@ -1416,13 +1567,15 @@ async function renderComponents(): Promise<HTMLElement[]> {
   ];
   if (limitedResult.status === "fulfilled") {
     nodes.push(row("setting-source", limitedResult.value.enabled
-      ? `Plugin limited mode: ${limitedResult.value.reason ?? "execution disabled"}`
-      : "Plugin limited mode: off"));
-  } else nodes.push(row("setting-source", `Limited-mode status unavailable: ${errorText(limitedResult.reason)}`));
+      ? t("settings.components.limited_on", { reason: limitedResult.value.reason ?? t("settings.components.limited_default") })
+      : t("settings.components.limited_off")));
+  } else nodes.push(row("setting-source", t("settings.components.limited_unavailable", { reason: errorText(limitedResult.reason) })));
   if (budgetResult.status === "fulfilled") {
     const b = budgetResult.value;
-    nodes.push(row("setting-source", `WASM budget · live ${b.live_instances} · calls ${b.total_calls} · timeout ${b.timed_out_calls} · out of memory ${b.oom_calls}`));
-  } else nodes.push(row("setting-source", `WASM budget unavailable: ${errorText(budgetResult.reason)}`));
+    nodes.push(row("setting-source", t("settings.components.budget", {
+      live: b.live_instances, calls: b.total_calls, timeouts: b.timed_out_calls, oom: b.oom_calls,
+    })));
+  } else nodes.push(row("setting-source", t("settings.components.budget_unavailable", { reason: errorText(budgetResult.reason) })));
   if (bundleResult.status === "rejected") {
     nodes.push(row("muted", t("settings.read_failed", { reason: errorText(bundleResult.reason) })));
   }
@@ -1682,10 +1835,19 @@ function renderInstalledComponent(plugin: InstalledPluginInfo, forKey: EntryMap)
     ),
   );
   if (plugin.catalog) text.append(
-    row("setting-source", `Signed by ${plugin.catalog.key_id} · generation ${plugin.catalog.generation} · publisher ${plugin.catalog.publisher} · license ${plugin.catalog.license} · compatible ${plugin.catalog.compatible} · source ${plugin.catalog.url}`),
+    row("setting-source", t("settings.components.signed", {
+      key: plugin.catalog.key_id,
+      generation: plugin.catalog.generation,
+      publisher: plugin.catalog.publisher,
+      license: plugin.catalog.license,
+      compatible: plugin.catalog.compatible,
+      url: plugin.catalog.url,
+    })),
   );
   if (plugin.revoked) text.append(
-    row("setting-source", `Revoked: this component cannot mount${plugin.revocation ? ` · signed by ${plugin.revocation.key_id} at generation ${plugin.revocation.generation}` : ""}.`),
+    row("setting-source", plugin.revocation
+      ? t("settings.components.revoked_signed", { key: plugin.revocation.key_id, generation: plugin.revocation.generation })
+      : t("settings.components.revoked")),
   );
   header.append(text);
   nodes.push(header);
@@ -1735,16 +1897,31 @@ function renderInstalledComponent(plugin: InstalledPluginInfo, forKey: EntryMap)
     consent.append(option);
   }
   consent.addEventListener("change", () => {
-    beginComponentAction(
+    const next = consent.value as InstalledPluginInfo["consent"];
+    const apply = () => beginComponentAction(
       key,
       nodes,
-      () =>
-        api.setInstalledPluginConsent(
-          plugin.installation,
-          consent.value as InstalledPluginInfo["consent"],
-        ),
+      () => api.setInstalledPluginConsent(plugin.installation, next),
       "settings.components.consent_failed",
     );
+    if (next !== "granted") {
+      apply();
+      return;
+    }
+    // Il consenso è il momento in cui il componente ottiene i suoi permessi:
+    // li si legge lì, nella domanda, e non solo nell'elenco sotto la riga.
+    const asked = rows(plugin).map((permission) =>
+      permission.detail ? `• ${permission.message} (${permission.detail})` : `• ${permission.message}`);
+    void confirm(
+      t("settings.components.consent.confirm", {
+        name: plugin.name,
+        permissions: asked.length > 0 ? asked.join("\n") : t("settings.permissions.none"),
+      }),
+      { title: t("settings.components.consent.confirm_title"), okLabel: t("settings.components.consent.grant") },
+    ).then((accepted) => {
+      if (accepted && consent.isConnected) apply();
+      else consent.value = plugin.consent;
+    }, () => { consent.value = plugin.consent; });
   });
   consentRow.append(consentText, consent);
   nodes.push(consentRow);

@@ -23,7 +23,7 @@ import type {
 
 // Initial `---` block (optional BOM) closed by `---`/`...`. The body must hold
 // a `:` (or be empty) so a leading rule plus heading is not misread.
-function detectFrontmatter(source: string): { from: number; to: number } | null {
+export function detectFrontmatter(source: string): { from: number; to: number } | null {
   let start = 0;
   if (source.startsWith("﻿")) start = 1;
   const firstEnd = source.indexOf("\n", start);
@@ -41,6 +41,15 @@ function detectFrontmatter(source: string): { from: number; to: number } | null 
     if (next === -1) return null;
     pos = next + 1;
   }
+}
+
+/// Quanto testo guardare in cima al documento: il frontmatter sta lì, e un
+/// documento enorme non va copiato per intero a ogni battuta.
+const FRONTMATTER_WINDOW = 64 * 1024;
+
+/// Il frontmatter di un documento CodeMirror, guardando solo la sua cima.
+export function frontmatterRange(doc: { length: number; sliceString(from: number, to?: number): string }): { from: number; to: number } | null {
+  return detectFrontmatter(doc.sliceString(0, Math.min(doc.length, FRONTMATTER_WINDOW)));
 }
 
 function isAlphaNum(char: string): boolean {

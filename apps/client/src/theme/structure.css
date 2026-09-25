@@ -98,6 +98,15 @@
     animation-iteration-count: 1 !important;
   }
 }
+/* La stessa scelta fatta dall'utente nelle impostazioni (`appearance.motion`),
+   anche quando il sistema non la chiede. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+}
 
 /* I colori forzati sono un pavimento della shell, non una variante del tema.
    I colori di sistema mantengono leggibili fuoco, controlli e stato scelto
@@ -484,6 +493,25 @@ html, body, #app {
   min-width: 0;
   min-height: 0;
 }
+/* Il divisore fra due riquadri: una riga di un pixel nel layout, con un'area
+   di presa più larga (il padding) che sborda sui vicini senza spostarli. */
+.pane-split > .pane-divider {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  box-sizing: content-box;
+  touch-action: none;
+}
+.pane-split.row > .pane-divider {
+  width: 1px;
+  margin: 0 -3px;
+  padding: 0 3px;
+}
+.pane-split.col > .pane-divider {
+  height: 1px;
+  margin: -3px 0;
+  padding: 3px 0;
+}
 
 .pane {
   display: flex;
@@ -756,10 +784,17 @@ html, body, #app {
   width: 100%;
   min-width: 0;
 }
+/* La colonna è `align-items: flex-start`: senza questo il blocco dei recenti
+   sarebbe largo quanto il nome più lungo, e la × di ognuno cadrebbe a metà. */
+#onboarding-recent-wrap {
+  align-self: stretch;
+}
 /* Drawer: veli sopra il layout, mai distruzione degli split. */
 .drawer-scrim {
   position: absolute;
   inset: 0;
+  /* Sotto il cassetto (`--z-dialog`), sopra i riquadri. */
+  z-index: calc(var(--z-dialog) - 1);
 }
 /* Breakpoint sezione 5: >=1200 affiancati; 960-1199 ispettore overlay;
    800-959 drawer alternativi; <800 stessa strategia compatta. */
@@ -990,3 +1025,13 @@ html, body, #app {
 .base-map-atlas { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
 .base-map-attribution { margin: 0; padding: 0.5rem; }
 .base-summaries { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* La modalità concentrazione (`shell.focus.toggle`): la scrittura senza
+   cornice. Solo geometria: i pannelli escono di scena, il riquadro resta. */
+#app[data-focus-mode] #views-ribbon,
+#app[data-focus-mode] #sidebar,
+#app[data-focus-mode] #right-pane,
+#app[data-focus-mode] .layout-divider,
+#app[data-focus-mode] .drawer-scrim {
+  display: none !important;
+}

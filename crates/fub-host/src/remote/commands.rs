@@ -45,9 +45,70 @@ fn enqueue_pass(
         job: SYNC_PASS_JOB.to_string(),
         payload: serde_json::Value::Object(payload),
     })?;
-    Ok(CommandOutcome::notify(Text::from(format!(
-        "sync {op}: accodato"
-    ))))
+    Ok(CommandOutcome::notify(Text::key("queued")))
+}
+
+/// Le stringhe dei comandi, aggiunte ai cataloghi del bundle
+/// ([`super::views::catalog`]).
+pub(crate) fn catalog_rows(
+    it: fub_abi::text::StringCatalog,
+    en: fub_abi::text::StringCatalog,
+) -> (fub_abi::text::StringCatalog, fub_abi::text::StringCatalog) {
+    let it = it
+        .with("cmd.push", "Sincronizzazione: invia ora")
+        .with("cmd.push.desc", "Manda al server le modifiche in coda (un passaggio solo).")
+        .with("cmd.pull", "Sincronizzazione: ricevi ora")
+        .with("cmd.pull.desc", "Riceve dal server, verifica e applica le modifiche remote (un passaggio solo).")
+        .with("cmd.pause", "Sincronizzazione: metti in pausa")
+        .with("cmd.pause.desc", "Ferma le nuove operazioni senza perdere la coda. Si riprende quando si vuole.")
+        .with("cmd.resume", "Sincronizzazione: riprendi")
+        .with("cmd.resume.desc", "Riprende una sincronizzazione in pausa.")
+        .with("cmd.retry", "Sincronizzazione: riprova il conflitto")
+        .with("cmd.retry.desc", "Rimanda la nota al prossimo passaggio. Non sovrascrive niente.")
+        .with("cmd.restore", "Sincronizzazione: ripristina una versione")
+        .with("cmd.restore.desc", "Riporta una nota a una sua versione sul server, come una scrittura nuova.")
+        .with("cmd.invite", "Sincronizzazione: invita")
+        .with("cmd.invite.desc", "Crea un invito al vault; il codice va consegnato per un altro canale.")
+        .with("cmd.accept", "Sincronizzazione: accetta un invito")
+        .with("cmd.accept.desc", "Accetta il codice d'invito letto da FUB_SYNC_INVITE_TOKEN_FILE.")
+        .with("cmd.revoke", "Sincronizzazione: revoca un accesso")
+        .with("cmd.revoke.desc", "Toglie a un account l'accesso futuro; le copie già scaricate restano.")
+        .with("cmd.rekey", "Sincronizzazione: ruota la chiave del vault")
+        .with("cmd.rekey.desc", "Ruota la chiave per le scritture future; ogni dispositivo deve ricevere la nuova chiave per un altro canale.")
+        .with("param.doc", "Nota")
+        .with("param.version", "Versione")
+        .with("param.role", "Ruolo (reader, writer o admin)")
+        .with("param.account", "Id dell'account")
+        .with("queued", "Operazione di sincronizzazione in coda.")
+        .with("dry_run", "Simulazione: nessuna operazione in coda.");
+    let en = en
+        .with("cmd.push", "Sync: push now")
+        .with("cmd.push.desc", "Push the queued changes to the server (a single pass).")
+        .with("cmd.pull", "Sync: pull now")
+        .with("cmd.pull.desc", "Pull, verify and apply the remote changes (a single pass).")
+        .with("cmd.pause", "Sync: pause")
+        .with("cmd.pause.desc", "Stop new operations without losing the queue. Resume at any time.")
+        .with("cmd.resume", "Sync: resume")
+        .with("cmd.resume.desc", "Resume a paused sync.")
+        .with("cmd.retry", "Sync: retry conflict")
+        .with("cmd.retry.desc", "Send the note again on the next pass. Nothing is overwritten.")
+        .with("cmd.restore", "Sync: restore version")
+        .with("cmd.restore.desc", "Take a note back to one of its server versions, as a new write.")
+        .with("cmd.invite", "Sync: invite")
+        .with("cmd.invite.desc", "Create a vault invite; the token must be delivered through another channel.")
+        .with("cmd.accept", "Sync: accept invite")
+        .with("cmd.accept.desc", "Accept the invite token read from FUB_SYNC_INVITE_TOKEN_FILE.")
+        .with("cmd.revoke", "Sync: revoke")
+        .with("cmd.revoke.desc", "Revoke an account's future access; copies already downloaded remain.")
+        .with("cmd.rekey", "Sync: rotate vault key")
+        .with("cmd.rekey.desc", "Rotate the key for future writes; every device needs the new key through another channel.")
+        .with("param.doc", "Note")
+        .with("param.version", "Version")
+        .with("param.role", "Role (reader, writer or admin)")
+        .with("param.account", "Account ID")
+        .with("queued", "Sync operation queued.")
+        .with("dry_run", "Dry run: no operation queued.");
+    (it, en)
 }
 
 /// The command set. Stateless unit struct (`boxed()` builds it; invoke solo
@@ -67,8 +128,8 @@ fn spec(
     scope: CommandScope,
     params: Vec<ParamSpec>,
 ) -> CommandSpec {
-    let mut s = CommandSpec::new(id, Text::from(title.to_string()))
-        .describing(Text::from(description.to_string()))
+    let mut s = CommandSpec::new(id, Text::key(title))
+        .describing(Text::key(description))
         .with_scope(scope);
     for p in params {
         s = s.with_param(p);
@@ -77,12 +138,12 @@ fn spec(
 }
 
 fn doc_param() -> ParamSpec {
-    ParamSpec::new("doc", Text::from("Document"), ParamKind::Document).required()
+    ParamSpec::new("doc", Text::key("param.doc"), ParamKind::Document).required()
 }
 
 fn version_param() -> ParamSpec {
     // Versioni come stringhe (u64-as-string): testo libero, validato nel job.
-    ParamSpec::new("version", Text::from("Version"), ParamKind::Text).required()
+    ParamSpec::new("version", Text::key("param.version"), ParamKind::Text).required()
 }
 
 impl CommandProvider for SyncCommands {
@@ -90,63 +151,76 @@ impl CommandProvider for SyncCommands {
         vec![
             spec(
                 SYNC_PUSH_NOW,
-                "Sync: push now",
-                "Push the durable outbox to the configured sync endpoint (single pass).",
+                "cmd.push",
+                "cmd.push.desc",
                 CommandScope::writing(CommandReach::Vault),
                 vec![],
             ),
             spec(
                 SYNC_PULL_NOW,
-                "Sync: pull now",
-                "Pull, verify (AAD recompute before any apply) and apply remote ops (single pass).",
+                "cmd.pull",
+                "cmd.pull.desc",
                 CommandScope::writing(CommandReach::Vault),
                 vec![],
             ),
             spec(
                 SYNC_PAUSE,
-                "Sync: pause",
-                "Pause sync (flag file + policy mirror). Reversible.",
+                "cmd.pause",
+                "cmd.pause.desc",
                 CommandScope::writing(CommandReach::Session),
                 vec![],
             ),
             spec(
                 SYNC_RESUME,
-                "Sync: resume",
-                "Resume a paused sync. Reversible.",
+                "cmd.resume",
+                "cmd.resume.desc",
                 CommandScope::writing(CommandReach::Session),
                 vec![],
             ),
             spec(
                 SYNC_RETRY_CONFLICT,
-                "Sync: retry conflict",
-                "Mark one conflicted doc for re-push on the next pass (conservative: never overwrites).",
+                "cmd.retry",
+                "cmd.retry.desc",
                 CommandScope::writing(CommandReach::Document),
                 vec![doc_param()],
             ),
             spec(
                 SYNC_RESTORE_VERSION,
-                "Sync: restore version",
-                "Restore one doc from its remote version chain (new write, never a vector replay).",
+                "cmd.restore",
+                "cmd.restore.desc",
                 CommandScope::writing(CommandReach::Document),
                 vec![doc_param(), version_param()],
             ),
             spec(
-                SYNC_INVITE, "Sync: invite", "Create a vault invite with a wrapped key; token returned by the job must be delivered out of band.",
+                SYNC_INVITE,
+                "cmd.invite",
+                "cmd.invite.desc",
                 CommandScope::writing(CommandReach::Vault),
-                vec![ParamSpec::new("role", Text::from("Role (reader/writer/admin)"), ParamKind::Text).required()],
+                vec![ParamSpec::new("role", Text::key("param.role"), ParamKind::Text).required()],
             ),
             spec(
-                SYNC_ACCEPT, "Sync: accept invite", "Accept an invite token read from FUB_SYNC_INVITE_TOKEN_FILE.",
-                CommandScope::writing(CommandReach::Vault), vec![],
-            ),
-            spec(
-                SYNC_REVOKE, "Sync: revoke", "Revoke an account's future access (existing downloaded copies survive).",
+                SYNC_ACCEPT,
+                "cmd.accept",
+                "cmd.accept.desc",
                 CommandScope::writing(CommandReach::Vault),
-                vec![ParamSpec::new("account_id", Text::from("Account ID"), ParamKind::Text).required()],
+                vec![],
             ),
             spec(
-                SYNC_REKEY, "Sync: rotate vault key", "Explicitly rotate the VDK for future writes; all devices need the new key out of band.",
-                CommandScope::writing(CommandReach::Vault), vec![],
+                SYNC_REVOKE,
+                "cmd.revoke",
+                "cmd.revoke.desc",
+                CommandScope::writing(CommandReach::Vault),
+                vec![
+                    ParamSpec::new("account_id", Text::key("param.account"), ParamKind::Text)
+                        .required(),
+                ],
+            ),
+            spec(
+                SYNC_REKEY,
+                "cmd.rekey",
+                "cmd.rekey.desc",
+                CommandScope::writing(CommandReach::Vault),
+                vec![],
             ),
         ]
     }
@@ -218,9 +292,7 @@ impl CommandProvider for SyncCommands {
             _ => return Err(PluginError::UnknownCommand(command.to_string().into())),
         };
         if mode.is_dry_run() {
-            return Ok(CommandOutcome::notify(Text::from(format!(
-                "sync {op}: simulazione, nessun job accodato"
-            ))));
+            return Ok(CommandOutcome::notify(Text::key("dry_run")));
         }
         enqueue_pass(host, op, payload)
     }

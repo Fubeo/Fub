@@ -102,7 +102,40 @@ export const HISTORY_LIMIT = 50;
 /// Come sono disposti i riquadri.
 export type LayoutNode =
   | { k: "leaf"; pane: string }
-  | { k: "split"; dir: "row" | "col"; children: LayoutNode[] };
+  | {
+      k: "split";
+      dir: "row" | "col";
+      children: LayoutNode[];
+      /// Quanto spazio prende ogni figlio, in frazioni che sommano a uno.
+      /// Assente = parti uguali. Lo scrive solo il trascinamento di un
+      /// divisore; quando la fila cambia (un riquadro in più o in meno) si
+      /// riparte uguali, perché le frazioni erano di quei figli.
+      sizes?: number[];
+    };
+
+export type SplitNode = Extract<LayoutNode, { k: "split" }>;
+
+/// La frazione più piccola che un riquadro può avere: sotto, non ci si legge
+/// più niente e il divisore finisce addosso al vicino.
+export const MIN_SPLIT_FRACTION = 0.1;
+
+/// Frazioni valide per `count` figli, o `undefined`: positive, finite, tante
+/// quanti i figli; si normalizzano a somma uno e non scendono sotto il minimo.
+export function normalizedSizes(sizes: unknown, count: number): number[] | undefined {
+  if (!Array.isArray(sizes) || sizes.length !== count || count < 2) return undefined;
+  if (!sizes.every((size) => typeof size === "number" && Number.isFinite(size) && size > 0)) return undefined;
+  const floor = sizes.map((size) => Math.max(size as number, MIN_SPLIT_FRACTION));
+  const total = floor.reduce((sum, size) => sum + size, 0);
+  return floor.map((size) => size / total);
+}
+
+/// Il trascinamento di un divisore: le nuove frazioni di una divisione.
+export function setSplitSizes(node: SplitNode, sizes: number[]): void {
+  const normalized = normalizedSizes(sizes, node.children.length);
+  if (!normalized) return;
+  node.sizes = normalized;
+  changed();
+}
 
 export interface Layout {
   tree: LayoutNode;
@@ -396,7 +429,10 @@ export function setPinnedTab(id: string, index: number, pinned: boolean, l: Layo
   p.tabs[index] = tab.k === "doc"
     ? { k: "doc", doc: tab.doc, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) }
     : { k: "view", view: tab.view, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
-  changed();
+  // Le appuntate stanno a sinistra: appuntare porta la tab in coda alle
+  // appuntate, spuntarla la porta subito dopo di loro.
+  const others = p.tabs.filter((other, i) => i !== index && other.pinned === true).length;
+  if (others === index || !moveTab(id, index, others, l)) changed();
 }
 
 /// Mette una tab in un gruppo (stack, P06/F21): le tab con lo stesso `stack`
@@ -436,7 +472,52 @@ export function setPaneLink(id: string, link: string | null, l: Layout = layout)
 /// riquadro vuoto è uno stato legittimo, ed è dove si finisce anche dividendone
 /// uno.
 export function closeTab(id: string, index: number, l: Layout = layout): void {
+  rememberClosed(id, index, l);
   if (removeTab(id, index, l)) changed();
+}
+
+/// Le tab chiuse di recente, per `Mod-Shift-t`: dove stavano e cosa erano.
+/// Vivono quanto la finestra — riaprire una tab è un ripensamento, non una
+/// cronologia da salvare.
+const closedTabs: { pane: string; index: number; tab: Tab }[] = [];
+const CLOSED_LIMIT = 20;
+
+function rememberClosed(id: string, index: number, l: Layout): void {
+  const tab = l.panes[id]?.tabs[index];
+  if (!tab) return;
+  closedTabs.push({ pane: id, index, tab });
+  if (closedTabs.length > CLOSED_LIMIT) closedTabs.splice(0, closedTabs.length - CLOSED_LIMIT);
+}
+
+/// Riapre l'ultima tab chiusa nel suo riquadro (o in quello col fuoco, se il
+/// suo non c'è più), al suo posto. `false` se non c'è niente da riaprire.
+export function reopenClosedTab(l: Layout = layout): boolean {
+  const closed = closedTabs.pop();
+  if (!closed) return false;
+  const id = l.panes[closed.pane] ? closed.pane : l.focus;
+  const p = l.panes[id];
+  if (!p) return false;
+  const already = p.tabs.findIndex((tab) => sameTab(tab, closed.tab));
+  if (already >= 0) {
+    activateTab(id, already, l);
+    return true;
+  }
+  const at = Math.min(Math.max(0, closed.index), p.tabs.length);
+  pushHistory(p, p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null);
+  p.tabs.splice(at, 0, closed.tab);
+  p.active = at;
+  l.focus = id;
+  changed();
+  return true;
+}
+
+/// Porta avanti o indietro la tab attiva del riquadro, girando in tondo.
+export function cycleTab(id: string, delta: 1 | -1, l: Layout = layout): boolean {
+  const p = l.panes[id];
+  if (!p || p.tabs.length < 2) return false;
+  const from = p.active < 0 ? 0 : p.active;
+  activateTab(id, (from + delta + p.tabs.length) % p.tabs.length, l);
+  return true;
 }
 
 /// Toglie la tab e basta: **niente annuncio, niente scrittura**. Torna `false`
@@ -464,6 +545,7 @@ export function closeUnpinned(id: string, l: Layout = layout): number {
   let closed = 0;
   for (let i = p.tabs.length - 1; i >= 0; i--) {
     if (p.tabs[i]!.pinned) continue;
+    rememberClosed(id, i, l);
     if (removeTab(id, i, l)) closed += 1;
   }
   if (closed > 0) changed();
@@ -478,6 +560,7 @@ export function closeOthers(id: string, keep: number, l: Layout = layout): numbe
   let closed = 0;
   for (let i = p.tabs.length - 1; i >= 0; i--) {
     if (i === keep || p.tabs[i]!.pinned) continue;
+    rememberClosed(id, i, l);
     if (removeTab(id, i, l)) closed += 1;
   }
   if (closed > 0) changed();
@@ -659,11 +742,19 @@ function removeNode(n: LayoutNode, pane: string): LayoutNode | null {
 /// verso: sono la stessa fila.
 function flatten(n: LayoutNode): LayoutNode {
   if (n.k === "leaf") return n;
+  let merged = false;
   const children = n.children.flatMap((c) => {
     const p = flatten(c);
-    return p.k === "split" && p.dir === n.dir ? p.children : [p];
+    if (p.k === "split" && p.dir === n.dir) {
+      merged = true;
+      return p.children;
+    }
+    return [p];
   });
-  return children.length === 1 ? children[0] : { ...n, children };
+  if (children.length === 1) return children[0];
+  const { sizes, ...rest } = n;
+  // Le frazioni valgono per quei figli: se la fila è cambiata, parti uguali.
+  return !merged && sizes?.length === children.length ? { ...rest, children, sizes } : { ...rest, children };
 }
 
 // --- ricordare --------------------------------------------------------------
@@ -710,12 +801,17 @@ function changed(): void {
 /// leggere due valori che nessuno lega. Le domande restano due — la vecchia
 /// chiave si chiedeva già sempre, anche quando il layout c'era — ma l'attesa
 /// diventa una.
-export async function loadLayout(): Promise<void> {
-  const [saved, inheritedMode] = await Promise.all([
+///
+/// `preferred` è la modalità che l'utente ha scelto per i riquadri nuovi
+/// (`editor.default-mode`): vale solo quando non c'è niente da ricordare, e
+/// arriva come promessa perché la si chiede insieme alle altre due.
+export async function loadLayout(preferred?: Promise<string | undefined>): Promise<void> {
+  const [saved, inheritedMode, preferredMode] = await Promise.all([
     readState<unknown>(LAYOUT_KEY),
     readState<string>(MODE_KEY_LEGACY),
+    preferred ?? Promise.resolve(undefined),
   ]);
-  layout = parseLayout(saved) ?? defaultLayout(validMode(inheritedMode));
+  layout = parseLayout(saved) ?? defaultLayout(validMode(inheritedMode ?? preferredMode));
 }
 
 function validMode(v: unknown): string {
@@ -771,7 +867,8 @@ function parseNode(v: unknown): LayoutNode | null {
     if (!n) return null;
     children.push(n);
   }
-  return { k: "split", dir: o.dir, children };
+  const sizes = normalizedSizes(o.sizes, children.length);
+  return sizes ? { k: "split", dir: o.dir, children, sizes } : { k: "split", dir: o.dir, children };
 }
 
 /// Da JSON a `PaneState`, **leggendo anche la forma di prima**.

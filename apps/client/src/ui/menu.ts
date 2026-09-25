@@ -17,6 +17,12 @@ export interface MenuItem {
   danger?: boolean;
   /// Voce da cui far partire il fuoco quando il menu si apre.
   selected?: boolean;
+  /// Una riga di separazione prima della voce: raggruppa i gesti affini.
+  separator?: boolean;
+  /// La voce c'è ma adesso non si può usare: si vede, non si attiva.
+  disabled?: boolean;
+  /// La scorciatoia del gesto, scritta come si preme.
+  hint?: string;
   run: () => void;
 }
 
@@ -62,24 +68,47 @@ export function showContextMenu(
   menu.style.left = `${at.clientX}px`;
   menu.style.top = `${at.clientY}px`;
   const buttons: HTMLButtonElement[] = [];
+  const usable: MenuItem[] = [];
   for (const item of items) {
+    if (item.separator && menu.childElementCount > 0) {
+      const rule = document.createElement("div");
+      rule.className = "menu-separator";
+      rule.setAttribute("role", "separator");
+      menu.appendChild(rule);
+    }
     const b = document.createElement("button");
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
-    b.textContent = item.label;
+    const label = document.createElement("span");
+    label.className = "menu-label";
+    label.textContent = item.label;
+    b.append(label);
+    if (item.hint) {
+      const hint = document.createElement("kbd");
+      hint.className = "menu-hint";
+      hint.textContent = item.hint;
+      b.append(hint);
+      b.setAttribute("aria-keyshortcuts", item.hint);
+    }
     if (item.danger) b.className = "danger";
+    if (item.disabled) {
+      b.setAttribute("aria-disabled", "true");
+      menu.appendChild(b);
+      continue;
+    }
     // L'attivazione da tastiera passa dal click nativo del button (Invio/Spazio):
     // nessun gestore keydown qui, così il browser osserva esattamente un click
     // e l'azione resta una sola grazie alla guardia in `activate`.
     b.addEventListener("click", () => activate(b, item));
     buttons.push(b);
+    usable.push(item);
     menu.appendChild(b);
   }
   const initial = Math.max(
     0,
-    items.findIndex((item) => item.selected),
+    usable.findIndex((item) => item.selected),
   );
-  let active = items.length > 0 && items[initial]?.selected ? initial : 0;
+  let active = usable.length > 0 && usable[initial]?.selected ? initial : 0;
   const focusItem = (index: number): void => {
     if (buttons.length === 0) {
       menu.focus();
@@ -120,6 +149,7 @@ export function showContextMenu(
   }
   const workspace = document.getElementById("workspace");
   (workspace ?? document.body).appendChild(menu);
+  placeInViewport(menu, at.clientX, at.clientY);
   // WebKitGTK può terminare il processo web mentre fotografa in una View
   // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
   // canonica, senza portare questa superficie effimera nel percorso nativo.
@@ -138,6 +168,21 @@ export function showContextMenu(
   focusItem(active);
   setTimeout(() => lifetime.listen(document, "click", closeContextMenu, { once: true }), 0);
 }
+/// Un menu aperto vicino al bordo resta dentro la finestra: si ribalta a
+/// sinistra o in alto invece di uscire, e un elenco lungo scorre.
+function placeInViewport(menu: HTMLElement, x: number, y: number): void {
+  const margin = 8;
+  const box = menu.getBoundingClientRect();
+  const width = box.width;
+  const height = Math.min(box.height, window.innerHeight - 2 * margin);
+  let left = x;
+  let top = y;
+  if (left + width > window.innerWidth - margin) left = Math.max(margin, x - width);
+  if (top + height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - height);
+  menu.style.left = `${Math.max(margin, left)}px`;
+  menu.style.top = `${Math.max(margin, top)}px`;
+}
+
 export function closeContextMenu(): void {
   const lifetime = menuLifetime;
   const notify = menuClose;

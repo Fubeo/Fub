@@ -65,6 +65,22 @@ function settingsRows(value = "light"): SettingEntry[] {
   ];
 }
 
+function row(key: string, value: string, source: SettingEntry["source"] = "machine"): SettingEntry {
+  return {
+    spec: {
+      key,
+      label: key,
+      description: "",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "text", default: "" },
+      program_writable: false,
+    },
+    value,
+    source,
+  };
+}
+
 let lifetime: Lifetime | undefined;
 afterEach(() => lifetime?.close());
 
@@ -167,5 +183,49 @@ describe("tema runtime installato", () => {
       id: "fub.serie",
       light: "light",
     });
+  });
+
+  // L'id nelle impostazioni della macchina vince sulla cache della webview:
+  // è ciò che lo fa viaggiare coi profili e sopravvivere a una cache svuotata.
+  it("monta il tema che le impostazioni nominano, anche con la cache vuota", async () => {
+    box.listThemes.mockResolvedValue([info]);
+    box.readTheme.mockResolvedValue(payload);
+    const theme = await mountFromCache("fub.serie");
+    box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "acme.paper")]);
+    theme.mountTheme(lifetime!, vi.fn());
+    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("acme.paper"));
+  });
+
+  it("un id scritto che non regge la luce ricade sul tema di serie", async () => {
+    box.listThemes.mockResolvedValue([info]);
+    box.readTheme.mockResolvedValue(payload);
+    const theme = await mountFromCache(info.manifest.id);
+    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("acme.paper"));
+    box.settings.mockResolvedValue([...settingsRows("dark"), row("appearance.theme-id", "acme.paper")]);
+    theme.mountTheme(lifetime!, vi.fn());
+    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("fub.serie"));
+  });
+
+  it("un id mai scritto lascia decidere la cache, come prima", async () => {
+    box.listThemes.mockResolvedValue([info]);
+    box.readTheme.mockResolvedValue(payload);
+    box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "fub.serie", "default")]);
+    const theme = await mountFromCache(info.manifest.id);
+    box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "fub.serie", "default")]);
+    theme.mountTheme(lifetime!, vi.fn());
+    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("acme.paper"));
+  });
+
+  it("le animazioni ridotte dalle impostazioni arrivano al documento", async () => {
+    const theme = await mountFromCache("fub.serie");
+    box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.motion", "reduced")]);
+    theme.mountTheme(lifetime!, vi.fn());
+    await vi.waitFor(() => expect(document.documentElement.dataset.motion).toBe("reduced"));
+    const motion = await import("./reduced-motion");
+    expect(motion.reducedMotion()).toBe(true);
+    box.settings.mockResolvedValue(settingsRows("light"));
+    theme.mountTheme(lifetime!, vi.fn());
+    await vi.waitFor(() => expect(document.documentElement.dataset.motion).toBeUndefined());
+    expect(motion.reducedMotion()).toBe(false);
   });
 });

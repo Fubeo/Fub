@@ -38,6 +38,20 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
     ownerWindow.clearTimeout(registration.timer);
     registration.timer = ownerWindow.setTimeout(registration.show, TOOLTIP_DELAY_MS);
   };
+  // Col fuoco la descrizione serve **subito**: il lettore di schermo annuncia
+  // il controllo appena lo raggiunge, e un `aria-describedby` che arriva mezzo
+  // secondo dopo non viene mai letto. Il testo si prepara nell'elemento ancora
+  // nascosto (una descrizione può puntare a un nodo nascosto); a vedersi resta
+  // il ritardo di sempre.
+  const focus = () => {
+    if (registration.disposed || registration.text.trim() === "") return;
+    if (current && current.target !== target) current.registration.hide();
+    const element = tooltipElement();
+    element.textContent = registration.text;
+    target.setAttribute("aria-describedby", element.id);
+    current = { target, registration, element };
+    schedule();
+  };
   const cancel = () => {
     ownerWindow.clearTimeout(registration.timer);
     registration.timer = undefined;
@@ -85,7 +99,7 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
     ownerWindow.clearTimeout(registration.timer);
     registration.timer = undefined;
     registration.hide();
-    target.removeEventListener("focus", schedule);
+    target.removeEventListener("focus", focus);
     target.removeEventListener("mouseenter", schedule);
     target.removeEventListener("blur", cancel);
     target.removeEventListener("mouseleave", cancel);
@@ -96,7 +110,7 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
     if (event.key === "Escape") cancel();
   }
 
-  target.addEventListener("focus", schedule);
+  target.addEventListener("focus", focus);
   target.addEventListener("mouseenter", schedule);
   target.addEventListener("blur", cancel);
   target.addEventListener("mouseleave", cancel);

@@ -646,7 +646,8 @@ export type PairDecision =
   | { action: "skip" };
 
 /// La decisione dell'auto-pair, separata dalla view così si testa a secco.
-/// Copre `[[`→`]]`, `==` ed `$`; il singolo `*` non si auto-chiude apposta —
+/// Copre `[[`→`]]`, `==` e `$$`; il singolo `*` e il singolo `$` non si
+/// auto-chiudono apposta —
 /// nel testo normale lo si digita di continuo, e una chiusura automatica
 /// sarebbe più danno che aiuto.
 export function autoPairDecision(
@@ -680,14 +681,21 @@ export function autoPairDecision(
         return { action: "insert", text: "===", cursor: 1 };
       }
       return null;
-    case "$":
-      // `$|$` + `$` → si sale al math a blocco: `$$|$$`.
-      if (prev(1) === "$" && next(1) === "$" && prev(2) !== "$$") {
-        return { action: "insert", text: "$$", cursor: 1 };
-      }
-      if (next(1) === "$") return { action: "skip" };
-      if (prev(1) === "$") return null;
-      return { action: "insert", text: "$$", cursor: 1 };
+    case "$": {
+      // Un `$` da solo non si chiude: nel testo è quasi sempre una valuta
+      // («5$ al mese», «costa $5»), e una chiusura automatica ne fa una formula.
+      const line = state.doc.lineAt(from);
+      const before = state.sliceDoc(line.from, from);
+      // `$$` a inizio riga apre il math a blocco: `$$|$$`.
+      if (before.trim() === "$" && next(1) !== "$") return { action: "insert", text: "$$$", cursor: 1 };
+      // Si scavalca solo la `$` che chiude una formula già aperta sulla riga:
+      // l'ultima `$` prima del cursore apre se è seguita subito da un
+      // carattere non bianco (`$x`), come vuole la sintassi del math in riga.
+      const last = before.lastIndexOf("$");
+      const open = last >= 0 && before[last - 1] !== "\\" && /\S/.test(before[last + 1] ?? " ");
+      if (next(1) === "$" && open) return { action: "skip" };
+      return null;
+    }
   }
   return null;
 }

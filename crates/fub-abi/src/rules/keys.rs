@@ -80,9 +80,16 @@ pub fn chords(binding: &str) -> Option<Vec<Chord>> {
     }
     let mut chords = Vec::new();
     for piece in text.split_whitespace() {
-        let mut parts: Vec<&str> = piece.split('-').collect();
-        // L'ultimo pezzo è il tasto; se è vuoto (`Mod-`) non c'è un tasto.
-        let key = parts.pop().filter(|t| !t.is_empty())?;
+        // `Mod--` è il tasto meno: il separatore non può essere anche il tasto.
+        let (parts, key): (Vec<&str>, &str) = match piece.strip_suffix("--") {
+            Some(mods) => (mods.split('-').filter(|p| !p.is_empty()).collect(), "-"),
+            None => {
+                let mut parts: Vec<&str> = piece.split('-').collect();
+                // L'ultimo pezzo è il tasto; se è vuoto (`Mod-`) non c'è un tasto.
+                let key = parts.pop().filter(|t| !t.is_empty())?;
+                (parts, key)
+            }
+        };
         let mods: Vec<String> = parts.iter().map(|p| p.to_lowercase()).collect();
         if mods.iter().any(|m| !MODIFIERS.contains(&m.as_str())) {
             return None;
@@ -95,10 +102,17 @@ pub fn chords(binding: &str) -> Option<Vec<Chord>> {
         if seen.len() != mods.len() {
             return None;
         }
+        // `+` e `=` sono lo stesso tasto dello zoom: sulla tastiera americana
+        // `+` è `Shift-=`, su quella italiana `+` ha un tasto suo.
+        let plus = key == "+";
         chords.push(Chord {
-            key: key.to_lowercase(),
+            key: if plus {
+                "=".to_string()
+            } else {
+                key.to_lowercase()
+            },
             command: mods.iter().any(|m| m == "mod"),
-            shift: mods.iter().any(|m| m == "shift"),
+            shift: !plus && mods.iter().any(|m| m == "shift"),
             alt: mods.iter().any(|m| m == "alt"),
         });
     }
@@ -173,6 +187,15 @@ mod tests {
         // E il secondo accordo nudo invece va bene: dopo `Mod-k` la modalità è
         // aperta e dichiarata.
         assert_eq!(canonical("Mod-k d").as_deref(), Some("mod-k d"));
+    }
+
+    #[test]
+    fn minus_and_plus_are_keys() {
+        assert_eq!(canonical("Mod--").as_deref(), Some("mod--"));
+        assert_eq!(canonical("Mod-Shift--").as_deref(), Some("mod-shift--"));
+        assert_eq!(canonical("Mod-+"), canonical("Mod-="));
+        assert_eq!(canonical("Mod-Shift-+"), canonical("Mod-="));
+        assert_eq!(canonical("-"), None);
     }
 
     #[test]

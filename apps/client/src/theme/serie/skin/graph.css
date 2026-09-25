@@ -121,10 +121,10 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
 }
-.graph-panel-toggle {
+.graph-panel-check {
   grid-template-columns: 1fr auto;
 }
-.graph-panel-toggle input[type="checkbox"] {
+.graph-panel-check input[type="checkbox"] {
   grid-column: 2;
 }
 .graph-panel-azioni {
@@ -214,4 +214,93 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
+}
+
+/* La barra dei controlli sopra il grafo: grafo locale, profondità, colori,
+   filtri. Una riga che va a capo, sommessa come la toolbar del riquadro. */
+.graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.graph-toolbar button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.graph-toolbar button:hover:not(:disabled) {
+  background: var(--overlay-hover);
+}
+.graph-toolbar button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.graph-toolbar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.graph-toolbar-field select {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+.graph-refresh {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* La legenda dei colori per gruppo: un pallino e il nome. */
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.graph-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.graph-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+}
+/* La timeline per data di modifica, sotto il grafo. */
+.graph-timeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.graph-timeline label {
+  flex: 1;
+  display: flex;
+}
+.graph-timeline input[type="range"] {
+  width: 100%;
+}
+.graph-timeline button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
 }

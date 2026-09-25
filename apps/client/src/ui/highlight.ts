@@ -36,3 +36,47 @@ export function highlighted(snippet: string, highlights: Span[]): DocumentFragme
   frag.append(decoder.decode(bytes.subarray(pos)));
   return frag;
 }
+
+/// **Le parole cercate dentro un nome**, per le liste che propongono note
+/// (il quick switcher). Qui non c'è un provider che manda offset: il nome è
+/// della shell e la domanda è dell'utente, quindi le porzioni si trovano qui —
+/// ogni parola della domanda, senza badare a maiuscole, la prima volta che
+/// compare e senza sovrapporsi. Il testo entra comunque solo come nodi di
+/// testo.
+export function markedTerms(text: string, query: string): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  const lower = text.toLocaleLowerCase();
+  // Un minuscolo che cambia lunghezza (qualche legatura, qualche alfabeto)
+  // sposterebbe gli indici: in quel caso il nome resta com'è.
+  if (lower.length !== text.length) {
+    frag.append(text);
+    return frag;
+  }
+  const terms = [...new Set(query.toLocaleLowerCase().split(/\s+/).filter(Boolean))]
+    .sort((a, b) => b.length - a.length);
+  const ranges: [number, number][] = [];
+  for (const term of terms) {
+    let from = 0;
+    while (from <= lower.length - term.length) {
+      const at = lower.indexOf(term, from);
+      if (at < 0) break;
+      const end = at + term.length;
+      if (!ranges.some(([s, e]) => at < e && end > s)) {
+        ranges.push([at, end]);
+        break;
+      }
+      from = at + 1;
+    }
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  let pos = 0;
+  for (const [start, end] of ranges) {
+    frag.append(text.slice(pos, start));
+    const mark = document.createElement("mark");
+    mark.textContent = text.slice(start, end);
+    frag.append(mark);
+    pos = end;
+  }
+  frag.append(text.slice(pos));
+  return frag;
+}

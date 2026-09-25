@@ -24,6 +24,9 @@ import {
   setPaneLink,
   setPinnedTab,
   setTabStack,
+  closeTab,
+  cycleTab,
+  reopenClosedTab,
   type Layout,
 } from "./layout";
 import { parseBookmarkStore, parseBookmarkTarget } from "./bookmarks";
@@ -82,6 +85,32 @@ describe("le tab appuntate e i gruppi", () => {
     expect(l.panes.main.tabs.map((t) => t.k === "doc" ? t.doc : "")).toEqual(["a.md", "b.md"]);
     expect(closeUnpinned("main", l)).toBe(1);
     expect(l.panes.main.tabs).toHaveLength(1);
+  });
+
+  it("appuntare porta la tab a sinistra, spuntarla la rimette dopo le appuntate", () => {
+    const l = layoutWith("a.md", "b.md", "c.md");
+    activateTab("main", 2, l);
+    setPinnedTab("main", 2, true, l);
+    expect(l.panes.main.tabs.map((t) => t.k === "doc" ? t.doc : "")).toEqual(["c.md", "a.md", "b.md"]);
+    expect(l.panes.main.active).toBe(0);
+    setPinnedTab("main", 2, true, l);
+    expect(l.panes.main.tabs.map((t) => t.k === "doc" ? t.doc : "")).toEqual(["c.md", "b.md", "a.md"]);
+    setPinnedTab("main", 0, false, l);
+    expect(l.panes.main.tabs.map((t) => t.k === "doc" ? t.doc : "")).toEqual(["b.md", "c.md", "a.md"]);
+  });
+
+  it("riapre l’ultima tab chiusa al suo posto e gira fra le tab", () => {
+    const l = layoutWith("a.md", "b.md", "c.md");
+    closeTab("main", 1, l);
+    expect(reopenClosedTab(l)).toBe(true);
+    expect(l.panes.main.tabs.map((t) => t.k === "doc" ? t.doc : "")).toEqual(["a.md", "b.md", "c.md"]);
+    expect(l.panes.main.active).toBe(1);
+    expect(cycleTab("main", 1, l)).toBe(true);
+    expect(l.panes.main.active).toBe(2);
+    expect(cycleTab("main", 1, l)).toBe(true);
+    expect(l.panes.main.active).toBe(0);
+    expect(cycleTab("main", -1, l)).toBe(true);
+    expect(l.panes.main.active).toBe(2);
   });
 
   it("riordinare tiene l’attiva sulla stessa tab", () => {

@@ -94,7 +94,7 @@ describe("gli accordi dei due registri, guardati insieme", () => {
 
 // **Il terzo insieme di accordi: quelli montati dentro l'editor** (§26.2).
 //
-// I registri dichiarati e CodeMirror condividono ancora tre accordi. Il banco
+// I registri dichiarati e CodeMirror condividono ancora un accordo. Il banco
 // statico li nomina; a runtime non serve duplicare questa lista: popup e keymap
 // locali elaborano l'evento per primi e `mountKeyboard` rispetta il loro
 // `defaultPrevented`. Se il gestore locale rifiuta il gesto, la shell resta
@@ -122,15 +122,15 @@ const KEYMAP_EDITOR = editorKeymap;
 /// il comando dell'editor che se la prende comunque.
 type CollisionPair = readonly [canonicalChord: string, declared: string, editor: string];
 
-/// Le tre che ci sono, e nessun'altra. Chi ne aggiunge una quarta la vede qui.
+/// Quella che c'è, e nessun'altra. `Mod-Shift-\\` (split in basso) e
+/// `Mod-Shift-l` (Live) non hanno più accordo: dentro l'editor vinceva sempre
+/// CodeMirror. Chi ne aggiunge una la vede qui.
 const KNOWN_COLLISIONS: readonly CollisionPair[] = [
   // `Ctrl+F` era quella che scattava due volte davvero, ed è la prova che
   // l'evento risale: il pannello di CodeMirror e l'overlay della shell si
   // aprivano insieme. Da 0156 a runtime non scattano più entrambi: decide il
   // fuoco, e dentro l'editor vince l'editor.
   ["mod-f", "shell.doc.search", "openSearchPanel"],
-  ["mod-shift-\\", "shell.pane.split.down", "cursorMatchingBracket"],
-  ["mod-shift-l", "shell.mode.live", "selectSelectionMatches"],
 ];
 
 /// Gli accordi dei due registri dichiarati, in forma canonica, con chi li porta.

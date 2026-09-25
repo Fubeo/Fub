@@ -6,7 +6,7 @@
 // sarebbe divergente: gli accenti (byte ≠ code unit) e gli intervalli che un
 // provider può mandare sbagliati.
 import { describe, expect, it } from "vitest";
-import { highlighted } from "./highlight";
+import { highlighted, markedTerms } from "./highlight";
 
 /// Cosa si vede: il testo intero, e quali porzioni sono dentro un `<mark>`.
 function read(frag: DocumentFragment): { text: string; marked: string[] } {
@@ -62,5 +62,29 @@ describe("l'estratto evidenziato", () => {
       { start: 3, end: 7 },
     ]);
     expect(read(frag)).toEqual({ text: "uno due", marked: ["uno d"] });
+  });
+});
+
+describe("le parole cercate dentro un nome", () => {
+  const html = (text: string, query: string) => {
+    const box = document.createElement("span");
+    box.append(markedTerms(text, query));
+    return box.innerHTML;
+  };
+
+  it("segna ogni parola una volta, senza badare alle maiuscole", () => {
+    expect(html("Riunione di Marzo", "marzo riu")).toBe("<mark>Riu</mark>nione di <mark>Marzo</mark>");
+  });
+
+  it("non sovrappone due parole e lascia intatto ciò che non combacia", () => {
+    // «an» compare solo dentro «ana», già segnato: non si segna due volte.
+    expect(html("banana", "ana an")).toBe("b<mark>ana</mark>na");
+    expect(html("piano di pianura", "pian ura")).toBe("<mark>pian</mark>o di pian<mark>ura</mark>");
+    expect(html("Diario", "zeta")).toBe("Diario");
+    expect(html("Diario", "")).toBe("Diario");
+  });
+
+  it("il testo entra come testo, mai come markup", () => {
+    expect(html("<b>x</b>", "x")).toBe("&lt;b&gt;<mark>x</mark>&lt;/b&gt;");
   });
 });

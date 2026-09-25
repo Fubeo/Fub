@@ -25,7 +25,7 @@ import {
   listItem,
   wikilink,
 } from "../../../../rules/syntax";
-import { findTrailingAnchor, renderMarkdownState } from "./render";
+import { findTrailingAnchor, frontmatterRange, renderMarkdownState } from "./render";
 import type { MarkdownBlock, MarkdownDocument, MountMarkdown } from "./render-types";
 import { mountMarkdown } from "../../../../ui/markdown";
 import { mountMathBlocks } from "../../../../ui/math";
@@ -543,6 +543,11 @@ const ruler = Decoration.replace({ widget: new RulerWidget() });
 const boxEmpty = Decoration.replace({ widget: new CheckboxWidget(false) });
 const checkedBox = Decoration.replace({ widget: new CheckboxWidget(true) });
 const codeLine = Decoration.line({ class: "cm-fub-codeblock" });
+const HEADING_LINES: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
+  (["h1", "h2", "h3", "h4", "h5", "h6"] as const).map(
+    (kind) => [kind, Decoration.line({ class: `cm-fub-heading-line cm-fub-${kind}-line` })],
+  ),
+);
 const quoteLine = Decoration.line({ class: "cm-fub-quote" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "code", "link", "highlight", "done", "quote-mark"] as const).map(
@@ -664,12 +669,18 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
 // resta montabile anche senza il CSS della shell.
 const theme = EditorView.baseTheme({
   ".cm-markdown-gap": { height: "0", lineHeight: "0", fontSize: "0", padding: "0" },
-  ".cm-fub-h1": { fontSize: "var(--text-3xl, 1.5em)", fontWeight: "700" },
-  ".cm-fub-h2": { fontSize: "var(--text-2xl, 1.35em)", fontWeight: "700" },
-  ".cm-fub-h3": { fontSize: "var(--text-xl, 1.2em)", fontWeight: "500" },
-  ".cm-fub-h4": { fontSize: "var(--text-lg, 1.1em)", fontWeight: "700" },
-  ".cm-fub-h5": { fontSize: "var(--text-sm, 0.9em)", fontWeight: "700" },
-  ".cm-fub-h6": { fontSize: "var(--text-sm, 0.9em)", fontWeight: "500" },
+  // La stessa scala della Lettura (`preview.css`): relativa al corpo, e
+  // sempre in discesa, in misura e in peso.
+  ".cm-fub-h1": { fontSize: "max(1.75em, var(--text-3xl, 1.75em))", fontWeight: "700", letterSpacing: "-0.01em" },
+  ".cm-fub-h2": { fontSize: "max(1.45em, var(--text-2xl, 1.45em))", fontWeight: "700", letterSpacing: "-0.005em" },
+  ".cm-fub-h3": { fontSize: "1.22em", fontWeight: "650" },
+  ".cm-fub-h4": { fontSize: "1.08em", fontWeight: "650" },
+  ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
+  ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
+  ".cm-fub-heading-line": { paddingTop: "0.9em", paddingBottom: "0.2em" },
+  ".cm-fub-h1-line": { paddingTop: "1.2em", borderBottom: "1px solid var(--doc-rule-soft, rgba(135, 135, 135, 0.3))", paddingBottom: "0.3em", marginBottom: "0.4em" },
+  ".cm-fub-h2-line": { paddingTop: "1.1em" },
+  ".cm-line:first-child.cm-fub-heading-line": { paddingTop: "0" },
   ".cm-fub-h1, .cm-fub-h2, .cm-fub-h3, .cm-fub-h4, .cm-fub-h5, .cm-fub-h6": {
     color: "var(--doc-heading, var(--doc-fg))", lineHeight: "var(--leading-tight, 1.2)",
   },
@@ -977,19 +988,42 @@ export function livePreview(
   callbacks: LivePreviewCallbacks,
   forms?: readonly SyntaxForm[],
 ): Extension {
+  /// Un blocco che il cursore lontano lascia reso: `from` è l'inizio della
+  /// sua prima riga, `next` quello del blocco dopo.
+  interface Candidate {
+    block: MarkdownBlock;
+    from: number;
+    to: number;
+    next: number;
+  }
   interface RenderState {
     document: MarkdownDocument;
+    /// I blocchi rendibili, ricavati una volta per documento: una selezione
+    /// che si muove ripassa solo questi, non tutto il documento.
+    candidates: readonly Candidate[];
+    /// Le scelte che la selezione ha dettato: blocco reso o sorgente, riga
+    /// vuota nascosta o no. Uguali, lo stato resta quello di prima.
+    decisions: string;
     decorations: DecorationSet;
     replaced: readonly { from: number; to: number }[];
   }
   const touched = (state: EditorState, from: number, to: number) =>
     state.selection.ranges.some((range) => range.from <= to && range.to >= from);
   const blocks = StateField.define<RenderState>({
-    create(state) { return buildBlocks(state, renderMarkdownState(state, forms)); },
+    create(state) {
+      const document = renderMarkdownState(state, forms);
+      return buildBlocks(state, document, candidatesOf(state, document));
+    },
     update(value, transaction) {
       const changed = transaction.docChanged;
-      if (!changed && !transaction.selection && transaction.startState.readOnly === transaction.state.readOnly) return value;
-      return buildBlocks(transaction.state, changed ? renderMarkdownState(transaction.state, forms) : value.document);
+      const readOnlyChanged = transaction.startState.readOnly !== transaction.state.readOnly;
+      if (!changed && !transaction.selection && !readOnlyChanged) return value;
+      if (!changed) {
+        const next = buildBlocks(transaction.state, value.document, value.candidates);
+        return next.decisions === value.decisions && !readOnlyChanged ? value : next;
+      }
+      const document = renderMarkdownState(transaction.state, forms);
+      return buildBlocks(transaction.state, document, candidatesOf(transaction.state, document));
     },
     provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
   });
@@ -1004,15 +1038,38 @@ export function livePreview(
     "heading", "list", "blockquote", "code", "incomplete", "hr",
     "frontmatter", "html", "definition", "footnote-definition",
   ]);
-  function buildBlocks(state: EditorState, document: MarkdownDocument): RenderState {
-    const ranges: Range<Decoration>[] = [];
-    const replaced: { from: number; to: number }[] = [];
+  // Un paragrafo fatto solo di immagini o embed (`![alt](x.png)`,
+  // `![[foto.png|120]]`) non ha prosa da scrivere: fuori dal cursore si vede
+  // reso, come in Lettura, e col cursore dentro torna sorgente.
+  const MEDIA = String.raw`(?:!\[[^\]\n]*\]\([^)\n]*\)|!\[\[[^\]\n]+\]\])`;
+  const ONLY_MEDIA = new RegExp(`^\\s*${MEDIA}(?:\\s+${MEDIA})*\\s*$`);
+  const onlyMedia = (text: string): boolean => text.length < 4096 && ONLY_MEDIA.test(text);
+  function candidatesOf(state: EditorState, document: MarkdownDocument): Candidate[] {
+    const candidates: Candidate[] = [];
     for (let index = 0; index < document.blocks.length; index++) {
       const block = document.blocks[index]!;
-      const from = state.doc.lineAt(block.from).from;
-      if (INLINE_KINDS.has(block.kind) || touched(state, from, block.to)) continue;
-      const to = block.to;
-      const next = document.blocks[index + 1] ? state.doc.lineAt(document.blocks[index + 1]!.from).from : state.doc.length;
+      const media = block.kind === "paragraph" && onlyMedia(state.sliceDoc(block.from, block.to));
+      if (INLINE_KINDS.has(block.kind) && !media) continue;
+      const following = document.blocks[index + 1];
+      candidates.push({
+        block,
+        from: state.doc.lineAt(block.from).from,
+        to: block.to,
+        next: following ? state.doc.lineAt(following.from).from : state.doc.length,
+      });
+    }
+    return candidates;
+  }
+  function buildBlocks(state: EditorState, document: MarkdownDocument, candidates: readonly Candidate[]): RenderState {
+    const ranges: Range<Decoration>[] = [];
+    const replaced: { from: number; to: number }[] = [];
+    let decisions = "";
+    for (const { block, from, to, next } of candidates) {
+      if (touched(state, from, to)) {
+        decisions += "s";
+        continue;
+      }
+      decisions += "r";
       ranges.push(Decoration.replace({
         block: true,
         widget: new MarkdownWidget(block, document.dependencies, state.readOnly, callbacks, document.anchors),
@@ -1025,24 +1082,41 @@ export function livePreview(
         if (line.from >= next) break;
         if (!line.text.trim() && !touched(state, line.from, line.to)) {
           ranges.push(Decoration.line({ class: "cm-markdown-gap" }).range(line.from));
+          decisions += "g";
+        } else {
+          decisions += "-";
         }
       }
     }
-    return { document, decorations: Decoration.set(ranges, true), replaced };
+    return { document, candidates, decisions, decorations: Decoration.set(ranges, true), replaced };
   }
   const buildInline = (view: EditorView): [DecorationSet, DecorationSet] => {
     const active = activeLinesOf(view.state);
     const replaced = view.state.field(blocks).replaced;
+    // Dentro il frontmatter non c'è Markdown: né riga orizzontale né titolo.
+    const yaml = frontmatterRange(view.state.doc);
     const decorations: Range<Decoration>[] = [];
     const atomic: Range<Decoration>[] = [];
     const seen = new Set<string>();
     for (const visible of view.visibleRanges) {
       for (const item of computeDecorations(view.state, active, visible.from, visible.to, forms)) {
         if (replaced.some((range) => item.from >= range.from && item.from < range.to)) continue;
+        if (yaml && item.from < yaml.to) continue;
         const key = `${item.from}:${item.to}:${item.kind}`;
         if (seen.has(key)) continue;
         seen.add(key);
         const decoration = inDecoration(item);
+        // Un titolo porta anche la sua riga: lo stesso respiro verticale della
+        // Lettura, così cambiare modalità non fa saltare la pagina.
+        const level = HEADING_LINES[item.kind];
+        if (level) {
+          const lineStart = view.state.doc.lineAt(item.from).from;
+          const lineKey = `line:${lineStart}`;
+          if (!seen.has(lineKey)) {
+            seen.add(lineKey);
+            decorations.push(level.range(lineStart));
+          }
+        }
         if (item.kind === "quote-line" || item.kind === "codeblock-line") {
           decorations.push(decoration.range(item.from));
         } else {

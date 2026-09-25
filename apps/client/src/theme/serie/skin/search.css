@@ -98,3 +98,79 @@
   border-radius: var(--radius-xs);
   padding: 0 var(--space-1);
 }
+
+/* La voce corrente di un elenco di scelte (il workspace caricato): lo dice il
+   fondo, e `aria-current` lo dice a chi ascolta. */
+.search-result[aria-current="true"] {
+  background: var(--bg-active);
+}
+
+/* Le azioni di una riga (escludi la nota, escludi la cartella): piccole, in
+   fila sotto il risultato, e visibili solo sulla riga che si sta guardando o
+   su cui c'è il fuoco — dieci righe di bottoni sempre accesi erano un muro. */
+.search-results li .search-action {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.search-results li:not(.search-tools):not(:hover):not(:focus-within) .search-action {
+  display: none;
+}
+.search-results li .search-action:hover {
+  color: var(--text);
+  background: var(--overlay-hover);
+}
+/* La riga degli strumenti (copia, sintassi): non è un risultato. */
+.search-results li.search-tools {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: 0;
+  padding-block: var(--space-1);
+  cursor: default;
+}
+.search-results li.search-tools:hover,
+.search-results li.search-tools:focus-within {
+  background: transparent;
+}
+.search-syntax {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-4);
+  width: 100%;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+}
+.search-syntax dd {
+  margin: 0;
+  color: var(--muted);
+}
+.search-syntax code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+/* Le esclusioni in corso, come etichette che si tolgono. */
+.search-exclusions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+.search-chip {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.search-chip:hover {
+  background: var(--overlay-hover);
+}

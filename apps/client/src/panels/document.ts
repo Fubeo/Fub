@@ -18,6 +18,8 @@
 // La superficie pubblica di questo modulo continua a rispondere alle domande
 // della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
 // lo stato mutabile della sessione ai suoi clienti.
+import { promptText } from "../ui/dialogs";
+import { openCompare } from "../ui/compare";
 import type { EditorChange } from "../editors/text/engine";
 import {
   createDocumentSurfaceRegistry,
@@ -29,9 +31,11 @@ import type {
   SurfaceMode,
 } from "../editors/core/registry";
 import { mediaKindOfId } from "../editors/media/media-types";
+import { NOTE_DRAG_TYPE } from "../ui/drag-types";
+import { pageName } from "../rules/organizer";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
-import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { attachmentMarkdown, depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
@@ -39,6 +43,7 @@ import { mountSlidePresentation } from "../ui/slides";
 import { mountMarkdown } from "../ui/markdown";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
+import { iconEl } from "../ui/icons";
 import {
   invalidateMarkdownResourceDocument,
   renameMarkdownResourceDocument,
@@ -74,6 +79,8 @@ import {
   moveTab,
   moveTabToPane,
   setPinnedTab,
+  reopenClosedTab,
+  cycleTab,
   setTabStack,
   setPaneLink,
   split,
@@ -90,14 +97,17 @@ import {
   sameTab,
   activeTab,
   removeEverywhere,
+  setSplitSizes,
+  MIN_SPLIT_FRACTION,
   type LayoutNode,
+  type SplitNode,
   type Tab,
 } from "../state/layout";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { showContextMenu } from "../ui/menu";
 import { confirm } from "../host/dialog";
-import { allCommands, registerShellCommand } from "../ui/commands";
+import { allCommands, displayBinding, registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "../state/slash";
@@ -130,6 +140,8 @@ interface Pane {
   tabMenuEl: HTMLButtonElement;
   toolbarEl: HTMLElement;
   conflictEl: HTMLElement;
+  /// Lo stato vuoto: cosa fare quando il riquadro non ha tab.
+  emptyEl: HTMLElement;
   editorEl: HTMLElement;
   /// Dove finisce una view dichiarata che questo riquadro sta ospitando (§3.3).
   /// Vuoto quasi sempre: è la seconda superficie di un riquadro, accanto
@@ -220,10 +232,24 @@ async function droppedFiles(data: DataTransfer): Promise<readonly File[]> {
   return files;
 }
 
+/// Il riferimento più corto che porta davvero alla nota: il nome, poi il
+/// percorso senza estensione, poi il percorso intero. Lo decide la
+/// risoluzione del vault, non una regola copiata qui.
+async function wikiReference(doc: string): Promise<string> {
+  const withoutExtension = doc.replace(/\.[^./]+$/, "");
+  for (const candidate of [pageName(doc), withoutExtension]) {
+    const resolved = await resolvedReference(
+      { kind: "wiki", value: { page: candidate, heading: null, block: null } },
+    ).catch(() => null);
+    if (resolved?.doc === doc) return candidate;
+  }
+  return doc;
+}
+
 function insertAttachmentLinks(r: Pane, doc: string, links: readonly string[]): void {
   if (r.shown?.k !== "doc" || r.shown.doc !== doc || !isMarkdownSurface(r.surface) ||
       closeDraining || documentSessions.isDeletionPending(doc)) return;
-  const markdown = links.map((link) => `![](${link})`).join("\n");
+  const markdown = links.map(attachmentMarkdown).join("\n");
   if (!r.surface.insertAtCursor(markdown)) {
     throw new Error("Markdown editor is not available for attachment insertion");
   }
@@ -252,12 +278,26 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
     }).catch(fail);
   };
   life.listen(r.editorEl, "dragover", (event) => {
-    if (!event.dataTransfer?.types.includes("Files")) return;
+    const types = event.dataTransfer?.types ?? [];
+    if (!types.includes("Files") && !types.includes(NOTE_DRAG_TYPE)) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
+    event.dataTransfer!.dropEffect = "copy";
   }, { capture: true });
   life.listen(r.editorEl, "drop", (event) => {
+    // Una nota dall'albero diventa un collegamento dove cade, non il suo
+    // percorso scritto in chiaro.
+    const note = event.dataTransfer?.getData(NOTE_DRAG_TYPE);
+    if (note) {
+      event.preventDefault();
+      event.stopPropagation();
+      const { clientX: x, clientY: y } = event;
+      void wikiReference(note).then((reference) => {
+        if (life.closed || r.surface !== surface || !isMarkdownSurface(surface)) return;
+        surface.insertAtPoint(x, y, `[[${reference}]]`);
+      });
+      return;
+    }
     if (!event.dataTransfer?.files.length) return;
     event.preventDefault();
     event.stopPropagation();
@@ -368,11 +408,13 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   });
   panesEl = $("#panes");
   sessionEventsStop?.();
+  paintedSessions.clear();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
   sessionEventsStop = stopSessionEvents;
   lifetime.add(() => {
     closeDraining = false;
     stopSessionEvents();
+    paintedSessions.clear();
     if (sessionEventsStop === stopSessionEvents) sessionEventsStop = undefined;
     for (const r of panes.values()) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
@@ -419,7 +461,16 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       const outcome = documentSessions.handleExternalRemoval(e.id);
       invalidateMarkdownResourceDocument(e.id);
       invalidateLoads(e.id);
-      if (outcome.dirty) notify(t("document.deleted_dirty", { doc: e.id }), "guasto");
+      if (outcome.dirty && outcome.text !== undefined) {
+        const text = outcome.text;
+        notify(t("document.deleted_dirty", { doc: e.id }), "guasto", {
+          label: t("document.recreate"),
+          run: async () => {
+            await api.writeDocument(e.id, text, { kind: "dictated" });
+            await openDocument(e.id);
+          },
+        });
+      }
       removeEverywhere(e.id);
     }),
   );
@@ -498,13 +549,15 @@ function registerCommands(): void {
   // sorgente nudo lo fa per capire cosa ha scritto un plugin. Dichiarare tre
   // comandi perché le modalità sono tre vorrebbe dire tre scorciatoie da
   // trovare per un caso che non le chiede.
+  // `Mod-e` alterna: dalla scrittura porta in Lettura, dalla Lettura torna
+  // alla modalità di scrittura da cui si era partiti.
   registerShellCommand({
     id: "shell.mode.reading",
     title: "commands.mode.reading",
     description: "commands.mode.reading.desc",
     layer: "surface",
     available: () => supportsMode("reading"),
-    run: () => void setMode("reading"),
+    run: () => void toggleReading(),
   });
   registerShellCommand({
     id: "shell.mode.live",
@@ -513,6 +566,48 @@ function registerCommands(): void {
     layer: "profile",
     available: () => supportsMode("live_preview"),
     run: () => void setMode("live_preview"),
+  });
+  registerShellCommand({
+    id: "shell.mode.source",
+    title: "commands.mode.source",
+    description: "commands.mode.source.desc",
+    layer: "profile",
+    available: () => supportsMode("source"),
+    run: () => void setMode("source"),
+  });
+  registerShellCommand({
+    id: "shell.doc.save",
+    title: "commands.doc.save",
+    description: "commands.doc.save.desc",
+    layer: "document",
+    run: () => void saveNow(),
+  });
+  registerShellCommand({
+    id: "shell.tab.reopen",
+    title: "commands.tab.reopen",
+    description: "commands.tab.reopen.desc",
+    layer: "global",
+    run: () => {
+      if (reopenClosedTab()) void synchronize();
+    },
+  });
+  registerShellCommand({
+    id: "shell.tab.next",
+    title: "commands.tab.next",
+    description: "commands.tab.next.desc",
+    layer: "global",
+    run: () => {
+      if (cycleTab(layout.focus, 1)) void synchronize();
+    },
+  });
+  registerShellCommand({
+    id: "shell.tab.previous",
+    title: "commands.tab.previous",
+    description: "commands.tab.previous.desc",
+    layer: "global",
+    run: () => {
+      if (cycleTab(layout.focus, -1)) void synchronize();
+    },
   });
   registerShellCommand({
     id: "shell.pane.split.right",
@@ -754,6 +849,26 @@ export function synchronize(): Promise<void> {
   return drawQueue.enqueue(render);
 }
 
+/// Smonta ogni riquadro e chiude ogni sessione prima di un vault nuovo.
+///
+/// Le sessioni sono indicizzate per path, e due vault hanno spesso le stesse
+/// note (`Benvenuto.md`): senza questo passo il vault nuovo riusava buffer,
+/// superficie e coda di salvataggio del vecchio. Chi chiama ha già svuotato
+/// la coda di salvataggio; ciò che resta sporco viene restituito.
+export function resetDocumentsForVault(): Promise<string[]> {
+  return drawQueue.enqueue(async () => {
+    for (const [id, r] of panes) {
+      if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
+      detachSurface(r);
+      destroySurface(r);
+      r.root.remove();
+    }
+    panes.clear();
+    treeSignature = "";
+    return documentSessions.closeAll();
+  });
+}
+
 async function render(): Promise<void> {
   buildStructure();
   const active = activeDoc();
@@ -813,11 +928,90 @@ function buildStructure(): void {
 }
 
 function node(n: LayoutNode): HTMLElement {
-  if (n.k === "leaf") return renderPane(n.pane).root;
+  if (n.k === "leaf") {
+    // Un riquadro riusato può venire da una divisione: fuori da lì la sua
+    // frazione non vale più, e un `flex-grow` rimasto lo stringerebbe.
+    const root = renderPane(n.pane).root;
+    root.style.removeProperty("flex-grow");
+    return root;
+  }
   const el = document.createElement("div");
   el.className = `pane-split ${n.dir}`;
-  el.append(...n.children.map(node));
+  const items = n.children.map(node);
+  const sizes = n.sizes ?? items.map(() => 1 / items.length);
+  items.forEach((item, index) => {
+    item.style.flexGrow = String(sizes[index]);
+    if (index > 0) el.append(splitDivider(n, index, el, items));
+    el.append(item);
+  });
   return el;
+}
+
+/// Il divisore fra due figli di una divisione: si trascina, si sposta con le
+/// frecce (a passi del 5%), e un doppio clic riporta le parti uguali. Durante
+/// il trascinamento cambia solo lo stile; il layout si scrive al rilascio.
+function splitDivider(split: SplitNode, index: number, container: HTMLElement, items: HTMLElement[]): HTMLElement {
+  const handle = document.createElement("div");
+  handle.className = "pane-divider";
+  handle.setAttribute("role", "separator");
+  handle.setAttribute("aria-orientation", split.dir === "row" ? "vertical" : "horizontal");
+  handle.setAttribute("aria-label", t("pane.resize"));
+  handle.setAttribute("aria-valuemin", String(Math.round(MIN_SPLIT_FRACTION * 100)));
+  handle.setAttribute("aria-valuemax", String(Math.round((1 - MIN_SPLIT_FRACTION) * 100)));
+  handle.tabIndex = 0;
+  const current = (): number[] => items.map((item) => Number(item.style.flexGrow) || 1 / items.length);
+  const show = (sizes: number[]): void => {
+    items.forEach((item, i) => { item.style.flexGrow = String(sizes[i]); });
+    const pair = sizes[index - 1]! + sizes[index]!;
+    handle.setAttribute("aria-valuenow", String(Math.round((sizes[index - 1]! / pair) * 100)));
+  };
+  // Si spostano solo i due vicini del divisore: gli altri riquadri non si
+  // accorgono di niente.
+  const shifted = (from: number[], delta: number): number[] => {
+    const sizes = [...from];
+    const pair = sizes[index - 1]! + sizes[index]!;
+    const before = Math.min(Math.max(sizes[index - 1]! + delta, MIN_SPLIT_FRACTION), pair - MIN_SPLIT_FRACTION);
+    sizes[index - 1] = before;
+    sizes[index] = pair - before;
+    return sizes;
+  };
+  show(current());
+  const span = (): number => {
+    const rect = container.getBoundingClientRect();
+    return Math.max(1, split.dir === "row" ? rect.width : rect.height);
+  };
+  let dragging: { origin: number; start: number[] } | null = null;
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    handle.setPointerCapture?.(event.pointerId);
+    handle.dataset.dragging = "";
+    dragging = { origin: split.dir === "row" ? event.clientX : event.clientY, start: current() };
+  });
+  handle.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+    const at = split.dir === "row" ? event.clientX : event.clientY;
+    show(shifted(dragging.start, (at - dragging.origin) / span()));
+  });
+  const release = (): void => {
+    if (!dragging) return;
+    dragging = null;
+    delete handle.dataset.dragging;
+    setSplitSizes(split, current());
+  };
+  handle.addEventListener("pointerup", release);
+  handle.addEventListener("pointercancel", release);
+  handle.addEventListener("dblclick", () => setSplitSizes(split, items.map(() => 1)));
+  handle.addEventListener("keydown", (event) => {
+    const back = split.dir === "row" ? "ArrowLeft" : "ArrowUp";
+    const forward = split.dir === "row" ? "ArrowRight" : "ArrowDown";
+    if (event.key !== back && event.key !== forward) return;
+    event.preventDefault();
+    const sizes = shifted(current(), event.key === back ? -0.05 : 0.05);
+    show(sizes);
+    setSplitSizes(split, sizes);
+  });
+  return handle;
 }
 
 /// Il riquadro con questo id, creandolo se è nuovo.
@@ -853,7 +1047,8 @@ function renderPane(id: string): Pane {
     const current = paneState(id);
     if (!current) return;
     showContextMenu(event, current.tabs.map((tab, index) => ({
-      label: (tab.k === "doc" && documentSessions.isDirty(tab.doc) ? "• " : "") + nameTab(tab),
+      label: nameTab(tab) + (tab.k === "doc" && documentSessions.isDirty(tab.doc) ? ` · ${t("save.unsaved")}` : ""),
+      selected: index === current.active,
       run: () => activateTab(id, index),
     })));
   });
@@ -893,6 +1088,20 @@ function renderPane(id: string): Pane {
   // altrimenti il contesto pubblicato subito dopo sarebbe quello di prima.
   root.addEventListener("mousedown", () => focusPane(id));
   root.addEventListener("focusin", () => focusPane(id));
+  // I tasti laterali del mouse: indietro e avanti nella cronologia del riquadro.
+  root.addEventListener("mouseup", (event) => {
+    if (event.button !== 3 && event.button !== 4) return;
+    event.preventDefault();
+    focusPane(id);
+    if (event.button === 3) paneBack();
+    else paneForward();
+  });
+
+  // Un riquadro senza tab dice cosa si può fare, invece di restare bianco.
+  const emptyEl = document.createElement("div");
+  emptyEl.className = "pane-empty";
+  emptyEl.hidden = true;
+  root.append(emptyEl);
 
 
   const r: Pane = {
@@ -904,6 +1113,7 @@ function renderPane(id: string): Pane {
     tabMenuEl,
     toolbarEl,
     conflictEl,
+    emptyEl,
     editorEl,
     viewEl,
     disposeAttachments: null,
@@ -983,6 +1193,7 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
   tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving));
   r.tabsShell.hidden = tabs.length === 0;
   r.contentEl.hidden = tabs.length === 0;
+  drawEmptyPane(r, tabs.length === 0);
   const selected =
     active >= 0
       ? r.tabsShell.querySelector<HTMLElement>(`[role="tab"][data-index="${active}"]`)
@@ -991,11 +1202,14 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
   else r.contentEl.removeAttribute("aria-labelledby");
   r.tabsEl.setAttribute("aria-label", t("document.tab.list"));
   const activeName = tabs[active] ? nameTab(tabs[active]!) : "";
+  // Il numero del riquadro, non il suo id interno (`pane-2`): è ciò che
+  // distingue due riquadri per chi ascolta.
+  const ordinal = layoutPanes().indexOf(r.id) + 1;
   r.root.setAttribute(
     "aria-label",
     activeName
-      ? `${t("pane.named", { name: activeName })} (${r.id})`
-      : `${t("pane.empty")} (${r.id})`,
+      ? `${t("pane.named", { name: activeName })} (${ordinal})`
+      : `${t("pane.empty")} (${ordinal})`,
   );
   if (focusedTab && focused && !focused.isConnected) {
     const replacement = buttons[roving];
@@ -1006,6 +1220,34 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
       ?.focus({ preventScroll: true });
   }
   drawTabOverflow(r, tabs, active);
+}
+
+/// Lo stato vuoto del riquadro: due gesti con le loro scorciatoie. Si
+/// ridisegna a ogni giro perché segue lingua e accordi riconfigurati.
+function drawEmptyPane(r: Pane, empty: boolean): void {
+  r.emptyEl.hidden = !empty || state.vaultRoot === "";
+  if (r.emptyEl.hidden) return;
+  const chord = (id: string): string =>
+    displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null);
+  const title = document.createElement("p");
+  title.className = "pane-empty-title";
+  title.textContent = t("pane.empty.title");
+  const actions = document.createElement("div");
+  actions.className = "pane-empty-actions";
+  for (const [id, label] of [["shell.note.new", "commands.note.new"], ["shell.switcher", "pane.empty.open"]] as const) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "link-button";
+    const keys = chord(id);
+    button.textContent = keys ? `${t(label)} (${keys})` : t(label);
+    button.addEventListener("click", () => {
+      focusPane(r.id);
+      const entry = allCommands().find((candidate) => candidate.id === id);
+      entry?.run?.();
+    });
+    actions.append(button);
+  }
+  r.emptyEl.replaceChildren(title, actions);
 }
 
 /// Costruisce una tab accessibile (U21): nome breve + dirty testuale oltre
@@ -1031,6 +1273,8 @@ function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
   close.type = "button";
   close.className = "tab-close";
   close.dataset.tabId = tab.id;
+  const glyph = iconEl("close");
+  if (glyph) close.append(glyph);
   const remove = (): void => {
     if (!tab.isConnected) return;
     closeTab(r.id, index);
@@ -1039,13 +1283,23 @@ function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
   close.addEventListener("mousedown", (event) => {
     // Chiudere una tab in secondo piano non deve prima attivarla, né
     // attivare quella che si sta chiudendo un istante prima di toglierla.
+    // La chiusura resta al `click`: premere e trascinare fuori annulla.
     event.stopPropagation();
     event.preventDefault();
-    remove();
   });
   close.addEventListener("click", (event) => {
     event.stopPropagation();
     event.preventDefault();
+    remove();
+  });
+  // Il clic centrale chiude la tab, come nei browser.
+  tab.addEventListener("mousedown", (event) => {
+    if (event.button === 1) event.preventDefault();
+  });
+  tab.addEventListener("auxclick", (event) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
     remove();
   });
   // Invio/Spazio sul Chiudi non devono anche attivare la tab: l'attivazione
@@ -1121,55 +1375,136 @@ function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
 function openTabMenu(r: Pane, index: number, target: Tab, at: MouseEvent): void {
   const pinned = target.pinned === true;
   const paneIds = layoutPanes().filter((id) => id !== r.id);
-  const stacks = [...new Set(paneState(r.id)?.tabs.map((tab) => tab.stack).filter((name): name is string => !!name) ?? [])];
+  const tabs = paneState(r.id)?.tabs ?? [];
+  const stacks = [...new Set(tabs.map((tab) => tab.stack).filter((name): name is string => !!name))];
+  const chord = (id: string): string | undefined =>
+    displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null) || undefined;
+  const doc = target.k === "doc" ? target.doc : null;
+  const hasRight = tabs.some((tab, i) => i > index && !tab.pinned);
   showContextMenu(at, [
     {
+      label: t("tabmenu.close"),
+      hint: chord("shell.tab.close"),
+      run: () => void closeTabAt(r.id, index),
+    },
+    {
+      label: t("tabmenu.close_others"),
+      disabled: tabs.length < 2,
+      run: () => void closeOthersAndRelease(r.id, index),
+    },
+    {
+      label: t("tabmenu.close_right"),
+      disabled: !hasRight,
+      run: () => void closeRightAndRelease(r.id, index),
+    },
+    {
+      label: t("tabmenu.close_unpinned"),
+      run: () => void closeUnpinnedAndRelease(r.id),
+    },
+    {
+      separator: true,
       label: t(pinned ? "tabmenu.unpin" : "tabmenu.pin"),
       run: () => {
         setPinnedTab(r.id, index, !pinned);
         void synchronize();
       },
     },
+    ...(doc ? [{
+      label: t("tabmenu.split_right"),
+      run: () => {
+        const added = split(r.id, "row");
+        if (added) {
+          openIn(added, doc);
+          void synchronize();
+        }
+      },
+    }, {
+      label: t("tabmenu.new_window"),
+      run: () => void import("../state/document-windows").then((windows) => windows.openCurrentInNewWindow(doc)),
+    }] : []),
+    ...(!pinned ? paneIds.map((id) => ({
+      label: t("tabmenu.to_pane", { pane: String(layoutPanes().indexOf(id) + 1) }),
+      run: () => { if (moveTabToPane(r.id, index, id)) void synchronize(); },
+    })) : []),
+    ...(doc ? [{
+      separator: true,
+      label: t("tabmenu.copy_path"),
+      run: () => {
+        void navigator.clipboard?.writeText(doc).then(
+          () => notify(t("tabmenu.path_copied", { path: doc }), "info"),
+          () => notify(t("tabmenu.copy_failed"), "guasto"),
+        );
+      },
+    }, {
+      label: t("commands.explorer.reveal"),
+      run: () => {
+        activateTab(r.id, index);
+        void synchronize().then(() => allCommands().find((entry) => entry.id === "shell.explorer.reveal")?.run?.());
+      },
+    }] : []),
     {
+      separator: true,
       label: t("tabmenu.left"),
+      disabled: index === 0,
       run: () => {
         if (moveTab(r.id, index, index - 1)) void synchronize();
       },
     },
     {
       label: t("tabmenu.right"),
+      disabled: index >= tabs.length - 1,
       run: () => {
         if (moveTab(r.id, index, index + 1)) void synchronize();
       },
     },
-    ...(!pinned ? paneIds.map((id) => ({
-      label: t("tabmenu.to_pane", { pane: id }),
-      run: () => { if (moveTabToPane(r.id, index, id)) void synchronize(); },
-    })) : []),
-    ...stacks.filter((name) => name !== target.stack).map((name) => ({
+    ...stacks.filter((name) => name !== target.stack).map((name, i) => ({
+      separator: i === 0,
       label: t("tabmenu.to_stack", { stack: name }),
-      run: () => setTabStack(r.id, index, name),
+      run: () => {
+        setTabStack(r.id, index, name);
+        void synchronize();
+      },
     })),
     {
+      separator: stacks.filter((name) => name !== target.stack).length === 0,
       label: t("tabmenu.new_stack"),
-      run: () => {
-        const name = window.prompt(t("tabmenu.stack_name"));
-        if (name?.trim()) setTabStack(r.id, index, name);
+      run: async () => {
+        const name = await promptText({ title: t("tabmenu.new_stack"), label: t("tabmenu.stack_name") });
+        if (name?.trim()) {
+          setTabStack(r.id, index, name);
+          void synchronize();
+        }
       },
     },
-    {
+    ...(target.stack ? [{
       label: t("tabmenu.leave_stack"),
-      run: () => setTabStack(r.id, index, null),
-    },
-    {
-      label: t("tabmenu.close_others"),
-      run: () => void closeOthersAndRelease(r.id, index),
-    },
-    {
-      label: t("tabmenu.close_unpinned"),
-      run: () => void closeUnpinnedAndRelease(r.id),
-    },
+      run: () => {
+        setTabStack(r.id, index, null);
+        void synchronize();
+      },
+    }] : []),
   ]);
+}
+
+/// Chiude una tab per indice, come la ×: rilascia ciò che teneva.
+async function closeTabAt(paneId: string, index: number): Promise<void> {
+  const tab = paneState(paneId)?.tabs[index] ?? null;
+  closeTab(paneId, index);
+  await releaseTab(paneId, tab);
+  await synchronize();
+}
+
+/// Chiude le tab a destra di `index` (le appuntate restano).
+async function closeRightAndRelease(paneId: string, index: number): Promise<void> {
+  const tabs = paneState(paneId)?.tabs ?? [];
+  const victims: Tab[] = [];
+  for (let i = tabs.length - 1; i > index; i--) {
+    if (tabs[i]!.pinned) continue;
+    victims.push(tabs[i]!);
+    closeTab(paneId, i);
+  }
+  for (const tab of victims) await releaseTab(paneId, tab);
+  await synchronize();
 }
 
 /// Il drag di una tab (P06/F21): riordino dentro il riquadro, spostamento fra
@@ -1234,8 +1569,13 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   tab.classList.toggle("tab-pinned", target.pinned === true);
   tab.setAttribute("aria-selected", String(selected));
   tab.tabIndex = tabStop ? 0 : -1;
-  tab.querySelector<HTMLElement>(".tab-name")!.textContent =
-    (target.pinned ? "📌 " : "") + described.label + (target.stack ? ` [${target.stack}]` : "");
+  const name = tab.querySelector<HTMLElement>(".tab-name")!;
+  name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "");
+  const pin = target.pinned ? iconEl("pin") : null;
+  if (pin) {
+    pin.classList.add("tab-pin");
+    name.prepend(pin);
+  }
   setTooltip(tab, target.k === "doc" ? target.doc : described.label);
   tab.setAttribute(
     "aria-label",
@@ -1268,7 +1608,28 @@ function redrawTabs(doc: string): void {
   }
 }
 
+/// Ciò che tab, stato di salvataggio e banner mostrano della sessione di un
+/// documento, com'era all'ultimo ridisegno. Ogni battuta emette `changed`, ma
+/// di rado cambia qualcosa di visibile: ridisegnare lo stesso a ogni carattere
+/// ridipingeva tutte le tab e forzava un layout (`scrollIntoView`).
+const paintedSessions = new Map<string, string>();
+
+/// Registra l'aspetto della sessione; falso se è quello già disegnato.
+function sessionLookChanged(doc: string): boolean {
+  const state = documentSessions.saveState(doc);
+  if (state === null) {
+    paintedSessions.delete(doc);
+    return true;
+  }
+  const look = `${state}|${documentSessions.isDirty(doc)}|${documentSessions.isDeletionPending(doc)}`;
+  if (paintedSessions.get(doc) === look) return false;
+  paintedSessions.set(doc, look);
+  return true;
+}
+
 function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
+  // Gli altri eventi ridisegnano comunque: il gate va tenuto al passo.
+  const looksDifferent = sessionLookChanged(event.id);
   if (event.kind === "deletion-changed") {
     setReadOnlyForDocument(event.id, event.pending);
     drawSave();
@@ -1277,6 +1638,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     return;
   }
   if (event.kind === "changed") {
+    if (!looksDifferent) return;
     drawSave();
     redrawTabs(event.id);
     drawPaneConflict(event.id);
@@ -1290,7 +1652,12 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     if (event.outcome === "conflitto") {
       notify(t("document.save_conflict", { doc: event.id }), "guasto");
     } else {
-      notify(t("document.save_failed", { doc: event.id, reason: errorText(event.error) }), "guasto");
+      // La bozza resta sporca e il salvataggio automatico ci riprova alla
+      // prossima battuta; «Riprova» serve a chi non vuole scrivere per salvare.
+      notify(t("document.save_failed", { doc: event.id, reason: errorText(event.error) }), "guasto", {
+        label: t("app.retry"),
+        run: saveNow,
+      });
     }
     drawSave();
     redrawTabs(event.id);
@@ -1338,7 +1705,15 @@ export function freezeDocumentSurfaces(frozen: boolean): void {
 /// rimasta nel file della macchina — resta il suo id: è brutto e non mente, che
 /// è l'ordine giusto delle due cose.
 function nameTab(tab: Tab): string {
-  return tab.k === "doc" ? docTitle(tab.doc) : (primaryView(tab.view)?.title ?? tab.view);
+  if (tab.k !== "doc") return primaryView(tab.view)?.title ?? tab.view;
+  const title = docTitle(tab.doc);
+  // Due note omonime aperte in due cartelle: la tab dice anche la cartella,
+  // o le due tab si leggono uguali.
+  const twin = layoutPanes().some((id) => paneState(id)?.tabs.some((other) =>
+    other.k === "doc" && other.doc !== tab.doc && docTitle(other.doc) === title));
+  if (!twin) return title;
+  const folder = tab.doc.includes("/") ? tab.doc.slice(0, tab.doc.lastIndexOf("/")).split("/").pop()! : "/";
+  return `${title} · ${folder}`;
 }
 
 /// Il nome di una nota come si legge su una tab: l'ultimo pezzo del path, senza
@@ -1523,13 +1898,14 @@ function destroySurface(r: Pane): void {
 /// diffuso. `syncDoc` e non `setDoc`: il documento è lo stesso, è cambiato il
 /// testo sotto — e chi lo sta guardando non perde il punto in cui era. Il
 /// cambio non entra nella history locale: un aggiornamento arrivato da un
-/// altro riquadro non diventa un undo di questo.
+/// altro riquadro non diventa un undo di questo. Le classi della nota non si
+/// rileggono qui: vengono dall'indice, che cambia al salvataggio e lo dice con
+/// `index_updated`; chiederle a ogni battuta era un IPC per carattere.
 function applySurfaceUpdate(r: Pane, doc: string, update: DocumentSurfaceUpdate): void {
   if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
   r.surface?.syncDoc(
     update.kind === "operation" ? { text: update.text, operation: update.operation } : update.text,
   );
-  refreshNoteClasses(r, doc);
 }
 
 /// Il testo di un documento: dal buffer se qualcuno lo tiene già aperto, dal
@@ -1576,6 +1952,22 @@ function supportsMode(id: string): boolean {
 function drawToolbar(r: Pane): void {
   const bar = r.toolbarEl;
   if (!bar.firstElementChild) {
+    // Indietro e avanti nella cronologia del riquadro: i comandi ci sono, qui
+    // diventano visibili.
+    const nav = document.createElement("span");
+    nav.className = "pane-nav";
+    for (const [direction, glyph] of [["back", "←"], ["forward", "→"]] as const) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.nav = direction;
+      button.textContent = glyph;
+      button.addEventListener("click", () => {
+        focusPane(r.id);
+        if (direction === "back") paneBack();
+        else paneForward();
+      });
+      nav.append(button);
+    }
     const crumbs = document.createElement("span");
     crumbs.className = "muted";
     // Il posto dello stato del documento (salvataggio, statistiche): lo
@@ -1587,17 +1979,31 @@ function drawToolbar(r: Pane): void {
     group.setAttribute("role", "group");
     const menu = document.createElement("button");
     menu.type = "button";
+    menu.dataset.paneMenu = "";
     menu.textContent = "…";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
-    bar.append(crumbs, status, group, menu);
+    bar.append(nav, crumbs, status, group, menu);
   }
-  const crumbs = bar.children[0] as HTMLElement;
-  const status = bar.children[1] as HTMLElement;
-  const group = bar.children[2] as HTMLElement;
-  const menu = bar.children[3] as HTMLElement;
+  const nav = bar.querySelector<HTMLElement>(":scope > .pane-nav")!;
+  const crumbs = bar.querySelector<HTMLElement>(":scope > .muted")!;
+  const status = bar.querySelector<HTMLElement>(":scope > .pane-status-slot")!;
+  const group = bar.querySelector<HTMLElement>(":scope > .segmented")!;
+  const menu = bar.querySelector<HTMLElement>(":scope > [data-pane-menu]")!;
+  const history = paneState(r.id)?.history;
+  for (const button of nav.querySelectorAll<HTMLButtonElement>("button")) {
+    const back = button.dataset.nav === "back";
+    const label = t(back ? "commands.pane.back" : "commands.pane.forward");
+    button.setAttribute("aria-label", label);
+    setTooltip(button, label);
+    button.disabled = back ? !history?.past.length : !history?.future.length;
+  }
   if (r.id === layout.focus) hostPaneStatus(status);
   const tab = activeTab(r.id);
+  // Senza una tab non c'è documento di cui dire lo stato né una strada da
+  // ripercorrere a vista: restano il menu del riquadro e lo stato vuoto.
+  status.hidden = tab?.k !== "doc";
+  nav.hidden = !tab;
   const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
   crumbs.textContent = path;
   setTooltip(crumbs, path);
@@ -1736,34 +2142,65 @@ export function hasUnknownPersistedMode(paneId: string): boolean {
 /// spiegazione, Mantieni mio / Usa disco, conferma esplicita con conseguenza,
 /// comandi shell.doc.conflict.* esistenti. Mai merge finto, mai risoluzione
 /// automatica; buffer recuperabile finché irrisolto (solo ridisegno + comandi).
+/// I conflitti rimandati: il banner si riduce a una riga finché chi scrive non
+/// torna a deciderlo. La decisione resta sua; rimandarla non la perde.
+const deferredConflicts = new Set<string>();
+
 function drawConflict(r: Pane, doc: string | null): void {
   const box = r.conflictEl;
   box.replaceChildren();
   if (!doc || documentSessions.saveState(doc) !== "conflitto") {
+    if (doc) deferredConflicts.delete(doc);
     box.hidden = true;
     box.removeAttribute("role");
     return;
   }
   box.hidden = false;
-  box.setAttribute("role", "alert");
+  box.className = "conflict-banner";
   box.setAttribute("data-banner", "document.conflict.body");
+  const current = doc;
+  if (deferredConflicts.has(current)) {
+    // Ridotto: una riga che dice che la scelta aspetta, e la riapre.
+    box.dataset.collapsed = "";
+    box.setAttribute("role", "status");
+    const line = document.createElement("span");
+    line.textContent = t("document.conflict.pending", { doc: docTitle(current) });
+    const reopen = document.createElement("button");
+    reopen.type = "button";
+    reopen.className = "link-button";
+    reopen.textContent = t("document.conflict.resume");
+    reopen.addEventListener("click", () => {
+      deferredConflicts.delete(current);
+      drawConflict(r, current);
+    });
+    box.append(line, reopen);
+    return;
+  }
+  delete box.dataset.collapsed;
+  box.setAttribute("role", "alert");
   const title = document.createElement("strong");
-  title.textContent = t("document.conflict.title", { doc });
+  title.textContent = t("document.conflict.title", { doc: docTitle(current) });
   const body = document.createElement("p");
   body.textContent = t("document.conflict.body");
-  body.setAttribute("data-doc", doc);
+  body.setAttribute("data-doc", current);
   const actions = document.createElement("div");
+  actions.className = "conflict-actions";
+  const compare = document.createElement("button");
+  compare.type = "button";
+  compare.textContent = t("document.conflict.compare");
   const mine = document.createElement("button");
   mine.type = "button";
   mine.className = "primary";
+  mine.dataset.choice = "mine";
   mine.textContent = t("document.conflict.keep_mine");
   const theirs = document.createElement("button");
   theirs.type = "button";
+  theirs.dataset.choice = "theirs";
   theirs.textContent = t("document.conflict.use_disk");
   const cancel = document.createElement("button");
   cancel.type = "button";
+  cancel.className = "link-button";
   cancel.textContent = t("document.conflict.cancel");
-  const current = doc;
   const ask = async (choice: "mine" | "theirs"): Promise<void> => {
     const detail = choice === "mine"
       ? t("commands.doc.conflict.mine.desc")
@@ -1776,19 +2213,26 @@ function drawConflict(r: Pane, doc: string | null): void {
         danger: choice === "theirs",
       },
     );
-    if (!ok) {
-      notify(t("document.conflict.cancel"), "info");
-      return;
-    }
+    if (!ok) return;
+    deferredConflicts.delete(current);
     if (choice === "mine") await resolveKeepingMine(current);
     else await resolveDiscardingMine(current);
   };
+  compare.addEventListener("click", () => {
+    // Il testo su disco si legge adesso, non da una copia: è quello che la
+    // scelta «usa la versione su disco» metterebbe al posto del mio.
+    void api.readDocument(current).then(
+      (source) => openCompare(t("document.conflict.compare_title", { doc: docTitle(current) }), source.text, documentSessions.text(current) ?? ""),
+      (error: unknown) => notify(t("document.reload_failed", { doc: current }) + ` ${errorText(error)}`, "guasto"),
+    );
+  });
   mine.addEventListener("click", () => void ask("mine"));
   theirs.addEventListener("click", () => void ask("theirs"));
   cancel.addEventListener("click", () => {
-    notify(t("document.conflict.cancel"), "info");
+    deferredConflicts.add(current);
+    drawConflict(r, current);
   });
-  actions.append(mine, theirs, cancel);
+  actions.append(compare, mine, theirs, cancel);
   box.append(title, body, actions);
 }
 
@@ -1879,6 +2323,25 @@ export async function openDocument(id: string): Promise<void> {
     // by its reservation. A tab already present still counts as a watcher.
     if (!isOpen(id)) await documentSessions.release(id);
   }
+}
+
+/// Apre una nota chiesta da una view che sta in un riquadro (il grafo, una
+/// dashboard): la view resta dov'è e la nota si apre accanto — nel primo altro
+/// riquadro, o in uno nuovo a destra. Chi clicca un nodo vuole leggere la nota
+/// senza perdere il grafo che stava guardando.
+export async function openFromView(id: string): Promise<void> {
+  const here = layout.focus;
+  if (activeTab(here)?.k !== "view") {
+    await openDocument(id);
+    return;
+  }
+  const other = layoutPanes().find((pane) => pane !== here) ?? split(here, "row");
+  if (!other) {
+    await openDocument(id);
+    return;
+  }
+  focusPane(other);
+  await openDocument(id);
 }
 
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa
@@ -2131,6 +2594,30 @@ function scheduleContext(): void {
 /// Che sia **del riquadro** e non della finestra è la parte nuova, ed è ciò che
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
+/// L'ultima modalità di scrittura di ogni riquadro, per tornare dalla Lettura.
+const writingModes = new Map<string, string>();
+
+async function toggleReading(): Promise<void> {
+  const id = layout.focus;
+  const current = paneState(id)?.mode;
+  if (current === "reading") {
+    const back = writingModes.get(id) ?? "live_preview";
+    await setMode(supportsMode(back) ? back : "live_preview");
+    return;
+  }
+  await setMode("reading");
+}
+
+/// `Mod-s`: il salvataggio è automatico, ma chi lo chiede vuole saperlo fatto
+/// adesso — e dopo un guasto è il gesto che riprova.
+async function saveNow(): Promise<void> {
+  const pending = await flushPendingSave();
+  drawSave();
+  if (pending.length > 0) {
+    notify(t("document.save_now_failed", { doc: pending.map(docTitle).join(", ") }), "guasto");
+  }
+}
+
 export async function setMode(next: string): Promise<void> {
   const r = panes.get(layout.focus);
   const mode = r?.surface?.modes.find((candidate) => candidate.id === next);
@@ -2138,6 +2625,8 @@ export async function setMode(next: string): Promise<void> {
   const doc = activeDoc();
   // Nessun salvataggio per cambiare modo: la lettura si monta dal buffer
   // corrente, e il cambio è immediato anche con modifiche non salvate.
+  const previous = paneState(layout.focus)?.mode;
+  if (mode.id === "reading" && previous && previous !== "reading") writingModes.set(layout.focus, previous);
   setPaneMode(layout.focus, mode.id);
   r.root.dataset.mode = mode.id;
   r.surface.setMode(mode.id);

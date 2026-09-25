@@ -29,7 +29,9 @@ import {
   foldGutter,
   foldKeymap,
   indentOnInput,
+  indentUnit,
   syntaxHighlighting,
+  syntaxTree,
 } from "@codemirror/language";
 import {
   autocompletion,
@@ -48,6 +50,7 @@ import {
   redoDepth,
 } from "@codemirror/commands";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import type { SyntaxNode } from "@lezer/common";
 import { vim } from "@replit/codemirror-vim";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
@@ -95,6 +98,19 @@ export interface ScrollAnchor {
   readonly top: number;
 }
 
+/// Dove sta il cursore principale, per le scorciatoie a carattere (la palette
+/// slash): una battuta dentro codice, link o URL resta testo.
+export interface CursorContext {
+  /// La selezione principale è vuota.
+  readonly empty: boolean;
+  /// La riga del cursore fino al cursore.
+  readonly lineBefore: string;
+  /// Il cursore sta dentro codice, formula, link, URL o HTML.
+  readonly literal: boolean;
+  /// La posizione del cursore, per `insertAt`.
+  readonly head: number;
+}
+
 export interface TextEngineOptions {
   onChange(change: EditorChange): void;
   onSelectionChange(): void;
@@ -104,6 +120,35 @@ export interface TextEngineOptions {
 // Mirrors the core machine settings read by every mounted text surface.
 export const EDITOR_SPELLCHECK_KEY = "editor.spellcheck";
 export const EDITOR_VIM_KEY = "editor.vim";
+export const EDITOR_LINE_NUMBERS_KEY = "editor.line-numbers";
+export const EDITOR_LINE_WRAP_KEY = "editor.line-wrap";
+export const EDITOR_INDENT_KEY = "editor.indent";
+const INPUT_KEYS = new Set([
+  EDITOR_SPELLCHECK_KEY,
+  EDITOR_VIM_KEY,
+  EDITOR_LINE_NUMBERS_KEY,
+  EDITOR_LINE_WRAP_KEY,
+  EDITOR_INDENT_KEY,
+]);
+
+/// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
+/// nasconde il margine), a capo, e l'unità di rientro. I default sono quelli
+/// che la superficie aveva prima che fossero impostazioni.
+interface LayoutPreferences {
+  readonly lineNumbers: boolean;
+  readonly lineWrap: boolean;
+  readonly indent: string;
+}
+const DEFAULT_LAYOUT: LayoutPreferences = { lineNumbers: true, lineWrap: true, indent: "2" };
+
+function layoutExtensions(layout: LayoutPreferences): Extension {
+  const unit = layout.indent === "tab" ? "\t" : layout.indent === "4" ? "    " : "  ";
+  return [
+    layout.lineNumbers ? lineNumbers() : [],
+    layout.lineWrap ? EditorView.lineWrapping : [],
+    indentUnit.of(unit),
+  ];
+}
 
 type ApplyOrigin = "user" | "sync" | "undo" | "redo" | "replace";
 
@@ -114,6 +159,7 @@ export class TextEngine {
   private readonly historyCompartment = new Compartment();
   private readonly vimCompartment = new Compartment();
   private readonly spellcheckCompartment = new Compartment();
+  private readonly layoutCompartment = new Compartment();
   private readonly nativeHistoryExtension = nativeHistory({
     minDepth: 100,
     newGroupDelay: 500,
@@ -129,6 +175,8 @@ export class TextEngine {
   private spellcheckEnabled = true;
   private appliedVim = false;
   private appliedSpellcheck = true;
+  private layout: LayoutPreferences = DEFAULT_LAYOUT;
+  private appliedLayout: LayoutPreferences = DEFAULT_LAYOUT;
   private pendingInput = false;
   private applyOrigin: ApplyOrigin = "user";
   private readOnlyEnabled = false;
@@ -152,9 +200,7 @@ export class TextEngine {
     this.view.scrollDOM.tabIndex = 0;
     this.view.scrollDOM.setAttribute("role", "document");
     this.stopSettings = onEvent("setting_changed", (event) => {
-      if (event.key === EDITOR_VIM_KEY || event.key === EDITOR_SPELLCHECK_KEY) {
-        void this.loadInputPreferences();
-      }
+      if (INPUT_KEYS.has(event.key)) void this.loadInputPreferences();
     });
     void this.loadInputPreferences();
     this.stopLanguage = onLanguage(() => this.updateAccessibleLabels());
@@ -295,6 +341,23 @@ export class TextEngine {
     };
   }
 
+  public cursorContext(): CursorContext {
+    const { state } = this.view;
+    const main = state.selection.main;
+    const line = state.doc.lineAt(main.head);
+    let literal = false;
+    for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(main.head, -1); node; node = node.parent) {
+      if (LITERAL_NODE.test(node.name)) {
+        literal = true;
+        break;
+      }
+    }
+    // A wikilink still being typed has no syntax node yet.
+    const before = state.doc.sliceString(line.from, main.head);
+    if (before.lastIndexOf("[[") > before.lastIndexOf("]]")) literal = true;
+    return { empty: main.empty, lineBefore: before, literal, head: main.head };
+  }
+
   public destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -331,6 +394,15 @@ export class TextEngine {
     this.reconfigureInput();
   }
 
+  private setLayout(next: LayoutPreferences): void {
+    const same = next.lineNumbers === this.layout.lineNumbers
+      && next.lineWrap === this.layout.lineWrap
+      && next.indent === this.layout.indent;
+    if (this.disposed || same) return;
+    this.layout = next;
+    this.reconfigureInput();
+  }
+
   private reconfigureInput(): void {
     if (this.view.compositionStarted) {
       this.pendingInput = true;
@@ -340,6 +412,10 @@ export class TextEngine {
     if (this.appliedVim !== this.vimEnabled) {
       this.appliedVim = this.vimEnabled;
       this.view.dispatch({ effects: this.vimCompartment.reconfigure(this.vimEnabled ? vim() : []) });
+    }
+    if (this.appliedLayout !== this.layout) {
+      this.appliedLayout = this.layout;
+      this.view.dispatch({ effects: this.layoutCompartment.reconfigure(layoutExtensions(this.layout)) });
     }
     if (this.appliedSpellcheck !== this.spellcheckEnabled) {
       this.appliedSpellcheck = this.spellcheckEnabled;
@@ -357,10 +433,15 @@ export class TextEngine {
     try {
       const entries = await settings();
       if (this.disposed || generation !== this.settingsGeneration) return;
-      const spellcheck = entries.find((entry) => entry.spec.key === EDITOR_SPELLCHECK_KEY);
-      const vimSetting = entries.find((entry) => entry.spec.key === EDITOR_VIM_KEY);
-      this.setSpellcheck(spellcheck?.value !== false);
-      this.setVim(vimSetting?.value === true);
+      const value = (key: string) => entries.find((entry) => entry.spec.key === key)?.value;
+      this.setSpellcheck(value(EDITOR_SPELLCHECK_KEY) !== false);
+      this.setVim(value(EDITOR_VIM_KEY) === true);
+      const indent = value(EDITOR_INDENT_KEY);
+      this.setLayout({
+        lineNumbers: value(EDITOR_LINE_NUMBERS_KEY) !== false,
+        lineWrap: value(EDITOR_LINE_WRAP_KEY) !== false,
+        indent: indent === "tab" || indent === "4" ? indent : "2",
+      });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.
     }
@@ -390,6 +471,35 @@ export class TextEngine {
     if (typeof text !== "string" || text.length === 0 || text.includes("\r")) return false;
     const { from, to } = this.view.state.selection.main;
     return this.applyUserEdit(from, to, text);
+  }
+
+  /// Inserisce testo a una posizione di `cursorContext` come battuta
+  /// dell'utente; il cursore che stava lì finisce dopo il testo.
+  public insertAt(head: number, text: string): boolean {
+    if (this.disposed || this.readOnlyEnabled || text.length === 0 || text.includes("\r")) return false;
+    if (!Number.isSafeInteger(head) || head < 0 || head > this.view.state.doc.length) return false;
+    const main = this.view.state.selection.main;
+    this.view.dispatch({
+      changes: { from: head, insert: Text.of(text.split("\n")) },
+      ...(main.empty && main.head === head ? { selection: { anchor: head + text.length } } : {}),
+      userEvent: "input",
+    });
+    return true;
+  }
+
+  /// Inserisce testo nel punto dello schermo dove qualcosa è stato lasciato
+  /// cadere, come battuta dell'utente; il cursore va dopo il testo. Fuori dal
+  /// testo (oltre l'ultima riga) vale la posizione più vicina.
+  public insertAtPoint(x: number, y: number, text: string): boolean {
+    if (this.disposed || this.readOnlyEnabled || text.length === 0 || text.includes("\r")) return false;
+    const at = this.view.posAtCoords({ x, y }, false);
+    this.view.dispatch({
+      changes: { from: at, insert: Text.of(text.split("\n")) },
+      selection: { anchor: at + text.length },
+      userEvent: "input.drop",
+    });
+    this.view.focus();
+    return true;
   }
 
   /// Il blocco visibile in cima, senza toccare selezione né cronologia.
@@ -599,7 +709,7 @@ export class TextEngine {
       }),
       this.readOnly.of(EditorState.readOnly.of(this.readOnlyEnabled)),
       this.historyCompartment.of(this.nativeHistoryExtension),
-      lineNumbers(),
+      this.layoutCompartment.of(layoutExtensions(this.layout)),
       highlightActiveLineGutter(),
       highlightSpecialChars(),
       foldGutter({ openText: "↓" }),
@@ -643,11 +753,12 @@ export class TextEngine {
       ]),
       keymap.of([indentWithTab]),
       this.theme.of(editorTheme(this.currentTheme)),
-      EditorView.lineWrapping,
       this.listener,
     ];
   }
 }
+
+const LITERAL_NODE = /code|url|link|math|html|comment|frontmatter/i;
 
 /// Le righe con una selezione non vuota perdono la classe `cm-activeLine`:
 /// la riga attiva è una `lineDecoration` e in paint order copre il rettangolo

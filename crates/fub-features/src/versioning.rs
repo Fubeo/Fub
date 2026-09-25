@@ -134,6 +134,9 @@ const GREW: &str = "grew";
 const SHRANK: &str = "shrank";
 const SAME_SIZE: &str = "same_size";
 const RESTORE_LABEL: &str = "restore";
+const RESTORE_QUESTION: &str = "restore.question";
+const RESTORE_CONFIRM_LABEL: &str = "restore.confirm";
+const RESTORE_CANCEL_LABEL: &str = "restore.cancel";
 const CLOSE_PREVIEW: &str = "close_preview";
 const BINARY_PREVIEW: &str = "binary_preview";
 const COMPARE_LABEL: &str = "compare";
@@ -213,6 +216,12 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SAME_SIZE, "Stessa dimensione")
             .with(WHEN, "{when}")
             .with(RESTORE_LABEL, "Ripristina")
+            .with(
+                RESTORE_QUESTION,
+                "Riportare la nota a questa versione? Il testo di adesso resta nella cronologia.",
+            )
+            .with(RESTORE_CONFIRM_LABEL, "Sì, ripristina")
+            .with(RESTORE_CANCEL_LABEL, "Annulla")
             .with(CLOSE_PREVIEW, "Chiudi l'anteprima")
             .with(
                 BINARY_PREVIEW,
@@ -293,6 +302,12 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SAME_SIZE, "Same size")
             .with(WHEN, "{when}")
             .with(RESTORE_LABEL, "Restore")
+            .with(
+                RESTORE_QUESTION,
+                "Take the note back to this version? The current text stays in the history.",
+            )
+            .with(RESTORE_CONFIRM_LABEL, "Yes, restore")
+            .with(RESTORE_CANCEL_LABEL, "Cancel")
             .with(CLOSE_PREVIEW, "Close the preview")
             .with(
                 BINARY_PREVIEW,
@@ -1718,8 +1733,13 @@ pub const VERSION_RESTORE: &str = "version.restore";
 const A_PREVIEW: &str = "preview";
 /// Chiude l'anteprima aperta.
 const A_CLOSE_PREVIEW: &str = "close_preview";
-/// Ripristina la versione il cui istante sta nel payload.
+/// Chiede di ripristinare la versione il cui istante sta nel payload: il
+/// pannello domanda prima di riscrivere la nota.
 const A_RESTORE: &str = "restore";
+/// Il sì alla domanda: ripristina davvero.
+const A_RESTORE_CONFIRM: &str = "restore_confirm";
+/// Il no: la domanda sparisce e non succede niente.
+const A_RESTORE_CANCEL: &str = "restore_cancel";
 /// Confronta con la nota attuale la versione il cui istante sta nel payload.
 const A_COMPARE: &str = "compare";
 /// Il testo intero della versione scelta, invece del confronto che è la vista
@@ -1733,6 +1753,8 @@ const TS: &str = "ts";
 const PREVIEW_STATE: &str = "preview";
 /// Se l'anteprima aperta mostra il confronto invece del testo.
 const COMPARE_STATE: &str = "compare";
+/// L'istante di cui si sta chiedendo il ripristino, finché non si risponde.
+const CONFIRM_STATE: &str = "restore_confirm";
 
 /// Le versioni di un documento secondo la voce già caricata dell'indice.
 fn versions_of_docs(doc: Option<&DocVersions>) -> Vec<VersionRef> {
@@ -1882,7 +1904,24 @@ impl ViewProvider for HistoryView {
             // palette o un plugin. Una view che riscrivesse il documento da sé
             // avrebbe un'operazione fuori dal registro — quindi fuori
             // dall'annullamento, fuori dalla simulazione e fuori dalla palette.
+            // Ripristinare riscrive la nota, e da questo pannello l'annullamento
+            // del comando non arriva a chi ha cliccato: prima si chiede.
             A_RESTORE => {
+                let (Some(_), Some(ts)) = (
+                    same_notes(&action, host),
+                    action.payload.get(TS).and_then(|v| v.as_u64()),
+                ) else {
+                    return Ok(ViewUpdate::None);
+                };
+                host.set_view_state(CONFIRM_STATE, Some(serde_json::Value::from(ts)))?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            A_RESTORE_CANCEL => {
+                host.set_view_state(CONFIRM_STATE, None)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            A_RESTORE_CONFIRM => {
+                host.set_view_state(CONFIRM_STATE, None)?;
                 let (Some(doc), Some(ts)) = (
                     same_notes(&action, host),
                     action.payload.get(TS).and_then(|v| v.as_u64()),
@@ -1998,7 +2037,25 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         // ripristino è l'unico primario, e c'è solo per le versioni passate:
         // ripristinare l'attuale riscriverebbe il file con ciò che contiene.
         let mut actions = Vec::new();
-        if !current {
+        let asking = !current
+            && host
+                .view_state(CONFIRM_STATE)?
+                .and_then(|v| v.as_u64())
+                .is_some_and(|asked| asked == ts);
+        if asking {
+            // La domanda al posto del bottone, dove l'occhio già stava.
+            actions.push(UiNode::text(Text::key(RESTORE_QUESTION)));
+            actions.push(UiNode::button(
+                Text::key(RESTORE_CONFIRM_LABEL),
+                Intent::Danger,
+                ActionRef::with(A_RESTORE_CONFIRM, payload.clone()),
+            ));
+            actions.push(UiNode::button(
+                Text::key(RESTORE_CANCEL_LABEL),
+                Intent::Neutral,
+                ActionRef::new(A_RESTORE_CANCEL),
+            ));
+        } else if !current {
             actions.push(UiNode::button(
                 Text::key(RESTORE_LABEL),
                 Intent::Primary,

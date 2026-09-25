@@ -1,6 +1,6 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
 import type { DocumentMatch, Span } from "../host/contract";
-import { matchingDocuments, searchExpression, vaultStatus } from "../host/query";
+import { matchingDocuments, SearchSyntaxError, searchExpression, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { rowsToShow } from "../rules/results";
 import { $ } from "../ui/dom";
@@ -38,14 +38,24 @@ const race = new Race();
 /// (U17) e cambiarla non tocca quella di un altro vault (R07: il cambio vault
 /// passa da `clearSearch`, non da una memoria condivisa).
 export function mountSearch(lifetime: Lifetime): void {
-  lifetime.listen(searchInputEl, "input", () => { excluded.clear(); excludedFolders.clear(); scheduleSearch(); });
+  // Le esclusioni restano mentre si affina la query: si vedono come etichette
+  // sopra i risultati e si tolgono una per una (o tutte con Esc).
+  lifetime.listen(searchInputEl, "input", () => scheduleSearch());
   lifetime.listen(searchInputEl, "keydown", (e) => {
     // La casella ha i suoi tasti, e sono questi: Invio apre il primo risultato,
     // Escape pulisce l'input e resta nel campo. La navigazione completa della
     // lista (Frecce/Enter/Esc) vive sulla lista, che è una listbox.
     if (e.key === "Enter") {
       e.preventDefault();
-      openFirstResult();
+      // Una battuta ancora in attesa del debounce: prima si cerca il testo che
+      // c'è, poi si apre il suo primo risultato — non quello della query di prima.
+      if (searchTimer !== undefined) {
+        window.clearTimeout(searchTimer);
+        searchTimer = undefined;
+        void runSearch().then(openFirstResult);
+      } else {
+        openFirstResult();
+      }
     } else if (e.key === "Escape") {
       searchInputEl.value = "";
       excluded.clear();
@@ -53,6 +63,7 @@ export function mountSearch(lifetime: Lifetime): void {
       race.cancel();
       searchResultsEl.innerHTML = "";
       searchSummaryEl.textContent = "";
+      drawExclusions();
     }
   });
   wireSearchListKeys(lifetime);
@@ -84,7 +95,10 @@ export function mountSearch(lifetime: Lifetime): void {
 
 function scheduleSearch(): void {
   window.clearTimeout(searchTimer);
-  searchTimer = window.setTimeout(() => void runSearch(), 180);
+  searchTimer = window.setTimeout(() => {
+    searchTimer = undefined;
+    void runSearch();
+  }, 180);
 }
 
 /// Azzera input e risultati senza toccare il pannello mostrato: il cambio
@@ -133,10 +147,26 @@ function testoP8(chiave: ChiaveP8, mostrati = 0, totale = 0): string {
 }
 async function runSearch(): Promise<void> {
   const query = searchInputEl.value.trim();
+  drawExclusions();
   if (!query) {
     race.cancel();
     searchResultsEl.innerHTML = "";
     searchSummaryEl.textContent = "";
+    return;
+  }
+  // Una sintassi a metà (`tag:` senza valore, una virgoletta aperta) è lo
+  // stato normale di chi sta scrivendo, non un guasto: lo si dice nel
+  // riepilogo e i risultati di prima restano dove sono.
+  let expression: ReturnType<typeof searchExpression>;
+  try {
+    expression = searchExpression(query, [...excluded], [...excludedFolders]);
+  } catch (error) {
+    if (error instanceof SearchSyntaxError) {
+      race.cancel();
+      searchSummaryEl.textContent = t("search.syntax_incomplete", { reason: error.message });
+      return;
+    }
+    showSearchResults([], errorText(error), false, 0);
     return;
   }
   // Caricamento: si mostra solo se il giro è ancora l'ultimo dopo 180ms, così
@@ -169,9 +199,7 @@ async function runSearch(): Promise<void> {
       const isFailure = (v: SearchPage | SearchFailure): v is SearchFailure => "error" in v;
       const page = await expected(
         Promise.resolve()
-          .then(() => matchingDocuments(
-            searchExpression(query, [...excluded], [...excludedFolders]), { offset: 0, limit: SEARCH_PAGE },
-          ))
+          .then(() => matchingDocuments(expression, { offset: 0, limit: SEARCH_PAGE }))
           .catch((e: unknown): SearchFailure => ({ error: errorText(e) })),
       );
       if (isFailure(page)) {
@@ -248,6 +276,7 @@ function showSearchResults(
   searchResultsEl.innerHTML = "";
   shownHits = hits;
   const tools = document.createElement("li");
+  tools.className = "search-tools";
   const copy = document.createElement("button");
   copy.type = "button";
   copy.className = "search-action";
@@ -260,22 +289,25 @@ function showSearchResults(
     void navigator.clipboard.writeText(shownHits.map((hit) => hit.doc).join("\n"))
       .catch((err: unknown) => notify(errorText(err), "guasto"));
   });
-  tools.append(copy);
-  const explain = document.createElement("button");
-  explain.type = "button";
-  explain.className = "search-action";
-  explain.textContent = t("search.explain");
-  explain.addEventListener("click", () => {
-    try {
-      const detail = document.createElement("pre");
-      detail.textContent = JSON.stringify(searchExpression(searchInputEl.value, [...excluded], [...excludedFolders]), null, 2);
-      tools.querySelector("pre")?.remove();
-      tools.append(detail);
-    } catch (err) {
-      notify(errorText(err));
+  if (hits.length > 0) tools.append(copy);
+  // Gli operatori della barra, detti a parole: la sintassi c'è ed è ricca, ma
+  // da un segnaposto non si scopre.
+  const help = document.createElement("button");
+  help.type = "button";
+  help.className = "search-action";
+  help.textContent = t("search.syntax_help");
+  help.setAttribute("aria-expanded", "false");
+  help.addEventListener("click", () => {
+    const open = tools.querySelector(".search-syntax");
+    if (open) {
+      open.remove();
+      help.setAttribute("aria-expanded", "false");
+      return;
     }
+    tools.append(syntaxHelp());
+    help.setAttribute("aria-expanded", "true");
   });
-  tools.append(explain);
+  tools.append(help);
   searchResultsEl.append(tools);
   // Le righe si montano **fuori dal documento** e si attaccano in una volta
   // sola. Non è cosmetica: una pagina di cinquanta note con le loro occorrenze
@@ -314,8 +346,13 @@ function showSearchResults(
     openAt(button, row.doc, row.byteOffset);
     li.appendChild(button);
     if (row.occurrence === undefined) {
+      // Le azioni della riga compaiono col puntatore o col fuoco sulla riga:
+      // fuori dal giro del Tab, che resta una fermata per risultato, e
+      // raggiungibili con → dal risultato (← o Esc per tornare).
+      button.setAttribute("aria-keyshortcuts", "ArrowRight");
       const omit = document.createElement("button");
       omit.type = "button";
+      omit.tabIndex = -1;
       omit.className = "search-action";
       omit.textContent = t("search.exclude");
       omit.setAttribute("aria-label", t("search.exclude_doc", { doc: row.doc }));
@@ -329,6 +366,7 @@ function showSearchResults(
         const folder = row.doc.slice(0, slash);
         const omitFolder = document.createElement("button");
         omitFolder.type = "button";
+        omitFolder.tabIndex = -1;
         omitFolder.className = "search-action";
         omitFolder.textContent = t("search.exclude_folder", { folder });
         omitFolder.setAttribute("aria-label", t("search.exclude_folder", { folder }));
@@ -367,6 +405,66 @@ function showSearchResults(
   }
   searchResultsEl.appendChild(newItems);
   wireSearchListSelection();
+}
+
+/// Gli operatori della barra, uno per riga: cosa si scrive e cosa fa.
+const SYNTAX: readonly (readonly [string, Parameters<typeof t>[0]])[] = [
+  ["tag:progetto", "search.syntax.tag"],
+  ["folder:Diario", "search.syntax.folder"],
+  ["path:2026/", "search.syntax.path"],
+  ["file:riunione", "search.syntax.file"],
+  ["heading:obiettivi", "search.syntax.heading"],
+  ["task:todo", "search.syntax.task"],
+  ['"frase esatta"', "search.syntax.phrase"],
+  ["/regex/", "search.syntax.regex"],
+  ["[stato:fatto]", "search.syntax.property"],
+  ["a OR b", "search.syntax.or"],
+  ["-parola", "search.syntax.not"],
+  ["(a OR b) c", "search.syntax.group"],
+];
+
+function syntaxHelp(): HTMLElement {
+  const list = document.createElement("dl");
+  list.className = "search-syntax";
+  for (const [example, key] of SYNTAX) {
+    const term = document.createElement("dt");
+    const code = document.createElement("code");
+    code.textContent = example;
+    term.append(code);
+    const detail = document.createElement("dd");
+    detail.textContent = t(key);
+    list.append(term, detail);
+  }
+  return list;
+}
+
+/// Le esclusioni in corso, come etichette che si tolgono con un clic.
+function drawExclusions(): void {
+  let bar = document.getElementById("search-exclusions");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "search-exclusions";
+    bar.className = "search-exclusions";
+    searchSummaryEl.after(bar);
+  }
+  bar.replaceChildren();
+  const chips: [string, () => void][] = [
+    ...[...excluded].map((doc): [string, () => void] => [pageName(doc), () => excluded.delete(doc)]),
+    ...[...excludedFolders].map((folder): [string, () => void] => [`${folder}/`, () => excludedFolders.delete(folder)]),
+  ];
+  bar.hidden = chips.length === 0;
+  for (const [label, remove] of chips) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "search-chip";
+    chip.textContent = `− ${label} ×`;
+    chip.setAttribute("aria-label", t("search.exclusion_remove", { name: label }));
+    chip.addEventListener("click", () => {
+      remove();
+      void runSearch();
+    });
+    bar.append(chip);
+  }
 }
 
 /// La riga «crea questa nota».
@@ -464,10 +562,34 @@ function wireSearchListKeys(lifetime: Lifetime): void {
     if (items.length === 0) return;
     const current = document.activeElement;
     const at = current instanceof HTMLButtonElement ? items.indexOf(current) : -1;
+    // Un'azione di riga (fuori dal Tab): ← ed Esc riportano al suo risultato,
+    // → passa all'azione dopo.
+    if (current instanceof HTMLButtonElement && current.classList.contains("search-action") &&
+        !current.closest(".search-tools")) {
+      const row = current.closest("li");
+      const actions = [...(row?.querySelectorAll<HTMLButtonElement>(".search-action") ?? [])];
+      if (e.key === "ArrowLeft" || e.key === "Escape") {
+        e.preventDefault();
+        const index = actions.indexOf(current);
+        (index > 0 && e.key === "ArrowLeft" ? actions[index - 1] : row?.querySelector<HTMLButtonElement>(".search-result"))?.focus();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        actions[actions.indexOf(current) + 1]?.focus();
+        return;
+      }
+    }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const next = e.key === "ArrowDown" ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
       items[next]?.focus();
+    } else if (e.key === "ArrowRight" && at >= 0) {
+      const action = items[at]?.closest("li")?.querySelector<HTMLButtonElement>(".search-action");
+      if (action) {
+        e.preventDefault();
+        action.focus();
+      }
     } else if (e.key === "Enter" && current instanceof HTMLButtonElement) {
       e.preventDefault();
       current.click();

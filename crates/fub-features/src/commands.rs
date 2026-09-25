@@ -357,6 +357,12 @@ fn catalog_it() -> StringCatalog {
         )
         .with("note.create.properties.title", "Proprietà iniziali")
         .with("note.create.properties.desc", "Oggetto JSON testuale delle proprietà iniziali del frontmatter; salvate insieme alla nota.")
+        .with("note.create.folder.title", "Cartella")
+        .with(
+            "note.create.folder.desc",
+            "La cartella in cui nasce la nota, al posto di quella configurata. \
+             Un nome che è già un path non viene ribasato.",
+        )
         .with("note.rename.title", "Rinomina nota")
         .with(
             "note.rename.desc",
@@ -724,6 +730,12 @@ fn catalog_en() -> StringCatalog {
         )
         .with("note.create.properties.title", "Initial properties")
         .with("note.create.properties.desc", "A JSON object encoded as text with the initial frontmatter properties, saved atomically with the note.")
+        .with("note.create.folder.title", "Folder")
+        .with(
+            "note.create.folder.desc",
+            "The folder the note is born in, instead of the configured one. A \
+             name that is already a path is not rebased.",
+        )
         .with("note.rename.title", "Rename note")
         .with(
             "note.rename.desc",
@@ -1035,6 +1047,7 @@ impl CoreCommands {
             command(NOTES_CREATE)
                 .with_param(parameter(NOTES_CREATE, "name", ParamKind::Text))
                 .with_param(parameter(NOTES_CREATE, "properties", ParamKind::Text))
+                .with_param(parameter(NOTES_CREATE, "folder", ParamKind::Text))
                 // --- strutturali (decisione 0013) ---------------------------------------
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_RENAME)
@@ -1505,11 +1518,22 @@ fn notes_create(
 ) -> Result<CommandOutcome, PluginError> {
     let requested = args.text("name").map(str::trim).filter(|n| !n.is_empty());
     let initial = initial_properties(args.text("properties"))?;
+    // «Nuova nota qui»: la cartella scelta vale al posto di quella configurata.
+    let folder = args
+        .text("folder")
+        .map(fub_abi::rules::folders::normalized)
+        .filter(|f| !f.is_empty());
+    let placed = |name: &str| match &folder {
+        Some(folder) if !name.contains('/') => format!("{folder}/{name}"),
+        _ => name.to_string(),
+    };
     let id = match requested {
-        Some(name) => DocId::new(with_extension(name)),
+        Some(name) => DocId::new(with_extension(&placed(name))),
         // Il nome libero lo chiede all'host: la convenzione D3 è una sola, e
         // sta nel vault che è l'unico a sapere cosa è occupato.
-        None => host.free_name(&DocId::new(format!("{UNTITLED}.{DEFAULT_EXTENSION}"))),
+        None => host.free_name(&DocId::new(placed(&format!(
+            "{UNTITLED}.{DEFAULT_EXTENSION}"
+        )))),
     };
 
     if mode.is_dry_run() {
@@ -2665,6 +2689,43 @@ mod tests {
         spec.validate_args(&args)?;
         CoreCommands.invoke(command, args, mode, host)
     }
+    #[test]
+    fn creation_in_a_folder_places_the_free_name_there() {
+        let mut host = MemoryHost::new();
+        let navigate = |outcome: CommandOutcome| match outcome.effect {
+            CommandEffect::Navigate { doc } => doc,
+            other => panic!("navigate atteso, arrivato {other:?}"),
+        };
+        let first = invoke(
+            &mut host,
+            NOTES_CREATE,
+            json!({ "folder": "Progetti/" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert_eq!(
+            navigate(first).as_str(),
+            format!("Progetti/{UNTITLED}.{DEFAULT_EXTENSION}")
+        );
+        let named = invoke(
+            &mut host,
+            NOTES_CREATE,
+            json!({ "folder": "Progetti", "name": "Idea" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert_eq!(navigate(named).as_str(), "Progetti/Idea.md");
+        // Un path esplicito non viene ribasato.
+        let explicit = invoke(
+            &mut host,
+            NOTES_CREATE,
+            json!({ "folder": "Progetti", "name": "Altrove/Idea" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert_eq!(navigate(explicit).as_str(), "Altrove/Idea.md");
+    }
+
     #[test]
     fn creation_persists_prefilled_properties_atomically_and_rejects_duplicate_keys() {
         let mut host = MemoryHost::new();

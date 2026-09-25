@@ -386,6 +386,16 @@ pub(crate) fn mount_with_formats(
             ));
         };
 
+        // Le giornaliere e gli inserimenti leggono impostazioni che il loro
+        // componente dichiara: senza questa riga `daily.folder` e compagne non
+        // erano di nessuno, il pannello non le mostrava e ogni lettura cadeva
+        // sul default.
+        #[cfg(feature = "template")]
+        let bundle = if feature.id == fub_features::TEMPLATE_ID {
+            bundle.configuring(fub_features::TemplateCommands::settings())
+        } else {
+            bundle
+        };
         let mut bundle = bundle.speaking("it", catalog_assembled(feature.id, (feature.catalog)()));
         // `fub.trash` invoca `trash.restore`/`trash.empty`, che appartengono al
         // bundle dei comandi. Il service marker è una dipendenza di montaggio:

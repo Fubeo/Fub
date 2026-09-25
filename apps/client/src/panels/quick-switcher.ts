@@ -58,6 +58,7 @@ import { createNote } from "../state/vault";
 import { stableIdentifier, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { setTooltip } from "../ui/tooltip";
+import { markedTerms } from "../ui/highlight";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { cancelScheduledPreview, hidePreview, schedulePreview, showStickyPreview } from "../state/preview";
 import { openDocument } from "./document";
@@ -232,7 +233,9 @@ export function openQuickSwitcher(): void {
         // Il nome pagina davanti e il path sotto, come in una linguetta: due note
         // omonime in cartelle diverse sono il caso in cui il nome non basta, ed
         // è anche il caso in cui questa superficie serve di più.
-        title.textContent = pageName(entry.doc);
+        // Le parole scritte, segnate nel nome: si vede *perché* una nota è lì,
+        // e fra tre omonime quale combacia meglio.
+        title.append(markedTerms(pageName(entry.doc), input.value.trim()));
         where.textContent = entry.doc;
         setTooltip(button, entry.doc);
       } else if (entry.k === "query") {
@@ -400,6 +403,15 @@ export function openQuickSwitcher(): void {
       list.children[selected]?.scrollIntoView?.({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
+      // Maiusc+Invio crea la nota col nome scritto anche se qualcosa combacia:
+      // cercare «Riunione» e trovare «Riunione di marzo» non vuol dire che
+      // «Riunione» esista. La voce «crea» resta solo a risultati vuoti, dove
+      // non si preme per sbaglio; qui il gesto è esplicito.
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const name = searchedName(input.value.trim());
+        if (name) void create(name);
+        return;
+      }
       const entry = visibleItems[selected];
       if (entry && entry.k === "doc" && e.altKey) {
         hidePreview();

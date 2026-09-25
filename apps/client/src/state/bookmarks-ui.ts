@@ -1,3 +1,4 @@
+import { confirmInShell, pickFromList, promptText } from "../ui/dialogs";
 import { activeTab, documents, layout, pane } from "./layout";
 import {
   addBookmark,
@@ -62,10 +63,10 @@ async function refresh(): Promise<void> {
   save.type = "button";
   save.textContent = t("bookmarks.save_tabs");
   setTooltip(save, t("bookmarks.save_tabs_hint"));
-  save.addEventListener("click", () => {
+  save.addEventListener("click", async () => {
     const p = pane(layout.focus);
     if (!p) return;
-    const name = window.prompt(t("bookmarks.name_title"), t("bookmarks.default_tabs"));
+    const name = await promptText({ title: t("bookmarks.save_tabs"), label: t("bookmarks.name_title"), value: t("bookmarks.default_tabs") });
     if (name === null) return;
     const created = saveTabsAsBookmark(name, [...p.tabs]);
     if (!created) notify(t("bookmarks.save_failed"), "guasto");
@@ -92,18 +93,18 @@ async function refresh(): Promise<void> {
     if (workspaceId) options.push({ label: t("bookmarks.type.workspace"), target: { k: "workspace", workspace: workspaceId } });
     showContextMenu(event, options.map(({ label, target }) => ({
       label,
-      run: () => {
+      run: async () => {
         if (target.k === "doc" && "heading" in target) {
-          const heading = window.prompt(t("bookmarks.type.heading"), "");
+          const heading = await promptText({ title: t("bookmarks.add"), label: t("bookmarks.type.heading") });
           if (!heading) return;
           target.heading = heading;
         }
         if (target.k === "doc" && "block" in target) {
-          const block = window.prompt(t("bookmarks.type.block"), "");
+          const block = await promptText({ title: t("bookmarks.add"), label: t("bookmarks.type.block") });
           if (!block) return;
           target.block = block;
         }
-        const title = window.prompt(t("bookmarks.name_title"), label);
+        const title = await promptText({ title: t("bookmarks.add"), label: t("bookmarks.name_title"), value: label });
         if (title === null) return;
         if (!addBookmark(title, target)) notify(t("bookmarks.save_failed"), "guasto");
         else void refresh();
@@ -151,14 +152,20 @@ async function refresh(): Promise<void> {
       row.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         showContextMenu(e, [
-          { label: t("bookmarks.rename"), run: () => {
-            const next = window.prompt(t("bookmarks.rename_title"), g.title);
+          { label: t("bookmarks.rename"), run: async () => {
+            const next = await promptText({ title: t("bookmarks.rename"), label: t("bookmarks.rename_title"), value: g.title });
             if (next === null) return;
             renameGroup(g.id, next);
             void refresh();
           } },
-          { label: t("bookmarks.delete"), danger: true, run: () => {
-            if (!window.confirm(t("bookmarks.delete_group_confirm", { title: g.title }))) return;
+          { separator: true, label: t("bookmarks.delete"), danger: true, run: async () => {
+            const ok = await confirmInShell({
+              title: t("bookmarks.delete"),
+              message: t("bookmarks.delete_group_confirm", { title: g.title }),
+              okLabel: t("bookmarks.delete"),
+              danger: true,
+            });
+            if (!ok) return;
             removeGroup(g.id);
             void refresh();
           } },
@@ -208,13 +215,13 @@ function rowFor(b: Bookmark): HTMLElement {
     e.preventDefault();
     showContextMenu(e, [
       { label: t("bookmarks.open"), run: () => void openBookmarkTarget(b.target) },
-      { label: t("bookmarks.rename"), run: () => {
-        const next = window.prompt(t("bookmarks.rename_title"), b.title);
+      { label: t("bookmarks.rename"), run: async () => {
+        const next = await promptText({ title: t("bookmarks.rename"), label: t("bookmarks.rename_title"), value: b.title });
         if (next === null) return;
         renameBookmark(b.id, next);
         void refresh();
       } },
-      { label: t("bookmarks.move_up"), run: () => {
+      { separator: true, label: t("bookmarks.move_up"), run: () => {
         const list = listBookmarks();
         const at = list.findIndex((x) => x.id === b.id);
         if (moveBookmark(b.id, Math.max(0, at - 1))) void refresh();
@@ -225,8 +232,14 @@ function rowFor(b: Bookmark): HTMLElement {
         if (moveBookmark(b.id, Math.min(list.length - 1, at + 1))) void refresh();
       } },
       { label: t("bookmarks.assign_group"), run: () => void assignGroupFlow(b.id).then(() => refresh()) },
-      { label: t("bookmarks.delete"), danger: true, run: () => {
-        if (!window.confirm(t("bookmarks.delete_confirm", { title: b.title }))) return;
+      { separator: true, label: t("bookmarks.delete"), danger: true, run: async () => {
+        const ok = await confirmInShell({
+          title: t("bookmarks.delete"),
+          message: t("bookmarks.delete_confirm", { title: b.title }),
+          okLabel: t("bookmarks.delete"),
+          danger: true,
+        });
+        if (!ok) return;
         removeBookmark(b.id);
         void refresh();
       } },
@@ -244,7 +257,7 @@ function describeTarget(b: Bookmark): string {
   if (target.k === "view") return target.view;
   if (target.k === "workspace") return target.workspace;
   if (target.k === "web") return target.url;
-  return `${target.tabs.length} tab`;
+  return t("bookmarks.tabs_count", { count: target.tabs.length });
 }
 
 async function assignGroupFlow(bookmarkId: string): Promise<void> {
@@ -254,16 +267,16 @@ async function assignGroupFlow(bookmarkId: string): Promise<void> {
     if (created) setBookmarkGroup(bookmarkId, created.id);
     return;
   }
-  const names = groups.map((g, i) => `${i + 1}. ${g.title}`).join("\n");
-  const choice = window.prompt(t("bookmarks.assign_title", { groups: names }), "1");
-  if (choice === null) return;
-  const at = Number.parseInt(choice.trim(), 10) - 1;
-  if (!Number.isInteger(at) || at < 0 || at >= groups.length) return;
-  setBookmarkGroup(bookmarkId, groups[at]!.id);
+  const choice = await pickFromList<string>({
+    title: t("bookmarks.assign_group"),
+    placeholder: t("bookmarks.group_filter"),
+    items: groups.map((g) => ({ label: g.title, detail: String(g.bookmarkIds.length), value: g.id })),
+  });
+  if (choice !== null) setBookmarkGroup(bookmarkId, choice);
 }
 
 export async function newBookmarkGroup(): Promise<{ id: string } | null> {
-  const name = window.prompt(t("bookmarks.group_title"), "");
+  const name = await promptText({ title: t("bookmarks.new_group"), label: t("bookmarks.group_title") });
   if (name === null) return null;
   const group = addGroup(name);
   if (!group) {

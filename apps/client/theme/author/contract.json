@@ -135,9 +135,13 @@
     "intent-neutral",
     "onboarding",
     "onboarding-actions",
+    "onboarding-recent-item",
+    "onboarding-forget",
+    "onboarding-trouble",
     "views-bottom",
     "sidebar",
     "inspector-pane",
+    "drawer-scrim",
     "panel-title",
     "link-button",
     "danger",
@@ -149,6 +153,9 @@
     "folder",
     "has-note",
     "chevron",
+    "tree-empty",
+    "leaf",
+    "no-icon",
     "drop-before",
     "drop-after",
     "drop-into",
@@ -167,6 +174,11 @@
     "hit-occurrence",
     "hit-create",
     "hit-snippet",
+    "search-action",
+    "search-tools",
+    "search-syntax",
+    "search-exclusions",
+    "search-chip",
     "segmented",
     "segmented--titlebar",
     "segmented--wide",
@@ -181,8 +193,19 @@
     "tab-name",
     "dirty",
     "tab-close",
+    "tab-pin",
     "pane",
     "pane-toolbar",
+    "conflict-banner",
+    "conflict-actions",
+    "compare-box",
+    "compare-lines",
+    "compare-line",
+    "pane-nav",
+    "pane-divider",
+    "pane-empty",
+    "pane-empty-title",
+    "pane-empty-actions",
     "focus",
     "pane-preview",
     "grid-surface",
@@ -239,6 +262,7 @@
     "embed",
     "embed-cycle",
     "embed-too-deep",
+    "image-missing",
     "empty-note",
     "link-preview",
     "doc-preview",
@@ -305,6 +329,9 @@
     "titlebar-btn-text",
     "titlebar-badge",
     "context-menu",
+    "menu-label",
+    "menu-hint",
+    "menu-separator",
     "modale",
     "palette-box",
     "palette-input",
@@ -324,6 +351,10 @@
     "palette-actions",
     "palette-error",
     "toast",
+    "toast-text",
+    "toast-action",
+    "toast-more",
+    "toast-close",
     "pane-status",
     "save-state",
     "ha-novita",
@@ -340,6 +371,13 @@
     "graph-count",
     "graph-panel",
     "graph-panel-toggle",
+    "graph-panel-check",
+    "graph-toolbar",
+    "graph-toolbar-field",
+    "graph-refresh",
+    "graph-legend",
+    "graph-swatch",
+    "graph-timeline",
     "graph-panel-popover",
     "graph-panel-titolo",
     "graph-panel-sezione",
@@ -396,7 +434,10 @@
       "hooks": [
         "app",
         "onboarding",
-        "onboarding-actions"
+        "onboarding-actions",
+        "onboarding-recent-item",
+        "onboarding-forget",
+        "onboarding-trouble"
       ],
       "states": [
         "rest"
@@ -576,7 +617,8 @@
       "hooks": [
         "views-bottom",
         "sidebar",
-        "inspector-pane"
+        "inspector-pane",
+        "drawer-scrim"
       ],
       "states": [
         "rest"
@@ -630,7 +672,10 @@
         "row-icon",
         "folder",
         "has-note",
-        "chevron"
+        "chevron",
+        "tree-empty",
+        "leaf",
+        "no-icon"
       ],
       "states": [
         "rest",
@@ -661,7 +706,12 @@
         "hit-title",
         "hit-occurrence",
         "hit-create",
-        "hit-snippet"
+        "hit-snippet",
+        "search-action",
+        "search-tools",
+        "search-syntax",
+        "search-exclusions",
+        "search-chip"
       ],
       "states": [
         "rest",
@@ -699,7 +749,17 @@
         "pane",
         "focus",
         "pane-preview",
-        "pane-toolbar"
+        "pane-toolbar",
+        "conflict-banner",
+        "conflict-actions",
+        "compare-box",
+        "compare-lines",
+        "compare-line",
+        "pane-nav",
+        "pane-divider",
+        "pane-empty",
+        "pane-empty-title",
+        "pane-empty-actions"
       ],
       "states": [
         "rest",
@@ -715,6 +775,7 @@
         "tab-name",
         "dirty",
         "tab-close",
+        "tab-pin",
         "tab-view"
       ],
       "states": [
@@ -891,6 +952,7 @@
         "embed",
         "embed-cycle",
         "embed-too-deep",
+        "image-missing",
         "empty-note",
         "block-footnote-definition",
         "footnote-ref",
@@ -917,7 +979,10 @@
     {
       "name": "context-menu",
       "hooks": [
-        "context-menu"
+        "context-menu",
+        "menu-label",
+        "menu-hint",
+        "menu-separator"
       ],
       "states": [
         "rest",
@@ -981,6 +1046,10 @@
       "name": "notices",
       "hooks": [
         "toast",
+        "toast-text",
+        "toast-action",
+        "toast-more",
+        "toast-close",
         "pane-status",
         "save-state",
         "ha-novita",
@@ -1007,6 +1076,13 @@
         "graph-count",
         "graph-panel",
         "graph-panel-toggle",
+        "graph-panel-check",
+        "graph-toolbar",
+        "graph-toolbar-field",
+        "graph-refresh",
+        "graph-legend",
+        "graph-swatch",
+        "graph-timeline",
         "graph-panel-popover",
         "graph-panel-titolo",
         "graph-panel-sezione",
@@ -1465,7 +1541,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 261,
+    "hooks": 299,
     "state_names": 7,
     "assigned_states": 129,
     "components": 42,

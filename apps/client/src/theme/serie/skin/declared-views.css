@@ -23,6 +23,20 @@
 .views-status .declared-view .ui-stack {
   gap: var(--space-5);
 }
+/* Una riga sola nella toolbar: la regola generica delle pile in riga va a
+   capo, e qui due righe escono dalla barra sopra il documento. */
+.views-status,
+.views-status .declared-view .ui-stack[data-dir="row"] {
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.views-status .declared-view .ui-stack[data-dir="row"] > .ui-text {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* La ribbon: i pulsanti che aprono qualcosa. La colonna e la larghezza le
    dà la struttura (`.rail`, che `#views-ribbon` porta nel markup); qui è
@@ -68,4 +82,11 @@
    più. */
 .panel-title.clickable {
   cursor: pointer;
+}
+
+/* Un'azione in volo: il bottone resta dov'è, ma dice che sta lavorando e non
+   accetta un secondo click finché il provider non risponde. */
+.clickable[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.7;
 }

@@ -193,10 +193,12 @@ fn the_data_channel_responds_with_schema_value_and_origin() {
         .map(|and| and.spec.key.as_str())
         .filter(|k| fub_abi::settings::permission_of_key(k).is_none())
         .collect();
+    // Nell'ordine in cui i manifest le hanno dichiarate, non per chiave: chi
+    // dichiara le scrive nell'ordine in cui vanno lette.
     assert_eq!(
         declared,
-        vec!["editor.font-size", "versioning.enabled"],
-        "in key order"
+        vec!["versioning.enabled", "editor.font-size"],
+        "in declaration order"
     );
     let versioning = all
         .iter()
@@ -229,12 +231,8 @@ fn the_data_channel_responds_with_schema_value_and_origin() {
             "fub:write-settings",
             "fub:read-session",
             "fub:read-selection",
-        ]
-        .into_iter()
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>(),
-        "one line per granted permission, in key order"
+        ],
+        "one line per granted permission, in declaration order"
     );
     assert!(
         all.iter()

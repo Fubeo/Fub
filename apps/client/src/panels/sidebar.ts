@@ -12,6 +12,7 @@
 // `#views-left`, e `showPanel` lo mostra nascondendo files, search e tutte
 // le altre view dichiarate. L'id è quello della view (una stringa), e non
 // un nome cablato: chi scopre le view dal backend non sa quali ci sono.
+import { revealSidePanel } from "../ui/side-panels";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 
@@ -119,13 +120,27 @@ export function mountSidebarCommands(): void {
     title: "commands.panel.files",
     description: "commands.panel.files.desc",
     layer: "global",
-    run: () => showPanel("files"),
+    run: () => {
+      // Il comando porta il fuoco dove promette: la barra si apre (anche come
+      // cassetto) e si entra nell'albero, sulla voce che il tab troverebbe.
+      revealSidePanel("sidebar");
+      showPanel("files");
+      document.querySelector<HTMLElement>('#file-list li[role="treeitem"][tabindex="0"], #file-list li[role="treeitem"]')?.focus();
+    },
   });
   registerShellCommand({
     id: "shell.panel.search",
     title: "commands.panel.search",
     description: "commands.panel.search.desc",
     layer: "global",
-    run: () => showPanel("search"),
+    run: () => {
+      revealSidePanel("sidebar");
+      showPanel("search");
+      const input = document.getElementById("search-input");
+      if (input instanceof HTMLInputElement) {
+        input.focus();
+        input.select();
+      }
+    },
   });
 }

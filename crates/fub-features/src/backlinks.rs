@@ -17,7 +17,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::model::{DocId, Span};
+use fub_abi::model::{DocId, LinkTarget, PropertyScalar, PropertyValue, Span};
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
 };
@@ -25,7 +25,8 @@ use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     BacklinkRef, DocumentMatch, Excerpts, HostApi, IndexQuery, IndexResult, LinkDirection, Page,
-    ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
+    PropertyEntry, PropertySelect, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
+    ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 
@@ -173,6 +174,7 @@ impl ViewProvider for BacklinksView {
                 .map_err(Clone::clone)
                 .map(|(_, refs)| (refs.len(), build_outgoing_view(refs))),
         );
+        let filter_result = filter_query(host);
         let unlinked = part(
             UNLINKED,
             UNLINKED_COUNT,
@@ -189,7 +191,7 @@ impl ViewProvider for BacklinksView {
                     .map(|r| r.source.clone())
                     .chain(targets)
                     .collect::<BTreeSet<_>>();
-                unlinked_mentions(host, &active, &linked, &filter_query(host)?)
+                unlinked_mentions(host, &active, &linked, &filter_result.clone()?)
                     .map(|mentions| (mentions.len(), build_unlinked_view(&mentions)))
             })(),
         );
@@ -199,7 +201,7 @@ impl ViewProvider for BacklinksView {
             (|| {
                 let (targets, _) = outgoing_result.clone()?;
                 let linked = targets.into_iter().collect::<BTreeSet<_>>();
-                outbound_unlinked_mentions(host, &active, &linked, &filter_query(host)?)
+                outbound_unlinked_mentions(host, &active, &linked, &filter_result.clone()?)
                     .map(|mentions| (mentions.len(), build_unlinked_view(&mentions)))
             })(),
         );
@@ -207,19 +209,25 @@ impl ViewProvider for BacklinksView {
         // la sa scrivere, non la prima cosa del pannello. Sta in fondo, chiuso
         // finché non ce n'è uno attivo.
         let filter = filter_text(host)?;
+        let mut filter_children = vec![UiNode::new(UiKind::TextInput {
+            field: FILTER_STATE.to_string(),
+            label: Some(Text::key(FILTER_STATE)),
+            value: filter.clone(),
+            placeholder: None,
+            action: Some(ActionRef::new(FILTER_ACTION)),
+        })
+        .with_key(FILTER_STATE)];
+        // Un filtro che non si legge lo dice accanto al campo, col punto in cui
+        // si è fermato, invece di far fallire le sezioni con una frase generica.
+        if let Err(PluginError::BadArgs(reason)) = &filter_result {
+            filter_children.push(UiNode::failed(reason.clone(), None));
+        }
         let filter_section = UiNode::keyed(
             FILTER_SECTION,
             UiKind::Section {
                 title: Text::key(FILTER_SECTION),
                 collapsed: filter.is_empty(),
-                children: vec![UiNode::new(UiKind::TextInput {
-                    field: FILTER_STATE.to_string(),
-                    label: Some(Text::key(FILTER_STATE)),
-                    value: filter,
-                    placeholder: None,
-                    action: Some(ActionRef::new(FILTER_ACTION)),
-                })
-                .with_key(FILTER_STATE)],
+                children: filter_children,
             },
         );
         Ok(UiNode::column(
@@ -290,7 +298,7 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
     }
     let doc = DocId::new(id);
     if host.document_revision(&doc)? != Revision::new(base) {
-        return Err(PluginError::Conflict("La menzione è cambiata.".into()));
+        return Err(PluginError::Conflict(Text::key(MENTION_CHANGED)));
     }
     let source = host.read_document(&doc)?;
     let span = usize::try_from(start).ok().zip(usize::try_from(end).ok());
@@ -298,19 +306,57 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
         return Ok(ViewUpdate::None);
     };
     if source.get(start..end) != Some(mention) {
-        return Err(PluginError::Conflict("La menzione è cambiata.".into()));
+        return Err(PluginError::Conflict(Text::key(MENTION_CHANGED)));
     }
+    // La parola resta quella che si leggeva: si collega, non si riscrive. Il
+    // riferimento è il più corto che porta davvero alla nota, e se la parola
+    // è scritta altrimenti (un alias) resta come testo del link.
+    let reference = link_reference(host, &DocId::new(target))?;
+    let link = if reference == mention {
+        format!("[[{reference}]]")
+    } else {
+        format!("[[{reference}|{mention}]]")
+    };
     host.apply_edit(
         &doc,
         EditRequest::new(
             Revision::new(base),
-            vec![TextEdit::replace(
-                Span::new(start, end),
-                format!("[[{target}]]"),
-            )],
+            vec![TextEdit::replace(Span::new(start, end), link)],
         ),
     )?;
     Ok(ViewUpdate::None)
+}
+
+/// Il testo del wikilink che porta a `target`: il nome pagina se la
+/// risoluzione del vault lo manda lì, poi il percorso senza estensione, e solo
+/// in ultimo il percorso intero. Chiede al kernel invece di indovinare la
+/// regola: due note omonime in cartelle diverse sono esattamente il caso in
+/// cui il nome da solo porterebbe altrove.
+fn link_reference(host: &dyn ReadApi, target: &DocId) -> Result<String, PluginError> {
+    let path = target.as_str();
+    let without_extension = path
+        .rsplit_once('.')
+        .map(|(stem, _)| stem)
+        .filter(|stem| !stem.is_empty() && !stem.ends_with('/'));
+    for candidate in [Some(target.page_name()), without_extension]
+        .into_iter()
+        .flatten()
+    {
+        let resolved = match host.query_index(IndexQuery::Resolve {
+            target: LinkTarget::wiki(candidate),
+            from: None,
+        }) {
+            Ok(resolved) => resolved,
+            // Un host che non sa risolvere non ferma il gesto: il percorso
+            // intero porta sempre alla nota, com'era prima.
+            Err(PluginError::Unserved(_)) => break,
+            Err(error) => return Err(error),
+        };
+        if matches!(resolved, IndexResult::Resolved(Some(ref found)) if found.doc == *target) {
+            return Ok(candidate.to_string());
+        }
+    }
+    Ok(path.to_string())
 }
 
 /// Il segnaposto (nessun backlink / nessuna nota aperta). Ora è ciò che dice di
@@ -339,7 +385,20 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(OUTGOING, "Uscenti")
             .with(UNLINKED, "Menzioni non collegate")
             .with(OUTBOUND_UNLINKED, "Menzioni uscenti non collegate")
-            .with(FILTER_STATE, "Filtro (QueryExpr JSON)")
+            .with(
+                FILTER_STATE,
+                "Filtra le menzioni (come nella ricerca: tag:progetto, path:note/…)",
+            )
+            .with(FILTER_INVALID, "Il filtro non si legge dal carattere {at}.")
+            .with(
+                FILTER_INVALID_JSON,
+                "Il filtro JSON non si legge dal carattere {at}: {reason}",
+            )
+            .with(
+                MENTION_CHANGED,
+                "La menzione è cambiata: il pannello si aggiorna.",
+            )
+            .with(NOTE_CHANGED, "La nota è cambiata: il pannello si aggiorna.")
             .with(EMPTY, "Nessun backlink.")
             .with(EMPTY_OUTGOING, "Nessun collegamento uscente.")
             .with(EMPTY_UNLINKED, "Nessuna menzione non collegata.")
@@ -360,7 +419,23 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(OUTGOING, "Outgoing")
             .with(UNLINKED, "Unlinked mentions")
             .with(OUTBOUND_UNLINKED, "Outgoing unlinked mentions")
-            .with(FILTER_STATE, "Filter (QueryExpr JSON)")
+            .with(
+                FILTER_STATE,
+                "Filter mentions (as in search: tag:project, path:notes/…)",
+            )
+            .with(
+                FILTER_INVALID,
+                "The filter cannot be read from character {at}.",
+            )
+            .with(
+                FILTER_INVALID_JSON,
+                "The JSON filter cannot be read from character {at}: {reason}",
+            )
+            .with(
+                MENTION_CHANGED,
+                "The mention changed: the panel is refreshing.",
+            )
+            .with(NOTE_CHANGED, "The note changed: the panel is refreshing.")
             .with(EMPTY, "No backlinks.")
             .with(EMPTY_OUTGOING, "No outgoing links.")
             .with(EMPTY_UNLINKED, "No unlinked mentions.")
@@ -396,6 +471,10 @@ const EMPTY_OUTGOING: &str = "empty_outgoing";
 const EMPTY_UNLINKED: &str = "empty_unlinked";
 const FAILED: &str = "failed";
 const CONVERT_LABEL: &str = "convert_label";
+const FILTER_INVALID: &str = "filter_invalid";
+const FILTER_INVALID_JSON: &str = "filter_invalid_json";
+const MENTION_CHANGED: &str = "mention_changed";
+const NOTE_CHANGED: &str = "note_changed";
 const OUTGOING_COUNT: &str = "outgoing_count";
 const UNLINKED_COUNT: &str = "unlinked_count";
 
@@ -603,8 +682,29 @@ fn filter_query(host: &dyn ReadApi) -> Result<QueryExpr, PluginError> {
             "unlinked filter exceeds 16 KiB".into(),
         ));
     }
-    serde_json::from_str(&text)
-        .map_err(|e| PluginError::BadArgs(format!("invalid unlinked filter: {e}").into()))
+    let text = text.trim();
+    // Un filtro salvato quando il campo voleva JSON vale ancora.
+    if text.starts_with('{') {
+        return serde_json::from_str(text).map_err(|e| {
+            PluginError::BadArgs(Text::message(
+                FILTER_INVALID_JSON,
+                vec![
+                    Arg::int("at", e.column() as i64),
+                    Arg::text("reason", e.to_string()),
+                ],
+            ))
+        });
+    }
+    // La stessa grammatica della barra di ricerca: chi sa cercare sa filtrare.
+    fub_abi::rules::search_syntax::parse(text, false).map_err(|fault| {
+        let at = text
+            .get(..fault.at)
+            .map_or(text.chars().count(), |before| before.chars().count());
+        PluginError::BadArgs(Text::message(
+            FILTER_INVALID,
+            vec![Arg::int("at", at as i64 + 1)],
+        ))
+    })
 }
 
 /// Distribuire AND sulle due DNF, mai ignorare un filtro o ridurre a una pagina
@@ -730,7 +830,7 @@ fn unlinked_mentions(
                 ));
             }
             if host.document_revision(&hit.doc)? != base {
-                return Err(PluginError::Conflict("La menzione è cambiata.".into()));
+                return Err(PluginError::Conflict(Text::key(MENTION_CHANGED)));
             }
             let mut spans = BTreeSet::new();
             for name in &names {
@@ -777,7 +877,7 @@ fn outbound_unlinked_mentions(
         ));
     }
     if host.document_revision(active)? != base {
-        return Err(PluginError::Conflict("La nota è cambiata.".into()));
+        return Err(PluginError::Conflict(Text::key(NOTE_CHANGED)));
     }
     let mut excluded = linked.iter().cloned().collect::<Vec<_>>();
     excluded.push(active.clone());
@@ -798,7 +898,7 @@ fn outbound_unlinked_mentions(
         let page = match host.query_index(IndexQuery::Documents {
             matching: matching.clone(),
             sort: None,
-            select: Default::default(),
+            select: PropertySelect::keys(&["alias", "aliases"]),
             page: Some(Page::new(page_no * PAGE_SIZE, PAGE_SIZE)),
             excerpts: Excerpts::Omit,
         })? {
@@ -809,9 +909,12 @@ fn outbound_unlinked_mentions(
             if !seen.insert(hit.doc.clone()) {
                 continue;
             }
-            let model = host.read_model(&hit.doc)?;
+            let aliases = match indexed_aliases(&hit.properties) {
+                Some(aliases) => aliases,
+                None => host.read_model(&hit.doc)?.frontmatter.aliases(),
+            };
             let mut names = vec![hit.doc.page_name().to_string()];
-            names.extend(model.frontmatter.aliases());
+            names.extend(aliases);
             names.retain(|name| !name.is_empty());
             names.sort();
             names.dedup();
@@ -847,6 +950,32 @@ fn outbound_unlinked_mentions(
         }
     }
     Ok(rows)
+}
+
+/// Gli alias di una candidata come li dà [`Frontmatter::aliases`], letti dalle
+/// proprietà che l'indice ha già: `aliases`, in sua assenza `alias`. Leggere il
+/// modello di ogni candidata voleva dire rileggerla dal disco e riparsarla,
+/// fino a ottocento volte per un disegno. `None` quando l'indice ha
+/// normalizzato la chiave in una forma che non è il testo del file (un tipo
+/// scelto dall'utente, un elemento che non è una stringa): lì decide il modello.
+///
+/// [`Frontmatter::aliases`]: fub_abi::model::Frontmatter::aliases
+fn indexed_aliases(properties: &[PropertyEntry]) -> Option<Vec<String>> {
+    let entry = properties
+        .iter()
+        .find(|entry| entry.key == "aliases")
+        .or_else(|| properties.iter().find(|entry| entry.key == "alias"));
+    match entry.map(|entry| &entry.value) {
+        None | Some(PropertyValue::Empty) => Some(Vec::new()),
+        Some(PropertyValue::List(items)) => items
+            .iter()
+            .map(|item| match item {
+                PropertyScalar::Text(text) => Some(text.clone()),
+                _ => None,
+            })
+            .collect(),
+        Some(_) => None,
+    }
 }
 
 fn build_unlinked_view(mentions: &[UnlinkedMention]) -> UiNode {
@@ -1142,6 +1271,52 @@ mod tests {
 
     /// Text meno Linked meno self, senza scansioni: gli hit di testo che sono
     /// già collegati o sono la nota stessa non sono candidati.
+    /// L'indice dà gli alias che dà il modello; dove li ha normalizzati in
+    /// un'altra forma risponde `None` e decide il modello.
+    #[test]
+    fn indexed_aliases_are_the_frontmatter_aliases() {
+        use fub_abi::model::{DateFormats, Frontmatter, PropertyTypes};
+        use fub_abi::rules::properties::entries_with_types;
+        let cases = [
+            serde_json::json!({}),
+            serde_json::json!({"aliases": "Uno"}),
+            serde_json::json!({"aliases": ["Uno", "Due"]}),
+            serde_json::json!({"aliases": null, "alias": "Uno"}),
+            serde_json::json!({"alias": ["Uno"]}),
+            serde_json::json!({"aliases": ["Uno", 3, true]}),
+            serde_json::json!({"aliases": 7}),
+            serde_json::json!({"aliases": {"a": 1}}),
+            serde_json::json!({"aliases": [], "alias": "Uno"}),
+        ];
+        for case in cases {
+            let serde_json::Value::Object(map) = case.clone() else {
+                unreachable!()
+            };
+            let frontmatter = Frontmatter(map);
+            let properties = entries_with_types(
+                &frontmatter,
+                &PropertySelect::keys(&["alias", "aliases"]),
+                &DateFormats::default(),
+                &PropertyTypes::default(),
+            );
+            let indexed = indexed_aliases(&properties);
+            assert_eq!(
+                indexed.clone().unwrap_or_else(|| frontmatter.aliases()),
+                frontmatter.aliases(),
+                "{case}"
+            );
+            // Le forme comuni non rileggono il documento.
+            if !matches!(case.get("aliases"), Some(serde_json::Value::Array(items)) if items.iter().any(|item| !item.is_string()))
+                && !matches!(
+                    case.get("aliases"),
+                    Some(serde_json::Value::Number(_) | serde_json::Value::Object(_))
+                )
+            {
+                assert!(indexed.is_some(), "{case}");
+            }
+        }
+    }
+
     #[test]
     fn unlinked_is_text_minus_linked_minus_self() {
         let hits = vec![hit("a.md"), hit("b.md"), hit("self.md"), hit("c.md")];
@@ -1192,9 +1367,11 @@ mod tests {
             .on_action(&instance(), action, &mut host)
             .unwrap();
         assert_eq!(update, ViewUpdate::None);
+        // Senza chi risolve, il percorso intero; la parola scritta resta
+        // quella che si leggeva.
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
-            "si parla di [[people/Rossi.md]] qui"
+            "si parla di [[people/Rossi.md|Mario Rossi]] qui"
         );
     }
 

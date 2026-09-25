@@ -89,12 +89,17 @@ describe("combobox della palette", () => {
   it("Arrow aggiorna la selezione, conserva gli id nel filtro e non sposta il fuoco", async () => {
     const { input, list } = await openPalette();
     const alphaId = options(list)[0]!.id;
+    const before = options(list);
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
 
     const afterArrow = options(list);
     expect(document.activeElement).toBe(input);
     expect(afterArrow[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(afterArrow.filter((row) => row.getAttribute("aria-selected") === "true")).toEqual([afterArrow[1]]);
     expect(input.getAttribute("aria-activedescendant")).toBe(afterArrow[1]!.id);
+    // La freccia sposta la scelta sulle righe che ci sono, senza ricostruirle.
+    expect(afterArrow).toEqual(before);
+    afterArrow.forEach((row, index) => expect(row).toBe(before[index]));
 
     input.value = "alpha";
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -153,6 +158,30 @@ describe("combobox della palette", () => {
       expect(fake.invokeCommand).toHaveBeenLastCalledWith("vault.cmd", {}, "apply"),
     );
     expect(fake.invokeCommand.mock.calls.map((call) => call[2])).toEqual(["dry_run", "apply"]);
+  });
+
+  it("un kernel che non risponde non tiene chiusa la palette, e i suoi comandi arrivano dopo", async () => {
+    await openPalette([command("cmd.old", "Vecchio")]);
+    closeCommandPalette();
+    vi.runAllTimers();
+    let answer!: (value: CommandSpec[]) => void;
+    fake.listCommands.mockReturnValue(new Promise<CommandSpec[]>((resolve) => { answer = resolve; }));
+    fake.settings.mockResolvedValue([]);
+    const opening = openCommandPalette(host);
+    await vi.advanceTimersByTimeAsync(400);
+    const overlay = document.getElementById("command-palette");
+    expect(overlay).not.toBeNull();
+    const titles = () => [...overlay!.querySelectorAll(".palette-title")].map((node) => node.textContent);
+    expect(titles()).toContain("Vecchio");
+    const input = overlay!.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    input.value = "uo";
+    input.dispatchEvent(new Event("input"));
+    answer([command("cmd.new", "Nuovo")]);
+    await opening;
+    // L'elenco nuovo, filtrato da ciò che era già scritto.
+    expect(input.value).toBe("uo");
+    expect(titles()).toContain("Nuovo");
+    expect(titles()).not.toContain("Vecchio");
   });
 
   it("chiudendo rimuove la superficie e restituisce il fuoco", async () => {

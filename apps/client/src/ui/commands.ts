@@ -299,8 +299,10 @@ export function parseChords(binding: string | null | undefined): Chord[] | null 
   if (text === "") return null;
   const chords: Chord[] = [];
   for (const piece of text.split(/\s+/)) {
-    const parts = piece.split("-");
-    const key = parts.pop();
+    // `Mod--` è il tasto meno: il separatore non può essere anche il tasto.
+    const minus = piece === "-" || piece.endsWith("--");
+    const parts = minus ? piece.slice(0, -2).split("-").filter(Boolean) : piece.split("-");
+    const key = minus ? "-" : parts.pop();
     if (!key) return null;
     const mods = parts.map((p) => p.toLowerCase());
     // Un modificatore che non esiste non si ignora: `Ctrl-k` sarebbe letto come
@@ -308,12 +310,12 @@ export function parseChords(binding: string | null | undefined): Chord[] | null 
     // scritto crederebbe di aver configurato Ctrl.
     if (mods.some((m) => !(MODIFIERS as readonly string[]).includes(m))) return null;
     if (new Set(mods).size !== mods.length) return null;
-    chords.push({
+    chords.push(sameKeyOnEveryLayout({
       key: key.toLowerCase(),
       mod: mods.includes("mod"),
       shift: mods.includes("shift"),
       alt: mods.includes("alt"),
-    });
+    }));
   }
   const first = chords[0]!;
   if (!first.mod && !first.shift && !first.alt) return null;
@@ -408,12 +410,18 @@ export function keyboardPlatform(platform: string): KeyboardPlatform {
 }
 
 function pressedChord(e: KeyChord, platform: KeyboardPlatform = "any"): Chord {
-  return {
+  return sameKeyOnEveryLayout({
     key: e.key.toLowerCase(),
     mod: platform === "mac" ? e.metaKey : platform === "other" ? e.ctrlKey : e.ctrlKey || e.metaKey,
     shift: e.shiftKey,
     alt: e.altKey,
-  };
+  });
+}
+
+/// `+` e `=` sono lo stesso tasto dello zoom: sulla tastiera americana `+` è
+/// `Shift-=`, su quella italiana `=` è `Shift-0` e `+` ha un tasto suo.
+function sameKeyOnEveryLayout(chord: Chord): Chord {
+  return chord.key === "+" ? { ...chord, key: "=", shift: false } : chord;
 }
 
 /// Un accordo in forma canonica: modificatori in ordine alfabetico, minuscolo.
@@ -441,6 +449,22 @@ function write(a: Chord): string {
 /// `⌘⇧F` su macOS. È la forma da mostrare a chi legge, mai da confrontare; con
 /// più alternative si mostra la prima, e una scorciatoia che non si sa
 /// leggere resta com'è scritta invece di sparire.
+/// Come si leggono i tasti con un nome: `pagedown` non è un tasto che si trova.
+const KEY_NAMES: Record<string, string> = {
+  arrowleft: "←",
+  arrowright: "→",
+  arrowup: "↑",
+  arrowdown: "↓",
+  pagedown: "PgDn",
+  pageup: "PgUp",
+  enter: "Enter",
+  escape: "Esc",
+  tab: "Tab",
+  delete: "Del",
+  backspace: "⌫",
+  " ": "Space",
+};
+
 export function displayBinding(
   binding: string | null | undefined,
   platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
@@ -456,7 +480,7 @@ export function displayBinding(
       if (chord.mod) parts.push(mac ? "⌘" : "Ctrl");
       if (chord.alt) parts.push(mac ? "⌥" : "Alt");
       if (chord.shift) parts.push(mac ? "⇧" : "Shift");
-      parts.push(chord.key.length === 1 ? chord.key.toUpperCase() : chord.key);
+      parts.push(KEY_NAMES[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key));
       return parts.join(mac ? "" : "+");
     })
     .join(" ");

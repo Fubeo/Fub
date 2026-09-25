@@ -17,7 +17,7 @@ import {
   mediaKindOfMime,
   mimeOfId,
 } from "./media-types";
-import { attachmentCandidate, attachmentTarget, depositAttachment, relativeUrl, sanitizeFileName, saveRemoteAttachment, splitFileName } from "./attachment-target";
+import { attachmentCandidate, attachmentMarkdown, attachmentTarget, depositAttachment, relativeUrl, sanitizeFileName, saveRemoteAttachment, splitFileName } from "./attachment-target";
 import { makePdfJsLoader, pdfIdWithoutFragment, pdfPageFromFragment, type PdfJsModule } from "./pdf-view";
 import { mountSlideDeck, splitRenderedSlides } from "../../ui/slides";
 import { printDocument } from "./print-view";
@@ -287,5 +287,15 @@ describe("recorder crash staging", () => {
     values.set(key, { schema: 2, chunks: ["AQ=="] });
     await expect(after.append(key, new Uint8Array([4]))).rejects.toThrow(/schema/);
     expect(values.get(key)).toEqual({ schema: 2, chunks: ["AQ=="] });
+  });
+});
+
+describe("il Markdown di un allegato depositato", () => {
+  it("incorpora ciò che la lettura sa mostrare e collega il resto col suo nome", () => {
+    expect(attachmentMarkdown("allegati/foto.png")).toBe("![](allegati/foto.png)");
+    expect(attachmentMarkdown("allegati/voce.mp3")).toBe("![](allegati/voce.mp3)");
+    expect(attachmentMarkdown("allegati/relazione.pdf")).toBe("![](allegati/relazione.pdf)");
+    expect(attachmentMarkdown("allegati/dati%20grezzi.zip")).toBe("[dati grezzi.zip](allegati/dati%20grezzi.zip)");
+    expect(attachmentMarkdown("allegati/[bozza].docx")).toBe("[\\[bozza\\].docx](allegati/[bozza].docx)");
   });
 });

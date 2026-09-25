@@ -12,6 +12,9 @@ type Subscription = {
 let media: MediaQueryList | null = null;
 let mediaInitialized = false;
 let reduced = false;
+/// `appearance.motion = reduced`: l'utente chiede meno moto anche se il
+/// sistema non lo dice. Si somma alla preferenza del sistema, non la sostituisce.
+let forced = false;
 let nativeListenerAttached = false;
 let dispatchGeneration = 0;
 const listeners = new Set<Subscription>();
@@ -24,14 +27,34 @@ function ensureMedia(): MediaQueryList | null {
   return media;
 }
 
-function onChange(event: MediaQueryListEvent): void {
-  reduced = event.matches;
+function dispatch(): void {
+  const effective = forced || reduced;
   const generation = ++dispatchGeneration;
   for (const subscription of listeners) {
     if (subscription.active && subscription.generation < generation) {
-      subscription.listener(reduced);
+      subscription.listener(effective);
     }
   }
+}
+
+function onChange(event: MediaQueryListEvent): void {
+  const before = forced || reduced;
+  reduced = event.matches;
+  if (before !== (forced || reduced)) dispatch();
+}
+
+/// La preferenza dell'utente (`appearance.motion`). La scrive anche sul
+/// documento, perché il pavimento CSS di `structure.css` spenga le transizioni
+/// come fa con la preferenza del sistema.
+export function setReducedMotionPreference(reduce: boolean): void {
+  ensureMedia();
+  const before = forced || reduced;
+  forced = reduce;
+  if (typeof document !== "undefined") {
+    if (reduce) document.documentElement.dataset.motion = "reduced";
+    else delete document.documentElement.dataset.motion;
+  }
+  if (before !== (forced || reduced)) dispatch();
 }
 
 function attachNativeListener(): void {
@@ -52,7 +75,7 @@ function detachNativeListener(): void {
 
 export function reducedMotion(): boolean {
   ensureMedia();
-  return reduced;
+  return forced || reduced;
 }
 
 export function onReducedMotionChange(listener: Listener): () => void {

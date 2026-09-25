@@ -68,8 +68,22 @@
   overflow-x: auto;
   font-family: var(--font-mono);
 }
+/* Dentro un blocco il codice non è un codice in riga: niente fondo e niente
+   margini per riga, o il blocco si legge a toppe. */
+.markdown-rendered pre code,
+.markdown-preview pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
 /* Il bottone copia vive dentro il `pre` senza spostare il codice: assoluto
-   in un angolo, fuori dalla selezione del testo, visibile anche da tastiera. */
+   in un angolo, fuori dalla selezione del testo, visibile anche da tastiera.
+   Resta nascosto finché il blocco non è sotto il puntatore o il fuoco, così
+   non copre la prima riga mentre la si legge. */
+.markdown-rendered pre:not(:hover):not(:focus-within) .markdown-code-copy,
+.markdown-preview pre:not(:hover):not(:focus-within) .markdown-code-copy {
+  opacity: 0;
+}
 .markdown-rendered .markdown-code-copy,
 .markdown-preview .markdown-code-copy {
   position: absolute;
@@ -183,6 +197,11 @@
 .markdown-preview td {
   border: 1px solid var(--doc-rule-soft);
   padding: var(--space-2) var(--space-4);
+  /* Una cella non spezza le parole (né i numeri) a metà: col testo che va a
+     capo ovunque la colonna più lunga si prendeva tutto e le altre finivano
+     una lettera per riga. Se la tabella non ci sta, scorre (`overflow-x`). */
+  overflow-wrap: normal;
+  min-width: 4ch;
 }
 .markdown-rendered th,
 .markdown-preview th {
@@ -293,15 +312,32 @@
   background: var(--doc-fill-soft);
   border-radius: var(--radius-sm);
 }
+/* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`):
+   un ciclo e una catena troppo profonda sono due cose diverse. */
 .embed-cycle::after,
 .embed-too-deep::after {
-  content: " (embed ricorsivo)";
+  content: " (" attr(data-embed-note) ")";
   opacity: 0.7;
   font-size: var(--text-sm);
 }
 .embed.unresolved {
   border-left-color: var(--doc-rule-soft);
   opacity: 0.7;
+}
+/* L'immagine che non si vede: il suo testo alternativo e il path, dove
+   sarebbe stata, invece dell'icona rotta del browser. */
+.image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: 1px dashed var(--doc-rule);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.image-missing::before {
+  content: "🖼";
 }
 
 /* Il cestino e la cronologia non hanno più regole proprie: sono due view
@@ -390,9 +426,13 @@
 .pane-preview.markdown-rendered > :last-child {
   margin-bottom: 0;
 }
+/* La scala dei titoli è **relativa al corpo di lettura** (`em`) e scende
+   sempre, in misura e in peso: legata ai gradini dell'interfaccia, un H3 valeva
+   quanto il corpo e un H4 meno. È la stessa scala della Live
+   (`livepreview.ts`), così cambiare modalità non fa saltare la pagina. */
 .markdown-rendered h1,
 .markdown-preview h1 {
-  font-size: var(--text-3xl);
+  font-size: max(1.75em, var(--text-3xl));
   line-height: var(--leading-tight);
   letter-spacing: -0.01em;
   margin: var(--space-8) 0 var(--space-4);
@@ -407,23 +447,24 @@
 }
 .markdown-rendered h2,
 .markdown-preview h2 {
-  font-size: var(--text-2xl);
+  font-size: max(1.45em, var(--text-2xl));
 }
 .markdown-rendered h3,
 .markdown-preview h3 {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-medium);
+  font-size: 1.22em;
+  font-weight: 650;
 }
 .markdown-rendered h4,
 .markdown-preview h4 {
-  font-size: var(--text-lg);
+  font-size: 1.08em;
+  font-weight: 650;
   margin: var(--space-6) 0 var(--space-2);
 }
 .markdown-rendered h5,
 .markdown-rendered h6,
 .markdown-preview h5,
 .markdown-preview h6 {
-  font-size: var(--text-sm);
+  font-size: 0.85em;
   font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
@@ -432,6 +473,7 @@
 .markdown-rendered h6,
 .markdown-preview h6 {
   font-weight: var(--weight-medium);
+  color: var(--muted);
 }
 .markdown-rendered p,
 .markdown-rendered li,

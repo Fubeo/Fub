@@ -419,18 +419,42 @@ export function closeCommandPalette() {
 /// è l'unico in cui devono essere fresche — un componente acceso mezzo minuto fa
 /// ha comandi che nessuno ha ancora chiesto. Con loro si rileggono gli accordi
 /// riconfigurati, perché sono la stessa domanda fatta all'altro canale.
+/// Quanto la palette aspetta il kernel prima di aprirsi con ciò che sa già.
+const PALETTE_WAIT_MS = 400;
+
 export async function openCommandPalette(host: PaletteHost) {
   const generation = ++paletteGeneration;
-  try {
-    state.commandSpecs = await api.listCommands();
-    await loadKeyOverrides();
-  } catch (e) {
-    if (generation !== paletteGeneration) return;
-    host.notify(t("palette.unavailable", { reason: errorText(e) }));
+  // `null` se l'elenco è arrivato, l'errore altrimenti: un valore, così
+  // l'attesa sotto non ha un rifiuto da perdere.
+  const loaded: Promise<unknown> = Promise.resolve()
+    .then(() => api.listCommands())
+    .then(async (specs) => {
+      state.commandSpecs = specs;
+      await loadKeyOverrides();
+      return null;
+    })
+    .catch((error: unknown) => error ?? new Error("listCommands"));
+  // Un kernel lento o fermo non tiene chiusa la palette: i comandi della shell
+  // sono locali, e quelli del kernel si aggiungono quando arrivano.
+  let waitTimer: number | undefined;
+  const waited = new Promise<"late">((resolve) => {
+    waitTimer = window.setTimeout(() => resolve("late"), PALETTE_WAIT_MS);
+  });
+  const first = await Promise.race([loaded, waited]);
+  window.clearTimeout(waitTimer);
+  if (generation !== paletteGeneration) return;
+  const refresh = chooseSpecs(orderCommands(allCommands(), paletteHistory), openOverlay(), host);
+  // `openOverlay` chiude la palette di prima, e chiudere fa avanzare la
+  // generazione: quella che vale adesso è quella di questa palette aperta.
+  const opened = paletteGeneration;
+  const failure = first === "late" ? await loaded : first;
+  if (opened !== paletteGeneration) return;
+  if (failure) {
+    // L'ultimo elenco del kernel che si conosceva resta, e si dice cosa manca.
+    host.notify(t("palette.unavailable", { reason: errorText(failure) }), "guasto");
     return;
   }
-  if (generation !== paletteGeneration) return;
-  chooseSpecs(orderCommands(allCommands(), paletteHistory), openOverlay(), host);
+  if (first === "late") refresh(orderCommands(allCommands(), paletteHistory));
 }
 
 /// Slash shares the command registry, ordering, save queue and outcome delivery
@@ -443,12 +467,17 @@ export async function openSlashPalette(
   host: Pick<PaletteHost, "onEffect" | "notify" | "flushPendingSave"> & {
     publishContext(): Promise<void>;
   },
+  onDismiss?: () => void,
 ): Promise<void> {
   closeCommandPalette();
   slashOwner = owner;
   const generation = paletteGeneration;
   const life = openLifetime();
   slashLife = life;
+  // Chiusa senza una scelta, per qualunque via (Esc, clic fuori), la palette
+  // restituisce ciò che l'ha aperta.
+  let chosen = false;
+  if (onDismiss) life.add(() => { if (!chosen) onDismiss(); });
   life.listen(document, "focusin", (event) => {
     const target = event.target;
     const overlay = document.getElementById(OVERLAY_ID);
@@ -586,6 +615,7 @@ export async function openSlashPalette(
   const launch = (entry: CommandEntry) => {
     const spec = entry.spec;
     if (busy || !current() || !spec) return;
+    chosen = true;
     const seed = slashArgs(spec, selection, doc);
     if (seed === null) return;
     // Offer every unfilled parameter, including optional format/date/template.
@@ -675,10 +705,23 @@ export function closeSlashPalette(owner: HTMLElement): void {
 /// consenso.
 export function startCommand(entry: CommandEntry, host: PaletteHost) {
   if (entry.run) {
-    void entry.run();
+    runShellCommand(entry, host);
     return;
   }
   start(entry, openOverlay(), host);
+}
+
+/// Un comando di shell che fallisce lo dice: il suo `run` è spesso asincrono,
+/// e un `void` lascerebbe cadere il rifiuto dove nessuno lo guarda.
+function runShellCommand(entry: CommandEntry, host: Pick<PaletteHost, "notify">): void {
+  try {
+    const running = entry.run?.();
+    if (running instanceof Promise) {
+      running.catch((error: unknown) => host.notify(t("commands.failed", { command: entry.title, reason: errorText(error) }), "guasto"));
+    }
+  } catch (error) {
+    host.notify(t("commands.failed", { command: entry.title, reason: errorText(error) }), "guasto");
+  }
 }
 
 function openOverlay(closePrevious = true): HTMLElement {
@@ -714,7 +757,14 @@ function openOverlay(closePrevious = true): HTMLElement {
 }
 
 /// Passo 1: l'elenco filtrabile.
-function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
+/// Disegna la palette e torna come **rimpiazzarne l'elenco** senza toccare
+/// ciò che si è scritto: i comandi del kernel possono arrivare dopo.
+function chooseSpecs(
+  initial: CommandEntry[],
+  box: HTMLElement,
+  host: PaletteHost,
+): (next: CommandEntry[]) => void {
+  let specs = initial;
   box.innerHTML = "";
   // Etichetta di scope esplicita (U13): "Comandi" — non un generico "Cerca…":
   // qui si eseguono azioni, con disponibilità e consenso del comando (U19).
@@ -830,8 +880,15 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
       e.preventDefault();
       if (visibleItems.length === 0) return;
       const step = e.key === "ArrowDown" ? 1 : -1;
+      // Le frecce spostano la scelta, non cambiano la lista: si ritoccano le
+      // due righe, senza rifiltrare e ricostruire tutti i comandi.
+      list.children[selected]?.setAttribute("aria-selected", "false");
       selected = (selected + step + visibleItems.length) % visibleItems.length;
-      render();
+      list.children[selected]?.setAttribute("aria-selected", "true");
+      input.setAttribute(
+        "aria-activedescendant",
+        stableIdentifier(OPTION_ID_PREFIX, visibleItems[selected]!.id),
+      );
       list.children[selected]?.scrollIntoView?.({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
@@ -854,6 +911,11 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
 
   render();
   input.focus();
+  return (next) => {
+    if (!box.isConnected) return;
+    specs = next;
+    render();
+  };
 }
 
 /// Passo 2: i parametri, se il comando ne dichiara. Se non ne dichiara, si va
@@ -864,7 +926,7 @@ function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
   if (entry.run) {
     closeCommandPalette();
     rememberCommand(entry.id);
-    void entry.run();
+    runShellCommand(entry, host);
     return;
   }
   const spec = entry.spec!;

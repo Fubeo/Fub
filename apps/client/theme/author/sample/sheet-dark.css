@@ -209,7 +209,9 @@
      bordo separa due superfici, quindi deve stare oltre la più lontana delle
      due, e la scala sa già dov'è. Non gli si chiede 3:1 — un filetto non è un
      controllo e pretenderglielo trasformerebbe l'interfaccia in un
-     wireframe — ma nemmeno lo si sceglie a mano. */
+     wireframe — ma nemmeno lo si sceglie a mano.
+     In alto contrasto sì: lì il filetto è anche il contorno di ogni campo, e
+     chi ha chiesto più contrasto deve vedere dove si scrive (WCAG 1.4.11). */
   --border: #433f3b;
 
   /* --- gli inchiostri della shell ---------------------------------------- */

@@ -13,24 +13,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fake = vi.hoisted(() => ({
   confirm: true,
   open: true,
-  active: null as string | null,
-  first: "prima.md" as string | null,
+  system: false,
 }));
 
 vi.mock("../host/dialog", () => ({ confirm: vi.fn(async () => fake.confirm) }));
 
 vi.mock("../state/vault", () => ({
-  trashNote: vi.fn(async () => {}),
+  trashNote: vi.fn(async () => ({ label: "Ripristina", steps: [] })),
   refreshDocuments: vi.fn(),
-  beforeNote: vi.fn(async () => fake.first),
+  trashesToSystem: vi.fn(async () => fake.system),
+  undoLastOperation: vi.fn(async () => {}),
 }));
 
-vi.mock("../state/layout", () => ({ activeDoc: vi.fn(() => fake.active) }));
+vi.mock("../ui/notify", () => ({ notify: vi.fn() }));
 
 vi.mock("./document", () => ({
   isOpen: vi.fn(() => fake.open),
   closeDocument: vi.fn(),
-  openDocument: vi.fn(async () => {}),
 }));
 
 vi.mock("../state/document-session", () => ({
@@ -46,8 +45,11 @@ vi.mock("../state/document-session", () => ({
 }));
 
 import { trashWithConfirm } from "./trash";
-import { closeDocument, openDocument } from "./document";
+import { closeDocument } from "./document";
 import { documentSessions } from "../state/document-session";
+import { confirm } from "../host/dialog";
+import { notify } from "../ui/notify";
+import { undoLastOperation } from "../state/vault";
 
 describe("cestinare una nota", () => {
   beforeEach(() => {
@@ -55,25 +57,25 @@ describe("cestinare una nota", () => {
     vi.mocked(documentSessions.isDeletionPending).mockReturnValue(false);
     fake.confirm = true;
     fake.open = true;
-    fake.active = null;
-    fake.first = "prima.md";
+    fake.system = false;
   });
 
-  it("chiude la nota cestinata, non quella a schermo", async () => {
-    fake.active = "altra.md";
+  it("chiude la nota cestinata, e non mette al suo posto una nota qualunque", async () => {
     await trashWithConfirm("vittima.md");
     expect(closeDocument).toHaveBeenCalledWith("vittima.md");
-    expect(openDocument).not.toHaveBeenCalled();
   });
 
-  it("apre una nota di rimpiazzo solo se non è rimasto niente", async () => {
-    fake.active = null;
+  it("nel cestino del vault non chiede conferma e offre Annulla", async () => {
     await trashWithConfirm("vittima.md");
-    expect(closeDocument).toHaveBeenCalledWith("vittima.md");
-    expect(openDocument).toHaveBeenCalledWith("prima.md");
+    expect(confirm).not.toHaveBeenCalled();
+    const action = vi.mocked(notify).mock.calls[0]?.[2];
+    expect(action?.label).toBe("Annulla");
+    await action?.run();
+    expect(undoLastOperation).toHaveBeenCalledOnce();
   });
 
-  it("non tocca niente se l'utente ci ripensa, e il salvataggio torna in coda", async () => {
+  it("col cestino di sistema chiede; se l'utente ci ripensa non tocca niente", async () => {
+    fake.system = true;
     fake.confirm = false;
     await trashWithConfirm("vittima.md");
     expect(documentSessions.cancelDeletion).toHaveBeenCalledWith("vittima.md");
@@ -88,11 +90,10 @@ describe("cestinare una nota", () => {
     expect(documentSessions.delete).toHaveBeenCalledWith("vittima.md", expect.any(Function));
   });
 
-  it("non cerca un rimpiazzo per una nota che non era aperta", async () => {
+  it("non chiude niente per una nota che non era aperta", async () => {
     fake.open = false;
     await trashWithConfirm("vittima.md");
     expect(closeDocument).not.toHaveBeenCalled();
-    expect(openDocument).not.toHaveBeenCalled();
   });
   it("ignora un secondo gesto mentre la conferma è pendente", async () => {
     vi.mocked(documentSessions.isDeletionPending).mockReturnValue(true);

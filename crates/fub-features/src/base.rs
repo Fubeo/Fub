@@ -543,21 +543,21 @@ fn field(key: &str, ctx: &RowContext) -> BaseValue {
     .cloned()
     .unwrap_or(BaseValue::Empty)
 }
-fn compare(left: &BaseValue, right: &BaseValue) -> Ordering {
-    fn rank(value: &BaseValue) -> u8 {
-        match value {
-            BaseValue::Number(_) => 0,
-            BaseValue::Date(_) | BaseValue::Duration(_) => 1,
-            BaseValue::Bool(_) => 2,
-            BaseValue::Text(_) => 3,
-            BaseValue::File { .. } | BaseValue::Link { .. } => 4,
-            BaseValue::List(_) => 5,
-            BaseValue::Object(_) => 6,
-            BaseValue::Empty => 7,
-            BaseValue::Error(_) => 8,
-        }
+fn compare_rank(value: &BaseValue) -> u8 {
+    match value {
+        BaseValue::Number(_) => 0,
+        BaseValue::Date(_) | BaseValue::Duration(_) => 1,
+        BaseValue::Bool(_) => 2,
+        BaseValue::Text(_) => 3,
+        BaseValue::File { .. } | BaseValue::Link { .. } => 4,
+        BaseValue::List(_) => 5,
+        BaseValue::Object(_) => 6,
+        BaseValue::Empty => 7,
+        BaseValue::Error(_) => 8,
     }
-    match rank(left).cmp(&rank(right)) {
+}
+fn compare(left: &BaseValue, right: &BaseValue) -> Ordering {
+    match compare_rank(left).cmp(&compare_rank(right)) {
         Ordering::Equal => match (left, right) {
             (BaseValue::Number(a), BaseValue::Number(b)) => a.total_cmp(b),
             (BaseValue::Date(a), BaseValue::Date(b))
@@ -566,6 +566,36 @@ fn compare(left: &BaseValue, right: &BaseValue) -> Ordering {
             _ => left.display().cmp(&right.display()),
         },
         other => other,
+    }
+}
+/// Un valore pronto per l'ordinamento, ricavato una volta per riga: il
+/// comparatore lo confronta O(n log n) volte, e ricavarlo lì clonava il valore
+/// e ne ricostruiva il testo a ogni confronto. Il testo c'è per le specie che
+/// [`compare`] confronta dal testo.
+struct SortKey {
+    value: BaseValue,
+    text: String,
+}
+impl SortKey {
+    fn of(value: BaseValue) -> Self {
+        let text = match value {
+            BaseValue::Empty | BaseValue::Number(_) | BaseValue::Bool(_) => String::new(),
+            _ => value.display(),
+        };
+        SortKey { value, text }
+    }
+    /// Lo stesso ordine di [`compare`] sui valori.
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (&self.value, &other.value) {
+            (BaseValue::Number(a), BaseValue::Number(b)) => a.total_cmp(b),
+            (BaseValue::Date(a), BaseValue::Date(b))
+            | (BaseValue::Duration(a), BaseValue::Duration(b)) => a.cmp(b),
+            (BaseValue::Bool(a), BaseValue::Bool(b)) => a.cmp(b),
+            (left, right) => match compare_rank(left).cmp(&compare_rank(right)) {
+                Ordering::Equal => self.text.cmp(&other.text),
+                other => other,
+            },
+        }
     }
 }
 fn compare_filter(left: &BaseValue, right: &BaseValue) -> Option<Ordering> {
@@ -851,16 +881,26 @@ fn derive(
                 .unwrap_or_else(|| aggregate(summary.aggregate, &values)),
         );
     }
-    result.sort_by(|a, b| {
-        for sort in &plan.view.sort {
-            let left = field(&sort.key, &a.ctx);
-            let right = field(&sort.key, &b.ctx);
-            let order = match (&left, &right) {
+    let mut keyed = result
+        .into_iter()
+        .map(|row| {
+            let keys = plan
+                .view
+                .sort
+                .iter()
+                .map(|sort| SortKey::of(field(&sort.key, &row.ctx)))
+                .collect::<Vec<_>>();
+            (keys, row)
+        })
+        .collect::<Vec<_>>();
+    keyed.sort_by(|(left_keys, a), (right_keys, b)| {
+        for ((sort, left), right) in plan.view.sort.iter().zip(left_keys).zip(right_keys) {
+            let order = match (&left.value, &right.value) {
                 (BaseValue::Empty, BaseValue::Empty) => Ordering::Equal,
                 (BaseValue::Empty, _) => Ordering::Greater,
                 (_, BaseValue::Empty) => Ordering::Less,
                 _ => {
-                    let order = compare(&left, &right);
+                    let order = left.cmp(right);
                     if sort.descending {
                         order.reverse()
                     } else {
@@ -874,6 +914,7 @@ fn derive(
         }
         a.doc.cmp(&b.doc)
     });
+    let mut result = keyed.into_iter().map(|(_, row)| row).collect::<Vec<_>>();
     if let Some(limit) = plan.view.limit {
         result.truncate(limit as usize);
     }
@@ -1022,6 +1063,43 @@ impl IndexProvider for BaseIndex {
 mod tests {
     use super::*;
     const SOURCE: &str = "properties:\n  - {key: status}\nviews:\n  - name: Board\n    type: kanban\n    order: [status]\n    group: {key: status}\n    sort: [{key: score, descending: true}]\n    summaries: [{key: score, aggregate: sum}]\n";
+
+    #[test]
+    fn sort_keys_order_like_the_values() {
+        let values = [
+            BaseValue::Empty,
+            BaseValue::Number(2.5),
+            BaseValue::Number(-1.0),
+            BaseValue::Number(f64::NAN),
+            BaseValue::Text("b".into()),
+            BaseValue::Text("ab".into()),
+            BaseValue::Text(String::new()),
+            BaseValue::Bool(true),
+            BaseValue::Bool(false),
+            BaseValue::Date(20),
+            BaseValue::Date(3),
+            BaseValue::Duration(100),
+            BaseValue::List(vec![BaseValue::Number(1.0), BaseValue::Text("x".into())]),
+            BaseValue::List(Vec::new()),
+            BaseValue::Object(BTreeMap::from([("k".into(), BaseValue::Bool(true))])),
+            BaseValue::File {
+                path: "b.md".into(),
+                label: None,
+            },
+            BaseValue::Link {
+                target: "a.md".into(),
+                label: Some("z".into()),
+            },
+            BaseValue::Error(FormulaErrorCode::DivZero),
+            BaseValue::Error(FormulaErrorCode::Name),
+        ];
+        for left in &values {
+            for right in &values {
+                let keys = SortKey::of(left.clone()).cmp(&SortKey::of(right.clone()));
+                assert_eq!(keys, compare(left, right), "{left:?} ~ {right:?}");
+            }
+        }
+    }
 
     #[test]
     fn plan_includes_hidden_sort_and_summary_dependencies() {

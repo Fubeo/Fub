@@ -118,9 +118,10 @@ una destinazione sicura.
 L'impostazione di vault `files.trash` sceglie dove finisce una nota cancellata
 dalla shell. `vault` (default) usa il cestino interno. `system` usa il comando
 `trash.os`, che prova il cestino del sistema operativo e, se non è disponibile,
-sposta la nota nel cestino interno; la shell segnala il ripiego. In entrambi i
-casi la cancellazione chiede conferma, e svuotare il cestino interno resta un
-comando irreversibile separato.
+sposta la nota nel cestino interno; la shell segnala il ripiego. Col cestino
+del vault la cancellazione non chiede conferma e offre «Annulla» nell'avviso;
+col cestino di sistema, da cui Fub non può ripristinare, chiede conferma.
+Svuotare il cestino interno resta un comando irreversibile separato.
 
 ## Versioning
 

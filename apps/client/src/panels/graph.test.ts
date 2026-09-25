@@ -66,11 +66,13 @@ vi.mock("../graph/chart", () => ({
       nodeId: vi.fn(() => null),
       nodeCount: vi.fn(() => 0),
       setVisibleNodes: vi.fn(),
+      setGroups: vi.fn(() => [] as string[]),
       setOpenDocuments: vi.fn(),
       setA11yLabel: vi.fn(),
       setConfig: vi.fn(),
       warm: vi.fn(),
       unpinNodes: vi.fn(),
+      snapshot: vi.fn(() => null),
       unmount: vi.fn(),
     };
     fakes.charts.push(chart);
@@ -101,6 +103,7 @@ vi.mock("../graph/config", () => ({
 
 vi.mock("../i18n/strings", () => ({
   t: (key: string) => key,
+  resolvedLanguage: () => "it",
   onLanguage: (listener: () => void) => {
     fakes.languageListeners.push(listener);
     return () => {
@@ -227,7 +230,8 @@ describe("lifecycle del renderer graph", () => {
     const stop = render(host, {
       nodes: ["a.md", "b.md"],
       edges: [{ from: "a.md", to: "b.md" }],
-      modified: { "a.md": "1000", "b.md": "2000" },
+      // Due giorni diversi: la timeline avanza per giorno, non per istante.
+      modified: { "a.md": "1700000000000", "b.md": "1700200000000" },
     }, vi.fn())!;
     await vi.dynamicImportSettled();
     const chart = fakes.charts[fakes.charts.length - 1];

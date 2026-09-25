@@ -850,3 +850,31 @@ describe("le voci di una lista", () => {
     expect(inner.getAttribute("role")).toBe("button");
   });
 });
+
+describe("un'azione in volo", () => {
+  it("un secondo click non la ripete, e il bottone dice che sta lavorando", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    let finish!: () => void;
+    const calls: string[] = [];
+    mountTree(
+      host,
+      { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: null } } as UiNode,
+      (a: ActionRef) => {
+        calls.push(a.action);
+        return new Promise<void>((resolve) => { finish = resolve; });
+      },
+    );
+    const button = host.querySelector("button")!;
+    button.click();
+    button.click();
+    expect(calls).toEqual(["restore"]);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    finish();
+    await vi.waitFor(() => expect(button.hasAttribute("aria-busy")).toBe(false));
+    button.click();
+    expect(calls).toEqual(["restore", "restore"]);
+    finish();
+    host.remove();
+  });
+});

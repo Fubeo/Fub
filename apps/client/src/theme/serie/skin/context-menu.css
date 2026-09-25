@@ -11,9 +11,13 @@
   border: 1px solid var(--elevation-floating-border);
   border-radius: var(--radius-md);
   box-shadow: var(--elevation-floating-shadow);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 .context-menu button {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
   width: 100%;
   text-align: left;
   background: transparent;
@@ -36,6 +40,30 @@
 }
 .context-menu button.danger {
   color: var(--danger);
+}
+.context-menu .menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.context-menu .menu-hint {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.context-menu button[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+}
+.context-menu button[aria-disabled="true"]:hover {
+  background: transparent;
+}
+.context-menu .menu-separator {
+  height: 1px;
+  margin: var(--space-2) var(--space-1);
+  background: var(--border);
 }
 .context-menu button.danger:hover,
 .context-menu button.danger:focus-visible {

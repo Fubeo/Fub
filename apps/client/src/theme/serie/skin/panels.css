@@ -16,6 +16,9 @@
 .inspector-pane {
   border-right: 1px solid var(--border);
   padding: var(--space-5);
+  /* Il fondo della pagina, dichiarato: da cassetto (finestra stretta) il
+     pannello sta sopra i riquadri, e senza fondo si leggerebbe attraverso. */
+  background: var(--elevation-base-surface);
 }
 .inspector-pane {
   border-right: none;
@@ -55,4 +58,10 @@
 }
 .link-button.danger:hover {
   color: var(--danger);
+}
+
+/* Il velo sotto un cassetto laterale aperto a finestra stretta: dice che il
+   resto è dietro, e un clic lì chiude il cassetto. */
+.drawer-scrim {
+  background: var(--scrim);
 }

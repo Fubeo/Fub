@@ -5,6 +5,9 @@
 // la logica dell'alberatura (cosa è una cartella, cosa è una folder note, che
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
+import { NOTE_DRAG_TYPE } from "../ui/drag-types";
+import { revealSidePanel } from "../ui/side-panels";
+import { pickFromList } from "../ui/dialogs";
 import { vaultFolders, folderContent, existingDocuments } from "../host/query";
 import { Race } from "../ui/race";
 import type { VaultFolder } from "../host/contract";
@@ -40,7 +43,7 @@ import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../sta
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
-import { onLanguage, t, type Key } from "../i18n/strings";
+import { onLanguage, plural, t, type Key } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
@@ -277,6 +280,21 @@ function renderFileList(): void {
 
   fileListEl.innerHTML = "";
   renderChildren(state.activeSpace ?? "", fileListEl);
+  // Un vault (o uno spazio) senza niente dentro lo dice, e offre il primo gesto.
+  if (fileListEl.childElementCount === 0 && state.vaultRoot !== "" && children(state.activeSpace ?? "")) {
+    const li = document.createElement("li");
+    li.setAttribute("role", "none");
+    li.className = "tree-empty";
+    const text = document.createElement("p");
+    text.textContent = t("explorer.empty");
+    const create = document.createElement("button");
+    create.type = "button";
+    create.className = "link-button";
+    create.textContent = t("commands.note.new");
+    create.addEventListener("click", () => void newNote());
+    li.append(text, create);
+    fileListEl.append(li);
+  }
 
   roving(toRestore);
   if (toRestore !== undefined) {
@@ -430,6 +448,22 @@ function treeArrows(lifetime: Lifetime): void {
         e.preventDefault();
         current.querySelector<HTMLElement>(":scope > .tree-row")?.click();
         return;
+      case "F2": {
+        const row = current.querySelector<HTMLElement>(":scope > .tree-row");
+        if (row && path && !row.classList.contains("folder")) {
+          e.preventDefault();
+          startRename(row, path);
+        }
+        return;
+      }
+      case "Delete": {
+        const row = current.querySelector<HTMLElement>(":scope > .tree-row");
+        if (row && path && !row.classList.contains("folder")) {
+          e.preventDefault();
+          void trashWithConfirm(path);
+        }
+        return;
+      }
       default:
     }
   });
@@ -505,7 +539,7 @@ function truncatedRow(path: string, count: number): HTMLElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "tree-row troncata";
-  button.textContent = t("explorer.altre_voci", { n: count });
+  button.textContent = plural(count, "explorer.altre_voci.one", "explorer.altre_voci");
   button.addEventListener("click", () => {
     const current = levelWindows.get(path) ?? LEVEL_PAGE.limit;
     levelWindows.set(path, current + LEVEL_PAGE.limit);
@@ -545,6 +579,10 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   setTooltip(row, id);
   const icon = state.meta.icons[id];
   if (icon) row.appendChild(rowIcon(icon));
+  // Senza icona la colonna resta (dal CSS, senza un nodo in più per riga): i
+  // nomi si allineano con quelli che un'icona ce l'hanno.
+  else row.classList.add("no-icon");
+  if (opts.draggable) row.classList.add("leaf");
   const name = document.createElement("span");
   name.className = "row-name";
   name.textContent = pageName(id);
@@ -573,7 +611,7 @@ const FILE_ICONS: Record<ResourceKind, string> = {
 /// invece di tentarne la lettura come testo.
 function fileRow(id: string): HTMLElement {
   const row = document.createElement("div");
-  row.className = "tree-row file";
+  row.className = "tree-row file leaf";
   row.dataset.path = id;
   setTooltip(row, id);
   const kind = mediaKindOfId(id);
@@ -591,8 +629,9 @@ function fileRow(id: string): HTMLElement {
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e, [
-      { label: t("explorer.rename"), run: () => startRename(row, id) },
-      { label: t("explorer.delete"), danger: true, run: () => void trashWithConfirm(id) },
+      { label: t("explorer.rename"), hint: "F2", run: () => startRename(row, id) },
+      { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
+      { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
     ]);
   });
   return row;
@@ -604,17 +643,18 @@ function fileRow(id: string): HTMLElement {
 function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
   const pinned = state.meta.pinned.includes(id);
   const move = voceSpostamento(id);
+  const reorder = reorderActions(id);
   showContextMenu(at, [
-    { label: t("explorer.rename"), run: () => startRename(row, id) },
-    { label: t("explorer.icon"), run: () => chooseIcon(at, id) },
+    { label: t("explorer.rename"), hint: "F2", run: () => startRename(row, id) },
+    ...(move ? [move] : []),
+    { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
+    { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, id) },
     {
       label: pinned ? t("explorer.unpin") : t("explorer.pin"),
       run: () => togglePin(id),
     },
-    { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
-    ...(move ? [move] : []),
-    { label: t("explorer.delete"), danger: true, run: () => void trashWithConfirm(id) },
-    ...reorderActions(id),
+    ...reorder.map((action, index) => ({ ...action, separator: index === 0 })),
+    { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
   ]);
 }
 // Returns actions only when another sibling of the same kind is visible.
@@ -656,22 +696,30 @@ function voceSpostamento(id: string): { label: string; run: () => void } | null 
 /// una finestra (stesso limite dell'albero), più la radice e il conto di ciò
 /// che resta fuori.
 async function pickMoveFolder(id: string): Promise<void> {
-  const at = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
-  const folders = await vaultFolders(LEVEL_PAGE);
+  // Un selettore con filtro e non un menu contestuale: le cartelle di un vault
+  // vero sono centinaia, e un menu senza posizione né scorrimento non le regge.
+  const folders = await vaultFolders(FOLDER_PICK);
   const here = parentOf(id);
   const other = Math.max(0, folders.total - folders.items.length);
-  showContextMenu(at, [
-    // La radice (del vault) come prima destinazione: è dove il drag porta
-    // trascinando sul titolo "Note".
-    { label: t("explorer.root"), run: () => void moveIntoFolder(id, "") },
-    ...folders.items
-      .filter((f) => f.path !== here)
-      .map((f) => ({ label: f.path, run: () => void moveIntoFolder(id, f.path) })),
-    ...(other > 0
-      ? [{ label: t("explorer.altre_cartelle", { n: other }), run: () => {} }]
-      : []),
-  ]);
+  const choice = await pickFromList<string>({
+    title: t("explorer.move_title", { name: childName(id) }),
+    placeholder: t("explorer.move_filter"),
+    items: [
+      // La radice (del vault) come prima destinazione: è dove il drag porta
+      // trascinando sul titolo "Note".
+      ...(here !== "" ? [{ label: t("explorer.root"), value: "" }] : []),
+      ...folders.items
+        .filter((f) => f.path !== here && f.path !== id && !f.path.startsWith(`${id}/`))
+        .map((f) => ({ label: `${state.meta.icons[f.path] ?? "📁"} ${childName(f.path)}`, detail: f.path, value: f.path })),
+    ],
+    more: other,
+  });
+  if (choice !== null) await moveIntoFolder(id, choice);
 }
+
+/// Quante cartelle chiede il selettore di destinazione: più di un livello
+/// dell'albero, perché qui si filtrano.
+const FOLDER_PICK = { offset: 0, limit: 2000 };
 
 /// Il contestuale della voce dell'albero a fuoco, per tastiera: apre il menu
 /// della nota o della cartella sotto il `treeitem`, alla sua posizione.
@@ -710,6 +758,11 @@ function folderRow(folder: VaultFolder): HTMLElement {
   const chevron = document.createElement("button");
   chevron.type = "button";
   chevron.className = "chevron";
+  // Fuori dal giro del tab e dall'albero accessibile: da tastiera le frecce
+  // aprono e chiudono il `treeitem`, e un bottone dentro una voce d'albero è un
+  // interattivo annidato (e una fermata di tab per cartella).
+  chevron.tabIndex = -1;
+  chevron.setAttribute("aria-hidden", "true");
   // Niente freccia su una cartella vuota: lo spazio resta (l'allineamento dei
   // fratelli è lo stesso), ma non si promette un contenuto che non c'è —
   // e il bottone disabilitato resta fuori dal tab.
@@ -758,11 +811,13 @@ function folderRow(folder: VaultFolder): HTMLElement {
 /// Le voci del contestuale di una **cartella**: stesse voci del click destro e
 /// del tasto Menu, un punto solo.
 function folderMenu(at: MouseEvent, path: string): void {
+  const reorder = reorderActions(path);
   showContextMenu(at, [
+    { label: t("explorer.new_note_here"), run: () => void newNote(path) },
     { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
-    { label: t("explorer.icon"), run: () => chooseIcon(at, path) },
+    { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
     { label: t("explorer.as_space"), run: () => addSpace(path) },
-    ...reorderActions(path),
+    ...reorder.map((action, index) => ({ ...action, separator: index === 0 })),
   ]);
 }
 
@@ -770,6 +825,7 @@ function rowIcon(icon: string): HTMLElement {
   const span = document.createElement("span");
   span.className = "row-icon";
   span.textContent = icon;
+  span.setAttribute("aria-hidden", "true");
   return span;
 }
 
@@ -803,6 +859,7 @@ async function revealActive(): Promise<void> {
     }
   }
   if (opened) saveExpanded();
+  revealSidePanel("sidebar");
   showPanel("files");
   await refreshFromKernel(true);
   const li = entry(doc);
@@ -986,7 +1043,7 @@ async function pickNewSpace(at: MouseEvent): Promise<void> {
       label: `${state.meta.icons[f.path] ?? "📁"} ${f.path}`,
       run: () => addSpace(f.path),
     })),
-    ...(other > 0 ? [{ label: t("explorer.altre_cartelle", { n: other }), run: () => {} }] : []),
+    ...(other > 0 ? [{ label: plural(other, "explorer.altre_cartelle.one", "explorer.altre_cartelle"), run: () => {} }] : []),
   ]);
 }
 
@@ -1004,10 +1061,20 @@ function openSpaceNote(): void {
 // --- crea, rinomina, converti -----------------------------------------------
 
 /// Crea una nota e la apre.
-async function newNote(): Promise<void> {
-  const created = await createNote();
-  if (created) await openDocument(created);
-  focusEditor();
+async function newNote(folder: string | null = state.activeSpace): Promise<void> {
+  try {
+    const created = await createNote(undefined, folder ?? undefined);
+    if (created) {
+      if (folder && !state.expanded.has(folder)) {
+        state.expanded.add(folder);
+        saveExpanded();
+      }
+      await openDocument(created);
+    }
+    focusEditor();
+  } catch (error) {
+    notify(t("explorer.create_failed", { reason: errorText(error) }), "guasto");
+  }
 }
 
 /// Una cartella nuova dentro `parent` ("" è la radice): un campo in cima al
@@ -1118,7 +1185,9 @@ function startRename(row: HTMLElement, id: string, preset?: string): void {
     if (e.key === "Enter") void confirm();
     else if (e.key === "Escape") cancel();
   });
-  input.addEventListener("blur", cancel);
+  // Cliccare altrove conferma il nome scritto, come nei file manager: solo
+  // Esc annulla.
+  input.addEventListener("blur", () => void confirm());
 }
 
 /// La frase per ciascun guasto di un nome: la mappa è un `Record` **esaustivo**,
@@ -1143,7 +1212,7 @@ function reportRenameCollision(outcome: RenameResult): boolean {
     t("explorer.rename_failed", {
       doc: outcome.from,
       to: outcome.to,
-      reason: "la destinazione è già aperta",
+      reason: t("explorer.destination_open"),
     }),
     "guasto",
   );
@@ -1241,7 +1310,7 @@ async function convertToFolder(id: string): Promise<void> {
   try {
     const outcome = await renameKeepingBuffer(id, `${folderPath}/${childName(id)}`);
     if (outcome.kind === "collision") {
-      notify(t("explorer.to_folder_failed", { doc: id, reason: "la destinazione è già aperta" }), "guasto");
+      notify(t("explorer.to_folder_failed", { doc: id, reason: t("explorer.destination_open") }), "guasto");
       return;
     }
   } catch (e) {
@@ -1270,8 +1339,10 @@ function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void
   row.draggable = true;
   row.addEventListener("dragstart", (e) => {
     drag = { path, kind, parent: parentOf(path) };
-    e.dataTransfer!.effectAllowed = "move";
+    // Spostare dentro l'albero, o lasciarla cadere in una nota per collegarla.
+    e.dataTransfer!.effectAllowed = kind === "note" ? "copyMove" : "move";
     e.dataTransfer!.setData("text/plain", path);
+    if (kind === "note") e.dataTransfer!.setData(NOTE_DRAG_TYPE, path);
   });
   row.addEventListener("dragend", () => {
     drag = null;
@@ -1357,7 +1428,7 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
         t("explorer.move_failed", {
           doc: id,
           folder: folderPath || t("explorer.root"),
-          reason: "la destinazione è già aperta",
+          reason: t("explorer.destination_open"),
         }),
         "guasto",
       );

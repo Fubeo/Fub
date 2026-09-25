@@ -108,7 +108,7 @@ impl SyncBundle {
     }
 
     fn manifest_inner(&self) -> PluginManifest {
-        PluginManifest::core("fub.sync", "Sync")
+        PluginManifest::core("fub.sync", "Sync").speaking("it", super::views::catalog())
     }
 }
 
@@ -170,7 +170,7 @@ impl SyncPlugin {
 
 impl Plugin for SyncPlugin {
     fn manifest(&self) -> PluginManifest {
-        PluginManifest::core("fub.sync", "Sync")
+        PluginManifest::core("fub.sync", "Sync").speaking("it", super::views::catalog())
     }
 
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {

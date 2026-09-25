@@ -142,6 +142,21 @@ describe("combobox del quick switcher", () => {
     expect(fake.rememberSearch).toHaveBeenCalledWith("");
   });
 
+  it("Maiusc+Invio crea la nota col nome scritto anche se qualcosa combacia", async () => {
+    fake.createNote.mockResolvedValue("Riunione.md");
+    const { input, list } = await openSwitcher(["notes/Riunione di marzo.md"]);
+    input.value = "Riunione";
+    input.dispatchEvent(new Event("input"));
+    vi.advanceTimersByTime(200);
+    await settleSearch();
+    // Il nome proposto segna le parole scritte.
+    expect(list.querySelector(".palette-title mark")?.textContent).toBe("Riunione");
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
+    await settleSearch();
+    expect(fake.createNote).toHaveBeenCalledWith("Riunione");
+    expect(fake.openDocument).toHaveBeenCalledWith("Riunione.md");
+  });
+
   it("dispatches here, split and window from distinct keyboard modifiers", async () => {
     const dispatch = vi.fn();
     const unmount = mountQuickSwitcher(dispatch);

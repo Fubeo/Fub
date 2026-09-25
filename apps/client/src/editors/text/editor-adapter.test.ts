@@ -77,6 +77,29 @@ describe("adapter dell'editor Markdown", () => {
     expect(parent.dataset.markdownMode).toBe("live_preview");
     ed.destroy();
   });
+  it("in lettura raccoglie le battute di un altro riquadro in un ridisegno solo", () => {
+    vi.useFakeTimers();
+    try {
+      const { ed, reading } = editor();
+      ed.setDoc("prima");
+      ed.setMode("reading");
+      const drawn = reading().firstElementChild;
+      ed.syncDoc("prima s");
+      ed.syncDoc("prima se");
+      ed.syncDoc("prima seconda");
+      // Il buffer è subito allineato; il reso aspetta la fine della finestra.
+      expect(ed.getDoc()).toBe("prima seconda");
+      expect(reading().firstElementChild).toBe(drawn);
+      vi.runOnlyPendingTimers();
+      expect(reading().textContent).toContain("prima seconda");
+      ed.syncDoc("terza");
+      ed.destroy();
+      // Smontato, il ridisegno in attesa non parte.
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("il task cliccato in lettura cambia solo il simbolo ed è annullabile", () => {
     const changes: string[] = [];
     const { ed, parent } = editor((text) => changes.push(text));
@@ -173,6 +196,47 @@ describe("adapter dell'editor Markdown", () => {
       ed.destroy();
       content.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
       expect(list).toHaveBeenCalledTimes(count);
+    } finally {
+      ed.destroy();
+      parent.remove();
+      closeCommandPalette();
+      state.currentDoc = previousDoc;
+      vi.restoreAllMocks();
+    }
+  });
+  it("lascia il / come testo dentro una parola, nel codice e nei link", async () => {
+    const previousDoc = state.currentDoc;
+    state.currentDoc = "notes/current.md";
+    const list = vi.spyOn(api, "listCommands").mockResolvedValue([]);
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "settings", value: [] });
+    const slash = {
+      currentDoc: vi.fn(() => state.currentDoc),
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+    } satisfies EditorSlashHost;
+    const { ed, parent, view } = editor(() => {}, slash);
+    const press = () => view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }),
+    );
+    try {
+      for (const text of ["e", "24", "`a", "[[Progetti", "https://x.org"]) {
+        ed.setDoc(text);
+        view().dispatch({ selection: { anchor: text.length } });
+        expect(press()).toBe(true);
+      }
+      expect(list).not.toHaveBeenCalled();
+
+      ed.setDoc("prima ");
+      view().dispatch({ selection: { anchor: 6 } });
+      expect(press()).toBe(false);
+      const live = "#command-palette:not([data-shell-motion=exit]) input";
+      await vi.waitFor(() => expect(document.querySelector(live)).not.toBeNull());
+      document.querySelector<HTMLInputElement>(live)!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+      expect(ed.getDoc()).toBe("prima /");
     } finally {
       ed.destroy();
       parent.remove();

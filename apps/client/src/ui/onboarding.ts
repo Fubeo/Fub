@@ -73,7 +73,18 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
     el.textContent = t(key);
     return el;
   };
-  const section = (key: Parameters<typeof t>[0], detail: Parameters<typeof t>[0]) => {
+  // Diagnostica e recupero servono quando qualcosa non va: stanno dietro una
+  // riga che si apre, e non davanti a chi sta aprendo il primo vault.
+  const trouble = document.createElement("details");
+  trouble.className = "onboarding-trouble";
+  const troubleSummary = document.createElement("summary");
+  troubleSummary.textContent = t("onboarding.trouble");
+  trouble.append(troubleSummary);
+  const section = (
+    key: Parameters<typeof t>[0],
+    detail: Parameters<typeof t>[0],
+    into: HTMLElement = extra,
+  ) => {
     const el = document.createElement("section");
     const title = document.createElement("h3");
     title.textContent = t(key);
@@ -87,7 +98,7 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
     status.setAttribute("role", "status");
     status.hidden = true;
     el.append(title, explanation, actions, status);
-    extra.append(el);
+    into.append(el);
     return { el, title, explanation, actions, status, key, detail };
   };
   const status = (el: HTMLElement, message: string | null): void => {
@@ -112,7 +123,8 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
   document.getElementById("titlebar-right")?.prepend(chrome);
   lifetime.add(() => chrome.remove());
 
-  const support = section("support.title", "support.detail");
+  extra.append(trouble);
+  const support = section("support.title", "support.detail", trouble);
   const previewButton = button("support.preview");
   const exportButton = button("support.export");
   exportButton.disabled = true;
@@ -141,7 +153,7 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
   lifetime.add(attachTooltip(demoReset, ""));
   lifetime.add(attachTooltip(diagnosticsButton, ""));
 
-  const recovery = section("recovery.title", "recovery.detail");
+  const recovery = section("recovery.title", "recovery.detail", trouble);
   const healthButton = button("recovery.check");
   const reports = document.createElement("div");
   recovery.actions.append(healthButton);
@@ -369,6 +381,7 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
   lifetime.add(on("vault", refresh));
   lifetime.add(onLanguage(() => {
     onboarding.setAttribute("aria-label", t("onboarding.title"));
+    troubleSummary.textContent = t("onboarding.trouble");
     for (const item of [demo, support, recovery]) {
       item.el.setAttribute("aria-label", t(item.key));
       item.title.textContent = t(item.key);

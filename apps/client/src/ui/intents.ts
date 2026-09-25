@@ -6,7 +6,7 @@
 // il giorno che la si dimentica, un comando naviga e una view no.
 import type { CommandEffect, ViewUpdate } from "../host/contract";
 import { t } from "../i18n/strings";
-import { isOpen, openDocument, revealByteOffset } from "../panels/document";
+import { isOpen, openDocument, openFromView, revealByteOffset } from "../panels/document";
 import { searchFor } from "../panels/search";
 import { notify } from "./notify";
 
@@ -56,7 +56,10 @@ export type ShellIntent = Exclude<ViewUpdate, { kind: "replace" }> | CommandEffe
 export async function applyIntent(intent: ShellIntent): Promise<void> {
   switch (intent.kind) {
     case "navigate":
-      await openDocument("doc" in intent ? intent.doc : intent.doc_id);
+      // Da una view (`doc_id`) la nota si apre accanto alla view; da un
+      // comando (`doc`) nel riquadro col fuoco, come sempre.
+      if ("doc_id" in intent) await openFromView(intent.doc_id);
+      else await openDocument(intent.doc);
       break;
     case "reveal": {
       // Apri il documento se non è quello aperto, poi porta la vista

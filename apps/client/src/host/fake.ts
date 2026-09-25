@@ -69,6 +69,7 @@ import type {
   VaultFolder,
   VaultInfo,
   ViewSpec,
+  KnownVault,
 } from "./contract";
 import type { SaveArtifactOutcome } from "./ipc";
 
@@ -124,6 +125,8 @@ export interface Options {
   grid?: GridFake;
   /// Provider finti per le query custom, indicizzati dal namespace.
   customQueries?: Record<string, (query: unknown) => unknown>;
+  /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
+  knownVaults?: KnownVault[];
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
 }
@@ -191,6 +194,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   );
   let gridCommit = 0;
   const docs = new Map<string, Document>();
+  let known = [...(options.knownVaults ?? [])];
   const trash = new Map<string, Trashed>();
   const viewStates = new Map<string, unknown>();
   const documentWindows = new Map<string, DocumentWindowRequest>();
@@ -863,12 +867,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
       catalogRevokeTheme: (id) => unavailable("catalogRevokeTheme", [id]),
       pluginBudgetSnapshot: () => unavailable("pluginBudgetSnapshot", []),
       pluginLimitedMode: () => unavailable("pluginLimitedMode", []),
-      knownVaults: () => gate("knownVaults", [], Promise.resolve([])),
+      knownVaults: () => gate("knownVaults", [], Promise.resolve(known.map((vault) => ({ ...vault })))),
       setVaultFavorite: (path, favorite) =>
         gate("setVaultFavorite", [path, favorite], Promise.resolve()),
       setVaultLook: (path, icon, name) =>
         gate("setVaultLook", [path, icon, name], Promise.resolve()),
-      forgetVault: (path) => gate("forgetVault", [path], Promise.resolve()),
+      forgetVault: (path) => gate("forgetVault", [path], Promise.resolve().then(() => {
+        known = known.filter((vault) => vault.root !== path);
+      })),
       pendingKeybindings: () => gate("pendingKeybindings", [], Promise.resolve({})),
       adoptKeybindings: () => gate("adoptKeybindings", [], Promise.resolve()),
       discardKeybindings: () => gate("discardKeybindings", [], Promise.resolve()),
@@ -931,6 +937,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       toggleMaximize: () => gate("finestra.alternaMassimizza", [], Promise.resolve()),
       close: () => gate("finestra.chiudi", [], Promise.resolve()),
       isMaximized: () => gate("finestra.eMassimizzata", [], Promise.resolve(false)),
+      setTitle: (title) => gate("finestra.titolo", [title], Promise.resolve()),
       onResize: (_cb) => gate("finestra.onCambio", [], Promise.resolve(() => {})),
     },
   };

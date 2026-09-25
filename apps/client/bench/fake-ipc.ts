@@ -214,7 +214,7 @@ function command(
 /// modo in cui un allestimento mente. Gli accordi della shell stanno in
 /// `src/ui/shell-keys.generated.ts`.
 const BENCH_COMMANDS: CommandSpec[] = [
-  command("note.create", "Crea una nota", "Una nota nuova nella cartella corrente", "Mod-n", true),
+  command("note.create", "Crea una nota", "Una nota nuova nella cartella corrente", "Mod-Alt-n", true),
   command("note.rename", "Rinomina la nota", "Cambia il nome del documento aperto", "Mod-Shift-r", true),
   command("note.trash", "Cestina la nota", "Sposta il documento nel cestino", null, true),
   command("search.open", "Cerca nel vault", "Apre il pannello di ricerca", null),

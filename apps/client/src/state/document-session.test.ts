@@ -539,11 +539,15 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(sessions.handleExternalRemoval("sparita.md")).toEqual({
       kind: "removed",
       dirty: true,
+      text: "lavoro da non resuscitare",
     });
     expect(retained.snapshot().lifecycle).toBe("closed");
     expect(sessions.get("sparita.md")).toBeUndefined();
     await Promise.resolve();
+    // Il file non si ricrea da solo, ma il lavoro resta in bozza.
     expect(vi.mocked(api.writeDocument).mock.calls).toHaveLength(0);
+    // Con la sua base: al recupero è «orfana», non «nuova», e non risorge da sola.
+    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledWith("sparita.md", "lavoro da non resuscitare", expect.any(String));
   });
 
   it("una rimozione esterna chiude prima che un salvataggio accodato possa partire", async () => {
@@ -557,6 +561,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(sessions.handleExternalRemoval("sparita.md")).toEqual({
       kind: "removed",
       dirty: true,
+      text: "non deve resuscitare",
     });
 
     await pendingSave;

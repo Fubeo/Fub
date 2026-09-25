@@ -146,6 +146,10 @@ const GROUP_ACTION: &str = "group_by";
 const FILTER_ACTION: &str = "filter";
 /// La chiave del payload di [`FILTER_ACTION`].
 const FILTER_KEY: &str = "key";
+/// L'azione che rilegge il grafo a richiesta: la maschera resta vuota (la
+/// simulazione non riparte da sola sotto il mouse), ma chi ha visto che il
+/// vault è cambiato può chiedere i dati nuovi.
+const REFRESH_ACTION: &str = "refresh";
 /// Profondità massima della vista locale: oltre tre passi il vicinato è il
 /// vault, e la «locale» mente.
 const MAX_DEPTH: u8 = 3;
@@ -313,6 +317,7 @@ impl ViewProvider for GraphView {
                 host.set_view_state(FILTER_STATE, value)?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
+            REFRESH_ACTION => Ok(ViewUpdate::Replace { root: tree(host)? }),
             _ => Ok(ViewUpdate::None),
         }
     }
@@ -492,16 +497,14 @@ fn local_graph(
             ))
         }
     };
-    let mut nodes: Vec<String> = vec![seed.to_string()];
+    // Un insieme ordinato: la lista finale è ordinata comunque, e un hub con
+    // migliaia di vicini non paga un confronto con tutti per ognuno.
+    let mut unique = std::collections::BTreeSet::from([seed]);
     for neighbor in &neighbors {
-        if !nodes.iter().any(|n| n == neighbor.doc.as_str()) {
-            nodes.push(neighbor.doc.to_string());
-        }
-        if !nodes.iter().any(|n| n == neighbor.via.as_str()) {
-            nodes.push(neighbor.via.to_string());
-        }
+        unique.insert(neighbor.doc.as_str());
+        unique.insert(neighbor.via.as_str());
     }
-    nodes.sort();
+    let nodes: Vec<String> = unique.into_iter().map(str::to_string).collect();
     let mut seen = std::collections::BTreeSet::new();
     let mut edges = Vec::new();
     for neighbor in neighbors {
@@ -801,6 +804,24 @@ mod tests {
             panic!("custom")
         };
         assert!(matches!(&fallback[0].kind, UiKind::EmptyState { .. }));
+    }
+
+    /// «Aggiorna» rilegge il vault: la maschera resta vuota, il gesto no.
+    #[test]
+    fn refresh_rereads_the_vault() {
+        let mut host = MemoryHost::new().with_document("a.md", "");
+        let update = GraphView
+            .on_action(
+                &ViewInstance::only(GRAPH_VIEW),
+                UiAction::new(REFRESH_ACTION),
+                &mut host,
+            )
+            .unwrap();
+        let ViewUpdate::Replace { root } = update else {
+            panic!("replace");
+        };
+        let (_, payload) = custom(&root);
+        assert_eq!(names(payload, NODES), [r#""a.md""#]);
     }
 
     /// Cliccare un nodo naviga, e non con un intento nuovo.

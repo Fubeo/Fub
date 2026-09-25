@@ -38,6 +38,10 @@ const SVG: Record<string, string> = {
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
   template: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
   trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
+  // --- le view di sincronizzazione e pubblicazione (fub-host) -------------
+  sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
+  publish: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  warning: '<path d="M12 4 21 20H3z"/><path d="M12 10v4M12 17h.01"/>',
   backup: '<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M7 12l2.5-2.5L12 12M9.5 9.5v6"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 5"/><path d="M3 3v2.5h2.5"/><path d="M12 8v4l3 2"/>',
   footnote: '<path d="M4 7h9M4 12h9M4 17h6"/><path d="M17 5l2-1v6"/>',
@@ -58,6 +62,7 @@ const SVG: Record<string, string> = {
   square: '<rect x="5" y="5" width="14" height="14" rx="1.5"/>',
   restore: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M5 16V5a1 1 0 0 1 1-1h11"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  pin: '<path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z"/><path d="M12 14v6"/>',
 
   // --- la navigazione ----------------------------------------------------
   chevron: '<path d="M9 6l6 6-6 6"/>',
@@ -79,6 +84,7 @@ const ALIASES: Record<string, string> = {
   struttura: "outline",
   collections: "collection",
   footnotes: "footnote",
+  "layout-dashboard": "dashboard",
 };
 
 export function icon(name: string): string {

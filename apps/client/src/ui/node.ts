@@ -1495,10 +1495,30 @@ function acceptEnter(control: HTMLElement): boolean {
 /// Non prende un `ActionRef`, e la mancanza è il prendereddio: un'azione qui non si
 /// può passare, quindi non si può catturare in una chiusura e non può
 /// invecchiare. Chi ci riprovasse non compila.
+/// Gli elementi la cui azione è in volo.
+const inFlight = new WeakSet<HTMLElement>();
+
 async function dispatchAction(from: HTMLElement, event: string): Promise<void> {
   const link = links.get(from)?.get(event);
   if (!link) return;
-  await link.onAction(link.action, activeFields(from));
+  // Un bottone premuto due volte mentre il provider risponde alla prima
+  // ripeteva l'azione: un ripristino, un invio, un «collega» doppi. Finché la
+  // prima non torna l'elemento è occupato, e lo dice (`aria-busy`). Solo per
+  // i click: un campo cambiato di nuovo porta un valore nuovo, e scartarlo
+  // perderebbe ciò che si è scritto.
+  if (event === "click") {
+    if (inFlight.has(from)) return;
+    inFlight.add(from);
+    from.setAttribute("aria-busy", "true");
+  }
+  try {
+    await link.onAction(link.action, activeFields(from));
+  } finally {
+    if (event === "click") {
+      inFlight.delete(from);
+      from.removeAttribute("aria-busy");
+    }
+  }
 }
 
 export function activeFields(from: HTMLElement): FieldValue[] {

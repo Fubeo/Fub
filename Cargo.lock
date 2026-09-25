@@ -1664,6 +1664,7 @@ dependencies = [
  "fub-host",
  "fub-kernel",
  "fub-wasm-host",
+ "objc2",
  "parking_lot",
  "serde",
  "serde_json",

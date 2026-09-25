@@ -120,7 +120,9 @@ export type CloseResult =
   | { kind: "active" }
   | { kind: "missing" };
 
-export type ExternalRemovalResult = { kind: "removed"; dirty: boolean };
+/// `text` c'è quando il buffer era sporco: il lavoro non salvato, messo in
+/// bozza e restituito a chi può offrire di ricreare la nota.
+export type ExternalRemovalResult = { kind: "removed"; dirty: boolean; text?: string };
 
 export type ConflictChoice = "mine" | "theirs";
 export type DocumentSessionEvent =
@@ -1065,6 +1067,20 @@ export class DocumentSessionCollection implements DraftBufferStore {
     for (const id of pending) await this.#sessions.get(id)?.flushDraft();
   }
 
+  /// Chiude ogni sessione: un vault nuovo non eredita buffer, bozze pendenti
+  /// né identità di quello vecchio. Restituisce i documenti ancora sporchi.
+  closeAll(): string[] {
+    const dirty: string[] = [];
+    for (const [id, session] of [...this.#sessions]) {
+      this.#invalidate(id);
+      if (session.dirty) dirty.push(id);
+      session.close(true);
+    }
+    this.#sessions.clear();
+    this.#pendingDeletionOwners.clear();
+    return dirty;
+  }
+
   beginDeletion(id: string): boolean {
     const session = this.#sessions.get(id);
     if (!session) return false;
@@ -1153,11 +1169,29 @@ export class DocumentSessionCollection implements DraftBufferStore {
     if (!session) return { kind: "removed", dirty: false };
     this.#invalidate(session.id);
     const dirty = session.dirty;
+    const text = session.text();
+    // La cancellazione chiesta da qui (il cestino) butta anche la bozza: è
+    // il gesto dell'utente. Solo quella arrivata da fuori ne conserva il testo.
+    const own = session.isDeletionPending() || this.#deletions.has(session.id) || this.#deletions.has(id);
+    // La base della bozza è la revisione da cui il buffer discendeva: al
+    // recupero la bozza è «orfana» (la nota c'era) e non si riscrive da sola,
+    // come farebbe una bozza «nuova». Resuscitare una nota cancellata è una
+    // scelta di chi legge, non del recupero.
+    const snapshot = session.snapshot();
+    const base = snapshot.base.kind === "descends_from" ? snapshot.base.value : null;
     session.close(true);
     if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
     this.#forgetPendingOwner(session);
-    void session.discardDraftAfterClose();
-    return { kind: "removed", dirty };
+    if (!dirty || own) {
+      void session.discardDraftAfterClose();
+      return { kind: "removed", dirty };
+    }
+    // Il file non c'è più, il lavoro sì: resta in bozza (la ritrova il
+    // recupero al prossimo avvio) e torna a chi può offrire di ricrearlo.
+    void this.#api.saveDraft(session.id, text, base).catch(() => {
+      this.#emit({ kind: "draft-blind", id: session.id });
+    });
+    return { kind: "removed", dirty, text };
   }
   async release(id: string): Promise<CloseResult> {
     if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };

@@ -280,7 +280,9 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
 
   function createToggle(key: string, initial: boolean, onChange: (v: boolean) => void): { element: HTMLElement; input: HTMLInputElement } {
     const row = document.createElement("label");
-    row.className = "graph-panel-campo graph-panel-toggle";
+    // Non `graph-panel-toggle`: quella è la classe del bottone ingranaggio, e
+    // una riga di casella che la eredita si disegnava come un bottone da 32px.
+    row.className = "graph-panel-campo graph-panel-check";
     const name = document.createElement("span");
     name.className = "graph-panel-nome";
     row.append(name);

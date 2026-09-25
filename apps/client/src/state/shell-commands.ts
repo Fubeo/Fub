@@ -5,6 +5,7 @@
 // Rust, che è il presidio contro alias superflui (il workflow riusa i
 // comandi kernel). Ogni azione passa da tastiera+palette+menu con lo stesso
 // `run`, per la regola del §18.2.
+import { confirmInShell, promptText } from "../ui/dialogs";
 import { activeDoc, layout } from "./layout";
 import { applyWorkspace, deleteWorkspace, getWorkspace, renameWorkspace, updateWorkspace } from "./workspaces";
 import { state } from "./store";
@@ -272,7 +273,7 @@ export function mountShellOwnerCommands(): void {
         ui.loadWorkspaceFlow();
         return;
       }
-      const name = window.prompt(t("workspaces.rename_title"), entry.name);
+      const name = await promptText({ title: t("workspaces.rename"), label: t("workspaces.rename_title"), value: entry.name });
       if (name === null) return;
       if (!renameWorkspace(entry.id, name)) notify(t("workspaces.rename_failed"), "guasto");
       else ui.refreshWorkspacesPanel();
@@ -291,7 +292,12 @@ export function mountShellOwnerCommands(): void {
         return;
       }
       const entry = getWorkspace(id);
-      const ok = window.confirm(t("workspaces.delete_confirm", { name: entry?.name ?? id }));
+      const ok = await confirmInShell({
+        title: t("workspaces.delete"),
+        message: t("workspaces.delete_confirm", { name: entry?.name ?? id }),
+        okLabel: t("workspaces.delete"),
+        danger: true,
+      });
       if (!ok) return;
       if (!deleteWorkspace(id)) notify(t("workspaces.delete_failed"), "guasto");
       else {

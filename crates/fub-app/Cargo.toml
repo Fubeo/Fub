@@ -64,6 +64,11 @@ tauri-plugin-deep-link = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
+# Il limite a 60 Hz di WebKit su macOS si spegne da `frame_rate.rs`; è la
+# stessa versione che Tauri e wry già portano.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 # tauri-build aggiunto con `cargo add` (versione corrente)

@@ -8061,6 +8061,9 @@ impl Workspace {
         to: &DocId,
     ) -> Vec<PreparedExplicitLinkRewrite> {
         let mut plan = Vec::new();
+        // Il riferimento wiki nuovo dipende solo da `from` e `to`: si chiede
+        // all'anagrafe alla prima wikilink che lo richiede, non a ognuna.
+        let mut wiki_ref: Option<String> = None;
         for (src, metadata) in &self.indexes.core.metas {
             let mut rewrites = Vec::new();
             for link in &metadata.links {
@@ -8068,21 +8071,24 @@ impl Workspace {
                     continue;
                 }
                 let replacement = match &link.target {
-                    LinkTarget::Wiki { .. } => {
-                        let name = to.as_str().rsplit('/').next().unwrap_or(to.as_str());
-                        let contended = self.indexes.core.entries.keys().any(|id| {
-                            id != to
-                                && id != from
-                                && fub_abi::rules::path::resolution_key(
-                                    id.as_str().rsplit('/').next().unwrap_or(id.as_str()),
-                                ) == fub_abi::rules::path::resolution_key(name)
-                        });
-                        if contended {
-                            to.as_str().to_string()
-                        } else {
-                            name.to_string()
-                        }
-                    }
+                    LinkTarget::Wiki { .. } => wiki_ref
+                        .get_or_insert_with(|| {
+                            let name = to.as_str().rsplit('/').next().unwrap_or(to.as_str());
+                            let key = fub_abi::rules::path::resolution_key(name);
+                            let contended = self.indexes.core.entries.keys().any(|id| {
+                                id != to
+                                    && id != from
+                                    && fub_abi::rules::path::resolution_key(
+                                        id.as_str().rsplit('/').next().unwrap_or(id.as_str()),
+                                    ) == key
+                            });
+                            if contended {
+                                to.as_str().to_string()
+                            } else {
+                                name.to_string()
+                            }
+                        })
+                        .clone(),
                     LinkTarget::Path(written) => {
                         let (path, fragment) = rules_path::split_fragment(written);
                         let new = if path.trim_start().starts_with('/') {

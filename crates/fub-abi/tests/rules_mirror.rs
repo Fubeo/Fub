@@ -582,11 +582,17 @@ fn canonical_chord_cases() -> Vec<Value> {
         "  Mod-g  ",
         "Mod-ArrowUp",
         "Alt-Mod-Shift-p",
+        // Il tasto meno e il tasto più, che è lo stesso `=` dello zoom.
+        "Mod--",
+        "Mod-Shift--",
+        "Mod-+",
+        "Mod-=",
         // Ciò che questa app non sa premere.
         "Ctrl-k",    // il modificatore che non esiste
         "d",         // il primo tasto nudo, che ruberebbe una lettera a chi scrive
         "Mod-",      // l'accordo senza tasto
         "Mod-Mod-k", // il modificatore ripetuto
+        "-",         // il meno nudo
         "",
         "   ",
     ]

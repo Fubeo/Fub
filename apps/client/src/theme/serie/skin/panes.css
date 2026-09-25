@@ -5,14 +5,30 @@
 .panes {
   border-right: 1px solid var(--border);
 }
-/* Il bordo lo porta il secondo figlio in poi, non il contenitore: così una
-   divisione a tre ha due righe di separazione e non tre, e nessun riquadro ha
-   un bordo che dà sul vuoto. */
-.pane-split.row > * + * {
-  border-left: 1px solid var(--border);
+/* La riga fra due riquadri la disegna il divisore, che è anche la maniglia per
+   ridimensionarli: un pixel di bordo al centro della sua area di presa, e
+   l'accento quando lo si prende o ci si arriva da tastiera. */
+.pane-divider {
+  background-color: var(--border);
+  background-clip: content-box;
+  transition: background-color var(--duration-fast) var(--ease);
 }
-.pane-split.col > * + * {
-  border-top: 1px solid var(--border);
+.pane-divider:hover,
+.pane-divider:focus-visible,
+.pane-divider[data-dragging] {
+  background-color: var(--accent);
+}
+/* Da tastiera serve un anello vero: una riga di un pixel che cambia colore
+   non si vede abbastanza per dire dove sta il fuoco. */
+.pane-divider:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.pane-split.row > .pane-divider {
+  cursor: col-resize;
+}
+.pane-split.col > .pane-divider {
+  cursor: row-resize;
 }
 
 /* Le tab di un riquadro. La striscia sparisce quando non c'è niente aperto:
@@ -71,6 +87,11 @@
   color: var(--accent);
 }
 .tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -78,9 +99,20 @@
      AA (2,8:1 nel chiaro). Il minimo per il peggior fondo è 0,63; 0,7 ci
      lascia il margine. Al passaggio torna pieno. */
   opacity: 0.7;
-  padding: 0 var(--space-2);
+  padding: 0;
   border-radius: var(--radius-xs);
   color: inherit;
+}
+.tab-close svg {
+  width: 12px;
+  height: 12px;
+}
+.tab-pin {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-1);
+  align-self: center;
 }
 .tab-close:hover {
   opacity: 1;
@@ -126,6 +158,54 @@
 .pane-toolbar > button:hover {
   background: var(--overlay-hover);
   color: var(--text);
+}
+/* Indietro e avanti: due fantasmi come il menu, spenti quando non c'è strada. */
+.pane-nav {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+.pane-nav button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.pane-nav button:hover:not(:disabled) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.pane-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Il riquadro senza tab: una frase e due gesti al centro, sommessi. */
+.pane-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  color: var(--muted);
+  text-align: center;
+}
+.pane-empty-title {
+  margin: 0;
+  font-size: var(--text-base);
+}
+.pane-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-5);
+  font-size: var(--text-sm);
 }
 
 /* Qui c'erano due regole che davano all'editor il fondo e l'inchiostro della
@@ -207,4 +287,36 @@
 .grid-cell-editor {
   border: 2px solid var(--accent);
   background: var(--doc-bg);
+}
+
+/* Il conflitto di salvataggio sopra la nota: un bordo del colore del guasto e
+   un fondo appena tinto, perché è una scelta che aspetta e non un errore
+   passato. Ridotto («Decidi dopo») resta una riga. */
+.conflict-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-3) var(--space-4) 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--danger);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-wash);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.conflict-banner p {
+  margin: 0;
+}
+.conflict-banner[data-collapsed] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-5);
+}
+.conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }

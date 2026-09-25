@@ -13,7 +13,7 @@
 // questo modulo è solo il posto dove la shell smette di avere scorciatoie.
 import { api } from "../host/ipc";
 import { settings, vaultEntries } from "../host/query";
-import { COMMANDS } from "../host/contract";
+import { COMMANDS, type Undo } from "../host/contract";
 import { emit, state } from "./store";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
@@ -48,8 +48,11 @@ export async function beforeNote(): Promise<string | null> {
 /// che crei una nota da un template. `null` significa che il comando è
 /// riuscito ma non ha detto dove: non è un caso previsto, e chi chiama decide
 /// se è un errore da mostrare.
-export async function createNote(name?: string): Promise<string | null> {
-  const outcome = await api.invokeCommand(COMMANDS.create, name ? { name } : undefined);
+export async function createNote(name?: string, folder?: string): Promise<string | null> {
+  const args: Record<string, string> = {};
+  if (name) args.name = name;
+  if (folder) args.folder = folder;
+  const outcome = await api.invokeCommand(COMMANDS.create, Object.keys(args).length > 0 ? args : undefined);
   refreshDocuments();
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
 }
@@ -86,12 +89,12 @@ export async function renameNote(from: string, to: string): Promise<void> {
 /// `system` passa da `trash.os`, che prova il cestino del sistema e ripiega su
 /// quello del vault senza perdere la nota: il ripiego si dice, perché chi ha
 /// scelto il cestino di sistema la cercherebbe lì.
-export async function trashNote(id: string): Promise<void> {
+export async function trashNote(id: string): Promise<Undo | null> {
   const choice = (await settings()).find((entry) => entry.spec.key === "files.trash")?.value;
   if (choice !== "system") {
-    await api.invokeCommand(COMMANDS.trash, { doc: id });
+    const outcome = await api.invokeCommand(COMMANDS.trash, { doc: id });
     refreshDocuments();
-    return;
+    return outcome.undo;
   }
   const outcome = await api.invokeCommand(COMMANDS.osTrash, { doc: id });
   refreshDocuments();
@@ -101,6 +104,24 @@ export async function trashNote(id: string): Promise<void> {
       ? (effect.payload as { via?: { kind?: unknown } } | null)?.via?.kind
       : undefined;
   if (via === "internal_fallback") notify(t("trash.os_fallback", { doc: id }));
+  return outcome.undo;
+}
+
+/// Il cestino scelto è quello del sistema? Lì la nota esce dal vault, e
+/// l'annullamento dell'app non la riporta.
+export async function trashesToSystem(): Promise<boolean> {
+  try {
+    return (await settings()).find((entry) => entry.spec.key === "files.trash")?.value === "system";
+  } catch {
+    return false;
+  }
+}
+
+/// Annulla l'ultima operazione del vault (`vault.undo`), per il gesto
+/// «Annulla» accanto a un esito.
+export async function undoLastOperation(): Promise<void> {
+  await api.invokeCommand(COMMANDS.undo);
+  refreshDocuments();
 }
 
 // Ripristinare dal cestino, svuotarlo e proporre un nome libero non stanno più

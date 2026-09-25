@@ -335,14 +335,6 @@ pub fn finish_with_types<'a>(
 ) -> Paged<DocumentMatch> {
     let mut rows = matches.into_vec();
 
-    if !select.is_none() {
-        for row in rows.iter_mut() {
-            if let Some(fm) = frontmatter(&row.doc) {
-                row.properties = entries_with_types(fm, select, formats, types);
-            }
-        }
-    }
-
     match sort {
         // Senza chiave: prima la rilevanza (chi ha cercato si aspetta i
         // risultati migliori in cima), poi l'id. Chi non ha rilevanza va in
@@ -353,16 +345,35 @@ pub fn finish_with_types<'a>(
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| a.doc.cmp(&b.doc))
         }),
-        Some(sort) => rows.sort_by(|a, b| {
-            let av = frontmatter(&a.doc)
-                .and_then(|fm| fm.property_with_types(&sort.key, formats, types));
-            let bv = frontmatter(&b.doc)
-                .and_then(|fm| fm.property_with_types(&sort.key, formats, types));
-            order_of(av.as_ref(), bv.as_ref(), sort.descending).then_with(|| a.doc.cmp(&b.doc))
-        }),
+        // La chiave si normalizza una volta per riga, date comprese, e non a
+        // ogni confronto: n log n letture del frontmatter diventano n.
+        Some(sort) => {
+            let mut keyed: Vec<(Option<PropertyValue>, DocumentMatch)> = rows
+                .into_iter()
+                .map(|row| {
+                    let value = frontmatter(&row.doc)
+                        .and_then(|fm| fm.property_with_types(&sort.key, formats, types));
+                    (value, row)
+                })
+                .collect();
+            keyed.sort_by(|(av, a), (bv, b)| {
+                order_of(av.as_ref(), bv.as_ref(), sort.descending).then_with(|| a.doc.cmp(&b.doc))
+            });
+            rows = keyed.into_iter().map(|(_, row)| row).collect();
+        }
     }
 
-    Paged::window(rows, page)
+    // Le colonne servono solo alla finestra: chi ne resta fuori è contato, non
+    // letto. Una base che scorre il vault a pagine pagava ogni volta il vault.
+    let mut paged = Paged::window(rows, page);
+    if !select.is_none() {
+        for row in paged.items.iter_mut() {
+            if let Some(fm) = frontmatter(&row.doc) {
+                row.properties = entries_with_types(fm, select, formats, types);
+            }
+        }
+    }
+    paged
 }
 
 #[cfg(test)]
@@ -418,6 +429,44 @@ mod tests {
                 .map(|(_, fm)| fm)
         })
         .items
+    }
+
+    /// La pagina legge il frontmatter una volta per riga per ordinare e una per
+    /// le colonne della sola finestra: chi resta fuori è contato, non letto.
+    #[test]
+    fn a_page_reads_columns_only_for_its_window_and_the_sort_key_once_per_row() {
+        let vault = vault();
+        let reads = std::cell::Cell::new(0);
+        let read = |id: &DocId| {
+            reads.set(reads.get() + 1);
+            vault
+                .iter()
+                .find(|(other, _)| other == id)
+                .map(|(_, fm)| fm)
+        };
+        let matches: Matches = vault
+            .iter()
+            .map(|(id, _)| DocumentMatch::of(id.clone()))
+            .collect();
+        let sort = PropertySort {
+            key: "peso".into(),
+            descending: false,
+        };
+        let page = finish(
+            matches,
+            Some(&sort),
+            &PropertySelect::All,
+            Some(Page {
+                offset: 1,
+                limit: 1,
+            }),
+            &DateFormats::ISO,
+            read,
+        );
+        assert_eq!(page.total, 3);
+        assert_eq!(ids(&page.items), ["b.md"]);
+        assert!(!page.items[0].properties.is_empty());
+        assert_eq!(reads.get(), 3 + 1);
     }
 
     /// Ordina un vault per una chiave, nei due versi. Serve ai banchi che

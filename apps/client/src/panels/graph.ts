@@ -35,11 +35,16 @@ import { registerShellCommand } from "../ui/commands";
 import { $ } from "../ui/dom";
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
-import { onLanguage, t } from "../i18n/strings";
+import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
+import { onEvent } from "../state/kernel";
+import { setTooltip } from "../ui/tooltip";
+import { GROUP_TOKENS } from "../graph/render/atlas";
+import { nodeLabel } from "../graph/render/painter";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { loadConfig, saveConfig } from "../graph/config";
 import type { Chart } from "../graph/chart";
+import type { SavedLayout } from "../graph/sim/memory";
 import type { PanelCopy, PhysicsPanel } from "../graph/physics-panel";
 type GraphEngine = typeof import("../graph/lazy");
 
@@ -70,12 +75,21 @@ interface GraphData {
   edges: { from: string; to: string }[];
   /** Indexed current last-modification time, not historical graph snapshots. */
   modified: Record<string, number>;
+  /// Il gruppo di ogni nodo (cartella o primo tag), se il provider lo manda.
+  groups: Record<string, string>;
+  /// La vista locale in corso, o `null` per il grafo intero.
+  local: { seed: string; depth: number; direction: string } | null;
+  filter: { showOrphans: boolean; showAttachments: boolean };
+  groupBy: "folder" | "tag";
 }
 
 /// Attacca la metà shell del grafo: il renderer del suo `ns` e il comando che lo
 /// apre.
 export function mountGraph(lifetime: Lifetime): void {
   lifetime.listen($("#show-graph"), "click", () => openGraph());
+  lifetime.add(on("active-doc", (doc) => {
+    if (doc) lastDocument = doc;
+  }));
 
   // Il grafo come **comando** (§18.2): era un bottone nella barra, e chi non lo
   // trovava con il mouse non lo trovava. L'id e la scorciatoia sono quelli di
@@ -146,8 +160,44 @@ function readData(payload: unknown): GraphData {
           !!e && typeof e.from === "string" && typeof e.to === "string",
       )
     : [];
-  return { nodes, edges, modified };
+  const extra = (payload ?? {}) as { groups?: unknown; local?: unknown; filter?: unknown; group_by?: unknown };
+  const groups: Record<string, string> = Object.create(null);
+  if (extra.groups && typeof extra.groups === "object" && !Array.isArray(extra.groups)) {
+    for (const [id, name] of Object.entries(extra.groups as Record<string, unknown>)) {
+      if (typeof name === "string" && name !== "") groups[id] = name;
+    }
+  }
+  const rawLocal = extra.local as { seed?: unknown; depth?: unknown; direction?: unknown } | undefined;
+  const local = rawLocal && typeof rawLocal.seed === "string"
+    ? {
+      seed: rawLocal.seed,
+      depth: typeof rawLocal.depth === "number" ? rawLocal.depth : 1,
+      direction: typeof rawLocal.direction === "string" ? rawLocal.direction : "outbound",
+    }
+    : null;
+  const rawFilter = (extra.filter ?? {}) as { show_orphans?: unknown; show_attachments?: unknown };
+  return {
+    nodes,
+    edges,
+    modified,
+    groups,
+    local,
+    filter: {
+      showOrphans: rawFilter.show_orphans !== false,
+      showAttachments: rawFilter.show_attachments === true,
+    },
+    groupBy: extra.group_by === "tag" ? "tag" : "folder",
+  };
 }
+
+/// L'ultima nota su cui si stava lavorando: il seme del grafo locale. Col
+/// grafo a fuoco la nota attiva è `null`, quindi la si ricorda da prima.
+let lastDocument: string | null = null;
+
+/// Il layout dell'ultimo grafo smontato. Il grafo si rimonta a ogni ritorno
+/// sulla sua linguetta e a ogni azione della barra: senza, ripartiva ogni
+/// volta dalla semina e dalla vista intera. Resta in memoria, non nel vault.
+let rememberedLayout: SavedLayout | null = null;
 
 /// Costruisce i testi del pannello nella lingua corrente. Le chiavi dei campi
 /// e dei preset sono letterali, così il compilatore verifica che ogni
@@ -235,7 +285,10 @@ function panelCopy(): PanelCopy {
 function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): () => void {
   const data = readData(payload);
   const config = loadConfig();
-  const times = [...new Set(Object.values(data.modified))].sort((a, b) => a - b);
+  // I passi della timeline sono **giorni** (locali), non millisecondi: con
+  // migliaia di note ogni istante di modifica era un passo da mezzo secondo.
+  const dayOf = (ms: number): number => new Date(ms).setHours(0, 0, 0, 0);
+  const times = [...new Set(Object.values(data.modified).map(dayOf))].sort((a, b) => a - b);
   const visible = new Set(data.nodes);
   let cutoffIndex = times.length;
   let playTimer: number | undefined;
@@ -276,7 +329,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   let disposed = false;
   const settleEngine = (engine: GraphEngine): void => {
     if (disposed) return;
-    const next = engine.createChart({ config, data });
+    const next = engine.createChart({ config, data, layout: rememberedLayout });
     next.setVisibleNodes(cutoffIndex === times.length ? null : visible);
     chart = next;
     const created = engine.createPhysicsPanel({
@@ -298,6 +351,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     next.open = (id: string) => onAction({ action: OPEN, payload: { [DOC]: id } }, []);
     next.onFocusChange = showSelection;
     next.mount(viewport);
+    drawLegend(next.setGroups(Object.keys(data.groups).length > 0 ? data.groups : null));
     viewport.append(count, created.element);
     refreshLive();
     viewport.removeAttribute("aria-busy");
@@ -392,8 +446,9 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
       const open = document.createElement("button");
       open.type = "button";
       open.className = "graph-list-open";
-      open.textContent = testoP8("graph.list.open", id);
+      open.textContent = nodeLabel(id);
       open.setAttribute("aria-label", testoP8("graph.list.open", id));
+      setTooltip(open, id);
       if (i === selected) open.setAttribute("aria-current", "true");
       const at = i;
       trackListButton(open, () => {
@@ -416,6 +471,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
       prev.type = "button";
       prev.disabled = page === 0;
       prev.textContent = "‹";
+      prev.setAttribute("aria-label", t("graph.list.previous"));
       trackListButton(prev, () => {
         page = Math.max(0, page - 1);
         drawList();
@@ -423,11 +479,12 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
       const info = document.createElement("span");
       info.className = "graph-list-info";
       info.textContent = `${page + 1}/${pages}`;
+      info.setAttribute("aria-label", t("graph.list.page", { page: page + 1, pages }));
       const next = document.createElement("button");
       next.type = "button";
       next.disabled = page >= pages - 1;
       next.textContent = "›";
-      next.setAttribute("aria-label", "›");
+      next.setAttribute("aria-label", t("graph.list.next"));
       trackListButton(next, () => {
         page = Math.min(pages - 1, page + 1);
         drawList();
@@ -488,13 +545,13 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   function timeText(): string {
     return cutoffIndex === times.length
       ? t("graph.time.all")
-      : t("graph.time.by", { date: new Date(times[cutoffIndex]).toISOString().slice(0, 10) });
+      : t("graph.time.by", { date: new Date(times[cutoffIndex]).toLocaleDateString(resolvedLanguage()) });
   }
   function updateTimeline(): void {
     visible.clear();
     const cutoff = cutoffIndex === times.length ? Infinity : times[cutoffIndex];
     for (const id of data.nodes) {
-      if (data.modified[id] === undefined || data.modified[id] <= cutoff) visible.add(id);
+      if (data.modified[id] === undefined || dayOf(data.modified[id]) <= cutoff) visible.add(id);
     }
     chart?.setVisibleNodes(cutoffIndex === times.length ? null : visible);
     timeInput.value = String(cutoffIndex);
@@ -524,8 +581,11 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     if (cutoffIndex === times.length) cutoffIndex = 0;
     updateTimeline();
     play.textContent = t("graph.time.pause");
+    // Una riproduzione dura al più una trentina di secondi, qualunque sia
+    // quanti giorni copre il vault.
+    const stride = Math.max(1, Math.ceil(times.length / 60));
     playTimer = window.setInterval(() => {
-      cutoffIndex++;
+      cutoffIndex = Math.min(times.length, cutoffIndex + stride);
       updateTimeline();
       if (cutoffIndex >= times.length) {
         clearInterval(playTimer);
@@ -536,7 +596,103 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   };
   timeInput.addEventListener("input", onTimeInput);
   play.addEventListener("click", onPlay);
-  host.append(viewport, timeline, empty, status, list);
+  // La barra dei controlli: grafo della nota o intero, profondità e verso,
+  // colori per cartella o tag, orfani e allegati. Sono le azioni che il
+  // provider sa già fare; qui diventano visibili.
+  const toolbar = document.createElement("div");
+  toolbar.className = "graph-toolbar";
+  toolbar.setAttribute("role", "toolbar");
+  toolbar.setAttribute("aria-label", t("graph.toolbar"));
+  const act = (action: string, payload: Record<string, unknown>) => onAction({ action, payload }, []);
+  const seedButton = document.createElement("button");
+  seedButton.type = "button";
+  if (data.local) {
+    seedButton.textContent = t("graph.local.leave");
+    seedButton.addEventListener("click", () => act("seed", { [DOC]: "" }));
+  } else {
+    const seed = lastDocument;
+    seedButton.textContent = seed ? t("graph.local.enter", { doc: nodeLabel(seed) }) : t("graph.local.none");
+    seedButton.disabled = !seed;
+    seedButton.addEventListener("click", () => {
+      if (seed) act("seed", { [DOC]: seed });
+    });
+  }
+  toolbar.append(seedButton);
+  const select = (label: string, value: string, options: [string, string][], run: (value: string) => void): HTMLLabelElement => {
+    const wrap = document.createElement("label");
+    wrap.className = "graph-toolbar-field";
+    const name = document.createElement("span");
+    name.textContent = label;
+    const field = document.createElement("select");
+    for (const [key, text] of options) {
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = text;
+      option.selected = key === value;
+      field.append(option);
+    }
+    field.addEventListener("change", () => run(field.value));
+    wrap.append(name, field);
+    return wrap;
+  };
+  if (data.local) {
+    toolbar.append(
+      select(t("graph.local.depth"), String(data.local.depth), [["1", "1"], ["2", "2"], ["3", "3"]], (v) => act("depth", { depth: Number(v) })),
+      select(t("graph.local.direction"), data.local.direction, [
+        ["outbound", t("graph.local.outbound")],
+        ["inbound", t("graph.local.inbound")],
+        ["both", t("graph.local.both")],
+      ], (v) => act("direction", { direction: v })),
+    );
+  }
+  toolbar.append(select(t("graph.group.label"), data.groupBy, [
+    ["folder", t("graph.group.folder")],
+    ["tag", t("graph.group.tag")],
+  ], (v) => act("group_by", { group_by: v })));
+  const toggle = (label: string, checked: boolean, key: string): HTMLLabelElement => {
+    const wrap = document.createElement("label");
+    wrap.className = "graph-toolbar-field";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = checked;
+    box.addEventListener("change", () => act("filter", { key }));
+    wrap.append(box, document.createTextNode(label));
+    return wrap;
+  };
+  toolbar.append(
+    toggle(t("graph.filter.orphans"), data.filter.showOrphans, "show_orphans"),
+    toggle(t("graph.filter.attachments"), data.filter.showAttachments, "show_attachments"),
+  );
+  // Il grafo non si ridisegna da solo (la simulazione non riparte sotto il
+  // mouse); quando il vault cambia lo dice, e si aggiorna a richiesta.
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.className = "graph-refresh";
+  refresh.hidden = true;
+  refresh.textContent = t("graph.refresh");
+  refresh.addEventListener("click", () => act("refresh", {}));
+  toolbar.append(refresh);
+  const stopIndex = onEvent("index_updated", () => {
+    refresh.hidden = false;
+  });
+  const legend = document.createElement("ul");
+  legend.className = "plain-list graph-legend";
+  legend.setAttribute("aria-label", t("graph.group.legend"));
+  const drawLegend = (names: string[]): void => {
+    legend.replaceChildren();
+    legend.hidden = names.length === 0;
+    names.forEach((name, index) => {
+      const li = document.createElement("li");
+      const swatch = document.createElement("span");
+      swatch.className = "graph-swatch";
+      swatch.style.background = `var(${GROUP_TOKENS[index] ?? "--muted"})`;
+      swatch.setAttribute("aria-hidden", "true");
+      li.append(swatch, document.createTextNode(name === "" ? "/" : name));
+      legend.append(li);
+    });
+  };
+  drawLegend([]);
+  host.append(toolbar, legend, viewport, timeline, empty, status, list);
   drawList();
   // `on` restituisce il disposer della registrazione: il renderer deve
   // rimuovere il listener quando il grafo viene smontato, non solo ignorare
@@ -570,7 +726,11 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     play.removeEventListener("click", onPlay);
     unsubscribeLayout();
     unsubscribeLanguage();
+    stopIndex();
+    toolbar.remove();
+    legend.remove();
     for (const release of listDisposers.splice(0)) release();
+    rememberedLayout = chart?.snapshot() ?? rememberedLayout;
     chart?.unmount();
     chart = null;
     panel?.destroy();

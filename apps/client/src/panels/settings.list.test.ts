@@ -178,10 +178,10 @@ describe("le cartelle escluse nel pannello", () => {
   it("lascia le altre liste in sola lettura", async () => {
     await openPanel([
       listEntry(EXCLUDED, ["node_modules"]),
-      listEntry("plugins.disabled", ["example.plugin"]),
+      listEntry("sync.exclude", ["drafts"]),
     ]);
 
-    const readonly = document.getElementById("setting-plugins.disabled");
+    const readonly = document.getElementById("setting-sync.exclude");
     expect(readonly).not.toBeNull();
     expect(readonly).not.toBeInstanceOf(HTMLInputElement);
     expect(document.querySelectorAll("button[type=submit]")).toHaveLength(1);
