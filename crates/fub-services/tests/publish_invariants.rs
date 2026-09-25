@@ -225,7 +225,14 @@ fn crash_between_renames_recovers_newest_version() {
     };
     commit_site(&data, &request, &[], quota(), 16, 1, false).unwrap();
     // Simulate a crash that leaves the committed record but loses the live pointer.
-    std::fs::remove_file(data.join("sites/blog/live")).unwrap();
+    // Per Windows un link a una cartella è una cartella: si toglie con remove_dir.
+    let live = data.join("sites/blog/live");
+    if cfg!(windows) {
+        std::fs::remove_dir(&live)
+    } else {
+        std::fs::remove_file(&live)
+    }
+    .unwrap();
     let restored = recover_interrupted_commit(&data, "blog").unwrap();
     assert_eq!(restored, Some(1));
     let (bytes, _) = resolve_static(&data, "blog", "index.html").unwrap();
