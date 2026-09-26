@@ -112,7 +112,6 @@ impl<T> Shelter<T> {
     /// Zero è il caso normale, e un sito che non chiama mai questo metodo
     /// degrada in silenzio col conto di [`reports`](Shelter::denunce) come sola
     /// traccia — il che va bene finché è **scritto** che è così.
-    /// traccia — il che va bene finché è **scritto** che è così.
     pub fn unreported(&self) -> u32 {
         let reports = self.reports.load(Ordering::Relaxed);
         reports.saturating_sub(self.reported.swap(reports, Ordering::Relaxed))
@@ -298,7 +297,6 @@ impl<T> Condition<T> {
 /// Non prende il lucchetto e non lo vuole: `notify_all` non chiede la guardia, e
 /// suonare tenendola in mano rimetterebbe in fila chi si sveglia. Vive quanto la
 /// chiamata, e la sua unica ragione è che *nessuna* strada d'uscita la salti.
-/// chiamata, e la sua unica ragione è che *nessuna* strada d'uscita la salti.
 struct Ring<'c>(&'c Condvar);
 
 impl Drop for Ring<'_> {
@@ -430,7 +428,6 @@ mod tests {
         // una volta ogni tanto. La bandiera si alza **sotto il lucchetto**, e
         // l'unico posto in cui quel lucchetto si rende è dentro `wait_while`:
         // vederla alzata da qui vuol dire che chi aspetta sta dormendo davvero.
-        // vederla alzata da qui vuol dire che chi aspetta sta dormendo davvero.
         let c = Arc::new(Condition::new((0u64, false)));
         let (tx, rx) = std::sync::mpsc::channel();
         let waker = {
@@ -469,7 +466,6 @@ mod tests {
         });
         let state = c.acquire();
         // Nessuno cambierà lo stato: si prova che l'attesa **torna** invece di
-        // paniare sul veleno, e che torna col valore che c'era.
         // paniare sul veleno, e che torna col valore che c'era.
         let out = c.wait_or(state, std::time::Duration::from_millis(1), |q| *q == 7);
         assert_eq!(*out, 7);

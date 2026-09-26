@@ -44,7 +44,7 @@ copie divergenti delle regole.
 | scrittura vault | capability esplicita, revisione e atomicità |
 | storage plugin | namespace dell'id proprietario |
 | query | provider e scope serviti |
-| eventi | maschera e budget |
+| eventi e job | maschera, budget, fatti propri e nomi di job propri |
 | rete | metodo, host e limiti |
 | tempo e random | quantità e disponibilità |
 | impostazioni | livello scrivibile e chiave dichiarata |

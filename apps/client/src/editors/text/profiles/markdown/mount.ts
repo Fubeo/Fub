@@ -1,19 +1,19 @@
-import type { EmbedContent, RenderedDocument, UiNode } from "../host/contract";
-import { BASE_RENDERER_NS } from "../editors/base/data";
-import { renderEmbed } from "../host/query";
-import { errorText } from "../host/errors";
-import { onLanguage, t } from "../i18n/strings";
-import { highlightMarkdownCode } from "../editors/text/profiles/markdown/highlight-code";
-import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
-import { mountMermaidBlocks } from "./mermaid";
+import type { EmbedContent, RenderedDocument } from "../../../../host/contract";
+import { renderEmbed } from "../../../../host/query";
+import { errorText } from "../../../../host/errors";
+import { onLanguage, t } from "../../../../i18n/strings";
+import { highlightMarkdownCode } from "./highlight-code";
+import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifetime";
+import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import { mountMathBlocks } from "./math";
-import { hydrateVaultMedia } from "./markdown-media";
-import { mediaKindOfId } from "../editors/media/media-types";
-import type { MarkdownResources, NativeMarkdownContent } from "./markdown-resources";
-import { mountTree, unmountTree } from "./node";
-import { notify } from "./notify";
-import { Race, type Expected } from "./race";
-import { isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "./sanitize";
+import { hydrateVaultMedia } from "./media";
+import { mediaKindOfId } from "../../../media/media-types";
+import type { MarkdownResources, NativeMarkdownContent } from "../../../../ui/markdown-resources";
+import { mountTree, unmountTree } from "../../../../ui/node";
+import { notify } from "../../../../ui/notify";
+import { Race, type Expected } from "../../../../ui/race";
+import { external, hasScheme, isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
+import { writeClipboardText } from "../../../../platform/clipboard";
 
 export interface MarkdownMountOptions {
   readonly documentId?: string;
@@ -87,7 +87,7 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
       life.listen(button, "click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void Promise.resolve().then(() => navigator.clipboard.writeText(text)).then(
+        void writeClipboardText(text).then(
           () => { if (!life.closed) notify(t("preview.code_copied")); },
           (error: unknown) => {
             if (!life.closed) notify(t("preview.copy_failed", { reason: errorText(error) }), "guasto");
@@ -151,14 +151,16 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     }
     const link = target.closest<HTMLAnchorElement>("a");
     if (!link) return;
-    if (link.classList.contains("internal-path")) {
-      event.preventDefault();
-      const path = link.dataset.path ?? "";
+    const openPath = (path: string): void => {
       if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path)).catch((error: unknown) => {
         if (life.closed) return;
         link.classList.add("unresolved");
         notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
       });
+    };
+    if (link.classList.contains("internal-path")) {
+      event.preventDefault();
+      openPath(link.dataset.path ?? "");
       return;
     }
     if (link.classList.contains("wikilink") && options.openWikilink) {
@@ -189,15 +191,25 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
         event.preventDefault();
         destination.scrollIntoView({ block: "start" });
       }
+      return;
     }
+    // Nessun link naviga la webview: la shell è una pagina sola, e seguirne uno
+    // la scaricherebbe con i buffer, le bozze in volo e la storia di ogni
+    // riquadro. Un indirizzo con schema va al sistema, uno relativo è un
+    // documento del vault.
+    event.preventDefault();
+    if (hasScheme(href) || external(href)) window.open(href, "_blank", "noopener,noreferrer");
+    else openPath(safeDecode(href));
   });
 }
 
-/** A file-backed Base embed derives file.* from its containing note, not its .base path. */
-function contextualPart(node: UiNode, documentId: string | undefined): UiNode {
-  if (!documentId || node.node !== "custom" || node.ns !== BASE_RENDERER_NS ||
-      !node.payload || typeof node.payload !== "object" || Array.isArray(node.payload)) return node;
-  return { ...node, payload: { ...node.payload, container: documentId } };
+/// Un `href` relativo arriva codificato (`Nota%20uno.md`), un path del vault no.
+function safeDecode(href: string): string {
+  try {
+    return decodeURI(href);
+  } catch {
+    return href;
+  }
 }
 
 function enhanceContent(
@@ -213,7 +225,7 @@ function enhanceContent(
       const slot = slots.get(String(part.slot));
       if (!slot) continue;
       slot.dataset.kind = part.kind;
-      mountTree(slot, contextualPart(part.node, options.documentId), async () => {});
+      mountTree(slot, part.node, async () => {}, { container: options.documentId ?? null });
       life.add(() => unmountTree(slot));
     }
   }

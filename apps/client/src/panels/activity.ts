@@ -27,7 +27,8 @@
 // [decisione 0035]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 import { api } from "../host/ipc";
 import { activeJobs } from "../host/query";
-import type { JobProgress, JobStatus, KernelNotice } from "../host/contract";
+import type { ExportArtifact, JobProgress, JobStatus, KernelNotice } from "../host/contract";
+import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { onAnyEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
@@ -150,24 +151,22 @@ function describeOutcome(error: unknown): string {
   return String(error);
 }
 
-export type ExportContent =
-  | { kind: "bytes"; value: readonly number[] }
-  | { kind: "delivered"; value: string };
-export interface ExportArtifact {
-  path: string;
-  media_type: string;
-  content: ExportContent;
+/** The successful result of the transfer job when it is an export: the one
+ * that carries `artifacts`. An import result through the same job has none. */
+function exportReport(notice: KernelNotice): { artifacts: unknown } | null {
+  if (notice.event.type !== "job_done" || notice.event.job !== ARTIFACT_JOB) return null;
+  const result = notice.event.result;
+  if (!result || typeof result !== "object" || !("Ok" in result)) return null;
+  const report = result.Ok;
+  if (!report || typeof report !== "object" || !("artifacts" in report)) return null;
+  return report;
 }
 
 /** Only typed successful transfer results can offer a native Save action.
  * Delivered content is a receipt, never a second promise to write bytes. */
 export function exportArtifacts(notice: KernelNotice): ExportArtifact[] | null {
-  if (notice.event.type !== "job_done" ||
-      !["import.transfer", "export.run"].includes(notice.event.job)) return null;
-  const result = notice.event.result;
-  if (!result || typeof result !== "object" || !("Ok" in result)) return null;
-  const report = result.Ok;
-  if (!report || typeof report !== "object" || !("artifacts" in report)) return null;
+  const report = exportReport(notice);
+  if (!report) return null;
   const artifacts = report.artifacts;
   if (!Array.isArray(artifacts) || artifacts.length > 128) return null;
   let total = 0;
@@ -302,10 +301,9 @@ export function mountActivity(lifetime: Lifetime): void {
           // Keep at most two completed exports; byte-bearing reports are
           // bounded by the producer's 32 MiB cap and released on vault close.
           if (finished.length > 2) finished.shift();
-        } else if (completed.job === "export.run" &&
-            artifacts === null && completed.result &&
-            typeof completed.result === "object" &&
-            "Ok" in completed.result) {
+        } else if (artifacts === null && exportReport(eventNotice)) {
+          // Un export riuscito i cui artefatti non passano la validazione:
+          // tacere vorrebbe dire un file promesso che non arriva mai.
           notify(t("activity.artifact_invalid"), "guasto");
         }
       }

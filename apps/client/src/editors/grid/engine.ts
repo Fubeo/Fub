@@ -8,10 +8,10 @@ import type {
   GridWindowRequest,
   SheetCellValue,
 } from "../../host/contract";
-import type { TextOperation } from "../../editor/text-operation";
+import type { EditorChangeOrigin, TextOperation } from "../core/text-operation";
 import type { Theme } from "../../theme/theme";
 import { t, onLanguage } from "../../i18n/strings";
-import { createTextEngine, type EditorChangeOrigin, type TextEngine } from "../text/engine";
+import { createTextEngine, type TextEngine } from "../text/engine";
 import { createFormulaProfile } from "../text/profiles/formula";
 import {
   cellAt,
@@ -36,6 +36,10 @@ import {
   type GridCellPatch,
   type GridOperation,
 } from "./operation";
+
+/// Oltre queste celle un intervallo non viaggia nel contesto: rifarne il
+/// testo a ogni movimento della selezione costerebbe quanto copiarlo.
+const SELECTED_TEXT_CELLS = 10_000;
 
 const DEFAULT_ROW_HEIGHT = 28;
 const DEFAULT_COLUMN_WIDTH = 120;
@@ -476,6 +480,7 @@ export class GridEngine {
       onChange: (change) => this.#draftFromEditor("formula", change.text),
       onSelectionChange: () => {},
       theme: options.theme,
+      field: true,
       extensions: () => formulaProfile.extensions(),
     });
     const cellProfile = createFormulaProfile({
@@ -488,6 +493,7 @@ export class GridEngine {
       onChange: (change) => this.#draftFromEditor("cell", change.text),
       onSelectionChange: () => {},
       theme: options.theme,
+      field: true,
       extensions: () => cellProfile.extensions(),
     });
 
@@ -593,6 +599,15 @@ export class GridEngine {
 
   focus(): void {
     if (!this.#destroyed) this.#viewport.focus();
+  }
+
+  /** The selected range as the text a copy would give (TSV), or `null` past the cap. */
+  selectedText(): { primary: string; secondary: string[] } | null {
+    if (this.#destroyed || !this.#workbook) return null;
+    const range = normalizedSelection(this.#selection);
+    const cells = (range.rowEnd - range.rowStart + 1) * (range.columnEnd - range.columnStart + 1);
+    if (cells > SELECTED_TEXT_CELLS) return null;
+    return { primary: selectionTsv(this.#sheet(), this.#selection), secondary: [] };
   }
 
   setReadOnly(readOnly: boolean): void {

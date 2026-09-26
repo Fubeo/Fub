@@ -605,6 +605,7 @@ fn manifest_of_the_index(root: &Utf8Path) -> String {
 }
 
 /// Il ponte eventi ridotto a ciò che serve a un test: il nome degli eventi
+/// passati.
 struct Recorder(Arc<Mutex<Vec<String>>>);
 
 impl EventSink for Recorder {
@@ -618,9 +619,9 @@ impl EventSink for Recorder {
     }
 }
 
-/// passati.
 /// Un rilevatore che si limita ad alzare la bandiera del kernel: è tutto ciò
 /// che un watcher vero fa in più di `NoWatcher`, e qui serve senza il
+/// filesystem in mezzo.
 struct FakeWatcher;
 
 struct WatcherGuard(Arc<AtomicBool>);
@@ -649,13 +650,13 @@ impl WatcherFactory for FakeWatcher {
     }
 }
 
-/// filesystem in mezzo.
 /// `Host::is_watching` e `IndexQuery::VaultStatus` rispondono **dallo stesso
 /// bit** (§9.7).
 ///
 /// Due copie del fatto sarebbero due verità, e la seconda mentirebbe in
 /// silenzio: chi monta alzerebbe la sua all'avvio e nessuno la abbasserebbe
 /// quando il rilevatore muore. Il presidio è che l'host non scrive mai il
+/// proprio valore — legge la bandiera del kernel.
 #[test]
 fn the_detection_is_asks_from_the_channel_data_and_from_host_and_and_the_same_bit() {
     let v = Vault::new();
@@ -678,8 +679,8 @@ fn the_detection_is_asks_from_the_channel_data_and_from_host_and_and_the_same_bi
         "chi guarda ha alzato la bandiera del kernel, non una sua"
     );
 
-    // proprio valore — legge la bandiera del kernel.
     // E chi smette lo dice: chiudere il vault lascia andare il rilevatore, e la
+    // risposta cambia senza che nessuno la aggiorni a mano.
     let ws = with.debug_workspace(None).unwrap();
     with.close_vault(&v.root).expect("closes");
     assert!(
@@ -709,13 +710,13 @@ fn a_path_that_is_not_a_directory_is_refused_before_anything_is_mounted() {
     assert!(host.debug_workspace(None).is_err());
 }
 
-// risposta cambia senza che nessuno la aggiorni a mano.
 /// **Chi apre distingue un vault intero da uno aperto in parte** (§15.7,
 /// decisione 0068).
 ///
 /// Il markdown vero non rifiuta quasi niente, quindi la leva portatile è la
 /// lettura: dei byte che non sono UTF-8 sono ciò che resta di una nota dopo un
 /// crash a metà scrittura. Prima di questa voce il vault non si apriva affatto,
+/// e le altre due note erano irraggiungibili per colpa della terza.
 #[test]
 fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
     let v = Vault::new();
@@ -726,17 +727,17 @@ fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
     let host = headless();
     let info = host.open(&v.root).expect("the vault opens anyway");
 
-    // e le altre due note erano irraggiungibili per colpa della terza.
     // **Su `info` non c'è niente da asserire**, ed è la conseguenza vera
     // dell'apertura a fasi (§15.7): `open` torna appena il vault è
     // *utilizzabile*, e scoprire uno scarto vuol dire aver già provato a
     // leggere — cioè la fase dopo. Quella lista dice «cosa non si è letto
     // **finora**», quindi qui è vuota o piena a seconda di quanto ha fatto in
     // tempo a camminare l'indicizzazione: asserire il vuoto sarebbe presidiare
+    // una corsa, e su tre note la si perderebbe quasi sempre.
     let _ = &info;
 
-    // una corsa, e su tre note la si perderebbe quasi sempre.
     // L'esito **si consulta**, che è ciò che la voce chiedeva: finita
+    // l'indicizzazione, chi chiede il vault trova cosa non si è potuto leggere.
     host.wait_indexed(None).expect("waits for indexing");
     let info = host
         .open(&v.root)
@@ -748,9 +749,9 @@ fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
         "the outcome of the open is consultable when the open has finished"
     );
 
-    // l'indicizzazione, chi chiede il vault trova cosa non si è potuto leggere.
     // Ed è un fatto **della sessione**: riaprire lo stesso vault non lo rimonta
     // (§9.6), quindi la seconda risposta non può essere un silenzio che
+    // sembrerebbe dire «adesso è tutto a posto».
     let still = host.open(&v.root).expect("reopens");
     assert_eq!(
         still.unread.len(),

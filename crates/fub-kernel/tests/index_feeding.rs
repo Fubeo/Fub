@@ -337,6 +337,7 @@ fn a_file_the_vault_ignores_never_reaches_models_events_or_index() {
     // Questi file esistono, hanno un'estensione gestita e un provider: è solo
     // il posto in cui si trovano a renderli invisibili al vault. Ed è il
     // percorso del *watcher* — `sync_path` — non quello della scansione, che
+    // il filtro già lo aveva.
     let ignored = [
         ".trash/deleted.txt",
         ".obsidian/workspace.txt",
@@ -375,15 +376,15 @@ fn backlinks_never_reach_the_providers() {
         page: None,
     });
 
-    // il filtro già lo aveva.
     // Il grafo del kernel è l'unica fonte di verità dei backlink: nessun
     // provider viene interpellato, non c'è una seconda verità che possa
+    // divergere dalla prima.
     assert!(matches!(r, Ok(IndexResult::Backlinks(_))));
     assert!(calls_of(&log).is_empty());
 }
 
-// divergere dalla prima.
 /// Chi non ha dichiarato una rotta **non viene interpellato**: non c'è nessuna
+/// caduta in avanti da provocare, e la spia muta non vede passare niente.
 #[test]
 fn a_provider_that_declared_nothing_is_never_asked() {
     let fx = Fixture::new();
@@ -417,20 +418,20 @@ fn a_provider_that_declared_nothing_is_never_asked() {
         "before, it was consulted first and responded `BadArgs`: the try-based \
          dispatch ran every query on every index"
     );
-    // caduta in avanti da provocare, e la spia muta non vede passare niente.
     // Due, e non una: dalla §21.9 una domanda testuale si fa in **due tempi** —
     // si seleziona senza estratti, e gli estratti si richiedono per le sole
     // righe che sono sopravvissute alla finestra. Chi risponde li vede
     // entrambi, e li vede sullo stesso indice: il secondo tempo non riparte dal
+    // routing, torna da chi ha selezionato.
     assert_eq!(
         calls_of(&answering_log),
         vec![Call::Query(Excerpts::Omit), Call::Query(Excerpts::Attach)]
     );
 }
 
-// routing, torna da chi ha selezionato.
 /// «Nessuno la serve» è una risposta a sé, e non l'errore dell'ultimo
 /// interpellato: chi disegna deve poter scegliere fra «installa un indice» e
+/// «qualcosa è andato storto».
 #[test]
 fn a_query_nobody_declared_is_unserved() {
     let fx = Fixture::new();
@@ -460,14 +461,14 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
         page: Some(Page::first(5)),
         excerpts: Excerpts::Attach,
     });
-    // «qualcosa è andato storto».
     // Zero risultati e "nessun indice sa cercare nel testo" sono due cose
     // diverse: la prima è una risposta, la seconda una mancanza, e confonderle
+    // nasconderebbe un guasto.
     assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
 }
 
-// nasconderebbe un guasto.
 /// Due indici che rivendicano la stessa famiglia: prima vinceva il primo
+/// registrato **in silenzio**, adesso il secondo non si registra e lo dice.
 #[test]
 fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
     struct Rival;
@@ -512,7 +513,7 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
     assert!(matches!(err, fub_kernel::RegistryError::Route(_)), "{err}");
     ws.reindex().unwrap();
 
-    // registrato **in silenzio**, adesso il secondo non si registra e lo dice.
+    // E chi c'era risponde ancora: il perdente non si è registrato a metà.
     let r = ws.query_index(IndexQuery::Tags {
         matching: QueryExpr::all(),
         page: None,
@@ -525,7 +526,7 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
         other => panic!("expected tags, got {other:?}"),
     }
 
-    // E chi c'era risponde ancora: il perdente non si è registrato a metà.
+    // Sostituirlo resta possibile, ma si chiede per nome.
     ws.replace_index_provider("test.rival", Box::new(Rival))
         .expect("the declared replacement is not a conflict");
     let r = ws.query_index(IndexQuery::Tags {
@@ -551,13 +552,13 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
     ws.register_index_provider("test.spy", Box::new(spy))
         .expect("registered");
 
-    // Sostituirlo resta possibile, ma si chiede per nome.
     // L'attivazione è la PRIMA cosa che accade, e accade alla registrazione:
     // dopo il primo `on_documents_indexed` sarebbe già troppo tardi per
+    // ricordarsi di ciò che si è già visto.
     assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
 
-    // ricordarsi di ciò che si è già visto.
     // E ciò che l'indice scrive finisce nel *suo* recinto, che gli assegna
+    // l'host: il provider ha nominato un blob, non un path.
     // Lo spazio dati **autorevole** del provider: da §31.8 una `data_write`
     // finisce in `.fub/plugins/<id>/`, non nella cache derivata di
     // `.fub/data/`.
@@ -569,9 +570,9 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
         .join(MEMORY);
     assert_eq!(std::fs::read_to_string(&memory).unwrap(), "was here");
 
-    // l'host: il provider ha nominato un blob, non un path.
     // Alla riapertura del vault la memoria si ritrova. È esattamente ciò che
     // un indice persistente deve poter fare — e ciò che, senza host in
+    // `activate`, un provider di terzi non potrebbe fare affatto.
     let mut reopened = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
     reopened
@@ -582,7 +583,7 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
         vec![Call::Activate(Some("was here".into()))]
     );
 
-    // `activate`, un provider di terzi non potrebbe fare affatto.
+    // Un altro indice non vede la memoria del primo: il recinto è per-id.
     let (spy, log) = SpyIndex::new(true);
     reopened
         .register_index_provider("test.other", Box::new(spy))
@@ -590,7 +591,6 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
     assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
 }
 
-// Un altro indice non vede la memoria del primo: il recinto è per-id.
 /// Un provider che, nel secondo tempo della §21.9, riporta **due righe per lo
 /// stesso documento**: prima la seconda cancellava la prima.
 ///
@@ -600,6 +600,8 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
 /// 0049 dice che le occorrenze **si sommano** — la ricerca ne mostra N e
 /// permette di saltare dall'una all'altra — ma la fusione la fa
 /// `DocumentMatch::absorb`, e chi raccoglieva gli estratti in una `BTreeMap`
+/// con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
+/// la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
 struct SegmentIndex;
 
 impl IndexProvider for SegmentIndex {
@@ -633,13 +635,13 @@ impl IndexProvider for SegmentIndex {
             _ => Excerpts::Omit,
         };
         if !excerpts.wanted() {
-            // con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
+            // Primo tempo: si seleziona e basta, una riga per documento.
             return Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
                 doc,
             )
             .with_score(1.0)])));
         }
-        // la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
+        // Secondo tempo: due segmenti, due righe, lo stesso documento.
         let mut first = DocumentMatch::of(doc.clone()).with_score(1.0);
         first.snippet = Some("…alpha…".into());
         first.occurrences = vec![DocPosition::at(Span::new(3, 7), rev.clone())];
@@ -680,8 +682,8 @@ fn two_excerpt_rows_for_one_document_merge_instead_of_overwriting() {
     assert_eq!(hits.items.len(), 1, "a document remains a document");
     let row = &hits.items[0];
 
-    // Primo tempo: si seleziona e basta, una riga per documento.
-    // Secondo tempo: due segmenti, due righe, lo stesso documento.
+    // Le occorrenze si sommano (decisione 0049): prima ne arrivava **una**,
+    // quella del segmento letto per ultimo.
     assert_eq!(
         row.occurrences.len(),
         2,
@@ -691,12 +693,12 @@ fn two_excerpt_rows_for_one_document_merge_instead_of_overwriting() {
     assert_eq!(row.occurrences[0].span, Span::new(3, 7));
     assert_eq!(row.occurrences[1].span, Span::new(90, 94));
 
-    // Le occorrenze si sommano (decisione 0049): prima ne arrivava **una**,
+    // Le proprietà si uniscono, in ordine di chiave.
     let keys: Vec<&str> = row.properties.iter().map(|p| p.key.as_str()).collect();
     assert_eq!(keys, vec!["author", "title"]);
 
-    // quella del segmento letto per ultimo.
-    // Le proprietà si uniscono, in ordine di chiave.
+    // La rilevanza che resta è la maggiore, e l'estratto è il primo che c'è —
+    // non quello della riga arrivata per ultima, che non ne aveva nessuno.
     assert_eq!(row.score, Some(1.0));
     assert_eq!(row.snippet.as_deref(), Some("…alpha…"));
 }

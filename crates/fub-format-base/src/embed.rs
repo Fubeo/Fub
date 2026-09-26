@@ -7,7 +7,7 @@
 
 use fub_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
-    SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+    SyntaxRule, SyntaxRuleSpec, SyntaxTrigger, SECTION_ATTR,
 };
 use fub_abi::format::{ParseContext, RenderOptions};
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -110,9 +110,12 @@ impl CustomRenderer for BaseRenderer {
         let Some(source) = block.attrs.get("source").and_then(|v| v.as_str()) else {
             return Ok(CustomRendering::Fallback);
         };
+        // La sezione scelta dal riferimento (`[[x.base#Vista]]`) vince sulla
+        // vista di default del blocco.
         let view = block
             .attrs
-            .get("view")
+            .get(SECTION_ATTR)
+            .or_else(|| block.attrs.get(VIEW_KEY))
             .and_then(|v| v.as_str())
             .map(str::to_string);
         // Static/print output must be inert source, not a JS-only placeholder.
@@ -266,5 +269,30 @@ mod tests {
                 .unwrap(),
             CustomRendering::Fallback
         ));
+    }
+
+    #[test]
+    fn la_sezione_scelta_vince_sulla_vista_di_default() {
+        let mut block = CustomBlock {
+            custom_kind: BASE_CUSTOM_KIND.into(),
+            attrs: json!({
+                "source": "views:\n  - {name: A, type: table}\n  - {name: B, type: table}\n",
+                "view": "A",
+            }),
+            blocks: vec![],
+            anchor: None,
+            span: fub_abi::Span::EMPTY,
+        };
+        block.attrs[SECTION_ATTR] = json!("B");
+        let CustomRendering::Ui(node) = BaseRenderer
+            .render(&block, &RenderOptions::preview())
+            .unwrap()
+        else {
+            panic!("atteso Ui");
+        };
+        let UiKind::Custom { payload, .. } = &node.kind else {
+            panic!("atteso Custom");
+        };
+        assert_eq!(payload[VIEW_KEY], json!("B"));
     }
 }

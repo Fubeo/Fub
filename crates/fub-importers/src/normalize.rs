@@ -35,11 +35,25 @@ fn spec(id: &str, title: &str, desc: &str) -> CommandSpec {
         .with_scope(CommandScope::writing(CommandReach::Documents))
 }
 
+/// Le note su cui lavorare: quelle nominate, o tutto il vault. In tutti e due
+/// i casi solo i documenti il cui sorgente è prosa: queste sono trasformazioni
+/// del testo importato, e sul JSON di un canvas o sullo YAML di un `.base`
+/// cambierebbero struttura e significato.
 fn target_docs(args: &Args<'_>, host: &dyn HostApi) -> Result<Vec<DocId>, PluginError> {
-    if let Some(docs) = args.documents("docs") {
-        return Ok(docs);
-    }
-    Ok(host.list_documents(None)?.items)
+    let docs = match args.documents("docs") {
+        Some(docs) => docs,
+        None => host.list_documents(None)?.items,
+    };
+    Ok(docs
+        .into_iter()
+        .filter(|doc| {
+            host.format_of(doc).is_some_and(|format| {
+                format
+                    .capabilities
+                    .supports(fub_abi::options::source::PROSE)
+            })
+        })
+        .collect())
 }
 
 fn plan_edits(

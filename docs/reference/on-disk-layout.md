@@ -33,9 +33,33 @@ La cartella viene scelta in ordine:
 | `logs/fub.log` | diagnostica | n/a | log del processo |
 | `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
 | `wasm-plugins/components/<installation>-<sha256>.wasm` | installato | componente | eseguibile verificato |
+| `installed-limited.json` | autorevole | n/a | avvio limitato dei componenti installati |
+| `catalog-trust.json` | autorevole, dell'operatore | n/a | chiavi del catalogo firmato e generazione minima |
+| `catalog-feed.json` | autorevole, dell'operatore | n/a | feed firmato del catalogo |
+| `sync/vaults/<chiave>/` | autorevole locale | n/a | stato di sync di un vault |
+| `services-token` | segreto | n/a | token dei servizi salvato da `fub-cli login` |
 
 Se la cartella di configurazione non è disponibile, l'host può lavorare in
 memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
+
+Lo stato di sync è di un vault, non della macchina. La chiave viene dallo
+SHA-256 della radice canonica del vault. La cartella tiene replica,
+abbinamento, coda, cursore, conflitti e l'endpoint a cui la coppia è legata. Un
+vault spostato riparte come replica nuova, e la cartella del percorso vecchio
+non viene cancellata. I file di una versione precedente, scritti direttamente
+in `sync/` e condivisi da tutti i vault, non vengono adottati né cancellati.
+
+Sync e pubblicazione leggono il token da `FUB_SERVICES_TOKEN_FILE`, poi da
+`FUB_SERVICES_TOKEN`, poi da `services-token`. Il file vale soltanto se è
+regolare, non è un collegamento e, su Unix, è leggibile dal solo proprietario,
+come lo scrive `login`.
+
+La cornice della shell (rail con ordine e icone nascoste, pannelli laterali
+affiancati, stato e strumenti del riquadro, cornice della finestra) sta in
+`settings.json` come impostazioni `chrome.*`. Le chiavi `localStorage` di prima
+(`fub.shell.rail.v1`, `fub.layout.sidebar`, `fub.layout.inspector`) si adottano
+una volta, solo se l'impostazione è ancora al default, e si cancellano dopo
+una scrittura riuscita.
 
 ## Componenti WASM installati
 
@@ -71,6 +95,34 @@ consenso `granted`; al riavvio rilegge queste scelte. Le cinque porte IPC
 desktop delegano a `InstalledPluginManager`, che persiste le decisioni e
 riconcilia i vault aperti. La decisione persistente è nell'
 [ADR 0200](../decisions/0200-inventario-componenti-installati.md).
+
+`installed-limited.json` sceglie l'avvio limitato dei componenti installati:
+`{"enabled": true, "reason": "…"}`, al massimo 4 KiB, campi sconosciuti
+rifiutati. La scelta vale per l'apertura e non tocca `enabled` né il consenso
+dell'inventario. Un file assente vale avvio normale; un file presente ma
+illeggibile avvia in modo limitato e ne dice il motivo.
+
+`catalog-trust.json` e `catalog-feed.json` li prepara chi amministra la
+macchina. Fub li legge soltanto quando un comando del catalogo li chiede, mai
+all'avvio né dalla rete, e nessun argomento IPC ne nomina un altro. Il primo,
+al massimo 64 KiB e con i campi sconosciuti rifiutati, tiene `keys` (id della
+chiave di firma → chiave pubblica) e `min_generation`, la generazione minima
+del feed come stringa decimale; senza il file o senza chiavi il catalogo
+risponde `Unserved`. Il secondo, al massimo 4 MiB, è il feed firmato. Un file
+illeggibile è un errore, non un catalogo vuoto. L'artefatto scelto per
+un'installazione dal catalogo si legge come la sorgente di un'installazione
+diretta: file regolare, nessun collegamento simbolico, al massimo 64 MiB.
+
+## Configurazione dell'app mobile
+
+Sul mobile la cartella dati dell'app tiene `mobile-storage.json` (autorevole,
+schema 1, al massimo 128 KiB, campi sconosciuti rifiutati): la scelta fra vault
+privato e cartella condivisa e il permesso sulla cartella dato dal sistema
+(URI dell'albero su Android, bookmark security-scoped su iOS). Ogni scrittura
+porta la `revision` letta, e una revisione diversa è `Conflict`; il file si
+sostituisce con una rinomina atomica. Uno schema diverso da 1 è rifiutato e il
+file non viene riscritto. Un permesso non più persistito chiede un nuovo
+consenso e non ripiega mai sul vault privato.
 
 ## Radice del vault
 
@@ -174,7 +226,9 @@ essere eliminata e ricostruita dai documenti.
 ```
 
 `versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
-autorevoli: eliminarli perde la memoria delle versioni. Ogni `VersionRef`
+autorevoli: eliminarli perde la memoria delle versioni. Ogni nuova versione
+pota le altre per fasce: tutte sotto le 24 ore, una per ora fino a 7 giorni,
+una per giorno fino a 90. Oltre resta solo la più recente. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
 Gli snapshot conservano i byte originali, anche per allegati binari, senza
 convertire BOM o terminatori di riga. Il nome riprende l'estensione del file;
@@ -256,6 +310,24 @@ I file autorevoli seguono:
 - nessuna riscrittura se il file di partenza non è stato letto in modo
   affidabile.
 
+## Scrittore del vault
+
+Un vault ha un solo processo scrittore alla volta. Il lock è un file fratello
+della radice, `<cartella madre>/.<nome del vault>.writer.lock`, preso con un
+`flock` esclusivo non bloccante (`LockFileEx` su Windows). Lo prende
+`Host::open` prima della recovery degli snapshot e del mount, e lo rilascia la
+chiusura della sessione dopo il teardown. App, CLI e host nativo del clipper non
+ne prendono uno proprio: passano tutti dall'host.
+
+Il file sta fuori dal vault perché l'applicazione di uno snapshot sostituisce la
+radice con una rename e l'azzeramento della demo la cancella: un lock interno
+cambierebbe inode e un secondo processo otterrebbe un lock diverso. Il file non
+si rimuove mai. Un secondo processo riceve `Conflict` con la chiave
+`host.vault.writer_busy`; la CLI la riporta come `busy` (exit code 5). Dentro
+lo stesso host il lease è condiviso: riaprire un vault già aperto, o aprirlo in
+due chiamate concorrenti, non si esclude da solo. Snapshot e azzeramento della
+demo tengono il lease dalla chiusura alla riapertura.
+
 ## Snapshot globale offline
 
 L'applicazione globale di uno snapshot è distinta dal backup per-file di
@@ -284,6 +356,10 @@ immediatamente prima del commit. Un record persistente coordina `prepare`,
 `commit` e `finalize`: la root precedente resta in un contenitore `.old` finché
 la nuova è pubblicata. La recovery startup riconosce solo schema, id e nomi
 propri, completa o annulla la fase osservata e non cancella artefatti ignoti.
+Se la root pubblicata non corrisponde al manifest atteso e la precedente è
+ancora intera, la recovery rimette la precedente al suo posto e sposta la
+pubblicata accanto, in un contenitore `.rejected` che non cancella: il vault
+si riapre invece di restare bloccato.
 
 
 Per lo schema 1 la pubblicazione ricrea il contenitore con directory POSIX

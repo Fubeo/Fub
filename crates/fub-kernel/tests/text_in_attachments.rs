@@ -14,6 +14,7 @@
 //! Questi test sono il cliente che percorre quel tragitto. Il provider di prova
 //! non è un estrattore di PDF: è la sua **forma** — byte in, testo fuori — e
 //! nessun crate di parsing entra nel workspace per averla
+//! ([0087](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)).
 
 use fub_abi::model::DocId;
 use fub_abi::traits::{IndexQuery, IndexResult};

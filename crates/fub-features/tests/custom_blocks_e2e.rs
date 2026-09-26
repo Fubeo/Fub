@@ -435,7 +435,7 @@ fn from_a_renderer_not_trusted_the_content_active_not_passes() {
 /// Una sintassi di terzi che porta i propri byte sotto la chiave
 /// **convenzionale** (`source`) *e* sotto una chiave che la convenzione non
 /// nomina (`text`): la resa generica deve prendere la prima e ignorare la
-/// seconda, ed è nei due versi che il banco la tiene shutdown.
+/// seconda, ed è nei due versi che il banco la tiene ferma.
 struct ConventionRule;
 
 impl SyntaxRule for ConventionRule {
@@ -465,7 +465,7 @@ impl SyntaxRule for ConventionRule {
 }
 
 /// **Un `kind` di terzi degradato mostra i byte sotto la chiave che la
-/// convenzione declare — `source` — e sotto nessun'altra.**
+/// convenzione dichiara — `source` — e sotto nessun'altra.**
 ///
 /// È il banco che la §25.7 dichiarava mancante: un `com.example.third:*` che passa dalla
 /// degradazione generica invece che dal proprio renderer. Un plugin che non
@@ -548,7 +548,7 @@ fn two_rules_on_the_same_syntax_not_is_register_in_silence() {
         }
     }
     // Il concorrente è un terzo, e nomina dentro il proprio namespace: la
-    // regola del §7.4 è soddisfatta, e ciò che lo shutdown è l'altro conflitto —
+    // regola del §7.4 è soddisfatta, e ciò che lo ferma è l'altro conflitto —
     // quello sul **trigger**, che è ciò che questo test vuole vedere.
     ws.register_plugin(
         PluginManifest::new("com.example.third", "Third"),
@@ -634,7 +634,7 @@ fn a_plugin_revoked_not_registers_nothing() {
     assert!(preview(&ws, "g.md").parts.is_empty());
 }
 
-/// Il gemello del `GanttinoRule` che declare `com.example.third:gantt` e prova a emettere
+/// Il gemello del `GanttinoRule` che dichiara `com.example.third:gantt` e prova a emettere
 /// `callout`, che è del core.
 struct GanttBuggy;
 
@@ -677,7 +677,7 @@ fn a_third_not_is_does_pass_for_the_core() {
     )
     .unwrap();
 
-    // Dichiarare di produrre un kind del core si shutdown alla registrazione: è la
+    // Dichiarare di produrre un kind del core si ferma alla registrazione: è la
     // stessa regola dei nomi di ogni altra famiglia (§7.4).
     struct DeclaresCore;
     impl SyntaxRule for DeclaresCore {
@@ -706,7 +706,7 @@ fn a_third_not_is_does_pass_for_the_core() {
         .expect_err("`callout` non è un nome di `com.example.third`");
     assert!(err.to_string().contains("callout"), "{err}");
 
-    // E chi declare il proprio e emette quello del core viene scartato dove
+    // E chi dichiara il proprio e emette quello del core viene scartato dove
     // emette: `produces` è un contratto, non una nota.
     ws.register_syntax_rule("com.example.third", Box::new(GanttBuggy))
         .expect("dichiara solo roba sua, quindi si registra");

@@ -4,10 +4,9 @@
 //! guarda il vault: quante note, quanti tag, quanti file, quanti link rotti.
 //! Legge solo il canale dati (`IndexQuery::{Entries,Tags,VaultHealth}`).
 //!
-//! Sta in sidebar e non su `Main`: una view principale la shell la apre solo
-//! con un comando di shell (`shell.graph`) o con `OpenView`, e quest'ultimo
-//! oggi la shell non lo esegue. Una dashboard che non si vede non è una
-//! dashboard.
+//! Sta in sidebar e non su `Main`: una view principale si vede soltanto quando
+//! qualcuno la apre in un riquadro (dalla palette o con `OpenView`), mentre la
+//! dashboard è una sintesi da tenere sott'occhio accanto alle note.
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};

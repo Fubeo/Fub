@@ -38,12 +38,29 @@
 //! il verso peggiore: il codice scritto contro il doppio passa e si rompe in
 //! produzione. Sono scritti dove sono stati riparati, in
 //! `fub-sdk/src/testing/mod.rs`.
+//!
+//! # Le risposte che dipendono dal formato
+//!
+//! Il banco registrava soltanto il Markdown. Con un secondo formato accanto si
+//! confrontano le domande in cui il formato decide: chi è un documento, quale
+//! voce dell'anagrafe è un allegato, quali documenti sceglie un filtro, dove
+//! porta un nome che due formati condividono, e come il Markdown di serie del
+//! doppio scrive link e spunte rispetto al provider vero. Il confronto ha
+//! trovato un doppio che spuntava qualunque byte gli si indicasse, anche in
+//! mezzo alla prosa.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::{EditRequest, TextEdit, WriteBase};
-use fub_abi::error::PluginError;
-use fub_abi::model::{DocId, Span};
-use fub_abi::traits::{DataWrite, HostApi};
+use fub_abi::error::{FormatError, PluginError};
+use fub_abi::format::{
+    DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
+    LinkInsert, ParseContext, RenderOptions,
+};
+use fub_abi::model::{DocId, DocumentModel, LinkTarget, Span, TaskMarker};
+use fub_abi::query::{QueryExpr, QueryPredicate};
+use fub_abi::traits::{
+    DataWrite, EntryKind, FolderScope, HostApi, IndexQuery, IndexResult, VaultEntry,
+};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{
     DirEntry, FormatRegistry, FsStorage, MachineSettings, Stat, VaultStorage, Workspace,
@@ -168,12 +185,28 @@ fn on_the_two_host(
     storage: Option<Arc<dyn VaultStorage>>,
     test: impl Fn(&mut dyn HostApi) -> Vec<(String, String)>,
 ) {
+    on_the_two_host_serving(storage, Vec::new, test)
+}
+
+/// Come [`on_the_two_host`], con dei formati accanto al Markdown. Il kernel li
+/// registra; il doppio, che non parsa, li riceve seminati con descrittore e
+/// capacità **del provider stesso**, cioè la sola cosa che può sapere di loro.
+fn on_the_two_host_serving(
+    storage: Option<Arc<dyn VaultStorage>>,
+    formats: fn() -> Vec<Box<dyn FormatProvider>>,
+    test: impl Fn(&mut dyn HostApi) -> Vec<(String, String)>,
+) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
+    for provider in formats() {
+        registry
+            .register(provider)
+            .expect("nessun conflitto di estensioni");
+    }
     let mut ws = match storage {
         None => Workspace::new(&root, registry).expect("l'apertura del vault riesce"),
         Some(s) => Workspace::on(&root, registry, s, MachineSettings::in_memory())
@@ -189,6 +222,16 @@ fn on_the_two_host(
     ws.with_host("prova.plugin", |host| from_the_kernel = test(host));
 
     let mut double = MemoryHost::new();
+    for provider in formats() {
+        let descriptor = provider.descriptor();
+        let format = DocumentFormat {
+            descriptor: descriptor.clone(),
+            capabilities: provider.capabilities(),
+        };
+        for ext in &descriptor.extensions {
+            double = double.with_format(ext, format.clone());
+        }
+    }
     let from_the_double = test(&mut double);
 
     assert_eq!(
@@ -605,6 +648,306 @@ fn every_name_and_every_format_is_judge_equal_of_here_and_of_the() {
             journal.push((
                 format!("cestinare {name:?}"),
                 face(&host.trash_document(&id)),
+            ));
+        }
+        journal
+    });
+}
+
+/// Un formato che non è il Markdown e non è prosa: una voce per riga, in
+/// `.lista`. Non sa scrivere link né spunte.
+struct Lista;
+
+impl FormatProvider for Lista {
+    fn descriptor(&self) -> FormatDescriptor {
+        FormatDescriptor::text("lista", "Lista", &["lista"])
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::default()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
+        model.text = source.text().unwrap_or_default().to_string();
+        Ok(model)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        _opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+}
+
+fn with_lista() -> Vec<Box<dyn FormatProvider>> {
+    vec![Box::new(Lista)]
+}
+
+/// Una risposta ridotta a ciò che si confronta: il valore, o la specie del
+/// rifiuto.
+fn told<T: std::fmt::Debug>(outcome: &Result<T, PluginError>) -> String {
+    match outcome {
+        Ok(value) => format!("{value:?}"),
+        Err(and) => kind(and),
+    }
+}
+
+/// **Il Markdown scrive link e spunte allo stesso modo nei due host.**
+///
+/// Il doppio non può dipendere dal provider e ne porta una copia ridotta
+/// (`series_markdown` in `fub-sdk`): qui la copia si confronta col provider
+/// vero, sulle forme che le feature scrivono e su quelle che la grammatica
+/// rifiuta. Anche il formato di serie del doppio si confronta con quello che
+/// il kernel dichiara.
+#[test]
+fn markdown_writes_links_and_ticks_alike() {
+    on_the_two_host(None, |host| {
+        let doc = DocId::new("Nota.md");
+        let source =
+            "- [ ] latte\n- [x] pane\n* [ ]\n\ntesto [ ] e [x]\n\n> - [ ] citato\n1. [ ] primo\n";
+        host.create_document(&doc, source).expect("si scrive");
+        let link = |target: LinkTarget, label: Option<&str>, embed: bool| LinkInsert {
+            target,
+            label: label.map(str::to_string),
+            embed,
+        };
+        let heading = LinkTarget::Wiki {
+            page: "Kant".into(),
+            heading: Some("Critica".into()),
+            block: None,
+        };
+        let block = LinkTarget::Wiki {
+            page: "Kant".into(),
+            heading: None,
+            block: Some("b1".into()),
+        };
+        let mut journal = vec![(
+            "il formato di serie".to_string(),
+            format!("{:?}", host.format_of(&doc)),
+        )];
+        for (what, insert) in [
+            ("nudo", link(LinkTarget::wiki("Kant"), None, false)),
+            (
+                "etichetta",
+                link(LinkTarget::wiki("Kant"), Some("il filosofo"), false),
+            ),
+            (
+                "etichetta uguale",
+                link(LinkTarget::wiki("Kant"), Some("Kant"), false),
+            ),
+            (
+                "incorporato",
+                link(LinkTarget::wiki("foto.png"), None, true),
+            ),
+            ("sezione", link(heading.clone(), None, false)),
+            ("blocco", link(block.clone(), Some("qui"), false)),
+            ("parentesi", link(LinkTarget::wiki("a]b"), None, false)),
+            (
+                "etichetta con parentesi",
+                link(LinkTarget::wiki("Kant"), Some("x]"), false),
+            ),
+            (
+                "a capo",
+                link(LinkTarget::wiki("Kant"), Some("due\nrighe"), false),
+            ),
+            (
+                "path",
+                link(LinkTarget::Path("Kant.md".into()), None, false),
+            ),
+            (
+                "url",
+                link(LinkTarget::Url("https://example.org".into()), None, false),
+            ),
+        ] {
+            journal.push((
+                format!("link {what}"),
+                told(&host.format_link(&doc, &insert)),
+            ));
+        }
+        let at = |needle: &str| source.find(needle).unwrap() + needle.find('[').unwrap() + 1;
+        for (what, symbol, at, to) in [
+            ("spunta", None, at("- [ ] latte"), true),
+            ("toglie", Some('x'), at("- [x] pane"), false),
+            ("già fatto", Some('x'), at("- [x] pane"), true),
+            ("a fine riga", None, at("* [ ]"), true),
+            ("citato", None, at("> - [ ]"), true),
+            ("numerato", None, at("1. [ ]"), true),
+            (
+                "non è un task",
+                Some('t'),
+                source.find("testo").unwrap(),
+                true,
+            ),
+            ("parentesi nella prosa", None, at("testo [ ]"), true),
+            ("spunta nella prosa", Some('x'), at("e [x]"), false),
+        ] {
+            let marker = TaskMarker {
+                symbol,
+                span: Span::new(at, at + 1),
+            };
+            journal.push((
+                format!("task {what}"),
+                told(&host.task_state_edit(&doc, &marker, to)),
+            ));
+        }
+        journal
+    });
+}
+
+/// **Un formato che non è il Markdown, nei due host.**
+///
+/// Il banco registrava solo il Markdown, e così nessuna risposta che dipende
+/// dal formato — chi è un documento, cosa è prosa, come si risolve un nome
+/// con due formati — si confrontava su un vault con più di uno.
+#[test]
+fn a_second_format_is_seen_alike() {
+    on_the_two_host_serving(None, with_lista, |host| {
+        for (name, text) in [
+            ("Piano.md", "prosa"),
+            ("Piano.lista", "voce"),
+            ("Progetti/Idea.md", "idea"),
+            ("Archivio/Vecchi/Idea.md", "vecchia"),
+            ("Progetti/spesa.lista", "latte"),
+        ] {
+            host.create_document(&DocId::new(name), text)
+                .expect("si scrive");
+        }
+        host.write_document_bytes(&DocId::new("Progetti/foto.png"), b"png", None)
+            .expect("un allegato si deposita");
+        host.write_document_bytes(&DocId::new("Progetti/dati.xyz"), b"?", None)
+            .expect("un file ignoto si deposita");
+
+        let mut journal = Vec::new();
+        for name in ["Piano.md", "Piano.lista", "foto.png", "dati.xyz"] {
+            journal.push((
+                format!("il formato di {name}"),
+                format!("{:?}", host.format_of(&DocId::new(name))),
+            ));
+        }
+        journal.push((
+            "scrivere un link in una lista".into(),
+            told(&host.format_link(
+                &DocId::new("Piano.lista"),
+                &LinkInsert {
+                    target: LinkTarget::wiki("Piano"),
+                    label: None,
+                    embed: false,
+                },
+            )),
+        ));
+        journal.push((
+            "i documenti".into(),
+            told(&host.list_documents(None).map(|page| page.items)),
+        ));
+        for (what, of_kind, within) in [
+            ("l'anagrafe", None, None),
+            ("gli allegati", Some(EntryKind::Asset), None),
+            (
+                "i figli di Progetti",
+                None,
+                Some(FolderScope::direct("Progetti")),
+            ),
+        ] {
+            let entries = host.query_index(IndexQuery::Entries {
+                of_kind,
+                within,
+                page: None,
+            });
+            journal.push((
+                what.to_string(),
+                told(&entries.map(|result| {
+                    match result {
+                        IndexResult::Entries(page) => page
+                            .items
+                            .into_iter()
+                            .filter(|entry| !entry.id.as_str().starts_with('.'))
+                            .map(|VaultEntry { id, kind, .. }| format!("{id} {kind:?}"))
+                            .collect::<Vec<_>>(),
+                        other => vec![format!("fuori tema: {}", other.kind_name())],
+                    }
+                })),
+            ));
+        }
+        let folder = QueryPredicate::Folder {
+            path: "Progetti".into(),
+            descendants: true,
+        };
+        let not_in_folder = QueryExpr {
+            any: vec![fub_abi::query::QueryClause {
+                all: vec![fub_abi::query::QueryLiteral {
+                    negated: true,
+                    predicate: folder.clone(),
+                }],
+            }],
+        };
+        for (what, matching) in [
+            ("tutti i documenti", QueryExpr::default()),
+            ("in Progetti", QueryExpr::of(folder)),
+            ("fuori da Progetti", not_in_folder),
+            (
+                "per nome",
+                QueryExpr::of(QueryPredicate::Docs {
+                    docs: vec![DocId::new("Piano.lista"), DocId::new("Progetti/foto.png")],
+                }),
+            ),
+        ] {
+            let found = host.query_index(IndexQuery::Documents {
+                matching,
+                sort: None,
+                select: Default::default(),
+                page: None,
+                excerpts: Default::default(),
+            });
+            journal.push((
+                what.to_string(),
+                told(&found.map(|result| {
+                    match result {
+                        IndexResult::Documents(page) => page
+                            .items
+                            .into_iter()
+                            .map(|found| found.doc.to_string())
+                            .collect::<Vec<_>>(),
+                        other => vec![format!("fuori tema: {}", other.kind_name())],
+                    }
+                })),
+            ));
+        }
+        for (from, target) in [
+            ("Piano.md", LinkTarget::wiki("Piano")),
+            ("Piano.md", LinkTarget::wiki("Piano.lista")),
+            ("Piano.md", LinkTarget::wiki("Idea")),
+            ("Piano.md", LinkTarget::wiki("Vecchi/Idea")),
+            ("Piano.md", LinkTarget::wiki("spesa")),
+            ("Piano.md", LinkTarget::wiki("foto.png")),
+            ("Piano.md", LinkTarget::wiki("Mai")),
+            (
+                "Progetti/Idea.md",
+                LinkTarget::Path("../Piano.lista".into()),
+            ),
+            ("Progetti/Idea.md", LinkTarget::Path("spesa.lista".into())),
+            ("Piano.md", LinkTarget::Path("Progetti/Idea.md".into())),
+        ] {
+            let resolved = host.query_index(IndexQuery::Resolve {
+                target: target.clone(),
+                from: Some(DocId::new(from)),
+            });
+            journal.push((
+                format!("risolvere {target:?} da {from}"),
+                told(&resolved.map(|result| match result {
+                    IndexResult::Resolved(found) => format!("{:?}", found.map(|found| found.doc)),
+                    other => format!("fuori tema: {}", other.kind_name()),
+                })),
             ));
         }
         journal

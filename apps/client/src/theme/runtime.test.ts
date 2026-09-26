@@ -26,7 +26,7 @@ vi.mock("../host/ipc", () => ({
 }));
 vi.mock("../host/query", () => ({ settings: box.settings }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn(() => () => {}) }));
-vi.mock("../state/store", () => ({ on: vi.fn(() => () => {}) }));
+vi.mock("../state/store", () => ({ on: vi.fn(() => () => {}), emit: vi.fn() }));
 vi.mock("../ui/notify", () => ({ reportThemeTrouble: box.report }));
 
 const manifest: ThemeManifest = {

@@ -1,8 +1,10 @@
-//! Static, dependency-free PDF projection of Markdown source.
+//! Static, dependency-free PDF projection of the document model.
 //! Dynamic views, formulas and diagrams are not rendered as live output:
 //! the report makes this limitation explicit instead of claiming a faithful
 //! print projection. The shell print path uses RenderTarget::Print separately.
 
+use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget};
+use fub_abi::rules::path::strip_ext;
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
     ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget, TransferNote,
@@ -70,20 +72,19 @@ impl ExportProvider for PdfExport {
             let mut total_bytes = 0usize;
             let mut pages: Vec<Vec<String>> = Vec::new();
             for doc in &docs {
-                match host.read_document(doc) {
-                    Ok(source) => {
-                        if source.len() > 32 * 1024 * 1024 {
+                match host.read_model(doc) {
+                    Ok(model) => {
+                        if model.text.len() > 32 * 1024 * 1024 {
                             return Err(bad_args(format!(
                                 "`{doc}` exceeds the 32 MiB PDF input limit"
                             )));
                         }
-                        total_bytes += source.len();
+                        total_bytes += model.text.len();
                         if total_bytes > 32 * 1024 * 1024 {
                             return Err(bad_args("single PDF exceeds 32 MiB of source text; export in separate files"));
                         }
-                        warn_unrenderable(&source, doc.as_str(), &mut report);
-                        let lines =
-                            markdown_to_lines(&source, doc.as_str(), with_meta, &mut report);
+                        let lines = model_to_lines(&model, doc.as_str(), with_meta, &mut report);
+                        warn_unrenderable(&lines, doc.as_str(), &mut report);
                         pages.push(lines);
                     }
                     Err(e) => report
@@ -109,8 +110,8 @@ impl ExportProvider for PdfExport {
         }
         let mut index: Vec<String> = Vec::new();
         for doc in &docs {
-            let source = match host.read_document(doc) {
-                Ok(s) => s,
+            let model = match host.read_model(doc) {
+                Ok(model) => model,
                 Err(e) => {
                     report
                         .log
@@ -118,16 +119,16 @@ impl ExportProvider for PdfExport {
                     continue;
                 }
             };
-            if source.len() > 32 * 1024 * 1024 {
+            if model.text.len() > 32 * 1024 * 1024 {
                 return Err(bad_args(format!(
                     "`{doc}` exceeds the 32 MiB PDF input limit"
                 )));
             }
-            warn_unrenderable(&source, doc.as_str(), &mut report);
-            let lines = markdown_to_lines(&source, doc.as_str(), with_meta, &mut report);
+            let lines = model_to_lines(&model, doc.as_str(), with_meta, &mut report);
+            warn_unrenderable(&lines, doc.as_str(), &mut report);
             ensure_page_budget(std::slice::from_ref(&lines))?;
             let pdf = render_pdf(&[lines]);
-            let path = format!("{}.pdf", doc.as_str().trim_end_matches(".md"));
+            let path = format!("{}.pdf", strip_ext(doc.as_str()));
             let h = out.open_artifact(&path, "application/pdf")?;
             for chunk in pdf.chunks(64 * 1024) {
                 out.write_artifact(h, chunk)?;
@@ -152,134 +153,206 @@ impl ExportProvider for PdfExport {
 
 fn static_note() -> TransferNote {
     TransferNote::warning(
-        "static source-text PDF only: dynamic views, queries, embeds, diagrams and formulas are not rendered; use the print-target renderer for faithful output".to_string(),
+        "static text PDF only: dynamic views, queries, embeds, diagrams and formulas are not rendered; use the print-target renderer for faithful output".to_string(),
     )
     .about("importers.pdf".to_string())
 }
 
-/// Markdown source → printable text lines (one string per visual line).
-fn markdown_to_lines(
-    source: &str,
+/// Document model → printable text lines (one string per visual line).
+///
+/// The format provider has already read the source: frontmatter, fences,
+/// headings and links come from the model, so a document in any registered
+/// format prints the same way and no Markdown is parsed here.
+fn model_to_lines(
+    model: &DocumentModel,
     doc: &str,
     with_meta: bool,
     report: &mut ExportReport,
 ) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
-    lines.push(doc.trim_end_matches(".md").replace('/', " / "));
+    lines.push(strip_ext(doc).replace('/', " / "));
     lines.push(String::new());
-    let mut in_fence = false;
-    let mut in_frontmatter = false;
-    let mut first = true;
-    for raw in source.lines() {
-        if first && (raw == "---") {
-            in_frontmatter = true;
-            first = false;
-            continue;
+    if with_meta && !model.frontmatter.is_empty() {
+        for (key, value) in &model.frontmatter.0 {
+            let value = match value {
+                serde_json::Value::String(text) => text.clone(),
+                other => other.to_string(),
+            };
+            lines.push(format!("  {key}: {value}"));
         }
-        first = false;
-        if in_frontmatter {
-            if raw == "---" || raw == "..." {
-                in_frontmatter = false;
-                if !with_meta {
-                    continue;
-                }
-            }
-            if with_meta {
-                lines.push(format!("  {raw}"));
-            }
-            continue;
-        }
-        if raw.trim_start().starts_with("```") {
-            in_fence = !in_fence;
-            lines.push("  ---".to_string());
-            continue;
-        }
-        if in_fence {
-            lines.push(format!("  {raw}"));
-            continue;
-        }
-        let t = raw.trim();
-        if t.is_empty() {
-            lines.push(String::new());
-            continue;
-        }
-        if let Some(h) = t.strip_prefix("######") {
-            lines.push(h.trim().to_uppercase());
-        } else if let Some(h) = t.strip_prefix("#####") {
-            lines.push(h.trim().to_uppercase());
-        } else if let Some(h) = t.strip_prefix("####") {
-            lines.push(h.trim().to_uppercase());
-        } else if let Some(h) = t.strip_prefix("###") {
-            lines.push(h.trim().to_uppercase());
-        } else if let Some(h) = t.strip_prefix("##") {
-            lines.push(h.trim().to_uppercase());
-        } else if let Some(h) = t.strip_prefix("# ") {
-            lines.push(h.trim().to_uppercase());
-        } else if let Some(b) = t.strip_prefix("- [ ]") {
-            lines.push(format!("[ ]{b}"));
-        } else if let Some(b) = t.strip_prefix("- [x]") {
-            lines.push(format!("[x]{b}"));
-        } else if let Some(b) = t.strip_prefix("- ") {
-            lines.push(format!("- {b}"));
-        } else if t.starts_with("|") {
-            lines.push(t.to_string());
-        } else if t == "---" {
-            lines.push("  ---".to_string());
-        } else {
-            // Inline cleanup: keep link destinations visible, images as
-            // placeholders, strip emphasis markers.
-            let mut s = t.to_string();
-            // Keep image destinations visible; malformed image syntax remains
-            // source text rather than entering an unbounded replacement loop.
-            loop {
-                let Some(bang) = s.find("![") else { break };
-                let Some(cb) = s[bang + 2..].find(']') else {
-                    break;
-                };
-                let alt_end = bang + 2 + cb;
-                let rest = &s[alt_end + 1..];
-                let Some(dest) = rest.strip_prefix('(') else {
-                    break;
-                };
-                let Some(close) = dest.find(')') else { break };
-                let alt = &s[bang + 2..alt_end];
-                let url = &dest[..close];
-                s = format!("{}[image: {alt} ({url})]{}", &s[..bang], &dest[close + 1..]);
-                if s.matches("[image: ").count() > 8 {
-                    break;
-                }
-            }
-            // `[text](url)` → `text [url]`.
-            loop {
-                let Some(ob) = s.find('[') else { break };
-                if s[..ob].ends_with("[image: ") {
-                    break;
-                }
-                let Some(cb) = s[ob..].find(']') else { break };
-                let text = s[ob + 1..ob + cb].to_string();
-                let rest = &s[ob + cb + 1..];
-                if rest.starts_with('(') {
-                    if let Some(cp) = rest.find(')') {
-                        let url = rest[1..cp].to_string();
-                        s = format!("{}{text} [{url}]{}", &s[..ob], &rest[cp + 1..]);
-                        continue;
-                    }
-                }
-                break;
-            }
-            s = s.replace("**", "").replace("~~", "");
-            if s.contains("![[") {
-                report.log.push(
-                    TransferNote::info("embeds render as their link text in PDF".to_string())
-                        .about(doc.to_string()),
-                );
-            }
-            for chunk in wrap(&s, 96) {
-                lines.push(chunk);
-            }
+        lines.push(String::new());
+    }
+    let mut printer = Printer {
+        lines,
+        doc,
+        report,
+        embeds_noted: false,
+    };
+    printer.blocks(&model.body, "");
+    printer.lines
+}
+
+struct Printer<'a> {
+    lines: Vec<String>,
+    doc: &'a str,
+    report: &'a mut ExportReport,
+    embeds_noted: bool,
+}
+
+impl Printer<'_> {
+    fn blocks(&mut self, blocks: &[Block], indent: &str) {
+        for block in blocks {
+            self.block(block, indent);
         }
     }
-    lines
+
+    fn block(&mut self, block: &Block, indent: &str) {
+        match block {
+            Block::Heading { inlines, .. } => {
+                let title = self.inlines(inlines).to_uppercase();
+                self.lines.push(format!("{indent}{title}"));
+            }
+            Block::Paragraph { inlines, .. } => {
+                let text = self.inlines(inlines);
+                self.wrapped(&text, indent);
+                self.lines.push(String::new());
+            }
+            Block::List {
+                ordered,
+                items,
+                start,
+                ..
+            } => {
+                let first = start.unwrap_or(1);
+                for (at, item) in items.iter().enumerate() {
+                    let marker = match (&item.task, ordered) {
+                        (Some(task), _) if task.symbol.is_some() => "[x] ".to_string(),
+                        (Some(_), _) => "[ ] ".to_string(),
+                        (None, true) => format!("{}. ", first as usize + at),
+                        (None, false) => "- ".to_string(),
+                    };
+                    let nested = format!("{indent}  ");
+                    let mut blocks = item.blocks.iter();
+                    match blocks.next() {
+                        Some(Block::Paragraph { inlines, .. }) => {
+                            let text = self.inlines(inlines);
+                            self.wrapped(&format!("{marker}{text}"), indent);
+                        }
+                        Some(other) => {
+                            self.lines.push(format!("{indent}{}", marker.trim_end()));
+                            self.block(other, &nested);
+                        }
+                        None => self.lines.push(format!("{indent}{}", marker.trim_end())),
+                    }
+                    for block in blocks {
+                        self.block(block, &nested);
+                    }
+                }
+                self.lines.push(String::new());
+            }
+            Block::CodeBlock { code, .. } => {
+                self.lines.push(format!("{indent}  ---"));
+                for line in code.lines() {
+                    self.lines.push(format!("{indent}  {line}"));
+                }
+                self.lines.push(format!("{indent}  ---"));
+            }
+            Block::Quote { blocks, .. } => {
+                self.blocks(blocks, &format!("{indent}> "));
+            }
+            Block::ThematicBreak { .. } => self.lines.push(format!("{indent}  ---")),
+            Block::Custom { blocks, .. } => self.blocks(blocks, indent),
+            Block::Table { head, rows, .. } => {
+                for row in head.iter().chain(rows) {
+                    let cells: Vec<String> = row
+                        .cells
+                        .iter()
+                        .map(|cell| self.inlines(&cell.inlines))
+                        .collect();
+                    self.lines
+                        .push(format!("{indent}| {} |", cells.join(" | ")));
+                }
+                self.lines.push(String::new());
+            }
+            // Where a reference link points is already printed with the link.
+            Block::ReferenceDefinition { .. } => {}
+        }
+    }
+
+    fn wrapped(&mut self, text: &str, indent: &str) {
+        for chunk in wrap(text, 96usize.saturating_sub(indent.chars().count()).max(24)) {
+            self.lines.push(format!("{indent}{chunk}"));
+        }
+    }
+
+    fn inlines(&mut self, inlines: &[Inline]) -> String {
+        let mut out = String::new();
+        for inline in inlines {
+            self.inline(inline, &mut out);
+        }
+        out
+    }
+
+    fn inline(&mut self, inline: &Inline, out: &mut String) {
+        match inline {
+            Inline::Text(text) | Inline::Code(text) => out.push_str(text),
+            Inline::Emph(children)
+            | Inline::Strong(children)
+            | Inline::Superscript(children)
+            | Inline::Strikethrough(children) => {
+                for child in children {
+                    self.inline(child, out);
+                }
+            }
+            Inline::Link {
+                target,
+                label,
+                embed,
+                ..
+            } => {
+                let label = label
+                    .as_deref()
+                    .map(|label| self.inlines(label))
+                    .filter(|label| !label.is_empty());
+                match target {
+                    LinkTarget::Wiki { page, heading, .. } => {
+                        if *embed && !self.embeds_noted {
+                            self.embeds_noted = true;
+                            self.report.log.push(
+                                TransferNote::info(
+                                    "embeds render as their link text in PDF".to_string(),
+                                )
+                                .about(self.doc.to_string()),
+                            );
+                        }
+                        let named = match heading {
+                            Some(heading) => format!("{page}#{heading}"),
+                            None => page.clone(),
+                        };
+                        out.push_str(label.as_deref().unwrap_or(&named));
+                    }
+                    LinkTarget::Url(dest) | LinkTarget::Path(dest) if *embed => {
+                        let alt = label.unwrap_or_default();
+                        out.push_str(&format!("[image: {alt} ({dest})]"));
+                    }
+                    LinkTarget::Url(dest) | LinkTarget::Path(dest) => match label {
+                        Some(text) if text != *dest => out.push_str(&format!("{text} [{dest}]")),
+                        _ => out.push_str(dest),
+                    },
+                }
+            }
+            Inline::TagRef { name, .. } => {
+                out.push('#');
+                out.push_str(name);
+            }
+            Inline::Custom { attrs, .. } => {
+                if let Some(label) = attrs.get("label").and_then(serde_json::Value::as_str) {
+                    out.push_str(&format!("[{label}]"));
+                }
+            }
+            Inline::HardBreak | Inline::SoftBreak => out.push(' '),
+        }
+    }
 }
 
 fn wrap(s: &str, width: usize) -> Vec<String> {
@@ -459,8 +532,8 @@ fn pdf_escape(s: &str) -> String {
     out
 }
 
-fn warn_unrenderable(source: &str, doc: &str, report: &mut ExportReport) {
-    if source.chars().any(|c| {
+fn warn_unrenderable(lines: &[String], doc: &str, report: &mut ExportReport) {
+    if lines.iter().flat_map(|line| line.chars()).any(|c| {
         c as u32 > 255
             && !matches!(
                 c,

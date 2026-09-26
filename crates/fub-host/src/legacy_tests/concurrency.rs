@@ -13,6 +13,7 @@
 //! passa ogni test funzionale, e non si vede in nessuna diff che non sia
 //! questa. È esattamente la forma del presidio di
 //! `dependency_invariant.rs` — l'invariante che nessuno rompe apposta e che
+//! tutti romperebbero per comodità.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -57,6 +58,7 @@ fn readers() -> usize {
 /// all'ultimo test aggiunto al file, che è il modo in cui questo elenco si
 /// sbaglia sempre. Per chi non misura il turno costa il tempo degli altri tre e
 /// non toglie niente, perché nessuno dei tre prova qualcosa che abbia bisogno di
+/// un vicino.
 static BENCH: Mutex<()> = Mutex::new(());
 /// Watchdog for a writer held back by a provider callback. The callback is
 /// released only after this result is observed, so a retained workspace guard
@@ -219,6 +221,7 @@ fn two_reads_can_be_in_the_workspace_at_the_same_time() {
 /// Per la stessa ragione i lettori sono `readers()` e non il doppio. Su un
 /// runner a quattro core, otto thread in ciclo stretto non aumentano la contesa
 /// sul lock — quella satura molto prima — e aggiungono solo thread pronti che
+/// si contendono le CPU: rumore di scheduler versato dentro la misura.
 #[test]
 fn writer_does_not_block_readers_for_more_than_one_tick() {
     let _turn = bench_turn();
@@ -697,9 +700,9 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
         let mut w = ws.write().expect("the vault is alive");
         w.register_core_feature(BEFORE_WRITE_LOCK_PLUGIN, "Audit detached before-write")
             .expect("hook owner declares");
-        w.set_before_write_hook(Some((
-            BEFORE_WRITE_LOCK_PLUGIN.to_string(),
-            Arc::new(move |host, id| {
+        w.set_before_write_hook(
+            BEFORE_WRITE_LOCK_PLUGIN,
+            Some(Arc::new(move |host, id| {
                 let old = host.read_document(id)?;
                 if !old.contains("Note 0") {
                     return Err(PluginError::Internal(
@@ -732,8 +735,8 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
                         PluginError::Internal("before-write probe was not released".into())
                     })?;
                 Ok(())
-            }),
-        )));
+            })),
+        );
     }
 
     let (outcome_tx, outcome_rx) = std::sync::mpsc::sync_channel(1);
@@ -790,18 +793,21 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         workspace
             .register_core_feature(BEFORE_WRITE_LOCK_PLUGIN, "Audit detached before-write")
             .expect("hook owner declares");
-        workspace.set_before_write_hook(Some((BEFORE_WRITE_LOCK_PLUGIN.to_string(), {
-            let first = Arc::clone(&first);
-            Arc::new(move |_host, _id| {
-                if first.swap(false, Ordering::SeqCst) {
-                    Err(PluginError::BadArgs(
-                        "errore intenzionale del before-write".into(),
-                    ))
-                } else {
-                    Ok(())
-                }
-            })
-        })));
+        workspace.set_before_write_hook(
+            BEFORE_WRITE_LOCK_PLUGIN,
+            Some({
+                let first = Arc::clone(&first);
+                Arc::new(move |_host, _id| {
+                    if first.swap(false, Ordering::SeqCst) {
+                        Err(PluginError::BadArgs(
+                            "errore intenzionale del before-write".into(),
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                })
+            }),
+        );
     }
 
     let original = host
@@ -1254,6 +1260,7 @@ impl ViewProvider for Explodes {
 /// metà è la rete al confine, che traduce il panico in un `PluginError` che
 /// **nomina** il colpevole. Ciò che la 0024 ha comprato resta e non è
 /// ridondante: la rete si può bucare — la prova qui sotto la buca apposta da un
+/// thread suo — e sotto un `Mutex` un buco solo costerebbe ancora il vault.
 #[test]
 fn a_view_that_panics_while_drawing_does_not_poison_the_vault() {
     // Il turno di banco vale anche per chi non misura, e questo test è quello
@@ -1275,7 +1282,6 @@ fn a_view_that_panics_while_drawing_does_not_poison_the_vault() {
     }
 
     // Il panico non esce più dal kernel: torna come errore, e dice di chi è.
-    // Il panico non esce più dal kernel: torna come errore, e dice di chi è.
     let outcome = ws
         .read()
         .unwrap()
@@ -1288,7 +1294,6 @@ fn a_view_that_panics_while_drawing_does_not_poison_the_vault() {
     );
 
     // E se qualcuno lo bucasse, la seconda rete regge: un panico su un prestito
-    // **condiviso** non avvelena. Il thread serve solo a non far morire il test.
     // **condiviso** non avvelena. Il thread serve solo a non far morire il test.
     let paniced = {
         let ws = ws.clone();

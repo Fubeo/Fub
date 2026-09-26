@@ -1,11 +1,13 @@
 import type { Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
+import { declareVaultPicker } from "../../platform/vault-picker";
 import type { MobileBridge, MobileTreeGrant } from "./bridge";
 import {
   decideStorage,
   inspectSharedStorage,
   inspectStorageHealth,
   loadStorageChoice,
+  mobileGrantStore,
   saveStorageChoice,
   registerPersistedGrant,
   type GrantStore,
@@ -13,6 +15,7 @@ import {
   type StorageDecision,
 } from "./storage";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 
 export interface MobileStorageMountPorts extends SharedStoragePorts {
   store: GrantStore;
@@ -21,6 +24,32 @@ export interface MobileStorageMountPorts extends SharedStoragePorts {
   unmountShared: () => Promise<void>;
   estimatePrivate?: () => Promise<{ quota?: number; usage?: number }>;
   requestTreeGrant?: () => Promise<MobileTreeGrant | null>;
+}
+
+/**
+ * The mount ports mobile can honour today. The private space mounts: the
+ * backend resolves and verifies its path (`open_vault` accepts only that
+ * one). A shared folder needs a native grant verifier that does not exist
+ * yet: its permission stays unknown, the proposal NeedGrant, and mounting it
+ * is a stated error, never a silent fallback to the private space.
+ */
+export function privateStoragePorts(
+  bridge: MobileBridge,
+  open: (dir: string) => Promise<void>,
+): MobileStorageMountPorts {
+  return {
+    store: mobileGrantStore(bridge),
+    mount: async (decision) => {
+      if (decision.choice !== "private" || decision.dir === null) {
+        throw new Error(t("mobile.storage.shared_unavailable"));
+      }
+      await open(decision.dir);
+    },
+    // No shared mount is ever active, so there is nothing to close.
+    unmountShared: () => Promise.resolve(),
+    verifyGrant: () => Promise.resolve("unknown"),
+    backendCas: () => Promise.resolve(false),
+  };
 }
 
 /** Mount callbacks are injected by the app; no path or grant becomes a vault implicitly. */
@@ -48,6 +77,15 @@ export function mountMobileStorageStatus(
   region.append(heading, status, privateButton, sharedButton, copyButton);
   document.body.append(region);
   lifetime.add(() => region.remove());
+  // "Open vault…" leads here: choosing between the private space and a shared
+  // folder is explicit, and this panel makes that choice. The picker shows it
+  // and never chooses on the person's behalf.
+  lifetime.add(declareVaultPicker(() => {
+    region.open = true;
+    region.scrollIntoView({ block: "nearest" });
+    (privateButton.disabled ? heading : privateButton).focus();
+    return Promise.resolve(null);
+  }));
   if (!ports) {
     privateButton.disabled = sharedButton.disabled = true;
     region.open = true;
@@ -88,7 +126,7 @@ export function mountMobileStorageStatus(
       activeShared = choice === "shared" && decision.mount !== "copy_import";
       await saveStorageChoice(ports!.store, decision.mount === "copy_import" ? "private" : choice);
     } catch (error) {
-      notify(String(error), "guasto");
+      notify(errorText(error), "guasto");
     } finally {
       busy = false;
     }
@@ -111,7 +149,7 @@ export function mountMobileStorageStatus(
       }
       if (decision.needsGrant) region.open = true;
       await render(decision);
-    })().catch((error: unknown) => notify(String(error), "guasto"));
+    })().catch((error: unknown) => notify(errorText(error), "guasto"));
   };
   lifetime.listen(window, "online", refresh);
   lifetime.listen(window, "offline", refresh);
@@ -120,6 +158,6 @@ export function mountMobileStorageStatus(
     if (document.visibilityState === "visible") refresh();
   });
   void bridge.onResumed(refresh).then((off) => lifetime.add(off))
-    .catch((error: unknown) => notify(String(error), "guasto"));
+    .catch((error: unknown) => notify(errorText(error), "guasto"));
   refresh();
 }

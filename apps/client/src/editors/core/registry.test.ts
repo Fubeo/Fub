@@ -29,17 +29,19 @@ function factory(family: SurfaceFamily, destroyed: string[], mountedProfiles: st
           },
         ],
         setMode: vi.fn(),
-        setDoc(value) {
-          text = value;
-        },
-        syncDoc(update) {
-          text = typeof update === "string" ? update : update.text;
-        },
-        getDoc() {
-          return text;
+        buffer: {
+          setDoc(value) {
+            text = value;
+          },
+          syncDoc(update) {
+            text = typeof update === "string" ? update : update.text;
+          },
+          getDoc() {
+            return text;
+          },
         },
         focus: vi.fn(),
-        revealByteOffset: vi.fn(),
+        reveal: vi.fn(() => true),
         selections: vi.fn(),
         setReadOnly: vi.fn(),
         setTheme: vi.fn(),
@@ -157,11 +159,17 @@ describe("DocumentSurfaceRegistry", () => {
     for (const [id, profile] of [
       ["photo.PNG", "media-image"], ["recording.m4a", "media-audio"],
       ["movie.webm", "media-video"], ["report.pdf", "media-pdf"], ["report.pdf#page=3", "media-pdf"],
-      ["unknown.bin", "bytes-read-only"],
     ]) {
       expect(registry.resolve({ formatId: null, sourceKind: "bytes", documentId: id }))
         .toMatchObject({ family: "viewer", profile });
+      expect(registry.showsBytes(id)).toBe(true);
     }
+    // Ciò che nessuna vista sa mostrare non è del visualizzatore: il registro
+    // lo dice, e la superficie resta quella d'errore.
+    expect(registry.resolve({ formatId: null, sourceKind: "bytes", documentId: "unknown.bin" }))
+      .toMatchObject({ family: "error" });
+    expect(registry.showsBytes("unknown.bin")).toBe(false);
+    expect(registry.showsBytes("notes/Idea.md")).toBe(false);
     const parent = document.createElement("div");
     const viewer = registry.mount(
       { formatId: null, sourceKind: "bytes", documentId: "photo.PNG" },
@@ -175,13 +183,48 @@ describe("DocumentSurfaceRegistry", () => {
       { formatId: "canvas", sourceKind: "text", documentId: "board.canvas" },
       { paneId: "board", documentId: "board.canvas", parent },
     );
-    board.setDoc(JSON.stringify({
+    board.buffer!.setDoc(JSON.stringify({
       nodes: [{ id: "remote", type: "link", x: 0, y: 0, width: 100, height: 100, url: "https://example.com" }],
       edges: [],
     }));
     expect(parent.querySelector<HTMLButtonElement>(".canvas-open-url")?.disabled).toBe(true);
     expect(parent.querySelector("iframe, video, audio")).toBeNull();
     board.destroy();
+  });
+
+  it("declares the capabilities each built-in surface really has", () => {
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const capabilities = (surface: EditorSurface) => ({
+      buffer: surface.buffer !== undefined,
+      reveal: typeof surface.reveal === "function",
+      references: typeof surface.insertReferences === "function",
+      presentation: typeof surface.mountPresentation === "function",
+      printable: surface.printable === true,
+    });
+    const cases = [
+      [{ formatId: "markdown", sourceKind: "text" }, "note.md",
+        { buffer: true, reveal: true, references: true, presentation: true, printable: true }],
+      [{ formatId: null, sourceKind: "text" }, "notes.txt",
+        { buffer: true, reveal: true, references: false, presentation: false, printable: false }],
+      // Lo sheet non ha un provider che lo stampi (`RenderPrint` → `NoProvider`).
+      [{ formatId: "fubsheet", sourceKind: "text" }, "budget.fubsheet",
+        { buffer: true, reveal: false, references: false, presentation: false, printable: false }],
+      [{ formatId: "canvas", sourceKind: "text" }, "board.canvas",
+        { buffer: true, reveal: true, references: false, presentation: false, printable: true }],
+      // I byte di un media non sono un testo: la superficie non finge un buffer.
+      [{ formatId: null, sourceKind: "bytes" }, "photo.png",
+        { buffer: false, reveal: false, references: false, presentation: false, printable: false }],
+    ] as const;
+    for (const [request, documentId, expected] of cases) {
+      const parent = document.createElement("div");
+      const surface = registry.mount({ ...request, documentId }, { paneId: documentId, documentId, parent });
+      expect(capabilities(surface), `${surface.family}/${surface.profile}`).toEqual(expected);
+      surface.destroy();
+    }
   });
 
   it("keeps unknown canvas fields when an edit flows through the source surface", () => {
@@ -201,8 +244,8 @@ describe("DocumentSurfaceRegistry", () => {
       nodes: [{ id: "n", type: "text", x: 40, y: 40, width: 100, height: 100, text: "hello", vendorNode: { kept: 1 } }],
       edges: [], vendorRoot: ["preserved"],
     });
-    surface.setDoc(original);
-    expect(surface.getDoc()).toBe(original);
+    surface.buffer!.setDoc(original);
+    expect(surface.buffer!.getDoc()).toBe(original);
     const viewport = parent.querySelector<HTMLElement>(".canvas-viewport")!;
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
@@ -224,8 +267,8 @@ describe("DocumentSurfaceRegistry", () => {
       { formatId: "canvas", sourceKind: "text", documentId: "bad.canvas" },
       { paneId: "bad", documentId: "bad.canvas", parent },
     );
-    expect(() => board.setDoc("{")).toThrow("canvas JSON");
-    expect(board.getDoc()).toBe("");
+    expect(() => board.buffer!.setDoc("{")).toThrow("canvas JSON");
+    expect(board.buffer!.getDoc()).toBe("");
     board.destroy();
     const failure = registry.mount(
       { formatId: null, sourceKind: "text", override: { family: "error" } },
@@ -364,6 +407,64 @@ describe("DocumentSurfaceRegistry", () => {
       family: "text",
       profile: "plain-text",
     });
+  });
+
+  it("accepts a family the shell does not know, bound to its own format", () => {
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "plugin.diagram",
+      family: "diagram",
+      defaultProfile: "board",
+      factory: factory("diagram", [], []),
+      formats: { "plugin.diagram": "board" },
+    });
+
+    expect(registry.resolve({ formatId: "plugin.diagram", sourceKind: "text" })).toMatchObject({
+      owner: "plugin.diagram",
+      family: "diagram",
+      profile: "board",
+    });
+    expect(registry.mount({ formatId: "plugin.diagram", sourceKind: "text" }, mountContext).family)
+      .toBe("diagram");
+  });
+
+  it("lets the source owner decline a document, which then falls to the error surface", () => {
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "core.viewer",
+      family: "viewer",
+      defaultProfile: "bytes",
+      factory: factory("viewer", [], []),
+      sources: { bytes: "bytes" },
+      selectSourceProfile: (request, fallback) => request.documentId?.endsWith(".png") ? fallback : null,
+    });
+
+    expect(registry.showsBytes("photo.png")).toBe(true);
+    expect(registry.showsBytes("archive.zip")).toBe(false);
+    expect(registry.resolve({ formatId: null, sourceKind: "bytes", documentId: "archive.zip" })).toBeNull();
+
+    registry.register({
+      owner: "core.error",
+      family: "error",
+      defaultProfile: "unsupported",
+      factory: factory("error", [], []),
+    });
+    expect(registry.resolve({ formatId: null, sourceKind: "bytes", documentId: "archive.zip" }))
+      .toMatchObject({ family: "error" });
+  });
+
+  it("rejects a source profile the owner did not register", () => {
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "core.viewer",
+      family: "viewer",
+      defaultProfile: "bytes",
+      factory: factory("viewer", [], []),
+      sources: { bytes: "bytes" },
+      selectSourceProfile: () => "invented",
+    });
+
+    expect(() => registry.showsBytes("photo.png")).toThrow("selected unregistered profile invented");
   });
 
   it("uses the explicit error surface only after format and source fallbacks", () => {

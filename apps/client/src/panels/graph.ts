@@ -29,10 +29,8 @@
 // e collegarli agli eventi della shell (il segnale `layout` per le note aperte,
 // `onLanguage` per i testi). Il dispose restituisce lo smontaggio di entrambi.
 
-import { openViewIn, layout, pane, panes } from "../state/layout";
+import { pane, panes } from "../state/layout";
 import { registerCustomRenderer, type OnAction } from "../ui/custom";
-import { registerShellCommand } from "../ui/commands";
-import { $ } from "../ui/dom";
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
@@ -51,19 +49,25 @@ type GraphEngine = typeof import("../graph/lazy");
 /// Il namespace con cui il grafo arriva dal provider. È `fub_features::graph::GRAPH_NS`,
 /// e la costanza dei due nomi è il contratto fra le due metà del componente.
 export const GRAPH_NS = "fub:graph";
-/// L'id della `ViewSpec` che il provider dichiara (`fub_features::graph::GRAPH_VIEW`).
-///
-/// Che questo file lo conosca **non** è la conoscenza privata che il §1.2 ha
-/// tolto ai pannelli: quella era la shell che sapeva quali pannelli esistono.
-/// Questo è un componente che conosce il proprio altro capo — la stessa cosa che
-/// fa già con lo `ns` — e i due nomi viaggiano insieme perché nominano lo stesso
-/// componente.
-export const GRAPH_VIEW = "graph";
-
 /// L'azione con cui si chiede al provider di aprire una nota, e la chiave del
 /// suo payload. Gemelle di `OPEN` e `DOC` in `graph.rs`.
 const OPEN = "open";
 const DOC = "doc";
+/// Le azioni della barra dei controlli e le chiavi dei loro payload. Gemelle di
+/// `SEED_ACTION`, `DEPTH_ACTION`, `DIRECTION_ACTION`, `GROUP_ACTION`,
+/// `FILTER_ACTION`/`FILTER_KEY`, `SHOW_ORPHANS`/`SHOW_ATTACHMENTS` e
+/// `REFRESH_ACTION` in `graph.rs`: sono protocollo fra le due metà del
+/// componente come `OPEN`, e `graph_has_two_halves.rs` le presidia allo stesso
+/// modo.
+const SEED = "seed";
+const DEPTH = "depth";
+const DIRECTION = "direction";
+const GROUP_BY = "group_by";
+const FILTER = "filter";
+const FILTER_KEY = "key";
+const SHOW_ORPHANS = "show_orphans";
+const SHOW_ATTACHMENTS = "show_attachments";
+const REFRESH = "refresh";
 
 
 /// Ciò che arriva nel `payload` del nodo custom. La forma la decide `graph.rs`,
@@ -83,43 +87,17 @@ interface GraphData {
   groupBy: "folder" | "tag";
 }
 
-/// Attacca la metà shell del grafo: il renderer del suo `ns` e il comando che lo
-/// apre.
+/// Attacca la metà shell del grafo: il renderer del suo `ns`.
+///
+/// Il grafo non ha un posto riservato nella shell. Lo apre il comando che il
+/// provider dichiara (`graph.open`, con la sua scorciatoia), la palette e la
+/// rail, che mostrano ogni view principale allo stesso modo: spento il
+/// componente, non resta un bottone che apre una view che non c'è.
 export function mountGraph(lifetime: Lifetime): void {
-  lifetime.listen($("#show-graph"), "click", () => openGraph());
   lifetime.add(on("active-doc", (doc) => {
     if (doc) lastDocument = doc;
   }));
-
-  // Il grafo come **comando** (§18.2): era un bottone nella barra, e chi non lo
-  // trovava con il mouse non lo trovava. L'id e la scorciatoia sono quelli di
-  // prima — chi li ha imparati li tiene — ed è cambiato cosa fa: apriva un
-  // overlay sopra tutto, adesso apre una linguetta nel riquadro col fuoco. Che sia un
-  // comando è la parte che la 0077 ha reso non negoziabile.
-  registerShellCommand({
-    id: "shell.graph",
-    title: "commands.graph",
-    description: "commands.graph.desc",
-    layer: "global",
-    run: () => openGraph(),
-  });
-
   registerCustomRenderer(GRAPH_NS, renderGraph);
-}
-
-/// Apre il grafo nel riquadro col fuoco.
-///
-/// **Nel riquadro col fuoco e non in uno nuovo**, che è la stessa regola con cui
-/// si apre una nota dall'esploratore: chi lo vuole di lato divide prima, ed è un
-/// gesto che ha già un comando suo (`shell.pane.split.right`). L'alternativa —
-/// dividere da sé — deciderebbe al posto dell'utente come vuole la finestra, e
-/// lo farebbe ogni volta.
-///
-/// Se la linguetta c'è già ci si sposta sopra: lo garantisce `apriVistaIn`, e per il
-/// grafo conta più che per una nota — due linguetta sullo stesso grafo sarebbero due
-/// simulazioni che girano insieme.
-function openGraph(): void {
-  openViewIn(layout.focus, GRAPH_VIEW);
 }
 
 /// I documenti aperti in un riquadro qualunque: sono i nodi che il grafo accende.
@@ -608,13 +586,13 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   seedButton.type = "button";
   if (data.local) {
     seedButton.textContent = t("graph.local.leave");
-    seedButton.addEventListener("click", () => act("seed", { [DOC]: "" }));
+    seedButton.addEventListener("click", () => act(SEED, { [DOC]: "" }));
   } else {
     const seed = lastDocument;
     seedButton.textContent = seed ? t("graph.local.enter", { doc: nodeLabel(seed) }) : t("graph.local.none");
     seedButton.disabled = !seed;
     seedButton.addEventListener("click", () => {
-      if (seed) act("seed", { [DOC]: seed });
+      if (seed) act(SEED, { [DOC]: seed });
     });
   }
   toolbar.append(seedButton);
@@ -637,31 +615,31 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   };
   if (data.local) {
     toolbar.append(
-      select(t("graph.local.depth"), String(data.local.depth), [["1", "1"], ["2", "2"], ["3", "3"]], (v) => act("depth", { depth: Number(v) })),
+      select(t("graph.local.depth"), String(data.local.depth), [["1", "1"], ["2", "2"], ["3", "3"]], (v) => act(DEPTH, { [DEPTH]: Number(v) })),
       select(t("graph.local.direction"), data.local.direction, [
         ["outbound", t("graph.local.outbound")],
         ["inbound", t("graph.local.inbound")],
         ["both", t("graph.local.both")],
-      ], (v) => act("direction", { direction: v })),
+      ], (v) => act(DIRECTION, { [DIRECTION]: v })),
     );
   }
   toolbar.append(select(t("graph.group.label"), data.groupBy, [
     ["folder", t("graph.group.folder")],
     ["tag", t("graph.group.tag")],
-  ], (v) => act("group_by", { group_by: v })));
+  ], (v) => act(GROUP_BY, { [GROUP_BY]: v })));
   const toggle = (label: string, checked: boolean, key: string): HTMLLabelElement => {
     const wrap = document.createElement("label");
     wrap.className = "graph-toolbar-field";
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = checked;
-    box.addEventListener("change", () => act("filter", { key }));
+    box.addEventListener("change", () => act(FILTER, { [FILTER_KEY]: key }));
     wrap.append(box, document.createTextNode(label));
     return wrap;
   };
   toolbar.append(
-    toggle(t("graph.filter.orphans"), data.filter.showOrphans, "show_orphans"),
-    toggle(t("graph.filter.attachments"), data.filter.showAttachments, "show_attachments"),
+    toggle(t("graph.filter.orphans"), data.filter.showOrphans, SHOW_ORPHANS),
+    toggle(t("graph.filter.attachments"), data.filter.showAttachments, SHOW_ATTACHMENTS),
   );
   // Il grafo non si ridisegna da solo (la simulazione non riparte sotto il
   // mouse); quando il vault cambia lo dice, e si aggiorna a richiesta.
@@ -670,7 +648,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   refresh.className = "graph-refresh";
   refresh.hidden = true;
   refresh.textContent = t("graph.refresh");
-  refresh.addEventListener("click", () => act("refresh", {}));
+  refresh.addEventListener("click", () => act(REFRESH, {}));
   toolbar.append(refresh);
   const stopIndex = onEvent("index_updated", () => {
     refresh.hidden = false;

@@ -1,8 +1,10 @@
 import type { DocumentWindowRequest } from "../host/contract";
 export type { DocumentWindowRequest } from "../host/contract";
-import { operationFromText, tryApplyOperation, validateOperation, type TextOperation, type TextEdit } from "../editor/text-operation";
-import { documentSessions, type DocumentSession } from "./document-session";
-import { state } from "./store";
+import { operationFromText, transformPair, tryApplyOperation, validateOperation, type TextOperation } from "../editors/core/text-operation";
+import { documentSessions, type DocumentSession, type DocumentSurfaceDescriptor } from "./document-session";
+import { on, state } from "./store";
+import { mountedTheme, type MirroredTheme } from "../theme/loader";
+export type { MirroredTheme } from "../theme/loader";
 
 const normalized = (text: string): string => text.replace(/\r\n?/g, "\n");
 const lineSeparator = (text: string): "\n" | "\r\n" =>
@@ -26,7 +28,58 @@ export type RemoteMessage = Identity & (
   | { kind: "freeze"; epoch: string; token: string }
   | { kind: "thaw"; epoch: string; token: string }
   | { kind: "drain-ready"; epoch: string; token: string; seq: number; revision: number }
+  /** Child to main: a link or tag the child cannot follow itself. */
+  | { kind: "navigate"; target: NavigateTarget }
+  /** Main to child: the theme as mounted, since the child has no IPC to mount its own. */
+  | { kind: "theme"; theme: MirroredTheme }
 );
+
+export type NavigateTarget =
+  | { kind: "wikilink"; page: string; heading: string | null; block: string | null }
+  | { kind: "path"; path: string }
+  | { kind: "tag"; tag: string };
+
+/** How the main window follows what a child window clicked. */
+export interface DocumentWindowNavigation {
+  navigate(target: NavigateTarget, from: string): void;
+}
+
+let navigation: DocumentWindowNavigation | null = null;
+/** Set by the shell that can open documents; `null` takes it back. */
+export function setDocumentWindowNavigation(port: DocumentWindowNavigation | null): void {
+  navigation = port;
+}
+
+/** The document has no text surface: a separate window cannot show it. */
+export class DocumentWindowUnsupported extends Error {
+  constructor(readonly doc: string) {
+    super(`document ${doc} has no text surface for a separate window`);
+    this.name = "DocumentWindowUnsupported";
+  }
+}
+
+function validNavigateTarget(value: unknown): value is NavigateTarget {
+  const target = record(value);
+  if (!target) return false;
+  switch (target.kind) {
+    case "wikilink": return typeof target.page === "string"
+      && (target.heading === null || typeof target.heading === "string")
+      && (target.block === null || typeof target.block === "string");
+    case "path": return typeof target.path === "string" && !!target.path;
+    case "tag": return typeof target.tag === "string" && !!target.tag;
+    default: return false;
+  }
+}
+
+function validMirroredTheme(value: unknown): value is MirroredTheme {
+  const theme = record(value);
+  if (!theme || typeof theme.light !== "string" || typeof theme.contrast !== "string"
+    || !Array.isArray(theme.layers) || theme.layers.length > 8) return false;
+  return theme.layers.every((entry) => {
+    const layer = record(entry);
+    return !!layer && typeof layer.layer === "string" && !!layer.layer && typeof layer.text === "string";
+  });
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -54,40 +107,10 @@ export function isRemoteMessage(value: unknown): value is RemoteMessage {
     case "thaw": return typeof m.epoch === "string" && !!m.epoch && typeof m.token === "string" && !!m.token;
     case "drain-ready": return typeof m.epoch === "string" && !!m.epoch && typeof m.token === "string"
       && !!m.token && counter(m.seq) && counter(m.revision);
+    case "navigate": return validNavigateTarget(m.target);
+    case "theme": return validMirroredTheme(m.theme);
     default: return false;
   }
-}
-
-/** Transform disjoint edits on a shared preimage. An overlap is a recoverable conflict. */
-function transformPair(local: TextOperation, remote: TextOperation): [TextOperation, TextOperation] | null {
-  if (local.beforeLength !== remote.beforeLength) return null;
-  const shift = (edit: TextEdit, other: readonly TextEdit[]): TextEdit | null => {
-    let delta = 0;
-    for (const change of other) {
-      // Adjacent edits are independent; coincident insertions have no stable order.
-      if (change.from === change.to && edit.from === edit.to && change.from === edit.from) return null;
-      if (change.to <= edit.from && !(change.from === change.to && change.from === edit.from)) {
-        delta += change.inserted.length - change.deleted.length;
-      } else if (change.from >= edit.to && !(edit.from === edit.to && change.from === edit.from)) {
-        continue;
-      } else {
-        return null;
-      }
-    }
-    return { ...edit, from: edit.from + delta, to: edit.to + delta };
-  };
-  const shiftAll = (source: TextOperation, other: TextOperation): TextOperation | null => {
-    const edits: TextEdit[] = [];
-    for (const edit of source.edits) {
-      const mapped = shift(edit, other.edits);
-      if (!mapped) return null;
-      edits.push(mapped);
-    }
-    return { beforeLength: other.afterLength, afterLength: other.afterLength + source.afterLength - source.beforeLength, edits };
-  };
-  const left = shiftAll(local, remote);
-  const right = shiftAll(remote, local);
-  return left && right && !validateOperation(left) && !validateOperation(right) ? [left, right] : null;
 }
 
 interface Step { base: number; operation: TextOperation }
@@ -117,6 +140,12 @@ const identity = (request: DocumentWindowRequest): Identity => ({
   v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId,
 });
 const unique = (): string => crypto.randomUUID();
+/** The main window's theme for a child that cannot mount its own: without IPC
+ * it reads neither the settings nor the installed themes. */
+function sendTheme(endpoint: Endpoint): void {
+  if (typeof document === "undefined" || !endpoint.active) return;
+  endpoint.port.postMessage({ ...identity(endpoint.request), kind: "theme", theme: mountedTheme() } satisfies RemoteMessage);
+}
 
 export interface RemoteSurfaceHandle {
   channel: string;
@@ -126,12 +155,20 @@ export interface RemoteSurfaceHandle {
   dispose(): Promise<void>;
 }
 
-export async function attachRemoteSurface(doc: string, vault: string): Promise<{ request: DocumentWindowRequest; handle: RemoteSurfaceHandle }> {
+/** `profileFor` names the text profile the shell's registry shows the read
+ * document with, or `null` when its surface is not text: then no window. */
+export async function attachRemoteSurface(
+  doc: string,
+  vault: string,
+  profileFor: (source: DocumentSurfaceDescriptor) => string | null,
+): Promise<{ request: DocumentWindowRequest; handle: RemoteSurfaceHandle }> {
   if (!doc || !vault || state.vaultRoot !== vault) throw new Error("Vault documento non disponibile");
   let releaseLease = documentSessions.retain(doc);
   let authority: Authority;
   try {
-    await documentSessions.readForSurface(doc);
+    const source = await documentSessions.readForSurface(doc);
+    const profile = profileFor(source);
+    if (profile === null) throw new DocumentWindowUnsupported(doc);
     const owner = documentSessions.get(doc);
     if (state.vaultRoot !== vault || !owner || owner.snapshot().lifecycle !== "open") throw new Error("Sessione documento cambiata");
     const key = keyOf(vault, doc);
@@ -141,7 +178,7 @@ export async function attachRemoteSurface(doc: string, vault: string): Promise<{
     } else {
       if (old?.endpoints.size) throw new Error("La sessione precedente ha ancora finestre aperte");
       const created: Authority = { owner, session: unique(), epoch: unique(), revision: 0, steps: [], endpoints: new Set(), applyingSurface: null, detach: () => {} };
-      created.detach = documentSessions.attachSurface(doc, {
+      const detachSurface = documentSessions.attachSurface(doc, {
         id: `bridge:${created.session}`,
         sync: (update) => {
           if (authorities.get(key) !== created || state.vaultRoot !== vault || documentSessions.get(doc) !== owner) return;
@@ -166,12 +203,21 @@ export async function attachRemoteSurface(doc: string, vault: string): Promise<{
           }
         },
       });
+      // The theme follows the main window: every change goes to whoever is
+      // connected, and the subscription dies with the authority.
+      const stopTheme = on("theme", () => {
+        for (const endpoint of created.endpoints) if (endpoint.active && endpoint.ready) sendTheme(endpoint);
+      });
+      created.detach = () => {
+        stopTheme();
+        detachSurface();
+      };
       authorities.set(key, created);
       authority = created;
     }
     const request: DocumentWindowRequest = {
       surface: "document", channel: `docwin-${unique()}`, document: doc, vault,
-      session: authority.session, surfaceId: `remote:${unique()}`,
+      session: authority.session, surfaceId: `remote:${unique()}`, profile,
     };
     const port = new BroadcastChannel(request.channel);
     const endpoint: Endpoint = { request, port, active: true, ready: false, lastSeq: 0, lastReply: null, frozenToken: null, drain: null };
@@ -198,9 +244,14 @@ export async function attachRemoteSurface(doc: string, vault: string): Promise<{
         reply({ ...identity(request), kind: "snapshot", text: snapshot.text, epoch: authority.epoch,
           revision: authority.revision, appliedSeq: endpoint.lastSeq,
           diskRevision: snapshot.base.kind === "descends_from" ? snapshot.base.value : "" });
+        sendTheme(endpoint);
         return;
       }
       if (!endpoint.ready) return;
+      if (message.kind === "navigate") {
+        navigation?.navigate(message.target, doc);
+        return;
+      }
       if (message.kind === "operation") {
         if (message.epoch !== authority.epoch) {
           reply({ ...identity(request), kind: "conflict", epoch: authority.epoch, seq: message.seq,
@@ -317,6 +368,8 @@ export async function attachRemoteSurface(doc: string, vault: string): Promise<{
 export interface ChildBridge {
   sendEdit(text: string, operation: TextOperation): void;
   resolveConflict(choice: "mine" | "theirs"): void;
+  /** Hands a link or tag to the main window, which can open it. */
+  navigate(target: NavigateTarget): void;
   dispose(): boolean;
 }
 
@@ -325,6 +378,7 @@ export function attachChildBridge(
   apply: (text: string, operation: TextOperation | null) => void,
   current: () => string,
   onState: (state: { kind: "ready" | "frozen" | "error"; reason?: string }) => void,
+  onTheme?: (theme: MirroredTheme) => void,
 ): ChildBridge {
   const port = new BroadcastChannel(request.channel);
   const id = identity(request);
@@ -358,6 +412,7 @@ export function attachChildBridge(
     if (!alive || !isRemoteMessage(event.data)) return;
     const message = event.data;
     if (message.doc !== id.doc || message.vault !== id.vault || message.session !== id.session || message.surfaceId !== id.surfaceId) return;
+    if (message.kind === "theme") { onTheme?.(message.theme); return; }
     if (message.kind === "snapshot-error") { report(message.reason); return; }
     if (message.kind === "snapshot") {
       if (initialized || pending.length) return;
@@ -390,7 +445,7 @@ export function attachChildBridge(
       return;
     }
     if (!initialized || failed) return;
-    if (message.kind === "hello" || message.kind === "drain-ready") return;
+    if (message.kind === "hello" || message.kind === "drain-ready" || message.kind === "navigate") return;
     if (message.kind !== "resync" && message.epoch !== epoch) return;
     if (message.kind === "freeze") {
       frozenToken = message.token;
@@ -472,6 +527,9 @@ export function attachChildBridge(
       }
       pending.push({ seq: ++nextSeq, operation });
       sendNext();
+    },
+    navigate: (target) => {
+      if (alive) port.postMessage({ ...id, kind: "navigate", target } satisfies RemoteMessage);
     },
     resolveConflict: (choice) => {
       if (!alive || !failed || frozen) throw new Error("Conflitto non recuperabile durante il drain");

@@ -4,12 +4,20 @@ use fub_abi::{
     DocId, DocumentModel, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginError,
     QueryKind, QueryRoute,
 };
-use fub_format_sheet::session::{check_response_size, SheetSessionError};
 use serde::{Deserialize, Serialize};
 
-use super::WorkbookEvaluation;
+use crate::session::{check_response_size, SheetSessionError};
+use crate::{Workbook, WorkbookEvaluation};
 
-pub(crate) const SHEET_ID: &str = "fub.sheet";
+/// Id del bundle che monta griglia e valutazione, e namespace della query.
+pub const SHEET_ID: &str = "fub.sheet";
+
+/// Parses, validates and evaluates one authoritative `.fubsheet` source.
+pub fn evaluate(source: &str) -> Result<WorkbookEvaluation, PluginError> {
+    Workbook::parse(source)
+        .and_then(|workbook| workbook.evaluate())
+        .map_err(|error| PluginError::BadArgs(error.to_string().into()))
+}
 
 /// Non è il futuro protocollo grid: è la sola lettura della vertical slice,
 /// con versione e campi chiusi, trasportata dal canale custom già esistente.
@@ -25,7 +33,7 @@ struct EvaluationEnvelope<'a> {
     value: &'a WorkbookEvaluation,
 }
 
-pub(crate) struct SheetIndex;
+pub struct SheetIndex;
 
 impl IndexProvider for SheetIndex {
     fn routes(&self) -> Vec<QueryRoute> {
@@ -68,7 +76,7 @@ impl IndexProvider for SheetIndex {
                 "unsupported sheet query version".into(),
             ));
         }
-        let evaluation = super::evaluate(source)?;
+        let evaluation = evaluate(source)?;
         check_response_size(&EvaluationEnvelope {
             kind: "custom",
             value: &evaluation,
@@ -94,8 +102,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn malformed_workbooks_are_bad_arguments() {
+        let error = evaluate("{}").unwrap_err();
+        assert!(matches!(error, PluginError::BadArgs(_)));
+    }
+
+    #[test]
     fn budget_counts_the_same_envelope_as_the_real_index_result() {
-        let evaluation = super::super::evaluate(r#"{"version":1,"sheets":[]}"#).unwrap();
+        let evaluation = evaluate(r#"{"version":1,"sheets":[]}"#).unwrap();
         let borrowed = serde_json::to_value(EvaluationEnvelope {
             kind: "custom",
             value: &evaluation,

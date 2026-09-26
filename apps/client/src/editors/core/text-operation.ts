@@ -152,3 +152,87 @@ export function operationFromText(before: string, after: string): TextOperation 
     edits: [edit],
   };
 }
+
+/** Transform disjoint edits on a shared preimage. An overlap is a recoverable conflict. */
+export function transformPair(local: TextOperation, remote: TextOperation): [TextOperation, TextOperation] | null {
+  if (local.beforeLength !== remote.beforeLength) return null;
+  const shift = (edit: TextEdit, other: readonly TextEdit[]): TextEdit | null => {
+    let delta = 0;
+    for (const change of other) {
+      // Adjacent edits are independent; coincident insertions have no stable order.
+      if (change.from === change.to && edit.from === edit.to && change.from === edit.from) return null;
+      if (change.to <= edit.from && !(change.from === change.to && change.from === edit.from)) {
+        delta += change.inserted.length - change.deleted.length;
+      } else if (change.from >= edit.to && !(edit.from === edit.to && change.from === edit.from)) {
+        continue;
+      } else {
+        return null;
+      }
+    }
+    return { ...edit, from: edit.from + delta, to: edit.to + delta };
+  };
+  const shiftAll = (source: TextOperation, other: TextOperation): TextOperation | null => {
+    const edits: TextEdit[] = [];
+    for (const edit of source.edits) {
+      const mapped = shift(edit, other.edits);
+      if (!mapped) return null;
+      edits.push(mapped);
+    }
+    return { beforeLength: other.afterLength, afterLength: other.afterLength + source.afterLength - source.beforeLength, edits };
+  };
+  const left = shiftAll(local, remote);
+  const right = shiftAll(remote, local);
+  return left && right && !validateOperation(left) && !validateOperation(right) ? [left, right] : null;
+}
+
+/**
+ * Rebases the change of a surface that fell behind onto the authoritative
+ * text. The operation carries its own preimage, so inverting it on the
+ * surface's text gives back the text the surface started from; what it missed
+ * is the step from there to the authoritative text. Disjoint changes compose,
+ * and `null` means they touch: then the authoritative text wins.
+ *
+ * Returns the merged text in the surface's line separator, the rebased
+ * operation (preimage: the normalized authoritative text) and the catch-up
+ * operation that brings the surface there (preimage: its normalized text).
+ */
+export function rebaseStaleChange(
+  authoritative: string,
+  change: { readonly text: string; readonly operation: TextOperation },
+): { readonly text: string; readonly operation: TextOperation; readonly catchUp: TextOperation } | null {
+  const surface = change.text.replace(/\r\n?/g, "\n");
+  const target = authoritative.replace(/\r\n?/g, "\n");
+  if (validateOperation(change.operation)) return null;
+  const started = tryApplyOperation(surface, invertOperation(change.operation));
+  if (started.kind !== "applied") return null;
+  const pair = transformPair(change.operation, operationFromText(started.text, target));
+  if (!pair) return null;
+  const merged = tryApplyOperation(target, pair[0]);
+  const caughtUp = tryApplyOperation(surface, pair[1]);
+  if (merged.kind !== "applied" || caughtUp.kind !== "applied" || merged.text !== caughtUp.text) return null;
+  const crlf = change.text.includes("\r\n") || (!change.text.includes("\n") && authoritative.includes("\r\n"));
+  return {
+    text: crlf ? merged.text.replace(/\n/g, "\r\n") : merged.text,
+    operation: pair[0],
+    catchUp: pair[1],
+  };
+}
+
+/** Who produced a local change: a keystroke, or the surface's own history. */
+export type EditorChangeOrigin = "input" | "undo" | "redo";
+
+/** A change a surface made to its document: the resulting text and the typed operation behind it. */
+export interface EditorChange {
+  readonly text: string;
+  readonly operation: TextOperation;
+  readonly origin: EditorChangeOrigin;
+}
+
+/**
+ * What the document session pushes to a surface: the authoritative text, with
+ * the operation when the surface can apply it instead of replacing the text.
+ */
+export interface DocumentUpdate {
+  readonly text: string;
+  readonly operation: TextOperation | null;
+}

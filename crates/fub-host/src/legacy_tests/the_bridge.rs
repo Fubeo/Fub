@@ -111,6 +111,7 @@ impl EventSink for SinkWithBrake {
         state.seen.push(notice.clone());
         // Si prende la barriera **sotto lo stesso lucchetto** con cui si è
         // registrato, e la si aspetta fuori: fermarsi tenendo il lucchetto
+        // fermerebbe anche chi guarda.
         let via = state.via.take();
         drop(state);
         self.bell.notify_all();
@@ -162,6 +163,7 @@ impl Bench {
         // ha detto **precede** il sigillo per costruzione: quando il sigillo
         // arriva, non c'è più niente di suo in volo. È l'unico modo di
         // sincronizzarsi col ponte che non contenga né un tempo né un'ipotesi
+        // su chi corre più veloce.
         host.wait_indexed(None).expect("opening is done");
         let bench = Bench {
             _dir: dir,

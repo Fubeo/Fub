@@ -1,8 +1,8 @@
 //! Publish invariants exercised against the same owner handlers as the HTTP router.
 
 use fub_services::publish::guard::{
-    assert_no_leakage, escape_html, hash_site_password, is_safe_href, render_markdown_safe,
-    sha256_hex, verify_site_password, PublishedSurface,
+    assert_no_leakage, escape_html, hash_site_password, is_safe_href, sha256_hex,
+    verify_site_password, PublishedSurface,
 };
 use fub_services::publish::manifest::{
     check_publish_path, check_site_id, plan_dry_run, validate_manifest_for_commit, AssetBody,
@@ -101,27 +101,41 @@ fn excluded_note_detected_in_each_surface() {
 
 // --- rendering guard ------------------------------------------------------
 
+/// The server does not render: the page HTML comes from the client, so the
+/// wall is the commit preflight, and it is the one exercised here.
 #[test]
-fn renderer_escapes_script_style_iframe() {
-    let html = render_markdown_safe("# Hi\n<script>alert(1)</script>\n<iframe src=\"x\"></iframe>");
-    assert!(!html.contains("<script>"), "{html}");
-    assert!(!html.contains("<iframe"), "{html}");
-    assert!(html.contains("&lt;script&gt;"), "{html}");
-    assert!(html.contains("<h1>Hi</h1>"), "{html}");
+fn raw_script_style_iframe_are_refused_without_isolation() {
+    let data = temp_data_dir("active-markup");
+    let body = |html: &str| {
+        serde_json::to_vec(&serde_json::json!({
+            "site_id": "blog", "pages": [{"path": "index.html", "html": html}], "assets": []
+        }))
+        .unwrap()
+    };
+    for html in [
+        "<h1>Hi</h1><script>alert(1)</script>",
+        "<style>body{background:url(https://evil.test)}</style>",
+        "<iframe src=\"/s/blog/x\"></iframe>",
+        "<a href=\"javascript:alert(1)\">click</a>",
+    ] {
+        let refused =
+            fub_services::site_isolation::preflight_commit(&data, &body(html)).expect_err(html);
+        assert_eq!(refused.status, 422, "{html}");
+    }
+    fub_services::site_isolation::preflight_commit(
+        &data,
+        &body("<h1>Hi</h1><p><a href=\"/s/blog/about.html\">about</a></p>"),
+    )
+    .expect("a static page needs no isolation");
 }
 
 #[test]
-fn unsafe_hrefs_fall_back_to_text() {
+fn unsafe_hrefs_are_refused() {
     assert!(!is_safe_href("javascript:alert(1)"));
     assert!(!is_safe_href("data:text/html,<h1>x</h1>"));
     assert!(is_safe_href("https://example.com/a"));
     assert!(is_safe_href("/s/blog/index.html"));
     assert!(is_safe_href("#anchor"));
-    let html = render_markdown_safe("[click](javascript:alert(1))");
-    assert!(
-        !html.contains("href=\"javascript:"),
-        "unsafe URI became clickable: {html}"
-    );
     assert_eq!(escape_html("<&>"), "&lt;&amp;&gt;");
 }
 

@@ -145,9 +145,9 @@ fn a_component_wasm_walks_the_tree_of_the_document() {
     let v = Vault::new();
     let (host, events) = bench(&v);
 
-    ask(&host, "modello");
+    ask(&host, "demo.modello:modello");
     let (job, result) = next_result(&events);
-    assert_eq!(job, "modello");
+    assert_eq!(job, "demo.modello:modello");
     let m = result.expect("il job è riuscito");
 
     // Chi è il documento, e che aveva un frontmatter: `frontmatter_presente` è
@@ -223,9 +223,9 @@ fn a_document_too_nested_receives_a_no_instead_of_far_falls_the_host() {
     let v = Vault::new();
     let (host, events) = bench(&v);
 
-    ask(&host, "modello-profondo");
+    ask(&host, "demo.modello:modello-profondo");
     let (job, result) = next_result(&events);
-    assert_eq!(job, "modello-profondo");
+    assert_eq!(job, "demo.modello:modello-profondo");
     let error = result.expect_err("a tree beyond the ceiling does not cross");
     assert!(
         matches!(&error, PluginError::Internal(t)
@@ -235,7 +235,7 @@ fn a_document_too_nested_receives_a_no_instead_of_far_falls_the_host() {
 
     // L'istanza è ancora viva: il rifiuto è passato come **valore**, non come
     // trap, e lo stesso componente risponde ancora a una domanda buona.
-    ask(&host, "modello");
+    ask(&host, "demo.modello:modello");
     let (_, result) = next_result(&events);
     assert!(
         result.is_ok(),

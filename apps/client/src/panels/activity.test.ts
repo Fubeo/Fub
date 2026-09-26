@@ -11,6 +11,10 @@ import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
 import { apply, exportArtifacts, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
 import { api } from "../host/ipc";
+import samples from "../__fixtures__/mirror-samples.json";
+import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
+import { clearHistory, recentNotices } from "../ui/notify";
+import { t } from "../i18n/strings";
 
 function notice(event: KernelEvent): KernelNotice {
   return { event, origin: { actor: { kind: "kernel" }, batch: null } };
@@ -160,8 +164,31 @@ describe("rimontaggio del centro attività", () => {
 
 describe("export artifacts from completed transfer jobs", () => {
   const complete = (artifact: unknown): KernelNotice =>
-    notice({ type: "job_done", id: "9007199254740993", job: "import.transfer",
+    notice({ type: "job_done", id: "9007199254740993", job: ARTIFACT_JOB,
       result: { Ok: { artifacts: [artifact], log: [] } } });
+  it("reads the report exactly as Rust serializes it, and only from the transfer job", () => {
+    const [report] = (samples as unknown as Record<string, unknown[]>).ExportReport;
+    const done = (job: string) => notice({ type: "job_done", id: "3", job, result: { Ok: report } });
+    expect(exportArtifacts(done(ARTIFACT_JOB))?.map((a) => a.content.kind)).toEqual(["bytes", "delivered"]);
+    expect(exportArtifacts(done("export.run"))).toBeNull();
+  });
+  it("an export whose artifacts fail validation is reported, an import result is not", () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    const invalid = () => recentNotices().filter((n) => n.text === t("activity.artifact_invalid")).length;
+    clearHistory();
+    forwardNotice(notice({ type: "job_done", id: "4", job: ARTIFACT_JOB,
+      result: { Ok: { receipt: "r", log: [] } } }));
+    expect(invalid()).toBe(0);
+    forwardNotice(complete({ path: "../fuori.csv", media_type: "text/csv", content: { kind: "bytes", value: [1] } }));
+    expect(invalid()).toBe(1);
+    lifetime.close();
+  });
   it("accepts only bounded byte artifacts and decimal-string delivered receipts", () => {
     expect(exportArtifacts(complete({
       path: "nested/export.csv", media_type: "text/csv",

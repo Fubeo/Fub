@@ -17,6 +17,14 @@ use thiserror::Error;
 pub const MAX_FORMULA_BYTES: usize = 8 * 1024;
 pub const MAX_FORMULA_DEPTH: usize = 32;
 pub const MAX_FORMULA_STEPS: u64 = 50_000;
+/// Quanti livelli il **parser** apre uno dentro l'altro: parentesi, segni,
+/// anelli di una catena di operatori, campi, liste e argomenti contano uno
+/// ciascuno. Non è un secondo limite semantico — quello resta
+/// [`MAX_FORMULA_DEPTH`], che il valutatore applica — ma il tetto della
+/// discesa ricorsiva: prima `((((…))))` in 8 KiB scendeva di una decina di
+/// frame per parentesi ed esauriva lo stack prima di arrivare al valutatore.
+/// È largo abbastanza da non rifiutare niente che il valutatore accetti.
+const MAX_PARSE_DEPTH: usize = 4 * MAX_FORMULA_DEPTH;
 /// Tetti sugli intermedi PRIMA di concat/allocazione (non solo JSON finale).
 pub const MAX_TEXT_BYTES: usize = 256 * 1024;
 pub const MAX_TEXT_LIST_ITEMS: usize = 10_000;
@@ -360,6 +368,9 @@ struct Parser<'a> {
     bytes: &'a [u8],
     source: &'a str,
     pos: usize,
+    /// Livelli aperti, contro [`MAX_PARSE_DEPTH`]. Chi ne apre li riporta
+    /// dove li ha trovati; un errore abbandona la formula intera.
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -368,7 +379,32 @@ impl<'a> Parser<'a> {
             bytes: source.as_bytes(),
             source,
             pos: 0,
+            depth: 0,
         }
+    }
+
+    /// Apre un livello. Un anello di una catena lo lascia aperto per il
+    /// resto della catena, perché l'albero a sinistra si approfondisce di uno
+    /// per anello anche senza ricorsione.
+    fn deeper(&mut self) -> Result<(), String> {
+        self.depth += 1;
+        if self.depth > MAX_PARSE_DEPTH {
+            Err("annidamento eccessivo".to_string())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Esegue `parse` un livello più in basso.
+    fn nested<T>(
+        &mut self,
+        parse: impl FnOnce(&mut Self) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let entry = self.depth;
+        self.deeper()?;
+        let parsed = parse(self)?;
+        self.depth = entry;
+        Ok(parsed)
     }
 
     fn skip_ws(&mut self) {
@@ -382,99 +418,124 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_or(&mut self) -> Result<FormulaAst, String> {
+        let entry = self.depth;
         let mut left = self.parse_and()?;
         loop {
             self.skip_ws();
             if self.eat("||") {
+                self.deeper()?;
                 let right = self.parse_and()?;
                 left = FormulaAst::Binary(BinaryOp::Or, Box::new(left), Box::new(right));
             } else {
+                self.depth = entry;
                 return Ok(left);
             }
         }
     }
 
     fn parse_and(&mut self) -> Result<FormulaAst, String> {
+        let entry = self.depth;
         let mut left = self.parse_equality()?;
         loop {
             self.skip_ws();
             if self.eat("&&") {
+                self.deeper()?;
                 let right = self.parse_equality()?;
                 left = FormulaAst::Binary(BinaryOp::And, Box::new(left), Box::new(right));
             } else {
+                self.depth = entry;
                 return Ok(left);
             }
         }
     }
 
     fn parse_equality(&mut self) -> Result<FormulaAst, String> {
+        let entry = self.depth;
         let mut left = self.parse_comparison()?;
         loop {
             self.skip_ws();
             if self.eat("==") {
+                self.deeper()?;
                 let right = self.parse_comparison()?;
                 left = FormulaAst::Binary(BinaryOp::Eq, Box::new(left), Box::new(right));
             } else if self.eat("!=") {
+                self.deeper()?;
                 let right = self.parse_comparison()?;
                 left = FormulaAst::Binary(BinaryOp::NotEq, Box::new(left), Box::new(right));
             } else {
+                self.depth = entry;
                 return Ok(left);
             }
         }
     }
 
     fn parse_comparison(&mut self) -> Result<FormulaAst, String> {
+        let entry = self.depth;
         let mut left = self.parse_add()?;
         loop {
             self.skip_ws();
             if self.eat(">=") {
+                self.deeper()?;
                 let right = self.parse_add()?;
                 left = FormulaAst::Binary(BinaryOp::Gte, Box::new(left), Box::new(right));
             } else if self.eat("<=") {
+                self.deeper()?;
                 let right = self.parse_add()?;
                 left = FormulaAst::Binary(BinaryOp::Lte, Box::new(left), Box::new(right));
             } else if self.eat('>') {
+                self.deeper()?;
                 let right = self.parse_add()?;
                 left = FormulaAst::Binary(BinaryOp::Gt, Box::new(left), Box::new(right));
             } else if self.eat('<') {
+                self.deeper()?;
                 let right = self.parse_add()?;
                 left = FormulaAst::Binary(BinaryOp::Lt, Box::new(left), Box::new(right));
             } else {
+                self.depth = entry;
                 return Ok(left);
             }
         }
     }
 
     fn parse_add(&mut self) -> Result<FormulaAst, String> {
+        let entry = self.depth;
         let mut left = self.parse_mul()?;
         loop {
             self.skip_ws();
             if self.eat('+') {
+                self.deeper()?;
                 let right = self.parse_mul()?;
                 left = FormulaAst::Binary(BinaryOp::Add, Box::new(left), Box::new(right));
             } else if self.eat('-') {
+                self.deeper()?;
                 let right = self.parse_mul()?;
                 left = FormulaAst::Binary(BinaryOp::Sub, Box::new(left), Box::new(right));
             } else {
+                self.depth = entry;
                 return Ok(left);
             }
         }
     }
 
     fn parse_mul(&mut self) -> Result<FormulaAst, String> {
+        let entry = self.depth;
         let mut left = self.parse_unary()?;
         loop {
             self.skip_ws();
             if self.eat('*') {
+                self.deeper()?;
                 let right = self.parse_unary()?;
                 left = FormulaAst::Binary(BinaryOp::Mul, Box::new(left), Box::new(right));
             } else if self.eat('/') {
+                self.deeper()?;
                 let right = self.parse_unary()?;
                 left = FormulaAst::Binary(BinaryOp::Div, Box::new(left), Box::new(right));
             } else if self.eat('%') {
+                self.deeper()?;
                 let right = self.parse_unary()?;
                 left = FormulaAst::Binary(BinaryOp::Mod, Box::new(left), Box::new(right));
             } else {
+                self.depth = entry;
                 return Ok(left);
             }
         }
@@ -485,30 +546,32 @@ impl<'a> Parser<'a> {
         if self.eat('-') {
             return Ok(FormulaAst::Unary(
                 UnaryOp::Minus,
-                Box::new(self.parse_unary()?),
+                Box::new(self.nested(Self::parse_unary)?),
             ));
         }
         if self.eat('+') {
             return Ok(FormulaAst::Unary(
                 UnaryOp::Plus,
-                Box::new(self.parse_unary()?),
+                Box::new(self.nested(Self::parse_unary)?),
             ));
         }
         if self.eat('!') {
             // `!=` è già stato consumato sopra; qui `!` è negazione.
             return Ok(FormulaAst::Unary(
                 UnaryOp::Not,
-                Box::new(self.parse_unary()?),
+                Box::new(self.nested(Self::parse_unary)?),
             ));
         }
         self.parse_postfix()
     }
 
     fn parse_postfix(&mut self) -> Result<FormulaAst, String> {
+        let entry = self.depth;
         let mut node = self.parse_primary()?;
         loop {
             self.skip_ws();
             if self.eat('.') {
+                self.deeper()?;
                 let field = self.parse_ident()?;
                 // Chiamata metodo `x.f(...)`: zucchero per `f(x, ...)`.
                 self.skip_ws();
@@ -520,6 +583,7 @@ impl<'a> Parser<'a> {
                     node = FormulaAst::Field(Box::new(node), field);
                 }
             } else {
+                self.depth = entry;
                 return Ok(node);
             }
         }
@@ -528,7 +592,7 @@ impl<'a> Parser<'a> {
     fn parse_primary(&mut self) -> Result<FormulaAst, String> {
         self.skip_ws();
         if self.eat('(') {
-            let inner = self.parse_expr()?;
+            let inner = self.nested(Self::parse_expr)?;
             self.skip_ws();
             if !self.eat(')') {
                 return Err("`)` attesa".to_string());
@@ -536,22 +600,7 @@ impl<'a> Parser<'a> {
             return Ok(inner);
         }
         if self.eat('[') {
-            let mut items = Vec::new();
-            self.skip_ws();
-            if self.eat(']') {
-                return Ok(FormulaAst::List(items));
-            }
-            loop {
-                items.push(self.parse_expr()?);
-                self.skip_ws();
-                if self.eat(',') {
-                    continue;
-                }
-                if self.eat(']') {
-                    return Ok(FormulaAst::List(items));
-                }
-                return Err("`,` o `]` attesi in lista".to_string());
-            }
+            return self.nested(Self::parse_list);
         }
         if let Some(text) = self.parse_string()? {
             return Ok(FormulaAst::Text(text));
@@ -572,7 +621,7 @@ impl<'a> Parser<'a> {
         let ident = self.parse_ident()?;
         self.skip_ws();
         if self.eat('(') {
-            let args = self.parse_args()?;
+            let args = self.nested(Self::parse_args)?;
             return Ok(FormulaAst::Call(ident, args));
         }
         if matches!(ident.as_str(), "prop" | "file" | "container" | "formula") {
@@ -595,6 +644,26 @@ impl<'a> Parser<'a> {
             return Ok(FormulaAst::Ref(FormulaRef::Prop(ident)));
         }
         Err(format!("nome sconosciuto `{ident}`"))
+    }
+
+    /// Gli elementi di una lista, dopo la `[`.
+    fn parse_list(&mut self) -> Result<FormulaAst, String> {
+        let mut items = Vec::new();
+        self.skip_ws();
+        if self.eat(']') {
+            return Ok(FormulaAst::List(items));
+        }
+        loop {
+            items.push(self.parse_expr()?);
+            self.skip_ws();
+            if self.eat(',') {
+                continue;
+            }
+            if self.eat(']') {
+                return Ok(FormulaAst::List(items));
+            }
+            return Err("`,` o `]` attesi in lista".to_string());
+        }
     }
 
     fn parse_args(&mut self) -> Result<Vec<FormulaAst>, String> {
@@ -1897,6 +1966,48 @@ mod tests {
         for (source, expected) in cases {
             assert_eq!(value_of(source), expected, "{source}");
         }
+    }
+
+    /// I100: dentro gli 8 KiB ammessi, ogni forma che scende di un livello
+    /// è un errore di parsing e non uno stack esaurito prima del valutatore.
+    #[test]
+    fn un_annidamento_ostile_e_un_errore_non_uno_stack_esaurito() {
+        let deep = MAX_FORMULA_BYTES / 2 - 1;
+        let hostile = [
+            format!("{}1{}", "(".repeat(deep), ")".repeat(deep)),
+            format!("{}1{}", "[".repeat(deep), "]".repeat(deep)),
+            format!("{}1", "-".repeat(deep * 2 - 1)),
+            format!("{}1", "!".repeat(deep * 2 - 1)),
+            vec!["1"; deep].join("+"),
+            vec!["1"; deep / 2].join("||"),
+            format!("status{}", ".x".repeat(deep - 4)),
+            format!("{}1{}", "abs(".repeat(deep / 3), ")".repeat(deep / 3)),
+        ];
+        for source in hostile {
+            assert!(source.len() <= MAX_FORMULA_BYTES, "{}", source.len());
+            assert!(
+                matches!(Formula::parse(&source), Err(EvalError::Parse(_))),
+                "{}",
+                &source[..16]
+            );
+        }
+    }
+
+    /// Il tetto del parser non restringe quello semantico: una formula al
+    /// limite del valutatore si legge e si valuta, e un livello oltre resta
+    /// il rifiuto del valutatore di sempre.
+    #[test]
+    fn il_tetto_del_parser_non_restringe_il_valutatore() {
+        let at_limit = format!("{}1", "-".repeat(MAX_FORMULA_DEPTH));
+        assert_eq!(value_of(&at_limit), BaseValue::Number(1.0));
+        let parens = format!(
+            "{}1{}",
+            "(".repeat(MAX_PARSE_DEPTH - 1),
+            ")".repeat(MAX_PARSE_DEPTH - 1)
+        );
+        assert_eq!(value_of(&parens), BaseValue::Number(1.0));
+        let beyond = format!("{}1", "-".repeat(MAX_FORMULA_DEPTH + 1));
+        assert_eq!(value_of(&beyond), BaseValue::Error(FormulaErrorCode::Parse));
     }
 
     #[test]

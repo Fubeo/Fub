@@ -5,7 +5,8 @@
 // Rust, che è il presidio contro alias superflui (il workflow riusa i
 // comandi kernel). Ogni azione passa da tastiera+palette+menu con lo stesso
 // `run`, per la regola del §18.2.
-import { confirmInShell, promptText } from "../ui/dialogs";
+import { confirm } from "../host/dialog";
+import { promptText } from "../ui/dialogs";
 import { activeDoc, layout } from "./layout";
 import { applyWorkspace, deleteWorkspace, getWorkspace, renameWorkspace, updateWorkspace } from "./workspaces";
 import { state } from "./store";
@@ -18,9 +19,10 @@ import { openViewIn } from "./layout";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
 import { resolvedReference } from "../host/query";
-import { revealByteOffset } from "../panels/document";
+import { reveal } from "../panels/document";
 import { captureShellGeometry, restoreShellGeometry } from "./shell-geometry";
 import { saveActiveSpace, saveExpanded, emit } from "./store";
+import { errorText } from "../host/errors";
 
 /// Apre un segnalibro eterogeneo con gli stessi verbi dell’app: doc via
 /// `openDocument` (+ anchor via reveal quando il link lo nomina), cartella
@@ -37,10 +39,10 @@ export async function openBookmarkTarget(target: BookmarkTarget): Promise<void> 
           { kind: "wiki", value: { page: target.doc, heading: target.heading ?? null, block: target.block ?? null } },
           target.doc,
         );
-        if (resolved?.at && resolved.doc === target.doc) revealByteOffset(resolved.at.span.start);
+        if (resolved?.at && resolved.doc === target.doc) await reveal(target.doc, { span: resolved.at.span });
       }
     } catch (e) {
-      notify(t("preview.open_failed", { page: target.doc, reason: String(e) }), "guasto");
+      notify(t("preview.open_failed", { page: target.doc, reason: errorText(e) }), "guasto");
     }
     return;
   }
@@ -128,6 +130,24 @@ export function mountShellOwnerCommands(): void {
     layer: "document",
     run: () => {
       void import("../panels/document").then(({ moveCurrentTab }) => moveCurrentTab(1));
+    },
+  });
+  registerShellCommand({
+    id: "shell.tab.move.pane.previous",
+    title: "commands.tab.move.pane.previous",
+    description: "commands.tab.move.pane.previous.desc",
+    layer: "document",
+    run: () => {
+      void import("../panels/document").then(({ moveCurrentTabToPane }) => moveCurrentTabToPane(-1));
+    },
+  });
+  registerShellCommand({
+    id: "shell.tab.move.pane.next",
+    title: "commands.tab.move.pane.next",
+    description: "commands.tab.move.pane.next.desc",
+    layer: "document",
+    run: () => {
+      void import("../panels/document").then(({ moveCurrentTabToPane }) => moveCurrentTabToPane(1));
     },
   });
   registerShellCommand({
@@ -227,6 +247,15 @@ export function mountShellOwnerCommands(): void {
     },
   });
   registerShellCommand({
+    id: "shell.workspace.toggle",
+    title: "commands.workspace.toggle",
+    description: "commands.workspace.toggle.desc",
+    layer: "global",
+    run: () => {
+      void import("./workspaces-ui").then(({ toggleWorkspacesPanel }) => toggleWorkspacesPanel());
+    },
+  });
+  registerShellCommand({
     id: "shell.workspace.save",
     title: "commands.workspace.save",
     description: "commands.workspace.save.desc",
@@ -292,9 +321,8 @@ export function mountShellOwnerCommands(): void {
         return;
       }
       const entry = getWorkspace(id);
-      const ok = await confirmInShell({
+      const ok = await confirm(t("workspaces.delete_confirm", { name: entry?.name ?? id }), {
         title: t("workspaces.delete"),
-        message: t("workspaces.delete_confirm", { name: entry?.name ?? id }),
         okLabel: t("workspaces.delete"),
         danger: true,
       });

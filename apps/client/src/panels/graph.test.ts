@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { emit } from "../state/store";
 import type * as Store from "../state/store";
-import { customRenderer } from "../ui/custom";
+import { customRenderer, NO_RENDER_CONTEXT } from "../ui/custom";
 import { GRAPH_NS, mountGraph } from "./graph";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 
@@ -114,10 +114,8 @@ vi.mock("../i18n/strings", () => ({
 }));
 
 vi.mock("../state/layout", () => ({
-  layout: { focus: "main" },
   panes: () => [],
   pane: () => undefined,
-  openViewIn: vi.fn(),
 }));
 
 afterEach(async () => {
@@ -144,9 +142,6 @@ function mountTestGraph(): void {
 
 describe("lifecycle del renderer graph", () => {
   it("stacca il layout e tutte le risorse a ogni mount/destroy", async () => {
-    const button = document.createElement("button");
-    button.id = "show-graph";
-    document.body.append(button);
     mountTestGraph();
 
     const render = customRenderer(GRAPH_NS, null);
@@ -155,7 +150,7 @@ describe("lifecycle del renderer graph", () => {
     for (let i = 0; i < 3; i += 1) {
       const host = document.createElement("div");
       document.body.append(host);
-      const unmount = render!(host, { nodes: ["a"], edges: [] }, vi.fn());
+      const unmount = render!(host, { nodes: ["a"], edges: [] }, vi.fn(), NO_RENDER_CONTEXT);
       await vi.dynamicImportSettled();
       const chart = fakes.charts[i];
       const panel = fakes.panels[i];
@@ -174,9 +169,6 @@ describe("lifecycle del renderer graph", () => {
 
 
   it("U46/U48: elenco accessibile paginato dagli stessi dati, apre con la stessa azione", async () => {
-    const button = document.createElement("button");
-    button.id = "show-graph";
-    document.body.append(button);
     mountTestGraph();
     const render = customRenderer(GRAPH_NS, null)!;
     const opened: string[] = [];
@@ -189,6 +181,7 @@ describe("lifecycle del renderer graph", () => {
       ((action: { action: string; payload: unknown }) => {
         if (action.action === "open") opened.push((action.payload as { doc: string }).doc);
       }) as never,
+      NO_RENDER_CONTEXT,
     );
     await vi.dynamicImportSettled();
     const chart = fakes.charts[fakes.charts.length - 1];
@@ -220,9 +213,6 @@ describe("lifecycle del renderer graph", () => {
   });
 
   it("filtra nodi e archi per data indicizzata senza ricostruire il layout", async () => {
-    const button = document.createElement("button");
-    button.id = "show-graph";
-    document.body.append(button);
     mountTestGraph();
     const render = customRenderer(GRAPH_NS, null)!;
     const host = document.createElement("div");
@@ -232,7 +222,7 @@ describe("lifecycle del renderer graph", () => {
       edges: [{ from: "a.md", to: "b.md" }],
       // Due giorni diversi: la timeline avanza per giorno, non per istante.
       modified: { "a.md": "1700000000000", "b.md": "1700200000000" },
-    }, vi.fn())!;
+    }, vi.fn(), NO_RENDER_CONTEXT)!;
     await vi.dynamicImportSettled();
     const chart = fakes.charts[fakes.charts.length - 1];
     chart.nodeCount.mockReturnValue(2);
@@ -250,14 +240,11 @@ describe("lifecycle del renderer graph", () => {
   });
 
   it("non monta un motore arrivato dopo lo smontaggio della superficie", async () => {
-    const button = document.createElement("button");
-    button.id = "show-graph";
-    document.body.append(button);
     mountTestGraph();
     const host = document.createElement("div");
     document.body.append(host);
     const render = customRenderer(GRAPH_NS, null)!;
-    const stop = render(host, { nodes: ["a"], edges: [] }, vi.fn())!;
+    const stop = render(host, { nodes: ["a"], edges: [] }, vi.fn(), NO_RENDER_CONTEXT)!;
     stop();
     await vi.dynamicImportSettled();
     expect(host.querySelector("canvas")).toBeNull();

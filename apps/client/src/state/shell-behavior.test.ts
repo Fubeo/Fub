@@ -31,7 +31,7 @@ import {
 } from "./layout";
 import { parseBookmarkStore, parseBookmarkTarget } from "./bookmarks";
 import { parseShellGeometry } from "./shell-geometry";
-import { applyWorkspace, parseWorkspaceStore, saveWorkspace } from "./workspaces";
+import { applyWorkspace, getWorkspace, parseWorkspaceStore, renameInWorkspaces, saveWorkspace } from "./workspaces";
 vi.mock("../host/query", () => ({ existingDocuments: async () => new Set<string>() }));
 
 function command(id: string): CommandEntry {
@@ -246,6 +246,29 @@ describe("i workspace nominati", () => {
     expect(reread?.workspaces[0]?.layout.panes.main.tabs).toHaveLength(2);
     expect(reread?.workspaces[0]?.layout.focus).toBe(live.focus);
     expect(reread?.workspaces[0]?.geometry).toEqual(saved?.geometry);
+  });
+
+  it("una rinomina segue nelle schede, nella cronologia e nel pin, come nel layout vivo", () => {
+    const assetto = layoutWith("a.md", "b.md", "c.md");
+    setPinnedTab("main", 0, true, assetto);
+    assetto.panes.main.history = {
+      past: [{ k: "doc", doc: "a.md" }, { k: "doc", doc: "b.md" }],
+      future: [{ k: "doc", doc: "a.md" }],
+    };
+    const saved = saveWorkspace("R", assetto, [], null)!;
+    const updated = saved.updated;
+    expect(renameInWorkspaces("a.md", "z.md")).toBe(true);
+    const after = getWorkspace(saved.id)!;
+    const live = structuredClone(assetto);
+    rename("a.md", "z.md", live);
+    expect(after.layout.panes).toEqual(live.panes);
+    expect(after.layout.panes.main.tabs[0]).toEqual({ k: "doc", doc: "z.md", pinned: true });
+    expect(after.layout.panes.main.history).toEqual({
+      past: [{ k: "doc", doc: "z.md" }, { k: "doc", doc: "b.md" }],
+      future: [{ k: "doc", doc: "z.md" }],
+    });
+    expect(after.updated).toBe(updated);
+    expect(renameInWorkspaces("assente.md", "altro.md")).toBe(false);
   });
 
   it("l’apply scarta i doc mancanti e nomina le view non dichiarate", async () => {

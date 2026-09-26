@@ -214,6 +214,30 @@ fn trapped_index_declaration_rolls_back_without_a_route_or_plugin() {
 }
 
 #[test]
+fn an_unserved_export_names_itself_and_leaves_a_reusable_host() {
+    let vault = Vault::new();
+    let host = host(&vault);
+
+    let rejected = WasmBundle::from_file(&common::ping("con-sintassi"), Trust::Community)
+        .expect_err("an export the host does not link is rejected before mounting");
+    let message = rejected.to_string();
+    assert!(
+        matches!(rejected, LoadError::UnservedExports(_)),
+        "{message}"
+    );
+    assert!(message.contains("fub:abi/syntax"), "{message}");
+    assert!(!host
+        .plugin_ids(None)
+        .expect("inventory")
+        .iter()
+        .any(|id| id == "demo.ping"));
+    let valid = WasmBundle::from_file(&common::ping(""), Trust::Community).expect("valid guest");
+    host.mount_bundle(None, Arc::new(valid))
+        .expect("host remains reusable");
+    assert!(host.close().is_empty());
+}
+
+#[test]
 fn an_unserved_host_family_names_itself_and_leaves_a_reusable_host() {
     let vault = Vault::new();
     let host = host(&vault);

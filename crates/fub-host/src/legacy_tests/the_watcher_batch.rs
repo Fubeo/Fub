@@ -54,7 +54,6 @@ struct Gate {
 impl Gate {
     /// Arma il cancello per **una** lettura: restituisce l'estremo da cui il
     /// test sente che il parse è entrato, e quello con cui lo lascia uscire.
-    /// test sente che il parse è entrato, e quello con cui lo lascia uscire.
     fn arm(&self) -> (Receiver<()>, Sender<()>) {
         let (inside_tx, inside_rx) = channel();
         let (exit_tx, exit_rx) = channel();

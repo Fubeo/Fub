@@ -1,9 +1,12 @@
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as SessionModule from "./document-session";
-import { operationFromText, type TextOperation } from "../editor/text-operation";
+import { operationFromText, type TextOperation } from "../editors/core/text-operation";
 import { state } from "./store";
 import { documentSessions } from "./document-session";
-import { attachChildBridge, attachRemoteSurface, isRemoteMessage, type ChildBridge, type RemoteSurfaceHandle } from "./document-bridge";
+import { attachChildBridge, attachRemoteSurface, DocumentWindowUnsupported, isRemoteMessage, setDocumentWindowNavigation, type ChildBridge, type MirroredTheme, type RemoteSurfaceHandle } from "./document-bridge";
+import { mount } from "../theme/loader";
+import { emit } from "./store";
 
 vi.mock("./document-session", async (importOriginal) => {
   const real = await importOriginal<typeof SessionModule>();
@@ -45,6 +48,8 @@ class MemoryChannel {
   }
 }
 
+const PLAIN = (): string => "plain-text";
+
 async function settle(): Promise<void> {
   for (let n = 0; n < 12; n++) await Promise.resolve();
 }
@@ -75,8 +80,8 @@ describe("document-window protocol", () => {
 
   it("conserva l'ultima battuta, aspetta ack e mantiene history remota tipizzata", async () => {
     const doc = `${number}-pending.md`;
-    const first = await attachRemoteSurface(doc, state.vaultRoot);
-    const second = await attachRemoteSurface(doc, state.vaultRoot);
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
     handles.push(first.handle, second.handle);
     expect(first.request.session).toBe(second.request.session);
     expect(first.request.channel).not.toBe(second.request.channel);
@@ -105,7 +110,7 @@ describe("document-window protocol", () => {
 
   it("preserva BOM, CRLF e offset UTF-16 durante un edit remoto", async () => {
     const doc = `${number}-crlf.md`;
-    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot);
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
     handles.push(handle);
     let text = "";
     children.push(attachChildBridge(request, (next) => { text = next; }, () => text, observeState));
@@ -121,7 +126,7 @@ describe("document-window protocol", () => {
 
   it("rifiuta messaggi malformati e replay, senza applicare l'operazione due volte", async () => {
     const doc = `${number}-replay.md`;
-    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot);
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
     handles.push(handle);
     let text = "";
     children.push(attachChildBridge(request, (value) => { text = value; }, () => text, observeState));
@@ -146,8 +151,8 @@ describe("document-window protocol", () => {
 
   it("mantiene entrambi gli intenti se due superfici cambiano lo stesso intervallo", async () => {
     const doc = `${number}-overlap.md`;
-    const first = await attachRemoteSurface(doc, state.vaultRoot);
-    const second = await attachRemoteSurface(doc, state.vaultRoot);
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
     handles.push(first.handle, second.handle);
     let left = "", right = "";
     let conflict = "";
@@ -170,5 +175,58 @@ describe("document-window protocol", () => {
     await settle();
     expect(documentSessions.text(doc)).toBe("aYc");
     expect(right).toBe("aYc");
+  });
+
+  // La finestra a parte non ha IPC: il profilo lo decide il registro della
+  // finestra principale prima di aprirla, e un documento senza superficie di
+  // testo non apre niente e non lascia un prestito appeso.
+  it("porta il profilo risolto e rifiuta un documento che non è testo", async () => {
+    const board = `${number}-lavagna.canvas`;
+    await expect(attachRemoteSurface(board, state.vaultRoot, () => null)).rejects.toBeInstanceOf(DocumentWindowUnsupported);
+    // Nessun prestito appeso e nessun canale aperto: la sessione letta per
+    // decidere si può chiudere.
+    expect((await documentSessions.release(board)).kind).toBe("closed");
+    expect(MemoryChannel.peers.size).toBe(0);
+
+    const doc = `${number}-profilo.md`;
+    const opened = await attachRemoteSurface(doc, state.vaultRoot, (source) => `${source.formatId}-${source.sourceKind}`);
+    handles.push(opened.handle);
+    expect(opened.request.profile).toBe("plain-text");
+  });
+
+  it("manda il tema montato al saluto e a ogni cambio, e riporta i link cliccati", async () => {
+    document.documentElement.dataset.theme = "dark";
+    document.documentElement.dataset.contrast = "normal";
+    mount(":root { --x: 1; }", "foglio");
+    const doc = `${number}-tema.md`;
+    const opened = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(opened.handle);
+    const themes: MirroredTheme[] = [];
+    let text = "";
+    children.push(attachChildBridge(opened.request, (next) => { text = next; }, () => text, observeState, (theme) => themes.push(theme)));
+    await settle();
+    expect(themes).toEqual([{ light: "dark", contrast: "normal", layers: [{ layer: "foglio", text: ":root { --x: 1; }" }] }]);
+
+    document.documentElement.dataset.theme = "light";
+    mount(":root { --y: 2; }", "pelle");
+    emit("theme");
+    await settle();
+    expect(themes[1]).toEqual({ light: "light", contrast: "normal", layers: [
+      { layer: "foglio", text: ":root { --x: 1; }" }, { layer: "pelle", text: ":root { --y: 2; }" },
+    ] });
+
+    const navigate = vi.fn();
+    setDocumentWindowNavigation({ navigate });
+    children[0].navigate({ kind: "wikilink", page: "Altra", heading: null, block: "abc" });
+    await settle();
+    expect(navigate).toHaveBeenCalledWith({ kind: "wikilink", page: "Altra", heading: null, block: "abc" }, doc);
+    setDocumentWindowNavigation(null);
+
+    await opened.handle.dispose();
+    handles.pop();
+    emit("theme");
+    await settle();
+    expect(themes).toHaveLength(2);
+    for (const el of document.head.querySelectorAll("style[data-fub]")) el.remove();
   });
 });

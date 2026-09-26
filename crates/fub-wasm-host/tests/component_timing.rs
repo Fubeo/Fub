@@ -166,7 +166,7 @@ fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
 
     // 1. Lo stesso componente, un job che torna: i limiti non sono una tassa su
     //    chi si comporta bene.
-    let id = ask(&host, CYCLE, "eco");
+    let id = ask(&host, CYCLE, "demo.ciclo:eco");
     let (echo_outcome, amount) = outcome(&events, id);
     assert_eq!(
         echo_outcome.expect("un job che torna, torna")["eco"],
@@ -180,14 +180,14 @@ fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
     // 2. Il ciclo infinito. Il componente non chiama nessuno e non alloca
     //    niente: la sola cosa che lo raggiunge è il controllo dell'epoca che
     //    cranelift ha infilato nel suo `loop`.
-    let id = ask(&host, CYCLE, "ciclo");
+    let id = ask(&host, CYCLE, "demo.ciclo:ciclo");
     let (cycle_outcome, amount) = outcome(&events, id);
     let error = cycle_outcome.expect_err("un ciclo infinito non riesce");
     let said = crashed(&error);
 
     // Il messaggio che l'utente riceve. Quello che wasmtime dà da sé era:
     //
-    //     il componente è crashed: error while executing at wasm backtrace:
+    //     il componente è caduto: error while executing at wasm backtrace:
     //         0:   0x3513 - <unknown>!<wasm function 30>: wasm trap: interrupt
     //
     // cioè la parola «interrupt», che non dice che il plugin è stato fermato
@@ -214,7 +214,7 @@ fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
 
     // 3. La prova che l'host è sano: un altro componente, sullo stesso thread di
     //    job che il ciclo teneva un istante fa, legge il vault e risponde.
-    let id = ask(&host, PING, "ping");
+    let id = ask(&host, PING, "demo.ping:ping");
     let (ping_outcome, amount) = outcome(&events, id);
     let value = ping_outcome.expect("il ping non è stato disturbato dai limiti");
     assert_eq!(value["nota"], "Nota.md");
@@ -232,7 +232,7 @@ fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
     //    trappato — ed è la regola giusta: un'istanza interrotta a metà di una
     //    funzione ha uno stato che nessuno sa più descrivere. Il plugin è morto,
     //    l'host no, ed è esattamente la separazione che questo file presidia.
-    let id = ask(&host, CYCLE, "eco");
+    let id = ask(&host, CYCLE, "demo.ciclo:eco");
     let (after, _) = outcome(&events, id);
     let said = crashed(&after.expect_err("un'istanza che ha trappato non risponde più"));
     assert!(
@@ -274,7 +274,7 @@ fn a_component_that_devours_memory_finds_the_ceiling() {
     let v = Vault::new();
     let (host, events) = bench(&v, &[cycle()]);
 
-    let id = ask(&host, CYCLE, "mangia");
+    let id = ask(&host, CYCLE, "demo.ciclo:mangia");
     let (answer, amount) = outcome(&events, id);
     let value = answer.expect("chi legge il rifiuto di `memory.grow` resta vivo per dirlo");
     let mib = value["mib"]
@@ -301,7 +301,7 @@ fn a_component_that_devours_memory_finds_the_ceiling() {
     // L'istanza però la memoria non l'ha restituita — non lo fa nessuno, in
     // wasm: la memoria lineare non si accorcia — quindi il secondo giro trova
     // il tetto dov'era, e non ne ottiene più.
-    let id = ask(&host, CYCLE, "mangia");
+    let id = ask(&host, CYCLE, "demo.ciclo:mangia");
     let (still, _) = outcome(&events, id);
     assert_eq!(
         still.expect("il plugin è ancora vivo")["mib"],

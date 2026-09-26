@@ -41,16 +41,20 @@ describe("il bersaglio di un wikilink", () => {
   it("legge pagina, heading e blocco dalla Lettura e dalla Live", () => {
     document.body.innerHTML =
       '<a class="wikilink" data-wikilink-page="Nota" data-wikilink-heading="Sez"><span>x</span></a>'
-      + '<span data-fub-target="Altra#^b1">y</span><span data-fub-target="Terza#Titolo">z</span><p>no</p>';
-    const [reading, liveBlock, liveHeading, plain] = [
+      + '<div contenteditable="true"><span data-wikilink-page="Altra" data-wikilink-block="b1">y</span>'
+      + '<span data-wikilink-page="Terza" data-wikilink-heading="Titolo">z</span>'
+      + '<div contenteditable="false"><a class="wikilink" data-wikilink-page="Resa">w</a></div></div><p>no</p>';
+    const [reading, liveBlock, liveHeading, widget, plain] = [
       document.querySelector("a span"),
-      document.querySelectorAll("[data-fub-target]")[0],
-      document.querySelectorAll("[data-fub-target]")[1],
+      document.querySelectorAll("[contenteditable] span")[0],
+      document.querySelectorAll("[contenteditable] span")[1],
+      document.querySelector('[contenteditable="false"] a'),
       document.querySelector("p"),
     ];
     expect(linkTarget(reading!)?.target).toEqual({ page: "Nota", heading: "Sez", block: null, live: false });
     expect(linkTarget(liveBlock!)?.target).toEqual({ page: "Altra", heading: null, block: "b1", live: true });
     expect(linkTarget(liveHeading!)?.target).toEqual({ page: "Terza", heading: "Titolo", block: null, live: true });
+    expect(linkTarget(widget!)?.target).toEqual({ page: "Resa", heading: null, block: null, live: false });
     expect(linkTarget(plain!)).toBeNull();
   });
 });
@@ -60,11 +64,11 @@ describe("l'anteprima al passaggio", () => {
     calls.resolved.set("Nota", "Cartella/Nota.md");
     document.body.innerHTML =
       '<a class="wikilink" data-wikilink-page="Nota">x</a><a class="wikilink" data-wikilink-page="Manca">m</a>'
-      + '<span data-fub-target="Nota">y</span>';
+      + '<div contenteditable="true"><span data-wikilink-page="Nota">y</span></div>';
     const life = openLifetime();
     mountLinkPreview(life);
     const [reading, missing] = Array.from(document.querySelectorAll("a"));
-    const live = document.querySelector("[data-fub-target]")!;
+    const live = document.querySelector("[contenteditable] span")!;
 
     live.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     await settle();

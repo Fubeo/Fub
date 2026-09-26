@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { createTextEngine, TextEngine, type EditorChange } from "../engine";
+import { createTextEngine, TextEngine } from "../engine";
+import type { EditorChange } from "../../core/text-operation";
 import { createPlainTextProfile, type PlainTextProfile } from "./plain-text";
 
 interface MountedPlainText {

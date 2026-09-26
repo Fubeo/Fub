@@ -2,6 +2,7 @@ import { openLifetime } from "../../ui/lifetime";
 import type { AttachmentDeposit } from "./attachment-target";
 import { commitRecording, createAudioRecorder, recoverableRecordings, type AudioRecorder, type CrashDeposit } from "./recorder";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 
 export interface RecorderSurfaceDeps {
   staging: CrashDeposit;
@@ -42,13 +43,13 @@ export function mountRecorderSurface(host: HTMLElement, deps: RecorderSurfaceDep
         deps.onEmbed(saved.link);
         status.textContent = t("media.recorder.saved", { id: saved.id });
       } catch (error) {
-        status.textContent = t("media.recorder.saved_no_embed", { id: saved.id, reason: String(error) });
+        status.textContent = t("media.recorder.saved_no_embed", { id: saved.id, reason: errorText(error) });
       }
       await showRecovery().catch((error) => {
-        if (!life.closed) status.textContent = t("media.recorder.saved_no_recovery", { id: saved.id, reason: String(error) });
+        if (!life.closed) status.textContent = t("media.recorder.saved_no_recovery", { id: saved.id, reason: errorText(error) });
       });
     } catch (error) {
-      if (!life.closed) status.textContent = t("media.recorder.staged", { reason: String(error) });
+      if (!life.closed) status.textContent = t("media.recorder.staged", { reason: errorText(error) });
     } finally {
       working = false;
       if (!life.closed) start.disabled = false;
@@ -81,7 +82,7 @@ export function mountRecorderSurface(host: HTMLElement, deps: RecorderSurfaceDep
     working = true;
     start.disabled = true;
     void recorder.start().catch((error) => {
-      if (!life.closed) status.textContent = String(error);
+      if (!life.closed) status.textContent = errorText(error);
     }).finally(() => {
       working = false;
       if (!life.closed) start.disabled = false;
@@ -93,11 +94,11 @@ export function mountRecorderSurface(host: HTMLElement, deps: RecorderSurfaceDep
     working = true;
     stop.disabled = true;
     void current.stop().then((meta) => save(meta.id)).catch((error) => {
-      if (!life.closed) status.textContent = t("media.recorder.recoverable", { reason: String(error) });
+      if (!life.closed) status.textContent = t("media.recorder.recoverable", { reason: errorText(error) });
     }).finally(() => { working = false; });
   });
   void showRecovery().catch((error) => {
-    if (!life.closed) status.textContent = t("media.recorder.recovery_unavailable", { reason: String(error) });
+    if (!life.closed) status.textContent = t("media.recorder.recovery_unavailable", { reason: errorText(error) });
   });
   life.add(() => {
     recorder?.destroy();

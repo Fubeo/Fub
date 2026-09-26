@@ -17,10 +17,13 @@ Markdown. I documenti `.fubsheet` usano invece la modalità **foglio** della
 famiglia Grid; se il provider Grid non è servito, la stessa superficie resta
 navigabile e mostra gli input grezzi senza un secondo valutatore formule.
 Il commutatore nella barra di ciascun riquadro legge la dichiarazione della
-propria superficie; con una sola modalità non mostra un selettore.
-Le scorciatoie seguono il riquadro attivo. La modalità di una finestra nuova
-viene da `editor.default-mode`; un riquadro diviso eredita quella del riquadro
-da cui nasce. I divisori fra riquadri si trascinano, si spostano con le frecce
+propria superficie; con una sola modalità non mostra un selettore. Il riquadro
+ricorda la modalità scelta per ogni famiglia di superfici: una nota in Sorgente
+non fa aprire la tela seguente come JSON, e la tela non cambia la modalità in
+cui si riapre la nota.
+Le scorciatoie seguono il riquadro attivo. La modalità delle note in una
+finestra nuova viene da `editor.default-mode`; un riquadro diviso eredita
+quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano, si spostano con le frecce
 e tornano a parti uguali con un doppio clic; le proporzioni restano nel layout
 finché la fila non cambia.
 
@@ -47,6 +50,9 @@ PDF) e diventa un link col suo nome altrimenti; una nota trascinata dall'albero
 diventa un wikilink nel punto in cui cade. Correttore ortografico, modalità
 Vim, numeri di riga (visibili in Sorgente), a capo automatico e unità di
 rientro sono preferenze di macchina aggiornate senza rimontare la sessione.
+Valgono per le superfici di documento: la barra delle formule e l'editor di
+cella della griglia sono campi con una disposizione fissa, senza numeri di
+riga, Vim o correttore.
 La direzione del testo è automatica per riga e la misura leggibile riusa la
 preferenza di aspetto.
 
@@ -241,6 +247,14 @@ override dell'utente, formato, specie della sorgente, fallback testuale, viewer
 per byte ed errore. Le collisioni nominano entrambi gli owner; la rimozione di
 un owner distrugge le istanze che possiede.
 
+Registratore, slide e stampa compaiono nel menu del riquadro soltanto quando la
+superficie montata li sa fare: la stampa c'è anche per il canvas, non per lo
+sheet, che non ha un provider di stampa. Trascinare una nota o un allegato
+scrive un rimando nella sintassi del formato. Un punto chiesto da outline,
+backlink, ricerca o segnalibri si apre nel riquadro che mostra quel documento;
+sul canvas è la carta che lo contiene. Se la vista corrente non ci arriva, un
+avviso lo dice.
+
 `TextEngine` è il motore testuale condiviso. Markdown e plain text sono percorsi
 utente distinti montati dal registro sullo stesso motore; `FormulaProfile`
 alimenta la formula bar e l'unico editor in-cell riusabile della griglia.
@@ -258,9 +272,15 @@ slash, compositore e statistiche sono comandi e provider ufficiali sullo
 stesso buffer e registro: giornaliere con cartella, formato data e template
 configurabili e orologio deterministico; template con variabili chiuse e merge
 delle proprietà; slash e palette condividono registro, contesto valido e flush
-senza toccare il buffer; estrazione e merge pianificano riferimenti e dati
+senza toccare il buffer. Il menu `/` offre i comandi che lo dichiarano nella
+propria spec (`surfaces`: `slash` sempre, `slash_selection` solo con del testo
+selezionato, che riempie il primo parametro di testo obbligatorio): la shell
+non ne tiene un elenco, e un plugin vi entra con la stessa dichiarazione;
+estrazione e merge pianificano riferimenti e dati
 prima di eliminare la sorgente; le statistiche contano anche lingue senza
-spazi con aggiornamenti incrementali.
+spazi con aggiornamenti incrementali. Di una nota in prosa contano il sorgente;
+di un formato strutturato (canvas, base) il testo del suo modello, non il JSON
+o lo YAML che lo tiene.
 
 ## Formato pilota `.fubsheet`
 
@@ -294,8 +314,8 @@ invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
 
 ## Dove si trova
 
-- `apps/client/src/editor/`
 - `apps/client/src/editors/core/`
+- `apps/client/src/editors/text/profiles/markdown/`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/state/`
 - `crates/fub-abi/src/edit.rs`

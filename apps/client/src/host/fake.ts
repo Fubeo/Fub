@@ -147,6 +147,10 @@ export interface FakeHost {
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
   renameFromOutside(from: string, to: string): void;
+  /// Riscrive un file **senza che la shell l'abbia chiesto**: l'altra
+  /// applicazione, il sync, un merge. I byte cambiano e l'evento arriva dal
+  /// watcher, come succede davvero.
+  writeFromOutside(id: string, text: string): void;
   /// Tiene in volo ciò che una porta risponde, finché non si chiama ciò che
   /// torna.
   ///
@@ -547,7 +551,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         trash.set(`.trash/${trashedCount}-${doc}`, { original: doc, text: before.text });
         emit({ type: "document_removed", id: doc });
         return {
-          notify: null,
+          notify: `Il sistema non ha un cestino disponibile: ${doc} è nel cestino del vault.`,
           effect: {
             kind: "custom" as const,
             ns: "fub.trash.os",
@@ -967,6 +971,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       docs.delete(from);
       docs.set(to, before);
       emit({ type: "document_renamed", from, to });
+    },
+    writeFromOutside: (id, text) => {
+      write(id, text);
+      listener?.({ event: { type: "document_changed", id }, origin: { actor: { kind: "watcher" }, batch: null } });
     },
     requestDocumentWindowClose: (label) => {
       const request = documentWindows.get(label);

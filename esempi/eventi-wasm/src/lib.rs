@@ -81,7 +81,7 @@ impl Guest for Componente {
 
     fn run_job(job: String, payload: String) -> Result<String, PluginError> {
         match job.as_str() {
-            "racconta" => {
+            "demo.eventi:racconta" => {
                 // Due passi e non uno: un progresso con una **fine** dichiarata
                 // (`total`) è ciò che chi disegna trasforma in una barra, e due
                 // chiamate fanno vedere che si può chiamare quante volte si
@@ -104,25 +104,27 @@ impl Guest for Componente {
                 }));
                 Ok("{\"detto\":true}".to_string())
             }
-            "genera" => {
+            "demo.eventi:genera" => {
                 // L'unica delle tre con un esito, e l'esito è un'**identità**:
                 // il lavoro non è girato, è stato accettato. Restituirla è ciò
                 // che permette a chi legge di riconoscere il `job-done` che
                 // arriverà più tardi.
+                // Anche il nome del job sta nel namespace dell'id, come il
+                // topic: con un nome altrui la richiesta torna `bad-args`.
                 let figlio = host_events::spawn_job(&JobSpec {
-                    job: "figlio".to_string(),
+                    job: format!("{ID}:figlio"),
                     payload: payload.clone(),
                 })?;
                 Ok(format!("{{\"figlio\":{figlio}}}"))
             }
-            "figlio" => {
+            "demo.eventi:figlio" => {
                 host_events::emit(&Event::Custom(EventCustom {
                     topic: format!("{ID}:nato"),
                     payload: "{\"chi\":\"figlio\"}".to_string(),
                 }));
                 Ok("{\"chi\":\"figlio\"}".to_string())
             }
-            "spazzatura" => {
+            "demo.eventi:spazzatura" => {
                 // Il `payload` di un `custom` è JSON dentro una stringa, e
                 // niente al confine può impedire a un componente di scriverci
                 // dentro qualunque cosa: il tipo WIT è `string`. Questa riga è

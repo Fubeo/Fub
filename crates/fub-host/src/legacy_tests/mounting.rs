@@ -957,27 +957,47 @@ fn mount_failure_preserves_primary_error_and_drops_later_resources() {
     let signalled = Arc::new(AtomicUsize::new(0));
     let later = Arc::clone(&signalled);
     let source: Arc<dyn fub_host::FormatSource> = Arc::new(move || {
-        Ok(
-            fub_host::PreparedFormatSource::from_provider(MarkdownProvider::boxed())
-                .retain(PanicOnDrop)
-                .retain(SignalOnDrop(Arc::clone(&later))),
-        )
+        Ok(fub_host::PreparedFormatSource::empty()
+            .retain(PanicOnDrop)
+            .retain(SignalOnDrop(Arc::clone(&later))))
     });
+    // La radice, per il supporto del vault, è un file: il kernel rifiuta di
+    // montarla dopo che le risorse dei formati sono già state preparate.
+    let memory = Arc::new(fub_kernel::MemStorage::new());
+    fub_kernel::storage::VaultStorage::write(&*memory, &root, b"not a folder")
+        .expect("the root is a file in memory");
     let host = fub_host::Host::new()
         .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_storage(Arc::new(SharedMemory(memory)))
         .with_format_source(source);
 
     let error = match host.open(&root) {
         Err(error) => error,
-        Ok(_) => panic!("duplicate markdown provider fails mount"),
+        Ok(_) => panic!("a root that is not a folder fails the mount"),
     };
     assert!(
         matches!(&error, PluginError::Internal(message)
-            if message.to_string().contains("format provider conflict")),
+            if message.to_string().contains("not a directory")),
         "the primary mount error must remain visible: {error}"
+    );
+    assert!(
+        error.to_string().contains("disposal failed"),
+        "the drop panic is reported after the primary error: {error}"
     );
     assert_eq!(signalled.load(Ordering::SeqCst), 1);
     assert!(host.vaults().is_empty());
+}
+
+/// Lo stesso supporto in memoria a ogni apertura.
+struct SharedMemory(Arc<fub_kernel::MemStorage>);
+
+impl fub_host::mount::VaultStorageSource for SharedMemory {
+    fn open(
+        &self,
+        _root: &camino::Utf8Path,
+    ) -> std::io::Result<Arc<dyn fub_kernel::storage::VaultStorage>> {
+        Ok(Arc::clone(&self.0) as Arc<dyn fub_kernel::storage::VaultStorage>)
+    }
 }
 
 #[test]

@@ -38,6 +38,15 @@ Vivono vicino alla regola o nel crate proprietario. Sono adatti a:
 l'intera applicazione. È il primo banco per comandi, view e servizi che usano
 `HostApi`.
 
+Il doppio non parsa: modelli, outline, tag, backlink e archi si seminano, e
+un formato diverso dal Markdown di serie si dichiara con `with_format`. Ciò
+che sa di sé lo serve con le regole condivise del kernel: anagrafe e specie
+delle voci, documenti, risoluzione dei riferimenti, vicini a partire dai semi,
+filtri su id, cartella, link e proprietà dei modelli seminati. Una domanda che
+vorrebbe un indice, come testo, tag o glob, risponde `unserved` invece di
+ignorare il filtro. `crates/fub-features/tests/both_hosts_answer_alike.rs`
+confronta le risposte dei due host, anche con un secondo formato registrato.
+
 ### `fub-testkit`
 
 `fub-testkit` monta kernel e host con fixture reali. Usalo per:

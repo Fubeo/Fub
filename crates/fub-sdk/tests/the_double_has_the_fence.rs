@@ -121,7 +121,6 @@ fn a_name_born_in_the_double_is_portable_like_in_the_real_host() {
 /// Il ripristino: `entry` nomina una voce dentro `.trash/`, che il recinto dei
 /// documenti rifiuta apposta — a validarlo è la ricerca fra le voci che ci
 /// sono. Il `to`, che atterra nel vault, è un nome che nasce.
-/// sono. Il `to`, che atterra nel vault, è un nome che nasce.
 #[test]
 fn the_doubles_restore_asks_the_trash_and_the_fence() {
     let mut host = MemoryHost::default();

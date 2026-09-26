@@ -3,39 +3,34 @@ import type { CommandOutcome, CommandSpec, InvokeMode } from "../host/contract";
 import { activeDoc } from "./layout";
 import { state } from "./store";
 
-// These commands are offered by the registry, not reimplemented by the editor.
-// The slash surface collects any missing declared parameters.
-const p05Commands: Record<string, true> = {
-  "note.from_template": true, "note.daily": true, "note.unique": true,
-  "note.random": true, "note.insert_datetime": true,
-  "note.insert_template": true, "note.extract": true, "note.merge": true,
-};
-
-export function slashCandidates(specs: CommandSpec[]): CommandSpec[] {
+/// I comandi del menu `/`: quelli che lo dichiarano (`CommandSpec.surfaces`), e
+/// chi trasforma la selezione soltanto quando c'è. Nessun elenco della shell e
+/// nessuna ipotesi sui nomi dei parametri: un plugin ci arriva per la stessa
+/// via di una feature ufficiale.
+export function slashCandidates(specs: CommandSpec[], selection: string): CommandSpec[] {
   return specs.filter((spec) =>
-    p05Commands[spec.id] === true || spec.id === "selection.wikilink" ||
-    spec.params.some((p) =>
-      p.name === "find" || p.name === "text" || p.name === "selection" || p.name === "at"
-    )
+    spec.surfaces.includes("slash") ||
+    (selection !== "" && spec.surfaces.includes("slash_selection"))
   );
 }
 
-/// Only the editor's current buffer supplies arguments. Never infer byte
-/// offsets from a DOM selection: the published session context owns spans.
+/// Gli argomenti che il contesto dell'editor sa dare; gli altri li chiede il
+/// menu. `doc` è il documento su cui si scrive, col nome con cui i comandi del
+/// registro chiamano il loro bersaglio; per chi trasforma la selezione, questa
+/// è il suo primo testo obbligatorio. Mai un offset dedotto da una selezione
+/// del DOM: gli span li porta il contesto pubblicato.
 export function slashArgs(
   spec: CommandSpec,
   selection: string,
   doc: string | null = slashContextDoc(),
-): Record<string, unknown> | null {
-  if (spec.id === "selection.wikilink") return selection ? {} : null;
+): Record<string, unknown> {
   const args: Record<string, unknown> = {};
-  for (const param of spec.params) {
-    if (param.name === "doc" && doc && param.kind.kind === "document") args.doc = doc;
-    if (
-      selection && param.kind.kind === "text" &&
-      (param.name === "find" || param.name === "text" || param.name === "selection")
-    ) args[param.name] = selection;
-    if (param.required && !(param.name in args) && !p05Commands[spec.id]) return null;
+  if (doc && spec.params.some((param) => param.name === "doc" && param.kind.kind === "document")) {
+    args.doc = doc;
+  }
+  if (selection && spec.surfaces.includes("slash_selection")) {
+    const text = spec.params.find((param) => param.required && param.kind.kind === "text" && !(param.name in args));
+    if (text) args[text.name] = selection;
   }
   return args;
 }

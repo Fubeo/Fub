@@ -461,6 +461,60 @@ pub(crate) fn to_link_rewrite(rewrite: &fub_abi::format::LinkRewrite) -> x_links
     }
 }
 
+/// Il riferimento da scrivere, nei due versi: il componente lo chiede
+/// all'host (`host-vault-read.format-link`) e l'host lo chiede al componente
+/// formato (`format-edits.format-link`). I tipi sono quelli di `model`, uguali
+/// nei due alberi di `bindgen!`.
+pub(crate) fn from_link_insert(link: w_model::LinkInsert) -> fub_abi::format::LinkInsert {
+    fub_abi::format::LinkInsert {
+        target: crate::model::from_target(link.target),
+        label: link.label,
+        embed: link.embed,
+    }
+}
+
+pub(crate) fn to_link_insert(link: &fub_abi::format::LinkInsert) -> w_model::LinkInsert {
+    w_model::LinkInsert {
+        target: crate::model::to_target(&link.target),
+        label: link.label.clone(),
+        embed: link.embed,
+    }
+}
+
+/// Il marcatore di un task scritto dal componente: lo span si stringe come
+/// ogni altro (vedi [`from_span`]).
+pub(crate) fn from_task_marker(
+    marker: w_model::TaskMarker,
+) -> Result<fub_abi::model::TaskMarker, PluginError> {
+    Ok(fub_abi::model::TaskMarker {
+        symbol: marker.symbol,
+        span: from_span(marker.span)?,
+    })
+}
+
+pub(crate) fn to_task_marker(marker: &fub_abi::model::TaskMarker) -> w_model::TaskMarker {
+    w_model::TaskMarker {
+        symbol: marker.symbol,
+        span: to_span(marker.span),
+    }
+}
+
+/// Una richiesta di modifica che l'host consegna al componente, che la
+/// applicherà poi da dove sa scrivere.
+pub(crate) fn to_edit_request(request: &fub_abi::edit::EditRequest) -> w_edit::EditRequest {
+    w_edit::EditRequest {
+        base: request.base.0.clone(),
+        edits: request
+            .edits
+            .iter()
+            .map(|edit| w_edit::TextEdit {
+                span: to_span(edit.span),
+                text: edit.text.clone(),
+            })
+            .collect(),
+    }
+}
+
 /// Converte la patch restituita dal componente; la validazione degli span
 /// avviene soltanto nel percorso di applicazione degli edit.
 pub(crate) fn from_link_edit(
@@ -477,6 +531,7 @@ pub(crate) fn from_link_edit(
 /// confine la larghezza è dichiarata, in casa è quella della macchina. La
 /// conversione è larga in questo verso — un `usize` ci sta sempre in un `u64`
 /// sulle macchine che questo progetto compila — e stretta nell'altro, che è
+/// [`from_span`].
 pub(crate) fn to_span(s: fub_abi::model::Span) -> w_model::Span {
     w_model::Span {
         start: s.start as u64,
@@ -573,6 +628,7 @@ fn to_floating(s: &fub_abi::session::FloatingSelection) -> w_session::FloatingSe
 //
 // Il verso è quasi tutto `from_*`: dei comandi l'host **legge** ciò che il
 // componente dichiara e risponde. L'unica cosa che passa di là è il modo
+// dell'invocazione, che è `to_invoke_mode`.
 
 fn from_doc(id: String) -> fub_abi::model::DocId {
     fub_abi::model::DocId(id)
@@ -630,7 +686,6 @@ fn from_command_scope(s: w_command::CommandScope) -> fub_abi::command::CommandSc
 /// scorciatoia la legge `fub_abi::rules::keys`, e gli argomenti li convalida il
 /// kernel prima di chiamare `invoke`. Un componente non è più sospetto di una
 /// feature nativa: passa dalla stessa porta, e la porta è già chiusa a chiave.
-/// feature nativa: passa dalla stessa porta, e la porta è già chiusa a chiave.
 pub(crate) fn from_command_spec(s: w_command::CommandSpec) -> fub_abi::command::CommandSpec {
     fub_abi::command::CommandSpec {
         id: s.id,
@@ -639,6 +694,16 @@ pub(crate) fn from_command_spec(s: w_command::CommandSpec) -> fub_abi::command::
         keybinding: s.keybinding,
         params: s.params.into_iter().map(from_param_spec).collect(),
         scope: from_command_scope(s.scope),
+        surfaces: s.surfaces.into_iter().map(from_command_surface).collect(),
+    }
+}
+
+fn from_command_surface(s: w_command::CommandSurface) -> fub_abi::command::CommandSurface {
+    match s {
+        w_command::CommandSurface::Slash => fub_abi::command::CommandSurface::Slash,
+        w_command::CommandSurface::SlashSelection => {
+            fub_abi::command::CommandSurface::SlashSelection
+        }
     }
 }
 
@@ -732,7 +797,6 @@ fn from_undo(u: w_command::Undo) -> Result<fub_abi::command::Undo, PluginError> 
     Ok(fub_abi::command::Undo {
         label: from_text(u.label),
         // Nell'ordine in cui vanno eseguiti, che è quello in cui il componente
-        // li ha scritti: chi esegue non riordina, e nemmeno chi traduce.
         // li ha scritti: chi esegue non riordina, e nemmeno chi traduce.
         steps: u
             .steps

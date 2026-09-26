@@ -900,6 +900,42 @@
           "at": 53
         }
       }
+    },
+    {
+      "input": "((((((((((((((((((((((((((((((((a))))))))))))))))))))))))))))))))",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "a",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "(((((((((((((((((((((((((((((((((a)))))))))))))))))))))))))))))))))",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "too-complex",
+          "at": 32
+        }
+      }
     }
   ],
   "page_name": [
@@ -1188,7 +1224,7 @@
     {
       "path": "a\\b.md",
       "naming": "existing",
-      "out": null
+      "out": "reserved"
     },
     {
       "path": "a\\b.md",
@@ -1524,6 +1560,26 @@
       "path": " / ",
       "naming": "new",
       "out": "traversal"
+    },
+    {
+      "path": "..\\..\\hosts",
+      "naming": "existing",
+      "out": "reserved"
+    },
+    {
+      "path": "..\\..\\hosts",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "note\\a.md",
+      "naming": "existing",
+      "out": "reserved"
+    },
+    {
+      "path": "note\\a.md",
+      "naming": "new",
+      "out": "reserved"
     }
   ],
   "normalized_name": [

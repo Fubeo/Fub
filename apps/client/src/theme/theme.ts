@@ -2,8 +2,9 @@
 import { api } from "../host/ipc";
 import { settings } from "../host/query";
 import type { SettingEntry, ThemeInfo, ThemePayload } from "../host/contract";
+import { asPluginError, errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
-import { on } from "../state/store";
+import { emit, on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { reportThemeTrouble } from "../ui/notify";
 import sheetDarkHigh from "./serie/sheet-dark-high.css?raw";
@@ -197,7 +198,7 @@ function themeBundle(payload: ThemePayload): {
 }
 
 function errorDetail(error: unknown): string {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error || asPluginError(error)) return errorText(error);
   if (typeof error === "string") return error;
   try {
     return JSON.stringify(error);
@@ -288,6 +289,7 @@ async function apply(): Promise<void> {
     if (suppressInitialWarning) suppressInitialWarning = false;
     else warn(light);
   }
+  emit("theme");
 }
 
 function valueOf(entries: Awaited<ReturnType<typeof settings>>, key: string): unknown {

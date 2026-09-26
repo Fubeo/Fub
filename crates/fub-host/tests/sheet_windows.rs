@@ -1,10 +1,11 @@
 //! Confine nativo della sessione derivata, prima della promozione ABI/WIT.
 
-use fub_format_sheet::{Cell, CellStyle, CellValue, Column, Row, Sheet, Workbook};
-use fub_host::sheet::{
-    SheetSession, SheetSessionError, SheetWindowRequest, MAX_WINDOW_COLUMNS,
-    MAX_WINDOW_RESPONSE_BYTES, MAX_WINDOW_ROWS,
+use fub_format_sheet::grid::SheetSession;
+use fub_format_sheet::session::{
+    SheetSessionError, SheetWindowRequest, MAX_WINDOW_COLUMNS, MAX_WINDOW_RESPONSE_BYTES,
+    MAX_WINDOW_ROWS,
 };
+use fub_format_sheet::{Cell, CellStyle, CellValue, Column, Row, Sheet, Workbook};
 
 fn workbook(rows: usize, columns: usize) -> Workbook {
     let mut sheet = Sheet::new("s", "Foglio");

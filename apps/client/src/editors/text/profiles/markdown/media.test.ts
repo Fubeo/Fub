@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import type { LinkTarget } from "../host/contract";
-import { openLifetime } from "./lifetime";
-import { embedSize, hydrateVaultMedia, type MediaPort } from "./markdown-media";
+import type { LinkTarget } from "../../../../host/contract";
+import { openLifetime } from "../../../../ui/lifetime";
+import { embedSize, hydrateVaultMedia, type MediaPort } from "./media";
 
 function port(files: Record<string, string>, delay?: Promise<void>) {
   const opened: string[] = [];

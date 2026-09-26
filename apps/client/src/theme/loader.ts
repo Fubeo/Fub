@@ -372,3 +372,41 @@ export function mountUserSnippets(css: string): void {
 export function count(layer: Layer): number {
   return document.head.querySelectorAll(`style[data-fub="${layer}"]`).length;
 }
+
+/** Il tema come questa finestra lo ha montato, strato per strato: ciò che
+ * un'altra finestra della stessa app rispecchia senza rimontarlo da sé. */
+export interface MirroredTheme {
+  readonly light: string;
+  readonly contrast: string;
+  readonly layers: readonly { readonly layer: Layer; readonly text: string }[];
+}
+
+export function mountedTheme(): MirroredTheme {
+  const layers: { layer: Layer; text: string }[] = [];
+  for (const el of document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")) {
+    const layer = el.dataset.fub as Layer;
+    if (ORDER.includes(layer)) layers.push({ layer, text: el.textContent ?? "" });
+  }
+  return {
+    light: document.documentElement.dataset.theme ?? "",
+    contrast: document.documentElement.dataset.contrast ?? "",
+    layers,
+  };
+}
+
+/** Rispecchia il tema di un'altra finestra: ogni strato che porta sostituisce
+ * il proprio, ogni strato che non porta si toglie. */
+export function mountMirroredTheme(theme: MirroredTheme): void {
+  const carried = new Set<Layer>();
+  for (const { layer, text } of theme.layers) {
+    if (!ORDER.includes(layer)) continue;
+    carried.add(layer);
+    replace(text, layer);
+  }
+  for (const layer of ORDER) {
+    if (carried.has(layer)) continue;
+    for (const el of document.head.querySelectorAll<HTMLStyleElement>(`style[data-fub="${layer}"]`)) el.remove();
+  }
+  document.documentElement.dataset.theme = theme.light;
+  document.documentElement.dataset.contrast = theme.contrast;
+}

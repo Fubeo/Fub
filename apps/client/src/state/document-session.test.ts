@@ -8,7 +8,7 @@ import {
   type DocumentSessionEvent,
   type SurfaceEdit,
 } from "./document-session";
-import { operationFromText } from "../editor/text-operation";
+import { operationFromText } from "../editors/core/text-operation";
 import type { DocumentSource } from "../host/contract";
 
 function fakeApi(): DocumentSessionApi {
@@ -475,8 +475,26 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(vi.mocked(api.saveDraft)).toHaveBeenCalledTimes(1);
 
     finishDraft();
-    expect(await releasing).toEqual({ kind: "closed", dirty: true });
+    // Il salvataggio è fallito: la sessione resta viva, e con lei il testo.
+    expect(await releasing).toEqual({ kind: "unsaved" });
     expect(vi.mocked(api.saveDraft)).toHaveBeenCalledTimes(1);
+    expect(sessions.inspect("nota.md")).toMatchObject({ lifecycle: "open", text: "testo da proteggere", dirty: true });
+  });
+
+  it("un buffer che non si salva si chiude solo scartandolo, con la sua bozza", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw new Error("permesso negato");
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "lavoro non salvato");
+
+    expect(await sessions.release("nota.md")).toEqual({ kind: "unsaved" });
+    expect(sessions.get("nota.md")).toBeDefined();
+
+    expect(sessions.discardUnsaved("nota.md")).toEqual({ kind: "closed", dirty: true });
+    expect(sessions.get("nota.md")).toBeUndefined();
+    await vi.waitFor(() => expect(vi.mocked(api.discardDraft)).toHaveBeenCalledWith("nota.md"));
   });
 
   it("ritenta una bozza fallita mentre l'owner resta vivo", async () => {
@@ -912,6 +930,29 @@ describe("le superfici sottoscritte alla sessione", () => {
     expect(log[0]).toMatchObject({ surface: "riquadro-b", update: { kind: "operation" } });
     // Salvataggio e bozza: i due ritardi sono della sessione, armati una volta.
     expect(nextTimer).toBe(2);
+  });
+
+  it("una superficie che lancia non toglie l'aggiornamento a quelle dopo", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+    sessions.attachSurface("nota.md", {
+      id: "riquadro-rotto",
+      sync: () => {
+        throw new SyntaxError("sorgente non valido");
+      },
+    });
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-c", log));
+
+    const before = "nota.md: disco";
+    const outcome = sessions.acceptSurfaceChange("nota.md", "riquadro-a", editFor(before, `${before} due`));
+
+    expect(outcome).toEqual({ kind: "accepted" });
+    expect(log.map((entry) => entry.surface)).toEqual(["riquadro-c"]);
+    expect(error).toHaveBeenCalledOnce();
+    error.mockRestore();
   });
 
   it("ristabilizza la sorgente su una preimmagine stantia senza mutare la sessione", async () => {

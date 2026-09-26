@@ -60,7 +60,8 @@ use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
 use fub_abi::arena::{self, BlockRef, InlineRef, UiRef};
 use fub_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep, Undone,
+    CommandSurface, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo,
+    UndoStep, Undone,
 };
 use fub_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
@@ -74,7 +75,7 @@ use fub_abi::event::{
 };
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
-    LinkRewrite, ParseContext, RenderOptions, RenderTarget, SourceKind,
+    LinkInsert, LinkRewrite, ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
@@ -86,7 +87,7 @@ use fub_abi::grid::{
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
-    PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag,
+    PropertyDate, PropertyScalar, PropertyTime, PropertyValue, Span, Tag, TaskMarker,
 };
 use fub_abi::net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 use fub_abi::options::OptionMap;
@@ -320,6 +321,8 @@ wit_kebab! {
     arena::Inline,
     arena::ListItem,
     arena::TaskMarker,
+    // Lo stesso record visto dal lato delle porte, con lo span del modello.
+    TaskMarker,
     arena::TableRow,
     arena::TableCell,
     arena::UiNode,
@@ -351,6 +354,7 @@ wit_kebab! {
     DocumentSource,
     FormatError,
     LinkRewrite,
+    LinkInsert,
 
     GridSurfaceSpec,
     GridSession,
@@ -412,6 +416,7 @@ wit_kebab! {
     PlannedEdit,
     CommandScope,
     CommandReach,
+    CommandSurface,
     ParamSpec,
     ParamKind,
     Choice,
@@ -3460,6 +3465,24 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let LinkInsert {
+        target,
+        label,
+        embed,
+    } = LinkInsert {
+        target: LinkTarget::wiki(""),
+        label: None,
+        embed: false,
+    };
+    contract.record(
+        "link-insert",
+        &[
+            ("target", wit(&target)),
+            ("label", wit(&label)),
+            ("embed", wit(&embed)),
+        ],
+    );
+
     let GridSurfaceSpec {
         id,
         format,
@@ -3962,6 +3985,7 @@ fn conform(source: &str) -> Result<(), String> {
         keybinding,
         params,
         scope,
+        surfaces,
     } = CommandSpec::new("", "");
     contract.record(
         "command-spec",
@@ -3972,8 +3996,10 @@ fn conform(source: &str) -> Result<(), String> {
             ("keybinding", wit(&keybinding)),
             ("params", wit(&params)),
             ("scope", wit(&scope)),
+            ("surfaces", wit(&surfaces)),
         ],
     );
+    contract.enumeration_from("command-surface", ("command.rs", "CommandSurface"));
 
     let ParamSpec {
         name,
@@ -5395,6 +5421,29 @@ fn conform(source: &str) -> Result<(), String> {
             ) -> Result<Option<Vec<TextEdit>>, FormatError>,
         &["source", "ctx", "rewrites"],
     );
+    contract.method(
+        "format-edits",
+        "format-link",
+        <dyn FormatProvider>::format_link
+            as fn(
+                &'static dyn FormatProvider,
+                &'static ParseContext,
+                &'static LinkInsert,
+            ) -> Result<Option<String>, FormatError>,
+        &["ctx", "link"],
+    );
+    contract.method(
+        "format-edits",
+        "set-task-state",
+        <dyn FormatProvider>::set_task_state
+            as fn(
+                &'static dyn FormatProvider,
+                &'static DocumentSource,
+                &'static TaskMarker,
+                bool,
+            ) -> Result<Option<Vec<TextEdit>>, FormatError>,
+        &["source", "marker", "done"],
+    );
 
     contract.method(
         "grid",
@@ -5681,6 +5730,29 @@ fn conform(source: &str) -> Result<(), String> {
         <dyn HostApi>::format_of
             as fn(&'static dyn HostApi, &'static DocId) -> Option<DocumentFormat>,
         &["id"],
+    );
+    contract.method(
+        "host-vault-read",
+        "format-link",
+        <dyn HostApi>::format_link
+            as fn(
+                &'static dyn HostApi,
+                &'static DocId,
+                &'static LinkInsert,
+            ) -> Result<Option<String>, PluginError>,
+        &["doc", "link"],
+    );
+    contract.method(
+        "host-vault-read",
+        "task-state-edit",
+        <dyn HostApi>::task_state_edit
+            as fn(
+                &'static dyn HostApi,
+                &'static DocId,
+                &'static TaskMarker,
+                bool,
+            ) -> Result<Option<EditRequest>, PluginError>,
+        &["doc", "marker", "done"],
     );
     contract.method(
         "host-vault-structure",
@@ -6067,6 +6139,7 @@ fn conform(source: &str) -> Result<(), String> {
         "importer",
         "exporter",
         "format-links",
+        "format-edits",
     ]
     .iter()
     .map(|s| s.to_string())

@@ -650,13 +650,14 @@ fn the_contract_grows_only_by_addition() {
 }
 
 /// Un cambiamento del contratto, applicato al modello parsato: nome e come si
+/// ottiene.
 type Change = (&'static str, Box<dyn Fn(&mut Contract)>);
 
-/// ottiene.
 /// Il test del test: ogni forma di rottura deve farlo diventare rosso.
 ///
 /// Le divergenze si introducono sul **modello parsato**, non sul sorgente: così
 /// colpiscono esattamente il costrutto voluto e non dipendono da come è scritto
+/// il file.
 #[test]
 fn every_form_of_breakage_turns_red() {
     let base = current();
@@ -808,7 +809,6 @@ fn every_form_of_breakage_turns_red() {
             }),
         ),
         (
-            // è più soddisfatto e non c'è instanziazione.
             // Il caso di questa voce (decisione 0092), e ci è arrivato tardi:
             // `write-document` ha ritipato il proprio `base` e il banco non
             // aveva nessuna rottura che *ritipasse* un parametro — solo
@@ -817,6 +817,7 @@ fn every_form_of_breakage_turns_red() {
             // suo messaggio nomina già il ritipo; ciò che mancava non era il
             // presidio, era la **prova** che quel ramo funzioni. Un ramo che
             // nessuno esercita è un ramo di cui si scopre lo stato il giorno
+            // che serve.
             "un parametro ritipato",
             Box::new(|c: &mut Contract| {
                 let sig = c
@@ -876,8 +877,8 @@ fn every_form_of_breakage_turns_red() {
     }
 }
 
-// che serve.
 /// L'altra metà: ciò che è davvero un'aggiunta deve passare, o il presidio
+/// blocca il lavoro che il §1 del piano deve poter fare.
 #[test]
 fn additions_at_the_end_pass() {
     let base = current();
@@ -913,18 +914,18 @@ fn additions_at_the_end_pass() {
         (
             "un tipo nuovo",
             Box::new(|c: &mut Contract| {
-                // blocca il lavoro che il §1 del piano deve poter fare.
                 // Un tipo che il contratto NON ha (il §13.1 lo prevede): il
                 // segnaposto precedente era `property-value`, che nel frattempo
+                // è nato davvero — e un tipo che esiste non è un'aggiunta.
                 c.types
                     .insert("model::doc-ref".into(), Shape::Alias("string".into()));
             }),
         ),
         (
-            // è nato davvero — e un tipo che esiste non è un'aggiunta.
             // Il gemello del caso rosso qui sopra, ed è la coppia che dice
             // dov'è il taglio: la STESSA aggiunta è additiva sull'interfaccia
             // che il plugin importa e rotta su quella che esporta. Chi importa
+            // può ignorare ciò che non conosce; chi esporta deve fornirlo.
             "una funzione nuova (decisione 0013: una capacità in più)",
             Box::new(|c: &mut Contract| {
                 c.functions.insert(

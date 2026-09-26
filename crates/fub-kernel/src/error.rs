@@ -85,6 +85,7 @@ pub trait Missing {
     /// `true` **solo** se ciò che si cercava non c'è. Un permesso negato, un
     /// disco che sta fallendo, un nome troppo lungo non sono assenze: sono
     /// guasti, e chi li legge come assenze racconta un fatto del vault che non
+    /// è mai avvenuto.
     fn is_missing(&self) -> bool;
 }
 
@@ -104,7 +105,6 @@ impl Missing for KernelError {
     }
 }
 
-/// è mai avvenuto.
 /// `Ok(None)` se la cosa non c'è, e **ogni altro errore risale con il suo
 /// tipo**.
 ///
@@ -113,6 +113,8 @@ impl Missing for KernelError {
 /// del supporto raccontato al chiamante come un fatto del vault — «non è un
 /// symlink», «il registro è vuoto», «non ci sono bozze», «la base non
 /// combacia», «cancellato». La domanda che quel `.ok()` voleva porre è
+/// legittima e sta qui una volta sola; ciò che non è legittimo è rispondere
+/// anche a tutte le altre.
 pub fn optional<T, E: Missing>(
     result: std::result::Result<T, E>,
 ) -> std::result::Result<Option<T>, E> {
@@ -123,8 +125,6 @@ pub fn optional<T, E: Missing>(
     }
 }
 
-/// legittima e sta qui una volta sola; ciò che non è legittimo è rispondere
-/// anche a tutte le altre.
 /// Un errore del kernel **come lo vede chi sta dall'altra parte del contratto**.
 ///
 /// `KernelError` resta fuori dall'ABI e ci deve restare — è la lingua di *questo*
@@ -192,15 +192,17 @@ pub fn optional<T, E: Missing>(
 ///   arriverebbe allo schermo **nuda**, cioè peggio di una frase. Resta prosa
 ///   del kernel come ogni altra riga di questo `match`, e diventerà traducibile
 ///   quando lo diventeranno tutte, in un posto solo.
+///
+///   [`Text::Message`]: fub_abi::text::Text::Message
 impl From<KernelError> for PluginError {
     fn from(and: KernelError) -> Self {
         match and {
             KernelError::NotFound(doc) => PluginError::NotFound(doc.into()),
             KernelError::AlreadyExists(doc) => PluginError::AlreadyExists(doc.into()),
-            //
-            //   [`Text::Message`]: fub_abi::text::Text::Message
             // Un conflitto è la sola cosa che chi chiama deve **riprovare**
             // (rileggendo e ricalcolando), un edit malformato la sola che deve
+            // **correggere**: appiattirli lascerebbe la distinzione a chi legge
+            // la prosa.
             KernelError::Stale(doc) => PluginError::Conflict(doc.into()),
             KernelError::IndexReentry(owner) => PluginError::Conflict(
                 format!("l'indice `{owner}` è già in chiamata su questo thread").into(),
@@ -228,8 +230,6 @@ impl From<KernelError> for PluginError {
                 )
                 .into(),
             ),
-            // **correggere**: appiattirli lascerebbe la distinzione a chi legge
-            // la prosa.
             // **Un'assenza non è un guasto** (0221), che è il rovescio esatto
             // di ciò che [`optional`] tiene fermo dall'altra parte. Il contratto
             // dichiara le due facce accanto e con ragioni opposte: `not-found`
@@ -239,6 +239,8 @@ impl From<KernelError> for PluginError {
             // una lettura che non ha niente da ritrovare.
             //
             // La domanda è la stessa di `optional` e sta nello stesso posto —
+            // [`Missing`] —, ma posta qui: chi legge non deve ricordarsene, e
+            // una capacità di lettura nuova la eredita senza aggiungere niente.
             KernelError::Io {
                 ref path,
                 ref source,
@@ -246,12 +248,12 @@ impl From<KernelError> for PluginError {
             and @ (KernelError::Io { .. }
             | KernelError::NonUtf8Path(_)
             | KernelError::LinkRewrite(_)) => PluginError::Io(and.to_string().into()),
-            // [`Missing`] —, ma posta qui: chi legge non deve ricordarsene, e
-            // una capacità di lettura nuova la eredita senza aggiungere niente.
             // La radice che l'apertura ha rifiutato (0160): la faccia la
             // decide la specie del guasto, non la prosa. Un posto che non c'è
             // o non è una cartella è la stessa cosa che [`Host::open`](crate::Host::open)
             // rispondeva già a chi sceglie male dal dialogo — «non trovato»,
+            // perché non c'è niente da ritrovare; un permesso negato è invece
+            // la metà del contratto fatta apposta per «c'è, ma non puoi».
             KernelError::InvalidRoot { path, source } => match source.kind() {
                 std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory => {
                     PluginError::NotFound(format!("Not a valid directory: {path}").into())
@@ -266,13 +268,13 @@ impl From<KernelError> for PluginError {
     }
 }
 
-// perché non c'è niente da ritrovare; un permesso negato è invece
-// la metà del contratto fatta apposta per «c'è, ma non puoi».
 /// Come si chiama una [`SourceKind`] in una frase che legge una persona.
 ///
 /// Il `match` è **senza `_`** di proposito: una specie di sorgente in più nel
 /// contratto — l'encoding da rilevare del §2.3, un flusso — non compila finché
 /// non le si è data una parola. È la metà che il tipo di
+/// [`FormatError::Unsupported`] non può prendere da sé: quello obbliga a *dire*
+/// cosa è arrivato, questo obbliga a saperlo **nominare**.
 fn source_kind_name(k: SourceKind) -> &'static str {
     match k {
         SourceKind::Text => "text",
@@ -284,14 +286,14 @@ fn source_kind_name(k: SourceKind) -> &'static str {
 mod tests {
     use super::*;
 
-    /// [`FormatError::Unsupported`] non può prendere da sé: quello obbliga a *dire*
-    /// cosa è arrivato, questo obbliga a saperlo **nominare**.
     /// **Cosa vede chi apre un allegato con un provider testuale**: una frase
     /// che nomina tutti e due i dati del rifiuto.
     ///
     /// È il presidio del §24.3 dal lato che il compilatore non prende. Il tipo
     /// obbliga chi costruisce `Unsupported` a *portare* il formato e la specie;
     /// non obbliga chi compone la frase a **spenderli**, e un `format!` che ne
+    /// dimentichi uno compila benissimo — è esattamente il difetto di prima,
+    /// spostato di un file.
     #[test]
     fn a_format_rejection_names_what_it_received() {
         let and: PluginError = KernelError::Format(FormatError::Unsupported {
@@ -313,8 +315,8 @@ mod tests {
         );
     }
 
-    /// dimentichi uno compila benissimo — è esattamente il difetto di prima,
-    /// spostato di un file.
+    /// Le altre tre restano una diagnosi per chi legge un log, e vanno in
+    /// `Internal`: è la riga che tiene separate le due metà di `FormatError`.
     #[test]
     fn the_other_three_remain_a_bug_not_an_unserved() {
         for and in [

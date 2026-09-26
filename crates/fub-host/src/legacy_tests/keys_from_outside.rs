@@ -98,11 +98,10 @@ fn never_seen_vault_does_not_apply_keys() {
 
     // E la domanda c'è, con l'accordo che il vault propone: chi disegna deve
     // poter dire *quale* combinazione e *su quale comando*.
-    // Il file **non è stato toccato**: nel dubbio non si cancella, e la
     let pending = host.pending_keybindings(None).expect("open");
     assert_eq!(pending.get(EMPTY).map(String::as_str), Some("Mod-s"));
 
-    // sospensione è la mossa che si disfa.
+    // Il file **non è stato toccato**: nel dubbio non si cancella, e la
     // sospensione è la mossa che si disfa.
     let written = std::fs::read_to_string(v.root.join(".fub").join("settings.json")).unwrap();
     assert!(written.contains("Mod-s"), "{written}");
@@ -125,7 +124,9 @@ fn adopt_applies_now_and_on_next_launch() {
     assert_eq!(from_where, SettingSource::Vault, "now the vault decides");
     assert!(host.pending_keybindings(None).unwrap().is_empty());
 
-    // Un altro avvio, con la stessa configurazione di macchina.
+    // Un altro avvio, con la stessa configurazione di macchina. Il primo
+    // finisce prima: un vault ha uno scrittore alla volta.
+    drop(host);
     let host = installed(&config);
     host.open(&v.root).expect("reopens");
     assert!(
@@ -138,6 +139,7 @@ fn adopt_applies_now_and_on_next_launch() {
 /// «Tieni le mie»: la chiave esce dal file del vault invece di restare sospesa
 /// per sempre. Un valore che nessuno leggerà mai è la cosa peggiore che un file
 /// di configurazione possa contenere (0076), e vale anche per un valore
+/// rifiutato.
 #[test]
 fn discard_removes_key_from_file_instead_of_leaving_it() {
     let (_c, config) = config();
@@ -186,7 +188,6 @@ fn changed_binding_requires_prompt_when_app_closed() {
 ///
 /// È il caso in cui la memoria per chiave paga ciò che un'impronta sola non
 /// saprebbe pagare.
-/// saprebbe pagare.
 #[test]
 fn setting_one_does_not_adopt_others() {
     let (_c, config) = config();
@@ -197,7 +198,6 @@ fn setting_one_does_not_adopt_others() {
     host.set_setting_for_user(None, CREATE, SettingValue::Text("Mod-j".into()))
         .expect("panel writes");
 
-    // Quella scritta vale — l'ha battuta una persona — e l'altra no.
     // Quella scritta vale — l'ha battuta una persona — e l'altra no.
     assert_eq!(
         effective_binding(&host, CREATE).0,
@@ -218,7 +218,6 @@ fn setting_one_does_not_adopt_others() {
 ///
 /// Questo banco fa il giro intero — le scorciatoie si scrivono dal pannello, il
 /// vault si chiude, si riapre — e pretende che valgano **senza nessuna
-/// domanda**: chi le ha scritte le ha già guardate.
 /// domanda**: chi le ha scritte le ha già guardate.
 #[test]
 fn shortcuts_written_here_still_travel_with_vault() {

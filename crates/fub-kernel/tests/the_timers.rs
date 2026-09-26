@@ -81,7 +81,6 @@ fn vault(timers: Vec<TimerSpec>) -> (tempfile::TempDir, Workspace, Log) {
 }
 
 /// Il posto dove un plugin dichiara un timer c'è, e chi lo legge lo trova.
-/// Il posto dove un plugin dichiara un timer c'è, e chi lo legge lo trova.
 #[test]
 fn a_declared_timer_is_visible_to_whoever_schedules() {
     let (_dir, ws, _log) = vault(vec![every(3600, "sync"), every(60, "check")]);
@@ -158,7 +157,6 @@ fn a_component_that_leaves_takes_its_alarms_with_it() {
 /// Due sveglie omonime sarebbero due eventi indistinguibili da chi li riceve, e
 /// una senza nome non sarebbe riconoscibile affatto: si rifiutano alla
 /// dichiarazione, che è l'unico momento in cui c'è qualcuno a cui dirlo.
-/// dichiarazione, che è l'unico momento in cui c'è qualcuno a cui dirlo.
 #[test]
 fn two_alarms_with_the_same_name_are_refused() {
     for timers in [
@@ -229,7 +227,6 @@ fn a_wall_clock_is_not_an_elapsed_time_and_says_so() {
 
     // E il `None` non si confonde con quello di chi ha finito: c'è una domanda
     // fatta apposta, e le due famiglie si distinguono senza dedurre.
-    // fatta apposta, e le due famiglie si distinguono senza dedurre.
     assert!(at_nine.wall_clock().is_some());
     assert!(TimerSchedule::After { seconds: 600 }.wall_clock().is_none());
     assert!(TimerSchedule::Every { seconds: 60 }.wall_clock().is_none());
@@ -275,7 +272,6 @@ fn the_contract_says_which_occurrences_exist() {
 
 /// Il calendario non si ferma alla fine del mese, né a quella dell'anno, né al
 /// 28 febbraio di un anno bisestile: è aritmetica gregoriana vera, e questi sono
-/// i tre punti in cui una scritta a mano si rompe.
 /// i tre punti in cui una scritta a mano si rompe.
 #[test]
 fn the_calendar_rolls_over_months_years_and_leap_days() {

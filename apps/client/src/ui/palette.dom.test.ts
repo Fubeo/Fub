@@ -21,6 +21,7 @@ function command(id: string, title: string): CommandSpec {
     keybinding: null,
     params: [],
     scope: { writes: false, reach: "session", reversible: true },
+    surfaces: [],
   };
 }
 

@@ -46,6 +46,7 @@ import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
 import { allCommands, keybindingIssues, keybindingKey, validateKeybinding, type CommandEntry } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
+import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
 import { LANGUAGE_KEY, catalogLanguages, t, type Key } from "../i18n/strings";
 import {
@@ -466,17 +467,10 @@ async function renderForm(): Promise<HTMLElement[]> {
 }
 
 /// Le chiavi che hanno un gesto loro altrove, e che nel form generico sarebbero
-/// un campo da non toccare a mano: la versione del formato dell'interfaccia,
-/// i componenti spenti (la scheda Componenti), l'ordine della barra laterale
-/// (si trascina nella barra), i tipi delle proprietà (il pannello Proprietà) e
-/// l'id del tema installato (il catalogo dei temi qui sotto).
-const MANAGED_ELSEWHERE = new Set([
-  "chrome.schema",
-  "plugins.disabled",
-  "chrome.rail.order",
-  "properties.types",
-  "appearance.theme-id",
-]);
+/// un campo da non toccare a mano. L'elenco arriva generato da chi le possiede
+/// (`fub_host::shell::SETTINGS_WITH_THEIR_OWN_GESTURE`): i tipi delle proprietà,
+/// per esempio, sono del kernel e non della shell.
+const MANAGED_ELSEWHERE = new Set(SETTINGS_WITH_THEIR_OWN_GESTURE);
 
 /// L'intestazione di un gruppo, con «Ripristina gruppo» quando nel gruppo c'è
 /// qualcosa di diverso dal default: riportare indietro una sezione intera era

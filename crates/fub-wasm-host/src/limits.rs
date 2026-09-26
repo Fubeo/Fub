@@ -46,6 +46,7 @@
 //! morire il battito insieme alla prima e all'ultima chiamata: sarebbe un
 //! thread creato e distrutto a ogni giro di job — cioè il costo spostato dal
 //! riposo al lavoro, dove dà fastidio davvero — in cambio di dieci risvegli al
+//! secondo che una macchina ferma non nota.
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -66,9 +67,9 @@ use crate::borrow::State;
 /// lavoro che nessuno sta aspettando. Ed è la **grana** della scadenza: la
 /// scadenza si misura in battiti, quindi non può essere più fine di così, e ogni
 /// numero di [`TIMEOUT_IN_TICKS`] vale ±1 battito di tempo vero.
-/// Quanti battiti ha una chiamata prima del trap: **50**, cioè circa 5 secondi.
 const HEARTBEAT: Duration = Duration::from_millis(100);
 
+/// Quanti battiti ha una chiamata prima del trap: **50**, cioè circa 5 secondi.
 ///
 /// «Circa» è la parte importante, e va detta invece che nascosta: una scadenza
 /// misurata in battiti è **grossolana quanto il battito**. Il primo battito dopo
@@ -87,9 +88,9 @@ const HEARTBEAT: Duration = Duration::from_millis(100);
 /// è bloccata. Il giorno in cui un plugin vero avrà bisogno di più tempo per un
 /// job, questo numero si muove qui, in un posto solo, con la sua ragione
 /// accanto; ciò che non deve succedere è che non ci sia nessun numero.
-/// Quanto può crescere una memoria lineare di un componente: **64 MiB**.
 const TIMEOUT_IN_TICKS: u64 = 50;
 
+/// Quanto può crescere una memoria lineare di un componente: **64 MiB**.
 ///
 /// Senza tetto il massimo è quello del bersaglio, cioè 4 GiB: un plugin che
 /// alloca in un ciclo non muore lui, fa morire l'app, e la fa morire con un
@@ -104,24 +105,15 @@ const TIMEOUT_IN_TICKS: u64 = 50;
 /// usano e non 640 MiB. Il conto che conta è l'altro — quanto può prendersi
 /// *uno* prima che qualcuno se ne accorga — e 64 MiB è una cifra che un utente
 /// vede nel monitor delle attività senza che l'app sia già in ginocchio.
-// ---------------------------------------------------------------------------
 const MEMORY_CEILING: usize = 64 * 1024 * 1024;
 
+// ---------------------------------------------------------------------------
 // Il motore, e il suo battito
 // ---------------------------------------------------------------------------
-// L'`Engine` del processo. Nasce alla prima [`engine`] e non muore più.
 
-/// L'`Engine` con cui si compila ogni componente.
+/// L'`Engine` del processo. Nasce alla prima [`engine`] e non muore più.
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
-///
-/// È **uno solo** per processo, e prima di questo modulo ce n'era uno per
-/// caricamento. Il cambio non è un'ottimizzazione di passaggio: il contatore
-/// delle epoche appartiene all'`Engine`, quindi un `Engine` per componente
-/// vorrebbe dire un battito per componente. Con uno solo il battito è uno solo,
-/// e in più i componenti si spartiscono lo stato del compilatore invece di
-/// rifabbricarlo a ogni `.wasm`.
-/// rifabbricarlo a ogni `.wasm`.
 /// Come l'engine compila: nativo Cranelift, o Pulley interprete portatile.
 ///
 /// Pulley è l'interprete portabile di wasmtime: stesso formato `.wasm`, nessuna
@@ -193,6 +185,13 @@ impl EngineBackend {
 static ACTIVE_BACKEND: OnceLock<EngineBackend> = OnceLock::new();
 
 /// L'`Engine` con cui si compila ogni componente.
+///
+/// È **uno solo** per processo, e prima di questo modulo ce n'era uno per
+/// caricamento. Il cambio non è un'ottimizzazione di passaggio: il contatore
+/// delle epoche appartiene all'`Engine`, quindi un `Engine` per componente
+/// vorrebbe dire un battito per componente. Con uno solo il battito è uno solo,
+/// e in più i componenti si spartiscono lo stato del compilatore invece di
+/// rifabbricarlo a ogni `.wasm`.
 pub(crate) fn engine() -> Engine {
     ENGINE
         .get_or_init(|| {
@@ -223,6 +222,7 @@ pub(crate) fn engine() -> Engine {
             // *questo* plugin. Restituirla come errore di caricamento
             // significherebbe scrivere «il componente non si compila» accanto a
             // un componente che non ha nessuna colpa, e mandare a cercare dalla
+            // parte sbagliata.
             let engine = Engine::new(&config)
                 .expect("WASM engine configuration is set here, not passed in from outside");
             let _ = ACTIVE_BACKEND.set(backend);
@@ -232,6 +232,8 @@ pub(crate) fn engine() -> Engine {
         .clone()
 }
 
+/// Il battito: un thread che dorme e incrementa l'epoca.
+///
 /// Tiene un `Engine` **forte** e non un `EngineWeak`, che sarebbe la forma che
 /// wasmtime suggerisce. La forma debole serve a chi vuole che il thread muoia
 /// con l'ultimo consumatore dell'`Engine`; qui l'`Engine` sta in [`ENGINE`],
@@ -285,7 +287,6 @@ fn tick(engine: Engine) {
 /// la sa usare — ed è il caso dell'allocatore di default di Rust, che chiama
 /// `handle_alloc_error` e aborta — trappa da sé una riga dopo, con lo stesso
 /// esito. Accendere l'opzione toglierebbe qualcosa al primo senza dare niente al
-/// secondo.
 /// secondo.
 pub(crate) fn ceiling() -> StoreLimits {
     StoreLimitsBuilder::new()

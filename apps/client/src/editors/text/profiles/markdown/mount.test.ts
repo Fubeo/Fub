@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { EmbedContent } from "../host/contract";
-import { renderMarkdown } from "../editors/text/profiles/markdown/render";
+import type { EmbedContent } from "../../../../host/contract";
+import { renderMarkdown } from "./render";
 
 const query = vi.hoisted(() => ({ renderEmbed: vi.fn() }));
-vi.mock("../host/query", () => query);
-import { mountMarkdown, sourceElementAt } from "./markdown";
+vi.mock("../../../../host/query", () => query);
+import { mountMarkdown, sourceElementAt } from "./mount";
+import { registerCustomRenderer } from "../../../../ui/custom";
 
 const disposers: (() => void)[] = [];
 function mount(html: string, element: HTMLElement = document.createElement("div")): HTMLElement {
@@ -38,6 +39,29 @@ describe("montaggio Markdown condiviso", () => {
     expect(embedded).not.toHaveBeenCalled();
   });
 
+  it("nessun link naviga la webview: relativo al vault, con schema al sistema", () => {
+    const openPath = vi.fn();
+    const opened = vi.spyOn(window, "open").mockReturnValue(null);
+    const root = document.createElement("div");
+    document.body.append(root);
+    disposers.push(mountMarkdown(
+      root,
+      '<a href="docs/Manuale%20uno.html">guida</a><a href="https://example.org">web</a><a href="mailto:a@b.c">posta</a>',
+      { documentId: "Nota.md", openPath },
+    ));
+    const click = (index: number): MouseEvent => {
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+      root.querySelectorAll("a")[index]!.dispatchEvent(event);
+      return event;
+    };
+    expect(root.querySelectorAll("a")).toHaveLength(3);
+    for (const index of [0, 1, 2]) expect(click(index).defaultPrevented).toBe(true);
+    return Promise.resolve().then(() => {
+      expect(openPath).toHaveBeenCalledWith("docs/Manuale uno.html");
+      expect(opened.mock.calls.map((call) => call[0])).toEqual(["https://example.org", "mailto:a@b.c"]);
+    });
+  });
+
   it("consente un ritaglio della nota corrente ma interrompe il riferimento ricorsivo", async () => {
     const reference = '<div class="embed" data-embed-page="" data-embed-heading="Sezione"></div>';
     query.renderEmbed.mockResolvedValue({ doc_id: "Nota.md", html: `<p>Ritaglio</p>${reference}`, parts: [] });
@@ -46,6 +70,20 @@ describe("montaggio Markdown condiviso", () => {
     expect(root.querySelectorAll("p")).toHaveLength(1);
     expect(root.textContent).toBe("Ritaglio");
     expect(query.renderEmbed).toHaveBeenCalledWith("Nota.md", "Sezione", null);
+  });
+
+  it("dà a ogni renderer custom la nota in cui sta la parte, anche trasclusa, senza toccarne il payload", async () => {
+    const seen: Array<{ payload: unknown; container: string | null }> = [];
+    registerCustomRenderer("terzi.prova", (_host, payload, _onAction, context) => {
+      seen.push({ payload, container: context.container });
+    });
+    query.renderEmbed.mockResolvedValue({
+      doc_id: "Altra.md",
+      html: '<div data-ui-slot="0"></div>',
+      parts: [{ slot: 0, kind: "prova", node: { node: "custom", ns: "terzi.prova", payload: { n: 1 }, fallback: [] } }],
+    });
+    mount('<div class="embed" data-embed-page="Altra"></div>');
+    await vi.waitFor(() => expect(seen).toEqual([{ payload: { n: 1 }, container: "Altra.md" }]));
   });
 
   it("condivide richieste identiche senza confondere heading e ancore di blocco", async () => {

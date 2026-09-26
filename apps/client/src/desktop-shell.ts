@@ -12,7 +12,7 @@
 // (`theme/loader.ts`) da `mountTheme`, qui sotto — e sono sostituiti, non
 // accatastati.
 import "./theme/structure.css";
-import { pickFolder } from "./host/dialog";
+import { pickVaultLocation } from "./platform/vault-picker";
 import { onClose, api, window as nativeWindow } from "./host/ipc";
 import { vaultStatus, vaultEntries, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
@@ -41,7 +41,10 @@ import { mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { revealSidePanel, setSidePanelController, toggleSidePanel, type SidePanel } from "./ui/side-panels";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
+import { openPrimaryView, opensWithoutParams, primaryViews } from "./ui/primary-views";
 import { mountTitlebar } from "./ui/titlebar";
+import { mountLongPressMenus } from "./ui/long-press";
+import { platformSupports } from "./platform/capabilities";
 import { mountAppMenu } from "./ui/app-menu";
 import { mountWebviewFocusMonitor } from "./ui/node";
 import { registerMermaidRenderer } from "./ui/mermaid";
@@ -71,6 +74,7 @@ import { mountGraph } from "./panels/graph";
 import { mountQuickSwitcher } from "./panels/quick-switcher";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
 import { errorText } from "./host/errors";
+import { pageName } from "./rules/mirrored";
 import type { ShellGeometry } from "./state/shell-geometry";
 import { configureRail } from "./panels/rail";
 import { mountBookmarksPanel } from "./state/bookmarks-ui";
@@ -80,6 +84,13 @@ import { hidePreview } from "./state/preview";
 import { closeContextMenu } from "./ui/menu";
 import { setTooltip } from "./ui/tooltip";
 import type { SettingEntry } from "./host/contract";
+import { adoptLegacyChrome, writeChrome } from "./state/machine-chrome";
+import { Race } from "./ui/race";
+
+/// Le impostazioni della macchina che ricordano i due pannelli laterali, e le
+/// chiavi `localStorage` dove stavano prima (si adottano una volta).
+const SIDE_SETTING = { sidebar: "chrome.sidebar.visible", inspector: "chrome.inspector.visible" } as const;
+const LEGACY_SIDE = { sidebar: "fub.layout.sidebar", inspector: "fub.layout.inspector" } as const;
 
 /** Apply machine chrome at boot and after external profile/setting changes.
  * A frame change is intentionally NOT live: native decorations are chosen
@@ -110,7 +121,7 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     applyToolbar();
     if (frameAtBoot === null) {
       frameAtBoot = valid && values.get("chrome.frame") === "system" ? "system" : "custom";
-      if (document.documentElement.dataset.clientShell !== "mobile") {
+      if (platformSupports("nativeWindowControls")) {
         document.getElementById("window-controls")?.toggleAttribute("hidden", frameAtBoot === "system");
       }
     }
@@ -153,21 +164,18 @@ function mountAdaptiveShell(): void {
   const inspectorScrim = document.getElementById("inspector-scrim");
   const divSidebar = document.getElementById("divider-sidebar");
   const divInspector = document.getElementById("divider-inspector");
+  // I divisori si trascinano con un puntatore fine: su una shell touch-first
+  // restano nascosti anche quando i pannelli sono affiancati.
+  const resizable = platformSupports("finePointer");
   let opening = false;
   let lastDir: string | null = null;
   let lastTrigger: HTMLElement | null = null;
-  // Preferenze esplicite (L01): mai sovrascritte dall'adattamento.
+  // Preferenze esplicite (L01): mai sovrascritte dall'adattamento. Sono
+  // impostazioni della macchina, come il resto della cornice
+  // (`state/machine-chrome.ts`); finché non si leggono vale il default,
+  // cioè affiancati.
   let sidebarPref: boolean | null = null;
   let inspectorPref: boolean | null = null;
-  try {
-    const rawSidebar = localStorage.getItem("fub.layout.sidebar");
-    sidebarPref = rawSidebar === "1" ? true : rawSidebar === "0" ? false : null;
-    const rawInspector = localStorage.getItem("fub.layout.inspector");
-    inspectorPref = rawInspector === "1" ? true : rawInspector === "0" ? false : null;
-  } catch {
-    sidebarPref = null;
-    inspectorPref = null;
-  }
   const hasVault = (): boolean => state.vaultRoot !== "";
   // Lo scrim sta sotto il cassetto e sopra i riquadri: dentro il pannello
   // coprirebbe il pannello stesso, e ogni clic nel cassetto lo chiuderebbe.
@@ -196,20 +204,41 @@ function mountAdaptiveShell(): void {
     const sidebarOpen = !isDrawer("sidebar") && (sidebarPref ?? true);
     sidebar.hidden = !sidebarOpen && !layout.classList.contains("drawer-sidebar-open");
     inspector.hidden = !inspectorOpen && !layout.classList.contains("drawer-inspector-open");
-    if (divSidebar) divSidebar.hidden = sidebar.hidden;
-    if (divInspector) divInspector.hidden = inspector.hidden;
+    if (divSidebar) divSidebar.hidden = !resizable || sidebar.hidden;
+    if (divInspector) divInspector.hidden = !resizable || inspector.hidden;
     if (width >= 1200) closeDrawers(false);
     else if (width >= 960 && layout.classList.contains("drawer-sidebar-open")) closeDrawers(false);
   };
   const rememberPreference = (side: SidePanel, open: boolean): void => {
     if (side === "sidebar") sidebarPref = open;
     else inspectorPref = open;
-    try {
-      localStorage.setItem(side === "sidebar" ? "fub.layout.sidebar" : "fub.layout.inspector", open ? "1" : "0");
-    } catch {
-      // La preferenza vale per questa sessione anche senza storage.
-    }
+    // La preferenza vale per questa sessione anche se la macchina non la ricorda.
+    void writeChrome(SIDE_SETTING[side], open).catch(() => notify(t("state.not_remembered"), "info"));
   };
+  const sideReads = new Race();
+  const readSidePreferences = () => sideReads.last(async (expected) => {
+    const entries = await expected(settings().catch(() => null));
+    if (!entries) return;
+    const values = new Map(entries.map((entry) => [entry.spec.key, entry]));
+    if (values.get("chrome.schema")?.value !== 1) return;
+    for (const side of ["sidebar", "inspector"] as const) {
+      const entry = values.get(SIDE_SETTING[side]);
+      if (!entry) continue;
+      // Solo «chiuso» era una scelta: «aperto» è il default.
+      const legacy = await expected(adoptLegacyChrome(LEGACY_SIDE[side], entry, (raw) => raw === "0" ? false : null));
+      const open = legacy ?? entry.value !== false;
+      if (side === "sidebar") sidebarPref = open;
+      else inspectorPref = open;
+    }
+    applyAdaptive();
+  });
+  life.add(() => sideReads.cancel());
+  life.add(onEvent("setting_changed", ({ key }) => {
+    if (key === "chrome.schema" || key === SIDE_SETTING.sidebar || key === SIDE_SETTING.inspector) {
+      void readSidePreferences();
+    }
+  }));
+  void readSidePreferences();
   const openDrawer = (side: SidePanel): void => {
     const panel = side === "sidebar" ? sidebar : inspector;
     const scrim = side === "sidebar" ? sidebarScrim : inspectorScrim;
@@ -430,10 +459,11 @@ function mountAdaptiveShell(): void {
       newNote.setAttribute("aria-disabled", String(empty));
       (newNote as HTMLButtonElement).disabled = empty;
     }
-    const graph = document.getElementById("show-graph") as HTMLButtonElement | null;
-    if (graph) {
-      graph.disabled = empty;
-      graph.setAttribute("aria-disabled", String(empty));
+    // Le view principali nella rail: senza vault non c'è un kernel a cui
+    // chiederle.
+    for (const view of document.querySelectorAll<HTMLButtonElement>("#views-ribbon .rail-btn-main")) {
+      view.disabled = empty;
+      view.setAttribute("aria-disabled", String(empty));
     }
     const trigger = document.getElementById("command-search");
     if (trigger) {
@@ -470,8 +500,9 @@ function mountAdaptiveShell(): void {
   };
   const onPick = async (title?: string): Promise<void> => {
     if (opening || life.closed) return;
-    // Picker annullato = stato invariato (U04): pickFolder null non tocca nulla.
-    const dir = await pickFolder(title);
+    // Picker annullato = stato invariato (U04): un selettore che torna null
+    // non tocca nulla.
+    const dir = await pickVaultLocation(title);
     if (!dir || life.closed) return;
     await openVaultFlow(dir);
   };
@@ -490,8 +521,10 @@ function mountAdaptiveShell(): void {
   });
   if (sidebarScrim) pageWindowLifetime.listen(sidebarScrim, "click", () => { closeDrawers(true); applyAdaptive(); });
   if (inspectorScrim) pageWindowLifetime.listen(inspectorScrim, "click", () => { closeDrawers(true); applyAdaptive(); });
-  mountDivider(divSidebar, sidebar, 1, 200, 360);
-  mountDivider(divInspector, inspector, -1, 240, 400);
+  if (resizable) {
+    mountDivider(divSidebar, sidebar, 1, 200, 360);
+    mountDivider(divInspector, inspector, -1, 240, 400);
+  }
   if (openBtn) pageWindowLifetime.listen(openBtn, "click", () => void onPick());
   // Un vault nuovo è una cartella vuota aperta come vault: il selettore di
   // sistema sa già crearne una, qui gli si dice che è quello che si vuole.
@@ -506,8 +539,14 @@ function mountAdaptiveShell(): void {
     pageWindowLifetime.listen(settingsBtn, "click", () =>
       document.getElementById("open-settings")?.click(),
     );
-  const graphBtn = document.getElementById("show-graph");
-  if (graphBtn) pageWindowLifetime.listen(graphBtn, "click", guardContext, { capture: true });
+  // Delegato sulla rail: i bottoni delle view principali nascono e muoiono a
+  // ogni giro di `syncRail`, la rail resta.
+  const ribbon = document.getElementById("views-ribbon");
+  if (ribbon) {
+    pageWindowLifetime.listen(ribbon, "click", (event) => {
+      if ((event.target as Element | null)?.closest?.(".rail-btn-main")) guardContext(event);
+    }, { capture: true });
+  }
   const searchInput = document.getElementById("search-input");
   if (searchInput) pageWindowLifetime.listen(searchInput, "click", guardContext, { capture: true });
   // Solo la shell apre i vault e sceglie cartelle: onboarding si iscrive una
@@ -595,7 +634,7 @@ function showVaultName(root: string): void {
 /// nella barra delle applicazioni e passando da una finestra all'altra.
 function drawWindowTitle(): void {
   const doc = state.currentDoc;
-  const note = doc ? (doc.split("/").pop() ?? doc).replace(/\.md$/i, "") : null;
+  const note = doc ? pageName(doc) : null;
   const title = [note, vaultName || null, "Fub"].filter((part): part is string => !!part).join(" — ");
   if (document.title === title) return;
   document.title = title;
@@ -692,6 +731,9 @@ async function init(): Promise<Teardown> {
   // contenuto.
   mountTitlebar(pageWindowLifetime);
   mountWebviewFocusMonitor(pageWindowLifetime);
+  // Un dito apre i menu contestuali con la pressione lunga: gli stessi del
+  // tasto destro, senza che ogni menu debba saperlo.
+  mountLongPressMenus(pageWindowLifetime);
   registerMermaidRenderer();
   registerBaseRenderer((doc) => openDocument(doc));
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
@@ -786,10 +828,9 @@ async function init(): Promise<Teardown> {
   pageWindowLifetime.add(closeCommandPalette);
   pageWindowLifetime.add(closeInDocumentSearch);
   pageWindowLifetime.add(closeContextMenu);
-  // La rail (§Fase 2): le icone shell a sinistra — Note, Cerca, Grafo —
-  // sempre visibili. Le view dichiarate `left_sidebar` si aggiungono dopo,
-  // a ogni apertura di vault, con `syncRail()`. Va prima di `mountGraph`
-  // perché crea `#show-graph`, che `mountGraph` ascolta.
+  // La rail (§Fase 2): le icone shell a sinistra — Note, Cerca — sempre
+  // visibili. Le view dichiarate (principali e `left_sidebar`) si aggiungono
+  // dopo, a ogni apertura di vault, con `syncRail()`.
   pageWindowLifetime.add(mountRail());
   mountGraph(pageWindowLifetime);
   // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
@@ -914,6 +955,11 @@ async function init(): Promise<Teardown> {
     },
     // Letta a ogni apertura del menu: una scorciatoia rimappata si vede subito.
     shortcut: (id) => displayBinding(allCommands().find((e) => e.id === id)?.binding ?? null),
+    // Le stesse view principali che la palette elenca, con la stessa frase.
+    views: () => primaryViews().filter(opensWithoutParams).map((spec) => ({
+      label: t("palette.open_view", { title: spec.title }),
+      run: () => openPrimaryView(spec.id),
+    })),
   }));
   refreshTitlebarShortcuts();
   pageWindowLifetime.add(onLanguage(refreshTitlebarShortcuts));
@@ -971,7 +1017,12 @@ async function init(): Promise<Teardown> {
   // — impostazioni del sistema, ora legale — se ne accorge al ritorno del
   // focus, e allora si ridisegna ciò che è appeso al contesto.
   mountLocale(pageWindowLifetime, () => {
-    if (alive()) void mountDeclaredViews(pageWindowLifetime);
+    if (!alive()) return;
+    // Il rimontaggio toglie dalla rail i bottoni delle view dichiarate: la
+    // rail li rifà, coi titoli nella lingua nuova.
+    void mountDeclaredViews(pageWindowLifetime).then(() => {
+      if (alive()) syncRail();
+    });
   });
 
   // Gli accordi riconfigurati, **prima** di sapere se un vault c'è (§16.3).
@@ -1057,8 +1108,16 @@ async function newNoteInActiveSpace(): Promise<void> {
 
 async function pickVault(): Promise<void> {
   if (pageWindowLifetime.closed) return;
-  const dir = await pickFolder();
+  const dir = await pickVaultLocation();
   if (dir && !pageWindowLifetime.closed) await openVaultPath(dir);
+}
+
+/// Apre un vault con la procedura intera della shell: ciò che resta del vault
+/// precedente scritto prima, poi stato di vista, segnale `vault` e view. È la
+/// porta di una shell che sceglie i vault a modo suo (il pannello dello spazio
+/// su mobile): li sceglie lei, li apre questa.
+export function openVault(dir: string): Promise<void> {
+  return openVaultPath(dir);
 }
 
 async function openVaultPath(

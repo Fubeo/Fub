@@ -195,13 +195,14 @@ impl Counter {
 impl ViewProvider for Counter {
     /// Dichiarare non è rileggersi: questa non passa da `views()`, o il
     /// conteggio che questo banco tiene direbbe due dove il kernel ha chiesto
+    /// una volta sola.
     fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
         ViewInterests::default()
     }
 
     fn views(&self) -> Vec<ViewSpec> {
         *self.views.lock().unwrap() += 1;
-        // una volta sola.
+
         let mut all = vec![Counter::spec("prova.view")];
         if *self.second.lock().unwrap() {
             all.push(Counter::spec("prova.altra"));
@@ -291,6 +292,8 @@ impl CommandProvider for Counter {
     }
 }
 
+// --- un formato finto, per avere dei documenti ------------------------------
+
 struct Text;
 
 impl FormatProvider for Text {
@@ -328,19 +331,19 @@ fn workspace(docs: &[&str]) -> (tempfile::TempDir, Workspace) {
     let mut registry = FormatRegistry::new();
     registry.register(Box::new(Text)).expect("registration");
     let mut ws = Workspace::new(&root, registry).expect("vault opens successfully");
-    // --- un formato finto, per avere dei documenti ------------------------------
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
     ws.register_core_feature("prova", "prova")
         .expect("declared");
     ws.reindex().expect("reindex");
     (dir, ws)
 }
 
-// kernel non presta capacità a una stringa.
 /// Le spec si chiedono **una volta**, alla registrazione.
 ///
 /// Prima `view_owner` interrogava ogni provider registrato per risolvere un id,
 /// e `check_params` richiamava il vincitore per convalidare i parametri: due
+/// giri per azione, e con le istanze quel percorso è quello di ogni click.
 #[test]
 fn specs_are_queried_only_once() {
     let (_g, mut ws) = workspace(&[]);
@@ -437,8 +440,8 @@ fn view_interests_validates_params_and_contains_provider_panic() {
     assert_eq!(*calls.lock().unwrap(), 2);
 }
 
-/// giri per azione, e con le istanze quel percorso è quello di ogni click.
 /// Chi cambia idea **lo dice**: è l'altra metà di «le spec sono dato di
+/// registrazione», ed è ciò che impedisce alla verità di stare in due posti.
 #[test]
 fn a_provider_that_changes_its_mind_declares_it() {
     let (_g, mut ws) = workspace(&[]);
@@ -447,7 +450,6 @@ fn a_provider_that_changes_its_mind_declares_it() {
     ws.register_view_provider("prova", Box::new(provider))
         .expect("registered");
 
-    // registrazione», ed è ciò che impedisce alla verità di stare in due posti.
     assert_eq!(
         ws.views().len(),
         1,
@@ -470,6 +472,7 @@ fn a_provider_that_changes_its_mind_declares_it() {
 ///
 /// È il metodo con cui un provider si guarda intorno: senza finestra clona
 /// tutto il vault a ogni chiamata, e chi ne vuole venti paga comunque
+/// centomila.
 #[test]
 fn the_document_list_has_a_page_and_a_total() {
     let (_g, mut ws) = workspace(&["b.txt", "a.txt", "sub/c.txt", "d.txt"]);

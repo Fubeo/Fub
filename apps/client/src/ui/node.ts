@@ -40,13 +40,14 @@
 // Fuori da `mountTree` un `ActionHandler` non passa: dentro gira solo la porta,
 // che per un contenitore è una sola per sempre.
 import type { ActionRef, FieldValue, UiKind, UiNode, UiOption, UiValue } from "../host/contract";
-import { customRenderer } from "./custom";
+import { customRenderer, NO_RENDER_CONTEXT, type CustomRenderContext } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
 import { activatable, identifier, notActivatable } from "./a11y";
 import { t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
+import { iconEl } from "./icons";
 import type { Lifetime } from "./lifetime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
@@ -90,9 +91,20 @@ interface Mount {
   current: ActionHandler;
   /// Il rinvio a `corrente`. Non cambia mai identità: è ciò che tutti tengono.
   port: Port;
+  /// Dove sta l'albero, per i renderer custom: lo dà l'ultimo montaggio.
+  context: CustomRenderContext;
 }
 
 const mounted = new WeakMap<HTMLElement, Mount>();
+/// Il montaggio di una porta: il disegno riceve soltanto la porta, e da lì
+/// risale al contesto senza che ogni funzione lo porti con sé.
+const mountOfPort = new WeakMap<Port, Mount>();
+/// Il contesto con cui un renderer custom ha disegnato il suo elemento.
+const drawnIn = new WeakMap<HTMLElement, CustomRenderContext>();
+
+function contextOf(port: Port): CustomRenderContext {
+  return mountOfPort.get(port)?.context ?? NO_RENDER_CONTEXT;
+}
 
 /// Un frame sposta il fuoco nel suo documento figlio: Chromium non emette un
 /// evento di fuoco sul documento ospite quando ci si entra col Tab, né gli
@@ -139,8 +151,10 @@ function route(container: HTMLElement, onAction: ActionHandler): Mount {
     root: null,
     current: onAction,
     port: ((action, fields) => failure(action, () => mount.current(action, fields))) as Port,
+    context: NO_RENDER_CONTEXT,
   };
   mounted.set(container, mount);
+  mountOfPort.set(mount.port, mount);
   return mount;
 }
 
@@ -191,9 +205,16 @@ function failure(action: ActionRef, execute: () => void | Promise<void>): void |
 ///
 /// La prima volta disegna; dalla seconda **riconcilia**. Il chiamante non deve
 /// sapere quale delle due sta succedendo: è la stessa chiamata, ed è ciò che
-/// impedisce che qualcuno "ottimizzi" ricostruendo.
-export function mountTree(container: HTMLElement, node: UiNode, onAction: ActionHandler): void {
+/// impedisce che qualcuno "ottimizzi" ricostruendo. `context` dice ai renderer
+/// custom dove sta l'albero (il documento che lo contiene, se c'è).
+export function mountTree(
+  container: HTMLElement,
+  node: UiNode,
+  onAction: ActionHandler,
+  context: CustomRenderContext = NO_RENDER_CONTEXT,
+): void {
   const mount = route(container, onAction);
+  mount.context = context;
   const previous = mount.root;
   if (previous && previous.parentElement === container) {
     mount.root = reconcile(previous, node, mount.port);
@@ -420,7 +441,8 @@ function update(
       const nextRenderer = customRenderer(next.ns, next.payload);
       if (previousRenderer !== nextRenderer) return false;
       if (nextRenderer) {
-        return JSON.stringify(prev.payload) === JSON.stringify(next.payload);
+        return JSON.stringify(prev.payload) === JSON.stringify(next.payload)
+          && drawnIn.get(el)?.container === contextOf(onAction).container;
       }
       children(el, next.fallback, onAction);
       return true;
@@ -817,11 +839,14 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       return el;
     }
     case "icon": {
+      // La figura del set della shell (`ui/icons.ts`), di serie o registrata.
       // Un nome che questa shell non conosce non disegna niente: un'icona
       // mancante non deve rompere un pannello.
       const el = document.createElement("span");
       el.className = "ui-icon";
       el.dataset.icon = node.name;
+      const svg = iconEl(node.name);
+      if (svg) el.append(svg);
       setTooltip(el, node.name);
       return el;
     }
@@ -934,7 +959,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
         // cambia, l'elemento resta e il widget dentro pure, per quanti
         // ridisegni faccia la view intorno. Un handler nudo qui invecchierebbe
         // e ci resterebbe.
-        const unmount = draw(el, node.payload, onAction);
+        const context = contextOf(onAction);
+        drawnIn.set(el, context);
+        const unmount = draw(el, node.payload, onAction, context);
         if (unmount) disposers.set(el, unmount);
       } else {
         for (const child of node.fallback) el.appendChild(renderUiNode(child, onAction));

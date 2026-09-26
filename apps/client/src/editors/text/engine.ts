@@ -64,33 +64,12 @@ import { HistoryFootprints } from "./history-footprints";
 import {
   operationFromText,
   tryApplyOperation,
+  type DocumentUpdate,
+  type EditorChange,
   type TextEdit,
   type TextOperation,
-} from "../../editor/text-operation";
-
-export interface EditorRange {
-  start: number;
-  end: number;
-  text: string;
-}
-
-export interface EditorSelections {
-  primary: EditorRange;
-  secondary: EditorRange[];
-}
-
-export type EditorChangeOrigin = "input" | "undo" | "redo";
-
-export interface EditorChange {
-  readonly text: string;
-  readonly operation: TextOperation;
-  readonly origin: EditorChangeOrigin;
-}
-
-export interface DocumentUpdate {
-  readonly text: string;
-  readonly operation: TextOperation | null;
-}
+} from "../core/text-operation";
+import type { EditorSelections } from "../core/registry";
 
 /// Ancoraggio di scroll che non tocca selezione né cronologia.
 export interface ScrollAnchor {
@@ -98,15 +77,17 @@ export interface ScrollAnchor {
   readonly top: number;
 }
 
-/// Dove sta il cursore principale, per le scorciatoie a carattere (la palette
-/// slash): una battuta dentro codice, link o URL resta testo.
+/// Dove sta il cursore principale, per le scorciatoie a carattere di un
+/// profilo (la palette slash). Il motore non sa quali costrutti di una
+/// grammatica siano testo letterale: dà i nomi dei nodi e il profilo decide.
 export interface CursorContext {
   /// La selezione principale è vuota.
   readonly empty: boolean;
   /// La riga del cursore fino al cursore.
   readonly lineBefore: string;
-  /// Il cursore sta dentro codice, formula, link, URL o HTML.
-  readonly literal: boolean;
+  /// I nomi dei nodi dell'albero sintattico che contengono il cursore, dal
+  /// più interno.
+  readonly nodes: readonly string[];
   /// La posizione del cursore, per `insertAt`.
   readonly head: number;
 }
@@ -116,6 +97,11 @@ export interface TextEngineOptions {
   onSelectionChange(): void;
   readonly extensions?: () => Extension;
   readonly theme?: Theme;
+  /// Un campo incorporato in un'altra superficie (la barra delle formule,
+  /// l'editor di una cella) non è un documento: ha una disposizione fissa,
+  /// senza margine dei numeri, vim né controllo ortografico, e non legge le
+  /// preferenze di scrittura `editor.*`.
+  readonly field?: boolean;
 }
 // Mirrors the core machine settings read by every mounted text surface.
 export const EDITOR_SPELLCHECK_KEY = "editor.spellcheck";
@@ -140,6 +126,7 @@ interface LayoutPreferences {
   readonly indent: string;
 }
 const DEFAULT_LAYOUT: LayoutPreferences = { lineNumbers: true, lineWrap: true, indent: "2" };
+const FIELD_LAYOUT: LayoutPreferences = { lineNumbers: false, lineWrap: true, indent: "2" };
 
 function layoutExtensions(layout: LayoutPreferences): Extension {
   const unit = layout.indent === "tab" ? "\t" : layout.indent === "4" ? "    " : "  ";
@@ -188,6 +175,10 @@ export class TextEngine {
 
   public constructor(parent: HTMLElement, options: TextEngineOptions) {
     this.options = options;
+    if (options.field === true) {
+      this.layout = this.appliedLayout = FIELD_LAYOUT;
+      this.spellcheckEnabled = this.appliedSpellcheck = false;
+    }
     this.currentTheme = options.theme ?? getCurrentTheme();
     this.listener = EditorView.updateListener.of((update) => this.handleUpdate(update));
     this.view = new EditorView({
@@ -199,10 +190,14 @@ export class TextEngine {
     this.view.contentDOM.tabIndex = -1;
     this.view.scrollDOM.tabIndex = 0;
     this.view.scrollDOM.setAttribute("role", "document");
-    this.stopSettings = onEvent("setting_changed", (event) => {
-      if (INPUT_KEYS.has(event.key)) void this.loadInputPreferences();
-    });
-    void this.loadInputPreferences();
+    if (options.field === true) {
+      this.stopSettings = () => {};
+    } else {
+      this.stopSettings = onEvent("setting_changed", (event) => {
+        if (INPUT_KEYS.has(event.key)) void this.loadInputPreferences();
+      });
+      void this.loadInputPreferences();
+    }
     this.stopLanguage = onLanguage(() => this.updateAccessibleLabels());
     this.updateAccessibleLabels();
   }
@@ -345,17 +340,12 @@ export class TextEngine {
     const { state } = this.view;
     const main = state.selection.main;
     const line = state.doc.lineAt(main.head);
-    let literal = false;
+    const nodes: string[] = [];
     for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(main.head, -1); node; node = node.parent) {
-      if (LITERAL_NODE.test(node.name)) {
-        literal = true;
-        break;
-      }
+      nodes.push(node.name);
     }
-    // A wikilink still being typed has no syntax node yet.
     const before = state.doc.sliceString(line.from, main.head);
-    if (before.lastIndexOf("[[") > before.lastIndexOf("]]")) literal = true;
-    return { empty: main.empty, lineBefore: before, literal, head: main.head };
+    return { empty: main.empty, lineBefore: before, nodes, head: main.head };
   }
 
   public destroy(): void {
@@ -757,8 +747,6 @@ export class TextEngine {
     ];
   }
 }
-
-const LITERAL_NODE = /code|url|link|math|html|comment|frontmatter/i;
 
 /// Le righe con una selezione non vuota perdono la classe `cm-activeLine`:
 /// la riga attiva è una `lineDecoration` e in paint order copre il rettangolo

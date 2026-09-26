@@ -1,14 +1,11 @@
-//! Adapter workbook dell'host, senza dipendere da Tauri.
+//! Adapter nativo del workbook verso le forme ABI della griglia.
 //!
-//! Il motore della sessione vive nel formato ed è compilabile anche per WASM.
-//! Questo adapter conserva l'API nativa e la derivazione comune `Revision::of`.
-//! La valutazione della vertical slice usa il canale dati del bundle `fub.sheet`.
-//! Le finestre grid sono proiezioni possedute dall'ABI, mentre tutta la mutazione
-//! resta in [`fub_format_sheet::session::SheetSession`].
-
-mod index;
-
-pub(crate) use index::{SheetIndex, SHEET_ID};
+//! Il motore della sessione resta in [`crate::session::SheetSession`], generico
+//! sulla revisione e compilabile anche per WASM. Questo modulo lo lega alla
+//! derivazione comune `Revision::of` e proietta finestre, commit e invalidazioni
+//! nelle forme possedute dall'ABI; tutta la mutazione resta nella sessione.
+//! L'host monta [`SheetGridProvider`] nel bundle `fub.sheet` senza conoscerne i
+//! dettagli.
 
 use std::collections::HashMap;
 
@@ -19,41 +16,30 @@ use fub_abi::grid::{
     GridWindowRequest as AbiGridWindowRequest,
 };
 use fub_abi::{PluginError, Revision};
-use fub_format_sheet::{CellKey, CellStyle, CellValue, SheetId, Workbook};
 
-pub use fub_format_sheet::session::{
-    SheetCellPatch, SheetInvalidation, SheetOperation, SheetSessionError, SheetSourceEdit,
-    SheetWindowCell, SheetWindowRequest, MAX_INVALIDATED_CELLS, MAX_OPERATION_INPUT_BYTES,
-    MAX_OPERATION_PATCHES, MAX_WINDOW_CELLS, MAX_WINDOW_COLUMNS, MAX_WINDOW_RESPONSE_BYTES,
-    MAX_WINDOW_ROWS,
+use crate::session::{
+    SheetCellPatch, SheetInvalidation, SheetOperation, SheetSessionError, SheetWindowRequest,
 };
-pub use fub_format_sheet::WorkbookEvaluation;
+use crate::{CellKey, CellStyle, CellValue, SheetId};
 
-pub type SheetWindow<'a> = fub_format_sheet::session::SheetWindow<'a, Revision>;
-pub type SheetCommit = fub_format_sheet::session::SheetCommit<Revision>;
+pub type SheetWindow<'a> = crate::session::SheetWindow<'a, Revision>;
+pub type SheetCommit = crate::session::SheetCommit<Revision>;
 
 pub const SHEET_GRID_SURFACE: &str = "fub.grid.sheet";
 
-/// Parses, validates and evaluates one authoritative `.fubsheet` source.
-pub fn evaluate(source: &str) -> Result<WorkbookEvaluation, PluginError> {
-    Workbook::parse(source)
-        .and_then(|workbook| workbook.evaluate())
-        .map_err(|error| PluginError::BadArgs(error.to_string().into()))
-}
-
 #[derive(Debug)]
 pub struct SheetSession {
-    inner: fub_format_sheet::session::SheetSession<Revision>,
+    inner: crate::session::SheetSession<Revision>,
 }
 
 impl SheetSession {
     pub fn open(source: &str) -> Result<Self, SheetSessionError> {
         Ok(Self {
-            inner: fub_format_sheet::session::SheetSession::open(source, Revision::of)?,
+            inner: crate::session::SheetSession::open(source, Revision::of)?,
         })
     }
 
-    pub fn sheets(&self) -> &[fub_format_sheet::Sheet] {
+    pub fn sheets(&self) -> &[crate::Sheet] {
         self.inner.sheets()
     }
 
@@ -112,10 +98,7 @@ impl SheetGridProvider {
 
 impl fub_abi::grid::GridProvider for SheetGridProvider {
     fn surfaces(&self) -> Vec<GridSurfaceSpec> {
-        vec![GridSurfaceSpec::new(
-            SHEET_GRID_SURFACE,
-            fub_format_sheet::FORMAT_ID,
-        )]
+        vec![GridSurfaceSpec::new(SHEET_GRID_SURFACE, crate::FORMAT_ID)]
     }
 
     fn open(
@@ -179,8 +162,8 @@ impl fub_abi::grid::GridProvider for SheetGridProvider {
                 .map(|patch| SheetCellPatch {
                     cell: CellKey {
                         sheet: SheetId::from(patch.cell.sheet.clone()),
-                        row: fub_format_sheet::RowId::from(patch.cell.row.clone()),
-                        column: fub_format_sheet::ColumnId::from(patch.cell.column.clone()),
+                        row: crate::RowId::from(patch.cell.row.clone()),
+                        column: crate::ColumnId::from(patch.cell.column.clone()),
                     },
                     before: patch.before.clone(),
                     after: patch.after.clone(),
@@ -353,9 +336,9 @@ fn grid_style(style: &CellStyle) -> GridCellStyle {
         text_color: style.text_color.clone(),
         fill_color: style.fill_color.clone(),
         horizontal: style.horizontal.map(|horizontal| match horizontal {
-            fub_format_sheet::HorizontalAlign::Start => GridHorizontalAlign::Start,
-            fub_format_sheet::HorizontalAlign::Center => GridHorizontalAlign::Center,
-            fub_format_sheet::HorizontalAlign::End => GridHorizontalAlign::End,
+            crate::HorizontalAlign::Start => GridHorizontalAlign::Start,
+            crate::HorizontalAlign::Center => GridHorizontalAlign::Center,
+            crate::HorizontalAlign::End => GridHorizontalAlign::End,
         }),
         number_format: style.number_format.clone(),
     }
@@ -368,13 +351,13 @@ fn grid_value(value: &CellValue) -> GridCellValue {
         CellValue::Text(value) => GridCellValue::Text(value.clone()),
         CellValue::Boolean(value) => GridCellValue::Boolean(*value),
         CellValue::Error(error) => GridCellValue::Error(match error {
-            fub_format_sheet::FormulaErrorCode::Parse => GridFormulaError::Parse,
-            fub_format_sheet::FormulaErrorCode::Ref => GridFormulaError::Ref,
-            fub_format_sheet::FormulaErrorCode::Name => GridFormulaError::Name,
-            fub_format_sheet::FormulaErrorCode::Value => GridFormulaError::Value,
-            fub_format_sheet::FormulaErrorCode::DivZero => GridFormulaError::DivZero,
-            fub_format_sheet::FormulaErrorCode::Num => GridFormulaError::Num,
-            fub_format_sheet::FormulaErrorCode::Cycle => GridFormulaError::Cycle,
+            crate::FormulaErrorCode::Parse => GridFormulaError::Parse,
+            crate::FormulaErrorCode::Ref => GridFormulaError::Ref,
+            crate::FormulaErrorCode::Name => GridFormulaError::Name,
+            crate::FormulaErrorCode::Value => GridFormulaError::Value,
+            crate::FormulaErrorCode::DivZero => GridFormulaError::DivZero,
+            crate::FormulaErrorCode::Num => GridFormulaError::Num,
+            crate::FormulaErrorCode::Cycle => GridFormulaError::Cycle,
         }),
     }
 }
@@ -392,13 +375,6 @@ fn sheet_session_error(error: SheetSessionError) -> PluginError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fub_format_sheet::CellKey;
-
-    #[test]
-    fn malformed_workbooks_are_bad_arguments() {
-        let error = evaluate("{}").unwrap_err();
-        assert!(matches!(error, PluginError::BadArgs(_)));
-    }
 
     #[test]
     fn native_adapter_derives_the_new_revision_after_an_atomic_patch() {

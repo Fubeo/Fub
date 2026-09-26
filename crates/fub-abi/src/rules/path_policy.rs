@@ -382,6 +382,11 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
             if let Some(fault) = unit_windows(the, segment) {
                 return Err(fault);
             }
+            // La stessa fuga col separatore di Windows. Per un nome che nasce
+            // la chiudono i [`RESERVED_CHARS`], nell'ordine dichiarato.
+            if let Some(fault) = windows_separator(segment) {
+                return Err(fault);
+            }
             continue;
         }
         if let Some(ch) = segment.chars().find(|c| c.is_control()) {
@@ -432,6 +437,22 @@ fn ascent(segment: &str) -> Option<NameFault> {
     })
 }
 
+/// Un segmento che contiene il separatore di Windows.
+///
+/// Per Fub il separatore è solo `/`, ma su Windows anche `\` lo è, e
+/// `Path::join` risolve i `..` che ci stanno in mezzo: `..\..\hosts` è un
+/// segmento solo per `split('/')` e tre per il sistema operativo. Un id che
+/// arriva da fuori la barra rovescia l'ha già convertita ([`from_outside`]) e
+/// la scansione la converte a sua volta, quindi un `\` rimasto in un id non
+/// nomina un file del vault: nomina un posto che questa funzione non può
+/// giudicare segmento per segmento.
+fn windows_separator(segment: &str) -> Option<NameFault> {
+    segment.contains('\\').then(|| NameFault::Reserved {
+        segment: segment.to_string(),
+        ch: '\\',
+    })
+}
+
 /// Un primo segmento che comincia con una lettera di unità Windows.
 fn unit_windows(the: usize, segment: &str) -> Option<NameFault> {
     (the == 0 && drive_prefix(segment)).then(|| NameFault::Traversal {
@@ -470,6 +491,9 @@ pub fn fenced(path: &str) -> Result<(), NameFault> {
     }
     for (the, segment) in path.split('/').enumerate() {
         if let Some(fault) = ascent(segment) {
+            return Err(fault);
+        }
+        if let Some(fault) = windows_separator(segment) {
             return Err(fault);
         }
         if let Some(fault) = unit_windows(the, segment) {
@@ -618,6 +642,30 @@ mod tests {
         for within in ["note/C:/dentro.md", "CC:/dentro.md", "domande: e r.md"] {
             assert_eq!(faults(within, Naming::Existing), None, "`{within}` esiste");
         }
+    }
+
+    #[test]
+    fn a_windows_separator_never_crosses_the_fence() {
+        // Su Windows `\` è un separatore e `Path::join` ne risolve i `..`: un
+        // id che la contiene è una fuga anche quando `split('/')` vede un
+        // segmento solo.
+        for escape in [
+            "..\\..\\Windows\\System32\\drivers\\etc\\hosts",
+            "note\\..\\..\\fuori.md",
+            "\\\\server\\share\\x.md",
+            "a/b\\c.md",
+        ] {
+            assert_eq!(fenced(escape).err().map(|f| f.tag()), Some("reserved"));
+            assert_eq!(faults(escape, Naming::Existing), Some("reserved"));
+            assert!(check(escape, Naming::New).is_err());
+        }
+        // Chi arriva da fuori la converte prima, e allora vale il recinto dei `..`.
+        let from_plugin = DocId::new("..\\..\\fuori.md");
+        assert!(fenced_doc_id(&from_plugin).is_err());
+        assert_eq!(
+            fenced_doc_id(&DocId::new("note\\a.md")).unwrap().as_str(),
+            "note/a.md"
+        );
     }
 
     #[test]

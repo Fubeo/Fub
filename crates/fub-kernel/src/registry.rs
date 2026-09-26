@@ -190,6 +190,28 @@ impl FormatRegistry {
         Some(&self.providers[at].capabilities)
     }
 
+    /// Le capacità congelate di un formato, cercato per id invece che per
+    /// estensione: serve a chi segue una
+    /// [`EMBEDDED_GRAMMAR`](fub_abi::options::source::EMBEDDED_GRAMMAR).
+    pub(crate) fn capabilities_for_format(&self, id: &str) -> Option<&FormatCapabilities> {
+        self.providers
+            .iter()
+            .find(|registered| registered.descriptor.id == id)
+            .map(|registered| &registered.capabilities)
+    }
+
+    /// Le estensioni dei formati che dichiarano un sorgente di prosa: fra
+    /// omonimi di formati diversi, un nome scritto senza estensione nomina
+    /// prima loro ([`ProseFormats`](crate::graph::ProseFormats)).
+    pub(crate) fn prose_formats(&self) -> crate::graph::ProseFormats {
+        crate::graph::ProseFormats::new(self.by_ext.iter().filter_map(|(ext, &at)| {
+            self.providers[at]
+                .capabilities
+                .supports(fub_abi::options::source::PROSE)
+                .then_some(ext.as_str())
+        }))
+    }
+
     /// Tutte le estensioni conosciute, per la scansione del vault.
     pub fn all_extensions(&self) -> Vec<String> {
         self.by_ext.keys().cloned().collect()

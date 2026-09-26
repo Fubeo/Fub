@@ -26,7 +26,7 @@
 
 use fub_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    Failure, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
+    CommandSurface, Failure, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
 };
 use fub_abi::custom::{SyntaxForm, SyntaxTrigger};
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
@@ -59,6 +59,7 @@ use fub_abi::traits::{
     NeighborRef, Page, Paged, PropertyEntry, PropertySelect, ResolvedRef, TagCount, VaultEntry,
     VaultFolder, VaultStatus, ViewInstance, ViewSpec, ViewSurface,
 };
+use fub_abi::transfer::{ArtifactContent, ExportArtifact, ExportReport, TransferNote};
 use fub_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
     UiNode, UiOption, UiValue, ViewUpdate,
@@ -543,6 +544,8 @@ fn command_spec_samples() -> Vec<Value> {
         CommandSpec::new("test.every", "Tutte le specie")
             .describing("Un comando con un parametro per specie.")
             .with_keybinding("Mod-k")
+            .offered_in(CommandSurface::Slash)
+            .offered_in(CommandSurface::SlashSelection)
             .with_scope(CommandScope::writing(CommandReach::Documents).irreversible()),
         |spec, (the, kind)| {
             spec.with_param(ParamSpec::new(format!("p{the}"), "P", kind).describing("un parametro"))
@@ -1460,6 +1463,23 @@ fn expected() -> Value {
                 progress: None,
             }),
         ],
+        // L'esito di un export come arriva dentro il `result.Ok` del job: un
+        // artefatto coi byte e uno già versato, la cui ricevuta è un u64 e quindi
+        // una stringa sul confine; una nota con la voce e una senza.
+        "ExportReport": [to_value(ExportReport {
+            artifacts: vec![
+                ExportArtifact::bytes("Diario/2026.csv", "text/csv", vec![65, 66]),
+                ExportArtifact {
+                    path: "vault.zip".into(),
+                    media_type: "application/zip".into(),
+                    content: ArtifactContent::Delivered(u64::MAX),
+                },
+            ],
+            log: vec![
+                TransferNote::warning("allegato mancante").about("Diario/2026.md"),
+                TransferNote::info("2 documenti esportati"),
+            ],
+        })],
         "UiAction": ui_action_samples(),
         "ViewSpec": [
             to_value(

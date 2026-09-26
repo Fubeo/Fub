@@ -575,7 +575,11 @@ function renderCodeNode(node: SyntaxNode, aux: RenderAux): string {
     return `<div class="math-block" data-tex="${escapeHtml(code)}"${mdAttrs(node.from, node.to)}>${escapeHtml(code)}</div>`;
   }
   const classAttr = lang === "" ? "" : ` class="language-${escapeHtml(lang)}"`;
-  return `<pre${mdAttrs(node.from, node.to)}><code${classAttr}>${escapeHtml(code)}</code></pre>`;
+  // Un recinto dichiarato dal vault (mermaid, …) lo porta scritto: chi lo
+  // idrata guarda questo, non la sola classe, e un recinto che il vault non
+  // dichiara resta codice.
+  const declaredAttr = langLower !== "" && aux.declared.has(langLower) ? " data-declared-fence" : "";
+  return `<pre${mdAttrs(node.from, node.to)}${declaredAttr}><code${classAttr}>${escapeHtml(code)}</code></pre>`;
 }
 
 function renderTableNode(node: SyntaxNode, aux: RenderAux): string {

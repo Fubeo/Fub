@@ -11,6 +11,7 @@
 //! se si confondessero, o un guasto sparirebbe nel silenzio (pavimento rotto),
 //! o il centro notifiche si riempirebbe di diagnosi per chi sviluppa (porta
 //! spalancata). Il primo test guasta l'uno e l'altro separatamente e guarda che
+//! l'altro stia fermo.
 
 use camino::Utf8PathBuf;
 use fub_abi::event::Event;

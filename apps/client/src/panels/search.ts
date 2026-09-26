@@ -6,7 +6,7 @@ import { rowsToShow } from "../rules/results";
 import { $ } from "../ui/dom";
 import { setTooltip } from "../ui/tooltip";
 import { refreshOn, registerPanel, unregisterPanel } from "../ui/panel-host";
-import { openDocument, revealByteOffset } from "./document";
+import { openDocument, reveal } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -17,6 +17,7 @@ import { notify } from "../ui/notify";
 import { Race } from "../ui/race";
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
+import { ClipboardUnavailable, writeClipboardText } from "../platform/clipboard";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -282,12 +283,11 @@ function showSearchResults(
   copy.className = "search-action";
   copy.textContent = t("search.copy_visible");
   copy.addEventListener("click", () => {
-    if (!navigator.clipboard) {
-      notify(t("search.clipboard_unavailable"), "guasto");
-      return;
-    }
-    void navigator.clipboard.writeText(shownHits.map((hit) => hit.doc).join("\n"))
-      .catch((err: unknown) => notify(errorText(err), "guasto"));
+    void writeClipboardText(shownHits.map((hit) => hit.doc).join("\n"))
+      .catch((err: unknown) => notify(
+        err instanceof ClipboardUnavailable ? t("search.clipboard_unavailable") : errorText(err),
+        "guasto",
+      ));
   });
   if (hits.length > 0) tools.append(copy);
   // Gli operatori della barra, detti a parole: la sintassi c'è ed è ricca, ma
@@ -501,7 +501,7 @@ function createRow(name: string): HTMLElement {
 /// porta il cursore.
 ///
 /// L'offset è in **byte UTF-8** — la valuta di ogni span del modello — e la
-/// conversione a posizione dell'editor la fa `revealByteOffset`, la stessa che
+/// conversione a posizione della vista la fa `reveal`, la stessa che
 /// usano l'outline e `ViewUpdate::Reveal`: la ricerca era l'unico cliente
 /// naturale di quel giro e non aveva le coordinate da passargli.
 ///
@@ -515,7 +515,7 @@ function openAt(el: HTMLElement, doc: string, byteOffset?: number): void {
     // prodotto un'apertura, cioè una ricerca **conclusa** (0086).
     rememberSearch(searchInputEl.value);
     void openDocument(doc).then(() => {
-      if (byteOffset !== undefined) revealByteOffset(byteOffset);
+      if (byteOffset !== undefined) return reveal(doc, { span: { start: byteOffset, end: byteOffset } });
     });
   });
 }

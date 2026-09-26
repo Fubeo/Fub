@@ -41,32 +41,53 @@
         <!-- #titlebar-center: il trigger di ricerca + il percorso del vault. -->
         <div id="titlebar-center" class="titlebar-center" data-tauri-drag-region="deep">
           <!-- Il trigger fa focus su #search-input — la ricerca onesta, già
-               lì — e il title dice che la palette è Mod-Shift-P. -->
+               lì. L'accordo sta dentro il bottone, scritto come si preme. -->
           <button
             id="command-search"
             type="button"
-            data-i18n="command-search.placeholder"
             data-i18n-title="command-search.hint"
             data-i18n-label="command-search.placeholder"
             aria-label="Cerca nel vault…"
             class="titlebar-btn titlebar-btn--wide"
           >
-            Cerca nel vault…
+            <span class="titlebar-btn-text" data-i18n="command-search.placeholder">Cerca nel vault…</span>
+            <kbd id="command-search-key" class="titlebar-shortcut" aria-hidden="true"></kbd>
           </button>
-            <kbd id="command-search-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-F</kbd>
           <span id="vault-path" class="muted" data-tauri-drag-region="deep"></span>
         </div>
-        <!-- #titlebar-right: palette, impostazioni e controlli finestra. -->
+        <!-- #titlebar-right: avvisi, attività, palette e impostazioni, come
+             in `index.html`. Mobile non ha controlli finestra: la piattaforma
+             non ne ha (`nativeWindowControls`). I quattro bottoni nascono
+             vuoti: icona, conteggio e nome li scrive chi conosce lo stato
+             (`ui/notify.ts`, `panels/activity.ts`, `ui/titlebar.ts`). -->
         <div id="titlebar-right" class="titlebar-side">
+          <button
+            id="notify-button"
+            type="button"
+            class="titlebar-btn titlebar-btn--icon"
+            data-i18n-label="notices.title"
+            aria-label="Avvisi"
+            aria-expanded="false"
+            aria-controls="notify-panel"
+            data-i18n-title="notices.hint"
+          ></button>
+          <button
+            id="activity-button"
+            type="button"
+            class="titlebar-btn titlebar-btn--icon"
+            data-i18n-label="activity.title"
+            aria-label="Attività"
+            aria-expanded="false"
+            aria-controls="activity-panel"
+            data-i18n-title="activity.hint"
+          ></button>
           <button
             id="open-palette"
             type="button"
-            data-i18n-title="commands.palette"
             data-i18n-label="commands.palette"
             class="titlebar-btn titlebar-btn--icon"
             aria-label="Apri la palette dei comandi"
           ></button>
-            <kbd id="open-palette-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-P</kbd>
           <button
             id="open-settings"
             type="button"
@@ -75,11 +96,6 @@
             class="titlebar-btn titlebar-btn--icon"
             aria-label="Impostazioni"
           ></button>
-          <span id="window-controls" class="window-controls" role="group" data-i18n-label="region.window_controls" aria-label="Controlli finestra">
-            <button id="win-min" type="button" class="win-ctrl" data-i18n-label="window.min" aria-label="Minimizza"></button>
-            <button id="win-max" type="button" class="win-ctrl" data-i18n-label="window.max" aria-label="Ingrandisci"></button>
-            <button id="win-close" type="button" class="win-ctrl win-ctrl--close" data-i18n-label="window.close" aria-label="Chiudi"></button>
-          </span>
         </div>
       </header>
       <main id="workspace">
@@ -237,69 +253,30 @@
         ></section>
         </div>
       </main>
-      <!-- Era un `<footer>`, ed erano due: questo e `#statusbar`. Un documento
-           con due `contentinfo` è un documento in cui chi naviga per punti di
-           riferimento ne trova due chiamati uguale e deve aprirli entrambi per
-           sapere quale sia quello che cerca. Quello **della shell** resta il
-           `<footer>`; questo, che è la superficie delle view dichiarate, è una
-           regione col suo nome. -->
-      <div
-        id="views-status"
-        class="views-status"
-        role="region"
-        data-i18n-label="region.status"
-        aria-label="Stato dei componenti"
-        hidden
-      ></div>
-      <!-- La barra di stato della shell (§10.3), che è un'altra cosa da
-           `#views-status`: quella la riempiono le view dichiarate, questa è
-           **della shell** e c'è sempre. Ci stanno le due cose che l'utente deve
-           poter guardare in qualunque momento senza che nulla lo interrompa:
-           cosa sta girando, e cosa gli è stato detto. -->
-      <footer id="statusbar" class="statusbar" data-i18n-label="region.statusbar" aria-label="Barra di stato">
-        <!-- Lo stato del salvataggio del documento che si sta guardando
-             (§20.4). Senza `data-i18n`, per la ragione dei due pulsanti qui
-             sotto: il testo lo scrive chi conosce lo stato — `panels/document.ts`
-             — e un secondo proprietario lo cancellerebbe al primo cambio di
-             lingua. `role="status"`: cambia da sé mentre si scrive, e chi legge
-             con uno screen reader deve poterlo sapere senza che gli si tolga la
-             parola di bocca. -->
+      <!-- Lo stato del documento a fuoco: il salvataggio (§20.4) e le view
+           dichiarate sulla superficie di stato (§2.2). Non c'è più una barra
+           in fondo alla finestra: `panels/document.ts` porta questo gruppo
+           nella toolbar del riquadro col fuoco, e qui resta solo finché non
+           c'è un riquadro. -->
+      <div id="pane-status" class="pane-status" hidden>
+        <!-- Senza `data-i18n`: il testo lo scrive chi conosce lo stato —
+             `panels/document.ts` — e un secondo proprietario lo cancellerebbe
+             al primo cambio di lingua. `role="status"`: cambia da sé mentre si
+             scrive. -->
         <span id="save-state" class="save-state" role="status"></span>
-        <!-- «Sto aspettando il tasto successivo» (§18.2). Vive due secondi ed è
-             la differenza fra una sequenza e una tastiera che ogni tanto non
-             risponde: chi ha premuto `Mod-k` deve poter vedere che l'app ha
-             capito. `role="status"` per la ragione di `#save-state`: cambia da
-             sé, e chi legge con uno screen reader deve saperlo senza che gli si
-             tolga la parola di bocca. Lo riempie `ui/keyboard.ts`, che è
-             l'unico a sapere quando l'attesa è aperta. -->
-        <span id="key-pending" class="key-pending" role="status" hidden></span>
-        <span id="statusbar-fill"></span>
-        <!-- Il **testo** di questi due pulsanti non porta un `data-i18n`, e non
-             è una dimenticanza: ci sta un conteggio («Attività 3»), quindi lo
-             scrive chi conosce il numero — `panels/activity.ts` e
-             `ui/notify.ts`, che si iscrivono a `onLanguage` e si rifanno da sé.
-             Due proprietari per la stessa parola vorrebbero dire che l'ultimo
-             a girare cancella il conteggio dell'altro. Il `title`, che di
-             numeri non ne ha, resta qui. -->
-        <button
-          id="activity-button"
-          type="button"
-          aria-expanded="false"
-          aria-controls="activity-panel"
-          data-i18n-title="activity.hint"
-        >
-          Attività
-        </button>
-        <button
-          id="notify-button"
-          type="button"
-          aria-expanded="false"
-          aria-controls="notify-panel"
-          data-i18n-title="notices.hint"
-        >
-          Avvisi
-        </button>
-      </footer>
+        <div
+          id="views-status"
+          class="views-status"
+          role="region"
+          data-i18n-label="region.status"
+          aria-label="Stato dei componenti"
+          hidden
+        ></div>
+      </div>
+      <!-- «Sto aspettando il tasto successivo» (§18.2). Vive due secondi e
+           galleggia in basso al centro: chi ha premuto `Mod-k` deve poter
+           vedere che l'app ha capito. Lo riempie `ui/keyboard.ts`. -->
+      <span id="key-pending" class="key-pending" role="status" hidden></span>
       <div
         id="activity-panel"
         class="dock-panel dock-panel--activity"

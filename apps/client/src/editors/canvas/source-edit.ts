@@ -75,6 +75,23 @@ function scanJson(source: string): JsonSpan {
   return root;
 }
 
+/**
+ * The index of the node whose JSON object holds `offset` (a UTF-16 index into
+ * `source`), or `null` when the offset falls outside every node. Nodes keep
+ * their array order in the model, so the index is the model's too.
+ */
+export function canvasNodeAt(source: string, offset: number): number | null {
+  let root: JsonSpan;
+  try {
+    root = scanJson(source);
+  } catch {
+    return null;
+  }
+  const nodes = root.fields?.find((field) => field.key === "nodes")?.value;
+  const index = nodes?.items?.findIndex((item) => item.start <= offset && offset < item.end) ?? -1;
+  return index < 0 ? null : index;
+}
+
 function same(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (Array.isArray(left) && Array.isArray(right)) {

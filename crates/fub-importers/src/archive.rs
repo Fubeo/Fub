@@ -166,14 +166,19 @@ impl ArchiveImport {
                 );
                 continue;
             }
-            let bytes = match zip::extract(archive.data(), entry, &mut total) {
+            let bytes = match zip::extract_entry(archive.data(), entry, &mut total) {
                 Ok(b) => b,
-                Err(e) if is_cancelled(&e) => return Err(e),
-                Err(e) => {
-                    // Bomb / truncation / CRC: per-entry failure keeps the
-                    // rest; a bomb aborts the whole import instead.
+                Err(failure) => {
+                    // Truncation / CRC: per-entry failure keeps the rest; a
+                    // bomb or the budget aborts the whole import instead.
+                    let (e, abort) = match failure {
+                        zip::EntryFailure::Entry(e) => (e, false),
+                        zip::EntryFailure::Archive(e) => (e, true),
+                    };
+                    if is_cancelled(&e) {
+                        return Err(e);
+                    }
                     let msg = e.to_string();
-                    let abort = msg.contains("bomb") || msg.contains("budget");
                     report.documents.push(fub_abi::transfer::ImportedDocument {
                         doc: request.destination("unreadable-entry.md"),
                         outcome: ImportOutcome::Failed(msg.clone()),
@@ -903,6 +908,27 @@ mod tests {
         );
         assert!(host.list_documents(None).unwrap().items.is_empty());
     }
+    // A corrupt entry is skipped whatever its name: the importer decides on
+    // the failure kind, not on words like "budget" in the message (I73).
+    #[test]
+    fn a_corrupt_entry_named_budget_is_skipped_not_an_abort() {
+        let mut zip = stored_zip("budget.md", b"# Budget\n");
+        let body = 30 + "budget.md".len();
+        zip[body] ^= 0xff;
+        let source = ImportSource::from_bytes("bundle.zip", zip);
+        let mut host = MemoryHost::new();
+        let report = ArchiveImport
+            .import(&source, &ImportRequest::apply(), &mut host)
+            .expect("a CRC failure is one bad entry");
+        assert_eq!(report.documents.len(), 1);
+        assert!(
+            matches!(&report.documents[0].outcome, ImportOutcome::Failed(msg) if msg.contains("CRC")),
+            "{:?}",
+            report.documents[0].outcome
+        );
+        assert!(host.list_documents(None).unwrap().items.is_empty());
+    }
+
     #[test]
     fn bear_backup_imports_plaintext_notes_but_refuses_sqlite_only() {
         let json = include_str!("../../../tests/fixtures/imports/bear.json");

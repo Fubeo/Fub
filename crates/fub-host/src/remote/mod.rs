@@ -26,6 +26,30 @@ pub mod bundle;
 pub mod commands;
 pub mod sync;
 pub mod views;
+/// Il manifest di un bundle di core che parla con i servizi Fub: i permessi
+/// di [`PluginPermissions::core`](fub_abi::PluginPermissions::core) più
+/// `fub:network`, che `core()` non dà a nessuno e che sync e pubblicazione
+/// senza di lui si vedevano negare dalla Guard a ogni richiesta.
+///
+/// Senza elenco di host, cioè *qualunque host*: l'endpoint non è scritto nel
+/// bundle ma lo sceglie chi usa la macchina (`FUB_SERVICES_URL`, o le
+/// impostazioni della macchina `sync.server_url` e `publish.server_url`, che un
+/// vault non può scrivere), e può cambiare mentre il vault è aperto, mentre il
+/// manifest si legge al montaggio. Il recinto sta nel codice, che si connette
+/// soltanto all'endpoint validato da [`validate_base_url`], e nella Guard, che
+/// ripete la regola sullo schema (HTTPS, o HTTP verso il loopback esplicito).
+/// Chi non vuole che parlino con la rete spegne l'interruttore del permesso
+/// ([`permission_key`](fub_abi::settings::permission_key)), come per ogni
+/// altro plugin.
+pub(crate) fn networked_manifest(id: &str, name: &str) -> fub_abi::PluginManifest {
+    let mut manifest = fub_abi::PluginManifest::core(id, name);
+    manifest
+        .permissions
+        .granted
+        .set(fub_abi::options::permission::NETWORK, true);
+    manifest
+}
+
 /// Versione wire attesa dal server (`GET /v1/hello`).
 pub const SYNC_PROTOCOL: &str = "fub-sync/1";
 
@@ -267,11 +291,6 @@ pub fn store_endpoint_binding(state_dir: &std::path::Path, base: &str) -> Result
     atomic_state_write(state_dir, "endpoint-binding", current.as_bytes()).map_err(|e| e.to_string())
 }
 
-/// Stato dell'istanza, senza ricostruire implicitamente la configurazione.
-pub fn scoped_state_dir(root: &camino::Utf8Path) -> std::path::PathBuf {
-    root.join("sync").into_std_path_buf()
-}
-
 /// Scrittura autorevole: file temporaneo univoco, fsync prima e dopo rename.
 pub fn atomic_state_write(
     root: &std::path::Path,
@@ -398,35 +417,105 @@ pub fn resolve_endpoint(
     resolve_base(&setting).map_err(|e| e.to_plugin_error())
 }
 
-/// Token bearer: file indicato da `FUB_SERVICES_TOKEN_FILE`, altrimenti env
-/// `FUB_SERVICES_TOKEN`. Mai argv/log/history (F36, P16.4).
-pub fn load_token() -> Option<String> {
-    if let Ok(path) = std::env::var("FUB_SERVICES_TOKEN_FILE") {
-        if !path.trim().is_empty() {
-            if let Ok(raw) = std::fs::read_to_string(path.trim()) {
-                let token = raw.trim().to_string();
-                if !token.is_empty() {
-                    return Some(token);
+/// Il file in cui `fub-cli login` salva il token dei servizi, nella cartella
+/// di configurazione della macchina.
+pub const TOKEN_FILE: &str = "services-token";
+
+/// Il tetto di un file di segreto: un token è una riga, non un documento.
+const MAX_SECRET_FILE: u64 = 4_096;
+
+/// Da dove si legge il token bearer dei servizi. In ordine: il file indicato
+/// da `FUB_SERVICES_TOKEN_FILE`, la variabile `FUB_SERVICES_TOKEN`, e il file
+/// che `fub-cli login` ha salvato nella configurazione della macchina
+/// ([`TOKEN_FILE`]). Mai argv, log o history (F36, P16.4).
+///
+/// Il terzo è ciò che rende sync e pubblicazione usabili dall'app, che non ha
+/// un ambiente da cui ricevere segreti: con le sole variabili il token c'era
+/// per la CLI e mancava sempre al desktop. Si legge soltanto se è un file
+/// regolare, non un collegamento, e su Unix leggibile dal solo proprietario,
+/// cioè come `login` lo scrive; altrimenti resta fuori, e lo dice il log.
+#[derive(Clone, Debug, Default)]
+pub struct TokenSource {
+    machine_file: Option<std::path::PathBuf>,
+}
+
+impl TokenSource {
+    /// Soltanto l'ambiente: un host senza cartella di configurazione.
+    pub fn environment() -> Self {
+        Self::default()
+    }
+
+    /// L'ambiente, poi il token salvato nella configurazione della macchina.
+    pub fn machine(config_root: Option<&camino::Utf8Path>) -> Self {
+        Self {
+            machine_file: config_root.map(|root| root.join(TOKEN_FILE).into_std_path_buf()),
+        }
+    }
+
+    /// Il token, se una delle tre fonti ne ha uno.
+    pub fn load(&self) -> Option<String> {
+        if let Ok(path) = std::env::var("FUB_SERVICES_TOKEN_FILE") {
+            if !path.trim().is_empty() {
+                if let Ok(raw) = std::fs::read_to_string(path.trim()) {
+                    let token = raw.trim().to_string();
+                    if !token.is_empty() {
+                        return Some(token);
+                    }
                 }
             }
         }
+        let from_env = std::env::var("FUB_SERVICES_TOKEN")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        from_env.or_else(|| self.machine_file.as_deref().and_then(owner_only_secret))
     }
-    std::env::var("FUB_SERVICES_TOKEN")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
 }
 
-/// Radice di stato sync/provisioning dell'ISTANZA (Main): deriva SEMPRE da
-/// `Host::configuration_root()` del chiamante, mai da `config_dir()`
-/// ricalcolata globalmente. `None` (istanza senza radice: env senza `HOME`)
-/// = `MissingConfiguration` esplicito, MAI cwd inventata. Sottocartella
-/// `sync/` sotto la radice: outbox, cursori, pairing, epoch, binding.
-pub fn instance_state_dir(host: &crate::session::Host) -> Result<std::path::PathBuf, RemoteError> {
-    match host.configuration_root() {
-        Some(root) => Ok(scoped_state_dir(root)),
-        None => Err(RemoteError::MissingConfiguration),
+/// Il contenuto di un file di segreto scritto come lo scrive `login`: regolare,
+/// non un collegamento, piccolo e, su Unix, del solo proprietario.
+fn owner_only_secret(path: &std::path::Path) -> Option<String> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if !meta.is_file() || meta.len() > MAX_SECRET_FILE {
+        tracing::warn!(target: "fub.host", "token dei servizi ignorato: non è un file regolare");
+        return None;
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if meta.permissions().mode() & 0o077 != 0 {
+            tracing::warn!(
+                target: "fub.host",
+                "token dei servizi ignorato: leggibile da altri oltre al proprietario"
+            );
+            return None;
+        }
+    }
+    let token = std::fs::read_to_string(path).ok()?.trim().to_string();
+    (!token.is_empty()).then_some(token)
+}
+
+/// Lo stato di sync di **un** vault su questa macchina:
+/// `<config>/sync/vaults/<chiave>/`, dove la chiave viene dallo SHA-256 della
+/// radice canonica del vault. Abbinamento, replica, outbox, cursore, conflitti
+/// e binding dell'endpoint sono del vault e non della macchina: con una
+/// cartella sola due vault condividevano identità remota e coda (I51).
+///
+/// Per percorso e non per un identificativo scritto dentro il vault, apposta:
+/// una copia della cartella si porterebbe dietro l'identità, e due repliche
+/// con lo stesso `replica-id` scriverebbero contatori che si contraddicono.
+/// Un vault spostato riparte come replica nuova, da abbinare di nuovo; lo
+/// stato del percorso vecchio resta dov'era e nessuno lo cancella.
+pub fn vault_state_dir(
+    config_root: &camino::Utf8Path,
+    vault_root: &camino::Utf8Path,
+) -> camino::Utf8PathBuf {
+    let digest = ring::digest::digest(&ring::digest::SHA256, vault_root.as_str().as_bytes());
+    let key: String = digest.as_ref()[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    config_root.join("sync").join("vaults").join(key)
 }
 
 /// Log strutturato allowlist (Main): niente testo libero con segreti.
@@ -1141,5 +1230,52 @@ mod state_write_tests {
         assert_eq!(std::fs::read(dir.path().join("cursor")).unwrap(), b"2");
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
         super::sync_dir(dir.path()).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod machine_state_tests {
+    use camino::Utf8Path;
+
+    /// Il token salvato da `login` vale solo com'è scritto da `login`: un
+    /// file del solo proprietario, non un collegamento.
+    #[cfg(unix)]
+    #[test]
+    fn the_saved_token_is_read_only_when_it_is_the_owners_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(super::TOKEN_FILE);
+        std::fs::write(&path, "segreto\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(super::owner_only_secret(&path).as_deref(), Some("segreto"));
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        assert_eq!(
+            super::owner_only_secret(&path),
+            None,
+            "readable by the group"
+        );
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+        assert_eq!(super::owner_only_secret(&link), None, "a symlink");
+        assert_eq!(super::owner_only_secret(dir.path()), None, "a directory");
+    }
+
+    /// Ogni vault ha la sua cartella di stato, sempre la stessa per lo stesso
+    /// percorso, dentro la configurazione della macchina.
+    #[test]
+    fn every_vault_has_its_own_stable_sync_state() {
+        let config = Utf8Path::new("/config");
+        let a = super::vault_state_dir(config, Utf8Path::new("/vaults/a"));
+        let b = super::vault_state_dir(config, Utf8Path::new("/vaults/b"));
+        assert_ne!(a, b);
+        assert_eq!(
+            a,
+            super::vault_state_dir(config, Utf8Path::new("/vaults/a"))
+        );
+        assert!(a.starts_with("/config/sync/vaults"), "{a}");
+        assert_eq!(a.file_name().map(str::len), Some(32), "{a}");
     }
 }

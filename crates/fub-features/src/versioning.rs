@@ -1090,7 +1090,7 @@ fn write_index(docs: impl Serialize, host: &mut dyn HostApi) -> Result<(), Plugi
     host.data_write(INDEX_FILE, &raw)
 }
 
-/// Applica le fasce di ritenzione (D6) all'elenco **del plan** e
+/// Applica le fasce di ritenzione (D6) all'elenco **del piano** e
 /// **restituisce i contenuti che avanzano**, senza cancellarne nessuno.
 ///
 /// Non cancella perché non può saperlo: finché l'indice potato non è sul disco,

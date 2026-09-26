@@ -43,14 +43,17 @@ fn the_two_ends_is_agree_on_the_namespace() {
     );
 }
 
-/// L'id della view che il provider dichiara è quello che il comando apre.
+/// L'id della view non attraversa il confine: la apre il comando del
+/// provider (`GRAPH_OPEN`, con l'effetto `OpenView`), e la shell la trova fra le
+/// view principali dichiarate come ogni altra. Un letterale di là sarebbe il
+/// posto riservato che il grafo non ha più.
 #[test]
-fn the_two_ends_is_agree_on_the_id_of_the_view() {
+fn the_shell_does_not_name_the_view() {
     let shell = metadata_shell();
     assert!(
-        shell.contains(&format!("\"{GRAPH_VIEW}\"")),
-        "la shell apre una tab su una view che non è «{GRAPH_VIEW}»: il riquadro \
-         resterebbe vuoto"
+        !shell.contains(&format!("\"{GRAPH_VIEW}\"")),
+        "la shell nomina la view «{GRAPH_VIEW}»: aprirla è del comando del \
+         componente, non di un bottone cablato"
     );
 }
 
@@ -81,13 +84,30 @@ fn metadata_provider() -> String {
 /// L'azione del click e la chiave del suo payload sono le due stringhe più
 /// sensibili del contratto: un click che non apre la nota giusta è un fallimento
 /// silenzioso. Sono letterali **quotati** da entrambi i lati — la shell ha
-/// `const APRI = "open"` e `const DOC = "doc"`, il provider ha le gemelle —
+/// `const OPEN = "open"` e `const DOC = "doc"`, il provider ha le gemelle —
 /// quindi il presidio è lo stesso del `ns`: il letterale fra virgolette dritte.
+///
+/// Lo stesso vale per la barra dei controlli, che il renderer disegna sopra il
+/// canvas: vista locale, profondità, verso, gruppi, filtri e rilettura sono
+/// azioni del provider, e i loro nomi e le chiavi dei loro payload sono
+/// protocollo fra le due metà quanto `open`.
 #[test]
 fn the_keys_of_the_action_is_agree_between_the_two_ends() {
     let shell = metadata_shell();
     let provider = metadata_provider();
-    for letterale in ["open", "doc"] {
+    for letterale in [
+        "open",
+        "doc",
+        "seed",
+        "depth",
+        "direction",
+        "group_by",
+        "filter",
+        "key",
+        "show_orphans",
+        "show_attachments",
+        "refresh",
+    ] {
         let quoted = format!("\"{letterale}\"");
         assert!(
             shell.contains(&quoted),

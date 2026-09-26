@@ -6,7 +6,8 @@
 // mostra il report (doc mancanti, view non dichiarate, history potata).
 // Chiude in sé: `currentWorkspaceId` è l’ultimo applicato in questa
 // sessione, non una verità persistita.
-import { confirmInShell, promptText } from "../ui/dialogs";
+import { confirm } from "../host/dialog";
+import { promptText } from "../ui/dialogs";
 import { layout } from "./layout";
 import { state } from "./store";
 import {
@@ -14,6 +15,7 @@ import {
   workspaceLoadSnapshot,
   deleteWorkspace,
   loadWorkspaces,
+  renameInWorkspaces,
   renameWorkspace,
   saveWorkspace,
   type WorkspaceEntry,
@@ -23,12 +25,17 @@ import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
 import { showContextMenu } from "../ui/menu";
 import { on } from "./store";
+import { onEvent } from "./kernel";
 import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
+import { refreshOn, registerPanel, unregisterPanel, type Panel } from "../ui/panel-host";
 import { primaryView } from "../ui/views";
 import { captureShellGeometry } from "./shell-geometry";
 
 let currentId: string | null = null;
 let lastLoadedId: string | null = null;
+
+/// L'id del pannello nel registro (`ui/panel-host.ts`).
+const PANEL_ID = "shell:workspaces";
 
 export function currentWorkspaceId(): string | null {
   return currentId;
@@ -129,9 +136,8 @@ export async function refreshWorkspacesPanel(): Promise<void> {
           else notify(t("workspaces.rename_failed"), "guasto");
         } },
         { separator: true, label: t("workspaces.delete"), danger: true, run: async () => {
-          const ok = await confirmInShell({
+          const ok = await confirm(t("workspaces.delete_confirm", { name: w.name }), {
             title: t("workspaces.delete"),
-            message: t("workspaces.delete_confirm", { name: w.name }),
             okLabel: t("workspaces.delete"),
             danger: true,
           });
@@ -193,16 +199,44 @@ export async function previewWorkspaceReport(id: string): Promise<string> {
   return parts.join(" · ");
 }
 
+/// Mostra o nasconde il pannello (`shell.workspace.toggle`). Si vede quando il
+/// suo elemento non è nascosto: nessun flag accanto al DOM che possa divergere.
+export function toggleWorkspacesPanel(): void {
+  const el = ensurePanel();
+  el.hidden = !el.hidden;
+  if (!el.hidden) void refreshWorkspacesPanel();
+}
+
+/// Monta il pannello dei workspace **nel registro dei pannelli**. I workspace
+/// vivono nella macchina e non nel vault, e il pannello ne mostra nomi e
+/// conteggi: nessun evento del kernel lo fa invecchiare, la maschera è vuota, e
+/// l'host lo ridisegna soltanto quando riconcilia tutto (una coda troncata) e
+/// soltanto se si vede. Il vault che cambia resta un segnale della shell,
+/// perché azzera il workspace corrente. Una rinomina invece cambia i dati
+/// salvati, non il disegno: gli id migrano in `renameInWorkspaces`.
 export function mountWorkspacesPanel(parent: Lifetime): Teardown {
   const life = openLifetime();
+  const registration: Panel = {
+    id: PANEL_ID,
+    title: "Workspace",
+    placement: "left_sidebar",
+    refresh: refreshOn(),
+    visible: () => panel()?.hidden === false,
+    render: () => refreshWorkspacesPanel(),
+  };
+  registerPanel(registration);
   const dispose = () => {
     if (life.closed) return;
     life.close();
+    unregisterPanel(PANEL_ID);
     panel()?.remove();
     currentId = null;
     lastLoadedId = null;
   };
   parent.add(dispose);
+  life.add(onEvent("document_renamed", (e) => {
+    renameInWorkspaces(e.from, e.to);
+  }));
   life.add(on("vault", () => {
     currentId = null;
     void loadWorkspaces().then(() => { if (!life.closed) void refreshWorkspacesPanel(); });

@@ -240,6 +240,78 @@ fn escape_and_unicode_before_and_inside_target_rewrite_exact_bytes() {
     );
 }
 
+/// I99: una coppia di surrogati (`\ud83d\ude00`, cioè 😀) è il modo in cui
+/// quasi ogni serializzatore JSON scrive un carattere fuori dal BMP. Il
+/// decodificatore consumava soltanto la prima metà e rileggeva la seconda come
+/// surrogato isolato: il canvas intero risultava corrotto.
+#[test]
+fn a_surrogate_pair_decodes_and_maps_exact_bytes() {
+    let source = "{\"nodes\":[{\"id\":\"t\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"\\ud83d\\ude00 [[Caff\\u00e9]] \\ud83d\\ude00\"}],\"edges\":[]}";
+    let canvas = parse_canvas(source).expect("il canvas non è corrotto");
+    assert_eq!(
+        canvas.nodes[0].text.as_deref(),
+        Some("\u{1F600} [[Caffé]] \u{1F600}")
+    );
+    let model = parse(source);
+    let wiki = model
+        .links
+        .iter()
+        .find(|l| matches!(&l.target, LinkTarget::Wiki { .. }))
+        .expect("il link dopo la coppia si vede");
+    let edits = rewrite(
+        source,
+        &[LinkRewrite {
+            span: wiki.span,
+            target: wiki.target.clone(),
+            replacement: "Nuova".to_string(),
+        }],
+    )
+    .unwrap();
+    let after = apply(source, &edits[0]);
+    assert_eq!(
+        parse_canvas(&after).unwrap().nodes[0].text.as_deref(),
+        Some("\u{1F600} [[Nuova]] \u{1F600}")
+    );
+    assert!(
+        after.contains("\\ud83d\\ude00 [[Nuova]] \\ud83d\\ude00"),
+        "le coppie restano byte per byte: {after}"
+    );
+}
+
+/// I100: un valore sconosciuto annidato migliaia di volte è un errore di
+/// parsing, non uno stack esaurito. `rewrite_links` legge la mappa senza
+/// passare da `serde_json`, quindi il suo limite non la proteggeva; un
+/// annidamento che il modello accetta resta leggibile.
+#[test]
+fn a_deep_unknown_value_is_refused_not_a_stack_overflow() {
+    let canvas = |depth: usize| {
+        format!(
+            "{{\"nodes\":[{{\"id\":\"t\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"[[Vecchia]]\",\"extra\":{}{}}}],\"edges\":[]}}",
+            "[".repeat(depth),
+            "]".repeat(depth)
+        )
+    };
+    let shallow = canvas(100);
+    let wiki = parse(&shallow)
+        .links
+        .into_iter()
+        .find(|l| matches!(&l.target, LinkTarget::Wiki { .. }))
+        .expect("un annidamento ammesso non nasconde il link");
+    let rewrites = [LinkRewrite {
+        span: wiki.span,
+        target: wiki.target.clone(),
+        replacement: "Nuova".to_string(),
+    }];
+    let edits = rewrite(&shallow, &rewrites).expect("e si riscrive");
+    assert!(apply(&shallow, &edits[0]).contains("[[Nuova]]"));
+
+    let hostile = canvas(100_000);
+    assert!(matches!(
+        rewrite(&hostile, &rewrites),
+        Err(FormatError::Parse(_))
+    ));
+}
+
 #[test]
 fn code_spans_never_become_links() {
     let source = "{\"nodes\":[{\"id\":\"t\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"`[[NonLink]]` e\\n\\n```\\n[[Nemmeno]]\\n```\\n\\nma [[Si]]\"}],\"edges\":[]}";

@@ -260,6 +260,9 @@ export function mountMermaidBlocks(
     if (code.closest("[data-ui-slot]")) continue;
     if (!Array.from(code.classList).some((name) => name.toLowerCase() === "language-mermaid")) continue;
     const pre = code.parentElement!;
+    // Only a fence the vault declares is a diagram: with the diagrams syntax
+    // off, a mermaid fence stays code, as it does in the model.
+    if (!pre.hasAttribute("data-declared-fence")) continue;
     const rawFrom = pre.dataset.mdFrom;
     const from = rawFrom !== undefined && /^\d+$/.test(rawFrom) ? Number(rawFrom) : NaN;
     const diagram: MermaidView = createMermaidView(code.textContent ?? "", {

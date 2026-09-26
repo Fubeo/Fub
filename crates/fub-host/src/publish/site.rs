@@ -548,8 +548,11 @@ impl PublishClient {
     /// else `setting_url` (the `publish.server_url` value read by the caller
     /// via the settings channel). Both empty = `MissingConfiguration`
     /// (CLI exit 2), never implicit loopback. Resolve runs BEFORE any I/O;
-    /// token absent = `MissingCredentials` unchanged (CLI exit 4).
-    pub fn from_env_with_setting(setting_url: &str) -> Result<Self, PublishClientError> {
+    /// token absent from `token` = `MissingCredentials` unchanged (CLI exit 4).
+    pub fn from_env_with_setting(
+        setting_url: &str,
+        token: &crate::remote::TokenSource,
+    ) -> Result<Self, PublishClientError> {
         let base = crate::remote::resolve_base(setting_url).map_err(|e| match e {
             crate::remote::RemoteError::MissingConfiguration => {
                 PublishClientError::MissingConfiguration
@@ -558,7 +561,7 @@ impl PublishClient {
                 PublishClientError::BadEndpoint(detail)
             }
         })?;
-        match crate::remote::load_token() {
+        match token.load() {
             Some(token) => Ok(Self::new(base, Some(token))),
             None => Err(PublishClientError::MissingCredentials),
         }
@@ -935,10 +938,14 @@ pub fn collect_export(
         let batch = host.list_documents(Some(Page::new(offset, 500)))?;
         let count = batch.items.len() as u32;
         for doc in batch.items {
-            if host
-                .format_of(&doc)
-                .is_none_or(|format| format.descriptor.id != "markdown")
-            {
+            // A page opts in from its frontmatter, so only a format that
+            // declares one can carry `publish: true`; any such format goes
+            // through the same projection, whatever its extension.
+            if host.format_of(&doc).is_none_or(|format| {
+                !format
+                    .capabilities
+                    .supports(fub_abi::options::syntax::FRONTMATTER)
+            }) {
                 vault.push(LinkedDoc {
                     doc_id: doc.0,
                     allowed: false,
@@ -994,10 +1001,17 @@ pub fn collect_export(
             .checked_add(count)
             .ok_or_else(|| fub_abi::PluginError::BadArgs("too many publish documents".into()))?;
     }
-    let page_paths: BTreeMap<_, _> = selected
-        .iter()
-        .map(|model| (model.id.0.clone(), doc_path(&model.id.0)))
-        .collect();
+    let mut page_paths = BTreeMap::new();
+    let mut routes = BTreeSet::new();
+    for model in &selected {
+        let route = doc_path(&model.id.0);
+        if !routes.insert(route.clone()) {
+            return Err(fub_abi::PluginError::BadArgs(
+                format!("two published documents share the page `{route}`").into(),
+            ));
+        }
+        page_paths.insert(model.id.0.clone(), route);
+    }
     let mut entries = Vec::new();
     let mut pages = Vec::new();
     let mut assets = Vec::new();
@@ -1022,7 +1036,10 @@ pub fn collect_export(
                 "publish assets exceed cap".into(),
             ));
         }
-        if path.ends_with(".canvas") {
+        if host
+            .format_of(&DocId(path.clone()))
+            .is_some_and(|format| format.descriptor.id == fub_format_canvas::FORMAT_ID)
+        {
             let html = super::projection::canvas(&bytes)
                 .map_err(|reason| fub_abi::PluginError::BadArgs(reason.into()))?;
             let output = format!("{path}.html");
@@ -1060,7 +1077,8 @@ pub fn collect_export(
         let path = page_paths
             .get(&model.id.0)
             .expect("selected page has a route");
-        let html = super::projection::page(model, site_id, &page_paths, &approved_assets)
+        let links = resolve_links(host, model)?;
+        let html = super::projection::page(model, site_id, &page_paths, &approved_assets, &links)
             .map_err(|reason| fub_abi::PluginError::BadArgs(reason.into()))?;
         entries.push(ManifestPage {
             path: path.clone(),
@@ -1159,9 +1177,57 @@ fn verified_asset(path: &str, bytes: &[u8]) -> bool {
     false
 }
 
+/// The local references of a published page, resolved by the vault index
+/// with the rule the app navigates by. Embeds stay out: an image is an
+/// approved asset named by its exact path, not a page to reach.
+fn resolve_links(
+    host: &dyn fub_abi::traits::ReadApi,
+    model: &fub_abi::model::DocumentModel,
+) -> Result<super::projection::Resolved, fub_abi::PluginError> {
+    use fub_abi::model::LinkTarget;
+    use fub_abi::traits::{IndexQuery, IndexResult};
+
+    let mut resolved = super::projection::Resolved::default();
+    for link in model.links.iter().filter(|link| !link.embed) {
+        let (table, key, target) = match &link.target {
+            LinkTarget::Wiki { page, .. } if !link.target.names_host() => (
+                &mut resolved.wiki,
+                page.clone(),
+                LinkTarget::wiki(page.clone()),
+            ),
+            LinkTarget::Path(raw) => {
+                let (path, _) = fub_abi::rules::path::split_fragment(raw);
+                (
+                    &mut resolved.paths,
+                    path.to_string(),
+                    LinkTarget::Path(path.to_string()),
+                )
+            }
+            _ => continue,
+        };
+        if table.contains_key(&key) {
+            continue;
+        }
+        match host.query_index(IndexQuery::Resolve {
+            target,
+            from: Some(model.id.clone()),
+        })? {
+            IndexResult::Resolved(Some(found)) => {
+                table.insert(key, found.doc);
+            }
+            IndexResult::Resolved(None) => {}
+            other => {
+                return Err(fub_abi::PluginError::Internal(
+                    format!("publish: resolving a link answered `{}`", other.kind_name()).into(),
+                ))
+            }
+        }
+    }
+    Ok(resolved)
+}
+
 fn doc_path(doc_id: &str) -> String {
-    let stem = doc_id
-        .trim_end_matches(".md")
+    let stem = fub_abi::rules::path::strip_ext(doc_id)
         .trim_matches('/')
         .replace([' ', '\\'], "-")
         .to_ascii_lowercase();

@@ -16,35 +16,37 @@
 //! aver messo il tempo nel contratto, e permette di invecchiare le fasce di
 //! ritenzione del versioning senza piantare timestamp finti dentro lo store.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub mod conformance;
 
 use fub_abi::command::CommandOutcome;
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::event::Event;
-use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
+use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor, LinkInsert};
 use fub_abi::grid::{
     validate_grid_source, GridApplyRequest, GridCommit, GridProvider, GridSession, GridSurfaceSpec,
     GridWindow, GridWindowRequest,
 };
 use fub_abi::locale::Locale;
-use fub_abi::model::{DocId, DocumentModel, Heading, Span};
+use fub_abi::model::{DateFormats, DocId, DocumentModel, Heading, LinkTarget, Span, TaskMarker};
 use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::query::{in_folder, Matches, QueryEvaluator, QueryPredicate};
 use fub_abi::rules::path_policy::{self, fenced_doc_id, Naming};
-use fub_abi::rules::trash;
+use fub_abi::rules::{media, properties, trash};
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, PaneMode, SelectionSet, ViewContext,
 };
 use fub_abi::settings::{SettingEntry, SettingSource, SettingSpec, SettingValue};
 use fub_abi::traits::{
-    BacklinkRef, DataRead, DataWrite, DocumentMatch, EntryKind, HostCommands, HostEnv, HostEvents,
-    HostNetwork, HostQuery, HostServices, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection,
-    NeighborRef, Page, Paged, SettingsRead, SettingsWrite, TagCount, TransferRead, TrashEntry,
-    VaultEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
+    BacklinkRef, DataRead, DataWrite, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery,
+    HostServices, IndexQuery, IndexResult, JobId, JobSpec, LinkDirection, NeighborRef, Page, Paged,
+    SettingsRead, SettingsWrite, TagCount, TransferRead, TrashEntry, VaultEntry, VaultRead,
+    VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
+use fub_abi::transfer::{ExportProvider, ImportProvider, MemorySink, PLUGIN_EXPORT_LIMIT};
 use fub_abi::{PluginError, MAX_RANDOM_BYTES};
 
 /// Il nome di un documento che **nasce** in questo doppio: il recinto l'ha già
@@ -217,7 +219,16 @@ pub struct MemoryHost {
     grid_commits: Mutex<BTreeMap<String, GridCommit>>,
     grid_calls: Mutex<Vec<String>>,
     grid_next_instance: AtomicU64,
+    /// Gli importer e gli exporter del banco, in ordine di registrazione: è
+    /// il registro che [`HostServices::run_import`] e
+    /// [`HostServices::run_export`] interrogano. Si seminano con
+    /// [`MemoryHost::with_import_provider`] e
+    /// [`MemoryHost::with_export_provider`].
+    imports: Mutex<Vec<SharedImport>>,
+    exports: Mutex<Vec<Arc<dyn ExportProvider>>>,
 }
+
+type SharedImport = Arc<Mutex<Box<dyn ImportProvider>>>;
 
 impl MemoryHost {
     pub fn new() -> Self {
@@ -277,6 +288,24 @@ impl MemoryHost {
     /// permesso, e chi costruisce un'identità deve accorgersene.
     pub fn without_entropy(self) -> Self {
         self.without_entropy.store(true, Ordering::Relaxed);
+        self
+    }
+
+    /// Registra un importer sul banco, dopo quelli già registrati: come
+    /// nell'host vero, [`HostServices::run_import`] sceglie il primo che
+    /// riconosce la sorgente.
+    pub fn with_import_provider(self, provider: Box<dyn ImportProvider>) -> Self {
+        self.imports
+            .lock()
+            .unwrap()
+            .push(Arc::new(Mutex::new(provider)));
+        self
+    }
+
+    /// Registra un exporter sul banco: [`HostServices::run_export`] sceglie
+    /// quello che offre la destinazione chiesta.
+    pub fn with_export_provider(self, provider: Box<dyn ExportProvider>) -> Self {
+        self.exports.lock().unwrap().push(Arc::from(provider));
         self
     }
 
@@ -674,11 +703,11 @@ impl VaultRead for MemoryHost {
 
     /// In ordine di id e a finestra, come il kernel: un doppio che
     /// restituisse tutto in ordine di hash farebbe passare i test a chi si
-    /// affida a un ordine che in produzione non c'è.
+    /// affida a un ordine che in produzione non c'è. Soltanto i documenti,
+    /// come nel vault vero: un allegato o un file che nessun formato serve sta
+    /// nell'anagrafe ([`IndexQuery::Entries`]), non qui.
     fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
-        let mut ids: Vec<DocId> = self.docs.lock().unwrap().keys().map(DocId::new).collect();
-        ids.sort();
-        Ok(Paged::window(ids, page))
+        Ok(Paged::window(self.documents(), page))
     }
 
     /// Il modello **seminato**, non uno parsato: un documento che esiste ma di
@@ -740,6 +769,37 @@ impl VaultRead for MemoryHost {
         free
     }
 
+    /// Il Markdown di serie scrive il link come il provider vero; un formato
+    /// seminato con [`with_format`](MemoryHost::with_format) non ha una
+    /// grammatica qui, e risponde «non so» come un provider senza
+    /// l'operazione. Un link che la grammatica non sa scrivere è `internal`,
+    /// come nel kernel, che riceve dal provider un errore di serializzazione.
+    /// La parità col provider vero la prova
+    /// `markdown_writes_links_and_ticks_alike` in `both_hosts_answer_alike`.
+    fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError> {
+        if !self.speaks_series_markdown(doc) {
+            return Ok(None);
+        }
+        series_markdown::link(link).map_err(|why| PluginError::Internal(why.into()))
+    }
+
+    /// Come [`format_link`](VaultRead::format_link): il simbolo del Markdown di
+    /// serie, sulla revisione dei byte che il doppio ha adesso.
+    fn task_state_edit(
+        &self,
+        doc: &DocId,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Option<EditRequest>, PluginError> {
+        if !self.speaks_series_markdown(doc) {
+            return Ok(None);
+        }
+        let source = self.read_document(doc)?;
+        let edits = series_markdown::task(&source, marker, done)
+            .map_err(|why| PluginError::Internal(why.into()))?;
+        Ok(Some(EditRequest::new(Revision::of(&source), edits)))
+    }
+
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
         let trash = self.trash.lock().unwrap();
         let mut entries: Vec<TrashEntry> = trash.values().map(|(and, _)| and.clone()).collect();
@@ -748,10 +808,387 @@ impl VaultRead for MemoryHost {
     }
 }
 
+impl MemoryHost {
+    /// A cosa punta `target`, scritto in `from`, fra i documenti in memoria.
+    ///
+    /// È la regola di `fub_kernel::graph` (`resolve_wiki`/`resolve_path`) e
+    /// del ripiego sull'anagrafe (`resolve_entry_in`) scritta come scansione:
+    /// il doppio ha pochi documenti e nessun indice. La parità col kernel la
+    /// prova `both_hosts_answer_alike`.
+    fn resolve(&self, target: &LinkTarget, from: Option<&DocId>) -> Option<DocId> {
+        use fub_abi::rules::path::{exact_key, resolution_key, resolve_against, strip_ext};
+        let docs = self.docs.lock().unwrap();
+        // L'ordine fra omonimi del grafo: il path più corto, poi il minore;
+        // fra formati dello stesso path, prima la prosa.
+        let prose = |id: &DocId| {
+            self.format_of(id).is_some_and(|format| {
+                format
+                    .capabilities
+                    .supports(fub_abi::options::source::PROSE)
+            })
+        };
+        let mut ids: Vec<DocId> = docs.keys().map(DocId::new).collect();
+        ids.sort_by(|a, b| {
+            let depth = |id: &DocId| id.as_str().matches('/').count();
+            depth(a).cmp(&depth(b)).then_with(|| {
+                let by_path = a.as_str().cmp(b.as_str());
+                if strip_ext(a.as_str()) == strip_ext(b.as_str()) {
+                    prose(b).cmp(&prose(a)).then(by_path)
+                } else {
+                    by_path
+                }
+            })
+        });
+        // Fra i candidati di una chiave vince chi combacia esattamente con
+        // ciò che si è scritto, altrimenti il primo per priorità.
+        let pick = |key: &str,
+                    exact: &str,
+                    keyed: &dyn Fn(&DocId) -> String,
+                    form: &dyn Fn(&DocId) -> String| {
+            let mut candidates = ids.iter().filter(|id| keyed(id) == key).peekable();
+            let first = (*candidates.peek()?).clone();
+            Some(
+                candidates
+                    .find(|id| form(id) == exact)
+                    .cloned()
+                    .unwrap_or(first),
+            )
+        };
+        let root = DocId::new("");
+        let source = from.unwrap_or(&root);
+        match target {
+            _ if target.names_host() => from.filter(|doc| docs.contains_key(doc.as_str())).cloned(),
+            LinkTarget::Wiki { page, .. } => {
+                let key = resolution_key(page);
+                let exact = exact_key(page);
+                if key.is_empty() {
+                    return None;
+                }
+                let by_path = |id: &DocId| resolution_key(&strip_ext(id.as_str()));
+                if key.contains('/') {
+                    let stem = strip_ext(&key);
+                    if let Some(id) = ids
+                        .iter()
+                        .find(|id| by_path(id) == stem && exact_key(id.as_str()) == exact)
+                    {
+                        return Some(id.clone());
+                    }
+                    if let Some(id) = pick(&stem, &strip_ext(&exact), &by_path, &|id| {
+                        exact_key(&strip_ext(id.as_str()))
+                    }) {
+                        return Some(id);
+                    }
+                }
+                let by_name = |id: &DocId| resolution_key(id.page_name());
+                if let Some(id) = pick(&key, &exact, &by_name, &|id| exact_key(id.page_name())) {
+                    return Some(id);
+                }
+                // Il nome con la sua estensione (`[[board.canvas]]`), prima
+                // degli alias come nel grafo.
+                let file = |id: &DocId| id.as_str().rsplit('/').next().unwrap_or("").to_string();
+                if strip_ext(&key) != key {
+                    if let Some(id) = pick(&key, &exact, &|id| resolution_key(&file(id)), &|id| {
+                        exact_key(&file(id))
+                    }) {
+                        return Some(id);
+                    }
+                }
+                let models = self.models.lock().unwrap();
+                let aliased = ids.iter().find(|id| {
+                    models.get(id.as_str()).is_some_and(|model| {
+                        model
+                            .frontmatter
+                            .aliases()
+                            .iter()
+                            .any(|alias| resolution_key(alias) == key)
+                    })
+                });
+                if let Some(id) = aliased {
+                    return Some(id.clone());
+                }
+                // Il file per nome, estensione compresa (`[[foto.png]]`), o
+                // per path intero: il più vicino alla radice.
+                ids.iter()
+                    .find(|id| {
+                        let name = id.as_str().rsplit('/').next().unwrap_or(id.as_str());
+                        resolution_key(name) == key || resolution_key(id.as_str()) == key
+                    })
+                    .cloned()
+            }
+            LinkTarget::Path(raw) => {
+                let path = resolve_against(source, raw)?;
+                let key = resolution_key(&path);
+                let exact = exact_key(&path);
+                if key.is_empty() {
+                    return None;
+                }
+                let stem = strip_ext(&key);
+                let by_path = |id: &DocId| resolution_key(&strip_ext(id.as_str()));
+                if let Some(id) = ids
+                    .iter()
+                    .filter(|id| by_path(id) == stem)
+                    .find(|id| exact_key(id.as_str()) == exact)
+                    .or_else(|| {
+                        ids.iter()
+                            .filter(|id| by_path(id) == stem)
+                            .find(|id| resolution_key(id.as_str()) == key)
+                    })
+                {
+                    return Some(id.clone());
+                }
+                if let Some(id) = pick(&key, &exact, &by_path, &|id| {
+                    exact_key(&strip_ext(id.as_str()))
+                }) {
+                    return Some(id);
+                }
+                // L'anagrafe: il path esatto, poi la sua chiave.
+                if docs.contains_key(path.as_str()) {
+                    return Some(DocId::new(path));
+                }
+                let mut named: Vec<&DocId> = ids
+                    .iter()
+                    .filter(|id| resolution_key(id.as_str()) == key)
+                    .collect();
+                named.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+                named.first().map(|id| (*id).clone())
+            }
+            LinkTarget::Url(_) => None,
+        }
+    }
+}
+
+impl MemoryHost {
+    /// I documenti **come li conta il kernel**: quelli che un formato serve,
+    /// in ordine di id. È l'universo delle domande sui documenti; l'anagrafe
+    /// intera, allegati compresi, è [`IndexQuery::Entries`].
+    fn documents(&self) -> Vec<DocId> {
+        let docs = self.docs.lock().unwrap();
+        docs.keys()
+            .map(DocId::new)
+            .filter(|id| self.format_of(id).is_some())
+            .collect()
+    }
+
+    /// I documenti a un passo da `doc` sugli archi seminati, nel verso
+    /// chiesto: ciò che nel kernel risponde il grafo (`LinkGraph::linked`).
+    fn linked(&self, doc: &DocId, direction: LinkDirection) -> BTreeSet<DocId> {
+        let edges = self.edges.lock().unwrap();
+        let mut out = BTreeSet::new();
+        for (from, to) in edges.iter() {
+            let outbound = matches!(direction, LinkDirection::Outbound | LinkDirection::Both);
+            let inbound = matches!(direction, LinkDirection::Inbound | LinkDirection::Both);
+            if outbound && from == doc.as_str() {
+                out.insert(DocId::new(to));
+            }
+            if inbound && to == doc.as_str() {
+                out.insert(DocId::new(from));
+            }
+        }
+        out
+    }
+
+    /// La camminata del kernel (`LinkGraph::neighbors`) sugli archi seminati:
+    /// in ampiezza, ogni documento una volta sola alla distanza minima, `via`
+    /// è l'anello da cui ci si arriva, e chi parte non è vicino di sé stesso.
+    /// L'ordine è distanza crescente, poi id.
+    fn neighbors(&self, doc: &DocId, direction: LinkDirection, depth: u8) -> Vec<NeighborRef> {
+        let mut seen = BTreeSet::from([doc.clone()]);
+        let mut out = Vec::new();
+        let mut frontier = vec![doc.clone()];
+        for step in 1..=depth {
+            let mut next = Vec::new();
+            for from in &frontier {
+                for to in self.linked(from, direction) {
+                    if !seen.insert(to.clone()) {
+                        continue;
+                    }
+                    out.push(NeighborRef {
+                        doc: to.clone(),
+                        via: from.clone(),
+                        depth: step,
+                    });
+                    next.push(to);
+                }
+            }
+            if next.is_empty() {
+                break;
+            }
+            frontier = next;
+        }
+        out.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.doc.cmp(&b.doc)));
+        out
+    }
+
+    /// `doc` è servito dal Markdown di serie, e non da un formato seminato?
+    /// La risposta è quella di `format_of`, così l'estensione si legge in un
+    /// posto solo.
+    fn speaks_series_markdown(&self, doc: &DocId) -> bool {
+        self.format_of(doc)
+            .is_some_and(|format| Some(format) == format_of_series("md"))
+    }
+}
+
+/// Le due scritture mirate del Markdown di serie, per il doppio.
+///
+/// Sono la grammatica di `fub-format-markdown` ridotta a ciò che le feature
+/// chiedono: un wikilink, un embed e il simbolo di un task. Il doppio non può
+/// dipendere dal provider (vedi `models`), e la copia è tenuta onesta dal
+/// banco di parità del kernel.
+mod series_markdown {
+    use fub_abi::edit::TextEdit;
+    use fub_abi::format::LinkInsert;
+    use fub_abi::model::{parse_wikilink_inner, Span, TaskMarker};
+
+    pub(super) fn link(link: &LinkInsert) -> Result<Option<String>, String> {
+        let Some(inside) = link.target.wiki_inner() else {
+            return Ok(None);
+        };
+        let label = link.label.as_deref().filter(|label| *label != inside);
+        let inner = match label {
+            Some(label) => format!("{inside}|{label}"),
+            None => inside.clone(),
+        };
+        let read_back = parse_wikilink_inner(&inner);
+        if inner.contains(['[', ']', '\n', '\r'])
+            || read_back.target != link.target
+            || read_back.alias.as_deref() != label
+        {
+            return Err(format!("«{inner}» non si scrive in un wikilink"));
+        }
+        let bang = if link.embed { "!" } else { "" };
+        Ok(Some(format!("{bang}[[{inner}]]")))
+    }
+
+    pub(super) fn task(
+        source: &str,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Vec<TextEdit>, String> {
+        let Some(symbol) = source.get(marker.span.start..marker.span.end) else {
+            return Err("il marcatore è fuori dalla sorgente".to_string());
+        };
+        if symbol.chars().count() != 1 || !between_the_brackets_of_an_item(source, marker.span) {
+            return Err(format!(
+                "nessun task ha il marcatore in {}..{}",
+                marker.span.start, marker.span.end
+            ));
+        }
+        let wanted = if done { "x" } else { " " };
+        Ok(vec![TextEdit::replace(marker.span, wanted)])
+    }
+
+    /// Il carattere fra le parentesi di un elemento d'elenco — `- [ ]`,
+    /// `1. [x]`, anche citato (`> - [ ]`) — seguito da uno spazio o dalla fine
+    /// della riga. È il task del provider ridotto a una riga: senza, il doppio
+    /// scriveva la spunta su qualunque byte gli si indicasse, anche in mezzo
+    /// alla prosa, dove il kernel rifiuta. Un elenco dentro un blocco di
+    /// codice qui passa: la riga non sa di stare in un blocco.
+    fn between_the_brackets_of_an_item(source: &str, span: Span) -> bool {
+        let line = source[..span.start].rfind('\n').map_or(0, |at| at + 1);
+        let Some(before) = source[line..span.start].strip_suffix('[') else {
+            return false;
+        };
+        let closes = source[span.end..]
+            .strip_prefix(']')
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t', '\n', '\r']));
+        let head = before.trim_start_matches([' ', '\t', '>']);
+        let gap = match head.strip_prefix(['-', '*', '+']) {
+            Some(gap) => gap,
+            None => {
+                let digits =
+                    head.len() - head.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+                match head[digits..].strip_prefix(['.', ')']) {
+                    Some(gap) if (1..=9).contains(&digits) => gap,
+                    _ => return false,
+                }
+            }
+        };
+        closes && !gap.is_empty() && gap.trim_start_matches([' ', '\t']).is_empty()
+    }
+}
+
+/// Le foglie che il doppio sa verificare **con le regole condivise**, sui
+/// documenti che ha in memoria: un elenco di id, una cartella
+/// ([`in_folder`]), un link sugli archi seminati, una proprietà sul
+/// frontmatter dei modelli seminati ([`properties::test`]). La struttura —
+/// OR, AND, negazione — è quella di [`QueryEvaluator`], la stessa del kernel.
+///
+/// Il resto (testo, tag, regex, task, glob, estensione, predicati di terzi)
+/// vuole un indice o una regola che vive nel kernel, e la risposta è
+/// `unserved`: ignorare il filtro farebbe passare per il motivo sbagliato
+/// ogni prova che se ne fidasse.
+struct Selection<'a> {
+    host: &'a MemoryHost,
+    documents: Vec<DocId>,
+}
+
+impl<'a> Selection<'a> {
+    fn of(host: &'a MemoryHost) -> Self {
+        Selection {
+            host,
+            documents: host.documents(),
+        }
+    }
+
+    fn keep(&self, test: impl Fn(&DocId) -> bool) -> Matches {
+        Matches::of_docs(self.documents.iter().filter(|id| test(id)).cloned())
+    }
+}
+
+impl QueryEvaluator for Selection<'_> {
+    fn universe(&self) -> Result<Matches, PluginError> {
+        Ok(Matches::of_docs(self.documents.iter().cloned()))
+    }
+
+    fn predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError> {
+        match predicate {
+            QueryPredicate::Docs { docs } => Ok(self.keep(|id| docs.contains(id))),
+            QueryPredicate::Folder { path, descendants } => {
+                Ok(self.keep(|id| in_folder(id, path, *descendants)))
+            }
+            QueryPredicate::Linked { doc, direction } => {
+                let linked = self.host.linked(doc, *direction);
+                Ok(self.keep(|id| linked.contains(id)))
+            }
+            QueryPredicate::Property { filter } => {
+                let models = self.host.models.lock().unwrap();
+                let mut found = Vec::new();
+                for id in &self.documents {
+                    let model = models.get(id.as_str()).ok_or_else(|| unseeded(id))?;
+                    if properties::test(&model.frontmatter, filter, &DateFormats::ISO) {
+                        found.push(id.clone());
+                    }
+                }
+                Ok(Matches::of_docs(found))
+            }
+            other => Err(PluginError::Unserved(
+                format!(
+                    "MemoryHost non valuta questa foglia senza un indice: {other:?}; \
+                     usa un Workspace vero"
+                )
+                .into(),
+            )),
+        }
+    }
+}
+
+/// Il frontmatter di `id` serve e nessuno ha seminato il suo modello: il
+/// doppio non parsa, e rispondere come se il documento non avesse proprietà
+/// sarebbe inventare.
+fn unseeded(id: &DocId) -> PluginError {
+    PluginError::Unserved(
+        format!(
+            "MemoryHost non conosce il frontmatter di `{id}`: seminane il modello \
+             con `with_model`, o usa un Workspace vero"
+        )
+        .into(),
+    )
+}
+
 /// **Il markdown, che ogni vault di Fub serve.**
 ///
 /// Il registro dei formati di questo doppio è ciò che gli si semina con
-/// [`MemoryHost::con_formato`], e finché era *soltanto* quello il doppio si
+/// [`MemoryHost::with_format`], e finché era *soltanto* quello il doppio si
 /// comportava come un vault in cui non è registrato nessun provider: `format_of`
 /// rispondeva «non so» per ogni estensione, e la scrittura scriveva lo stesso —
 /// mentre il kernel, che un registro ce l'ha, risponde `unserved` a chi prova a
@@ -762,15 +1199,27 @@ impl VaultRead for MemoryHost {
 /// ciò che il core registra in ogni vault, ed è la ragione per cui un doppio
 /// vuoto deve rispondere *come un vault vero* e non *come un vault vuoto*. Chi
 /// ne serve altri li dichiara, e chi vuole un markdown diverso lo sovrascrive —
-/// `con_formato` vince, perché il registro seminato si guarda per primo.
+/// `with_format` vince, perché il registro seminato si guarda per primo.
 ///
-/// Le capacità sono vuote apposta: questo doppio non parsa niente (i modelli si
-/// seminano, vedi `read_model`), e dichiarare una sintassi che non sa leggere
-/// sarebbe la seconda bugia dopo quella che si sta togliendo.
+/// Le capacità sono **quelle del provider vero**, sintassi di lettura
+/// comprese: una feature che decide da una capacità (scrivere un blocco, una
+/// proprietà, un `[[link]]`, leggere le note a piè di pagina dal modello) deve
+/// ricevere qui la risposta che riceve nel vault. Il doppio non parsa — i
+/// modelli si seminano, vedi `read_model` — ma la dichiarazione dice cosa il
+/// formato *sa*, non chi lo sta parsando.
 fn format_of_series(ext: &str) -> Option<DocumentFormat> {
     matches!(ext, "md" | "markdown").then(|| DocumentFormat {
-        descriptor: FormatDescriptor::text("markdown", "Markdown", &["md", "markdown"]),
-        capabilities: FormatCapabilities::default(),
+        descriptor: FormatDescriptor::text("markdown", "Markdown (Obsidian)", &["md", "markdown"]),
+        capabilities: FormatCapabilities::of(&[
+            fub_abi::options::syntax::WIKILINKS,
+            fub_abi::options::syntax::TAGS,
+            fub_abi::options::syntax::FRONTMATTER,
+            fub_abi::options::syntax::CALLOUTS,
+            fub_abi::options::syntax::EMBEDS,
+            fub_abi::options::syntax::FOOTNOTES,
+            fub_abi::options::syntax::DEFINITION_LISTS,
+            fub_abi::options::source::PROSE,
+        ]),
     })
 }
 
@@ -780,6 +1229,10 @@ impl VaultWrite for MemoryHost {
     /// non si scrive niente. Vale qui la ragione scritta sotto per `apply_edit`
     /// — un doppio che accettasse qualunque base non proverebbe niente proprio
     /// della cosa che questa firma esiste per rendere impossibile.
+    ///
+    /// Il parse invece non c'è, per la ragione scritta su `models`: un
+    /// sorgente che il provider del formato rifiuterebbe qui si scrive. Chi
+    /// prova che una feature scrive un sorgente valido lo prova col kernel.
     fn write_document(
         &mut self,
         id: &DocId,
@@ -1276,90 +1729,110 @@ impl HostQuery for MemoryHost {
             // distinzione che l'apertura a fasi (§15.7) ha reso osservabile, e
             // che senza questo ramo si proverebbe solo end-to-end.
             //
-            // Solo i documenti: il doppio non ha allegati, quindi a una domanda
-            // su `Asset` risponde con l'elenco vuoto, che è la verità.
-            IndexQuery::Entries { of_kind, page, .. } => {
-                let entries: Vec<VaultEntry> = match of_kind {
-                    Some(EntryKind::Document) | None => self
-                        .docs
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .map(|(id, source)| VaultEntry {
-                            id: DocId::new(id),
-                            kind: EntryKind::Document,
-                            size: source.len() as u64,
-                            mtime: self.now.load(Ordering::Relaxed),
-                            fingerprint: None,
-                        })
-                        .collect(),
-                    Some(_) => Vec::new(),
-                };
-                Ok(IndexResult::Entries(Paged::window(entries, page)))
-            }
-            IndexQuery::Tags { page, .. } => Ok(IndexResult::Tags(Paged::window(
-                self.tags.lock().unwrap().clone(),
+            // La specie la decide la regola del kernel
+            // ([`media::kind_of_ext`]): documento se un formato lo serve,
+            // allegato se ha un tipo di contenuto noto, altrimenti ignoto. La
+            // cartella si sceglie con la stessa [`in_folder`].
+            IndexQuery::Entries {
+                of_kind,
+                within,
                 page,
-            ))),
-            // **I documenti che ci sono**, come l'anagrafe qui sopra e per la
-            // stessa ragione: «quali documenti esistono» è ciò che un host in
-            // memoria sa di sé senza che glielo si semini. Niente rilevanza e
-            // niente estratti — quelli li produce un indice, e qui non ce n'è
-            // uno — quindi la selezione si **ignora**: chi vuole provare un
-            // filtro vuole un kernel vero.
-            IndexQuery::Documents { page, .. } => Ok(IndexResult::Documents(Paged::window(
-                self.docs
+            } => {
+                let entries: Vec<VaultEntry> = self
+                    .docs
                     .lock()
                     .unwrap()
-                    .keys()
-                    .map(|id| DocumentMatch {
-                        doc: DocId::new(id),
-                        score: None,
-                        snippet: None,
-                        highlights: Vec::new(),
-                        occurrences: Default::default(),
-                        properties: Default::default(),
+                    .iter()
+                    .map(|(id, bytes)| {
+                        let id = DocId::new(id);
+                        let kind = media::kind_of_ext(&id, |_| self.format_of(&id).is_some());
+                        VaultEntry {
+                            id,
+                            kind,
+                            size: bytes.len() as u64,
+                            mtime: self.now.load(Ordering::Relaxed),
+                            fingerprint: None,
+                        }
                     })
-                    .collect(),
-                page,
-            ))),
-            // I vicini, dagli archi seminati. Il verso lo si onora — è l'unica
-            // cosa che questo ramo possa sbagliare in modo invisibile — e la
-            // profondità no: oltre il primo passo servirebbe una chiusura
-            // transitiva, cioè un grafo, cioè il kernel. Chiederne di più è
-            // `Unserved`, che è la risposta onesta.
-            IndexQuery::Neighbors {
-                direction,
-                depth,
-                page,
-                ..
-            } => {
-                if depth > 1 {
+                    .filter(|entry| of_kind.is_none_or(|kind| entry.kind == kind))
+                    .filter(|entry| {
+                        within.as_ref().is_none_or(|scope| {
+                            in_folder(&entry.id, &scope.path, scope.descendants)
+                        })
+                    })
+                    .collect();
+                Ok(IndexResult::Entries(Paged::window(entries, page)))
+            }
+            // I conteggi seminati sono del vault intero: a chi li chiede per
+            // una selezione il doppio non sa rispondere, e lo dice.
+            IndexQuery::Tags { matching, page } => {
+                if !matching.is_everything() {
                     return Err(PluginError::Unserved(
-                        "MemoryHost non cammina il grafo: chiedi depth 1, o usa un Workspace vero"
+                        "MemoryHost conta i tag seminati del vault intero, non di una \
+                         selezione: usa un Workspace vero"
                             .into(),
                     ));
                 }
-                let edges = self.edges.lock().unwrap();
-                let mut items = Vec::new();
-                for (from, to) in edges.iter() {
-                    // `via` è da dove si parte, `doc` dove si arriva: entrante
-                    // vuol dire che i due si scambiano.
-                    if matches!(direction, LinkDirection::Outbound | LinkDirection::Both) {
-                        items.push(NeighborRef {
-                            doc: DocId::new(to),
-                            via: DocId::new(from),
-                            depth: 1,
-                        });
-                    }
-                    if matches!(direction, LinkDirection::Inbound | LinkDirection::Both) {
-                        items.push(NeighborRef {
-                            doc: DocId::new(from),
-                            via: DocId::new(to),
-                            depth: 1,
-                        });
+                Ok(IndexResult::Tags(Paged::window(
+                    self.tags.lock().unwrap().clone(),
+                    page,
+                )))
+            }
+            // **I documenti che ci sono**, scelti con le foglie che il doppio
+            // sa verificare ([`Selection`]) e finiti con la stessa regola del
+            // kernel ([`properties::finish`]): ordine, colonne e finestra. Il
+            // frontmatter è quello dei modelli seminati; chi ordina o chiede
+            // colonne su un documento senza modello riceve `unserved`. Niente
+            // rilevanza e niente estratti: quelli li produce un indice.
+            IndexQuery::Documents {
+                matching,
+                sort,
+                select,
+                page,
+                excerpts: _,
+            } => {
+                let matches = Selection::of(self).expr(&matching)?;
+                let models = self.models.lock().unwrap();
+                if sort.is_some() || !select.is_none() {
+                    if let Some(id) = matches.ids().find(|id| !models.contains_key(id.as_str())) {
+                        return Err(unseeded(id));
                     }
                 }
+                Ok(IndexResult::Documents(properties::finish(
+                    matches,
+                    sort.as_ref(),
+                    &select,
+                    page,
+                    &DateFormats::ISO,
+                    |id| models.get(id.as_str()).map(|model| &model.frontmatter),
+                )))
+            }
+            // **La risoluzione**, dai documenti che ha in memoria e con le
+            // regole condivise di `fub_abi::rules::path`: le stesse chiavi e la
+            // stessa precedenza del grafo del kernel — path, nome, alias dei
+            // modelli seminati, poi il file per nome — e fra omonimi vince chi
+            // combacia esattamente, poi il path più corto. Il punto dentro il
+            // documento non lo cerca (non ha outline propri): `at` resta
+            // `None`, che è il degrado del contratto per un punto che non si
+            // trova.
+            IndexQuery::Resolve { target, from } => Ok(IndexResult::Resolved(
+                self.resolve(&target, from.as_ref())
+                    .map(fub_abi::traits::ResolvedRef::doc),
+            )),
+            // I vicini, dagli archi seminati e come li cammina il kernel: i semi
+            // sono una selezione ([`Selection`]), e per ognuno, in ordine di
+            // id, la camminata in ampiezza fino a `depth`.
+            IndexQuery::Neighbors {
+                seeds,
+                direction,
+                depth,
+                page,
+            } => {
+                let from = Selection::of(self).expr(&seeds)?;
+                let items = from
+                    .ids()
+                    .flat_map(|seed| self.neighbors(seed, direction, depth))
+                    .collect();
                 Ok(IndexResult::Neighbors(Paged::window(items, page)))
             }
             // Le impostazioni le serve, e dal canale dati come il kernel: una
@@ -1402,7 +1875,8 @@ impl HostQuery for MemoryHost {
             // malposta.
             _ => Err(PluginError::Unserved(
                 "MemoryHost serve solo backlink, outline, tag, archi, impostazioni e \
-                 salute del vault seminati a mano, più i documenti che ha in memoria"
+                 salute del vault seminati a mano, più l'anagrafe, i documenti e la \
+                 risoluzione dei riferimenti fra quelli che ha in memoria"
                     .into(),
             )),
         }
@@ -1476,6 +1950,68 @@ impl HostServices for MemoryHost {
     ) -> Result<serde_json::Value, PluginError> {
         Err(PluginError::Unserved(
             format!("MemoryHost non ha un registro dei plugin: nessuno offre `{service}`").into(),
+        ))
+    }
+
+    fn export_targets(&self) -> Result<Vec<fub_abi::transfer::ExportTarget>, PluginError> {
+        Ok(self
+            .exports
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(|provider| provider.targets())
+            .collect())
+    }
+
+    /// Lo stesso dispatch e lo stesso sink dell'host vero: la destinazione
+    /// sceglie l'exporter, e i byte tornano nel rapporto col tetto di
+    /// [`PLUGIN_EXPORT_LIMIT`]. Il doppio non ha capacità per plugin: il
+    /// provider legge questo stesso banco.
+    fn run_export(
+        &mut self,
+        request: &fub_abi::transfer::ExportRequest,
+    ) -> Result<fub_abi::transfer::ExportReport, PluginError> {
+        let provider = self
+            .exports
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|provider| provider.targets().iter().any(|t| t.id == request.target))
+            .cloned()
+            .ok_or_else(|| {
+                PluginError::BadArgs(
+                    format!("destinazione di export ignota: `{}`", request.target).into(),
+                )
+            })?;
+        let mut sink = MemorySink::bounded(PLUGIN_EXPORT_LIMIT);
+        provider.export(request, self, &mut sink)
+    }
+
+    /// Il primo importer che riconosce la sorgente, come nell'host vero. Un
+    /// importer che, importando, chiede di nuovo sé stesso riceve `Conflict`
+    /// invece di bloccarsi.
+    fn run_import(
+        &mut self,
+        source: &fub_abi::transfer::ImportSource,
+        request: &fub_abi::transfer::ImportRequest,
+    ) -> Result<fub_abi::transfer::ImportReport, PluginError> {
+        let candidates: Vec<SharedImport> = self.imports.lock().unwrap().clone();
+        for candidate in candidates {
+            let Ok(mut provider) = candidate.try_lock() else {
+                return Err(PluginError::Conflict(
+                    "an importer is already importing: an import cannot re-enter it".into(),
+                ));
+            };
+            if provider.can_handle(source) {
+                return provider.import(source, request, self);
+            }
+        }
+        Err(PluginError::BadArgs(
+            format!(
+                "nessun ImportProvider registrato riconosce `{}`",
+                source.name
+            )
+            .into(),
         ))
     }
 }
@@ -1679,6 +2215,7 @@ mod tests {
     use super::*;
     use fub_abi::format::{FormatCapabilities, FormatDescriptor};
     use fub_abi::locale::{HourCycle, Weekday};
+    use fub_abi::traits::EntryKind;
 
     /// Il locale del doppio parte **indeterminato**, come quello del contratto:
     /// un banco che partisse italiano nasconderebbe proprio i posti in cui una
@@ -1895,6 +2432,173 @@ mod tests {
                 "open:sheet:grid-memory-1",
                 "window:grid-memory-1:sheet-1",
                 "apply:grid-memory-1"
+            ]
+        );
+    }
+
+    fn neighbors(
+        host: &MemoryHost,
+        seeds: Vec<&str>,
+        direction: LinkDirection,
+        depth: u8,
+    ) -> Vec<String> {
+        let seeds = if seeds.is_empty() {
+            fub_abi::query::QueryExpr::default()
+        } else {
+            fub_abi::query::QueryExpr::of(QueryPredicate::Docs {
+                docs: seeds.into_iter().map(DocId::new).collect(),
+            })
+        };
+        let IndexResult::Neighbors(found) = host
+            .query_index(IndexQuery::Neighbors {
+                seeds,
+                direction,
+                depth,
+                page: None,
+            })
+            .unwrap()
+        else {
+            panic!("una risposta fuori tema");
+        };
+        found
+            .items
+            .iter()
+            .map(|n| format!("{}<{}@{}", n.doc, n.via, n.depth))
+            .collect()
+    }
+
+    /// I vicini partono **dai semi** e camminano come il grafo del kernel: in
+    /// ampiezza, ognuno una volta sola alla distanza minima. Prima il doppio
+    /// ignorava i semi e rispondeva con tutti gli archi del vault.
+    #[test]
+    fn the_neighbors_start_from_the_seeds_and_walk_like_the_graph() {
+        let host = MemoryHost::new()
+            .with_document("a.md", "")
+            .with_document("b.md", "")
+            .with_document("c.md", "")
+            .with_document("d.md", "")
+            .with_edge("a.md", "b.md")
+            .with_edge("a.md", "b.md")
+            .with_edge("b.md", "c.md")
+            .with_edge("c.md", "a.md")
+            .with_edge("d.md", "a.md");
+        assert_eq!(
+            neighbors(&host, vec!["a.md"], LinkDirection::Outbound, 1),
+            ["b.md<a.md@1"]
+        );
+        assert_eq!(
+            neighbors(&host, vec!["a.md"], LinkDirection::Outbound, 3),
+            ["b.md<a.md@1", "c.md<b.md@2"],
+            "chi parte non torna vicino di sé stesso"
+        );
+        assert_eq!(
+            neighbors(&host, vec!["a.md"], LinkDirection::Inbound, 1),
+            ["c.md<a.md@1", "d.md<a.md@1"]
+        );
+        assert_eq!(
+            neighbors(&host, vec!["a.md"], LinkDirection::Both, 1),
+            ["b.md<a.md@1", "c.md<a.md@1", "d.md<a.md@1"]
+        );
+        assert_eq!(
+            neighbors(&host, vec![], LinkDirection::Outbound, 1),
+            ["b.md<a.md@1", "c.md<b.md@1", "a.md<c.md@1", "a.md<d.md@1"],
+            "senza semi, ogni documento in ordine di id"
+        );
+        assert!(neighbors(&host, vec!["a.md"], LinkDirection::Outbound, 0).is_empty());
+    }
+
+    fn documents(
+        host: &MemoryHost,
+        matching: fub_abi::query::QueryExpr,
+    ) -> Result<Vec<String>, PluginError> {
+        match host.query_index(IndexQuery::Documents {
+            matching,
+            sort: None,
+            select: Default::default(),
+            page: None,
+            excerpts: Default::default(),
+        })? {
+            IndexResult::Documents(found) => {
+                Ok(found.items.iter().map(|m| m.doc.to_string()).collect())
+            }
+            _ => panic!("una risposta fuori tema"),
+        }
+    }
+
+    /// Il filtro si **valuta** con le regole condivise, oppure si rifiuta:
+    /// prima il doppio lo ignorava e rispondeva con tutti i documenti, allegati
+    /// compresi, e una prova che si fidava del filtro passava per il motivo
+    /// sbagliato.
+    #[test]
+    fn the_double_evaluates_the_filter_or_says_it_cannot() {
+        let mut model = DocumentModel::empty(DocId::new("Progetti/Idea.md"));
+        model
+            .frontmatter
+            .0
+            .insert("stato".into(), serde_json::json!("aperto"));
+        let host = MemoryHost::new()
+            .with_document("Nota.md", "")
+            .with_document("Progetti/Idea.md", "")
+            .with_binary_document("Progetti/foto.png", b"png")
+            .with_model("Progetti/Idea.md", model);
+        let folder = || {
+            fub_abi::query::QueryExpr::of(QueryPredicate::Folder {
+                path: "Progetti".into(),
+                descendants: true,
+            })
+        };
+        assert_eq!(
+            documents(&host, fub_abi::query::QueryExpr::default()).unwrap(),
+            ["Nota.md", "Progetti/Idea.md"],
+            "un allegato non è un documento"
+        );
+        assert_eq!(documents(&host, folder()).unwrap(), ["Progetti/Idea.md"]);
+        let text = fub_abi::query::QueryExpr::of(QueryPredicate::Text(
+            fub_abi::query::TextQuery::terms("idea"),
+        ));
+        assert!(matches!(
+            documents(&host, text),
+            Err(PluginError::Unserved(_))
+        ));
+        let property = || {
+            fub_abi::query::QueryExpr::of(QueryPredicate::Property {
+                filter: fub_abi::traits::PropertyFilter {
+                    key: "stato".into(),
+                    test: fub_abi::traits::PropertyTest::Exists,
+                },
+            })
+        };
+        assert!(
+            matches!(documents(&host, property()), Err(PluginError::Unserved(msg)) if msg.to_string().contains("Nota.md")),
+            "senza il modello di Nota.md il doppio non sa se ha la proprietà"
+        );
+        let host = host.with_model("Nota.md", DocumentModel::empty(DocId::new("Nota.md")));
+        assert_eq!(documents(&host, property()).unwrap(), ["Progetti/Idea.md"]);
+
+        assert_eq!(
+            host.list_documents(None).unwrap().items,
+            [DocId::new("Nota.md"), DocId::new("Progetti/Idea.md")]
+        );
+        let IndexResult::Entries(entries) = host
+            .query_index(IndexQuery::Entries {
+                of_kind: None,
+                within: Some(fub_abi::traits::FolderScope::direct("Progetti")),
+                page: None,
+            })
+            .unwrap()
+        else {
+            panic!("una risposta fuori tema");
+        };
+        let kinds: Vec<(String, EntryKind)> = entries
+            .items
+            .into_iter()
+            .map(|entry| (entry.id.to_string(), entry.kind))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                ("Progetti/Idea.md".to_string(), EntryKind::Document),
+                ("Progetti/foto.png".to_string(), EntryKind::Asset),
             ]
         );
     }

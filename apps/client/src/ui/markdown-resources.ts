@@ -1,13 +1,14 @@
 import type { EmbedContent, RenderedDocument } from "../host/contract";
 import { renderEmbed, renderPreview } from "../host/query";
 import { errorText } from "../host/errors";
-import { operationFromText, type TextEdit } from "../editor/text-operation";
+import { operationFromText, type TextEdit } from "../editors/core/text-operation";
 import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../rules/offsets";
 import {
   documentSessions,
   type DocumentSession,
   type DocumentSessionCollection,
 } from "../state/document-session";
+import { registerDocumentCache } from "../state/document-caches";
 import { t } from "../i18n/strings";
 import { openLifetime } from "./lifetime";
 import { notify } from "./notify";
@@ -270,14 +271,16 @@ class SharedMarkdownResources {
 
 const resources = new WeakMap<DocumentSession, SharedMarkdownResources>();
 const activeResources = new Set<SharedMarkdownResources>();
+/** Listed among the document caches only while a resource is alive. */
+let unregisterCache: (() => void) | undefined;
 
 /** Invalidates transclusions even when the changed document has no open surface. */
-export function invalidateMarkdownResourceDocument(documentId: string): void {
+function invalidateMarkdownResourceDocument(documentId: string): void {
   for (const resource of activeResources) resource.invalidateDocument(documentId);
 }
 
 /** Rebuilds the owner artifact after its path changes, then invalidates dependants. */
-export function renameMarkdownResourceDocument(from: string, to: string): void {
+function renameMarkdownResourceDocument(from: string, to: string): void {
   for (const resource of activeResources) {
     if (resource.session.id === to) resource.invalidate();
     else resource.invalidateDocument(from);
@@ -295,6 +298,10 @@ export function acquireMarkdownResources(
     shared = new SharedMarkdownResources(session, sessions);
     resources.set(session, shared);
     activeResources.add(shared);
+    unregisterCache ??= registerDocumentCache({
+      invalidate: invalidateMarkdownResourceDocument,
+      rename: renameMarkdownResourceDocument,
+    });
   }
   const retained = shared;
   retained.references += 1;
@@ -313,6 +320,10 @@ export function acquireMarkdownResources(
         retained.close();
         resources.delete(session);
         activeResources.delete(retained);
+        if (!activeResources.size) {
+          unregisterCache?.();
+          unregisterCache = undefined;
+        }
       }
     },
   };

@@ -1,11 +1,13 @@
-//! Rendering, asset and access guards for the publish slice (P17.3, P17.5).
+//! Asset and access guards for the publish slice (P17.3, P17.5).
 //!
-//! Every byte served from `/s/<site>/...` passes through here:
-//! markdown is rendered to *static* HTML with all raw markup escaped
-//! (script/style/iframe included — there is no allowlist of live tags),
-//! links are restricted to safe schemes, embeds/boards/dataviews need a
-//! verified static projection, assets are size-capped, and the site
-//! password gate is PBKDF2 ver=1 with constant-time verification.
+//! The server never renders markdown: pages arrive as HTML the host has
+//! already projected. What guards them on the way in and out is
+//! [`crate::site_isolation`] — a parsed-HTML preflight that refuses active
+//! markup (script/style/iframe, event handlers, unsafe schemes) without
+//! explicit isolation, and a no-script CSP on every served page. Here live
+//! the pieces it shares: safe link schemes, embeds/boards/dataviews that need
+//! a verified static projection, size-capped assets, and the site password
+//! gate, PBKDF2 ver=1 with constant-time verification.
 //!
 //! The leakage scanner ([`assert_no_leakage`]) is the second wall behind
 //! selective manifests: it asserts an excluded note appears in *none* of
@@ -121,7 +123,7 @@ pub fn escape_html(raw: &str) -> String {
 
 /// Safe link/image targets: relative paths, `#anchors`, `http(s):`, `mailto:`.
 /// Everything else (`javascript:`, `data:`, `vbscript:`, `file:`, …) is
-/// rejected — the renderer then falls back to plain text, never the raw URL.
+/// rejected — the preflight then classifies the page as active markup.
 pub fn is_safe_href(href: &str) -> bool {
     let target = href.trim();
     if target.is_empty() {
@@ -149,176 +151,6 @@ pub fn is_safe_href(href: &str) -> bool {
         ) && !scheme.is_empty();
     }
     true
-}
-
-/// Render markdown to sanitized static HTML.
-///
-/// Supported: `#`/`##`/`###` headings, fenced code, `- ` lists, paragraphs,
-/// and inline `` `code` ``, `**bold**`, `*em*`, `[text](href)`,
-/// `![alt](src)`. All raw HTML in the source is *escaped*, so
-/// `<script>`, `<style>`, `<iframe>` and event attributes can never go live.
-/// The output carries no host IPC bridge and no vault APIs — static strings
-/// only, safe to serve from the filesystem.
-pub fn render_markdown_safe(markdown: &str) -> String {
-    let mut out = String::new();
-    let mut in_code = false;
-    let mut in_list = false;
-    for line in markdown.lines() {
-        if line.trim_start().starts_with("```") {
-            if in_list {
-                out.push_str("</ul>\n");
-                in_list = false;
-            }
-            out.push_str(if in_code {
-                "</code></pre>\n"
-            } else {
-                "<pre><code>"
-            });
-            in_code = !in_code;
-            continue;
-        }
-        if in_code {
-            out.push_str(&escape_html(line));
-            out.push('\n');
-            continue;
-        }
-        let stripped = line.trim_start();
-        if let Some(heading) = stripped
-            .strip_prefix("### ")
-            .map(|t| (3, t))
-            .or_else(|| stripped.strip_prefix("## ").map(|t| (2, t)))
-            .or_else(|| stripped.strip_prefix("# ").map(|t| (1, t)))
-        {
-            if in_list {
-                out.push_str("</ul>\n");
-                in_list = false;
-            }
-            out.push_str(&format!(
-                "<h{}>{}</h{}>\n",
-                heading.0,
-                render_inline(heading.1),
-                heading.0
-            ));
-        } else if let Some(item) = stripped.strip_prefix("- ") {
-            if !in_list {
-                out.push_str("<ul>\n");
-                in_list = true;
-            }
-            out.push_str(&format!("<li>{}</li>\n", render_inline(item)));
-        } else if stripped.is_empty() {
-            if in_list {
-                out.push_str("</ul>\n");
-                in_list = false;
-            }
-        } else {
-            if in_list {
-                out.push_str("</ul>\n");
-                in_list = false;
-            }
-            out.push_str(&format!("<p>{}</p>\n", render_inline(stripped)));
-        }
-    }
-    if in_code {
-        out.push_str("</code></pre>\n");
-    }
-    if in_list {
-        out.push_str("</ul>\n");
-    }
-    out
-}
-
-fn render_inline(text: &str) -> String {
-    let mut out = String::new();
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if text[i..].starts_with("![") {
-            if let Some(rendered) = render_link(&text[i + 1..], true) {
-                out.push_str(&rendered.html);
-                i += 1 + rendered.consumed;
-                continue;
-            }
-        }
-        if bytes[i] == b'[' {
-            if let Some(rendered) = render_link(&text[i..], false) {
-                out.push_str(&rendered.html);
-                i += rendered.consumed;
-                continue;
-            }
-        }
-        if text[i..].starts_with("**") {
-            if let Some(end) = text[i + 2..].find("**") {
-                out.push_str(&format!(
-                    "<strong>{}</strong>",
-                    escape_html(&text[i + 2..i + 2 + end])
-                ));
-                i += 2 + end + 2;
-                continue;
-            }
-        }
-        if bytes[i] == b'`' {
-            if let Some(end) = text[i + 1..].find('`') {
-                out.push_str(&format!(
-                    "<code>{}</code>",
-                    escape_html(&text[i + 1..i + 1 + end])
-                ));
-                i += 1 + end + 1;
-                continue;
-            }
-        }
-        if bytes[i] == b'*' {
-            if let Some(end) = text[i + 1..].find('*') {
-                out.push_str(&format!(
-                    "<em>{}</em>",
-                    escape_html(&text[i + 1..i + 1 + end])
-                ));
-                i += 1 + end + 1;
-                continue;
-            }
-        }
-        let ch = text[i..].chars().next().expect("non-empty");
-        match ch {
-            '&' | '<' | '>' | '"' | '\'' => out.push_str(&escape_html(&ch.to_string())[..]),
-            _ => out.push(ch),
-        }
-        i += ch.len_utf8();
-    }
-    out
-}
-
-struct RenderedLink {
-    html: String,
-    consumed: usize,
-}
-
-fn render_link(text: &str, image: bool) -> Option<RenderedLink> {
-    // text starts at '['.
-    let close = text.find(']')?;
-    let label = &text[1..close];
-    let rest = &text[close + 1..];
-    let target = rest.strip_prefix('(')?;
-    let end = target.find(')')?;
-    let href = &target[..end];
-    if !is_safe_href(href) {
-        return None;
-    }
-    let html = if image {
-        format!(
-            "<img src=\"{}\" alt=\"{}\">",
-            escape_html(href),
-            escape_html(label)
-        )
-    } else {
-        format!(
-            "<a href=\"{}\">{}</a>",
-            escape_html(href),
-            escape_html(label)
-        )
-    };
-    Some(RenderedLink {
-        html,
-        consumed: close + 1 + 1 + end + 1,
-    })
 }
 
 /// Dynamic content that has no business running on the publish server.

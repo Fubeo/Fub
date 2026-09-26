@@ -28,6 +28,8 @@ use fub_abi::traits::{HostApi, ReadApi};
 use fub_abi::PluginError;
 use wasmtime::{Store, StoreLimits};
 
+/// L'host prestato. `'static` per finta: la vita vera è quella della parentesi
+/// di [`with_guest`], e l'invariante che la sostituisce è scritta lì sopra.
 type Guest = *mut (dyn HostApi + 'static);
 type ReadGuest = *const (dyn ReadApi + 'static);
 
@@ -36,9 +38,17 @@ enum BorrowedGuest {
     Write(Guest),
 }
 
-/// Il tetto di memoria di questa istanza (`crate::limits`).
+/// Ciò che una host function ha davanti quando la chiamano.
 pub(crate) struct State {
     guest: Option<BorrowedGuest>,
+    /// Il tetto di memoria di questa istanza (`crate::limits`).
+    ///
+    /// Sta qui e non nel modulo che lo decide perché `Store::limiter` non vuole
+    /// un valore, vuole una **chiusura che peschi il limitatore dal dato dello
+    /// store**: è la forma con cui wasmtime permette a un limitatore di
+    /// ricordarsi di ciò che ha già concesso. Il dato dello store è questo
+    /// tipo, quindi il tetto abita qui — accanto al prestito dell'host, con cui
+    /// non ha niente da spartire se non l'indirizzo.
     limits: StoreLimits,
 }
 

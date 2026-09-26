@@ -70,6 +70,10 @@ export default defineConfig({
           if (/\/node_modules\/@codemirror\/(state|view|language|commands|autocomplete|search|lint)\//.test(id)) {
             return "editor-runtime";
           }
+          // Vim è una libreria a sé, grossa e con un'altra cadenza: da sola
+          // resta in cache quando cambia la shell, e non gonfia il chunk
+          // condiviso dalle tre finestre.
+          if (/\/node_modules\/@replit\/codemirror-vim(-core)?\//.test(id)) return "editor-vim";
           if (/\/node_modules\/@lezer\/(common|lr|highlight)\//.test(id)) return "parser-runtime";
           if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
             return "markdown-grammar";

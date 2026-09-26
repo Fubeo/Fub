@@ -13,7 +13,7 @@ use fub_abi::transfer::{
 use fub_abi::PluginError;
 
 use crate::common::{bad_args, content_hash_hex, MAX_MANIFEST_BYTES, MAX_TOTAL_UNCOMPRESSED};
-use crate::template::StagingManifest;
+use crate::template::{Importer, StagingManifest};
 
 const JOURNAL_SCHEMA: u32 = 1;
 
@@ -116,6 +116,22 @@ pub fn commit(
     provider: &mut dyn ImportProvider,
     host: &mut dyn HostApi,
 ) -> Result<ImportReport, PluginError> {
+    commit_with(job, Importer::Provider(provider), host)
+}
+
+/// Like [`commit`], with the importer the host has registered for the staged
+/// source ([`HostServices::run_import`]).
+///
+/// [`HostServices::run_import`]: fub_abi::traits::HostServices::run_import
+pub fn commit_registered(job: &str, host: &mut dyn HostApi) -> Result<ImportReport, PluginError> {
+    commit_with(job, Importer::Registered, host)
+}
+
+fn commit_with(
+    job: &str,
+    mut importer: Importer<'_>,
+    host: &mut dyn HostApi,
+) -> Result<ImportReport, PluginError> {
     let manifest = StagingManifest::load(job, host)?;
     if manifest.schema != 2 {
         return Err(bad_args(
@@ -145,12 +161,12 @@ pub fn commit(
         media_type: manifest.media_type.clone(),
         content: SourceContent::Bytes(bytes),
     };
-    if !provider.can_handle(&source) {
-        return Err(bad_args("staged source no longer matches its importer"));
-    }
+    importer
+        .check(&source)
+        .map_err(|_| bad_args("staged source no longer matches its importer"))?;
     let mut dry = request.clone();
     dry.mode = ImportMode::Preview;
-    let current_plan = provider.import(&source, &dry, host)?;
+    let current_plan = importer.import(&source, &dry, host)?;
     if current_plan.documents != manifest.preview.documents
         || current_plan.log != manifest.preview.log
     {
@@ -209,7 +225,7 @@ pub fn commit(
     save(job, &journal, host)?;
     let mut apply = request.clone();
     apply.mode = ImportMode::Apply;
-    let result = provider.import(&source, &apply, host);
+    let result = importer.import(&source, &apply, host);
     let mut persist_error = None;
     if let Ok(report) = &result {
         for entry in &mut journal.entries {

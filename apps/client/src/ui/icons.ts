@@ -10,6 +10,12 @@
 // titlebar, della rail e dell'inspector. Le view dichiarate possono portare
 // la propria `spec.icon` (una stringa), e chi le disegna decide cosa farne —
 // qui non si cabla niente di una feature.
+//
+// Il set è aperto: un modulo della shell che ha una figura sua la registra con
+// `registerIcon`, e da quel momento la disegnano tutti — la rail, l'ispettore,
+// il nodo `icon` delle view dichiarate — con lo stesso costrutto. Il teardown
+// la ritira.
+import type { Teardown } from "./lifetime";
 
 /// Un SVG inline 16×16, stroke 1.6, `currentColor`, pronto da inserire in un
 /// bottone. Restituisce una stringa, non un elemento: così chi la usa può
@@ -87,8 +93,32 @@ const ALIASES: Record<string, string> = {
   "layout-dashboard": "dashboard",
 };
 
+/// Le icone registrate dai moduli della shell, sopra il set di serie.
+const REGISTERED = new Map<string, string>();
+
+/// Solo i comandi e i numeri di un tracciato SVG: niente markup, attributi o
+/// riferimenti, quindi niente che una registrazione possa iniettare.
+const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,+\s-]+$/;
+
+/// Registra un'icona col costrutto del set: soltanto tracciati (i `d` dei suoi
+/// `<path>`), perché griglia, tratto e colore sono quelli di tutte le altre. Un
+/// nome già disegnato (di serie, alias o registrato) non si ridefinisce: due
+/// moduli che volessero la stessa figura se la contenderebbero in silenzio.
+export function registerIcon(name: string, paths: readonly string[]): Teardown {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`icon name «${name}» is not a lowercase id`);
+  if (SVG[name] || ALIASES[name] || REGISTERED.has(name)) throw new Error(`icon «${name}» is already drawn`);
+  if (paths.length === 0 || paths.some((d) => !PATH_DATA.test(d))) {
+    throw new Error(`icon «${name}» accepts only SVG path data`);
+  }
+  const body = paths.map((d) => `<path d="${d}"/>`).join("");
+  REGISTERED.set(name, body);
+  return () => {
+    if (REGISTERED.get(name) === body) REGISTERED.delete(name);
+  };
+}
+
 export function icon(name: string): string {
-  const body = SVG[ALIASES[name] ?? name];
+  const body = SVG[ALIASES[name] ?? name] ?? REGISTERED.get(name);
   if (!body) return "";
   return `<svg viewBox="0 0 ${ICON_GRID} ${ICON_GRID}" width="${ICON_SIZE}" height="${ICON_SIZE}" fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="${ICON_STROKE_WIDTH}" stroke-linecap="${ICON_LINECAP}" stroke-linejoin="${ICON_LINEJOIN}" aria-hidden="true" focusable="false">${body}</svg>`;
 }
@@ -106,7 +136,7 @@ export function iconEl(name: string): SVGElement | null {
 /// I nomi che questa shell sa disegnare. Per chi costruisce un selettore
 /// (la rail, l'inspector) e vuole sapere cosa c'è senza indovinare.
 export function iconNames(): string[] {
-  return Object.keys(SVG);
+  return [...Object.keys(SVG), ...REGISTERED.keys()];
 }
 /// Un bottone a icona con un contatore: la figura, il numero quando ce n'è
 /// uno, e il nome intero come nome accessibile e suggerimento. Il numero è

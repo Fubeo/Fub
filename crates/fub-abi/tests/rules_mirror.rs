@@ -202,6 +202,10 @@ fn name_fault_cases() -> Vec<Value> {
         " note.md ",
         "note. ",
         " / ",
+        // Il separatore di Windows: su un nome che c'è già è la fuga che
+        // `split('/')` non vede, su uno nuovo un carattere riservato.
+        "..\\..\\hosts",
+        "note\\a.md",
     ];
     let mut out = Vec::new();
     for path in names {
@@ -636,9 +640,8 @@ fn expansion_cases() -> Vec<Value> {
         ("{a.b}", vec![("a.b", "1")]),
         ("{ spaced }", vec![("spaced", "no")]),
         // Un'aperta dentro un nome: il nome è ciò che precede la prima chiusa.
-        // Un nome che in JavaScript è un membro di ogni oggetto.
         ("{a{b}", vec![("b", "B")]),
-        // Rigenerazione esplicita: `UPDATE_MIRROR=1 cargo test -p fub-abi --test
+        // Un nome che in JavaScript è un membro di ogni oggetto.
         ("{constructor}", vec![]),
         ("nothing", vec![]),
     ];
@@ -714,7 +717,14 @@ fn search_syntax_cases() -> Vec<Value> {
         ),
     ]
     .into_iter()
+    .map(|(input, typing)| (input.to_string(), typing))
+    // Il tetto dei gruppi annidati: all'ultimo livello ammesso e uno oltre.
+    .chain([32, 33].map(|depth| {
+        let nested = format!("{}a{}", "(".repeat(depth), ")".repeat(depth));
+        (nested, false)
+    }))
     .map(|(input, typing)| {
+        let input = input.as_str();
         let out = match fub_abi::rules::search_syntax::parse(input, typing) {
             Ok(expr) => json!({ "ok": expr }),
             Err(fault) => json!({ "fault": {
@@ -758,8 +768,8 @@ fn rules_fixture_is_in_sync_with_the_rust_rules() {
     let expected = expected();
     let path = fixture_path();
 
+    // Rigenerazione esplicita: `UPDATE_MIRROR=1 cargo test -p fub-abi --test
     // rules_mirror`. Fuori da quel caso il test non scrive mai nulla.
-    // Il test del test: una fixture di casi che non distinguono niente non
     if std::env::var_os("UPDATE_MIRROR").is_some() {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).expect("creates the fixture folder");
@@ -788,12 +798,12 @@ fn rules_fixture_is_in_sync_with_the_rust_rules() {
     );
 }
 
+/// Il test del test: una fixture di casi che non distinguono niente non
 /// presidierebbe niente.
 ///
 /// Per ogni regola con esito booleano servono entrambi gli esiti, e per le
 /// altre almeno due risposte diverse: se domani qualcuno potasse i casi ostili
 /// lasciando solo quelli facili, la fixture resterebbe verde mentre le due
-/// implementazioni divergono sul resto.
 /// implementazioni divergono sul resto.
 #[test]
 fn every_rule_has_cases_that_disagree_with_each_other() {

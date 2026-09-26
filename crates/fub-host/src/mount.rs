@@ -13,38 +13,36 @@ use camino::Utf8Path;
 use fub_abi::format::FormatDescriptor;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
+use fub_abi::traits::HostNetwork;
 use fub_abi::traits::{Plugin, PluginManifest};
-#[cfg(feature = "base")]
-use fub_features::{BaseIndex, BASE_ID};
-#[cfg(feature = "blocks")]
-use fub_features::{
-    CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID,
-};
+use fub_features::{HostWiring, OfficialFeature};
 #[cfg(feature = "search")]
 use fub_features::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "versioning")]
-use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
+use fub_features::{VersionStore, VersioningHandler};
 use fub_format_markdown::{MarkdownExport, MarkdownImport, MarkdownProvider};
 use fub_importers as importers;
+use fub_kernel::storage::VaultStorage;
 #[cfg(feature = "search")]
 use fub_kernel::RegistryError;
-use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
+use fub_kernel::{
+    FormatRegistry, MachineSettings, RootedFsStorage, SystemLocale, Trust, ViewStates, Workspace,
+};
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders, Registrar};
-#[cfg(feature = "versioning")]
-use crate::settings::versioning_settings;
 use crate::settings::{
-    catalog_assembled, core_catalog_assembled, core_settings, disabled_plugins, CORE_ID,
+    catalog_assembled, core_catalog_assembled, core_settings, disabled_plugins, settings_assembled,
+    CORE_ID,
 };
 
 const MARKDOWN_ID: &str = "fub.markdown";
-const COMMANDS_SERVICE: &str = "fub.commands";
-const TRASH_ID: &str = "fub.trash";
 
 pub struct Mounted {
     pub workspace: Workspace,
     pub registry: BundleRegistry,
     pub format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+    /// I provider di formato esterni rifiutati al montaggio, uno per rifiuto.
+    pub format_diagnostics: Vec<fub_abi::PluginError>,
     #[cfg(feature = "versioning")]
     pub versions: Option<VersionStore>,
 }
@@ -110,13 +108,13 @@ impl CoreBundle {
         self
     }
 
-    fn providing(mut self, service: &'static str) -> Self {
-        self.provides.push(service);
+    fn providing(mut self, services: &[&'static str]) -> Self {
+        self.provides.extend_from_slice(services);
         self
     }
 
-    fn requiring(mut self, service: &'static str) -> Self {
-        self.requires.push(service);
+    fn requiring(mut self, services: &[&'static str]) -> Self {
+        self.requires.extend_from_slice(services);
         self
     }
 }
@@ -181,6 +179,40 @@ impl Bundle for ImportersBundle {
     }
 }
 
+/// Chi apre il **supporto** di un vault (§15.1) per conto dell'host: il disco
+/// ancorato alla radice di serie; in memoria, o che fallisce la mossa che si
+/// vuole studiare, nei banchi. È la porta di [`Host::with_storage`](crate::Host::with_storage):
+/// un host che monta su un supporto che non è il disco non ha nessun altro
+/// canale verso il vault.
+pub trait VaultStorageSource: Send + Sync {
+    /// Il supporto su cui aprire il vault in `root`, che è già assoluta.
+    fn open(&self, root: &Utf8Path) -> std::io::Result<Arc<dyn VaultStorage>>;
+}
+
+/// Il disco, ancorato alla cartella aperta al mount
+/// ([`RootedFsStorage`]): il supporto di serie di ogni host.
+pub struct RootedDisk;
+
+impl VaultStorageSource for RootedDisk {
+    fn open(&self, root: &Utf8Path) -> std::io::Result<Arc<dyn VaultStorage>> {
+        Ok(Arc::new(RootedFsStorage::open(root)?))
+    }
+}
+
+/// Il client di rete di serie: `ureq` se questo binario ha il filo verso fuori
+/// (`http-client`), nessuno altrimenti — e allora un `fetch` risponde
+/// `Unserved`, non un errore di permesso.
+pub(crate) fn default_network() -> Option<Arc<dyn HostNetwork>> {
+    #[cfg(feature = "http-client")]
+    {
+        Some(Arc::new(crate::net::UreqNetwork::new()))
+    }
+    #[cfg(not(feature = "http-client"))]
+    {
+        None
+    }
+}
+
 pub fn mount(
     root: &Utf8Path,
     machine: Arc<MachineSettings>,
@@ -188,8 +220,17 @@ pub fn mount(
     system_locale: Arc<SystemLocale>,
     levels: &fub_kernel::log::Levels,
 ) -> Result<Mounted, String> {
+    let root = fub_kernel::vault::root_absolute(root);
+    let storage = RootedDisk
+        .open(&root)
+        .map_err(|source| fub_kernel::KernelError::InvalidRoot {
+            path: root.clone(),
+            source,
+        })
+        .map_err(|error| error.to_string())?;
     mount_with_formats(
-        root,
+        &root,
+        storage,
         machine,
         view_states,
         system_locale,
@@ -197,6 +238,8 @@ pub fn mount(
         crate::PreparedFormatSource::empty(),
         #[cfg(feature = "http-client")]
         None,
+        default_network(),
+        Arc::new(fub_kernel::time::SystemClock),
     )
 }
 
@@ -210,14 +253,18 @@ fn mount_error_with_resource_disposal(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn mount_with_formats(
     root: &Utf8Path,
+    storage: Arc<dyn VaultStorage>,
     machine: Arc<MachineSettings>,
     view_states: Arc<ViewStates>,
     system_locale: Arc<SystemLocale>,
     levels: &fub_kernel::log::Levels,
     prepared_formats: crate::PreparedFormatSource,
     #[cfg(feature = "http-client")] config_root: Option<&Utf8Path>,
+    network: Option<Arc<dyn HostNetwork>>,
+    clock: Arc<dyn fub_kernel::time::Clock>,
 ) -> Result<Mounted, String> {
     let (providers, resources) = prepared_formats.into_parts();
     let mut format_resources = Some(resources);
@@ -244,19 +291,23 @@ pub(crate) fn mount_with_formats(
             format_resources.take().unwrap_or_default(),
         ));
     }
+    // Un provider esterno che rivendica un'estensione già presa è rifiutato da
+    // solo: il vault si apre coi formati che aveva, e il rifiuto resta nella
+    // diagnostica di apertura invece di far cadere l'intero vault.
+    let mut format_diagnostics = Vec::new();
     for provider in providers {
         if let Err(error) = formats.register(provider) {
-            return Err(mount_error_with_resource_disposal(
-                format!("format provider conflict: {error}"),
-                format_resources.take().unwrap_or_default(),
+            format_diagnostics.push(fub_abi::PluginError::AlreadyExists(
+                format!("provider di formato rifiutato: {error}").into(),
             ));
         }
     }
 
-    let mut ws = match Workspace::with_machine_settings(root, formats, machine) {
+    let mut ws = match Workspace::on(root, formats, storage, machine) {
         Ok(ws) => ws
             .with_view_states(view_states)
-            .with_system_locale(system_locale),
+            .with_system_locale(system_locale)
+            .with_clock(clock),
         Err(error) => {
             return Err(mount_error_with_resource_disposal(
                 error.to_string(),
@@ -265,8 +316,15 @@ pub(crate) fn mount_with_formats(
         }
     };
 
-    #[cfg(feature = "http-client")]
-    ws.set_network(Arc::new(crate::net::UreqNetwork::new()));
+    if let Some(network) = network {
+        ws.set_network(network);
+    }
+    if let Err(error) = ws.reserve_host_commands(&crate::session::HOST_COMMANDS) {
+        return Err(mount_error_with_resource_disposal(
+            error.to_string(),
+            format_resources.take().unwrap_or_default(),
+        ));
+    }
 
     #[cfg(feature = "versioning")]
     let store: Custody<Option<VersionStore>> = Custody::empty("the version store");
@@ -306,16 +364,18 @@ pub(crate) fn mount_with_formats(
         Arc::new(ImportersBundle),
         Arc::new(crate::theme::ThemeBundle::series()),
         Arc::new(CoreBundle::new(
-            crate::sheet::SHEET_ID,
+            fub_format_sheet::index::SHEET_ID,
             "Fub Sheet",
             |registrar| {
-                let mut errors = match registrar
-                    .register_grid_provider(Box::new(crate::sheet::SheetGridProvider::new()))
-                {
+                let mut errors = match registrar.register_grid_provider(Box::new(
+                    fub_format_sheet::grid::SheetGridProvider::new(),
+                )) {
                     Ok(()) => Vec::new(),
                     Err(error) => vec![format!("sheet grid NOT registered: {error}")],
                 };
-                match registrar.register_index_provider(Box::new(crate::sheet::SheetIndex)) {
+                match registrar
+                    .register_index_provider(Box::new(fub_format_sheet::index::SheetIndex))
+                {
                     Ok(()) => errors,
                     Err(error) => {
                         errors.push(format!("sheet index NOT registered: {error}"));
@@ -326,98 +386,53 @@ pub(crate) fn mount_with_formats(
         )),
     ];
 
-    for feature in fub_features::every_official_feature() {
-        #[allow(unused_mut)]
-        let mut irregular: Option<CoreBundle> = None;
-
-        #[cfg(feature = "search")]
-        if feature.id == SEARCH_ID {
-            irregular = Some(
-                CoreBundle::new(feature.id, feature.name, register_search)
-                    .configuring(fub_features::search::settings()),
-            );
-        }
-
+    // Ogni feature ufficiale si monta con lo stesso ciclo: ciò che registra, le
+    // impostazioni, i servizi forniti e richiesti e il collegamento che solo
+    // l'host sa fare sono campi della sua riga d'inventario, non rami per id.
+    let wirings = FeatureWirings {
         #[cfg(feature = "versioning")]
-        if feature.id == VERSIONING_ID {
-            let store = store.clone();
-            let view = feature.view;
-            let commands = feature.commands;
-            irregular = Some(
-                CoreBundle::new(feature.id, feature.name, move |registrar| {
-                    register_versioning(registrar, &store, view, commands)
-                })
-                .configuring(versioning_settings()),
-            );
-        }
-
-        #[cfg(feature = "base")]
-        if feature.id == BASE_ID {
-            irregular = Some(CoreBundle::new(feature.id, feature.name, register_base));
-        }
-        #[cfg(feature = "blocks")]
-        if feature.id == BLOCKS_ID {
-            irregular = Some(CoreBundle::new(feature.id, feature.name, register_blocks));
-        }
-
-        let bundle = if let Some(bundle) = irregular {
-            bundle
-        } else if feature.view.is_some() || feature.commands.is_some() {
-            let view = feature.view;
-            let commands = feature.commands;
-            let id = feature.id;
-            CoreBundle::new(id, feature.name, move |registrar| {
-                let mut failures = Vec::new();
-                if let Some(build) = view {
-                    failures.extend(register_view(registrar, build()));
-                }
-                if let Some(build) = commands {
-                    failures.extend(register_commands(registrar, build()));
-                }
-                failures
-            })
-        } else {
+        versions: store.clone(),
+    };
+    for feature in fub_features::every_official_feature() {
+        if feature.registers_nothing() {
             return Err(mount_error_with_resource_disposal(
                 format!(
-                    "feature '{}' is in the inventory but the mount table does not know what it registers",
+                    "feature '{}' is in the inventory but declares nothing to register",
                     feature.id
                 ),
                 format_resources.take().unwrap_or_default(),
             ));
-        };
-
-        // Le giornaliere e gli inserimenti leggono impostazioni che il loro
-        // componente dichiara: senza questa riga `daily.folder` e compagne non
-        // erano di nessuno, il pannello non le mostrava e ogni lettura cadeva
-        // sul default.
-        #[cfg(feature = "template")]
-        let bundle = if feature.id == fub_features::TEMPLATE_ID {
-            bundle.configuring(fub_features::TemplateCommands::settings())
-        } else {
-            bundle
-        };
-        let mut bundle = bundle.speaking("it", catalog_assembled(feature.id, (feature.catalog)()));
-        // `fub.trash` invoca `trash.restore`/`trash.empty`, che appartengono al
-        // bundle dei comandi. Il service marker è una dipendenza di montaggio:
-        // il provider vero resta il registro comandi e l'atomicità garantisce
-        // che il marker non sopravviva a una registrazione fallita.
-        if feature.id == COMMANDS_SERVICE {
-            bundle = bundle.providing(COMMANDS_SERVICE);
         }
-        if feature.id == TRASH_ID {
-            bundle = bundle.requiring(COMMANDS_SERVICE);
-        }
+        let wirings = wirings.clone();
+        let bundle = CoreBundle::new(feature.id, feature.name, move |registrar| {
+            register_feature(registrar, feature, &wirings)
+        })
+        .configuring(settings_assembled(feature))
+        .speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            catalog_assembled(feature),
+        )
+        .providing(feature.provides)
+        .requiring(feature.requires);
         bundles.push(Arc::new(bundle));
     }
 
     #[cfg(feature = "http-client")]
     {
-        bundles.push(Arc::new(crate::remote::bundle::SyncBundle::new(
-            config_root.map(|root| root.join("sync")),
-        )));
-        bundles.push(Arc::new(crate::publish::commands::PublishBundle::new(
-            config_root.map(|root| root.join("publish")),
-        )));
+        // Lo stato di sync è del vault, il token della macchina.
+        let token = crate::remote::TokenSource::machine(config_root);
+        bundles.push(Arc::new(
+            crate::remote::bundle::SyncBundle::new(
+                config_root.map(|config| crate::remote::vault_state_dir(config, root)),
+            )
+            .with_token(token.clone()),
+        ));
+        bundles.push(Arc::new(
+            crate::publish::commands::PublishBundle::new(
+                config_root.map(crate::publish::scoped_state_dir),
+            )
+            .with_token(token),
+        ));
     }
 
     let mut registry = BundleRegistry::new();
@@ -495,23 +510,95 @@ pub(crate) fn mount_with_formats(
         workspace: ws,
         registry,
         format_resources: format_resources.take().unwrap_or_default(),
+        format_diagnostics,
         #[cfg(feature = "versioning")]
         versions,
     })
 }
 
-#[cfg(feature = "base")]
-fn register_base(registrar: &mut Registrar<'_>) -> Vec<String> {
+/// Ciò che l'host tiene per i collegamenti che le feature dichiarano.
+#[derive(Clone)]
+struct FeatureWirings {
+    /// La metà esterna del versioning: la legge chi apre le sessioni.
+    #[cfg(feature = "versioning")]
+    versions: Custody<Option<VersionStore>>,
+}
+
+/// Registra una feature ufficiale da ciò che la sua riga dichiara.
+///
+/// Prima il collegamento dell'host, poi i provider nell'ordine indice, regole,
+/// renderer, view e comandi. Un collegamento che fallisce ferma la feature
+/// prima dei provider: il registro annulla ciò che era entrato.
+fn register_feature(
+    registrar: &mut Registrar<'_>,
+    feature: &OfficialFeature,
+    #[cfg_attr(not(feature = "versioning"), allow(unused_variables))] wirings: &FeatureWirings,
+) -> Vec<String> {
+    #[cfg(feature = "versioning")]
+    let mut opened_versions = None;
+    match feature.wiring {
+        HostWiring::None => {}
+        #[cfg(feature = "search")]
+        HostWiring::SearchIndex => {
+            let failures = register_search(registrar);
+            if !failures.is_empty() {
+                return failures;
+            }
+        }
+        #[cfg(feature = "versioning")]
+        HostWiring::VersionStore => match open_versioning(registrar) {
+            Ok(opened) => opened_versions = Some(opened),
+            Err(failure) => return vec![failure],
+        },
+        #[allow(unreachable_patterns)]
+        unwired => {
+            return vec![format!(
+                "this host was built without the {unwired:?} wiring that the feature declares"
+            )]
+        }
+    }
+
     let mut failures = Vec::new();
-    if let Err(error) = registrar.register_index_provider(Box::new(BaseIndex::new())) {
-        failures.push(format!("base index not registered: {error}"));
+    if let Some(build) = feature.index {
+        if let Err(error) = registrar.register_index_provider(build()) {
+            failures.push(format!("index not registered: {error}"));
+        }
     }
-    if let Err(error) = registrar.register_syntax_rule(Box::new(fub_format_base::BaseRule)) {
-        failures.push(format!("base syntax rule not registered: {error}"));
+    if let Some(build) = feature.syntax {
+        for rule in build() {
+            if let Err(error) = registrar.register_syntax_rule(rule) {
+                failures.push(format!("syntax rule not grafted: {error}"));
+            }
+        }
     }
-    if let Err(error) = registrar.register_custom_renderer(Box::new(fub_format_base::BaseRenderer))
-    {
-        failures.push(format!("base renderer not registered: {error}"));
+    if let Some(build) = feature.renderers {
+        for renderer in build() {
+            if let Err(error) = registrar.register_custom_renderer(renderer) {
+                failures.push(format!("renderer not registered: {error}"));
+            }
+        }
+    }
+    if let Some(build) = feature.view {
+        failures.extend(register_view(registrar, build()));
+    }
+    if let Some(build) = feature.commands {
+        let commands = build();
+        // Il ripristino scrive, e la preimmagine la fotografa il gancio che
+        // l'interruttore spegne: spento, si legge e non si ripristina.
+        #[cfg(feature = "versioning")]
+        let commands: Box<dyn fub_abi::traits::CommandProvider> = if opened_versions.is_some() {
+            Box::new(SwitchedRestore(commands))
+        } else {
+            commands
+        };
+        failures.extend(register_commands(registrar, commands));
+    }
+
+    #[cfg(feature = "versioning")]
+    if let Some(opened) = opened_versions {
+        if failures.is_empty() {
+            failures.extend(publish_versions(&wirings.versions, opened));
+        }
     }
     failures
 }
@@ -543,49 +630,111 @@ fn register_search(registrar: &mut Registrar<'_>) -> Vec<String> {
     }
 }
 
+/// Apre lo store delle versioni e registra handler e hook prima della
+/// scrittura.
+///
+/// Lo store si apre anche con l'interruttore spento: la storia già registrata
+/// resta leggibile, com'è scritto nella descrizione dell'impostazione. Spento
+/// vuol dire che **non ne nasce di nuova**, e lo decidono handler e gancio a
+/// ogni scrittura, leggendo l'impostazione in quel momento: riaccenderlo non
+/// chiede di riaprire il vault.
 #[cfg(feature = "versioning")]
-fn register_versioning(
-    registrar: &mut Registrar<'_>,
-    external_store: &Custody<Option<VersionStore>>,
-    view: Option<fn() -> Box<dyn fub_abi::ViewProvider>>,
-    commands: Option<fn() -> Box<dyn fub_abi::traits::CommandProvider>>,
-) -> Vec<String> {
-    if !matches!(
-        registrar.setting(crate::settings::VERSIONING_ENABLED),
-        Ok(fub_abi::settings::SettingValue::Toggle(true))
-    ) {
-        return Vec::new();
-    }
-
-    let opened = match registrar.with_host(VersionStore::open) {
-        Ok(opened) => opened,
-        Err(error) => return vec![format!("versioning unavailable: {error}")],
-    };
+fn open_versioning(registrar: &mut Registrar<'_>) -> Result<VersionStore, String> {
+    let opened = registrar
+        .with_host(VersionStore::open)
+        .map_err(|error| format!("versioning unavailable: {error}"))?;
     let hook_store = opened.clone();
-    if let Err(error) =
-        registrar.register_event_handler(Box::new(VersioningHandler::new(opened.clone())))
-    {
-        return vec![format!("versioning not registered: {error}")];
-    }
-    if let Err(error) = registrar.set_before_write_hook(Arc::new(move |host, id| {
-        VersioningHandler::new(hook_store.clone()).photograph_before_write(host, id)
-    })) {
-        return vec![format!("versioning hook not registered: {error}")];
+    registrar
+        .register_event_handler(Box::new(SwitchedVersioning(VersioningHandler::new(
+            opened.clone(),
+        ))))
+        .map_err(|error| format!("versioning not registered: {error}"))?;
+    registrar
+        .set_before_write_hook(Arc::new(move |host, id| {
+            if !versioning_on(host) {
+                return Ok(());
+            }
+            VersioningHandler::new(hook_store.clone()).photograph_before_write(host, id)
+        }))
+        .map_err(|error| format!("versioning hook not registered: {error}"))?;
+    Ok(opened)
+}
+
+/// L'interruttore del versioning, letto adesso. Il default è quello dello
+/// schema: acceso.
+#[cfg(feature = "versioning")]
+fn versioning_on(host: &dyn fub_abi::traits::ReadApi) -> bool {
+    host.setting(crate::settings::VERSIONING_ENABLED)
+        .ok()
+        .and_then(|value| value.as_toggle())
+        .unwrap_or(true)
+}
+
+/// Il campionatore dietro l'interruttore. Spento, la storia già registrata
+/// segue le sue note, rinominate o cancellate, e non ne nasce di nuova: niente
+/// fotografie dalle modifiche, niente passata di riconciliazione dopo un
+/// `Overflow`, che fotografa.
+#[cfg(feature = "versioning")]
+struct SwitchedVersioning(VersioningHandler);
+
+#[cfg(feature = "versioning")]
+impl fub_abi::traits::EventHandler for SwitchedVersioning {
+    fn subscribed(&self) -> fub_abi::EventMask {
+        self.0.subscribed()
     }
 
-    let mut failures = Vec::new();
-    if let Some(build) = view {
-        failures.extend(register_view(registrar, build()));
+    fn handle(
+        &mut self,
+        notice: &fub_abi::Notice,
+        host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<(), fub_abi::PluginError> {
+        use fub_abi::Event;
+        let records = matches!(
+            notice.event,
+            Event::DocumentChanged { .. } | Event::EntryChanged { .. } | Event::Overflow { .. }
+        );
+        if records && !versioning_on(host) {
+            return Ok(());
+        }
+        self.0.handle(notice, host)
     }
-    if let Some(build) = commands {
-        failures.extend(register_commands(registrar, build()));
-    }
-    if !failures.is_empty() {
-        return failures;
+}
+
+/// I comandi del versioning dietro l'interruttore. Il ripristino sostituisce
+/// la nota, e con il versioning spento nessuno fotograferebbe ciò che
+/// sostituisce: rifiuta, e dice come riaverlo, invece di perderlo.
+#[cfg(feature = "versioning")]
+struct SwitchedRestore(Box<dyn fub_abi::traits::CommandProvider>);
+
+#[cfg(feature = "versioning")]
+impl fub_abi::traits::CommandProvider for SwitchedRestore {
+    fn commands(&self) -> Vec<fub_abi::CommandSpec> {
+        self.0.commands()
     }
 
-    // La metà esterna viene pubblicata solo quando tutti i provider sono
-    // entrati: un rollback non lascia un `VersionStore` che finga un bundle vivo.
+    fn invoke(
+        &self,
+        command: &str,
+        args: serde_json::Value,
+        mode: fub_abi::InvokeMode,
+        host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<fub_abi::CommandOutcome, fub_abi::PluginError> {
+        if !versioning_on(host) {
+            return Err(fub_abi::PluginError::Unserved(fub_abi::text::Text::key(
+                crate::settings::VERSIONING_OFF_RESTORE,
+            )));
+        }
+        self.0.invoke(command, args, mode, host)
+    }
+}
+
+/// La metà esterna viene pubblicata solo quando tutti i provider sono entrati:
+/// un rollback non lascia un `VersionStore` che finga un bundle vivo.
+#[cfg(feature = "versioning")]
+fn publish_versions(
+    external_store: &Custody<Option<VersionStore>>,
+    opened: VersionStore,
+) -> Vec<String> {
     match external_store.write() {
         Ok(mut slot) => {
             *slot = Some(opened);
@@ -628,30 +777,6 @@ fn register_commands(
         Ok(()) => Vec::new(),
         Err(error) => vec![format!("commands not registered: {error}")],
     }
-}
-
-#[cfg(feature = "blocks")]
-fn register_blocks(registrar: &mut Registrar<'_>) -> Vec<String> {
-    let mut failures = Vec::new();
-    for rule in [
-        Box::new(DiagramRule) as Box<dyn fub_abi::custom::SyntaxRule>,
-        Box::new(MathRule),
-        Box::new(HighlightRule),
-        Box::new(CommentRule),
-    ] {
-        if let Err(error) = registrar.register_syntax_rule(rule) {
-            failures.push(format!("syntax rule not grafted: {error}"));
-        }
-    }
-    for renderer in [
-        Box::new(DiagramRenderer) as Box<dyn fub_abi::custom::CustomRenderer>,
-        Box::new(MathRenderer),
-    ] {
-        if let Err(error) = registrar.register_custom_renderer(renderer) {
-            failures.push(format!("renderer not registered: {error}"));
-        }
-    }
-    failures
 }
 
 #[cfg(test)]

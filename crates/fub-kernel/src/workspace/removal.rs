@@ -310,6 +310,8 @@ impl Workspace {
             return Ok(None);
         }
         let previous_provider_call = self.dispatch.enter_provider_call();
+        // La nota con il focus non esiste più: `active_context` non deve
+        // continuare a nominarla alle view (né tenerne una selezione).
         self.session.invalidate(id, ContextChange::Gone);
         self.indexes.core.remove_entry(id);
         self.indexes

@@ -109,9 +109,9 @@ fn a_component_wasm_is_mounts_lives_and_is_unmounts() {
 
     // Il job gira sul pool vero, dentro l'istanza WASM, e torna con l'esito:
     // ha letto la nota **attraverso il confine**.
-    ask(&host, "ping");
+    ask(&host, "demo.ping:ping");
     let (job, result) = next_result(&events);
-    assert_eq!(job, "ping");
+    assert_eq!(job, "demo.ping:ping");
     let value = result.expect("il job è riuscito");
     assert_eq!(value["nota"], "Nota.md");
     assert!(
@@ -127,12 +127,12 @@ fn a_component_wasm_is_mounts_lives_and_is_unmounts() {
 
     // Un job che non esiste è `UnknownJob`, e il nome è quello chiesto: un
     // errore del contratto tradotto dal WIT, non un trap.
-    ask(&host, "non-esiste");
+    ask(&host, "demo.ping:non-esiste");
     let (_, result) = next_result(&events);
     let error = result.expect_err("an unknown job does not succeed");
     assert!(
         matches!(&error, PluginError::UnknownJob(t)
-            if t.as_literal() == Some("non-esiste")),
+            if t.as_literal() == Some("demo.ping:non-esiste")),
         "it is an unknown job, with its name: {error}"
     );
 
@@ -163,9 +163,9 @@ fn a_component_without_the_permission_sees_close_the_gate() {
     let v = Vault::new();
     let (host, events) = bench(&v, false);
 
-    ask(&host, "ping");
+    ask(&host, "demo.ping:ping");
     let (job, result) = next_result(&events);
-    assert_eq!(job, "ping");
+    assert_eq!(job, "demo.ping:ping");
     let error = result.expect_err("without `read-vault` the ping cannot read");
     assert!(
         matches!(&error, PluginError::PermissionDenied(t)
@@ -203,9 +203,9 @@ fn a_component_with_data_families_round_trips() {
     let v = Vault::new();
     let (host, events) = bench_component(&v, "con-dati");
 
-    ask(&host, "dati");
+    ask(&host, "demo.ping:dati");
     let (job, result) = next_result(&events);
-    assert_eq!(job, "dati");
+    assert_eq!(job, "demo.ping:dati");
     assert_eq!(
         result.expect("il round-trip dei dati riesce"),
         serde_json::json!({

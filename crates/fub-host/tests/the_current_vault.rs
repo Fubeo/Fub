@@ -12,7 +12,6 @@
 //! Qui si prova la **sequenza**, non la serializzazione: apri, riapri, scegli,
 //! chiudi, e chiedi chi è corrente. Un registro finto riletto da un file
 //! proverebbe che il JSON va e viene, cioè l'unica metà che non era rotta.
-//! not broken.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_host::Host;
@@ -64,7 +63,6 @@ fn when(host: &Host, root: &Utf8Path) -> u64 {
 /// Il presidio ha bisogno di **tre** vault e di un ordine d'uso diverso da
 /// quello dei path: con due soli, chi resta è uno solo e qualunque criterio
 /// sembra giusto — ed è esattamente per questo che il difetto è sopravvissuto
-/// al banco che apre due vault e ne chiude uno.
 /// al banco che apre due vault e ne chiude uno.
 #[test]
 fn closing_the_current_of_it_takes_the_place_the_more_recent_not_the_first_of_the_path() {
@@ -257,7 +255,6 @@ fn the_startup_falls_on_the_next_if_the_last_and_vanished() {
         "B gone, startup falls back to A"
     );
 
-    // Lascia A aperto finché il test ha finito: close lo spegne senza reclami.
     // Lascia A aperto finché il test ha finito: close lo spegne senza reclami.
     drop(host);
     drop(a);

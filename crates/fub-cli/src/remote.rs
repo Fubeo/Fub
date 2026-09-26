@@ -6,17 +6,24 @@ use super::cli::{GlobalArgs, PublishAction, PublishArgs, SyncAction, SyncArgs};
 use super::commands::{Connection, Failure};
 use super::output::{envelope_ok, OutputFormat};
 
+/// Lo stato di sync del vault scelto: la stessa cartella che il bundle riceve
+/// al montaggio ([`fub_host::remote::vault_state_dir`]).
 fn sync_state_dir(connection: &Connection) -> Result<std::path::PathBuf, Failure> {
-    fub_host::remote::instance_state_dir(&connection.host)
-        .map_err(|error| Failure::new(error.exit_code(), "bad_args", error.to_string()))
-}
-
-fn vault_root(connection: &Connection) -> Result<String, Failure> {
-    connection
+    let config = connection.host.configuration_root().ok_or_else(|| {
+        let error = fub_host::remote::RemoteError::MissingConfiguration;
+        Failure::new(error.exit_code(), "bad_args", error.to_string())
+    })?;
+    let root = connection
         .host
         .root(connection.vault_selector())
-        .map(|p| p.to_string())
-        .map_err(|error| Failure::from_plugin(&error))
+        .map_err(|error| Failure::from_plugin(&error))?;
+    Ok(fub_host::remote::vault_state_dir(config, &root).into_std_path_buf())
+}
+
+/// Il token come lo leggono i bundle: l'ambiente, poi quello salvato da
+/// `login` nella configurazione della macchina.
+fn token_source(connection: &Connection) -> fub_host::remote::TokenSource {
+    fub_host::remote::TokenSource::machine(connection.host.configuration_root())
 }
 
 fn setting_url(connection: &Connection, key: &str) -> Result<String, Failure> {
@@ -43,10 +50,16 @@ fn setting_url(connection: &Connection, key: &str) -> Result<String, Failure> {
 
 fn build_client(connection: &Connection) -> Result<fub_host::remote::sync::SyncClient, Failure> {
     let state_dir = sync_state_dir(connection)?;
-    let root = vault_root(connection)?;
     let setting = setting_url(connection, "sync.server_url")?;
-    fub_host::remote::sync::SyncClient::from_env(state_dir, Some(&root), &setting)
-        .map_err(map_sync_err)
+    // Nessun `vault_scope`: l'abbinamento del vault sta nel suo stato, e
+    // il percorso del vault non è un identificativo remoto (I60).
+    fub_host::remote::sync::SyncClient::from_env(
+        state_dir,
+        None,
+        &setting,
+        &token_source(connection),
+    )
+    .map_err(map_sync_err)
 }
 
 pub fn map_sync_err(error: fub_host::remote::sync::SyncClientError) -> Failure {
@@ -140,7 +153,7 @@ pub fn sync_cmd(
                         connection.vault_selector(),
                         "fub.sync",
                         "sync.pass",
-                        serde_json::json!({ "op": "pass", "vault_id": vault_root(connection)? }),
+                        serde_json::json!({ "op": "pass" }),
                     )
                     .map_err(|error| Failure::from_plugin(&error));
                 let report = match pass {
@@ -383,7 +396,8 @@ pub fn publish_cmd(
     // scope included, no vault required): empty/missing = MissingConfiguration.
     let setting_url = setting_url(connection, "publish.server_url")?;
     let client =
-        site::PublishClient::from_env_with_setting(&setting_url).map_err(map_publish_err)?;
+        site::PublishClient::from_env_with_setting(&setting_url, &token_source(connection))
+            .map_err(map_publish_err)?;
     match args.action {
         PublishAction::Status { site } => {
             let status = client.status(&site).map_err(map_publish_err)?;

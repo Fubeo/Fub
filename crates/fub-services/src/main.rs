@@ -521,7 +521,7 @@ fn handle_register(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpRespons
     {
         let state = state.lock();
         if state.accounts.by_name.contains_key(&name) {
-            return HttpResponse::err(422, "account exists");
+            return HttpResponse::err(409, "account exists");
         }
     }
     // 210k round PBKDF2 senza lock: sync/publish non si fermano.
@@ -530,6 +530,10 @@ fn handle_register(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpRespons
         Ok(pw) => pw,
     };
     let mut state = state.lock();
+    // Un register concorrente può aver preso il nome mentre girava la KDF.
+    if state.accounts.by_name.contains_key(&name) {
+        return HttpResponse::err(409, "account exists");
+    }
     let id = match state.accounts.insert_prepared(&name, pw) {
         Err(e) => return HttpResponse::err(422, &e),
         Ok(id) => id,

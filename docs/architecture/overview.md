@@ -65,12 +65,11 @@ flowchart TD
     canvas --> abi
     canvas --> markdown
     importers --> abi
-    importers --> markdown
     features --> abi
     features --> base
-    features --> markdown
     markdown --> abi
     markdown --> sdk
+    sheet --> abi
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -80,13 +79,16 @@ flowchart TD
     testkit --> kernel
 
     features -.-> kernel
+    features -.-> markdown
     features -.-> sdk
     features -.-> testkit
     markdown -.-> kernel
     kernel -.-> testkit
     host -.-> sdk
     host -.-> testkit
+    wasmhost -.-> sheet
     wasmhost -.-> testkit
+    importers -.-> markdown
     importers -.-> sdk
 ```
 
@@ -158,4 +160,5 @@ rigenerati. La classificazione è esplicita nel riferimento su disco.
 - [Storage e identità](storage-and-identity.md)
 - [Runtime, eventi e job](runtime-events-and-jobs.md)
 - [Frontend e IPC](frontend-and-ipc.md)
+- [Superfici dell'editor](editor-surfaces.md)
 - [Runtime dei plugin](plugin-runtime.md)

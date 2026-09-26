@@ -1,13 +1,14 @@
 import type { Theme } from "../../theme/theme";
 import type { SourceKind } from "../../host/enums.generated";
-import type { PaneMode } from "../../host/contract";
-import type {
-  DocumentUpdate,
-  EditorChange,
-  EditorSelections,
-} from "../text/engine";
+import type { PaneMode, SelectionSet, Span, SyntaxForm } from "../../host/contract";
+import type { DocumentUpdate, EditorChange } from "./text-operation";
 
-export type SurfaceFamily = "text" | "grid" | "structured" | "canvas" | "viewer" | "error";
+/**
+ * The family of a surface: a name its registration owns, one owner at a time.
+ * The shell registers `text`, `grid`, `structured`, `canvas`, `viewer` and
+ * `error`; another owner names its own family.
+ */
+export type SurfaceFamily = string;
 
 export interface SurfaceOverride {
   readonly family: SurfaceFamily;
@@ -26,7 +27,10 @@ export interface SurfaceMode {
   readonly id: string;
   readonly label: () => string;
   readonly presentation: "surface" | "rendered";
-  /** Projection onto the frozen host context until the public surface ABI exists. */
+  /**
+   * What a provider learns of this mode from the session context: the source
+   * as stored, a rendering the user edits, or a rendering without a caret.
+   */
   readonly contextMode: PaneMode;
 }
 
@@ -39,23 +43,162 @@ export interface SurfaceMountContext {
   /** Detail of a rejected document, displayed only by the inert error surface. */
   readonly errorReason?: string;
 }
-/** A mounted shell-owned surface. No DOM or CodeMirror value crosses its boundary. */
+
+/** A selected range, in UTF-8 bytes of the document source, with its text. */
+export interface EditorRange {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface EditorSelections {
+  primary: EditorRange;
+  secondary: EditorRange[];
+}
+
+/**
+ * What a structured surface has selected (canvas cards, a range of cells), as
+ * the text of each item. The items are not byte ranges of the source, so the
+ * context publishes them floating: the text is true, coordinates there are
+ * none.
+ */
+export interface SelectedText {
+  primary: string;
+  secondary: string[];
+}
+
+/// Le selezioni che un riquadro pubblica, cioè ciò che il contesto dice al
+/// kernel. Una superficie di testo dà
+/// intervalli del sorgente: ancorati a buffer pulito, fluttuanti a buffer
+/// sporco. Il buffer è UNO, e il suo stato decide per tutte le selezioni
+/// insieme: è la ragione per cui il caso si sceglie qui, una volta, e non
+/// dentro ogni selezione (decisione 0093). Una superficie strutturata (tela,
+/// foglio) sceglie elementi e non intervalli: il loro testo viaggia sempre
+/// senza coordinate. `null` quando la superficie non dice niente.
+export function selectionSetOf(
+  surface: Pick<EditorSurface, "selections" | "selectedText"> | undefined,
+  dirty: boolean,
+): SelectionSet | null {
+  const sel = surface?.selections?.();
+  if (sel === undefined) {
+    const items = surface?.selectedText?.() ?? null;
+    if (!items) return null;
+    return {
+      kind: "floating",
+      value: { primary: { text: items.primary }, secondary: items.secondary.map((text) => ({ text })) },
+    };
+  }
+  return dirty
+    ? {
+        kind: "floating",
+        value: {
+          primary: { text: sel.primary.text },
+          secondary: sel.secondary.map((s) => ({ text: s.text })),
+        },
+      }
+    : {
+        kind: "anchored",
+        value: {
+          primary: { span: { start: sel.primary.start, end: sel.primary.end }, text: sel.primary.text },
+          secondary: sel.secondary.map((s) => ({
+            span: { start: s.start, end: s.end },
+            text: s.text,
+          })),
+        },
+      };
+}
+
+/**
+ * The document text a surface edits: the session's buffer, as this surface
+ * holds it. A surface that shows the document some other way (the bytes of a
+ * media file, a message) has no buffer, and fakes none.
+ */
+export interface SurfaceBuffer {
+  setDoc(text: string): void;
+  syncDoc(update: DocumentUpdate | string): void;
+  getDoc(): string;
+}
+
+/**
+ * A place in the document, in the model's currency: UTF-8 byte offsets of the
+ * source (`Span`). Each surface reads it its own way: a text profile moves the
+ * cursor there, the canvas selects the card whose source holds it.
+ */
+export interface SurfaceLocation {
+  readonly span: Span;
+}
+
+/**
+ * Another vault entry, to refer to from inside the document. The surface
+ * writes it in the document's own syntax: the shell says what, never how.
+ */
+export type SurfaceReference =
+  /** A resource just deposited, as a URL relative to the document. */
+  | { readonly kind: "attachment"; readonly link: string }
+  /** A note, by the shortest name that resolves to it in this vault. */
+  | { readonly kind: "note"; readonly name: string };
+
+/** A point on screen, in client coordinates: where something was dropped. */
+export interface SurfacePoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A mounted shell-owned surface. No DOM or CodeMirror value crosses its
+ * boundary. Past the first five members everything is a capability: the shell
+ * offers a gesture where the mounted surface declares it, and never asks which
+ * family or profile it is.
+ */
 export interface EditorSurface {
   readonly family: SurfaceFamily;
   readonly profile: string;
   readonly surfaceId: string;
   readonly modes: readonly SurfaceMode[];
+  /**
+   * The mode a pane opens this surface in when it remembers none for its
+   * family; the first declared one when absent.
+   */
+  readonly defaultMode?: string;
   setMode(mode: string): void;
-  setDoc(text: string): void;
-  syncDoc(update: DocumentUpdate | string): void;
-  getDoc(): string;
+  /** The document text, when this surface edits it. */
+  readonly buffer?: SurfaceBuffer;
   focus?(): void;
-  revealByteOffset?(byteOffset: number): void;
+  /**
+   * Brings the view to a place in the document. `false` when this surface
+   * cannot get there, so that the shell says it instead of doing nothing.
+   */
+  reveal?(location: SurfaceLocation): boolean;
   selections?(): EditorSelections | undefined;
+  /**
+   * A surface without text ranges says what it has selected here instead of
+   * `selections`; `null` when nothing is.
+   */
+  selectedText?(): SelectedText | null;
   setReadOnly?(readOnly: boolean): void;
   setTheme?(theme: Theme): void;
+  /** The syntax the vault declares for this document (tags, wikilinks, ...). */
+  setSyntaxForms?(forms: readonly SyntaxForm[]): void;
+  /**
+   * Writes references to other vault entries into the document, at the point
+   * where they were dropped or else at the cursor. It is a user edit: it goes
+   * to the session and into the local history. `false` when the surface cannot
+   * write now (read-only, closed).
+   */
+  insertReferences?(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
+  /** Mounts the document rendered for a presentation into `host`; returns its teardown. */
+  mountPresentation?(host: HTMLElement): () => void;
+  /**
+   * The document has a print rendering worth offering. The core draws it from
+   * the format's provider (`IndexQuery::RenderPrint`): a surface whose format
+   * has no provider, or nothing to print, does not declare it.
+   */
+  readonly printable?: boolean;
   destroy(): void;
 }
+
+/** A surface that edits the document text: what a text-backed format mounts. */
+export type BufferedSurface = EditorSurface & { readonly buffer: SurfaceBuffer };
 
 export interface SurfaceFactory {
   mount(profile: string, context: SurfaceMountContext): EditorSurface;
@@ -70,8 +213,11 @@ export interface SurfaceRegistration {
   readonly factory: SurfaceFactory;
   readonly formats?: Readonly<Record<string, string>>;
   readonly sources?: Readonly<Partial<Record<SourceKind, string>>>;
-  /** Select a registered profile when the source binding alone is too broad. */
-  readonly selectSourceProfile?: (request: SurfaceRequest, fallback: string) => string;
+  /**
+   * Select a registered profile when the source binding alone is too broad, or
+   * `null` when this binding does not show the requested document.
+   */
+  readonly selectSourceProfile?: (request: SurfaceRequest, fallback: string) => string | null;
 }
 
 export interface ResolvedSurface {
@@ -207,15 +353,30 @@ export class DocumentSurfaceRegistry {
       if (exact) return this.#resolved(exact.registration, exact.profile);
     }
     const source = this.#sources.get(request.sourceKind);
-    if (source) {
-      const profile = source.registration.selectSourceProfile?.(request, source.profile) ?? source.profile;
-      if (!source.registration.profileSet.has(profile)) {
-        throw new Error(`surface owner ${source.registration.owner} selected unregistered profile ${profile}`);
-      }
-      return this.#resolved(source.registration, profile);
-    }
+    const profile = source ? this.#sourceProfile(source, request) : null;
+    if (source && profile !== null) return this.#resolved(source.registration, profile);
     const error = this.#families.get("error");
     return error ? this.#resolved(error, error.defaultProfile) : null;
+  }
+
+  /**
+   * Whether a document can be shown from its bytes, without reading it as
+   * text. The owner of the `bytes` source binding decides from the id alone:
+   * it is the only place that classifies such a file, and the shell asks here
+   * instead of guessing from the extension.
+   */
+  showsBytes(documentId: string): boolean {
+    const source = this.#sources.get("bytes");
+    return !!source && this.#sourceProfile(source, { formatId: null, sourceKind: "bytes", documentId }) !== null;
+  }
+
+  #sourceProfile(source: Binding, request: SurfaceRequest): string | null {
+    const selected = source.registration.selectSourceProfile;
+    const profile = selected ? selected(request, source.profile) : source.profile;
+    if (profile !== null && !source.registration.profileSet.has(profile)) {
+      throw new Error(`surface owner ${source.registration.owner} selected unregistered profile ${profile}`);
+    }
+    return profile;
   }
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {

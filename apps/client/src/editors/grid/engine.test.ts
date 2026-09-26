@@ -417,6 +417,34 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  it("dice l'intervallo scelto col testo di una copia, fino a un tetto", () => {
+    const { engine, viewport } = mounted();
+    expect(engine.selectedText()).toEqual({ primary: "1", secondary: [] });
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true }));
+    expect(engine.selectedText()).toEqual({ primary: "1\t\n\t", secondary: [] });
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+    // Cento righe per cinquanta colonne: sotto il tetto di diecimila celle.
+    expect(engine.selectedText()?.primary.split("\n")).toHaveLength(100);
+    engine.destroy();
+    expect(engine.selectedText()).toBeNull();
+
+    const large = mounted(undefined, workbook(200, 60));
+    large.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+    expect(large.engine.selectedText()).toBeNull();
+    large.engine.destroy();
+  });
+
+  it("barra delle formule ed editor di cella sono campi, non documenti", () => {
+    const { engine, host } = mounted();
+    for (const selector of [".grid-formula-editor", ".grid-cell-editor"]) {
+      const field = host.querySelector<HTMLElement>(selector)!;
+      expect(field.querySelector(".cm-lineNumbers")).toBeNull();
+      expect(findTextEditorOrThrow(field).contentDOM.getAttribute("spellcheck")).toBe("false");
+    }
+    engine.destroy();
+  });
+
   it("annulla la bozza locale quando un full-text peer ricarica la topologia", () => {
     const { engine, host, viewport, changes } = mounted();
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));

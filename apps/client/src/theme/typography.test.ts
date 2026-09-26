@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import dark from "./serie/sheet-dark.css?raw";
 import light from "./serie/sheet-light.css?raw";
 import preview from "./serie/skin/preview.css?raw";
-import editorTheme from "../editor/theme.ts?raw";
+import editorTheme from "../editors/text/theme.ts?raw";
 
 const TYPOGRAPHY = {
   "font-reading": '"Literata Variable", Georgia, "Times New Roman", serif',

@@ -242,6 +242,16 @@ describe("i nomi fra graffe", () => {
   it("un argomento che non compare nel template non compare nemmeno nel testo", () => {
     expect(expand("fermo", { count: 3 })).toBe("fermo");
   });
+
+  it("chi chiama `t` con la chiave scritta deve passare i nomi del modello", () => {
+    // I due cataloghi concordano fra loro (sopra), ma è il punto di chiamata
+    // che sbagliava: `{ name, reason }` a un modello che chiedeva `{nome}` e
+    // `{motivo}`. Il controllo è del compilatore (`npm run typecheck`); qui
+    // resta la prova che la forma sbagliata non compila.
+    // @ts-expect-error: il modello nomina `{name}` e `{reason}`.
+    expect(t("explorer.bad_name", { nome: "a", motivo: "b" })).toContain("{name}");
+    expect(t("explorer.bad_name", { name: "a", reason: "b" })).not.toContain("{");
+  });
 });
 
 describe("quale lingua vale", () => {

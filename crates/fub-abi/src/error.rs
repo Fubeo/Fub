@@ -79,17 +79,17 @@ pub enum FormatError {
     /// non può dimenticarsi di dire *chi* ha rifiutato e *cosa* ha ricevuto,
     /// perché sono i due dati con cui la frase si compone, e la frase la
     /// compone chi sta sulla via d'uscita — non lui.
-    /// L'id del formato che ha detto di no — quello del suo
     #[error("format \"{format}\" cannot read a source of kind {got:?}")]
     Unsupported {
+        /// L'id del formato che ha detto di no — quello del suo
         /// [`FormatDescriptor::id`](crate::format::FormatDescriptor::id).
-        /// La forma di sorgente che ha ricevuto, e che non è la sua.
         format: String,
-        /// Errore prodotto da un plugin (nativo o WASM), e **la forma con cui ogni
+        /// La forma di sorgente che ha ricevuto, e che non è la sua.
         got: SourceKind,
     },
 }
 
+/// Errore prodotto da un plugin (nativo o WASM), e **la forma con cui ogni
 /// fallimento arriva a chi disegna**.
 ///
 /// Sul filo è adiacentemente taggato — `{"kind": "bad_args", "message": …}` —
@@ -98,7 +98,6 @@ pub enum FormatError {
 /// default di serde (`{"BadArgs": …}`), che nessuno leggeva perché il confine
 /// Tauri buttava via il tipo e mandava una stringa: la forma è stata scelta nel
 /// momento in cui ha guadagnato il primo lettore.
-/// Il sorgente su cui l'operazione era stata calcolata non è più quello
 #[derive(Clone, Debug, PartialEq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "message", rename_all = "snake_case")]
 pub enum PluginError {
@@ -114,6 +113,7 @@ pub enum PluginError {
     PermissionDenied(Text),
     #[error("internal plugin error: {0}")]
     Internal(Text),
+    /// Il sorgente su cui l'operazione era stata calcolata non è più quello
     /// (vedi [`EditRequest::base`](crate::edit::EditRequest::base)).
     ///
     /// È un caso a sé e non un [`BadArgs`](PluginError::BadArgs) perché è
@@ -121,20 +121,20 @@ pub enum PluginError {
     /// argomenti erano giusti quando li ha calcolati, e la risposta giusta è
     /// ricalcolare, non correggere. Chi non li distingue riprova all'infinito
     /// una richiesta malformata, o rinuncia a una che sarebbe riuscita.
-    /// **Nessuno serve questa domanda**: nessun indice registrato ha dichiarato
-    /// la rotta che servirebbe (vedi [`QueryRoute`](crate::traits::QueryRoute)).
     #[error("document changed in the meantime: {0}")]
     Conflict(Text),
+    /// **Nessuno serve questa domanda**: nessun indice registrato ha dichiarato
+    /// la rotta che servirebbe (vedi [`QueryRoute`](crate::traits::QueryRoute)).
     ///
     /// È un caso a sé, e distinguerlo è metà del valore del routing dichiarato:
     /// prima «nessuno la serve» e «chi la serve ha fallito» arrivavano al
     /// chiamante nella stessa forma — un `BadArgs`, per giunta quello
     /// dell'ultimo interpellato — e chi disegna non poteva sapere se mostrare
     /// «installa un indice» o «qualcosa è andato storto».
-    /// **Annullato**: il lavoro non è fallito, è stato fermato — da chi l'ha
-    /// chiesto, o dalla chiusura del vault.
     #[error("no index serves this query: {0}")]
     Unserved(Text),
+    /// **Annullato**: il lavoro non è fallito, è stato fermato — da chi l'ha
+    /// chiesto, o dalla chiusura del vault.
     ///
     /// È un caso a sé perché è l'unico esito che **non è un difetto di
     /// nessuno**, e chi disegna deve poterlo dire diversamente: un job fallito
@@ -146,48 +146,45 @@ pub enum PluginError {
     /// Lo riceve chi chiama una capacità dell'host **dopo** che il proprio job è
     /// stato annullato (decisione 0032): la cancellazione non aggiunge una
     /// capacità al contratto, toglie le altre.
-    /// **Non c'è**: il documento, la versione, la voce di cestino che si nomina
-    /// non esiste.
     #[error("cancelled: {0}")]
     Cancelled(Text),
+    /// **Non c'è**: il documento, la versione, la voce di cestino che si nomina
+    /// non esiste.
     ///
     /// Distinto da [`BadArgs`](PluginError::BadArgs) perché l'argomento *era*
     /// ben formato: `a/Uno.md` è un `DocId` valido, e chi lo ha chiesto non ha
     /// sbagliato a scriverlo — semmai qualcuno l'ha cancellato nel frattempo. Chi
     /// disegna deve poter dire «non esiste più» invece di «hai sbagliato a
     /// chiedere», e chi automatizza deve poter smettere invece di correggere.
+    #[error("not found: {0}")]
+    NotFound(Text),
     /// **C'è già**: il path che si vuole occupare è occupato.
     ///
     /// È la variante che il §12.2 nomina per nome, ed è l'unica che rende vero
-    #[error("not found: {0}")]
-    NotFound(Text),
     /// il ramo del ripristino dal cestino: solo qui la domanda *«lo ripristino
     /// con un altro nome?»* è quella giusta. Con un `Io` o un
     /// [`PermissionDenied`](PluginError::PermissionDenied) è la domanda
     /// sbagliata, e la risposta affermativa ritenta qualcosa che fallirà uguale.
+    #[error("already exists: {0}")]
+    AlreadyExists(Text),
     /// **Il supporto ha detto di no**: disco pieno, file in uso, cartella
     /// sparita sotto i piedi, path non UTF-8.
     ///
-    #[error("already exists: {0}")]
-    AlreadyExists(Text),
     /// Non è `Internal`, e la differenza è chi ha sbagliato: `Internal` è un
     /// difetto di chi ha scritto il codice, questo è il mondo. Chi disegna lo
     /// dice diversamente (*«riprova»*, non *«segnala un bug»*), e chi riprova ha
     /// ragione di farlo.
-    /// Il payload, per chi deve leggerlo o risolverlo senza sapere quale
-    /// variante ha in mano.
-    ///
     #[error("I/O error: {0}")]
     Io(Text),
 }
 
 impl PluginError {
+    /// Il payload, per chi deve leggerlo o risolverlo senza sapere quale
+    /// variante ha in mano.
+    ///
     /// Il `match` è esaustivo di proposito: una variante nuova deve rompere la
     /// compilazione qui, non arrivare a uno schermo con la propria chiave non
     /// tradotta.
-    /// Come sopra, in scrittura: è ciò da cui passa la risoluzione.
-    /// La forma sul filo è quella che il mirror TypeScript dichiara, ed è
-    /// **discriminabile**: chi la riceve sceglie un ramo sul `kind`, non
     pub fn message(&self) -> &Text {
         match self {
             PluginError::UnknownCommand(t)
@@ -205,7 +202,7 @@ impl PluginError {
         }
     }
 
-    /// cercando una sottostringa nella prosa.
+    /// Come sopra, in scrittura: è ciò da cui passa la risoluzione.
     pub fn message_mut(&mut self) -> &mut Text {
         match self {
             PluginError::UnknownCommand(t)
@@ -234,9 +231,9 @@ impl Localize for PluginError {
 mod tests {
     use super::*;
 
-    /// `Display` resta la forma per il log, e non pretende di essere quella per
-    /// l'utente: una chiave non risolta si stampa come sé stessa.
-    /// Il payload si legge e si risolve senza sapere quale variante si ha in
+    /// La forma sul filo è quella che il mirror TypeScript dichiara, ed è
+    /// **discriminabile**: chi la riceve sceglie un ramo sul `kind`, non
+    /// cercando una sottostringa nella prosa.
     #[test]
     fn the_wire_shape_is_discriminable() {
         let and = PluginError::AlreadyExists("a/Uno.md".into());
@@ -249,7 +246,7 @@ mod tests {
         assert_eq!(back, and);
     }
 
-    /// mano: è ciò su cui poggia la risoluzione del kernel.
+    /// `Display` resta la forma per il log, e non pretende di essere quella per
     /// l'utente: una chiave non risolta si stampa come sé stessa.
     #[test]
     fn display_is_still_for_logs() {

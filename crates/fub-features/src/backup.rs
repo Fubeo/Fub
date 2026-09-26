@@ -4,6 +4,10 @@
 //! `permission::EXTERNAL_FS` oggi non ha un consumatore. I byte stanno in
 //! `.fub/plugins/fub.backup/<data>/…`, che il vault non indicizza. Ripristino
 //! = `create_document` delle note che nel vault non ci sono più.
+//!
+//! Gli snapshot ruotano: dopo ogni backup riuscito restano i più recenti
+//! [`BACKUP_KEEP_KEY`] (10 di serie, `0` li tiene tutti). Senza, crescevano
+//! dentro il vault per sempre, e ognuno è una copia di tutte le note.
 
 use fub_abi::command::{
     Args, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
@@ -13,6 +17,7 @@ use fub_abi::event::{EventKind, EventMask};
 use fub_abi::locale::civil_from_days;
 use fub_abi::model::DocId;
 use fub_abi::session::ContextMask;
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
@@ -30,6 +35,10 @@ pub const VAULT_BACKUP: &str = "vault.backup";
 /// Ripristina le note mancanti da uno snapshot.
 pub const VAULT_BACKUP_RESTORE: &str = "vault.backup.restore";
 
+/// Quanti snapshot restano dopo un backup; `0` li tiene tutti.
+pub const BACKUP_KEEP_KEY: &str = "backup.keep";
+const KEEP_DEFAULT: f64 = 10.0;
+
 const MANIFEST: &str = "snapshots.json";
 const SCHEMA: u32 = 1;
 const RUN: &str = "run";
@@ -45,6 +54,28 @@ const E_MISSING: &str = "e_missing";
 const P_BACKUP: &str = "p_backup";
 const P_RESTORE: &str = "p_restore";
 const FAILED: &str = "failed";
+const S_GROUP: &str = "s_group";
+const S_KEEP: &str = "s_keep";
+const S_KEEP_DESC: &str = "s_keep_desc";
+
+/// Lo schema delle impostazioni del backup: quanti snapshot tenere.
+///
+/// **Non** `program_writable`: abbassarla cancella snapshot al backup dopo, e
+/// un componente che potesse farlo da sé potrebbe togliere di mezzo le copie
+/// che l'utente conta di avere.
+pub fn settings() -> Vec<SettingSpec> {
+    vec![SettingSpec::new(
+        BACKUP_KEEP_KEY,
+        Text::key(S_KEEP),
+        SettingKind::Number {
+            default: KEEP_DEFAULT,
+            min: Some(0.0),
+            max: None,
+        },
+    )
+    .describing(Text::key(S_KEEP_DESC))
+    .grouped(Text::key(S_GROUP))]
+}
 
 /// Le stringhe del pannello e dei comandi.
 pub fn catalog() -> Vec<StringCatalog> {
@@ -59,6 +90,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_BACKUP, "Salvate {n} note in «{id}»")
             .with(P_RESTORE, "Ripristinate {n} note da «{id}»")
             .with(FAILED, "Backup: {reason}")
+            .with(S_GROUP, "Backup")
+            .with(S_KEEP, "Snapshot da tenere")
+            .with(
+                S_KEEP_DESC,
+                "Dopo ogni backup riuscito si cancellano gli snapshot più vecchi \
+                 oltre questo numero. 0 li tiene tutti.",
+            )
             .with("vault.backup.title", "Backup del vault")
             .with(
                 "vault.backup.desc",
@@ -84,6 +122,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_BACKUP, "Saved {n} notes in «{id}»")
             .with(P_RESTORE, "Restored {n} notes from «{id}»")
             .with(FAILED, "Backup: {reason}")
+            .with(S_GROUP, "Backup")
+            .with(S_KEEP, "Snapshots to keep")
+            .with(
+                S_KEEP_DESC,
+                "After each successful backup, the oldest snapshots beyond this \
+                 number are deleted. 0 keeps them all.",
+            )
             .with("vault.backup.title", "Back up vault")
             .with(
                 "vault.backup.desc",
@@ -272,12 +317,18 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
             vec![Arg::int("n", n), Arg::text(ID, &id)],
         )));
     }
-    for path in host.data_list(&id)? {
-        host.data_remove(&path)?;
-    }
+    let previous = host.data_list(&id)?;
+    let mut written = std::collections::BTreeSet::new();
     for doc in &docs {
         let src = host.read_document(doc)?;
-        host.data_write(&format!("{id}/{}", doc.as_str()), src.as_bytes())?;
+        let path = format!("{id}/{}", doc.as_str());
+        host.data_write(&path, src.as_bytes())?;
+        written.insert(path);
+    }
+    // Ciò che lo snapshot di oggi aveva e questo no se ne va **dopo** la copia
+    // nuova: un backup interrotto lascia uno snapshot misto, mai più povero.
+    for path in previous.iter().filter(|path| !written.contains(*path)) {
+        host.data_remove(path)?;
     }
     let mut store = load(host)?;
     if let Some(existing) = store.snapshots.iter_mut().find(|s| s.id == id) {
@@ -288,7 +339,15 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
             n: docs.len() as u32,
         });
     }
+    let dropped = rotate(&mut store, &id, keep(host));
     persist(host, &store)?;
+    // I file degli snapshot tolti si cancellano dopo il manifest: un errore
+    // lascia file orfani, mai un manifest che nomina uno snapshot sparito.
+    for old in &dropped {
+        for path in host.data_list(old)? {
+            host.data_remove(&path)?;
+        }
+    }
     Ok(CommandOutcome::notify(Text::message(
         P_BACKUP,
         vec![Arg::int("n", n), Arg::text(ID, id)],
@@ -350,6 +409,35 @@ fn restore(
         P_RESTORE,
         vec![Arg::int("n", n), Arg::text(ID, id)],
     )))
+}
+
+/// Quanti snapshot tenere, dall'impostazione; `0` = tutti.
+fn keep(host: &dyn ReadApi) -> usize {
+    host.setting(BACKUP_KEEP_KEY)
+        .ok()
+        .and_then(|value| value.as_number())
+        .unwrap_or(KEEP_DEFAULT)
+        .max(0.0) as usize
+}
+
+/// Toglie dal manifest gli snapshot oltre i `keep` più recenti per data, e
+/// torna i loro id. `fresh` è appena stato scritto e resta sempre, anche se un
+/// orologio tornato indietro gli ha dato una data più vecchia degli altri.
+fn rotate(store: &mut Store, fresh: &str, keep: usize) -> Vec<String> {
+    if keep == 0 {
+        return Vec::new();
+    }
+    let mut others: Vec<String> = store
+        .snapshots
+        .iter()
+        .filter(|s| s.id != fresh)
+        .map(|s| s.id.clone())
+        .collect();
+    // Gli id sono date `YYYY-MM-DD`: l'ordine del testo è quello del tempo.
+    others.sort_unstable_by(|a, b| b.cmp(a));
+    let dropped: Vec<String> = others.into_iter().skip(keep - 1).collect();
+    store.snapshots.retain(|s| !dropped.contains(&s.id));
+    dropped
 }
 
 fn today(host: &dyn ReadApi) -> String {

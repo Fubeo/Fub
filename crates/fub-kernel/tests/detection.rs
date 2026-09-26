@@ -11,6 +11,7 @@
 //! dicesse.
 //!
 //! Qui si prova che quei due fatti adesso **si chiedono**, e dallo stesso posto
+//! da cui si chiede tutto il resto: il canale dati.
 
 use camino::Utf8PathBuf;
 use fub_abi::error::FormatError;
@@ -171,6 +172,7 @@ fn a_discarded_result_remains_written_in_the_vault() {
 
     // Un secondo tentativo che va a buon fine non cancella il conto: «è già
     // successo» resta vero, e ciò che è rimasto indietro non torna indietro da
+    // sé.
     std::fs::write(&path, "now readable").expect("rewrite");
     ws.sync_path(&path).expect("now passes");
     let after = status(&ws);
@@ -218,7 +220,6 @@ fn a_failing_rename_counts_only_once() {
 ///
 /// Le tre uscite dicono tre cose diverse: il registro conta, il log resta dopo
 /// che l'app si è chiusa, l'evento arriva **adesso**. Questo banco tiene la
-/// terza, che è quella che mancava.
 /// terza, che è quella che mancava.
 #[test]
 fn a_sync_failure_reaches_the_listener_too() {

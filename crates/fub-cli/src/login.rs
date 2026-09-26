@@ -122,14 +122,34 @@ fn account_base() -> Result<String, Failure> {
 }
 
 fn post_account(path: &str, payload: &serde_json::Value) -> Result<serde_json::Value, Failure> {
-    let base = account_base()?;
-    let (status, body) = fub_host::remote::post_json(&base, path, None, payload)
-        .map_err(|detail| Failure::new(3, "unavailable", detail))?;
-    let value: serde_json::Value = serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
+    let (status, value) = account_response(path, payload)?;
     if (200..300).contains(&status) {
         return Ok(value);
     }
     Err(map_status(path, status, &value))
+}
+
+/// Lo status e il corpo di una risposta del servizio account, prima che un
+/// rifiuto diventi [`Failure`]: chi deve distinguere un rifiuto dall'altro
+/// decide su questi, non sul testo del messaggio.
+fn account_response(
+    path: &str,
+    payload: &serde_json::Value,
+) -> Result<(u16, serde_json::Value), Failure> {
+    let base = account_base()?;
+    let (status, body) = fub_host::remote::post_json(&base, path, None, payload)
+        .map_err(|detail| Failure::new(3, "unavailable", detail))?;
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
+    Ok((status, value))
+}
+
+/// La registrazione è rifiutata perché l'account c'è già: `409`, oppure il
+/// `422` con codice `account exists` dei server precedenti. Il codice è il
+/// campo `error` del corpo, confrontato per intero: non contiene nomi.
+fn account_exists(status: u16, value: &serde_json::Value) -> bool {
+    status == 409
+        || (status == 422
+            && value.get("error").and_then(serde_json::Value::as_str) == Some("account exists"))
 }
 
 fn mfa_post(token: &str, payload: &serde_json::Value) -> Result<serde_json::Value, Failure> {
@@ -172,22 +192,18 @@ pub fn login(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| Failure::bad_args("login vuole un user"))?;
     let password = read_password(args.password_file.as_deref())?;
-    // 1. register best-effort: 409 account-exists -> login; altri errori reali.
-    let registered: Option<serde_json::Value> = match post_account(
-        "/v1/account/register",
+    // 1. register best-effort: account già esistente -> login; altri errori reali.
+    const REGISTER: &str = "/v1/account/register";
+    let (status, value) = account_response(
+        REGISTER,
         &serde_json::json!({ "name": user, "password": password }),
-    ) {
-        Ok(value) => Some(value),
-        Err(Failure { code: 5, .. }) => None,
-        Err(other) => {
-            let conflict =
-                other.message.contains("409") || other.message.contains("account exists");
-            if conflict {
-                None
-            } else {
-                return Err(other);
-            }
-        }
+    )?;
+    let registered: Option<serde_json::Value> = if (200..300).contains(&status) {
+        Some(value)
+    } else if account_exists(status, &value) {
+        None
+    } else {
+        return Err(map_status(REGISTER, status, &value));
     };
     // 2. login (con code TOTP quando fornito).
     let mut payload = serde_json::json!({ "name": user, "password": password });
@@ -411,4 +427,29 @@ fn parse_setting_value(raw: &str) -> Result<fub_abi::SettingValue, Failure> {
         ));
     }
     Ok(fub_abi::SettingValue::Text(raw.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::account_exists;
+
+    /// La registrazione di un account che c'è già porta al login; il ramo
+    /// decide su status e codice, non sul testo (I73). Un `413`, che la CLI
+    /// chiama "conflict" come il `409`, non è un account esistente.
+    #[test]
+    fn an_existing_account_is_told_by_status_and_code() {
+        let exists = serde_json::json!({ "error": "account exists" });
+        assert!(account_exists(409, &serde_json::Value::Null));
+        assert!(account_exists(422, &exists));
+        assert!(!account_exists(
+            422,
+            &serde_json::json!({ "error": "password too short (min 8)" })
+        ));
+        assert!(!account_exists(
+            422,
+            &serde_json::json!({ "error": "account exists: no, bad account name" })
+        ));
+        assert!(!account_exists(413, &exists));
+        assert!(!account_exists(500, &exists));
+    }
 }

@@ -1,6 +1,7 @@
 //! Capture: ingresso non autenticato (file/URI) + applicazione capture v1.
 //!
-//! Validazione identica al canale NM (stessi limiti, stesso validatore).
+//! Validazione identica al canale NM (stessi limiti, stesso validatore), e
+//! scrittura del comando dell'host `capture.apply` ([`fub_host::capture`]).
 //! Scrittura solo con consenso esplicito (--yes o conferma interattiva);
 //! --no-input rifiuta. Mai scrittura silenziosa, mai token in pagina.
 
@@ -135,20 +136,6 @@ fn file_payload(
     Ok((payload, None))
 }
 
-fn titled_body(title: &str, markdown: &str, source_url: Option<&str>) -> String {
-    // Corpo con titolo H1 + fonte: la destinazione resta testo cercabile.
-    let mut body = format!("# {title}\n\n{markdown}");
-    if let Some(url) = source_url {
-        if !url.trim().is_empty() {
-            body.push_str(&format!("\n\nFonte: {url}"));
-        }
-    }
-    if !body.ends_with('\n') {
-        body.push('\n');
-    }
-    body
-}
-
 pub fn capture(
     connection: &mut Connection,
     global: &GlobalArgs,
@@ -169,14 +156,12 @@ fn apply_payload(
     global: &GlobalArgs,
     payload: fub_host::automation::CapturePayloadV1,
 ) -> Result<serde_json::Value, Failure> {
-    use fub_host::automation::CaptureMode;
     // Vault: payload > --vault globale > FUB_VAULT > corrente.
     let vault = payload
         .target
         .vault
         .clone()
         .or_else(|| connection.vault_selector().map(str::to_string));
-    let selector = vault.as_deref();
     // Consenso: import non autenticato = approvazione esplicita sempre.
     let summary = format!(
         "capture `{}` -> {} ({})",
@@ -196,144 +181,11 @@ fn apply_payload(
     if let Some(root) = payload.target.vault.as_deref() {
         connection.open_vault(root)?;
     }
-    match payload.target.mode {
-        CaptureMode::Create => {
-            let name = match payload.target.note.as_deref() {
-                Some(note) if !note.trim().is_empty() => note.trim().to_string(),
-                _ => {
-                    // Titolo -> nome file: portabilità via doc_id, collisione
-                    // via free_name del comando note.create.
-                    let slug: String = payload.title.trim().chars().take(80).collect();
-                    if slug.trim().is_empty() {
-                        "Untitled.md".to_string()
-                    } else {
-                        format!("{}.md", slug.trim())
-                    }
-                }
-            };
-            // Cartella opzionale: compone senza traversal (già validato).
-            let full = match payload.target.folder.as_deref() {
-                Some(folder) if !folder.trim().is_empty() => {
-                    format!("{}/{name}", folder.trim().trim_matches('/'))
-                }
-                _ => name,
-            };
-            let id = doc_id(&full)?;
-            // Già occupato = Conflict, mai sovrascrittura: il comando
-            // note.create fallisce da sé su path preso.
-            let body = titled_body(
-                &payload.title,
-                &payload.markdown,
-                payload.source_url.as_deref(),
-            );
-            let outcome = connection
-                .host
-                .invoke_user_command(
-                    selector,
-                    "note.create",
-                    serde_json::json!({ "name": id.as_str() }),
-                    fub_abi::InvokeMode::Apply,
-                )
-                .map_err(|error| Failure::from_plugin(&error))?;
-            let created = created_doc(&outcome).unwrap_or(id);
-            let (_, revision) = connection
-                .host
-                .read_document(selector, &created)
-                .map_err(|error| Failure::from_plugin(&error))?;
-            connection
-                .host
-                .write_document(
-                    selector,
-                    &created,
-                    &body,
-                    fub_abi::WriteBase::DescendsFrom(revision),
-                )
-                .map_err(|error| Failure::from_plugin(&error))?;
-            apply_properties(connection, selector, &created, &payload)?;
-            Ok(serde_json::json!({ "mode": "create", "doc": created.as_str() }))
-        }
-        CaptureMode::Daily => {
-            // Giornaliera: riuso di note.daily, poi append del corpo.
-            let outcome = connection
-                .host
-                .invoke_user_command(
-                    selector,
-                    "note.daily",
-                    serde_json::json!({}),
-                    fub_abi::InvokeMode::Apply,
-                )
-                .map_err(|error| Failure::from_plugin(&error))?;
-            let daily = created_doc(&outcome)
-                .ok_or_else(|| Failure::local("note.daily non ha restituito una destinazione"))?;
-            append_body(
-                connection,
-                selector,
-                &daily,
-                &titled_body(
-                    &payload.title,
-                    &payload.markdown,
-                    payload.source_url.as_deref(),
-                ),
-            )?;
-            apply_properties(connection, selector, &daily, &payload)?;
-            Ok(serde_json::json!({ "mode": "daily", "doc": daily.as_str() }))
-        }
-        CaptureMode::Append => {
-            let note = payload
-                .target
-                .note
-                .as_deref()
-                .ok_or_else(|| Failure::bad_args("append vuole --note"))?;
-            let id = doc_id(note)?;
-            append_body(
-                connection,
-                selector,
-                &id,
-                &format!(
-                    "\n\n{}",
-                    titled_body(
-                        &payload.title,
-                        &payload.markdown,
-                        payload.source_url.as_deref()
-                    )
-                ),
-            )?;
-            apply_properties(connection, selector, &id, &payload)?;
-            Ok(serde_json::json!({ "mode": "append", "doc": id.as_str() }))
-        }
-        CaptureMode::Prepend => {
-            let note = payload
-                .target
-                .note
-                .as_deref()
-                .ok_or_else(|| Failure::bad_args("prepend vuole --note"))?;
-            let id = doc_id(note)?;
-            let (source, revision) = connection
-                .host
-                .read_document(selector, &id)
-                .map_err(|error| Failure::from_plugin(&error))?;
-            let body = format!(
-                "{}{}",
-                titled_body(
-                    &payload.title,
-                    &payload.markdown,
-                    payload.source_url.as_deref()
-                ),
-                source
-            );
-            connection
-                .host
-                .write_document(
-                    selector,
-                    &id,
-                    &body,
-                    fub_abi::WriteBase::DescendsFrom(revision),
-                )
-                .map_err(|error| Failure::from_plugin(&error))?;
-            apply_properties(connection, selector, &id, &payload)?;
-            Ok(serde_json::json!({ "mode": "prepend", "doc": id.as_str() }))
-        }
-    }
+    // Nome, corpo, proprietà e ordine delle scritture sono del comando
+    // dell'host `capture.apply`, lo stesso del clipper e del mobile.
+    let doc = fub_host::capture::apply(&connection.host, vault.as_deref(), &payload, None)
+        .map_err(|error| Failure::from_plugin(&error))?;
+    Ok(serde_json::json!({ "mode": payload.target.mode.as_str(), "doc": doc.as_str() }))
 }
 
 fn created_doc(outcome: &fub_abi::CommandOutcome) -> Option<fub_abi::DocId> {
@@ -343,59 +195,6 @@ fn created_doc(outcome: &fub_abi::CommandOutcome) -> Option<fub_abi::DocId> {
     }
 }
 
-fn append_body(
-    connection: &Connection,
-    selector: Option<&str>,
-    id: &fub_abi::DocId,
-    addition: &str,
-) -> Result<(), Failure> {
-    let (source, revision) = connection
-        .host
-        .read_document(selector, id)
-        .map_err(|error| Failure::from_plugin(&error))?;
-    let mut body = source;
-    if !body.ends_with('\n') {
-        body.push('\n');
-    }
-    body.push_str(addition);
-    connection
-        .host
-        .write_document(
-            selector,
-            id,
-            &body,
-            fub_abi::WriteBase::DescendsFrom(revision),
-        )
-        .map_err(|error| Failure::from_plugin(&error))?;
-    Ok(())
-}
-
-fn apply_properties(
-    connection: &Connection,
-    selector: Option<&str>,
-    id: &fub_abi::DocId,
-    payload: &fub_host::automation::CapturePayloadV1,
-) -> Result<(), Failure> {
-    let Some(props) = payload.properties.as_ref() else {
-        return Ok(());
-    };
-    for (key, value) in props {
-        let rendered = match value {
-            serde_json::Value::String(s) => s.clone(),
-            other => serde_json::to_string(other).unwrap_or_default(),
-        };
-        connection
-            .host
-            .invoke_user_command(
-                selector,
-                "note.property.set",
-                serde_json::json!({ "doc": id.as_str(), "key": key, "value": rendered }),
-                fub_abi::InvokeMode::Apply,
-            )
-            .map_err(|error| Failure::from_plugin(&error))?;
-    }
-    Ok(())
-}
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredCallbacks {
@@ -692,50 +491,28 @@ pub fn uri(
             ..
         } => {
             vault_required(connection)?;
-            let full = match (folder.as_deref(), name.as_deref()) {
-                (Some(folder), Some(name)) => format!("{}/{name}", folder.trim_matches('/')),
-                (Some(folder), None) => format!("{}/Untitled.md", folder.trim_matches('/')),
-                (None, Some(name)) => name.to_string(),
-                (None, None) => "Untitled.md".to_string(),
+            // Nome e titolo con le regole della cattura: il nome dal titolo
+            // quando manca, il titolo dopo il frontmatter del template.
+            let note = fub_host::capture::NewNote {
+                folder: folder.as_deref(),
+                name: name.as_deref(),
+                title: title.as_deref(),
+                template: template.as_deref(),
             };
-            let id = doc_id(&full)?;
-            if !global.dry_run {
-                confirm_capture(global, &format!("uri new -> {full}"))?;
-            }
-            let mode = if global.dry_run {
-                fub_abi::InvokeMode::DryRun
+            let selector = connection.vault_selector();
+            let new_note = |mode| {
+                fub_host::capture::new_note(&connection.host, selector, &note, mode)
+                    .map_err(|error| Failure::from_plugin(&error))
+            };
+            // Il piano nomina la nota che nascerà: è quella che si approva.
+            let planned = new_note(fub_abi::InvokeMode::DryRun)?;
+            let doc = if global.dry_run {
+                planned
             } else {
-                fub_abi::InvokeMode::Apply
+                confirm_capture(global, &format!("uri new -> {}", planned.as_str()))?;
+                new_note(fub_abi::InvokeMode::Apply)?
             };
-            let (command, args) = match template.as_deref() {
-                Some(template) => (
-                    "note.from_template",
-                    serde_json::json!({ "template": template, "name": id.as_str() }),
-                ),
-                None => ("note.create", serde_json::json!({ "name": id.as_str() })),
-            };
-            let outcome = connection
-                .host
-                .invoke_user_command(connection.vault_selector(), command, args, mode)
-                .map_err(|error| Failure::from_plugin(&error))?;
-            let created = created_doc(&outcome).unwrap_or(id);
-            if let Some(title) = title.as_deref().filter(|_| !global.dry_run) {
-                let (source, revision) = connection
-                    .host
-                    .read_document(connection.vault_selector(), &created)
-                    .map_err(|error| Failure::from_plugin(&error))?;
-                let body = format!("# {title}\n\n{source}");
-                connection
-                    .host
-                    .write_document(
-                        connection.vault_selector(),
-                        &created,
-                        &body,
-                        fub_abi::WriteBase::DescendsFrom(revision),
-                    )
-                    .map_err(|error| Failure::from_plugin(&error))?;
-            }
-            serde_json::json!({ "action": "new", "doc": created.as_str(), "dry_run": global.dry_run })
+            serde_json::json!({ "action": "new", "doc": doc.as_str(), "dry_run": global.dry_run })
         }
         FubUri::Daily { date, .. } => {
             vault_required(connection)?;

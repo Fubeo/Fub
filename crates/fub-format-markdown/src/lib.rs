@@ -4,6 +4,7 @@
 //! È l'unico crate di M1 che sa che il markdown esiste — il kernel lo vede solo
 //! come `dyn FormatProvider`.
 
+mod edits;
 mod offsets;
 mod parse;
 mod render;
@@ -13,12 +14,12 @@ mod transfer;
 mod util;
 
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, LinkRewrite, ParseContext, RenderOptions,
+    DocumentSource, FormatCapabilities, FormatDescriptor, LinkInsert, LinkRewrite, ParseContext,
+    RenderOptions,
 };
-use fub_abi::model::DocumentModel;
+use fub_abi::model::{DocumentModel, TaskMarker};
 use fub_abi::options::syntax;
 use fub_abi::{FormatError, FormatProvider, TextEdit};
-pub use parse::{collect_footnotes, FootnoteKind, FootnoteOccurrence};
 
 pub use transfer::{MarkdownExport, MarkdownImport, TARGET_FILES, TARGET_SINGLE};
 
@@ -55,6 +56,9 @@ impl FormatProvider for MarkdownProvider {
             syntax::EMBEDS,
             syntax::FOOTNOTES,
             syntax::DEFINITION_LISTS,
+            // Non è una sintassi: dice che il sorgente è prosa, e che le
+            // feature possono scriverci testo senza romperlo.
+            fub_abi::options::source::PROSE,
         ])
     }
 
@@ -95,6 +99,27 @@ impl FormatProvider for MarkdownProvider {
             got: source.kind(),
         })?;
         rewrite::rewrite_links(text, ctx, rewrites).map(Some)
+    }
+
+    fn format_link(
+        &self,
+        ctx: &ParseContext,
+        link: &LinkInsert,
+    ) -> Result<Option<String>, FormatError> {
+        edits::format_link(ctx, link)
+    }
+
+    fn set_task_state(
+        &self,
+        source: &DocumentSource,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        let text = source.text().ok_or_else(|| FormatError::Unsupported {
+            format: self.descriptor().id,
+            got: source.kind(),
+        })?;
+        edits::set_task_state(text, marker, done).map(Some)
     }
 }
 
@@ -1144,14 +1169,46 @@ mod tests {
         assert!(serialized.contains("^[nota &amp; segreti]"), "{serialized}");
     }
 
+    /// Il modello porta ogni nota che il file contiene, anche quelle che la
+    /// resa non mostra: un richiamo senza definizione (`unresolved`) e una
+    /// definizione che nessuno richiama (`unreferenced`). Codice, HTML e
+    /// marcatori sotto escape restano fuori, come per comrak.
     #[test]
-    fn footnote_extraction_skips_literals_and_reports_unresolved_refs() {
+    fn the_model_keeps_unresolved_and_unreferenced_footnotes() {
         let source = "Été [^known] [^missing] ^[inline 🎯] ^[**rich**] \\[^escaped]\n\n[^known]: yes\n[^unused]: no\n\n```\n[^code] ^[code]\n```\n\n<div>\n[^html]\n</div>\n";
-        let occurrences = collect_footnotes(source).unwrap();
-        let slices: Vec<&str> = occurrences
-            .iter()
-            .map(|item| &source[item.span.start..item.span.end])
-            .collect();
+        let model = parse(source);
+        let mut found: Vec<(String, serde_json::Value)> = Vec::new();
+        fn walk(blocks: &[Block], source: &str, found: &mut Vec<(String, serde_json::Value)>) {
+            for block in blocks {
+                match block {
+                    Block::Paragraph { inlines, .. } => {
+                        for inline in inlines {
+                            if let Inline::Custom { attrs, span, .. } = inline {
+                                found.push((
+                                    source[span.start..span.end].to_string(),
+                                    attrs.clone(),
+                                ));
+                            }
+                        }
+                    }
+                    Block::Custom {
+                        custom_kind,
+                        attrs,
+                        blocks,
+                        span,
+                        ..
+                    } => {
+                        if custom_kind == custom_kind::FOOTNOTE_DEFINITION {
+                            found.push((source[span.start..span.end].to_string(), attrs.clone()));
+                        }
+                        walk(blocks, source, found);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        walk(&model.body, source, &mut found);
+        let slices: Vec<&str> = found.iter().map(|(slice, _)| slice.as_str()).collect();
         for expected in [
             "[^known]",
             "[^missing]",
@@ -1164,10 +1221,27 @@ mod tests {
         for excluded in ["[^escaped]", "[^code]", "^[code]", "[^html]"] {
             assert!(!slices.contains(&excluded), "{slices:?}");
         }
-        assert!(occurrences.iter().any(|item| matches!(
-            &item.kind,
-            FootnoteKind::Inline(body) if body == "inline 🎯"
-        )));
+        let attrs_of = |slice: &str| &found.iter().find(|(s, _)| s == slice).unwrap().1;
+        assert_eq!(attrs_of("[^missing]")["unresolved"], true);
+        assert_eq!(attrs_of("[^unused]: no")["unreferenced"], true);
+        assert!(attrs_of("[^known]").get("unresolved").is_none());
+        assert_eq!(attrs_of("^[inline 🎯]")["label"], "inline 🎯");
+
+        let html = MarkdownProvider::new()
+            .render_html(&model, &RenderOptions::default())
+            .unwrap();
+        assert!(
+            html.contains("[^missing]"),
+            "si legge com'è scritto: {html}"
+        );
+        assert!(
+            !html.contains("unused"),
+            "una nota non richiamata non si rende: {html}"
+        );
+        assert!(!model.text.contains("no"), "{}", model.text);
+        let serialized = MarkdownProvider::new().serialize(&model).unwrap();
+        assert!(serialized.contains("[^missing]"), "{serialized}");
+        assert!(serialized.contains("[^unused]: no"), "{serialized}");
     }
 
     /// Il buco che rendeva 13.1 irraggiungibile: un'immagine non entrava

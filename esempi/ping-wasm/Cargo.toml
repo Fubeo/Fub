@@ -33,6 +33,9 @@ senza-permessi = []
 con-rete = []
 # Il mondo che chiede i dati persistiti: il backend WASM lo rifiuta al caricamento.
 con-dati = []
+# Il mondo che esporta anche `syntax`, che l'host non collega: rifiutato al
+# caricamento, e con un componente vero davanti.
+con-sintassi = []
 # Varianti reali per il rifiuto prima della pubblicazione nell'inventario.
 abi-incompatibile = []
 versione-successiva = []

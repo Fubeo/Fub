@@ -9,6 +9,7 @@ import {
   findByChord,
   conflictMessage,
   commandOfKeybindingKey,
+  ariaBinding,
   displayBinding,
   keybindingKey,
   parseChords,
@@ -55,6 +56,7 @@ function spec(over: Partial<CommandSpec> = {}): CommandSpec {
     keybinding: null,
     params: [],
     scope: { writes: false, reach: "session", reversible: true },
+    surfaces: [],
     ...over,
   };
 }
@@ -172,58 +174,58 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
   // niente se non che questa riga smette di essere un'eccezione.
   it("l'impostazione vince sull'accordo dichiarato, come per un comando del kernel", async () => {
     registerShellCommand({
-      id: "shell.graph",
-      title: "commands.graph",
-      description: "commands.graph.desc",
+      id: "shell.switcher",
+      title: "commands.switcher",
+      description: "commands.switcher.desc",
       layer: "global",
       run: () => {},
     });
     // Prima: quello dichiarato dalla tabella generata.
-    expect(allCommands()[0]!.binding).toBe("Mod-Shift-g");
+    expect(allCommands()[0]!.binding).toBe("Mod-o");
 
-    fromBackend.mockResolvedValue([settingEntry("keys.shell.graph", "Mod-Alt-g")]);
+    fromBackend.mockResolvedValue([settingEntry("keys.shell.switcher", "Mod-Alt-o")]);
     await loadKeyOverrides();
 
     const entry = allCommands()[0]!;
-    expect(entry.binding).toBe("Mod-Alt-g");
+    expect(entry.binding).toBe("Mod-Alt-o");
     // E `declared` continua a dire quello di fabbrica, che è ciò da cui il
     // pannello sa scrivere «questo l'hai cambiato tu».
-    expect(entry.declared).toBe("Mod-Shift-g");
+    expect(entry.declared).toBe("Mod-o");
   });
 
   it("la combinazione nuova è quella che la tastiera trova", async () => {
     let done = false;
     registerShellCommand({
-      id: "shell.graph",
-      title: "commands.graph",
-      description: "commands.graph.desc",
+      id: "shell.switcher",
+      title: "commands.switcher",
+      description: "commands.switcher.desc",
       layer: "global",
       run: () => {
         done = true;
       },
     });
-    fromBackend.mockResolvedValue([settingEntry("keys.shell.graph", "Mod-Alt-g")]);
+    fromBackend.mockResolvedValue([settingEntry("keys.shell.switcher", "Mod-Alt-o")]);
     await loadKeyOverrides();
 
     // La vecchia non risponde più, e la nuova sì: senza la seconda metà, una
     // scorciatoia «riconfigurata» che risponde a tutte e due sarebbe un
     // conflitto che nessuno ha dichiarato.
-    expect(findByChord(allCommands(), chord({ key: "g", ctrlKey: true, shiftKey: true }))).toBeUndefined();
-    const found = findByChord(allCommands(), chord({ key: "g", ctrlKey: true, altKey: true }));
-    expect(found?.id).toBe("shell.graph");
+    expect(findByChord(allCommands(), chord({ key: "o", ctrlKey: true }))).toBeUndefined();
+    const found = findByChord(allCommands(), chord({ key: "o", ctrlKey: true, altKey: true }));
+    expect(found?.id).toBe("shell.switcher");
     found!.run!();
     expect(done).toBe(true);
   });
 
   it("un accordo azzerato lascia il comando senza scorciatoia", async () => {
     registerShellCommand({
-      id: "shell.graph",
-      title: "commands.graph",
-      description: "commands.graph.desc",
+      id: "shell.switcher",
+      title: "commands.switcher",
+      description: "commands.switcher.desc",
       layer: "global",
       run: () => {},
     });
-    fromBackend.mockResolvedValue([settingEntry("keys.shell.graph", "")]);
+    fromBackend.mockResolvedValue([settingEntry("keys.shell.switcher", "")]);
     await loadKeyOverrides();
     expect(allCommands()[0]!.binding).toBeNull();
   });
@@ -234,16 +236,16 @@ describe("i due registri sono uno solo", () => {
     state.commandSpecs = [spec({ id: "note.create", keybinding: "Mod-n" })];
     let done = false;
     registerShellCommand({
-      id: "shell.graph",
-      title: "commands.graph",
-      description: "commands.graph.desc",
+      id: "shell.switcher",
+      title: "commands.switcher",
+      description: "commands.switcher.desc",
       layer: "global",
       run: () => {
         done = true;
       },
     });
     const entries = allCommands();
-    expect(entries.map((e) => e.id)).toEqual(["note.create", "shell.graph"]);
+    expect(entries.map((e) => e.id)).toEqual(["note.create", "shell.switcher"]);
     expect(entries[0]!.spec).not.toBeNull();
     expect(entries[0]!.run).toBeNull();
     entries[1]!.run!();
@@ -262,9 +264,9 @@ describe("i due registri sono uno solo", () => {
     // da tutte e due le parti (0081).
     for (const _ of [1, 2]) {
       registerShellCommand({
-        id: "shell.graph",
-        title: "commands.graph",
-        description: "commands.graph.desc",
+        id: "shell.switcher",
+        title: "commands.switcher",
+        description: "commands.switcher.desc",
         layer: "global",
         run: () => {},
       });
@@ -277,7 +279,7 @@ describe("i due registri sono uno solo", () => {
 describe("l'arbitrato tra strati", () => {
   it("sceglie superficie, profilo, documento, riquadro e globale in quest'ordine", async () => {
     const layers = [
-      ["shell.graph", "global"],
+      ["shell.switcher", "global"],
       ["shell.pane.split.right", "pane"],
       ["shell.doc.search", "document"],
       ["shell.mode.live", "profile"],
@@ -286,8 +288,8 @@ describe("l'arbitrato tra strati", () => {
     for (const [id, layer] of layers) {
       registerShellCommand({
         id,
-        title: "commands.graph",
-        description: "commands.graph.desc",
+        title: "commands.switcher",
+        description: "commands.switcher.desc",
         layer,
         run: () => {},
       });
@@ -573,5 +575,20 @@ describe("una scorciatoia come si preme", () => {
     expect(displayBinding(null, "other")).toBe("");
     // Ciò che non si sa leggere resta scritto, non sparisce.
     expect(displayBinding("Hyper-x", "other")).toBe("Hyper-x");
+  });
+});
+
+describe("una scorciatoia come si annuncia", () => {
+  it("usa i nomi di KeyboardEvent, non i simboli che si leggono", () => {
+    expect(ariaBinding("Mod-Shift-PageDown", "other")).toBe("Control+Shift+PageDown");
+    expect(ariaBinding("Mod-Shift-e", "mac")).toBe("Meta+Shift+E");
+    expect(ariaBinding("Mod-Alt-ArrowLeft", "other")).toBe("Control+Alt+ArrowLeft");
+    expect(ariaBinding("Mod--", "other")).toBe("Control+-");
+    expect(ariaBinding("Mod-o || Mod-k o", "other")).toBe("Control+O");
+    // Una sequenza non ha forma in `aria-keyshortcuts`, dove lo spazio separa
+    // le alternative: non si dichiara piuttosto che dichiararne un'altra.
+    expect(ariaBinding("Mod-k d", "other")).toBe("");
+    expect(ariaBinding(null, "other")).toBe("");
+    expect(ariaBinding("Hyper-x", "other")).toBe("");
   });
 });

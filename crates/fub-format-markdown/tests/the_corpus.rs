@@ -25,7 +25,7 @@
 //! posteriori». Il costo non cresce perché scrivere il caso sia caro — cresce
 //! perché **nessuno si accorge che il corpus non è cresciuto**. Quindi il corpus
 //! non è un elenco su cui si itera ([0056](../../../docs/decisions/0196-test-e-artefatti-generati.md)):
-//! si **compare**, in tre direzioni, con altrettante sorgenti che non sono lui.
+//! si **confronta**, in tre direzioni, con altrettante sorgenti che non sono lui.
 //!
 //! 1. le varianti di `Block` e `Inline`, estratte dal sorgente del contratto;
 //! 2. i `custom_kind` del registro, estratti dallo stesso;
@@ -91,7 +91,7 @@ use crate::corpus::{corpus, divergent, how_many_cases, mutate, seed, Case64};
 /// confronto.
 ///
 /// Arriva per `include_str!` e non per path a runtime: se `model.rs` si sposta,
-/// questo file **non compila** — invece di passare avendo compareto il corpus
+/// questo file **non compila** — invece di passare avendo confrontato il corpus
 /// con un elenco vuoto. È il gesto della
 /// [0059](../../../docs/decisions/0180-compatibilita-wit-additiva.md).
 const CONTRATTO: &str = include_str!("../../fub-abi/src/model.rs");
@@ -347,11 +347,20 @@ fn the_corpus_exercises_every_syntax_the_provider_declares() {
         .keys()
         .map(|k| k.to_string())
         .collect();
+    // I nomi di `source` non sono sintassi: `fub:prose-source` dice che il
+    // sorgente è prosa, su cui una feature può accodare testo. Non hanno un
+    // costrutto da osservare nel modello, quindi il corpus non può produrli;
+    // si scusano quelli che il provider dichiara.
+    let excused: BTreeSet<String> = fub_abi::options::source::ALL
+        .iter()
+        .map(|k| k.to_string())
+        .filter(|k| declared.contains(k))
+        .collect();
     compare(
         "le sintassi dichiarate in `capabilities()`",
         &declared,
         &or.syntaxes,
-        &BTreeSet::new(),
+        &excused,
     );
 }
 
@@ -554,7 +563,7 @@ enum Reason {
 /// provano la tesi su cui poggia il round-trip — una divergenza fra il modello e
 /// il file non è una perdita nel trasferimento, perché i byte che il
 /// trasferimento copia non vengono dal modello. Il nome è la chiave che lega le
-/// due metà, e [`le_divergenze_sono_quelle_dichiarate`] compare i due elenchi
+/// due metà, e [`le_divergenze_sono_quelle_dichiarate`] confronta i due elenchi
 /// **nei due versi**: un nome senza predicato o un predicato senza nome è rosso.
 ///
 /// # Perché il predicato riceve anche la sorgente
@@ -1223,7 +1232,7 @@ fn span_in_code_unit(text: &str, span: &Span) -> (usize, usize) {
 ///
 /// Lo span di un [`TaskMarker`](fub_abi::model::TaskMarker) è il **simbolo**,
 /// non le parentesi: `[x]` → la `x`. La shell decora `[x]` intero, quindi la
-/// fixture porta il simbolo e chi compare ci allarga di uno per lato — la
+/// fixture porta il simbolo e chi confronta ci allarga di uno per lato — la
 /// differenza è dichiarata qui e non nascosta in un `-1` di là.
 fn model_tasks(model: &DocumentModel, text: &str, out: &mut Vec<Value>) {
     fn walk(blocks: &[Block], text: &str, out: &mut Vec<Value>) {

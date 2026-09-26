@@ -288,7 +288,7 @@ function staysRelative(v: string): boolean {
   }
 }
 
-function hasScheme(v: string): boolean {
+export function hasScheme(v: string): boolean {
   const compact = v.replace(/[\s\x00-\x1F]/g, "");
   const colon = compact.indexOf(":");
   if (colon < 1) return false;

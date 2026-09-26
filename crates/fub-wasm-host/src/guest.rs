@@ -35,8 +35,8 @@ use wasmtime::component::{HasSelf, Linker};
 
 use crate::borrow::State;
 use crate::contract::fub::abi::{
-    format as w_format, host_data_read, host_data_write, host_env, host_events, host_vault_read,
-    index as w_index, intl as w_intl, model as w_model, session as w_session,
+    edit as w_edit, format as w_format, host_data_read, host_data_write, host_env, host_events,
+    host_vault_read, index as w_index, intl as w_intl, model as w_model, session as w_session,
 };
 use crate::translate as tr;
 
@@ -83,7 +83,6 @@ impl host_env::Host for State {
     /// Senza host prestato l'orologio risponde `0`. È l'unica firma di questa
     /// famiglia che non può dire di no — il contratto la dà come `u64` nudo,
     /// perché «che ore sono» non è una domanda che si rifiuta — e zero è
-    /// l'epoca, cioè un istante che nessuno scambia per adesso.
     /// l'epoca, cioè un istante che nessuno scambia per adesso.
     fn now_unix_millis(&mut self) -> u64 {
         self.reader().map(|h| h.now_unix_millis()).unwrap_or(0)
@@ -179,6 +178,29 @@ impl host_vault_read::Host for State {
             .and_then(|h| h.format_of(&DocId::new(id)))
             .as_ref()
             .map(tr::to_format)
+    }
+
+    fn format_link(
+        &mut self,
+        doc: w_model::DocId,
+        link: w_model::LinkInsert,
+    ) -> Result<Option<String>, crate::contract::fub::abi::errors::PluginError> {
+        let h = reader!(self);
+        h.format_link(&DocId::new(doc), &tr::from_link_insert(link))
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn task_state_edit(
+        &mut self,
+        doc: w_model::DocId,
+        marker: w_model::TaskMarker,
+        done: bool,
+    ) -> Result<Option<w_edit::EditRequest>, crate::contract::fub::abi::errors::PluginError> {
+        let h = reader!(self);
+        let marker = tr::from_task_marker(marker).map_err(|and| tr::to_error(&and))?;
+        h.task_state_edit(&DocId::new(doc), &marker, done)
+            .map(|request| request.as_ref().map(tr::to_edit_request))
+            .map_err(|and| tr::to_error(&and))
     }
 
     fn list_trash(

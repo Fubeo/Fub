@@ -7,7 +7,7 @@ use fub_abi::grid::{
     GridApplyRequest, GridCellKey, GridCellPatch, GridProvider, GridWindowRequest,
 };
 use fub_abi::Revision;
-use fub_host::sheet::{SheetGridProvider, SHEET_GRID_SURFACE};
+use fub_format_sheet::grid::{SheetGridProvider, SHEET_GRID_SURFACE};
 use fub_host::Host;
 use fub_kernel::Trust;
 use fub_wasm_host::WasmBundle;

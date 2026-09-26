@@ -1513,6 +1513,43 @@
       "progress": null
     }
   ],
+  "ExportReport": [
+    {
+      "artifacts": [
+        {
+          "path": "Diario/2026.csv",
+          "media_type": "text/csv",
+          "content": {
+            "kind": "bytes",
+            "value": [
+              65,
+              66
+            ]
+          }
+        },
+        {
+          "path": "vault.zip",
+          "media_type": "application/zip",
+          "content": {
+            "kind": "delivered",
+            "value": "18446744073709551615"
+          }
+        }
+      ],
+      "log": [
+        {
+          "level": "warning",
+          "message": "allegato mancante",
+          "entry": "Diario/2026.md"
+        },
+        {
+          "level": "info",
+          "message": "2 documenti esportati",
+          "entry": null
+        }
+      ]
+    }
+  ],
   "UiAction": [
     {
       "action": "nuda",
@@ -1883,7 +1920,11 @@
         "writes": true,
         "reach": "documents",
         "reversible": false
-      }
+      },
+      "surfaces": [
+        "slash",
+        "slash_selection"
+      ]
     },
     {
       "id": "test.min",
@@ -1895,7 +1936,8 @@
         "writes": false,
         "reach": "session",
         "reversible": true
-      }
+      },
+      "surfaces": []
     }
   ],
   "CommandOutcome": [

@@ -178,3 +178,27 @@ fn outbound_mentions_find_aliases_read_from_the_kernel_index() {
     assert!(json.contains("Città.md"), "{json}");
     assert!(!json.contains("Estranea.md"), "{json}");
 }
+
+/// Il banco monta il pannello senza la ricerca: nessuno valuta il testo, e le
+/// menzioni non collegate entranti lo dicono invece di presentarsi come un
+/// guasto. Il resto del pannello risponde.
+#[test]
+fn unlinked_mentions_without_search_say_so_instead_of_failing() {
+    let vault = Vault::new();
+    vault.put("Target.md", "# Target\n");
+    vault.put("Uno.md", "vedi [[Target]]\n");
+    vault.put("Due.md", "parla di Target senza link\n");
+    let ws = vault.open();
+    ws.set_active_document(Some(DocId::new("Target.md")));
+
+    let tree = ws
+        .render_view(&ViewInstance::only(BACKLINKS_VIEW))
+        .expect("render con attivo");
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(json.contains("mentions_need_search"), "{json}");
+    assert_eq!(backlink_titles(&tree), vec!["Uno".to_string()]);
+    fn failed(node: &UiNode) -> bool {
+        matches!(node.kind, UiKind::Failed { .. }) || node.children().into_iter().any(failed)
+    }
+    assert!(!failed(&tree), "{json}");
+}

@@ -15,6 +15,7 @@
 // anche se il link si cancella.
 
 import { depositAttachment, type AttachmentDeposit } from "./attachment-target";
+import { errorText } from "../../host/errors";
 export type RecorderState = "idle" | "requesting" | "recording" | "stopped" | "denied" | "failed";
 
 export interface RecordingMeta {
@@ -169,7 +170,7 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
           bytes += chunk.byteLength;
         }).catch((error: unknown) => {
           writeFailure = error;
-          if (!destroyed) set("failed", `recording could not be staged: ${String(error)}`);
+          if (!destroyed) set("failed", `recording could not be staged: ${errorText(error)}`);
           try {
             if (recorder?.state === "recording") recorder.stop();
           } catch {
@@ -200,7 +201,7 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
         recorder.start(1000);
       } catch (error) {
         releaseStream();
-        set("failed", `recording could not start: ${String(error)}`);
+        set("failed", `recording could not start: ${errorText(error)}`);
         throw error;
       }
       set("recording");

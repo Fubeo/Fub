@@ -58,7 +58,9 @@ export type Tab =
   | { k: "doc"; doc: string; pinned?: boolean; stack?: string }
   /// Una view **dichiarata** dal backend, per id di `ViewSpec` (§3.3). Il
   /// riquadro non sa cosa disegni: la monta `ui/views.ts` come le altre.
-  | { k: "view"; view: string; pinned?: boolean; stack?: string };
+  /// `params` sono gli argomenti dell'istanza (`CommandEffect::OpenView`),
+  /// assenti per la view che si apre senza.
+  | { k: "view"; view: string; params?: unknown; pinned?: boolean; stack?: string };
 
 /// Cosa tiene aperto un riquadro.
 export interface PaneState {
@@ -71,12 +73,15 @@ export interface PaneState {
   /// stesso riquadro non sono vietate, e con un path non si saprebbe quale
   /// delle due è davanti.
   active: number;
-  /// La modalità interna della superficie mostrata in questo riquadro.
+  /// La modalità scelta in questo riquadro, **per famiglia di superfici**.
   ///
-  /// È una stringa stabile dichiarata dalla superficie, non il `PaneMode`
-  /// congelato dell'ABI. La proiezione sul vecchio contesto è responsabilità
-  /// della superficie attiva.
-  mode: string;
+  /// Gli id li dichiara la superficie e valgono dentro la sua famiglia: il
+  /// `source` del testo e il `source` della tela sono due modalità diverse, e
+  /// con una stringa sola per riquadro una nota in Sorgente faceva aprire la
+  /// tela seguente come JSON grezzo. Una famiglia senza voce si apre nella
+  /// modalità predefinita della superficie. Non è il `PaneMode` dell'ABI: la
+  /// proiezione sul contesto è della superficie attiva.
+  modes: Record<string, string>;
   /// Cronologia avanti/indietro di questo riquadro (P06/F21): le tab visitate.
   /// Assente = nessuna navigazione (primo avvio, riquadro nuovo, layout migrato).
   /// Sono identità di tab, non testi: il buffer resta unico nella sessione.
@@ -146,14 +151,18 @@ export interface Layout {
   focus: string;
 }
 
-export const DEFAULT_MODE = "live_preview";
+/// La famiglia a cui appartengono le modalità nominate da `editor.default-mode`
+/// e dalla vecchia `mode` di un riquadro: il testo, l'unica che ne offriva più
+/// d'una quando la modalità era una sola.
+export const TEXT_FAMILY = "text";
 
 /// La finestra come nasce quando non c'è niente da ricordare: un riquadro, il
-/// primo, senza niente dentro.
-export function defaultLayout(mode: string = DEFAULT_MODE): Layout {
+/// primo, senza niente dentro. `textMode` è la modalità scelta per le note;
+/// senza, ogni superficie si apre nella sua predefinita.
+export function defaultLayout(textMode?: string): Layout {
   return {
     tree: { k: "leaf", pane: MAIN_PANE },
-    panes: { [MAIN_PANE]: { tabs: [], active: -1, mode } },
+    panes: { [MAIN_PANE]: { tabs: [], active: -1, modes: textMode ? { [TEXT_FAMILY]: textMode } : {} } },
     focus: MAIN_PANE,
   };
 }
@@ -275,7 +284,7 @@ export function split(id: string, dir: "row" | "col", l: Layout = layout): strin
   }));
   if (!inserted) return null;
   l.tree = flatten(inserted);
-  l.panes[newItem] = { tabs: [], active: -1, mode: l.panes[id].mode };
+  l.panes[newItem] = { tabs: [], active: -1, modes: { ...l.panes[id].modes } };
   l.focus = newItem;
   changed();
   return newItem;
@@ -322,20 +331,35 @@ export function openIn(id: string, doc: string, l: Layout = layout): void {
 /// Stessa regola del documento — se c'è già ci si sposta sopra — e per una
 /// ragione più forte: due tab sullo stesso grafo sarebbero due simulazioni che
 /// girano insieme sullo stesso vault, cioè il doppio del lavoro per due disegni
-/// che convergono allo stesso posto.
-export function openViewIn(id: string, view: string, l: Layout = layout): void {
-  openTabIn(id, { k: "view", view }, l);
+/// che convergono allo stesso posto. Con `params` la linguetta che c'è già
+/// passa a quegli argomenti; senza, tiene i suoi.
+export function openViewIn(id: string, view: string, l: Layout = layout, params?: unknown): void {
+  openTabIn(id, { k: "view", view, ...(params === undefined || params === null ? {} : { params }) }, l);
 }
 
 function openTabIn(id: string, tab: Tab, l: Layout): void {
   const p = l.panes[id];
   if (!p) return;
   pushHistory(p, p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null);
-  const already = p.tabs.findIndex((t) => sameTab(t, tab));
-  p.active = already >= 0 ? already : p.tabs.push(tab) - 1;
+  placeTab(p, tab);
   l.focus = id;
   changed();
   propagateToLinked(id, tab, l);
+}
+
+/// Rende attiva `tab` nel riquadro: se c'è già ci si sposta sopra, e una view
+/// riaperta con argomenti passa a quelli; altrimenti la si aggiunge in coda.
+function placeTab(p: PaneState, tab: Tab): void {
+  const already = p.tabs.findIndex((t) => sameTab(t, tab));
+  if (already < 0) {
+    p.active = p.tabs.push(tab) - 1;
+    return;
+  }
+  const present = p.tabs[already]!;
+  if (tab.k === "view" && present.k === "view" && tab.params !== undefined) {
+    p.tabs[already] = { ...present, params: tab.params };
+  }
+  p.active = already;
 }
 
 /// Registra la tab che si sta lasciando nella cronologia del riquadro:
@@ -364,19 +388,15 @@ function propagateToLinked(source: string, tab: Tab, l: Layout): void {
     if (id === source) continue;
     const p = l.panes[id];
     if ((p.link ?? null) !== name) continue;
-    const already = p.tabs.findIndex((t) => sameTab(t, tab));
-    if (already >= 0) {
-      p.active = already;
-    } else {
-      p.tabs.push(tab);
-      p.active = p.tabs.length - 1;
-    }
+    placeTab(p, tab);
   }
 }
 
 /// Due tab sono la stessa cosa aperta? Serve a non aprirne una seconda, ed è
 /// l'unico posto in cui le due specie si confrontano fra loro. Pin e stack
-/// non fanno parte dell'identità: una nota appuntata resta quella nota.
+/// non fanno parte dell'identità: una nota appuntata resta quella nota. Nemmeno
+/// gli argomenti di una view: l'istanza di un riquadro è una, e riaprirla con
+/// altri argomenti la riporta su quelli.
 export function sameTab(a: Tab, b: Tab): boolean {
   if (a.k === "doc" && b.k === "doc") return a.doc === b.doc;
   if (a.k === "view" && b.k === "view") return a.view === b.view;
@@ -428,7 +448,7 @@ export function setPinnedTab(id: string, index: number, pinned: boolean, l: Layo
   if ((tab.pinned === true) === pinned) return;
   p.tabs[index] = tab.k === "doc"
     ? { k: "doc", doc: tab.doc, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) }
-    : { k: "view", view: tab.view, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
+    : { k: "view", view: tab.view, ...viewParams(tab), ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
   // Le appuntate stanno a sinistra: appuntare porta la tab in coda alle
   // appuntate, spuntarla la porta subito dopo di loro.
   const others = p.tabs.filter((other, i) => i !== index && other.pinned === true).length;
@@ -444,7 +464,7 @@ export function setTabStack(id: string, index: number, stack: string | null, l: 
   const tab = p.tabs[index]!;
   const next = name === "" ? null : name;
   if ((tab.stack ?? null) === next) return;
-  const base = tab.k === "doc" ? { k: "doc" as const, doc: tab.doc } : { k: "view" as const, view: tab.view };
+  const base = tab.k === "doc" ? { k: "doc" as const, doc: tab.doc } : { k: "view" as const, view: tab.view, ...viewParams(tab) };
   p.tabs[index] = {
     ...base,
     ...(tab.pinned ? { pinned: true } : {}),
@@ -629,18 +649,23 @@ export function goForward(id: string, l: Layout = layout): boolean {
 /// col fuoco: un rename non guarda chi sta guardando. Pin, stack e cronologia
 /// seguono l'identità: una tab appuntata rinominata resta appuntata.
 export function rename(from: string, a: string, l: Layout = layout): void {
+  if (renameInLayout(from, a, l)) changed();
+}
+
+/// La regola di [`rename`] senza annunciarla, per un layout qualunque: `true`
+/// se ha toccato una tab o la cronologia. La usano anche i workspace salvati,
+/// perché una nota rinominata segua allo stesso modo nell'assetto vivo e in
+/// quelli con un nome.
+export function renameInLayout(from: string, a: string, l: Layout): boolean {
   let wasTouched = false;
-  const renamed = (t: Tab): Tab =>
-    t.k === "doc" && t.doc === from
-      ? { k: "doc", doc: a, ...(t.pinned ? { pinned: true } : {}), ...(t.stack ? { stack: t.stack } : {}) }
-      : t;
+  const renamed = (t: Tab): Tab => {
+    if (t.k !== "doc" || t.doc !== from) return t;
+    wasTouched = true;
+    return { k: "doc", doc: a, ...(t.pinned ? { pinned: true } : {}), ...(t.stack ? { stack: t.stack } : {}) };
+  };
   for (const id of panes(l)) {
     const p = l.panes[id];
-    p.tabs = p.tabs.map((t) => {
-      const next = renamed(t);
-      if (next !== t) wasTouched = true;
-      return next;
-    });
+    p.tabs = p.tabs.map(renamed);
     if (p.history) {
       p.history = {
         past: p.history.past.map(renamed),
@@ -648,7 +673,7 @@ export function rename(from: string, a: string, l: Layout = layout): void {
       };
     }
   }
-  if (wasTouched) changed();
+  return wasTouched;
 }
 
 /// Il documento non c'è più: via da ogni riquadro che lo teneva.
@@ -681,11 +706,11 @@ export function removeEverywhere(doc: string, l: Layout = layout): void {
   if (wasTouched) changed();
 }
 
-/// Cambia la modalità di un riquadro.
-export function setMode(id: string, mode: string, l: Layout = layout): void {
+/// Cambia la modalità di un riquadro per una famiglia di superfici.
+export function setMode(id: string, family: string, mode: string, l: Layout = layout): void {
   const p = l.panes[id];
-  if (!p || p.mode === mode) return;
-  p.mode = mode;
+  if (!p || p.modes[family] === mode) return;
+  p.modes[family] = mode;
   changed();
 }
 
@@ -791,7 +816,7 @@ function changed(): void {
 /// La migrazione è piccola ma vera, e va detta: fino a ieri la modalità era la
 /// chiave `mode`, una per vault. Adesso è dentro ogni riquadro. Chi apre la
 /// prima volta dopo l'aggiornamento non ha un `layout` da leggere ma ha un
-/// `mode`, e quello diventa la modalità del primo riquadro. Da lì in poi `mode`
+/// `mode`, e quello diventa la modalità delle note nel primo riquadro. Da lì in poi `mode`
 /// non si riscrive più e resta lì finché non se ne va da sé: **non lo
 /// cancelliamo**, perché una versione precedente della shell riaperta sullo
 /// stesso vault lo ritroverebbe, e una migrazione che rompe il ritorno indietro
@@ -802,20 +827,20 @@ function changed(): void {
 /// chiave si chiedeva già sempre, anche quando il layout c'era — ma l'attesa
 /// diventa una.
 ///
-/// `preferred` è la modalità che l'utente ha scelto per i riquadri nuovi
-/// (`editor.default-mode`): vale solo quando non c'è niente da ricordare, e
-/// arriva come promessa perché la si chiede insieme alle altre due.
+/// `preferred` è la modalità che l'utente ha scelto per le note dei riquadri
+/// nuovi (`editor.default-mode`): vale solo quando non c'è niente da
+/// ricordare, e arriva come promessa perché la si chiede insieme alle altre due.
 export async function loadLayout(preferred?: Promise<string | undefined>): Promise<void> {
   const [saved, inheritedMode, preferredMode] = await Promise.all([
     readState<unknown>(LAYOUT_KEY),
     readState<string>(MODE_KEY_LEGACY),
     preferred ?? Promise.resolve(undefined),
   ]);
-  layout = parseLayout(saved) ?? defaultLayout(validMode(inheritedMode ?? preferredMode));
+  layout = parseLayout(saved) ?? defaultLayout(validMode(inheritedMode) ?? validMode(preferredMode));
 }
 
-function validMode(v: unknown): string {
-  return typeof v === "string" && v.trim() !== "" ? v : DEFAULT_MODE;
+function validMode(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() !== "" ? v : undefined;
 }
 
 /// Da JSON a `Layout`, o `null` se ciò che c'è scritto non è un layout.
@@ -911,10 +936,29 @@ function parsePane(v: unknown): PaneState | null {
     // mano, ed è anche l'unica che si può riparare invece di buttare tutto:
     // il riquadro c'è, le tab ci sono, non si sa quale era davanti.
     active: Number.isInteger(active) && active >= 0 && active < tabs.length ? active : tabs.length > 0 ? 0 : -1,
-    mode: validMode(o.mode),
+    modes: parseModes(o.modes, o.mode),
     ...(history ? { history } : {}),
     ...(typeof link === "string" ? { link } : {}),
   };
+}
+
+/// Le modalità per famiglia, **leggendo anche la forma di prima**: una `mode`
+/// sola per riquadro, che diventa la voce del testo — era la sola famiglia con
+/// più di una modalità da ricordare. Clemente come lo era `mode`: una voce che
+/// non regge la forma vale come assente, e quella famiglia torna alla sua
+/// predefinita invece di costare il layout intero.
+function parseModes(v: unknown, legacy: unknown): Record<string, string> {
+  const modes: Record<string, string> = {};
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    for (const [family, mode] of Object.entries(v as Record<string, unknown>)) {
+      const valid = validMode(mode);
+      if (family.trim() !== "" && valid) modes[family] = valid;
+    }
+    return modes;
+  }
+  const inherited = validMode(legacy);
+  if (inherited) modes[TEXT_FAMILY] = inherited;
+  return modes;
 }
 
 /// Da JSON a cronologia di riquadro: due elenchi di tab, o niente. Severa
@@ -974,7 +1018,14 @@ function parseTab(v: unknown): Tab | null {
     return typeof o.doc === "string" && o.doc ? { k: "doc", doc: o.doc, ...pinned, ...stack } : null;
   }
   if (o.k === "view") {
-    return typeof o.view === "string" && o.view ? { k: "view", view: o.view, ...pinned, ...stack } : null;
+    return typeof o.view === "string" && o.view
+      ? { k: "view", view: o.view, ...viewParams(o), ...pinned, ...stack }
+      : null;
   }
   return null;
+}
+
+/// Gli argomenti di una view, da ricopiare quando la linguetta si ricostruisce.
+function viewParams(tab: { params?: unknown }): { params?: unknown } {
+  return tab.params === undefined || tab.params === null ? {} : { params: tab.params };
 }

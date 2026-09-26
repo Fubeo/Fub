@@ -28,6 +28,10 @@ import {
   removeEverywhere,
   normalizedSizes,
   setSplitSizes,
+  setMode,
+  setPaneLink,
+  setPinnedTab,
+  setTabStack,
   type Layout,
   type SplitNode,
 } from "./layout";
@@ -111,11 +115,25 @@ describe("l'albero dei riquadri", () => {
     expect(panes(l)).toEqual(["main"]);
   });
 
-  it("un riquadro nuovo eredita la modalità di chi lo ha generato", () => {
+  it("un riquadro nuovo eredita le modalità di chi lo ha generato", () => {
     const l = newItem();
-    l.panes.main.mode = "reading";
+    setMode("main", "text", "reading", l);
+    setMode("main", "canvas", "source", l);
     const newItemId = split("main", "col", l)!;
-    expect(l.panes[newItemId].mode).toBe("reading");
+    expect(l.panes[newItemId].modes).toEqual({ text: "reading", canvas: "source" });
+    // Una copia, non lo stesso oggetto: cambiare modalità a destra non la
+    // cambia a sinistra.
+    setMode(newItemId, "text", "source", l);
+    expect(l.panes.main.modes.text).toBe("reading");
+  });
+
+  // Gli id valgono dentro la famiglia: il `source` della tela non è quello
+  // del testo, e sceglierne uno non tocca l'altro.
+  it("la modalità si ricorda per famiglia di superfici", () => {
+    const l = newItem();
+    setMode("main", "text", "source", l);
+    setMode("main", "canvas", "canvas", l);
+    expect(l.panes.main.modes).toEqual({ text: "source", canvas: "canvas" });
   });
 });
 
@@ -262,6 +280,61 @@ describe("una tab che non è un documento", () => {
     removeEverywhere("a.md", l);
     expect(l.panes.main.tabs).toEqual([{ k: "view", view: "a.md" }]);
   });
+
+  // `OpenView` porta gli argomenti dell'istanza: stanno sulla linguetta, così
+  // il riquadro li ridà al kernel a ogni disegno e dopo un riavvio.
+  it("una view aperta con argomenti li tiene sulla linguetta", () => {
+    const l = newItem();
+    openViewIn("main", "links", l, { doc: "a.md" });
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "links", params: { doc: "a.md" } });
+    // Senza argomenti (o con `null`) la linguetta non ne ha.
+    openViewIn("main", "graph", l, null);
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+  });
+
+  it("riaprire la view con altri argomenti la riporta su quelli, senza una seconda linguetta", () => {
+    const l = newItem();
+    openViewIn("main", "links", l, { doc: "a.md" });
+    openIn("main", "b.md", l);
+    openViewIn("main", "links", l, { doc: "b.md" });
+    expect(l.panes.main.tabs).toEqual([
+      { k: "view", view: "links", params: { doc: "b.md" } },
+      { k: "doc", doc: "b.md" },
+    ]);
+    expect(l.panes.main.active).toBe(0);
+    // Riaprirla senza argomenti ci si sposta sopra e tiene i suoi.
+    openIn("main", "b.md", l);
+    openViewIn("main", "links", l);
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "links", params: { doc: "b.md" } });
+  });
+
+  it("appuntare, raggruppare e rileggere non perdono gli argomenti", () => {
+    const l = newItem();
+    openIn("main", "a.md", l);
+    openViewIn("main", "links", l, { doc: "a.md" });
+    setPinnedTab("main", 1, true, l);
+    expect(l.panes.main.tabs[0]).toEqual({ k: "view", view: "links", params: { doc: "a.md" }, pinned: true });
+    setTabStack("main", 0, "ricerca", l);
+    expect(l.panes.main.tabs[0]).toEqual({
+      k: "view",
+      view: "links",
+      params: { doc: "a.md" },
+      pinned: true,
+      stack: "ricerca",
+    });
+    expect(parseLayout(JSON.parse(JSON.stringify(l)))).toEqual(l);
+  });
+
+  it("un riquadro collegato segue anche gli argomenti nuovi", () => {
+    const l = newItem();
+    split("main", "row", l);
+    const [left, right] = panes(l);
+    setPaneLink(left!, "coppia", l);
+    setPaneLink(right!, "coppia", l);
+    openViewIn(left!, "links", l, { doc: "a.md" });
+    openViewIn(left!, "links", l, { doc: "b.md" });
+    expect(activeTab(right!, l)).toEqual({ k: "view", view: "links", params: { doc: "b.md" } });
+  });
 });
 
 // Il file si apre con un editor di testo — è la promessa fatta alle
@@ -375,19 +448,38 @@ describe("rileggere la finestra com'era", () => {
   it("conserva una modalità non vuota dichiarata da una superficie", () => {
     const reread = parseLayout({
       tree: { k: "leaf", pane: "main" },
-      panes: { main: { docs: [], active: -1, mode: "grid.navigate" } },
+      panes: { main: { tabs: [], active: -1, modes: { grid: "grid.navigate", text: "reading" } } },
       focus: "main",
     });
-    expect(reread!.panes.main.mode).toBe("grid.navigate");
+    expect(reread!.panes.main.modes).toEqual({ grid: "grid.navigate", text: "reading" });
   });
 
-  it("una modalità vuota torna al default", () => {
+  // Una voce rovinata costa soltanto sé stessa: quella famiglia torna alla
+  // modalità predefinita della sua superficie, il resto del riquadro resta.
+  it("una modalità vuota o non testuale torna al default della superficie", () => {
     const reread = parseLayout({
+      tree: { k: "leaf", pane: "main" },
+      panes: { main: { tabs: [], active: -1, modes: { text: "   ", canvas: 3, grid: "sheet", " ": "x" } } },
+      focus: "main",
+    });
+    expect(reread!.panes.main.modes).toEqual({ grid: "sheet" });
+  });
+
+  // La forma di prima: una `mode` sola per riquadro. Era la modalità delle
+  // note — l'unica famiglia che ne aveva più d'una — e resta quella.
+  it("la `mode` di un riquadro di prima diventa la modalità delle note", () => {
+    const reread = parseLayout({
+      tree: { k: "leaf", pane: "main" },
+      panes: { main: { docs: [], active: -1, mode: "reading" } },
+      focus: "main",
+    });
+    expect(reread!.panes.main.modes).toEqual({ text: "reading" });
+    const blank = parseLayout({
       tree: { k: "leaf", pane: "main" },
       panes: { main: { docs: [], active: -1, mode: "   " } },
       focus: "main",
     });
-    expect(reread!.panes.main.mode).toBe("live_preview");
+    expect(blank!.panes.main.modes).toEqual({});
   });
 
   // La migrazione, che è piccola ma vera: fino a ieri la modalità era la chiave
@@ -400,14 +492,22 @@ describe("rileggere la finestra com'era", () => {
     );
     await loadLayout();
     expect(panes()).toEqual(["main"]);
-    expect(layout.panes.main.mode).toBe("reading");
+    expect(layout.panes.main.modes).toEqual({ text: "reading" });
+  });
+
+  // `editor.default-mode` nomina una modalità delle note: vale per il testo e
+  // basta, o una tela aperta nel riquadro nuovo partirebbe dal suo `source`.
+  it("senza niente da ricordare, la modalità preferita vale per le note", async () => {
+    viewState.mockResolvedValue(null);
+    await loadLayout(Promise.resolve("source"));
+    expect(layout.panes.main.modes).toEqual({ text: "source" });
   });
 
   it("un errore dell'IPC non impedisce di partire", async () => {
     viewState.mockRejectedValue(new Error("nessun vault aperto"));
     await loadLayout();
     expect(panes()).toEqual(["main"]);
-    expect(layout.panes.main.mode).toBe("live_preview");
+    expect(layout.panes.main.modes).toEqual({});
   });
 
   // Le due chiavi si chiedono **insieme**. Il conto delle chiamate non lo

@@ -10,9 +10,12 @@
 // # Perché non registra comandi
 //
 // Le voci dei menu invocano comandi **già registrati** — `shell.vault.open`,
-// `shell.palette`, `shell.graph` — e non ne dichiarano di nuovi. La dieta
-// dei comandi di shell è chiusa, e un menu che inventasse i propri la
-// violerebbe. Il menu è un lettore del registro, non un scrittore.
+// `shell.palette` — e non ne dichiarano di nuovi. La dieta dei comandi di
+// shell è chiusa, e un menu che inventasse i propri la violerebbe. Il menu è
+// un lettore del registro, non un scrittore. Le view principali — il grafo è
+// una di loro — entrano nel menu Vista allo stesso modo in cui entrano nella
+// palette: dall'elenco che i componenti dichiarano, e non da una voce scritta
+// qui.
 //
 // # La iniezione, e perché
 //
@@ -38,6 +41,16 @@ export interface MenuHost {
   /// La scorciatoia del comando come la si preme, se ne ha una: la mostra la
   /// voce accanto al nome, come in ogni menu che insegna le scorciatoie.
   shortcut?(id: ShellCommandId): string;
+  /// Le view principali che si aprono senza argomenti, lette a ogni apertura
+  /// del menu: un componente acceso o spento cambia l'elenco.
+  views?(): readonly MenuView[];
+}
+
+/// Una view principale come voce del menu Vista: il nome già tradotto e il
+/// gesto che la apre.
+export interface MenuView {
+  readonly label: string;
+  run(): void;
 }
 
 
@@ -53,6 +66,8 @@ export interface MenuHost {
 type MenuEntry = (
   | { label: string; command: ShellCommandId }
   | { label: string; click: string }
+  /// Il posto delle view principali dichiarate: zero, una o più voci.
+  | { views: true }
 ) & { separator?: boolean };
 
 const MENU: { title: string; entries: MenuEntry[] }[] = [
@@ -79,7 +94,7 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
     entries: [
       { label: "menu.view.files", command: "shell.panel.files" },
       { label: "menu.view.search", command: "shell.panel.search" },
-      { label: "menu.view.graph", command: "shell.graph" },
+      { views: true },
       { label: "menu.view.sidebar", command: "shell.sidebar.toggle", separator: true },
       { label: "menu.view.inspector", command: "shell.inspector.toggle" },
       { label: "menu.view.focus", command: "shell.focus.toggle" },
@@ -286,22 +301,34 @@ export function mountAppMenu(host: MenuHost): Teardown {
     const generation = ++menuGeneration;
 
     const entries = MENU[index]!.entries;
-    const items: MenuItem[] = entries.map((v) => ({
-      label: t(v.label as never),
-      separator: v.separator,
-      hint: "command" in v ? host.shortcut?.(v.command) || undefined : undefined,
-      run: () => {
-        // Il runner può essere raggiunto dopo un click nativo o da un test che
-        // lo richiami direttamente: chiudere qui è quindi deliberatamente
-        // idempotente e non dipende dal listener del bottone.
-        close();
-        if ("click" in v) {
-          document.querySelector<HTMLElement>(v.click)?.click();
-          return;
-        }
-        host.run(v.command);
-      },
-    }));
+    const items: MenuItem[] = entries.flatMap((v): MenuItem[] => {
+      if ("views" in v) {
+        return (host.views?.() ?? []).map((view, i) => ({
+          label: view.label,
+          separator: i === 0 ? v.separator : undefined,
+          run: () => {
+            close();
+            view.run();
+          },
+        }));
+      }
+      return [{
+        label: t(v.label as never),
+        separator: v.separator,
+        hint: "command" in v ? host.shortcut?.(v.command) || undefined : undefined,
+        run: () => {
+          // Il runner può essere raggiunto dopo un click nativo o da un test che
+          // lo richiami direttamente: chiudere qui è quindi deliberatamente
+          // idempotente e non dipende dal listener del bottone.
+          close();
+          if ("click" in v) {
+            document.querySelector<HTMLElement>(v.click)?.click();
+            return;
+          }
+          host.run(v.command);
+        },
+      }];
+    });
     // Il menu si apre sotto la voce, e non nel punto del click: una menubar
     // ha i menu allineati ai bottoni, e aprirli dove capita sarebbe un menu
     // che salta. `showContextMenu` usa `clientX/clientY`, quindi costruiamo

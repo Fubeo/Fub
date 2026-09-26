@@ -2,7 +2,7 @@ import {
   invertOperation,
   operationFromText,
   type TextOperation,
-} from "../../editor/text-operation";
+} from "../core/text-operation";
 import {
   cellAt,
   coordinateAt,

@@ -16,24 +16,29 @@
 //!
 //! # Due interruttori, e non è un doppione
 //!
-//! - [`VERSIONING_ENABLED`] è l'interruttore **della feature**, e lo legge la
-//!   feature: spenta, il versioning *si dichiara lo stesso e non registra
-//!   niente* (D7). «Dichiarato con zero registrazioni» è uno stato vero e
-//!   diverso da «non c'è», ed è quello che l'inventario del §7.6 mostra.
-//! - [`PLUGINS_DISABLED`] è l'interruttore **dell'host**, e lo legge chi monta:
+//! - [`VERSIONING_ENABLED`] spegne il versioning **montato**. La feature non
+//!   sa di poter essere spenta: la chiave la dichiara l'host, e la leggono a
+//!   ogni scrittura il campionatore e il gancio che l'host le monta attorno
+//!   (`crate::mount`). Spento, il versioning *si monta lo stesso e non
+//!   fotografa niente* (D7). La storia resta leggibile, il ripristino rifiuta
+//!   finché non si riaccende, e riaccenderlo non chiede di riaprire il vault.
+//! - [`PLUGINS_DISABLED`] decide **che cosa si monta**, e lo legge chi monta:
 //!   un bundle che ci compare non viene montato affatto — niente dichiarazione,
 //!   niente inventario, e nemmeno le sue impostazioni esistono.
 //!
 //! Il primo è «acceso ma spento», il secondo è «non c'è». Sono due domande
-//! diverse e vanno tenute distinte: una feature che si spegne da sé sa
-//! degradare (il versioning smette di fotografare e la storia vecchia resta
-//! leggibile), un bundle non montato non sa niente perché non c'è nessuno.
+//! diverse e vanno tenute distinte: una feature spenta sa degradare (il
+//! versioning smette di fotografare e la storia vecchia resta leggibile), un
+//! bundle non montato non sa niente perché non c'è nessuno.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::ui::UiOption;
+#[cfg(feature = "versioning")]
+use fub_features::HostWiring;
+use fub_features::OfficialFeature;
 
 /// Le scorciatoie che questo vault propone e che **nessuno ha ancora guardato**
 /// su questa macchina (§23.13): quelle il cui valore va sospeso.
@@ -137,6 +142,9 @@ pub const APPEARANCE_CSS_SNIPPETS: &str = "appearance.css-snippets";
 pub const CHROME_SCHEMA: &str = "chrome.schema";
 pub const CHROME_RAIL_VISIBLE: &str = "chrome.rail.visible";
 pub const CHROME_RAIL_ORDER: &str = "chrome.rail.order";
+pub const CHROME_RAIL_HIDDEN: &str = "chrome.rail.hidden";
+pub const CHROME_SIDEBAR_VISIBLE: &str = "chrome.sidebar.visible";
+pub const CHROME_INSPECTOR_VISIBLE: &str = "chrome.inspector.visible";
 pub const CHROME_STATUS_VISIBLE: &str = "chrome.status.visible";
 pub const CHROME_TOOLBAR_VISIBLE: &str = "chrome.toolbar.visible";
 pub const CHROME_FRAME: &str = "chrome.frame";
@@ -173,6 +181,10 @@ pub const DEFAULT_ATTACHMENT_FOLDER: &str = "attachments";
 pub const NEW_NOTE_FOLDER: &str = fub_kernel::settings::NEW_NOTE_FOLDER;
 /// Il valore vuoto conserva il comportamento interoperabile della radice.
 pub const DEFAULT_NEW_NOTE_FOLDER: &str = "";
+/// L'estensione con cui nasce una nota a cui l'utente non ne ha data una.
+pub const NEW_NOTE_EXTENSION: &str = fub_kernel::settings::NEW_NOTE_EXTENSION;
+/// Markdown, il primo formato del core.
+pub const DEFAULT_NEW_NOTE_EXTENSION: &str = "md";
 /// Dove va una nota cancellata dalla shell: `vault` è il cestino interno
 /// (`.trash/`, ripristinabile da Fub), `system` il cestino del sistema
 /// operativo tramite `trash.os`, che ripiega sull'interno se il sistema non ne
@@ -257,6 +269,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(C_NEW_NOTE_FOLDER_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            NEW_NOTE_EXTENSION,
+            Text::key(C_NEW_NOTE_EXTENSION),
+            SettingKind::Text {
+                default: DEFAULT_NEW_NOTE_EXTENSION.into(),
+            },
+        )
+        .describing(Text::key(C_NEW_NOTE_EXTENSION_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
@@ -596,6 +619,26 @@ fn chrome_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_CHROME_ORDER_DESC))
         .grouped(Text::key(C_GROUP_CHROME))
         .for_machine(),
+        SettingSpec::new(
+            CHROME_RAIL_HIDDEN,
+            Text::key(C_CHROME_HIDDEN),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_CHROME_HIDDEN_DESC))
+        .grouped(Text::key(C_GROUP_CHROME))
+        .for_machine(),
+        toggle(
+            CHROME_SIDEBAR_VISIBLE,
+            C_CHROME_SIDEBAR,
+            C_CHROME_SIDEBAR_DESC,
+        ),
+        toggle(
+            CHROME_INSPECTOR_VISIBLE,
+            C_CHROME_INSPECTOR,
+            C_CHROME_INSPECTOR_DESC,
+        ),
         toggle(CHROME_STATUS_VISIBLE, C_CHROME_STATUS, C_CHROME_STATUS_DESC),
         toggle(
             CHROME_TOOLBAR_VISIBLE,
@@ -773,6 +816,8 @@ const C_ATTACHMENT_FOLDER: &str = "core.attachment_folder";
 const C_ATTACHMENT_FOLDER_DESC: &str = "core.attachment_folder.desc";
 const C_NEW_NOTE_FOLDER: &str = "core.new_note_folder";
 const C_NEW_NOTE_FOLDER_DESC: &str = "core.new_note_folder.desc";
+const C_NEW_NOTE_EXTENSION: &str = "core.new_note_extension";
+const C_NEW_NOTE_EXTENSION_DESC: &str = "core.new_note_extension.desc";
 const C_FILES_TRASH: &str = "core.files_trash";
 const C_FILES_TRASH_DESC: &str = "core.files_trash.desc";
 const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
@@ -850,6 +895,12 @@ const C_CHROME_RAIL: &str = "core.chrome.rail";
 const C_CHROME_RAIL_DESC: &str = "core.chrome.rail.desc";
 const C_CHROME_ORDER: &str = "core.chrome.order";
 const C_CHROME_ORDER_DESC: &str = "core.chrome.order.desc";
+const C_CHROME_HIDDEN: &str = "core.chrome.hidden";
+const C_CHROME_HIDDEN_DESC: &str = "core.chrome.hidden.desc";
+const C_CHROME_SIDEBAR: &str = "core.chrome.sidebar";
+const C_CHROME_SIDEBAR_DESC: &str = "core.chrome.sidebar.desc";
+const C_CHROME_INSPECTOR: &str = "core.chrome.inspector";
+const C_CHROME_INSPECTOR_DESC: &str = "core.chrome.inspector.desc";
 const C_CHROME_STATUS: &str = "core.chrome.status";
 const C_CHROME_STATUS_DESC: &str = "core.chrome.status.desc";
 const C_CHROME_TOOLBAR: &str = "core.chrome.toolbar";
@@ -931,6 +982,10 @@ pub fn core_catalog_assembled() -> Vec<StringCatalog> {
 /// restare uguali sono due stringhe che divergono: il giorno che il catalogo
 /// nascesse in inglese, chi apre il pannello senza vault leggerebbe le chiavi
 /// nude e nessun test lo direbbe.
+///
+/// I bundle che l'host compone da sé (le feature ufficiali, la pubblicazione,
+/// la sincronizzazione) scrivono i cataloghi nella stessa lingua e dichiarano
+/// questa costante, non una propria copia della stringa.
 pub const CORE_DEFAULT_LOCALE: &str = "it";
 
 pub fn core_catalog() -> Vec<StringCatalog> {
@@ -955,10 +1010,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.param.doc", "Documento")
         .with("host.trash_os.title", "Sposta nel cestino di sistema")
         .with("host.trash_os.desc", "Prova il cestino del sistema; se non c'è usa il cestino interno senza perdere dati.")
+        .with("host.trash_os.fallback", "Il sistema non ha un cestino disponibile: {doc} è nel cestino del vault.")
+        .with("host.mount.added", "Cartella esterna «{name}» collegata ({target}).")
+        .with("host.mount.removed", "Cartella esterna «{name}» scollegata; i file esterni restano dove sono.")
+        .with("host.mount.listed.none", "Nessuna cartella esterna collegata.")
+        .with("host.mount.listed", "Cartelle esterne collegate: {routes}.")
+        .with("host.mount.listed.only_faulty", "Nessuna cartella esterna raggiungibile. Con problemi: {faulty}.")
+        .with("host.mount.listed.faulty", "Cartelle esterne collegate: {routes}. Con problemi: {faulty}.")
         .with("host.folder.title", "Nuova cartella")
         .with("host.folder.desc", "Crea una cartella vuota nel vault; un nome occupato è un conflitto.")
         .with("host.folder.plan", "Crea la cartella «{folder}»")
         .with("host.folder.done", "Cartella «{folder}» creata")
+        .with("host.capture.title", "Cattura in una nota")
+        .with("host.capture.desc", "Scrive una cattura (clipper, condivisione, CLI) in una nota del vault: nuova, del giorno, o in coda o in testa a una esistente.")
+        .with("host.param.capture_payload", "Cattura (JSON v1)")
+        .with("host.param.template", "Template")
+        .with("host.capture.payload", "La cattura non è un payload v1 leggibile: {why}")
+        .with("host.capture.plan", "Cattura «{title}» in «{doc}»")
+        .with("host.capture.done", "Cattura salvata in «{doc}»")
+        .with("host.capture.not_prose", "«{doc}» non è una nota di testo: la cattura non ci scrive.")
+        .with("host.capture.no_properties", "Il formato di «{doc}» non ha proprietà: la cattura con proprietà non ci scrive.")
+        .with("host.capture.template_mode", "Un template vale solo per una cattura che crea una nota.")
+        .with("host.capture.moved", "«{doc}» è cambiata durante la cattura: riprova.")
+        .with("host.capture.source", "Fonte: {url}")
         .with("host.snapshot.create.title", "Snapshot completo del vault")
         .with("host.snapshot.create.desc", "Chiude il vault, ne copia ogni voce autorevole in una cartella esterna nuova e lo riapre.")
         .with("host.snapshot.apply.title", "Ripristina uno snapshot completo")
@@ -971,6 +1045,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.snapshot.done.create", "Snapshot completo scritto in «{target}»: {count} voci.")
         .with("host.snapshot.done.apply", "Vault ripristinato da «{source}»: {count} voci. Lo stato precedente è in «{backup}».")
         .with("host.snapshot.distinct", "Lo snapshot e il backup devono essere cartelle distinte.")
+        .with("host.vault.writer_busy", "Un altro processo di Fub sta già scrivendo in «{root}». Chiudilo lì, o usa quell'istanza.")
         .with("host.snapshot.unreadable", "Non è uno snapshot leggibile: {path}")
         .with("host.path.not_absolute", "Serve un path assoluto: {path}")
         .with("host.path.invalid", "Non è una destinazione valida: {path}")
@@ -988,6 +1063,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_NEW_NOTE_FOLDER_DESC,
             "La cartella del vault per le note create senza un path esplicito; vuota indica la radice.",
         )
+        .with(C_NEW_NOTE_EXTENSION, "Estensione delle nuove note")
+        .with(
+            C_NEW_NOTE_EXTENSION_DESC,
+            "L'estensione data a una nota creata senza estensione. Deve appartenere a un formato installato.",
+        )
         .with(C_FILES_TRASH, "Note cancellate")
         .with(
             C_FILES_TRASH_DESC,
@@ -1003,6 +1083,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_RAIL_DESC, "Mostra la colonna di icone che apre i pannelli.")
         .with(C_CHROME_ORDER, "Ordine della barra laterale")
         .with(C_CHROME_ORDER_DESC, "ID dei pannelli nell'ordine desiderato; quelli non elencati restano visibili.")
+        .with(C_CHROME_HIDDEN, "Pannelli nascosti dalla barra laterale")
+        .with(C_CHROME_HIDDEN_DESC, "ID dei pannelli che la barra laterale non mostra.")
+        .with(C_CHROME_SIDEBAR, "Mostra il pannello a sinistra")
+        .with(C_CHROME_SIDEBAR_DESC, "Lo affianca ai riquadri quando la finestra è larga abbastanza; altrimenti si apre a richiesta.")
+        .with(C_CHROME_INSPECTOR, "Mostra il pannello a destra")
+        .with(C_CHROME_INSPECTOR_DESC, "Lo affianca ai riquadri quando la finestra è larga abbastanza; altrimenti si apre a richiesta.")
         .with(C_CHROME_STATUS, "Mostra lo stato del documento")
         .with(C_CHROME_STATUS_DESC, "Mostra salvataggio e statistiche nella barra del riquadro.")
         .with(C_CHROME_TOOLBAR, "Mostra strumenti del pannello")
@@ -1166,10 +1252,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.param.doc", "Document")
         .with("host.trash_os.title", "Move to the system trash")
         .with("host.trash_os.desc", "Tries the system trash; if there is none, uses the internal trash without losing data.")
+        .with("host.trash_os.fallback", "The system trash is not available: {doc} is in the vault trash.")
+        .with("host.mount.added", "External folder “{name}” linked ({target}).")
+        .with("host.mount.removed", "External folder “{name}” unlinked; the external files stay where they are.")
+        .with("host.mount.listed.none", "No external folder is linked.")
+        .with("host.mount.listed", "Linked external folders: {routes}.")
+        .with("host.mount.listed.only_faulty", "No external folder can be reached. With problems: {faulty}.")
+        .with("host.mount.listed.faulty", "Linked external folders: {routes}. With problems: {faulty}.")
         .with("host.folder.title", "New folder")
         .with("host.folder.desc", "Creates an empty folder in the vault; a taken name is a conflict.")
         .with("host.folder.plan", "Create folder “{folder}”")
         .with("host.folder.done", "Folder “{folder}” created")
+        .with("host.capture.title", "Capture into a note")
+        .with("host.capture.desc", "Writes a capture (clipper, share sheet, CLI) into a vault note: a new one, today's, or at the end or the start of an existing one.")
+        .with("host.param.capture_payload", "Capture (JSON v1)")
+        .with("host.param.template", "Template")
+        .with("host.capture.payload", "The capture is not a readable v1 payload: {why}")
+        .with("host.capture.plan", "Capture “{title}” into “{doc}”")
+        .with("host.capture.done", "Capture saved to “{doc}”")
+        .with("host.capture.not_prose", "“{doc}” is not a text note: the capture does not write into it.")
+        .with("host.capture.no_properties", "The format of “{doc}” has no properties: a capture with properties does not write into it.")
+        .with("host.capture.template_mode", "A template only applies to a capture that creates a note.")
+        .with("host.capture.moved", "“{doc}” changed during the capture: try again.")
+        .with("host.capture.source", "Source: {url}")
         .with("host.snapshot.create.title", "Full vault snapshot")
         .with("host.snapshot.create.desc", "Closes the vault, copies every authoritative entry into a new external folder and reopens it.")
         .with("host.snapshot.apply.title", "Restore a full snapshot")
@@ -1182,6 +1287,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.snapshot.done.create", "Full snapshot written to “{target}”: {count} entries.")
         .with("host.snapshot.done.apply", "Vault restored from “{source}”: {count} entries. The previous state is in “{backup}”.")
         .with("host.snapshot.distinct", "The snapshot and the backup must be different folders.")
+        .with("host.vault.writer_busy", "Another Fub process is already writing to \"{root}\". Close it there, or use that instance.")
         .with("host.snapshot.unreadable", "Not a readable snapshot: {path}")
         .with("host.path.not_absolute", "An absolute path is required: {path}")
         .with("host.path.invalid", "Not a valid destination: {path}")
@@ -1196,6 +1302,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_RAIL_DESC, "Show the column of icons that opens panels.")
         .with(C_CHROME_ORDER, "Side rail order")
         .with(C_CHROME_ORDER_DESC, "Panel IDs in preferred order; unlisted panels remain visible.")
+        .with(C_CHROME_HIDDEN, "Panels hidden from the side rail")
+        .with(C_CHROME_HIDDEN_DESC, "Panel IDs the side rail does not show.")
+        .with(C_CHROME_SIDEBAR, "Show the left panel")
+        .with(C_CHROME_SIDEBAR_DESC, "Shown beside the panes when the window is wide enough; otherwise it opens on request.")
+        .with(C_CHROME_INSPECTOR, "Show the right panel")
+        .with(C_CHROME_INSPECTOR_DESC, "Shown beside the panes when the window is wide enough; otherwise it opens on request.")
         .with(C_CHROME_STATUS, "Show document status")
         .with(C_CHROME_STATUS_DESC, "Show save state and statistics in the pane bar.")
         .with(C_CHROME_TOOLBAR, "Show pane tools")
@@ -1213,6 +1325,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_NEW_NOTE_FOLDER_DESC,
             "The vault folder for notes created without an explicit path; empty means the vault root.",
+        )
+        .with(C_NEW_NOTE_EXTENSION, "New note extension")
+        .with(
+            C_NEW_NOTE_EXTENSION_DESC,
+            "The extension given to a note created without one. It must belong to an installed format.",
         )
         .with(C_FILES_TRASH, "Deleted notes")
         .with(
@@ -1377,6 +1494,9 @@ pub fn versioning_settings() -> Vec<SettingSpec> {
 const V_GROUP: &str = "versioning.group";
 const V_ENABLED: &str = "versioning.enabled.label";
 const V_ENABLED_DESC: &str = "versioning.enabled.desc";
+/// Il rifiuto del ripristino a interruttore spento: il ripristino sostituisce
+/// la nota, e spento nessuno fotograferebbe ciò che sostituisce.
+pub const VERSIONING_OFF_RESTORE: &str = "versioning.off.restore";
 
 /// **Il catalogo che una feature ufficiale monta davvero**: il suo, più quello
 /// che l'host le aggiunge accanto.
@@ -1385,7 +1505,9 @@ const V_ENABLED_DESC: &str = "versioning.enabled.desc";
 /// l'identità. Il versioning no: il suo interruttore è **dell'host** e non
 /// della feature (§11.1) — il versioning non sa di poter essere spento — quindi
 /// le tre chiavi che lo descrivono stanno qui, e al montaggio i due cataloghi
-/// si sommano.
+/// si sommano. La somma segue il collegamento che la feature dichiara
+/// ([`fub_features::HostWiring::VersionStore`]), non il suo id: è quel collegamento a portare
+/// l'interruttore.
 ///
 /// Esiste per la ragione di [`core_catalog_montato`] e per lo stesso difetto.
 /// Quella somma era scritta **una volta sola**, dentro l'espressione
@@ -1398,17 +1520,31 @@ const V_ENABLED_DESC: &str = "versioning.enabled.desc";
 /// somma scritta in un posto solo non è né elencata né contata.
 ///
 /// Adesso la somma è una funzione, la chiamano il montaggio e il banco, e non
-/// ci sono due copie da far divergere. Una seconda feature a cui l'host debba
-/// aggiungere delle chiavi aggiunge **un ramo qui**, e le eredita tutt'e due.
-pub fn catalog_assembled(
-    feature_id: &str,
-    feature_catalog: Vec<StringCatalog>,
-) -> Vec<StringCatalog> {
-    match feature_id {
-        #[cfg(feature = "versioning")]
-        fub_features::VERSIONING_ID => [versioning_settings_catalog(), feature_catalog].concat(),
-        _ => feature_catalog,
+/// ci sono due copie da far divergere. Un secondo collegamento dell'host che
+/// porti delle chiavi aggiunge **un ramo qui** e uno in [`settings_assembled`],
+/// e il montaggio e il banco li ereditano tutt'e due.
+pub fn catalog_assembled(feature: &OfficialFeature) -> Vec<StringCatalog> {
+    let own = (feature.catalog)();
+    #[cfg(feature = "versioning")]
+    if feature.wiring == HostWiring::VersionStore {
+        return [versioning_settings_catalog(), own].concat();
     }
+    own
+}
+
+/// **Le impostazioni che una feature ufficiale monta davvero**: le sue, più
+/// quelle del collegamento che l'host le fa.
+///
+/// È la metà di [`catalog_assembled`] che riguarda lo schema: l'interruttore
+/// del versioning entra nel manifest del bundle insieme alle chiavi che la
+/// feature dichiara, e le sue etichette arrivano dalla somma dei cataloghi.
+pub fn settings_assembled(feature: &OfficialFeature) -> Vec<SettingSpec> {
+    let own = feature.settings.map(|build| build()).unwrap_or_default();
+    #[cfg(feature = "versioning")]
+    if feature.wiring == HostWiring::VersionStore {
+        return [versioning_settings(), own].concat();
+    }
+    own
 }
 
 /// Le stringhe dell'interruttore del versioning.
@@ -1421,7 +1557,12 @@ pub fn versioning_settings_catalog() -> Vec<StringCatalog> {
                 V_ENABLED_DESC,
                 "Tiene uno storico delle modifiche di ogni nota, con ripristino. \
                  Spento, la storia già registrata resta leggibile e non ne nasce di \
-                 nuova.",
+                 nuova; per ripristinare una versione va riacceso.",
+            )
+            .with(
+                VERSIONING_OFF_RESTORE,
+                "Il versioning è spento: la storia si legge, ma per ripristinare una \
+                 versione va riacceso.",
             ),
         StringCatalog::new("en")
             .with(V_GROUP, "Vault")
@@ -1429,7 +1570,13 @@ pub fn versioning_settings_catalog() -> Vec<StringCatalog> {
             .with(
                 V_ENABLED_DESC,
                 "Keeps a history of every note's changes, with restore. Turned off, \
-                 the history already recorded stays readable and no new one is made.",
+                 the history already recorded stays readable and no new one is made; \
+                 restoring a version needs it back on.",
+            )
+            .with(
+                VERSIONING_OFF_RESTORE,
+                "Versioning is off: the history can be read, but restoring a version \
+                 needs it back on.",
             ),
     ]
 }
@@ -1437,7 +1584,8 @@ pub fn versioning_settings_catalog() -> Vec<StringCatalog> {
 /// Acceso di default, e la ragione è la stessa di prima: è una rete di
 /// sicurezza, e una rete che va accesa a mano non c'è quando serve.
 ///
-/// Il valore lo tiene lo store del vault e lo legge chi monta; il default sta
+/// Il valore lo tiene lo store del vault e lo leggono campionatore e gancio a
+/// ogni scrittura; il default sta
 /// nello schema qui sopra e non in questa funzione — un default scritto due
 /// volte è un default che prima o poi diverge.
 pub fn versioning_enabled(ws: &fub_kernel::Workspace) -> bool {

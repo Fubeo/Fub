@@ -107,7 +107,6 @@ const RELATIVE: &str = "a-relative-vault";
 
 /// La radice assoluta che ci si aspetta, calcolata come la calcolerebbe
 /// chiunque legga un path relativo: appesa alla cartella di lavoro di adesso.
-/// chiunque legga un path relativo: appesa alla cartella di lavoro di adesso.
 fn expected() -> Utf8PathBuf {
     let cwd = std::env::current_dir().expect("working directory");
     Utf8PathBuf::from_path_buf(cwd)

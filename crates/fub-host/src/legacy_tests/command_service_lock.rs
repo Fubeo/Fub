@@ -786,3 +786,69 @@ fn a_scoped_job_cannot_partially_replay_a_global_undo() {
     assert_eq!(std::fs::read_to_string(public).unwrap(), "before public\n");
     assert_eq!(std::fs::read_to_string(secret).unwrap(), "before secret\n");
 }
+
+/// Il client di rete è una scelta di chi compone l'host, non di `mount`: il
+/// workspace montato usa quello passato a `Host::with_network`, e `Host::network`
+/// lo restituisce a chi — il visore — deve chiedere fuori dal vault.
+#[test]
+fn the_workspace_uses_the_network_the_host_was_given() {
+    let vault = vault();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let network: Arc<dyn HostNetwork> = Arc::new(CountingNetwork(Arc::clone(&calls)));
+    let host = Host::new()
+        .with_watcher(Box::new(NoWatcher))
+        .with_network(Arc::clone(&network));
+    host.open(&vault.root).expect("the vault opens");
+    let workspace = host.debug_workspace(None).expect("debug custody");
+    let mounted = workspace
+        .read()
+        .expect("the vault is alive")
+        .network()
+        .expect("the workspace has the host's network");
+    assert!(Arc::ptr_eq(&mounted, &network));
+    assert!(host
+        .network()
+        .is_some_and(|shared| Arc::ptr_eq(&shared, &network)));
+}
+
+#[test]
+fn a_granted_plugin_cannot_invoke_a_host_command_through_run_command() {
+    let vault = vault();
+    let (host, workspace) = open(&vault);
+    workspace
+        .write()
+        .expect("the vault is alive")
+        .register_plugin(
+            PluginManifest::new(CALLER, "Granted caller").granting(
+                fub_abi::traits::PluginPermissions::of(&[permission::RUN_COMMAND]),
+            ),
+            Trust::Community,
+        )
+        .expect("the caller declares with the grant");
+
+    let mut job = JobHost::new(workspace.clone(), CALLER);
+    for command in [
+        "folder.create",
+        "mount.list",
+        "trash.os",
+        "vault.snapshot.create",
+        "capture.apply",
+    ] {
+        let denied = job.run_command(command, serde_json::json!({}));
+        assert!(
+            matches!(&denied, Err(PluginError::Unserved(message))
+                if message.to_string().contains("host")),
+            "`{command}` is named as the host's, not unknown: {denied:?}"
+        );
+    }
+
+    // The same command still reaches the host from the shell.
+    host.invoke_user_command(
+        None,
+        "folder.create",
+        serde_json::json!({ "path": "cartella" }),
+        InvokeMode::Apply,
+    )
+    .expect("the shell reaches the host command");
+    assert!(vault.root.join("cartella").is_dir());
+}

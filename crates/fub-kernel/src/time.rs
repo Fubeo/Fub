@@ -20,6 +20,31 @@
 use fub_abi::locale::civil_from_days;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// L'orologio del vault: da qui leggono il registro, il cestino, le bozze e i
+/// job. Lo sceglie chi compone il [`Workspace`](crate::Workspace)
+/// ([`Workspace::with_clock`](crate::Workspace::with_clock)); un banco lo fa
+/// avanzare a mano invece di aspettare i giorni della ritenzione.
+///
+/// Restano sull'orologio di sistema, di proposito, soltanto i confronti con i
+/// timbri che il disco scrive da sé (l'età dei temporanei, l'istante di una
+/// modifica esterna), il log di processo, la data che il cestino del sistema
+/// legge dal suo file `info` e gli id di transazione degli snapshot, che
+/// dell'istante usano solo l'unicità.
+pub trait Clock: Send + Sync {
+    /// Millisecondi dall'epoca UNIX.
+    fn now_unix_millis(&self) -> u64;
+}
+
+/// L'orologio di serie: quello del sistema.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now_unix_millis(&self) -> u64 {
+        now_unix_millis()
+    }
+}
+
 /// Secondi dall'epoca UNIX. Un orologio impostato prima del 1970 vale 0: una
 /// data assurda può rendere brutto un nome di file, non far fallire una
 /// cancellazione.

@@ -463,14 +463,14 @@ fn divergent_clocks_do_not_decide() {
     let mut c = Replica::new("c");
     let mut d = Replica::new("d");
     d.clock += 10_000; // d claims to be "newer".
-    let sc = c.op("settings/app.settings.json", OpKind::Create, "c-settings");
-    let sd = d.op("settings/app.settings.json", OpKind::Create, "d-settings");
+    let sc = c.op("config-shared/app.json", OpKind::Create, "c-settings");
+    let sd = d.op("config-shared/app.json", OpKind::Create, "d-settings");
     push(&mut state, &auth, &c.id, &[sc]);
     let r2 = push(&mut state, &auth, &d.id, &[sd]);
     assert!(r2.conflicts.is_empty(), "settings converge by LWW");
     let dir_sync = fub_services::schema::sync_dir(&dir);
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
-    assert_eq!(folded.versions["settings/app.settings.json"].len(), 2);
+    assert_eq!(folded.versions["config-shared/app.json"].len(), 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -510,6 +510,27 @@ fn restart_mid_queue_converges() {
 // ---------------------------------------------------------------------------
 // 6. Attachment integrity: hash addressing round-trips opaquely.
 // ---------------------------------------------------------------------------
+
+/// The bearer status comes from the typed rejection, not from matching the
+/// message text (I73): re-authenticating fixes a 401, not a 403.
+#[test]
+fn bearer_status_follows_the_rejection_kind() {
+    let dir = temp_data_dir("bearer");
+    let mut state = open_state(&dir);
+    let auth = auth_for(&mut state, "bearer-user");
+    let id = state.bearer(Some(&auth)).expect("session valid");
+    assert_eq!(state.bearer(None).unwrap_err().status, 401);
+    assert_eq!(state.bearer(Some("Bearer ")).unwrap_err().status, 401);
+    assert_eq!(state.bearer(Some("Bearer nope")).unwrap_err().status, 401);
+    // Deleting the account revokes its sessions: the old token is just bad.
+    state.accounts.delete_account(&id).expect("delete");
+    assert_eq!(state.bearer(Some(&auth)).unwrap_err().status, 401);
+    // A session that outlives its account is refused for the account.
+    use fub_services::auth::TokenRejection;
+    assert_eq!(TokenRejection::AccountDeleted.status(), 403);
+    assert_eq!(TokenRejection::UnknownAccount.status(), 403);
+    assert_eq!(TokenRejection::Expired.status(), 401);
+}
 
 #[test]
 fn attachment_integrity_roundtrip() {

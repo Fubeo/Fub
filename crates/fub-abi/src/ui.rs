@@ -865,8 +865,6 @@ impl UiAction {
     }
 }
 
-/// Aggiornamento restituito da un `ViewProvider` dopo un'azione.
-///
 /// Il `ns` dell'intento con cui un provider chiede alla shell di mettere un
 /// testo negli appunti. Il payload è `{ "text": "..." }`.
 pub const CLIPBOARD_TEXT_NS: &str = "fub.clipboard.text";
@@ -887,6 +885,8 @@ pub fn privileged_intent(ns: &str) -> bool {
     ns == CLIPBOARD_TEXT_NS || ns == SETTINGS_EXPORT_NS || ns == VAULT_RESTORED_NS
 }
 
+/// Aggiornamento restituito da un `ViewProvider` dopo un'azione.
+///
 /// # Nessuna variante porta un annulla, ed è una decisione
 ///
 /// Le pile sono **due** — quella del testo e quella delle operazioni

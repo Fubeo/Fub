@@ -1097,9 +1097,14 @@ pub mod custom_kind {
     /// HTML grezzo incontrato nella sorgente. `attrs: { html: string }`.
     pub const HTML: &str = "html";
     /// La definizione di una nota a piè di pagina; il corpo sta in `blocks`.
-    /// `attrs: { label: string }`.
+    /// `attrs: { label: string, unreferenced?: bool }`: `unreferenced` segna
+    /// una definizione che nessun richiamo usa, che sta nel file e che la resa
+    /// non mostra.
     pub const FOOTNOTE_DEFINITION: &str = "footnote-definition";
-    /// Il richiamo nel testo (inline). `attrs: { label: string }`.
+    /// Il richiamo nel testo (inline). `attrs: { label: string, inline?: bool,
+    /// source?: string, unresolved?: bool }`: `inline` è una nota che porta il
+    /// suo testo sul posto (`source` è com'è scritto), `unresolved` un
+    /// richiamo che non trova la sua definizione e si legge com'è scritto.
     pub const FOOTNOTE_REFERENCE: &str = "footnote-reference";
     /// Un diagramma a blocco recintato: mermaid, PlantUML, Graphviz, D2.
     /// `attrs: { engine: string, source: string }`. Il core lo **delimita** e
@@ -1192,11 +1197,11 @@ pub mod custom_kind {
         (FRONTMATTER_UNPARSED, Payload::Source("text")),
     ];
 
-    /// Cosa porta un `custom_kind`, o `None` se il contratto non lo declare.
+    /// Cosa porta un `custom_kind`, o `None` se il contratto non lo dichiara.
     ///
     /// **`None` non vuol dire «niente»: vuol dire «nessuno l'ha detto».** Un
     /// kind di terzi non è in [`PAYLOADS`] per costruzione — l'elenco è del
-    /// core, e questo modulo declare i significati *condivisi*, non tutti
+    /// core, e questo modulo dichiara i significati *condivisi*, non tutti
     /// quelli possibili. Chi rende un kind non dichiarato degrada come sa; chi
     /// serializza si rifiuta, che è l'unica risposta che non inventa byte.
     ///
@@ -1292,6 +1297,7 @@ impl PropertyTypes {
 }
 
 /// Il valore di una proprietà del frontmatter, **normalizzato**.
+///
 /// Il frontmatter grezzo è JSON piatto, e va benissimo per attraversare il
 /// confine; non va bene come *risposta* alla domanda che tutti gli consumatori
 /// fanno. 8.2 chiede proprietà tipizzate (data, rating, relazione, formula),
@@ -1311,31 +1317,30 @@ impl PropertyTypes {
 /// lista di proprietà l'arena sarebbe una macchina sproporzionata al problema.
 /// La lista di liste — che nel frontmatter di una nota non si scrive — cade in
 /// [`PropertyScalar::Unknown`], che è JSON e quindi non perde niente.
-// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
 // `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
-/// `chiave:` senza valore (YAML `null`). Diverso da chiave assente.
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum PropertyValue {
-    /// Data ISO-8601, con o senza orario.
+    /// `chiave:` senza valore (YAML `null`). Diverso da chiave assente.
     Empty,
     Text(String),
     Number(f64),
     Bool(bool),
-    /// Una relazione: `autore: "[[Mario Rossi]]"`.
+    /// Data ISO-8601, con o senza orario.
     Date(PropertyDate),
-    /// Ciò che non si normalizza (oggetti annidati): il JSON com'è. L'escape
+    /// Una relazione: `autore: "[[Mario Rossi]]"`.
     Link(LinkTarget),
     List(Vec<PropertyScalar>),
+    /// Ciò che non si normalizza (oggetti annidati): il JSON com'è. L'escape
     /// hatch delle proprietà, gemello di `Block::Custom`.
-    /// Il valore di una **voce di elenco**: [`PropertyValue`] meno la lista.
     Unknown(serde_json::Value),
 }
 
-// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
+/// Il valore di una **voce di elenco**: [`PropertyValue`] meno la lista.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+// Tag adiacente: alcune varianti portano uno scalare, e col tag interno
 // `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
-/// Una data ISO-8601, già scomposta.
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum PropertyScalar {
     Empty,
@@ -1347,13 +1352,13 @@ pub enum PropertyScalar {
     Unknown(serde_json::Value),
 }
 
+/// Una data ISO-8601, già scomposta.
 ///
 /// Scomposta e non stringa perché il primo cliente (10.4, calendario e agenda)
 /// deve raggruppare per giorno e per mese, e una stringa lo costringerebbe a
 /// riparsare — che è esattamente ciò che questa voce esiste per evitare. Il
 /// contratto non dipende da `chrono`: qui non si fa aritmetica sulle date, si
-/// declare *cosa c'era scritto*.
-/// L'ordine dei campi in una data che **non** è ISO-8601: ciò che un vault può
+/// dichiara *cosa c'era scritto*.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyDate {
     pub year: i32,
@@ -1362,6 +1367,7 @@ pub struct PropertyDate {
     pub time: Option<PropertyTime>,
 }
 
+/// L'ordine dei campi in una data che **non** è ISO-8601: ciò che un vault può
 /// dichiarare di sé.
 ///
 /// Tre ordini e non un formato con dei segnaposto (`%d/%m/%Y`) perché il
@@ -1372,31 +1378,30 @@ pub struct PropertyDate {
 /// vault può dire.
 ///
 /// Serializzabile e in `snake_case` non per attraversare il contratto — non lo
-/// cross — ma perché la parola con cui il vault lo declare *è* il suo
+/// attraversa — ma perché la parola con cui il vault lo dichiara *è* il suo
 /// nome in minuscolo, e le due forme devono restare la stessa: che
 /// [`as_key`](DateOrder::as_key) e serde dicano `dmy` tutte e due lo prova
 /// `the_word_of_the_setting_is_the_word_of_the_wire`.
-/// `05/07/2026`, `5-7-2026`: giorno, mese, anno.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DateOrder {
-    /// `07/05/2026`: mese, giorno, anno.
+    /// `05/07/2026`, `5-7-2026`: giorno, mese, anno.
     Dmy,
-    /// `2026/07/05`, `2026-7-5`: anno, mese, giorno.
+    /// `07/05/2026`: mese, giorno, anno.
     Mdy,
-    /// Tutti gli ordini, in ordine di dichiarazione.
+    /// `2026/07/05`, `2026-7-5`: anno, mese, giorno.
     Ymd,
 }
 
 impl DateOrder {
-    /// La parola con cui il vault lo declare.
+    /// Tutti gli ordini, in ordine di dichiarazione.
     pub const ALL: [DateOrder; 3] = [DateOrder::Dmy, DateOrder::Mdy, DateOrder::Ymd];
 
+    /// La parola con cui il vault lo dichiara.
     ///
     /// Sta qui e non accanto all'impostazione che la scrive: la stringa che
     /// l'utente sceglie e l'ordine che il parser applica sono **una tabella
     /// sola**, e due copie sarebbero due tendine che promettono cose diverse.
-    /// L'ordine che quella parola nomina, o `None` se non ne nomina nessuno.
     pub fn as_key(self) -> &'static str {
         match self {
             DateOrder::Dmy => "dmy",
@@ -1405,18 +1410,18 @@ impl DateOrder {
         }
     }
 
-    /// Legge `s` in quest'ordine, o `None`.
+    /// L'ordine che quella parola nomina, o `None` se non ne nomina nessuno.
     pub fn from_key(s: &str) -> Option<DateOrder> {
         DateOrder::ALL.into_iter().find(|or| or.as_key() == s)
     }
 
+    /// Legge `s` in quest'ordine, o `None`.
     ///
     /// Rigido quanto [`parse_iso_date`], su un insieme diverso: tre campi
     /// numerici separati dallo **stesso** segno fra `/`, `-` e `.`, l'anno a
     /// quattro cifre, mese e giorno a una o due. Le due cifre dell'anno non si
     /// accettano — `05/07/26` chiederebbe di indovinare il secolo, e indovinare
     /// è la cosa che la 0003 ha rifiutato.
-    /// I formati di data che **questo vault declare**, oltre all'ISO-8601.
     fn read(self, s: &str) -> Option<PropertyDate> {
         let sep = s.chars().find(|c| matches!(c, '/' | '-' | '.'))?;
         let mut parts = s.split(sep);
@@ -1447,74 +1452,76 @@ impl DateOrder {
     }
 }
 
+/// I formati di data che **questo vault dichiara**, oltre all'ISO-8601.
 ///
 /// La [decisione 0003](../../../docs/decisions/0181-modello-documento-e-arene.md)
 /// ha rifiutato il parser tollerante con l'argomento giusto — *un parser
 /// tollerante trasformerebbe in date le stringhe dell'utente* — e quell'argomento
-/// resta intero. Ciò che cambia non è la **tolleranza**: è **chi declare il
+/// resta intero. Ciò che cambia non è la **tolleranza**: è **chi dichiara il
 /// formato**. Un formato dichiarato non è un indovinello, ed è la differenza
 /// esatta fra questo tipo e la cosa che la 0003 ha rifiutato.
 ///
 /// Il default è [`DateFormats::ISO`], cioè nessuna dichiarazione e la regola di
 /// prima parola per parola: un vault che non dice niente si legge oggi come si
 /// leggeva ieri.
-/// Nessuna dichiarazione: **solo** l'ISO-8601.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct DateFormats {
     declared: Option<DateOrder>,
 }
 
 impl DateFormats {
-    /// I formati di un vault che ne declare uno.
+    /// Nessuna dichiarazione: **solo** l'ISO-8601.
     pub const ISO: DateFormats = DateFormats { declared: None };
 
-    /// L'ordine dichiarato, se c'è.
+    /// I formati di un vault che ne dichiara uno.
     pub fn declaring(order: DateOrder) -> DateFormats {
         DateFormats {
             declared: Some(order),
         }
     }
 
-    /// Legge `s` coi soli formati dichiarati. Senza dichiarazione non legge
+    /// L'ordine dichiarato, se c'è.
     pub fn declared(&self) -> Option<DateOrder> {
         self.declared
     }
 
+    /// Legge `s` coi soli formati dichiarati. Senza dichiarazione non legge
     /// niente, ed è il punto.
-    /// `s` **sembra** una data a qualcuno?
     fn read(&self, s: &str) -> Option<PropertyDate> {
         self.declared.and_then(|or| or.read(s))
     }
 
+    /// `s` **sembra** una data a qualcuno?
     ///
     /// È il rilevatore del controllo di salute, e non è una seconda regola: è
     /// lo **stesso** parser con tutti gli ordini insieme. Ciò che due
     /// dichiarazioni diverse leggerebbero in due modi è esattamente ciò su cui
     /// vale la pena chiedere all'utente — e siccome la risposta è una domanda e
     /// non un valore, qui la larghezza è legittima dove nel parser non lo era.
-    /// L'orario di una [`PropertyDate`], col fuso **come era scritto**.
     pub fn looks_like_a_date(s: &str) -> bool {
         let t = s.trim();
         DateOrder::ALL.iter().any(|or| or.read(t).is_some())
     }
 }
 
+/// L'orario di una [`PropertyDate`], col fuso **come era scritto**.
 ///
 /// `offset_minutes` è `None` per un orario locale-senza-fuso: convertirlo
 /// richiederebbe sapere il fuso dell'utente, che è una capacità dell'host
 /// (decisione 0013) e non un fatto del documento. Il modello non indovina.
-/// Minuti rispetto a UTC (`Z` → `0`, `+02:00` → `120`).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyTime {
     pub hour: u8,
     pub minute: u8,
     pub second: u8,
-    /// Normalizza un valore JSON del frontmatter, coi formati di data che il
+    /// Minuti rispetto a UTC (`Z` → `0`, `+02:00` → `120`).
     pub offset_minutes: Option<i16>,
 }
 
 impl PropertyValue {
-    /// Inference for undeclared keys, retained for existing consumers.
+    /// Normalizza un valore JSON del frontmatter, coi formati di data che il
+    /// vault dichiara ([`DateFormats`]). Il tipo si deduce dal valore: è la
+    /// strada delle chiavi non dichiarate, che resta per i consumatori esistenti.
     pub fn normalize(v: &serde_json::Value, formats: &DateFormats) -> PropertyValue {
         Self::normalize_as(v, formats, None)
     }
@@ -1608,16 +1615,16 @@ impl PropertyValue {
 }
 
 impl PropertyScalar {
+    /// Normalizza un valore JSON che **non** può essere una lista: una lista
     /// annidata resta JSON.
-    // Un intero più grande di quanto un f64 rappresenti senza
     pub fn normalize(v: &serde_json::Value, formats: &DateFormats) -> PropertyScalar {
         match v {
             serde_json::Value::Null => PropertyScalar::Empty,
             serde_json::Value::Bool(b) => PropertyScalar::Bool(*b),
             serde_json::Value::Number(n) => match n.as_f64() {
                 Some(f) => PropertyScalar::Number(f),
+                // Un intero più grande di quanto un f64 rappresenti senza
                 // perdite non è un numero da fare i conti: è un'identità.
-                // La normalizzazione di una stringa: wikilink, poi data ISO, poi il
                 None => PropertyScalar::Text(n.to_string()),
             },
             serde_json::Value::String(s) => PropertyScalar::from_text(s, formats),
@@ -1627,13 +1634,13 @@ impl PropertyScalar {
         }
     }
 
-    /// formato che il vault **declare**, poi testo.
+    /// La normalizzazione di una stringa: wikilink, poi data ISO, poi il
+    /// formato che il vault **dichiara**, poi testo.
     ///
     /// L'ordine non è un dettaglio: l'ISO-8601 si legge sempre e per primo,
     /// quindi una dichiarazione non può cambiare come si legge una data già
     /// scritta bene. Ciò che una dichiarazione fa è **aggiungere** una lettura
     /// a stringhe che oggi restano [`PropertyScalar::Text`].
-    /// `2026-07-25`, `2026-07-25T10:30`, `2026-07-25 10:30:00Z`, `…+02:00`.
     fn from_text(s: &str, formats: &DateFormats) -> PropertyScalar {
         let t = s.trim();
         if let Some(inner) = t.strip_prefix("[[").and_then(|r| r.strip_suffix("]]")) {
@@ -1660,11 +1667,11 @@ impl From<PropertyScalar> for PropertyValue {
     }
 }
 
+/// `2026-07-25`, `2026-07-25T10:30`, `2026-07-25 10:30:00Z`, `…+02:00`.
 ///
 /// Rigido di proposito: solo l'ISO-8601 nella forma che YAML e Obsidian
 /// producono. Un parser tollerante qui direbbe di sì a `1-2-3` e trasformerebbe
 /// in date delle stringhe che l'utente non intendeva tali.
-// Il `-` del fuso si distingue dal nulla solo per posizione: prima ci
 fn parse_iso_date(s: &str) -> Option<PropertyDate> {
     let (date, rest) = s.split_at_checked(10)?;
     let mut parts = date.split('-');
@@ -1707,8 +1714,8 @@ pub fn valid_civil_date(year: i32, month: u8, day: u8) -> bool {
 fn parse_iso_time(s: &str) -> Option<PropertyTime> {
     let (hms, zone) = match s.find(['Z', 'z', '+']) {
         Some(the) => s.split_at(the),
+        // Il `-` del fuso si distingue dal nulla solo per posizione: prima ci
         // sono almeno `hh:mm`.
-        // I secondi frazionari si troncano: il modello declare cosa c'era
         None => match s.get(5..).and_then(|rest| rest.find('-')) {
             Some(the) => s.split_at(the + 5),
             None => (s, ""),
@@ -1718,8 +1725,8 @@ fn parse_iso_time(s: &str) -> Option<PropertyTime> {
     let hour: u8 = fixed_width(parts.next()?, 2)?;
     let minute: u8 = fixed_width(parts.next()?, 2)?;
     let second: u8 = match parts.next() {
+        // I secondi frazionari si troncano: il modello dichiara cosa c'era
         // scritto, non pretende di essere un istante.
-        // Un campo numerico a larghezza fissa (`07`), che è ciò che distingue una data
         Some(sec) => fixed_width(sec.split('.').next()?, 2)?,
         None => 0,
     };
@@ -1748,8 +1755,8 @@ fn parse_iso_time(s: &str) -> Option<PropertyTime> {
     })
 }
 
+/// Un campo numerico a larghezza fissa (`07`), che è ciò che distingue una data
 /// ISO da un'espressione: `2026-7-5` non è una data ISO.
-/// Un campo numerico di una data **dichiarata**: da una a `max` cifre ASCII.
 fn fixed_width(s: &str, width: usize) -> Option<u8> {
     if s.len() != width || !s.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -1757,11 +1764,11 @@ fn fixed_width(s: &str, width: usize) -> Option<u8> {
     s.parse().ok()
 }
 
+/// Un campo numerico di una data **dichiarata**: da una a `max` cifre ASCII.
 ///
 /// Il gemello largo di [`fixed_width`], e la larghezza è il punto: `2026-7-5`
-/// non è una data ISO e resta tale, ma un vault che declare `ymd` sta dicendo
+/// non è una data ISO e resta tale, ma un vault che dichiara `ymd` sta dicendo
 /// che quella è la sua scrittura del cinque luglio.
-/// I `const` dichiarati dentro `pub mod custom_kind`, letti dal sorgente.
 fn digits(s: &str, max: usize) -> Option<u32> {
     if s.is_empty() || s.len() > max || !s.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -1773,13 +1780,13 @@ fn digits(s: &str, max: usize) -> Option<u32> {
 mod tests {
     use super::*;
 
+    /// I `const` dichiarati dentro `pub mod custom_kind`, letti dal sorgente.
     ///
     /// Il salto della prosa è la metà che conta: questo modulo *racconta* i
     /// kind nei doc comment, e un estrattore che contasse anche quelli
     /// presidierebbe se stesso. Si prendono le sole righe che **sono** una
     /// dichiarazione — `pub const NOME: &str = "…";` — e solo dentro il
     /// modulo, che comincia alla riga che lo apre.
-    // Un `pub const` di **un altro tipo** non è un kind: `PAYLOADS` è la
     fn kind_declared() -> Vec<(String, String)> {
         let src = include_str!("model.rs");
         let within = src
@@ -1792,12 +1799,12 @@ mod tests {
             let Some(rest) = row.strip_prefix("pub const ") else {
                 continue;
             };
+            // Un `pub const` di **un altro tipo** non è un kind: `PAYLOADS` è la
             // tabella che risponde su di loro, e sta nello stesso modulo. Il
             // salto guarda il tipo scritto, non il nome, così un kind non può
             // sfuggire al conto chiamandosi in un modo invece che in un altro;
             // e se un giorno l'estrattore smettesse di riconoscere la forma,
             // il conto `>= 12` qui sotto è il rosso che se ne accorge.
-            // **Ogni `custom_kind` del core declare cosa porta, e viceversa.**
             let Some((name, value)) = rest.split_once(": &str = ") else {
                 continue;
             };
@@ -1810,6 +1817,7 @@ mod tests {
         out
     }
 
+    /// **Ogni `custom_kind` del core dichiara cosa porta, e viceversa.**
     ///
     /// È il presidio del difetto 0095: *dove* stiano i byte di un `Custom` era
     /// scritto in tre posti che nessuno teneva allineati — la prosa qui sopra,
@@ -1823,7 +1831,6 @@ mod tests {
     /// `dependency_invariant.rs`: una riga di `PAYLOADS` che non nomina nessun
     /// `const` è un kind rinominato di cui è rimasta l'ombra, e sarebbe una
     /// tabella che risponde a un nome che non esiste più.
-    /// L'estrattore deve leggere ciò che dice di leggere: le dichiarazioni sì,
     #[test]
     fn every_kind_declares_what_carries() {
         let declared = kind_declared();
@@ -1863,8 +1870,8 @@ mod tests {
         );
     }
 
+    /// L'estrattore deve leggere ciò che dice di leggere: le dichiarazioni sì,
     /// la prosa che le nomina no.
-    // `PAYLOADS` è un `pub const` dello stesso modulo, ed è la tabella, non
     #[test]
     fn the_extractor_of_the_kind_skips_the_prose() {
         let read = kind_declared();
@@ -1872,15 +1879,15 @@ mod tests {
         assert!(read
             .iter()
             .any(|(n, v)| n == "FRONTMATTER_UNPARSED" && v == "frontmatter-unparsed"));
+        // `PAYLOADS` è un `pub const` dello stesso modulo, ed è la tabella, non
         // un kind: l'estrattore lo salta perché il suo tipo non è `&str`.
-        // Il doc di `PAYLOADS` nomina `Source`, `Body` e `Children`, e il doc di
         assert!(
             !read.iter().any(|(n, _)| n == "PAYLOADS"),
             "the extractor mistook the table for a kind"
         );
+        // Il doc di `PAYLOADS` nomina `Source`, `Body` e `Children`, e il doc di
         // `payload` nomina `SyntaxRuleSpec::produces`: nessuno dei quattro è un
         // kind, e nessuno dei quattro deve comparire.
-        // La regola che distingue "risorsa del vault" da "mondo esterno", con i
         for name in ["Source", "Body", "Children", "produces"] {
             assert!(
                 !read.iter().any(|(n, v)| n == name || v == name),
@@ -1896,9 +1903,9 @@ mod tests {
         assert_eq!(DocId::new("senza-ext").page_name(), "senza-ext");
     }
 
+    /// La regola che distingue "risorsa del vault" da "mondo esterno", con i
     /// casi su cui un `contains("://")` sbagliava: `mailto:` non ha `//`, e un
     /// path di Windows ha i due punti al secondo carattere senza essere un URI.
-    // Un heading vuoto non è un heading: `Nota#^blk` ha un `#` che serve al
     #[test]
     fn classify_tells_a_vault_resource_from_the_outside_world() {
         for external in [
@@ -1950,8 +1957,8 @@ mod tests {
             parse_wikilink_inner("Nota").target,
             LinkTarget::wiki("Nota")
         );
+        // Un heading vuoto non è un heading: `Nota#^blk` ha un `#` che serve al
         // `^`, e `Nota#` non nomina niente.
-        // **Il giro fra i due versi della stessa regola.**
         assert_eq!(
             parse_wikilink_inner("Nota#^blk").target,
             LinkTarget::Wiki {
@@ -1966,6 +1973,7 @@ mod tests {
         );
     }
 
+    /// **Il giro fra i due versi della stessa regola.**
     ///
     /// `wiki_inner` scrive ciò che `parse_wikilink_inner` legge, e la prova che
     /// conta è che il giro sia l'identità: una coppia scrittore/lettore può
@@ -1973,7 +1981,6 @@ mod tests {
     /// legge, ed è esattamente com'era — il serializer markdown scriveva
     /// `page^b`, il lettore lo riaccettava perché è indulgente, e Obsidian ci
     /// leggeva una pagina di nome `page^b`.
-    // Il caso che divergeva: blocco **senza** heading.
     #[test]
     fn what_a_wikilink_writes_is_what_a_wikilink_reads() {
         let targets = [
@@ -1983,7 +1990,7 @@ mod tests {
                 heading: Some("Sezione".into()),
                 block: None,
             },
-            // I due che nominano il documento che li ospita (`names_host`).
+            // Il caso che divergeva: blocco **senza** heading.
             LinkTarget::Wiki {
                 page: "Nota".into(),
                 heading: None,
@@ -1994,7 +2001,7 @@ mod tests {
                 heading: Some("Sezione".into()),
                 block: Some("blk".into()),
             },
-            // L'altro verso: ciò che il lettore accetta per indulgenza torna
+            // I due che nominano il documento che li ospita (`names_host`).
             LinkTarget::Wiki {
                 page: String::new(),
                 heading: Some("Sezione".into()),
@@ -2026,8 +2033,8 @@ mod tests {
             "the `#` is not optional because the heading is missing: it is what\n\
              makes that `^` an anchor `^`"
         );
+        // L'altro verso: ciò che il lettore accetta per indulgenza torna
         // **canonico** quando lo si riscrive, invece di restare un dialetto.
-        // E i bersagli che non sono wikilink non hanno un interno da scrivere.
         assert_eq!(
             parse_wikilink_inner("Nota^blk")
                 .target
@@ -2035,7 +2042,7 @@ mod tests {
                 .as_deref(),
             Some("Nota#^blk")
         );
-        // Ciò che NON è un'ancora: senza questo, `2^10 = 1024` ne creerebbe una.
+        // E i bersagli che non sono wikilink non hanno un interno da scrivere.
         assert_eq!(
             LinkTarget::Url("https://x.invalid/".into()).wiki_inner(),
             None
@@ -2047,7 +2054,7 @@ mod tests {
     fn an_anchor_is_a_key_and_a_heading_slug_is_generated() {
         assert_eq!(canonical_anchor("  Blocco-1 "), "blocco-1");
         assert!(valid_anchor("abc123") && valid_anchor("a-b_c"));
-        // Due titoli omonimi non possono portare lo stesso id, e un documento che
+        // Ciò che NON è un'ancora: senza questo, `2^10 = 1024` ne creerebbe una.
         assert!(!valid_anchor("") && !valid_anchor("10 = 1024") && !valid_anchor("a.b"));
 
         assert_eq!(heading_slug("Ciao Mondo!"), "ciao-mondo");
@@ -2055,10 +2062,10 @@ mod tests {
         assert_eq!(heading_slug("A/B & C"), "ab-c");
     }
 
+    /// Due titoli omonimi non possono portare lo stesso id, e un documento che
     /// omonimi non ne ha non deve cambiare **nemmeno un** id: un link già
     /// scritto dall'utente punta a uno slug, e riscriverlo sarebbe una
     /// regressione silenziosa su ogni nota del vault.
-    // Il verso che protegge chi non ha duplicati: identità con la regola
     #[test]
     fn two_headings_with_the_same_text_cannot_share_an_id() {
         assert_eq!(
@@ -2066,36 +2073,36 @@ mod tests {
             ["note", "altro", "note-1", "note-2"],
             "the first keeps the pure form, the rest are numbered"
         );
+        // Il verso che protegge chi non ha duplicati: identità con la regola
         // pura, titolo per titolo.
-        // Il numero è la prima forma LIBERA, non un contatore per testo: se
         let only = ["Titolo Uno", "Sotto Sezione", "A/B & C", ""];
         assert_eq!(
             heading_slugs(only),
             only.iter().map(|t| heading_slug(t)).collect::<Vec<_>>()
         );
+        // Il numero è la prima forma LIBERA, non un contatore per testo: se
         // `note-1` esiste già come titolo suo, il secondo `Note` lo salta
         // invece di rubarglielo.
-        // Chi arriva dopo non scaccia chi c'era: se `note-1` se l'è già preso
         assert_eq!(
             heading_slugs(["Note", "Note 1", "Note"]),
             ["note", "note-1", "note-2"]
         );
+        // Chi arriva dopo non scaccia chi c'era: se `note-1` se l'è già preso
         // il secondo omonimo, il titolo che si chiama davvero «Note 1» prende
         // la prima forma libera invece del suo id.
-        // Anche la base vuota (titolo di sola punteggiatura) si disambigua, e
         assert_eq!(
             heading_slugs(["Note", "Note", "Note 1"]),
             ["note", "note-1", "note-1-1"]
         );
+        // Anche la base vuota (titolo di sola punteggiatura) si disambigua, e
         // resta una forma che `heading_slug` sa produrre — cioè scrivibile in
         // un link.
-        // La gemella che legge: chi cerca un frammento trova esattamente il
         assert_eq!(heading_slugs(["...", "???"]), ["", "1"]);
         assert_eq!(heading_slug("1"), "1");
     }
 
+    /// La gemella che legge: chi cerca un frammento trova esattamente il
     /// titolo che quella lista ha nominato, secondo per secondo.
-    // La seconda sezione omonima è raggiungibile, e prima non lo era da
     #[test]
     fn a_fragment_finds_the_heading_the_allocator_named() {
         let outline: Vec<Heading> = ["Note", "Ciao, Mondo!", "Note"]
@@ -2111,16 +2118,17 @@ mod tests {
             .collect();
         let find = |q: &str| outline.iter().position(|h| heading_matches(q, h));
         assert_eq!(find("Note"), Some(0));
+        // La seconda sezione omonima è raggiungibile, e prima non lo era da
         // nessuna sintassi.
-        // Il titolo com'è scritto, punteggiatura compresa, resta una strada.
         assert_eq!(find("Note 1"), Some(2));
         assert_eq!(find("note-1"), Some(2));
-        // **Il difetto 0093 era falso sulla conseguenza, e questo lo tiene fermo.**
+        // Il titolo com'è scritto, punteggiatura compresa, resta una strada.
         assert_eq!(find("Ciao, Mondo!"), Some(1));
         assert_eq!(find("ciao-mondo"), Some(1));
         assert_eq!(find("Sezione che non c'è"), None);
     }
 
+    /// **Il difetto 0093 era falso sulla conseguenza, e questo lo tiene fermo.**
     ///
     /// Diceva: «`heading_slug` non normalizza in NFC, quindi `# Café` scritto da
     /// macOS e lo stesso link digitato altrove danno due slug diversi **e i link
@@ -2136,7 +2144,6 @@ mod tests {
     /// rotta, e la strada che salva la risoluzione anche a slug divergenti non
     /// sarebbe provata da nessuna parte — perciò il titolo su cui si prova qui è
     /// uno che i due rami vedono **diverso**.
-    // Lo slug non diverge più: è la chiusura del 0140, e la coppia completa
     #[test]
     fn nfd_and_nfc_is_meet_on_the_text_and_not_on_the_slug() {
         let nfc = "Café";
@@ -2146,15 +2153,15 @@ mod tests {
             "le due forme sono byte diversi, o non si prova niente"
         );
 
+        // Lo slug non diverge più: è la chiusura del 0140, e la coppia completa
         // sta in `crates/fub-abi/tests/una_sola_forma_normalizzata.rs`.
-        // Il ramo del **testo**, provato da solo. Ci vuole un titolo il cui slug
         assert_eq!(heading_slug(nfc), "café");
         assert_eq!(heading_slug(nfd), "café");
 
+        // Il ramo del **testo**, provato da solo. Ci vuole un titolo il cui slug
         // non sia la forma pura, e in un documento vero è il secondo omonimo:
         // `## Café` due volte dà `café` e `café-1`, e chi scrive `[[Nota#Café]]`
         // nomina il testo, non lo slug che gli è toccato.
-        // Gli stati personalizzati (10.1) NON sono "fatto", ma restano leggibili.
         let second = |text: &str| Heading {
             level: 2,
             text: text.to_string(),
@@ -2187,7 +2194,7 @@ mod tests {
             span: Span::EMPTY,
         };
         assert!(m(Some('x')).checked() && m(Some('X')).checked());
-        // La lista di liste non è rappresentabile al confine e non si perde:
+        // Gli stati personalizzati (10.1) NON sono "fatto", ma restano leggibili.
         assert!(!m(None).checked() && !m(Some('/')).checked() && !m(Some('-')).checked());
         assert_eq!(m(Some('/')).symbol, Some('/'));
     }
@@ -2450,18 +2457,18 @@ mod tests {
                 PropertyScalar::Text("b".into())
             ]))
         );
+        // La lista di liste non è rappresentabile al confine e non si perde:
         // resta JSON dentro la voce.
-        // La relazione (8.2) è l'unica stringa che cambia specie...
         assert!(matches!(
             PropertyValue::normalize(&serde_json::json!([["a"], "b"]), &DateFormats::ISO),
             PropertyValue::List(v) if matches!(v[0], PropertyScalar::Unknown(_))
         ));
-        // ...un URL no: distinguerlo sarebbe indovinare, e `Text` non perde nulla.
+        // La relazione (8.2) è l'unica stringa che cambia specie...
         assert_eq!(
             fm.property("autore", &DateFormats::ISO),
             Some(PropertyValue::Link(LinkTarget::wiki("Mario Rossi")))
         );
-        // Chiave assente ≠ chiave senza valore.
+        // ...un URL no: distinguerlo sarebbe indovinare, e `Text` non perde nulla.
         assert_eq!(
             fm.property("sito", &DateFormats::ISO),
             Some(PropertyValue::Text("https://esempio.it".into()))
@@ -2470,13 +2477,13 @@ mod tests {
             fm.property("annidata", &DateFormats::ISO),
             Some(PropertyValue::Unknown(_))
         ));
-        // Il parser di date dice di **no** più spesso di quanto dica di sì: ogni
+        // Chiave assente ≠ chiave senza valore.
         assert_eq!(fm.property("mai-scritta", &DateFormats::ISO), None);
         assert_eq!(fm.properties(&DateFormats::ISO).len(), 10);
     }
 
+    /// Il parser di date dice di **no** più spesso di quanto dica di sì: ogni
     /// falso positivo qui è una stringa dell'utente trasformata in data.
-    /// Una dichiarazione **aggiunge** una lettura, non ne cambia nessuna: ciò
     #[test]
     fn only_iso_8601_is_a_date() {
         let date =
@@ -2518,9 +2525,9 @@ mod tests {
         }
     }
 
+    /// Una dichiarazione **aggiunge** una lettura, non ne cambia nessuna: ciò
     /// che era una data ISO resta quella data, ciò che era testo può diventare
     /// una data, e niente si muove al contrario.
-    // L'ISO si legge sempre e per primo, dichiarazione o no.
     #[test]
     fn a_declared_format_only_adds_readings() {
         let dmy = DateFormats::declaring(DateOrder::Dmy);
@@ -2529,13 +2536,13 @@ mod tests {
                 PropertyValue::Date(d) => Some((d.year, d.month, d.day)),
                 _ => None,
             };
-        // Senza dichiarazione niente cambia rispetto a ieri.
+        // L'ISO si legge sempre e per primo, dichiarazione o no.
         assert_eq!(read("2026-07-25", &dmy), Some((2026, 7, 25)));
         assert_eq!(read("2026-07-25", &DateFormats::ISO), Some((2026, 7, 25)));
-        // Con la dichiarazione, e **solo** nell'ordine dichiarato.
+        // Senza dichiarazione niente cambia rispetto a ieri.
         assert_eq!(read("05/07/2026", &DateFormats::ISO), None);
         assert_eq!(read("2026-7-5", &DateFormats::ISO), None);
-        // La stessa stringa, due dichiarazioni, due giorni: è precisamente ciò
+        // Con la dichiarazione, e **solo** nell'ordine dichiarato.
         assert_eq!(read("05/07/2026", &dmy), Some((2026, 7, 5)));
         assert_eq!(read("5-7-2026", &dmy), Some((2026, 7, 5)));
         assert_eq!(read("5.7.2026", &dmy), Some((2026, 7, 5)));
@@ -2543,8 +2550,8 @@ mod tests {
             read("2026-7-5", &DateFormats::declaring(DateOrder::Ymd)),
             Some((2026, 7, 5))
         );
+        // La stessa stringa, due dichiarazioni, due giorni: è precisamente ciò
         // che nessun parser può dedurre e che solo il vault può dire.
-        // Un formato dichiarato non è un parser tollerante: l'insieme si allarga
         assert_eq!(
             read("07/05/2026", &DateFormats::declaring(DateOrder::Mdy)),
             Some((2026, 7, 5))
@@ -2552,9 +2559,9 @@ mod tests {
         assert_eq!(read("07/05/2026", &dmy), Some((2026, 5, 7)));
     }
 
+    /// Un formato dichiarato non è un parser tollerante: l'insieme si allarga
     /// di poco e per una ragione dichiarata, e tutto il resto continua a dire
     /// di no.
-    // L'anno a due cifre chiederebbe di indovinare il secolo.
     #[test]
     fn declaring_a_format_is_not_a_tolerant_parser() {
         let each = |s: &str| {
@@ -2567,23 +2574,23 @@ mod tests {
             })
         };
         for not_data in [
-            // Un codice prodotto: è il caso del foglio di calcolo, e resta testo.
+            // L'anno a due cifre chiederebbe di indovinare il secolo.
             "05/07/26",
-            // Separatori mescolati: due scritture in una non sono una scrittura.
+            // Un codice prodotto: è il caso del foglio di calcolo, e resta testo.
             "1-2-3",
             "12-3456-78",
-            // Campi che non sono un giorno né un mese.
+            // Separatori mescolati: due scritture in una non sono una scrittura.
             "05/07-2026",
-            // Un campo più largo del suo posto: `007` non è un mese scritto
+            // Campi che non sono un giorno né un mese.
             "45/07/2026",
             "00/00/2026",
+            // Un campo più largo del suo posto: `007` non è un mese scritto
             // storto, è un'altra cosa. Questo caso è nato dalla verifica del
             // rosso — togliendo il limite di larghezza non diventava rosso
             // niente, perché sul mese e sul giorno ci pensava già `u8` e
             // sull'anno il vincolo delle quattro cifre.
-            // Cifre non ASCII, testo attaccato, e la data con la coda.
             "5/007/2026",
-            // Il rilevatore è lo stesso parser con tutti gli ordini insieme, e dice di
+            // Cifre non ASCII, testo attaccato, e la data con la coda.
             "٠٥/٠٧/٢٠٢٦",
             "05/07/2026 e poi",
             "2026-07-05T10:30 fine",
@@ -2594,8 +2601,8 @@ mod tests {
         }
     }
 
+    /// Il rilevatore è lo stesso parser con tutti gli ordini insieme, e dice di
     /// sì esattamente a ciò su cui varrebbe la pena chiedere.
-    /// La parola che l'utente sceglie nell'impostazione e quella che serde
     #[test]
     fn what_looks_like_a_date_is_what_a_declaration_would_read() {
         for sembra in ["05/07/2026", "2026-7-5", "5.7.2026", " 12/12/2026 "] {
@@ -2606,10 +2613,10 @@ mod tests {
         }
     }
 
+    /// La parola che l'utente sceglie nell'impostazione e quella che serde
     /// scrive sono la **stessa tabella**: due copie sarebbero due modi di
     /// nominare lo stesso ordine, e il secondo lo leggerebbe solo metà del
     /// codice.
-    /// Ogni variante di questi enum deve saper attraversare il JSON: l'IPC
     #[test]
     fn the_word_of_the_setting_is_the_word_of_the_wire() {
         for order in DateOrder::ALL {
@@ -2631,11 +2638,11 @@ mod tests {
         assert_eq!(Frontmatter(m2).aliases(), vec!["Solo"]);
     }
 
+    /// Ogni variante di questi enum deve saper attraversare il JSON: l'IPC
     /// verso la shell è JSON, e un tipo del contratto che non ci passa non
     /// arriva a nessuna view. Col tag *interno* — la forma di `Block` e
     /// `Event`, che hanno solo varianti a struct — le varianti che portano uno
     /// scalare fallivano a runtime, in silenzio fino al primo cliente vero: le
-    /// proprietà del frontmatter, che il canale dati della decisione 0005 mette sul filo.
     /// proprietà del frontmatter, che il canale dati della decisione 0005 mette sul filo.
     #[test]
     fn every_variant_survives_the_json_boundary() {

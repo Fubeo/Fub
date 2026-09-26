@@ -50,10 +50,12 @@ pub struct TextStats {
 
 /// Conta parole e caratteri di un testo.
 ///
-/// Conta il **sorgente**, sintassi markdown compresa: contare il testo reso
-/// vorrebbe il modello parsato al di qua del confine, che è il canale che
-/// ancora non c'è (§4.1). È una differenza di pochi punti percentuali su una
-/// nota vera, e dichiararla costa meno che fingere una precisione che non c'è.
+/// Conta il testo che riceve. Il pannello gli passa il **sorgente** di una
+/// nota in prosa (`fub:prose-source`), sintassi markdown compresa: è ciò che
+/// l'utente scrive, e lo scarto dal testo reso è di pochi punti percentuali.
+/// Di un formato strutturato (canvas, base) passa invece `model.text`, la
+/// proiezione a testo del modello: il sorgente lì è JSON o YAML, e le sue
+/// chiavi non sono parole di nessuno.
 ///
 /// Le parole sono **consapevoli del CJK**: nelle lingue senza spazi (cinese,
 /// giapponese, coreano) ogni ideogramma/sillaba vale una parola, mentre la
@@ -229,9 +231,20 @@ impl ViewProvider for StatsView {
         let Some(doc) = context.doc.as_ref() else {
             return Ok(row(Text::key(NO_ACTIVE_DOC)));
         };
-        let source = host.read_document(doc)?;
+        // Un formato strutturato si conta sul modello; la prosa, e un file che
+        // nessun formato rivendica, sul sorgente.
+        let structured = host.format_of(doc).is_some_and(|format| {
+            !format
+                .capabilities
+                .supports(fub_abi::options::source::PROSE)
+        });
+        let text = if structured {
+            host.read_model(doc)?.text
+        } else {
+            host.read_document(doc)?
+        };
         Ok(build_stats_view(
-            count(&source),
+            count(&text),
             selection_stats(&context.selections),
             context.mode,
         ))
@@ -611,6 +624,39 @@ mod tests {
                 "Parole: 3 · Caratteri: 14".to_string(),
                 "~1 min di lettura".to_string()
             ]
+        );
+    }
+
+    /// Un canvas si conta sul testo dei suoi nodi, non sul JSON che li tiene:
+    /// chiavi e coordinate non sono parole (I68).
+    #[test]
+    fn a_structured_format_is_counted_on_its_model_text() {
+        let json = r#"{"nodes":[{"id":"a","type":"text","text":"ciao","x":0,"y":0,"width":10,"height":10},{"id":"b","type":"text","text":"mondo","x":0,"y":20,"width":10,"height":10}],"edges":[]}"#;
+        let mut model =
+            fub_abi::model::DocumentModel::empty(fub_abi::model::DocId::new("board.canvas"));
+        model.text = "ciao\nmondo".into();
+        let host = MemoryHost::new()
+            .with_format(
+                "canvas",
+                fub_abi::format::DocumentFormat {
+                    descriptor: fub_abi::format::FormatDescriptor::text(
+                        "canvas",
+                        "Canvas",
+                        &["canvas"],
+                    ),
+                    capabilities: fub_abi::format::FormatCapabilities::of(&[]),
+                },
+            )
+            .with_document("board.canvas", json)
+            .with_model("board.canvas", model);
+        host.set_active(Some("board.canvas"));
+        assert_eq!(
+            texts(
+                &StatsView
+                    .render_view(&ViewInstance::only(STATS_VIEW), &host)
+                    .unwrap()
+            ),
+            vec!["Parole: 2 · Caratteri: 10".to_string()]
         );
     }
 

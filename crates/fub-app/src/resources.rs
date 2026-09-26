@@ -623,7 +623,7 @@ pub async fn viewer_save<H, N>(
 ) -> Result<ResourceWriteReceipt, PluginError>
 where
     H: ResourceHost + ResourceWrite,
-    N: HostNetwork,
+    N: HostNetwork + ?Sized,
 {
     guard_trusted_local(window_label, origin)?;
     let open = ViewerOpen {

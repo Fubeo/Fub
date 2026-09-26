@@ -20,7 +20,7 @@ const fixture = vi.hoisted(() => ({
 
 vi.mock("../state/store", () => ({ state: fixture.state }));
 vi.mock("../host/query", () => ({ matchingDocuments: fixture.matching }));
-vi.mock("../panels/document", () => ({ revealByteOffset: fixture.reveal }));
+vi.mock("../panels/document", () => ({ reveal: fixture.reveal }));
 vi.mock("../ui/commands", () => ({ registerShellCommand: vi.fn() }));
 vi.mock("../ui/a11y", () => ({
   trapFocus: (_root: HTMLElement, _close: () => void) => () => {},
@@ -138,5 +138,9 @@ describe("ciclo di vita della ricerca nella nota", () => {
     fixture.pending[2]!.resolve(page("new.md", 30, "new result"));
     await flush();
     expect(box().textContent).toContain("new result");
+
+    // Il punto va al documento cercato, nominato: non al riquadro col fuoco.
+    box().querySelector<HTMLButtonElement>("button.search-result")!.click();
+    expect(fixture.reveal).toHaveBeenCalledWith("new.md", { span: { start: 30, end: 30 } });
   });
 });

@@ -266,6 +266,18 @@ pub fn reset_demo(host: &Host, config_dir: &Utf8Path) -> Result<Utf8PathBuf, Plu
         Ok(_) | Err(PluginError::NotFound(_)) => {}
         Err(and) => return Err(and),
     }
+    // Nessun altro processo deve avere la demo aperta mentre la si cancella:
+    // il lease si prende sulla radice canonica, la stessa che usa l'apertura,
+    // prima di dimenticare qualunque cosa, e si tiene fino al nuovo seme.
+    let _writer = if owned {
+        let canonical = std::fs::canonicalize(root.as_std_path())
+            .ok()
+            .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
+            .unwrap_or_else(|| root.clone());
+        Some(host.writer_lease(&canonical)?)
+    } else {
+        None
+    };
     // Dimenticare toglie registro e stato di vista; se la voce non c'era,
     // `forget_vault` riesce comunque (cancella per forme, senza pretendere).
     host.forget_vault(&root)?;
@@ -525,9 +537,11 @@ fn read_log_tail(path: &Utf8Path, max_lines: usize) -> Vec<String> {
     vec!["riga di log omessa".to_string(); lines.min(max_lines.min(200))]
 }
 
-/// Scrive il rapporto fuori dai vault aperti e conosciuti. La cartella madre
+/// Scrive il rapporto fuori dai vault aperti e conosciuti, e fuori dalla
+/// demo di questa installazione anche quando non e` aperta. La cartella madre
 /// e` canonicalizzata prima del confronto: `..` e symlink non possono
-/// riportare il rapporto dentro le note.
+/// riportare il rapporto dentro le note. La regola sta qui, non nel comando
+/// IPC, perche' vale per ogni chiamante.
 pub fn export_preview(
     host: &Host,
     preview: &SupportPreview,
@@ -548,11 +562,22 @@ pub fn export_preview(
     let canonical_parent = Utf8PathBuf::from_path_buf(canonical_parent)
         .map_err(|_| PluginError::BadArgs("percorso non UTF-8".into()))?;
     let dest = canonical_parent.join(filename);
-    for root in host.vaults().into_iter().chain(
-        host.known_vaults()
-            .into_iter()
-            .map(|entry| Utf8PathBuf::from(entry.root)),
-    ) {
+    let demo = demo_root(host.configuration_root()).map(|root| {
+        std::fs::canonicalize(root.as_std_path())
+            .ok()
+            .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
+            .unwrap_or(root)
+    });
+    for root in host
+        .vaults()
+        .into_iter()
+        .chain(
+            host.known_vaults()
+                .into_iter()
+                .map(|entry| Utf8PathBuf::from(entry.root)),
+        )
+        .chain(demo)
+    {
         if dest.starts_with(&root) {
             return Err(PluginError::BadArgs(
                 format!("scrivi il rapporto fuori dai vault (non dentro {root})").into(),
@@ -649,6 +674,22 @@ pub fn config_health(config_dir: Option<&Utf8Path>) -> Vec<ConfigReport> {
     let Some(dir) = config_dir else {
         return Vec::new();
     };
+    machine_files(dir)
+        .into_iter()
+        .map(|(kind, path)| {
+            let status = inspect_config_file(&path);
+            ConfigReport {
+                kind,
+                path: path.to_string(),
+                status,
+            }
+        })
+        .collect()
+}
+
+/// I tre file di macchina di una cartella di configurazione: gli unici che il
+/// recovery tocca.
+fn machine_files(dir: &Utf8Path) -> [(ConfigFileKind, Utf8PathBuf); 3] {
     [
         (
             ConfigFileKind::MachineSettings,
@@ -663,16 +704,6 @@ pub fn config_health(config_dir: Option<&Utf8Path>) -> Vec<ConfigReport> {
             crate::config::view_states_path(dir),
         ),
     ]
-    .into_iter()
-    .map(|(kind, path)| {
-        let status = inspect_config_file(&path);
-        ConfigReport {
-            kind,
-            path: path.to_string(),
-            status,
-        }
-    })
-    .collect()
 }
 
 /// Legge un file di configurazione e ne dice lo stato senza scriverlo.
@@ -716,7 +747,9 @@ fn supported_schema_version() -> u32 {
     1
 }
 
-/// Recupera un file di macchina con backup obbligatorio.
+/// Recupera uno dei tre file di macchina di `config_dir` con backup
+/// obbligatorio. Quali file si possono toccare lo decide questa funzione, per
+/// ogni chiamante: un altro percorso e` rifiutato prima di leggerlo.
 ///
 /// - Il file attuale (anche corrotto) e` copiato in `<path>.bak.<millis>`
 ///   prima di qualunque scrittura: il precedente non si perde mai.
@@ -729,6 +762,24 @@ fn supported_schema_version() -> u32 {
 ///   una riapertura pulisce quel cancello. Lo si dice in chiaro invece di
 ///   fingere effetto immediato.
 pub fn recover_config_file(
+    config_dir: Option<&Utf8Path>,
+    path: &Utf8Path,
+    action: RecoverAction,
+) -> Result<RecoverOutcome, PluginError> {
+    let Some(dir) = config_dir else {
+        return Err(PluginError::Unserved(
+            "recovery non disponibile senza una cartella di configurazione".into(),
+        ));
+    };
+    if !machine_files(dir).iter().any(|(_, file)| file == path) {
+        return Err(PluginError::BadArgs(
+            format!("{path} non e` un file di configurazione recuperabile").into(),
+        ));
+    }
+    recover_machine_file(path, action)
+}
+
+fn recover_machine_file(
     path: &Utf8Path,
     action: RecoverAction,
 ) -> Result<RecoverOutcome, PluginError> {
@@ -1103,6 +1154,56 @@ mod tests {
         }
     }
 
+    /// La demo di questa installazione e` un vault anche da chiusa: il
+    /// rapporto non ci entra, qualunque sia il chiamante (I75).
+    #[test]
+    fn support_report_stays_out_of_the_closed_demo() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = Utf8Path::from_path(temp.path()).unwrap();
+        let demo = demo_root(Some(config)).unwrap();
+        std::fs::create_dir(&demo).unwrap();
+        let host = Host::without_watcher().with_config_dir(config);
+        let preview = collect_preview(&host, None, None, 0).unwrap();
+        let consent = ExportConsent {
+            acknowledged_preview: true,
+            include_log: false,
+            destination: demo.join("report.json").to_string(),
+        };
+        assert!(matches!(
+            export_preview(&host, &preview, &consent),
+            Err(PluginError::BadArgs(_))
+        ));
+        assert!(!demo.join("report.json").exists());
+    }
+
+    /// Il recovery tocca soltanto i tre file di macchina della cartella di
+    /// configurazione: un altro percorso non si legge ne' si scrive (I75).
+    #[test]
+    fn recovery_touches_only_the_machine_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = Utf8Path::from_path(temp.path()).unwrap();
+        let other = config.join("notes.json");
+        std::fs::write(&other, br#"{"version":1,"mine":true}"#).unwrap();
+        assert!(matches!(
+            recover_config_file(Some(config), &other, RecoverAction::ResetEmpty),
+            Err(PluginError::BadArgs(_))
+        ));
+        assert!(matches!(
+            recover_config_file(None, &other, RecoverAction::BackupOnly),
+            Err(PluginError::Unserved(_))
+        ));
+        assert_eq!(
+            std::fs::read(&other).unwrap(),
+            br#"{"version":1,"mine":true}"#
+        );
+        assert_eq!(std::fs::read_dir(config).unwrap().count(), 1, "no backup");
+        let settings = crate::config::machine_settings_path(config);
+        std::fs::write(&settings, br#"{"version":1,"values":{}}"#).unwrap();
+        let outcome =
+            recover_config_file(Some(config), &settings, RecoverAction::BackupOnly).unwrap();
+        assert!(outcome.backup.is_some());
+    }
+
     #[test]
     fn future_config_is_never_reset() {
         let temp = tempfile::tempdir().unwrap();
@@ -1130,8 +1231,8 @@ mod tests {
                 };
                 assert_eq!(found, expected);
             }
-            assert!(recover_config_file(&path, RecoverAction::ResetEmpty).is_err());
-            assert!(recover_config_file(
+            assert!(recover_machine_file(&path, RecoverAction::ResetEmpty).is_err());
+            assert!(recover_machine_file(
                 &path,
                 RecoverAction::RestoreBackup {
                     backup: known.to_string()
@@ -1151,12 +1252,12 @@ mod tests {
         let first = br#"{"version":1,"values":{"saved":"first"}}"#;
         let second = br#"{"version":1,"values":{"saved":"second"}}"#;
         std::fs::write(&path, first).unwrap();
-        let original = recover_config_file(&path, RecoverAction::BackupOnly)
+        let original = recover_machine_file(&path, RecoverAction::BackupOnly)
             .unwrap()
             .backup
             .unwrap();
         std::fs::write(&path, second).unwrap();
-        let later = recover_config_file(&path, RecoverAction::BackupOnly)
+        let later = recover_machine_file(&path, RecoverAction::BackupOnly)
             .unwrap()
             .backup
             .unwrap();

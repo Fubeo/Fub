@@ -22,6 +22,7 @@
 //! manda a cercare il difetto nello schema, dove non c'è. E che con un vault
 //! aperto la scrittura continui a passare dal `Workspace`: è lui che emette
 //! `setting_changed`, e una scorciatoia della shell rimappata a vault aperto
+//! deve svegliare la tastiera come tutte le altre.
 
 use camino::Utf8PathBuf;
 use fub_abi::settings::{SettingScope, SettingSource, SettingValue};
@@ -261,7 +262,6 @@ fn with_a_vault_open_a_key_of_machine_remains_a_single() {
 /// non c'è. Senza questa riga una scorciatoia rimappata nella finestra vuota
 /// resterebbe scritta, riletta e mostrata giusta mentre la tastiera continua a
 /// rispondere a quella vecchia — che è il difetto che la 0090 aveva già trovato
-/// una volta per l'altra metà della stessa famiglia.
 /// una volta per l'altra metà della stessa famiglia.
 #[test]
 fn a_write_without_vault_is_says_the_same() {

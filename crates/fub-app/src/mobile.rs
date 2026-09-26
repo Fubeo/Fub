@@ -12,13 +12,13 @@
 //!
 //! **Parser unico.** `fub://` si riusa da [`fub_host::automation`]
 //! (`parse_fub_uri`, `validate_callback`, `CallbackPolicy`, `FubUri`,
-//! `CaptureMode`, costanti): qui non si duplica la grammatica. Il payload
-//! capture v1 è modellato qui come [`MobileCapturePayload`] con gli stessi
-//! limiti validati in `automation` (titolo <= 512 caratteri, markdown <= 1MiB,
-//! URL http/https <= 2048, path relativi senza `..`, proprietà <= 64KiB),
-//! così la validazione resta identica su ogni trasporto. Origine mobile
-//! propria: [`MOBILE_ORIGIN`] (`mobile-share`), distinta da
-//! `clipper-extension` come concordato con ClipperOwner.
+//! `CaptureMode`, costanti): qui non si duplica la grammatica. Neppure la
+//! cattura è una copia: il payload è [`CapturePayloadV1`], la validazione
+//! [`automation::validate_capture_v1`] e la scrittura il comando dell'host
+//! `capture.apply` ([`fub_host::capture`]), così limiti, nome della nota e
+//! corpo restano identici su ogni trasporto. Origine mobile propria:
+//! [`MOBILE_ORIGIN`] (`mobile-share`), distinta da `clipper-extension` come
+//! concordato con ClipperOwner.
 //!
 //! **Lifecycle reale.** Il dirty vive nel frontend (`DocumentSession`,
 //! singleton per vault, ShellOwner): su `pagehide`/`visibilitychange` il
@@ -29,15 +29,11 @@
 //! scrittura del kernel + bozze su disco. Solo `RunEvent::Exit` chiude
 //! (`Host::close`, già in `lib.rs`).
 
-use camino::Utf8PathBuf;
-use fub_abi::command::CommandEffect;
-use fub_abi::edit::WriteBase;
-use fub_abi::{DocId, InvokeMode, PluginError};
+use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::{DocId, PluginError};
 use fub_host::automation::{
-    self, CallbackPolicy, CaptureMode, FubUri, MARKDOWN_MAX_BYTES, SOURCE_URL_MAX_BYTES,
-    TITLE_MAX_CHARS,
+    self, CallbackPolicy, CaptureMode, CapturePayloadV1, CaptureTarget, FubUri,
 };
-use fub_host::doc_id;
 use std::io::Write;
 use std::sync::Mutex;
 
@@ -45,18 +41,6 @@ use std::sync::Mutex;
 /// `clipper-extension`: il canale resta una proposta privata dell'adattatore
 /// via host, nessun nuovo WIT.
 pub const MOBILE_ORIGIN: &str = "mobile-share";
-
-/// Versione payload capture accettata (stessa di `automation::CAPTURE_V1`).
-pub const MOBILE_CAPTURE_V1: u8 = 1;
-
-/// Tetto proprietà serializzate, come `automation::validate_capture_v1`.
-pub const MOBILE_PROPS_MAX_BYTES: usize = 65536;
-
-/// Tetto chiavi proprietà, come `automation`.
-pub const MOBILE_PROP_KEY_MAX_BYTES: usize = 128;
-
-/// Tetto path vault/cartella/nota, come `automation`.
-pub const MOBILE_PATH_MAX_BYTES: usize = 1024;
 
 // --- lifecycle ---------------------------------------------------------------
 
@@ -280,17 +264,13 @@ pub struct MobileStorageInfo {
     pub shared_mount: MobileMountMode,
 }
 
-fn path_to_string(path: Result<std::path::PathBuf, tauri::Error>) -> Option<String> {
-    path.ok().map(|p| p.to_string_lossy().into_owned())
-}
-
 /// Legge la sola sandbox dal resolver Tauri. Il tree condiviso NON si deduce
 /// da `document_dir()`: arriva solo dal registry app-level dopo verifica OS.
-/// Grant assente = NeedGrant.
+/// Grant assente = NeedGrant. `private_dir` è il vault privato da montare
+/// ([`private_vault_root`]), non la sandbox intera: lì vive anche il registry
+/// dell'app, che dentro un vault diventerebbe una nota.
 pub fn mobile_storage_info(app: &tauri::AppHandle) -> MobileStorageInfo {
-    use tauri::Manager;
-    let paths = app.path();
-    let private_dir = path_to_string(paths.app_data_dir());
+    let private_dir = private_vault_root(app).map(Utf8PathBuf::into_string);
     MobileStorageInfo {
         offline_reliable_private: private_dir.is_some(),
         offline_reliable_shared: false,
@@ -435,397 +415,13 @@ pub fn persist_mobile_storage_preference(
 }
 
 // --- capture v1 lato mobile ---------------------------------------------------
+//
+// Il share sheet non ha una cattura sua: il payload è quello di ogni trasporto
+// ([`CapturePayloadV1`]), la regola [`automation::validate_capture_v1`] e la
+// scrittura il comando dell'host `capture.apply` ([`fub_host::capture`]). Qui
+// restano soltanto i due adattatori, [`mobile_validate_capture`] e
+// [`mobile_submit_capture`].
 
-/// Destinazione capture: stessi quattro modi della CLI e dell'estensione.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct MobileCaptureTarget {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vault: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub folder: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-    pub mode: CaptureMode,
-}
-
-/// Payload capture v1 dal share sheet mobile. Stessi limiti di
-/// `automation::validate_capture_v1` (titolo <= 512 caratteri senza a-capo,
-/// markdown <= 1MiB non vuoto, URL solo http/https <= 2048 senza credenziali,
-/// proprietà <= 64KiB con chiavi <= 128 byte, path nel recinto).
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct MobileCapturePayload {
-    pub v: u8,
-    pub title: String,
-    pub markdown: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub properties: Option<serde_json::Map<String, serde_json::Value>>,
-    pub target: MobileCaptureTarget,
-}
-
-fn has_control(s: &str) -> bool {
-    s.chars().any(|c| c.is_control())
-}
-
-fn contains_nul(s: &str) -> bool {
-    s.contains('\0')
-}
-
-fn validate_target_path(
-    field: &str,
-    value: &str,
-    is_new: bool,
-) -> Result<(), fub_host::automation::AutomationError> {
-    use fub_abi::rules::path_policy::{check, from_outside, Naming};
-    let bad = fub_host::automation::AutomationError::bad_args;
-    if value.trim().is_empty() {
-        return Err(bad(format!("`{field}` vuoto")));
-    }
-    if value.len() > MOBILE_PATH_MAX_BYTES {
-        return Err(bad(format!("`{field}` oltre 1024 byte")));
-    }
-    if contains_nul(value) {
-        return Err(bad(format!("`{field}` con NUL")));
-    }
-    let clean = from_outside(value);
-    if clean.is_empty() {
-        return Err(bad(format!("`{field}` vuoto")));
-    }
-    let naming = if is_new {
-        Naming::New
-    } else {
-        Naming::Existing
-    };
-    check(&clean, naming)
-        .map_err(|why| bad(format!("`{field}` non nomina dentro il vault: {why}")))?;
-    Ok(())
-}
-
-fn validate_source_url(url: &str) -> Result<(), fub_host::automation::AutomationError> {
-    let bad = fub_host::automation::AutomationError::bad_args;
-    if url.trim().is_empty() {
-        return Err(bad("`source_url` vuota"));
-    }
-    if url.len() > SOURCE_URL_MAX_BYTES {
-        return Err(bad("`source_url` oltre 2048 byte"));
-    }
-    if has_control(url) || contains_nul(url) || url.contains(' ') {
-        return Err(bad("`source_url` con spazi/controllo"));
-    }
-    let lower = url.to_ascii_lowercase();
-    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
-        return Err(bad("`source_url` solo http/https"));
-    }
-    let after = url.split_once("://").map(|(_, after)| after).unwrap_or("");
-    let host = after.split(['/', '?', '#']).next().unwrap_or("");
-    if host.is_empty() {
-        return Err(bad("`source_url` senza host"));
-    }
-    if host.contains('@') {
-        return Err(bad("`source_url` senza credenziali"));
-    }
-    Ok(())
-}
-
-/// Valida un payload mobile con le stesse regole del canale NM/URI. Pura:
-/// nessuna I/O, nessun vault, nessuna scrittura.
-pub fn validate_mobile_capture(
-    payload: &MobileCapturePayload,
-) -> Result<(), fub_host::automation::AutomationError> {
-    use fub_host::automation::AutomationError;
-    if payload.v != MOBILE_CAPTURE_V1 {
-        return Err(AutomationError::bad_args(format!(
-            "`v` deve essere {}, non {}",
-            MOBILE_CAPTURE_V1, payload.v
-        )));
-    }
-    if payload.title.trim().is_empty() {
-        return Err(AutomationError::bad_args("`title` vuoto"));
-    }
-    if payload.title.chars().count() > TITLE_MAX_CHARS {
-        return Err(AutomationError::bad_args("`title` oltre 512 caratteri"));
-    }
-    if payload.title.contains('\n') || payload.title.contains('\r') || has_control(&payload.title) {
-        return Err(AutomationError::bad_args("`title` con a-capo o controllo"));
-    }
-    if payload.markdown.trim().is_empty() {
-        return Err(AutomationError::bad_args("`markdown` vuoto"));
-    }
-    if payload.markdown.len() > MARKDOWN_MAX_BYTES {
-        return Err(AutomationError::bad_args("`markdown` oltre 1MiB"));
-    }
-    if let Some(url) = &payload.source_url {
-        validate_source_url(url)?;
-    }
-    if let Some(props) = &payload.properties {
-        for key in props.keys() {
-            if key.trim().is_empty() {
-                return Err(AutomationError::bad_args("`properties` con chiave vuota"));
-            }
-            if key.len() > MOBILE_PROP_KEY_MAX_BYTES {
-                return Err(AutomationError::bad_args(
-                    "`properties` con chiave oltre 128 byte",
-                ));
-            }
-            if has_control(key) {
-                return Err(AutomationError::bad_args(
-                    "`properties` con chiave di controllo",
-                ));
-            }
-        }
-        let encoded = serde_json::to_string(props).map_err(|e| {
-            AutomationError::bad_args(format!("`properties` non serializzabili: {e}"))
-        })?;
-        if encoded.len() > MOBILE_PROPS_MAX_BYTES {
-            return Err(AutomationError::bad_args("`properties` oltre 64KiB"));
-        }
-    }
-    let is_new = matches!(
-        payload.target.mode,
-        CaptureMode::Create | CaptureMode::Daily
-    );
-    if let Some(folder) = &payload.target.folder {
-        validate_target_path("folder", folder, true)?;
-    }
-    if let Some(note) = &payload.target.note {
-        validate_target_path("note", note, is_new)?;
-    }
-    match payload.target.mode {
-        CaptureMode::Append | CaptureMode::Prepend => {
-            if payload
-                .target
-                .note
-                .as_deref()
-                .is_none_or(|n| n.trim().is_empty())
-            {
-                return Err(AutomationError::bad_args(
-                    "`target.note` richiesta per append/prepend",
-                ));
-            }
-        }
-        CaptureMode::Create | CaptureMode::Daily => {}
-    }
-    Ok(())
-}
-
-fn titled_body(title: &str, markdown: &str, source_url: Option<&str>) -> String {
-    let mut body = format!("# {title}\n\n{markdown}");
-    if let Some(url) = source_url {
-        if !url.trim().is_empty() {
-            body.push_str(&format!("\n\nFonte: {url}"));
-        }
-    }
-    if !body.ends_with('\n') {
-        body.push('\n');
-    }
-    body
-}
-
-fn with_extension(name: &str) -> String {
-    let last = name.rsplit('/').next().unwrap_or(name);
-    if last.contains('.') {
-        name.to_string()
-    } else {
-        format!("{name}.md")
-    }
-}
-
-fn created_doc(outcome: &fub_abi::CommandOutcome) -> Option<DocId> {
-    match &outcome.effect {
-        CommandEffect::Navigate { doc } => Some(doc.clone()),
-        _ => None,
-    }
-}
-
-fn append_body(
-    host: &fub_host::Host,
-    selector: Option<&str>,
-    id: &DocId,
-    addition: &str,
-) -> Result<(), PluginError> {
-    let (source, revision) = host.read_document(selector, id)?;
-    let mut body = source;
-    if !body.ends_with('\n') {
-        body.push('\n');
-    }
-    body.push_str(addition);
-    host.write_document(selector, id, &body, WriteBase::DescendsFrom(revision))?;
-    Ok(())
-}
-
-fn apply_properties(
-    host: &fub_host::Host,
-    selector: Option<&str>,
-    id: &DocId,
-    payload: &MobileCapturePayload,
-) -> Result<(), PluginError> {
-    let Some(props) = payload.properties.as_ref() else {
-        return Ok(());
-    };
-    for (key, value) in props {
-        let rendered = match value {
-            serde_json::Value::String(s) => s.clone(),
-            other => serde_json::to_string(other).unwrap_or_default(),
-        };
-        host.invoke_user_command(
-            selector,
-            "note.property.set",
-            serde_json::json!({ "doc": id.as_str(), "key": key, "value": rendered }),
-            InvokeMode::Apply,
-        )?;
-    }
-    Ok(())
-}
-
-/// Applica una capture validata attraverso l'unico `Host`: nessun secondo
-/// writer, nessun percorso diretto sul filesystem. `vault` esplicito vince sul
-/// `target.vault` solo se quest'ultimo è assente; la destinazione resta
-/// approvata dal frontend prima della chiamata (mai scrittura silenziosa).
-/// `template` è un pre-passo opzionale solo per `create`: crea da template e
-/// poi accoda il corpo (mai sovrascrittura del template).
-pub fn apply_mobile_capture(
-    host: &fub_host::Host,
-    vault: Option<&str>,
-    payload: &MobileCapturePayload,
-    template: Option<&str>,
-) -> Result<DocId, PluginError> {
-    validate_mobile_capture(payload).map_err(|e| e.to_plugin_error())?;
-    if let Some(tpl) = template.map(str::trim).filter(|s| !s.is_empty()) {
-        if payload.target.mode != CaptureMode::Create {
-            return Err(PluginError::BadArgs("template solo con mode create".into()));
-        }
-        validate_target_path("template", tpl, false).map_err(|e| e.to_plugin_error())?;
-    }
-    let selector = payload.target.vault.as_deref().or(vault);
-    match payload.target.mode {
-        CaptureMode::Create => {
-            let body = titled_body(
-                &payload.title,
-                &payload.markdown,
-                payload.source_url.as_deref(),
-            );
-            if let Some(tpl) = template.map(str::trim).filter(|s| !s.is_empty()) {
-                let name = match payload.target.note.as_deref() {
-                    Some(note) if !note.trim().is_empty() => note.trim().to_string(),
-                    _ => {
-                        let slug: String = payload.title.trim().chars().take(80).collect();
-                        if slug.trim().is_empty() {
-                            "Untitled.md".to_string()
-                        } else {
-                            with_extension(slug.trim())
-                        }
-                    }
-                };
-                let full = match payload.target.folder.as_deref() {
-                    Some(folder) if !folder.trim().is_empty() => {
-                        format!("{}/{name}", folder.trim().trim_matches('/'))
-                    }
-                    _ => name,
-                };
-                let outcome = host.invoke_user_command(
-                    selector,
-                    "note.from_template",
-                    serde_json::json!({ "template": tpl, "name": full }),
-                    InvokeMode::Apply,
-                )?;
-                let created = created_doc(&outcome).ok_or_else(|| {
-                    PluginError::Internal("note.from_template senza navigazione".into())
-                })?;
-                append_body(host, selector, &created, &format!("\n\n{body}"))?;
-                apply_properties(host, selector, &created, payload)?;
-                return Ok(created);
-            }
-            let name = match payload.target.note.as_deref() {
-                Some(note) if !note.trim().is_empty() => note.trim().to_string(),
-                _ => {
-                    let slug: String = payload.title.trim().chars().take(80).collect();
-                    if slug.trim().is_empty() {
-                        "Untitled.md".to_string()
-                    } else {
-                        with_extension(slug.trim())
-                    }
-                }
-            };
-            let full = match payload.target.folder.as_deref() {
-                Some(folder) if !folder.trim().is_empty() => {
-                    format!("{}/{name}", folder.trim().trim_matches('/'))
-                }
-                _ => name,
-            };
-            let id = doc_id(&full)?;
-            let outcome = host.invoke_user_command(
-                selector,
-                "note.create",
-                serde_json::json!({ "name": id.as_str() }),
-                InvokeMode::Apply,
-            )?;
-            let created = created_doc(&outcome).unwrap_or(id);
-            let (_, revision) = host.read_document(selector, &created)?;
-            host.write_document(selector, &created, &body, WriteBase::DescendsFrom(revision))?;
-            apply_properties(host, selector, &created, payload)?;
-            Ok(created)
-        }
-        CaptureMode::Daily => {
-            let outcome = host.invoke_user_command(
-                selector,
-                "note.daily",
-                serde_json::json!({}),
-                InvokeMode::Apply,
-            )?;
-            let daily = created_doc(&outcome)
-                .ok_or_else(|| PluginError::Internal("note.daily senza navigazione".into()))?;
-            append_body(
-                host,
-                selector,
-                &daily,
-                &titled_body(
-                    &payload.title,
-                    &payload.markdown,
-                    payload.source_url.as_deref(),
-                ),
-            )?;
-            apply_properties(host, selector, &daily, payload)?;
-            Ok(daily)
-        }
-        CaptureMode::Append => {
-            let note = payload.target.note.as_deref().unwrap_or("");
-            let id = doc_id(note)?;
-            append_body(
-                host,
-                selector,
-                &id,
-                &format!(
-                    "\n\n{}",
-                    titled_body(
-                        &payload.title,
-                        &payload.markdown,
-                        payload.source_url.as_deref()
-                    )
-                ),
-            )?;
-            apply_properties(host, selector, &id, payload)?;
-            Ok(id)
-        }
-        CaptureMode::Prepend => {
-            let note = payload.target.note.as_deref().unwrap_or("");
-            let id = doc_id(note)?;
-            let (source, revision) = host.read_document(selector, &id)?;
-            let body = format!(
-                "{}{}",
-                titled_body(
-                    &payload.title,
-                    &payload.markdown,
-                    payload.source_url.as_deref()
-                ),
-                source
-            );
-            host.write_document(selector, &id, &body, WriteBase::DescendsFrom(revision))?;
-            apply_properties(host, selector, &id, payload)?;
-            Ok(id)
-        }
-    }
-}
 // --- share ingest: instradamento file/testo in arrivo ---------------------------
 //
 // Punto d'ingresso canonico (StorageOwner): i byte arrivano dai bridge nativi
@@ -833,7 +429,7 @@ pub fn apply_mobile_capture(
 // copia i security-scoped nell'inbox del gruppo) e qui si decide SOLO la rotta
 // — documento vs allegato vs rifiuto — con la stessa `kind_of` di MediaOwner.
 // La scrittura resta di `Host` sull'unica authority: testo via
-// `apply_mobile_capture`, allegati via `open_artifact/write_artifact` a chunk
+// `capture.apply`, allegati via `open_artifact/write_artifact` a chunk
 // 64KiB (short-read) + `create_document` (AlreadyExists se occupato), binari
 // grossi via `write_document_bytes` quando BinaryGuard la espone (wiring Main).
 // Niente path arbitrari fuori vault, niente secondo writer, mai tutto in RAM.
@@ -851,7 +447,7 @@ pub struct PlannedShare {
 }
 
 /// Testo condiviso -> capture create. Pura: valida i limiti qui, la scrittura
-/// resta di `apply_mobile_capture` dopo approvazione UI.
+/// resta di [`fub_host::capture::apply`] dopo approvazione UI.
 pub fn plan_shared_text(text: &str, mime: &str) -> PlannedCaptureText {
     let title: String = text
         .trim()
@@ -862,8 +458,8 @@ pub fn plan_shared_text(text: &str, mime: &str) -> PlannedCaptureText {
         .take(80)
         .collect();
     PlannedCaptureText {
-        payload: MobileCapturePayload {
-            v: MOBILE_CAPTURE_V1,
+        payload: CapturePayloadV1 {
+            v: automation::CAPTURE_V1,
             title: if title.trim().is_empty() {
                 "Condiviso".to_string()
             } else {
@@ -872,7 +468,7 @@ pub fn plan_shared_text(text: &str, mime: &str) -> PlannedCaptureText {
             markdown: text.to_string(),
             source_url: None,
             properties: None,
-            target: MobileCaptureTarget {
+            target: CaptureTarget {
                 vault: None,
                 folder: None,
                 note: None,
@@ -885,7 +481,7 @@ pub fn plan_shared_text(text: &str, mime: &str) -> PlannedCaptureText {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlannedCaptureText {
-    pub payload: MobileCapturePayload,
+    pub payload: CapturePayloadV1,
     pub mime: String,
 }
 
@@ -970,7 +566,7 @@ impl OpenedUrlKind {
         }
         let lower = raw.to_ascii_lowercase();
         if lower.starts_with("http://") || lower.starts_with("https://") {
-            return match validate_source_url(raw) {
+            return match automation::validate_source_url(raw) {
                 Ok(()) => OpenedUrlKind::HttpShare(raw.to_string()),
                 Err(e) => OpenedUrlKind::Rejected(e.message().to_string()),
             };
@@ -1235,18 +831,18 @@ pub fn probe_mobile_prereqs() -> MobileBuildPrereqs {
     }
 }
 
-/// Valida senza scrivere. Il frontend conferma la destinazione prima di
-/// `mobile_submit_capture`.
-pub fn mobile_validate_capture(payload: MobileCapturePayload) -> Result<(), PluginError> {
+/// Valida senza scrivere, con la regola di ogni trasporto (vault compreso). Il
+/// frontend conferma la destinazione prima di `mobile_submit_capture`.
+pub fn mobile_validate_capture(payload: CapturePayloadV1) -> Result<(), PluginError> {
     let _origin: &str = MOBILE_ORIGIN;
-    validate_mobile_capture(&payload).map_err(|e| e.to_plugin_error())
+    automation::validate_capture_v1(&payload).map_err(|e| e.to_plugin_error())
 }
 
-/// Applica via unico `Host`, ritorna il DocId creato/toccato. Destinazione già
-/// approvata in UI; template solo con create.
+/// Applica con il comando dell'host `capture.apply` e ritorna il DocId creato
+/// o toccato. Destinazione già approvata in UI; template solo con create.
 pub fn mobile_submit_capture(
     host: tauri::State<fub_host::Host>,
-    payload: MobileCapturePayload,
+    payload: CapturePayloadV1,
     vault: Option<String>,
     template: Option<String>,
 ) -> Result<String, PluginError> {
@@ -1257,15 +853,18 @@ pub fn mobile_submit_capture(
     let _callback =
         validate_mobile_callback as fn(&str, &CallbackPolicy) -> Result<String, PluginError>;
     let _policy = mobile_callback_policy as fn() -> CallbackPolicy;
-    let created = apply_mobile_capture(&host, vault.as_deref(), &payload, template.as_deref())?;
+    let created = crate::for_the_shell(
+        &host,
+        vault.as_deref(),
+        fub_host::capture::apply(&host, vault.as_deref(), &payload, template.as_deref()),
+    )?;
     Ok(created.as_str().to_string())
 }
 
 /// Radici private/condivise dal resolver. Niente valori inventati.
 pub fn mobile_storage_roots(app: tauri::AppHandle) -> MobileStorageInfo {
-    // Diagnostica build e base vault privata restano raggiungibili dal confine registrato.
+    // La diagnostica build resta raggiungibile dal confine registrato.
     let _prereqs = probe_mobile_prereqs as fn() -> MobileBuildPrereqs;
-    let _base = default_private_vault_base as fn(&tauri::AppHandle) -> Option<Utf8PathBuf>;
     mobile_storage_info(&app)
 }
 
@@ -1338,18 +937,63 @@ pub fn default_private_vault_base(app: &tauri::AppHandle) -> Option<Utf8PathBuf>
         .map(|base| base.join("vaults"))
 }
 
+/// La cartella del vault privato dentro [`default_private_vault_base`].
+pub const PRIVATE_VAULT_DIR: &str = "Vault";
+
+/// Il vault privato: una cartella fissa sotto la base della sandbox, decisa
+/// qui e mai dal webview. È il solo vault che mobile sa montare senza un grant
+/// del sistema operativo.
+pub fn private_vault_root(app: &tauri::AppHandle) -> Option<Utf8PathBuf> {
+    default_private_vault_base(app).map(|base| base.join(PRIVATE_VAULT_DIR))
+}
+
+/// `open_vault` su mobile: si apre soltanto il vault privato, e la prima volta
+/// se ne crea la cartella. Il path che il webview chiede è una domanda, non
+/// un'autorità: vale se è `root`. Ogni altro path è una cartella condivisa, che
+/// chiede la verifica nativa del grant (SystemStorage) che questo confine
+/// ancora non ha. Su desktop lo chiama soltanto il test: `open_vault` lo usa
+/// nel ramo mobile.
+#[cfg_attr(not(mobile), allow(dead_code))]
+pub fn open_private_vault(
+    host: &fub_host::Host,
+    root: Option<&Utf8Path>,
+    requested: &str,
+) -> Result<fub_host::VaultInfo, PluginError> {
+    let Some(root) = root.filter(|root| *root == Utf8Path::new(requested)) else {
+        return Err(PluginError::Unserved(
+            "mobile vault mount requires native OS grant verification and SystemStorage".into(),
+        ));
+    };
+    std::fs::create_dir_all(root)
+        .map_err(|e| PluginError::Io(format!("vault privato {root}: {e}").into()))?;
+    host.open(root)
+}
+
+/// Il vault da riaprire all'avvio: il privato, se è la scelta salvata. Senza
+/// scelta si chiede di nuovo, e la condivisa aspetta un grant verificato: in
+/// nessuno dei due casi si sceglie al posto della persona. Come
+/// [`open_private_vault`], esiste solo per il ramo mobile di `initial_vault`.
+#[cfg_attr(not(mobile), allow(dead_code))]
+pub fn initial_private_vault(app: &tauri::AppHandle) -> Option<String> {
+    let preference = load_mobile_storage_preference(app).ok()?;
+    if preference.choice != Some(MobileStorageKind::Private) {
+        return None;
+    }
+    private_vault_root(app).map(Utf8PathBuf::into_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn payload(mode: CaptureMode, note: Option<&str>) -> MobileCapturePayload {
-        MobileCapturePayload {
+    fn payload(mode: CaptureMode, note: Option<&str>) -> CapturePayloadV1 {
+        CapturePayloadV1 {
             v: 1,
             title: "Condiviso da app".to_string(),
             markdown: "# testo\n\ncorpo".to_string(),
             source_url: Some("https://example.com/pagina".to_string()),
             properties: None,
-            target: MobileCaptureTarget {
+            target: CaptureTarget {
                 vault: None,
                 folder: Some("Inbox".to_string()),
                 note: note.map(str::to_string),
@@ -1394,19 +1038,24 @@ mod tests {
     }
 
     #[test]
-    fn mobile_capture_limits_mirror_automation() {
-        assert!(validate_mobile_capture(&payload(CaptureMode::Create, None)).is_ok());
-        assert!(validate_mobile_capture(&payload(CaptureMode::Append, None)).is_err());
-        assert!(validate_mobile_capture(&payload(CaptureMode::Append, Some("Nota.md"))).is_ok());
+    fn mobile_capture_is_validated_by_the_shared_rule() {
+        assert!(mobile_validate_capture(payload(CaptureMode::Create, None)).is_ok());
+        assert!(mobile_validate_capture(payload(CaptureMode::Append, None)).is_err());
+        assert!(mobile_validate_capture(payload(CaptureMode::Append, Some("Nota.md"))).is_ok());
         let mut bad = payload(CaptureMode::Create, None);
         bad.title = "   ".to_string();
-        assert!(validate_mobile_capture(&bad).is_err());
+        assert!(mobile_validate_capture(bad).is_err());
         let mut big = payload(CaptureMode::Create, None);
-        big.markdown = "x".repeat(MARKDOWN_MAX_BYTES + 1);
-        assert!(validate_mobile_capture(&big).is_err());
+        big.markdown = "x".repeat(automation::MARKDOWN_MAX_BYTES + 1);
+        assert!(mobile_validate_capture(big).is_err());
         let mut traversal = payload(CaptureMode::Create, Some("../fuori.md"));
         traversal.target.folder = None;
-        assert!(validate_mobile_capture(&traversal).is_err());
+        assert!(mobile_validate_capture(traversal).is_err());
+        // Il vault del payload passa dalla regola del clipper: la copia mobile
+        // lo lasciava passare.
+        let mut vault = payload(CaptureMode::Create, None);
+        vault.target.vault = Some("../fuori".to_string());
+        assert!(mobile_validate_capture(vault).is_err());
     }
 
     #[test]
@@ -1454,7 +1103,7 @@ mod tests {
     fn share_plan_routes_text_and_file() {
         let text = plan_shared_text("ciao", "text/plain");
         assert_eq!(text.mime, "text/plain");
-        assert!(validate_mobile_capture(&text.payload).is_ok());
+        assert!(mobile_validate_capture(text.payload).is_ok());
         let file = plan_share_file("Foto.png", 1024, "image/png", "attachments");
         assert!(matches!(file.route, ShareRoute::Attachment { .. }));
         let big = plan_share_file("film.mkv", 64 * 1024 * 1024 + 1, "video/mp4", "attachments");
@@ -1587,5 +1236,34 @@ mod tests {
         );
         assert!(classify_opened_url("fub://mobile-switcher?exec=1").is_err());
         assert!(classify_opened_url("fub://mobile-treeevil?uri=x").is_err());
+    }
+
+    #[test]
+    fn only_the_private_vault_opens_and_its_folder_is_created_on_demand() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(dir.path()).unwrap().join("vaults");
+        let root = base.join(PRIVATE_VAULT_DIR);
+        let host = fub_host::Host::new().with_watcher(Box::new(fub_host::NoWatcher));
+
+        // Ogni altra cartella è condivisa: niente mount, e niente si crea.
+        let shared = base.join("Condivisa");
+        assert!(matches!(
+            open_private_vault(&host, Some(&root), shared.as_str()),
+            Err(PluginError::Unserved(_))
+        ));
+        assert!(matches!(
+            open_private_vault(&host, None, root.as_str()),
+            Err(PluginError::Unserved(_))
+        ));
+        assert!(!base.exists());
+
+        let info = open_private_vault(&host, Some(&root), root.as_str()).unwrap();
+        assert!(root.is_dir());
+        assert_eq!(host.vaults().len(), 1);
+        assert!(info.root.ends_with(PRIVATE_VAULT_DIR));
+        // Riaprirlo dà lo stesso vault, non un secondo.
+        open_private_vault(&host, Some(&root), root.as_str()).unwrap();
+        assert_eq!(host.vaults().len(), 1);
+        assert!(host.close().is_empty());
     }
 }

@@ -201,7 +201,6 @@ impl IndexProvider for Batches {
 
     /// Dice di avere già tutto: è la condizione della **riapertura a caldo**, e
     /// senza di lei il ramo che salta i parse non si può nemmeno raggiungere.
-    /// senza di lei il ramo che salta i parse non si può nemmeno raggiungere.
     fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
         entries.iter().map(|and| and.id.clone()).collect()
     }
@@ -389,7 +388,6 @@ fn reopening_an_intact_vault_costs_no_parse() {
 /// l'allocatore: guarda che **raddoppiare il vault non cambi il prezzo di una
 /// pagina**. È l'unica forma in cui una misura di memoria sopravvive a una
 /// macchina che non si conosce.
-/// macchina che non si conosce.
 #[test]
 fn a_page_of_twenty_does_not_grow_with_the_vault() {
     let mut costs = Vec::new();
@@ -567,7 +565,8 @@ fn every_paged_index_family_has_an_allocation_row() {
     }
 }
 
-// 4. Risolvere un riferimento, contato in allocazioni
+// ---------------------------------------------------------------------------
+// 5. Risolvere un riferimento, contato in allocazioni
 // ---------------------------------------------------------------------------
 
 /// Un formato che mette in ogni documento **un riferimento a un allegato**.

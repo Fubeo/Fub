@@ -32,6 +32,14 @@ Gli eventi descrivono:
 La consegna è accodata. Un handler non viene chiamato mentre il kernel mantiene
 un prestito esclusivo o sta ancora mutando lo stesso registro.
 
+Un plugin di terze parti racconta soltanto i fatti suoi: un `custom` nel
+proprio spazio di nomi, un `trouble` e un `view-invalidated`. Gli altri eventi
+(documenti, voci, job, impostazioni, apertura e chiusura, lotti, sveglie) li
+emette chi li ha fatti accadere. Se un plugin li emette, non arrivano a
+nessuno, e il rifiuto diventa un `trouble` che nomina il plugin. Un
+plugin `Core` parla con la voce del kernel. La regola vive in `KernelHost::emit`,
+che vede ogni emissione, nativa o WASM.
+
 ```mermaid
 sequenceDiagram
     participant OP as Operazione
@@ -51,7 +59,14 @@ sequenceDiagram
 
 ## Job
 
-Un job ha un'identità, uno stato e un proprietario. Il lifecycle tipico è:
+Un job ha un'identità, uno stato e un proprietario. Il suo nome sta nello
+spazio di nomi del proprietario come ogni altro id (`<id>:<nome>`), e soltanto
+il core nomina senza prefisso. `KernelHost::spawn_job` rifiuta un nome altrui
+con `BadArgs` prima della coda: `JobDone` porta quel nome sul bus con la voce
+del kernel, e chi lo ascolta, come la shell che offre di salvare l'esito di un
+export, se ne fida.
+
+Il lifecycle tipico è:
 
 ```mermaid
 stateDiagram-v2
@@ -92,8 +107,12 @@ sequenceDiagram
     K-->>HOST: stato completo
 ```
 
-La shell può lavorare prima che l'indice sia completo, ma le query dichiarano
-lo stato di indicizzazione.
+La shell può lavorare prima che l'indice sia completo. Una query risponde con
+ciò che l'indice sa in quel momento, e lo stato dell'indicizzazione si chiede a
+parte (`IndexQuery::VaultStatus`). Chi non può proseguire con una risposta
+parziale aspetta la fine dell'apertura con `Host::wait_indexed`, o con
+`Host::wait_indexed_for` per un'attesa che si può interrompere. `fub-cli` lo fa
+a ogni apertura, perché un comando secco apre il vault, domanda ed esce.
 
 ## Custodia e lock
 

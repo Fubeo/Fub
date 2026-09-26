@@ -95,7 +95,6 @@
 //!
 //! [0024]: ../../../docs/decisions/README.md
 //! [0032]: ../../../docs/decisions/0183-composizione-host-kernel.md
-//! [0032]: ../../../docs/decisions/0183-composizione-host-kernel.md
 
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -123,7 +122,6 @@ const TOO_SLOW: Duration = Duration::from_millis(250);
 /// Si clona come un `Arc` — è un `Arc` — e chi ne ha una copia ha lo stesso
 /// dato. Il `RwLock` non esce: le uniche due porte sono [`Custody::read`] e
 /// [`Custody::write`], che rispondono con la guardia o con la frase.
-/// [`Custody::write`], che rispondono con la guardia o con la frase.
 pub struct Custody<T> {
     inside: Arc<Inner<T>>,
 }
@@ -137,7 +135,6 @@ struct WriterTurnState {
 struct Inner<T> {
     /// **Il lucchetto, e non esce di qui.** È l'intera ragione per cui questo
     /// tipo esiste: un campo privato di un modulo privato non si prende a mano.
-    /// tipo esiste: un campo privato di un modulo privato non si prende a mano.
     lock: RwLock<T>,
     /// Serializza i **turni di mutazione**, ma non le letture. Un turno può
     /// sopravvivere al rilascio del `RwLock` mentre gira codice esterno: così
@@ -149,16 +146,16 @@ struct Inner<T> {
     /// `&'static str` e non `String` perché è una costante del sito di
     /// costruzione: se un giorno servisse il path del vault, allora la frase la
     /// comporrebbe chi apre, e questo campo diventerebbe `Box<str>`.
-    /// Quante volte questa custodia ha **denunciato**, cioè scritto la riga.
     name: &'static str,
+    /// Quante volte questa custodia ha **denunciato**, cioè scritto la riga.
     /// Zero o uno, per sempre. Vedi [`Custody::reports`].
-    /// Oltre quanto un prestito esclusivo è **lungo**. È un campo e non la
     reports: AtomicU32,
+    /// Oltre quanto un prestito esclusivo è **lungo**. È un campo e non la
     /// costante letta a ogni giro perché un banco che prova la proprietà non
     /// deve dormire un quarto di secondo per vederla: la soglia è ciò che si
     /// muove, la proprietà no.
-    /// Quanti prestiti esclusivi hanno passato la soglia. A differenza delle
     threshold: Duration,
+    /// Quanti prestiti esclusivi hanno passato la soglia. A differenza delle
     /// denunce **cresce**: un veleno è uno stato e si dice una volta, una
     /// lentezza è un fatto e ne può capitare un altro. Vedi
     /// [`Custody::slow_count`].
@@ -338,6 +335,7 @@ impl<T> Custody<T> {
     /// mettere un lucchetto dentro la risposta a *«un lucchetto è andato
     /// storto»* è il modo di scoprire un giorno che la via d'uscita si può
     /// bloccare. Qui la risposta è una parola e un `compare_exchange`, e non può
+    /// aspettare nessuno.
     #[cold]
     fn report(&self) -> PluginError {
         if self
@@ -377,7 +375,6 @@ impl<T> Inner<T> {
     /// «La prima volta soltanto» è la stessa regola del veleno e per la stessa
     /// ragione: una diagnosi ripetuta a ogni giro è rumore che copre la prima,
     /// e chi vuole sapere se è successo ancora ha il conto, che invece cresce.
-    /// e chi vuole sapere se è successo ancora ha il conto, che invece cresce.
     #[cold]
     fn slowness(&self, duration: Duration) {
         if self.slow_count.fetch_add(1, Ordering::Relaxed) == 0 {
@@ -395,16 +392,6 @@ impl<T> Inner<T> {
     }
 }
 
-/// **Il prestito esclusivo, e per quanto lo si è tenuto.**
-///
-/// Si usa come la guardia che avvolge — `*presa`, `presa.metodo()` — e l'unica
-/// cosa che aggiunge la fa sciogliendosi: guarda l'orologio, e se il prestito è
-/// durato più della soglia della custodia lo dice.
-///
-/// Il lucchetto si **rilascia prima** di scrivere la riga, e non è un dettaglio
-/// di stile: il campo si scioglie dopo il corpo del [`Drop`], quindi lasciandolo
-/// dov'era la diagnosi di un prestito troppo lungo si sarebbe scritta tenendolo,
-/// cioè allungando esattamente ciò che sta misurando.
 /// Il turno di un writer, separato dal prestito esclusivo del dato.
 ///
 /// Non è `Send`: la rientranza è definita dall'identità del thread e il turno
@@ -442,9 +429,18 @@ impl<T> Drop for WriteTurn<'_, T> {
     }
 }
 
+/// **Il prestito esclusivo, e per quanto lo si è tenuto.**
+///
+/// Si usa come la guardia che avvolge — `*presa`, `presa.metodo()` — e l'unica
+/// cosa che aggiunge la fa sciogliendosi: guarda l'orologio, e se il prestito è
+/// durato più della soglia della custodia lo dice.
+///
+/// Il lucchetto si **rilascia prima** di scrivere la riga, e non è un dettaglio
+/// di stile: il campo si scioglie dopo il corpo del [`Drop`], quindi lasciandolo
+/// dov'era la diagnosi di un prestito troppo lungo si sarebbe scritta tenendolo,
+/// cioè allungando esattamente ciò che sta misurando.
 pub struct Hold<'a, T> {
     /// `Option` per poterlo sciogliere **prima** della riga: vedi sopra. Vale
-    /// `Some` per tutta la vita della presa e `None` solo dentro il [`Drop`].
     /// `Some` per tutta la vita della presa e `None` solo dentro il [`Drop`].
     guard: Option<RwLockWriteGuard<'a, T>>,
     turn: Option<WriteTurn<'a, T>>,
@@ -510,7 +506,6 @@ mod tests {
     /// tenendo il prestito **esclusivo**.
     ///
     /// Il panico è di proposito e non deve sporcare l'output del banco: l'hook
-    /// si mette a tacere per la durata del misfatto e si rimette subito.
     /// si mette a tacere per la durata del misfatto e si rimette subito.
     fn poison<T: Send + Sync + 'static>(c: &Custody<T>) {
         let copy = c.clone();

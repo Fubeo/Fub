@@ -526,15 +526,15 @@ fn a_panic_inside_a_undo_does_not_carries_via_the_stack() {
 
     let armed = Arc::new(AtomicBool::new(true));
     let panic_once = Arc::clone(&armed);
-    ws.set_before_write_hook(Some((
-        COMMANDS_ID.to_string(),
-        Arc::new(move |_, id| {
+    ws.set_before_write_hook(
+        COMMANDS_ID,
+        Some(Arc::new(move |_, id| {
             if id == &DocId::new("a.md") && panic_once.swap(false, Ordering::SeqCst) {
                 panic!("il gancio before-write è esploso durante undo");
             }
             Ok(())
-        }),
-    )));
+        })),
+    );
 
     // **Una sostituzione e non una rinomina**, e la differenza è tutto il banco:
     // l'inverso è un `UndoStep::Edit`, dunque attraversa il gancio di scrittura.

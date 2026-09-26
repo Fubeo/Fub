@@ -111,8 +111,6 @@ use tantivy::snippet::SnippetGenerator;
 use tantivy::tokenizer::TokenStream;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 
-/// Identità della ricerca come plugin: è lo spazio dati che l'host le concede.
-/// La assegna chi registra il provider — non la feature.
 const MAX_SCAN_DOCS: u64 = 2048;
 const MAX_SCAN_BYTES: usize = 8 * 1024 * 1024;
 const MAX_REGEX_BYTES: usize = 256;
@@ -122,6 +120,9 @@ const ALL_TEXT_FIELDS: [TextField; 4] = [
     TextField::Tags,
     TextField::Heading,
 ];
+
+/// Identità della ricerca come plugin: è lo spazio dati che l'host le concede.
+/// La assegna chi registra il provider — non la feature.
 pub const SEARCH_ID: &str = "fub.search";
 
 /// Versione dello schema dell'indice. **Va incrementata** ad ogni modifica dei
@@ -337,12 +338,6 @@ struct Manifest {
     sources: HashMap<String, String>,
 }
 
-/// Impronta stabile di ciò che finisce nell'indice per un documento.
-///
-/// L'impronta è quella del contratto ([`Fnv1a`]) e non una copia con le stesse
-/// due costanti: questi numeri sopravvivono su disco fra un avvio e l'altro, e
-/// una copia che diverge renderebbe illeggibile un indice già scritto senza che
-/// nessun banco se ne accorga — ogni copia resta coerente con sé stessa.
 /// I tag di un documento come li conta il kernel: quelli nel testo e quelli
 /// del frontmatter (`fub_abi::rules::tag::frontmatter_tags`), senza doppioni.
 fn tag_names(doc: &DocumentModel) -> Vec<String> {
@@ -355,6 +350,12 @@ fn tag_names(doc: &DocumentModel) -> Vec<String> {
     names
 }
 
+/// Impronta stabile di ciò che finisce nell'indice per un documento.
+///
+/// L'impronta è quella del contratto ([`Fnv1a`]) e non una copia con le stesse
+/// due costanti: questi numeri sopravvivono su disco fra un avvio e l'altro, e
+/// una copia che diverge renderebbe illeggibile un indice già scritto senza che
+/// nessun banco se ne accorga — ogni copia resta coerente con sé stessa.
 fn fingerprint(doc: &DocumentModel) -> u64 {
     let mut h = Fnv1a::new();
     // Il path intero e non il solo nome: da quando l'indice porta la cartella

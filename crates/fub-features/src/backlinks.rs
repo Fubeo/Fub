@@ -10,6 +10,11 @@
 //! il provider chiede i backlink all'host → un click torna come `on_action` e
 //! il provider risponde [`ViewUpdate::Navigate`], che la shell esegue. Nessun
 //! pezzo del percorso è cablato nell'app.
+//!
+//! Le menzioni non collegate entranti si cercano nel testo delle note
+//! (`QueryPredicate::Text`), che valuta soltanto la ricerca full-text
+//! (`fub.search`). Il pannello non la richiede: senza di lei quella sezione
+//! dice che la ricerca manca, e il resto del pannello funziona.
 use fub_abi::command::{ParamKind, ParamSpec};
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::rules::path_policy::{check, Naming};
@@ -175,7 +180,7 @@ impl ViewProvider for BacklinksView {
                 .map(|(_, refs)| (refs.len(), build_outgoing_view(refs))),
         );
         let filter_result = filter_query(host);
-        let unlinked = part(
+        let unlinked = mentions(
             UNLINKED,
             UNLINKED_COUNT,
             (|| {
@@ -272,14 +277,15 @@ impl ViewProvider for BacklinksView {
     }
 }
 
-/// Trasforma una menzione non collegata in `[[bersaglio]]` con
+/// Trasforma una menzione non collegata in un link al bersaglio, scritto dal
+/// formato della nota (`[[bersaglio]]` in Markdown), con
 /// `VaultWrite::apply_edit`, che `HostApi` espone via `VaultWrite` — nessuna
 /// nuova porta, nessuna scrittura fuori contratto.
 ///
 /// Il chiamante porta `doc` (la nota da modificare), `target` (il bersaglio
 /// scelto), `mention` (il testo da collegare, in byte del sorgente corrente) e
 /// `base` (la revisione su cui `mention` è stato calcolato). Il testo si
-/// rilegge dall'host e la prima occorrenza di `mention` diventa `[[target]]`;
+/// rilegge dall'host e la prima occorrenza di `mention` diventa il link;
 /// assente = niente da collegare, e non è un errore. La concorrenza è quella
 /// della firma: `base` non più corrente → `Conflict`.
 fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpdate, PluginError> {
@@ -297,6 +303,9 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
         return Ok(ViewUpdate::None);
     }
     let doc = DocId::new(id);
+    // Si sostituisce una parola: ha senso solo in un sorgente in prosa. Come
+    // si scrive il link lo decide il formato della nota.
+    crate::formats::require(host, &doc, fub_abi::options::source::PROSE)?;
     if host.document_revision(&doc)? != Revision::new(base) {
         return Err(PluginError::Conflict(Text::key(MENTION_CHANGED)));
     }
@@ -312,11 +321,11 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
     // riferimento è il più corto che porta davvero alla nota, e se la parola
     // è scritta altrimenti (un alias) resta come testo del link.
     let reference = link_reference(host, &DocId::new(target))?;
-    let link = if reference == mention {
-        format!("[[{reference}]]")
-    } else {
-        format!("[[{reference}|{mention}]]")
-    };
+    let link = crate::formats::link_text(
+        host,
+        &doc,
+        &crate::formats::wikilink(&reference, Some(mention), false),
+    )?;
     host.apply_edit(
         &doc,
         EditRequest::new(
@@ -328,17 +337,19 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
 }
 
 /// Il testo del wikilink che porta a `target`: il nome pagina se la
-/// risoluzione del vault lo manda lì, poi il percorso senza estensione, e solo
-/// in ultimo il percorso intero. Chiede al kernel invece di indovinare la
-/// regola: due note omonime in cartelle diverse sono esattamente il caso in
-/// cui il nome da solo porterebbe altrove.
+/// risoluzione del vault lo manda lì, poi il nome con la sua estensione, poi
+/// il percorso senza estensione, e solo in ultimo il percorso intero. Chiede al
+/// kernel invece di indovinare la regola: due note omonime in cartelle diverse,
+/// o nella stessa cartella con formati diversi, sono esattamente il caso in cui
+/// il nome da solo porterebbe altrove.
 fn link_reference(host: &dyn ReadApi, target: &DocId) -> Result<String, PluginError> {
     let path = target.as_str();
+    let file_name = path.rsplit('/').next().filter(|name| *name != path);
     let without_extension = path
         .rsplit_once('.')
         .map(|(stem, _)| stem)
         .filter(|stem| !stem.is_empty() && !stem.ends_with('/'));
-    for candidate in [Some(target.page_name()), without_extension]
+    for candidate in [Some(target.page_name()), file_name, without_extension]
         .into_iter()
         .flatten()
     {
@@ -377,7 +388,7 @@ fn placeholder(key: &str) -> UiNode {
 /// conoscere le chiavi di nessuno. Le chiavi sono nude — la qualifica è il
 /// catalogo stesso, che appartiene a un componente solo.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    crate::formats::speaking(vec![
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Collegamenti")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
@@ -403,6 +414,11 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(EMPTY_OUTGOING, "Nessun collegamento uscente.")
             .with(EMPTY_UNLINKED, "Nessuna menzione non collegata.")
             .with(FAILED, "Impossibile caricare questa sezione.")
+            .with(
+                MENTIONS_NEED_SEARCH,
+                "Le menzioni si cercano nel testo delle note: serve la ricerca, che \
+                 in questo vault non è attiva.",
+            )
             .with(CONVERT_LABEL, "Collega")
             .with(INCOMING_COUNT, "Entranti · {count}")
             .with(OUTGOING_COUNT, "Uscenti · {count}")
@@ -440,6 +456,11 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(EMPTY_OUTGOING, "No outgoing links.")
             .with(EMPTY_UNLINKED, "No unlinked mentions.")
             .with(FAILED, "Could not load this section.")
+            .with(
+                MENTIONS_NEED_SEARCH,
+                "Mentions are found in the notes' text: this needs search, which is \
+                 not active in this vault.",
+            )
             .with(CONVERT_LABEL, "Link")
             .with(INCOMING_COUNT, "Incoming · {count}")
             .with(OUTGOING_COUNT, "Outgoing · {count}")
@@ -449,7 +470,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Outgoing unlinked mentions · {count}",
             )
             .with(FILTER_SECTION, "Advanced filter"),
-    ]
+    ])
 }
 
 /// Il titolo del pannello: si vede sempre, anche quando il pannello è vuoto.
@@ -470,6 +491,8 @@ const FILTER_SECTION: &str = "filter_section";
 const EMPTY_OUTGOING: &str = "empty_outgoing";
 const EMPTY_UNLINKED: &str = "empty_unlinked";
 const FAILED: &str = "failed";
+/// Le menzioni non collegate senza la ricerca che valuta il testo.
+const MENTIONS_NEED_SEARCH: &str = "mentions_need_search";
 const CONVERT_LABEL: &str = "convert_label";
 const FILTER_INVALID: &str = "filter_invalid";
 const FILTER_INVALID_JSON: &str = "filter_invalid_json";
@@ -564,18 +587,38 @@ pub fn build_outgoing_view(targets: &[(DocId, Option<String>)]) -> UiNode {
 /// ogni titolo riempiva il pannello di niente. Se la parte non si carica il
 /// titolo resta senza numero e la sezione dice il guasto.
 fn part(name: &str, counted: &str, result: Result<(usize, UiNode), PluginError>) -> UiNode {
-    let (title, collapsed, body) = match result {
-        Ok((count, body)) => (
+    match result {
+        Ok((count, body)) => section(
+            name,
             Text::message(counted, vec![Arg::int(A_COUNT, count as i64)]),
             count == 0,
             body,
         ),
-        Err(_) => (
+        Err(_) => section(
+            name,
             Text::key(name),
             false,
             UiNode::failed(Text::key(FAILED), None),
         ),
-    };
+    }
+}
+
+/// Le menzioni che si cercano nel testo. Se nessun provider valuta il testo la
+/// risposta è `Unserved`, e non è un guasto: la ricerca non è montata. La
+/// sezione lo dice, chiusa, invece di presentarsi come una sezione rotta.
+fn mentions(name: &str, counted: &str, result: Result<(usize, UiNode), PluginError>) -> UiNode {
+    match result {
+        Err(PluginError::Unserved(_)) => section(
+            name,
+            Text::key(name),
+            true,
+            placeholder(MENTIONS_NEED_SEARCH),
+        ),
+        other => part(name, counted, other),
+    }
+}
+
+fn section(name: &str, title: Text, collapsed: bool, body: UiNode) -> UiNode {
     UiNode::keyed(
         name,
         UiKind::Section {
@@ -642,6 +685,9 @@ fn outgoing_refs(
             .items
             .into_iter()
             .filter(|neighbor| neighbor.via == *active)
+            // Gli allegati sono foglie del grafo, non note da aprire nel
+            // pannello: e chi li nomina si chiede passando tutto il vault.
+            .filter(|neighbor| host.format_of(&neighbor.doc).is_some())
             .map(|neighbor| neighbor.doc)
             .collect::<Vec<_>>(),
         other => return Err(unexpected("neighbors", &other)),
@@ -1157,6 +1203,38 @@ mod tests {
     }
 
     #[test]
+    fn mentions_without_a_text_evaluator_say_search_is_missing_not_failed() {
+        let unserved = mentions(
+            UNLINKED,
+            UNLINKED_COUNT,
+            Err(PluginError::Unserved("text".into())),
+        );
+        let UiKind::Section {
+            collapsed,
+            children,
+            ..
+        } = &unserved.kind
+        else {
+            panic!("the part is a section");
+        };
+        assert!(*collapsed);
+        assert!(
+            matches!(&children[0].kind, UiKind::EmptyState { title, .. } if *title == Text::key(MENTIONS_NEED_SEARCH)),
+            "{children:?}"
+        );
+
+        let broken = mentions(
+            UNLINKED,
+            UNLINKED_COUNT,
+            Err(PluginError::Internal("disk".into())),
+        );
+        let UiKind::Section { children, .. } = &broken.kind else {
+            panic!("the part is a section");
+        };
+        assert!(matches!(children[0].kind, UiKind::Failed { .. }));
+    }
+
+    #[test]
     fn render_without_active_doc_is_a_placeholder_not_an_error() {
         let host = MemoryHost::new();
         let tree = BacklinksView.render_view(&instance(), &host).unwrap();
@@ -1269,8 +1347,6 @@ mod tests {
         DocumentMatch::of(DocId::new(doc))
     }
 
-    /// Text meno Linked meno self, senza scansioni: gli hit di testo che sono
-    /// già collegati o sono la nota stessa non sono candidati.
     /// L'indice dà gli alias che dà il modello; dove li ha normalizzati in
     /// un'altra forma risponde `None` e decide il modello.
     #[test]
@@ -1317,6 +1393,8 @@ mod tests {
         }
     }
 
+    /// Text meno Linked meno self, senza scansioni: gli hit di testo che sono
+    /// già collegati o sono la nota stessa non sono candidati.
     #[test]
     fn unlinked_is_text_minus_linked_minus_self() {
         let hits = vec![hit("a.md"), hit("b.md"), hit("self.md"), hit("c.md")];

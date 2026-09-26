@@ -19,19 +19,20 @@
 //! # Qui non si cronometra niente
 //!
 //! Un tempo su una macchina condivisa non è un segnale: si contano **le
-//! operazioni**. Il supporto di prova annota le `read` e le `stats` per path, e
+//! operazioni**. Il supporto di prova annota le `read` e le `stat` per path, e
 //! il provider di formato conta le proprie `parse_count`, che è il solo modo di
 //! distinguere «non ha reingerito» da «ha reingerito una cosa uguale».
 //!
 //! # Il caso in cui non si riconosce, e va tenuto
 //!
 //! Il riconoscimento è **per impronta** e non per `mtime + size`. Il secondo è
-//! il criterio dell'anagrafe (§14.1) e sarebbe costato una `stats` invece di una
+//! il criterio dell'anagrafe (§14.1) e sarebbe costato una `stat` invece di una
 //! lettura, ma sbaglia nel verso caro: una scrittura altrui nello stesso
 //! millisecondo e della stessa lunghezza passerebbe per «immutato», e l'indice
 //! resterebbe fermo su un documento vecchio. Per questo l'ultimo banco di
 //! questo file guarda dall'altra parte — ciò che *è* cambiato da fuori deve
 //! continuare a entrare — ed è la metà che rende il presidio un presidio invece
+//! di una descrizione della scorciatoia.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -245,11 +246,12 @@ impl Bench {
 /// **Un salvataggio non torna a chiedere al disco cosa ha appena scritto**
 /// (difetto 0179).
 ///
-/// Zero letture e zero `stats` sul path della nota, e l'anagrafe che ne esce non
+/// Zero letture e zero `stat` sul path della nota, e l'anagrafe che ne esce non
 /// è un'approssimazione: dimensione e data sono **le stesse** che il
 /// filesystem darebbe, perché vengono dal descrittore ancora aperto della
-/// scrittura. Quella coincidenza è ciò che l'assenza della `stats` non può
+/// scrittura. Quella coincidenza è ciò che l'assenza della `stat` non può
 /// costare — un'anagrafe con una data inventata farebbe rileggere l'intero
+/// vault alla prossima apertura (§14.2), che è il baratto sbagliato.
 #[test]
 fn a_save_does_not_ask_the_disk_what_it_just_wrote() {
     let mut bench = Bench::new();
@@ -297,8 +299,6 @@ fn a_save_does_not_ask_the_disk_what_it_just_wrote() {
 /// non c'è» contraddirebbe un evento che ha già annunciato il contrario, senza
 /// annunciare niente a sua volta. La cancellazione è un fatto **di un altro**,
 /// ed entra dalla porta da cui entrano i fatti altrui: il rilevatore, che la
-/// riferisce con il suo `EntryRemoved`. Qui sotto se ne vede l'arrivo.
-/// riferisce con il suo `EntryRemoved`. Qui sotto se ne vede l'arrivo.
 /// riferisce con il suo `EntryRemoved`. Qui sotto se ne vede l'arrivo.
 #[test]
 fn a_deletion_in_the_instant_after_does_not_undo_the_entry_store() {

@@ -1,9 +1,9 @@
 //! [`ReadHost`]: il percorso di lettura, che non ha le altre capacità.
 
-use fub_abi::edit::Revision;
-use fub_abi::format::DocumentFormat;
+use fub_abi::edit::{EditRequest, Revision};
+use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
-use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::model::{DocId, DocumentModel, TaskMarker};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
@@ -79,6 +79,21 @@ impl VaultRead for ReadHost<'_> {
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
         self.ws.format_of(id)
+    }
+
+    fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError> {
+        self.ws.format_link(doc, link)
+    }
+
+    /// Calcolare la modifica è una lettura, come la revisione: la si consegna
+    /// poi da dove l'host sa scrivere.
+    fn task_state_edit(
+        &self,
+        doc: &DocId,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Option<EditRequest>, PluginError> {
+        self.ws.task_state_edit(doc, marker, done)
     }
 
     /// Elencare il cestino è una lettura: un pannello "cestino" è una view, e
@@ -175,7 +190,7 @@ impl SettingsRead for ReadHost<'_> {
 
 impl HostEnv for ReadHost<'_> {
     fn now_unix_millis(&self) -> u64 {
-        crate::time::now_unix_millis()
+        self.ws.now_unix_millis()
     }
 
     fn user_locale(&self) -> Locale {

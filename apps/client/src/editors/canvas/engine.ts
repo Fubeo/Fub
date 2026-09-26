@@ -1,6 +1,7 @@
 import type { Theme } from "../../theme/theme";
+import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage } from "../../i18n/strings";
-import { tryApplyOperation, type TextOperation } from "../../editor/text-operation";
+import { tryApplyOperation, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import {
   applyCanvasPatches,
   commitCanvasPatches,
@@ -15,14 +16,14 @@ import {
   type CanvasPatch,
 } from "./operation";
 import { parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
+import { canvasNodeAt } from "./source-edit";
+import { byteToCharIndex } from "../../rules/offsets";
 
 export const CANVAS_SNAP = 8;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
-
-export type EditorChangeOrigin = "input" | "undo" | "redo";
 
 export interface CanvasChange {
   readonly text: string;
@@ -53,6 +54,12 @@ export interface CanvasEngineOptions {
   readonly onOpenWikilink?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath?: (path: string, from?: string) => void | Promise<void>;
   readonly onCreateNote?: (initialText: string) => string | void | Promise<string | void>;
+  /**
+   * Sceglie il file del vault a cui punta una nuova card file; `null` o niente
+   * se l'utente rinuncia. Assente = niente bottone «aggiungi file»: una card
+   * che punta a un file inventato è un rimando rotto scritto nel documento.
+   */
+  readonly onPickFile?: () => string | null | void | Promise<string | null | void>;
   readonly documentId?: string;
   readonly media?: CanvasMediaPort;
   readonly attachments?: CanvasAttachmentPort;
@@ -60,12 +67,15 @@ export interface CanvasEngineOptions {
   /**
    * Resa markdown reale di una card testo (stesso `renderMarkdown` della
    * lettura, con `mountMarkdown` per sanitizzazione/embed). Assente = testo
-   * non interattivo: nessun secondo parser né scanner locale.
+   * non interattivo: nessun secondo parser né scanner locale. `forms` sono le
+   * sintassi che il vault dà al Markdown delle card (`EMBEDDED_GRAMMAR`);
+   * assenti finché la superficie non le ha ricevute.
    */
   readonly renderMarkdownForCard?: (
     nodeId: string,
     text: string,
     host: HTMLElement,
+    forms: readonly SyntaxForm[] | undefined,
   ) => (() => void) | void;
 }
 
@@ -98,6 +108,13 @@ function nodeFill(color: string | undefined): string {
   return PRESET_FILL[color] ?? color;
 }
 
+/** Un path relativo alla radice del vault, senza risalite né caratteri di controllo. */
+function isVaultPath(path: unknown): path is string {
+  return typeof path === "string" && path.length > 0 && path.length <= 8192
+    && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes("..")
+    && !/[\u0000-\u001f]/u.test(path);
+}
+
 function externalUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -114,6 +131,7 @@ export class CanvasEngine {
   readonly #stage: HTMLElement;
   readonly #edgeLayer: SVGSVGElement;
   readonly #options: CanvasEngineOptions;
+  #forms: readonly SyntaxForm[] | undefined;
   readonly #stopLanguage: () => void;
   readonly #abort = new AbortController();
   #doc: CanvasDocument | null = null;
@@ -226,6 +244,27 @@ export class CanvasEngine {
     if (!this.#destroyed) this.#viewport.focus();
   }
 
+  /**
+   * Brings into view the card whose source holds `byteOffset` (UTF-8 bytes,
+   * the currency of the model's spans): selects it and frames it. `false`
+   * when the offset is outside every card, or the scene is too large to draw.
+   */
+  revealSource(byteOffset: number): boolean {
+    if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return false;
+    const index = canvasNodeAt(this.#source, byteToCharIndex(this.#source, byteOffset));
+    const node = index === null ? undefined : this.#doc.nodes[index];
+    if (!node) return false;
+    this.#finishEditing?.(true);
+    this.#cancelGestures();
+    this.#selection = [node.id];
+    this.#edgeSelection = [];
+    this.#fitCamera(false, [node]);
+    this.#render();
+    this.#viewport.focus();
+    this.#options.onSelectionChange();
+    return true;
+  }
+
   setReadOnly(readOnly: boolean): void {
     this.#finishEditing?.(true);
     this.#cancelGestures();
@@ -236,6 +275,16 @@ export class CanvasEngine {
 
   setTheme(theme: Theme): void {
     this.#root.dataset.theme = theme;
+  }
+
+  /**
+   * Le sintassi del Markdown delle card, com'è montato in questo vault. Una
+   * card in modifica tiene il suo editor: la resa nuova arriva col disegno
+   * successivo.
+   */
+  setSyntaxForms(forms: readonly SyntaxForm[]): void {
+    this.#forms = forms;
+    if (!this.#finishEditing) this.#render();
   }
 
   undo(): boolean {
@@ -310,6 +359,17 @@ export class CanvasEngine {
     const edges = new Set(this.#doc.edges.map((e) => e.id));
     this.#selection = this.#selection.filter((id) => nodes.has(id));
     this.#edgeSelection = this.#edgeSelection.filter((id) => edges.has(id));
+  }
+
+  /**
+   * The selected cards as text: a card's text, a file's path, a link's URL, a
+   * group's label. The last one picked is the primary.
+   */
+  selectedText(): { primary: string; secondary: string[] } | null {
+    const nodes = this.#selectedNodes();
+    const last = nodes[nodes.length - 1];
+    if (this.#destroyed || !last) return null;
+    return { primary: nodeText(last), secondary: nodes.slice(0, -1).map(nodeText) };
   }
 
   #selectedNodes(): CanvasNode[] {
@@ -393,7 +453,11 @@ export class CanvasEngine {
       return button;
     };
     mk("add-text", t("canvas.add_text"), () => this.#addNode("text"));
-    mk("add-file", t("canvas.add_file"), () => this.#addNode("file"));
+    if (this.#options.onPickFile) {
+      mk("add-file", t("canvas.add_file"), () => {
+        void this.#addFileNode().catch((error: unknown) => this.#showIntakeError(error));
+      });
+    }
     mk("add-link", t("canvas.add_link"), () => this.#addNode("link"));
     mk("add-group", t("canvas.add_group"), () => this.#addNode("group"));
     const hasSelection = this.#selection.length > 0 || this.#edgeSelection.length > 0;
@@ -631,10 +695,7 @@ export class CanvasEngine {
     const paths = files.length ? await port!.deposit(files, documentId!)
       : port?.resolvePaths && documentId ? await port.resolvePaths(data, documentId) : [];
     if (this.#destroyed || this.#readOnly || this.#source !== before || this.#epoch !== epoch || !this.#doc) return;
-    const unique = [...new Set(paths)].filter((path) =>
-      typeof path === "string" && path.length > 0 && path.length <= 8192
-      && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes("..")
-      && !/[\u0000-\u001f]/u.test(path));
+    const unique = [...new Set(paths)].filter(isVaultPath);
     if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
     const point = drop ? this.#screenToWorld(event.clientX, event.clientY)
       : this.#screenToWorld(this.#viewport.getBoundingClientRect().left + this.#viewport.clientWidth / 2,
@@ -684,8 +745,20 @@ export class CanvasEngine {
     if (patch) this.#commit([patch], "input");
   }
 
-  #addNode(type: CanvasNode["type"]): void {
-    if (!this.#doc || this.#readOnly) return;
+  async #addFileNode(): Promise<void> {
+    const pick = this.#options.onPickFile;
+    if (!pick || this.#readOnly || this.#destroyed || !this.#doc) return;
+    const source = this.#source;
+    const epoch = this.#epoch;
+    const path = await pick();
+    if (!isVaultPath(path) || this.#destroyed || this.#readOnly || source !== this.#source
+      || this.#epoch !== epoch) return;
+    this.#addNode("file", path);
+  }
+
+  /** Una card nuova al centro della vista; una card file vuole il suo `file`. */
+  #addNode(type: CanvasNode["type"], file?: string): void {
+    if (!this.#doc || this.#readOnly || (type === "file" && !file)) return;
     const rect = this.#viewport.getBoundingClientRect();
     const center = this.#screenToWorld(
       rect.left + (rect.width || 800) / 2,
@@ -699,7 +772,7 @@ export class CanvasEngine {
       width: type === "group" ? 480 : 320,
       height: type === "group" ? 320 : type === "link" ? 120 : 160,
       ...(type === "text" ? { text: "" } : {}),
-      ...(type === "file" ? { file: "allegati/nuovo.md" } : {}),
+      ...(type === "file" ? { file } : {}),
       ...(type === "link" ? { url: "https://" } : {}),
       ...(type === "group" ? { label: "" } : {}),
     };
@@ -1301,7 +1374,7 @@ export class CanvasEngine {
           const key = `${node.id}`;
           this.#markdownTeardowns.get(key)?.();
           this.#markdownTeardowns.delete(key);
-          const teardown = render(node.id, text, host);
+          const teardown = render(node.id, text, host, this.#forms);
           if (typeof teardown === "function") this.#markdownTeardowns.set(key, teardown);
           body.append(host);
         } else {
@@ -1493,3 +1566,11 @@ function edgePoint(
   }
 }
 
+function nodeText(node: CanvasNode): string {
+  switch (node.type) {
+    case "text": return node.text ?? "";
+    case "file": return node.subpath ? `${node.file ?? ""}${node.subpath}` : node.file ?? "";
+    case "link": return node.url ?? "";
+    default: return node.label ?? "";
+  }
+}

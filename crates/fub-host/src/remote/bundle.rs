@@ -16,10 +16,12 @@
 //!   `None` = create-only atomico; `Conflict` = niente scritto, niente eventi.
 //! - Ack solo dopo deposito + stato durevole (outbox drain + cursor fsync).
 //!
-//! Costruttori definitivi (Main monta via configuration della sua istanza,
-//! `config_root.join("sync")`; `None` = MissingConfiguration esplicito):
-//! `SyncBundle::new(root)`, `bundle.plugin()/commands()/runner()`,
-//! `SyncPlugin::new(root)`, `SyncRunner::new(root)`,
+//! Costruttori definitivi (Main monta con lo stato del vault nella
+//! configurazione della sua istanza, [`super::vault_state_dir`], e con il
+//! token della macchina, [`super::TokenSource`]; `None` = MissingConfiguration
+//! esplicito): `SyncBundle::new(root).with_token(token)`,
+//! `bundle.plugin()/commands()/runner()`, `SyncPlugin::new(root)`,
+//! `SyncRunner::new(root)`,
 //! `SyncCommands::boxed()` (stateless), `SyncViews::boxed()` (stateless).
 //! Job payload = solo op/ID/parametri validati, mai path root o segreti.
 
@@ -74,17 +76,27 @@ impl ReplicationMode {
 pub const SYNC_PASS_JOB: &str = "sync.pass";
 
 /// Composition root dello slice sync (wiring Main): la TRUSTED `state_root`
-/// catturata una volta alla costruzione (`config_root.join("sync")`), mai da
-/// env, cwd, payload JSON o settings per-chiamata. `None` = esplicito
+/// del vault catturata una volta alla costruzione ([`super::vault_state_dir`]),
+/// mai da env, cwd, payload JSON o settings per-chiamata. `None` = esplicito
 /// `MissingConfiguration` su ogni op, mai path inventato.
 pub struct SyncBundle {
     state_root: Option<camino::Utf8PathBuf>,
+    token: super::TokenSource,
 }
 
 impl SyncBundle {
     /// Costruttore definitivo: Main passa la root trusted (o `None`).
     pub fn new(state_root: Option<camino::Utf8PathBuf>) -> Self {
-        Self { state_root }
+        Self {
+            state_root,
+            token: super::TokenSource::environment(),
+        }
+    }
+
+    /// Da dove i passaggi leggono il token; di serie soltanto l'ambiente.
+    pub fn with_token(mut self, token: super::TokenSource) -> Self {
+        self.token = token;
+        self
     }
 
     pub fn commands(&self) -> SyncCommands {
@@ -94,12 +106,14 @@ impl SyncBundle {
     pub fn runner(&self) -> SyncRunner {
         SyncRunner {
             state_root: self.state_root.clone(),
+            token: self.token.clone(),
         }
     }
 
     pub fn plugin(&self) -> SyncPlugin {
         SyncPlugin {
             state_root: self.state_root.clone(),
+            token: self.token.clone(),
         }
     }
 
@@ -108,7 +122,10 @@ impl SyncBundle {
     }
 
     fn manifest_inner(&self) -> PluginManifest {
-        PluginManifest::core("fub.sync", "Sync").speaking("it", super::views::catalog())
+        super::networked_manifest("fub.sync", "Sync").speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            super::views::catalog(),
+        )
     }
 }
 
@@ -142,12 +159,16 @@ impl crate::registry::Bundle for SyncBundle {
 /// Eredita la TRUSTED root dal bundle; `run_job` delega al runner radicato.
 pub struct SyncPlugin {
     state_root: Option<camino::Utf8PathBuf>,
+    token: super::TokenSource,
 }
 
 impl SyncPlugin {
     /// Costruttore lato bundle (vedi [`SyncBundle::plugin`]).
     pub fn new(state_root: Option<camino::Utf8PathBuf>) -> Self {
-        Self { state_root }
+        Self {
+            state_root,
+            token: super::TokenSource::environment(),
+        }
     }
 
     pub fn job_name() -> &'static str {
@@ -164,13 +185,20 @@ impl SyncPlugin {
         if job != SYNC_PASS_JOB {
             return Err(PluginError::UnknownJob(job.to_string().into()));
         }
-        SyncRunner::new(self.state_root.clone()).run_job(&payload, host)
+        SyncRunner {
+            state_root: self.state_root.clone(),
+            token: self.token.clone(),
+        }
+        .run_job(&payload, host)
     }
 }
 
 impl Plugin for SyncPlugin {
     fn manifest(&self) -> PluginManifest {
-        PluginManifest::core("fub.sync", "Sync").speaking("it", super::views::catalog())
+        super::networked_manifest("fub.sync", "Sync").speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            super::views::catalog(),
+        )
     }
 
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -193,11 +221,15 @@ impl Plugin for SyncPlugin {
 
 pub struct SyncRunner {
     state_root: Option<camino::Utf8PathBuf>,
+    token: super::TokenSource,
 }
 
 impl SyncRunner {
     pub fn new(state_root: Option<camino::Utf8PathBuf>) -> Self {
-        Self { state_root }
+        Self {
+            state_root,
+            token: super::TokenSource::environment(),
+        }
     }
 
     fn require_root(&self) -> Result<&camino::Utf8Path, PluginError> {
@@ -231,7 +263,7 @@ impl SyncRunner {
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
                     .map(str::to_string);
-                run_pass_on(&root, host, vault_id.as_deref(), op)
+                run_pass_on(&root, &self.token, host, vault_id.as_deref(), op)
             }
             "pause" => {
                 pause_policy(&root, host, true)?;
@@ -271,9 +303,11 @@ impl SyncRunner {
                     .ok_or_else(|| {
                         PluginError::BadArgs("sync.pass restore needs a version".into())
                     })?;
-                request_restore(&root, host, doc, version)
+                request_restore(&root, &self.token, host, doc, version)
             }
-            "invite" | "accept" | "revoke" | "rekey" => run_share_action(&root, host, op, payload),
+            "invite" | "accept" | "revoke" | "rekey" => {
+                run_share_action(&root, &self.token, host, op, payload)
+            }
             _ => Err(PluginError::BadArgs(
                 format!("unknown sync.pass op: {op}").into(),
             )),
@@ -378,11 +412,13 @@ fn secret_from_file(name: &str) -> Result<String, PluginError> {
 
 fn share_connection(
     root: &Path,
+    token: &super::TokenSource,
     host: &mut dyn HostApi,
 ) -> Result<(String, String, JobState), PluginError> {
     let base = super::resolve_endpoint(host)?;
     super::check_endpoint_binding(root, &base).map_err(|e| e.to_plugin_error())?;
-    let token = super::load_token()
+    let token = token
+        .load()
         .ok_or_else(|| PluginError::PermissionDenied("missing credentials".into()))?;
     let state = JobState::open(root, None, host)?;
     let hello = http_get(host, &base, &format!("Bearer {token}"), "/v1/hello")?;
@@ -396,6 +432,7 @@ fn share_connection(
 
 fn run_share_action(
     root: &Path,
+    token: &super::TokenSource,
     host: &mut dyn HostApi,
     action: &str,
     payload: &serde_json::Value,
@@ -409,7 +446,7 @@ fn run_share_action(
         }
         check_external_overlap(host)?;
     }
-    let (base, auth, state) = share_connection(root, host)?;
+    let (base, auth, state) = share_connection(root, token, host)?;
     match action {
         "invite" => {
             let role = payload
@@ -626,6 +663,7 @@ fn run_share_action(
 /// la cifra in una nuova op. L'op vecchia resta immutata e mai ritrasmessa.
 pub(crate) fn request_restore(
     root: &Path,
+    token: &super::TokenSource,
     host: &mut dyn HostApi,
     doc: &str,
     version: u64,
@@ -642,7 +680,8 @@ pub(crate) fn request_restore(
     let _lock = JobLock::acquire(root)?;
     let base = super::resolve_endpoint(host)?;
     super::check_endpoint_binding(root, &base).map_err(|e| e.to_plugin_error())?;
-    let token = super::load_token()
+    let token = token
+        .load()
         .ok_or_else(|| PluginError::PermissionDenied("missing credentials".into()))?;
     let auth = format!("Bearer {token}");
     let state = JobState::open(root, None, host)?;
@@ -765,6 +804,7 @@ fn store_versions(root: &Path, response: &serde_json::Value) -> Result<(), Plugi
 /// CLI (file/stdin -> KEK -> unwrap envelope), mai nel payload.
 pub(crate) fn run_pass_on(
     root: &Path,
+    token: &super::TokenSource,
     host: &mut dyn HostApi,
     vault_scope: Option<&str>,
     direction: &str,
@@ -793,7 +833,8 @@ pub(crate) fn run_pass_on(
     let _lock = JobLock::acquire(root)?;
     let base = super::resolve_endpoint(host)?;
     super::check_endpoint_binding(root, &base).map_err(|e| e.to_plugin_error())?;
-    let token = super::load_token()
+    let token = token
+        .load()
         .ok_or_else(|| PluginError::PermissionDenied("missing credentials".into()))?;
     let auth = format!("Bearer {token}");
     check_external_overlap(host)?;

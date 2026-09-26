@@ -18,7 +18,11 @@
 //! comandi: uno che lavora davvero, e uno che restituisce l'esito nella sua
 //! forma più profonda.
 
-#[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
+#[cfg(all(
+    not(feature = "con-rete"),
+    not(feature = "con-dati"),
+    not(feature = "con-sintassi")
+))]
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
     world: "esempio:ping/ping",
@@ -43,12 +47,21 @@ wit_bindgen::generate!({
     generate_all,
 });
 
+// Il mondo che esporta anche `syntax`, che l'host non collega: serve a far
+// pronunciare il rifiuto al caricamento, non a riconoscere niente.
+#[cfg(feature = "con-sintassi")]
+wit_bindgen::generate!({
+    path: ["../../crates/fub-abi/wit/fub", "wit"],
+    world: "esempio:ping/ping-con-sintassi",
+    generate_all,
+});
+
 use exports::fub::abi::plugin::{Guest, PluginManifest, PluginPermissions};
 use fub::abi::errors::PluginError;
 use fub::abi::options::OptionEntry;
 
 /// L'id del plugin: lo stesso del nativo. Il namespace del §7.4 è suo, e il
-/// job che risponde si chiama `ping` come là.
+/// job che risponde si chiama `demo.ping:ping` come là.
 const ID: &str = "demo.ping";
 
 /// La versione del contratto contro cui è scritto: quella effettiva di
@@ -110,11 +123,9 @@ impl Guest for Componente {
 
     fn activate() -> Result<(), PluginError> {
         if cfg!(feature = "fallisce-attivazione") {
-            return Err(PluginError::Internal(
-                fub::abi::text::Text::Literal(
-                    "attivazione rifiutata dal fixture".to_string(),
-                ),
-            ));
+            return Err(PluginError::Internal(fub::abi::text::Text::Literal(
+                "attivazione rifiutata dal fixture".to_string(),
+            )));
         }
         // L'orologio è una capacità SENZA permesso (§7.3), ed è la stessa riga
         // che il plugin nativo scrive nel proprio diario. Sta qui e non nel job
@@ -139,7 +150,7 @@ impl Guest for Componente {
     /// time, ed è appunto il punto.
     #[cfg(feature = "con-rete")]
     fn run_job(job: String, payload: String) -> Result<String, PluginError> {
-        if job == "scarica" {
+        if job == "demo.ping:scarica" {
             let risposta = fub::abi::host_network::fetch(&fub::abi::net::HttpRequest {
                 url: payload,
                 method: fub::abi::net::HttpMethod::Get,
@@ -151,11 +162,11 @@ impl Guest for Componente {
         Self::ping(job)
     }
 
-    /// Il job `dati` attraversa entrambe le famiglie host-data per
+    /// Il job `demo.ping:dati` attraversa entrambe le famiglie host-data per
     /// esercitare scrittura, lettura, lista e separazione della cache.
     #[cfg(feature = "con-dati")]
     fn run_job(job: String, _payload: String) -> Result<String, PluginError> {
-        if job != "dati" {
+        if job != "demo.ping:dati" {
             return Self::ping(job);
         }
 
@@ -194,16 +205,24 @@ impl Guest for Componente {
 
 /// La nota su cui lavorano i due comandi. La stessa del job: un esempio con un
 /// documento solo è un esempio in cui si vede cosa attraversa.
-#[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
+#[cfg(all(
+    not(feature = "con-rete"),
+    not(feature = "con-dati"),
+    not(feature = "con-sintassi")
+))]
 const NOTA: &str = "Nota.md";
 
-#[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
+#[cfg(all(
+    not(feature = "con-rete"),
+    not(feature = "con-dati"),
+    not(feature = "con-sintassi")
+))]
 mod comandi {
     use super::{Componente, NOTA};
     use crate::exports::fub::abi::command::{
         Choice, CommandEffect, CommandEffectReveal, CommandOutcome, CommandPlan, CommandReach,
-        CommandScope, CommandSpec, Failure, Guest, InvokeMode, ParamKind, ParamSpec, Partial,
-        PlannedEdit, Undo, UndoStep, UndoStepCommand,
+        CommandScope, CommandSpec, CommandSurface, Failure, Guest, InvokeMode, ParamKind,
+        ParamSpec, Partial, PlannedEdit, Undo, UndoStep, UndoStepCommand,
     };
     use crate::fub::abi::edit::{EditRequest, TextEdit};
     use crate::fub::abi::errors::PluginError;
@@ -254,6 +273,8 @@ mod comandi {
                         reach: CommandReach::Document,
                         reversible: false,
                     },
+                    // Solo la palette: è la norma.
+                    surfaces: vec![],
                 },
                 CommandSpec {
                     id: "demo.ping:esito-ricco".to_string(),
@@ -298,6 +319,9 @@ mod comandi {
                         reach: CommandReach::Documents,
                         reversible: true,
                     },
+                    // Entrambi i casi, perché attraversino in ordine: è il
+                    // comando che pronuncia la forma più profonda.
+                    surfaces: vec![CommandSurface::Slash, CommandSurface::SlashSelection],
                 },
             ]
         }
@@ -397,11 +421,45 @@ mod comandi {
     }
 }
 
+// Una regola di sintassi che non riconosce niente: il componente non arriva
+// mai a essere chiamato, perché l'host lo rifiuta prima di montarlo.
+#[cfg(feature = "con-sintassi")]
+mod sintassi {
+    use super::Componente;
+    use crate::exports::fub::abi::syntax::{
+        FormatError, Guest, ParseContext, SyntaxMatch, SyntaxProduct, SyntaxRuleSpec,
+        SyntaxTrigger, SyntaxTriggerInline,
+    };
+
+    impl Guest for Componente {
+        fn spec() -> SyntaxRuleSpec {
+            SyntaxRuleSpec {
+                id: "demo.ping:eco".to_string(),
+                format: "markdown".to_string(),
+                trigger: SyntaxTrigger::Inline(SyntaxTriggerInline {
+                    open: "((".to_string(),
+                    close: "))".to_string(),
+                }),
+                order: 0,
+                option: None,
+                produces: vec![],
+            }
+        }
+
+        fn apply(
+            _m: SyntaxMatch,
+            _ctx: ParseContext,
+        ) -> Result<Option<SyntaxProduct>, FormatError> {
+            Ok(None)
+        }
+    }
+}
+
 impl Componente {
     /// Il corpo del ping, uguale nei due mondi.
     fn ping(job: String) -> Result<String, PluginError> {
         match job.as_str() {
-            "ping" => {
+            "demo.ping:ping" => {
                 let testo = fub::abi::host_vault_read::read_document("Nota.md")?;
                 let caratteri = testo.chars().count();
                 let acceso = unsafe { ACCESO };

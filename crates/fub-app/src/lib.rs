@@ -47,7 +47,6 @@ use fub_host::{doc_id, Delivery, EventSink, Host};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
-use parking_lot::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // I tre record che attraversano l'IPC vivono nell'host — un'API locale
@@ -150,6 +149,18 @@ struct CatalogConfig(Option<Utf8PathBuf>);
 struct MachineCatalogTrust {
     keys: BTreeMap<String, String>,
     min_generation: String,
+}
+
+/// L'errore dell'host come lo legge la shell: nella sua lingua. Dentro l'host
+/// un errore può restare una chiave del catalogo del core, e sul filo JSON una
+/// chiave non risolta è un oggetto, non una frase
+/// ([`Host::localized_error`]).
+pub(crate) fn for_the_shell<T>(
+    host: &Host,
+    vault: Option<&str>,
+    result: Result<T, PluginError>,
+) -> Result<T, PluginError> {
+    result.map_err(|error| host.localized_error(vault, error))
 }
 
 fn bounded_config(path: &Utf8Path, limit: u64) -> Result<Vec<u8>, PluginError> {
@@ -319,55 +330,24 @@ impl EventSink for WebviewEvents {
     }
 }
 
-/// Keep the inter-process writer lease until Host finishes closing this vault.
-#[derive(Default)]
-struct WriterLocks(Mutex<BTreeMap<Utf8PathBuf, fub_host::automation::VaultWriterLock>>);
-
-fn writer_root(path: &str) -> Result<Utf8PathBuf, PluginError> {
-    let root = std::fs::canonicalize(path).map_err(|error| {
-        PluginError::Io(format!("cannot resolve vault writer root: {error}").into())
-    })?;
-    Utf8PathBuf::from_path_buf(root)
-        .map_err(|_| PluginError::BadArgs("vault path is not UTF-8".into()))
-}
-
-fn open_with_writer(
-    host: &Host,
-    locks: &WriterLocks,
-    path: &str,
-) -> Result<VaultInfo, PluginError> {
-    let root = writer_root(path)?;
-    let mut held = locks.0.lock();
-    if held.contains_key(&root) {
-        return host.open(&root);
-    }
-    let lock = fub_host::automation::lock_vault_writer(root.as_std_path()).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
-            PluginError::Conflict(format!("vault writer is busy: {root}").into())
-        } else {
-            PluginError::Io(format!("cannot lock vault writer: {error}").into())
-        }
-    })?;
-    let info = host.open(&root)?;
-    held.insert(root, lock);
-    Ok(info)
-}
-
 #[tauri::command]
-fn open_vault(
-    host: State<Host>,
-    locks: State<WriterLocks>,
-    path: String,
-) -> Result<VaultInfo, PluginError> {
+fn open_vault(app: AppHandle, host: State<Host>, path: String) -> Result<VaultInfo, PluginError> {
+    // Su mobile si monta soltanto il vault privato, che il backend risolve da
+    // sé nella sandbox; una cartella condivisa chiede un grant verificato.
     #[cfg(mobile)]
-    {
-        let _ = (&host, &locks, &path);
-        return Err(PluginError::Unserved(
-            "mobile vault mount requires native OS grant verification and SystemStorage".into(),
-        ));
-    }
+    return for_the_shell(
+        &host,
+        None,
+        mobile::open_private_vault(&host, mobile::private_vault_root(&app).as_deref(), &path),
+    );
+    // Il lock di scrittura fra processi lo prende l'host aprendo, e lo lascia
+    // chiudendo: qui non c'è niente da tenere. Un altro scrittore è un
+    // conflitto con la sua chiave, che la shell legge come frase.
     #[cfg(not(mobile))]
-    open_with_writer(&host, &locks, &path)
+    {
+        let _ = app;
+        for_the_shell(&host, None, host.open(Utf8Path::new(&path)))
+    }
 }
 
 // --- i vault aperti (§9.6) -------------------------------------------------
@@ -407,30 +387,27 @@ fn set_current_vault(host: State<Host>, path: String) -> Result<(), PluginError>
 fn close_vault(
     host: State<Host>,
     windows: State<document_windows::DocumentWindows>,
-    locks: State<WriterLocks>,
     path: String,
 ) -> Result<Vec<PluginError>, PluginError> {
-    let mut held = locks.0.lock();
-    let root = writer_root(&path)?;
-    let outcome = document_windows::close_vault(&host, &windows, &path);
-    if outcome.is_ok() {
-        held.remove(&root);
-    }
-    outcome
+    document_windows::close_vault(&host, &windows, &path)
 }
 
 /// Path del vault da aprire all'avvio: l'override di ambiente (`FUB_VAULT`)
 /// se non vuoto, altrimenti l'ultimo vault aperto ancora sul disco. Il
-/// frontend lo legge e apre il vault senza passare dal dialogo.
+/// frontend lo legge e apre il vault senza passare dal dialogo. Su mobile è il
+/// vault privato, se è la scelta salvata.
 #[tauri::command]
-fn initial_vault(host: State<Host>) -> Option<String> {
+fn initial_vault(app: AppHandle, host: State<Host>) -> Option<String> {
     #[cfg(mobile)]
     {
         let _ = host;
-        None
+        mobile::initial_private_vault(&app)
     }
     #[cfg(not(mobile))]
-    fub_host::initial_vault().or_else(|| host.last_vault())
+    {
+        let _ = app;
+        fub_host::initial_vault().or_else(|| host.last_vault())
+    }
 }
 
 /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di configurazione
@@ -593,9 +570,14 @@ async fn viewer_save(
     let origin = window.url().map_err(|error| {
         PluginError::Internal(format!("viewer window URL unavailable: {error}").into())
     })?;
+    // Il filo verso fuori è quello dell'host: lo stesso che i workspace
+    // montati usano, e lo stesso che un banco sostituisce.
+    let network = host.network().ok_or_else(|| {
+        PluginError::Unserved("this host has no network client for the viewer".into())
+    })?;
     resources::viewer_save(
         &*host,
-        &fub_host::net::UreqNetwork::new(),
+        &*network,
         window.label(),
         origin.as_str(),
         &url,
@@ -1352,18 +1334,12 @@ async fn catalog_search(app: AppHandle, needle: String) -> Result<Vec<CatalogEnt
     .await
 }
 
+/// L'artefatto scelto per il catalogo si legge come la sorgente di
+/// un'installazione diretta: file regolare, nessun symlink, tetto di byte.
 fn catalog_artifact(source: &str) -> Result<Vec<u8>, CatalogError> {
-    let mut file = std::fs::File::open(source)?;
-    let mut bytes = Vec::new();
-    Read::by_ref(&mut file)
-        .take(64 * 1024 * 1024 + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() > 64 * 1024 * 1024 {
-        return Err(CatalogError::Invalid(
-            "plugin artifact exceeds the local 64 MiB limit".into(),
-        ));
-    }
-    Ok(bytes)
+    Ok(fub_wasm_host::installed::read_source_file(Utf8Path::new(
+        source,
+    ))?)
 }
 
 #[tauri::command]
@@ -1885,14 +1861,16 @@ fn finish_main_close(
 
 // --- superficie IPC da `mobile` (boundary OS sopra lo stesso Host) ----------
 #[tauri::command]
-fn mobile_validate_capture(payload: mobile::MobileCapturePayload) -> Result<(), PluginError> {
+fn mobile_validate_capture(
+    payload: fub_host::automation::CapturePayloadV1,
+) -> Result<(), PluginError> {
     mobile::mobile_validate_capture(payload)
 }
 
 #[tauri::command]
 fn mobile_submit_capture(
     host: State<Host>,
-    payload: mobile::MobileCapturePayload,
+    payload: fub_host::automation::CapturePayloadV1,
     vault: Option<String>,
     template: Option<String>,
 ) -> Result<String, PluginError> {
@@ -2077,7 +2055,6 @@ pub fn run() {
         .manage(InstalledPlugins::new(installed_availability))
         .manage(ViewerConfig(config_dir.clone()))
         .manage(CatalogConfig(config_dir.clone()))
-        .manage(WriterLocks::default())
         .manage(limited)
         .manage(document_windows::DocumentWindows::default())
         .on_window_event(|window, event| {
@@ -2296,9 +2273,8 @@ pub fn run() {
                     // ancora riparare a schermo spento (0062).
                     tracing::warn!(target: "fub.app", "vault closure: {and}");
                 }
-                // The OS writer lease is released only after the host has
-                // completely torn down all sessions, never before.
-                app.state::<WriterLocks>().0.lock().clear();
+                // Il lease di scrittura fra processi è delle sessioni: l'host
+                // l'ha lasciato chiudendo ciascuna, dopo il suo teardown.
                 match shutdown {
                     Ok(Some(shutdown)) => {
                         if let Err(and) = shutdown.finish() {

@@ -91,6 +91,16 @@ pub const VAULT_DIAGNOSTIC_BUNDLE: &str = "vault.diagnostic-bundle";
 /// Svuota il registro delle modifiche (§23.9). L'unico che perde qualcosa.
 pub const VAULT_CLEAR_JOURNAL: &str = "vault.clear-journal";
 
+/// **Soltanto un gesto dell'utente** raggiunge questi comandi: un'invocazione
+/// di primo livello con attore [`Actor::User`](fub_abi::event::Actor::User).
+/// Un `run_command` (una macro, un handler, un job) è un plugin che invoca, e
+/// il § in testa al modulo dice perché quel potere non gli si presta: con il
+/// solo `fub:commands` qualunque plugin montato avrebbe svuotato il registro,
+/// senza conferma e senza che l'utente lo sapesse.
+pub(crate) fn user_gesture_only(command: &str) -> bool {
+    command == VAULT_CLEAR_JOURNAL
+}
+
 /// Le chiavi delle frasi, nel catalogo di chi le ha scritte (0040).
 pub(crate) const T_REBUILD_TITLE: &str = "cmd.vault.rebuild-index.title";
 pub(crate) const T_REBUILD_DESC: &str = "cmd.vault.rebuild-index.desc";

@@ -173,6 +173,33 @@ fn a_attachment_renamed_from_outside_carries_behind_the_state_for_document() {
     );
 }
 
+/// **La raccolta non tocca lo spazio di un allegato vivo.** Un `.png` non è un
+/// documento, ma è una voce dell'anagrafe: se la raccolta guardasse solo i
+/// documenti, ogni apertura cancellerebbe la storia e i dati di ogni allegato.
+#[test]
+fn the_collection_keeps_the_space_of_a_live_attachment() {
+    let (_g, root, mut ws) = vault();
+    std::fs::write(root.join("foto.png"), b"\x89PNG").expect("write");
+    ws.reindex().expect("reindex");
+
+    let live = doc_data::path(&DocId::new("foto.png"), "miniatura.bin");
+    let gone = doc_data::path(&DocId::new("sparita.png"), "miniatura.bin");
+    write_data_item(&root, OFF, &live, b"anteprima");
+    write_data_item(&root, OFF, &gone, b"orfana");
+
+    // L'apertura raccoglie: è `reindex` che la chiama.
+    ws.reindex().expect("reindex");
+    assert_eq!(
+        read_data_item(&root, OFF, &live).as_deref(),
+        Some(&b"anteprima"[..]),
+        "the collection removed the per-document space of a live attachment"
+    );
+    assert!(
+        read_data_item(&root, OFF, &gone).is_none(),
+        "the space of an attachment that no longer exists was not collected"
+    );
+}
+
 /// L'altra metà, che impedisce alla riparazione di diventare «ogni coppia di
 /// path si migra»: se a destinazione c'è già un allegato **vivo**, la mossa non
 /// è una rinomina — `mv foto.png logo.png` sovrascrive un file che era di

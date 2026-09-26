@@ -42,7 +42,6 @@ use fub_abi::text::StringCatalog;
 /// **Non** è l'elenco dei moduli del kernel: è l'elenco di quelli che hanno
 /// qualcosa da dire a chi monta. Un modulo che non dichiara né un catalogo né
 /// uno schema qui non entra, e non entrandoci non perde niente.
-/// uno schema qui non entra, e non entrandoci non perde niente.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Family {
     /// Lingua, fuso, formati: `locale.*`.
@@ -95,6 +94,7 @@ impl Family {
 
     /// Il nome con cui questa famiglia si nomina in un messaggio d'errore.
     /// Non è una stringa da tradurre: la legge chi ripara un presidio, non
+    /// chi usa Fub.
     pub const fn name(self) -> &'static str {
         match self {
             Family::Locale => "locale",
@@ -106,6 +106,7 @@ impl Family {
     }
 
     /// Il catalogo di stringhe di questa famiglia, in tutte le lingue che
+    /// dichiara.
     pub fn catalog(self) -> Vec<StringCatalog> {
         match self {
             Family::Locale => crate::locale::catalog(),

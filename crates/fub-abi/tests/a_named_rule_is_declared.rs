@@ -317,6 +317,26 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-kernel/src/graph.rs::new",
+            (
+                Family::ContextualCase,
+                "`ProseFormats::new` riceve le chiavi di `registry.rs` (`prose_formats`) e le \
+                 piega come lei: l'insieme dei formati di prosa è una vista della stessa mappa, \
+                 e una piegatura diversa farebbe vincere lo spareggio a un formato che il \
+                 registro non riconosce per quell'estensione.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/graph.rs::names",
+            (
+                Family::ContextualCase,
+                "l'altro capo di `ProseFormats::new`: piega l'estensione del path del vault per \
+                 confrontarla con l'insieme. Deve piegare come `documents.rs::extension_of`, \
+                 perché lo spareggio fra omonimi deve scegliere il documento che il registro \
+                 saprebbe parsare come prosa.",
+            ),
+        ),
+        (
             "crates/fub-kernel/src/documents.rs::extension_of",
             (
                 Family::ContextualCase,
@@ -416,6 +436,25 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
+        (
+            "crates/fub-features/src/formats.rs::new_note_extension",
+            (
+                Family::AsciiCase,
+                "porta nella forma delle chiavi del registro l'estensione che l'utente ha scritto \
+                 nell'impostazione `files.new-note-extension`: le chiavi di `by_ext` sono già \
+                 minuscole, e una nota nuova deve nascere con l'estensione nella forma in cui \
+                 verrà poi ricercata. È la stessa regola di `new_notes_id` nel kernel.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/workspace.rs::new_notes_id",
+            (
+                Family::AsciiCase,
+                "legge la stessa impostazione di `formats.rs::new_note_extension` e la porta \
+                 nella stessa forma: kernel e feature devono dare alla nota nuova la stessa \
+                 estensione, scritta come la scrive `default_extension`.",
+            ),
+        ),
         (
             "crates/fub-abi/src/edit.rs::matches_bytes",
             (
@@ -669,16 +708,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-features/src/graph.rs::is_note",
-            (
-                Family::ContextualCase,
-                "piega l'intero path in full-Unicode prima di riconoscere le estensioni documento \
-                 (`.md`, `.txt`, …): la lista è ASCII ma l'input è un path del vault, e la piegatura \
-                 larga non inventa estensioni, si limita a non disegnare un PNG come una nota. \
-                 Diverge da `media.rs::kind_of` perché qui la domanda è di disegno, non di formato.",
-            ),
-        ),
-        (
             "crates/fub-features/src/outline.rs::build_footnotes_view",
             (
                 Family::ContextualCase,
@@ -739,13 +768,13 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-importers/src/export_pdf.rs::markdown_to_lines",
+            "crates/fub-importers/src/export_pdf.rs::block",
             (
                 Family::ContextualCase,
                 "va **verso l'alto** come `log.rs::compose`: i titoli stampati si alzano di caso \
                  per tipografia, e nessuno li riconverte. Diverge da lei perché qui la sorgente è \
-                 il documento dell'utente e non un livello di log, ma la direzione resta \
-                 decorativa e non d'identità.",
+                 il modello del documento dell'utente e non un livello di log, ma la direzione \
+                 resta decorativa e non d'identità.",
             ),
         ),
         (
@@ -782,23 +811,14 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoAscii: schemi e URL (la grammatica è ASCII per RFC) ----------
         (
-            "crates/fub-app/src/mobile.rs::validate_source_url",
-            (
-                Family::AsciiCase,
-                "riconosce il prefisso `http(s)://` della `source_url` mobile piegando in ASCII: \
-                 lo schema è ASCII per la RFC 3986 e una piegatura larga inventerebbe schemi che \
-                 il protocollo non ha. Diverge dalla gemella di `automation.rs` perché qui il \
-                 limite di lunghezza e di controllo sta accanto, nel canale mobile.",
-            ),
-        ),
-        (
             "crates/fub-host/src/automation.rs::validate_source_url",
             (
                 Family::AsciiCase,
-                "gemella della precedente sul canale automazione: stesso prefisso, stessa corsia, \
-                 ma il rifiuto qui è `AutomationError` e non un errore mobile. Diverge da \
-                 `validate_callback` perché la domanda è «da dove viene la cattura», non «dove è \
-                 lecito richiamare».",
+                "riconosce il prefisso `http(s)://` della `source_url` piegando in ASCII: lo \
+                 schema è ASCII per la RFC 3986 e una piegatura larga inventerebbe schemi che il \
+                 protocollo non ha. È una sola per ogni trasporto, e la shell mobile la usa anche \
+                 per riconoscere un link condiviso. Diverge da `validate_callback` perché la \
+                 domanda è «da dove viene la cattura», non «dove è lecito richiamare».",
             ),
         ),
         (
@@ -1250,9 +1270,9 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             (
                 Family::AsciiCase,
                 "abbassa il path per riconoscere le estensioni multimediali (`.png`, `.mp4`, …): \
-                 sono token di formato, ASCII per definizione. Diverge da `is_note` perché qui la \
-                 lista è dei media e la piegatura è stretta — là la lista è dei documenti e la \
-                 piegatura è larga.",
+                 sono token di formato, ASCII per definizione. Diverge da \
+                 `documents.rs::extension_of` perché qui la lista è dei media e la piegatura è \
+                 stretta — là la chiave è del registro dei formati e la piegatura è larga.",
             ),
         ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
@@ -1359,46 +1379,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  la regola fabbrica un nome pubblico, non normalizza un nome del vault.",
             ),
         ),
-        // -- ConfineDiCartella: comporre cartella e nome (tre canali) ---------
-        (
-            "crates/fub-app/src/mobile.rs::apply_mobile_capture",
-            (
-                Family::FolderBoundary,
-                "compone `{cartella}/{nome}` tagliando gli slash della cartella scritta nel payload \
-                 mobile: la tolleranza è sul confine digitato da fuori, non sull'identità della \
-                 nota, che si decide accanto (slug o `Untitled`). Diverge da `folders::normalized` \
-                 perché qui il nome non esiste ancora — si sta creando — e il confine si attraversa \
-                 una volta sola.",
-            ),
-        ),
-        (
-            "crates/fub-cli/src/capture.rs::apply_payload",
-            (
-                Family::FolderBoundary,
-                "gemella della precedente sul canale CLI: stessa composizione, stessa tolleranza, \
-                 ma il payload qui arriva da un file o da flag non autenticati e il consenso sta \
-                 accanto (`confirm_capture`). Diverge da lei perché due canali con due paure — \
-                 importare da fuori contro salvare da dentro — non condividono la riga.",
-            ),
-        ),
-        (
-            "crates/fub-cli/src/native_host.rs::apply_capture",
-            (
-                Family::FolderBoundary,
-                "gemella sul canale del native host: stessa composizione `{cartella}/{nome}`, ma il \
-                 vault qui si apre da variabile d'ambiente o da ultimo noto prima di comporre. \
-                 Diverge dalle due precedenti perché il confine si attraversa dopo aver scelto il \
-                 vault, e sbagliare l'ordine vorrebbe dire comporre nel posto sbagliato.",
-            ),
-        ),
+        // -- ConfineDiCartella: comporre cartella e nome ----------------------
         (
             "crates/fub-cli/src/capture.rs::uri",
             (
                 Family::FolderBoundary,
-                "compone `{cartella}/{nome}` per le nuove URI (`new`, `daily`, `unique`) tagliando \
-                 gli slash della cartella: come in `apply_payload`, la tolleranza è sul confine \
-                 digitato. Diverge da lei perché qui la regola fabbrica l'id (tre forme, tre \
-                 composizioni) e non applica un payload già pronto.",
+                "compone `{cartella}/{prefisso}` per `fub://unique` tagliando gli slash della \
+                 cartella digitata nell'URI: la tolleranza è sul confine digitato, non \
+                 sull'identità della nota, che decide `note.unique`. Diverge da \
+                 `folders::normalized` perché qui la regola fabbrica il nome chiesto a un \
+                 comando, non normalizza un nome del vault. La cattura e `fub://new` non \
+                 compongono più: passano la cartella all'host.",
             ),
         ),
         // -- ConfineDiCartella: scope di cartella nei filtri ------------------

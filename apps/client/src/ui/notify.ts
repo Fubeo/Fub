@@ -44,6 +44,7 @@ import type { Lifetime } from "./lifetime";
 import { focusableElements } from "./a11y";
 import { setTooltip } from "./tooltip";
 import { drawCountButton } from "./icons";
+import { errorText } from "../host/errors";
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -343,7 +344,7 @@ function show(notice: Notice, action?: NoticeAction): void {
     button.textContent = action.label;
     button.addEventListener("click", () => {
       dismissToast(toast);
-      void Promise.resolve(action.run()).catch((error: unknown) => notify(String(error), "guasto"));
+      void Promise.resolve(action.run()).catch((error: unknown) => notify(errorText(error), "guasto"));
     });
     toast.append(button);
   }

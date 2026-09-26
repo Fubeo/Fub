@@ -49,14 +49,14 @@ use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::TextEdit;
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, LinkRewrite,
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, LinkInsert, LinkRewrite,
     ParseContext, RenderOptions,
 };
 use fub_abi::grid::{
     validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
     GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
 };
-use fub_abi::model::DocumentModel;
+use fub_abi::model::{DocumentModel, TaskMarker};
 use fub_abi::traits::{
     abi_compatible, CommandProvider, HostApi, Plugin, PluginManifest, ReadApi, ViewInstance,
     ViewInterests, ViewProvider, ViewSpec,
@@ -73,6 +73,7 @@ use crate::borrow::{with_guest, with_read_guest, State};
 use crate::contract::exports::fub::abi::command as w_command;
 use crate::contract::exports::fub::abi::event_handler as w_event_handler;
 use crate::contract::exports::fub::abi::format as w_format;
+use crate::contract::exports::fub::abi::format_edits as w_format_edits;
 use crate::contract::exports::fub::abi::format_links as w_format_links;
 use crate::contract::exports::fub::abi::grid as w_grid;
 use crate::contract::exports::fub::abi::index as w_index;
@@ -93,6 +94,8 @@ const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
 const FORMAT_INTERFACE: &str = "fub:abi/format";
 const FORMAT_LINKS_INTERFACE: &str = "fub:abi/format-links";
 const FORMAT_LINKS_EXPORT: &str = "fub:abi/format-links@0.2.0";
+const FORMAT_EDITS_INTERFACE: &str = "fub:abi/format-edits";
+const FORMAT_EDITS_EXPORT: &str = "fub:abi/format-edits@0.2.0";
 const FORMAT_EXPORT: &str = "fub:abi/format@0.2.0";
 const VIEW_INTERFACE: &str = "fub:abi/view";
 const VIEW_EXPORT: &str = "fub:abi/view@0.2.0";
@@ -102,6 +105,24 @@ const INDEX_INTERFACE: &str = "fub:abi/index";
 const INDEX_EXPORT: &str = "fub:abi/index@0.2.0";
 const EVENT_HANDLER_INTERFACE: &str = "fub:abi/event-handler";
 const EVENT_HANDLER_EXPORT: &str = "fub:abi/event-handler@0.2.0";
+const COMMAND_INTERFACE: &str = "fub:abi/command";
+const COMMAND_EXPORT: &str = "fub:abi/command@0.2.0";
+/// Interfacce che `plugin-world` esporta e che questo host non collega: un
+/// componente che le esporta viene rifiutato al caricamento, come chi importa
+/// una famiglia non servita, invece di montarsi con metà del suo lavoro ignorata.
+const EXPORTS_UNSERVED: &[&str] = &[
+    "fub:abi/syntax",
+    "fub:abi/renderer",
+    "fub:abi/service",
+    "fub:abi/importer",
+    "fub:abi/exporter",
+];
+
+/// `name` è `interface`, con o senza versione (`fub:abi/syntax@0.2.0`).
+fn names_interface(name: &str, interface: &str) -> bool {
+    name == interface
+        || (name.starts_with(interface) && name.as_bytes().get(interface.len()) == Some(&b'@'))
+}
 fn compatible_export_version(name: &str, interface: &str) -> bool {
     let Some(version) = name
         .strip_prefix(interface)
@@ -180,6 +201,10 @@ pub enum LoadError {
     /// host non implementa.
     #[error("il componente importa famiglie che questo host non serve: {0}")]
     UnservedFamilies(String),
+    /// Il componente esporta interfacce del contratto che questo host non
+    /// collega: nessun adapter le chiamerebbe, e montarlo le ignorerebbe.
+    #[error("il componente esporta interfacce che questo host non collega: {0}")]
+    UnservedExports(String),
     /// Manca l'export obbligatorio `fub:abi/plugin`.
     #[error("il componente non esporta `fub:abi/plugin`: non è un plugin ({0})")]
     NotAPlugin(String),
@@ -196,6 +221,7 @@ pub struct Component {
     command_indices: Option<w_command::GuestIndices>,
     format_indices: Option<w_format::GuestIndices>,
     format_links_indices: Option<w_format_links::GuestIndices>,
+    format_edits_indices: Option<w_format_edits::GuestIndices>,
     grid_indices: Option<w_grid::GuestIndices>,
     view_indices: Option<w_view::GuestIndices>,
     index_indices: Option<w_index::GuestIndices>,
@@ -234,6 +260,19 @@ impl Component {
         if !missing.is_empty() {
             return Err(LoadError::UnservedFamilies(missing.join(", ")));
         }
+        let unserved: Vec<String> = component
+            .component_type()
+            .exports(&engine)
+            .map(|(name, _)| name.to_string())
+            .filter(|name| {
+                EXPORTS_UNSERVED
+                    .iter()
+                    .any(|interface| names_interface(name, interface))
+            })
+            .collect();
+        if !unserved.is_empty() {
+            return Err(LoadError::UnservedExports(unserved.join(", ")));
+        }
         cap_the_rest(&mut linker, &engine, &component)
             .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
         if let Some(name) = component
@@ -242,7 +281,9 @@ impl Component {
             .map(|(name, _)| name)
             .find(|name| {
                 unsupported_versioned_export(name, FORMAT_INTERFACE)
+                    || unsupported_versioned_export(name, COMMAND_INTERFACE)
                     || unsupported_versioned_export(name, FORMAT_LINKS_INTERFACE)
+                    || unsupported_versioned_export(name, FORMAT_EDITS_INTERFACE)
                     || unsupported_versioned_export(name, VIEW_INTERFACE)
                     || unsupported_versioned_export(name, INDEX_INTERFACE)
                     || unsupported_versioned_export(name, GRID_INTERFACE)
@@ -270,6 +311,15 @@ impl Component {
                 .map(|(name, _)| name),
             FORMAT_LINKS_INTERFACE,
             FORMAT_LINKS_EXPORT,
+        )
+        .is_some();
+        let format_edits_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            FORMAT_EDITS_INTERFACE,
+            FORMAT_EDITS_EXPORT,
         )
         .is_some();
         let view_export_present = select_supported_export(
@@ -308,13 +358,27 @@ impl Component {
             GRID_EXPORT,
         )
         .is_some();
+        let command_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            COMMAND_INTERFACE,
+            COMMAND_EXPORT,
+        )
+        .is_some();
         let indices = w_plugin::GuestIndices::new(&pre)
             .map_err(|error| LoadError::NotAPlugin(format!("{error:#}")))?;
-        let command_indices = w_command::GuestIndices::new(&pre).ok();
+        let command_indices = resolve_format_indices(command_export_present, || {
+            w_command::GuestIndices::new(&pre)
+        })?;
         let format_indices =
             resolve_format_indices(format_export_present, || w_format::GuestIndices::new(&pre))?;
         let format_links_indices = resolve_format_indices(format_links_export_present, || {
             w_format_links::GuestIndices::new(&pre)
+        })?;
+        let format_edits_indices = resolve_format_indices(format_edits_export_present, || {
+            w_format_edits::GuestIndices::new(&pre)
         })?;
         let grid_indices =
             resolve_format_indices(grid_export_present, || w_grid::GuestIndices::new(&pre))?;
@@ -331,6 +395,7 @@ impl Component {
             command_indices,
             format_indices,
             format_links_indices,
+            format_edits_indices,
             grid_indices,
             view_indices,
             index_indices,
@@ -366,6 +431,14 @@ impl Component {
             None => None,
         };
         let format_links = match &self.format_links_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
+        let format_edits = match &self.format_edits_indices {
             Some(indices) => Some(
                 indices
                     .load(&mut store, &instance)
@@ -412,6 +485,7 @@ impl Component {
                 commands,
                 format,
                 format_links,
+                format_edits,
                 grid,
                 view,
                 index,
@@ -419,6 +493,27 @@ impl Component {
             },
         })
     }
+}
+
+/// Il tetto di una richiesta a `wasi:random`: un guest che vuole un seme o una
+/// chiave chiede decine di byte, e una lunghezza da gigabyte è un guasto da
+/// fermare prima di allocarla, non da servire.
+const WASI_RANDOM_LIMIT: u64 = 64 * 1024;
+
+/// `len` byte dal generatore crittografico del sistema, o una trap se la
+/// richiesta supera [`WASI_RANDOM_LIMIT`] o il sistema non ne dà.
+fn wasi_random_bytes(len: u64) -> wasmtime::Result<Vec<u8>> {
+    use ring::rand::SecureRandom;
+    if len > WASI_RANDOM_LIMIT {
+        return Err(wasmtime::Error::msg(format!(
+            "get-random-bytes: {len} byte richiesti, il limite è {WASI_RANDOM_LIMIT}"
+        )));
+    }
+    let mut bytes = vec![0u8; len as usize];
+    ring::rand::SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| wasmtime::Error::msg("il sistema non ha dato byte casuali"))?;
+    Ok(bytes)
 }
 
 /// Tappa con trap gli import non serviti dal contratto, senza aprire WASI sul
@@ -431,14 +526,24 @@ fn cap_the_rest(
     let ty = component.component_type();
     for (name, item) in ty.imports(engine) {
         if name == "wasi:random/random@0.2.3" {
+            // Il caso **sicuro** che WASI promette, dal generatore del sistema:
+            // un guest che ci fa un uuid o una chiave non deve ricevere sempre
+            // gli stessi byte (I70). Nessun'altra porta di WASI si apre.
             let mut instance = linker.instance(name)?;
-            instance.func_new("get-random-bytes", |_, _, results| {
-                results[0] = Val::List(
-                    [0x13_u8, 0x37, 0x5a, 0x7d, 0x91, 0xb4, 0xd6, 0xf8]
-                        .into_iter()
-                        .map(Val::U8)
-                        .collect(),
-                );
+            instance.func_new("get-random-bytes", |_, params, results| {
+                let Some(Val::U64(len)) = params.first() else {
+                    return Err(wasmtime::Error::msg(
+                        "get-random-bytes: argomento non valido",
+                    ));
+                };
+                results[0] = Val::List(wasi_random_bytes(*len)?.into_iter().map(Val::U8).collect());
+                Ok(())
+            })?;
+            instance.func_new("get-random-u64", |_, _, results| {
+                let bytes = wasi_random_bytes(8)?;
+                let mut word = [0u8; 8];
+                word.copy_from_slice(&bytes);
+                results[0] = Val::U64(u64::from_le_bytes(word));
                 Ok(())
             })?;
             continue;
@@ -482,6 +587,7 @@ pub(crate) struct Interfaces {
     commands: Option<w_command::Guest>,
     format: Option<w_format::Guest>,
     pub(crate) format_links: Option<w_format_links::Guest>,
+    pub(crate) format_edits: Option<w_format_edits::Guest>,
     grid: Option<w_grid::Guest>,
     view: Option<w_view::Guest>,
     pub(crate) index: Option<w_index::Guest>,
@@ -867,11 +973,50 @@ impl GridProvider for WasmGridProvider {
     }
 }
 
+/// L'interruttore di un provider di formato WASM: acceso finché il plugin è
+/// scelto, **spento per sempre** quando viene disabilitato, revocato, rimosso o
+/// aggiornato.
+///
+/// Il `FormatRegistry` di un vault aperto è fisso per la vita del workspace:
+/// il provider resta lì, e senza interruttore il parser di un plugin ritirato
+/// continuerebbe a girare fino alla riapertura. Spento, ogni chiamata fallisce
+/// con un errore di formato: il codice del plugin non gira più. Un plugin
+/// riacceso torna a servire il formato alla prossima apertura, con un'istanza
+/// nuova; questa ha visto il suo `deactivate`.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FormatSwitch(Arc<std::sync::atomic::AtomicBool>);
+
+impl FormatSwitch {
+    /// Spegne il provider. Non si riaccende.
+    pub(crate) fn retire(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Qualcuno oltre a chi lo tiene nel registro lo vede ancora? Un provider
+    /// lasciato cadere con la sua sessione non ha più niente da spegnere.
+    pub(crate) fn is_held(&self) -> bool {
+        Arc::strong_count(&self.0) > 1
+    }
+
+    fn served(&self) -> Result<(), String> {
+        if self.0.load(std::sync::atomic::Ordering::SeqCst) {
+            Err(
+                "provider di formato ritirato: il plugin è stato disabilitato, revocato, \
+                 rimosso o aggiornato; torna a servire alla prossima apertura del vault"
+                    .into(),
+            )
+        } else {
+            Ok(())
+        }
+    }
+}
+
 /// Proxy `FormatProvider` sopra una singola istanza WASM.
 pub struct WasmFormatProvider {
     inner: Arc<Mutex<Instance>>,
     descriptor: FormatDescriptor,
     capabilities: FormatCapabilities,
+    switch: FormatSwitch,
 }
 
 impl FormatProvider for WasmFormatProvider {
@@ -888,6 +1033,7 @@ impl FormatProvider for WasmFormatProvider {
         source: &DocumentSource,
         ctx: &ParseContext,
     ) -> Result<DocumentModel, FormatError> {
+        self.switch.served().map_err(FormatError::Parse)?;
         let source_wit = tr::to_document_source(source);
         let ctx_wit = tr::to_parse_context(ctx);
         let _guard = enter_instance(instance_identity(self.inner.as_ref()))
@@ -913,6 +1059,7 @@ impl FormatProvider for WasmFormatProvider {
         model: &DocumentModel,
         opts: &RenderOptions,
     ) -> Result<String, FormatError> {
+        self.switch.served().map_err(FormatError::Render)?;
         let model_wit = crate::model::to_document(model.clone())
             .map_err(|error| FormatError::Render(error.to_string()))?;
         let opts_wit = tr::to_render_options(opts);
@@ -934,6 +1081,7 @@ impl FormatProvider for WasmFormatProvider {
     }
 
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        self.switch.served().map_err(FormatError::Serialize)?;
         let model_wit = crate::model::to_document(model.clone())
             .map_err(|error| FormatError::Serialize(error.to_string()))?;
         let _guard = enter_instance(instance_identity(self.inner.as_ref()))
@@ -959,7 +1107,27 @@ impl FormatProvider for WasmFormatProvider {
         ctx: &ParseContext,
         rewrites: &[LinkRewrite],
     ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        self.switch.served().map_err(FormatError::Parse)?;
         crate::format_links::call_rewrite_links(&self.inner, source, ctx, rewrites)
+    }
+
+    fn format_link(
+        &self,
+        ctx: &ParseContext,
+        link: &LinkInsert,
+    ) -> Result<Option<String>, FormatError> {
+        self.switch.served().map_err(FormatError::Parse)?;
+        crate::format_links::call_format_link(&self.inner, ctx, link)
+    }
+
+    fn set_task_state(
+        &self,
+        source: &DocumentSource,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        self.switch.served().map_err(FormatError::Parse)?;
+        crate::format_links::call_set_task_state(&self.inner, source, marker, done)
     }
 }
 /// Proxy `ViewProvider` sopra la stessa istanza WASM.
@@ -968,31 +1136,47 @@ pub struct WasmViewProvider {
     specs: Vec<ViewSpec>,
 }
 
+impl WasmViewProvider {
+    fn try_interests(&self, instance: &ViewInstance) -> Result<ViewInterests, PluginError> {
+        let wit_instance = tr::to_view_instance(instance)?;
+        let _guard = enter_instance(instance_identity(&self.inner))
+            .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+        let mut locked = self
+            .inner
+            .lock()
+            .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *locked;
+        let view = interfaces.view.as_ref().ok_or_else(|| {
+            PluginError::Internal("il componente non esporta `fub:abi/view`".into())
+        })?;
+        crate::limits::renew(&mut *store);
+        let interests = view
+            .call_interests(&mut *store, &wit_instance)
+            .map_err(failure)?;
+        tr::from_view_interests(interests)
+    }
+}
+
 impl ViewProvider for WasmViewProvider {
     fn views(&self) -> Vec<ViewSpec> {
         self.specs.clone()
     }
 
+    /// Il trait risponde un valore e non un esito, e la domanda arriva sul
+    /// thread dell'host mentre registra la view: un guest che cade qui — trap,
+    /// tempo scaduto, memoria finita — non può portarsi dietro il processo.
+    /// Il guasto diventa «nessun interesse»: la view resta disegnabile, e
+    /// `render_view`, che un esito ce l'ha, dirà cosa non va.
     fn interests(&self, instance: &ViewInstance) -> ViewInterests {
-        let wit_instance = tr::to_view_instance(instance)
-            .unwrap_or_else(|error| panic!("view instance non traducibile: {error}"));
-        let result = {
-            let mut locked = self
-                .inner
-                .lock()
-                .unwrap_or_else(|_| panic!("component instance is poisoned"));
-            let Instance { store, interfaces } = &mut *locked;
-            let view = interfaces
-                .view
-                .as_ref()
-                .unwrap_or_else(|| panic!("il componente non esporta `fub:abi/view`"));
-            crate::limits::renew(&mut *store);
-            view.call_interests(&mut *store, &wit_instance)
-        };
-        result
-            .map_err(failure)
-            .and_then(tr::from_view_interests)
-            .unwrap_or_else(|error| panic!("interessi view falliti: {error}"))
+        self.try_interests(instance).unwrap_or_else(|error| {
+            tracing::warn!(
+                target: "fub.wasm",
+                view = %instance.view,
+                %error,
+                "interessi della view non disponibili: nessun aggiornamento automatico"
+            );
+            ViewInterests::default()
+        })
     }
 
     fn render_view(
@@ -1147,6 +1331,7 @@ impl WasmBundle {
     }
     fn format_provider_from_inner(
         inner: Arc<Mutex<Instance>>,
+        switch: FormatSwitch,
     ) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
         let mut locked = inner
             .lock()
@@ -1171,6 +1356,7 @@ impl WasmBundle {
             inner,
             descriptor,
             capabilities,
+            switch,
         })))
     }
 
@@ -1180,7 +1366,7 @@ impl WasmBundle {
             .component
             .instantiate()
             .map_err(|error| PluginError::Internal(error.to_string().into()))?;
-        Self::format_provider_from_inner(Arc::new(Mutex::new(instance)))
+        Self::format_provider_from_inner(Arc::new(Mutex::new(instance)), FormatSwitch::default())
     }
 
     fn grid_provider_from_inner(
@@ -1232,21 +1418,21 @@ fn bundle_mount(
     let plugin = Box::new(WasmPlugin {
         inner: Arc::clone(&inner),
     });
-    let command_specs = WasmBundle::declared_commands(&inner);
-    let view_specs = WasmBundle::declared_views(&inner);
-    let grid_specs = WasmBundle::declared_grids(&inner);
     BundleMount::new(plugin, move |registrar| {
-        let command_specs = match &command_specs {
-            Ok(specs) => specs.clone(),
-            Err(error) => return RegistrationReport::failed(error.clone()),
+        // Comandi, view e griglie si chiedono qui, dopo `Plugin::activate`,
+        // come fa un bundle nativo che li registra dal suo passo: un
+        // componente che li costruisce in `activate` li dichiara pieni.
+        let command_specs = match WasmBundle::declared_commands(&inner) {
+            Ok(specs) => specs,
+            Err(error) => return RegistrationReport::failed(error),
         };
-        let view_specs = match &view_specs {
-            Ok(specs) => specs.clone(),
-            Err(error) => return RegistrationReport::failed(error.clone()),
+        let view_specs = match WasmBundle::declared_views(&inner) {
+            Ok(specs) => specs,
+            Err(error) => return RegistrationReport::failed(error),
         };
-        let grid_specs = match &grid_specs {
-            Ok(specs) => specs.clone(),
-            Err(error) => return RegistrationReport::failed(error.clone()),
+        let grid_specs = match WasmBundle::declared_grids(&inner) {
+            Ok(specs) => specs,
+            Err(error) => return RegistrationReport::failed(error),
         };
         // Inbound declarations run here — after `Plugin::activate`, on the
         // same thread that registers — so a trapped component fails with the
@@ -1309,13 +1495,18 @@ pub(crate) struct WasmOpeningBundle {
 }
 
 impl WasmOpeningBundle {
-    pub(crate) fn format_provider(&self) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
+    /// Il provider di formato di questa apertura, dietro `switch`: chi lo
+    /// prepara tiene l'interruttore per spegnerlo quando il plugin si ritira.
+    pub(crate) fn format_provider(
+        &self,
+        switch: FormatSwitch,
+    ) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
         let inner = self
             .instance
             .as_ref()
             .map(Arc::clone)
             .map_err(|error| PluginError::Internal(error.clone().into()))?;
-        WasmBundle::format_provider_from_inner(inner)
+        WasmBundle::format_provider_from_inner(inner, switch)
     }
 }
 
@@ -1416,9 +1607,26 @@ impl Plugin for FailedPlugin {
 mod tests {
     use super::{
         enter_instance, is_supported_format_export, resolve_format_indices,
-        select_supported_export, unsupported_versioned_export, FORMAT_EXPORT, FORMAT_INTERFACE,
+        select_supported_export, unsupported_versioned_export, wasi_random_bytes, FORMAT_EXPORT,
+        FORMAT_INTERFACE, WASI_RANDOM_LIMIT,
     };
     use std::sync::Mutex;
+
+    /// `wasi:random` dà la lunghezza chiesta e byte che cambiano: prima dava
+    /// sempre gli stessi otto, a qualunque lunghezza (I70).
+    #[test]
+    fn wasi_random_serves_the_requested_length_and_never_repeats() {
+        assert_eq!(wasi_random_bytes(0).unwrap().len(), 0);
+        let first = wasi_random_bytes(32).unwrap();
+        let second = wasi_random_bytes(32).unwrap();
+        assert_eq!(first.len(), 32);
+        assert_ne!(first, second, "two draws of 32 bytes do not coincide");
+        assert_eq!(
+            wasi_random_bytes(WASI_RANDOM_LIMIT).unwrap().len(),
+            64 * 1024
+        );
+        assert!(wasi_random_bytes(WASI_RANDOM_LIMIT + 1).is_err());
+    }
     #[test]
     fn instance_guard_rejects_reentry_and_cleans_up_nested_instances() {
         let first = Mutex::new(());

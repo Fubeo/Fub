@@ -20,6 +20,7 @@ import { window } from "../host/ipc";
 import { $ } from "./dom";
 import { icon } from "./icons";
 import type { Lifetime } from "./lifetime";
+import { platformSupports } from "../platform/capabilities";
 import { t, onLanguage } from "../i18n/strings";
 
 /// Monta i controlli finestra e il doppio click della titlebar.
@@ -28,6 +29,14 @@ import { t, onLanguage } from "../i18n/strings";
 /// lei, e quando la shell smonta non restano appesi. L'unlistener di
 /// `onResize` è l'altro capo — la shell lo tiene nella vita, e chiudi.
 export function mountTitlebar(lifetime: Lifetime): void {
+  // Una piattaforma senza finestre da ridurre o ingrandire (mobile) non ha
+  // controlli finestra: la barra resta, i tre bottoni no.
+  if (!platformSupports("nativeWindowControls")) {
+    document.getElementById("window-controls")?.setAttribute("hidden", "");
+    mountCompactMenu(lifetime);
+    mountTopbarIcons();
+    return;
+  }
   const topbar = $("#topbar");
   const min = $("#win-min") as HTMLButtonElement;
   const max = $("#win-max") as HTMLButtonElement;
@@ -55,10 +64,7 @@ export function mountTitlebar(lifetime: Lifetime): void {
   // (l'HTML non porta SVG, così `mountStrings` non li sovrascrive).
   min.innerHTML = icon("minus");
   close.innerHTML = icon("close");
-  const palette = document.getElementById("open-palette");
-  if (palette) palette.innerHTML = icon("palette");
-  const settings = document.getElementById("open-settings");
-  if (settings) settings.innerHTML = icon("settings");
+  mountTopbarIcons();
 
   min.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -96,6 +102,14 @@ export function mountTitlebar(lifetime: Lifetime): void {
   // testi si rinfrescano quando la lingua cambia e non a ogni ridisegno.
   applyControlLabels(min, max, close);
   lifetime.add(onLanguage(() => applyControlLabels(min, max, close)));
+}
+
+/// Le icone dei due bottoni a destra, che l'HTML porta vuoti.
+function mountTopbarIcons(): void {
+  const palette = document.getElementById("open-palette");
+  if (palette) palette.innerHTML = icon("palette");
+  const settings = document.getElementById("open-settings");
+  if (settings) settings.innerHTML = icon("settings");
 }
 
 /// Sotto 1100px la menubar si compatta in un pulsante Menu con le stesse

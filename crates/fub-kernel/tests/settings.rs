@@ -209,6 +209,7 @@ fn the_data_channel_responds_with_schema_value_and_origin() {
 
     // E i permessi di una feature ufficiale ci sono tutti e sette, uno per
     // riga, **accesi**: ciò che il manifest dichiara è concesso finché qualcuno
+    // non dice di no.
     let its: Vec<&str> = all
         .iter()
         .filter_map(|and| fub_abi::settings::permission_of_key(&and.spec.key))
@@ -246,6 +247,7 @@ fn the_data_channel_responds_with_schema_value_and_origin() {
 
     // Con un id, solo le sue: è ciò che serve al pannello di **un** plugin, e
     // ciò che permette di non filtrare per prefisso — le chiavi del core un
+    // prefisso non ce l'hanno.
     let IndexResult::Settings(its_keys) = ws
         .query_index(IndexQuery::Settings {
             plugin: Some("fub.editor".into()),
@@ -391,6 +393,7 @@ impl fub_abi::traits::CommandProvider for TwoCommands {
 /// Registrare un `CommandProvider` fa nascere una chiave per comando, col
 /// suggerimento dichiarato come **default**: ne segue che il valore efficace
 /// della chiave *è* la scorciatoia, sempre, e nessuno a valle deve fondere due
+/// campi.
 #[test]
 fn every_command_carries_its_own_shortcut_key() {
     let mut ws = Bench::new().without_format().without_scan().mounts();

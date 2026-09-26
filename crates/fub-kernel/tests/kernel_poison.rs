@@ -48,7 +48,7 @@
 //! e non un banco, perché il banco è qui sotto e guarda altre due cose.
 //! Adesso l'attore c'è, è `check-prosa`, e la stessa zona vista sui tre crate
 //! che il conto della 0120 non attraversa
-//! vale **nove** file [conta: lucchetti-outside-dal-conto].
+//! vale **nove** file [conta: lucchetti-fuori-dal-conto].
 //!
 //! Il secondo conto invece li attraversa tutti, perché la domanda è diversa: non
 //! «hai un lucchetto?» ma «ne hai improvvisato la politica?».

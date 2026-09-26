@@ -55,6 +55,9 @@ pub mod blocks;
 pub mod commands;
 #[cfg(feature = "dashboard")]
 pub mod dashboard;
+// Ogni feature ne usa una parte, e una build parziale lascia spento il resto.
+#[allow(dead_code)]
+mod formats;
 #[cfg(feature = "graph")]
 pub mod graph;
 pub mod inventory;
@@ -81,7 +84,8 @@ pub mod versioning;
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
 #[cfg(feature = "backup")]
 pub use backup::{
-    BackupCommands, BackupView, BACKUP_ID, BACKUP_VIEW, VAULT_BACKUP, VAULT_BACKUP_RESTORE,
+    BackupCommands, BackupView, BACKUP_ID, BACKUP_KEEP_KEY, BACKUP_VIEW, VAULT_BACKUP,
+    VAULT_BACKUP_RESTORE,
 };
 #[cfg(feature = "base")]
 pub use base::{BaseIndex, BASE_ID};
@@ -101,8 +105,8 @@ pub use commands::{
 #[cfg(feature = "dashboard")]
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "graph")]
-pub use graph::{GraphView, GRAPH_ID, GRAPH_NS, GRAPH_VIEW};
-pub use inventory::{every_official_feature, every_official_view, OfficialFeature};
+pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_VIEW};
+pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};
 #[cfg(feature = "outline")]
 pub use outline::{build_outline_view, OutlineView, FOOTNOTES_VIEW, OUTLINE_ID, OUTLINE_VIEW};
 #[cfg(feature = "properties")]

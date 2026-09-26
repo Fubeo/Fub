@@ -80,7 +80,7 @@
   color: CanvasText;
 }
 
-/* The existing declared ViewSurface::StatusBar host lives beside #statusbar.
+/* The declared ViewSurface::StatusBar host, as in index.html.
    desktop-shell's mountDeclaredViews owns its lifetime on mobile too. */
 :root[data-client-shell="mobile"] #views-status {
   display: flex;
@@ -88,11 +88,4 @@
   max-height: 30dvh;
   overflow: auto;
   padding-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px));
-}
-
-:root[data-client-shell="mobile"] #statusbar {
-  min-height: 44px;
-  height: auto;
-  max-height: none;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

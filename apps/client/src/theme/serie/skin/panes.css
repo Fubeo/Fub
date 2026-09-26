@@ -213,7 +213,7 @@
    la metà visibile di un doppione: l'altra metà stava dentro `oneDark`, che
    portava i propri colori e li imponeva a tutto il resto (margine, cursore,
    selezione, riga corrente). Adesso il tema dell'editor è scritto **con i
-   token** (`editor/theme.ts`) e non ha più niente da scavalcare — quindi non
+   token** (`editors/text/theme.ts`) e non ha più niente da scavalcare — quindi non
    c'è più niente da scrivere qui. Il foglio della shell si ferma dove finisce
    la shell. */
 

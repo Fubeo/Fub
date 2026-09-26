@@ -90,13 +90,11 @@ fn render_arg_value(value: &fub_abi::ArgValue) -> String {
     }
 }
 
-/// CLI writer handles are retained as long as the Host remains alive. The
-/// desktop must take the same advisory lock before mounting a writer.
+/// Il lock di scrittura fra processi lo prende l'host aprendo il vault e lo
+/// tiene finché la sessione vive: la CLI non ne possiede uno suo.
 pub struct Connection {
     pub host: fub_host::Host,
     vault: Option<String>,
-    writer_locks:
-        std::collections::BTreeMap<std::path::PathBuf, fub_host::automation::VaultWriterLock>,
 }
 
 impl Connection {
@@ -137,11 +135,7 @@ impl Connection {
                 .ok()
                 .filter(|s| !s.trim().is_empty())
         });
-        let mut connection = Connection {
-            host,
-            vault,
-            writer_locks: Default::default(),
-        };
+        let mut connection = Connection { host, vault };
         if mount {
             connection.ensure_open()?;
         }
@@ -168,27 +162,42 @@ impl Connection {
     }
 
     pub fn open_vault(&mut self, root: &str) -> Result<(), Failure> {
-        let canonical = std::path::Path::new(root)
+        std::path::Path::new(root)
             .canonicalize()
             .map_err(|error| Failure::local(format!("vault: {error}")))?;
-        if !self.writer_locks.contains_key(&canonical) {
-            let guard = fub_host::automation::lock_vault_writer(&canonical).map_err(|error| {
-                if error.kind() == std::io::ErrorKind::WouldBlock {
+        self.host
+            .open(camino::Utf8Path::new(root))
+            .map_err(|error| {
+                if fub_host::automation::is_writer_busy(&error) {
                     Failure::new(
                         5,
                         "busy",
                         "vault già aperto da un writer: usa l'istanza proprietaria o riprova",
                     )
                 } else {
-                    Failure::local(format!("writer lock: {error}"))
+                    Failure::from_plugin(&error)
                 }
             })?;
-            self.writer_locks.insert(canonical.clone(), guard);
-        }
-        self.host
-            .open(camino::Utf8Path::new(root))
-            .map_err(|error| Failure::from_plugin(&error))?;
         self.vault = Some(root.to_string());
+        self.wait_indexed()
+    }
+
+    /// Aspetta che l'apertura abbia indicizzato il vault. Un comando secco
+    /// apre, domanda ed esce: senza questa attesa backlink, vicini, tag,
+    /// proprietà e wikilink risponderebbero vuoti con `ok: true`, e il piano
+    /// di un `--dry-run` che chiede i backlink sottostimerebbe le note toccate.
+    /// L'attesa si interrompe con SIGINT come le altre della CLI.
+    fn wait_indexed(&self) -> Result<(), Failure> {
+        const TICK: std::time::Duration = std::time::Duration::from_millis(100);
+        while !self
+            .host
+            .wait_indexed_for(self.vault_selector(), TICK)
+            .map_err(|error| Failure::from_plugin(&error))?
+        {
+            if crate::interrupted() {
+                return Err(Failure::new(130, "cancelled", "interrotto da SIGINT"));
+            }
+        }
         Ok(())
     }
 

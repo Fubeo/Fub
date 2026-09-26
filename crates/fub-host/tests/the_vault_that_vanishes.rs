@@ -55,10 +55,11 @@ fn open_and_vanished(host: &Host) -> (tempfile::TempDir, Utf8PathBuf) {
     // `DirectoryNotEmpty`, sette corse su dieci. Non è il soggetto di questi
     // banchi — il soggetto è cosa resta possibile su una radice **già**
     // sparita — quindi la sparizione si fa quando il vault è fermo, non a
-    host.wait_indexed(None).expect("waits for indexing");
     // metà apertura.
+    host.wait_indexed(None).expect("waits for indexing");
     // Il `TempDir` resta vivo — cancellarlo due volte non è un errore, e
     // tenerlo in mano rende esplicito che è la prova a togliere la cartella,
+    // non il drop.
     std::fs::remove_dir_all(&root).expect("the directory is gone");
     assert!(!root.exists(), "the root has really vanished");
     (dir, root)

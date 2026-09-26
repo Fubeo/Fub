@@ -27,7 +27,7 @@ use fub_abi::event::{Actor, EventMask, Notice};
 use fub_abi::model::{DocId, Span};
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{CommandProvider, EventHandler, HostApi, JobSpec};
-use fub_kernel::{Capability, FormatRegistry, Policy, ReadOnly, Workspace};
+use fub_kernel::{Capability, FormatRegistry, Policy, ReadOnly, RegistryError, Workspace};
 use fub_testkit::SampleExtractor;
 
 fn vault() -> (tempfile::TempDir, Workspace) {
@@ -208,29 +208,28 @@ impl CommandProvider for TriesEverything {
         // spegnesse il versioning lo lascerebbe spento. Il guard risponde prima
         // di guardare se la chiave esista, che è il verso giusto: un rifiuto per
         // «stai simulando» non deve dipendere da cosa si stava per scrivere.
-        // Lo stato di vista (§11.2) è in questo elenco per la stessa ragione
         annotate(
             Capability::SettingsWrite,
             "setting",
             host.set_setting("test.key", SettingValue::Toggle(true)),
         );
+        // Lo stato di vista (§11.2) è in questo elenco per la stessa ragione
         // della configurazione: sopravvive alla sessione. Una prova a vuoto che
         // spostasse lo scroll di un pannello avrebbe lasciato dietro di sé
         // l'unica cosa che doveva non lasciare. E il cancello risponde **prima**
         // di guardare se ci sia un esemplare: un rifiuto per «stai simulando»
         // non deve dipendere da chi stava scrivendo.
-        // `Events` si prova con `spawn_job` e **non** con `emit`, e non è un
         annotate(
             Capability::ViewStateWrite,
             "view-state",
             host.set_view_state("scroll", Some(serde_json::json!(10))),
         );
+        // `Events` si prova con `spawn_job` e **non** con `emit`, e non è un
         // dettaglio di comodo: `emit` non restituisce un `Result`: è una delle
         // sei capacità che non sanno dire di no (`host/guard.rs`), e il suo
         // rifiuto è il silenzio. Un tentativo che non può fallire non prova
         // niente; un job invece rientra quando la simulazione è finita da un
         // pezzo, e il suo rifiuto ha un canale per dirsi.
-        // Un servizio di un altro plugin girerebbe con le capacità di **chi lo
         annotate(
             Capability::Events,
             "spawn-job",
@@ -240,24 +239,23 @@ impl CommandProvider for TriesEverything {
             })
             .map(|_| ()),
         );
+        // Un servizio di un altro plugin girerebbe con le capacità di **chi lo
         // offre**: se passasse, una simulazione avrebbe una scala per uscire da
         // sé stessa. Che nessuno serva `test.other` non c'entra — il cancello
         // risponde prima di cercare chi lo serve, e un `Unserved` qui sarebbe
         // già la prova che il controllo è arrivato dopo.
-        // **Una `DryRun` che scarica non è una simulazione**, ed è l'unica
-        // famiglia il cui effetto non è nemmeno *in questo processo*: un `POST`
         annotate(
             Capability::Services,
             "call-service",
             host.call_service("test.other", "something", serde_json::Value::Null)
                 .map(|_| ()),
         );
+        // **Una `DryRun` che scarica non è una simulazione**, ed è l'unica
+        // famiglia il cui effetto non è nemmeno *in questo processo*: un `POST`
         // crea qualcosa dall'altra parte, e un `GET` viene contato e registrato
         // da chi risponde. Che questo montaggio non abbia un client di rete non
         // c'entra — come sopra, il cancello risponde prima, e un `Unserved` qui
         // sarebbe già la prova che il controllo è arrivato dopo.
-        // Un comando che restituisce un piano **incompleto**: tocca due note e ne
-        // nomina una. È l'errore che rende un consenso strappato.
         annotate(
             Capability::Network,
             "fetch",
@@ -273,8 +271,8 @@ impl CommandProvider for TriesEverything {
     }
 }
 
-/// Un comando che scrive davvero (dichiarandolo): serve a provare la consegna
-/// degli eventi a chiamata tornata.
+/// Un comando che restituisce un piano **incompleto**: tocca due note e ne
+/// nomina una. È l'errore che rende un consenso strappato.
 struct HalfHonestPlan;
 
 impl CommandProvider for HalfHonestPlan {
@@ -310,8 +308,8 @@ impl CommandProvider for HalfHonestPlan {
     }
 }
 
-/// Handler che annota gli eventi ricevuti, per vedere *quando* arrivano.
-// Lo stesso comando, applicato: adesso scrive davvero.
+/// Un comando che scrive davvero (dichiarandolo): serve a provare la consegna
+/// degli eventi a chiamata tornata.
 struct Toucher;
 
 impl CommandProvider for Toucher {
@@ -333,7 +331,7 @@ impl CommandProvider for Toucher {
     }
 }
 
-// Si dichiara innocuo e non lo è.
+/// Handler che annota gli eventi ricevuti, per vedere *quando* arrivano.
 struct Recorder(Log);
 
 impl EventHandler for Recorder {
@@ -468,7 +466,7 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
          tests: {message}"
     );
 
-    // Il varco della decisione 0010 copre **ogni** famiglia che una politica di
+    // Lo stesso comando, applicato: adesso scrive davvero.
     ws.invoke_command(
         "test.write",
         serde_json::Value::Null,
@@ -493,7 +491,7 @@ fn declaring_yourself_read_only_is_binding() {
     ws.register_command_provider(
         "test",
         Box::new(AlwaysWrites {
-            // sola lettura nega — e l'elenco delle famiglie non è scritto qui dentro: si
+            // Si dichiara innocuo e non lo è.
             declares_writes: false,
             refused: refused.clone(),
         }),
@@ -517,6 +515,8 @@ fn declaring_yourself_read_only_is_binding() {
     assert!(message.contains("sola lettura"), "{message}");
 }
 
+/// Il varco della decisione 0010 copre **ogni** famiglia che una politica di
+/// sola lettura nega — e l'elenco delle famiglie non è scritto qui dentro: si
 /// calcola.
 ///
 /// # Perché non un elenco
@@ -556,8 +556,6 @@ fn declaring_yourself_read_only_is_binding() {
 /// alla politica passerebbe di qui **verde**, perché `VaultStructure` risulta
 /// coperta dagli altri cinque. È un limite vero e va nominato accanto al
 /// presidio invece che scoperto dopo.
-// L'insieme atteso, calcolato. La `why` non conta — `ReadOnly` nega per
-// famiglia e la ragione è solo il testo che finisce nel messaggio — ma è la
 #[test]
 fn every_structural_capability_is_refused_by_the_same_gate() {
     let (_dir, mut ws) = vault();
@@ -582,11 +580,10 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
     )
     .expect("simulation succeeds");
 
+    // L'insieme atteso, calcolato. La `why` non conta — `ReadOnly` nega per
+    // famiglia e la ragione è solo il testo che finisce nel messaggio — ma è la
     // stessa frase che il kernel monta simulando, così l'asserzione sul
     // messaggio qui sotto e quella sull'insieme parlano della stessa politica.
-    // Basta **un** tentativo passato perché la famiglia non si possa dire
-    // rifiutata: cinque `check` su sei metodi sono un cancello con un buco, non
-    // un cancello.
     let policy = ReadOnly {
         why: "a simulation does not write",
     };
@@ -608,8 +605,9 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
         ),
         "restoring a missing entry under ReadOnly is denied by the family gate: {seen:?}"
     );
-    // E ogni rifiuto dice **perché**: un `permission-denied` muto costringe chi
-    // scrive un comando a indovinare se abbia sbagliato permessi o se stia solo
+    // Basta **un** tentativo passato perché la famiglia non si possa dire
+    // rifiutata: cinque `check` su sei metodi sono un cancello con un buco, non
+    // un cancello.
     let passed: BTreeSet<Capability> = seen
         .iter()
         .filter(|(_, _, result)| result.is_none())
@@ -634,9 +632,9 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
          that family that delegates without calling `check`. Attempts: {seen:?}"
     );
 
+    // E ogni rifiuto dice **perché**: un `permission-denied` muto costringe chi
+    // scrive un comando a indovinare se abbia sbagliato permessi o se stia solo
     // simulando, e sono due rimedi opposti.
-    // Fra il piano e l'approvazione, qualcuno scrive.
-    // Il tipo dell'effetto è parte del contratto quanto i suoi campi: questo
     for (cap, which, error) in seen
         .iter()
         .filter_map(|(c, q, and)| Some((c, q, and.as_ref()?)))
@@ -713,7 +711,7 @@ fn a_plan_calculated_now_refuses_to_apply_over_someone_elses_write() {
         panic!("a plan")
     };
 
-    // test non chiama nessuno, verifica che la forma sia quella che la shell
+    // Fra il piano e l'approvazione, qualcuno scrive.
     ws.write_document(&doc, "other text", WriteBase::Dictated)
         .expect("writes");
 
@@ -760,7 +758,7 @@ fn what_a_command_writes_reaches_the_handlers_after_it_has_returned() {
 
 #[test]
 fn a_reveal_from_a_command_speaks_in_bytes_of_the_new_text() {
-    // sa interpretare (e che un cambio di forma sia rosso qui).
+    // Il tipo dell'effetto è parte del contratto quanto i suoi campi: questo
     // test non chiama nessuno, verifica che la forma sia quella che la shell
     // sa interpretare (e che un cambio di forma sia rosso qui).
     let effect = CommandEffect::Reveal {
@@ -815,4 +813,57 @@ fn a_third_party_command_cannot_ask_the_shell_for_the_clipboard() {
         )
         .expect_err("the clipboard intent is reserved to the core");
     assert!(matches!(err, PluginError::PermissionDenied(_)), "{err:?}");
+}
+
+/// A provider that declares an id the host executes on its own.
+struct Squatter;
+
+impl CommandProvider for Squatter {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new("folder.create", "Not the host's")]
+    }
+
+    fn invoke(
+        &self,
+        _command: &str,
+        _args: serde_json::Value,
+        _mode: InvokeMode,
+        _host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        Ok(CommandOutcome::notify("never"))
+    }
+}
+
+#[test]
+fn a_host_command_is_reserved_before_the_providers_arrive() {
+    let (_dir, mut ws) = vault();
+    ws.reserve_host_commands(&["folder.create"])
+        .expect("nobody owns it yet");
+
+    let denied = ws
+        .invoke_command(
+            "folder.create",
+            serde_json::json!({ "path": "x" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("the registry does not serve a host command");
+    assert!(
+        matches!(&denied, PluginError::Unserved(message) if message.to_string().contains("host")),
+        "the refusal names the host, not an unknown command: {denied:?}"
+    );
+
+    let refused = ws
+        .register_command_provider("test", Box::new(Squatter))
+        .expect_err("the id belongs to the host");
+    assert!(
+        matches!(&refused, RegistryError::Claimed { id, incumbent, .. }
+            if id == "folder.create" && incumbent == "host"),
+        "{refused:?}"
+    );
+
+    ws.register_command_provider("test", Box::new(Echo(Log::default())))
+        .expect("another id still registers");
+    ws.reserve_host_commands(&["test.echo"])
+        .expect_err("an id a provider already owns cannot become the host's");
 }

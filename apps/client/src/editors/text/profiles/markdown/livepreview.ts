@@ -27,8 +27,8 @@ import {
 } from "../../../../rules/syntax";
 import { findTrailingAnchor, frontmatterRange, renderMarkdownState } from "./render";
 import type { MarkdownBlock, MarkdownDocument, MountMarkdown } from "./render-types";
-import { mountMarkdown } from "../../../../ui/markdown";
-import { mountMathBlocks } from "../../../../ui/math";
+import { mountMarkdown } from "./mount";
+import { mountMathBlocks } from "./math";
 import { scanInlineMath } from "./render-inline";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
@@ -580,11 +580,22 @@ function inDecoration(d: LiveDeco): Decoration {
       return d.data
         ? Decoration.mark({ class: `cm-fub-${d.data}` })
         : marksMap[d.kind]!;
-    case "wikilink":
+    case "wikilink": {
+      // Il bersaglio anche nel contratto che la resa dà alla shell
+      // (`data-wikilink-*`, come in Lettura): chi guarda il link sotto il
+      // puntatore, come l'anteprima al passaggio, non conosce la grammatica
+      // di questo profilo.
+      const target = parseWikilinkInner(d.data ?? "");
       return Decoration.mark({
         class: "cm-fub-wikilink",
-        attributes: { [ATTR_WIKILINK]: d.data ?? "" },
+        attributes: {
+          [ATTR_WIKILINK]: d.data ?? "",
+          "data-wikilink-page": target.page,
+          ...(target.heading ? { "data-wikilink-heading": target.heading } : {}),
+          ...(target.block ? { "data-wikilink-block": target.block } : {}),
+        },
       });
+    }
     case "tag":
       return Decoration.mark({
         class: "cm-fub-tag",

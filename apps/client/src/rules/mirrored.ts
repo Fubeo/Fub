@@ -151,6 +151,9 @@ export function nameFault(path: string, naming: Naming): NameFault | null {
       // vault. La falla era tutta di qua — i riservati non si guardano su un
       // nome che si dichiara esistente.
       if (i === 0 && /^[A-Za-z]:/.test(segment)) return "traversal";
+      // La stessa fuga col separatore di Windows: `..\\..\\x` è un segmento
+      // per `split("/")` e tre per `Path::join`.
+      if (segment.includes("\\")) return "reserved";
       continue;
     }
     for (const ch of segment) {

@@ -427,3 +427,64 @@ fn the_emptying_proof_says_how_many_rows_would_fall() {
         "chi non perde niente non ha un conto da mostrare"
     );
 }
+
+/// **Svuotare il registro è un gesto dell'utente, non un permesso** (I98).
+///
+/// Un plugin con il solo `fub:run-command` raggiungeva
+/// `vault.clear-journal` da `run_command`, cioè cancellava la storia del vault
+/// senza conferma e senza che l'utente lo sapesse. Ora ogni invocazione
+/// annidata lo rifiuta, in prova come in applicazione, e così un ingresso di
+/// primo livello intestato a un attore che non è l'utente.
+#[test]
+fn no_plugin_empties_the_journal_on_its_own() {
+    let (_dir, root, mut ws) = vault();
+    notes(&root, "Una.md", "prima");
+    ws.reindex().expect("indice");
+    ws.write_document(
+        &DocId::new("Una.md"),
+        "cambiata",
+        fub_abi::edit::WriteBase::Dictated,
+    )
+    .expect("scrittura");
+    let before = ws.journal().expect("registro").records.len();
+    assert!(before >= 1, "il registro ha righe da perdere: {before}");
+    ws.register_plugin(
+        fub_abi::traits::PluginManifest::new("terzi.macro", "Macro").granting(
+            fub_abi::traits::PluginPermissions::of(&[fub_abi::options::permission::RUN_COMMAND]),
+        ),
+        fub_kernel::Trust::Community,
+    )
+    .expect("dichiarato");
+
+    for mode in [InvokeMode::Apply, InvokeMode::DryRun] {
+        let refused = ws.with_host_mode("terzi.macro", mode, |host| {
+            host.run_command(VAULT_CLEAR_JOURNAL, serde_json::json!({}))
+        });
+        assert!(
+            matches!(refused, Err(fub_abi::PluginError::PermissionDenied(_))),
+            "{mode:?}: {refused:?}"
+        );
+    }
+    let refused = ws.invoke_command(
+        VAULT_CLEAR_JOURNAL,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::Plugin {
+            id: "terzi.macro".into(),
+        },
+    );
+    assert!(matches!(
+        refused,
+        Err(fub_abi::PluginError::PermissionDenied(_))
+    ));
+    // Gli altri tre non perdono niente, e restano alla portata di chi li
+    // invoca: il rifiuto è per il comando, non per la manutenzione.
+    ws.with_host("terzi.macro", |host| {
+        host.run_command(VAULT_REPAIR, serde_json::json!({}))
+    })
+    .expect("riparare resta un comando qualunque");
+    assert!(
+        ws.journal().expect("registro").records.len() >= before,
+        "il registro non ha perso niente"
+    );
+}

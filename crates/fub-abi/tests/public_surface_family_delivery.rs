@@ -67,7 +67,7 @@ fn every_public_surface_family_has_shell_fallback_mirror_native_and_wasm() {
             ),
             (
                 "native",
-                "crates/fub-host/src/sheet.rs",
+                "crates/fub-format-sheet/src/grid.rs",
                 "impl fub_abi::grid::GridProvider for SheetGridProvider",
             ),
             (

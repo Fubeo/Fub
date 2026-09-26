@@ -23,8 +23,10 @@ essere ricostruito dalle cache eliminabili.
 ### Local-first
 
 La normale apertura, modifica e ricerca non richiedono account o servizio
-remoto. Il workspace corrente non include un client HTTP nel percorso
-principale dell'app.
+remoto. La build predefinita include un client HTTP (feature `http-client` di
+`fub-host`). Chi lo usa passa dalla `Guard` e deve avere il permesso
+`fub:network`, che si può spegnere per ogni componente. Sync e pubblicazione
+si connettono soltanto all'endpoint configurato sulla macchina.
 
 ### Confine della prima release
 

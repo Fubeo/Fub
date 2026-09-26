@@ -81,6 +81,11 @@ fn path() -> PathBuf {
 
 /// Le forme dichiarate da un montaggio vero, per un `.md`.
 fn forms() -> Vec<SyntaxForm> {
+    forms_for(PROBE)
+}
+
+/// Le forme dichiarate da un montaggio vero, per un documento qualsiasi.
+fn forms_for(doc: &str) -> Vec<SyntaxForm> {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     // Tutto in memoria, come in `le_view_ufficiali.rs` e per la stessa ragione:
@@ -97,7 +102,7 @@ fn forms() -> Vec<SyntaxForm> {
     match mounted
         .workspace
         .query_index(IndexQuery::SyntaxForms {
-            doc: DocId::new(PROBE),
+            doc: DocId::new(doc),
         })
         .expect("the runtime data channel answers syntax forms")
     {
@@ -180,6 +185,27 @@ fn a_hot_registered_plugin_appears_on_the_runtime_channel() {
         other => panic!("unexpected response: {}", other.kind_name()),
     };
     assert!(forms.iter().any(|form| form.name == "third.party:spoiler"));
+}
+
+/// Le card di testo di un canvas sono Markdown (`EMBEDDED_GRAMMAR`): il
+/// canvas porta le forme che il vault dà alle note, innesti compresi, e non il
+/// nome della dichiarazione, che non è una sintassi (I78).
+#[test]
+fn a_canvas_declares_the_forms_of_the_markdown_in_its_cards() {
+    let note = forms();
+    let canvas = forms_for("tela.canvas");
+    for form in &note {
+        assert!(
+            canvas.contains(form),
+            "the canvas misses {form:?}: {canvas:?}"
+        );
+    }
+    assert!(canvas
+        .iter()
+        .all(|form| form.name != fub_abi::options::source::EMBEDDED_GRAMMAR));
+    let names: BTreeSet<&str> = canvas.iter().map(|form| form.name.as_str()).collect();
+    assert_eq!(names.len(), canvas.len(), "no form is declared twice");
+    assert!(names.contains("fub:diagrams") && names.contains("fub:math"));
 }
 
 fn trigger_ts(t: &SyntaxTrigger) -> String {

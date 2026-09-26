@@ -41,6 +41,11 @@ export function isErrorKind(e: unknown, kind: PluginErrorKind): boolean {
 // Il messaggio è **già risolto** quando arriva: lo traduce il kernel col
 // catalogo di chi l'ha prodotto, prima di lasciarlo uscire (§12.1). Qui non si
 // traduce niente, si sceglie soltanto cosa stampare.
+//
+// Un `Error` della webview dà il suo messaggio e non `"Error: …"`: il prefisso
+// è inglese in ogni lingua e non dice niente a chi legge.
 export function errorText(e: unknown): string {
-  return asPluginError(e)?.message ?? String(e);
+  const plugin = asPluginError(e);
+  if (plugin) return plugin.message;
+  return e instanceof Error ? e.message : String(e);
 }

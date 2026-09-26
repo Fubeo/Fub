@@ -183,6 +183,14 @@
   color: var(--danger);
 }
 
+/* Un'icona del set della shell dentro una view dichiarata: prende il colore
+   del testo intorno, come ogni altra icona della shell. */
+.ui-icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
 .ui-progress {
   display: flex;
   align-items: center;

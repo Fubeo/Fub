@@ -75,6 +75,14 @@ mentre un path esplicito conserva la propria cartella. La scelta del nome libero
 e il controllo delle collisioni avvengono nel kernel insieme alla scrittura,
 senza una verifica separata nella shell.
 
+`files.new-note-extension` sceglie l'estensione di una nota creata senza
+estensione; il valore predefinito è `md`. Un nome la riceve quando il suo
+ultimo segmento non porta già un'estensione servita da un formato del vault:
+`Idee` diventa `Idee.md`, `Lavagna.canvas` resta un canvas e `Report v1.2`
+diventa `Report v1.2.md`. Se nessun formato installato serve l'estensione
+scelta, i comandi che creano note rispondono con un errore e non scrivono un
+file che il vault non saprebbe aprire.
+
 ## Albero dei file
 
 L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene
@@ -99,6 +107,41 @@ path è già occupato da una cartella o da un file, l'esito è un conflitto e il
 disco resta invariato. La prova a vuoto esegue lo stesso controllo senza
 scrivere. La creazione non è annullabile dal registro dei comandi.
 
+## Cattura rapida
+
+Il clipper del browser, la condivisione mobile, `fub-cli capture` e l'URI
+`fub://capture` scrivono tutti con lo stesso comando dell'host,
+`capture.apply`. Il parametro `payload_json` porta il payload capture v1 come
+testo JSON; `template` è facoltativo e vale soltanto per una cattura che crea.
+La validazione è la stessa per ogni trasporto: titolo su una riga, testo non
+vuoto, `source_url` http o https senza credenziali, e `vault`, `folder` e
+`note` dentro il recinto del vault.
+
+- `create` crea la nota con `note.create`, o con `note.from_template` se c'è
+  un template. Il nome è `note` se c'è; altrimenti il titolo diventa un
+  segmento portabile, senza caratteri riservati e al più di 80 caratteri. Un
+  nome occupato è un conflitto e la nota esistente resta intatta.
+- `append` e `prepend` scrivono in una nota esistente; `prepend` scrive dopo il
+  frontmatter.
+- `daily` scrive nella nota del giorno, che `note.daily` crea se manca.
+
+Il blocco scritto contiene il titolo come intestazione `# …`, il testo e, se
+c'è, la riga della fonte nella lingua del vault. Una riga vuota separa le parti
+e il blocco dal testo vicino, e il blocco usa i terminatori di riga del
+documento. La destinazione deve essere un formato di testo, e le proprietà
+vogliono un formato con frontmatter: un canvas o una base sono rifiutati prima
+di qualunque scrittura.
+
+L'ordine delle scritture rende sicuro un nuovo tentativo. Tutti i controlli
+vengono prima; poi si scrivono le proprietà, che ripetute non cambiano niente;
+per ultimo il testo, in una sola scrittura che discende dalla revisione letta.
+Una nota nata dalla cattura e rimasta senza testo torna nel cestino. La prova a
+vuoto dice quale documento verrebbe scritto.
+
+`fub://new` segue le stesse regole di nome e di titolo: senza `name` il nome
+viene dal titolo, e il titolo va in testa al corpo, dopo l'eventuale
+frontmatter del template.
+
 ## Bozze
 
 Una bozza protegge testo che non è ancora diventato una scrittura riuscita sul
@@ -120,14 +163,20 @@ una destinazione sicura.
 L'impostazione di vault `files.trash` sceglie dove finisce una nota cancellata
 dalla shell. `vault` (default) usa il cestino interno. `system` usa il comando
 `trash.os`, che prova il cestino del sistema operativo e, se non è disponibile,
-sposta la nota nel cestino interno; la shell segnala il ripiego. Col cestino
+sposta la nota nel cestino interno; l'esito del comando segnala il ripiego con
+un messaggio, lo stesso dalla shell e dalla palette. Col cestino
 del vault la cancellazione non chiede conferma e offre «Annulla» nell'avviso;
 col cestino di sistema, da cui Fub non può ripristinare, chiede conferma.
 Svuotare il cestino interno resta un comando irreversibile separato.
 
 ## Versioning
 
-Il versioning conserva snapshot del contenuto. `version.restore` cattura la
+Il versioning conserva snapshot del contenuto. L'impostazione del vault
+`versioning.enabled` (accesa di serie) decide se ne nascono di nuovi, e vale
+dalla scrittura successiva, senza riaprire il vault. Spenta, la storia già
+registrata resta leggibile e segue le note rinominate o cancellate, mentre
+`version.restore` rifiuta finché non si riaccende: nessuno fotograferebbe il
+contenuto che il ripristino sostituisce. `version.restore` cattura la
 revisione del documento, quindi verifica che il riferimento alla versione
 esista e che il blob sia leggibile e integro (dimensione e impronta FNV-1a).
 La scrittura condizionata usa quella revisione come confronto e scambio (CAS).
@@ -152,12 +201,19 @@ Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
+Le versioni si diradano col tempo, a ogni nuova versione della nota. Nelle
+ultime 24 ore restano tutte; fino a 7 giorni ne resta una per ora, fino a 90
+giorni una per giorno. Oltre i 90 giorni resta soltanto la versione più recente
+della nota. Le fasce non sono configurabili.
+
 ## Cartelle esterne
 
 Le cartelle esterne non vengono scoperte né collegate automaticamente. Dopo aver
 scelto un path assoluto, l'utente può usare i comandi generici `mount.add`
 (`name`, `target`, `namespace`), `mount.list` e `mount.remove` (`name`).
-L'elenco restituisce rotte tipizzate con namespace stabile e target; i path
+L'elenco restituisce rotte tipizzate con namespace stabile e target, e le dice
+anche in un messaggio, con le cartelle configurate che non si raggiungono; i
+tre comandi confermano l'esito anche dalla palette. I path
 relativi risolti nel namespace restano recintati, senza attraversare `..`,
 separatori Windows o symlink. Alla registrazione gli antenati del path scelto
 si risolvono una volta (su macOS `/var` è `/private/var`) e si salva il path
@@ -238,7 +294,10 @@ Questo flusso è distinto da `fub.versioning`:
 transazione dell'intero vault. È distinto anche dal drill backup/restore offline
 dell'issue [#7](https://github.com/Fubeo/Fub/issues/7), che conserva il proprio
 fixture e manifesto indipendente. La feature `fub.backup` resta invece uno
-snapshot namespaced delle sole note nello stesso vault.
+snapshot namespaced delle sole note nello stesso vault. Gli snapshot prendono il
+nome dal giorno, e un secondo backup nello stesso giorno sostituisce il
+precedente. Dopo ogni backup riuscito restano gli snapshot più recenti indicati da
+`backup.keep` (10 di serie; 0 li tiene tutti).
 
 ## Limiti
 

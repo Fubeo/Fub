@@ -62,15 +62,17 @@ use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::host::authorize_path;
 use fub_kernel::os_trash::{FallbackReason, OsTrashBackend, OsTrashReceipt, TrashVia};
 use fub_kernel::{
-    Capability, Guard, JournalRead, MachineSettings, MountRegistry, MountRoute, Policy, ReadOnly,
+    Capability, Guard, JournalRead, MachineSettings, MountRegistry, MountRoute, ReadOnly,
     Subscription, SystemLocale, ViewStates, Workspace,
 };
 
+use crate::automation::VaultWriterLock;
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
 use crate::jobs::{
     drain_events, finish_events, run_detached_rebuild_index, with_event_drain, JobHost,
 };
+use crate::mount::{RootedDisk, VaultStorageSource};
 use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{
@@ -79,6 +81,8 @@ use crate::registry::{
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry, VaultRegistryHandle};
 use crate::watcher::{OpeningWatcher, RunningWatcher, WatcherFactory};
+use fub_abi::traits::HostNetwork;
+use fub_kernel::storage::VaultStorage;
 
 const OS_TRASH_COMMAND: &str = "trash.os";
 const MOUNT_ADD: &str = "mount.add";
@@ -87,6 +91,20 @@ const MOUNT_LIST: &str = "mount.list";
 const FOLDER_CREATE: &str = "folder.create";
 const SNAPSHOT_CREATE: &str = "vault.snapshot.create";
 const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
+
+/// I comandi che l'host esegue in proprio: il kernel li riserva al mount
+/// (`Workspace::reserve_host_commands`), così un plugin che li invoca sente che
+/// non sono suoi da chiamare e nessun provider ne registra un omonimo.
+pub(crate) const HOST_COMMANDS: [&str; 8] = [
+    OS_TRASH_COMMAND,
+    MOUNT_ADD,
+    MOUNT_REMOVE,
+    MOUNT_LIST,
+    FOLDER_CREATE,
+    SNAPSHOT_CREATE,
+    SNAPSHOT_APPLY,
+    crate::capture::CAPTURE_APPLY,
+];
 
 /// Lo stesso catalogo host-owned serve l'elenco e la scelta del dispatcher.
 fn mount_specs() -> [CommandSpec; 3] {
@@ -264,6 +282,36 @@ fn snapshot_host_error(error: SnapshotHostError) -> PluginError {
     }
 }
 
+/// La tabella delle rotte in una frase: nome e cartella di ognuna, e le
+/// cartelle configurate che non si raggiungono. Nessuna rotta è una frase sua.
+fn mount_listing(
+    routes: &[fub_kernel::MountRoute],
+    diagnostics: &[fub_kernel::MountDiagnostic],
+) -> Text {
+    let routes = routes
+        .iter()
+        .map(|route| format!("{} ({})", route.name, route.target))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let faulty = diagnostics
+        .iter()
+        .map(|problem| format!("{} ({})", problem.name, problem.message))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match (routes.is_empty(), faulty.is_empty()) {
+        (true, true) => Text::key("host.mount.listed.none"),
+        (false, true) => Text::message("host.mount.listed", vec![Arg::text("routes", routes)]),
+        (true, false) => Text::message(
+            "host.mount.listed.only_faulty",
+            vec![Arg::text("faulty", faulty)],
+        ),
+        (false, false) => Text::message(
+            "host.mount.listed.faulty",
+            vec![Arg::text("routes", routes), Arg::text("faulty", faulty)],
+        ),
+    }
+}
+
 /// Unica dichiarazione della porta host-owned: elencazione e dispatch usano
 /// questa stessa spec, mentre l'IPC Tauri resta `invoke_command`.
 fn os_trash_spec() -> CommandSpec {
@@ -275,7 +323,16 @@ fn os_trash_spec() -> CommandSpec {
         .with_scope(CommandScope::writing(CommandReach::Document))
 }
 
+/// L'esito di `trash.os`. Il ripiego sul cestino interno si **dice**, nel
+/// `notify`, perché chi ha scelto il cestino di sistema cercherebbe la nota
+/// lì: la palette e la shell mostrano la stessa frase, senza leggere l'effetto.
 fn os_trash_outcome(receipt: OsTrashReceipt) -> CommandOutcome {
+    let notify = matches!(receipt.via, TrashVia::InternalFallback { .. }).then(|| {
+        Text::message(
+            "host.trash_os.fallback",
+            vec![Arg::text("doc", receipt.id.as_str())],
+        )
+    });
     let via = match receipt.via {
         TrashVia::Os => serde_json::json!({ "kind": "os" }),
         TrashVia::InternalFallback { reason } => serde_json::json!({
@@ -286,7 +343,11 @@ fn os_trash_outcome(receipt: OsTrashReceipt) -> CommandOutcome {
             }
         }),
     };
-    CommandOutcome::done().with_effect(CommandEffect::Custom {
+    let outcome = match notify {
+        Some(message) => CommandOutcome::notify(message),
+        None => CommandOutcome::done(),
+    };
+    outcome.with_effect(CommandEffect::Custom {
         ns: "fub.trash.os".into(),
         payload: serde_json::json!({
             "doc": receipt.id,
@@ -394,6 +455,9 @@ pub struct VaultSession {
     /// due nomi diversi dello stesso vault non devono essere due sessioni — la
     /// seconda troverebbe il lock dell'indice della prima.
     root: Utf8PathBuf,
+    /// Il supporto su cui il vault è montato: lo stesso del workspace, ed è
+    /// l'unico da cui l'host legge o scrive dentro la radice.
+    storage: Arc<dyn VaultStorage>,
     /// Il workspace, dietro il lock che distingue chi legge da chi scrive.
     ///
     /// Le misure del banco in `examples/contention.rs` confrontano un gate
@@ -412,6 +476,7 @@ pub struct VaultSession {
     ///
     /// Condiviso col runner, che da qui prende il **corpo** di un job. Il lock
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
+    /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Custody<BundleRegistry>,
     /// Risorse preparate dalla `FormatSource`, vive quanto la sessione.
     _format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
@@ -460,6 +525,10 @@ pub struct VaultSession {
     /// aprire un vault lo rende corrente **quando l'apertura è finita**, non a
     /// metà.
     used: u64,
+    /// **Il diritto di scrivere nel vault**, esclusivo fra processi. Lo prende
+    /// l'apertura prima di toccare il disco e lo lascia la chiusura per ultimo,
+    /// quando nessun thread di questa sessione può più scrivere.
+    writer: Arc<VaultWriterLock>,
 }
 
 impl VaultSession {
@@ -471,6 +540,7 @@ impl VaultSession {
         &self.workspace
     }
 
+    /// Chi possiede i bundle di questo vault (§9.3): serve a chi ne monta uno a
     /// mano — un test, e a M5 il caricatore che installa un plugin a vault già
     /// aperto.
     #[cfg(test)]
@@ -521,6 +591,7 @@ impl VaultSession {
             registry,
             mut runner,
             _format_resources,
+            writer,
             ..
         } = self;
         // 1. smette di guardare, 2. smette di lavorare, 3. si chiude. I primi
@@ -533,6 +604,9 @@ impl VaultSession {
         errors.extend(crate::format_source::dispose_format_resources(
             _format_resources,
         ));
+        // Il lease si lascia per ultimo: fino a qui un altro processo che
+        // aprisse il vault troverebbe indici e plugin ancora al lavoro.
+        drop(writer);
         errors
     }
 
@@ -612,6 +686,8 @@ fn close_session_resources(
 struct OpeningTransaction<'a> {
     workspace: Custody<Workspace>,
     registry: Custody<BundleRegistry>,
+    /// Il supporto su cui il workspace è stato montato: passa alla sessione.
+    storage: Arc<dyn VaultStorage>,
     format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
     startup_diagnostics: Vec<PluginError>,
     watcher: Option<OpeningWatcher<'a>>,
@@ -625,6 +701,7 @@ impl<'a> OpeningTransaction<'a> {
     fn new(
         workspace: &'a Custody<Workspace>,
         registry: &Custody<BundleRegistry>,
+        storage: Arc<dyn VaultStorage>,
         format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
         startup_diagnostics: Vec<PluginError>,
         startup_lease: Option<StartupLease>,
@@ -632,6 +709,7 @@ impl<'a> OpeningTransaction<'a> {
         Self {
             workspace: workspace.clone(),
             registry: registry.clone(),
+            storage,
             format_resources,
             startup_diagnostics,
             watcher: Some(OpeningWatcher::new(workspace)),
@@ -670,6 +748,7 @@ impl<'a> OpeningTransaction<'a> {
         indexed: Arc<(Mutex<bool>, std::sync::Condvar)>,
         #[cfg(feature = "versioning")] versions: Option<VersionStore>,
         mounts: MountRegistry,
+        writer: Arc<VaultWriterLock>,
     ) {
         assert!(
             self.session.is_none() && self.watcher.is_some() && self.runner.is_some(),
@@ -683,6 +762,7 @@ impl<'a> OpeningTransaction<'a> {
         let runner = self.runner.take().expect("il runner è stato verificato");
         self.session = Some(VaultSession {
             root,
+            storage: Arc::clone(&self.storage),
             workspace: self.workspace.clone(),
             registry: self.registry.clone(),
             mounts: Custody::new("i mount esterni", mounts),
@@ -695,6 +775,7 @@ impl<'a> OpeningTransaction<'a> {
             versions,
             watcher,
             used: 0,
+            writer,
         });
     }
 
@@ -802,11 +883,19 @@ struct ApplyClaim<'a> {
     sessions: &'a Custody<Sessions>,
     root: Utf8PathBuf,
     token: Arc<ApplyingToken>,
+    /// Il vault è chiuso ma non libero: nessun altro processo ci scrive mentre
+    /// lo snapshot lo legge o lo sostituisce, e la sessione riaperta eredita
+    /// lo stesso lease.
+    writer: Arc<VaultWriterLock>,
 }
 
 impl ApplyClaim<'_> {
     fn token(&self) -> Arc<ApplyingToken> {
         Arc::clone(&self.token)
+    }
+
+    fn writer(&self) -> Arc<VaultWriterLock> {
+        Arc::clone(&self.writer)
     }
 }
 
@@ -945,7 +1034,13 @@ pub struct Host {
     sessions: Custody<Sessions>,
     /// Unica sequenza di handle: una riapertura non riutilizza identità vecchie.
     resources: Custody<crate::resources::ResourceTable>,
+    /// Chi apre il supporto di ogni vault (§15.1): il disco di serie.
+    storage: Arc<dyn VaultStorageSource>,
     watcher: Box<dyn WatcherFactory>,
+    /// Il filo verso fuori che ogni workspace montato riceve: `ureq` di serie
+    /// quando il binario ha `http-client`, nessuno altrimenti.
+    network: Option<Arc<dyn HostNetwork>>,
+    clock: Arc<dyn fub_kernel::time::Clock>,
     sink: Option<Arc<dyn EventSink>>,
     os_trash: Arc<dyn OsTrashBackend>,
     startup_source: Option<Arc<dyn StartupSource>>,
@@ -998,6 +1093,12 @@ pub struct Host {
     /// (`fub_app::run`), e questo `Arc` è il filo che lega quel collettore al
     /// montaggio, dove le impostazioni gli dicono quanto raccontare.
     levels: Arc<fub_kernel::log::Levels>,
+    /// **I lease di scrittura** che questo processo tiene, per radice canonica.
+    /// Deboli: li possiedono le sessioni e gli snapshot in corso, e il lock si
+    /// rilascia quando l'ultimo di loro lo lascia. Due aperture concorrenti
+    /// della stessa radice in questo host condividono lo stesso lease invece
+    /// di escludersi a vicenda.
+    writers: Mutex<BTreeMap<Utf8PathBuf, std::sync::Weak<VaultWriterLock>>>,
 }
 
 impl Default for Host {
@@ -1072,6 +1173,7 @@ fn update_view_state(
 
 impl Host {
     /// Un host col rilevatore di default e nessun ponte eventi.
+    ///
     /// Il rilevatore di default è `notify` se la cargo feature
     /// `notify-watcher` è accesa (lo è), e l'implementazione interna senza
     /// rilevamento altrimenti — cioè su PWA e mobile, dove `notify` non esiste
@@ -1084,7 +1186,10 @@ impl Host {
         Self {
             sessions: Custody::empty("le sessioni aperte"),
             resources: Custody::empty("le risorse binarie aperte"),
+            storage: Arc::new(RootedDisk),
             watcher,
+            network: crate::mount::default_network(),
+            clock: Arc::new(fub_kernel::time::SystemClock),
             os_trash: Arc::new(fub_kernel::FsStorage),
             sink: None,
             format_source: None,
@@ -1097,6 +1202,7 @@ impl Host {
             job_threads: DEFAULT_JOB_THREADS,
             system_locale: Arc::new(SystemLocale::default()),
             levels: Arc::new(fub_kernel::log::Levels::default()),
+            writers: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -1104,6 +1210,38 @@ impl Host {
     pub fn with_os_trash_backend(mut self, backend: Arc<dyn OsTrashBackend>) -> Self {
         self.os_trash = backend;
         self
+    }
+
+    /// Sostituisce il supporto su cui ogni vault viene montato (§15.1). Di
+    /// serie è il disco ancorato alla radice; un banco passa un supporto in
+    /// memoria o uno che fallisce la mossa da studiare, e l'host non ha nessun
+    /// altro canale verso il vault: registro dei mount compreso.
+    pub fn with_storage(mut self, source: Arc<dyn VaultStorageSource>) -> Self {
+        self.storage = source;
+        self
+    }
+
+    /// Sostituisce il client di rete che ogni workspace montato riceve
+    /// (§23.3). Di serie è `ureq` quando il binario ha `http-client`; un banco
+    /// passa un client che conta, risponde o rifiuta a comando.
+    pub fn with_network(mut self, network: Arc<dyn HostNetwork>) -> Self {
+        self.network = Some(network);
+        self
+    }
+
+    /// Sostituisce l'orologio che ogni workspace montato legge per registro,
+    /// cestino, bozze e job. Di serie è quello di sistema; un banco passa un
+    /// orologio che avanza a comando.
+    pub fn with_clock(mut self, clock: Arc<dyn fub_kernel::time::Clock>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// Il client di rete di questo host, se ne ha uno: è lo stesso che i
+    /// workspace montati usano, così chi deve chiedere fuori dal vault — il
+    /// visore che salva una risorsa remota — non se ne costruisce un altro.
+    pub fn network(&self) -> Option<Arc<dyn HostNetwork>> {
+        self.network.clone()
     }
 
     /// Il locale di sistema condiviso: la shell ci scrive ciò che il sistema
@@ -1171,16 +1309,16 @@ impl Host {
     }
 
     /// Sostituisce il rilevatore con l'implementazione interna che non osserva
-    /// il filesystem. È la variante pubblica per host senza un backend watcher:
-    /// il trait e la capacità del workspace restano confinati al crate.
+    /// il filesystem: la scorciatoia di [`with_watcher`](Host::with_watcher)
+    /// con [`NoWatcher`](crate::NoWatcher), per gli host senza un backend.
     pub fn without_watcher() -> Self {
-        let mut host = Self::new();
-        host.watcher = Box::new(crate::watcher::NoWatcher);
-        host
+        Self::new().with_watcher(Box::new(crate::watcher::NoWatcher))
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
+    /// Sostituisce chi avvia il rilevamento delle modifiche esterne su ogni
+    /// vault aperto: `notify` di serie, [`NoWatcher`](crate::NoWatcher), o
+    /// una fabbrica del banco che consegna i cambiamenti a comando.
+    pub fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
         self.watcher = watcher;
         self
     }
@@ -1296,27 +1434,6 @@ impl Host {
         })
     }
 
-    /// Reports whether a plugin currently has a capability permission.
-    pub fn permission_granted(
-        &self,
-        vault: Option<&str>,
-        plugin: &str,
-        permission: &str,
-    ) -> Result<bool, PluginError> {
-        let capability = Capability::ALL
-            .into_iter()
-            .find(|capability| capability.permission() == Some(permission))
-            .ok_or_else(|| {
-                PluginError::BadArgs(format!("unknown permission: {permission}").into())
-            })?;
-        self.read_workspace(vault, |workspace| {
-            Ok(workspace
-                .granted_policy(plugin)
-                .denies(capability)
-                .is_none())
-        })
-    }
-
     /// Reads the journal snapshot for the selected vault.
     pub fn journal(&self, vault: Option<&str>) -> Result<JournalRead, PluginError> {
         self.read_workspace(vault, |workspace| {
@@ -1409,6 +1526,24 @@ impl Host {
         Ok(())
     }
 
+    /// [`Self::wait_indexed`] con un tetto: `true` se l'apertura ha smesso di
+    /// lavorare entro `timeout`, `false` se sta ancora indicizzando. È per chi
+    /// aspetta e intanto deve poter rinunciare: la CLI, che fra un giro e
+    /// l'altro guarda se è arrivato un SIGINT.
+    pub fn wait_indexed_for(
+        &self,
+        vault: Option<&str>,
+        timeout: std::time::Duration,
+    ) -> Result<bool, PluginError> {
+        let condition = self.with_session(vault, |s| Arc::clone(&s.indexed))?;
+        let (done, bell) = &*condition;
+        let done = done.lock().expect("fine avvelenata");
+        let (done, _) = bell
+            .wait_timeout_while(done, timeout, |done| !*done)
+            .expect("fine avvelenata");
+        Ok(*done)
+    }
+
     /// Apre un vault — monta, prepara il subscriber temporaneo, avvia il
     /// rilevatore, scansiona, registra il subscriber live e accende il ponte —
     /// e lo rende **corrente**.
@@ -1454,7 +1589,7 @@ impl Host {
         }
         let recovery_root = snapshot_recovery_root(root)?;
         let existing_root = root_is_directory.then(|| canonical(root)).transpose()?;
-        let root = if let Some(root) = existing_root {
+        let (root, writer) = if let Some(root) = existing_root {
             let already_open = {
                 let sessions = self.sessions.read()?;
                 match sessions.slots.get(&root) {
@@ -1468,14 +1603,18 @@ impl Host {
                 self.become_current(&root)?;
                 return Ok(info);
             }
+            // Il lease prima della recovery: anche completare uno snapshot
+            // interrotto è scrivere nel vault.
+            let writer = self.writer_lease(&root)?;
             fub_kernel::snapshot::recover_snapshots(&recovery_root)
                 .map_err(|error| PluginError::Io(error.to_string().into()))?;
             if root != recovery_root {
                 fub_kernel::snapshot::recover_snapshots(&root)
                     .map_err(|error| PluginError::Io(error.to_string().into()))?;
             }
-            root
+            (root, writer)
         } else {
+            let writer = self.writer_lease(&recovery_root)?;
             fub_kernel::snapshot::recover_snapshots(&recovery_root)
                 .map_err(|error| PluginError::Io(error.to_string().into()))?;
             if !root.is_dir() {
@@ -1488,14 +1627,19 @@ impl Host {
             }
             let root = canonical(root)?;
             if root != recovery_root {
+                // La radice nominata si risolve altrove: il lease giusto è il
+                // suo, non quello del nome.
+                let writer = self.writer_lease(&root)?;
                 fub_kernel::snapshot::recover_snapshots(&root)
                     .map_err(|error| PluginError::Io(error.to_string().into()))?;
+                (root, writer)
+            } else {
+                (root, writer)
             }
-            root
         };
 
         let _phase = tracing::info_span!(target: "fub.apertura", "open").entered();
-        let info = self.mounts(&root)?;
+        let info = self.mounts(&root, writer)?;
         self.become_current(&root)?;
         Ok(info)
     }
@@ -1550,7 +1694,7 @@ impl Host {
         }
         let claim = self.claim_snapshot(&canonical_root)?;
         let report = fub_kernel::snapshot::apply_snapshot(&canonical_root, snapshot)?;
-        self.mounts_after_apply(&canonical_root, claim.token())
+        self.mounts_after_apply(&canonical_root, claim.token(), claim.writer())
             .map_err(SnapshotHostError::Reopen)?;
         self.become_current(&canonical_root)
             .map_err(SnapshotHostError::Reopen)?;
@@ -1560,6 +1704,9 @@ impl Host {
 
     fn claim_snapshot(&self, root: &Utf8Path) -> Result<ApplyClaim<'_>, SnapshotHostError> {
         let token = Arc::new(ApplyingToken);
+        let writer = self
+            .writer_lease(root)
+            .map_err(SnapshotHostError::Lifecycle)?;
         let mut sessions = self
             .sessions
             .write()
@@ -1574,7 +1721,45 @@ impl Host {
             sessions: &self.sessions,
             root: root.to_owned(),
             token,
+            writer,
         })
+    }
+
+    /// Il lease di scrittura su `root` (canonica): quello che questo processo
+    /// tiene già, se una sessione o uno snapshot lo possiede, altrimenti preso
+    /// dal disco senza aspettare.
+    ///
+    /// Un altro processo che lo tiene dà un `Conflict` con
+    /// [`E_WRITER_BUSY`](crate::automation::E_WRITER_BUSY): due scrittori sullo
+    /// stesso vault (l'app e la CLI, due finestre di due istanze) non si
+    /// sovrascrivono a vicenda, si rifiutano all'apertura.
+    pub(crate) fn writer_lease(
+        &self,
+        root: &Utf8Path,
+    ) -> Result<Arc<VaultWriterLock>, PluginError> {
+        let mut writers = self
+            .writers
+            .lock()
+            .map_err(|_| PluginError::Internal("i lease di scrittura sono avvelenati".into()))?;
+        if let Some(held) = writers.get(root).and_then(std::sync::Weak::upgrade) {
+            return Ok(held);
+        }
+        writers.retain(|_, lease| lease.strong_count() > 0);
+        let lock = crate::automation::lock_vault_writer(root.as_std_path()).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::WouldBlock {
+                PluginError::Conflict(Text::message(
+                    crate::automation::E_WRITER_BUSY,
+                    vec![Arg::text("root", root.as_str())],
+                ))
+            } else {
+                PluginError::Io(
+                    format!("non riesco a prendere il lock di scrittura di {root}: {error}").into(),
+                )
+            }
+        })?;
+        let lease = Arc::new(lock);
+        writers.insert(root.to_owned(), Arc::downgrade(&lease));
+        Ok(lease)
     }
 
     /// Il montaggio vero e proprio, che è la via lunga di [`open`](Host::open):
@@ -1583,26 +1768,34 @@ impl Host {
     /// mette la sessione nella mappa. **Non decide chi è corrente**: quello lo
     /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
     /// già aperto.
-    fn mounts(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
-        self.mounts_with_info(root, info_of)
+    fn mounts(
+        &self,
+        root: &Utf8Path,
+        writer: Arc<VaultWriterLock>,
+    ) -> Result<VaultInfo, PluginError> {
+        self.mounts_with_info(root, info_of, writer)
     }
 
     fn mounts_after_apply(
         &self,
         root: &Utf8Path,
         token: Arc<ApplyingToken>,
+        writer: Arc<VaultWriterLock>,
     ) -> Result<VaultInfo, PluginError> {
-        self.mounts_with_claim(root, info_of, Some(token))
+        self.mounts_with_claim(root, info_of, Some(token), writer)
     }
 
     /// Variante privata che rende iniettabile la sola lettura pre-pubblicazione.
     ///
+    /// Il seam resta dentro il modulo: i test possono far fallire `VaultInfo`
+    /// senza avvelenare un lock o aggiungere una leva all'API pubblica.
     fn mounts_with_info(
         &self,
         root: &Utf8Path,
         session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
+        writer: Arc<VaultWriterLock>,
     ) -> Result<VaultInfo, PluginError> {
-        self.mounts_with_claim(root, session_info, None)
+        self.mounts_with_claim(root, session_info, None, writer)
     }
 
     fn mounts_with_claim(
@@ -1610,10 +1803,21 @@ impl Host {
         root: &Utf8Path,
         session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
         applying: Option<Arc<ApplyingToken>>,
+        writer: Arc<VaultWriterLock>,
     ) -> Result<VaultInfo, PluginError> {
         let root = root.to_owned();
-        let external_mounts =
-            MountRegistry::load(&fub_kernel::FsStorage, &root).map_err(PluginError::from)?;
+        // Il supporto si apre prima di ogni lettura dentro la radice: il
+        // registro dei mount e il workspace stanno sullo stesso.
+        let storage = self
+            .storage
+            .open(&root)
+            .map_err(|source| fub_kernel::KernelError::InvalidRoot {
+                path: root.clone(),
+                source,
+            })
+            .map_err(PluginError::from)?;
+        let external_mounts = MountRegistry::load(&*storage, &fub_kernel::FsStorage, &root)
+            .map_err(PluginError::from)?;
         let startup = self
             .startup_source
             .as_ref()
@@ -1690,10 +1894,12 @@ impl Host {
             workspace: mut ws,
             mut registry,
             format_resources,
+            format_diagnostics,
             #[cfg(feature = "versioning")]
             versions,
         } = crate::mount::mount_with_formats(
             &root,
+            Arc::clone(&storage),
             Arc::clone(&self.machine),
             Arc::clone(&self.view_states),
             Arc::clone(&self.system_locale),
@@ -1701,15 +1907,25 @@ impl Host {
             prepared_formats,
             #[cfg(feature = "http-client")]
             self.configuration_root(),
+            self.network.clone(),
+            Arc::clone(&self.clock),
         )
-        // Le tre cose che fanno fallire il montaggio sono un provider di
-        // formato in conflitto con sé stesso, un bundle di core che non si
-        // monta — ciò che questo binario si porta dietro — e, da quando
+        // Le tre cose che fanno fallire il montaggio sono un formato di serie
+        // in conflitto con un altro formato di serie, un bundle di core che non
+        // si monta — ciò che questo binario si porta dietro — e, da quando
         // l'apertura verifica la radice (0160), un posto che non esiste, che
-        // non è una cartella o su cui non si ha permesso di scrivere: per chi
-        // apre dal dialogo la prima delle tre filtra già in `Host::open`, le
-        // altre arrivano qui con il perché nel messaggio.
+        // non è una cartella o su cui non si ha permesso di scrivere. Un
+        // provider esterno in conflitto non fa cadere il vault: è rifiutato da
+        // solo e finisce nella diagnostica di apertura.
         .map_err(|and| PluginError::Internal(and.into()))?;
+        for diagnostic in &format_diagnostics {
+            tracing::warn!(
+                target: "fub.host",
+                startup_diagnostic = ?diagnostic,
+                "startup diagnostic"
+            );
+        }
+        startup_diagnostics.extend(format_diagnostics);
 
         // **I temi installati sulla macchina** (§29.4): l'unica porta è il
         // `BundleRegistry` appena montato, come per le feature ufficiali —
@@ -1802,6 +2018,7 @@ impl Host {
         let mut opening = OpeningTransaction::new(
             &workspace,
             &registry,
+            storage,
             format_resources,
             startup_diagnostics,
             startup_lease,
@@ -1864,6 +2081,7 @@ impl Host {
             #[cfg(feature = "versioning")]
             versions,
             external_mounts,
+            writer,
         );
 
         // **Chi arriva secondo lascia cadere ciò che ha montato.** Il controllo
@@ -2443,8 +2661,8 @@ impl Host {
     pub fn adopt_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
         let shown: std::collections::BTreeSet<String> =
             self.pending_keybindings(vault)?.into_keys().collect();
-        self.in_session(vault, |session| {
-            with_event_drain(&session.workspace, |ws| ws.resume_settings(&shown))
+        with_event_drain(&self.session_workspace(vault)?, |ws| {
+            ws.resume_settings(&shown)
         })?;
         self.remember_seen_keys(vault)
     }
@@ -2525,9 +2743,9 @@ impl Host {
             crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
             return self.tell_observer(key);
         }
-        self.in_session(vault, |session| {
-            with_event_drain(&session.workspace, |ws| ws.set_setting(key, value))?
-        })?;
+        with_event_drain(&self.session_workspace(vault)?, |ws| {
+            ws.set_setting(key, value)
+        })??;
         crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
         self.if_key_remember_it(vault, key)
     }
@@ -2544,9 +2762,7 @@ impl Host {
             crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
             return self.tell_observer(key);
         }
-        self.in_session(vault, |session| {
-            with_event_drain(&session.workspace, |ws| ws.reset_setting(key))?
-        })?;
+        with_event_drain(&self.session_workspace(vault)?, |ws| ws.reset_setting(key))??;
         crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
         self.if_key_remember_it(vault, key)
     }
@@ -2654,9 +2870,9 @@ impl Host {
                 Ok(())
             }
             fub_abi::settings::SettingScope::Vault => {
-                self.in_session(vault, |session| {
-                    with_event_drain(&session.workspace, |ws| ws.switch_settings_profile(name))?
-                })?;
+                with_event_drain(&self.session_workspace(vault)?, |ws| {
+                    ws.switch_settings_profile(name)
+                })??;
                 self.remember_seen_keys(vault)
             }
         }
@@ -2771,7 +2987,11 @@ impl Host {
                 self.machine_settings(),
             ));
         }
-        self.in_session(vault, |session| query_workspace(&session.workspace, query))
+        // Il prestito delle sessioni si rilascia prima della query: dentro ci
+        // sono i provider, anche di terze parti, e chi aspetta di aprire o
+        // chiudere un vault bloccherebbe ogni nuova lettura delle sessioni —
+        // compresa quella con cui il provider stesso torna sull'host.
+        query_workspace(&self.session_workspace(vault)?, query)
     }
 
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e
@@ -3004,6 +3224,7 @@ impl Host {
         // comunque lasciati cadere e ritirano ciascuno il proprio marker.
         claimed.into_iter().flat_map(CloseClaim::close).collect()
     }
+
     /// Restituisce la diagnostica tipizzata conservata dall'apertura del vault.
     pub fn startup_diagnostics(
         &self,
@@ -3112,7 +3333,20 @@ impl Host {
         vault: Option<&str>,
         f: impl FnOnce(&mut Workspace) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
-        self.in_session(vault, |session| with_event_drain(&session.workspace, f)?)
+        // Fuori dal prestito delle sessioni, per la ragione di `query_index`:
+        // il drenaggio consegna gli eventi agli handler dei plugin.
+        with_event_drain(&self.session_workspace(vault)?, f)?
+    }
+
+    /// La custodia del workspace di una sessione, **fuori** dal prestito delle
+    /// sessioni.
+    ///
+    /// Chi chiama un provider, un handler o altro codice esterno parte da qui:
+    /// tenere `sessions.read()` durante quella chiamata è la regola che
+    /// `AGENTS.md` vieta per il workspace, e un writer in attesa su `sessions`
+    /// (aprire, chiudere) basta a trasformarla in un blocco circolare.
+    fn session_workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
+        self.with_session(vault, |session| session.workspace.clone())
     }
     /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
     pub fn read_document_with_format(
@@ -3125,6 +3359,30 @@ impl Host {
             let revision = Revision::of(&source);
             let format = workspace.format_of(id);
             Ok((source, revision, format))
+        })
+    }
+
+    /// Il formato che il vault riconosce a `id`, anche per un nome che non
+    /// esiste ancora: chi sta per scrivere in un documento nuovo chiede al
+    /// formato prima di crearlo, non dopo.
+    pub(crate) fn format_of(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<Option<DocumentFormat>, PluginError> {
+        self.read_workspace(vault, |workspace| Ok(workspace.format_of(id)))
+    }
+
+    /// Una frase del catalogo del core resa nella lingua del vault, per il
+    /// testo che l'host scrive **dentro** una nota e non in un esito.
+    pub(crate) fn core_phrase(
+        &self,
+        vault: Option<&str>,
+        mut text: Text,
+    ) -> Result<String, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace.localize_as(crate::settings::CORE_ID, &mut text);
+            Ok(text.as_literal().unwrap_or_default().to_string())
         })
     }
 
@@ -3159,12 +3417,10 @@ impl Host {
         vault: Option<&str>,
         id: &DocId,
     ) -> Result<fub_kernel::RenderedDocument, PluginError> {
-        let result = self.in_session(vault, |session| {
-            query_workspace(
-                &session.workspace,
-                fub_abi::traits::IndexQuery::RenderPreview { doc: id.clone() },
-            )
-        })?;
+        let result = query_workspace(
+            &self.session_workspace(vault)?,
+            fub_abi::traits::IndexQuery::RenderPreview { doc: id.clone() },
+        )?;
         match result {
             fub_abi::traits::IndexResult::RenderPreview(rendered) => Ok(rendered.into()),
             other => Err(PluginError::Internal(
@@ -3275,12 +3531,10 @@ impl Host {
                 .map_err(PluginError::from)?
         };
         let model = prepared.parse(bytes).map_err(PluginError::from)?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = JobHost::new(workspace.clone(), owner);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
+        let before_write = prepared.before_write().try_for_each(|hook| {
+            let mut detached = JobHost::new(workspace.clone(), hook.owner());
+            hook.invoke(&mut detached)
+        });
         let pending = {
             let mut ws = workspace.write()?;
             ws.commit_document_bytes_write(prepared, bytes, model, before_write)
@@ -3311,12 +3565,10 @@ impl Host {
                 .map_err(PluginError::from)?
         };
         let model = prepared.parse(source).map_err(PluginError::from)?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = JobHost::new(workspace.clone(), owner);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
+        let before_write = prepared.before_write().try_for_each(|hook| {
+            let mut detached = JobHost::new(workspace.clone(), hook.owner());
+            hook.invoke(&mut detached)
+        });
         let pending = {
             let mut ws = workspace.write()?;
             ws.commit_document_write(prepared, source, model, before_write)
@@ -3410,10 +3662,15 @@ impl Host {
             specs.retain(|spec| {
                 spec.id != OS_TRASH_COMMAND
                     && spec.id != FOLDER_CREATE
+                    && spec.id != crate::capture::CAPTURE_APPLY
                     && !mounts.iter().any(|own| own.id == spec.id)
             });
             specs.retain(|spec| spec.id != SNAPSHOT_CREATE && spec.id != SNAPSHOT_APPLY);
-            let mut own = vec![os_trash_spec(), folder_create_spec()];
+            let mut own = vec![
+                os_trash_spec(),
+                folder_create_spec(),
+                crate::capture::spec(),
+            ];
             own.extend(mounts);
             own.extend(snapshot_specs());
             // I comandi dell'host parlano col catalogo del core, nella lingua di
@@ -3427,11 +3684,13 @@ impl Host {
     }
     /// Tabella tipizzata, aggiornata dal documento autorevole prima di ogni lettura.
     pub fn mount_routes(&self, vault: Option<&str>) -> Result<Vec<MountRoute>, PluginError> {
-        let mounts = self.with_session(vault, |session| session.mounts.clone())?;
+        let (mounts, storage) = self.with_session(vault, |session| {
+            (session.mounts.clone(), Arc::clone(&session.storage))
+        })?;
         let _turn = mounts.write_turn();
         let root = mounts.read()?.root().to_owned();
-        let fresh =
-            MountRegistry::load(&fub_kernel::FsStorage, &root).map_err(PluginError::from)?;
+        let fresh = MountRegistry::load(&*storage, &fub_kernel::FsStorage, &root)
+            .map_err(PluginError::from)?;
         let routes = fresh.routing_table();
         *mounts.write()? = fresh;
         Ok(routes)
@@ -3440,6 +3699,7 @@ impl Host {
     fn invoke_mount_command(
         &self,
         mounts: Custody<MountRegistry>,
+        storage: Arc<dyn VaultStorage>,
         spec: CommandSpec,
         args: serde_json::Value,
         mode: InvokeMode,
@@ -3447,16 +3707,20 @@ impl Host {
         spec.validate_args(&args)?;
         let _turn = mounts.write_turn();
         let root = mounts.read()?.root().to_owned();
-        let storage = fub_kernel::FsStorage;
-        let mut fresh = MountRegistry::load(&storage, &root).map_err(PluginError::from)?;
-        match spec.id.as_str() {
+        // Il registro sta nel vault; le cartelle montate stanno sulla macchina.
+        let storage: &dyn VaultStorage = &*storage;
+        let targets: &dyn VaultStorage = &fub_kernel::FsStorage;
+        let mut fresh = MountRegistry::load(storage, targets, &root).map_err(PluginError::from)?;
+        // Ciò che l'utente legge: l'effetto tipizzato resta per chi lo consuma,
+        // ma la palette mostra il `notify`, e senza un comando riuscito è muto.
+        let said = match spec.id.as_str() {
             MOUNT_ADD => {
                 let name = args["name"].as_str().expect("spec validata");
                 let chosen = Utf8Path::new(args["target"].as_str().expect("spec validata"));
                 let namespace = args["namespace"].as_str().expect("spec validata");
                 // Il piano mostra il nome che verrà salvato, non quello scelto.
                 let target = fresh
-                    .register(&storage, name, chosen, namespace)
+                    .register(targets, name, chosen, namespace)
                     .map_err(PluginError::from)?;
                 if mode.is_dry_run() {
                     let summary = Text::message(
@@ -3471,8 +3735,17 @@ impl Host {
                         CommandPlan::of_edits(summary, Vec::new()),
                     )));
                 }
-                fresh.persist_add(&storage, name).map_err(mount_io_error)?;
-                fresh = MountRegistry::load(&storage, &root).map_err(PluginError::from)?;
+                fresh
+                    .persist_add(storage, targets, name)
+                    .map_err(mount_io_error)?;
+                fresh = MountRegistry::load(storage, targets, &root).map_err(PluginError::from)?;
+                Some(Text::message(
+                    "host.mount.added",
+                    vec![
+                        Arg::text("name", name),
+                        Arg::text("target", target.as_str()),
+                    ],
+                ))
             }
             MOUNT_REMOVE => {
                 let name = args["name"].as_str().expect("spec validata");
@@ -3490,23 +3763,30 @@ impl Host {
                     )));
                 }
                 fresh
-                    .persist_remove(&storage, name)
+                    .persist_remove(storage, name)
                     .map_err(mount_io_error)?;
-                fresh = MountRegistry::load(&storage, &root).map_err(PluginError::from)?;
+                fresh = MountRegistry::load(storage, targets, &root).map_err(PluginError::from)?;
+                Some(Text::message(
+                    "host.mount.removed",
+                    vec![Arg::text("name", name)],
+                ))
             }
-            MOUNT_LIST => {}
+            MOUNT_LIST => None,
             _ => unreachable!("dispatch scelto dalle spec mount"),
-        }
+        };
         let routes = fresh.routing_table();
         let diagnostics = fresh.diagnostics().to_vec();
         *mounts.write()? = fresh;
-        Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
-            ns: "fub.mount.routes".into(),
-            payload: serde_json::json!({
-                "routes": routes,
-                "diagnostics": diagnostics,
+        let said = said.unwrap_or_else(|| mount_listing(&routes, &diagnostics));
+        Ok(
+            CommandOutcome::notify(said).with_effect(CommandEffect::Custom {
+                ns: "fub.mount.routes".into(),
+                payload: serde_json::json!({
+                    "routes": routes,
+                    "diagnostics": diagnostics,
+                }),
             }),
-        }))
+        )
     }
 
     /// Crea o applica uno snapshot completo. Il vault si chiude prima di
@@ -3537,6 +3817,10 @@ impl Host {
                     CommandPlan::of_edits(summary, Vec::new()),
                 )));
             }
+            // Il lease resta di questo processo fra la chiusura e la
+            // riapertura: senza, un altro scrittore potrebbe entrare nel vault
+            // mentre lo si copia.
+            let _writer = self.writer_lease(&root)?;
             let faults = self.close_vault(&root)?;
             for fault in faults {
                 tracing::warn!(target: "fub.snapshot", "chiusura prima dello snapshot: {fault}");
@@ -3586,6 +3870,7 @@ impl Host {
                 CommandPlan::of_edits(summary, Vec::new()),
             )));
         }
+        let _writer = self.writer_lease(&root)?;
         let faults = self.close_vault(&root)?;
         for fault in faults {
             tracing::warn!(target: "fub.snapshot", "chiusura prima del ripristino: {fault}");
@@ -3600,7 +3885,7 @@ impl Host {
                 .map_err(snapshot_error)?;
             let report =
                 fub_kernel::snapshot::apply_snapshot(&root, &rebased).map_err(snapshot_error)?;
-            self.mounts_after_apply(&root, claim.token())?;
+            self.mounts_after_apply(&root, claim.token(), claim.writer())?;
             drop(claim);
             Ok::<_, PluginError>(report)
         })();
@@ -3689,16 +3974,16 @@ impl Host {
         Ok(os_trash_outcome(receipt))
     }
 
-    /// L'esito (o l'errore) di un comando dell'host nella lingua di chi guarda,
-    /// col catalogo del core. Non **aspetta** il workspace: `mount.*` deve
-    /// finire anche mentre un altro writer lo tiene, quindi se il lock non è
-    /// libero la frase esce nella lingua predefinita del catalogo, mai come
-    /// chiave grezza. Dopo uno snapshot la sessione è quella riaperta.
-    fn localized_host_result(
+    /// Un valore dell'host nella lingua di chi guarda, col catalogo del core.
+    /// Non **aspetta** il workspace: `mount.*` deve finire anche mentre un
+    /// altro writer lo tiene, quindi se il lock non è libero — o un vault non
+    /// c'è ancora — la frase esce nella lingua del sistema, mai come chiave
+    /// grezza. Dopo uno snapshot la sessione è quella riaperta.
+    fn localize_core<T: fub_abi::text::Localize + ?Sized>(
         &self,
         vault: Option<&str>,
-        mut result: Result<CommandOutcome, PluginError>,
-    ) -> Result<CommandOutcome, PluginError> {
+        value: &mut T,
+    ) {
         let workspace = self
             .with_session(vault, |session| session.workspace.clone())
             .ok();
@@ -3706,25 +3991,45 @@ impl Host {
             .as_ref()
             .and_then(|workspace| workspace.try_read())
         {
-            Some(ws) => match &mut result {
-                Ok(outcome) => ws.localize_as(crate::settings::CORE_ID, outcome),
-                Err(error) => ws.localize_as(crate::settings::CORE_ID, error),
-            },
+            Some(ws) => ws.localize_as(crate::settings::CORE_ID, value),
             None => {
                 let catalogs = crate::settings::core_catalog_assembled();
-                let locale = fub_abi::locale::Locale::default();
-                let strings = fub_abi::text::Strings::new(
+                let locale = self.system_locale.get();
+                fub_abi::text::Strings::new(
                     &catalogs,
                     crate::settings::CORE_DEFAULT_LOCALE,
                     &locale,
-                );
-                match &mut result {
-                    Ok(outcome) => strings.localize(outcome),
-                    Err(error) => strings.localize(error),
-                }
+                )
+                .localize(value);
             }
+        };
+    }
+
+    /// L'esito (o l'errore) di un comando dell'host nella lingua di chi guarda.
+    fn localized_host_result(
+        &self,
+        vault: Option<&str>,
+        mut result: Result<CommandOutcome, PluginError>,
+    ) -> Result<CommandOutcome, PluginError> {
+        match &mut result {
+            Ok(outcome) => self.localize_core(vault, outcome),
+            Err(error) => self.localize_core(vault, error),
         }
         result
+    }
+
+    /// L'errore di una chiamata dell'host pronto a uscire dal processo così
+    /// com'è, nella lingua di chi guarda.
+    ///
+    /// Dentro l'host un errore può restare una chiave del catalogo del core,
+    /// ed è ciò che permette a chi lo riceve in Rust di riconoscerlo
+    /// ([`is_writer_busy`](crate::automation::is_writer_busy)). Sul filo JSON
+    /// invece un `Text` non risolto è un oggetto e non una frase: chi porta
+    /// l'errore alla shell lo passa di qui, come fanno i comandi dell'host con
+    /// il proprio esito.
+    pub fn localized_error(&self, vault: Option<&str>, mut error: PluginError) -> PluginError {
+        self.localize_core(vault, &mut error);
+        error
     }
 
     pub fn invoke_user_command(
@@ -3741,11 +4046,21 @@ impl Host {
             let result = self.invoke_snapshot_command(root, spec, args, mode);
             return self.localized_host_result(vault, result);
         }
-        let (workspace, mounts) = self.with_session(vault, |session| {
-            (session.workspace.clone(), session.mounts.clone())
+        // La cattura compone altri comandi del registro: nessun prestito del
+        // workspace deve essere preso qui, perché ognuno prende il suo.
+        if command == crate::capture::CAPTURE_APPLY {
+            let result = crate::capture::invoke(self, vault, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        let (workspace, mounts, storage) = self.with_session(vault, |session| {
+            (
+                session.workspace.clone(),
+                session.mounts.clone(),
+                Arc::clone(&session.storage),
+            )
         })?;
         if let Some(spec) = mount_specs().into_iter().find(|spec| spec.id == command) {
-            let result = self.invoke_mount_command(mounts, spec, args, mode);
+            let result = self.invoke_mount_command(mounts, storage, spec, args, mode);
             return self.localized_host_result(vault, result);
         }
         if command == os_trash_spec().id {
@@ -3858,8 +4173,14 @@ impl Host {
     // `EventHandler`, e il ripristino è una scrittura normale (D8). L'host
     // compone le due metà, che è esattamente ciò che dovrà fare per un plugin
     // di terzi.
+    //
+    // Le tre funzioni qui sotto sono il banco dei test headless, non una porta
+    // del prodotto: la shell legge la storia dalla view `history` e ripristina
+    // col comando `version.restore`, come farebbe un plugin. Restano nascoste
+    // dalla documentazione finché un consumer vero non ne fa un'API.
 
     #[cfg(feature = "versioning")]
+    #[doc(hidden)]
     /// Lo store delle versioni di un vault, o l'errore se il versioning è
     /// spento: un chiamante che risponde "vuoto" quando la feature non c'è
     /// racconterebbe che non ci sono versioni, che è un'altra cosa.
@@ -3872,6 +4193,7 @@ impl Host {
     }
 
     #[cfg(feature = "versioning")]
+    #[doc(hidden)]
     pub fn list_versions(
         &self,
         vault: Option<&str>,
@@ -3888,6 +4210,7 @@ impl Host {
     /// `VersionStore::read` invochi il provider e attraversi lo storage. Così
     /// una lettura di cronologia non trattiene il workspace durante l'I/O.
     #[cfg(feature = "versioning")]
+    #[doc(hidden)]
     pub fn read_version(
         &self,
         vault: Option<&str>,
@@ -4045,19 +4368,6 @@ fn info_of(session: &VaultSession) -> Result<VaultInfo, PluginError> {
     })
 }
 
-/// La forma **canonica** di una radice: è la chiave delle sessioni, e si conia
-/// **all'apertura**.
-///
-/// Senza, `/vault` e `/vault/` — o un link simbolico e la sua destinazione —
-/// sarebbero due sessioni sullo stesso vault, e la seconda si fermerebbe sul
-/// lock che l'indice della prima tiene sulla propria cartella. Un path che non
-/// si canonicalizza (non esiste, o non è leggibile) è un errore qui, dove si può
-/// ancora dire quale.
-///
-/// **Chi la chiama diretta è chi conia**: [`Host::open`], che una cartella l'ha
-/// già pretesa una riga sopra. Chi *usa* una radice coniata passa da
-/// [`Host::key`] e chi la dimentica da [`root_forms`], e in nessuno
-/// dei due casi si torna a chiedere al disco una risposta che si ha già.
 /// Risolve il contenitore sibling anche quando la root live è assente dopo una
 /// `OldMoved` o una `Published` interrotta.
 fn snapshot_recovery_root(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
@@ -4095,6 +4405,20 @@ fn snapshot_recovery_root(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let parent = canonical(parent)?;
     Ok(parent.join(leaf))
 }
+
+/// La forma **canonica** di una radice: è la chiave delle sessioni, e si conia
+/// **all'apertura**.
+///
+/// Senza, `/vault` e `/vault/` — o un link simbolico e la sua destinazione —
+/// sarebbero due sessioni sullo stesso vault, e la seconda si fermerebbe sul
+/// lock che l'indice della prima tiene sulla propria cartella. Un path che non
+/// si canonicalizza (non esiste, o non è leggibile) è un errore qui, dove si può
+/// ancora dire quale.
+///
+/// **Chi la chiama diretta è chi conia**: [`Host::open`], che una cartella l'ha
+/// già pretesa una riga sopra. Chi *usa* una radice coniata passa da
+/// [`Host::key`] e chi la dimentica da [`root_forms`], e in nessuno
+/// dei due casi si torna a chiedere al disco una risposta che si ha già.
 fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let canonical = root
         .canonicalize()
@@ -4203,9 +4527,12 @@ mod opening_publication_tests {
             }))
             .with_job_threads(1);
 
-        let outcome = host.mounts_with_info(&root, |_| {
-            Err(PluginError::Internal("planned VaultInfo failure".into()))
-        });
+        let writer = host.writer_lease(&root).expect("the vault is free");
+        let outcome = host.mounts_with_info(
+            &root,
+            |_| Err(PluginError::Internal("planned VaultInfo failure".into())),
+            writer,
+        );
 
         assert!(outcome.is_err(), "the injected info failure is returned");
         assert!(
@@ -4238,8 +4565,12 @@ mod opening_publication_tests {
         host.wait_indexed(None)
             .expect("the winner finishes indexing");
 
-        let (outcome, log) =
-            fub_kernel::log::captured_default(|| host.mounts_with_info(&root, info_of));
+        let (outcome, log) = fub_kernel::log::captured_default(|| {
+            let writer = host
+                .writer_lease(&root)
+                .expect("the winner shares its lease");
+            host.mounts_with_info(&root, info_of, writer)
+        });
 
         outcome.expect("loser cleanup does not mask the winning open result");
         assert!(
@@ -4782,7 +5113,8 @@ mod os_trash_command_tests {
         (vault, os, host)
     }
 
-    fn invoke(host: &Host) -> serde_json::Value {
+    /// L'esito intero: la frase per l'utente e il payload tipizzato.
+    fn invoke_outcome(host: &Host) -> (Option<Text>, serde_json::Value) {
         let spec = host
             .commands(None)
             .expect("registro")
@@ -4802,14 +5134,15 @@ mod os_trash_command_tests {
             panic!("l'esito deve essere tipizzato")
         };
         assert_eq!(ns, "fub.trash.os");
-        payload
+        (outcome.notify, payload)
     }
 
     #[test]
     fn p01_os_trash_does_not_run_internal_trash_after_success() {
         let (vault, os, host) = fixture(false);
-        let outcome = invoke(&host);
+        let (said, outcome) = invoke_outcome(&host);
         assert_eq!(outcome["via"]["kind"], "os");
+        assert!(said.is_none(), "a plain success says nothing: {said:?}");
         assert_eq!(
             std::fs::read(os.path().join("Nota.md")).unwrap(),
             b"# bytes preziosi\n"
@@ -4831,8 +5164,11 @@ mod os_trash_command_tests {
     #[test]
     fn p01_unsupported_backend_uses_full_internal_trash() {
         let (vault, _os, host) = fixture(true);
-        let outcome = invoke(&host);
+        let (said, outcome) = invoke_outcome(&host);
         assert_eq!(outcome["via"]["kind"], "internal_fallback");
+        // La palette mostra solo il `notify`: il ripiego va detto lì (I66).
+        let said = said.expect("the fallback is said to the user");
+        assert!(said.to_string().contains("Nota.md"), "{said:?}");
         assert_eq!(outcome["via"]["reason"], "unsupported");
         let trashed = host
             .with_session(None, |s| s.workspace.read().unwrap().list_trash().unwrap())
@@ -4889,6 +5225,16 @@ mod mount_command_tests {
             .invoke_user_command(None, MOUNT_ADD, args, InvokeMode::Apply)
             .unwrap();
         assert!(matches!(added.effect, CommandEffect::Custom { .. }));
+        // La palette mostra solo il `notify`: senza, un comando riuscito è
+        // muto (I66).
+        assert!(
+            added
+                .notify
+                .as_ref()
+                .is_some_and(|t| t.to_string().contains("archivio")),
+            "{:?}",
+            added.notify
+        );
         assert_eq!(host.mount_routes(None).unwrap()[0].namespace, "external");
         let listed = host
             .invoke_user_command(None, MOUNT_LIST, serde_json::Value::Null, InvokeMode::Apply)
@@ -4898,6 +5244,11 @@ mod mount_command_tests {
         };
         assert_eq!(ns, "fub.mount.routes");
         assert_eq!(payload["routes"][0]["name"], "archivio");
+        let said = listed
+            .notify
+            .expect("the listing is said to the user")
+            .to_string();
+        assert!(said.contains("archivio"), "{said}");
         host.close_vault(&root).unwrap();
         host.open(&root).unwrap();
         // Si salva il nome reale: su macOS il tempdir passa da `/var`.

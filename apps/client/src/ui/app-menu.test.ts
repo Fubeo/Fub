@@ -100,3 +100,42 @@ describe("menubar applicativa", () => {
     expect(document.getElementById("context-menu")).toBeNull();
   });
 });
+
+describe("il menu Vista e le view principali", () => {
+  afterEach(() => {
+    closeContextMenu();
+    document.body.replaceChildren();
+  });
+
+  function mountWith(views: MenuHost["views"]): () => void {
+    document.body.replaceChildren();
+    const menubar = document.createElement("nav");
+    menubar.id = "app-menu";
+    document.body.append(menubar);
+    return mountAppMenu({ run: () => {}, views });
+  }
+
+  function viewMenuLabels(): string[] {
+    document.querySelector<HTMLButtonElement>("#app-menu-2")!.click();
+    return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].map(
+      (item) => item.textContent ?? "",
+    );
+  }
+
+  it("elenca le view dichiarate, lette a ogni apertura, e le apre", () => {
+    const opened: string[] = [];
+    let declared = [{ label: "Apri la vista Grafo", run: () => opened.push("graph") }];
+    const teardown = mountWith(() => declared);
+    expect(viewMenuLabels()).toContain("Apri la vista Grafo");
+    const item = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
+      .find((entry) => entry.textContent === "Apri la vista Grafo")!;
+    item.click();
+    expect(opened).toEqual(["graph"]);
+
+    // Il componente si spegne: la voce se ne va con la view, non resta a
+    // aprire qualcosa che non c'è.
+    declared = [];
+    expect(viewMenuLabels().some((label) => label.includes("Grafo"))).toBe(false);
+    teardown();
+  });
+});

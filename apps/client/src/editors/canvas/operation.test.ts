@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { parseCanvas, serializeCanvas } from "./model";
-import { applyOperation } from "../../editor/text-operation";
+import { applyOperation } from "../core/text-operation";
 import {
   applyCanvasPatches,
   commitCanvasPatches,

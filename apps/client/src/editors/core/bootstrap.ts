@@ -1,6 +1,5 @@
-import { createEditor, type Editor, type EditorSlashHost } from "../../editor/editor";
-import type { CompletionSources } from "../../editor/completions";
-import type { SyntaxForm } from "../../host/contract";
+import { mountMarkdownSurface, type EditorSlashHost } from "../text/profiles/markdown/surface";
+import type { CompletionSources } from "../text/profiles/markdown/completions";
 import { api } from "../../host/ipc";
 import type { GridHost } from "../grid/engine";
 import { onLanguage, t, type Key } from "../../i18n/strings";
@@ -16,24 +15,13 @@ import { mediaKindOfId } from "../media/media-types";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
+import type { SyntaxForm } from "../../host/contract";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
   type SurfaceCallbacks,
   type SurfaceMountContext,
 } from "./registry";
-
-export interface MarkdownEditorSurface extends EditorSurface {
-  readonly family: "text";
-  readonly profile: "markdown";
-  setSyntaxForms(forms: readonly SyntaxForm[]): void;
-  insertAtCursor(text: string): boolean;
-  insertAtPoint(x: number, y: number, text: string): boolean;
-}
-
-export function isMarkdownSurface(surface: EditorSurface | null): surface is MarkdownEditorSurface {
-  return surface?.family === "text" && surface.profile === "markdown";
-}
 
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
@@ -47,31 +35,22 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly canvasMedia?: CanvasMediaPort;
   readonly canvasAttachments?: CanvasAttachmentPort;
   readonly onCreateCanvasNote?: (text: string) => Promise<string>;
-  readonly renderCanvasMarkdown?: (nodeId: string, text: string, host: HTMLElement, documentId: string) => (() => void) | void;
+  readonly onPickCanvasFile?: () => Promise<string | null>;
+  readonly renderCanvasMarkdown?: (
+    nodeId: string,
+    text: string,
+    host: HTMLElement,
+    documentId: string,
+    forms: readonly SyntaxForm[] | undefined,
+  ) => (() => void) | void;
 }
-
-const MARKDOWN_MODES = [
-  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
-  {
-    id: "live_preview",
-    label: () => t("mode.live"),
-    presentation: "surface",
-    contextMode: "live_preview",
-  },
-  {
-    id: "reading",
-    label: () => t("mode.reading"),
-    presentation: "rendered",
-    contextMode: "reading",
-  },
-] as const;
 
 const PLAIN_TEXT_MODES = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
 ] as const;
 
 const GRID_MODES = [
-  { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "source" },
+  { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "live_preview" },
 ] as const;
 
 const VIEWER_MODES = [
@@ -80,41 +59,13 @@ const VIEWER_MODES = [
 
 
 const ERROR_MODES = [
-  { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
+  { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "reading" },
 ] as const;
 
 function requireMode(modes: EditorSurface["modes"], mode: string): void {
   if (!modes.some((candidate) => candidate.id === mode)) {
     throw new RangeError(`surface mode ${mode} is not supported`);
   }
-}
-
-function markdownSurface(
-  editor: Editor,
-  context: SurfaceMountContext,
-): MarkdownEditorSurface {
-  return {
-    family: "text",
-    profile: "markdown",
-    surfaceId: context.paneId,
-    modes: MARKDOWN_MODES,
-    setMode(mode) {
-      requireMode(MARKDOWN_MODES, mode);
-      editor.setMode(mode as "source" | "live_preview" | "reading");
-    },
-    setSyntaxForms: (forms) => editor.setSyntaxForms(forms),
-    setDoc: (text) => editor.setDoc(text),
-    syncDoc: (update) => editor.syncDoc(update),
-    getDoc: () => editor.getDoc(),
-    focus: () => editor.focus(),
-    revealByteOffset: (byteOffset) => editor.revealByteOffset(byteOffset),
-    selections: () => editor.selections(),
-    insertAtCursor: (text) => editor.insertAtCursor(text),
-    insertAtPoint: (x, y, text) => editor.insertAtPoint(x, y, text),
-    setReadOnly: (readOnly) => editor.setReadOnly(readOnly),
-    setTheme: (theme) => editor.setTheme(theme),
-    destroy: () => editor.destroy(),
-  };
 }
 
 function staticSurface(
@@ -142,7 +93,6 @@ function staticSurface(
   redraw();
   const stopLanguage = onLanguage(redraw);
 
-  let source = "";
   return {
     family,
     profile,
@@ -151,15 +101,6 @@ function staticSurface(
     setMode(mode) {
       requireMode(family === "viewer" ? VIEWER_MODES : ERROR_MODES, mode);
       element.dataset.mode = mode;
-    },
-    setDoc(text) {
-      source = text;
-    },
-    syncDoc(update) {
-      source = typeof update === "string" ? update : update.text;
-    },
-    getDoc() {
-      return source;
     },
     focus() {
       element.focus();
@@ -181,7 +122,12 @@ const loadPdf = makePdfJsLoader(
   pdfWorkerUrl,
 );
 
-/** Registers the shell's built-in surface families; plugins use the same registry seam. */
+/**
+ * Registers the shell's built-in surface families. Every owner goes through
+ * `register`, whose disposer takes down what the owner mounted; the owners are
+ * the shell's own, because a third-party surface would need a declarative
+ * surface contract that does not exist yet.
+ */
 export function createDocumentSurfaceRegistry(
   options: SurfaceBootstrapOptions,
 ): DocumentSurfaceRegistry {
@@ -197,19 +143,15 @@ export function createDocumentSurfaceRegistry(
       mount(profile, context) {
         context.parent.replaceChildren();
         if (profile === "markdown") {
-          return markdownSurface(
-            createEditor(context.parent, {
-              onChange: (change) => options.onChange(context.paneId, change),
-              onSelectionChange: () => options.onSelectionChange(context.paneId),
-              onOpenWikilink: options.onOpenWikilink,
-              onOpenPath: options.onOpenPath,
-              onSearchTag: options.onSearchTag,
-              documentId: context.documentId,
-              completions: options.completions,
-              slash: options.slash,
-            }),
-            context,
-          );
+          return mountMarkdownSurface(context, {
+            onChange: (change) => options.onChange(context.paneId, change),
+            onSelectionChange: () => options.onSelectionChange(context.paneId),
+            onOpenWikilink: options.onOpenWikilink,
+            onOpenPath: options.onOpenPath,
+            onSearchTag: options.onSearchTag,
+            completions: options.completions,
+            slash: options.slash,
+          });
         }
         if (profile !== "plain-text") {
           throw new Error(`text surface profile ${profile} is not registered`);
@@ -230,11 +172,16 @@ export function createDocumentSurfaceRegistry(
             requireMode(PLAIN_TEXT_MODES, mode);
             context.parent.dataset.surfaceMode = mode;
           },
-          setDoc: (text) => engine.setDoc(text),
-          syncDoc: (update) => engine.syncDoc(update),
-          getDoc: () => engine.getDoc(),
+          buffer: {
+            setDoc: (text) => engine.setDoc(text),
+            syncDoc: (update) => engine.syncDoc(update),
+            getDoc: () => engine.getDoc(),
+          },
           focus: () => engine.focus(),
-          revealByteOffset: (byteOffset) => engine.revealByteOffset(byteOffset),
+          reveal: ({ span }) => {
+            engine.revealByteOffset(span.start);
+            return true;
+          },
           selections: () => engine.selections(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
           setTheme: (theme) => engine.setTheme(theme),
@@ -286,10 +233,13 @@ export function createDocumentSurfaceRegistry(
             requireMode(GRID_MODES, mode);
             context.parent.dataset.surfaceMode = mode;
           },
-          setDoc: (text) => engine.setDoc(text),
-          syncDoc: (update) => engine.syncDoc(update),
-          getDoc: () => engine.getDoc(),
+          buffer: {
+            setDoc: (text) => engine.setDoc(text),
+            syncDoc: (update) => engine.syncDoc(update),
+            getDoc: () => engine.getDoc(),
+          },
           focus: () => engine.focus(),
+          selectedText: () => engine.selectedText(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
           setTheme: (theme) => engine.setTheme(theme),
           destroy: () => engine.destroy(),
@@ -311,8 +261,9 @@ export function createDocumentSurfaceRegistry(
           onOpenWikilink: options.onOpenWikilink,
           onOpenPath: options.onOpenPath,
           onCreateNote: options.onCreateCanvasNote,
+          onPickFile: options.onPickCanvasFile,
           renderMarkdownForCard: options.renderCanvasMarkdown
-            ? (nodeId, text, host) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId)
+            ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,
           media: options.canvasMedia,
           attachments: options.canvasAttachments,
@@ -326,8 +277,14 @@ export function createDocumentSurfaceRegistry(
     defaultProfile: "bytes-read-only",
     profiles: ["media-image", "media-audio", "media-video", "media-pdf"],
     sources: { bytes: "bytes-read-only" },
-    selectSourceProfile: (request, fallback) =>
-      request.documentId ? profileForKind(mediaKindOfId(pdfIdWithoutFragment(request.documentId))) : fallback,
+    // L'unica classificazione di un file senza formato: la tabella MIME della
+    // shell sceglie la vista, e ciò che nessuna vista sa mostrare non è di
+    // questa famiglia.
+    selectSourceProfile: (request, fallback) => {
+      if (!request.documentId) return fallback;
+      const kind = mediaKindOfId(pdfIdWithoutFragment(request.documentId));
+      return kind === "other" ? null : profileForKind(kind);
+    },
     factory: {
       mount(profile, context) {
         return options.media

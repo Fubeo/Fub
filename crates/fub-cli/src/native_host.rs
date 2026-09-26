@@ -2,7 +2,7 @@
 //!
 //! Loop sequenziale su stdin framed (4 byte LE + JSON, max 2MiB):
 //! valida specie+busta+payload, verifica il pairing, scrive con la stessa
-//! autorità della CLI (CAS + comandi di registro), risponde framed.
+//! autorità della CLI (il comando dell'host `capture.apply`), risponde framed.
 //! Nessuna porta TCP, nessun secondo writer oltre quello host.
 
 use base64::Engine;
@@ -28,7 +28,6 @@ struct Transfer {
 
 struct NativeState {
     host: fub_host::Host,
-    locks: std::collections::BTreeMap<std::path::PathBuf, fub_host::automation::VaultWriterLock>,
     transfer: Option<Transfer>,
 }
 
@@ -51,7 +50,6 @@ fn run() -> i32 {
     }
     let mut state = NativeState {
         host,
-        locks: Default::default(),
         transfer: None,
     };
     let stdin = std::io::stdin();
@@ -157,29 +155,22 @@ fn effective_vault(host: &fub_host::Host, target: Option<&str>) -> Option<String
 
 impl NativeState {
     fn open_vault(&mut self, root: &str) -> Result<(), NmResponse> {
-        let canonical = std::path::Path::new(root)
+        std::path::Path::new(root)
             .canonicalize()
             .map_err(|_| NmResponse::err(AutomationKind::NotFound, "NM: vault assente"))?;
-        #[allow(clippy::map_entry)]
-        if !self.locks.contains_key(&canonical) {
-            let guard = fub_host::automation::lock_vault_writer(&canonical).map_err(|error| {
-                if error.kind() == std::io::ErrorKind::WouldBlock {
+        // Il lock di scrittura lo prende l'host aprendo, e lo tiene la sessione.
+        self.host
+            .open(camino::Utf8Path::new(root))
+            .map_err(|error| {
+                if fub_host::automation::is_writer_busy(&error) {
                     NmResponse::err(
                         AutomationKind::Conflict,
                         "NM: vault occupato da altro writer",
                     )
                 } else {
-                    NmResponse::err(
-                        AutomationKind::Unavailable,
-                        "NM: writer lock non disponibile",
-                    )
+                    NmResponse::err(map_kind(&error), error.to_string())
                 }
             })?;
-            self.locks.insert(canonical, guard);
-        }
-        self.host
-            .open(camino::Utf8Path::new(root))
-            .map_err(|error| NmResponse::err(map_kind(&error), error.to_string()))?;
         Ok(())
     }
 }
@@ -390,229 +381,16 @@ fn nm_gate(
     }
 }
 
+/// Scrive la cattura autorizzata nel vault che `open_vault` ha già aperto, con
+/// il comando dell'host `capture.apply`: lo stesso della CLI e del mobile.
 fn apply_capture(
     host: &fub_host::Host,
     request: &NmRequest,
 ) -> Result<(), (AutomationKind, String)> {
-    use fub_host::automation::CaptureMode;
     let payload = &request.payload;
-    // Vault: payload > FUB_VAULT > ultimo noto. Si apre (o rende corrente).
-    let vault = payload
-        .target
-        .vault
-        .clone()
-        .or_else(|| {
-            std::env::var("FUB_VAULT")
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-        })
-        .or_else(|| host.last_vault());
-    let selector = vault.as_deref();
-    if let Some(root) = vault.as_deref() {
-        host.open(camino::Utf8Path::new(root))
-            .map_err(|e| (map_kind(&e), e.to_string()))?;
-    } else if !host.has_current_vault() {
-        return Err((
-            AutomationKind::NotFound,
-            "nessun vault: accoppia con --vault o apri un vault".to_string(),
-        ));
-    }
-    match payload.target.mode {
-        CaptureMode::Create => {
-            let name = match payload.target.note.as_deref() {
-                Some(note) if !note.trim().is_empty() => note.trim().to_string(),
-                _ => {
-                    let slug: String = payload.title.trim().chars().take(80).collect();
-                    if slug.trim().is_empty() {
-                        "Untitled.md".to_string()
-                    } else {
-                        format!("{}.md", slug.trim())
-                    }
-                }
-            };
-            let full = match payload.target.folder.as_deref() {
-                Some(folder) if !folder.trim().is_empty() => {
-                    format!("{}/{name}", folder.trim().trim_matches('/'))
-                }
-                _ => name,
-            };
-            let id = fub_host::doc_id(&full).map_err(|e| (map_kind(&e), e.to_string()))?;
-            let body = titled_body(
-                &payload.title,
-                &payload.markdown,
-                payload.source_url.as_deref(),
-            );
-            let outcome = host
-                .invoke_user_command(
-                    selector,
-                    "note.create",
-                    serde_json::json!({ "name": id.as_str() }),
-                    fub_abi::InvokeMode::Apply,
-                )
-                .map_err(|e| (map_kind(&e), e.to_string()))?;
-            let created = match &outcome.effect {
-                fub_abi::CommandEffect::Navigate { doc } => doc.clone(),
-                _ => id,
-            };
-            let (_, revision) = host
-                .read_document(selector, &created)
-                .map_err(|e| (map_kind(&e), e.to_string()))?;
-            host.write_document(
-                selector,
-                &created,
-                &body,
-                fub_abi::WriteBase::DescendsFrom(revision),
-            )
-            .map_err(|e| (map_kind(&e), e.to_string()))?;
-            apply_properties(host, selector, &created, payload)?;
-            Ok(())
-        }
-        CaptureMode::Daily => {
-            let outcome = host
-                .invoke_user_command(
-                    selector,
-                    "note.daily",
-                    serde_json::json!({}),
-                    fub_abi::InvokeMode::Apply,
-                )
-                .map_err(|e| (map_kind(&e), e.to_string()))?;
-            let daily = match &outcome.effect {
-                fub_abi::CommandEffect::Navigate { doc } => doc.clone(),
-                _ => {
-                    return Err((
-                        AutomationKind::NotFound,
-                        "daily senza destinazione".to_string(),
-                    ))
-                }
-            };
-            append_body(
-                host,
-                selector,
-                &daily,
-                &titled_body(
-                    &payload.title,
-                    &payload.markdown,
-                    payload.source_url.as_deref(),
-                ),
-            )?;
-            apply_properties(host, selector, &daily, payload)?;
-            Ok(())
-        }
-        CaptureMode::Append => {
-            let note = payload
-                .target
-                .note
-                .as_deref()
-                .ok_or((AutomationKind::BadArgs, "append vuole note".to_string()))?;
-            let id = fub_host::doc_id(note).map_err(|e| (map_kind(&e), e.to_string()))?;
-            append_body(
-                host,
-                selector,
-                &id,
-                &format!(
-                    "\n\n{}",
-                    titled_body(
-                        &payload.title,
-                        &payload.markdown,
-                        payload.source_url.as_deref()
-                    )
-                ),
-            )?;
-            apply_properties(host, selector, &id, payload)?;
-            Ok(())
-        }
-        CaptureMode::Prepend => {
-            let note = payload
-                .target
-                .note
-                .as_deref()
-                .ok_or((AutomationKind::BadArgs, "prepend vuole note".to_string()))?;
-            let id = fub_host::doc_id(note).map_err(|e| (map_kind(&e), e.to_string()))?;
-            let (source, revision) = host
-                .read_document(selector, &id)
-                .map_err(|e| (map_kind(&e), e.to_string()))?;
-            let body = format!(
-                "{}{}",
-                titled_body(
-                    &payload.title,
-                    &payload.markdown,
-                    payload.source_url.as_deref()
-                ),
-                source
-            );
-            host.write_document(
-                selector,
-                &id,
-                &body,
-                fub_abi::WriteBase::DescendsFrom(revision),
-            )
-            .map_err(|e| (map_kind(&e), e.to_string()))?;
-            apply_properties(host, selector, &id, payload)?;
-            Ok(())
-        }
-    }
-}
-
-fn append_body(
-    host: &fub_host::Host,
-    selector: Option<&str>,
-    id: &fub_abi::DocId,
-    addition: &str,
-) -> Result<(), (AutomationKind, String)> {
-    let (source, revision) = host
-        .read_document(selector, id)
-        .map_err(|e| (map_kind(&e), e.to_string()))?;
-    let mut body = source;
-    if !body.ends_with('\n') {
-        body.push('\n');
-    }
-    body.push_str(addition);
-    host.write_document(
-        selector,
-        id,
-        &body,
-        fub_abi::WriteBase::DescendsFrom(revision),
-    )
-    .map_err(|e| (map_kind(&e), e.to_string()))?;
-    Ok(())
-}
-
-fn apply_properties(
-    host: &fub_host::Host,
-    selector: Option<&str>,
-    id: &fub_abi::DocId,
-    payload: &fub_host::automation::CapturePayloadV1,
-) -> Result<(), (AutomationKind, String)> {
-    let Some(props) = payload.properties.as_ref() else {
-        return Ok(());
-    };
-    for (key, value) in props {
-        let rendered = match value {
-            serde_json::Value::String(s) => s.clone(),
-            other => serde_json::to_string(other).unwrap_or_default(),
-        };
-        host.invoke_user_command(
-            selector,
-            "note.property.set",
-            serde_json::json!({ "doc": id.as_str(), "key": key, "value": rendered }),
-            fub_abi::InvokeMode::Apply,
-        )
-        .map_err(|e| (map_kind(&e), e.to_string()))?;
-    }
-    Ok(())
-}
-
-fn titled_body(title: &str, markdown: &str, source_url: Option<&str>) -> String {
-    let mut body = format!("# {title}\n\n{markdown}");
-    if let Some(url) = source_url {
-        if !url.trim().is_empty() {
-            body.push_str(&format!("\n\nFonte: {url}"));
-        }
-    }
-    if !body.ends_with('\n') {
-        body.push('\n');
-    }
-    body
+    fub_host::capture::apply(host, payload.target.vault.as_deref(), payload, None)
+        .map(|_| ())
+        .map_err(|e| (map_kind(&e), e.to_string()))
 }
 
 fn map_kind(error: &fub_abi::PluginError) -> AutomationKind {

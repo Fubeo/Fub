@@ -214,6 +214,7 @@ fn opening_in_phases_collects_the_space_of_those_no_longer_present() {
     let v = Vault::with(3);
     // Lo spazio per-documento di una nota che nel vault non c'è: è ciò che resta
     // di una cancellazione definitiva fatta ad app chiusa, che nessun evento
+    // racconta.
     let orphan = fub_kernel::data_root(&v.root)
         .join("plugins")
         .join("plugin.spento")

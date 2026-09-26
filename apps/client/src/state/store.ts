@@ -50,6 +50,10 @@ export interface Signals {
   /// diretta, perché chi pubblica il contesto è il pannello del documento e
   /// chi le ridisegna è `ui/panel-host.ts`: chiamarsi per nome sarebbe un ciclo.
   "stale-views": [ids: string[]];
+  /// Il tema montato è cambiato: luce, contrasto, foglio, pelle o preferenze.
+  /// **Senza payload**: chi lo rispecchia in un'altra finestra legge gli
+  /// strati montati da `theme/loader.ts`.
+  theme: [];
 }
 
 type Listener = (...args: never[]) => unknown;

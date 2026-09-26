@@ -45,7 +45,8 @@ use std::collections::{HashMap, HashSet};
 
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
+    CommandSurface, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo,
+    UndoStep,
 };
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
@@ -92,16 +93,11 @@ pub const VAULT_UNDO: &str = "vault.undo";
 /// Il `ns` con cui l'esito di `settings.export` arriva alla shell.
 pub const SETTINGS_NS: &str = fub_abi::ui::SETTINGS_EXPORT_NS;
 
-/// Il nome di una nota senza nome, e l'estensione che le si dà.
-///
-/// Vivono qui e non nel contratto perché *qual è il formato predefinito* è una
-/// domanda del registro dei formati, che è del kernel e non è (ancora) una
-/// capacità: finché non lo è, questo comando dichiara la propria convenzione
-/// invece di indovinare quella di qualcun altro. Chi vuole un'altra estensione
+/// Il nome di una nota senza nome. L'estensione la sceglie l'impostazione del
+/// core `files.new-note-extension`, la stessa che legge il kernel (vedi
+/// [`crate::formats::new_note_extension`]).
 const UNTITLED: &str = "Untitled";
-const DEFAULT_EXTENSION: &str = "md";
 
-/// la scrive nel nome.
 /// Un comando del core, col titolo e la descrizione presi dal catalogo.
 ///
 /// Le chiavi si **derivano dall'id** — `vault.replace` diventa
@@ -118,40 +114,41 @@ const DEFAULT_EXTENSION: &str = "md";
 /// Al suo posto c'è un presidio che vale di più, perché copre anche le chiavi
 /// costanti — `ogni_chiave_dichiarata_ha_una_voce`, in fondo a questo file:
 /// cammina sulle spec vere e pretende che ogni chiave che producono abbia una
+/// voce in **tutte** le lingue del catalogo.
 fn command(id: &str) -> CommandSpec {
     CommandSpec::new(id, Text::key(format!("{id}.title")))
         .describing(Text::key(format!("{id}.desc")))
 }
 
-/// voce in **tutte** le lingue del catalogo.
+/// Un parametro, con le chiavi derivate da comando e nome.
 fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
     ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
         .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
-/// Un parametro, con le chiavi derivate da comando e nome.
 /// Un messaggio con un argomento solo: la forma di due terzi delle righe che
+/// un comando scrive.
 fn one(key: &str, name: &str, value: &str) -> Text {
     Text::message(key, vec![Arg::text(name, value)])
 }
 
-/// un comando scrive.
+/// Un messaggio su due documenti: da chi a chi.
 fn two(key: &str, doc: &str, to: &str) -> Text {
     Text::message(key, vec![Arg::text(A_DOC, doc), Arg::text(A_TO, to)])
 }
 
-/// Un messaggio su due documenti: da chi a chi.
+/// Un messaggio con un conteggio solo.
 fn count_text(key: &str, n: usize) -> Text {
     Text::message(key, vec![Arg::int(A_COUNT, n as i64)])
 }
 
-/// Un messaggio con un conteggio solo.
+/// Un messaggio con due conteggi.
 fn count_pair(key: &str, a: &str, na: usize, b: &str, nb: usize) -> Text {
     Text::message(key, vec![Arg::int(a, na as i64), Arg::int(b, nb as i64)])
 }
 
-/// Un messaggio con due conteggi.
 /// Il messaggio dell'archiviazione: quante note, in che cartella, e — se ce ne
+/// sono — quelle rimaste indietro.
 fn archive(key: &str, n: usize, folder: &str, failed: Option<String>) -> Text {
     let mut args = vec![Arg::int(A_COUNT, n as i64), Arg::text(A_FOLDER, folder)];
     if let Some(f) = failed {
@@ -160,7 +157,6 @@ fn archive(key: &str, n: usize, folder: &str, failed: Option<String>) -> Text {
     Text::message(key, args)
 }
 
-/// sono — quelle rimaste indietro.
 /// Le chiavi delle righe che i comandi scrivono **mentre girano**: gli errori,
 /// i riassunti di un piano, e ciò che si dice quando è andata.
 ///
@@ -171,6 +167,7 @@ fn archive(key: &str, n: usize, folder: &str, failed: Option<String>) -> Text {
 ///
 /// I prefissi dicono **quando** si leggono, ed è l'unica cosa che serve sapere
 /// per tradurle: `E_` mentre qualcosa non si può fare, `Y_` in simulazione
+/// (*se* lo facessi), `P_` nel riassunto di un piano, `D_` a cose fatte.
 const E_NO_ACTIVE_PANE: &str = "err.no_active_pane";
 const AND_NO_OPEN_NOTES: &str = "err.no_open_note";
 const AND_NOTHING_SELECTED: &str = "err.nothing_selected";
@@ -188,6 +185,7 @@ const AND_TASK_WRONG_PANE: &str = "err.task_wrong_pane";
 const AND_TASK_NO_CARET: &str = "err.task_no_caret";
 const AND_TASK_DIRTY_BUFFER: &str = "err.task_dirty_buffer";
 const AND_TASK_NOT_FOUND: &str = "err.task_not_found";
+const AND_TASK_CHANGED: &str = "err.task_changed";
 const AND_NOT_A_TOGGLE: &str = "err.not_a_toggle";
 const AND_NOT_A_NUMBER: &str = "err.not_a_number";
 const E_UNDECLARED_KEY: &str = "err.undeclared_key";
@@ -230,17 +228,17 @@ const D_SETTINGS_EXPORT: &str = "done.settings_export";
 const D_SETTINGS_IMPORT: &str = "done.settings_import";
 const D_SETTINGS_IMPORT_PARTIAL: &str = "done.settings_import_partial";
 const D_UNDONE: &str = "done.undone";
-/// (*se* lo facessi), `P_` nel riassunto di un piano, `D_` a cose fatte.
 /// Annullato per intero, ma **l'operazione era già a metà** (§23.14): non è un
 /// guasto di adesso, è la notizia che il giorno in cui è stata fatta non tutto
-const D_UNDONE_OF_PARTIAL: &str = "done.undone_of_partial";
 /// era riuscito — e quindi non tutto torna indietro.
+const D_UNDONE_OF_PARTIAL: &str = "done.undone_of_partial";
 /// L'annullamento **stesso** si è fermato a un passo, e i passi dopo non sono
+/// stati provati.
 const D_UNDONE_PARTIAL: &str = "done.undone_partial";
 const D_NOTHING_TO_UNDO: &str = "done.nothing_to_undo";
 const P_UNDO: &str = "plan.undo";
 
-/// stati provati.
+/// Le etichette dell'annullamento: cosa si disferebbe, non cosa è successo.
 const U_WIKILINK: &str = "undo.wikilink";
 const U_WIKILINK_MANY: &str = "undo.wikilink.many";
 const U_REPLACE: &str = "undo.replace";
@@ -251,7 +249,7 @@ const U_RESTORE: &str = "undo.restore";
 const U_ARCHIVE: &str = "undo.archive";
 const U_TASK: &str = "undo.task";
 
-/// Le etichette dell'annullamento: cosa si disferebbe, non cosa è successo.
+/// I nomi degli argomenti.
 const A_DOC: &str = "doc";
 const A_TO: &str = "to";
 const A_TEXT: &str = "text";
@@ -269,13 +267,12 @@ const A_FAILED: &str = "failed";
 const A_FOLDER: &str = "folder";
 const A_AT: &str = "at";
 const A_WHAT: &str = "what";
-/// I nomi degli argomenti.
 /// I due conti di un esito parziale (§23.14): quante cose c'erano davanti e
 /// quante sono cambiate. Stanno insieme perché una da sola non si legge —
+/// «undici» non dice niente finché non c'è «su dodici».
 const A_ATTEMPTED: &str = "attempted";
 const A_DONE: &str = "done";
 
-/// «undici» non dice niente finché non c'è «su dodici».
 /// Le stringhe dei comandi: quindici titoli, quindici descrizioni,
 /// ventisei etichette di parametro e le righe che un comando scrive quando ha
 /// finito.
@@ -284,8 +281,9 @@ const A_DONE: &str = "done";
 /// palette è **la** superficie in cui un utente legge prosa scritta da un
 /// componente, e finché queste righe erano `&str` dentro le spec, la palette
 /// era italiana per chiunque — compreso chi aveva scelto `en` nelle
+/// impostazioni e vedeva già il resto in inglese.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![catalog_it(), catalog_en()]
+    crate::formats::speaking(vec![catalog_it(), catalog_en()])
 }
 
 fn catalog_it() -> StringCatalog {
@@ -551,6 +549,10 @@ fn catalog_it() -> StringCatalog {
             "Nessuna voce di task alla posizione {at} di {doc}.",
         )
         .with(
+            AND_TASK_CHANGED,
+            "{doc} è cambiata mentre si spuntavano i task: riprova.",
+        )
+        .with(
             AND_NOT_A_TOGGLE,
             "`{value}` non è un interruttore (`true` o `false`).",
         )
@@ -622,11 +624,11 @@ fn catalog_it() -> StringCatalog {
             D_SETTINGS_IMPORT_PARTIAL,
             "Impostazioni applicate: {count} · Saltate: {skipped} ({reasons})",
         )
-        // impostazioni e vedeva già il resto in inglese.
         // --- l'annullamento (§13.3) ---------------------------------------
         //
         // Le etichette `undo.*` dicono **cosa si disferebbe**, non cosa è
         // successo: sono la frase che si legge in un menu, mesi dopo, e per
+        // questo cominciano dal verbo di ciò che tornerebbe indietro.
         .with("vault.undo.title", "Annulla l'ultima operazione")
         .with(
             "vault.undo.desc",
@@ -919,6 +921,10 @@ fn catalog_en() -> StringCatalog {
             "No task item at position {at} of {doc}.",
         )
         .with(
+            AND_TASK_CHANGED,
+            "{doc} changed while ticking the tasks: try again.",
+        )
+        .with(
             AND_NOT_A_TOGGLE,
             "`{value}` is not a toggle (`true` or `false`).",
         )
@@ -1017,50 +1023,55 @@ fn catalog_en() -> StringCatalog {
         .with(U_TASK, "the task ticked in {doc}")
 }
 
-// questo cominciano dal verbo di ciò che tornerebbe indietro.
 /// I comandi ufficiali. Senza stato: tutto ciò che gli serve lo chiede
+/// all'host, come farebbe un plugin.
 #[derive(Default)]
 pub struct CoreCommands;
 
 impl CoreCommands {
-    /// all'host, come farebbe un plugin.
     /// Le spec, anche fuori dal trait: chi disegna una palette nei test le
+    /// legge senza montare un workspace.
     pub fn specs() -> Vec<CommandSpec> {
         vec![
-            // legge senza montare un workspace.
             // Senza accordo, e non per distrazione: `Mod-Shift-f` è della shell,
             // che con quel tasto porta il pannello della ricerca sotto gli occhi
             // — la cosa che fa Obsidian e che le dita hanno già imparato. Questo
             // comando vuole una `query` **obbligatoria**: premere un tasto per
             // farsi aprire un modulo da compilare è il gesto sbagliato, mentre
             // dalla palette — che i parametri li sa chiedere — è esattamente il
+            // gesto giusto. Il perché sta nella 0081.
             command(SEARCH_OPEN)
                 .with_param(parameter(SEARCH_OPEN, "query", ParamKind::Text).required()),
-            command(SELECTION_WIKILINK).with_scope(CommandScope::writing(CommandReach::Document)),
+            // Nel menu `/` soltanto con una selezione: è lei che diventa il link.
+            command(SELECTION_WIKILINK)
+                .offered_in(CommandSurface::SlashSelection)
+                .with_scope(CommandScope::writing(CommandReach::Document)),
+            // Nel menu `/` con una selezione, che riempie `find`.
             command(VAULT_REPLACE)
+                .offered_in(CommandSurface::SlashSelection)
                 .with_param(parameter(VAULT_REPLACE, "find", ParamKind::Text).required())
                 .with_param(parameter(VAULT_REPLACE, "replace", ParamKind::Text).required())
                 .with_param(parameter(VAULT_REPLACE, "whole_word", ParamKind::Bool))
                 .with_param(parameter(VAULT_REPLACE, "docs", ParamKind::Documents))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
-            // gesto giusto. Il perché sta nella 0081.
+            // --- strutturali (decisione 0013) ---------------------------------------
             command(NOTES_CREATE)
                 .with_param(parameter(NOTES_CREATE, "name", ParamKind::Text))
                 .with_param(parameter(NOTES_CREATE, "properties", ParamKind::Text))
                 .with_param(parameter(NOTES_CREATE, "folder", ParamKind::Text))
-                // --- strutturali (decisione 0013) ---------------------------------------
+                // Una nota sola, e il cestino la rende reversibile.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_RENAME)
                 .with_param(parameter(NOTES_RENAME, "doc", ParamKind::Document).required())
                 .with_param(parameter(NOTES_RENAME, "to", ParamKind::Text).required())
-                // Una nota sola, e il cestino la rende reversibile.
                 // `Documents` e non `Document`: una rinomina riscrive anche
                 // ogni nota che linkava la vecchia. Dichiarare `Document`
+                // sarebbe la bugia che il piano del dry-run smaschera.
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
             command(NOTES_TRASH)
                 .with_param(parameter(NOTES_TRASH, "doc", ParamKind::Document))
-                // sarebbe la bugia che il piano del dry-run smaschera.
                 // Reversibile, e non per ottimismo: la reversibilità è
+                // `trash.restore`, che sta in questo stesso registro.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(TRASH_RESTORE)
                 .with_param(parameter(TRASH_RESTORE, "entry", ParamKind::Text).required())
@@ -1072,7 +1083,6 @@ impl CoreCommands {
                 .with_param(parameter(VAULT_ARCHIVE, "docs", ParamKind::Documents).required())
                 .with_param(parameter(VAULT_ARCHIVE, "folder", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
-            // `trash.restore`, che sta in questo stesso registro.
             // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
             // quella la tiene l'editor, che spunta le todo delle righe
             // selezionate nel **buffer** tramite i comandi Markdown dell'editor.
@@ -1080,11 +1090,12 @@ impl CoreCommands {
             // entrambi la stessa combinazione vorrebbe dire che l'accordo
             // fa due cose a seconda di chi vince la corsa. Chi la invoca
             // oggi è chi ha una posizione da dare: la palette, un altro
+            // comando, un plugin.
             command(NOTES_TASK_TOGGLE)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_TASK_TOGGLE, "doc", ParamKind::Document))
                 .with_param(parameter(NOTES_TASK_TOGGLE, "at", ParamKind::Numbers))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            // comando, un plugin.
             // --- le impostazioni (§11.1) --------------------------------
             //
             // Sono comandi e non codice dell'app per la ragione della
@@ -1096,6 +1107,7 @@ impl CoreCommands {
             // Il **raggio** è `CommandReach::Settings`, che era vocabolario
             // senza clienti dalla decisione 0010: questi sono i suoi primi
             // quattro, e chi invoca sa da lì che sta per toccare la
+            // configurazione e non delle note.
             command(SETTINGS_SET)
                 .with_param(parameter(SETTINGS_SET, "key", ParamKind::Text).required())
                 .with_param(parameter(SETTINGS_SET, "value", ParamKind::Text).required())
@@ -1111,7 +1123,6 @@ impl CoreCommands {
             command(SETTINGS_IMPORT)
                 .with_param(parameter(SETTINGS_IMPORT, "json", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
-            // configurazione e non delle note.
             // --- l'annullamento (§13.3) ---------------------------------
             //
             // La scorciatoia **non** è `Mod-z`: quella è dell'editor, che
@@ -1179,7 +1190,9 @@ impl CommandProvider for CoreCommands {
 // selection.wikilink
 // ---------------------------------------------------------------------------
 
-/// Il testo selezionato diventa `[[testo]]` — **in ogni punto selezionato**.
+/// Il testo selezionato diventa un collegamento alla pagina con quel nome,
+/// scritto dal formato della nota (`[[testo]]` in Markdown) — **in ogni punto
+/// selezionato**.
 ///
 /// Con più cursori le selezioni sono N e l'azione è una sola (decisione 0093):
 /// applicarla alla sola primaria vorrebbe dire lasciare all'utente due dei tre
@@ -1208,6 +1221,11 @@ fn selection_wikilink(
         .active_context()
         .ok_or_else(|| state(E_NO_ACTIVE_PANE))?;
     let doc = context.doc.ok_or_else(|| state(AND_NO_OPEN_NOTES))?;
+    // Si sostituisce del testo: nel JSON di un canvas sarebbe una scrittura
+    // nella struttura. Come si scrive il link lo decide poi il formato. Si
+    // chiede prima delle coordinate: le carte scelte in una tela arrivano
+    // senza, e il motivo vero è il formato, non il buffer.
+    crate::formats::require(host, &doc, fub_abi::options::source::PROSE)?;
     let selections = context
         .selections
         .ok_or_else(|| state(AND_NOTHING_SELECTED))?;
@@ -1241,12 +1259,15 @@ fn selection_wikilink(
     let (_, first_text) = *wrap.first().ok_or_else(|| state(E_EMPTY_SELECTION))?;
     let count = wrap.len();
 
-    let request = EditRequest::new(
-        host.document_revision(&doc)?,
-        wrap.iter()
-            .map(|(span, selected)| TextEdit::replace(*span, format!("[[{selected}]]")))
-            .collect(),
-    );
+    let mut edits = Vec::with_capacity(wrap.len());
+    for (span, selected) in &wrap {
+        let link = crate::formats::wikilink(selected, None, false);
+        edits.push(TextEdit::replace(
+            *span,
+            crate::formats::link_text(host, &doc, &link)?,
+        ));
+    }
+    let request = EditRequest::new(host.document_revision(&doc)?, edits);
     // Una selezione sola si racconta col testo che ha dentro; N si raccontano
     // col numero, perché elencarli non aiuterebbe nessuno a capire cosa sta per
     // succedere.
@@ -1331,20 +1352,33 @@ fn vault_replace(
     // file. Un prefiltro non renderebbe questo comando più rapido: lo
     // renderebbe incompleto, in silenzio. Il conto e la prova stanno in
     // `tests/chi_risponde_apre_i_byte.rs`.
-    let targets = match args.documents("docs") {
+    let explicit = args.documents("docs");
+    let named = explicit.is_some();
+    let targets = match explicit {
         Some(docs) => docs,
         None => host.list_documents(None)?.items,
     };
 
     let mut planned = Vec::new();
-    let mut occorrenze = 0usize;
+    let mut counts = Vec::new();
+    let mut skipped: Vec<Failure> = Vec::new();
     for doc in targets {
+        // Sostituire nei byte ha senso solo dove il sorgente è prosa: nel JSON
+        // di un canvas o nello YAML di un `.base` cambia chiavi e struttura.
+        // Chi scandisce il vault salta quei documenti; chi li ha nominati
+        // riceve il rifiuto come esito parziale.
+        if !crate::formats::understands(host, &doc, fub_abi::options::source::PROSE) {
+            if named {
+                skipped.push(Failure::of(doc.clone(), crate::formats::unsupported(&doc)));
+            }
+            continue;
+        }
         let source = host.read_document(&doc)?;
         let spans = occurrences(&source, find, whole_word);
         if spans.is_empty() {
             continue;
         }
-        occorrenze += spans.len();
+        counts.push(spans.len());
         let edits = spans
             .into_iter()
             .map(|span| TextEdit::replace(span, replace))
@@ -1359,11 +1393,17 @@ fn vault_replace(
         ));
     }
 
+    let occorrenze: usize = counts.iter().sum();
     let summary = count_pair(P_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, planned.len());
 
     if mode.is_dry_run() {
-        return Ok(CommandOutcome::done()
-            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(summary, planned))));
+        let attempted = planned.len() + skipped.len();
+        let mut outcome = CommandOutcome::done()
+            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(summary, planned)));
+        if !skipped.is_empty() {
+            outcome = outcome.partially(Partial::of(attempted, attempted - skipped.len(), skipped));
+        }
+        return Ok(outcome);
     }
 
     // Si applica tutto, anche se una nota fallisce: fermarsi a metà lascerebbe
@@ -1371,30 +1411,33 @@ fn vault_replace(
     // riuscito si nomina — un conflitto qui è la cosa che il piano esisteva per
     // rendere visibile, non un dettaglio da inghiottire.
     let mut made = 0usize;
-    let mut failed: Vec<Failure> = Vec::new();
+    // Le occorrenze contano solo nelle note scritte davvero.
+    let mut replaced = 0usize;
+    let mut failed: Vec<Failure> = skipped;
     // L'inverso si raccoglie **mentre si scrive**, non ricalcolandolo dopo: il
     // rapporto di ogni modifica porta le coordinate nuove e il testo tolto, e
     // `EditReport::inverse` ne fa una richiesta come le altre (decisione 0008).
     // Ricalcolarlo dopo vorrebbe dire rileggere N documenti e cercarci dentro
     // il testo sostituito — cioè indovinare quali occorrenze erano le nostre.
     let mut back: Vec<PlannedEdit> = Vec::new();
-    let before = planned.len();
-    for PlannedEdit { doc, edit } in planned {
+    let before = planned.len() + failed.len();
+    for (PlannedEdit { doc, edit }, count) in planned.into_iter().zip(counts) {
         match host.apply_edit(&doc, edit) {
             Ok(report) => {
                 made += 1;
+                replaced += count;
                 back.push(PlannedEdit::new(doc, report.inverse()));
             }
             Err(and) => failed.push(Failure::of(doc, and)),
         }
     }
     let notify = if failed.is_empty() {
-        count_pair(D_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, made)
+        count_pair(D_REPLACE, A_OCCURRENCES, replaced, A_NOTES, made)
     } else {
         Text::message(
             D_REPLACE_PARTIAL,
             vec![
-                Arg::int(A_OCCURRENCES, occorrenze as i64),
+                Arg::int(A_OCCURRENCES, replaced as i64),
                 Arg::int(A_NOTES, made as i64),
                 Arg::text(A_FAILED, why(&failed)),
             ],
@@ -1410,7 +1453,7 @@ fn vault_replace(
     // storto che si vuole tornare indietro. Le note fallite non hanno un
     // inverso da fare — non è successo niente, su di loro.
     let undo = Undo::of_edits(
-        count_pair(U_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, made),
+        count_pair(U_REPLACE, A_OCCURRENCES, replaced, A_NOTES, made),
         back,
     );
     Ok(CommandOutcome::notify(notify)
@@ -1426,21 +1469,6 @@ fn vault_replace(
 // validazione dei path, il recinto del vault, la riscrittura dei backlink e il
 // lotto stanno dietro le capacità, dove stavano già — la novità è che adesso ci
 // si arriva **dal di fuori**, con la stessa firma che avrà un plugin.
-
-/// Il path di una nota a partire da come l'utente l'ha nominata: se l'ultimo
-/// segmento non porta un punto, l'estensione predefinita.
-///
-/// «Progetti/Idee» è un path senza estensione, «note.2026» è un nome con un
-/// punto in mezzo — e distinguerli guardando solo l'ultimo segmento è la stessa
-/// regola che usa il vault per il cestino.
-fn with_extension(name: &str) -> String {
-    let last = name.rsplit('/').next().unwrap_or(name);
-    if last.contains('.') {
-        name.to_string()
-    } else {
-        format!("{name}.{DEFAULT_EXTENSION}")
-    }
-}
 
 fn plan(summary: Text, docs: Vec<DocId>) -> CommandOutcome {
     let plan = docs
@@ -1518,6 +1546,7 @@ fn notes_create(
 ) -> Result<CommandOutcome, PluginError> {
     let requested = args.text("name").map(str::trim).filter(|n| !n.is_empty());
     let initial = initial_properties(args.text("properties"))?;
+    let extension = crate::formats::new_note_extension(host)?;
     // «Nuova nota qui»: la cartella scelta vale al posto di quella configurata.
     let folder = args
         .text("folder")
@@ -1528,13 +1557,20 @@ fn notes_create(
         _ => name.to_string(),
     };
     let id = match requested {
-        Some(name) => DocId::new(with_extension(&placed(name))),
+        Some(name) => DocId::new(crate::formats::with_extension(
+            host,
+            &placed(name),
+            &extension,
+        )),
         // Il nome libero lo chiede all'host: la convenzione D3 è una sola, e
         // sta nel vault che è l'unico a sapere cosa è occupato.
-        None => host.free_name(&DocId::new(placed(&format!(
-            "{UNTITLED}.{DEFAULT_EXTENSION}"
-        )))),
+        None => host.free_name(&DocId::new(placed(&format!("{UNTITLED}.{extension}")))),
     };
+    // Le proprietà iniziali sono un frontmatter: davanti a un `.base` o a un
+    // canvas corromperebbero il file che nasce.
+    if !initial.is_empty() {
+        crate::formats::require(host, &id, fub_abi::options::syntax::FRONTMATTER)?;
+    }
 
     if mode.is_dry_run() {
         return Ok(plan(one(P_CREATE, A_DOC, id.as_str()), vec![id]));
@@ -1572,7 +1608,9 @@ fn notes_rename(
         .map(str::trim)
         .filter(|t| !t.is_empty())
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_EMPTY_TO)))?;
-    let to = DocId::new(with_extension(to));
+    // Un nome senza estensione eredita quella del documento: rinominare un
+    // canvas in «Lavagna» non lo fa diventare una nota Markdown.
+    let to = DocId::new(crate::formats::keeping_extension(host, &doc, to));
 
     if mode.is_dry_run() {
         // L'insieme impattato di una rinomina non è «la nota»: sono anche tutte
@@ -1659,7 +1697,7 @@ fn trash_restore(
         .text("to")
         .map(str::trim)
         .filter(|t| !t.is_empty())
-        .map(|t| DocId::new(with_extension(t)));
+        .map(|t| DocId::new(crate::formats::keeping_extension(host, &entry, t)));
 
     if mode.is_dry_run() {
         // Dove tornerebbe lo sa il cestino, non chi invoca: si legge, così il
@@ -1774,6 +1812,7 @@ fn skipped_key(key: &str, mut and: PluginError) -> Failure {
 /// scrive italiano cablato, e tradurre l'altra metà lascerebbe un messaggio
 /// mezzo in una lingua e mezzo nell'altra. Ciò che *è* traducibile viaggia
 /// intanto come dato, in [`CommandOutcome::partial`], dove chi disegna lo trova
+/// intero.
 fn why(failures: &[Failure]) -> String {
     failures
         .iter()
@@ -1801,10 +1840,10 @@ fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcom
     )))
 }
 
-// intero.
 // ---------------------------------------------------------------------------
 // vault.archive — durable batch intent and deterministic recovery
 // ---------------------------------------------------------------------------
+/// La cartella in cui archiviare, quando non è stata detta.
 const ARCHIVE: &str = "Archivio";
 const ARCHIVE_RECOVERY: &str = "archive-recovery.json";
 const ARCHIVE_SCHEMA: u32 = 1;
@@ -2036,7 +2075,7 @@ fn vault_archive(
         if path == doc.as_str() {
             continue;
         }
-        let to = DocId::new(with_extension(&path));
+        let to = DocId::new(path);
         *sources.entry(doc.clone()).or_default() += 1;
         *destinations.entry(to.clone()).or_default() += 1;
         candidates.push((doc.clone(), to));
@@ -2088,7 +2127,7 @@ fn vault_archive(
     let mut back = Vec::with_capacity(made);
     for doc in report.done.into_iter().rev() {
         let name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
-        let to = with_extension(&format!("{folder}/{name}"));
+        let to = format!("{folder}/{name}");
         back.push(UndoStep::Command {
             command: NOTES_RENAME.into(),
             args: serde_json::json!({ "doc": to, "to": doc.as_str() }),
@@ -2109,6 +2148,7 @@ fn vault_archive(
 }
 // ---------------------------------------------------------------------------
 // note.task.toggle
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 /// Spunta il task che sta sotto una posizione: il **primo cliente one-shot** del
@@ -2136,6 +2176,7 @@ fn vault_archive(
 /// prodotto non ha ancora definito, e un toggle che li promuovesse a `[x]`
 /// deciderebbe al posto suo che «in corso» è più vicino a «fatto» che a «da
 /// fare». Toglierli è l'unica mossa reversibile: il simbolo che c'era lo sa
+/// ancora l'undo, mentre una semantica inventata non la disfa nessuno.
 fn notes_task_toggle(
     args: Args<'_>,
     mode: InvokeMode,
@@ -2148,8 +2189,10 @@ fn notes_task_toggle(
         .document("doc")
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| state(Text::key(AND_TASK_NO_NOTES)))?;
+    // Il simbolo che si scrive nel marcatore è testo del sorgente: vale solo
+    // dove il sorgente è prosa.
+    crate::formats::require(host, &doc, fub_abi::options::source::PROSE)?;
 
-    // ancora l'undo, mentre una semantica inventata non la disfa nessuno.
     // Le posizioni: quelle dette, o tutte quelle del contesto. Le due non si
     // mescolano — un `doc` detto e un `at` no vorrebbe dire spuntare in una
     // nota i task che stanno sotto i cursori di **un'altra**, che è un modo
@@ -2159,6 +2202,7 @@ fn notes_task_toggle(
     // convalida di `ParamKind::Numbers` lo rifiuta al confine. Se `at` è
     // assente, si spuntano **tutte** le selezioni placed del contesto e non
     // solo la primaria, che è il gesto per cui il multi-cursore esiste
+    // (FEATURES 4.2, §23.4).
     let ats: Vec<usize> = match args.numbers("at") {
         Some(ns) => {
             let mut offsets: Vec<usize> =
@@ -2178,9 +2222,9 @@ fn notes_task_toggle(
                 .selections
                 .as_ref()
                 .ok_or_else(|| state(Text::key(AND_TASK_NO_CARET)))?;
-            // (FEATURES 4.2, §23.4).
             // La regola dello span della decisione 0007, per la stessa ragione di
             // `selection.wikilink`: a buffer sporco le coordinate valgono per il
+            // buffer, e il modello che si sta per chiedere è quello del **file**.
             selections
                 .placed()
                 .ok_or_else(|| state(Text::key(AND_TASK_DIRTY_BUFFER)))?
@@ -2193,9 +2237,9 @@ fn notes_task_toggle(
 
     let model = host.read_model(&doc)?;
 
-    // buffer, e il modello che si sta per chiedere è quello del **file**.
     // Per ogni offset, il task che lo contiene. Se un offset non ha un task,
     // l'errore nomina **quello** — non l'insieme — perché chi legge sa quale
+    // cursore spostare.
     let mut markers: Vec<TaskMarker> = Vec::with_capacity(ats.len());
     for at in &ats {
         let marker = task_at(&model, *at).ok_or_else(|| {
@@ -2207,8 +2251,8 @@ fn notes_task_toggle(
         markers.push(marker);
     }
 
-    // cursore spostare.
     // Due cursori nello stesso task lo toggleerebbero due volte — un no-op
+    // silenzioso. Si deduplica per span, tenendo il primo (ordine stabile).
     let mut seen: Vec<Span> = Vec::with_capacity(markers.len());
     markers.retain(|m| {
         if seen.contains(&m.span) {
@@ -2219,19 +2263,36 @@ fn notes_task_toggle(
         }
     });
 
-    let revision = host.document_revision(&doc)?;
+    // Il simbolo lo scrive il formato: qui si decide soltanto la direzione.
+    // Ogni risposta porta la revisione su cui è stata calcolata, e devono
+    // essere tutte la stessa: un file cambiato fra due domande è un conflitto,
+    // non una spunta scritta su due versioni diverse.
+    let mut base: Option<Revision> = None;
     let mut edits = Vec::with_capacity(markers.len());
     let mut done = false;
     for marker in &markers {
-        let (symbol, f) = match marker.symbol {
-            None => ("x", true),
-            Some(_) => (" ", false),
-        };
-        if f {
-            done = true;
+        let to_done = marker.symbol.is_none();
+        done |= to_done;
+        let request = host
+            .task_state_edit(&doc, marker, to_done)?
+            .ok_or_else(|| crate::formats::unsupported(&doc))?;
+        match &base {
+            Some(base) if *base != request.base => {
+                return Err(PluginError::Conflict(one(
+                    AND_TASK_CHANGED,
+                    A_DOC,
+                    doc.as_str(),
+                )));
+            }
+            Some(_) => {}
+            None => base = Some(request.base),
         }
-        edits.push(TextEdit::replace(marker.span, symbol));
+        edits.extend(request.edits);
     }
+    let revision = match base {
+        Some(base) => base,
+        None => host.document_revision(&doc)?,
+    };
     let request = EditRequest::new(revision, edits);
     let summary = one(
         if done { P_TASK_DONE } else { P_TASK_TODO },
@@ -2265,13 +2326,13 @@ fn notes_task_toggle(
         .with_effect(effect))
 }
 
-// silenzioso. Si deduplica per span, tenendo il primo (ordine stabile).
 /// Un `at` che arriva come numero JSON diventa un offset in byte, o si spiega.
 ///
 /// La specie [`ParamKind::Number`] è un `f64`, e ciò che non è un indice di byte
 /// — un negativo, una frazione, un infinito — va rifiutato **qui**: `as usize`
 /// lo tradurrebbe in una posizione plausibile e sbagliata (`-1` diventa un
 /// numero enorme, `3.9` diventa `3`), e chi legge l'errore dopo avrebbe in mano
+/// un task spuntato al posto di un rifiuto.
 fn position(n: f64) -> Result<usize, PluginError> {
     if n.is_finite() && n >= 0.0 && n.fract() == 0.0 {
         Ok(n as usize)
@@ -2282,13 +2343,13 @@ fn position(n: f64) -> Result<usize, PluginError> {
     }
 }
 
-/// un task spuntato al posto di un rifiuto.
 /// Il marcatore del task che contiene `at`, **il più interno** se sono
 /// annidati.
 ///
 /// Il criterio è la voce più stretta fra quelle che contengono la posizione: le
 /// voci annidate stanno dentro la loro, quindi il minimo è sempre la foglia — e
 /// un cursore su una sottovoce spunta quella e non il task che la contiene, che
+/// è ciò che si aspetta chi guarda lo schermo.
 fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
     fn find(blocks: &[Block], at: usize, best: &mut Option<(usize, TaskMarker)>) {
         for block in blocks {
@@ -2325,11 +2386,11 @@ fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
     best.map(|(_, task)| task)
 }
 
-// blocchi annidati.
 /// Le occorrenze di `needle` in `source`, in byte e non sovrapposte.
 ///
 /// `whole_word` non è una raffinatezza: una sostituzione in blocco senza di essa
 /// riscrive `nota` dentro `annotazione`, e chi se ne accorge lo fa dopo aver
+/// toccato quaranta file.
 pub fn occurrences(source: &str, needle: &str, whole_word: bool) -> Vec<Span> {
     let mut spans = Vec::new();
     if needle.is_empty() {
@@ -2342,15 +2403,15 @@ pub fn occurrences(source: &str, needle: &str, whole_word: bool) -> Vec<Span> {
         if !whole_word || is_whole_word(source, start, end) {
             spans.push(Span::new(start, end));
         }
-        // toccato quaranta file.
         // Si riparte dalla fine del match: le occorrenze sono un insieme di
+        // edit, e due edit non possono contendersi lo stesso punto (decisione 0008).
         from = end;
     }
     spans
 }
 
-// edit, e due edit non possono contendersi lo stesso punto (decisione 0008).
 /// Il match `[start, end)` è una parola intera? Confine = ciò che sta prima e
+/// dopo non è alfanumerico né `_`.
 fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
     let before = source[..start].chars().next_back();
     let after = source[end..].chars().next();
@@ -2358,9 +2419,9 @@ fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
     !word_part(before) && !word_part(after)
 }
 
-// dopo non è alfanumerico né `_`.
 // ---------------------------------------------------------------------------
 // settings.* (§11.1)
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 /// Le impostazioni **dichiarate**, chieste al canale dati come le chiederebbe
@@ -2370,6 +2431,7 @@ fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
 /// decisione 0013: un elenco è *dati*, e i dati hanno un canale solo. Ne segue
 /// una proprietà che serve qui e non altrove — un comando che elenca le
 /// impostazioni vede **le stesse righe** che vede il pannello, comprese quelle
+/// dei plugin di terzi, senza conoscerne nessuna.
 fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
     match host.query_index(IndexQuery::Settings { plugin: None })? {
         IndexResult::Settings(entries) => Ok(entries),
@@ -2383,13 +2445,13 @@ fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
     }
 }
 
-/// dei plugin di terzi, senza conoscerne nessuna.
 /// Legge un valore **dalla stringa**, secondo la specie che la chiave dichiara.
 ///
 /// Un comando si compila da una riga di comando, da un JSON di automazione o da
 /// un modello (22.4): il suo `value` è testo, e a dargli un tipo è lo schema —
 /// che è l'unico posto in cui quel tipo è scritto. È la stessa mossa dei
 /// `ParamSpec`, un livello più in là: qui la specie non la dichiara il comando,
+/// la dichiara la chiave che si sta toccando.
 fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginError> {
     let bad = |key: &str| PluginError::BadArgs(one(key, A_VALUE, raw));
     match kind {
@@ -2406,9 +2468,9 @@ fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginErro
         SettingKind::Text { .. } | SettingKind::Choice { .. } => {
             Ok(SettingValue::Text(raw.to_string()))
         }
-        // la dichiara la chiave che si sta toccando.
         // La virgola e non il JSON: chi scrive `a, b` in un campo di testo sta
         // scrivendo due voci, e chiedergli le virgolette vorrebbe dire fargli
+        // scrivere JSON dentro una stringa di un JSON.
         SettingKind::List { .. } => Ok(SettingValue::List(
             raw.split(',')
                 .map(|s| s.trim().to_string())
@@ -2418,7 +2480,7 @@ fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginErro
     }
 }
 
-// scrivere JSON dentro una stringa di un JSON.
+/// La riga di una chiave, o l'errore che dice che non esiste.
 fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> {
     declared(host)?
         .into_iter()
@@ -2426,7 +2488,6 @@ fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> 
         .ok_or_else(|| PluginError::BadArgs(one(E_UNDECLARED_KEY, A_KEY, key)))
 }
 
-/// La riga di una chiave, o l'errore che dice che non esiste.
 /// Il cancello della chiave, applicato **prima di sapere in che modo si sta
 /// girando**.
 ///
@@ -2435,6 +2496,7 @@ fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> 
 /// simulazione**. Il gate vero resta quello dell'host
 /// ([`HostApi::set_setting`]), che è dove il non-scrivere è garantito e non
 /// promesso: qui si guadagna solo che il piano dica ciò che succederebbe
+/// davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
 fn deny_if_not_writable(entry: &SettingEntry) -> Result<(), PluginError> {
     if entry.spec.program_writable {
         return Ok(());
@@ -2456,16 +2518,16 @@ fn settings_set(
     let entry = entry_of(host, key)?;
     deny_if_not_writable(&entry)?;
     let value = parse_value(&entry.spec.kind, raw)?;
-    // davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
     // Il piano deve attraversare lo stesso cancello dell'applicazione: il kernel
+    // lo ripeterà in `set_setting`, ma il dry-run non arriva fin lì.
     if let Some(why) = entry.spec.kind.rejects(&value) {
         return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
     }
 
-    // lo ripeterà in `set_setting`, ma il dry-run non arriva fin lì.
     // La simulazione dice cosa cambierebbe **e da cosa**: un piano senza
     // documenti sarebbe vuoto (un'impostazione non è una nota), quindi ciò che
     // si mostra è il messaggio. È il limite dichiarato di `CommandPlan` su
+    // questo raggio, non una dimenticanza.
     if mode.is_dry_run() {
         return Ok(CommandOutcome::notify(Text::message(
             Y_SETTINGS_SET,
@@ -2512,12 +2574,12 @@ fn settings_reset(
     Ok(CommandOutcome::notify(one(D_SETTINGS_RESET, A_KEY, key)))
 }
 
-// questo raggio, non una dimenticanza.
 /// Esporta ciò che **qualcuno ha deciso**, e non i default.
 ///
 /// I default non sono una configurazione: sono ciò che vale quando non c'è una
 /// configurazione, e portarli dentro un export vorrebbe dire che reimportarlo
 /// **decide** tutto ciò che nessuno aveva deciso — cioè congela per sempre i
+/// default di oggi, compresi quelli che cambieranno.
 fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
     let mut decise = serde_json::Map::new();
     for entry in declared(host)? {
@@ -2540,12 +2602,12 @@ fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError
     )
 }
 
-/// default di oggi, compresi quelli che cambieranno.
 /// Rimette dentro una configurazione esportata, **una chiave alla volta**.
 ///
 /// Non è tutto-o-niente, ed è una scelta: un file che nomina una chiave di un
 /// plugin che non c'è più non deve impedire di applicare le altre venti. Ciò
 /// che non entra viene **contato e detto** — che è la differenza fra un import
+/// parziale e un import parziale in silenzio.
 fn settings_import(
     args: Args,
     mode: InvokeMode,
@@ -2587,11 +2649,12 @@ fn settings_import(
             skipped.push(skipped_key(key, PluginError::BadArgs(why.into())));
             continue;
         }
-        // parziale e un import parziale in silenzio.
         // Il cancello della chiave si applica **anche in simulazione**, o il
         // piano direbbe una cosa e l'applicazione ne farebbe un'altra: senza
         // questa riga un dry-run su un file che nomina `privacy.telemetry`
         // risponde «2 applicate», e l'apply subito dopo «1 applicata, 1
+        // saltata». Un piano che non è ciò che succederebbe non è un piano
+        // (decisione 0010).
         if let Err(and) = deny_if_not_writable(entry) {
             skipped.push(skipped_key(key, and));
             continue;
@@ -2602,9 +2665,9 @@ fn settings_import(
         }
         match host.set_setting(key, value) {
             Ok(()) => applied += 1,
-            // saltata». Un piano che non è ciò che succederebbe non è un piano
-            // (decisione 0010).
             // Il rifiuto più importante è questo, e va **detto**: un file di
+            // impostazioni che passa di mano non sposta le chiavi che un
+            // programma non può scrivere.
             Err(and) => skipped.push(skipped_key(key, and)),
         }
     }
@@ -2617,14 +2680,15 @@ fn settings_import(
             vec![
                 Arg::int(A_COUNT, applied as i64),
                 Arg::int(A_SKIPPED, skipped.len() as i64),
-                // impostazioni che passa di mano non sposta le chiavi che un
-                // programma non può scrivere.
                 // Le ragioni per cui una chiave è saltata attraversano come
                 // **dato**, non come prosa da tradurre, e restano in italiano.
                 // Non è pigrizia: metà di quelle ragioni non sono di questo
                 // file — vengono da `SettingKind::rejects`, che sta nel
                 // **contratto** e scrive italiano cablato. Finché quel buco non
                 // ha un proprietario (nessun catalogo appartiene all'ABI),
+                // tradurre le due righe di qui lascerebbe una frase mezza in
+                // una lingua e mezza nell'altra, che è peggio di una
+                // dichiaratamente in una sola.
                 Arg::text(A_REASONS, why(&skipped)),
             ],
         )
@@ -2640,9 +2704,6 @@ fn settings_import(
     })
 }
 
-// tradurre le due righe di qui lascerebbe una frase mezza in
-// una lingua e mezza nell'altra, che è peggio di una
-// dichiaratamente in una sola.
 /// Un valore dentro un messaggio, **come dato**.
 ///
 /// Diceva «acceso» e «spento» e «niente», cioè tre parole italiane che
@@ -2652,6 +2713,9 @@ fn settings_import(
 /// tradotto sarebbe una chiave, non un argomento»).
 ///
 /// Quindi un interruttore si mostra come `true`/`false`, che è la stessa cosa
+/// che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
+/// povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
+/// che non è parola di nessuno.
 fn display(value: &SettingValue) -> String {
     match value {
         SettingValue::Toggle(v) => format!("`{v}`"),
@@ -2665,6 +2729,7 @@ fn display(value: &SettingValue) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use fub_abi::model::{DocId, ListItem};
     use fub_abi::session::{SelectionSet, ViewContext};
     use fub_abi::settings::SettingSpec;
@@ -2673,15 +2738,44 @@ mod tests {
     use fub_sdk::testing::MemoryHost;
     use serde_json::json;
 
+    /// Il menu `/` lo dichiarano i comandi: la shell non ne tiene un elenco.
+    /// Chi trasforma la selezione compare solo con una selezione; gli altri
+    /// del registro restano della palette.
+    #[test]
+    fn the_slash_menu_is_declared_by_the_commands() {
+        let surfaces = |id: &str| {
+            CoreCommands::specs()
+                .into_iter()
+                .find(|spec| spec.id == id)
+                .map(|spec| spec.surfaces)
+                .unwrap_or_else(|| panic!("{id} is in the registry"))
+        };
+        assert_eq!(
+            surfaces(SELECTION_WIKILINK),
+            [CommandSurface::SlashSelection]
+        );
+        assert_eq!(surfaces(VAULT_REPLACE), [CommandSurface::SlashSelection]);
+        assert_eq!(surfaces(NOTES_TASK_TOGGLE), [CommandSurface::Slash]);
+        for id in [
+            NOTES_CREATE,
+            NOTES_RENAME,
+            NOTES_TRASH,
+            TRASH_EMPTY,
+            SETTINGS_RESET,
+        ] {
+            assert!(surfaces(id).is_empty(), "{id} belongs to the palette only");
+        }
+    }
+
     fn invoke(
         host: &mut MemoryHost,
         command: &str,
         args: serde_json::Value,
         mode: InvokeMode,
     ) -> Result<CommandOutcome, PluginError> {
-        // che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
-        // povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
-        // che non è parola di nessuno.
+        // Come farebbe il kernel: prima la convalida contro la spec, poi la
+        // chiamata. Un test che saltasse la convalida proverebbe un percorso
+        // che non esiste.
         let spec = CoreCommands::specs()
             .into_iter()
             .find(|s| s.id == command)
@@ -2703,10 +2797,7 @@ mod tests {
             InvokeMode::Apply,
         )
         .unwrap();
-        assert_eq!(
-            navigate(first).as_str(),
-            format!("Progetti/{UNTITLED}.{DEFAULT_EXTENSION}")
-        );
+        assert_eq!(navigate(first).as_str(), format!("Progetti/{UNTITLED}.md"));
         let named = invoke(
             &mut host,
             NOTES_CREATE,
@@ -2759,13 +2850,13 @@ mod tests {
             .is_err());
     }
 
-    // Come farebbe il kernel: prima la convalida contro la spec, poi la
-    // chiamata. Un test che saltasse la convalida proverebbe un percorso
-    // che non esiste.
     /// Un `Text` **come lo legge chi guarda**: risolto col catalogo di questo
     /// componente, invece che stampato col suo `Display`.
     ///
     /// `Display` c'è ancora e serve — è la forma per il log della 0041 — ma per
+    /// un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
+    /// asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
+    /// adesso provano anche che quella chiave nel catalogo ci sia.
     fn rendered(text: &Text) -> String {
         let catalog = catalog();
         let locale = fub_abi::locale::Locale::default();
@@ -2828,7 +2919,7 @@ mod tests {
     fn the_wikilink_command_needs_a_selection_that_is_true_for_the_file() {
         let mut host = MemoryHost::new().with_document("nota.md", "una nota di prova");
         host.set_active(Some("nota.md"));
-        // un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
+        // Buffer sporco: c'è il testo, non lo span (decisione 0007).
         host.set_context(Some(
             ViewContext::new("main")
                 .with_doc(Some(DocId::new("nota.md")))
@@ -2957,7 +3048,7 @@ mod tests {
         );
         let whole = occurrences("nota, annotazione, nota", "nota", true);
         assert_eq!(whole, vec![Span::new(0, 4), Span::new(19, 23)]);
-        // asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
+        // Accentate: il confine è un carattere, non un byte.
         assert!(occurrences("però", "per", true).is_empty());
     }
 
@@ -2974,10 +3065,6 @@ mod tests {
         assert!(matches!(err, PluginError::BadArgs(_)));
     }
 
-    // adesso provano anche che quella chiave nel catalogo ci sia.
-    // Buffer sporco: c'è il testo, non lo span (decisione 0007).
-    // Accentate: il confine è un carattere, non un byte.
-
     // -----------------------------------------------------------------------
     // note.task.toggle — il cliente one-shot del modello (decisione 0018)
     // -----------------------------------------------------------------------
@@ -2990,6 +3077,9 @@ mod tests {
     /// ```
     ///
     /// L'host in memoria non parsa (e non deve: proverebbe la feature contro un
+    /// provider invece che contro il contratto), quindi il modello lo si semina
+    /// — ed è l'occasione per dire negli span esattamente cosa il comando si
+    /// aspetta di ricevere.
     const TASK_SOURCE: &str = "- [ ] fare la spesa\n  - [x] pane\n";
 
     fn with_task(symbol_external: Option<char>) -> MemoryHost {
@@ -3053,8 +3143,8 @@ mod tests {
     #[test]
     fn the_innermost_task_wins_when_they_are_nested() {
         let mut host = with_task(None);
-        // provider invece che contro il contratto), quindi il modello lo si semina
-        // — ed è l'occasione per dire negli span esattamente cosa il comando si
+        // Una posizione che sta dentro **entrambe** le voci: la annidata è la
+        // più stretta, ed è quella che l'utente sta guardando.
         invoke(
             &mut host,
             NOTES_TASK_TOGGLE,
@@ -3154,10 +3244,10 @@ mod tests {
         );
     }
 
-    /// aspetta di ricevere.
-    // Una posizione che sta dentro **entrambe** le voci: la annidata è la
-    // più stretta, ed è quella che l'utente sta guardando.
     /// La specie di una chiave la dichiara lo **schema**, e il comando la legge
+    /// da lì: è ciò che permette a `value` di essere testo — la sola forma che
+    /// un chiamante non interattivo (una CLI, un'automazione, un modello) sa
+    /// compilare.
     #[test]
     fn a_setting_value_is_read_according_to_the_kind_the_key_declares() {
         let number = SettingKind::Number {
@@ -3181,8 +3271,8 @@ mod tests {
             "un interruttore ha due stati, e «forse» non è uno di quelli"
         );
 
-        // da lì: è ciò che permette a `value` di essere testo — la sola forma che
-        // un chiamante non interattivo (una CLI, un'automazione, un modello) sa
+        // Un elenco si scrive con le virgole: chiedere il JSON vorrebbe dire
+        // far scrivere virgolette dentro una stringa di un JSON.
         let list = SettingKind::List {
             default: Vec::new(),
         };
@@ -3192,9 +3282,9 @@ mod tests {
         );
     }
 
-    /// compilare.
-    // Un elenco si scrive con le virgole: chiedere il JSON vorrebbe dire
-    // far scrivere virgolette dentro una stringa di un JSON.
+    /// Il comando visto **dal contratto**: il doppio in memoria applica il
+    /// cancello della chiave come lo applica il kernel, quindi ciò che qui
+    /// passa è ciò che passa nell'app.
     #[test]
     fn the_command_refuses_a_key_that_is_not_program_writable_and_says_which() {
         let mut host = MemoryHost::new()
@@ -3228,8 +3318,8 @@ mod tests {
             "{error:?}"
         );
 
-        // Il comando visto **dal contratto**: il doppio in memoria applica il
-        // cancello della chiave come lo applica il kernel, quindi ciò che qui
+        // E una chiave che nessuno dichiara è un'altra cosa ancora: un errore
+        // di chi la chiede, non un permesso che manca.
         let error = invoke(
             &mut host,
             SETTINGS_SET,

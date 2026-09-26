@@ -2,7 +2,7 @@
 // source text; notes and their indexed properties remain the authoritative data.
 import { EVERY_DOCUMENT, type DocumentMatch, type Excerpts, type IndexQuery, type IndexResult, type InvokeMode, type Paged, type PropertySelect, type QueryExpr, type UiNode } from "../../host/contract";
 import type { Theme } from "../../theme/theme";
-import type { DocumentUpdate } from "../text/engine";
+import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
 
 export const BASE_OWNER = "fub.shell.base";
@@ -262,7 +262,7 @@ export function parseBaseEmbed(node: UiNode): BaseEmbed | null {
   if (typeof payload.base === "string") return { base: payload.base, view: typeof payload.view === "string" ? payload.view : null, container: typeof payload.container === "string" ? payload.container : null };
   return null;
 }
-export function baseSurfaceModes(): SurfaceMode[] { return [{ id: "base", label: () => "Base", presentation: "surface", contextMode: "source" }]; }
+export function baseSurfaceModes(): SurfaceMode[] { return [{ id: "base", label: () => "Base", presentation: "surface", contextMode: "live_preview" }]; }
 function stateKey(doc: string): string { return `${BASE_STATE_KEY}:${doc}`; }
 export async function persistBaseView(deps: BaseSurfaceDeps, doc: string, view: string): Promise<void> { await deps.setViewState(stateKey(doc), view); }
 export async function restoreBaseView(deps: BaseSurfaceDeps, doc: string): Promise<string | null> {

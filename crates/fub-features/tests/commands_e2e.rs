@@ -833,6 +833,7 @@ fn the_plan_of_a_rename_names_the_notes_that_link_it() {
     );
 }
 
+// ---------------------------------------------------------------------------
 // vault.archive: durable renames on apply, nested plans on dry-run
 // ---------------------------------------------------------------------------
 

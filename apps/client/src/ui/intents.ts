@@ -6,9 +6,11 @@
 // il giorno che la si dimentica, un comando naviga e una view no.
 import type { CommandEffect, ViewUpdate } from "../host/contract";
 import { t } from "../i18n/strings";
-import { isOpen, openDocument, openFromView, revealByteOffset } from "../panels/document";
+import { openDocument, openFromView, reveal } from "../panels/document";
 import { searchFor } from "../panels/search";
 import { notify } from "./notify";
+import { openPrimaryView } from "./primary-views";
+import { writeClipboardText } from "../platform/clipboard";
 
 /// Il namespace con cui `settings.export` consegna ciò che ha esportato
 /// (`fub_features::SETTINGS_NS`). Il comando non scrive un file e non può:
@@ -47,11 +49,12 @@ export function takeNoticeAfterReload(): string | null {
   }
 }
 
-/// I due tipi veri del confine, meno il caso che qui non c'entra: `replace`
-/// riguarda la view che lo ha mandato, e lo gestisce chi la monta. Scritto come
-/// unione dei tipi rispecchiati e non a mano, così un caso nuovo in Rust arriva
-/// fin qui.
-export type ShellIntent = Exclude<ViewUpdate, { kind: "replace" }> | CommandEffect;
+/// I due tipi veri del confine, meno i casi che qui non c'entrano: `replace` e
+/// `patch` riguardano la view che li ha mandati, e li gestisce chi la monta.
+/// Scritto come unione dei tipi rispecchiati e non a mano, così un caso nuovo
+/// in Rust arriva fin qui, e il `default` dello `switch` non compila finché
+/// non ha il suo ramo.
+export type ShellIntent = Exclude<ViewUpdate, { kind: "replace" } | { kind: "patch" }> | CommandEffect;
 
 export async function applyIntent(intent: ShellIntent): Promise<void> {
   switch (intent.kind) {
@@ -61,14 +64,11 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       if ("doc_id" in intent) await openFromView(intent.doc_id);
       else await openDocument(intent.doc);
       break;
-    case "reveal": {
-      // Apri il documento se non è quello aperto, poi porta la vista
-      // sull'intervallo (lo scroll converte byte UTF-8 → posizione editor).
-      const doc = "doc" in intent ? intent.doc : intent.doc_id;
-      if (!isOpen(doc)) await openDocument(doc);
-      revealByteOffset(intent.span.start);
+    case "reveal":
+      // Il punto si porta nel riquadro che mostra quel documento, o in quello
+      // col fuoco dopo averlo aperto: mai in un riquadro che ne mostra un altro.
+      await reveal("doc" in intent ? intent.doc : intent.doc_id, { span: intent.span });
       break;
-    }
     case "run_search":
       searchFor(intent.query);
       break;
@@ -95,6 +95,11 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       // che lo capisce, non su questa.
       console.info(`Fub: intento custom ignorato (ns: ${intent.ns}).`);
       break;
+    case "open_view":
+      // Solo l'area principale ha istanze aperte da altri: una view di barra
+      // laterale ne ha una, montata dalla shell, e `openPrimaryView` lo dice.
+      openPrimaryView(intent.view, intent.params);
+      break;
     case "plan":
       // Un piano arrivato fuori dal giro dell'anteprima: non si applica da
       // sé, e la palette lo ha già mostrato quando l'ha chiesto.
@@ -102,6 +107,12 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
     case "none":
     case "done":
       break;
+    default: {
+      // Un caso nuovo del contratto non compila finché non ha un ramo qui; uno
+      // arrivato da un backend più nuovo di questa shell si dice e non fa nulla.
+      const unknown: never = intent;
+      console.info(`Fub: intento ignorato (kind: ${(unknown as { kind: string }).kind}).`);
+    }
   }
 }
 
@@ -114,7 +125,7 @@ async function copyText(payload: unknown): Promise<void> {
     return;
   }
   try {
-    await navigator.clipboard.writeText(text);
+    await writeClipboardText(text);
     notify(t("clipboard.copied"));
   } catch {
     notify(t("clipboard.failed"), "guasto");
@@ -132,7 +143,7 @@ async function copyText(payload: unknown): Promise<void> {
 async function collectExport(payload: unknown): Promise<void> {
   const json = JSON.stringify(payload, null, 2);
   try {
-    await navigator.clipboard.writeText(json);
+    await writeClipboardText(json);
     notify(t("settings.exported_clipboard"));
   } catch {
     // Senza permesso sugli appunti resta la console, che per un JSON di venti

@@ -31,10 +31,11 @@
 //! l'insieme dei vault aperti tre settimane fa: chiede **un** path, l'ultimo
 //! `last_opened` ancora sul disco, e il registro è la memoria di recency che le
 //! lo dà.
-///
-/// `VaultRegistry` è l'owner del servizio; i caller che devono condividere
-/// l'accesso usano [`VaultRegistry::handle`]. Il handle conserva soltanto lo
-/// stato del registro e non porta mai con sé un workspace.
+//!
+//! `VaultRegistry` è l'owner del servizio; i caller che devono condividere
+//! l'accesso usano [`VaultRegistry::handle`]. Il handle conserva soltanto lo
+//! stato del registro e non porta mai con sé un workspace.
+
 use crate::custody::Custody;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -214,12 +215,12 @@ impl RegistryInner {
     /// recente. L'ordine è **del registro** e non di chi disegna: due elenchi
     /// ordinati in due posti sarebbero due idee di cosa vuol dire "recente".
     fn list(&self) -> Vec<VaultEntry> {
-        // Nessun canale d'errore in questa firma (decisione 0120): un registro
-        // avvelenato risponde «non ne conosco», e la porta ha già scritto la
-        // riga che dice perché. È un elenco di comodità, non un dato del vault.
         if self.closed.load(Ordering::Acquire) {
             return Vec::new();
         }
+        // Nessun canale d'errore in questa firma (decisione 0120): un registro
+        // avvelenato risponde «non ne conosco», e la porta ha già scritto la
+        // riga che dice perché. È un elenco di comodità, non un dato del vault.
         let Ok(guard) = self.entries.read() else {
             return Vec::new();
         };
@@ -439,17 +440,6 @@ impl RegistryInner {
         })
     }
 
-    /// Una mutazione del registro, applicata a **ciò che il file dice adesso**.
-    ///
-    /// Il tetto dei recenti rende la cosa più visibile che altrove: due
-    /// installazioni che ricompongono l'elenco dalla propria copia non si
-    /// cancellano solo l'ultimo vault aperto dall'altra — si cancellano i
-    /// **preferiti**, che sono una scelta e non una traccia. Quindi la
-    /// mutazione si applica all'elenco reopened sotto lock
-    /// ([`fub_kernel::update_atomic`],
-    /// [0066](../../../docs/decisions/0195-versioni-indipendenti.md)),
-    /// e il tetto si applica dopo la fusione: se l'altra installazione ha
-    /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
     fn ensure_open(&self) -> Result<(), PluginError> {
         if self.closed.load(Ordering::Acquire) {
             return Err(PluginError::Cancelled(
@@ -459,6 +449,17 @@ impl RegistryInner {
         Ok(())
     }
 
+    /// Una mutazione del registro, applicata a **ciò che il file dice adesso**.
+    ///
+    /// Il tetto dei recenti rende la cosa più visibile che altrove: due
+    /// installazioni che ricompongono l'elenco dalla propria copia non si
+    /// cancellano solo l'ultimo vault aperto dall'altra — si cancellano i
+    /// **preferiti**, che sono una scelta e non una traccia. Quindi la
+    /// mutazione si applica all'elenco riletto sotto lock
+    /// ([`fub_kernel::update_atomic`],
+    /// [0066](../../../docs/decisions/0195-versioni-indipendenti.md)),
+    /// e il tetto si applica dopo la fusione: se l'altra installazione ha
+    /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
     fn mutate(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
         self.ensure_open()?;
         let mut entries = self.entries.write()?;

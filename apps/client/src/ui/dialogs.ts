@@ -1,12 +1,15 @@
-// Le domande che la shell fa da sé: un nome, una conferma, una scelta in un
-// elenco lungo.
+// Le domande che la shell fa da sé: un nome, una scelta in un elenco lungo.
 //
-// Prima erano `window.prompt` e `window.confirm` in segnalibri, workspace e
-// gruppi di tab: un dialogo del browser, fuori dal tema e dalla lingua, che
-// nelle webview di Tauri non è garantito su ogni piattaforma. E la scelta di
-// una cartella era un menu contestuale con duecento voci aperto in (0,0).
-// Qui c'è una forma sola, la `.modale` della palette: stesso fuoco
-// intrappolato, stesso Esc, stessa pelle.
+// Prima erano `window.prompt` in segnalibri, workspace e gruppi di tab: un
+// dialogo del browser, fuori dal tema e dalla lingua, che nelle webview di
+// Tauri non è garantito su ogni piattaforma. E la scelta di una cartella era un
+// menu contestuale con duecento voci aperto in (0,0). Qui c'è una forma sola,
+// la `.modale` della palette: stesso fuoco intrappolato, stesso Esc, stessa
+// pelle.
+//
+// Una conferma sì/no invece non sta qui: è una sola in tutta l'app, quella di
+// `host/dialog.ts`, la superficie che la piattaforma disegna e che una shell
+// sostituisce in un file.
 import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
 import { openLifetime } from "./lifetime";
@@ -58,22 +61,19 @@ function openFrame(title: string, onDismiss: () => void): Frame {
   return { overlay, box, close };
 }
 
-function actions(okLabel: string, danger: boolean, onCancel: () => void): {
-  row: HTMLElement;
-  ok: HTMLButtonElement;
-} {
+function actions(okLabel: string, onCancel: () => void): HTMLElement {
   const row = document.createElement("div");
   row.className = "palette-actions";
   const ok = document.createElement("button");
   ok.type = "submit";
-  ok.className = danger ? "danger" : "primary";
+  ok.className = "primary";
   ok.textContent = okLabel;
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.textContent = t("app.cancel");
   cancel.addEventListener("click", onCancel);
   row.append(ok, cancel);
-  return { row, ok };
+  return row;
 }
 
 export interface PromptOptions {
@@ -107,7 +107,7 @@ export function promptText(options: PromptOptions): Promise<string | null> {
     input.value = options.value ?? "";
     if (options.placeholder) input.placeholder = options.placeholder;
     label.append(name, input);
-    const { row } = actions(options.okLabel ?? t("app.ok"), false, () => settle(null));
+    const row = actions(options.okLabel ?? t("app.ok"), () => settle(null));
     form.append(label, row);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -116,40 +116,6 @@ export function promptText(options: PromptOptions): Promise<string | null> {
     frame.box.append(form);
     input.focus();
     input.select();
-  });
-}
-
-export interface ConfirmShellOptions {
-  readonly title: string;
-  readonly message: string;
-  readonly okLabel: string;
-  readonly danger?: boolean;
-}
-
-/// Una conferma disegnata dalla shell: `true` se l'utente ha detto di sì.
-export function confirmInShell(options: ConfirmShellOptions): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const settle = (value: boolean): void => {
-      if (settled) return;
-      settled = true;
-      frame.close();
-      resolve(value);
-    };
-    const frame = openFrame(options.title, () => settle(false));
-    const form = document.createElement("form");
-    form.className = "palette-form";
-    const message = document.createElement("p");
-    message.className = "palette-desc";
-    message.textContent = options.message;
-    const { row, ok } = actions(options.okLabel, options.danger === true, () => settle(false));
-    form.append(message, row);
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      settle(true);
-    });
-    frame.box.append(form);
-    ok.focus();
   });
 }
 

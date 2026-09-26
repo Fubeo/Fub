@@ -58,9 +58,9 @@ use crate::query::query_workspace;
 
 use fub_abi::command::{CommandOutcome, Failure, InvokeMode, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
-use fub_abi::format::DocumentFormat;
+use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
-use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::model::{DocId, DocumentModel, TaskMarker};
 use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
@@ -71,10 +71,18 @@ use fub_abi::traits::{
     SettingsRead, SettingsWrite, TransferRead, TrashEntry, VaultRead, VaultStructure, VaultWrite,
     ViewStateRead, ViewStateWrite,
 };
+use fub_abi::transfer::{
+    ExportReport, ExportRequest, ExportTarget, ImportReport, ImportRequest, ImportSource,
+};
 use fub_abi::{Event, PluginError};
-use fub_kernel::host::{authorize_path, Capability, Guard, Policy};
+use fub_kernel::host::{
+    authorize_export, authorize_import, authorize_path, authorize_restore, Capability, Guard,
+    Policy,
+};
+use fub_kernel::transfer::{MemorySink, PLUGIN_EXPORT_LIMIT};
 use fub_kernel::workspace::{
-    DeferredEvents, EventDrain, PreparedMaintenanceRebuild, PreparedPluginDataIo,
+    DeferredEvents, EventDrain, PreparedFormatEdit, PreparedMaintenanceRebuild,
+    PreparedPluginDataIo,
 };
 use fub_kernel::{
     authorize_query, filter_query_result, ReadOnly, RenameRecoveryPosition, Workspace,
@@ -224,6 +232,24 @@ impl JobHost {
         authorize_path(&policy, capability, "", action)
     }
 
+    /// Il provider del documento, preparato sotto la lettura e autorizzato
+    /// con la stessa policy di `read_model`: il chiamante lo invoca dopo aver
+    /// rilasciato il lock.
+    fn prepare_format_edit(
+        &self,
+        doc: &DocId,
+        with_source: bool,
+        why: &str,
+    ) -> Result<Option<PreparedFormatEdit>, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.read()?;
+        let policy = workspace.granted_policy(&self.plugin);
+        authorize_path(&policy, Capability::VaultRead, doc.as_str(), || {
+            format!("{why} from the format of `{doc}`")
+        })?;
+        workspace.prepare_format_edit(doc, with_source)
+    }
+
     /// Una lettura che può **rifiutare**: prima la bandiera, poi il prestito.
     fn read_result<R>(
         &self,
@@ -348,12 +374,10 @@ impl JobHost {
             }
         };
         let model = prepared.parse(source).map_err(PluginError::from)?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = self.for_provider(owner, InvokeMode::Apply);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
+        let before_write = prepared.before_write().try_for_each(|hook| {
+            let mut detached = self.for_provider(hook.owner(), InvokeMode::Apply);
+            hook.invoke(&mut detached)
+        });
         let pending = {
             let mut ws = workspace.write()?;
             ws.commit_document_write(prepared, source, model, before_write)
@@ -401,12 +425,10 @@ impl JobHost {
             return Ok(report);
         }
         let model = prepared.parse(&next).map_err(PluginError::from)?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = self.for_provider(owner, InvokeMode::Apply);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
+        let before_write = prepared.before_write().try_for_each(|hook| {
+            let mut detached = self.for_provider(hook.owner(), InvokeMode::Apply);
+            hook.invoke(&mut detached)
+        });
         let base = request.base;
         let pending = {
             let mut ws = workspace.write()?;
@@ -751,6 +773,25 @@ impl VaultRead for JobHost {
         self.reading(|h| h.format_of(id)).unwrap_or_default()
     }
 
+    fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError> {
+        match self.prepare_format_edit(doc, false, "asking a link")? {
+            Some(prepared) => prepared.format_link(link),
+            None => Ok(None),
+        }
+    }
+
+    fn task_state_edit(
+        &self,
+        doc: &DocId,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Option<EditRequest>, PluginError> {
+        match self.prepare_format_edit(doc, true, "asking a task edit")? {
+            Some(prepared) => prepared.task_state_edit(marker, done),
+            None => Ok(None),
+        }
+    }
+
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
         self.read_result(|h| h.list_trash())
     }
@@ -798,12 +839,10 @@ impl VaultWrite for JobHost {
         };
         let model = prepared.parse(bytes).map_err(PluginError::from)?;
         self.stopped()?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = self.for_provider(owner, InvokeMode::Apply);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
+        let before_write = prepared.before_write().try_for_each(|hook| {
+            let mut detached = self.for_provider(hook.owner(), InvokeMode::Apply);
+            hook.invoke(&mut detached)
+        });
         self.stopped()?;
         let pending = {
             let mut ws = workspace.write()?;
@@ -1025,50 +1064,26 @@ impl VaultStructure for JobHost {
             authorize_family(&policy, Capability::VaultStructure, || {
                 format!("restoring `{entry}`")
             })?;
-            if let Some(target) = to.as_ref() {
-                if self.mode == InvokeMode::DryRun {
-                    authorize_path(
-                        &ReadOnly {
-                            why: "simulazione del comando",
-                        },
-                        Capability::VaultStructure,
-                        target.as_str(),
-                        || format!("restoring to `{target}`"),
-                    )?;
-                }
-                authorize_path(&policy, Capability::VaultStructure, target.as_str(), || {
-                    format!("restoring to `{target}`")
-                })?;
-            }
             authorize_family(&policy, Capability::VaultRead, || "listing trash".into())?;
             (policy, ws.detached_trash_listing())
         };
-        let listed = list_trash()
-            .map_err(PluginError::from)?
-            .into_iter()
-            .filter(|candidate| {
-                policy
-                    .denies_path(Capability::VaultRead, candidate.original.as_str())
-                    .is_none()
-            })
-            .find(|candidate| &candidate.id == entry)
-            .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?;
-        if to.is_none() {
-            let target = &listed.original;
-            if self.mode == InvokeMode::DryRun {
-                authorize_path(
-                    &ReadOnly {
-                        why: "simulazione del comando",
-                    },
-                    Capability::VaultStructure,
-                    target.as_str(),
-                    || format!("restoring to `{target}`"),
-                )?;
-            }
-            authorize_path(&policy, Capability::VaultStructure, target.as_str(), || {
-                format!("restoring to `{target}`")
-            })?;
-        }
+        // La stessa regola della `Guard`, non una sua copia
+        // (`fub_kernel::host::authorize_restore`), sulla stessa lista: ciò che
+        // il plugin non può leggere non esiste, e la risposta è `NotFound` in
+        // tutte e due. La simulazione è già stata rifiutata sopra: `ReadOnly`
+        // nega l'intera famiglia `VaultStructure`, qualunque path.
+        let (listed, _) = authorize_restore(&policy, entry, to.as_ref(), || {
+            list_trash()
+                .map_err(PluginError::from)?
+                .into_iter()
+                .filter(|candidate| {
+                    policy
+                        .denies_path(Capability::VaultRead, candidate.original.as_str())
+                        .is_none()
+                })
+                .find(|candidate| &candidate.id == entry)
+                .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))
+        })?;
         let prepared = {
             let ws = workspace.read()?;
             ws.prepare_listed_document_restore(listed, to)
@@ -1560,5 +1575,58 @@ impl HostServices for JobHost {
             ws.finish_service_call_deferred(prepared, outcome)
         };
         finish_events(&workspace, deferred)?
+    }
+
+    fn export_targets(&self) -> Result<Vec<ExportTarget>, PluginError> {
+        self.stopped()?;
+        Ok(self.workspace.read()?.export_targets())
+    }
+
+    /// L'exporter gira **fuori** dal prestito del workspace, con un host suo
+    /// di sola lettura: un export del vault intero non tiene in fila chi
+    /// scrive. I byte tornano nel rapporto, col tetto di
+    /// [`PLUGIN_EXPORT_LIMIT`].
+    fn run_export(&mut self, request: &ExportRequest) -> Result<ExportReport, PluginError> {
+        self.stopped()?;
+        let prepared = {
+            let ws = self.workspace.read()?;
+            authorize_export(&ws.granted_policy(&self.plugin), request)?;
+            ws.prepare_export()
+        };
+        let at = prepared.choose(&request.target)?;
+        let host = self.for_provider(prepared.owner(at), self.mode);
+        let mut sink = MemorySink::bounded(PLUGIN_EXPORT_LIMIT);
+        prepared.invoke(at, request, &host, &mut sink)
+    }
+
+    /// L'importer gira fuori dal prestito e senza il turno di scrittura: un
+    /// import può durare quanto la rete che lo alimenta, e ogni sua scrittura
+    /// prende il turno da sé, come quelle di un job.
+    fn run_import(
+        &mut self,
+        source: &ImportSource,
+        request: &ImportRequest,
+    ) -> Result<ImportReport, PluginError> {
+        self.stopped()?;
+        let read_only = ReadOnly {
+            why: "simulazione del comando",
+        };
+        let prepared = {
+            let ws = self.workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_import(&read_only, source, request)?;
+            }
+            authorize_import(&ws.granted_policy(&self.plugin), source, request)?;
+            ws.prepare_import()
+        };
+        let at = prepared.choose(source)?;
+        let host = self.for_provider(prepared.owner(at), self.mode);
+        if self.mode == InvokeMode::DryRun {
+            let mut host = Guard::new(host, read_only);
+            prepared.invoke(at, source, request, &mut host)
+        } else {
+            let mut host = host;
+            prepared.invoke(at, source, request, &mut host)
+        }
     }
 }

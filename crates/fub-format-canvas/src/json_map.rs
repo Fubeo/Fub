@@ -137,6 +137,10 @@ pub(crate) fn read_mapped(source: &str, at: usize) -> Option<(String, Vec<CharMa
                                 }
                                 let full = 0x10000 + ((code - 0xD800) << 10) + (code2 - 0xDC00);
                                 raw += 6;
+                                // Il secondo `\uXXXX` è consumato qui: senza,
+                                // il giro dopo lo rileggeva come surrogato basso
+                                // isolato e l'intero literale diventava invalido.
+                                i += 6;
                                 push!(char::from_u32(full)?, from);
                             } else {
                                 return None;
@@ -164,10 +168,20 @@ pub(crate) fn read_mapped(source: &str, at: usize) -> Option<(String, Vec<CharMa
     None
 }
 
+/// Quanti oggetti o array uno dentro l'altro un valore sconosciuto può
+/// annidare: lo stesso tetto di `serde_json`, che legge lo stesso sorgente in
+/// `parse_canvas` e conta anche i livelli di radice, `nodes` e nodo, così la
+/// mappa non rifiuta niente che il modello accetti. Senza, `skip_value`
+/// scendeva di un frame per livello, e un canvas di migliaia di `[` esauriva lo
+/// stack in `rewrite_links`, che la mappa la legge senza passare da `serde`.
+const MAX_DEPTH: usize = 128;
+
 struct Lexer<'a> {
     source: &'a str,
     bytes: &'a [u8],
     pos: usize,
+    /// Livelli di `skip_value` aperti.
+    depth: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -270,14 +284,27 @@ impl<'a> Lexer<'a> {
                 self.pos = end;
                 Ok(())
             }
-            Some(b'{') => self.skip_object(),
-            Some(b'[') => self.skip_array(),
+            Some(b'{') => self.skip_nested(Self::skip_object),
+            Some(b'[') => self.skip_nested(Self::skip_array),
             Some(b't') => self.literal("true"),
             Some(b'f') => self.literal("false"),
             Some(b'n') => self.literal("null"),
             Some(b'-') | Some(b'0'..=b'9') => self.skip_number(),
             _ => Err(format!("invalid JSON value near offset {}", self.pos)),
         }
+    }
+
+    fn skip_nested(&mut self, skip: fn(&mut Self) -> Result<(), String>) -> Result<(), String> {
+        if self.depth >= MAX_DEPTH {
+            return Err(format!(
+                "canvas JSON nested deeper than {MAX_DEPTH} near offset {}",
+                self.pos
+            ));
+        }
+        self.depth += 1;
+        let skipped = skip(self);
+        self.depth -= 1;
+        skipped
     }
 
     fn skip_object(&mut self) -> Result<(), String> {
@@ -339,6 +366,7 @@ pub(crate) fn canvas_literals(source: &str) -> Result<Vec<MappedLiteral>, String
         source,
         bytes: source.as_bytes(),
         pos: 0,
+        depth: 0,
     };
     let mut out = Vec::new();
     lx.ws();

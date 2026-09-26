@@ -40,6 +40,10 @@ use crate::traits::{PropertyFilter, PropertyTest};
 /// `QueryExpr` scritta a mano.
 pub const MAX_CLAUSES: usize = 32;
 pub const MAX_LITERALS: usize = 32;
+/// Quanti gruppi uno dentro l'altro. Il parser scende di un livello per
+/// gruppo, e così la distribuzione: senza un tetto una riga di migliaia di `(`
+/// esauriva lo stack. Oltre, la riga è `TooComplex` sulla `(` di troppo.
+pub const MAX_DEPTH: usize = 32;
 
 /// Perché una riga non è una ricerca.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -261,7 +265,7 @@ impl Parser<'_> {
                 continue;
             }
             pending_or = None;
-            current.push(self.item()?);
+            current.push(self.item(depth)?);
         }
         if let Some(at) = pending_or {
             return Err(fault(SearchFaultKind::DanglingOr, at));
@@ -280,7 +284,7 @@ impl Parser<'_> {
                 .is_none_or(|c| c.is_whitespace() || c == '(' || c == ')')
     }
 
-    fn item(&mut self) -> Result<Item, SearchFault> {
+    fn item(&mut self, depth: usize) -> Result<Item, SearchFault> {
         let start = self.pos;
         let negated = self.peek() == Some('-')
             && self.src[self.pos + 1..]
@@ -295,8 +299,11 @@ impl Parser<'_> {
                 if negated {
                     return Err(fault(SearchFaultKind::NegatedGroup, start));
                 }
+                if depth >= MAX_DEPTH {
+                    return Err(fault(SearchFaultKind::TooComplex, start));
+                }
                 self.pos += 1;
-                Ok(Item::Group(self.alternatives(1)?))
+                Ok(Item::Group(self.alternatives(depth + 1)?))
             }
             Some('"') => {
                 let phrase = self.quoted()?;
@@ -698,5 +705,16 @@ mod tests {
     #[test]
     fn empty_is_everything() {
         assert_eq!(parse("   ", false).unwrap(), QueryExpr::all());
+    }
+
+    #[test]
+    fn a_deep_nest_is_a_fault_not_a_stack_overflow() {
+        let hostile = "(".repeat(100_000);
+        assert_eq!(
+            parse(&hostile, false),
+            Err(fault(SearchFaultKind::TooComplex, MAX_DEPTH))
+        );
+        let deepest = format!("{}a{}", "(".repeat(MAX_DEPTH), ")".repeat(MAX_DEPTH));
+        assert!(parse(&deepest, false).is_ok());
     }
 }

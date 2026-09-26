@@ -4,7 +4,8 @@ import { EditorView, keymap } from "@codemirror/view";
 import { getCM } from "@replit/codemirror-vim";
 import { insertNewlineAndIndent, redoDepth, undoDepth } from "@codemirror/commands";
 import { EditorSelection, EditorState, StateField, Transaction, type Extension } from "@codemirror/state";
-import { createTextEngine, type EditorChange, type TextEngine } from "./engine";
+import { createTextEngine, type TextEngine } from "./engine";
+import type { EditorChange } from "../core/text-operation";
 import { MAX_FOOTPRINTS, type FootprintState } from "./history-footprints";
 interface TestEditor {
   ed: TextEngine;

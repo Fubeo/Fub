@@ -151,7 +151,7 @@ fn required_attr<'a>(
 /// | blocco | usciva | cosa succedeva al giro dopo |
 /// |---|---|---|
 /// | tabella | `\| 1 \| 2 \| ^tab` | la cella in più si butta: **l'ancora sparisce** |
-/// | codice | ``` ``` ^cod ``` | il recinto non chiude più: `^cod` **enter nel codice** |
+/// | codice | ``` ``` ^cod ``` | il recinto non chiude più: `^cod` **entra nel codice** |
 /// | riga | `--- ^hr` | non è più una riga orizzontale: diventa un paragrafo |
 /// | elenco, citazione, callout | `- b ^lis`, `> citata ^cit` | l'id resta, ma indirizza il **figlio** invece del contenitore |
 ///
@@ -177,7 +177,7 @@ fn write_anchor(anchor: &Option<String>, out: &mut String) {
 /// L'ancora esplicita su **riga propria**, dopo una riga vuota: la forma con
 /// cui si indirizza un blocco che in coda non ha del testo.
 ///
-/// È la stessa forma che il parser declare — «l'ancora su riga propria (`^abc`
+/// È la stessa forma che il parser dichiara — «l'ancora su riga propria (`^abc`
 /// da solo, subito dopo un blocco) è la sola forma con cui si indirizza un
 /// contenitore» — e che rilegge da `lone_anchor`: un paragrafo di sola ancora
 /// non resta un blocco, si attacca a quello che lo precede.
@@ -273,7 +273,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             // **Il numero di partenza è quello del documento**, non `1`: una
             // lista che comincia da 3 riprende una lista interrotta, e
             // riportarla a 1 fa dire al file riscritto una cosa diversa da
-            // quella che il file read_value diceva. `1` resta il ripiego per un
+            // quella che il file letto diceva. `1` resta il ripiego per un
             // ordinato che arriva da un generatore senza numero.
             let first = start.unwrap_or(1);
             for (the, item) in items.iter().enumerate() {

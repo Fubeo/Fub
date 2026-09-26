@@ -10,6 +10,7 @@ import {
   ICON_STROKE_WIDTH,
   icon,
   iconNames,
+  registerIcon,
 } from "./icons";
 
 function svgParts(name: string): { attrs: string; body: string } {
@@ -69,5 +70,38 @@ describe("il costrutto delle icone", () => {
       .filter(([, text]) => /<svg\b/i.test(text))
       .map(([path]) => path);
     expect(offenders, `SVG fuori dal modulo icone: ${offenders.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("le icone registrate", () => {
+  it("si disegnano col costrutto del set finché il teardown non le ritira", () => {
+    const retire = registerIcon("goccia-di-prova", ["M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z"]);
+    try {
+      const { attrs, body } = svgParts("goccia-di-prova");
+      expect(attr(attrs, "stroke")).toBe(ICON_STROKE);
+      expect(body).toBe('<path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z"/>');
+      expect(iconNames()).toContain("goccia-di-prova");
+    } finally {
+      retire();
+    }
+    expect(icon("goccia-di-prova")).toBe("");
+    expect(iconNames()).not.toContain("goccia-di-prova");
+  });
+
+  it("non ridefiniscono un nome già disegnato", () => {
+    expect(() => registerIcon("search", ["M0 0h1"])).toThrow(/already drawn/);
+    expect(() => registerIcon("backlink", ["M0 0h1"])).toThrow(/already drawn/);
+    const retire = registerIcon("doppia-di-prova", ["M0 0h1"]);
+    try {
+      expect(() => registerIcon("doppia-di-prova", ["M0 0h2"])).toThrow(/already drawn/);
+    } finally {
+      retire();
+    }
+  });
+
+  it("accettano soltanto tracciati, niente markup", () => {
+    expect(() => registerIcon("iniettata", ['M0 0"/><script>alert(1)</script><path d="'])).toThrow(/path data/);
+    expect(() => registerIcon("vuota", [])).toThrow(/path data/);
+    expect(() => registerIcon("Maiuscola", ["M0 0h1"])).toThrow(/lowercase id/);
   });
 });

@@ -88,7 +88,7 @@ const FAILED: &str = "failed";
 /// Le stringhe del pannello e dei comandi. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    crate::formats::speaking(vec![
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Proprietà")
             .with(EMPTY_NO_NOTES, "Nessuna nota aperta.")
@@ -318,7 +318,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.key.rename.old_key.desc", "Existing key.")
             .with("property.key.rename.new_key.title", "New key")
             .with("property.key.rename.new_key.desc", "Destination key."),
-    ]
+    ])
 }
 
 /// Il pannello proprietà della nota aperta.
@@ -994,10 +994,15 @@ fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
         .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
+/// Il documento su cui scrivere, e solo se il suo formato ha un frontmatter:
+/// scriverne uno davanti a un `.base` o a un canvas lo corrompe.
 fn doc_from(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
-    args.document(DOC)
+    let doc = args
+        .document(DOC)
         .or_else(|| host.active_context().and_then(|c| c.doc))
-        .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES)))
+        .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES)))?;
+    crate::formats::require(host, &doc, fub_abi::options::syntax::FRONTMATTER)?;
+    Ok(doc)
 }
 
 fn key_from(args: Args<'_>) -> Result<String, PluginError> {
@@ -1302,6 +1307,7 @@ fn rename_property_key(
     for entry in docs {
         let doc = entry.doc;
         let prepared = (|| -> Result<Option<PlannedEdit>, PluginError> {
+            crate::formats::require(host, &doc, fub_abi::options::syntax::FRONTMATTER)?;
             let revision = host.document_revision(&doc)?;
             let source = host.read_document(&doc)?;
             let model = host.read_model(&doc)?;

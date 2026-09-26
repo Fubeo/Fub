@@ -21,6 +21,7 @@ import type {
   Align,
   Axis,
   CommandReach,
+  CommandSurface,
   ContextKind,
   DocChange,
   EntryKind,
@@ -642,6 +643,10 @@ export interface CommandScope {
   reversible: boolean;
 }
 
+// Dove un comando si offre oltre alla palette: lo dichiara il comando, e la
+// shell non tiene un elenco suo né indovina dai nomi dei parametri.
+export type { CommandSurface } from "./enums.generated";
+
 export interface CommandSpec {
   id: string;
   title: string;
@@ -651,6 +656,7 @@ export interface CommandSpec {
   keybinding: string | null;
   params: ParamSpec[];
   scope: CommandScope;
+  surfaces: CommandSurface[];
 }
 
 // Come si invoca: eseguire, o chiedere cosa succederebbe.
@@ -771,7 +777,9 @@ export type UndoStep =
 // anche quando è nullo: serde rifiuta un campo assente, e il mirror
 // (`mirror.test.ts`) verifica che le chiavi siano esattamente queste.
 
-// Le tre modalità esclusive di un pannello (FEATURES 4.1).
+// Che vista mostra un pannello (FEATURES 4.1): il documento com'è salvato, una
+// resa in cui si scrive, una resa da leggere. Ogni superficie ci proietta le
+// sue modalità (`SurfaceMode.contextMode`); i nomi vengono da Markdown.
 export type { PaneMode } from "./enums.generated";
 
 // Le parti del contesto che una view può dichiarare di seguire.
@@ -788,7 +796,9 @@ export type { ContextKind } from "./enums.generated";
 // sarebbe stata una conversione che la perde.
 //
 // Le COORDINATE valgono o non valgono per tutte insieme: a deciderlo è lo stato
-// del buffer, che è uno per pannello. Per questo la scelta sta sopra l'insieme
+// del buffer, che è uno per pannello, oppure una superficie che sceglie
+// elementi e non intervalli del sorgente (carte di una tela, celle), che
+// pubblica il loro testo fluttuante. Per questo la scelta sta sopra l'insieme
 // (`SelectionSet`) e non dentro le singole selezioni — un insieme metà
 // ancorato e metà no non è rappresentabile, ed è voluto.
 export interface FloatingSelection {
@@ -908,6 +918,9 @@ export interface DocumentWindowRequest {
   vault: string;
   session: string;
   surfaceId: string;
+  // Il profilo di testo che il registro delle superfici ha risolto per il
+  // documento: la finestra lo monta com'è, senza risolverlo di nuovo.
+  profile: string;
 }
 
 export interface DocumentWindowEvent {
@@ -1837,6 +1850,28 @@ export interface JobStatus {
   plugin: string;
   since: number;
   progress: JobProgress | null;
+}
+
+// L'esito di un export, dentro il `result.Ok` del job che lo ha eseguito
+// (rispecchia fub_abi::transfer::ExportReport). Un artefatto porta i byte, o la
+// ricevuta di quanti ne sono già stati versati dove l'utente li voleva: quella
+// è un u64 conteggio e attraversa l'IPC come stringa.
+export type ExportContent =
+  | { kind: "bytes"; value: readonly number[] }
+  | { kind: "delivered"; value: string };
+export interface ExportArtifact {
+  path: string;
+  media_type: string;
+  content: ExportContent;
+}
+export interface TransferNote {
+  level: "info" | "warning" | "error";
+  message: string;
+  entry: string | null;
+}
+export interface ExportReport {
+  artifacts: ExportArtifact[];
+  log: TransferNote[];
 }
 
 // Un tag del vault con quante note lo portano (rispecchia

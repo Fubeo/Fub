@@ -14,29 +14,51 @@
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
-/// All standalone writers and the desktop composition use this same lock.
-/// The file is never removed: its inode must remain stable across processes.
-/// Keep the handle alive for the entire Host writer lifetime.
-pub const WRITER_LOCK_FILE: &str = "automation-writer.lock";
+/// Il suffisso del **lock di scrittura** di un vault: il file è fratello della
+/// radice, `<cartella madre>/.<nome>.writer.lock`, come il lock degli snapshot.
+///
+/// Sta fuori dal vault apposta. Uno snapshot applicato sostituisce la radice
+/// intera con una rename, e l'azzeramento della demo la cancella: un lock
+/// dentro `.fub/` cambiava inode in tutti e due i casi, e un secondo processo
+/// otteneva un lock «nuovo» mentre il primo credeva di tenere ancora il vecchio.
+/// Il file non si rimuove mai: l'inode deve restare lo stesso fra i processi.
+pub const WRITER_LOCK_SUFFIX: &str = ".writer.lock";
+
+/// La chiave di catalogo dell'errore «un altro processo sta già scrivendo in
+/// questo vault». Viaggia in un [`PluginError::Conflict`](fub_abi::PluginError):
+/// chi deve distinguerlo da un altro conflitto usa [`is_writer_busy`].
+pub const E_WRITER_BUSY: &str = "host.vault.writer_busy";
+
+/// Il possesso esclusivo, fra processi, del diritto di scrivere in un vault.
+///
+/// Lo prende [`Host`](crate::Host) quando apre un vault e lo tiene la sessione
+/// finché non è chiusa: le shell (app, CLI, host nativo) non lo prendono da
+/// sé. L'handle aperto è il lease; chiuderlo lo rilascia, anche se il processo
+/// muore.
 pub struct VaultWriterLock {
     _file: std::fs::File,
 }
 
-pub fn lock_vault_writer(root: &std::path::Path) -> std::io::Result<VaultWriterLock> {
-    let root = root.canonicalize()?;
-    let state = root.join(".fub");
-    match std::fs::symlink_metadata(&state) {
-        Ok(meta) if !meta.is_dir() || meta.file_type().is_symlink() => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "vault state is not a directory",
-            ));
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(&state)?,
-        Err(err) => return Err(err),
-        _ => {}
-    }
-    let path = state.join(WRITER_LOCK_FILE);
+/// Il path del lock di scrittura di `root`, che deve essere già canonica.
+pub fn writer_lock_path(root: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    let invalid = || {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "vault root has no parent for its writer lock",
+        )
+    };
+    let parent = root.parent().ok_or_else(invalid)?;
+    let name = root.file_name().ok_or_else(invalid)?;
+    let mut file = std::ffi::OsString::from(".");
+    file.push(name);
+    file.push(WRITER_LOCK_SUFFIX);
+    Ok(parent.join(file))
+}
+
+/// Prende il lock di scrittura di `root` (canonica) senza aspettare:
+/// `WouldBlock` se un altro lo tiene.
+pub(crate) fn lock_vault_writer(root: &std::path::Path) -> std::io::Result<VaultWriterLock> {
+    let path = writer_lock_path(root)?;
     if std::fs::symlink_metadata(&path)
         .is_ok_and(|meta| !meta.is_file() || meta.file_type().is_symlink())
     {
@@ -55,6 +77,15 @@ pub fn lock_vault_writer(root: &std::path::Path) -> std::io::Result<VaultWriterL
     // semantics on every desktop target. The open handle owns the lease.
     file.try_lock_exclusive()?;
     Ok(VaultWriterLock { _file: file })
+}
+
+/// L'errore è «un altro processo scrive già in questo vault»?
+pub fn is_writer_busy(error: &fub_abi::PluginError) -> bool {
+    matches!(
+        error,
+        fub_abi::PluginError::Conflict(fub_abi::text::Text::Message(message))
+            if message.key == E_WRITER_BUSY
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -328,7 +359,14 @@ fn validate_vault_field(vault: &str) -> Result<(), AutomationError> {
     Ok(())
 }
 
-fn validate_target_path(field: &str, value: &str, is_new: bool) -> Result<(), AutomationError> {
+/// Un path di destinazione (`folder`, `note`, `template`) dentro il recinto:
+/// per i nomi nuovi la portabilità stretta, per gli esistenti il solo
+/// recinto. La usa anche [`crate::capture`] per il template.
+pub(crate) fn validate_target_path(
+    field: &str,
+    value: &str,
+    is_new: bool,
+) -> Result<(), AutomationError> {
     if value.trim().is_empty() {
         return Err(AutomationError::bad_args(format!("`{field}` vuoto")));
     }
@@ -412,15 +450,7 @@ pub fn validate_capture_v1(payload: &CapturePayloadV1) -> Result<(), AutomationE
             CAPTURE_V1, payload.v
         )));
     }
-    if payload.title.trim().is_empty() {
-        return Err(AutomationError::bad_args("`title` vuoto"));
-    }
-    if payload.title.chars().count() > TITLE_MAX_CHARS {
-        return Err(AutomationError::bad_args("`title` oltre 512 caratteri"));
-    }
-    if payload.title.contains('\n') || payload.title.contains('\r') || has_control(&payload.title) {
-        return Err(AutomationError::bad_args("`title` con a-capo o controllo"));
-    }
+    validate_title(&payload.title)?;
     if payload.markdown.trim().is_empty() {
         return Err(AutomationError::bad_args("`markdown` vuoto"));
     }
@@ -485,7 +515,26 @@ pub fn validate_capture_v1(payload: &CapturePayloadV1) -> Result<(), AutomationE
     Ok(())
 }
 
-fn validate_source_url(url: &str) -> Result<(), AutomationError> {
+/// Il titolo di una cattura o di una nota nuova: non vuoto, al più
+/// [`TITLE_MAX_CHARS`] caratteri, su una riga sola e senza caratteri di
+/// controllo, perché diventa la riga `# {title}` del documento.
+pub(crate) fn validate_title(title: &str) -> Result<(), AutomationError> {
+    if title.trim().is_empty() {
+        return Err(AutomationError::bad_args("`title` vuoto"));
+    }
+    if title.chars().count() > TITLE_MAX_CHARS {
+        return Err(AutomationError::bad_args("`title` oltre 512 caratteri"));
+    }
+    if has_control(title) {
+        return Err(AutomationError::bad_args("`title` con a-capo o controllo"));
+    }
+    Ok(())
+}
+
+/// La `source_url` di una cattura: http o https, con un host e senza
+/// credenziali. È anche la regola con cui la shell mobile riconosce un link
+/// condiviso.
+pub fn validate_source_url(url: &str) -> Result<(), AutomationError> {
     if url.trim().is_empty() {
         return Err(AutomationError::bad_args("`source_url` vuota"));
     }
@@ -1020,9 +1069,7 @@ pub fn parse_fub_uri(raw: &str) -> Result<FubUri, AutomationError> {
                 ensure_no_traversal("name", n, true)?;
             }
             if let Some(t) = &title {
-                if t.trim().is_empty() || t.chars().count() > TITLE_MAX_CHARS {
-                    return Err(AutomationError::bad_args("`title` non valido"));
-                }
+                validate_title(t)?;
             }
             if let Some(t) = &template {
                 ensure_no_traversal("template", t, false)?;
@@ -1105,9 +1152,7 @@ pub fn parse_fub_uri(raw: &str) -> Result<FubUri, AutomationError> {
             let source_url = lookup(&pairs, "source_url");
             // Stessi limiti del payload, anche inline: il trasporto non allarga.
             if let Some(t) = &title {
-                if t.trim().is_empty() || t.chars().count() > TITLE_MAX_CHARS {
-                    return Err(AutomationError::bad_args("`title` non valido"));
-                }
+                validate_title(t)?;
             }
             if let Some(m) = &markdown {
                 if m.trim().is_empty() || m.len() > MARKDOWN_MAX_BYTES {

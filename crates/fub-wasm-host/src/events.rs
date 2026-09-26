@@ -83,8 +83,6 @@ impl host_events::Host for State {
     /// componente può riempire di spazzatura. Per quel caso il canale c'è già
     /// (decisione 0052) e ci passiamo: un `trouble` a nome del plugin, emesso
     /// dallo stesso host, che dice cosa non è uscito e perché.
-    /// dallo stesso host, che dice cosa non è uscito e perché.
-    /// dallo stesso host, che dice cosa non è uscito e perché.
     fn emit(&mut self, event: w_events::Event) {
         let Ok(guest) = self.writer() else {
             return;
@@ -114,8 +112,6 @@ impl host_events::Host for State {
     ///
     /// L'unica traduzione che può fallire è il `payload`, e il rifiuto è
     /// `bad-args` e non `internal` per la ragione di `translate::from_json`: a
-    /// scrivere quella stringa è stato il componente.
-    /// scrivere quella stringa è stato il componente.
     /// scrivere quella stringa è stato il componente.
     fn spawn_job(&mut self, spec: w_jobs::JobSpec) -> Result<w_jobs::JobId, w_errors::PluginError> {
         let payload = tr::from_json(&spec.payload).map_err(|and| tr::to_error(&and))?;
@@ -161,10 +157,11 @@ impl host_events::Host for State {
 /// vale la pena dire: si traducono **tutte** e diciannove, comprese quelle che
 /// un plugin non ha nessuna ragione di emettere (`vault-opened`,
 /// `batch-ended`, `overflow`). Non è ingenuità — è la 0021 applicata al verso
-/// di ritorno: se un giorno si dovrà decidere che un componente non può
-/// firmarsi un `vault-closed`, quella decisione è del `Guard`, che ha davanti
-/// il manifest e il registro; un filtro scritto qui sarebbe la stessa regola
+/// di ritorno: che un componente non possa firmarsi un `vault-closed` lo
+/// decide l'host del kernel (`KernelHost::emit`), che ha davanti la fiducia
+/// e il registro; un filtro scritto qui sarebbe la stessa regola
 /// detta due volte, e il primo giorno in cui le due divergono nessuno se ne
+/// accorge.
 fn from_event(and: w_events::Event) -> Result<Event, PluginError> {
     use w_events::Event as W;
     Ok(match and {
@@ -303,7 +300,6 @@ fn from_severity(s: w_events::Severity) -> Severity {
 /// Le porte del panico (§17.3): l'elenco è chiuso e l'ordine è quello della
 /// dichiarazione nei due file. Un componente che nomina una porta sta
 /// raccontando un guasto **suo**, non uno che il kernel ha visto entrare — e il
-/// campo resta lo stesso, perché la porta è il luogo e non chi lo attraversa.
 /// campo resta lo stesso, perché la porta è il luogo e non chi lo attraversa.
 fn from_gate(g: w_events::Gate) -> Gate {
     match g {

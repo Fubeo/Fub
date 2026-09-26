@@ -305,44 +305,65 @@ pub fn create(
         ));
         return Ok(());
     }
-    let name = args
-        .name
-        .clone()
-        .unwrap_or_else(|| "Untitled.md".to_string());
-    let id = doc_id(&name)?;
+    // Creazione = comando di registro (note.create): nome, estensione e
+    // AlreadyExists se occupato sono suoi, e senza un nome lo sceglie lui.
+    let create_args = match args.name.as_deref().map(doc_id).transpose()? {
+        Some(name) => serde_json::json!({ "name": name.as_str() }),
+        None => serde_json::json!({}),
+    };
+    let create = |mode| {
+        connection
+            .host
+            .invoke_user_command(
+                connection.vault_selector(),
+                "note.create",
+                create_args.clone(),
+                mode,
+            )
+            .map_err(|error| Failure::from_plugin(&error))
+    };
+    let planned = match create(fub_abi::InvokeMode::DryRun)?.effect {
+        fub_abi::CommandEffect::Plan(plan) => plan.docs.into_iter().next(),
+        _ => None,
+    }
+    .ok_or_else(|| Failure::local("note.create non ha nominato la nota"))?;
     if dry_run(global) {
         print(&envelope_ok(
-            serde_json::json!({ "doc": id.as_str(), "dry_run": true }),
+            serde_json::json!({ "doc": planned.as_str(), "dry_run": true }),
         ));
         return Ok(());
     }
-    confirm_write(global, &format!("creare `{}`", id.as_str()))?;
-    // Creazione = comando di registro (note.create): AlreadyExists se occupato.
-    let outcome = connection
-        .host
-        .invoke_user_command(
-            connection.vault_selector(),
-            "note.create",
-            serde_json::json!({ "name": id.as_str() }),
-            fub_abi::InvokeMode::Apply,
-        )
-        .map_err(|error| Failure::from_plugin(&error))?;
-    // Corpo iniziale: scrittura CAS sulla revisione appena creata.
+    confirm_write(global, &format!("creare `{}`", planned.as_str()))?;
+    let outcome = create(fub_abi::InvokeMode::Apply)?;
+    let id = match &outcome.effect {
+        fub_abi::CommandEffect::Navigate { doc } => doc.clone(),
+        _ => return Err(Failure::local("note.create non ha nominato la nota")),
+    };
+    // Corpo iniziale: scrittura CAS sulla revisione appena creata, nel
+    // documento che il comando ha creato e non nel nome chiesto.
     if !source.is_empty() {
-        let (current, revision) = connection
+        let written = connection
             .host
             .read_document(connection.vault_selector(), &id)
-            .map_err(|error| Failure::from_plugin(&error))?;
-        let _ = current;
-        connection
-            .host
-            .write_document(
+            .and_then(|(_, revision)| {
+                connection.host.write_document(
+                    connection.vault_selector(),
+                    &id,
+                    &source,
+                    fub_abi::WriteBase::DescendsFrom(revision),
+                )
+            });
+        if let Err(error) = written {
+            // Una nota vuota al posto del testo non è ciò che si è chiesto:
+            // torna nel cestino, e l'errore da dire resta questo.
+            let _ = connection.host.invoke_user_command(
                 connection.vault_selector(),
-                &id,
-                &source,
-                fub_abi::WriteBase::DescendsFrom(revision),
-            )
-            .map_err(|error| Failure::from_plugin(&error))?;
+                "note.trash",
+                serde_json::json!({ "doc": id.as_str() }),
+                fub_abi::InvokeMode::Apply,
+            );
+            return Err(Failure::from_plugin(&error));
+        }
     }
     print(&envelope_ok(
         serde_json::json!({ "doc": id.as_str(), "outcome": outcome_json(&outcome) }),

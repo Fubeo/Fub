@@ -1067,7 +1067,7 @@ progress::-moz-progress-bar {
    la metà visibile di un doppione: l'altra metà stava dentro `oneDark`, che
    portava i propri colori e li imponeva a tutto il resto (margine, cursore,
    selezione, riga corrente). Adesso il tema dell'editor è scritto **con i
-   token** (`editor/theme.ts`) e non ha più niente da scavalcare — quindi non
+   token** (`editors/text/theme.ts`) e non ha più niente da scavalcare — quindi non
    c'è più niente da scrivere qui. Il foglio della shell si ferma dove finisce
    la shell. */
 
@@ -3082,6 +3082,14 @@ progress::-moz-progress-bar {
      raccontano di aver sciolto, rimasta in due righe. */
   border-color: var(--danger);
   color: var(--danger);
+}
+
+/* Un'icona del set della shell dentro una view dichiarata: prende il colore
+   del testo intorno, come ogni altra icona della shell. */
+.ui-icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
 }
 
 .ui-progress {

@@ -19,6 +19,8 @@ export type ColumnAlign = "none" | "left" | "center" | "right";
 
 export type CommandReach = "session" | "document" | "documents" | "vault" | "settings";
 
+export type CommandSurface = "slash" | "slash_selection";
+
 export type ConflictPolicy = "skip" | "replace" | "rename";
 
 export type ContextKind = "document" | "selection" | "mode";

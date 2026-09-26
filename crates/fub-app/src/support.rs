@@ -45,9 +45,10 @@ pub fn open_demo(
     let root = support::demo_root(dir.as_deref()).ok_or_else(|| {
         PluginError::Unserved("demo non disponibile senza una cartella di configurazione".into())
     })?;
-    document_windows::with_vault_transition(&host, &windows, &host_key(&root), || {
+    let opened = document_windows::with_vault_transition(&host, &windows, &host_key(&root), || {
         support::open_demo(&host, dir.as_deref())
-    })
+    });
+    crate::for_the_shell(&host, None, opened)
 }
 
 /// Il risultato della chiusura: gli eventuali errori di flush e il vault
@@ -71,13 +72,14 @@ pub fn close_demo(
     };
     let root = host_key(&dir.join(support::DEMO_DIR_NAME));
     let prev = return_to.map(Utf8PathBuf::from);
-    document_windows::with_vault_transition(&host, &windows, &root, || {
+    let closed = document_windows::with_vault_transition(&host, &windows, &root, || {
         let errors = support::close_demo(&host, dir.as_path(), prev.as_deref())?;
         Ok(DemoClosed {
             errors,
             current: host.current().map(|path| path.to_string()),
         })
-    })
+    });
+    crate::for_the_shell(&host, None, closed)
 }
 
 /// Azzera la demo (solo `<config>/demo-vault`, mai un vault utente).
@@ -91,9 +93,10 @@ pub fn reset_demo(
         ));
     };
     let root = host_key(&dir.join(support::DEMO_DIR_NAME));
-    document_windows::with_vault_transition(&host, &windows, &root, || {
+    let reset = document_windows::with_vault_transition(&host, &windows, &root, || {
         support::reset_demo(&host, dir.as_path()).map(|root| host_key(&root))
-    })
+    });
+    crate::for_the_shell(&host, None, reset)
 }
 
 /// Diagnostica tipizzata dell'apertura corrente.
@@ -119,50 +122,13 @@ pub fn support_preview(
 }
 
 /// Export del rapporto dopo consenso esplicito (anteprima vista + destinazione).
+/// Consenso, canonicalizzazione e vault esclusi (demo compresa) li decide
+/// l'host, per ogni chiamante.
 pub fn support_export(
     host: State<Host>,
     preview: SupportPreview,
     consent: ExportConsent,
 ) -> Result<String, PluginError> {
-    consent.check()?;
-    let dest = Utf8PathBuf::from(&consent.destination);
-    let parent = dest
-        .parent()
-        .ok_or_else(|| PluginError::BadArgs("scegli un file fuori dai vault".into()))?;
-    let parent = std::fs::canonicalize(parent.as_std_path()).map_err(|err| {
-        PluginError::Io(format!("cartella di destinazione {parent}: {err}").into())
-    })?;
-    let parent = Utf8PathBuf::from_path_buf(parent)
-        .map_err(|_| PluginError::BadArgs("destinazione non UTF-8".into()))?;
-    let destination = parent.join(
-        dest.file_name()
-            .ok_or_else(|| PluginError::BadArgs("scegli un file".into()))?,
-    );
-    if host
-        .known_vaults()
-        .iter()
-        .any(|vault| destination.starts_with(Utf8Path::new(&vault.root)))
-        || support::demo_root(config_dir().as_deref()).is_some_and(|root| {
-            let canonical = std::fs::canonicalize(root.as_std_path())
-                .ok()
-                .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
-                .unwrap_or(root);
-            destination.starts_with(canonical)
-        })
-    {
-        return Err(PluginError::BadArgs(
-            "scrivi il rapporto fuori dai vault".into(),
-        ));
-    }
-    if std::fs::symlink_metadata(destination.with_extension("tmp-fub-support").as_std_path())
-        .is_ok()
-    {
-        return Err(PluginError::BadArgs(
-            "file temporaneo di supporto gia` presente".into(),
-        ));
-    }
-    let mut consent = consent;
-    consent.destination = destination.to_string();
     support::export_preview(&host, &preview, &consent)
 }
 
@@ -172,25 +138,9 @@ pub fn config_health() -> Vec<ConfigReport> {
 }
 
 /// Recovery di un file di macchina con backup obbligatorio del precedente.
+/// Quali file sono recuperabili lo decide l'host.
 pub fn recover_config(path: String, action: RecoverAction) -> Result<RecoverOutcome, PluginError> {
-    // Il path deve corrispondere a uno dei tre file di macchina noti.
-    let path = Utf8PathBuf::from(path);
-    let Some(dir) = config_dir() else {
-        return Err(PluginError::Unserved(
-            "recovery non disponibile senza una cartella di configurazione".into(),
-        ));
-    };
-    let allowed = [
-        fub_host::config::machine_settings_path(dir.as_path()),
-        fub_host::config::vault_registry_path(dir.as_path()),
-        fub_host::config::view_states_path(dir.as_path()),
-    ];
-    if !allowed.contains(&path) {
-        return Err(PluginError::BadArgs(
-            format!("{path} non e` un file di configurazione recuperabile").into(),
-        ));
-    }
-    support::recover_config_file(path.as_path(), action)
+    support::recover_config_file(config_dir().as_deref(), Utf8Path::new(&path), action)
 }
 
 #[cfg(test)]
@@ -217,11 +167,12 @@ mod tests {
     #[test]
     fn future_machine_schema_is_never_reset() {
         let dir = tempfile::tempdir().expect("config tempdir");
-        let path = Utf8PathBuf::from_path_buf(dir.path().join("settings.json")).unwrap();
+        let config = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let path = config.join("settings.json");
         let future = br#"{"version":99,"private":"preserve me"}"#;
         std::fs::write(&path, future).unwrap();
         assert!(matches!(
-            support::recover_config_file(&path, RecoverAction::ResetEmpty),
+            support::recover_config_file(Some(&config), &path, RecoverAction::ResetEmpty),
             Err(PluginError::BadArgs(_))
         ));
         assert_eq!(std::fs::read(&path).unwrap(), future);

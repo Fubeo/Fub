@@ -14,10 +14,10 @@ use crate::custom::SyntaxForm;
 use crate::edit::{EditReport, EditRequest, Revision, WriteBase};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
-use crate::format::DocumentFormat;
+use crate::format::{DocumentFormat, LinkInsert};
 use crate::locale::{Locale, Weekday};
 use crate::model::{
-    DocId, DocumentModel, Heading, LinkTarget, PropertyScalar, PropertyValue, Span,
+    DocId, DocumentModel, Heading, LinkTarget, PropertyScalar, PropertyValue, Span, TaskMarker,
 };
 use crate::organization::Organization;
 use crate::query::{QueryExpr, QueryPredicate};
@@ -25,6 +25,9 @@ use crate::render::{EmbedContent, RenderedDocument};
 use crate::session::{ContextMask, ViewContext};
 use crate::settings::{SettingEntry, SettingSpec, SettingValue};
 use crate::text::{Localize, StringCatalog, Text};
+use crate::transfer::{
+    ExportReport, ExportRequest, ExportTarget, ImportReport, ImportRequest, ImportSource,
+};
 use crate::ui::{UiAction, UiNode, ViewUpdate};
 
 // ---------------------------------------------------------------------------
@@ -498,6 +501,32 @@ pub trait VaultRead: Send + Sync {
     /// `Diario/2026-07-26.md` può chiedere prima chi lo tratterà — e si può
     /// fare su tutta una lista senza pagare un'apertura a testa.
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat>;
+
+    /// Il testo con cui il formato di `doc` scrive `link`, con le sintassi che
+    /// il vault vi accende: la domanda che una feature fa invece di comporre
+    /// `[[…]]` da sé.
+    ///
+    /// `Ok(None)` = il formato non sa scrivere quel riferimento, oppure nessun
+    /// provider rivendica `doc`. Come [`format_of`](VaultRead::format_of) è una
+    /// domanda sul **nome**: non legge il documento, che può non esistere
+    /// ancora.
+    fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError>;
+
+    /// La modifica che porta a fatto (`done`) o da fare il task di `marker`,
+    /// scritta dal formato di `doc` sul sorgente attuale.
+    ///
+    /// Il marcatore viene da [`read_model`](VaultRead::read_model); il
+    /// simbolo lo sceglie il provider. `Ok(None)` = il formato non offre
+    /// l'operazione. La richiesta porta la revisione del sorgente su cui il
+    /// provider ha lavorato: se il file cambia prima di
+    /// [`apply_edit`](VaultWrite::apply_edit), l'applicazione è un conflitto e
+    /// non un simbolo scritto nel posto sbagliato.
+    fn task_state_edit(
+        &self,
+        doc: &DocId,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Option<EditRequest>, PluginError>;
 
     /// Il contenuto del cestino, dal più recente al più vecchio.
     ///
@@ -1039,8 +1068,13 @@ pub trait HostEvents: Send + Sync {
     /// richiesta e non una chiamata — è il **tempo**: il job gira quando l'host
     /// lo esegue, non adesso.
     ///
-    /// L'unico no a monte è la **chiusura**: su un vault che sta chiudendo la
-    /// richiesta non entra nemmeno in coda e risponde subito
+    /// I no a monte sono due. Il **nome**: i nomi dei job sono uno degli
+    /// spazi di nomi del §7.4 ([`crate::rules::ids`]), e un plugin che non è
+    /// core nomina dentro il proprio id; un nome altrui risponde
+    /// [`BadArgs`](PluginError::BadArgs), perché `JobDone` lo porta sul bus a
+    /// nome del kernel e chi lo ascolta se ne fida. E la **chiusura**: su un
+    /// vault che sta chiudendo la richiesta non entra nemmeno in coda e
+    /// risponde subito
     /// [`Cancelled`](PluginError::Cancelled) — di quel lavoro non arriverà
     /// nessun `JobDone`, perché non è mai partito. La guardia è per
     /// generazione: chi riapre il vault è un workspace nuovo, e i job
@@ -1145,6 +1179,37 @@ pub trait HostServices: Send + Sync {
         method: &str,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError>;
+
+    /// Le destinazioni offerte dagli
+    /// [`ExportProvider`](crate::transfer::ExportProvider) registrati, in ordine
+    /// di registrazione.
+    ///
+    /// Stanno qui, accanto a [`call_service`](Self::call_service), perché sono
+    /// la stessa mossa: usare un provider che un altro plugin ha registrato,
+    /// scelto dall'host e non da una lista che chi chiama si porta dietro.
+    fn export_targets(&self) -> Result<Vec<ExportTarget>, PluginError>;
+
+    /// Esporta col provider registrato che offre `request.target`; nessuno la
+    /// offre → [`PluginError::BadArgs`].
+    ///
+    /// Il provider gira con le **proprie** capacità, come un servizio. Chi
+    /// chiama riceve i byte degli artefatti nel rapporto, quindi deve poter
+    /// leggere ciò che la selezione nomina: il `Guard` del kernel lo controlla
+    /// sulla selezione, non sugli artefatti.
+    fn run_export(&mut self, request: &ExportRequest) -> Result<ExportReport, PluginError>;
+
+    /// Fa entrare `source` nel vault (o dice cosa entrerebbe, con
+    /// [`ImportMode::Preview`](crate::transfer::ImportMode::Preview)) col primo
+    /// [`ImportProvider`](crate::transfer::ImportProvider) registrato che la
+    /// riconosce; nessuno → [`PluginError::BadArgs`].
+    ///
+    /// Il provider scrive con le proprie capacità; chi chiama deve poter
+    /// scrivere nella cartella di destinazione (leggere, per un'anteprima).
+    fn run_import(
+        &mut self,
+        source: &ImportSource,
+        request: &ImportRequest,
+    ) -> Result<ImportReport, PluginError>;
 }
 
 /// **Parlare con qualcosa che non sta sul disco** (§23.3).
@@ -1680,9 +1745,9 @@ impl ViewSurface {
 pub struct ViewInstance {
     /// L'id della [`ViewSpec`] di cui questa è un'istanza.
     pub view: String,
-    /// L'identità dell'esemplare, unica fra le istanze **vive**. La sceglie chi
-    /// apre (la shell, o il comando che ha restituito
-    /// [`CommandEffect::OpenView`](crate::command::CommandEffect::OpenView)); il
+    /// L'identità dell'esemplare, unica fra le istanze **vive**. La sceglie la
+    /// shell che apre, da sé o eseguendo un
+    /// [`CommandEffect::OpenView`](crate::command::CommandEffect::OpenView); il
     /// provider la riceve e basta. Per la view che la shell monta da sola —
     /// quella dichiarata, senza parametri — è l'id della view: un esemplare
     /// solo che si chiama come la sua specie.
@@ -2676,7 +2741,8 @@ pub enum IndexQuery {
         #[serde(default)]
         excerpts: Excerpts,
     },
-    /// I riferimenti entranti verso un documento, col loro contesto.
+    /// I riferimenti entranti verso un documento, col loro contesto. Vale
+    /// anche per un allegato: le note che lo incorporano o lo linkano.
     ///
     /// Resta una variante sua e non una `Documents` con
     /// [`QueryPredicate::Linked`](crate::query::QueryPredicate::Linked) perché
@@ -2724,6 +2790,12 @@ pub enum IndexQuery {
     /// tutto il vault, `depth: 1`, uscenti: sono esattamente gli archi) invece
     /// che in una domanda per nota — che sull'IPC vorrebbe dire mille viaggi
     /// per disegnare un grafo, cioè un comando bespoke.
+    ///
+    /// Nel verso uscente (o in entrambi) la risposta porta anche gli
+    /// **allegati** che i documenti raggiunti nominano, `![[foto.png]]` o
+    /// `[pdf](doc.pdf)`: sono foglie, un passo oltre la nota che li nomina, e
+    /// il cammino non prosegue da loro. Chi vuole solo le note li riconosce
+    /// perché `format_of` non dà un formato.
     Neighbors {
         #[serde(default)]
         seeds: QueryExpr,

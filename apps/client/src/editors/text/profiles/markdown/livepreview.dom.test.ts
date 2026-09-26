@@ -118,3 +118,30 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
     }
   });
 });
+
+describe("wikilink in Live", () => {
+  it("porta il bersaglio nel contratto della Lettura, letto con la grammatica del profilo", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownLanguage }),
+        livePreview({ openWikilink() {}, searchTag() {} }),
+      ],
+    });
+    try {
+      engine.setDoc("Primo\n\nVai a [[Nota#Sez^b1|la nota]] e [[Altra]]");
+      const links = [...parent.querySelectorAll<HTMLElement>(".cm-fub-wikilink")];
+      expect(links.map((link) => [
+        link.dataset.wikilinkPage,
+        link.dataset.wikilinkHeading,
+        link.dataset.wikilinkBlock,
+      ])).toEqual([["Nota", "Sez", "b1"], ["Altra", undefined, undefined]]);
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+});

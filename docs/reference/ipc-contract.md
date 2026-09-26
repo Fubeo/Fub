@@ -53,7 +53,7 @@ invalidazioni e il diff UTF-8 seguono i limiti del contratto ABI/WIT e non
 trasportano DOM, CodeMirror, callback JavaScript o una battuta.
 Il payload non è il percorso Grid pubblico a finestre.
 
-Le fonti sono `crates/fub-host/src/sheet/index.rs` e il mirror TypeScript in
+Le fonti sono `crates/fub-format-sheet/src/index.rs` e il mirror TypeScript in
 `apps/client/src/host/contract.ts`. La fixture
 `apps/client/src/__fixtures__/sheet-query.json` è generata e verificata dal test
 Rust [`crates/fub-host/tests/sheet_query.rs`](../../crates/fub-host/tests/sheet_query.rs);
@@ -119,6 +119,15 @@ kind + message
 
 La shell decide il comportamento da `kind`. `message` è presentabile e può
 essere localizzato, ma non viene analizzato con sottostringhe.
+
+`message` sul filo è sempre una stringa. Dentro l'host un errore può restare
+una chiave del catalogo, perché chi lo riceve in Rust lo riconosce da quella.
+I comandi e le view escono già localizzati. Un comando IPC che porta alla shell
+l'errore di una chiamata dell'host lo passa da `Host::localized_error`
+(`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
+non una frase. Un errore nuovo destinato all'utente usa una chiave del
+catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
+letterali per crate e ne impedisce la crescita.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
 

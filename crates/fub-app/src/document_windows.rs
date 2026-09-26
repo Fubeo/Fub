@@ -28,6 +28,10 @@ pub struct DocumentWindowRequest {
     pub vault: String,
     pub session: String,
     pub surface_id: String,
+    /// The text profile the shell's surface registry resolved for the
+    /// document. The host does not interpret it: it only keeps the entry
+    /// query a plain token.
+    pub profile: String,
 }
 
 #[derive(Serialize)]
@@ -120,6 +124,14 @@ fn valid_uuid(value: &str) -> bool {
     Uuid::parse_str(value).is_ok_and(|uuid| uuid.to_string() == value && !uuid.is_nil())
 }
 
+fn valid_profile(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
 fn validate(request: &DocumentWindowRequest, host: &Host) -> Result<(), PluginError> {
     if request.surface != "document" {
         return Err(invalid(
@@ -139,6 +151,9 @@ fn validate(request: &DocumentWindowRequest, host: &Host) -> Result<(), PluginEr
         return Err(invalid(
             "invalid document window channel, session or surfaceId",
         ));
+    }
+    if !valid_profile(&request.profile) {
+        return Err(invalid("invalid document window profile"));
     }
     doc_id(&request.document)?;
     if !host
@@ -204,7 +219,8 @@ fn entry_path(request: &DocumentWindowRequest) -> String {
         .append_pair("document", &request.document)
         .append_pair("vault", &request.vault)
         .append_pair("session", &request.session)
-        .append_pair("surfaceId", &request.surface_id);
+        .append_pair("surfaceId", &request.surface_id)
+        .append_pair("profile", &request.profile);
     format!("{ENTRY}?{}", url.query().expect("document entry has query"))
 }
 
@@ -215,6 +231,13 @@ pub async fn open_document_window(
     registry: State<'_, DocumentWindows>,
     request: DocumentWindowRequest,
 ) -> Result<DocumentWindowOpened, PluginError> {
+    // Mobile ha una finestra sola: la shell non offre la voce
+    // (`multipleWindows`), e il backend non si fida che non arrivi.
+    if cfg!(mobile) {
+        return Err(PluginError::Unserved(
+            "document windows are not available on mobile".into(),
+        ));
+    }
     let main_url = trusted_main(&window, &app)?;
     let path = entry_path(&request);
     let expected = main_url.join(&path).map_err(|error| {
@@ -402,5 +425,40 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(profile: &str) -> DocumentWindowRequest {
+        DocumentWindowRequest {
+            surface: "document".into(),
+            channel: "docwin-6f1c2b3a-4d5e-4f60-8a71-92b3c4d5e6f7".into(),
+            document: "note/a & b.md".into(),
+            vault: "/vault".into(),
+            session: "6f1c2b3a-4d5e-4f60-8a71-92b3c4d5e6f7".into(),
+            surface_id: "remote:6f1c2b3a-4d5e-4f60-8a71-92b3c4d5e6f7".into(),
+            profile: profile.into(),
+        }
+    }
+
+    #[test]
+    fn the_entry_carries_the_profile_the_shell_resolved() {
+        let path = entry_path(&request("plain-text"));
+        assert!(path.starts_with("document.html?"), "{path}");
+        assert!(path.contains("&profile=plain-text"), "{path}");
+        assert!(path.contains("document=note%2Fa+%26+b.md"), "{path}");
+    }
+
+    #[test]
+    fn a_profile_is_a_plain_token() {
+        assert!(valid_profile("markdown"));
+        assert!(valid_profile("plain-text"));
+        assert!(!valid_profile(""));
+        assert!(!valid_profile("Markdown"));
+        assert!(!valid_profile("a/b"));
+        assert!(!valid_profile(&"a".repeat(65)));
     }
 }

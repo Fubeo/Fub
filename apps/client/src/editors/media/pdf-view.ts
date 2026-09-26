@@ -225,13 +225,13 @@ export function mountPdfView(
   prev.type = "button";
   prev.textContent = "‹";
   life.listen(prev, "click", () => void show(page - 1).catch((error) => {
-    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: String(error) });
+    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: errorText(error) });
   }));
   const next = document.createElement("button");
   next.type = "button";
   next.textContent = "›";
   life.listen(next, "click", () => void show(page + 1).catch((error) => {
-    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: String(error) });
+    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: errorText(error) });
   }));
   const search = document.createElement("input");
   search.type = "search";
@@ -246,7 +246,7 @@ export function mountPdfView(
           ? t("media.pdf.no_matches", { needle })
           : t("media.pdf.matches", { count: hits.length, page: hits[0]!.page });
     }).catch((error) => {
-      if (!destroyed) status.textContent = t("media.pdf.search_failed", { reason: String(error) });
+      if (!destroyed) status.textContent = t("media.pdf.search_failed", { reason: errorText(error) });
     });
   });
   toolbar.append(prev, next, search);
@@ -286,7 +286,7 @@ export function mountPdfView(
         void show(page).catch(() => fallback(`PDF ${descriptor.id} failed to render page ${page}.`));
       })
       .catch((error) => {
-        if (!destroyed) fallback(`PDF ${descriptor.id} could not be opened: ${String(error)}`);
+        if (!destroyed) fallback(`PDF ${descriptor.id} could not be opened: ${errorText(error)}`);
       });
   }
 

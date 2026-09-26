@@ -3,7 +3,9 @@
 //! I template vivono nella cartella `Templates/` del vault (convenzione, non
 //! recinto). `note.from_template` legge la sorgente, sostituisce le variabili
 //! `{{…}}` e crea una nota nuova. `note.daily` apre o crea
-//! `Daily/YYYY-MM-DD.md`, usando `Templates/Daily.md` se c'è.
+//! `Daily/YYYY-MM-DD`, usando `Templates/Daily` se c'è. Un nome senza
+//! estensione riceve quella delle note nuove (`files.new-note-extension`): il
+//! diario non presume un formato.
 //!
 //! Le variabili sono un vocabolario **chiuso** — mai scripting arbitrario e mai
 //! callback nel contratto: titolo, date/ore dal fuso dell'utente, nome file e
@@ -13,13 +15,15 @@
 
 use fub_abi::command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
-    CommandSpec, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
+    CommandSpec, CommandSurface, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit,
+    Undo, UndoStep,
 };
 use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::locale::{civil_from_days, HourCycle};
 use fub_abi::model::{valid_civil_date, DocId, LinkTarget};
+use fub_abi::options::syntax;
 use fub_abi::rules::path_policy::{check as check_name, Naming};
 use fub_abi::rules::text_policy;
 use fub_abi::session::ContextMask;
@@ -54,8 +58,8 @@ pub const NOTES_MERGE: &str = "note.merge";
 
 const FOLDER_TEMPLATES: &str = "Templates";
 const FOLDER_DAILY: &str = "Daily";
-const DAILY_TEMPLATE: &str = "Templates/Daily.md";
-const EXTENSION: &str = "md";
+/// Senza estensione: la sceglie `files.new-note-extension`, come per le note.
+const DAILY_TEMPLATE: &str = "Templates/Daily";
 const UNTITLED: &str = "Untitled";
 /// Cartella delle giornaliere decisa nelle impostazioni (vault: viaggia con le
 /// note, come il formato delle date delle proprietà).
@@ -171,7 +175,7 @@ const A_FAILED: &str = "failed";
 const A_VALUE: &str = "value";
 
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![catalog_it(), catalog_en()]
+    crate::formats::speaking(vec![catalog_it(), catalog_en()])
 }
 fn catalog_it() -> StringCatalog {
     StringCatalog::new("it")
@@ -694,7 +698,12 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         .list_documents(None)?
         .items
         .into_iter()
-        .filter(|d| d.as_str().starts_with(&prefix) && d.as_str().ends_with(".md"))
+        // Un template è testo da inserire in una nota: vale ogni formato il
+        // cui sorgente è prosa, non la sola estensione `.md`.
+        .filter(|d| {
+            d.as_str().starts_with(&prefix)
+                && crate::formats::understands(host, d, fub_abi::options::source::PROSE)
+        })
         .collect();
     docs.sort_by(|a, b| a.as_str().cmp(b.as_str()));
     if docs.is_empty() {
@@ -723,25 +732,34 @@ pub struct TemplateCommands;
 impl TemplateCommands {
     /// Le spec, anche fuori dal trait: chi disegna una palette nei test le
     /// legge senza montare un workspace, come fa `CoreCommands::specs`.
+    ///
+    /// Tutte si offrono anche nel menu `/` dell'editor: sono gesti di chi sta
+    /// scrivendo, e i parametri che il contesto non riempie li chiede il menu.
     pub fn specs() -> Vec<CommandSpec> {
         vec![
             command(NOTES_FROM_TEMPLATE)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_FROM_TEMPLATE, TEMPLATE, ParamKind::Text).required())
                 .with_param(parameter(NOTES_FROM_TEMPLATE, NAME, ParamKind::Text))
                 .with_param(parameter(NOTES_FROM_TEMPLATE, FOLDER, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
             command(NOTES_DAILY)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_DAILY, DATE, ParamKind::Text))
                 .with_param(parameter(NOTES_DAILY, FOLDER, ParamKind::Text))
                 .with_param(parameter(NOTES_DAILY, TEMPLATE, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
             command(NOTES_UNIQUE)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_UNIQUE, NAME, ParamKind::Text))
                 .with_param(parameter(NOTES_UNIQUE, RANDOM, ParamKind::Bool))
                 .with_param(parameter(NOTES_UNIQUE, TEMPLATE, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
-            command(NOTES_RANDOM).with_scope(CommandScope::read_only()),
+            command(NOTES_RANDOM)
+                .offered_in(CommandSurface::Slash)
+                .with_scope(CommandScope::read_only()),
             command(NOTES_INSERT_DATETIME)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_INSERT_DATETIME, DOC, ParamKind::Document))
                 .with_param(parameter(NOTES_INSERT_DATETIME, AT, ParamKind::Numbers))
                 .with_param(parameter(
@@ -758,12 +776,14 @@ impl TemplateCommands {
                 ))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_INSERT_TEMPLATE)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_INSERT_TEMPLATE, TEMPLATE, ParamKind::Text).required())
                 .with_param(parameter(NOTES_INSERT_TEMPLATE, DOC, ParamKind::Document))
                 .with_param(parameter(NOTES_INSERT_TEMPLATE, AT, ParamKind::Numbers))
                 .with_param(parameter(NOTES_INSERT_TEMPLATE, MERGE, ParamKind::Bool))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_EXTRACT)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_EXTRACT, NAME, ParamKind::Text))
                 .with_param(parameter(NOTES_EXTRACT, TEMPLATE, ParamKind::Text))
                 .with_param(parameter(
@@ -776,6 +796,7 @@ impl TemplateCommands {
                 ))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
             command(NOTES_MERGE)
+                .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_MERGE, FROM, ParamKind::Documents).required())
                 .with_param(parameter(NOTES_MERGE, INTO, ParamKind::Document))
                 .with_param(parameter(
@@ -900,7 +921,7 @@ fn from_template(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_TEMPLATE)))?;
-    let tpl = DocId::new(with_extension(template));
+    let tpl = DocId::new(with_extension(host, template)?);
     let title = args
         .text(NAME)
         .map(str::trim)
@@ -920,7 +941,7 @@ fn from_template(
         (Some(folder), false) => format!("{folder}/{title}"),
         _ => title,
     };
-    let id = host.free_name(&DocId::new(with_extension(&wanted)));
+    let id = host.free_name(&DocId::new(with_extension(host, &wanted)?));
     let summary = Text::message(P_FROM, vec![Arg::text(TEMPLATE, tpl.as_str())]);
     if mode.is_dry_run() {
         return Ok(plan(summary, id));
@@ -965,7 +986,8 @@ fn daily(
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .unwrap_or_else(|| daily_template(host));
-    let id = DocId::new(format!("{folder}/{date}.{EXTENSION}"));
+    let extension = crate::formats::new_note_extension(host)?;
+    let id = DocId::new(format!("{folder}/{date}.{extension}"));
     let summary = Text::message(P_DAILY, vec![Arg::text(DATE, &date)]);
     if mode.is_dry_run() {
         return Ok(plan(summary, id));
@@ -979,7 +1001,7 @@ fn daily(
         .with_effect(CommandEffect::Navigate { doc: id }));
     }
     let ctx = context_of(host, &date)?;
-    let body = match host.read_document(&DocId::new(with_extension(&template))) {
+    let body = match host.read_document(&DocId::new(with_extension(host, &template)?)) {
         Ok(grezzo) => expand_full(&grezzo, &date, &ctx, host)?,
         Err(PluginError::NotFound(_)) => String::new(),
         Err(and) => return Err(and),
@@ -1192,18 +1214,22 @@ fn today(host: &dyn ReadApi) -> Result<String, PluginError> {
     Ok(context(host)?.date)
 }
 
+/// Il titolo di una nota: il nome del file senza l'estensione, qualunque sia.
 fn file_name(id: &DocId) -> String {
-    let file = id.0.rsplit('/').next().unwrap_or(&id.0);
-    file.strip_suffix(".md").unwrap_or(file).to_string()
+    id.page_name().to_string()
 }
 
-fn with_extension(name: &str) -> String {
-    let last = name.rsplit('/').next().unwrap_or(name);
-    if last.contains('.') {
-        name.to_string()
-    } else {
-        format!("{name}.{EXTENSION}")
-    }
+/// Un nome che non porta già un formato del vault riceve l'estensione delle
+/// note nuove ([`crate::formats::with_extension`]).
+fn with_extension(
+    host: &(impl fub_abi::traits::VaultRead + fub_abi::traits::SettingsRead + ?Sized),
+    name: &str,
+) -> Result<String, PluginError> {
+    Ok(crate::formats::with_extension(
+        host,
+        name,
+        &crate::formats::new_note_extension(host)?,
+    ))
 }
 
 /// Una data `YYYY-MM-DD`, o il perché no. Il formato è stretto di proposito:
@@ -1344,7 +1370,7 @@ fn unique(
     let id = unique_name(args, host)?;
     let body = match template {
         Some(tpl) => {
-            let grezzo = host.read_document(&DocId::new(with_extension(&tpl)))?;
+            let grezzo = host.read_document(&DocId::new(with_extension(host, &tpl)?))?;
             let ctx = context(host)?;
             expand_full(&grezzo, &file_name(&id), &ctx, host)?
         }
@@ -1370,7 +1396,7 @@ fn unique_name(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError>
         (None, Some(name)) => name.to_string(),
         (None, None) => UNTITLED.to_string(),
     };
-    Ok(host.free_name(&DocId::new(with_extension(&name))))
+    Ok(host.free_name(&DocId::new(with_extension(host, &name)?)))
 }
 
 /// Il prefisso di adesso nel formato dichiarato, o `None` se il formato è
@@ -1436,7 +1462,8 @@ fn random_name(host: &dyn HostApi) -> Result<DocId, PluginError> {
         out.push(ALPHABET[(v & 31) as usize] as char);
         v >>= 5;
     }
-    Ok(host.free_name(&DocId::new(format!("Nota-{out}.{EXTENSION}"))))
+    let extension = crate::formats::new_note_extension(host)?;
+    Ok(host.free_name(&DocId::new(format!("Nota-{out}.{extension}"))))
 }
 
 /// Apre una nota a caso fra quelle del vault (P05.3). Sola lettura: niente
@@ -1447,7 +1474,9 @@ fn random(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
         .list_documents(None)?
         .items
         .into_iter()
-        .filter(|d| d.as_str().ends_with(".md"))
+        // Una nota è un documento in prosa, con qualunque estensione il suo
+        // formato dichiari (`.md`, `.markdown`, o quella di un plugin).
+        .filter(|d| crate::formats::understands(host, d, fub_abi::options::source::PROSE))
         .collect();
     ids.sort_by(|a, b| a.as_str().cmp(b.as_str()));
     if ids.is_empty() {
@@ -1480,6 +1509,9 @@ fn insert_target(args: Args<'_>, host: &dyn HostApi) -> Result<(DocId, usize), P
         .document(DOC)
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
+    // Ciò che si inserisce è testo di una nota: in un canvas o in un `.base`
+    // finirebbe dentro la struttura.
+    crate::formats::require(host, &doc, fub_abi::options::source::PROSE)?;
     if let Some(ns) = args.numbers(AT) {
         let at = ns.first().copied().unwrap_or(0.0);
         return position(at).map(|at| (doc, at));
@@ -1632,13 +1664,19 @@ fn insert_template(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_TEMPLATE)))?;
-    let tpl = DocId::new(with_extension(template));
+    let tpl = DocId::new(with_extension(host, template)?);
     let (doc, at) = insert_target(args, host)?;
     let merge_props = args.flag(MERGE, true);
     let grezzo = host.read_document(&tpl)?;
     let ctx = context(host)?;
     let expanded = expand_full(&grezzo, &file_name(&doc), &ctx, host)?;
-    let (props, body) = split_frontmatter(&expanded)?;
+    // Il frontmatter si separa solo se il formato del template lo legge:
+    // altrove le righe `---` in testa sono testo come le altre.
+    let (props, body) = if crate::formats::understands(host, &tpl, syntax::FRONTMATTER) {
+        split_frontmatter(&expanded)?
+    } else {
+        (Vec::new(), expanded)
+    };
     let missing = if merge_props && !props.is_empty() {
         missing_properties(host, &doc, &props)?
     } else {
@@ -1728,7 +1766,8 @@ fn insert_template(
         .with_effect(effect))
 }
 
-/// Divide `---\n…\n---\n` dal corpo: il frontmatter si riconosce solo in testa
+/// Divide `---\n…\n---\n` dal corpo, per un template il cui formato dichiara
+/// [`syntax::FRONTMATTER`]: il frontmatter si riconosce solo in testa
 /// (dopo un eventuale BOM), il corpo resta byte-identico. Le proprietà sono
 /// parse come una mappa YAML vera e serializzate una per una come YAML flow:
 /// liste e strutture annidate restano strutture, mai chiavi piatte inventate.
@@ -1825,6 +1864,11 @@ fn extract(
         .doc
         .clone()
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
+    // La selezione diventa il corpo di una nota e al suo posto va un link:
+    // tutte e due le cose hanno senso solo in un sorgente in prosa, e il link
+    // lo scrive il suo formato. Si chiede prima delle coordinate: le carte
+    // scelte in una tela arrivano senza, e il motivo vero è il formato.
+    crate::formats::require(host, &from, fub_abi::options::source::PROSE)?;
     let selections = view_context
         .selections
         .as_ref()
@@ -1850,7 +1894,7 @@ fn extract(
     if name.is_empty() {
         return Err(PluginError::BadArgs(Text::key(E_EMPTY_SELECTION)));
     }
-    let id = host.free_name(&DocId::new(with_extension(&name)));
+    let id = host.free_name(&DocId::new(with_extension(host, &name)?));
     // The session supplied the span and text. A stale context must not replace
     // some other bytes even if the file itself has a valid current revision.
     let revision = host.document_revision(&from)?;
@@ -1863,11 +1907,11 @@ fn extract(
     }
     check_relative_assets(host, &from, &id, Some(span))?;
     let embed = matches!(args.text(REPLACE).unwrap_or("link").trim(), "embed");
-    let link = if embed {
-        format!("![[{}]]", id.page_name())
-    } else {
-        format!("[[{}]]", id.page_name())
-    };
+    let link = crate::formats::link_text(
+        host,
+        &from,
+        &crate::formats::wikilink(id.page_name(), None, embed),
+    )?;
     let summary = Text::message(
         P_EXTRACT,
         vec![
@@ -1885,7 +1929,7 @@ fn extract(
     // 1. La destinazione: corpo = selezione, avvolta dal template se detto.
     let body = match args.text(TEMPLATE).map(str::trim).filter(|s| !s.is_empty()) {
         Some(tpl) => {
-            let grezzo = host.read_document(&DocId::new(with_extension(tpl)))?;
+            let grezzo = host.read_document(&DocId::new(with_extension(host, tpl)?))?;
             let ctx = context(host)?;
             expand_full(&grezzo, &file_name(&id), &ctx, host)?.replace("{{selection}}", &selected)
         }
@@ -2024,6 +2068,13 @@ fn merge(
             E_MERGE_SELF,
             vec![Arg::text(A_DOC, into.as_str())],
         )));
+    }
+    // Unire è incollare un sorgente in un altro: ha senso solo fra documenti
+    // in prosa. Un canvas incollato in una nota è JSON grezzo, e una nota
+    // accodata a un `.base` ne cancella le viste. Si controlla prima di
+    // leggere o cestinare qualunque cosa.
+    for doc in std::iter::once(&into).chain(&sources) {
+        crate::formats::require(host, doc, fub_abi::options::source::PROSE)?;
     }
     let prepend = matches!(args.text(MODE).unwrap_or("append").trim(), "prepend");
     let separator = args.text(SEPARATOR).unwrap_or("\n\n").to_string();
@@ -2214,6 +2265,15 @@ mod tests {
     use super::*;
     use fub_abi::locale::Locale;
     use fub_sdk::testing::MemoryHost;
+
+    /// Ogni comando del template si offre nel menu `/`: è lì che si inserisce
+    /// uno scheletro mentre si scrive, e la shell non ne tiene un elenco.
+    #[test]
+    fn every_template_command_is_offered_in_the_slash_menu() {
+        for spec in TemplateCommands::specs() {
+            assert_eq!(spec.surfaces, [CommandSurface::Slash], "{}", spec.id);
+        }
+    }
 
     fn ctx_for(date: &str) -> Ctx {
         Ctx {

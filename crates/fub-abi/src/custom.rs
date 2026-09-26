@@ -215,6 +215,22 @@ pub struct CustomRendererSpec {
     pub kinds: Vec<String>,
 }
 
+/// La chiave di `attrs` con cui un blocco custom dichiara le proprie **sezioni
+/// nominate**: un array di nomi.
+///
+/// Vale per un documento il cui corpo è un solo blocco custom. Per lui
+/// `[[Doc#Nome]]` non cerca un heading: sceglie la sezione `Nome` fra quelle
+/// dichiarate, e un nome che non c'è non ha sezione. Il kernel risolve la
+/// scelta senza sapere di che formato si tratta, e la consegna al renderer in
+/// [`SECTION_ATTR`]. Un blocco senza la dichiarazione passa per gli heading
+/// come ogni altro documento.
+pub const SECTIONS_ATTR: &str = "sections";
+
+/// La chiave di `attrs` in cui il kernel scrive la sezione scelta da
+/// `[[Doc#Nome]]` fra quelle dichiarate in [`SECTIONS_ATTR`]. Assente quando il
+/// riferimento non nomina una sezione.
+pub const SECTION_ATTR: &str = "section";
+
 /// Un blocco custom, come arriva al suo renderer.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CustomBlock {

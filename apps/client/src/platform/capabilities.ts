@@ -53,3 +53,28 @@ export function supports(
 ): boolean {
   return shell.capabilities[capability];
 }
+
+// La shell comune (`desktop-shell.ts`) è la stessa per desktop e mobile: le
+// differenze le chiede qui, per capacità, invece di confrontare l'id della
+// shell. Il bootstrap di ogni shell la dichiara prima di montare quella comune.
+const DEFAULT_SHELL: ClientShell = Object.freeze({
+  id: "desktop",
+  capabilities: DESKTOP_CAPABILITIES,
+});
+let declared: ClientShell | null = null;
+
+/** Dichiara la shell attiva e ne rende osservabile l'id nel DOM. */
+export function declareShell(shell: ClientShell): void {
+  declared = shell;
+  if (typeof document !== "undefined") document.documentElement.dataset.clientShell = shell.id;
+}
+
+/** La shell attiva. Senza dichiarazione è il desktop, la shell di serie. */
+export function activeShell(): ClientShell {
+  return declared ?? DEFAULT_SHELL;
+}
+
+/** La shell attiva ha questa capacità di piattaforma? */
+export function platformSupports(capability: keyof PlatformCapabilities): boolean {
+  return supports(activeShell(), capability);
+}

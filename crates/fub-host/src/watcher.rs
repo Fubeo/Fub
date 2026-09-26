@@ -58,7 +58,7 @@ use crate::jobs::{drain_events, with_event_drain};
 /// proprio `Drop`; chi non ne ha — [`NoWatcher`] — non ha niente da aspettare.
 ///
 /// [decisione 0120]: ../../../docs/decisions/README.md
-pub(crate) trait VaultWatcher: Send + Sync {
+pub trait VaultWatcher: Send + Sync {
     /// `true` se questo vault ha il rilevamento delle modifiche esterne
     /// **adesso**.
     ///
@@ -74,7 +74,7 @@ pub(crate) trait VaultWatcher: Send + Sync {
 ///
 /// Sta separato dal watcher perché è la parte che si sceglie **prima** di avere
 /// un vault: `Host::with_watcher` la prende una volta, e ogni apertura la usa.
-pub(crate) trait WatcherFactory: Send + Sync {
+pub trait WatcherFactory: Send + Sync {
     /// Avvia il rilevamento su `root`, sincronizzando `workspace` a ogni
     /// cambiamento. L'apertura chiama questo metodo senza un read-lock o un
     /// write-lock del workspace: una fabbrica può quindi verificarlo, leggere o
@@ -295,7 +295,7 @@ fn start_safely(
 /// ciò che doveva provare.
 ///
 /// Serve sia da fabbrica sia da rilevatore: non c'è niente da tenere vivo.
-pub(crate) struct NoWatcher;
+pub struct NoWatcher;
 
 impl VaultWatcher for NoWatcher {
     fn is_watching(&self) -> bool {
@@ -415,58 +415,6 @@ impl Drop for SyncOperation {
     }
 }
 
-/// Chi porta nel workspace ciò che è cambiato da fuori, **un lotto alla volta**.
-///
-/// # Perché è un tipo e non una funzione
-///
-/// Perché `batch` prende `&mut self`, e questo è l'unico posto in cui l'ordine
-/// dei lotti è scritto invece che sperato. Un lotto legge il disco in una fase
-/// e muta in un'altra: due lotti che si accavallassero potrebbero applicare in
-/// ordine invertito, e il secondo lascerebbe nel workspace lo stato più vecchio
-/// dei due. Oggi non si accavallano — il debouncer di `notify` chiama il
-/// proprio handler da un thread solo, e l'handler è un `FnMut` — ma «oggi non
-/// succede» è la forma di garanzia che la
-/// [0024](../../../docs/decisions/README.md) ha
-/// già dovuto scrivere in prosa una volta. Qui la dice il prestito: da un
-/// `&mut ExternalSync` non se ne ricava un secondo, quindi due lotti sullo
-/// stesso sincronizzatore non compilano.
-///
-/// # Ciclo di vita
-///
-/// Lo shutdown impedisce nuovi ingressi e aspetta quelli già in volo senza
-/// conservare il mutex durante l'attesa. Un lotto accettato completa tutte le
-/// sue fasi, compreso il flush, prima che il teardown possa tornare.
-///
-/// # Le tre fasi, e perché sono tre
-///
-/// È la regola della 0024 applicata alla porta da cui il vault cambia da fuori:
-///
-/// 1. **leggere e parsare** i file cambiati sotto prestito **condiviso** — è
-///    l'I/O più lungo del lotto, e chi legge (la ricerca, il disegno dei
-///    pannelli) non ha niente a che farci;
-/// 2. **mutare** il workspace sotto quello esclusivo, con i modelli già in
-///    mano;
-/// 3. **rendere durevole** con un prestito suo.
-///
-/// # E il lotto sente rientrare le scritture di Fub
-///
-/// Non c'è nessun filtro qui che le tolga, e non ci deve essere: un salvataggio
-/// del kernel è una rename, `notify` la riporta come qualunque altra, e un
-/// rilevatore che provasse a indovinare quali eventi sono suoi si sbaglierebbe
-/// nel verso caro — su una rename fatta da un altro processo nello stesso
-/// momento. A riconoscerle è il kernel, che le riconosce **per impronta**:
-/// `plan_sync` legge il file, e se ne porta l'impronta che l'anagrafe già ha non
-/// parsa niente e la fase 2 non applica niente (difetto 0196). Prima, ogni
-/// salvataggio di ogni nota tornava dentro riletto, riparsato e reingerito, con
-/// un `DocumentChanged` a nome del rilevatore su una modifica che l'utente
-/// aveva appena fatto lui.
-///
-/// La terza fase resta esclusiva, e non per distrazione: `IndexProvider::flush`
-/// riceve un `&mut dyn HostApi`, che il kernel costruisce su `&mut Workspace` —
-/// finché la firma è quella, la durevolezza degli indici *non può* stare fuori
-/// dal prestito esclusivo. Ciò che si compra tenendola in una fase sua è che
-/// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
-/// si rilascia, e i lettori in coda passano.
 enum WatcherPreflight {
     Sync {
         path: Utf8PathBuf,
@@ -642,6 +590,58 @@ struct BatchApply {
     outcome_reported: bool,
 }
 
+/// Chi porta nel workspace ciò che è cambiato da fuori, **un lotto alla volta**.
+///
+/// # Perché è un tipo e non una funzione
+///
+/// Perché `batch` prende `&mut self`, e questo è l'unico posto in cui l'ordine
+/// dei lotti è scritto invece che sperato. Un lotto legge il disco in una fase
+/// e muta in un'altra: due lotti che si accavallassero potrebbero applicare in
+/// ordine invertito, e il secondo lascerebbe nel workspace lo stato più vecchio
+/// dei due. Oggi non si accavallano — il debouncer di `notify` chiama il
+/// proprio handler da un thread solo, e l'handler è un `FnMut` — ma «oggi non
+/// succede» è la forma di garanzia che la
+/// [0024](../../../docs/decisions/README.md) ha
+/// già dovuto scrivere in prosa una volta. Qui la dice il prestito: da un
+/// `&mut ExternalSync` non se ne ricava un secondo, quindi due lotti sullo
+/// stesso sincronizzatore non compilano.
+///
+/// # Ciclo di vita
+///
+/// Lo shutdown impedisce nuovi ingressi e aspetta quelli già in volo senza
+/// conservare il mutex durante l'attesa. Un lotto accettato completa tutte le
+/// sue fasi, compreso il flush, prima che il teardown possa tornare.
+///
+/// # Le tre fasi, e perché sono tre
+///
+/// È la regola della 0024 applicata alla porta da cui il vault cambia da fuori:
+///
+/// 1. **leggere e parsare** i file cambiati sotto prestito **condiviso** — è
+///    l'I/O più lungo del lotto, e chi legge (la ricerca, il disegno dei
+///    pannelli) non ha niente a che farci;
+/// 2. **mutare** il workspace sotto quello esclusivo, con i modelli già in
+///    mano;
+/// 3. **rendere durevole** con un prestito suo.
+///
+/// # E il lotto sente rientrare le scritture di Fub
+///
+/// Non c'è nessun filtro qui che le tolga, e non ci deve essere: un salvataggio
+/// del kernel è una rename, `notify` la riporta come qualunque altra, e un
+/// rilevatore che provasse a indovinare quali eventi sono suoi si sbaglierebbe
+/// nel verso caro — su una rename fatta da un altro processo nello stesso
+/// momento. A riconoscerle è il kernel, che le riconosce **per impronta**:
+/// `plan_sync` legge il file, e se ne porta l'impronta che l'anagrafe già ha non
+/// parsa niente e la fase 2 non applica niente (difetto 0196). Prima, ogni
+/// salvataggio di ogni nota tornava dentro riletto, riparsato e reingerito, con
+/// un `DocumentChanged` a nome del rilevatore su una modifica che l'utente
+/// aveva appena fatto lui.
+///
+/// La terza fase resta esclusiva, e non per distrazione: `IndexProvider::flush`
+/// riceve un `&mut dyn HostApi`, che il kernel costruisce su `&mut Workspace` —
+/// finché la firma è quella, la durevolezza degli indici *non può* stare fuori
+/// dal prestito esclusivo. Ciò che si compra tenendola in una fase sua è che
+/// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
+/// si rilascia, e i lettori in coda passano.
 pub(crate) struct ExternalSync {
     workspace: Custody<Workspace>,
     lifecycle: Arc<SyncLifecycle>,
@@ -1033,10 +1033,10 @@ impl ExternalSync {
     /// rilevatore ha da dire al workspace sono «ecco cosa è cambiato» e «ho
     /// smesso di vedere», e la seconda non è meno di `notify` della prima.
     pub(crate) fn watch_died(&mut self, reasons: Vec<String>) {
+        self.watching.store(false, Ordering::Release);
         // I motivi si scrivono nel log **prima** del prestito: se il vault è
         // avvelenato il canale degli eventi non c'è più, e la ragione per cui
         // il rilevamento è morto resterebbe l'unica cosa che nessuno ha detto.
-        self.watching.store(false, Ordering::Release);
         for reason in &reasons {
             tracing::error!(target: "fub.host", "{reason}");
         }
@@ -1055,7 +1055,7 @@ impl ExternalSync {
 }
 
 #[cfg(feature = "notify-watcher")]
-pub(crate) use notify_watcher::NotifyWatcher;
+pub use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
@@ -1075,7 +1075,7 @@ mod notify_watcher {
     use super::{ExternalChange, ExternalSync, SyncLifecycle, VaultWatcher, WatcherFactory};
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
-    pub(crate) struct NotifyWatcher;
+    pub struct NotifyWatcher;
 
     /// Il debouncer vivo, **e il thread che consegna i lotti**.
     ///
@@ -1390,11 +1390,11 @@ mod notify_watcher {
             );
         }
 
+        /// **L'anello che si chiudeva.** Questi sono gli eventi che inotify
         /// riporta quando Fub apre un documento per localizzare le occorrenze
         /// di una ricerca: se contassero come cambiamenti, il rilevatore
         /// chiederebbe al kernel di rileggere ciò che il kernel ha appena
         /// letto — e la rilettura sarebbe un'altra apertura.
-        /// E ciò che cambia davvero continua ad arrivare: il filtro sta fra le
         #[test]
         fn reading_a_document_is_not_changing_it() {
             for kind in [
@@ -1407,8 +1407,8 @@ mod notify_watcher {
             }
         }
 
+        /// E ciò che cambia davvero continua ad arrivare: il filtro sta fra le
         /// letture e le scritture, non fra il rilevatore e il vault.
-        // Chi non sa dire cosa è successo va creduto: meglio una
         #[test]
         fn what_changes_still_gets_through() {
             for kind in [
@@ -1416,8 +1416,8 @@ mod notify_watcher {
                 EventKind::Modify(ModifyKind::Data(DataChange::Content)),
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
                 EventKind::Remove(RemoveKind::File),
+                // Chi non sa dire cosa è successo va creduto: meglio una
                 // rilettura in più di un indice che drifta.
-                // **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
                 EventKind::Any,
                 EventKind::Other,
             ] {
@@ -1473,6 +1473,7 @@ mod notify_watcher {
             );
         }
 
+        /// **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
         /// caduta).
         ///
         /// La riga temeva che la metà «da» di una rinomina restasse appesa in
@@ -1494,7 +1495,6 @@ mod notify_watcher {
         /// prima la nascita della nota dev'essere stata consegnata, poi la sua
         /// sparizione dev'essere un secondo lotto. Se la metà «da» non uscisse,
         /// il secondo lotto non arriverebbe mai.
-        // Fuori dalla cartella guardata: una partenza che non avrà mai un
         #[test]
         fn an_orphan_rename_emerges_as_a_touched_path() {
             let inside = tempfile::tempdir().expect("the watched folder");
@@ -1546,7 +1546,7 @@ mod notify_watcher {
                  first half the test proves nothing"
             );
 
-            // arrivo da accoppiarci.
+            // Fuori dalla cartella guardata: una partenza che non avrà mai un
             // arrivo da accoppiarci.
             std::fs::rename(&notes, outside.path().join("note.md")).expect("the orphan rename");
             assert!(

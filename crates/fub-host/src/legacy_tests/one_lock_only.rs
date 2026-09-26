@@ -120,6 +120,7 @@ fn the_poison_of_a_vault_not_touches_the_other() {
 
     // Nominati, e non presi per posizione: `vaults()` ordina per path, e un
     // banco che si fidasse dell'ordine proverebbe una volta su due l'opposto di
+    // ciò che dice di provare.
     let ws_a = host
         .debug_workspace(Some(root_a.as_str()))
         .expect("il primo");

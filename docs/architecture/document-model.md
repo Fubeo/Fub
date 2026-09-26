@@ -101,7 +101,12 @@ specifica del formato può restare `Custom`.
 - i blocchi possono avere ancore;
 - link e tag conservano lo span nella sorgente;
 - `DocId` identifica un documento nel vault, non un nodo del modello;
-- l'embed è una proprietà del riferimento, non del bersaglio.
+- l'embed è una proprietà del riferimento, non del bersaglio;
+- un documento fatto di un solo blocco `Custom` può dichiarare sezioni nominate
+  in `attrs.sections` (`fub_abi::custom::SECTIONS_ATTR`): per lui `[[Doc#Nome]]`
+  sceglie una sezione dichiarata invece di un heading, e il kernel consegna la
+  scelta al renderer in `attrs.section`. Le viste di un file `.base` sono
+  sezioni nominate; il kernel non conosce il formato.
 
 ## Proprietà
 

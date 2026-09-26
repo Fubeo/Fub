@@ -69,6 +69,26 @@ use std::collections::BTreeSet;
 ///   che dipende da tutti gli altri.
 const ROOT: &[&str] = &["lib.rs", "inventory.rs"];
 
+/// I moduli **condivisi**: helper che non sono una feature e che un modulo di
+/// feature può nominare come `crate::<nome>::`, e la ragione.
+///
+/// - `formats` sono le domande che si fanno al formato di un documento prima
+///   di scriverci dentro (capacità dichiarate, estensione delle note nuove).
+///   Non appartiene a nessuna feature e non ne nomina nessuna; uno split lo
+///   porterebbe in un crate di appoggio da cui dipendono le feature che
+///   scrivono sorgente.
+///
+/// Un modulo condiviso resta sotto la stessa domanda degli altri: se nominasse
+/// una feature, l'accoppiamento passerebbe da lui.
+const SHARED: &[&str] = &["formats"];
+
+/// La riga senza i nomi dei moduli condivisi, che sono vocabolario dichiarato.
+fn without_shared(row: &str) -> String {
+    SHARED.iter().fold(row.to_string(), |row, shared| {
+        row.replace(&format!("crate::{shared}::"), "")
+    })
+}
+
 /// Toglie da un sorgente Rust tutto ciò che non è codice: commenti di riga
 /// (compresi `///` e `//!`), commenti a blocco annidati, e il contenuto delle
 /// stringhe.
@@ -194,7 +214,7 @@ fn no_feature_module_names_at_root() {
     let mut offenders: BTreeSet<String> = BTreeSet::new();
     for (name, source) in modules_of_feature() {
         for (n, row) in only_code(&source).lines().enumerate() {
-            if row.contains("crate::") {
+            if without_shared(row).contains("crate::") {
                 offenders.insert(format!("  {name}:{} → {}", n + 1, row.trim()));
             }
         }
@@ -286,4 +306,15 @@ use crate::search::SearchIndex;
         "the'import guardato from `#[cfg]` deve survive: è **the** form that the \
          compiler not takes, ed è the reason for which this bench exists"
     );
+}
+
+/// Il vocabolario condiviso toglie soltanto sé stesso: una riga che nomina un
+/// helper condiviso **e** una feature resta un accoppiamento.
+#[test]
+fn shared_vocabulary_hides_only_itself() {
+    assert!(!without_shared("crate::formats::require(host, &doc, X)?;").contains("crate::"));
+    assert!(
+        without_shared("crate::formats::require(h, &crate::search::ID, X)?;").contains("crate::")
+    );
+    assert!(without_shared("use crate::formatsx::Y;").contains("crate::"));
 }

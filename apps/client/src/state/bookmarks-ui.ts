@@ -1,4 +1,5 @@
-import { confirmInShell, pickFromList, promptText } from "../ui/dialogs";
+import { confirm } from "../host/dialog";
+import { pickFromList, promptText } from "../ui/dialogs";
 import { activeTab, documents, layout, pane } from "./layout";
 import {
   addBookmark,
@@ -18,8 +19,8 @@ import {
   type BookmarkTarget,
 } from "./bookmarks";
 import { on } from "./store";
-import { onEvent } from "./kernel";
 import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
+import { refreshOn, registerPanel, unregisterPanel, type Panel } from "../ui/panel-host";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
@@ -28,8 +29,11 @@ import { openBookmarkTarget } from "./shell-commands";
 import { state } from "./store";
 import { currentWorkspaceId } from "./workspaces-ui";
 
-let visible = false;
 let lifetime: Lifetime | null = null;
+
+/// L'id del pannello nel registro (`ui/panel-host.ts`): `shell:` perché è di
+/// questa shell.
+const PANEL_ID = "shell:bookmarks";
 
 function panel(): HTMLElement | null {
   return document.getElementById("bookmarks-panel");
@@ -159,9 +163,8 @@ async function refresh(): Promise<void> {
             void refresh();
           } },
           { separator: true, label: t("bookmarks.delete"), danger: true, run: async () => {
-            const ok = await confirmInShell({
+            const ok = await confirm(t("bookmarks.delete_group_confirm", { title: g.title }), {
               title: t("bookmarks.delete"),
-              message: t("bookmarks.delete_group_confirm", { title: g.title }),
               okLabel: t("bookmarks.delete"),
               danger: true,
             });
@@ -233,9 +236,8 @@ function rowFor(b: Bookmark): HTMLElement {
       } },
       { label: t("bookmarks.assign_group"), run: () => void assignGroupFlow(b.id).then(() => refresh()) },
       { separator: true, label: t("bookmarks.delete"), danger: true, run: async () => {
-        const ok = await confirmInShell({
+        const ok = await confirm(t("bookmarks.delete_confirm", { title: b.title }), {
           title: t("bookmarks.delete"),
-          message: t("bookmarks.delete_confirm", { title: b.title }),
           okLabel: t("bookmarks.delete"),
           danger: true,
         });
@@ -286,31 +288,49 @@ export async function newBookmarkGroup(): Promise<{ id: string } | null> {
   return { id: group.id };
 }
 
+/// Il pannello si vede quando il suo elemento non è nascosto: una sola verità,
+/// quella che legge anche chi guarda lo schermo.
+function isShown(): boolean {
+  return panel()?.hidden === false;
+}
+
 export function openBookmarksPanel(): void {
-  visible = true;
-  const el = ensurePanel();
-  el.hidden = false;
+  ensurePanel().hidden = false;
   void refresh();
 }
 
 export function toggleBookmarksPanel(): void {
-  visible = !visible;
   const el = ensurePanel();
-  el.hidden = !visible;
-  if (visible) void refresh();
+  el.hidden = !el.hidden;
+  if (!el.hidden) void refresh();
 }
 
+/// Monta il pannello dei segnalibri **nel registro dei pannelli**: dichiara chi
+/// è, dove sta e cosa lo fa invecchiare, e quando ridisegnarlo lo decide
+/// l'host — una rinomina riscrive i segnalibri che puntano alla nota, una coda
+/// troncata li riconcilia, e un pannello nascosto non si ridisegna. Restano suoi
+/// soltanto i segnali della shell: il vault che cambia (i segnalibri si
+/// rileggono) e l'elenco dei documenti (quali bersagli esistono ancora).
 export function mountBookmarksPanel(parent: Lifetime): Teardown {
   lifetime?.close();
   const life = openLifetime();
   lifetime = life;
+  const registration: Panel = {
+    id: PANEL_ID,
+    title: "Segnalibri",
+    placement: "left_sidebar",
+    refresh: refreshOn("document_renamed"),
+    visible: isShown,
+    render: () => refresh(),
+  };
+  registerPanel(registration);
   const dispose = () => {
     if (life.closed) return;
     life.close();
     if (lifetime === life) {
       lifetime = null;
+      unregisterPanel(PANEL_ID);
       panel()?.remove();
-      visible = false;
     }
   };
   parent.add(dispose);
@@ -318,7 +338,6 @@ export function mountBookmarksPanel(parent: Lifetime): Teardown {
     void loadBookmarks().then(() => { if (!life.closed) void refresh(); });
   }));
   life.add(on("documents", () => void refresh()));
-  life.add(onEvent("document_renamed", () => void refresh()));
   void loadBookmarks().then(() => { if (!life.closed) void refresh(); });
   return dispose;
 }

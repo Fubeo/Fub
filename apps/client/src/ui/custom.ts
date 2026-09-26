@@ -37,10 +37,21 @@ import type { ActionRef, FieldValue } from "../host/contract";
 /// provider.
 export type OnAction = (action: ActionRef, fields: FieldValue[]) => void;
 
+/// Dove sta il nodo che si disegna. `container` è il documento nella cui resa
+/// il nodo compare — la nota che incorpora una base — e `null` in una view,
+/// che non sta dentro un documento. Lo dà chi monta l'albero, non il payload:
+/// un renderer di qualunque `ns` lo riceve allo stesso modo.
+export interface CustomRenderContext {
+  readonly container: string | null;
+}
+
+export const NO_RENDER_CONTEXT: CustomRenderContext = { container: null };
+
 /// Chi sa disegnare un `ns`.
 ///
 /// Riceve l'elemento in cui disegnare — già nel documento, già vuoto — il
-/// `payload` così com'è arrivato dal provider, e la porta delle azioni.
+/// `payload` così com'è arrivato dal provider, la porta delle azioni e il
+/// contesto del montaggio.
 /// Restituisce come **smontarsi**, o niente se non ha nulla da rilasciare: un
 /// canvas con un `requestAnimationFrame` in volo che nessuno ferma è un ciclo
 /// che continua a girare su un elemento tolto dal DOM.
@@ -48,6 +59,7 @@ export type CustomRenderer = (
   host: HTMLElement,
   payload: unknown,
   onAction: OnAction,
+  context: CustomRenderContext,
 ) => (() => void) | void;
 
 const registry = new Map<string, {

@@ -152,14 +152,6 @@ use crate::registry::FormatRegistry;
 use crate::safety::Gate;
 use crate::settings::SharedSettings;
 
-/// Gli indici del workspace: quello del kernel, quelli registrati, e la tabella
-/// che dice a chi va cosa.
-///
-/// È uno dei cinque componenti in cui il §8.1 scompone il `Workspace`
-/// ([decisione 0022](../../../../docs/decisions/README.md)) — il
-/// primo ad avere avuto un confine, con la 0019 — ed è tenuto insieme qui
-/// perché le tre parti non hanno senso separate: una tabella di routing senza un core index che si dichiara come
-/// gli altri instraderebbe due varianti su nove.
 /// **La rete contro i panici, per chi alimenta** (§9.3 + §20.1): un indice che
 /// pania mentre riceve un lotto non si porta via la scrittura di chi ha
 /// chiamato, e non sparisce nemmeno in silenzio — il lotto che gli era stato
@@ -239,6 +231,23 @@ pub(crate) fn forget_handles(
     lost
 }
 
+/// **Cosa hanno già tutti**, di queste voci (§14.2): l'intersezione delle
+/// risposte, non l'unione.
+///
+/// L'intersezione perché un documento si salta solo se **nessuno** lo
+/// aspetta: basta un indice che non ce l'ha, e il kernel deve comunque
+/// leggerlo e parsarlo per darglielo — a quel punto tanto vale darlo a
+/// tutti, che è ciò che rende il salto un tutto-o-niente per documento e
+/// non una consegna a metà.
+///
+/// Senza indici registrati l'intersezione è l'insieme intero, ed è la
+/// risposta giusta e non un caso limite: se nessuno aspetta niente, non
+/// c'è niente da rileggere per nessuno.
+///
+/// Chi pania rispondendo non blocca l'apertura, e non fa nemmeno saltare
+/// niente: si porta via solo la propria risposta, che senza di lui è vuota
+/// — cioè «mandami tutto», che è il verso sicuro dello sbaglio.
+///
 /// Interroga gli indici registrati usando soltanto handle staccati dal
 /// `Workspace`. Chi chiama può quindi rilasciare `Custody<Workspace>` prima di
 /// attraversare il confine del provider.
@@ -269,6 +278,19 @@ pub(crate) fn up_to_date_handles(
     agreed
 }
 
+/// Chi non è riuscito ad allinearsi lo dice, e **nomina i morti che si
+/// tiene**: gli id che tornano di qui non stanno in `ids` — sono ciò che
+/// l'indice ha in più, cioè quello che avrebbe dovuto dimenticare.
+///
+/// La rete contro i panici c'è come nell'alimentazione, ma ciò che torna
+/// indietro è **diverso**: chi pania riconciliando non ha lasciato indietro
+/// i documenti che gli sono stati dati (quelli ci sono), ha lasciato
+/// indietro dei morti di cui nessuno conosce il nome — nemmeno il kernel,
+/// che sa solo chi è vivo. La perdita si nomina quindi sul primo id del
+/// lotto se c'è, e su nessuno se il vault è vuoto: dice *quale indice* e
+/// *cosa è successo*, che è ciò su cui si può agire (riaprire il vault),
+/// e non finge di sapere un elenco che non esiste.
+///
 /// Riconcilia gli indici registrati usando una fotografia dei loro handle. Il
 /// core resta al chiamante: è stato locale del `Workspace` e si finalizza sotto
 /// il suo lock solo dopo il ritorno delle callback esterne.
@@ -300,6 +322,15 @@ pub(crate) fn reconcile_handles(
     lost
 }
 
+/// Gli indici del workspace: quello del kernel, quelli registrati, e la tabella
+/// che dice a chi va cosa.
+///
+/// È uno dei cinque componenti in cui il §8.1 scompone il `Workspace`
+/// ([decisione 0022](../../../../docs/decisions/README.md)) — il
+/// primo ad avere avuto un confine, con la 0019 — ed è tenuto insieme qui
+/// perché le tre parti non hanno senso separate: una tabella di routing senza
+/// un core index che si dichiara come gli altri instraderebbe due varianti su
+/// nove.
 pub(crate) struct Indexes {
     /// L'indice del kernel: metadati, tag, grafo. È `Target::Core` nella
     /// tabella, ed è registrato **per primo** — che è ciò che gli dà la

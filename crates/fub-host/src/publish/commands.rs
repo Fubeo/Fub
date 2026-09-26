@@ -48,6 +48,7 @@ const PUBLISH_PROTOCOL: &str = super::PUBLISH_PROTOCOL;
 /// `PublishCommands` (enqueue-only) all inherit this root.
 pub struct PublishBundle {
     state_root: Option<camino::Utf8PathBuf>,
+    token: crate::remote::TokenSource,
 }
 
 impl PublishBundle {
@@ -55,7 +56,17 @@ impl PublishBundle {
     /// root (or `None` when the instance has none); everything below
     /// inherits it. No payload, env, or cwd path is ever honored.
     pub fn new(state_root: Option<camino::Utf8PathBuf>) -> Self {
-        Self { state_root }
+        Self {
+            state_root,
+            token: crate::remote::TokenSource::environment(),
+        }
+    }
+
+    /// Where every pass reads the bearer token; the environment only by
+    /// default, the machine's saved token too when Main mounts it.
+    pub fn with_token(mut self, token: crate::remote::TokenSource) -> Self {
+        self.token = token;
+        self
     }
 
     pub fn commands(&self) -> PublishCommands {
@@ -65,12 +76,14 @@ impl PublishBundle {
     pub fn runner(&self) -> PublishRunner {
         PublishRunner {
             state_root: self.state_root.clone(),
+            token: self.token.clone(),
         }
     }
 
     pub fn plugin(&self) -> PublishPlugin {
         PublishPlugin {
             state_root: self.state_root.clone(),
+            token: self.token.clone(),
         }
     }
 
@@ -79,8 +92,10 @@ impl PublishBundle {
     }
 
     fn manifest_inner(&self) -> fub_abi::PluginManifest {
-        fub_abi::PluginManifest::core("fub.publish", "Publish")
-            .speaking("it", super::views::catalog())
+        crate::remote::networked_manifest("fub.publish", "Publish").speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            super::views::catalog(),
+        )
     }
 }
 
@@ -342,6 +357,7 @@ fn version_of(args: &Args) -> Result<String, PluginError> {
 /// root from [`PublishBundle::runner`]; constructed per use, never from JSON.
 pub struct PublishRunner {
     state_root: Option<camino::Utf8PathBuf>,
+    token: crate::remote::TokenSource,
 }
 
 /// Job-body plugin owning `publish.pass` for the job dispatcher. Inherits
@@ -349,12 +365,16 @@ pub struct PublishRunner {
 /// a bundle-rooted [`PublishRunner`]. Main registers this, not a bare runner.
 pub struct PublishPlugin {
     state_root: Option<camino::Utf8PathBuf>,
+    token: crate::remote::TokenSource,
 }
 
 impl PublishPlugin {
     /// Bundle-side constructor (see [`PublishBundle::plugin`]).
     pub fn new(state_root: Option<camino::Utf8PathBuf>) -> Self {
-        Self { state_root }
+        Self {
+            state_root,
+            token: crate::remote::TokenSource::environment(),
+        }
     }
 
     pub fn job_name() -> &'static str {
@@ -371,14 +391,20 @@ impl PublishPlugin {
         if job != PUBLISH_PASS_JOB {
             return Err(PluginError::UnknownJob(job.to_string().into()));
         }
-        PublishRunner::new(self.state_root.clone()).run_job(&payload, host)
+        PublishRunner {
+            state_root: self.state_root.clone(),
+            token: self.token.clone(),
+        }
+        .run_job(&payload, host)
     }
 }
 
 impl fub_abi::traits::Plugin for PublishPlugin {
     fn manifest(&self) -> fub_abi::PluginManifest {
-        fub_abi::PluginManifest::core("fub.publish", "Publish")
-            .speaking("it", super::views::catalog())
+        crate::remote::networked_manifest("fub.publish", "Publish").speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            super::views::catalog(),
+        )
     }
 
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -403,7 +429,10 @@ impl PublishRunner {
     /// Bundle-side constructor (see [`PublishBundle::runner`]). `None` root
     /// = every op fails `MissingConfiguration` explicitly, never cwd.
     pub fn new(state_root: Option<camino::Utf8PathBuf>) -> Self {
-        Self { state_root }
+        Self {
+            state_root,
+            token: crate::remote::TokenSource::environment(),
+        }
     }
 
     fn require_root(&self) -> Result<&camino::Utf8PathBuf, PluginError> {
@@ -435,7 +464,7 @@ impl PublishRunner {
             .unwrap_or(serde_json::json!({}));
         let outcome = match op {
             "dry-run" => {
-                let preview = dry_run_live(host, site)?;
+                let preview = dry_run_live(host, &self.token, site)?;
                 persist_dry_run(host, site, &preview)?;
                 let diff = &preview.plan.diff;
                 format!(
@@ -446,11 +475,11 @@ impl PublishRunner {
                 )
             }
             "commit" => {
-                let version = commit_live(host, site)?;
+                let version = commit_live(host, &self.token, site)?;
                 format!("published {site} v{version}")
             }
             "unpublish" => {
-                unpublish_live(host, site)?;
+                unpublish_live(host, &self.token, site)?;
                 format!("unpublished {site} (versions kept)")
             }
             "rollback" => {
@@ -461,7 +490,7 @@ impl PublishRunner {
                     .ok_or_else(|| {
                         PluginError::BadArgs("rollback needs a u64 to_version".into())
                     })?;
-                rollback_live(host, site, to_version)?;
+                rollback_live(host, &self.token, site, to_version)?;
                 format!("rolled back {site} to v{to_version}")
             }
             _ => return Err(PluginError::UnknownJob(op.to_string().into())),
@@ -498,21 +527,24 @@ fn setting_text(value: &fub_abi::settings::SettingValue) -> String {
     }
 }
 
-/// Token: env-file/stdin discipline, same as the sync coordinator.
-/// Absent = PermissionDenied (CLI exit 4), never an anonymous call.
-fn token() -> Result<String, PluginError> {
-    crate::remote::load_token()
+/// Token: env-file/stdin discipline, then the machine's saved token, same
+/// as the sync coordinator. Absent = PermissionDenied (CLI exit 4), never an
+/// anonymous call.
+fn bearer(token: &crate::remote::TokenSource) -> Result<String, PluginError> {
+    token
+        .load()
         .filter(|t| !t.trim().is_empty())
         .ok_or_else(|| PluginError::PermissionDenied("missing credentials".into()))
 }
 
 fn post(
     host: &dyn HostApi,
+    token: &crate::remote::TokenSource,
     path: &str,
     payload: &serde_json::Value,
 ) -> Result<serde_json::Value, PluginError> {
     let base = endpoint(host)?;
-    let bearer = token()?;
+    let bearer = bearer(token)?;
     let body = serde_json::to_vec(payload)
         .map_err(|e| PluginError::Internal(format!("publish encode: {e}").into()))?;
     let response = host.fetch(HttpRequest {
@@ -538,9 +570,13 @@ fn post(
         .map_err(|e| PluginError::Internal(format!("publish {path}: invalid json: {e}").into()))
 }
 
-fn get(host: &dyn HostApi, path: &str) -> Result<serde_json::Value, PluginError> {
+fn get(
+    host: &dyn HostApi,
+    token: &crate::remote::TokenSource,
+    path: &str,
+) -> Result<serde_json::Value, PluginError> {
     let base = endpoint(host)?;
-    let bearer = token()?;
+    let bearer = bearer(token)?;
     let response = host.fetch(HttpRequest {
         url: format!("{base}{path}"),
         method: HttpMethod::Get,
@@ -584,10 +620,15 @@ struct DryRunPlan {
     diff: site::ManifestDiff,
 }
 
-fn dry_run_live(host: &dyn HostApi, site: &str) -> Result<PreviewSnapshot, PluginError> {
+fn dry_run_live(
+    host: &dyn HostApi,
+    token: &crate::remote::TokenSource,
+    site: &str,
+) -> Result<PreviewSnapshot, PluginError> {
     let export = site::collect_export(host, site, 1)?;
     let value = post(
         host,
+        token,
         "/v1/publish/dry-run",
         &serde_json::json!({
             "protocol": PUBLISH_PROTOCOL,
@@ -624,8 +665,12 @@ fn persist_dry_run(
     host.cache_write(&format!("sites/{site}/export.json"), &bytes)
 }
 
-fn next_manifest_version(host: &dyn HostApi, site: &str) -> Result<u64, PluginError> {
-    let status = match get(host, &format!("/v1/publish/status?site_id={site}")) {
+fn next_manifest_version(
+    host: &dyn HostApi,
+    token: &crate::remote::TokenSource,
+    site: &str,
+) -> Result<u64, PluginError> {
+    let status = match get(host, token, &format!("/v1/publish/status?site_id={site}")) {
         Ok(status) => status,
         Err(PluginError::NotFound(_)) => return Ok(1),
         Err(error) => return Err(error),
@@ -648,7 +693,11 @@ fn next_manifest_version(host: &dyn HostApi, site: &str) -> Result<u64, PluginEr
         .ok_or_else(|| PluginError::Conflict("publish version exhausted".into()))
 }
 
-fn commit_live(host: &mut dyn HostApi, site: &str) -> Result<String, PluginError> {
+fn commit_live(
+    host: &mut dyn HostApi,
+    token: &crate::remote::TokenSource,
+    site: &str,
+) -> Result<String, PluginError> {
     let bytes = host
         .cache_read(&format!("sites/{site}/export.json"))?
         .ok_or_else(|| PluginError::BadArgs("publish requires a fresh dry-run".into()))?;
@@ -665,7 +714,7 @@ fn commit_live(host: &mut dyn HostApi, site: &str) -> Result<String, PluginError
             "publish source changed or preview is empty; dry-run again".into(),
         ));
     }
-    export.manifest.version = next_manifest_version(host, site)?;
+    export.manifest.version = next_manifest_version(host, token, site)?;
     let excluded_private = site::preflight_commit(
         site,
         &export.manifest,
@@ -677,6 +726,7 @@ fn commit_live(host: &mut dyn HostApi, site: &str) -> Result<String, PluginError
     let requested_version = export.manifest.version;
     let value = post(
         host,
+        token,
         "/v1/publish/commit",
         &serde_json::json!({
             "protocol": PUBLISH_PROTOCOL,
@@ -697,13 +747,18 @@ fn commit_live(host: &mut dyn HostApi, site: &str) -> Result<String, PluginError
         .ok_or_else(|| {
             PluginError::Internal("publish /v1/publish/commit: bad version body".into())
         })?;
-    refresh_record(host, site)?;
+    refresh_record(host, token, site)?;
     Ok(version.to_string())
 }
 
-fn unpublish_live(host: &mut dyn HostApi, site: &str) -> Result<(), PluginError> {
+fn unpublish_live(
+    host: &mut dyn HostApi,
+    token: &crate::remote::TokenSource,
+    site: &str,
+) -> Result<(), PluginError> {
     let response = post(
         host,
+        token,
         "/v1/publish/unpublish",
         &serde_json::json!({ "protocol": PUBLISH_PROTOCOL, "site_id": site }),
     )?;
@@ -714,12 +769,18 @@ fn unpublish_live(host: &mut dyn HostApi, site: &str) -> Result<(), PluginError>
             "publish /v1/publish/unpublish: bad response".into(),
         ));
     }
-    refresh_record(host, site)
+    refresh_record(host, token, site)
 }
 
-fn rollback_live(host: &mut dyn HostApi, site: &str, to_version: u64) -> Result<(), PluginError> {
+fn rollback_live(
+    host: &mut dyn HostApi,
+    token: &crate::remote::TokenSource,
+    site: &str,
+    to_version: u64,
+) -> Result<(), PluginError> {
     let response = post(
         host,
+        token,
         "/v1/publish/rollback",
         &serde_json::json!({
             "protocol": PUBLISH_PROTOCOL,
@@ -734,7 +795,7 @@ fn rollback_live(host: &mut dyn HostApi, site: &str, to_version: u64) -> Result<
             "publish /v1/publish/rollback: bad response".into(),
         ));
     }
-    refresh_record(host, site)
+    refresh_record(host, token, site)
 }
 
 fn wire_version(value: &serde_json::Value) -> Option<u64> {
@@ -750,8 +811,12 @@ fn wire_version(value: &serde_json::Value) -> Option<u64> {
 
 /// Refresh the local record mirror from `GET /v1/publish/status` after every
 /// mutation, so the views render fresh data without touching the network.
-fn refresh_record(host: &mut dyn HostApi, site: &str) -> Result<(), PluginError> {
-    let status = get(host, &format!("/v1/publish/status?site_id={site}"))?;
+fn refresh_record(
+    host: &mut dyn HostApi,
+    token: &crate::remote::TokenSource,
+    site: &str,
+) -> Result<(), PluginError> {
+    let status = get(host, token, &format!("/v1/publish/status?site_id={site}"))?;
     let bad = || PluginError::Internal("publish /v1/publish/status: bad response".into());
     if status.get("site_id").and_then(|v| v.as_str()) != Some(site) {
         return Err(bad());

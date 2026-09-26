@@ -5,6 +5,19 @@ use serde::{Deserialize, Serialize};
 use crate::{Cell, CellKey, ColumnId, RowId, Sheet, SheetError, SheetId, Workbook};
 
 const MAX_RANGE_CELLS: usize = 1_000_000;
+/// Quanti livelli una formula può annidare: parentesi, segni, potenze,
+/// argomenti di funzione e anelli di una catena di operatori contano uno
+/// ciascuno. Il parser, la valutazione, la raccolta delle dipendenze e perfino
+/// il `Drop` dell'albero scendono di un frame per livello: senza un tetto
+/// `=((((…1))))` con ventimila parentesi esauriva lo stack e chiudeva il
+/// processo. Oltre, la formula è `#PARSE!`.
+const MAX_FORMULA_DEPTH: usize = 256;
+/// Quanti livelli di valutazione (una cella, un nodo) possono essere aperti
+/// insieme. Una formula al tetto ne apre al più `2 * MAX_FORMULA_DEPTH`, e
+/// una cella fuori da un anello ne apre soltanto per sé, perché
+/// [`Evaluator::settle`] le consegna le dipendenze già valutate: il budget si
+/// esaurisce soltanto dentro un anello lungo, che è `#CYCLE!` comunque.
+const MAX_EVALUATION_FRAMES: usize = 4 * MAX_FORMULA_DEPTH;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -89,6 +102,9 @@ impl Workbook {
                 })
             })
             .collect();
+        for key in &keys {
+            evaluator.settle(key);
+        }
         let mut cells = Vec::with_capacity(keys.len());
         for key in &keys {
             cells.push(EvaluatedCell {
@@ -110,13 +126,46 @@ struct IndexedSheet<'a> {
     cells: HashMap<(&'a RowId, &'a ColumnId), &'a Cell>,
 }
 
+/// Lo stato di Tarjan per [`Evaluator::settle`].
+#[derive(Default)]
+struct Walk {
+    /// Per cella visitata: (ordine di visita, minimo ordine raggiungibile).
+    order: HashMap<CellKey, (usize, usize)>,
+    /// Celle visitate la cui componente non è ancora chiusa.
+    component: Vec<CellKey>,
+    on_component: HashSet<CellKey>,
+    /// La pila di chiamata esplicita: cella e dipendenze ancora da guardare.
+    stack: Vec<(CellKey, std::vec::IntoIter<CellKey>)>,
+}
+
+impl Walk {
+    fn open(&mut self, key: CellKey, direct: Vec<CellKey>) {
+        let at = self.order.len();
+        self.order.insert(key.clone(), (at, at));
+        self.component.push(key.clone());
+        self.on_component.insert(key.clone());
+        self.stack.push((key, direct.into_iter()));
+    }
+
+    fn lower(&mut self, key: &CellKey, reached: usize) {
+        if let Some((_, low)) = self.order.get_mut(key) {
+            *low = (*low).min(reached);
+        }
+    }
+}
+
 struct Evaluator<'a> {
     sheets: Vec<IndexedSheet<'a>>,
     sheet_by_id: HashMap<&'a SheetId, usize>,
     sheet_by_name: HashMap<&'a str, usize>,
     cache: HashMap<CellKey, CellValue>,
     visiting: HashSet<CellKey>,
+    /// Livelli di valutazione aperti, contro [`MAX_EVALUATION_FRAMES`].
+    frames: usize,
     dependencies: Vec<CellDependency>,
+    /// Formule già lette da [`Evaluator::settle`], con le loro dipendenze
+    /// dirette: [`Evaluator::evaluate_key`] le consuma invece di rileggerle.
+    parsed: HashMap<CellKey, (Result<Ast, ()>, Vec<CellKey>)>,
 }
 
 impl<'a> Evaluator<'a> {
@@ -149,30 +198,114 @@ impl<'a> Evaluator<'a> {
             sheet_by_name,
             cache: HashMap::new(),
             visiting: HashSet::new(),
+            frames: 0,
             dependencies: Vec::new(),
+            parsed: HashMap::new(),
         }
+    }
+
+    /// Valuta `root` e tutto ciò da cui dipende senza ricorrere cella per
+    /// cella: Tarjan iterativo, con una pila esplicita. Le componenti
+    /// fortemente connesse escono in ordine topologico inverso e si valutano
+    /// appena escono, quindi una cella trova in cache tutto ciò che sta fuori
+    /// dalla sua componente. Prima una colonna di totali progressivi scritta
+    /// dal basso (`A1=A2+1`, `A2=A3+1`, …) ricorreva una volta per riga ed
+    /// esauriva lo stack. Dentro un anello la valutazione resta quella di
+    /// sempre (è lei a dire `#CYCLE!`, e un `IF` che non prende il ramo non lo
+    /// chiude), limitata da [`MAX_EVALUATION_FRAMES`].
+    fn settle(&mut self, root: &CellKey) {
+        if self.cache.contains_key(root) {
+            return;
+        }
+        let mut walk = Walk::default();
+        walk.open(root.clone(), self.read_formula(root));
+        loop {
+            let Some((key, pending)) = walk.stack.last_mut() else {
+                break;
+            };
+            if let Some(dependency) = pending.next() {
+                if self.cache.contains_key(&dependency) {
+                    continue;
+                }
+                match walk.order.get(&dependency) {
+                    None => {
+                        let direct = self.read_formula(&dependency);
+                        walk.open(dependency, direct);
+                    }
+                    Some(&(reached, _)) if walk.on_component.contains(&dependency) => {
+                        let key = key.clone();
+                        walk.lower(&key, reached);
+                    }
+                    Some(_) => {}
+                }
+                continue;
+            }
+            let Some((key, _)) = walk.stack.pop() else {
+                break;
+            };
+            let (at, low) = walk.order[&key];
+            if let Some(parent) = walk.stack.last().map(|(parent, _)| parent.clone()) {
+                walk.lower(&parent, low);
+            }
+            if at == low {
+                let mut members = Vec::new();
+                while let Some(member) = walk.component.pop() {
+                    walk.on_component.remove(&member);
+                    let last = member == key;
+                    members.push(member);
+                    if last {
+                        break;
+                    }
+                }
+                for member in members.iter().rev() {
+                    self.evaluate_key(member);
+                }
+            }
+        }
+    }
+
+    /// Legge la formula di `key` (una volta) e ne restituisce le dipendenze
+    /// dirette; una cella che non è una formula non ne ha.
+    fn read_formula(&mut self, key: &CellKey) -> Vec<CellKey> {
+        if let Some((_, direct)) = self.parsed.get(key) {
+            return direct.clone();
+        }
+        let Some(formula) = self.cell(key).and_then(|cell| cell.input.strip_prefix('=')) else {
+            return Vec::new();
+        };
+        let ast = Parser::parse(formula);
+        let mut direct = Vec::new();
+        if let Ok(ast) = &ast {
+            self.collect_dependencies(&key.sheet, ast, &mut direct);
+            direct.sort();
+            direct.dedup();
+        }
+        self.parsed.insert(key.clone(), (ast, direct.clone()));
+        direct
     }
 
     fn evaluate_key(&mut self, key: &CellKey) -> CellValue {
         if let Some(value) = self.cache.get(key) {
             return value.clone();
         }
-        if !self.visiting.insert(key.clone()) {
+        if self.frames >= MAX_EVALUATION_FRAMES || !self.visiting.insert(key.clone()) {
             self.cache
                 .insert(key.clone(), CellValue::Error(FormulaErrorCode::Cycle));
             return CellValue::Error(FormulaErrorCode::Cycle);
         }
+        self.frames += 1;
         let input = self
             .cell(key)
             .map(|cell| cell.input.clone())
             .unwrap_or_default();
-        let value = if let Some(formula) = input.strip_prefix('=') {
-            match Parser::parse(formula) {
+        let value = if input.starts_with('=') {
+            self.read_formula(key);
+            let (ast, direct) = self
+                .parsed
+                .remove(key)
+                .unwrap_or_else(|| (Err(()), Vec::new()));
+            match ast {
                 Ok(ast) => {
-                    let mut direct = Vec::new();
-                    self.collect_dependencies(&key.sheet, &ast, &mut direct);
-                    direct.sort();
-                    direct.dedup();
                     self.dependencies.push(CellDependency {
                         cell: key.clone(),
                         depends_on: direct,
@@ -184,6 +317,7 @@ impl<'a> Evaluator<'a> {
         } else {
             literal_value(&input)
         };
+        self.frames -= 1;
         self.visiting.remove(key);
         self.cache.insert(key.clone(), value.clone());
         value
@@ -195,6 +329,16 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_ast(&mut self, current_sheet: &SheetId, ast: &Ast) -> CellValue {
+        if self.frames >= MAX_EVALUATION_FRAMES {
+            return CellValue::Error(FormulaErrorCode::Cycle);
+        }
+        self.frames += 1;
+        let value = self.evaluate_node(current_sheet, ast);
+        self.frames -= 1;
+        value
+    }
+
+    fn evaluate_node(&mut self, current_sheet: &SheetId, ast: &Ast) -> CellValue {
         match ast {
             Ast::Number(value) => finite(*value),
             Ast::Text(value) => CellValue::Text(value.clone()),
@@ -674,6 +818,10 @@ impl<'a> Lexer<'a> {
 struct Parser {
     tokens: Vec<Token>,
     index: usize,
+    /// Livelli aperti, contro [`MAX_FORMULA_DEPTH`]. Ogni funzione lo
+    /// riporta dove l'ha trovato prima di tornare; un errore abbandona la
+    /// formula intera, quindi non serve ripristinarlo sul ramo `Err`.
+    depth: usize,
 }
 
 impl Parser {
@@ -681,6 +829,7 @@ impl Parser {
         let mut parser = Self {
             tokens: Lexer::tokenize(source)?,
             index: 0,
+            depth: 0,
         };
         let expression = parser.comparison()?;
         if parser.index == parser.tokens.len() {
@@ -690,16 +839,32 @@ impl Parser {
         }
     }
 
+    /// Apre un livello. Un anello di una catena di operatori ne apre uno che
+    /// resta aperto per il resto della catena: l'albero a sinistra si
+    /// approfondisce di uno per anello anche senza ricorsione del parser.
+    fn deeper(&mut self) -> Result<(), ()> {
+        self.depth += 1;
+        if self.depth > MAX_FORMULA_DEPTH {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+
     fn comparison(&mut self) -> Result<Ast, ()> {
+        let entry = self.depth;
         let mut expression = self.additive()?;
         while let Some(operator) = self.take_comparison() {
+            self.deeper()?;
             let right = self.additive()?;
             expression = Ast::Binary(operator, Box::new(expression), Box::new(right));
         }
+        self.depth = entry;
         Ok(expression)
     }
 
     fn additive(&mut self) -> Result<Ast, ()> {
+        let entry = self.depth;
         let mut expression = self.multiplicative()?;
         loop {
             let operator = if self.take(&Token::Plus) {
@@ -709,13 +874,16 @@ impl Parser {
             } else {
                 break;
             };
+            self.deeper()?;
             let right = self.multiplicative()?;
             expression = Ast::Binary(operator, Box::new(expression), Box::new(right));
         }
+        self.depth = entry;
         Ok(expression)
     }
 
     fn multiplicative(&mut self) -> Result<Ast, ()> {
+        let entry = self.depth;
         let mut expression = self.power()?;
         loop {
             let operator = if self.take(&Token::Star) {
@@ -725,16 +893,21 @@ impl Parser {
             } else {
                 break;
             };
+            self.deeper()?;
             let right = self.power()?;
             expression = Ast::Binary(operator, Box::new(expression), Box::new(right));
         }
+        self.depth = entry;
         Ok(expression)
     }
 
     fn power(&mut self) -> Result<Ast, ()> {
         let left = self.unary()?;
         if self.take(&Token::Caret) {
+            let entry = self.depth;
+            self.deeper()?;
             let right = self.power()?;
+            self.depth = entry;
             Ok(Ast::Binary(Binary::Power, Box::new(left), Box::new(right)))
         } else {
             Ok(left)
@@ -742,13 +915,18 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Ast, ()> {
-        if self.take(&Token::Plus) {
-            return Ok(Ast::Unary(Unary::Plus, Box::new(self.unary()?)));
-        }
-        if self.take(&Token::Minus) {
-            return Ok(Ast::Unary(Unary::Minus, Box::new(self.unary()?)));
-        }
-        self.primary()
+        let operator = if self.take(&Token::Plus) {
+            Unary::Plus
+        } else if self.take(&Token::Minus) {
+            Unary::Minus
+        } else {
+            return self.primary();
+        };
+        let entry = self.depth;
+        self.deeper()?;
+        let value = self.unary()?;
+        self.depth = entry;
+        Ok(Ast::Unary(operator, Box::new(value)))
     }
 
     fn primary(&mut self) -> Result<Ast, ()> {
@@ -777,7 +955,10 @@ impl Parser {
                 Ast::Reference(reference(Some(sheet), &address)?)
             }
             Token::LeftParen => {
+                let entry = self.depth;
+                self.deeper()?;
                 let value = self.comparison()?;
+                self.depth = entry;
                 if !self.take(&Token::RightParen) {
                     return Err(());
                 }
@@ -803,6 +984,8 @@ impl Parser {
         if self.take(&Token::RightParen) {
             return Ok(Ast::Call(name, arguments));
         }
+        let entry = self.depth;
+        self.deeper()?;
         loop {
             arguments.push(self.comparison()?);
             if self.take(&Token::RightParen) {
@@ -812,6 +995,7 @@ impl Parser {
                 return Err(());
             }
         }
+        self.depth = entry;
         Ok(Ast::Call(name, arguments))
     }
 
@@ -1060,6 +1244,210 @@ mod tests {
         assert_eq!(
             value(&evaluation, "sheet-wide", "r1", "c1"),
             CellValue::Error(FormulaErrorCode::Num)
+        );
+    }
+
+    /// I100: una formula annidata oltre il tetto è `#PARSE!`, in ogni forma
+    /// che scende di un livello — e non uno stack esaurito.
+    #[test]
+    fn a_hostile_nest_is_a_parse_error_not_a_stack_overflow() {
+        let deep = 100_000;
+        let hostile = [
+            format!("={}1{}", "(".repeat(deep), ")".repeat(deep)),
+            format!("={}", vec!["1"; deep].join("+")),
+            format!("={}", vec!["2"; deep].join("^")),
+            format!("={}1", "-".repeat(deep)),
+            format!("={}1{}", "SUM(".repeat(deep), ")".repeat(deep)),
+            format!("={}", vec!["1"; deep].join("=")),
+        ];
+        for formula in hostile {
+            assert_eq!(Parser::parse(&formula[1..]), Err(()));
+        }
+        let mut workbook = workbook();
+        workbook.sheets[0].cells.push(cell(
+            "r4",
+            "c1",
+            &format!("={}1{}", "(".repeat(deep), ")".repeat(deep)),
+        ));
+        assert_eq!(
+            value(&workbook.evaluate().unwrap(), "sheet-1", "r4", "c1"),
+            CellValue::Error(FormulaErrorCode::Parse)
+        );
+    }
+
+    /// Al tetto la formula si legge e si valuta ancora, sullo stack di un
+    /// thread di test.
+    #[test]
+    fn a_formula_at_the_depth_limit_still_evaluates() {
+        let mut workbook = workbook();
+        workbook.sheets[0].cells.extend([
+            cell(
+                "r4",
+                "c1",
+                &format!("={}", vec!["1"; MAX_FORMULA_DEPTH + 1].join("+")),
+            ),
+            cell(
+                "r4",
+                "c2",
+                &format!(
+                    "={}1{}",
+                    "(".repeat(MAX_FORMULA_DEPTH),
+                    ")".repeat(MAX_FORMULA_DEPTH)
+                ),
+            ),
+            cell(
+                "r4",
+                "c3",
+                &format!(
+                    "={}A1{}",
+                    "SUM(".repeat(MAX_FORMULA_DEPTH),
+                    ")".repeat(MAX_FORMULA_DEPTH)
+                ),
+            ),
+        ]);
+        let evaluation = workbook.evaluate().unwrap();
+        assert_eq!(
+            value(&evaluation, "sheet-1", "r4", "c1"),
+            CellValue::Number((MAX_FORMULA_DEPTH + 1) as f64)
+        );
+        assert_eq!(
+            value(&evaluation, "sheet-1", "r4", "c2"),
+            CellValue::Number(1.0)
+        );
+        assert_eq!(
+            value(&evaluation, "sheet-1", "r4", "c3"),
+            CellValue::Number(2.0)
+        );
+    }
+
+    fn column_sheet(rows: usize, input: impl Fn(usize) -> String) -> Workbook {
+        let mut sheet = Sheet::new("sheet-long", "Long");
+        sheet.rows = (1..=rows)
+            .map(|index| Row {
+                id: format!("r{index}").into(),
+                height: None,
+                hidden: false,
+            })
+            .collect();
+        sheet.columns = vec![Column {
+            id: "c1".into(),
+            width: None,
+            hidden: false,
+        }];
+        sheet.cells = (1..=rows)
+            .map(|index| cell(&format!("r{index}"), "c1", &input(index)))
+            .collect();
+        Workbook::new(vec![sheet])
+    }
+
+    /// Una colonna di totali scritta dal basso: ogni riga dipende dalla
+    /// successiva. La valutazione ricorreva una volta per riga; ora ogni
+    /// cella si valuta dopo le sue dipendenze, e il valore resta esatto.
+    #[test]
+    fn a_long_reference_chain_evaluates_without_deep_recursion() {
+        let rows = 100_000;
+        let workbook = column_sheet(rows, |index| {
+            if index == rows {
+                "1".to_string()
+            } else {
+                format!("=A{}+1", index + 1)
+            }
+        });
+        let evaluation = workbook.evaluate().unwrap();
+        assert_eq!(
+            value(&evaluation, "sheet-long", "r1", "c1"),
+            CellValue::Number(rows as f64)
+        );
+        assert_eq!(evaluation.dependencies.len(), rows - 1);
+    }
+
+    /// Un anello lungo resta `#CYCLE!` per ogni sua cella, senza scendere
+    /// di un livello per cella.
+    #[test]
+    fn a_long_cycle_is_a_cycle_not_a_stack_overflow() {
+        let rows = 20_000;
+        let workbook = column_sheet(rows, |index| {
+            format!("=A{}+1", if index == rows { 1 } else { index + 1 })
+        });
+        let evaluation = workbook.evaluate().unwrap();
+        assert!(evaluation
+            .cells
+            .iter()
+            .all(|cell| cell.value == CellValue::Error(FormulaErrorCode::Cycle)));
+    }
+
+    /// L'albero più profondo che il tetto ammette — una catena di segni
+    /// come primo termine di una catena di somme — si valuta da solo, e due
+    /// celle così che si citano esauriscono il budget invece dello stack.
+    #[test]
+    fn the_deepest_admitted_tree_fits_the_budget_even_inside_a_cycle() {
+        let deepest = |tail: &str| {
+            format!(
+                "={}1{}",
+                "-".repeat(MAX_FORMULA_DEPTH - 1),
+                "+1".repeat(MAX_FORMULA_DEPTH - 1) + tail
+            )
+        };
+        let workbook = column_sheet(3, |index| match index {
+            1 => deepest(""),
+            2 => deepest("+A3"),
+            _ => deepest("+A2"),
+        });
+        let evaluation = workbook.evaluate().unwrap();
+        assert_eq!(
+            value(&evaluation, "sheet-long", "r1", "c1"),
+            CellValue::Number((MAX_FORMULA_DEPTH - 2) as f64)
+        );
+        for row in ["r2", "r3"] {
+            assert_eq!(
+                value(&evaluation, "sheet-long", row, "c1"),
+                CellValue::Error(FormulaErrorCode::Cycle)
+            );
+        }
+    }
+
+    /// Una catena aciclica lunga appesa a un anello: l'anello è `#CYCLE!`,
+    /// la catena ha i suoi valori esatti — il budget dell'anello non la tocca,
+    /// perché la sua componente si chiude e si valuta prima.
+    #[test]
+    fn a_chain_hanging_off_a_cycle_keeps_its_values() {
+        let rows = 50_000;
+        let workbook = column_sheet(rows, |index| match index {
+            1 => "=A2+1".to_string(),
+            2 => "=A1+A3".to_string(),
+            last if last == rows => "1".to_string(),
+            index => format!("=A{}+1", index + 1),
+        });
+        let evaluation = workbook.evaluate().unwrap();
+        for row in ["r1", "r2"] {
+            assert_eq!(
+                value(&evaluation, "sheet-long", row, "c1"),
+                CellValue::Error(FormulaErrorCode::Cycle)
+            );
+        }
+        assert_eq!(
+            value(&evaluation, "sheet-long", "r3", "c1"),
+            CellValue::Number((rows - 2) as f64)
+        );
+    }
+
+    /// Un anello che un `IF` non percorre non è un anello: la valutazione
+    /// dentro una componente resta quella dinamica.
+    #[test]
+    fn a_cycle_that_an_if_never_takes_is_not_a_cycle() {
+        let workbook = column_sheet(3, |index| match index {
+            1 => "=IF(A3>0,A2,0)".to_string(),
+            2 => "=IF(A3<0,A1,5)".to_string(),
+            _ => "1".to_string(),
+        });
+        let evaluation = workbook.evaluate().unwrap();
+        assert_eq!(
+            value(&evaluation, "sheet-long", "r1", "c1"),
+            CellValue::Number(5.0)
+        );
+        assert_eq!(
+            value(&evaluation, "sheet-long", "r2", "c1"),
+            CellValue::Number(5.0)
         );
     }
 

@@ -20,7 +20,8 @@ use std::collections::HashSet;
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::model::{DocId, Heading, Span};
+use fub_abi::model::{custom_kind, Block, DocId, Heading, Inline, ListItem, Span};
+use fub_abi::options::syntax;
 use fub_abi::session::{ContextKind, ContextMask, SelectionSet};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{
@@ -28,7 +29,6 @@ use fub_abi::traits::{
     ViewSurface,
 };
 use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
-use fub_format_markdown::{collect_footnotes, FootnoteKind, FootnoteOccurrence};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const OUTLINE_ID: &str = "fub.outline";
@@ -121,16 +121,13 @@ impl ViewProvider for OutlineView {
             return Ok(placeholder(NO_ACTIVE_DOC));
         };
         if instance.view == FOOTNOTES_VIEW {
-            let markdown = host
-                .format_of(&active)
-                .is_some_and(|format| format.descriptor.id == "markdown");
-            if !markdown {
+            // Le note le legge il formato: la vista chiede solo se ne ha, e le
+            // trova nel modello come `custom_kind` registrati.
+            if !crate::formats::understands(host, &active, syntax::FOOTNOTES) {
                 return Ok(placeholder(FOOTNOTES_EMPTY));
             }
             let base = host.document_revision(&active)?;
-            let source = host.read_document(&active)?;
-            let footnotes = collect_footnotes(&source)
-                .map_err(|error| PluginError::BadArgs(error.to_string().into()))?;
+            let footnotes = footnotes_of(&host.read_model(&active)?.body);
             return Ok(build_footnotes_view(&footnotes, active.as_str(), &base.0));
         }
         let headings = match host.query_index(IndexQuery::Outline {
@@ -301,6 +298,112 @@ fn move_section(action: &UiAction, host: &mut dyn HostApi) -> Result<(), PluginE
         EditRequest::new(base, vec![TextEdit::replace(Span::new(a, c), replacement)]),
     )?;
     Ok(())
+}
+
+/// Il ruolo di una nota nel sorgente. Le note in linea portano la definizione
+/// dove stanno; richiami e definizioni con etichetta si ritrovano per
+/// etichetta.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FootnoteKind {
+    Reference(String),
+    Definition(String),
+    Inline(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FootnoteOccurrence {
+    kind: FootnoteKind,
+    span: Span,
+}
+
+/// Le note del modello, in ordine di sorgente: le definizioni sono
+/// `custom_kind::FOOTNOTE_DEFINITION`, i richiami (anche in linea)
+/// `custom_kind::FOOTNOTE_REFERENCE`. Codice, HTML e marcatori sotto escape non
+/// ci arrivano: li ha già scartati il parse del formato.
+fn footnotes_of(body: &[Block]) -> Vec<FootnoteOccurrence> {
+    let mut found = Vec::new();
+    blocks_footnotes(body, &mut found);
+    found.sort_by_key(|item| (item.span.start, item.span.end));
+    found.dedup_by(|right, left| right.span == left.span);
+    found
+}
+
+fn label_of(attrs: &serde_json::Value) -> Option<String> {
+    attrs
+        .get("label")
+        .and_then(|label| label.as_str())
+        .map(str::to_string)
+}
+
+fn blocks_footnotes(blocks: &[Block], out: &mut Vec<FootnoteOccurrence>) {
+    for block in blocks {
+        match block {
+            Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
+                inlines_footnotes(inlines, out);
+            }
+            Block::List { items, .. } => {
+                for ListItem { blocks, .. } in items {
+                    blocks_footnotes(blocks, out);
+                }
+            }
+            Block::Quote { blocks, .. } => blocks_footnotes(blocks, out),
+            Block::Custom {
+                custom_kind: kind,
+                attrs,
+                blocks,
+                span,
+                ..
+            } => {
+                if kind == custom_kind::FOOTNOTE_DEFINITION {
+                    if let Some(label) = label_of(attrs) {
+                        out.push(FootnoteOccurrence {
+                            kind: FootnoteKind::Definition(label),
+                            span: *span,
+                        });
+                    }
+                }
+                blocks_footnotes(blocks, out);
+            }
+            Block::Table { head, rows, .. } => {
+                for row in head.iter().chain(rows) {
+                    for cell in &row.cells {
+                        inlines_footnotes(&cell.inlines, out);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn inlines_footnotes(inlines: &[Inline], out: &mut Vec<FootnoteOccurrence>) {
+    for inline in inlines {
+        match inline {
+            Inline::Custom {
+                custom_kind: kind,
+                attrs,
+                span,
+            } if kind == custom_kind::FOOTNOTE_REFERENCE => {
+                let Some(label) = label_of(attrs) else {
+                    continue;
+                };
+                let inline = attrs.get("inline").and_then(|value| value.as_bool()) == Some(true);
+                out.push(FootnoteOccurrence {
+                    kind: if inline {
+                        FootnoteKind::Inline(label)
+                    } else {
+                        FootnoteKind::Reference(label)
+                    },
+                    span: *span,
+                });
+            }
+            Inline::Emph(children)
+            | Inline::Strong(children)
+            | Inline::Superscript(children)
+            | Inline::Strikethrough(children) => inlines_footnotes(children, out),
+            _ => {}
+        }
+    }
 }
 
 /// The footnote view groups each source occurrence by its actual role, not by
@@ -669,7 +772,7 @@ mod tests {
         );
     }
 
-    /// Le etichette selected_labels, in ordine di lettura.
+    /// Le etichette selezionate, in ordine di lettura.
     fn selected_labels(tree: &UiNode) -> Vec<String> {
         entries(tree)
             .into_iter()

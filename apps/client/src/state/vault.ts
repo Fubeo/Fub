@@ -98,12 +98,9 @@ export async function trashNote(id: string): Promise<Undo | null> {
   }
   const outcome = await api.invokeCommand(COMMANDS.osTrash, { doc: id });
   refreshDocuments();
-  const effect = outcome.effect;
-  const via =
-    effect.kind === "custom" && effect.ns === "fub.trash.os"
-      ? (effect.payload as { via?: { kind?: unknown } } | null)?.via?.kind
-      : undefined;
-  if (via === "internal_fallback") notify(t("trash.os_fallback", { doc: id }));
+  // Il ripiego lo dice l'host nel `notify`, la stessa frase che la palette
+  // mostra: qui non si rilegge l'effetto per ricomporla.
+  if (outcome.notify) notify(outcome.notify);
   return outcome.undo;
 }
 

@@ -160,6 +160,15 @@ interface model {
         path(string),
     }
 
+    /// Un riferimento da scrivere nella grammatica del formato di un
+    /// documento: dove porta, con quale testo, se incorpora. Chi lo chiede non
+    /// compone la sintassi; la scrive il provider (`format-edits`).
+    record link-insert {
+        target: link-target,
+        label: option<string>,
+        embed: bool,
+    }
+
     /// Un link estratto, piatto, con span e contesto per i backlink.
     record link {
         target: link-target,
@@ -507,6 +516,23 @@ interface format-links {
     /// none = operazione non supportata; some = tutte le patch richieste.
     /// L'assenza non autorizza una sostituzione grezza nel kernel.
     rewrite-links: func(source: document-source, ctx: parse-context, rewrites: list<link-rewrite>) -> result<option<list<text-edit>>, format-error>;
+}
+
+/// Le scritture mirate che solo il formato sa fare: come si scrive un
+/// riferimento e quale simbolo segna un task. Export opzionale come
+/// `format-links`: un componente che non lo esporta resta caricabile, e ogni
+/// domanda riceve «non supportato».
+interface format-edits {
+    use model.{link-insert, task-marker};
+    use format.{document-source, parse-context, format-error};
+    use edit.{text-edit};
+
+    /// none = il formato non sa scrivere quel riferimento con le sintassi di
+    /// `ctx`. Un bersaglio che la grammatica non esprime è un errore.
+    format-link: func(ctx: parse-context, link: link-insert) -> result<option<string>, format-error>;
+    /// Le patch che portano il task di `marker` a fatto o da fare, su
+    /// `source`. none = operazione non supportata.
+    set-task-state: func(source: document-source, marker: task-marker, done: bool) -> result<option<list<text-edit>>, format-error>;
 }
 
 /// `SyntaxRule`: una sintassi INNESTATA su un formato che non la conosce (§3.1).
@@ -1619,6 +1645,10 @@ interface command {
     /// fuori vince la shell — e i tasti nudi restano ignorati dal registro
     /// (0009). Aggiungere un ambito è una mossa additiva, e si farà quando un
     /// secondo consumatore lo chiederà (0156).
+    ///
+    /// `surfaces` dice dove si offre **oltre** alla palette, che li elenca
+    /// tutti: vuoto è la norma. Lo dichiara il comando, e un plugin compare nel
+    /// menu `/` per la stessa via di una feature ufficiale.
     record command-spec {
         id: string,
         title: text,
@@ -1626,6 +1656,16 @@ interface command {
         keybinding: option<string>,
         params: list<param-spec>,
         scope: command-scope,
+        surfaces: list<command-surface>,
+    }
+    /// Una superficie, oltre alla palette, in cui un comando si offre. Casi e
+    /// non un booleano per superficie: la prossima è un caso in più.
+    enum command-surface {
+        /// Il menu `/` dell'editor: il comando agisce dove si sta scrivendo, e i
+        /// parametri che il contesto non riempie li chiede il menu stesso.
+        slash,
+        /// Il menu `/`, soltanto con una selezione: il comando la trasforma.
+        slash-selection,
     }
 
     /// Come si sta invocando. Nessun default: un `apply` implicito è l'errore
@@ -2753,9 +2793,14 @@ interface session {
     /// interpreta e non la inventa — un pannello nasce e muore nell'app.
     type pane-id = string;
 
-    /// Le tre modalità ESCLUSIVE di un pannello (FEATURES 4.1). Ciò che
-    /// esclusivo non è (focus mode, zen, typewriter, schermo intero) non sta
-    /// qui: non cambia cosa un provider deve fare.
+    /// Che vista del suo documento mostra un pannello (FEATURES 4.1): non le
+    /// modalità di un formato ma tre CLASSI, le sole che cambiano cosa un
+    /// provider deve fare. `source` è il documento com'è salvato; `live-preview`
+    /// una resa in cui si scrive (la Live Preview di Markdown, la tela, la
+    /// griglia di un foglio); `reading` una resa da leggere, senza cursore.
+    /// Ogni superficie della shell proietta le sue modalità su queste; i nomi
+    /// vengono da Markdown, la prima a dichiararle. Ciò che esclusivo non è
+    /// (focus mode, zen, typewriter, schermo intero) non sta qui.
     enum pane-mode { source, live-preview, reading }
 
     /// Una selezione di cui si sa il TESTO e basta: il buffer ha modifiche non
@@ -3405,11 +3450,11 @@ interface errors {
 /// La famiglia sotto `read-vault`, e la sola che ogni percorso ha: anche il
 /// render di una view, anche una simulazione.
 interface host-vault-read {
-    use model.{doc-id, document-model};
+    use model.{doc-id, document-model, link-insert, task-marker};
     use format.{document-format};
     use errors.{plugin-error};
     use index.{doc-ids-page, page};
-    use edit.{revision};
+    use edit.{revision, edit-request};
 
     /// Una voce del cestino. Due id perché sono due domande: dove il file si
     /// trova ora (ed è quello che si passa a `restore-document`) e dove
@@ -3487,6 +3532,14 @@ interface host-vault-read {
     /// vale anche per un documento che non esiste ancora e si può fare su una
     /// lista intera senza pagare un'apertura a testa.
     format-of: func(id: doc-id) -> option<document-format>;
+    /// Il testo con cui il formato di `doc` scrive `link`: la domanda che un
+    /// plugin fa invece di comporre la sintassi. none = il formato non sa
+    /// scriverlo, o nessun provider rivendica `doc`. Non legge il documento.
+    format-link: func(doc: doc-id, link: link-insert) -> result<option<string>, plugin-error>;
+    /// La modifica che porta il task di `marker` a fatto o da fare, calcolata
+    /// dal formato di `doc` sul sorgente attuale e con la sua revisione come
+    /// base. none = il formato non offre l'operazione.
+    task-state-edit: func(doc: doc-id, marker: task-marker, done: bool) -> result<option<edit-request>, plugin-error>;
     /// Il contenuto del cestino, dal più recente al più vecchio. Sta qui e non
     /// in `index-query` perché il cestino non è indicizzato: una nota cestinata
     /// non ha modello, né tag, né archi.
@@ -3783,9 +3836,13 @@ interface host-events {
     emit: func(event: event);
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
-    /// L'unico no a monte è la chiusura: su un vault che sta chiudendo la
-    /// richiesta non entra nemmeno in coda e risponde subito `cancelled` — di
-    /// quel lavoro non arriverà nessun `job-done`, perché non è mai partito.
+    /// I no a monte sono due. Il nome del job è uno spazio di nomi come gli
+    /// altri (§7.4): un plugin che non è core nomina `<id>:<nome>`, e un nome
+    /// fuori dal proprio spazio risponde `bad-args` — `job-done` lo porta sul
+    /// bus a nome del kernel, e chi lo ascolta si fida di quel nome. E la
+    /// chiusura: su un vault che sta chiudendo la richiesta non entra nemmeno
+    /// in coda e risponde subito `cancelled` — di quel lavoro non arriverà
+    /// nessun `job-done`, perché non è mai partito.
     spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
     /// A CHE PUNTO SONO: da chiamare dentro `plugin.run-job`, quante volte si
     /// vuole (§10.3, decisione 0035).
@@ -4421,4 +4478,5 @@ world plugin-world {
     export importer;
     export exporter;
     export format-links;
+    export format-edits;
 }

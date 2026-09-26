@@ -54,3 +54,15 @@ world ping-con-dati {
 
     export fub:abi/plugin@0.2.0;
 }
+
+// Lo stesso ping, che in più esporta `syntax`: un'interfaccia che
+// `plugin-world` prevede e che l'host non collega a nessun adapter. Esiste
+// perché il rifiuto al caricamento (`UnservedExports`) abbia davanti un
+// componente vero, invece di un plugin che si monta con un export ignorato.
+world ping-con-sintassi {
+    import fub:abi/host-env@0.2.0;
+    import fub:abi/host-vault-read@0.2.0;
+
+    export fub:abi/plugin@0.2.0;
+    export fub:abi/syntax@0.2.0;
+}

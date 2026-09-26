@@ -167,42 +167,35 @@ pub enum DocKind {
     Other,
 }
 
-/// Family by path heuristic (extension + folder); the server never sees
-/// plaintext, so policy keys off the `doc_id` shape only.
+/// Family by path shape; the server never sees plaintext, so policy keys off
+/// the `doc_id` alone. Only the file's extension and the reserved top-level
+/// categories of [`super::category_of`] count: a folder a person named
+/// (`Casa/Router settings/`, `Interviews/`) never changes the family, because
+/// the family decides whether a concurrent write keeps a conflict copy.
 pub fn doc_kind_for(doc_id: &str) -> DocKind {
     let lower = doc_id.to_ascii_lowercase();
-    if lower.ends_with(".settings.json") || lower.contains("settings/") {
+    let category = super::category_of(doc_id);
+    // Shared configuration is the only settings family that can travel: the
+    // vault's own settings live under `.fub/`, which never syncs, and a note
+    // stays a note wherever it sits.
+    if category == "config-shared" && lower.ends_with(".json") {
         return DocKind::Settings;
     }
-    if lower.ends_with(".canvas.json") || lower.contains("canvas/") {
-        return DocKind::Canvas;
-    }
-    if lower.ends_with(".view.json") || lower.contains("views/") {
-        return DocKind::Views;
-    }
-    if lower.ends_with(".md")
-        || lower.ends_with(".markdown")
-        || lower.ends_with(".txt")
-        || lower.ends_with(".sheet.json")
-    {
-        return DocKind::Text;
-    }
-    if lower.ends_with(".png")
-        || lower.ends_with(".jpg")
-        || lower.ends_with(".jpeg")
-        || lower.ends_with(".pdf")
-        || lower.ends_with(".mp3")
-        || lower.ends_with(".mp4")
-        || lower.contains("attachments/")
-    {
+    if category == "attachments" {
         return DocKind::Binary;
     }
-    DocKind::Other
+    let name = lower.rsplit('/').next().unwrap_or(&lower);
+    match name.rsplit_once('.').map(|(_, ext)| ext) {
+        Some("canvas") => DocKind::Canvas,
+        Some("base") => DocKind::Views,
+        Some("md" | "markdown" | "txt" | "fubsheet") => DocKind::Text,
+        _ => DocKind::Other,
+    }
 }
 
 /// Conservative policy: every concurrent write needs a conflict copy EXCEPT
-/// settings, which are last-writer-wins with a log entry (still no data loss:
-/// the losing version stays in the version chain).
+/// shared settings, which are last-writer-wins with a log entry (still no data
+/// loss: the losing version stays in the version chain).
 pub fn needs_conflict_copy(kind: DocKind) -> bool {
     !matches!(kind, DocKind::Settings)
 }
@@ -227,6 +220,33 @@ mod unit {
     // Main is `crates/fub-services/tests/sync_invariants.rs` (not executed
     // during concurrency).
     use super::*;
+
+    /// A folder a person named never turns a note into settings: every
+    /// concurrent write to it keeps a conflict copy.
+    #[test]
+    fn a_note_under_a_settings_folder_keeps_its_conflict_copy() {
+        for note in [
+            "Casa/Router settings/wifi.md",
+            "settings/idee.md",
+            "a.settings.json",
+        ] {
+            assert_ne!(doc_kind_for(note), DocKind::Settings, "{note}");
+            assert!(needs_conflict_copy(doc_kind_for(note)), "{note}");
+        }
+        assert_eq!(doc_kind_for("config-shared/app.json"), DocKind::Settings);
+        assert_eq!(doc_kind_for("config-shared/leggimi.md"), DocKind::Text);
+    }
+
+    /// The families follow the formats Fub writes, not invented extensions.
+    #[test]
+    fn the_family_follows_the_real_extension() {
+        assert_eq!(doc_kind_for("Lavagna.canvas"), DocKind::Canvas);
+        assert_eq!(doc_kind_for("Progetti.base"), DocKind::Views);
+        assert_eq!(doc_kind_for("Conti.fubsheet"), DocKind::Text);
+        assert_eq!(doc_kind_for("Interviews/a.md"), DocKind::Text);
+        assert_eq!(doc_kind_for("foto/Gatto.PNG"), DocKind::Binary);
+        assert_eq!(doc_kind_for("LICENSE"), DocKind::Other);
+    }
 
     #[test]
     fn vv_text_roundtrip_is_canonical() {

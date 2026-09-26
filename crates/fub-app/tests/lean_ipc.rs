@@ -425,7 +425,7 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("reset_setting", Why::GateIsCredential),
     ("view_state", Why::GateIsCredential),
     ("set_view_state", Why::GateIsCredential),
-    // --- vault organization (§11.3): writes without requester ---------------
+    // --- l'organizzazione del vault (§11.3): scritture senza richiedente ----
     ("set_icon", Why::AwaitingClient),
     ("set_pinned", Why::AwaitingClient),
     ("set_space", Why::AwaitingClient),

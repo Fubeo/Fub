@@ -89,6 +89,7 @@ impl IndexProvider for Spy {
 
     /// Una voce **per documento** anche se l'alimentazione è a lotti: la spia
     /// serve a dire *quali* documenti sono arrivati, e contare i lotti non lo
+    /// direbbe.
     fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
         for doc in docs {
             self.record(Life::Indexed(doc.id.to_string()));
@@ -264,7 +265,6 @@ impl Bench {
 /// I permessi sono quelli di una feature ufficiale perché qui si prova il ciclo
 /// di vita, non il §7.3: senza `write_vault` un handler che scrive riceverebbe
 /// un rifiuto, e il test parlerebbe della politica invece che della chiusura.
-/// un rifiuto, e il test parlerebbe della politica invece che della chiusura.
 fn declare(ws: &mut Workspace, id: &str) {
     ws.register_plugin(
         PluginManifest::new(id, id).granting(PluginPermissions::core()),
@@ -334,8 +334,6 @@ fn a_deactivated_index_receives_flush_then_close_then_nothing() {
 /// Le rotte di chi se ne va **spariscono**, e quelle di chi resta restano sue.
 ///
 /// È il caso che si sarebbe scoperto in silenzio: un bersaglio è una posizione
-/// nell'elenco, e senza rimappatura la domanda del primo finirebbe al secondo.
-/// nell'elenco, e senza rimappatura la domanda del primo finirebbe al secondo.
 /// nell'elenco, e senza rimappatura la domanda del primo finirebbe al secondo.
 #[test]
 fn the_routes_of_the_one_who_leaves_do_not_pass_to_the_one_who_was_behind() {
@@ -434,7 +432,7 @@ fn the_queued_jobs_of_the_one_shutting_down_receive_an_outcome() {
     let id = ws
         .with_host("test.one", |host| {
             host.spawn_job(JobSpec {
-                job: "long".into(),
+                job: "test.one:long".into(),
                 payload: serde_json::Value::Null,
             })
         })
@@ -472,7 +470,6 @@ fn the_queued_jobs_of_the_one_shutting_down_receive_an_outcome() {
 /// drena per conto suo a ogni esito. È una coincidenza fra due funzioni, e
 /// finché nessuno la guarda è anche una che si può disfare cambiando l'altra:
 /// questo banco la guarda. Toglietelo da `complete_job` e diventa rosso.
-/// questo banco la guarda. Toglietelo da `complete_job` e diventa rosso.
 #[test]
 fn and_the_outcome_also_reaches_the_one_listening_from_the_kernel() {
     let bench = Bench::new();
@@ -482,7 +479,7 @@ fn and_the_outcome_also_reaches_the_one_listening_from_the_kernel() {
         .expect("handler");
     ws.with_host("test.one", |host| {
         host.spawn_job(JobSpec {
-            job: "long".into(),
+            job: "test.one:long".into(),
             payload: serde_json::Value::Null,
         })
     })
@@ -665,7 +662,7 @@ impl EventHandler for CloseAndAsk {
     fn handle(&mut self, _notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         for _ in 0..2 {
             match host.spawn_job(JobSpec {
-                job: "too-late".into(),
+                job: "test.one:too-late".into(),
                 payload: serde_json::Value::Null,
             }) {
                 Ok(id) => {
@@ -736,7 +733,7 @@ fn the_closing_guard_does_not_survive_a_reopen() {
     after
         .with_host("test.one", |host| {
             host.spawn_job(JobSpec {
-                job: "after".into(),
+                job: "test.one:after".into(),
                 payload: serde_json::Value::Null,
             })
         })
@@ -748,7 +745,7 @@ fn the_closing_guard_does_not_survive_a_reopen() {
         "the job of the new generation is in the queue, awaiting the runner"
     );
     assert_eq!(
-        queued[0].spec.job, "after",
+        queued[0].spec.job, "test.one:after",
         "and it is precisely the job requested after the reopen"
     );
 }

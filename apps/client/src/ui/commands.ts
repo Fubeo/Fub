@@ -486,6 +486,36 @@ export function displayBinding(
     .join(" ");
 }
 
+/// I nomi di `KeyboardEvent.key` che l'accordo scrive minuscoli.
+const ARIA_KEYS: Record<string, string> = {
+  arrowleft: "ArrowLeft",
+  arrowright: "ArrowRight",
+  arrowup: "ArrowUp",
+  arrowdown: "ArrowDown",
+  pagedown: "PageDown",
+  pageup: "PageUp",
+  " ": "Space",
+};
+
+/// La stessa scorciatoia nella forma di `aria-keyshortcuts`: modificatori e
+/// tasti coi nomi di `KeyboardEvent`, non coi simboli che si leggono. Una
+/// sequenza non ha una forma là dentro (lo spazio separa le alternative), e
+/// allora non si dichiara.
+export function ariaBinding(
+  binding: string | null | undefined,
+  platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
+): string {
+  const chords = parseChords(splitAlternatives(binding)[0]);
+  if (!chords || chords.length !== 1) return "";
+  const chord = chords[0]!;
+  const parts: string[] = [];
+  if (chord.mod) parts.push(platform === "mac" ? "Meta" : "Control");
+  if (chord.alt) parts.push("Alt");
+  if (chord.shift) parts.push("Shift");
+  parts.push(ARIA_KEYS[chord.key] ?? chord.key.charAt(0).toUpperCase() + chord.key.slice(1));
+  return parts.join("+");
+}
+
 /// Questa combinazione è l'accordo scritto?
 ///
 /// Vale per una scorciatoia di **un accordo solo**: una sequenza non corrisponde

@@ -2,10 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DocumentSource, EmbedContent, RenderedDocument } from "../host/contract";
-import { operationFromText } from "../editor/text-operation";
+import { operationFromText } from "../editors/core/text-operation";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../state/document-session";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
-import { mountMarkdown } from "./markdown";
+import { mountMarkdown } from "../editors/text/profiles/markdown/mount";
 import { registerMermaidRenderer } from "./mermaid";
 
 const query = vi.hoisted(() => ({
@@ -18,10 +18,8 @@ vi.mock("mermaid", () => ({ default: {
   render: vi.fn(async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"></svg>' })),
 } }));
 
-import {
-  acquireMarkdownResources,
-  invalidateMarkdownResourceDocument,
-} from "./markdown-resources";
+import { acquireMarkdownResources } from "./markdown-resources";
+import { invalidateDocumentCaches } from "../state/document-caches";
 
 const releases: Array<() => void> = [];
 
@@ -145,10 +143,20 @@ describe("risorse Markdown condivise", () => {
     ])).resolves.toHaveLength(2);
     expect(query.renderEmbed).toHaveBeenCalledTimes(1);
 
-    invalidateMarkdownResourceDocument("Altra.md");
+    invalidateDocumentCaches("Altra.md");
     query.renderEmbed.mockResolvedValue({ doc_id: "Altra.md", html: "<p>seconda</p>", parts: [] });
     await expect(first.embed("Altra", null, null)).resolves.toMatchObject({ html: "<p>seconda</p>" });
     expect(query.renderEmbed).toHaveBeenCalledTimes(2);
+
+    // Rilasciate tutte, le risorse escono dalle cache; riprese, rientrano.
+    first.release();
+    second.release();
+    const again = acquireMarkdownResources("Nota.md", sessions)!;
+    releases.push(again.release);
+    await again.embed("Altra", null, null);
+    invalidateDocumentCaches("Altra.md");
+    query.renderEmbed.mockResolvedValue({ doc_id: "Altra.md", html: "<p>terza</p>", parts: [] });
+    await expect(again.embed("Altra", null, null)).resolves.toMatchObject({ html: "<p>terza</p>" });
   });
 
   it("arricchisce un blocco nativo annidato senza perdere la citazione e la prosa", async () => {

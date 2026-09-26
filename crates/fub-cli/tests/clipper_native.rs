@@ -83,6 +83,58 @@ fn native_host_denies_unpaired_and_wrong_scope_before_any_vault_write() {
 }
 
 #[test]
+fn paired_native_capture_writes_through_the_host_command() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = tmp.path().join("vault");
+    std::fs::create_dir(&vault).unwrap();
+    let vault_name = vault.to_str().unwrap().to_string();
+    let pairing = tmp.path().join("clipper-pairing.json");
+    std::fs::write(
+        &pairing,
+        serde_json::json!({ "pairs": [{ "extension_id": "clipper@fub.local",
+            "vault": vault_name, "folder": "Clips" }] })
+        .to_string(),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&pairing, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let mut request = capture();
+    request.payload.target.vault = Some(vault_name);
+    request.payload.source_url = Some("https://example.com/p".into());
+    request.payload.properties = Some(
+        serde_json::json!({ "fonte": "web" })
+            .as_object()
+            .unwrap()
+            .clone(),
+    );
+    let frame = serde_json::to_vec(&request).unwrap();
+    let replies = host_frames(tmp.path(), &[frame.clone(), frame]);
+    assert!(replies[0].ok, "{:?}", replies[0]);
+    let text = std::fs::read_to_string(vault.join("Clips/Private.md")).unwrap();
+    assert!(
+        text.starts_with("---\n"),
+        "le proprietà nascono con la nota: {text:?}"
+    );
+    assert!(text.contains("fonte: web"), "{text:?}");
+    assert!(text.contains("\n# Private\n\nbytes\n\n"), "{text:?}");
+    assert!(
+        text.trim_end().ends_with("https://example.com/p"),
+        "{text:?}"
+    );
+
+    // La stessa cattura una seconda volta è un conflitto, non un duplicato.
+    assert!(!replies[1].ok);
+    assert_eq!(replies[1].kind.as_deref(), Some("conflict"));
+    assert_eq!(
+        std::fs::read_to_string(vault.join("Clips/Private.md")).unwrap(),
+        text
+    );
+}
+
+#[test]
 fn native_host_rejects_wrong_kind_and_invalid_utf8_without_echoing_untrusted_data() {
     let tmp = tempfile::tempdir().unwrap();
     let mut wrong = capture();

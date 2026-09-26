@@ -132,8 +132,8 @@ fn a_component_reports_a_that_point_and_and_what_and_success() {
     let v = Vault::new();
     let (host, events) = bench(&v);
 
-    let id = ask(&host, "racconta");
-    let (seen, outcome) = until_end(&events, "racconta");
+    let id = ask(&host, "demo.eventi:racconta");
+    let (seen, outcome) = until_end(&events, "demo.eventi:racconta");
     outcome.expect("il job è riuscito");
 
     let progress: Vec<_> = seen
@@ -185,8 +185,8 @@ fn a_component_asks_a_work_and_the_work_speaks() {
     let v = Vault::new();
     let (host, events) = bench(&v);
 
-    ask(&host, "genera");
-    let (mut seen, outcome) = until_end(&events, "genera");
+    ask(&host, "demo.eventi:genera");
+    let (mut seen, outcome) = until_end(&events, "demo.eventi:genera");
     let value = outcome.expect("il job è riuscito");
     let child = value["figlio"]
         .as_u64()
@@ -204,13 +204,13 @@ fn a_component_asks_a_work_and_the_work_speaks() {
     // sotto restano quelle sostanziali — identità, avvio ed evento emesso
     // dall'interno del figlio — senza trasformare il test in un retry.
     let outcome = seen.iter().find_map(|and| match and {
-        Event::JobDone { job, result, .. } if job == "figlio" => Some(result.clone()),
+        Event::JobDone { job, result, .. } if job == "demo.eventi:figlio" => Some(result.clone()),
         _ => None,
     });
     let outcome = match outcome {
         Some(outcome) => outcome,
         None => {
-            let (queue, outcome) = until_end(&events, "figlio");
+            let (queue, outcome) = until_end(&events, "demo.eventi:figlio");
             seen.extend(queue);
             outcome
         }
@@ -221,7 +221,7 @@ fn a_component_asks_a_work_and_the_work_speaks() {
     assert!(
         seen.iter().any(|and| matches!(
             and,
-            Event::JobStarted { id, job } if id.0 == child && job == "figlio"
+            Event::JobStarted { id, job } if id.0 == child && job == "demo.eventi:figlio"
         )),
         "il job accettato porta l'identità che il componente ha ricevuto ({child}): {seen:#?}"
     );
@@ -249,8 +249,8 @@ fn a_event_that_not_is_translates_becomes_a_fault_and_not_a_silence() {
     let v = Vault::new();
     let (host, events) = bench(&v);
 
-    ask(&host, "spazzatura");
-    let (seen, outcome) = until_end(&events, "spazzatura");
+    ask(&host, "demo.eventi:spazzatura");
+    let (seen, outcome) = until_end(&events, "demo.eventi:spazzatura");
     outcome.expect("il job in sé è riuscito: a non attraversare è stato l'evento");
 
     let failure = seen

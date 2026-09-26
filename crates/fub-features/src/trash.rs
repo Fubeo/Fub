@@ -326,13 +326,13 @@ fn two_ids(payload: &serde_json::Value) -> Option<(String, String)> {
     Some((entry, original))
 }
 
-/// Il nome leggibile di un documento: l'ultimo segmento, senza estensione.
+/// Il nome leggibile di un documento: l'ultimo segmento, senza estensione,
+/// qualunque formato sia — la regola è quella di [`DocId::page_name`].
 ///
 /// Il path intero è nel `title` di ciò che si passa il mouse sopra; qui serve
 /// ciò che l'utente ha scritto in cima alla nota.
 fn display_name(id: &DocId) -> String {
-    let file = id.0.rsplit('/').next().unwrap_or(&id.0);
-    file.strip_suffix(".md").unwrap_or(file).to_string()
+    id.page_name().to_string()
 }
 
 /// L'albero del pannello: la domanda in corso se ce n'è una, l'elenco sempre.

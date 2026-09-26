@@ -45,7 +45,7 @@ describe("Base table windows", () => {
       onOpenDocument: () => {},
     });
     try {
-      surface.setDoc("views:\n  - {name: Table, type: table}\n");
+      surface.buffer.setDoc("views:\n  - {name: Table, type: table}\n");
       await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeGreaterThan(0));
       expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBeLessThan(50);
       const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
@@ -86,7 +86,7 @@ describe("Base table windows", () => {
       setViewState: async () => {}, onOpenDocument: () => {}, mapTileHosts: ["tiles.example.test"],
     });
     try {
-      surface.setDoc("views:\n  - {name: Map, type: map}\n");
+      surface.buffer.setDoc("views:\n  - {name: Map, type: map}\n");
       await vi.waitFor(() => expect(host.querySelector(".base-map")).not.toBeNull());
       expect(fetchTile).not.toHaveBeenCalled();
       host.querySelector<HTMLButtonElement>(".base-map button")!.click();

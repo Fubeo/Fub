@@ -13,6 +13,7 @@ import type {
 
 export const MAX_CLAUSES = 32;
 export const MAX_LITERALS = 32;
+export const MAX_DEPTH = 32;
 
 export type SearchFaultKind =
   | "unclosed-quote"
@@ -179,7 +180,7 @@ class Parser {
         continue;
       }
       pendingOr = null;
-      current.push(this.item());
+      current.push(this.item(depth));
     }
     if (pendingOr !== null) fail("dangling-or", pendingOr);
     alternatives.push(current);
@@ -194,7 +195,7 @@ class Parser {
     return isWs(next) || next === "(" || next === ")";
   }
 
-  item(): Item {
+  item(depth: number): Item {
     const start = this.pos;
     const afterDash = this.src.codePointAt(this.pos + 1);
     const nextChar = afterDash === undefined ? undefined : String.fromCodePoint(afterDash);
@@ -203,8 +204,9 @@ class Parser {
     switch (this.peek()) {
       case "(":
         if (negated) fail("negated-group", start);
+        if (depth >= MAX_DEPTH) fail("too-complex", start);
         this.pos += 1;
-        return { kind: "group", alternatives: this.alternatives(1) };
+        return { kind: "group", alternatives: this.alternatives(depth + 1) };
       case '"':
         return { kind: "literal", literal: literal(negated, textPredicate(this.quoted(), "phrase", [], false)) };
       case "/":

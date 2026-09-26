@@ -25,7 +25,8 @@ use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Subject};
 use fub_abi::model::DocId;
-use fub_abi::traits::{EventHandler, HostApi, PluginManifest, PluginPermissions};
+use fub_abi::traits::{EventHandler, HostApi, JobId, JobSpec, PluginManifest, PluginPermissions};
+use fub_abi::Severity;
 use fub_kernel::{FormatRegistry, Trust, Workspace};
 use fub_testkit::SampleText;
 
@@ -240,8 +241,9 @@ fn what_nobody_can_rediscover_reaches_everyone() {
     // guardando il vault: un `overflow` è l'invito a riconciliare, un
     // `vault-closed` è l'ultimo giro per rendere durevole ciò che si ha in
     // memoria. Filtrarli via per un soggetto vorrebbe dire perderli in silenzio
-    // proprio a chi si è abbonato a poco.
-    ws.with_host(ACME, |host| host.emit(Event::Overflow { dropped: 3 }));
+    // proprio a chi si è abbonato a poco. L'`overflow` lo racconta un
+    // plugin di core: uno di terze parti non può dire un fatto del kernel.
+    ws.with_host(SPY, |host| host.emit(Event::Overflow { dropped: 3 }));
     let lines = log.lock().unwrap().clone();
     assert_eq!(lines, vec!["overflow:3".to_string()], "{lines:?}");
 
@@ -249,5 +251,124 @@ fn what_nobody_can_rediscover_reaches_everyone() {
     assert!(
         log.lock().unwrap().contains(&"closed".to_string()),
         "the last round even reaches whoever subscribed to a single document"
+    );
+}
+
+/// Un plugin di terze parti racconta soltanto i fatti suoi. Un rename o un job
+/// finito detti da lui non arrivano a nessuno — la shell sposterebbe le schede
+/// o offrirebbe di salvare byte che nessun export ha prodotto — e il rifiuto
+/// esce come guasto che lo nomina. Il suo `custom` e il suo guasto passano.
+#[test]
+fn a_plugin_tells_only_its_own_facts() {
+    let (_dir, mut ws, log) = vault(EventMask::all());
+    let bus = ws.bus().subscribe();
+    ws.with_host(ACME, |host| {
+        host.emit(Event::DocumentRenamed {
+            from: DocId::new("a.txt"),
+            to: DocId::new("b.txt"),
+        });
+        host.emit(Event::JobDone {
+            id: JobId(7),
+            job: "import.transfer".into(),
+            result: Ok(serde_json::json!({ "artifacts": [] })),
+        });
+        host.emit(Event::Custom {
+            topic: "com.acme.tasks:done".into(),
+            payload: serde_json::Value::Null,
+        });
+        host.emit(Event::Trouble {
+            severity: Severity::Warning,
+            subject: None,
+            error: PluginError::Io("the board did not load".into()),
+            gate: None,
+        });
+    });
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec!["custom:com.acme.tasks:done".to_string()],
+        "the handlers hear the custom, not the two forged facts"
+    );
+    let (mut refusals, mut own) = (0, 0);
+    while let Ok(notice) = bus.try_recv() {
+        assert!(
+            !matches!(
+                notice.event,
+                Event::DocumentRenamed { .. } | Event::JobDone { .. }
+            ),
+            "a forged fact reached the bus: {notice:?}"
+        );
+        if let Event::Trouble { error, .. } = &notice.event {
+            let error = error.to_string();
+            if error.contains("event not emitted") {
+                assert!(error.contains(ACME), "the refusal names who tried: {error}");
+                refusals += 1;
+            } else {
+                own += 1;
+            }
+        }
+    }
+    assert_eq!(
+        (refusals, own),
+        (2, 1),
+        "two refusals, and the plugin's own trouble"
+    );
+
+    // Il core parla con la voce del kernel: lo stesso fatto detto da lui passa.
+    log.lock().unwrap().clear();
+    ws.with_host(SPY, |host| {
+        host.emit(Event::DocumentRenamed {
+            from: DocId::new("a.txt"),
+            to: DocId::new("b.txt"),
+        })
+    });
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec!["renamed:a.txt->b.txt".to_string()]
+    );
+}
+
+/// Il nome di un job è uno spazio di nomi come gli altri (§7.4). `JobDone` lo
+/// dice il kernel, col nome scelto da chi ha accodato: un plugin di terze parti
+/// che potesse chiamare un proprio job `import.transfer` farebbe offrire alla
+/// shell di salvare i suoi byte come l'esito di un export. Un nome altrui torna
+/// indietro prima della coda, e il proprio entra.
+#[test]
+fn a_plugin_names_only_its_own_jobs() {
+    let (_dir, mut ws, _log) = vault(EventMask::all());
+    let bus = ws.bus().subscribe();
+    let spawn = |ws: &mut Workspace, plugin: &str, job: &str| {
+        ws.with_host(plugin, |host| {
+            host.spawn_job(JobSpec {
+                job: job.into(),
+                payload: serde_json::Value::Null,
+            })
+        })
+    };
+    for foreign in ["import.transfer", "fub:transfer", "com.altro.note:sync"] {
+        let refused = spawn(&mut ws, ACME, foreign);
+        assert!(
+            matches!(&refused, Err(PluginError::BadArgs(_))),
+            "`{foreign}` is not a name of {ACME}: {refused:?}"
+        );
+    }
+    spawn(&mut ws, ACME, "com.acme.tasks:sync").expect("its own name is accepted");
+    spawn(&mut ws, SPY, "import.transfer").expect("the core names bare");
+
+    let queued: Vec<String> = ws
+        .take_pending_jobs()
+        .into_iter()
+        .map(|pending| pending.spec.job)
+        .collect();
+    assert_eq!(queued, ["com.acme.tasks:sync", "import.transfer"]);
+    let mut started = Vec::new();
+    while let Ok(notice) = bus.try_recv() {
+        if let Event::JobStarted { job, .. } = notice.event {
+            started.push(job);
+        }
+    }
+    assert_eq!(
+        started,
+        ["com.acme.tasks:sync", "import.transfer"],
+        "a refused name never reaches the bus"
     );
 }

@@ -445,6 +445,7 @@ fn a_truncated_queue_does_not_steal_the_line_after_in_an_open_vault() {
 
     // Il crash di **un altro** che scrive sullo stesso registro: gli ultimi byte
     // non sono arrivati sul disco. Il vault qui resta aperto, quindi nessuna
+    // riapertura può rimediare.
     std::fs::write(&path, &raw[..raw.len() - 12]).expect("truncate");
 
     bench
@@ -670,8 +671,6 @@ impl fub_kernel::VaultStorage for CountingStorage {
 ///
 /// Questo banco, con una terza `self.storage.read(&self.path)` messa a mano in
 /// `Journal::open`: `3` contro un tetto di `2`.
-/// `Journal::open`: `3` contro un tetto di `2`.
-/// `Journal::open`: `3` contro un tetto di `2`.
 #[test]
 fn opening_a_vault_does_not_reread_the_journal_more_than_twice() {
     let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -821,8 +820,6 @@ fn opening_the_journal_does_not_write_into_it() {
 /// # Chi è stato rosso
 ///
 /// Tutte e due le metà, verificate: la prima con un `exclusive_lock` messo a
-/// mano in `FsStorage::append`, la seconda rimettendo il commento di prima.
-/// mano in `FsStorage::append`, la seconda rimettendo il commento di prima.
 /// mano in `FsStorage::append`, la seconda rimettendo il commento di prima.
 #[test]
 fn pruning_does_not_promise_a_lock_that_append_does_not_take() {

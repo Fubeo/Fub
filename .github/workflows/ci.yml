@@ -33,6 +33,10 @@ jobs:
         run: cargo test -p fub-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fub-abi --test dependency_invariant
+      - name: la shell raggiunge il workspace solo dalle porte strette dell'host
+        run: node .github/scripts/check-host-workspace-boundary.mjs
+      - name: gli errori letterali non crescono
+        run: node .github/scripts/check-error-literals.mjs
       - name: aggiungi il bersaglio del confine
         run: rustup target add wasm32-unknown-unknown
       - name: il contratto attraversa il confine
@@ -52,6 +56,14 @@ jobs:
           cargo build -p fub-features --no-default-features
           cargo build -p fub-features --no-default-features --features outline
           cargo build -p fub-host --no-default-features --features outline,notify-watcher
+      - name: ogni feature ufficiale compila da sola
+        run: |
+          set -euo pipefail
+          features=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "fub-features") | .features | keys[] | select(. != "default")')
+          for feature in $features; do
+            cargo check -p fub-features --no-default-features --features "$feature"
+          done
       - name: una cargo feature per bundle, e l'inventario è dove si legge
         run: cargo test -p fub-features --test cargo_features
       - name: i moduli di feature non si parlano

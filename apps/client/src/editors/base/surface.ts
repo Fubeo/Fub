@@ -6,9 +6,9 @@ import { api } from "../../host/ipc";
 import { registerCustomRenderer } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, t } from "../../i18n/strings";
-import type { DocumentUpdate } from "../text/engine";
+import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
-import type { EditorSurface, SurfaceMountContext } from "../core/registry";
+import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import { uniformRowRange } from "../grid/engine";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
@@ -17,6 +17,7 @@ import {
   planBaseView, prepareBaseMutations, restoreBaseView,
   type BaseCellValue, type BasePlan, type BaseRow, type BaseSurfaceDeps,
 } from "./data";
+import { writeClipboardText } from "../../platform/clipboard";
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
@@ -47,7 +48,7 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
 export function mountBaseSurface(
   profile: string, context: SurfaceMountContext, deps: BaseMountDeps,
   options: { view?: string | null; persistSelection?: boolean; container?: string | null } = {},
-): EditorSurface {
+): BufferedSurface {
   if (profile !== "base") throw new Error(`base surface profile ${profile} is not registered`);
   const root = document.createElement("div");
   root.className = "base-surface";
@@ -551,7 +552,7 @@ export function mountBaseSurface(
     finally { newNote.disabled = readOnly; }
   }
   async function copyResults(): Promise<void> {
-    try { await navigator.clipboard.writeText(baseRowsToCsv(filteredRows(), plan?.columns ?? [])); status.textContent = t("base.csv.copied"); }
+    try { await writeClipboardText(baseRowsToCsv(filteredRows(), plan?.columns ?? [])); status.textContent = t("base.csv.copied"); }
     catch (failure) { presentError(failure); }
   }
   function exportResults(): void {
@@ -618,9 +619,11 @@ export function mountBaseSurface(
   return {
     family: "structured", profile: "base", surfaceId: context.paneId, modes,
     setMode(mode: string) { if (!modes.some((candidate) => candidate.id === mode)) throw new RangeError(`surface mode ${mode} is not supported`); root.dataset.surfaceMode = mode; },
-    setDoc(text: string) { source = text; void reload(true); },
-    syncDoc(update: DocumentUpdate | string) { const next = typeof update === "string" ? update : update.text; if (next !== source) { source = next; void reload(true); } },
-    getDoc() { return source; },
+    buffer: {
+      setDoc(text: string) { source = text; void reload(true); },
+      syncDoc(update: DocumentUpdate | string) { const next = typeof update === "string" ? update : update.text; if (next !== source) { source = next; void reload(true); } },
+      getDoc() { return source; },
+    },
     focus() { search.focus(); },
     setReadOnly(next: boolean) {
       if (readOnly === next) return;
@@ -643,9 +646,12 @@ export function mountBaseSurface(
 
 /** Native fenced and file-backed Base embeds use the same surface and data ports. */
 export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Promise<void>): void {
-  registerCustomRenderer(BASE_RENDERER_NS, (host, payload) => {
-    const embed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
-    if (!embed) return;
+  registerCustomRenderer(BASE_RENDERER_NS, (host, payload, _onAction, context) => {
+    const parsed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
+    if (!parsed) return;
+    // Una base incorporata deriva `file.*` dalla nota che la contiene, non dal
+    // suo path `.base`: la nota la dice chi monta la resa.
+    const embed = { ...parsed, container: context.container ?? parsed.container };
     let disposed = false;
     const surface = mountBaseSurface("base", {
       paneId: `base:embed:${crypto.randomUUID()}`,
@@ -662,7 +668,7 @@ export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Pro
       ? api.readDocument(embed.base!).then((document) => document.text)
       : Promise.resolve(embed.source);
     void source.then((text) => {
-      if (!disposed) surface.setDoc(text);
+      if (!disposed) surface.buffer.setDoc(text);
     }, (error: unknown) => {
       if (disposed) return;
       surface.destroy();

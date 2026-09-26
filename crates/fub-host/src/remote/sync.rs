@@ -345,7 +345,7 @@ impl SyncClient {
     }
 
     /// Built from explicit endpoint (env `FUB_SERVICES_URL` else
-    /// `sync.server_url` setting) + token from file/stdin env + durable
+    /// `sync.server_url` setting) + token from `token` + durable
     /// identity files. No endpoint configured = `RemoteError` (exit 2, never
     /// implicit loopback); missing token = `MissingCredentials`. The
     /// (vault-pairing, replica) pair is bound to the endpoint that created
@@ -357,6 +357,7 @@ impl SyncClient {
         state_dir: std::path::PathBuf,
         vault_scope: Option<&str>,
         setting_url: &str,
+        token: &super::TokenSource,
     ) -> Result<Self, SyncClientError> {
         let base = super::resolve_base(setting_url).map_err(|e| match e {
             super::RemoteError::MissingConfiguration => SyncClientError::MissingConfiguration,
@@ -370,7 +371,7 @@ impl SyncClient {
                 SyncClientError::Protocol(format!("bad endpoint: {detail}"))
             }
         })?;
-        let token = super::load_token().ok_or(SyncClientError::MissingCredentials)?;
+        let token = token.load().ok_or(SyncClientError::MissingCredentials)?;
         let replica_id = load_or_create_replica_id(&state_dir)?;
         let vault_id = super::load_or_create_vault_pairing(&state_dir, vault_scope)
             .map_err(SyncClientError::Transport)?;

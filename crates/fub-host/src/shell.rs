@@ -62,11 +62,17 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // Mostra nell'albero il documento attivo. **Senza accordo**: è un gesto di
     // orientamento raro, e `Mod-Shift-e` porta già l'albero sotto gli occhi.
     ("shell.explorer.reveal", None),
+    // Rinomina e cestina la voce dell'albero col fuoco, o la nota attiva.
+    // **Senza accordo**: dentro l'albero li prendono F2 e Canc, tasti nudi
+    // della sua keymap locale che un accordo globale non può essere; fuori,
+    // cestinare è un gesto distruttivo che un tasto premuto per sbaglio non
+    // deve poter fare.
+    ("shell.explorer.rename", None),
+    ("shell.explorer.trash", None),
     // L'accordo che era conteso. Lo tiene la shell: qui il gesto è completo —
     // si preme e la ricerca è sotto gli occhi — mentre di là serviva compilare
     // un parametro obbligatorio prima di vedere qualcosa (0081).
     ("shell.panel.search", Some("Mod-Shift-f")),
-    ("shell.graph", Some("Mod-Shift-g")),
     // Alterna Lettura e l'ultima modalità di scrittura del riquadro.
     ("shell.mode.reading", Some("Mod-e")),
     // **Senza accordo**: `Mod-Shift-l` dentro l'editor è di CodeMirror
@@ -98,8 +104,15 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.doc.conflict.theirs", None),
     ("shell.tab.pin", None),
     ("shell.tab.unpin", None),
-    ("shell.tab.move.left", None),
-    ("shell.tab.move.right", None),
+    // Spostano la scheda col fuoco della tastiera, o l'attiva: lungo la
+    // striscia, e nel riquadro prima o dopo. La famiglia di `Mod-PageUp/Down`
+    // (`shell.tab.previous/next`), come nei browser: non le frecce, che dentro
+    // l'editor sono di CodeMirror (`Alt-Shift-↑/↓` copiano la riga) e in un
+    // campo di testo muovono il cursore.
+    ("shell.tab.move.left", Some("Mod-Shift-PageUp")),
+    ("shell.tab.move.right", Some("Mod-Shift-PageDown")),
+    ("shell.tab.move.pane.previous", Some("Mod-Alt-PageUp")),
+    ("shell.tab.move.pane.next", Some("Mod-Alt-PageDown")),
     ("shell.tab.close.others", None),
     ("shell.tab.close.unpinned", None),
     // **Senza accordo**: `Mod-Alt-←/→` dentro l'editor sono di CodeMirror.
@@ -113,6 +126,8 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.bookmarks.save", None),
     ("shell.bookmarks.open", None),
     ("shell.bookmarks.group", None),
+    // Mostra o nasconde il pannello dei workspace, come i segnalibri.
+    ("shell.workspace.toggle", None),
     ("shell.workspace.save", None),
     ("shell.workspace.load", None),
     ("shell.workspace.update", None),
@@ -138,6 +153,35 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // La scrittura senza cornice: via pannelli, rail e toolbar.
     ("shell.focus.toggle", None),
 ];
+
+/// Le chiavi di configurazione che hanno un gesto loro, e che nel form generico
+/// delle impostazioni sarebbero un campo da non toccare a mano.
+///
+/// Stanno qui e non in un pannello della shell per la ragione degli accordi:
+/// alcune sono di chi le dichiara (i tipi delle proprietà sono del kernel, e li
+/// disegna il pannello Proprietà), e la shell le riceve generate
+/// (`apps/client/src/ui/shell-ids.generated.ts`) invece di scriverne l'id per
+/// letterale. Un rename del proprietario non compila finché questa riga non lo
+/// segue.
+pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
+    // La versione del formato dell'interfaccia.
+    crate::settings::CHROME_SCHEMA,
+    // La scheda Componenti.
+    crate::settings::PLUGINS_DISABLED,
+    // Ordine e icone nascoste si gestiscono dalla barra laterale.
+    crate::settings::CHROME_RAIL_ORDER,
+    crate::settings::CHROME_RAIL_HIDDEN,
+    // Il pannello Proprietà.
+    fub_kernel::properties::TYPES,
+    // Il catalogo dei temi.
+    crate::settings::APPEARANCE_THEME_ID,
+];
+
+/// Il job il cui esito, quando riesce, può portare gli artefatti di un export
+/// da posare dove sceglie l'utente: import ed export passano dallo stesso job, e
+/// l'esito dell'export si riconosce dagli `artifacts` di un
+/// [`ExportReport`](fub_abi::transfer::ExportReport).
+pub const ARTIFACT_JOB: &str = fub_importers::transfer_commands::TRANSFER_JOB;
 
 /// Le impostazioni `keys.shell.*`, una per comando di shell (§16.3).
 ///

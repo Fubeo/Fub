@@ -3,8 +3,6 @@
 
 import { unsavedDrafts } from "../../host/query";
 
-export type MobileLifecycleState = "foreground" | "hidden" | "suspended";
-
 export interface LifecyclePorts {
   flushPendingSave: () => Promise<string[]>;
   dirtyIds: () => string[];

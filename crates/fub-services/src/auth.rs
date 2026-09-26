@@ -15,6 +15,50 @@ use subtle::ConstantTimeEq;
 use crate::crypto::{derive_kek, KdfParams};
 use crate::schema::{accounts_path, atomic_write, now_ms};
 
+/// Perché un bearer non vale. Lo status HTTP si sceglie sulla variante, mai
+/// sul testo del messaggio (I73): [`TokenRejection::status`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenRejection {
+    /// Nessun token, o un header vuoto.
+    Missing,
+    /// Un token che non corrisponde a nessuna sessione.
+    Bad,
+    /// La sessione c'era, ed è scaduta.
+    Expired,
+    /// La sessione nomina un account che non c'è più.
+    UnknownAccount,
+    /// L'account è stato cancellato.
+    AccountDeleted,
+}
+
+impl TokenRejection {
+    /// Il codice nel corpo della risposta (`{"error": …}`).
+    pub fn code(self) -> &'static str {
+        match self {
+            TokenRejection::Missing => "missing credentials",
+            TokenRejection::Bad => "bad token",
+            TokenRejection::Expired => "token expired",
+            TokenRejection::UnknownAccount => "unknown account",
+            TokenRejection::AccountDeleted => "account deleted",
+        }
+    }
+
+    /// `401` quando basta autenticarsi di nuovo, `403` quando l'account
+    /// stesso non è più servibile.
+    pub fn status(self) -> u16 {
+        match self {
+            TokenRejection::Missing | TokenRejection::Bad | TokenRejection::Expired => 401,
+            TokenRejection::UnknownAccount | TokenRejection::AccountDeleted => 403,
+        }
+    }
+}
+
+impl std::fmt::Display for TokenRejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.code())
+    }
+}
+
 /// Hash persistito della password account (mai la chiave dati).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PasswordHash {
@@ -244,29 +288,26 @@ impl AccountStore {
 
     /// Verifica `Authorization: Bearer <token>` (accetta anche il token nudo):
     /// torna l'`account_id` o un errore tipizzato (mai il segreto nei log).
-    pub fn verify_session_token(&self, auth: Option<&str>) -> Result<String, String> {
-        let raw = auth.ok_or_else(|| "missing credentials".to_string())?;
+    pub fn verify_session_token(&self, auth: Option<&str>) -> Result<String, TokenRejection> {
+        let raw = auth.ok_or(TokenRejection::Missing)?;
         let token = raw
             .strip_prefix("Bearer ")
             .or_else(|| raw.strip_prefix("bearer "))
             .unwrap_or(raw)
             .trim();
         if token.is_empty() {
-            return Err("missing credentials".to_string());
+            return Err(TokenRejection::Missing);
         }
-        let sess = self
-            .sessions
-            .get(token)
-            .ok_or_else(|| "bad token".to_string())?;
+        let sess = self.sessions.get(token).ok_or(TokenRejection::Bad)?;
         if now_ms() > sess.expires_ms {
-            return Err("token expired".to_string());
+            return Err(TokenRejection::Expired);
         }
         let acc = self
             .accounts
             .get(&sess.account_id)
-            .ok_or_else(|| "unknown account".to_string())?;
+            .ok_or(TokenRejection::UnknownAccount)?;
         if acc.deleted {
-            return Err("account deleted".to_string());
+            return Err(TokenRejection::AccountDeleted);
         }
         Ok(acc.id.clone())
     }

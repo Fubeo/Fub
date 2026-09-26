@@ -31,13 +31,15 @@ use fub_abi::text::{StringCatalog, Text};
 /// anche loro. I due conti stanno in questa frase apposta: il
 /// primo legge i `pub fn catalog()` dei sorgenti, il secondo le varianti di
 /// `Family`, e una famiglia che nasce nel kernel senza entrare nell'elenco
+/// li fa divergere. È l'attore che la 0105 nomina per questa specie di buco —
+/// nessun `assert` dentro Rust può vedere un modulo che nessuno cita.
 fn catalogs_of_the_core() -> Vec<StringCatalog> {
     fub_host::settings::core_catalog_assembled()
 }
 
 /// I cataloghi che il bundle del **versioning** porta al montaggio.
 ///
-/// Stessa forma e stessa ragione di [`cataloghi_del_core`], un giro dopo. Il
+/// Stessa forma e stessa ragione di [`catalogs_of_the_core`], un giro dopo. Il
 /// versioning è l'unica feature ufficiale che al montaggio somma due cataloghi
 /// — il suo, e quello dell'interruttore che è dell'host (§11.1) — e quella
 /// somma stava scritta **una volta sola**, dentro l'espressione `.speaking(…)`
@@ -50,13 +52,14 @@ fn catalogs_of_the_core() -> Vec<StringCatalog> {
 /// Adesso la somma è `fub_host::settings::catalog_assembled`, e a chiamarla sono
 /// il montaggio e questo banco. La feature si cerca **nell'inventario**, non si
 /// nomina: è la stessa `fn` che `mount` invoca, quindi fra ciò che si monta e
+/// ciò che si giudica non c'è una copia da tenere allineata.
 #[cfg(feature = "versioning")]
 fn catalogs_of_the_versioning() -> Vec<StringCatalog> {
     let feature = fub_features::every_official_feature()
         .iter()
         .find(|f| f.id == fub_features::VERSIONING_ID)
         .expect("versioning is in the official features inventory");
-    fub_host::settings::catalog_assembled(feature.id, (feature.catalog)())
+    fub_host::settings::catalog_assembled(feature)
 }
 
 /// **Ciò che una famiglia dichiara, il montaggio lo dice.**
@@ -243,11 +246,12 @@ fn the_settings_of_the_app_have_all_a_entry_in_all_the_languages() {
 ///
 /// La domanda vale per tutte e dieci e non per il versioning soltanto: è la
 /// prova che il secondo chiamante eredita: la riga che un giorno aggiungerà un
+/// catalogo dell'host a un'altra feature nasce già presidiata da qui.
 #[test]
 fn every_official_feature_mounts_its_own_catalog() {
     for feature in fub_features::every_official_feature() {
         let own = (feature.catalog)();
-        let mounted = fub_host::settings::catalog_assembled(feature.id, own.clone());
+        let mounted = fub_host::settings::catalog_assembled(feature);
         for catalog in &own {
             for key in catalog.entries.keys() {
                 let arrives = mounted
@@ -277,6 +281,8 @@ fn the_two_core_halves_do_not_step_on_each_others_toes() {
     //
     // L'unica sovrapposizione ammessa è quella voluta: nessuna. «Come il
     // sistema» la dice una chiave sola (`AS_SYSTEM_KEY`), e il tema la prende
+    // in prestito da lì invece di ridichiararla — che è appunto il motivo per
+    // cui quella costante è pubblica.
     let host: std::collections::BTreeSet<String> = fub_host::settings::core_catalog()
         .iter()
         .filter(|c| c.locale == "it")

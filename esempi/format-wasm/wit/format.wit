@@ -5,4 +5,5 @@ world format {
     export fub:abi/plugin@0.2.0;
     export fub:abi/format@0.2.0;
     export fub:abi/format-links@0.2.0;
+    export fub:abi/format-edits@0.2.0;
 }

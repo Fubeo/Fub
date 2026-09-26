@@ -470,14 +470,8 @@ pub fn vault_resource(vault_id: &str) -> String {
 // ---------------------------------------------------------------------------
 
 fn account_of(state: &ServiceState, auth: Option<&str>) -> Result<String, HttpResponse> {
-    // Exact parent hook: `AccountStore::verify_session_token`.
-    state
-        .accounts
-        .verify_session_token(auth)
-        .map_err(|e| match e.as_str() {
-            "missing credentials" | "bad token" | "token expired" => HttpResponse::err(401, &e),
-            _ => HttpResponse::err(403, &e),
-        })
+    // Exact parent hook: `ServiceState::bearer`, one status mapping for both.
+    state.bearer(auth)
 }
 
 fn unclaimed_vault(

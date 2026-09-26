@@ -87,6 +87,8 @@
 //!   PDF/HTML/Typst deve riparsare per conto proprio; l'export markdown, che è
 //!   il primo cliente, la sorgente la vuole com'è.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
@@ -857,6 +859,114 @@ pub trait ArtifactSink: Send {
     /// il conto di [`ArtifactContent::Delivered`] non falsificabile per
     /// distrazione: chi lo emette è chi ha contato i byte mentre passavano.
     fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError>;
+}
+
+/// Il path di un artefatto è **dentro l'esito**, e ci resta.
+///
+/// Stessa famiglia di `ImportSource::stem`, e per la stessa ragione: il path lo
+/// scrive chi ha scritto il provider, cioè qualcuno che non è l'utente. Un
+/// `../` qui non sarebbe un artefatto storto, sarebbe un file scritto fuori
+/// dalla cartella che l'utente ha scelto nel dialogo.
+pub fn check_artifact_path(path: &str) -> Result<(), PluginError> {
+    let wrong = path.is_empty()
+        || path.starts_with('/')
+        || path.starts_with('\\')
+        || path.contains(':')
+        || path
+            .split(['/', '\\'])
+            .any(|c| c == ".." || c == "." || c.is_empty());
+    if wrong {
+        return Err(PluginError::PermissionDenied(
+            format!("`{path}` is not a valid location inside an export output").into(),
+        ));
+    }
+    Ok(())
+}
+
+fn artifact_not_open() -> PluginError {
+    PluginError::BadArgs("this artifact handle is not (or is no longer) open".into())
+}
+
+/// Un sink che tiene gli artefatti in memoria: il comportamento di sempre,
+/// adesso dichiarato invece che implicito.
+///
+/// È il default dell'export del kernel — chi esporta tre note non deve
+/// scegliere una destinazione per averle — e il sink di
+/// [`HostServices::run_export`](crate::traits::HostServices::run_export), col
+/// tetto di [`PLUGIN_EXPORT_LIMIT`]. Sta nel contratto perché lo usano l'host
+/// vero e il banco in memoria, con la stessa regola sui path.
+#[derive(Default)]
+pub struct MemorySink {
+    open: BTreeMap<u64, (String, String, Vec<u8>)>,
+    next: u64,
+    /// Il tetto sui byte versati in tutto, se c'è.
+    limit: Option<usize>,
+    poured: usize,
+}
+
+/// Il tetto dell'export che un plugin chiede all'host
+/// ([`HostServices::run_export`](crate::traits::HostServices::run_export)):
+/// i byte tornano nel rapporto, quindi stanno in memoria, e un vault intero in
+/// PDF non ci deve entrare per sbaglio.
+pub const PLUGIN_EXPORT_LIMIT: usize = 32 * 1024 * 1024;
+
+impl MemorySink {
+    /// Un sink in memoria che rifiuta con `BadArgs` oltre `limit` byte.
+    pub fn bounded(limit: usize) -> MemorySink {
+        MemorySink {
+            limit: Some(limit),
+            ..MemorySink::default()
+        }
+    }
+}
+
+impl ArtifactSink for MemorySink {
+    fn open_artifact(
+        &mut self,
+        path: &str,
+        media_type: &str,
+    ) -> Result<ArtifactHandle, PluginError> {
+        check_artifact_path(path)?;
+        self.next += 1;
+        self.open.insert(
+            self.next,
+            (path.to_string(), media_type.to_string(), Vec::new()),
+        );
+        Ok(ArtifactHandle(self.next))
+    }
+
+    fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
+        let Some((_, _, buf)) = self.open.get_mut(&handle.0) else {
+            return Err(artifact_not_open());
+        };
+        let poured = self.poured.saturating_add(bytes.len());
+        if let Some(limit) = self.limit.filter(|limit| poured > *limit) {
+            return Err(PluginError::BadArgs(
+                format!(
+                    "the export exceeds {} MiB; select fewer documents",
+                    limit / (1024 * 1024)
+                )
+                .into(),
+            ));
+        }
+        buf.extend_from_slice(bytes);
+        self.poured = poured;
+        Ok(())
+    }
+
+    fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
+        let Some((path, media_type, buf)) = self.open.remove(&handle.0) else {
+            return Err(artifact_not_open());
+        };
+        // In memoria la ricevuta porta i byte: sono già qui, e dirlo
+        // `Delivered` costringerebbe chi legge il rapporto a cercarli altrove
+        // dove non ci sono.
+        Ok(ExportArtifact {
+            path,
+            media_type,
+            content: ArtifactContent::Bytes(buf),
+        })
+    }
 }
 
 /// L'esito di un export.

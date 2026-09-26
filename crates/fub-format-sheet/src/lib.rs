@@ -1,6 +1,8 @@
 //! Formato testuale e versionato per workbook `.fubsheet`.
 //!
-//! Questo crate possiede il modello persistito, le proiezioni e le sessioni derivate.
+//! Questo crate possiede il modello persistito, le proiezioni e le sessioni derivate,
+//! e gli adapter che le espongono ai registri: il provider grid in [`grid`] e la
+//! route di valutazione in [`index`]. L'host li monta senza possederli.
 //! Valori, AST delle formule, dipendenze, cache ed errori sono dati derivati e
 //! non entrano nel file. Il workbook resta intenzionalmente separato da
 //! `DocumentModel`: una griglia non è un albero Markdown travestito.
@@ -12,6 +14,8 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 mod formula;
+pub mod grid;
+pub mod index;
 pub mod session;
 
 pub use formula::{CellDependency, CellValue, EvaluatedCell, FormulaErrorCode, WorkbookEvaluation};

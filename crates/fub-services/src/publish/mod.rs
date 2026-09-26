@@ -17,9 +17,9 @@ pub mod manifest;
 pub mod site;
 
 pub use guard::{
-    assert_no_leakage, escape_html, hash_site_password, is_safe_href, render_markdown_safe,
-    sha256_hex, verify_site_password, BearerToken, EmbedKind, Leak, PreflightError,
-    PublishedBundle, PublishedSurface,
+    assert_no_leakage, escape_html, hash_site_password, is_safe_href, sha256_hex,
+    verify_site_password, BearerToken, EmbedKind, Leak, PreflightError, PublishedBundle,
+    PublishedSurface,
 };
 pub use manifest::{
     check_publish_path, check_site_id, diff_manifest, glob_match, matches_allowlist, plan_dry_run,

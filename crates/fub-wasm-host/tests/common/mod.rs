@@ -42,6 +42,9 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
     static NONCE: OnceLock<String> = OnceLock::new();
 
     let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
+    // Un panico dentro la parentesi avvelena il `Mutex`, e un test già rotto non
+    // è una ragione per farne fallire altri con un messaggio che parla di
+    // avvelenamento invece che del guasto vero.
     let mut built = built.lock().unwrap_or_else(|and| and.into_inner());
     let key = format!("{example}\0{artifact}\0{feature}");
     if let Some(path) = built.get(&key) {

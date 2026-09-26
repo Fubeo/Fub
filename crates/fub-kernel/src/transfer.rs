@@ -33,7 +33,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::Revision;
 use fub_abi::model::DocId;
 use fub_abi::transfer::{
-    ArtifactContent, ArtifactHandle, ArtifactSink, ExportArtifact, SourceHandle,
+    check_artifact_path, ArtifactContent, ArtifactHandle, ArtifactSink, ExportArtifact,
+    SourceHandle,
 };
 use fub_abi::PluginError;
 
@@ -201,54 +202,7 @@ impl OpenSources {
 // Il verso che esce
 // ---------------------------------------------------------------------------
 
-/// Un sink che tiene gli artefatti in memoria: il comportamento di sempre,
-/// adesso dichiarato invece che implicito.
-///
-/// È il default di [`Workspace::export`](crate::workspace::Workspace::export) —
-/// chi esporta tre note non deve scegliere una destinazione per averle.
-#[derive(Default)]
-pub struct MemorySink {
-    open: BTreeMap<u64, (String, String, Vec<u8>)>,
-    next: u64,
-}
-
-impl ArtifactSink for MemorySink {
-    fn open_artifact(
-        &mut self,
-        path: &str,
-        media_type: &str,
-    ) -> Result<ArtifactHandle, PluginError> {
-        check_path(path)?;
-        self.next += 1;
-        self.open.insert(
-            self.next,
-            (path.to_string(), media_type.to_string(), Vec::new()),
-        );
-        Ok(ArtifactHandle(self.next))
-    }
-
-    fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
-        let Some((_, _, buf)) = self.open.get_mut(&handle.0) else {
-            return Err(handle_unknown());
-        };
-        buf.extend_from_slice(bytes);
-        Ok(())
-    }
-
-    fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
-        let Some((path, media_type, buf)) = self.open.remove(&handle.0) else {
-            return Err(handle_unknown());
-        };
-        // In memoria la ricevuta porta i byte: sono già qui, e dirlo
-        // `Delivered` costringerebbe chi legge il rapporto a cercarli altrove
-        // dove non ci sono.
-        Ok(ExportArtifact {
-            path,
-            media_type,
-            content: ArtifactContent::Bytes(buf),
-        })
-    }
-}
+pub use fub_abi::transfer::{MemorySink, PLUGIN_EXPORT_LIMIT};
 
 /// Un sink che posa gli artefatti dentro una cartella.
 ///
@@ -314,7 +268,7 @@ impl ArtifactSink for DirectorySink {
         path: &str,
         media_type: &str,
     ) -> Result<ArtifactHandle, PluginError> {
-        check_path(path)?;
+        check_artifact_path(path)?;
         let dest = self.root.join(path);
         let dir = dest.parent().unwrap_or(&self.root).to_path_buf();
         // Prima di creare, non dopo: `create_dir_all` attraversa un
@@ -331,7 +285,7 @@ impl ArtifactSink for DirectorySink {
             PluginError::Io(format!("cannot create `{}`: {and}", dir.display()).into())
         })?;
         // Il nome del file lo dà il provider ed è già passato da
-        // `check_path`, quindi è UTF-8 e non ha separatori: la cartella
+        // `check_artifact_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
         let name = crate::storage::temp_name(
             dest.file_name()
@@ -423,18 +377,12 @@ fn handle_unknown() -> PluginError {
     PluginError::BadArgs("this artifact handle is not (or is no longer) open".into())
 }
 
-/// Il path di un artefatto è **dentro l'esito**, e ci resta.
-///
-/// Stessa famiglia di `ImportSource::stem`, e per la stessa ragione: il path lo
-/// scrive chi ha scritto il provider, cioè qualcuno che non è l'utente. Un
-/// `../` qui non sarebbe un artefatto storto, sarebbe un file scritto fuori
-/// dalla cartella che l'utente ha scelto nel dialogo.
 /// **Un path lessicalmente pulito può uscire lo stesso dalla cartella scelta**,
 /// e basta che un componente sia un collegamento: `esiti/fuga/rapporto.html` non
 /// ha nessun `..` da rifiutare, ma se `fuga` è un symlink verso la home i byte
 /// atterrano nella home (difetto 0194).
 ///
-/// La differenza con [`check_path`] è chi risponde. Là la domanda è sul
+/// La differenza con [`check_artifact_path`] è chi risponde. Là la domanda è sul
 /// *nome* — quello lo si può leggere — e la risposta è la stessa ovunque; qui la
 /// domanda è «dove si finisce davvero», e a quella risponde solo il disco. Le due
 /// stanno accanto perché la prima è la sola che il [`MemorySink`] può porre: in
@@ -469,21 +417,6 @@ fn stays_inside(root: &Path, dir: &Path) -> Result<(), PluginError> {
     Ok(())
 }
 
-fn check_path(path: &str) -> Result<(), PluginError> {
-    let wrong = path.is_empty()
-        || path.starts_with('/')
-        || path.starts_with('\\')
-        || path.contains(':')
-        || path
-            .split(['/', '\\'])
-            .any(|c| c == ".." || c == "." || c.is_empty());
-    if wrong {
-        return Err(PluginError::PermissionDenied(
-            format!("`{path}` is not a valid location inside an export output").into(),
-        ));
-    }
-    Ok(())
-}
 /// Lease kernel stabile di una risorsa binaria: l'unica `ResourceLease` del
 /// progetto. Vive qui (non in host): il kernel ne possiede invarianti e
 /// metadati, l'host `ResourceTable` la possiede direttamente come tipo opaco —

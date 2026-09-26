@@ -7,6 +7,7 @@ use exports::fub::abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatError, FormatErrorUnsupported,
     Guest as FormatGuest, ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
+use exports::fub::abi::format_edits::{Guest as FormatEditsGuest, TextEdit as EditsTextEdit};
 use exports::fub::abi::format_links::{
     Guest as FormatLinksGuest, LinkRewrite, TextEdit as LinksTextEdit,
 };
@@ -173,6 +174,39 @@ impl FormatLinksGuest for Componente {
             }
         }
         Ok(Some(edits))
+    }
+}
+
+/// `fubfmt` scrive un riferimento a pagina come `[[pagina]]`, con `!` davanti
+/// se incorpora, e l'etichetta dopo `|`. Non ha task: la risposta è «non
+/// supportato», che deve attraversare il confine come tale.
+impl FormatEditsGuest for Componente {
+    fn format_link(
+        _ctx: ParseContext,
+        link: fub::abi::model::LinkInsert,
+    ) -> Result<Option<String>, FormatError> {
+        let fub::abi::model::LinkTarget::Wiki(wiki) = link.target else {
+            return Ok(None);
+        };
+        if wiki.page.contains(['[', ']', '|']) {
+            return Err(FormatError::Serialize(format!(
+                "«{}» non si scrive in un wikilink",
+                wiki.page
+            )));
+        }
+        let bang = if link.embed { "!" } else { "" };
+        Ok(Some(match link.label {
+            Some(label) => format!("{bang}[[{}|{label}]]", wiki.page),
+            None => format!("{bang}[[{}]]", wiki.page),
+        }))
+    }
+
+    fn set_task_state(
+        _source: DocumentSource,
+        _marker: fub::abi::model::TaskMarker,
+        _done: bool,
+    ) -> Result<Option<Vec<EditsTextEdit>>, FormatError> {
+        Ok(None)
     }
 }
 

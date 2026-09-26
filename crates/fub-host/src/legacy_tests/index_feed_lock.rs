@@ -554,20 +554,23 @@ fn asset_rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
     {
         let mut ws = workspace.write().expect("workspace is alive");
-        ws.set_before_write_hook(Some((RENAME_BACKLINK_LOCK_PLUGIN.to_string(), {
-            let workspace_slot = Arc::clone(&workspace_slot);
-            let observed = observed_tx.clone();
-            Arc::new(move |host, id| {
-                let source = host.read_document(id)?;
-                if !source.contains("![photo](photo.png)") {
-                    return Err(PluginError::Internal(
-                        "before-write re-entry read the wrong asset backlink source".into(),
-                    ));
-                }
-                observe_backlink_stage(&workspace_slot, &observed, BacklinkStage::BeforeWrite);
-                Ok(())
-            })
-        })));
+        ws.set_before_write_hook(
+            RENAME_BACKLINK_LOCK_PLUGIN,
+            Some({
+                let workspace_slot = Arc::clone(&workspace_slot);
+                let observed = observed_tx.clone();
+                Arc::new(move |host, id| {
+                    let source = host.read_document(id)?;
+                    if !source.contains("![photo](photo.png)") {
+                        return Err(PluginError::Internal(
+                            "before-write re-entry read the wrong asset backlink source".into(),
+                        ));
+                    }
+                    observe_backlink_stage(&workspace_slot, &observed, BacklinkStage::BeforeWrite);
+                    Ok(())
+                })
+            }),
+        );
         ws.register_index_provider(
             RENAME_BACKLINK_LOCK_PLUGIN,
             Box::new(BacklinkIndexProbe {
@@ -626,10 +629,10 @@ fn a_panicking_before_write_finishes_the_staged_asset_rename_once() {
             "Audit panicking backlink rewrite",
         )
         .expect("rename caller declares");
-    workspace.set_before_write_hook(Some((
-        RENAME_BACKLINK_LOCK_PLUGIN.to_string(),
-        Arc::new(|_, _| panic!("before-write probe")),
-    )));
+    workspace.set_before_write_hook(
+        RENAME_BACKLINK_LOCK_PLUGIN,
+        Some(Arc::new(|_, _| panic!("before-write probe"))),
+    );
     let workspace = Custody::new("panicking backlink workspace", workspace);
     let events = workspace
         .read()
@@ -721,7 +724,7 @@ fn a_panicking_before_write_finishes_the_staged_asset_rename_once() {
     workspace
         .write()
         .expect("workspace remains usable")
-        .set_before_write_hook(None);
+        .set_before_write_hook(RENAME_BACKLINK_LOCK_PLUGIN, None);
     JobHost::new(workspace, RENAME_BACKLINK_LOCK_PLUGIN)
         .write_document(
             &DocId::new("Note 0.md"),
@@ -752,10 +755,10 @@ fn reopening_resumes_a_rename_after_the_file_move() {
     workspace
         .write()
         .expect("workspace remains writable")
-        .set_before_write_hook(Some((
-            COMMANDS_ID.to_string(),
-            Arc::new(|_, _| panic!("interrupt after the asset move")),
-        )));
+        .set_before_write_hook(
+            COMMANDS_ID,
+            Some(Arc::new(|_, _| panic!("interrupt after the asset move"))),
+        );
 
     let error = JobHost::new(workspace, COMMANDS_ID)
         .rename_document(&DocId::new("photo.png"), &DocId::new("media/photo.png"))
@@ -1256,4 +1259,50 @@ fn a_restore_feed_is_reentry_safe_and_finishes_once() {
         .filter(|record| matches!(record.op, JournalOp::Restored { .. }))
         .count();
     assert_eq!(restored, 1, "the restore journal fact is appended once");
+}
+
+/// I98: a job reaches maintenance through `run_command`, and emptying the
+/// journal is a user gesture — not a power lent to whoever holds
+/// `fub:run-command`, not even to a core feature.
+#[test]
+fn a_job_cannot_empty_the_journal() {
+    let v = vault();
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None)
+        .expect("the initial indexing finishes");
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let before = {
+        let mut w = ws.write().expect("the vault is alive");
+        w.write_document(&DocId::new("Note 0.md"), "# Changed\n", WriteBase::Dictated)
+            .expect("the write lands in the journal");
+        w.register_core_feature("fub.audit-clear-journal", "Audit clear journal")
+            .expect("the caller declares");
+        w.journal().expect("journal").records.len()
+    };
+    assert!(before >= 1, "the journal has rows to lose");
+
+    for mode in [InvokeMode::Apply, InvokeMode::DryRun] {
+        let refused = JobHost::new(ws.clone(), "fub.audit-clear-journal")
+            .in_mode(mode)
+            .run_command(
+                fub_kernel::maintenance::VAULT_CLEAR_JOURNAL,
+                serde_json::json!({}),
+            );
+        assert!(
+            matches!(refused, Err(PluginError::PermissionDenied(_))),
+            "{mode:?}: {refused:?}"
+        );
+    }
+    assert_eq!(
+        ws.read()
+            .expect("the vault is alive")
+            .journal()
+            .expect("journal")
+            .records
+            .len(),
+        before,
+        "the journal lost nothing"
+    );
+    assert!(host.close().is_empty(), "the host closes cleanly");
 }

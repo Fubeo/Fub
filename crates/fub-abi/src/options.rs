@@ -293,6 +293,40 @@ impl<K: Into<String>, V: Into<serde_json::Value>> FromIterator<(K, V)> for Optio
     }
 }
 
+/// Ciò che un formato dichiara sul proprio **sorgente**, accanto alle
+/// sintassi e nella stessa mappa di
+/// [`FormatCapabilities`](crate::format::FormatCapabilities).
+///
+/// Non sono grammatiche: la superficie di scrittura non ha niente da decorare,
+/// e per questo il kernel non le elenca fra le forme di sintassi. Rispondono
+/// alle domande che una feature o una superficie deve farsi prima di scrivere
+/// byte grezzi in un documento di cui non conosce il formato, o prima di
+/// rendere il testo che quel formato incorpora.
+pub mod source {
+    /// Il sorgente è prosa: inserire, accodare o sostituire testo fuori dai
+    /// costrutti lascia un documento valido che dice ciò che il testo dice.
+    ///
+    /// Lo dichiara Markdown. Non lo dichiarano un canvas JSON né una
+    /// definizione YAML: lì un testo accodato o una sostituzione nei byte
+    /// rompe la struttura, oppure la cambia in silenzio. Chi non dichiara
+    /// nulla è trattato come chi dice di no.
+    pub const PROSE: &str = "fub:prose-source";
+
+    /// Le parti di testo di questo formato sono scritte nella grammatica di
+    /// un altro, e il valore è l'id di quel formato (`"markdown"`).
+    ///
+    /// Lo dichiara il canvas, le cui card di testo sono Markdown. Chi rende o
+    /// decora quelle parti usa le sintassi **effettive** di quel formato nel
+    /// vault, comprese quelle che una
+    /// [`SyntaxRule`](crate::custom::SyntaxRule) gli innesta: una sintassi
+    /// spenta per le note è spenta anche nelle card.
+    pub const EMBEDDED_GRAMMAR: &str = "fub:embedded-grammar";
+
+    /// I nomi di questo modulo: non sono sintassi, e chi elenca le sintassi
+    /// li salta.
+    pub const ALL: &[&str] = &[PROSE, EMBEDDED_GRAMMAR];
+}
+
 /// I nomi di sintassi che il core conosce: **lo stesso vocabolario** per
 /// [`FormatCapabilities`](crate::format::FormatCapabilities) (*cosa so fare*) e
 /// per [`ParseContext`](crate::format::ParseContext) (*cosa devo accendere*).

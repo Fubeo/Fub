@@ -163,3 +163,61 @@ fn with_all_the_feature_the_two_lists_coincide() {
          `Cargo.toml` promette e che non si monta"
     );
 }
+
+/// Ciò che ogni cargo feature accende, per nome: le liste su una riga
+/// (`trash = ["commands"]`), senza le dipendenze `dep:`.
+fn implied() -> std::collections::BTreeMap<String, BTreeSet<String>> {
+    let manifest =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).unwrap();
+    let section = manifest
+        .split("\n[features]\n")
+        .nth(1)
+        .expect("il Cargo.toml ha una sezione [features]");
+    let section = section.split("\n[").next().unwrap();
+    section
+        .lines()
+        .filter_map(|row| {
+            let (name, rest) = row.split_once('=')?;
+            let list = rest.trim().strip_prefix('[')?.strip_suffix(']')?;
+            let features = list
+                .split(',')
+                .map(|item| item.trim().trim_matches('"'))
+                .filter(|item| !item.is_empty() && !item.starts_with("dep:"))
+                .map(str::to_string)
+                .collect();
+            Some((name.trim().to_string(), features))
+        })
+        .collect()
+}
+
+/// **Un servizio richiesto nel manifest è anche una cargo feature accesa.**
+///
+/// Il manifest dice chi deve essere montato prima; il `Cargo.toml` dice chi
+/// deve essere compilato insieme. Se una riga richiedesse un servizio senza
+/// accenderne la cargo feature, una build con la sola feature dipendente
+/// compilerebbe un bundle che non si monta mai.
+#[test]
+fn a_required_service_is_also_an_implied_cargo_feature() {
+    let implied = implied();
+    let rows = fub_features::every_official_feature();
+    let name = |id: &str| id.strip_prefix(PREFISSO).unwrap_or(id).to_string();
+    for row in rows.iter().filter(|row| !row.requires.is_empty()) {
+        for service in row.requires {
+            let provider = rows
+                .iter()
+                .find(|other| other.provides.contains(service))
+                .unwrap_or_else(|| {
+                    panic!("«{}» richiede «{service}» e nessuno lo fornisce", row.id)
+                });
+            let accese = implied.get(&name(row.id)).cloned().unwrap_or_default();
+            assert!(
+                accese.contains(&name(provider.id)),
+                "«{}» richiede «{service}», che fornisce «{}», ma la sua cargo feature \
+                 non accende «{}»",
+                row.id,
+                provider.id,
+                name(provider.id)
+            );
+        }
+    }
+}

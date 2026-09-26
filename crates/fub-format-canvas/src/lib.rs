@@ -56,12 +56,19 @@ impl FormatProvider for CanvasProvider {
         // La tela non introduce una nuova grammatica: le card testuali usano
         // la grammatica markdown normale (wikilink, tag, embed), i file usano
         // path del vault. Nessuna voce propria: la forma `fub:canvas` vive nel
-        // renderer namespace della shell, non nelle sintassi.
-        FormatCapabilities::of(&[
+        // renderer namespace della shell, non nelle sintassi. Che le card
+        // siano Markdown lo dice `EMBEDDED_GRAMMAR`: chi le rende usa le
+        // sintassi che il vault dà alle note, innesti compresi.
+        let mut capabilities = FormatCapabilities::of(&[
             fub_abi::options::syntax::WIKILINKS,
             fub_abi::options::syntax::TAGS,
             fub_abi::options::syntax::EMBEDS,
-        ])
+        ]);
+        capabilities.syntax.set(
+            fub_abi::options::source::EMBEDDED_GRAMMAR,
+            fub_format_markdown::MarkdownProvider::new().descriptor().id,
+        );
+        capabilities
     }
 
     fn parse(

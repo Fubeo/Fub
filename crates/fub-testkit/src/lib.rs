@@ -104,6 +104,7 @@ pub struct Bench {
     file: Vec<(String, String)>,
     probe: bool,
     scan: bool,
+    clock: Option<Arc<dyn fub_kernel::time::Clock>>,
 }
 
 /// Dove sta il vault: una cartella temporanea che il banco possiede, o una che
@@ -132,6 +133,7 @@ impl Bench {
             file: Vec::new(),
             probe: false,
             scan: true,
+            clock: None,
         }
     }
 
@@ -216,6 +218,14 @@ impl Bench {
         self
     }
 
+    /// Il kernel legge questo orologio invece di quello di sistema: registro,
+    /// cestino, bozze e job avanzano quando il test lo dice (vedi
+    /// [`ManualClock`]).
+    pub fn with_clock(mut self, clock: Arc<dyn fub_kernel::time::Clock>) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
     /// Costruisce il vault e monta il kernel.
     pub fn mounts(mut self) -> Mounted {
         if self.format_default {
@@ -239,6 +249,9 @@ impl Bench {
         }
 
         let mut ws = Workspace::new(&root, self.formats).expect("la radice appena creata si apre");
+        if let Some(clock) = self.clock.take() {
+            ws = ws.with_clock(clock);
+        }
 
         for id in &self.plugin {
             ws.register_core_feature(id, id)
@@ -274,6 +287,29 @@ impl Bench {
             ws,
             journal,
         }
+    }
+}
+
+/// Un orologio che avanza soltanto quando il test lo dice: la ritenzione del
+/// registro e i nomi nel cestino si provano senza aspettare i giorni veri.
+pub struct ManualClock(std::sync::atomic::AtomicU64);
+
+impl ManualClock {
+    /// Fermo a `millis` dall'epoca UNIX.
+    pub fn at(millis: u64) -> Self {
+        ManualClock(std::sync::atomic::AtomicU64::new(millis))
+    }
+
+    /// Sposta l'orologio avanti di `millis`.
+    pub fn advance(&self, millis: u64) {
+        self.0
+            .fetch_add(millis, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl fub_kernel::time::Clock for ManualClock {
+    fn now_unix_millis(&self) -> u64 {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 

@@ -49,7 +49,7 @@ percorso WASM. La scena visuale `grid-sheet` esercita il cliente `.fubsheet`
 reale attraverso la shell e il fake IPC tipizzato.
 
 Le invarianti permanenti vivono in
-[Frontend e IPC](../architecture/frontend-and-ipc.md),
+[Superfici dell'editor](../architecture/editor-surfaces.md),
 [Editor e anteprima](../product/editor-and-preview.md),
 [Runtime dei plugin](../architecture/plugin-runtime.md) e
 [ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md).
@@ -58,14 +58,13 @@ Le invarianti permanenti vivono in
 
 M5 è consegnata. Il percorso prodotto distingue installazione, dati persistenti,
 consenso, scelta `enabled` e istanza montata. `CommandProvider`,
-`FormatProvider`, `ViewProvider` e `GridProvider` attraversano i percorsi
+`FormatProvider`, `ViewProvider`, `GridProvider` e, in ingresso,
+`IndexProvider` ed `EventHandler` (`WASM-002`, #57) attraversano i percorsi
 esercitati nativo/WASM.
 
-I limiti non promessi restano espliciti:
-
-- #57 possiede `WASM-002`: `IndexProvider` e `EventHandler` inbound;
-- #58 possiede `WASM-003`: quote assolute CPU/RAM di processo oltre i limiti
-  per-store e le deadline cooperative.
+Il limite non promesso resta esplicito: #58 possiede `WASM-003`, le quote
+assolute CPU/RAM di processo oltre i limiti per-store e le deadline
+cooperative.
 
 La pagina [M5](m5-wasm-runtime.md) è una retrospettiva della milestone, non un
 piano ancora aperto.

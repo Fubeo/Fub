@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CommandPlan, CommandSpec, ParamKind } from "../host/contract";
+import type { CommandEffect, CommandPlan, CommandSpec, ParamKind, ParamSpec, ViewSpec } from "../host/contract";
+import { t } from "../i18n/strings";
 import {
   argsFromForm,
   filterCommands,
@@ -8,8 +9,10 @@ import {
   planApplies,
   planLines,
   scopeLabel,
+  viewEntries,
 } from "./palette";
 import type { CommandEntry } from "./commands";
+import { setPrimaryViews } from "./primary-views";
 
 // Le decisioni della palette sono funzioni pure apposta: la regola del consenso
 // (quando mostrare il piano prima di eseguire) e la costruzione degli argomenti
@@ -23,6 +26,7 @@ function spec(over: Partial<CommandSpec> = {}): CommandSpec {
     keybinding: null,
     params: [],
     scope: { writes: false, reach: "session", reversible: true },
+    surfaces: [],
     ...over,
   };
 }
@@ -263,5 +267,47 @@ describe("il piano che si guarda prima di approvarlo", () => {
       // approva.
       "C",
     ]);
+  });
+});
+
+function mainView(id: string, params: ParamSpec[] = []): ViewSpec {
+  return {
+    id,
+    title: `Vista ${id}`,
+    surface: "main",
+    refresh: { kinds: [], topics: [], subjects: [], changes: [] },
+    follows: [],
+    params,
+    icon: null,
+    order: 0,
+    open_by_default: false,
+    preferred_size: null,
+    closable: true,
+  };
+}
+
+// Nessuna view ha un posto riservato nella shell: la palette elenca quelle che
+// un riquadro può ospitare, e aprirne una è l'intento di un comando qualunque.
+describe("le view principali nella palette", () => {
+  it("elenca quelle che si aprono senza argomenti e le apre con OpenView", async () => {
+    setPrimaryViews([
+      mainView("graph"),
+      mainView("links", [param("doc", { kind: "document" }, true)]),
+      mainView("board", [param("filter", { kind: "text" })]),
+    ]);
+    const effects: CommandEffect[] = [];
+    const entries = viewEntries({ onEffect: (effect) => void effects.push(effect) });
+
+    expect(entries.map((entry) => entry.id)).toEqual(["view:graph", "view:board"]);
+    expect(entries[0]!.title).toBe(t("palette.open_view", { title: "Vista graph" }));
+    expect(entries.every((entry) => entry.spec === null && entry.layer === "global")).toBe(true);
+
+    await entries[0]!.run!();
+    expect(effects).toEqual([{ kind: "open_view", view: "graph", params: null }]);
+  });
+
+  it("senza view principali non aggiunge niente", () => {
+    setPrimaryViews([]);
+    expect(viewEntries({ onEffect: () => {} })).toEqual([]);
   });
 });

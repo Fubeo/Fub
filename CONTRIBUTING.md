@@ -64,6 +64,8 @@ cargo test --workspace --no-fail-fast
 npm run typecheck
 npm test
 npm run build
+node .github/scripts/check-host-workspace-boundary.mjs
+node .github/scripts/check-error-literals.mjs
 node .github/scripts/check-codemirror-boundary.mjs
 node .github/scripts/check-doc-links.mjs
 node .github/scripts/check-doc-orphans.mjs

@@ -322,7 +322,6 @@ fn with_two_handlers(fx: &Fixture, cascade: Box<dyn EventHandler>) -> (Workspace
 /// ciò che si riscopre riguardando il vault diventa un `Overflow`; il guasto,
 /// che porta l'unica copia di un fatto, arriva lo stesso — e arriva **dopo**
 /// l'invito a riconciliare, che è l'ordine in cui le due cose sono successe.
-/// l'invito a riconciliare, che è l'ordine in cui le due cose sono successe.
 #[test]
 fn truncation_does_not_throw_away_a_trouble() {
     let fx = Fixture::new();

@@ -63,7 +63,6 @@ export function mountMediaSurface(
   status.setAttribute("role", "status");
   root.append(status);
   let active = true;
-  let mode = "view";
   let pendingPort: ResourcePort | null = null;
 
   function message(key: Key): void {
@@ -120,17 +119,7 @@ export function mountMediaSurface(
     modes: MEDIA_MODES,
     setMode(next: string) {
       if (next !== "view") throw new Error(`unknown media mode ${next}`);
-      mode = next;
       root.dataset.mode = next;
-    },
-    setDoc() {
-      // La sorgente binaria non passa dal buffer di testo: niente da fare.
-    },
-    syncDoc() {
-      // Ricarica esplicita via rimonto (come le grid): niente sync testuale.
-    },
-    getDoc() {
-      return mode;
     },
     focus() {
       root.focus();

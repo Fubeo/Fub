@@ -89,7 +89,10 @@ devono comunque usare tipi ed errori condivisi.
 `FormatSource` è una porta host-agnostica: prepara `FormatProvider` e risorse
 prima dell'apertura del `Workspace`. L'host registra i provider prima di
 costruire il workspace; le risorse preparate restano vive per la sessione e
-vengono rilasciate anche in caso di rollback.
+vengono rilasciate anche in caso di rollback. I formati di serie (Markdown,
+Canvas, Base e la sorgente `.fubsheet`) si registrano per primi: un provider
+esterno che rivendica un'estensione già presa è rifiutato da solo, con una
+diagnostica di apertura che nomina chi la tiene, e il vault si apre lo stesso.
 
 L'interfaccia WIT `format` è opzionale. Se il componente la esporta,
 `WasmBundle` congela descriptor e capability dichiarati e `fub-wasm-host`
@@ -115,6 +118,17 @@ alcuna sessione.
 
 Il lease e le risorse preparate sono posseduti dalla sessione o dal rollback;
 nessuna `Operation` del manager viene trattenuta dalla sessione.
+
+Il registro dei formati di un vault aperto è fisso per la vita del workspace,
+quindi un provider di formato non si monta né si smonta a vault aperto. Il
+manager tiene un interruttore per ogni provider preparato: disabilitazione,
+revoca del consenso o del publisher, aggiornamento e rimozione lo spengono in
+tutti i vault aperti, e da lì ogni chiamata (parse, render, serialize,
+riscrittura dei link, modifiche di formato) fallisce con un errore di formato
+senza eseguire il componente. Gli indici derivati restano quelli dell'ultima
+analisi finché il documento cambia o il vault si riapre. Un provider abilitato
+o riacceso a vault aperto serve il formato dalla prossima apertura, con
+un'istanza nuova.
 
 Il componente non riceve capability host per il solo fatto di esportare
 `format`: ogni famiglia resta soggetta al mount e al `Guard`. Il percorso
@@ -210,15 +224,22 @@ non sia più disponibile.
 Il runtime non replica la policy. Riceve un `HostApi` già incappucciato dal
 `Guard` del kernel.
 
-Le interfacce host vengono linkate una alla volta. Se un componente importa una
-famiglia non disponibile, l'istanza non viene montata e l'errore nomina la
-famiglia.
+Le interfacce host vengono linkate una alla volta. Il runtime WASM serve
+cinque famiglie: `host-env`, `host-vault-read`, `host-data-read`,
+`host-data-write` e `host-events`. Le altre famiglie `host-*` del WIT (scrittura
+e struttura del vault, impostazioni, stato delle view, query, servizi, rete,
+comandi, trasferimenti) esistono nel contratto ma non ancora qui. Se un
+componente importa una famiglia non servita, il caricamento fallisce con
+`UnservedFamilies` e l'errore nomina la famiglia.
 
 ## Sandbox
 
 Il component model isola la memoria. Il runtime corrente:
 
-- non collega WASI;
+- non collega WASI, tranne `wasi:random/random`, che dà byte dal generatore
+  crittografico del sistema (al massimo 64 KiB per richiesta) perché un guest
+  che genera identità o chiavi non riceva valori prevedibili; ogni altro import
+  WASI è collegato a una trap;
 - non concede filesystem o rete diretti;
 - impone un limite alla memoria lineare;
 - usa epoch interruption per la deadline;
@@ -263,10 +284,15 @@ panic. Fine indicizzazione, watcher, manutenzione e teardown attraversano la
 stessa porta staccata.
 
 Scrittura, edit e creazione preparano sorgente, parser e `BeforeWrite` sotto
-guardia, ma eseguono parser e hook con handle owned e capacità strette. Il panic
-di `BeforeWrite` viene convertito in errore prima della scrittura: il commit non
-tocca il documento quando l'hook fallisce o va in panic. Feed e finalize degli
-indici restano fasi successive e staccate.
+guardia, ma eseguono parser e hook con handle owned e capacità strette. Ogni
+owner registra al più un hook `BeforeWrite`; gli hook girano nell'ordine di
+registrazione, ognuno con l'host intestato al proprio owner, e il primo errore
+ferma la scrittura e gli hook successivi. Il panic di `BeforeWrite` viene
+convertito in errore prima della scrittura: il commit non tocca il documento
+quando un hook fallisce o va in panic. Chi viene disattivato porta via soltanto
+il proprio hook. L'hook è soltanto nativo: il WIT non ha un export che lo
+registri, quindi un componente WASM non ne ha uno. Feed e finalize degli indici
+restano fasi successive e staccate.
 
 Il ripristino dal cestino fotografa voce, destinazione, revisione e parser sotto
 guardia; poi legge la sorgente, invoca parser e sintassi e compie la mossa
@@ -364,9 +390,11 @@ viene diagnosticato senza pubblicare registrazioni parziali né impedire
 l'apertura del vault. Il riavvio rilegge le scelte persistite; lo store resta
 separato dalle istanze delle sessioni.
 
-`InstalledPluginManager` espone le cinque operazioni IPC desktop per inventario,
-installazione, consenso, abilitazione e rimozione, persiste le decisioni e
-riconcilia i vault aperti. La rimozione richiede prima la disabilitazione, ritira
+`InstalledPluginManager` serve le operazioni IPC desktop: inventario,
+installazione da file, consenso, abilitazione e rimozione, il catalogo firmato
+(ricerca, installazione, aggiornamento, rollback e revoca, per plugin e temi) e
+la lettura dei budget di processo. Persiste le decisioni e riconcilia i vault
+aperti. La rimozione richiede prima la disabilitazione, ritira
 soltanto i claim posseduti, quindi elimina record e blob senza cancellare
 `.fub/plugins/<id>/`.
 
@@ -386,7 +414,7 @@ Schema, atomicità e rimozione sono descritti nel
 | eventi host | presente |
 | timeout e memoria | presenti |
 | capability negate | presenti |
-| altri provider | `IndexProvider` e `EventHandler` inbound deferred |
+| `IndexProvider` e `EventHandler` inbound | presenti |
 | inventario, installazione, consenso, enabled, restart e remove | presenti |
 | startup autorizzato e gestione desktop | presenti |
 | UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
@@ -403,4 +431,11 @@ Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 - un solo `Guard` applica la policy;
 - nessuna famiglia host è concessa implicitamente;
 - mount parziale e teardown incompleto sono errori;
-- un componente incompatibile viene rifiutato prima dell'attivazione.
+- un componente incompatibile viene rifiutato prima dell'attivazione;
+- un componente che esporta un'interfaccia che l'host non collega (`syntax`,
+  `renderer`, `service`, `importer`, `exporter`) è rifiutato al caricamento
+  con `UnservedExports`, come chi importa una famiglia host non servita;
+- i comandi che l'host esegue in proprio (`mount.*`, `folder.create`,
+  `trash.os`, `vault.snapshot.*`, `capture.apply`) sono riservati nel registro
+  al mount: un plugin che li invoca con `run_command` riceve `Unserved`, e
+  nessun provider può registrarne un omonimo.

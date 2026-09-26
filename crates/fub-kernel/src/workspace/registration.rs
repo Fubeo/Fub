@@ -407,23 +407,27 @@ impl Workspace {
         Ok(provides)
     }
 
-    /// Publishes the singleton write hook for the permit's owner. The owner is
-    /// derived from the permit so a registrar cannot attach code to another
-    /// plugin's lifecycle.
+    /// Publishes the permit owner's write hook after the hooks already
+    /// registered. Each owner has at most one; other owners keep theirs. The
+    /// owner is derived from the permit so a registrar cannot attach code to
+    /// another plugin's lifecycle.
     pub fn commit_before_write_hook(
         &mut self,
         permit: &RegistrationPermit,
         hook: &mut Option<BeforeWriteHook>,
     ) -> std::result::Result<(), RegistryError> {
         self.validate_registration_permit(permit)?;
-        if self.before_write.is_some() {
+        if self
+            .before_write
+            .iter()
+            .any(|(owner, _)| owner == &permit.owner)
+        {
             return Err(RegistryError::RegistrationPhase(permit.owner.clone()));
         }
-        self.before_write = Some((
-            permit.owner.clone(),
-            hook.take()
-                .ok_or_else(|| RegistryError::RegistrationPhase(permit.owner.clone()))?,
-        ));
+        let hook = hook
+            .take()
+            .ok_or_else(|| RegistryError::RegistrationPhase(permit.owner.clone()))?;
+        self.before_write.push((permit.owner.clone(), hook));
         Ok(())
     }
 
@@ -461,7 +465,20 @@ impl Workspace {
             Declaration::Syntax(spec, _) => (RegistrationKind::Syntax, vec![spec.id.clone()]),
             Declaration::Renderer(spec, _) => (RegistrationKind::Renderer, vec![spec.id.clone()]),
         };
+        self.providers.refuse_host_commands(plugin, kind, &ids)?;
         self.providers.plugins.admit(plugin, kind, &ids)?;
+        // Le **scorciatoie** come impostazioni (§18.2): una chiave per comando,
+        // fabbricata qui e non chiesta a chi registra. Chiederla avrebbe voluto
+        // dire che un comando con la scorciatoia riconfigurabile è un comando il
+        // cui autore si è ricordato di dichiararne una — cioè la proprietà che
+        // interessa affidata alla diligenza, mentre l'utente che vuole
+        // rimappare *quel* comando non ha modo di sapere perché non può.
+        //
+        // Va **dopo** `admit` e prima di `record`: `admit` è ciò che verifica
+        // che quegli id siano nominabili da questo plugin, e sintetizzare una
+        // chiave dal nome di un comando che il registro sta per rifiutare
+        // vorrebbe dire dichiarare l'impostazione di un comando che non
+        // esisterà.
         if let Declaration::Commands(specs, _) = declaration {
             let keys = self.keybinding_specs(specs);
             self.settings
@@ -473,6 +490,18 @@ impl Workspace {
         let trust = self.providers.plugins.trust_of(plugin).unwrap_or_default();
         match declaration {
             Declaration::Syntax(spec, provider) => {
+                // La regola dei nomi è **una** (§7.4): questa famiglia aveva la
+                // propria — «serve un `ns:nome`», senza sapere di chi — e
+                // chiedeva un namespace anche al core mentre non chiedeva a
+                // nessuno che fosse il *suo*. Adesso passa dall'`admit` qui
+                // sopra come le altre.
+                //
+                // E vale anche per i `custom_kind` che la regola si impegna a
+                // emettere: sono nomi che entrano nel modello, e senza questa
+                // riga un terzo dichiara `callout` e si fa disegnare dal core.
+                // Non passano da `admit` perché produrre lo stesso kind in due
+                // non è una contesa — è come si scrivono due dialetti della
+                // stessa famiglia.
                 self.providers.plugins.check_names(plugin, &spec.produces)?;
                 self.docs
                     .syntax
@@ -494,6 +523,10 @@ impl Workspace {
         match prepared.declaration.take().expect("checked above") {
             Declaration::Syntax(_, _) | Declaration::Renderer(_, _) => {}
             Declaration::Commands(specs, provider) => {
+                // La firma resta `Box` — è quella degli altri `register_*`, e
+                // chi registra non deve sapere perché qui dentro serve un `Arc`
+                // (decisione 0013: `run_command` rientra nel registro mentre il
+                // registro è in uso).
                 self.providers.commands.push(RegisteredCommand {
                     id: plugin.to_owned(),
                     specs,
@@ -512,12 +545,14 @@ impl Workspace {
                 specs,
                 provider: Arc::new(SharedShelter::new(provider)),
             }),
-            Declaration::Export(_, provider) => {
-                self.providers.exports.push((plugin.to_owned(), provider))
-            }
-            Declaration::Import(provider) => {
-                self.providers.imports.push((plugin.to_owned(), provider))
-            }
+            Declaration::Export(_, provider) => self
+                .providers
+                .exports
+                .push((plugin.to_owned(), Arc::from(provider))),
+            Declaration::Import(provider) => self
+                .providers
+                .imports
+                .push((plugin.to_owned(), Arc::new(SharedShelter::new(provider)))),
             Declaration::Handler(provider) => {
                 self.providers.handlers.push((plugin.to_owned(), provider))
             }
@@ -536,8 +571,8 @@ enum RetiredProvider {
     Grid(Arc<SharedShelter<Box<dyn GridProvider>>>),
     Handler(Box<dyn EventHandler>),
     Service(Arc<dyn ServiceProvider>),
-    Import(Box<dyn ImportProvider>),
-    Export(Box<dyn ExportProvider>),
+    Import(Arc<SharedShelter<Box<dyn ImportProvider>>>),
+    Export(Arc<dyn ExportProvider>),
     Syntax(Arc<dyn SyntaxRule>),
     Renderer(Arc<dyn CustomRenderer>),
     BeforeWrite(BeforeWriteHook),
@@ -779,14 +814,15 @@ impl Workspace {
         if syntax_changed || renderer_changed {
             self.projection_generation = self.projection_generation.wrapping_add(1);
         }
-        if self
-            .before_write
-            .as_ref()
-            .is_some_and(|(owner, _)| owner == &permit.owner)
-        {
-            let (_, hook) = self.before_write.take().expect("owner checked above");
-            prepared.providers.push(RetiredProvider::BeforeWrite(hook));
-        }
+        let (retiring, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.before_write)
+            .into_iter()
+            .partition(|(owner, _)| owner == &permit.owner);
+        self.before_write = kept;
+        prepared.providers.extend(
+            retiring
+                .into_iter()
+                .map(|(_, hook)| RetiredProvider::BeforeWrite(hook)),
+        );
         self.providers.plugins.retire(&prepared.owner);
         self.settings
             .write()
@@ -915,6 +951,11 @@ impl Workspace {
         if prepared.provider.is_none() {
             return Err(RegistryError::RegistrationPhase(plugin.to_owned()));
         }
+        // I `ns` delle query custom sono nomi in uno spazio condiviso, e la
+        // regola del §7.4 vale per loro come per gli id di view: chi rivendica
+        // `acme:tasks` deve essere `acme`. Le rotte del contratto invece non
+        // sono nomi di nessuno — chi le rivendica non le nomina, le serve — e il
+        // loro conflitto lo vede la tabella delle rotte.
         let namespaces = plugins::custom_namespaces(&prepared.routes);
         self.providers
             .plugins

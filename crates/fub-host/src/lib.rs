@@ -24,6 +24,7 @@
 //!
 //! Ciò che di un'app vera *non* può stare qui non è il montaggio: sono i tre
 //! punti in cui il montaggio tocca il mondo, e ognuno ha un trait.
+//!
 //! - Il watcher interno — `notify` quando disponibile, nessun rilevamento
 //!   altrimenti — osserva le scritture altrui senza esporre il lock del
 //!   workspace.
@@ -82,6 +83,9 @@
 /// framing NM. Puro: nessuna I/O, nessun vault, nessuna rete.
 pub mod automation;
 mod bridge;
+/// La cattura rapida: il comando dell'host `capture.apply`, uno per ogni
+/// trasporto (clipper, condivisione mobile, CLI).
+pub mod capture;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
 mod custody;
@@ -104,7 +108,6 @@ pub mod resources;
 pub mod runner;
 pub mod session;
 pub mod settings;
-pub mod sheet;
 pub mod shell;
 pub mod support;
 mod teardown;
@@ -115,8 +118,14 @@ mod wall;
 mod watcher;
 extern crate self as fub_host;
 pub use custody::Custody;
+#[cfg(feature = "notify-watcher")]
+pub use watcher::NotifyWatcher;
 #[cfg(test)]
-pub(crate) use watcher::{ExternalChange, ExternalSync, NoWatcher, VaultWatcher, WatcherFactory};
+pub(crate) use watcher::{ExternalChange, ExternalSync};
+/// Il rilevamento delle modifiche esterne è una scelta di chi compone l'host
+/// ([`Host::with_watcher`]): `notify` di serie, nessuno, o una fabbrica del
+/// banco che consegna i cambiamenti a comando.
+pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
 #[cfg(test)]
 mod legacy_tests;
 

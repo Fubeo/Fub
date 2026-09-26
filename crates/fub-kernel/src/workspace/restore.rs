@@ -105,6 +105,10 @@ impl PreparedDocumentRestore {
             documents,
             content,
         } = self;
+        // Il modello si costruisce **prima** di muovere il file, per la ragione
+        // di `write_source`: il parse è puro, e farlo dopo lascerebbe il disco
+        // avanti rispetto a modelli, grafo e indici davanti a un chiamante che
+        // riceve `Err`.
         let (source_revision, model) = match content {
             RestoreContent::Document {
                 source_kind,
@@ -149,6 +153,10 @@ impl PendingDocumentRestore {
     /// infine rimuove best-effort il sidecar, sempre senza custodire il
     /// workspace.
     pub fn invoke_indexes(mut self) -> Self {
+        // Lo stato per-documento segue la chiave anche qui, e va fatto nel
+        // kernel per la ragione di sempre: l'evento dice la stessa cosa, ma
+        // la coda ha un budget e può troncare (decisione 0034), e chi tiene
+        // stato autorevole non può dipendere da una consegna best-effort.
         if let Some(from) = self.rename_from.as_ref() {
             if let Err(error) = self
                 .organization
@@ -227,6 +235,19 @@ impl Workspace {
         to: Option<DocId>,
     ) -> Result<PreparedDocumentRestore> {
         self.indexes.ensure_mutation_available()?;
+        // Le due strade fanno **due domande diverse**, ed è la distinzione del
+        // §15.5 letta sul cestino. Senza `to` non nasce nessun nome: ne torna
+        // uno che c'era, e va giudicato col solo recinto — una nota che si
+        // chiamava `CON.md` prima di finire nel cestino deve poter tornare, e
+        // sarebbe un modo curioso di perdere un file, rifiutarsi di restituirlo
+        // per un nome che il vault conteneva già. Con `to` invece il nome
+        // **nasce adesso**: `to` è opzionale proprio perché è il caso in cui il
+        // path d'origine era occupato e l'utente ne ha digitato un altro, cioè
+        // Fub sta scegliendo dove mettere un file. Finché anche questa strada
+        // chiedeva il solo recinto, un ripristino poteva atterrare su
+        // `.nascosta/Nota.md` — legale su ogni filesystem, saltato dalla
+        // scansione — e la nota tornava invisibile a chi l'aveva ripristinata,
+        // con la sua voce fantasma in anagrafe. Era il difetto 0186.
         let target = match to {
             Some(target) => new_doc_id(target.as_str())?,
             None => valid_doc_id(entry.original.as_str())?,
@@ -311,6 +332,12 @@ impl Workspace {
                 (None, None)
             }
         };
+        // Se il ripristino approda su un path diverso dall'origine (il path
+        // era di nuovo occupato e l'utente ha scelto un altro nome), lo stato
+        // per-documento — storia del versioning, meta del frontend — vive
+        // ancora sotto la chiave d'origine: è un rename a tutti gli effetti,
+        // anche se il documento non era indicizzato, e chi tiene stato migra
+        // la chiave sull'evento.
         let rename_from = (target != entry.original).then(|| entry.original.clone());
         if let Some(from) = rename_from.as_ref() {
             self.emit_event(Event::DocumentRenamed {

@@ -82,23 +82,34 @@ impl PaneId {
     }
 }
 
-/// In che modalità un pannello sta mostrando il suo documento (FEATURES 4.1).
+/// Che vista del suo documento un pannello sta mostrando (FEATURES 4.1).
 ///
-/// Sono le tre modalità **esclusive**: ciò che non lo è — focus mode, zen,
-/// typewriter, schermo intero — non sta qui, perché non cambia *cosa* un
-/// provider deve fare, solo come la shell si dispone. Una quarta modalità
-/// esclusiva (WYSIWYG, block editor) è un caso in fondo all'enum, cioè una
-/// minor dopo il freeze: è additiva, a differenza di un campo del record.
+/// Non sono le modalità di un formato ma **tre classi di vista**, le sole che
+/// cambiano *cosa* un provider deve fare: il documento com'è salvato, una resa
+/// in cui si scrive, una resa da leggere. Ogni superficie della shell dichiara
+/// le sue modalità — Markdown ne ha tre, la tela due, il foglio una — e
+/// proietta ciascuna su una classe: la tela e il foglio si scrivono attraverso
+/// la loro resa (`LivePreview`), il sorgente JSON della tela è `Source`, un
+/// visore di media è `Reading`. I nomi vengono da Markdown, la prima superficie
+/// a dichiararle; il contratto non nomina le modalità di nessuna, che restano
+/// della shell.
+///
+/// Ciò che esclusivo non è — focus mode, zen, typewriter, schermo intero — non
+/// sta qui, perché cambia solo come la shell si dispone. Una classe di vista
+/// che nessuna di queste descrive è un caso in fondo all'enum, cioè una minor
+/// dopo il freeze: è additiva, a differenza di un campo del record.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaneMode {
-    /// Il sorgente nudo, senza resa inline.
+    /// Il documento nella sua forma salvata, senza resa: il Markdown com'è
+    /// scritto, il JSON di una tela.
     Source,
-    /// Sorgente con resa inline di ciò che non si sta editando: il modo
-    /// normale di scrivere, e il default.
+    /// Una resa in cui si scrive: la Live Preview di Markdown, la tela, la
+    /// griglia di un foglio. Il modo normale di lavorare, e il default.
     #[default]
     LivePreview,
-    /// Sola lettura: il documento reso, nessun cursore.
+    /// Una resa da leggere, senza cursore: la lettura di una nota, un'immagine,
+    /// un PDF.
     Reading,
 }
 
@@ -294,8 +305,10 @@ pub enum SelectionSet {
     /// Il buffer non ha modifiche non salvate: le coordinate di ogni selezione
     /// valgono anche per il sorgente che il kernel ha in mano.
     Anchored(AnchoredSelections),
-    /// Il buffer ha modifiche non salvate: il testo è vero, le coordinate no —
-    /// e non lo sono **per tutte**, perché il buffer è uno.
+    /// Il testo è vero, le coordinate no — e non lo sono **per tutte**. Succede
+    /// quando il buffer ha modifiche non salvate, perché il buffer è uno, e
+    /// quando la superficie sceglie elementi che non sono intervalli del
+    /// sorgente: le carte di una tela, un intervallo di celle.
     Floating(FloatingSelections),
 }
 

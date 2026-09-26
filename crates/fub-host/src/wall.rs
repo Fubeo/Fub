@@ -35,6 +35,7 @@
 //! date: la regola del contratto ([`WallClock::next_after`]) è aritmetica su ore
 //! civili, e le ore civili non hanno bisogno di sapere cosa sia l'ora legale.
 //! Cosa sia l'ora legale serve in due conversioni sole — istante → ora civile e
+//! ora civile → istante — e sono queste.
 
 use std::time::Duration;
 
@@ -130,11 +131,12 @@ pub(crate) struct Position {
     /// saltata resterebbe la «prossima passata» per sempre e ogni giro la
     /// riesaminerebbe; con lei si guarda una volta e si passa oltre, che è anche
     /// il modo in cui una macchina riaccesa dopo due giorni suona zero volte
-    pub(crate) last: Option<CivilTime>,
     /// invece di due.
+    pub(crate) last: Option<CivilTime>,
     /// L'occorrenza per cui si sta aspettando. Quando arriva si suona **senza
     /// consultare la finestra**: la finestra dice fino a quanto tardi ha senso
     /// recuperare ciò che nessuno aspettava, non se onorare ciò che era in
+    /// calendario.
     pub(crate) wait_for: Option<CivilTime>,
 }
 
@@ -231,7 +233,6 @@ mod tests {
     }
 
     /// **Un nome che il database non conosce non fa suonare la sveglia**, e non
-    /// ripiega su UTC: è la riga che tiene la dichiarazione onesta.
     /// ripiega su UTC: è la riga che tiene la dichiarazione onesta.
     #[test]
     fn unknown_zone_does_not_fall_through_to_utc() {
@@ -344,7 +345,6 @@ mod tests {
     ///
     /// Nel 2026 l'uscita è il 25 ottobre alle 3:00: le 2:30 accadono alle 00:30
     /// UTC e di nuovo alle 01:30 UTC.
-    /// UTC e di nuovo alle 01:30 UTC.
     #[test]
     fn duplicate_time_rings_once() {
         let timer = WallClock::daily(2, 30)
@@ -413,6 +413,7 @@ mod tests {
         // Le due occorrenze perse cadono fuori dalla finestra: zero suonate, non
         // due. La più recente si consuma lo stesso — è il campo `last` a
         // impedire che la si riesamini per sempre — e la prossima è quella di
+        // stamattina, che suonerà per la sua strada.
         let v = verdict(&wide, &zone, ts("2026-01-17T05:00:00Z"), yesterday);
         assert!(!v.ring, "twenty hours are outside a one-hour window");
         let consumed = v.position.last.expect("consumed");

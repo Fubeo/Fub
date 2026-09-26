@@ -13,7 +13,10 @@
 //!
 //! L'universo è volutamente piccolo e ostile: omonimi a profondità diverse,
 //! alias che collidono con nomi di pagina, path che collidono a meno
-//! dell'estensione (`nota.md` / `nota.txt`), link a documenti inesistenti.
+//! dell'estensione (`nota.md` / `nota.txt`, `Nota.md` / `Nota.canvas`), nomi
+//! scritti con l'estensione, link a documenti inesistenti. Ogni sequenza gira
+//! due volte: senza formati di prosa e con `md` di prosa, perché lo spareggio
+//! fra formati dello stesso path è un ordine che l'incrementale deve tenere.
 //!
 //! Ci sono **entrambe le specie di link** (decisione 0004), e non per completismo: un
 //! link markdown è relativo alla cartella di chi lo scrive, quindi la stessa
@@ -23,7 +26,7 @@
 use std::collections::BTreeMap;
 
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
-use fub_kernel::LinkGraph;
+use fub_kernel::{LinkGraph, ProseFormats};
 
 /// I documenti che possono esistere nel vault sintetico.
 const PATHS: &[&str] = &[
@@ -36,6 +39,8 @@ const PATHS: &[&str] = &[
     "people/Mario Rossi.md",
     "a.md",
     "sub/a.md",
+    "Nota.canvas",
+    "sub/a.canvas",
 ];
 
 /// Le chiavi che i wikilink possono usare (alcune non risolveranno mai).
@@ -53,6 +58,10 @@ const KEYS: &[&str] = &[
     "a",
     "sub/a",
     "Inesistente",
+    "Nota.canvas",
+    "a.canvas",
+    "nota.txt",
+    "Nota.md",
     "",
 ];
 
@@ -242,9 +251,14 @@ fn observe(graph: &LinkGraph) -> Observed {
 /// Esegue una sequenza di operazioni su un grafo incrementale e, in parallelo,
 /// su uno stato di riferimento ricostruito da zero ad ogni passo.
 fn run_sequence(seed: u64, ops: usize) {
+    run_sequence_with(seed, ops, ProseFormats::default());
+    run_sequence_with(seed, ops, ProseFormats::new(["md"]));
+}
+
+fn run_sequence_with(seed: u64, ops: usize, prose: ProseFormats) {
     let mut rng = Rng::new(seed);
     let mut state: BTreeMap<DocId, DocumentModel> = BTreeMap::new();
-    let mut graph = LinkGraph::default();
+    let mut graph = LinkGraph::with_prose(prose.clone());
     let mut log: Vec<Op> = Vec::new();
 
     for step in 0..ops {
@@ -268,7 +282,7 @@ fn run_sequence(seed: u64, ops: usize) {
             }
         }
 
-        let rebuilt = LinkGraph::build(state.values());
+        let rebuilt = LinkGraph::build_with(state.values(), prose.clone());
         let (got, want) = (observe(&graph), observe(&rebuilt));
         assert_eq!(
             got, want,

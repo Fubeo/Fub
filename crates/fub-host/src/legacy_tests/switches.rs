@@ -4,9 +4,9 @@
 //! provate diverse.
 //!
 //! - `versioning.enabled` è l'interruttore **della feature**: spenta si
-//!   dichiara lo stesso e non registra niente (D7). «Dichiarato con zero
-//!   registrazioni» è uno stato vero, ed è quello che l'inventario del §7.6
-//!   mostra.
+//!   monta lo stesso e non fotografa niente (D7). La storia resta leggibile,
+//!   il ripristino rifiuta, e l'interruttore vale dalla scrittura dopo, senza
+//!   riaprire il vault.
 //! - `plugins.disabled` è l'interruttore **dell'host**: un bundle che ci
 //!   compare non viene montato affatto — niente dichiarazione, niente
 //!   inventario, e nemmeno le sue impostazioni esistono.
@@ -15,9 +15,10 @@
 //! avvio e l'altro**, e come si riaccende.
 
 use camino::Utf8PathBuf;
+use fub_abi::model::DocId;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{IndexQuery, IndexResult};
-use fub_abi::PluginError;
+use fub_abi::{InvokeMode, PluginError, WriteBase};
 use fub_features::VERSIONING_ID;
 use fub_host::{Host, NoWatcher};
 
@@ -81,8 +82,17 @@ fn the_versioning_and_a_setting_and_not_a_variable_d_environment() {
 
     let host = headless();
     host.open(&v.root).expect("reopens");
+    host.write_document(
+        None,
+        &DocId::new("Nota.md"),
+        "# Nota\n\nda spenta\n",
+        WriteBase::Dictated,
+    )
+    .expect("writes");
     assert!(
-        host.versions(None).is_err(),
+        host.list_versions(None, &DocId::new("Nota.md"))
+            .expect("the history stays readable")
+            .is_empty(),
         "reopened, versioning is off: the value lives in the vault, not in the process"
     );
     // D7: **si dichiara lo stesso**. È lo stato che distingue «spento» da «non
@@ -91,6 +101,64 @@ fn the_versioning_and_a_setting_and_not_a_variable_d_environment() {
         declared(&host).contains(&VERSIONING_ID.to_string()),
         "disabled does not mean unmounted: {:?}",
         declared(&host)
+    );
+}
+
+/// I61: la descrizione dell'interruttore dice «spento, la storia già
+/// registrata resta leggibile e non ne nasce di nuova». Spegnerlo smontava
+/// la vista e il ripristino, e valeva solo alla riapertura.
+#[test]
+fn turned_off_the_history_stays_readable_and_the_switch_needs_no_reopening() {
+    let v = Vault::new();
+    let host = headless();
+    host.open(&v.root).expect("opens");
+    let nota = DocId::new("Nota.md");
+    let write = |text: &str| {
+        host.write_document(None, &nota, text, WriteBase::Dictated)
+            .expect("writes");
+    };
+    let versions = || host.list_versions(None, &nota).expect("history readable");
+    write("# Nota\n\nuno\n");
+    let recorded = versions();
+    assert_eq!(recorded.len(), 2, "the original and the first write");
+
+    host.set_setting_for_user(None, "versioning.enabled", SettingValue::Toggle(false))
+        .expect("turned off");
+    write("# Nota\n\ndue\n");
+    assert_eq!(
+        versions(),
+        recorded,
+        "off: no new version, the old ones stay"
+    );
+    assert!(
+        host.views(None)
+            .unwrap()
+            .iter()
+            .any(|view| view.id == fub_features::versioning::HISTORY_VIEW),
+        "the history view stays mounted"
+    );
+    let restore = host.invoke_user_command(
+        None,
+        fub_features::versioning::VERSION_RESTORE,
+        serde_json::json!({ "doc": "Nota.md", "ts": recorded[1].ts }),
+        InvokeMode::Apply,
+    );
+    assert!(
+        matches!(restore, Err(PluginError::Unserved(_))),
+        "restoring would replace a note nobody photographs: {restore:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Nota.md")).unwrap(),
+        "# Nota\n\ndue\n",
+        "the refused restore did not touch the note"
+    );
+
+    host.set_setting_for_user(None, "versioning.enabled", SettingValue::Toggle(true))
+        .expect("turned back on");
+    write("# Nota\n\ntre\n");
+    assert!(
+        versions().len() > recorded.len(),
+        "back on without reopening, the next write is recorded"
     );
 }
 
@@ -112,6 +180,7 @@ fn a_component_off_not_is_mounts_at_all_and_is_turns_on_again() {
     );
     // E l'inventario dei bundle continua a saperlo: «spento» e «non
     // installato» sono due stati diversi, e senza questo elenco il secondo si
+    // mangerebbe il primo.
     let inventory = host.bundles(None).expect("open");
     let stats = inventory
         .iter()
@@ -319,7 +388,6 @@ fn the_core_not_is_turns_off() {
 /// che ci sia: un componente che potesse spegnere gli altri avrebbe potere di
 /// veto su tutto ciò che gli sta accanto, compreso ciò che lo controlla.
 /// `versioning.enabled` lo è, e la differenza fra le due è la voce.
-/// `versioning.enabled` lo è, e la differenza fra le due è la voce.
 #[test]
 fn who_can_shutdown_the_other_not_and_a_program() {
     let core = fub_host::settings::core_settings();
@@ -423,7 +491,6 @@ const BROKEN: &str = "test.non-si-mount";
 /// Un bundle che **non si monta**, e che lo dichiara nel manifest: una major
 /// del contratto che questo host non parla è il primo dei quattro passi di
 /// `mount`, e cade sempre. Il guasto è costruito, non atteso.
-/// `mount`, e cade sempre. Il guasto è costruito, non atteso.
 struct BundleThatDoesNotMount;
 
 impl fub_host::registry::Bundle for BundleThatDoesNotMount {
@@ -454,6 +521,7 @@ impl fub_host::registry::Bundle for BundleThatDoesNotMount {
 /// l'errore nel log e tira avanti), quindi il prossimo avvio ci riprova. Con
 /// l'ordine vecchio, invece, il gesto dell'utente veniva dimenticato: il
 /// montaggio falliva, la riga restava fra gli spenti, e alla riapertura del
+/// vault non ci provava più nessuno.
 #[test]
 fn turning_on_records_intention_even_when_mounting_fails() {
     let v = Vault::new();
@@ -712,7 +780,6 @@ fn the_frame_rate_caps_are_the_same_here_and_there() {
 /// resta sul disco nel frattempo è precisamente il dato che quella casella
 /// prometteva di non tenere. Un interruttore di privacy che non comanda niente
 /// è peggio di un interruttore che non c'è, perché è una promessa.
-/// è peggio di un interruttore che non c'è, perché è una promessa.
 #[test]
 fn the_key_of_the_memory_and_the_same_of_here_and_of_the() {
     let recent_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -844,6 +911,7 @@ fn the_window_of_the_record_does_falls_the_rows_old() {
     //
     // Senza questo pezzo il ramo che pota alla dichiarazione dello schema non
     // sarebbe presidiato da niente — verificato togliendolo e non vedendo
+    // rosso, che è il modo in cui questo banco è nato.
     std::fs::write(
         v.root.join(".fub/journal.jsonl"),
         format!(
@@ -854,6 +922,8 @@ fn the_window_of_the_record_does_falls_the_rows_old() {
     )
     .expect("the journal");
 
+    // L'apertura di prima finisce: un vault ha uno scrittore alla volta.
+    drop(host);
     let host = headless();
     host.open(&v.root).expect("reopens");
     host.with_session(None, |s| {
@@ -876,6 +946,7 @@ fn the_window_of_the_record_does_falls_the_rows_old() {
 /// E la finestra non è scrivibile da un programma, per la ragione della
 /// memoria qui sopra letta al contrario: un componente che potesse **allungare**
 /// la conservazione dei path dell'utente lo farebbe da dietro un interruttore
+/// che l'utente crede suo.
 #[test]
 fn who_can_extend_the_window_of_the_record_not_and_a_program() {
     let window = fub_host::settings::core_settings()

@@ -92,7 +92,7 @@ pub use bus::{EventBus, Subscription};
 pub use dispatcher::{Dispatcher, JobBell, PendingJob};
 pub use documents::DocumentStore;
 pub use error::{KernelError, Result};
-pub use graph::{BuiltGraph, GraphSources, LinkGraph};
+pub use graph::{BuiltGraph, GraphSources, LinkGraph, ProseFormats};
 pub use host::{
     authorize_query, filter_query_result, Capability, CapabilitySet, Granted, Guard, Policy,
     ReadOnly,

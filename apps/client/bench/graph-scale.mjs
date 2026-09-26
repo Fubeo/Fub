@@ -431,7 +431,7 @@ async function main() {
     for (let i = 0; i < config.cycles; i++) {
       await page.evaluate(() => window.__graphScaleProbe.begin());
       const t0 = performance.now();
-      await page.locator("#show-graph").dispatchEvent("click");
+      await page.locator('#views-ribbon .rail-btn-main[data-panel="graph"]').dispatchEvent("click");
       await page.waitForSelector("canvas.graph-main");
       await page.waitForFunction(() => { const c = document.querySelector("canvas.graph-main"); return c && c.width > 0 && c.height > 0; });
       const mounted = await page.evaluate(() => window.__graphScaleProbe.snapshot());

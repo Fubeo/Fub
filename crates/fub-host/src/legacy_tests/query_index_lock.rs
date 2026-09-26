@@ -305,6 +305,51 @@ fn host_query_releases_the_workspace_before_index_provider_query() {
     );
 }
 
+/// `query_index` must not hold the host's session registry while a provider
+/// answers: opening or closing a vault waits for that registry exclusively, and
+/// a waiting writer blocks every new reader — including the provider itself
+/// when it calls back into the host. Here a second vault must open while the
+/// provider is suspended.
+#[test]
+fn host_query_releases_the_sessions_before_index_provider_query() {
+    let vault = vault();
+    let second = self::vault();
+    let host = std::sync::Arc::new(Host::new().with_watcher(Box::new(NoWatcher)));
+    host.open(&vault.root).expect("the vault opens");
+    host.wait_indexed(None).expect("opening indexing finishes");
+    let workspace = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    install_blocking_probe(&workspace, entered_tx, release_rx);
+
+    let querying = std::sync::Arc::clone(&host);
+    let call = std::thread::spawn(move || querying.query_index(None, query()));
+    entered_rx
+        .recv_timeout(TIMEOUT)
+        .expect("IndexProvider::query entered");
+
+    let (opened_tx, opened_rx) = mpsc::sync_channel(1);
+    let opening = std::sync::Arc::clone(&host);
+    let second_root = second.root.clone();
+    let opener = std::thread::spawn(move || {
+        let _ = opened_tx.send(opening.open(&second_root).map(drop));
+    });
+    let opened = opened_rx.recv_timeout(WRITER_LIMIT);
+
+    release_tx.send(()).expect("release query probe");
+    let query_result = call.join().expect("query thread does not panic");
+    opener.join().expect("opener does not panic");
+    assert!(
+        opened.is_ok(),
+        "a second vault did not open within {WRITER_LIMIT:?} while \
+         IndexProvider::query was suspended: query_index held the sessions"
+    );
+    opened
+        .expect("open completion was observed")
+        .expect("the second vault opens");
+    assert_result(query_result, serde_json::json!({ "source": "old" }));
+}
+
 /// The production query path must release `Custody<Workspace>` before entering
 /// an external reader/provider callback. The callback stays suspended after
 /// its entry signal; an independent workspace writer then has a bounded

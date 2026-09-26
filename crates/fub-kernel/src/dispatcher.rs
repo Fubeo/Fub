@@ -710,6 +710,7 @@ mod tests {
     ///
     /// L'hook dei panici si mette a tacere per la durata del misfatto, o un
     /// panico voluto stamperebbe la sua traccia e farebbe sembrare rotto un
+    /// banco verde.
     fn poison_bus(f: impl FnOnce()) {
         let old = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
@@ -717,12 +718,12 @@ mod tests {
         std::panic::set_hook(old);
     }
 
-    /// banco verde.
     /// **Un campanello avvelenato suona lo stesso, e chi aspetta si sveglia.**
     ///
     /// Coi sei `.expect("campanello avvelenato")` di prima questo caso non
     /// falliva un `assert`: paniava — nel thread del banco alla prima riga, e
     /// nell'app dentro il runner dei job, cioè nel thread che poi non accoda
+    /// più niente.
     #[test]
     fn a_poisoned_bell_still_rings_and_wakes_waiters() {
         let bell = Arc::new(JobBell::default());
@@ -731,8 +732,8 @@ mod tests {
             panic!("someone dies holding the bell");
         });
 
-        // più niente.
         // Il conto è monotòno e non è tornato indietro: ciò che il veleno può
+        // costare è un risveglio, non un job.
         let ticket = bell.ticket();
         let waiter = {
             let bell = Arc::clone(&bell);
@@ -750,8 +751,8 @@ mod tests {
         );
     }
 
-    // costare è un risveglio, non un job.
     /// L'attesa a scadenza è la seconda porta, e si rompe per conto suo: il
+    /// veleno di `wait_timeout_while` porta dentro una coppia e non una guardia.
     #[test]
     fn a_poisoned_bell_times_out_anyway() {
         let bell = JobBell::default();

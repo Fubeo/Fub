@@ -11,6 +11,7 @@
 //!    strada di prima, ed è il confronto fra le due a dirlo nella stessa corsa e
 //!    sullo stesso vault;
 //! 3. se il vault cambia mentre il job calcola, la guardia che se ne accorge è
+//!    quella di tutti: la `base` della decisione 0008, e `Conflict`.
 
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread::JoinHandle;
@@ -277,6 +278,8 @@ fn step_step(
 /// non ha dentro nessun arbitro — è «il prestito è libero **adesso**?» invece di
 /// «quanto devo aspettare?». Ed è esattamente la domanda della voce: quello che
 /// il `JobHost` decide è **quando il prestito viene rilasciato** — per chiamata,
+/// o una volta sola per tutto il job — non chi vince la coda. Un test che cade
+/// per una proprietà del lock di sistema non sta guardando ciò per cui esiste.
 #[test]
 fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     const NOTE: usize = 150;

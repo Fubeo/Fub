@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMermaidView, mountMermaidBlocks, registerMermaidRenderer, type MermaidView } from "./mermaid";
-import { sourceElementAt } from "./markdown";
+import { sourceElementAt } from "../editors/text/profiles/markdown/mount";
+import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { mountTree, unmountTree } from "./node";
 import type { UiNode } from "../host/contract";
 
@@ -177,13 +178,28 @@ describe("Mermaid lifecycle", () => {
 
   it("keeps reading anchors and source mapping without converting ordinary code", () => {
     const container = document.createElement("div");
-    container.innerHTML = '<pre id="fub-contenuto-diagram" data-md-from="8" data-md-to="48"><code class="language-mermaid">flowchart LR; A--&gt;B</code></pre><pre><code class="language-js">let x = 1;</code></pre>';
+    container.innerHTML = '<pre id="fub-contenuto-diagram" data-md-from="8" data-md-to="48" data-declared-fence><code class="language-mermaid">flowchart LR; A--&gt;B</code></pre><pre><code class="language-js">let x = 1;</code></pre>';
     const destroy = mountMermaidBlocks(container);
     const diagram = container.querySelector("figure")!;
     expect(sourceElementAt(container, 20)).toBe(diagram);
     expect(diagram.querySelector("code")!.textContent).toBe("flowchart LR; A-->B");
     expect(container.querySelector("pre > code.language-js")!.textContent).toBe("let x = 1;");
     destroy();
+  });
+
+  // I78: with the diagrams syntax off for the vault the fence is not declared,
+  // and it stays code instead of turning into a diagram anyway.
+  it("leaves an undeclared mermaid fence as code", () => {
+    const container = document.createElement("div");
+    container.innerHTML = renderMarkdown("```mermaid\nflowchart LR; A-->B\n```\n", []).html;
+    const destroy = mountMermaidBlocks(container);
+    expect(container.querySelector("figure")).toBeNull();
+    expect(container.querySelector("pre > code.language-mermaid")!.textContent).toBe("flowchart LR; A-->B");
+    destroy();
+    container.innerHTML = renderMarkdown("```mermaid\nflowchart LR; A-->B\n```\n").html;
+    const declared = mountMermaidBlocks(container);
+    expect(container.querySelector("figure")).not.toBeNull();
+    declared();
   });
 });
 

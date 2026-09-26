@@ -57,14 +57,15 @@
 //! `ViewInterests` che il provider dichiara, e che un giorno può cambiare idea
 //! senza che nessuno tocchi la shell.
 
+use fub_abi::command::{CommandEffect, CommandOutcome, CommandScope, CommandSpec, InvokeMode};
 use fub_abi::error::PluginError;
 use fub_abi::event::EventMask;
 use fub_abi::query::QueryExpr;
 use fub_abi::session::ContextMask;
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{
-    HostApi, IndexQuery, IndexResult, LinkDirection, NeighborRef, ReadApi, ViewInstance,
-    ViewInterests, ViewProvider, ViewSpec, ViewSurface,
+    CommandProvider, HostApi, IndexQuery, IndexResult, LinkDirection, NeighborRef, ReadApi,
+    ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::{UiAction, UiKind, UiNode, ViewUpdate};
 use serde_json::json;
@@ -73,6 +74,17 @@ use serde_json::json;
 pub const GRAPH_ID: &str = "fub.graph";
 /// Id della `ViewSpec`: è ciò con cui la shell chiede questa view al kernel.
 pub const GRAPH_VIEW: &str = "graph";
+
+/// Il comando che apre il grafo nel riquadro col fuoco.
+///
+/// È del componente e non della shell: chi dichiara la view dichiara anche il
+/// gesto che la apre, con la sua scorciatoia, e un grafo spento non lascia in
+/// giro un comando che apre una view che non c'è. La shell esegue l'effetto
+/// [`CommandEffect::OpenView`] come per ogni altra view principale.
+pub const GRAPH_OPEN: &str = "graph.open";
+/// L'accordo di [`GRAPH_OPEN`]: quello che la shell dichiarava per il suo
+/// `shell.graph`, perché chi lo ha imparato lo tenga.
+const GRAPH_OPEN_KEY: &str = "Mod-Shift-g";
 
 /// Il namespace con cui il grafo arriva alla shell dentro [`UiKind::Custom`].
 ///
@@ -160,20 +172,31 @@ const VIEW_TITLE: &str = "view_title";
 /// disegnarlo. Dice **cosa** manca e non «non supportato», che è la stessa
 /// regola con cui `ui/views.ts` nomina le superfici che non ospita.
 const FALLBACK: &str = "fallback";
+/// Titolo e descrizione di [`GRAPH_OPEN`].
+const OPEN_TITLE: &str = "graph.open.title";
+const OPEN_DESC: &str = "graph.open.desc";
 
 /// Le stringhe del grafo. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
 /// componente e non nella shell.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
-        StringCatalog::new("it").with(VIEW_TITLE, "Grafo").with(
-            FALLBACK,
-            "Questa shell non sa disegnare un grafo: le manca il renderer di «fub:graph».",
-        ),
-        StringCatalog::new("en").with(VIEW_TITLE, "Graph").with(
-            FALLBACK,
-            "This shell cannot draw a graph: it has no renderer for `fub:graph`.",
-        ),
+        StringCatalog::new("it")
+            .with(VIEW_TITLE, "Grafo")
+            .with(
+                FALLBACK,
+                "Questa shell non sa disegnare un grafo: le manca il renderer di «fub:graph».",
+            )
+            .with(OPEN_TITLE, "Mostra il grafo")
+            .with(OPEN_DESC, "Apre il grafo dei collegamenti del vault."),
+        StringCatalog::new("en")
+            .with(VIEW_TITLE, "Graph")
+            .with(
+                FALLBACK,
+                "This shell cannot draw a graph: it has no renderer for `fub:graph`.",
+            )
+            .with(OPEN_TITLE, "Show the graph")
+            .with(OPEN_DESC, "Opens the graph of the vault links."),
     ]
 }
 
@@ -210,7 +233,8 @@ impl ViewProvider for GraphView {
             //
             // Niente `open_by_default`: un riquadro non è un pannello che nasce
             // aperto o chiuso, è un posto in cui qualcuno mette qualcosa. Ci
-            // arriva col comando `shell.graph`, e `order` non ha nessuno con cui
+            // arriva col comando [`GRAPH_OPEN`] o dalla rail, che mostra ogni
+            // view principale con un'icona, e `order` non ha nessuno con cui
             // ordinarsi.
             ViewSpec::new(GRAPH_VIEW, Text::key(VIEW_TITLE), ViewSurface::Main).with_icon("graph"),
         ]
@@ -323,6 +347,41 @@ impl ViewProvider for GraphView {
     }
 }
 
+/// Il comando del grafo: [`GRAPH_OPEN`] e nient'altro.
+///
+/// Senza stato, come la view: aprire un riquadro non tocca il vault, quindi il
+/// comando è di sola lettura e la sua prova a secco non chiede niente alla
+/// shell.
+pub struct GraphCommands;
+
+impl CommandProvider for GraphCommands {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new(GRAPH_OPEN, Text::key(OPEN_TITLE))
+            .describing(Text::key(OPEN_DESC))
+            .with_keybinding(GRAPH_OPEN_KEY)
+            .with_scope(CommandScope::read_only())]
+    }
+
+    fn invoke(
+        &self,
+        command: &str,
+        _args: serde_json::Value,
+        mode: InvokeMode,
+        _host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        if command != GRAPH_OPEN {
+            return Err(PluginError::UnknownCommand(command.to_string().into()));
+        }
+        if mode.is_dry_run() {
+            return Ok(CommandOutcome::done());
+        }
+        Ok(CommandOutcome::done().with_effect(CommandEffect::OpenView {
+            view: GRAPH_VIEW.to_string(),
+            params: serde_json::Value::Null,
+        }))
+    }
+}
+
 /// L'albero della view: un nodo custom col grafo dentro, e il ripiego per chi
 /// non sa disegnarlo.
 fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
@@ -340,7 +399,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
             edge_values(host, QueryExpr::all(), LinkDirection::Outbound)?,
         ),
     };
-    let (nodes, edges) = apply_filter(nodes, edges, &filter);
+    let (nodes, edges) = apply_filter(host, nodes, edges, &filter);
     let groups = groups_for(host, &nodes, &group_by)?;
     let visible = nodes
         .iter()
@@ -521,69 +580,58 @@ fn local_graph(
 }
 
 /// Applica i filtri di disegno: senza orfani si tolgono i nodi isolati (chi ha
-/// un arco resta); senza allegati si tolgono gli archi verso non-documenti —
-/// qui letti dall'estensione, perché il payload non porta le specie e il canale
-/// `Entries` costerebbe una seconda topologia per un filtro di disegno.
+/// un arco resta); senza allegati si tolgono i non-documenti e i loro archi.
+///
+/// Gli allegati arrivano da `Neighbors` come foglie uscenti (`![[foto.png]]`):
+/// il grafo globale parte dai documenti, e un allegato mostrato entra fra i
+/// nodi dall'arco che lo nomina. Che cosa è un documento lo dice il registro
+/// dei formati (`format_of`), non una lista di estensioni tenuta qui.
 fn apply_filter(
+    host: &dyn ReadApi,
     nodes: Vec<String>,
     edges: Vec<serde_json::Value>,
     filter: &GraphFilter,
 ) -> (Vec<String>, Vec<serde_json::Value>) {
-    let edges = if filter.show_attachments {
-        edges
+    let is_document = |path: &str| host.format_of(&fub_abi::model::DocId::new(path)).is_some();
+    let endpoints = |e: &serde_json::Value| {
+        (
+            e.get(FROM)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            e.get(TO).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        )
+    };
+    let (nodes, edges) = if filter.show_attachments {
+        let mut all: std::collections::BTreeSet<String> = nodes.into_iter().collect();
+        for e in &edges {
+            let (from, to) = endpoints(e);
+            all.insert(from);
+            all.insert(to);
+        }
+        (all.into_iter().collect::<Vec<_>>(), edges)
     } else {
-        edges
+        let edges = edges
             .into_iter()
             .filter(|e| {
-                let from = e.get(FROM).and_then(|v| v.as_str()).unwrap_or("");
-                let to = e.get(TO).and_then(|v| v.as_str()).unwrap_or("");
-                is_note(from) && is_note(to)
+                let (from, to) = endpoints(e);
+                is_document(&from) && is_document(&to)
             })
-            .collect()
+            .collect::<Vec<_>>();
+        let nodes = nodes.into_iter().filter(|n| is_document(n)).collect();
+        (nodes, edges)
     };
     if filter.show_orphans {
         return (nodes, edges);
     }
     let mut linked = std::collections::BTreeSet::new();
     for e in &edges {
-        if let Some(from) = e.get(FROM).and_then(|v| v.as_str()) {
-            linked.insert(from.to_string());
-        }
-        if let Some(to) = e.get(TO).and_then(|v| v.as_str()) {
-            linked.insert(to.to_string());
-        }
+        let (from, to) = endpoints(e);
+        linked.insert(from);
+        linked.insert(to);
     }
     let nodes = nodes.into_iter().filter(|n| linked.contains(n)).collect();
     (nodes, edges)
-}
-
-/// Un allegato, per il filtro di disegno: ciò che non è una nota per
-/// estensione. La regola delle estensioni sta nel registry dei formati — qui
-/// serve solo a non disegnare un PNG come una nota, e la lista è quella che il
-/// markdown tratta da documento contro allegato.
-fn is_note(path: &str) -> bool {
-    let lower = path.to_lowercase();
-    lower.ends_with(".md")
-        || lower.ends_with(".markdown")
-        || lower.ends_with(".txt")
-        || !lower.rsplit('.').next().is_some_and(|ext| {
-            matches!(
-                ext,
-                "png"
-                    | "jpg"
-                    | "jpeg"
-                    | "gif"
-                    | "webp"
-                    | "svg"
-                    | "pdf"
-                    | "mp3"
-                    | "wav"
-                    | "ogg"
-                    | "mp4"
-                    | "webm"
-                    | "zip"
-            )
-        })
 }
 
 /// Raggruppamento per tag esatto: la faccetta individua i tag presenti nel
@@ -672,6 +720,7 @@ fn groups_for(
     }
     Ok(groups)
 }
+/// I nodi: ogni documento del vault.
 ///
 /// Senza finestra, come i tag: un grafo mostrato a pagine non è un grafo. È
 /// anche il motivo per cui il §2.9 (virtualizzazione) non lo tocca — qui non c'è
@@ -859,6 +908,50 @@ mod tests {
         assert_eq!(update, ViewUpdate::None);
     }
 
+    /// Il gesto che apre il grafo è del grafo: un comando con la sua
+    /// scorciatoia, che chiede alla shell di aprire la view e non tocca niente.
+    #[test]
+    fn the_open_command_asks_the_shell_for_the_view() {
+        let specs = GraphCommands.commands();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].id, GRAPH_OPEN);
+        assert_eq!(specs[0].keybinding.as_deref(), Some(GRAPH_OPEN_KEY));
+        let mut host = MemoryHost::new();
+        let outcome = GraphCommands
+            .invoke(
+                GRAPH_OPEN,
+                serde_json::Value::Null,
+                InvokeMode::Apply,
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(
+            outcome.effect,
+            CommandEffect::OpenView {
+                view: GRAPH_VIEW.to_string(),
+                params: serde_json::Value::Null,
+            }
+        );
+        let dry = GraphCommands
+            .invoke(
+                GRAPH_OPEN,
+                serde_json::Value::Null,
+                InvokeMode::DryRun,
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(dry.effect, CommandEffect::Done);
+        assert!(matches!(
+            GraphCommands.invoke(
+                "graph.other",
+                serde_json::Value::Null,
+                InvokeMode::Apply,
+                &mut host
+            ),
+            Err(PluginError::UnknownCommand(_))
+        ));
+    }
+
     /// La superficie che nessuno aveva mai dichiarato.
     #[test]
     fn it_declares_the_main_surface() {
@@ -913,24 +1006,34 @@ mod tests {
             show_orphans: false,
             show_attachments: true,
         };
-        let (nodes, edges) = apply_filter(nodes, edges, &hidden);
+        let (nodes, edges) = apply_filter(&MemoryHost::new(), nodes, edges, &hidden);
         assert_eq!(nodes, vec!["a.md".to_string(), "b.md".to_string()]);
         assert_eq!(edges.len(), 1);
     }
 
-    /// Senza allegati gli archi verso non-note spariscono e i nodi restano: il
-    /// filtro taglia i fili, non le palline.
+    /// Senza allegati spariscono i non-documenti e i loro archi; con gli
+    /// allegati l'estremo di un arco entra fra i nodi anche se la lista dei
+    /// documenti (il grafo globale) non lo portava. Il documento lo dice il
+    /// registro dei formati: `foto.png` non ne ha uno, `a.md` sì.
     #[test]
-    fn hiding_attachments_cuts_edges_not_nodes() {
-        let nodes = vec!["a.md".to_string(), "foto.png".to_string()];
-        let edges = vec![json!({ FROM: "a.md", TO: "foto.png" })];
+    fn the_attachments_filter_shows_and_hides_the_attachment() {
+        let host = MemoryHost::new();
+        let nodes = || vec!["a.md".to_string()];
+        let edges = || vec![json!({ FROM: "a.md", TO: "foto.png" })];
         let hidden = GraphFilter {
             show_orphans: true,
             show_attachments: false,
         };
-        let (nodes, edges) = apply_filter(nodes, edges, &hidden);
-        assert_eq!(nodes.len(), 2);
-        assert!(edges.is_empty());
+        let (shown_nodes, shown_edges) = apply_filter(&host, nodes(), edges(), &hidden);
+        assert_eq!(shown_nodes, ["a.md"]);
+        assert!(shown_edges.is_empty());
+        let shown = GraphFilter {
+            show_orphans: true,
+            show_attachments: true,
+        };
+        let (shown_nodes, shown_edges) = apply_filter(&host, nodes(), edges(), &shown);
+        assert_eq!(shown_nodes, ["a.md", "foto.png"]);
+        assert_eq!(shown_edges, edges());
     }
 
     /// Profondità oltre il massimo e versi illeggibili leggono come i default:

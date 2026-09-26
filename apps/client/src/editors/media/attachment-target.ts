@@ -8,7 +8,6 @@
 // encoding, e conservano il nome originale (`C:\foto\a.png` -> `a.png`).
 // Gemello Rust: `sanitize_file_name`, `attachment_candidate`,
 // `split_file_name`, `relative_url` in `crates/fub-host/src/resources.rs`.
-import { mediaKindOfId } from "./media-types";
 import type { Lifetime } from "../../ui/lifetime";
 
 export const DEFAULT_ATTACHMENT_FOLDER = "attachments";
@@ -126,20 +125,6 @@ export async function depositAttachment(
     }
   }
   throw new Error(`no free attachment name remains for ${name}`);
-}
-
-/// Il Markdown di un allegato appena depositato. Immagini, audio, video e PDF
-/// si incorporano, perché la lettura li sa mostrare; tutto il resto diventa un
-/// link col suo nome — prima uno zip diventava un'immagine rotta.
-export function attachmentMarkdown(link: string): string {
-  let name = link.split("/").pop() ?? link;
-  try {
-    name = decodeURIComponent(name);
-  } catch {
-    // Un nome non codificato resta com'è.
-  }
-  if (mediaKindOfId(name) !== "other") return `![](${link})`;
-  return `[${name.replace(/[[\]\\]/g, "\\$&")}](${link})`;
 }
 
 /** Paste/drop files are deposited only after the user's actual gesture. */

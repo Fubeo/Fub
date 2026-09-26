@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { state } from "./store";
 import { closeDocumentWindowByLabel, openCurrentInNewWindow, pendingDocumentWindows } from "./document-windows";
+import { DocumentWindowUnsupported } from "./document-bridge";
+import { declareShell, DESKTOP_CAPABILITIES, MOBILE_CAPABILITIES, type ClientShell } from "../platform/capabilities";
+
+const MOBILE_SHELL: ClientShell = { id: "mobile", capabilities: MOBILE_CAPABILITIES };
+const DESKTOP_SHELL: ClientShell = { id: "desktop", capabilities: DESKTOP_CAPABILITIES };
 
 const fixture = vi.hoisted(() => ({
   api: {
@@ -18,10 +23,15 @@ const fixture = vi.hoisted(() => ({
   },
   attach: vi.fn(),
   notify: vi.fn(),
+  showsBytes: vi.fn(() => false),
 }));
 vi.mock("../host/ipc", () => ({ api: fixture.api }));
 vi.mock("./document-session", () => ({ documentSessions: fixture.sessions }));
-vi.mock("./document-bridge", () => ({ attachRemoteSurface: fixture.attach }));
+vi.mock("./document-bridge", () => ({
+  attachRemoteSurface: fixture.attach,
+  DocumentWindowUnsupported: class extends Error {},
+}));
+vi.mock("../panels/document", () => ({ canShowFile: fixture.showsBytes, textProfileFor: () => "markdown" }));
 vi.mock("./layout", () => ({ activeDoc: () => null }));
 vi.mock("../ui/notify", () => ({ notify: fixture.notify }));
 vi.mock("../i18n/strings", () => ({ t: (key: string) => key }));
@@ -56,7 +66,7 @@ describe("native document-window close barrier", () => {
     thaw = vi.fn();
     dispose = vi.fn(async () => {});
     fixture.attach.mockReset().mockImplementation(async (doc: string, vault: string) => ({
-      request: { surface: "document", channel: `channel-${serial}`, document: doc, vault, session: `session-${serial}`, surfaceId: `surface-${serial}` },
+      request: { surface: "document", channel: `channel-${serial}`, document: doc, vault, session: `session-${serial}`, surfaceId: `surface-${serial}`, profile: "markdown" },
       handle: { surfaceId: `surface-${serial}`, channel: `channel-${serial}`, freeze, thaw, dispose },
     }));
     fixture.api.onDocumentWindowClosed.mockReset().mockImplementation(async (handler: (event: WindowEvent) => void) => {
@@ -105,5 +115,34 @@ describe("native document-window close barrier", () => {
     events.destroyed?.({ label, surface: "document" });
     await expect(retried).resolves.toBe(true);
     expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  // I byte di un media non hanno un buffer da condividere; una tela o un foglio
+  // hanno una superficie che la finestra non sa montare. In tutti e due i casi
+  // la shell lo dice, invece di aprire una finestra sbagliata.
+  it("un documento senza superficie di testo resta nella finestra principale", async () => {
+    fixture.showsBytes.mockReturnValueOnce(true);
+    await openCurrentInNewWindow("foto.png");
+    expect(fixture.attach).not.toHaveBeenCalled();
+    expect(fixture.notify).toHaveBeenCalledWith("windows.not_text", "info");
+
+    fixture.attach.mockRejectedValueOnce(new DocumentWindowUnsupported("lavagna.canvas"));
+    await openCurrentInNewWindow("lavagna.canvas");
+    expect(fixture.api.openDocumentWindow).not.toHaveBeenCalled();
+    expect(fixture.notify).toHaveBeenLastCalledWith("windows.not_text", "info");
+  });
+
+  // Una piattaforma con una finestra sola non ne apre altre, da qualunque voce
+  // ci si arrivi: niente superficie remota, niente richiesta al backend.
+  it("senza multipleWindows nessuna finestra viene chiesta", async () => {
+    declareShell(MOBILE_SHELL);
+    try {
+      await openCurrentInNewWindow("nota.md");
+      expect(fixture.attach).not.toHaveBeenCalled();
+      expect(fixture.api.openDocumentWindow).not.toHaveBeenCalled();
+      expect(fixture.notify).toHaveBeenCalledWith("windows.unavailable", "info");
+    } finally {
+      declareShell(DESKTOP_SHELL);
+    }
   });
 });

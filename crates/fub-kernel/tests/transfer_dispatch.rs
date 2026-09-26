@@ -477,3 +477,84 @@ fn whoever_pours_into_the_sink_receives_a_receipt_and_leaves_a_file() {
         "le cartelle intermedie le crea l'host: un provider non conosce il disco"
     );
 }
+
+/// Un importer che, importando, chiede all'host la stessa sorgente: si
+/// risponde a sé stesso, e il suo lucchetto è già preso.
+struct Reentrant {
+    again: Arc<Mutex<Option<Result<ImportReport, PluginError>>>>,
+}
+
+impl ImportProvider for Reentrant {
+    fn can_handle(&self, source: &ImportSource) -> bool {
+        source.extension().as_deref() == Some("txt")
+    }
+
+    fn import(
+        &mut self,
+        source: &ImportSource,
+        request: &ImportRequest,
+        host: &mut dyn HostApi,
+    ) -> Result<ImportReport, PluginError> {
+        *self.again.lock().unwrap() = Some(host.run_import(source, request));
+        Ok(ImportReport {
+            mode: request.mode,
+            documents: Vec::new(),
+            log: Vec::new(),
+        })
+    }
+}
+
+/// **Un import non rientra nel proprio importer**: `Conflict`, non un blocco.
+///
+/// Il provider sta dietro un lucchetto esclusivo per tutto l'import, perché
+/// `import` chiede `&mut self`; un secondo import dallo stesso thread lo
+/// aspetterebbe per sempre.
+#[test]
+fn an_importer_that_asks_for_itself_is_refused_not_deadlocked() {
+    let (_g, mut ws) = workspace();
+    let again = Arc::default();
+    ws.register_import_provider(
+        "spia.txt",
+        Box::new(Reentrant {
+            again: Arc::clone(&again),
+        }),
+    )
+    .expect("registrato");
+    ws.import(
+        &ImportSource::text_source("dati.txt", "contenuto"),
+        &ImportRequest::preview(),
+    )
+    .expect("il primo import torna");
+    let again = again.lock().unwrap().take().expect("ha chiesto di nuovo");
+    assert!(
+        matches!(again, Err(PluginError::Conflict(_))),
+        "il rientro è un conflitto tipizzato: {again:?}"
+    );
+}
+
+/// **Un export non scelto a mano**: la porta dell'host trova il provider
+/// della destinazione, e i byte tornano nel rapporto.
+#[test]
+fn run_export_reaches_the_registered_exporter() {
+    let (_g, mut ws) = workspace();
+    ws.register_export_provider("spia", Box::new(SpyExport))
+        .expect("registrato");
+    let request = ExportRequest::new(
+        "spia.elenco",
+        ExportSelection::Documents(vec![DocId::new("esistente.txt")]),
+    );
+    let report = ws
+        .with_host("spia", |host| host.run_export(&request))
+        .expect("export");
+    assert!(!report.artifacts.is_empty(), "{report:?}");
+    let unknown = ws.with_host("spia", |host| {
+        host.run_export(&ExportRequest::new(
+            "nessuno.sa",
+            ExportSelection::default(),
+        ))
+    });
+    assert!(
+        matches!(unknown, Err(PluginError::BadArgs(_))),
+        "{unknown:?}"
+    );
+}

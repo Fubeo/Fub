@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::edit::TextEdit;
 use crate::error::FormatError;
-use crate::model::{DocumentModel, LinkTarget, Span};
+use crate::model::{DocumentModel, LinkTarget, Span, TaskMarker};
 use crate::options::{render_option, syntax, OptionMap};
 
 /// Che cosa un provider si aspetta di ricevere in [`FormatProvider::parse`].
@@ -300,6 +300,23 @@ pub struct LinkRewrite {
     pub replacement: String,
 }
 
+/// Un riferimento da scrivere in un documento, nella grammatica del suo
+/// formato.
+///
+/// Chi lo chiede sa **dove** deve portare il riferimento e con quale testo; il
+/// provider sa **come** si scrive, compreso l'escaping. Una feature che
+/// componesse `[[…]]` da sé scriverebbe Markdown anche dove il formato è un
+/// altro.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LinkInsert {
+    /// La destinazione, nella forma con cui il vault la risolve.
+    pub target: LinkTarget,
+    /// Il testo mostrato al posto della destinazione, se diverso.
+    pub label: Option<String>,
+    /// Incorporare il bersaglio invece di collegarlo.
+    pub embed: bool,
+}
+
 /// Il trait centrale. **Object-safe**: nessun metodo generico, nessun `async fn`
 /// nel trait (l'I/O vive nell'`HostApi`, non qui — parse/render/serialize sono
 /// funzioni CPU pure).
@@ -381,6 +398,39 @@ pub trait FormatProvider: Send + Sync {
         _source: &DocumentSource,
         _ctx: &ParseContext,
         _rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        Ok(None)
+    }
+
+    /// Il testo con cui questo formato scrive `link`, pronto da inserire.
+    ///
+    /// `None` dichiara che il formato non sa scrivere quel riferimento, con le
+    /// sintassi che `ctx` accende: chi chiede non ripiega su una grammatica
+    /// sua. Un bersaglio che la grammatica non può esprimere è un errore, non
+    /// un testo che alla rilettura porterebbe altrove.
+    ///
+    /// La proiezione WASM è l'export opzionale `format-edits`.
+    fn format_link(
+        &self,
+        _ctx: &ParseContext,
+        _link: &LinkInsert,
+    ) -> Result<Option<String>, FormatError> {
+        Ok(None)
+    }
+
+    /// Le patch che portano il task di `marker` a fatto o da fare.
+    ///
+    /// Il marcatore viene dal modello che questo provider ha prodotto per
+    /// `source`: la posizione la sa già chi chiama, il simbolo da scrivere lo
+    /// sa soltanto il formato. `None` dichiara che il formato non offre
+    /// l'operazione. Le patch usano offset UTF-8 e vengono applicate con CAS.
+    ///
+    /// La proiezione WASM è l'export opzionale `format-edits`.
+    fn set_task_state(
+        &self,
+        _source: &DocumentSource,
+        _marker: &TaskMarker,
+        _done: bool,
     ) -> Result<Option<Vec<TextEdit>>, FormatError> {
         Ok(None)
     }

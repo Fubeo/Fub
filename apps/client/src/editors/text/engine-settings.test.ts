@@ -48,4 +48,30 @@ describe("text input settings", () => {
     expect(read).toHaveBeenCalledTimes(calls);
     host.remove();
   });
+
+  it("a field keeps its fixed layout and never reads the writing preferences", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([entry(EDITOR_SPELLCHECK_KEY, true), entry(EDITOR_VIM_KEY, true)]);
+    const document_ = document.createElement("div");
+    const field = document.createElement("div");
+    document.body.append(document_, field);
+    const text = createTextEngine(document_, { onChange: () => {}, onSelectionChange: () => {} });
+    const cell = createTextEngine(field, { onChange: () => {}, onSelectionChange: () => {}, field: true });
+    const view = EditorView.findFromDOM(field)!;
+    await vi.waitFor(() => expect(getCM(EditorView.findFromDOM(document_)!)).not.toBeNull());
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_VIM_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(getCM(view)).toBeNull();
+    expect(field.querySelector(".cm-lineNumbers")).toBeNull();
+    expect(document_.querySelector(".cm-lineNumbers")).not.toBeNull();
+    expect(view.contentDOM.getAttribute("spellcheck")).toBe("false");
+    text.destroy();
+    cell.destroy();
+    document_.remove();
+    field.remove();
+  });
 });

@@ -40,7 +40,6 @@ pub struct SampleText {
 impl SampleText {
     /// Il formato di prova su una estensione. L'id è derivato dall'estensione,
     /// così due formati su due estensioni diverse non collidono nel registro.
-    /// così due formati su due estensioni diverse non collidono nel registro.
     pub fn by_extension(ext: &str) -> Self {
         SampleText {
             id: format!("sample.{ext}"),
@@ -68,7 +67,6 @@ impl SampleText {
     }
 
     /// Rende dentro un `<pre>`: serve dove il test guarda che l'HTML del
-    /// provider arrivi intatto, e un `render_html` identità non lo mostrerebbe.
     /// provider arrivi intatto, e un `render_html` identità non lo mostrerebbe.
     pub fn inside_pre(mut self) -> Self {
         self.pre = true;

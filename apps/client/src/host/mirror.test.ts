@@ -16,6 +16,7 @@ import type {
   EmbedContent,
   Failure,
   EventMask,
+  ExportReport,
   GridApplyRequest,
   GridCell,
   GridCellKey,
@@ -652,6 +653,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     since: true,
     progress: true,
   }),
+  ExportReport: keysOf<ExportReport>({ artifacts: true, log: true }),
   ViewSpec: keysOf<ViewSpec>({
     id: true,
     title: true,
@@ -697,6 +699,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     keybinding: true,
     params: true,
     scope: true,
+    surfaces: true,
   }),
   CommandOutcome: keysOf<CommandOutcome>({
     notify: true,
@@ -926,6 +929,7 @@ describe("mirror TS↔Rust", () => {
       "CommandOutcome",
       "SettingSpec",
       "SettingEntry",
+      "ExportReport",
       "PluginError",
     ]) {
       expect(fixture[type], `manca il type ${type} nella fixture`).toBeTruthy();
@@ -1103,6 +1107,26 @@ describe("mirror TS↔Rust", () => {
     expect(asPluginError(new TypeError("rotto qui dentro"))).toBeNull();
     expect(asPluginError("una stringa, come prima della 0041")).toBeNull();
     expect(errorText(new TypeError("rotto qui dentro"))).toContain("rotto qui dentro");
+  });
+
+  it("un esito di export porta byte o una ricevuta u64 come stringa, e il giornale", () => {
+    for (const report of fixture.ExportReport as ExportReport[]) {
+      for (const artifact of report.artifacts) {
+        expect(Object.keys(artifact).sort()).toEqual(["content", "media_type", "path"]);
+        expect(Object.keys(artifact.content).sort()).toEqual(["kind", "value"]);
+        if (artifact.content.kind === "bytes") {
+          expect(artifact.content.value.every((byte) => Number.isInteger(byte))).toBe(true);
+        } else {
+          expect(artifact.content.kind).toBe("delivered");
+          expect(typeof artifact.content.value).toBe("string");
+        }
+      }
+      expect(new Set(report.artifacts.map((a) => a.content.kind))).toEqual(new Set(["bytes", "delivered"]));
+      for (const note of report.log) {
+        expect(Object.keys(note).sort()).toEqual(["entry", "level", "message"]);
+        expect(["info", "warning", "error"]).toContain(note.level);
+      }
+    }
   });
 
   it("i record hanno esattamente le chiavi del tipo TS", () => {

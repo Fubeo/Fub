@@ -89,6 +89,12 @@ pub const ATTACHMENT_FOLDER: &str = "files.attachment-folder";
 /// bundle core; il kernel la applica insieme alla scelta del nome, sotto la
 /// custodia esclusiva del workspace.
 pub const NEW_NOTE_FOLDER: &str = "files.new-note-folder";
+/// L'estensione di una nota creata senza estensione.
+///
+/// La dichiara il bundle core. La leggono il kernel, quando crea una nota
+/// senza nome completo, e le feature che nominano note nuove: una regola sola
+/// invece di due convenzioni. Vale solo se un provider la rivendica.
+pub const NEW_NOTE_EXTENSION: &str = "files.new-note-extension";
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
 /// giorno**, perché il file che non ce l'ha è quello che poi non si sa da che

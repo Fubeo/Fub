@@ -51,6 +51,7 @@ import { t } from "../i18n/strings";
 import { iconEl } from "./icons";
 import { setTooltip } from "./tooltip";
 import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
+import { primaryView, setPrimaryViews } from "./primary-views";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -94,20 +95,11 @@ interface Mounted {
 let mountedEpoch = 0;
 const mounted = new Map<string, Mounted>();
 
-/// Le view che dichiarano la superficie principale, per id.
-///
-/// Non sono montate: sono **disponibili**. Chi apre una linguetta di view le cerca
-/// qui, e il titolo che ne legge è quello che finisce sulla linguetta.
-const primarySpecs = new Map<string, ViewSpec>();
-
-/// Le view che un riquadro può ospitare, in ordine di dichiarazione.
-export function primaryViews(): ViewSpec[] {
-  return [...primarySpecs.values()];
-}
-
-export function primaryView(id: string): ViewSpec | undefined {
-  return primarySpecs.get(id);
-}
+// Le view che dichiarano la superficie principale non sono montate: sono
+// **disponibili**. Chi apre una linguetta di view le cerca in
+// `primary-views.ts`, e il titolo che ne legge è quello che finisce sulla
+// linguetta. Questo modulo ne riempie l'elenco a ogni giro di discovery.
+export { primaryView, primaryViews } from "./primary-views";
 
 /// L'id del pannello di una view montata in un riquadro.
 ///
@@ -149,7 +141,7 @@ export async function mountViewInPane(
   container: HTMLElement,
   params: unknown = null,
 ): Promise<void> {
-  const spec = primarySpecs.get(view);
+  const spec = primaryView(view);
   if (!spec) return;
   const id = panePanel(view, pane);
   const already = mounted.get(id);
@@ -216,7 +208,7 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
       return viewsSettingsEl;
     // L'area principale è ospitata, ma non da qui: il suo contenitore è un
     // riquadro, e quale riquadro lo decide chi apre la tab. Vedi
-    // `primaryViews` più sotto — `null` qui significa «non all'avvio», non
+    // `primary-views.ts` — `null` qui significa «non all'avvio», non
     // «non si può».
     case "main":
       return null;
@@ -256,7 +248,7 @@ function clearMountedViews(): void {
     unmountMounted(id, mountedView);
   }
   mounted.clear();
-  primarySpecs.clear();
+  setPrimaryViews([]);
   for (const el of [
     viewsLeftEl,
     viewsRightEl,
@@ -329,7 +321,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
       unmountMounted(id, mountedView);
     }
   }
-  primarySpecs.clear();
+  const mains: ViewSpec[] = [];
   for (const el of [
     viewsLeftEl,
     viewsRightEl,
@@ -361,7 +353,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
     // L'area principale si dichiara e aspetta un riquadro: non è un avviso, è
     // il suo modo di essere ospitata.
     if (spec.surface === "main") {
-      primarySpecs.set(spec.id, spec);
+      mains.push(spec);
       continue;
     }
     const host = surfaceContainer(spec.surface);
@@ -378,6 +370,8 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
     }
     mountSpec(spec, host);
   }
+
+  setPrimaryViews(mains);
 
   viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;
   viewsStatusEl.hidden = viewsStatusEl.childElementCount === 0;

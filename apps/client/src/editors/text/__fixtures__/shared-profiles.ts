@@ -1,10 +1,7 @@
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import {
-  createTextEngine,
-  type EditorChange,
-  type TextEngine,
-} from "../engine";
+import { createTextEngine, type TextEngine } from "../engine";
+import type { EditorChange } from "../../core/text-operation";
 import {
   createFormulaProfile,
   type FormulaProfile,

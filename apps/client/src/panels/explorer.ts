@@ -38,7 +38,7 @@ import { pickIcon, showContextMenu } from "../ui/menu";
 import { registerShellCommand } from "../ui/commands";
 import { showPanel } from "./sidebar";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
-import { focusEditor, openDocument } from "./document";
+import { canShowFile, focusEditor, openDocument } from "./document";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
@@ -105,6 +105,34 @@ export function mountExplorer(lifetime: Lifetime): void {
     layer: "global",
     available: () => state.currentDoc !== null,
     run: () => revealActive(),
+  });
+  // Dentro l'albero li prendono F2 e Canc (`treeArrows`); i comandi sono la
+  // stessa azione per la palette e per un accordo che l'utente sceglie.
+  registerShellCommand({
+    id: "shell.explorer.rename",
+    title: "commands.explorer.rename",
+    description: "commands.explorer.rename.desc",
+    layer: "global",
+    available: () => explorerTarget() !== null,
+    run: async () => {
+      const id = explorerTarget();
+      if (id === null) return;
+      // Da fuori dell'albero la voce è la nota attiva, e il campo del nome
+      // vive nella sua riga: prima la si porta in vista.
+      if (!treeFocused()) await revealActive();
+      renameEntry(id);
+    },
+  });
+  registerShellCommand({
+    id: "shell.explorer.trash",
+    title: "commands.explorer.trash",
+    description: "commands.explorer.trash.desc",
+    layer: "global",
+    available: () => explorerTarget() !== null,
+    run: async () => {
+      const id = explorerTarget();
+      if (id !== null) await trashWithConfirm(id);
+    },
   });
   treeArrows(lifetime);
   wireRootDropTarget(lifetime);
@@ -448,17 +476,14 @@ function treeArrows(lifetime: Lifetime): void {
         e.preventDefault();
         current.querySelector<HTMLElement>(":scope > .tree-row")?.click();
         return;
+      // I tasti nudi della keymap dell'albero: un accordo globale non può
+      // esserlo. L'azione è quella di `shell.explorer.rename/trash`.
       case "F2": {
-        const row = current.querySelector<HTMLElement>(":scope > .tree-row");
-        if (row && path && !row.classList.contains("folder")) {
-          e.preventDefault();
-          startRename(row, path);
-        }
+        if (path && renameEntry(path)) e.preventDefault();
         return;
       }
       case "Delete": {
-        const row = current.querySelector<HTMLElement>(":scope > .tree-row");
-        if (row && path && !row.classList.contains("folder")) {
+        if (path && entryRow(path)) {
           e.preventDefault();
           void trashWithConfirm(path);
         }
@@ -606,9 +631,9 @@ const FILE_ICONS: Record<ResourceKind, string> = {
 };
 
 /// La riga di un file che non è una nota: c'è sul disco, quindi c'è
-/// nell'albero. Un media noto (immagine, audio, video, PDF) si apre nel
-/// visualizzatore; per il resto la shell non ha una superficie, e lo dice
-/// invece di tentarne la lettura come testo.
+/// nell'albero. L'icona dice che specie di media sembra; se si apre lo decide
+/// il registro delle superfici, che sa quale vista mostra quei byte. Per il
+/// resto la shell lo dice, invece di tentarne la lettura come testo.
 function fileRow(id: string): HTMLElement {
   const row = document.createElement("div");
   row.className = "tree-row file leaf";
@@ -621,7 +646,7 @@ function fileRow(id: string): HTMLElement {
   name.textContent = childName(id);
   row.appendChild(name);
   row.addEventListener("click", () => {
-    if (kind !== "other") void openDocument(id);
+    if (canShowFile(id)) void openDocument(id);
     else notify(t("explorer.no_viewer", { name: childName(id) }), "info");
   });
   // Un allegato si rinomina (l'estensione resta) e si cestina come una nota:
@@ -629,7 +654,7 @@ function fileRow(id: string): HTMLElement {
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e, [
-      { label: t("explorer.rename"), hint: "F2", run: () => startRename(row, id) },
+      { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
       { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
       { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
     ]);
@@ -645,7 +670,7 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
   const move = voceSpostamento(id);
   const reorder = reorderActions(id);
   showContextMenu(at, [
-    { label: t("explorer.rename"), hint: "F2", run: () => startRename(row, id) },
+    { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
     ...(move ? [move] : []),
     { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
     { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, id) },
@@ -685,6 +710,41 @@ function reorderAdjacent(row: HTMLElement, delta: -1 | 1): void {
   const target = other?.dataset.path;
   if (!source || !target) return;
   applyReorder(parentOf(source), childName(source), childName(target), delta < 0);
+}
+
+/// La riga di una voce che si rinomina e si cestina da qui: una nota o un
+/// allegato. Una cartella ha le sue voci nel proprio contestuale.
+function entryRow(id: string): HTMLElement | null {
+  const row = entry(id)?.querySelector<HTMLElement>(":scope > .tree-row");
+  return row && !row.classList.contains("folder") ? row : null;
+}
+
+function treeFocused(): boolean {
+  const focused = document.activeElement;
+  return focused instanceof HTMLElement && fileListEl.contains(focused);
+}
+
+/// La voce su cui agiscono i comandi di rinomina e cestino: quella col fuoco,
+/// se il fuoco è nell'albero, altrimenti la nota attiva. Il fuoco su una
+/// cartella non ricade sulla nota attiva: agire su una voce diversa da quella
+/// che si guarda è la sorpresa da evitare.
+function explorerTarget(): string | null {
+  if (treeFocused()) {
+    const li = (document.activeElement as HTMLElement).closest<HTMLElement>('li[role="treeitem"]');
+    const path = li?.dataset.path;
+    if (li && path) return entryRow(path) ? path : null;
+  }
+  return state.currentDoc;
+}
+
+/// Apre il campo del nome sulla riga della voce. Una strada sola per F2, per il
+/// contestuale e per `shell.explorer.rename`: `false` se la riga non c'è. Il
+/// contestuale passa la riga su cui si è aperto, che fra le appuntate non è
+/// quella dell'albero.
+function renameEntry(id: string, row: HTMLElement | null = entryRow(id)): boolean {
+  if (!row) return false;
+  startRename(row, id);
+  return true;
 }
 
 /// Voce "Sposta in…" senza drag (U10): apre il selettore di destinazione.

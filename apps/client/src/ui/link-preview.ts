@@ -3,7 +3,9 @@
 // La scheda è quella di `state/preview.ts` — stessa lettura dal canale dati,
 // stessa sanitizzazione, un solo proprietario per tutta la shell — e qui c'è
 // soltanto chi la chiede: un ascoltatore delegato sul documento, che riconosce
-// i wikilink della Lettura (`a.wikilink`) e della Live (`[data-fub-target]`).
+// i wikilink dal contratto che la resa dà alla shell (`data-wikilink-*`, vedi
+// `ui/sanitize.ts`). Lo posano la Lettura, le card e la Live: qui non si
+// conosce la grammatica di nessun formato.
 //
 // - In Lettura basta passare sopra: la scheda arriva dopo il ritardo di
 //   `state/preview.ts`; con Ctrl/Cmd arriva subito.
@@ -27,33 +29,23 @@ interface Target {
   live: boolean;
 }
 
-/// Il bersaglio del wikilink sotto il puntatore, se ce n'è uno.
+/// Il bersaglio del wikilink sotto il puntatore, se ce n'è uno. Un link
+/// dentro un testo che si sta scrivendo (`contenteditable` acceso, la Live)
+/// vuole il modificatore; il blocco reso dentro la Live non è scrivibile e
+/// risponde come la Lettura.
 export function linkTarget(element: Element | null): { link: HTMLElement; target: Target } | null {
-  const reading = element?.closest<HTMLElement>("a.wikilink");
-  if (reading && !reading.closest(".link-preview")) {
-    return {
-      link: reading,
-      target: {
-        page: reading.dataset.wikilinkPage ?? "",
-        heading: reading.dataset.wikilinkHeading ?? null,
-        block: reading.dataset.wikilinkBlock ?? null,
-        live: false,
-      },
-    };
-  }
-  const live = element?.closest<HTMLElement>("[data-fub-target]");
-  if (live) {
-    const raw = live.getAttribute("data-fub-target") ?? "";
-    const hash = raw.indexOf("#");
-    const page = hash < 0 ? raw : raw.slice(0, hash);
-    const point = hash < 0 ? "" : raw.slice(hash + 1);
-    const block = point.startsWith("^") ? point.slice(1) : null;
-    return {
-      link: live,
-      target: { page, heading: point && !block ? point : null, block, live: true },
-    };
-  }
-  return null;
+  const link = element?.closest<HTMLElement>("[data-wikilink-page]");
+  if (!link || link.closest(".link-preview")) return null;
+  const editable = link.closest("[contenteditable]");
+  return {
+    link,
+    target: {
+      page: link.dataset.wikilinkPage ?? "",
+      heading: link.dataset.wikilinkHeading ?? null,
+      block: link.dataset.wikilinkBlock ?? null,
+      live: editable !== null && editable.getAttribute("contenteditable") !== "false",
+    },
+  };
 }
 
 export function mountLinkPreview(life: Lifetime): void {

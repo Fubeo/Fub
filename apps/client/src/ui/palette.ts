@@ -34,6 +34,7 @@ import { enterSurface, exitSurface } from "./motion";
 import { readState, state, writeState } from "../state/store";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
+import { opensWithoutParams, primaryViews } from "./primary-views";
 
 /// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
 /// all'utente, e mettere in salvo i buffer prima di un comando che scrive. Il
@@ -413,6 +414,23 @@ export function closeCommandPalette() {
   if (overlay) exitSurface(overlay, () => overlay.remove());
 }
 
+/// Le view principali come voci della palette. Aprirne una è lo stesso intento
+/// che consegnerebbe un comando (`open_view`), e la palette lo consegna alla
+/// shell allo stesso modo: nessuna view ha un posto riservato, e una che chiede
+/// argomenti obbligatori la apre chi glieli dà.
+export function viewEntries(host: Pick<PaletteHost, "onEffect">): CommandEntry[] {
+  return primaryViews().filter(opensWithoutParams).map((spec) => ({
+    id: `view:${spec.id}`,
+    title: t("palette.open_view", { title: spec.title }),
+    description: t("palette.open_view.desc"),
+    layer: "global",
+    binding: null,
+    declared: null,
+    spec: null,
+    run: () => host.onEffect({ kind: "open_view", view: spec.id, params: null }),
+  }));
+}
+
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
 ///
 /// Le spec del kernel si rileggono **qui**: è il momento in cui costa nulla ed
@@ -443,7 +461,8 @@ export async function openCommandPalette(host: PaletteHost) {
   const first = await Promise.race([loaded, waited]);
   window.clearTimeout(waitTimer);
   if (generation !== paletteGeneration) return;
-  const refresh = chooseSpecs(orderCommands(allCommands(), paletteHistory), openOverlay(), host);
+  const entries = (): CommandEntry[] => [...allCommands(), ...viewEntries(host)];
+  const refresh = chooseSpecs(orderCommands(entries(), paletteHistory), openOverlay(), host);
   // `openOverlay` chiude la palette di prima, e chiudere fa avanzare la
   // generazione: quella che vale adesso è quella di questa palette aperta.
   const opened = paletteGeneration;
@@ -454,7 +473,7 @@ export async function openCommandPalette(host: PaletteHost) {
     host.notify(t("palette.unavailable", { reason: errorText(failure) }), "guasto");
     return;
   }
-  if (first === "late") refresh(orderCommands(allCommands(), paletteHistory));
+  if (first === "late") refresh(orderCommands(entries(), paletteHistory));
 }
 
 /// Slash shares the command registry, ordering, save queue and outcome delivery
@@ -501,11 +520,7 @@ export async function openSlashPalette(
   }
   state.commandSpecs = specs;
   const doc = slashContextDoc();
-  const allowed = new Set(
-    slashCandidates(specs)
-      .filter((spec) => slashArgs(spec, selection, doc) !== null)
-      .map((spec) => spec.id),
-  );
+  const allowed = new Set(slashCandidates(specs, selection).map((spec) => spec.id));
   const entries = orderCommands(allCommands(), paletteHistory).filter((entry) => allowed.has(entry.id));
   const box = openOverlay(false);
   box.innerHTML = "";
@@ -617,7 +632,6 @@ export async function openSlashPalette(
     if (busy || !current() || !spec) return;
     chosen = true;
     const seed = slashArgs(spec, selection, doc);
-    if (seed === null) return;
     // Offer every unfilled parameter, including optional format/date/template.
     // An editor selection never implies a UTF-8 byte offset.
     const missing = spec.params.filter((param) => !(param.name in seed));

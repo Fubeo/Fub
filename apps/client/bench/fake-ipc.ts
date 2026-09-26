@@ -200,6 +200,7 @@ function command(
     keybinding,
     params: [],
     scope: { writes, reach: writes ? "document" : "session", reversible: writes },
+    surfaces: [],
   };
 }
 

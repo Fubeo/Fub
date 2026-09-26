@@ -53,6 +53,9 @@ use fub_kernel::{Subscription, Trust};
 
 const ID: &str = "demo.ping";
 const COMMAND: &str = "demo.ping:ping";
+/// I job sono uno spazio di nomi a sé, ma con la stessa regola: un plugin
+/// della comunità nomina dentro il proprio id.
+const JOB: &str = "demo.ping:ping";
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -195,7 +198,7 @@ impl Plugin for DemoPing {
         host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         match job {
-            "ping" => {
+            JOB => {
                 host.report_progress(JobProgress {
                     done: 1,
                     total: Some(1),
@@ -290,9 +293,9 @@ fn a_plugin_live_for_contract_is_mounts_lives_and_is_unmounts() {
     })
     .expect("open");
 
-    ask(&host, "ping");
+    ask(&host, JOB);
     let (job, result) = outcome(&events);
-    assert_eq!(job, "ping");
+    assert_eq!(job, JOB);
     let value = result.expect("the job succeeded");
     assert_eq!(value["note"], "Nota.md");
     assert!(
@@ -357,9 +360,9 @@ fn a_plugin_without_the_permission_sees_close_the_gate() {
     })
     .expect("open");
 
-    ask(&host, "ping");
+    ask(&host, JOB);
     let (job, result) = outcome(&events);
-    assert_eq!(job, "ping");
+    assert_eq!(job, JOB);
     let error = result.expect_err("the job without permission cannot read");
     assert!(
         matches!(&error, PluginError::PermissionDenied(t)

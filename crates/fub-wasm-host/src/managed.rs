@@ -13,6 +13,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use crate::budgets::{self, BudgetSnapshot};
 use crate::catalog::{self, CatalogEntry, CatalogError, CatalogKind, CatalogTrust, SignedFeed};
+use crate::component::FormatSwitch;
 use crate::installed::{
     CatalogProvenance, Consent, InstallError, InstalledPlugin, InstalledPluginStore,
     InventorySnapshot,
@@ -58,6 +59,36 @@ pub struct InstalledPluginInfo {
 struct InstallationState {
     claim: BundleClaim,
     turn: Custody<()>,
+    /// Gli interruttori dei provider di formato preparati per le aperture:
+    /// un formato non si smonta da un vault aperto, si spegne (I69).
+    formats: Mutex<Vec<FormatSwitch>>,
+}
+
+impl InstallationState {
+    /// Un nuovo interruttore per il provider di formato di un'apertura.
+    /// Quelli dei provider già caduti con la loro sessione si scordano qui.
+    fn format_switch(&self) -> FormatSwitch {
+        let switch = FormatSwitch::default();
+        let mut formats = self
+            .formats
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        formats.retain(FormatSwitch::is_held);
+        formats.push(switch.clone());
+        switch
+    }
+
+    /// Spegne ogni provider di formato di questa installazione, in ogni vault
+    /// aperto: il plugin non è più scelto, o i suoi byte non sono più questi.
+    fn retire_formats(&self) {
+        let mut formats = self
+            .formats
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        for switch in formats.drain(..) {
+            switch.retire();
+        }
+    }
 }
 
 struct ManagerState {
@@ -739,6 +770,7 @@ impl InstalledPluginManager {
         }
 
         self.replace_and_invalidate_validity()?;
+        state.retire_formats();
         let mut errors = Vec::new();
         for vault in host.vaults() {
             let vault = Some(vault.as_str());
@@ -805,6 +837,7 @@ impl InstalledPluginManager {
                 Arc::new(InstallationState {
                     claim: BundleClaim::default(),
                     turn: Custody::new("installed plugin decision", ()),
+                    formats: Mutex::new(Vec::new()),
                 })
             })
             .clone())
@@ -832,6 +865,9 @@ impl InstalledPluginManager {
         installed: &InstalledPlugin,
         state: &InstallationState,
     ) -> Vec<PluginError> {
+        // Il formato dei byte vecchi si spegne anche se il bundle non era
+        // montato: il provider sta nel registro dei formati, non nel claim.
+        state.retire_formats();
         let mut errors = Vec::new();
         for vault in host.vaults() {
             let vault = Some(vault.as_str());
@@ -875,6 +911,9 @@ impl InstalledPluginManager {
         state: &InstallationState,
     ) -> Vec<PluginError> {
         let selected = installed.requested_at_startup();
+        if !selected {
+            state.retire_formats();
+        }
         let bundle = if selected {
             match self.load_bundle(installed) {
                 Ok(bundle) => Some(Arc::new(bundle) as Arc<dyn fub_host::Bundle>),
@@ -1104,7 +1143,7 @@ impl StartupSource for InstalledPluginManager {
             match self.load_bundle(installed) {
                 Ok(bundle) => {
                     let opening = Arc::new(bundle.prepare_opening());
-                    match opening.format_provider() {
+                    match opening.format_provider(state.format_switch()) {
                         Ok(Some(provider)) => {
                             formats = formats.with_provider(provider);
                         }
@@ -1225,7 +1264,9 @@ fn load_error(error: LoadError) -> PluginError {
         LoadError::Compilation(message) | LoadError::UnsupportedExport(message) => {
             PluginError::BadArgs(message.into())
         }
-        LoadError::UnservedFamilies(message) => PluginError::BadArgs(message.into()),
+        LoadError::UnservedFamilies(message) | LoadError::UnservedExports(message) => {
+            PluginError::BadArgs(message.into())
+        }
         LoadError::NotAPlugin(message) => PluginError::BadArgs(message.into()),
         LoadError::Instantiation(message) => PluginError::BadArgs(message.into()),
     }

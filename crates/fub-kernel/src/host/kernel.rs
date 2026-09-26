@@ -3,9 +3,9 @@
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, InvokeMode, Undone};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
-use fub_abi::format::DocumentFormat;
+use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
-use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::model::{DocId, DocumentModel, TaskMarker};
 use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
@@ -14,10 +14,14 @@ use fub_abi::traits::{
     IndexQuery, IndexResult, JobId, JobSpec, Page, Paged, SettingsRead, SettingsWrite,
     TransferRead, TrashEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
-use fub_abi::transfer::SourceHandle;
+use fub_abi::transfer::{
+    ExportReport, ExportRequest, ExportTarget, ImportReport, ImportRequest, ImportSource,
+    SourceHandle,
+};
 use fub_abi::{Event, PluginError, Severity};
 
 use crate::error::KernelError;
+use crate::transfer::{MemorySink, PLUGIN_EXPORT_LIMIT};
 use crate::workspace::{collect_data_files, fenced_doc_id, new_doc_id, Workspace};
 
 /// L'[`HostApi`](fub_abi::traits::HostApi) del kernel: chiamate dirette,
@@ -33,8 +37,9 @@ pub(crate) struct KernelHost<'a> {
     pub(crate) plugin: &'a str,
     /// In che modo sta girando chi ha in mano questo host.
     ///
-    /// Serve a una capacità sola — [`HostCommands::run_command`] — ed è ciò che
-    /// impedisce a una simulazione di diventare reale invocando qualcuno. Fuori
+    /// Serve a due capacità — [`HostCommands::run_command`] e
+    /// [`HostServices::run_import`] — ed è ciò che impedisce a una simulazione
+    /// di diventare reale invocando qualcuno. Fuori
     /// dal percorso dei comandi (dispatch di un evento, azione di una view,
     /// import) è [`InvokeMode::Apply`], che è la verità: lì non si sta
     /// simulando niente.
@@ -79,6 +84,58 @@ impl KernelHost<'_> {
             )),
         }
     }
+
+    /// Può questo plugin raccontare questo evento?
+    ///
+    /// Un evento è un fatto già accaduto, e chi lo riceve gli crede: la shell
+    /// sposta le schede su un `document-renamed`, un indice butta le voci su un
+    /// `document-removed`, il centro attività offre di salvare gli artefatti di
+    /// un `job-done`. Un plugin racconta soltanto i fatti **suoi**: un
+    /// `custom` nel proprio spazio di nomi e un guasto (`trouble`) che ha
+    /// avuto. Può anche invitare a ridisegnare una view
+    /// (`view-invalidated`), che non afferma niente: chi disegna la richiede a
+    /// chi la offre, e un invito di troppo costa un ridisegno. Il resto lo
+    /// sa soltanto chi l'ha fatto accadere — il kernel, il watcher, l'host —
+    /// e lo dice da sé; il progresso di un job lo timbra l'host del job
+    /// (`report_progress`), che l'identità ce l'ha.
+    ///
+    /// Il core parla con la voce del kernel, come nomina anche nudo
+    /// ([`fub_abi::rules::ids::check`]). Un componente WASM non è mai core.
+    ///
+    /// Il `match` è esaustivo di proposito: una variante nuova non compila
+    /// finché qualcuno non ha deciso chi può raccontarla.
+    fn may_tell(&self, event: &Event) -> Result<(), String> {
+        if self.ws.trust_of(self.plugin) == Some(crate::Trust::Core) {
+            return Ok(());
+        }
+        match event {
+            Event::Custom { topic, .. } => self
+                .ws
+                .owns_name(self.plugin, topic)
+                .map_err(|fault| fault.to_string()),
+            Event::Trouble { .. } | Event::ViewInvalidated { .. } => Ok(()),
+            Event::VaultOpened { .. }
+            | Event::DocumentChanged { .. }
+            | Event::DocumentRemoved { .. }
+            | Event::DocumentRenamed { .. }
+            | Event::IndexUpdated
+            | Event::JobDone { .. }
+            | Event::Overflow { .. }
+            | Event::BatchEnded { .. }
+            | Event::VaultClosed { .. }
+            | Event::JobStarted { .. }
+            | Event::JobProgress { .. }
+            | Event::SettingChanged { .. }
+            | Event::EntryChanged { .. }
+            | Event::EntryRemoved { .. }
+            | Event::EntryRenamed { .. }
+            | Event::TimerFired { .. } => Err(format!(
+                "`{:?}` is a fact only the host can tell, not `{}`",
+                event.kind(),
+                self.plugin
+            )),
+        }
+    }
 }
 
 impl VaultRead for KernelHost<'_> {
@@ -119,6 +176,19 @@ impl VaultRead for KernelHost<'_> {
         // path che non nomina un documento è una domanda senza risposta, non un
         // varco.
         self.ws.format_of(id)
+    }
+
+    fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError> {
+        self.ws.format_link(doc, link)
+    }
+
+    fn task_state_edit(
+        &self,
+        doc: &DocId,
+        marker: &TaskMarker,
+        done: bool,
+    ) -> Result<Option<EditRequest>, PluginError> {
+        self.ws.task_state_edit(doc, marker, done)
     }
 
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
@@ -366,7 +436,7 @@ impl SettingsWrite for KernelHost<'_> {
 
 impl HostEnv for KernelHost<'_> {
     fn now_unix_millis(&self) -> u64 {
-        crate::time::now_unix_millis()
+        self.ws.now_unix_millis()
     }
 
     fn user_locale(&self) -> Locale {
@@ -403,23 +473,38 @@ impl HostEvents for KernelHost<'_> {
     /// ogni guasto lascia una riga, e questo racconta una perdita — un evento
     /// che qualcuno si aspettava di ricevere non è arrivato — quindi apre anche
     /// la porta.
+    ///
+    /// Vale per i fatti come per i topic: vedi [`Self::may_tell`].
     fn emit(&mut self, event: Event) {
-        if let Event::Custom { topic, .. } = &event {
-            if let Err(fault) = self.ws.owns_name(self.plugin, topic) {
-                tracing::warn!(target: "fub.kernel", "event not emitted: {fault}");
-                self.ws.report_trouble(
-                    Severity::Warning,
-                    None,
-                    PluginError::Internal(format!("event not emitted: {fault}").into()),
-                    None,
-                );
-                return;
-            }
+        if let Err(fault) = self.may_tell(&event) {
+            tracing::warn!(target: "fub.kernel", "event not emitted: {fault}");
+            self.ws.report_trouble(
+                Severity::Warning,
+                None,
+                PluginError::Internal(format!("event not emitted: {fault}").into()),
+                None,
+            );
+            return;
         }
         self.ws.emit_event(event);
     }
 
+    /// Accoda, **se il nome del job è suo**.
+    ///
+    /// I nomi dei job sono l'ultimo degli otto spazi di nomi del §7.4, e come i
+    /// topic non hanno un momento di registrazione: si verificano all'uso. Il
+    /// nome non resta dentro il plugin che lo esegue — `JobDone` lo porta sul
+    /// bus a nome del kernel, e chi lo ascolta (la shell che offre di salvare
+    /// l'esito di `import.transfer`, per esempio) si fida di quel nome. Un
+    /// plugin di terze parti che potesse chiamare un proprio job come uno del
+    /// core farebbe dire al kernel un fatto falso.
+    ///
+    /// Qui l'esito c'è, quindi il rifiuto torna a chi ha chiesto: è un argomento
+    /// sbagliato, e l'autore lo corregge nominando dentro il proprio id.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError> {
+        self.ws
+            .owns_name(self.plugin, &spec.job)
+            .map_err(|fault| PluginError::BadArgs(fault.to_string().into()))?;
         self.ws.enqueue_job(self.plugin, spec)
     }
 }
@@ -487,6 +572,25 @@ impl HostServices for KernelHost<'_> {
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
         self.ws.call_service(service, method, args)
+    }
+
+    fn export_targets(&self) -> Result<Vec<ExportTarget>, PluginError> {
+        Ok(self.ws.export_targets())
+    }
+
+    /// I byte tornano nel rapporto, quindi in memoria: col tetto di
+    /// [`PLUGIN_EXPORT_LIMIT`].
+    fn run_export(&mut self, request: &ExportRequest) -> Result<ExportReport, PluginError> {
+        let mut sink = MemorySink::bounded(PLUGIN_EXPORT_LIMIT);
+        self.ws.export_to(request, &mut sink)
+    }
+
+    fn run_import(
+        &mut self,
+        source: &ImportSource,
+        request: &ImportRequest,
+    ) -> Result<ImportReport, PluginError> {
+        self.ws.import_in_mode(source, request, self.mode)
     }
 }
 

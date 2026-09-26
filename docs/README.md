@@ -45,6 +45,7 @@ flowchart LR
 - [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
+- [Superfici dell'editor](architecture/editor-surfaces.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 
 ## Sviluppare

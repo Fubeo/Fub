@@ -17,7 +17,7 @@ import {
 } from "./saving";
 import { rejoinDrafts, type DraftBuffer, type DraftBufferStore } from "./drafts";
 import { renameNote } from "./vault";
-import { tryApplyOperation, type TextOperation } from "../editor/text-operation";
+import { tryApplyOperation, type TextOperation } from "../editors/core/text-operation";
 
 const SAVE_MS = 400;
 const DRAFT_MS = 1_000;
@@ -115,8 +115,13 @@ export type RenameResult =
 export type DeletionResult =
   | { kind: "deleted"; dirty: boolean }
   | { kind: "ignored" };
+/// `unsaved`: il buffer è rimasto sporco dopo il flush — il salvataggio è
+/// fallito o c'è un conflitto — e la sessione **resta aperta**. Chiudere una
+/// sessione così butterebbe l'unica copia del lavoro; la decisione è di chi ha
+/// chiuso la linguetta, non di questa collezione.
 export type CloseResult =
   | { kind: "closed"; dirty: boolean }
+  | { kind: "unsaved" }
   | { kind: "active" }
   | { kind: "missing" };
 
@@ -357,9 +362,15 @@ export class DocumentSession implements DraftBuffer {
   /// l'eventuale sorgente. Una diffusione per dato accettato: chi riceve non
   /// ri-entra nella sessione (il motore marca il cambio come remoto).
   #fanOut(update: DocumentSurfaceUpdate, except?: string): void {
-    for (const surface of this.#surfaces.values()) {
+    // Ogni superficie riceve il dato anche se una prima di lei ha fallito:
+    // l'errore di una è suo, e le altre non devono restare indietro.
+    for (const surface of [...this.#surfaces.values()]) {
       if (surface.id === except) continue;
-      surface.sync(update);
+      try {
+        surface.sync(update);
+      } catch (error) {
+        console.error(error);
+      }
     }
   }
 
@@ -1250,7 +1261,18 @@ export class DocumentSessionCollection implements DraftBufferStore {
       return { kind: "missing" };
     }
     if (session.activityGeneration() !== activity) return { kind: "active" };
+    if (session.dirty) return { kind: "unsaved" };
     return this.close(id);
+  }
+
+  /// Chiude una sessione il cui buffer non si è potuto salvare, perché chi
+  /// l'ha chiusa ha scelto di scartarlo: il buffer e la sua bozza se ne vanno
+  /// insieme, come se le modifiche non ci fossero mai state.
+  discardUnsaved(id: string): CloseResult {
+    const session = this.#sessions.get(id);
+    const outcome = this.close(id);
+    if (outcome.kind === "closed" && session) void session.discardDraftAfterClose();
+    return outcome;
   }
 
   async resolveConflict(id: string, choice: ConflictChoice): Promise<ConflictResolutionResult> {

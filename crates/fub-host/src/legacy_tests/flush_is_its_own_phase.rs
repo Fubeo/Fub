@@ -65,6 +65,7 @@ const NOTE: usize = 40;
 /// Un indice che **conta i propri flush** e per il resto non fa niente: è
 /// l'`IndiceCheRifiuta` di `quando_qualcosa_va_storto.rs` ridotto a una
 /// domanda sola — quante volte il kernel gli ha chiesto di rendere durevole
+/// ciò che ha.
 struct CountingIndex {
     flush: Arc<AtomicUsize>,
 }

@@ -169,6 +169,7 @@ use fub_abi::text::{StringCatalog, Text};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::VaultStorage;
+use crate::time::{Clock, SystemClock};
 use crate::vault::FUB_DIR;
 use fub_abi::schema::SchemaVersion;
 
@@ -415,6 +416,8 @@ pub(crate) struct Journal {
     storage: Arc<dyn VaultStorage>,
     /// L'identità di questa apertura (vedi [`JournalRecord::writer`]).
     writer: String,
+    /// L'orologio con cui si timbrano le righe e si misura la ritenzione.
+    clock: Arc<dyn Clock>,
 }
 
 /// Il path del registro dentro un vault.
@@ -433,6 +436,7 @@ impl Journal {
         let journal = Journal {
             path: journal_path(root),
             storage,
+            clock: Arc::new(SystemClock),
             // Sedici cifre esadecimali dal caso del kernel: serve che due
             // aperture non collidano, non che nessuno le indovini. Otto byte
             // sono due ordini di grandezza sotto il tetto, quindi il rifiuto è
@@ -499,11 +503,21 @@ impl Journal {
         &self.path
     }
 
+    /// Lo stesso registro, con lo stesso scrittore, timbrato da `clock`.
+    pub(crate) fn with_clock(&self, clock: Arc<dyn Clock>) -> Self {
+        Journal {
+            path: self.path.clone(),
+            storage: Arc::clone(&self.storage),
+            writer: self.writer.clone(),
+            clock,
+        }
+    }
+
     /// Appende una riga. L'esito non risale: vedi [`Journal::prune`].
     pub(crate) fn append(&self, origin: Origin, op: JournalOp) -> Result<(), String> {
         let record = JournalRecord {
             v: SCHEMA_VERSION,
-            at: crate::time::now_unix_millis(),
+            at: self.clock.now_unix_millis(),
             origin,
             writer: self.writer.clone(),
             op,
@@ -550,6 +564,7 @@ impl Journal {
     /// il suo registro non si è potuto potare, e la riga successiva ci si
     /// appende sopra lo stesso.
     pub(crate) fn prune(&self, days: u64) {
+        let now = self.clock.now_unix_millis();
         // Un **aggiornamento** e non una lettura seguita da una scrittura, e la
         // differenza è vera ma più stretta di come si legge: `update` rilegge
         // dentro il lucchetto (0066), quindi due potature dello stesso registro
@@ -571,7 +586,7 @@ impl Journal {
         // registro passa dalla scrittura atomica del supporto (0065): l'unico in
         // cui perderlo tutto insieme sarebbe possibile.
         let outcome = self.storage.update(&self.path, &mut |current| {
-            Ok(current.and_then(|raw| pruned(raw, days)))
+            Ok(current.and_then(|raw| pruned(raw, days, now)))
         });
         if let Err(and) = outcome {
             tracing::warn!(target: "fub.kernel", "journal: not pruned: {and}");
@@ -585,7 +600,7 @@ impl Journal {
 /// adesso e torna quelli che ci devono essere. Sta fuori perché è ciò che gira
 /// **dentro** il lucchetto del supporto, e ciò che gira là dentro non deve poter
 /// toccare il supporto.
-fn pruned(raw: &[u8], days: u64) -> Option<Vec<u8>> {
+fn pruned(raw: &[u8], days: u64, now: u64) -> Option<Vec<u8>> {
     // Solo un file che finisce per intero si pota: se in coda c'è una riga
     // lasciata a metà da un crash, non la si riscrive di certo — la prossima
     // aggiunta si delimita da sé e il file torna potabile da lì.
@@ -602,7 +617,10 @@ fn pruned(raw: &[u8], days: u64) -> Option<Vec<u8>> {
     // nel file riscritto non servirebbe a niente: dopo una riscrittura la coda è
     // integra per costruzione, e il record che verrà si delimita da sé.
     let rows: Vec<&[u8]> = all.iter().copied().filter(|r| !r.is_empty()).collect();
-    let mut cut = rows.len().saturating_sub(CEILING).max(expired(&rows, days));
+    let mut cut = rows
+        .len()
+        .saturating_sub(CEILING)
+        .max(expired(&rows, days, now));
     if cut == 0 {
         return None;
     }
@@ -637,7 +655,7 @@ fn pruned(raw: &[u8], days: u64) -> Option<Vec<u8>> {
 /// Per la stessa ragione una riga che non porta nemmeno `at` **ferma** la
 /// scansione invece di cadere: il conto delle scadute è un prefisso, e ciò che
 /// non si data non è vecchio, è ignoto.
-fn expired(rows: &[&[u8]], days: u64) -> usize {
+fn expired(rows: &[&[u8]], days: u64, now: u64) -> usize {
     if days == 0 {
         return 0;
     }
@@ -645,7 +663,7 @@ fn expired(rows: &[&[u8]], days: u64) -> usize {
     struct When {
         at: u64,
     }
-    let threshold = crate::time::now_unix_millis().saturating_sub(days.saturating_mul(86_400_000));
+    let threshold = now.saturating_sub(days.saturating_mul(86_400_000));
     rows.iter()
         .position(|row| match serde_json::from_slice::<When>(row) {
             Ok(q) => q.at >= threshold,
@@ -730,6 +748,48 @@ mod tests {
         let read = parse(raw.as_bytes());
         assert_eq!(read.records.len(), 1, "today's line is read");
         assert_eq!(read.pruned, 1, "and tomorrow's is counted");
+    }
+
+    /// Un orologio che avanza soltanto quando il test lo dice.
+    struct Manual(std::sync::atomic::AtomicU64);
+
+    impl Clock for Manual {
+        fn now_unix_millis(&self) -> u64 {
+            self.0.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    #[test]
+    fn the_rows_and_the_retention_read_the_injected_clock() {
+        let (root, storage) = bench();
+        let clock = Arc::new(Manual(std::sync::atomic::AtomicU64::new(1_000)));
+        let journal = Journal::open(&root, Arc::clone(&storage) as Arc<dyn VaultStorage>)
+            .with_clock(Arc::clone(&clock) as Arc<dyn Clock>);
+        journal
+            .append(Origin::by(Actor::User), rename(0))
+            .expect("appends");
+        clock
+            .0
+            .store(1_000 + 3 * 86_400_000, std::sync::atomic::Ordering::SeqCst);
+        journal
+            .append(Origin::by(Actor::User), rename(1))
+            .expect("appends");
+
+        let read = journal.read().expect("journal readable");
+        assert_eq!(
+            read.records[0].at, 1_000,
+            "the row carries the clock's instant"
+        );
+        assert_eq!(read.records[1].at, 1_000 + 3 * 86_400_000);
+
+        journal.prune(2);
+        let read = journal.read().expect("journal readable");
+        assert_eq!(
+            read.records.len(),
+            1,
+            "two days on the injected clock expire the first row"
+        );
+        assert_eq!(read.records[0].op, rename(1));
     }
 
     #[test]

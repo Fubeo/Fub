@@ -97,6 +97,62 @@ impl PreparedParse {
         self.descriptor.source
     }
 
+    /// [`FormatProvider::format_link`](fub_abi::FormatProvider::format_link),
+    /// con lo stesso contesto del parse. Un testo vuoto non è un riferimento:
+    /// un provider che lo restituisce ha sbagliato, e non si inserisce niente.
+    pub(crate) fn format_link(&self, link: &fub_abi::format::LinkInsert) -> Result<Option<String>> {
+        let ctx = ParseContext::obsidian(self.id.as_str());
+        let text = crate::safety::caught(
+            &self.descriptor.id,
+            crate::safety::Gate::FormatParse,
+            self.id.as_str(),
+            fub_abi::error::FormatError::Parse,
+            || self.provider.format_link(&ctx, link),
+        )?;
+        if text.as_deref() == Some("") {
+            return Err(KernelError::Format(fub_abi::error::FormatError::Parse(
+                format!("il formato di {} ha scritto un riferimento vuoto", self.id),
+            )));
+        }
+        Ok(text)
+    }
+
+    /// [`FormatProvider::set_task_state`](fub_abi::FormatProvider::set_task_state)
+    /// su `source`. Gli span restituiti devono stare nella sorgente e sui
+    /// confini dei caratteri: l'applicazione con CAS li ricontrolla, ma un
+    /// errore qui nomina il provider invece di un edit qualunque.
+    pub(crate) fn task_state_edits(
+        &self,
+        source: &DocumentSource,
+        marker: &fub_abi::model::TaskMarker,
+        done: bool,
+    ) -> Result<Option<Vec<fub_abi::edit::TextEdit>>> {
+        let edits = crate::safety::caught(
+            &self.descriptor.id,
+            crate::safety::Gate::FormatParse,
+            self.id.as_str(),
+            fub_abi::error::FormatError::Parse,
+            || self.provider.set_task_state(source, marker, done),
+        )?;
+        if let (Some(edits), DocumentSource::Text(text)) = (&edits, source) {
+            let outside = edits.iter().find(|edit| {
+                edit.span.start > edit.span.end
+                    || edit.span.end > text.len()
+                    || !text.is_char_boundary(edit.span.start)
+                    || !text.is_char_boundary(edit.span.end)
+            });
+            if let Some(edit) = outside {
+                return Err(KernelError::Format(fub_abi::error::FormatError::Parse(
+                    format!(
+                        "il formato di {} ha proposto un edit fuori dalla sorgente: {}..{}",
+                        self.id, edit.span.start, edit.span.end
+                    ),
+                )));
+            }
+        }
+        Ok(edits)
+    }
+
     /// Rende un modello con la stessa fotografia di provider usata dal parse.
     /// Il chiamante può così tenere l'intera proiezione oltre il confine di un
     /// lock senza risolvere di nuovo un provider nel frattempo.
@@ -232,6 +288,12 @@ impl DocumentStore {
             renderers: RendererRegistry::new(),
         })
     }
+
+    /// L'orologio del vault, al posto di quello di sistema.
+    pub(crate) fn set_clock(&mut self, clock: Arc<dyn crate::time::Clock>) {
+        self.vault.set_clock(clock);
+    }
+
     /// Fotografia owned delle sole dipendenze necessarie alle letture staccate.
     pub(crate) fn detached(&self) -> DocumentStoreHandle {
         DocumentStoreHandle {
@@ -420,20 +482,24 @@ impl DocumentStore {
             return Vec::new();
         };
         let snapshot = self.syntax.snapshot();
-        let grafted = snapshot.forms(&descriptor.id).to_vec();
-        // La domanda «è già innestato?» si fa una volta per nome che il
-        // provider dichiara: su un insieme, non rescandendo l'elenco.
-        let nested: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();
-        let mut out: Vec<SyntaxForm> = capabilities
+        let mut out = forms_of(&descriptor.id, capabilities, &snapshot);
+        // Le parti scritte in un'altra grammatica (le card di un canvas) si
+        // leggono con le forme di quella, innesti compresi: le proprie restano
+        // e vincono sul nome.
+        let embedded = capabilities
             .syntax
-            .active()
-            .filter(|(name, _)| !nested.contains(*name))
-            .map(|(name, _)| SyntaxForm {
-                name: name.to_string(),
-                trigger: None,
-            })
-            .collect();
-        out.extend(grafted);
+            .as_str(fub_abi::options::source::EMBEDDED_GRAMMAR)
+            .filter(|grammar| *grammar != descriptor.id);
+        if let Some(grammar) = embedded {
+            if let Some(inner) = self.registry.capabilities_for_format(grammar) {
+                let known: HashSet<String> = out.iter().map(|form| form.name.clone()).collect();
+                out.extend(
+                    forms_of(grammar, inner, &snapshot)
+                        .into_iter()
+                        .filter(|form| !known.contains(&form.name)),
+                );
+            }
+        }
         out
     }
 
@@ -486,6 +552,33 @@ fn prepare_parse(
         provider,
         syntax: syntax.clone(),
     })
+}
+
+/// Le forme di un formato: le sintassi che il provider dichiara, più quelle
+/// che le regole registrate gli innestano.
+fn forms_of(
+    format: &str,
+    capabilities: &fub_abi::format::FormatCapabilities,
+    snapshot: &crate::syntax::SyntaxSnapshot,
+) -> Vec<SyntaxForm> {
+    let grafted = snapshot.forms(format).to_vec();
+    // La domanda «è già innestato?» si fa una volta per nome che il
+    // provider dichiara: su un insieme, non rescandendo l'elenco.
+    let nested: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();
+    let mut out: Vec<SyntaxForm> = capabilities
+        .syntax
+        .active()
+        .filter(|(name, _)| !nested.contains(*name))
+        // Ciò che il formato dice del proprio sorgente non ha una forma
+        // da decorare.
+        .filter(|(name, _)| !fub_abi::options::source::ALL.contains(name))
+        .map(|(name, _)| SyntaxForm {
+            name: name.to_string(),
+            trigger: None,
+        })
+        .collect();
+    out.extend(grafted);
+    out
 }
 
 fn ensure_model_identity(requested: &DocId, returned: &DocId) -> Result<()> {

@@ -88,9 +88,9 @@ export function showPanel(panel: SidebarPanel): void {
   const ribbon = document.getElementById("views-ribbon");
   if (ribbon) {
     for (const btn of ribbon.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
-      // Il grafo è un linguetta nell'area principale, non un pannello della
-      // sidebar: `showPanel` non lo spegne e non lo accende.
-      if (btn.id === "show-graph") continue;
+      // Una view principale è una linguetta nell'area principale, non un
+      // pannello della sidebar: `showPanel` non la spegne e non la accende.
+      if (btn.classList.contains("rail-btn-main")) continue;
       btn.setAttribute("aria-pressed", String(btn.dataset.panel === effective));
     }
   }

@@ -223,7 +223,7 @@ export const SCENE = [
     title: "Il grafo dei collegamenti",
     query: "",
     prepare: async (page) => {
-      await page.click('#views-ribbon button[aria-label="Il grafo dei collegamenti"]');
+      await page.click('#views-ribbon .rail-btn-main[data-panel="graph"]');
       await page.waitForSelector("canvas.graph-main");
       await waitForGraphToSettle(page);
       await page.click("summary.graph-list-summary");

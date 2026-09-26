@@ -78,18 +78,24 @@ fn community_view_interests_trap_is_contained_and_recovery_stays_usable() {
         serde_json::json!({"mode": "trap-interests"}),
     );
 
-    let error = host
+    // `interests` answers a value, not an outcome: a trap becomes "no
+    // interests" instead of a panic that would poison the instance (or, on the
+    // registration path, take down the process).
+    let interests = host
         .view_interests(None, &trapped)
-        .expect_err("the fixture intentionally traps while computing interests");
-    assert!(
-        matches!(error, PluginError::Internal(_)),
-        "guest interests trap is contained as typed Internal: {error}"
-    );
+        .expect("a guest trap in interests is contained without an error");
+    assert_eq!(interests, fub_abi::traits::ViewInterests::default());
 
     let views = host
         .views(None)
         .expect("the host remains usable after the interests trap");
     assert!(views.iter().any(|view| view.id == VIEW));
+    // A trapped component instance cannot be entered again (wasmtime): the
+    // next call is a typed error, not a panic, and teardown reports it.
+    let dead = host
+        .render_view(None, &instance())
+        .expect_err("a trapped instance cannot be entered again");
+    assert!(matches!(dead, PluginError::Internal(_)), "{dead}");
     let errors = close_and_assert_session_is_gone(&host);
     assert!(
         errors

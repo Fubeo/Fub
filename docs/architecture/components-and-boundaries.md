@@ -14,16 +14,28 @@ flowchart LR
     TESTKIT["fub-testkit"] --> KERNEL
     TESTKIT --> ABI
     MARKDOWN["fub-format-markdown"] --> ABI
+    MARKDOWN --> SDK
+    SHEET["fub-format-sheet"] --> ABI
+    CANVAS["fub-format-canvas"] --> ABI
+    CANVAS --> MARKDOWN
+    BASE["fub-format-base"] --> ABI
+    IMPORTERS["fub-importers"] --> ABI
     FEATURES["fub-features"] --> ABI
+    FEATURES -. "feature base" .-> BASE
     HOST["fub-host"] --> KERNEL
     HOST --> ABI
     HOST --> FEATURES
     HOST --> MARKDOWN
-    HOST --> SHEET["fub-format-sheet"]
+    HOST --> SHEET
+    HOST --> CANVAS
+    HOST --> BASE
+    HOST --> IMPORTERS
     WASM["fub-wasm-host"] --> ABI
     WASM --> HOST
     APP["fub-app"] --> HOST
     APP --> WASM
+    CLI["fub-cli"] --> HOST
+    SERVICES["fub-services"] --> ABI
     FRONTEND["frontend"] --> APP
 ```
 
@@ -41,9 +53,14 @@ del repository verificano le eccezioni.
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
-| `fub-format-sheet` | workbook persistito, valutatore e sessioni derivate | host, storage, Tauri, Wasmtime |
+| `fub-format-sheet` | workbook persistito, valutatore, sessioni derivate, provider grid e route di valutazione | host, storage, Tauri, Wasmtime |
+| `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
+| `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
+| `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
+| `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
+| `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |
 | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |
 
 ## Dipendenze vietate
@@ -74,7 +91,13 @@ sbagliato.
 ### Composizione
 
 Modifica `fub-host` per mount, registri, lifecycle, custodia del workspace,
-watcher, job, impostazioni macchina e collegamento dei provider.
+watcher, job, impostazioni macchina e collegamento dei provider. Ciò che tocca
+il mondo lo riceve da chi lo compone: il supporto del vault
+(`Host::with_storage`, il disco ancorato alla radice di serie), il rilevatore
+delle modifiche esterne (`with_watcher`), il client di rete (`with_network`),
+l'orologio che registro, cestino, bozze e job leggono (`with_clock`) e il
+cestino di sistema (`with_os_trash_backend`). Un banco li sostituisce senza
+un secondo canale verso il vault.
 
 ### Desktop e serializzazione
 
@@ -92,6 +115,22 @@ Tauri ovunque.
 `fub-features` usa feature Cargo indipendenti. Una feature spenta deve rimuovere
 il proprio modulo senza lasciare import obbligatori da altri moduli.
 
+L'inventario (`crates/fub-features/src/inventory.rs`) dichiara per ogni feature
+id, nome, catalogo, impostazioni, servizi forniti e richiesti, e i provider che
+si costruiscono con una chiamata: view, comandi, indice, regole di sintassi e
+renderer. `fub-host` monta ogni riga con lo stesso ciclo e non confronta id.
+Ciò che soltanto chi monta sa collegare, cioè l'indice di ricerca nella cartella
+dati assegnata e lo store delle versioni dietro l'interruttore dell'host, è una
+variante di `HostWiring` dichiarata nella riga.
+
+Una feature che non funziona senza un'altra lo dichiara due volte: la sua
+feature Cargo accende l'altra (`trash` → `commands`, `template` e `base` →
+`properties`) e la sua riga ne richiede il servizio (`requires`), così spegnere
+il fornitore a runtime tiene fuori anche chi dipende da lui.
+`crates/fub-features/tests/cargo_features.rs` confronta le due dichiarazioni.
+Una feature che degrada senza l'altra non la richiede e dice cosa manca: le
+menzioni non collegate senza la ricerca full-text ne sono un esempio.
+
 La condizione per dividere il crate in più crate non è il numero di file: è il
 primo accoppiamento reale che impedisce build, ownership o dipendenze
 indipendenti.
@@ -105,7 +144,8 @@ indipendenti.
 | composizione | `crates/fub-host/src/mount.rs`, `session.rs`, `registry.rs` |
 | desktop | `crates/fub-app/src/lib.rs` |
 | Markdown | `crates/fub-format-markdown/src/` |
-| foglio | `crates/fub-format-sheet/src/`, `crates/fub-host/src/sheet/` |
+| foglio | `crates/fub-format-sheet/src/` |
+| lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
 | feature | `crates/fub-features/src/` |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |

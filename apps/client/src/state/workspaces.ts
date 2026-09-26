@@ -13,7 +13,7 @@
 // Ogni tab ripristinata si verifica contro i documenti esistenti e le view
 // dichiarate. Nessuna rete, nessun lock tenuto.
 import type { Layout, PaneHistory, Tab } from "./layout";
-import { HISTORY_LIMIT, parseLayout } from "./layout";
+import { HISTORY_LIMIT, parseLayout, renameInLayout } from "./layout";
 import { existingDocuments } from "../host/query";
 import { readState, writeState, state } from "./store";
 import { asRecord } from "./guard";
@@ -95,7 +95,7 @@ function salvageLayout(raw: unknown, workspace: string, rejected: unknown[]): La
     const probe = (tab: unknown): Tab | null => {
       const parsed = parseLayout({
         tree: { k: "leaf", pane: paneId },
-        panes: { [paneId]: { tabs: [tab], active: 0, mode: source?.mode } },
+        panes: { [paneId]: { tabs: [tab], active: 0, modes: source?.modes, mode: source?.mode } },
         focus: paneId,
       });
       return parsed?.panes[paneId]?.tabs[0] ?? null;
@@ -131,6 +131,7 @@ function salvageLayout(raw: unknown, workspace: string, rejected: unknown[]): La
     const candidate = {
       tabs: good,
       active: good.length === 0 ? -1 : active >= 0 ? active : 0,
+      modes: source?.modes,
       mode: source?.mode,
       ...(history ? { history } : {}),
       ...(source?.link !== undefined ? { link: source.link } : {}),
@@ -246,6 +247,10 @@ let rawFuture: unknown = null;
 let rawCorrupt: unknown = null;
 let loadedVault = "";
 let loadGeneration = 0;
+/// Le rinomine arrivate mentre lo store si stava rileggendo: la lettura in volo
+/// porta gli id di prima, e la lettura che vince le applica appena arriva.
+let loadsInFlight = 0;
+let renamedDuringLoad: Array<readonly [string, string]> = [];
 
 function snapshotList(): WorkspaceListSnapshot {
   return {
@@ -287,8 +292,17 @@ export async function loadWorkspaces(): Promise<WorkspaceLoad> {
     loadedVault = vault;
     memory = { v: 1, workspaces: [] };
     status = "empty";
+    renamedDuringLoad = [];
   }
-  const saved = await readState<unknown>(WORKSPACES_KEY);
+  loadsInFlight++;
+  let saved: unknown;
+  try {
+    saved = await readState<unknown>(WORKSPACES_KEY);
+  } finally {
+    loadsInFlight--;
+  }
+  const renamed = renamedDuringLoad;
+  if (loadsInFlight === 0) renamedDuringLoad = [];
   if (generation !== loadGeneration || vault !== state.vaultRoot) return workspaceLoadSnapshot();
   if (saved === null || saved === undefined) {
     memory = { v: 1, workspaces: [] };
@@ -312,7 +326,30 @@ export async function loadWorkspaces(): Promise<WorkspaceLoad> {
   }
   memory = parsed;
   status = "ok";
+  let touched = false;
+  for (const [from, to] of renamed) touched = renameInMemory(from, to) || touched;
+  if (touched) persist();
   return { kind: "ok", store: snapshotList() };
+}
+
+function renameInMemory(from: string, to: string): boolean {
+  let touched = false;
+  for (const workspace of memory.workspaces) touched = renameInLayout(from, to, workspace.layout) || touched;
+  return touched;
+}
+
+/// Una nota rinominata segue anche nei workspace salvati, con la regola del
+/// layout vivo: schede e cronologia che la nominavano nominano il nuovo id.
+/// Senza, ripristinare il workspace scarterebbe la scheda come mancante mentre
+/// la nota c'è (ADR 0188: una rinomina aggiorna chi tiene stato per documento).
+/// Una scrittura sola per tutti i workspace toccati; `updated` resta quello
+/// dell'utente, perché l'assetto non l'ha cambiato lui.
+export function renameInWorkspaces(from: string, to: string): boolean {
+  if (loadsInFlight > 0) renamedDuringLoad.push([from, to]);
+  if (status !== "ok") return false;
+  const touched = renameInMemory(from, to);
+  if (touched) persist();
+  return touched;
 }
 export function workspaceLoadSnapshot(): WorkspaceLoad {
   if (status === "future") return { kind: "future", version: futureVersion, raw: rawFuture };

@@ -323,7 +323,7 @@ fn a_vault_that_not_is_scans_not_is_opens_a_metadata() {
     //
     // Una radice che non esiste non arriva più fin qui: l'apertura la rifiuta
     // all'ingresso (0160), ed è un banco a parte. Qui la camminata deve
-    // fallire su una radice che l'ingresso ha accettato, e l'obstacle è una
+    // fallire su una radice che l'ingresso ha accettato, e l'ostacolo è una
     // cartella dentro il vault che non si lascia elencare.
     let dir = tempfile::tempdir().expect("tempdir");
     let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
@@ -332,7 +332,7 @@ fn a_vault_that_not_is_scans_not_is_opens_a_metadata() {
     std::fs::write(obstacle.join("nota.md"), "x").expect("semina");
     std::fs::set_permissions(&obstacle, std::fs::Permissions::from_mode(0o000))
         .expect("permesso tolto");
-    // Da root l'obstacle non ostacola: lo dice la lettura, non un elenco di
+    // Da root l'ostacolo non ostacola: lo dice la lettura, non un elenco di
     // utenti, e se non ostacola il banco non può dimostrare niente.
     if std::fs::read_dir(&obstacle).is_ok() {
         std::fs::set_permissions(&obstacle, std::fs::Permissions::from_mode(0o700))

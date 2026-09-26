@@ -602,17 +602,17 @@ fn concurrent_cas_failure_reports_partial_undo_and_rerun_only_remaining() {
     let root = vault.root.clone();
     let once = Arc::new(AtomicBool::new(true));
     let armed = once.clone();
-    ws.set_before_write_hook(Some((
-        PROPERTIES_ID.into(),
-        Arc::new(move |_, doc| {
+    ws.set_before_write_hook(
+        PROPERTIES_ID,
+        Some(Arc::new(move |_, doc| {
             if doc.as_str() == "a.md" && armed.swap(false, Ordering::SeqCst) {
                 // External concurrent writer after all rename CAS revisions were
                 // captured, before b's edit reaches its disk CAS.
                 std::fs::write(root.join("b.md"), "---\nold: B\nnewer: true\n---\n").unwrap();
             }
             Ok(())
-        }),
-    )));
+        })),
+    );
     let args = serde_json::json!({"old_key":"old","new_key":"new"});
     let outcome = ws
         .invoke_command(
@@ -635,7 +635,7 @@ fn concurrent_cas_failure_reports_partial_undo_and_rerun_only_remaining() {
     assert_eq!(outcome.undo.as_ref().unwrap().steps.len(), 1);
     assert!(vault.read("a.md").contains("new: A"));
     assert!(vault.read("b.md").contains("old: B"));
-    ws.set_before_write_hook(None);
+    ws.set_before_write_hook(PROPERTIES_ID, None);
     ws.reindex().unwrap();
     let resumed = ws
         .invoke_command(PROPERTY_KEY_RENAME, args, InvokeMode::Apply, Actor::User)

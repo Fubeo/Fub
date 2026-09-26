@@ -72,15 +72,43 @@ fn fetch_json(
     entry: &str,
     log: &mut Vec<TransferNote>,
 ) -> Result<(u16, serde_json::Value), PluginError> {
+    try_fetch_json(net, req, owner, entry, log).map_err(FetchError::into_error)
+}
+
+/// A failed fetch, with the refusing status kept apart from the message: a
+/// fallback is chosen on the status, never on the error text, which quotes
+/// the response body (I73).
+enum FetchError {
+    /// The server answered with a non-2xx status.
+    Status(u16, PluginError),
+    /// Transport, cancellation or a body that is not JSON.
+    Other(PluginError),
+}
+
+impl FetchError {
+    fn into_error(self) -> PluginError {
+        match self {
+            FetchError::Status(_, error) | FetchError::Other(error) => error,
+        }
+    }
+}
+
+fn try_fetch_json(
+    net: &dyn HostNetwork,
+    req: HttpRequest,
+    owner: &str,
+    entry: &str,
+    log: &mut Vec<TransferNote>,
+) -> Result<(u16, serde_json::Value), FetchError> {
     let mut attempt = 0;
     loop {
         attempt += 1;
         let resp = net.fetch(req.clone()).map_err(|e| {
-            if is_cancelled(&e) {
+            FetchError::Other(if is_cancelled(&e) {
                 e
             } else {
                 PluginError::Io(format!("{owner}: network failure for `{entry}`: {e}").into())
-            }
+            })
         })?;
         if resp.status == 429 && attempt <= MAX_RATE_RETRIES {
             let wait = resp
@@ -111,13 +139,19 @@ fn fetch_json(
                 let body = String::from_utf8_lossy(&resp.body);
                 format!(": {}", body.chars().take(500).collect::<String>())
             };
-            return Err(bad_args(format!(
-                "{owner}: HTTP {} for `{entry}`{hint}{detail}",
-                resp.status
-            )));
+            return Err(FetchError::Status(
+                resp.status,
+                bad_args(format!(
+                    "{owner}: HTTP {} for `{entry}`{hint}{detail}",
+                    resp.status
+                )),
+            ));
         }
-        let value: serde_json::Value = serde_json::from_slice(&resp.body)
-            .map_err(|e| bad_args(format!("{owner}: response for `{entry}` is not JSON: {e}")))?;
+        let value: serde_json::Value = serde_json::from_slice(&resp.body).map_err(|e| {
+            FetchError::Other(bad_args(format!(
+                "{owner}: response for `{entry}` is not JSON: {e}"
+            )))
+        })?;
         return Ok((resp.status, value));
     }
 }
@@ -178,31 +212,32 @@ impl ImportProvider for NotionApiImport {
             headers: notion_headers(&token),
             body: None,
         };
-        let (page_status, page_val) = match fetch_json(net, req, "notion", &url, &mut report.log) {
-            Ok(v) => v,
-            Err(error) if error.to_string().contains("HTTP 404") => {
-                // Only an absent page might be a database. A revoked token or
-                // cancellation must never trigger an unrelated second call.
-                let url = format!("https://{NOTION_HOST}/v1/databases/{root_id}");
-                let req = HttpRequest {
-                    url: url.clone(),
-                    method: HttpMethod::Get,
-                    headers: notion_headers(&token),
-                    body: None,
-                };
-                let (_, v) = fetch_json(net, req, "notion", &url, &mut report.log)?;
-                return self.import_database(
-                    &token,
-                    &root_id,
-                    &v,
-                    source,
-                    request,
-                    host,
-                    &mut report,
-                );
-            }
-            Err(error) => return Err(error),
-        };
+        let (page_status, page_val) =
+            match try_fetch_json(net, req, "notion", &url, &mut report.log) {
+                Ok(v) => v,
+                Err(FetchError::Status(404, _)) => {
+                    // Only an absent page might be a database. A revoked token or
+                    // cancellation must never trigger an unrelated second call.
+                    let url = format!("https://{NOTION_HOST}/v1/databases/{root_id}");
+                    let req = HttpRequest {
+                        url: url.clone(),
+                        method: HttpMethod::Get,
+                        headers: notion_headers(&token),
+                        body: None,
+                    };
+                    let (_, v) = fetch_json(net, req, "notion", &url, &mut report.log)?;
+                    return self.import_database(
+                        &token,
+                        &root_id,
+                        &v,
+                        source,
+                        request,
+                        host,
+                        &mut report,
+                    );
+                }
+                Err(error) => return Err(error.into_error()),
+            };
         let _ = page_status;
         // 2. Page properties → frontmatter; children → body (recursive).
         let title = page_val
@@ -840,5 +875,49 @@ impl ImportProvider for AirtableApiImport {
             }
         }
         Ok(report)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fub_abi::net::HttpResponse;
+    use fub_sdk::testing::MemoryHost;
+
+    fn notion_request() -> ImportRequest {
+        let mut request = ImportRequest::apply();
+        request.options = serde_json::json!({ "token": "t", "page_id": "abc" });
+        request
+    }
+
+    fn answer(status: u16, body: &str) -> HttpResponse {
+        HttpResponse {
+            status,
+            headers: Vec::new(),
+            body: body.as_bytes().to_vec(),
+        }
+    }
+
+    // Only a 404 on the page tries the database; a 502 whose body happens to
+    // quote "HTTP 404" is a server failure, not a fallback (I73).
+    #[test]
+    fn only_the_404_status_falls_back_to_the_database() {
+        let source = ImportSource::from_bytes("notion://abc", Vec::new());
+        let mut host = MemoryHost::new().with_response(answer(502, "upstream said HTTP 404"));
+        let error = NotionApiImport
+            .import(&source, &notion_request(), &mut host)
+            .unwrap_err();
+        assert!(error.to_string().contains("HTTP 502"), "{error}");
+        assert_eq!(host.network_requests().len(), 1, "no second call");
+
+        let mut host = MemoryHost::new()
+            .with_response(answer(404, "{}"))
+            .with_response(answer(500, "down"));
+        let error = NotionApiImport
+            .import(&source, &notion_request(), &mut host)
+            .unwrap_err();
+        let requests = host.network_requests();
+        assert_eq!(requests.len(), 2, "{error}");
+        assert!(requests[1].url.ends_with("/v1/databases/abc"));
     }
 }

@@ -47,7 +47,6 @@ use fub_abi::rules::path::{exact_key, resolution_key};
 /// Non sono varianti inventate: `Café` è il caso che i verbali già citano,
 /// `caffè` è la parola italiana più probabile in un vault, e `Ångström` porta
 /// una lettera che in NFD si decompone in tre code point e in NFC in uno.
-/// **Le cinque regole rispondono sulla stessa forma.**
 fn pairs() -> Vec<(&'static str, &'static str)> {
     vec![
         ("Café", "Cafe\u{301}"),
@@ -72,10 +71,10 @@ fn the_two_spellings_are_different_bytes_or_this_bench_proves_nothing() {
     }
 }
 
+/// **Le cinque regole rispondono sulla stessa forma.**
 ///
 /// Una per riga e non una funzione sola con un ciclo, perché ciò che si vuole
 /// leggere quando una diventa rossa è **quale** ha smesso di comporre.
-/// **E la forma composta è quella che vince**, non una terza.
 #[test]
 fn a_name_key_does_not_change_with_encoding() {
     for (nfc, nfd) in pairs() {
@@ -107,12 +106,12 @@ fn a_name_key_does_not_change_with_encoding() {
     }
 }
 
+/// **E la forma composta è quella che vince**, non una terza.
 ///
 /// Senza questa riga il banco sopra passerebbe anche con cinque regole che
 /// decompongono tutte allo stesso modo — la stessa risposta, ma su una chiave
 /// che nessun altro pezzo del sistema scrive. La forma è quella di
 /// `resolution_key`, che è l'origine dichiarata (decisione 0136).
-/// **L'accento non spariva soltanto: cambiava parola.**
 #[test]
 fn the_form_on_which_is_judges_and_that_composed() {
     assert_eq!(canonical_tag("Cafe\u{301}"), "café");
@@ -121,12 +120,12 @@ fn the_form_on_which_is_judges_and_that_composed() {
     assert_eq!(exact_key("  Cafe\u{301}  "), "Café");
 }
 
+/// **L'accento non spariva soltanto: cambiava parola.**
 ///
 /// È la metà del difetto che non si vedeva confrontando due chiavi fra loro —
 /// `heading_slug` su NFD dava `cafe`, che è un'altra parola e per giunta una
 /// che qualcun altro può aver scritto davvero. Due titoli diversi finivano con
 /// lo stesso `id=` HTML, e il primo si prendeva l'ancora del secondo.
-/// **La gemella che legge trova il titolo nei due versi, e su tutti e due i
 #[test]
 fn two_titles_different_not_end_on_the_same_id() {
     assert_ne!(
@@ -137,6 +136,7 @@ fn two_titles_different_not_end_on_the_same_id() {
     assert_eq!(heading_slug("Cafe"), "cafe");
 }
 
+/// **La gemella che legge trova il titolo nei due versi, e su tutti e due i
 /// rami.**
 ///
 /// [`heading_matches`] è una disgiunzione: lo slug **oppure** la chiave di
@@ -144,7 +144,6 @@ fn two_titles_different_not_end_on_the_same_id() {
 /// motivo per cui il difetto non si vedeva come link rotto — copriva il primo.
 /// Qui si prova il ramo dello slug **da solo**, con un titolo che il secondo
 /// ramo non aggancia perché il testo non è quello cercato.
-// `Café Nero` cercato come slug (`café-nero`) non è il testo del titolo:
 #[test]
 fn the_slug_branch_hooks_too() {
     let heading = |text: &str| Heading {
@@ -154,7 +153,7 @@ fn the_slug_branch_hooks_too() {
         span: Span::EMPTY,
         explicit_anchor: None,
     };
-    // il ramo di `resolution_key` dice no, e a rispondere resta solo lo slug.
+    // `Café Nero` cercato come slug (`café-nero`) non è il testo del titolo:
     // il ramo di `resolution_key` dice no, e a rispondere resta solo lo slug.
     let nfd = heading("Cafe\u{301} Nero");
     assert_ne!(

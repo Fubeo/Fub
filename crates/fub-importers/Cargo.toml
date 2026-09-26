@@ -8,12 +8,12 @@ description = "P10 official import/export providers: local parsers (HTML/CSV/ZIP
 
 [dependencies]
 fub-abi = { workspace = true }
-fub-format-markdown = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 flate2 = { workspace = true }
 quick-xml = { workspace = true }
 
 [dev-dependencies]
+fub-format-markdown = { workspace = true }
 fub-sdk = { workspace = true }
 serde_json = { workspace = true }

@@ -1,7 +1,7 @@
 import type katex from "katex";
-import { onLanguage, t } from "../i18n/strings";
-import { openLifetime, type Teardown } from "./lifetime";
-import { attachTooltip, setTooltip } from "./tooltip";
+import { onLanguage, t } from "../../../../i18n/strings";
+import { openLifetime, type Teardown } from "../../../../ui/lifetime";
+import { attachTooltip, setTooltip } from "../../../../ui/tooltip";
 
 const MAX_SOURCE_LENGTH = 20_000;
 let library: Promise<{ default: typeof katex }> | undefined;

@@ -963,3 +963,61 @@ fn declaring_the_same_plugin_twice_is_a_conflict() {
         .expect_err("due plugin con lo stesso id");
     assert!(matches!(err, RegistryError::DuplicatePlugin(_)), "{err:?}");
 }
+
+/// **Una destinazione esplicita non fa propria una voce del cestino altrui.**
+///
+/// Il cestino ricorda da dove viene ogni voce, e il ripristino giudica
+/// quell'origine anche quando il chiamante sceglie dove far tornare la nota.
+/// Prima, con `to` esplicito, la `Guard` guardava soltanto la destinazione: un
+/// plugin confinato in `sandbox/` riportava in `sandbox/` una nota cestinata da
+/// `riservata/` e poi la leggeva, cioè scavalcava il recinto di lettura con
+/// un giro dal cestino (I97).
+#[test]
+fn a_confined_plugin_cannot_restore_a_foreign_entry_into_its_own_folder() {
+    let mut ws = Bench::new()
+        .with_file("riservata/Segreto.md", "solo per l'utente")
+        .mounts();
+    let entry = ws
+        .delete_document(&DocId::new("riservata/Segreto.md"))
+        .expect("l'utente cestina");
+    let mut permissions = PluginPermissions::of(&[]);
+    for key in [permission::READ_VAULT, permission::WRITE_VAULT] {
+        permissions.granted.set(
+            key,
+            serde_json::Value::Array(vec![serde_json::Value::String("sandbox/".into())]),
+        );
+    }
+    ws.register_plugin(
+        PluginManifest::new("terzi.confinato", "Confinato").granting(permissions),
+        Trust::Community,
+    )
+    .expect("dichiarato");
+
+    ws.with_host("terzi.confinato", |host| {
+        assert!(
+            host.list_trash().expect("il cestino si elenca").is_empty(),
+            "la voce non è nella sua vista"
+        );
+        let err = host
+            .restore_document(&entry, Some(DocId::new("sandbox/Preso.md")))
+            .expect_err("la destinazione è sua, l'origine no");
+        assert!(
+            matches!(err, PluginError::NotFound(_)),
+            "ciò che non può leggere non esiste: {err:?}"
+        );
+        assert!(host
+            .restore_document(&entry, None)
+            .is_err_and(|err| matches!(err, PluginError::NotFound(_))));
+    });
+    assert!(
+        !ws.root().join("sandbox/Preso.md").exists(),
+        "niente è arrivato in sandbox"
+    );
+    assert!(
+        ws.list_trash()
+            .expect("l'utente vede il cestino")
+            .iter()
+            .any(|candidate| candidate.id == entry),
+        "e la voce è ancora nel cestino"
+    );
+}

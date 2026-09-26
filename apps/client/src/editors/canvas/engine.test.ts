@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderMarkdown } from "../text/profiles/markdown/render";
-import { mountMarkdown } from "../../ui/markdown";
+import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
 import { parseCanvas } from "./model";
-import { applyOperation } from "../../editor/text-operation";
+import { applyOperation } from "../core/text-operation";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
 import { commitCanvasPatches, upsertNodePatch, type CanvasOperation } from "./operation";
 
@@ -74,6 +74,28 @@ describe("CanvasEngine", () => {
     expect(host.querySelector("iframe")).toBeNull();
     expect(host.querySelector(".canvas-url-text")?.textContent).toBe("https://example.com/x");
     expect(host.querySelectorAll(".canvas-edge").length).toBe(1);
+    engine.destroy();
+  });
+
+  // I78: le card di testo sono Markdown del vault, con le sue sintassi.
+  it("rende le card con le sintassi che il vault dà al Markdown", () => {
+    const source = JSON.stringify({
+      nodes: [{ id: "t", type: "text", x: 0, y: 0, width: 240, height: 140, text: "==segnato==" }],
+      edges: [],
+    });
+    const seen: unknown[] = [];
+    const { engine, host } = mounted(source, {
+      renderMarkdownForCard: (_nodeId, text, host, forms) => {
+        seen.push(forms);
+        host.innerHTML = renderMarkdown(text, forms).html;
+      },
+    });
+    expect(seen).toEqual([undefined]);
+    engine.setSyntaxForms([]);
+    expect(seen).toEqual([undefined, []]);
+    expect(host.querySelector(".canvas-markdown mark")).toBeNull();
+    engine.setSyntaxForms([{ name: "fub:highlight", trigger: { inline: { open: "==", close: "==" } } }]);
+    expect(host.querySelector(".canvas-markdown mark")?.textContent).toBe("segnato");
     engine.destroy();
   });
 
@@ -228,6 +250,21 @@ describe("CanvasEngine", () => {
     engine.destroy();
   });
 
+  it("dice le carte scelte col loro testo, l'ultima come primaria", () => {
+    const { engine, host } = mounted();
+    expect(engine.selectedText()).toBeNull();
+    const byte = (needle: string) => new TextEncoder().encode(engine.getDoc().slice(0, engine.getDoc().indexOf(needle))).length;
+    engine.revealSource(byte("allegati"));
+    expect(engine.selectedText()).toEqual({ primary: "allegati/foto.png", secondary: [] });
+    host.querySelector(".canvas-viewport")!.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+    const all = engine.selectedText()!;
+    expect([all.primary, ...all.secondary].sort()).toEqual(
+      ["Idee", "allegati/foto.png", "https://example.com/x", "vedi [[Altra]] e #tag"],
+    );
+    engine.destroy();
+    expect(engine.selectedText()).toBeNull();
+  });
+
   it("allinea più card in una patch batch annullabile, preservando i dati ignoti", () => {
     const { engine, host, changes } = mounted();
     const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
@@ -252,6 +289,36 @@ describe("CanvasEngine", () => {
     expect(changes).toHaveLength(0);
     expect(engine.getDoc()).toBe(before);
     engine.destroy();
+  });
+
+  it("porta a schermo la card che contiene un punto della sorgente, senza toccarla", () => {
+    // Una carta con testo non ASCII prima del bersaglio: l'offset è in byte
+    // UTF-8, come ogni span del modello, e non in unità UTF-16.
+    const source = JSON.stringify({
+      nodes: [
+        { id: "prima", type: "text", x: 0, y: 0, width: 100, height: 60, text: "città — perché" },
+        { id: "bersaglio", type: "text", x: 900, y: 700, width: 100, height: 60, text: "qui" },
+      ],
+      edges: [],
+    });
+    const selections: string[] = [];
+    const { engine, host, changes } = mounted(source, { onSelectionChange: () => selections.push("changed") });
+    const stage = host.querySelector<HTMLElement>(".canvas-stage")!;
+    const before = stage.style.transform;
+    const byte = new TextEncoder().encode(source.slice(0, source.indexOf('"qui"'))).length;
+
+    expect(engine.revealSource(byte)).toBe(true);
+    expect([...host.querySelectorAll<HTMLElement>(".canvas-node.selected")].map((el) => el.dataset.node))
+      .toEqual(["bersaglio"]);
+    expect(stage.style.transform).not.toBe(before);
+    expect(selections).toEqual(["changed"]);
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source);
+
+    // Un punto fuori dalle carte (la radice, gli archi) non ha dove andare.
+    expect(engine.revealSource(new TextEncoder().encode(source).length - 1)).toBe(false);
+    engine.destroy();
+    expect(engine.revealSource(byte)).toBe(false);
   });
 
   it("distribuisce i centri sull'asse x senza spostare gli estremi", () => {
@@ -357,6 +424,24 @@ describe("CanvasEngine", () => {
     await vi.waitFor(() => expect(parseCanvas(engine.getDoc()).nodes
       .filter((node) => node.file?.startsWith("Notes/")).map((node) => node.file)).toEqual(["Notes/one.md", "Notes/two.md"]));
     expect(deposit).not.toHaveBeenCalled();
+    engine.destroy();
+  });
+
+  it("una card file nuova punta al file scelto, mai a un segnaposto", async () => {
+    const without = mounted();
+    expect(without.host.querySelector('[data-canvas-action="add-file"]')).toBeNull();
+    without.engine.destroy();
+
+    const answers: Array<string | null> = [null, "../fuori.md", "Cartella/scelta.pdf"];
+    const pick = vi.fn(async () => answers.shift() ?? null);
+    const { engine, host } = mounted(canvasSource(), { onPickFile: pick });
+    const files = () => parseCanvas(engine.getDoc()).nodes.filter((node) => node.type === "file").map((node) => node.file);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      host.querySelector<HTMLButtonElement>('[data-canvas-action="add-file"]')!.click();
+      await vi.waitFor(() => expect(pick).toHaveBeenCalledTimes(attempt));
+      await Promise.resolve();
+    }
+    await vi.waitFor(() => expect(files()).toEqual(["allegati/foto.png", "Cartella/scelta.pdf"]));
     engine.destroy();
   });
 

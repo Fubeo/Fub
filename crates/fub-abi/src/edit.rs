@@ -869,7 +869,6 @@ mod tests {
             "the file was CRLF and stays CRLF: no line outside the span"
         );
         // E l'inverso riporta ai byte esatti di prima, terminatori compresi.
-        // Due edit adiacenti di cui il primo cancella finiscono nel testo nuovo
         let (returned, _) = report.inverse().apply_to(&out).unwrap();
         assert_eq!(returned, source);
     }
@@ -911,10 +910,10 @@ mod tests {
 
     #[test]
     fn the_inverse_survives_edits_that_collapse_onto_the_same_point() {
+        // Due edit adiacenti di cui il primo cancella finiscono nel testo nuovo
         // **nello stesso punto**: ciò che è stato tolto lì non occupa spazio. I
         // loro inversi non possono stare tutti e due lì, e devono comunque
         // riportare il documento intero.
-        // Scrivere una lettera e cancellarla riporta il documento a com'era: un
         let source = "abcdefghi";
         for edits in [
             vec![
@@ -939,24 +938,24 @@ mod tests {
         assert!(req.apply_to("testo").is_ok());
     }
 
+    /// I due vettori canonici di FNV-1a a 64 bit, scritti a mano.
     ///
     /// Sono l'unica cosa che tiene ferma l'impronta il giorno che qualcuno la
     /// «semplifica»: da quando l'indice di ricerca e lo store delle versioni
     /// passano di qui (difetto 0223), cambiare una delle due costanti non fa
     /// più fallire niente per conto suo — ogni archivio resta coerente con sé
     /// stesso — ma rende illeggibile ciò che è già su disco.
-    // Mangiata a pezzi o in un blocco solo è lo stesso numero: è ciò su cui
     #[test]
     fn the_fingerprint_not_is_moves() {
         assert_eq!(Fnv1a::hash(b""), 0xcbf2_9ce4_8422_2325);
         assert_eq!(Fnv1a::hash(b"a"), 0xaf63_dc4c_8601_ec8c);
+        // Mangiata a pezzi o in un blocco solo è lo stesso numero: è ciò su cui
         // conta chi impronta un documento campo per campo.
-        // E la revisione del confine è quel numero in esadecimale, non un'altra
         let mut h = Fnv1a::new();
         h.update(b"fo");
         h.update(b"obar");
         assert_eq!(h.value(), Fnv1a::hash(b"foobar"));
-        // famiglia di impronte.
+        // E la revisione del confine è quel numero in esadecimale, non un'altra
         // famiglia di impronte.
         assert_eq!(
             Revision::of("foobar").as_str(),

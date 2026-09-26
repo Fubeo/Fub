@@ -2,7 +2,7 @@ import {
   invertOperation,
   operationFromText,
   type TextOperation,
-} from "../../editor/text-operation";
+} from "../core/text-operation";
 import { parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
 import { patchCanvasSource, sameCanvasModel } from "./source-edit";
 

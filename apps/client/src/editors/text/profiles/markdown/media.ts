@@ -7,14 +7,14 @@
 // wikilink) e i byte arrivano dal protocollo `fub-asset:` attraverso un lease
 // `resource_open`, chiuso quando la resa si smonta. Nessun path diventa URL, e
 // un riferimento che non si risolve resta dichiarato non risolto.
-import { t } from "../i18n/strings";
-import type { LinkTarget } from "../host/contract";
-import { api } from "../host/ipc";
-import { resolvedReference } from "../host/query";
-import { assetUrl, mediaKindOfId } from "../editors/media/media-types";
-import type { Lifetime } from "./lifetime";
-import type { Expected } from "./race";
-import { VAULT_SRC_ATTRIBUTE } from "./sanitize";
+import { t } from "../../../../i18n/strings";
+import type { LinkTarget } from "../../../../host/contract";
+import { api } from "../../../../host/ipc";
+import { resolvedReference } from "../../../../host/query";
+import { assetUrl, mediaKindOfId } from "../../../media/media-types";
+import type { Lifetime } from "../../../../ui/lifetime";
+import type { Expected } from "../../../../ui/race";
+import { VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
 
 /// Ciò che serve a idratare, iniettabile nei banchi.
 export interface MediaPort {

@@ -101,14 +101,20 @@ fn source_error_does_not_publish_workspace_or_session() {
 }
 
 #[test]
-fn provider_conflict_rolls_back_session_and_prepared_resources() {
+fn a_conflicting_provider_is_refused_alone_and_the_vault_opens() {
     let (_dir, root) = vault();
+    std::fs::write(root.join("nota.txt"), "testo").expect("a text note");
     let dropped = Arc::new(AtomicUsize::new(0));
     let first_dropped = Arc::clone(&dropped);
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
         .with_format_source(Arc::new(move || {
             Ok(PreparedFormatSource::from_provider(Box::new(ProbeProvider {
+                id: "test.canvas",
+                ext: "canvas",
+                marker: "canvas",
+            }))
+            .with_provider(Box::new(ProbeProvider {
                 id: "test.first",
                 ext: "txt",
                 marker: "first",
@@ -122,13 +128,41 @@ fn provider_conflict_rolls_back_session_and_prepared_resources() {
             .retain(DropProbe(Arc::clone(&first_dropped))))
         }));
 
-    assert!(host.open(&root).is_err());
-    assert!(host.vaults().is_empty());
-    assert!(host.with_session(None, |_| ()).is_err());
+    host.open(&root)
+        .expect("a conflicting provider does not take the vault down");
+    let diagnostics: Vec<String> = host
+        .startup_diagnostics(None)
+        .expect("the vault is open")
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    for (challenger, incumbent) in [("test.canvas", "canvas"), ("test.second", "test.first")] {
+        assert!(
+            diagnostics
+                .iter()
+                .any(|message| message.contains(challenger) && message.contains(incumbent)),
+            "the refusal names `{challenger}` and who keeps the extension: {diagnostics:?}"
+        );
+    }
+    host.wait_indexed(None).expect("indexing completes");
+    let model = host
+        .debug_workspace(None)
+        .expect("workspace is published")
+        .read()
+        .expect("workspace read")
+        .read_model(&fub_abi::model::DocId::new("nota.txt"))
+        .expect("the note parses");
+    assert_eq!(
+        model.text, "first",
+        "the first claimant keeps the extension"
+    );
+    assert_eq!(dropped.load(Ordering::SeqCst), 0);
+
+    host.close_vault(&root).expect("vault closes");
     assert_eq!(
         dropped.load(Ordering::SeqCst),
         2,
-        "rollback drops all prepared resources"
+        "the prepared resources live until the vault closes"
     );
 }
 

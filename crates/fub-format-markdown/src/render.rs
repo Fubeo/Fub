@@ -157,7 +157,13 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             blocks,
             ..
         } => {
-            if custom_kind == custom_kind::CALLOUT {
+            if custom_kind == custom_kind::FOOTNOTE_DEFINITION
+                && attrs.get("unreferenced").and_then(|v| v.as_bool()) == Some(true)
+            {
+                // Una nota che nessuno richiama non ha un posto nella resa:
+                // comrak la toglieva, e il modello la porta solo perché sta
+                // nel file.
+            } else if custom_kind == custom_kind::CALLOUT {
                 let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
                 write!(
                     out,
@@ -308,7 +314,11 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             custom_kind, attrs, ..
         } if custom_kind == custom_kind::FOOTNOTE_REFERENCE => {
             let label = attrs.get("label").and_then(|v| v.as_str()).unwrap_or("");
-            if attrs.get("inline").and_then(|v| v.as_bool()) == Some(true) {
+            if attrs.get("unresolved").and_then(|v| v.as_bool()) == Some(true) {
+                // Un richiamo che non porta a nessuna nota si legge com'è
+                // scritto, come lo mostrava comrak quando era solo testo.
+                out.push_str(&escape(&format!("[^{label}]")));
+            } else if attrs.get("inline").and_then(|v| v.as_bool()) == Some(true) {
                 write!(
                     out,
                     "<sup class=\"footnote-inline\"{}>{}</sup>",

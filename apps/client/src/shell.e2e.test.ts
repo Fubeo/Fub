@@ -21,19 +21,14 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Quarantatré gesti, contati da fuori
+// # Nessun gesto spento in silenzio
 //
-// I gesti sono **quarantatré** [conta: gesti-della-shell], e il numero è contato da
-// `conteggi.mjs` invece che ricordato. Non è pedanteria: la
-// [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
-// ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
+// La [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md) ha
+// misurato che *una suite che si svuota in silenzio è indistinguibile da una
 // suite verde*, e un file come questo si svuota nel modo più facile che ci sia
-// — un `.skip` messo per sbloccare un giro e mai tolto. La prima forma del
-// conto leggeva `^  it(`, cioè **il rientro di oggi**: misurato, un `.skip` sui
-// sei `describe`, che stanno in colonna zero, lasciava il conto a sette e
-// `npm run test` verde con `7 skipped`. Adesso il rientro non conta e un
-// `.skip`/`.only`/`.todo` — su un `describe` o su un `it` — azzera il conto:
-// una suite che si può *non eseguire* non si scala, si spegne rumorosamente.
+// — un `.skip` messo per sbloccare un giro e mai tolto. Nessun conteggio lo
+// presidia: un `.skip`, `.only` o `.todo` qui si toglie prima di chiudere il
+// giro, e `npm test` lo mostra fra i saltati.
 //
 // # I limiti, dichiarati qui perché nessuno li deduca
 //
@@ -66,6 +61,8 @@ const box = vi.hoisted(() => ({
   /// Cosa risponde la modale di conferma del sistema. È l'unica altra cosa che
   /// la shell chiede al di là del confine (§1.3), e negli e2e è un `true`.
   confirm: true,
+  /// Quante volte la modale è stata chiesta.
+  asked: 0,
   /// I vault che la macchina ricorda, per la schermata senza vault.
   known: [] as KnownVault[],
 }));
@@ -110,7 +107,10 @@ vi.mock("./host/ipc", () => {
 });
 
 vi.mock("./host/dialog", () => ({
-  confirm: () => Promise.resolve(box.confirm),
+  confirm: () => {
+    box.asked++;
+    return Promise.resolve(box.confirm);
+  },
   pickFolder: () => Promise.resolve("/vault"),
   pickFile: () => Promise.resolve(null),
 }));
@@ -506,6 +506,155 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 });
 
+describe("rinomina e cestino dal registro dei comandi", () => {
+  const noteItem = (path: string) =>
+    document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+  const command = async (id: string) => {
+    const registry = await import("./ui/commands");
+    return registry.allCommands().find((entry) => entry.id === id);
+  };
+
+  it("da fuori dell'albero rinomina la nota attiva, portandola in vista", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    expect(noteItem("note/Riunione.md")).toBeNull();
+
+    const rename = await command("shell.explorer.rename");
+    expect(rename?.binding).toBeNull();
+    await rename!.run!();
+    await settle();
+    const field = noteItem("note/Riunione.md")?.querySelector<HTMLInputElement>("input");
+    expect(field?.value).toBe("Riunione");
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("nell'albero F2, Canc e il comando agiscono sulla voce col fuoco", async () => {
+    const host = await start(VAULT);
+    // La nota attiva è Benvenuto; il fuoco va sulla cartella e poi su una
+    // nota diversa, e i gesti devono seguire il fuoco e non l'attiva.
+    const folder = noteItem("note")!;
+    folder.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    noteItem("note")!.focus();
+    const trash = await command("shell.explorer.trash");
+    expect(trash).toBeUndefined();
+
+    const spesa = noteItem("note/Spesa.md")!;
+    spesa.focus();
+    const f2 = new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true });
+    spesa.dispatchEvent(f2);
+    expect(f2.defaultPrevented).toBe(true);
+    const field = spesa.querySelector<HTMLInputElement>("input")!;
+    expect(field.value).toBe("Spesa");
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await settle();
+
+    noteItem("note/Spesa.md")!.focus();
+    await (await command("shell.explorer.trash"))!.run!();
+    await waitFor("la voce col fuoco è nel cestino", () => host.trash().length === 1);
+
+    const riunione = noteItem("note/Riunione.md")!;
+    riunione.focus();
+    const canc = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+    riunione.dispatchEvent(canc);
+    expect(canc.defaultPrevented).toBe(true);
+    await waitFor("anche la seconda è nel cestino", () => host.trash().length === 2);
+    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+      ["note.trash", { doc: "note/Spesa.md" }],
+      ["note.trash", { doc: "note/Riunione.md" }],
+    ]);
+    expect(Object.keys(host.files())).toContain("Benvenuto.md");
+  });
+});
+
+describe("una conferma sola", () => {
+  // Una domanda sì/no la fa sempre il dialogo di `host/dialog.ts`: prima
+  // segnalibri e workspace ne disegnavano una loro nel DOM, e la stessa
+  // eliminazione si chiedeva in due modi diversi a seconda di chi la offriva.
+  it("eliminare un workspace lo chiede al dialogo dell'app, e un no lo lascia", async () => {
+    await start(VAULT);
+    const workspaces = await import("./state/workspaces");
+    const ui = await import("./state/workspaces-ui");
+    const { layout } = await import("./state/layout");
+    const saved = workspaces.saveWorkspace("Sera", layout, [], null)!;
+    ui.setCurrentWorkspace(saved.id);
+    const registry = await import("./ui/commands");
+    const remove = registry.allCommands().find((entry) => entry.id === "shell.workspace.delete")!;
+
+    const asked = box.asked;
+    box.confirm = false;
+    await remove.run!();
+    expect(box.asked).toBe(asked + 1);
+    expect(document.querySelector(".shell-dialog")).toBeNull();
+    expect(workspaces.getWorkspace(saved.id)).not.toBeNull();
+
+    box.confirm = true;
+    await remove.run!();
+    expect(box.asked).toBe(asked + 2);
+    expect(workspaces.getWorkspace(saved.id)).toBeNull();
+  });
+});
+
+describe("un workspace salvato segue le rinomine", () => {
+  // I89: il layout vivo migrava la chiave, i workspace salvati no — e al
+  // ripristino la nota rinominata usciva dalle schede come «mancante».
+  it("rinominata la nota, il ripristino la riapre col nome nuovo", async () => {
+    const host = await start(VAULT);
+    const workspaces = await import("./state/workspaces");
+    const { defaultLayout, openIn } = await import("./state/layout");
+    const assetto = defaultLayout();
+    openIn("main", "note/Spesa.md", assetto);
+    openIn("main", "Benvenuto.md", assetto);
+    assetto.panes.main.history = { past: [{ k: "doc", doc: "note/Spesa.md" }], future: [] };
+    const saved = workspaces.saveWorkspace("Mattina", assetto, [], null)!;
+
+    host.renameFromOutside("note/Spesa.md", "note/Lista della spesa.md");
+    await waitFor("il workspace salvato nomina la nota nuova", () =>
+      workspaces.getWorkspace(saved.id)!.layout.panes.main.tabs
+        .some((tab) => tab.k === "doc" && tab.doc === "note/Lista della spesa.md"));
+
+    const applied = await workspaces.applyWorkspace(saved.id, defaultLayout());
+    expect(applied?.report.missingDocs).toEqual([]);
+    expect(applied?.layout.panes.main.tabs.map((tab) => tab.k === "doc" ? tab.doc : tab.view))
+      .toEqual(["note/Lista della spesa.md", "Benvenuto.md"]);
+    expect(applied?.layout.panes.main.history?.past).toEqual([{ k: "doc", doc: "note/Lista della spesa.md" }]);
+    expect(applied?.report.prunedHistory).toBe(0);
+  });
+});
+
+describe("i pannelli laterali ricordati sulla macchina", () => {
+  // Stavano in `localStorage`: adesso sono `chrome.sidebar.visible` e
+  // `chrome.inspector.visible`, impostazioni della macchina come il resto
+  // della cornice.
+  const chrome = (key: string, kind: SettingEntry["spec"]["kind"], value: SettingEntry["value"],
+    source: SettingEntry["source"] = "default"): SettingEntry => ({
+    spec: { key, label: key, description: "", group: "", scope: "machine", kind, program_writable: false },
+    value,
+    source,
+  });
+
+  it("chiuso nell'impostazione resta chiuso, e riaprirlo lo scrive lì", async () => {
+    localStorage.clear();
+    const host = await start(VAULT, [
+      chrome("chrome.schema", { kind: "number", default: 1, min: 1, max: 1 }, 1),
+      chrome("chrome.sidebar.visible", { kind: "toggle", default: true }, false, "machine"),
+      chrome("chrome.inspector.visible", { kind: "toggle", default: true }, true),
+    ]);
+    const sidebar = document.getElementById("sidebar")!;
+    await waitFor("la barra si chiude come dice la macchina", () => sidebar.hidden);
+
+    const registry = await import("./ui/commands");
+    registry.allCommands().find((entry) => entry.id === "shell.sidebar.toggle")!.run!();
+    await settle();
+    expect(sidebar.hidden).toBe(false);
+    expect(host.calls.filter((call) => call.gate === "setSetting").map((call) => call.args))
+      .toContainEqual(["chrome.sidebar.visible", true]);
+    expect(localStorage.getItem("fub.layout.sidebar")).toBeNull();
+  });
+});
+
 describe("apri un vault", () => {
   it("la finestra parte sul vault iniziale, con l'albero e la prima nota aperta", async () => {
     // **Le domande che nessun dato lega partono insieme.** Aprire un vault
@@ -854,6 +1003,44 @@ describe("undo locale tra riquadri", () => {
     expect(host.atGate("writeDocument").length).toBe(writesBeforeClose + 1);
     await settle();
     expect(host.atGate("writeDocument").length).toBe(writesBeforeClose + 1);
+  });
+  it("un riquadro rimasto indietro fonde la sua battuta invece di perderla", async () => {
+    await start(VAULT);
+    const initial = editorTexts()[0]!;
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "\\", ctrlKey: true }),
+    );
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+
+    const views = editorViews();
+    views[0]!.dispatch({ changes: { from: views[0]!.state.doc.length, insert: " [A]" } });
+    await settle();
+    // Il secondo riquadro resta indietro — una sincronizzazione mancata —
+    // senza che la sessione lo sappia: `sync` non torna alla sessione.
+    const behind = views[1]!.state.doc.length;
+    views[1]!.dispatch({
+      changes: { from: behind - " [A]".length, to: behind },
+      userEvent: "sync",
+    });
+    expect(editorTexts()[1]).toBe(initial);
+
+    // La battuta parte da un testo stantio: la sessione la rifiuta, il
+    // pannello la ribasa e la ripresenta. Prima si perdeva sotto il testo
+    // autorevole, fuori dalla history.
+    views[1]!.dispatch({ changes: { from: 0, insert: "[B] " } });
+    await settle();
+    const merged = `[B] ${initial} [A]`;
+    expect(editorTexts()).toEqual([merged, merged]);
+
+    // La battuta resta del riquadro che l'ha fatta: il suo undo toglie
+    // soltanto quella, e l'altro riquadro la vede sparire.
+    views[1]!.focus();
+    views[1]!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "z", ctrlKey: true }),
+    );
+    await settle();
+    expect(editorTexts()).toEqual([`${initial} [A]`, `${initial} [A]`]);
   });
 });
 
@@ -1240,6 +1427,32 @@ describe("chiudere linguette e superfici", () => {
     expect(host.atGate("writeDocument")).toHaveLength(1);
   });
 
+  it("una linguetta che non si salva non butta il buffer alla chiusura", async () => {
+    const host = await start(VAULT);
+    const { documentSessions } = await import("./state/document-session");
+    const repair = host.fault("writeDocument", "disco pieno");
+    box.confirm = false;
+    const asked = box.asked;
+    typeInEditor("lavoro che il disco rifiuta");
+
+    document.querySelector<HTMLElement>(".pane .tab-close")?.click();
+    await waitFor("la chiusura chiede cosa fare", () => box.asked === asked + 1);
+    // Senza un «scarta» esplicito la nota torna aperta, col suo buffer.
+    await waitFor("la nota torna aperta", () =>
+      document.querySelectorAll(".pane .tab").length === 1 &&
+      textToVideo().includes("lavoro che il disco rifiuta"),
+    );
+    expect(documentSessions.inspect("Benvenuto.md")).toMatchObject({ dirty: true });
+
+    // Scartare è una scelta: allora la sessione se ne va davvero.
+    box.confirm = true;
+    document.querySelector<HTMLElement>(".pane .tab-close")?.click();
+    await waitFor("la sessione se ne va", () => documentSessions.get("Benvenuto.md") === undefined);
+    expect(document.querySelectorAll(".pane .tab")).toHaveLength(0);
+    repair();
+    expect(host.files()["Benvenuto.md"]).toBe(VAULT["Benvenuto.md"]);
+  });
+
   it("una riapertura prenotata durante il flush conserva lo stesso owner", async () => {
     const host = await start(VAULT);
     const { documentSessions } = await import("./state/document-session");
@@ -1422,6 +1635,81 @@ describe("chiudere linguette e superfici", () => {
     );
     expect(host.files()["Benvenuto.md"]).toBe(after);
     expect(documentSessions.inspect("Benvenuto.md")?.dirty).toBe(false);
+  });
+});
+
+describe("spostare linguette dal registro dei comandi", () => {
+  const press = (on: Element, key: string, mods: KeyboardEventInit): KeyboardEvent => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods });
+    on.dispatchEvent(event);
+    return event;
+  };
+  const names = (pane: Element) =>
+    [...pane.querySelectorAll<HTMLElement>(".tab")].map((tab) => tab.textContent?.trim());
+
+  it("l'accordo del registro sposta la linguetta col fuoco, non quella attiva", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    const pane = document.querySelector<HTMLElement>(".pane")!;
+    expect(names(pane)).toEqual(["Benvenuto", "Riunione"]);
+
+    // Le frecce della striscia portano il fuoco sulla prima senza attivarla.
+    const first = pane.querySelector<HTMLElement>(".tab")!;
+    first.focus();
+    const registry = await import("./ui/commands");
+    const chord = { key: "PageDown", ctrlKey: true, metaKey: false, shiftKey: true, altKey: false };
+    expect(registry.advance(registry.allCommands(), null, chord)).toMatchObject({
+      type: "esegue",
+      entry: { id: "shell.tab.move.right" },
+    });
+    press(first, "PageDown", { ctrlKey: true, shiftKey: true });
+    await waitFor("la linguetta col fuoco si sposta", () => names(pane)[1] === "Benvenuto");
+    expect(names(pane)).toEqual(["Riunione", "Benvenuto"]);
+    expect(textToVideo()).toContain("Appunti della riunione");
+    expect(first.getAttribute("aria-keyshortcuts")).toContain("Control+Shift+PageDown");
+
+    // Il gesto di prima non è più un tasto locale che aggira il registro.
+    const old = press(pane.querySelectorAll<HTMLElement>(".tab")[1]!, "ArrowLeft", { altKey: true, shiftKey: true });
+    await settle();
+    expect(old.defaultPrevented).toBe(false);
+    expect(names(pane)).toEqual(["Riunione", "Benvenuto"]);
+  });
+
+  it("porta la linguetta nel riquadro dopo, in giro, e l'appuntata resta", async () => {
+    await start(VAULT);
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "\\", ctrlKey: true }),
+    );
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await settle();
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+    const focused = panes().find((pane) => pane.classList.contains("focus"))!;
+    const other = panes().find((pane) => pane !== focused)!;
+    const before = names(other).length;
+
+    const registry = await import("./ui/commands");
+    const next = registry.allCommands().find((entry) => entry.id === "shell.tab.move.pane.next")!;
+    expect(next.binding).toBe("Mod-Alt-PageDown");
+    await next.run!();
+    await waitFor("la linguetta arriva nell'altro riquadro", () => names(other).length === before + 1);
+    expect(names(other)).toContain("Riunione");
+    expect(names(focused)).not.toContain("Riunione");
+
+    // Un'appuntata è appuntata al suo riquadro: il comando non la porta via.
+    const { pinCurrentTab } = await import("./panels/document");
+    other.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await settle();
+    pinCurrentTab(true);
+    await settle();
+    const pinned = names(other);
+    await next.run!();
+    await settle();
+    expect(names(other)).toEqual(pinned);
   });
 });
 
@@ -1926,6 +2214,7 @@ describe("la palette flussa prima di un comando che scrive", () => {
     keybinding: null,
     params: [{ name: "name", title: "Nome", description: "", kind: { kind: "text" }, required: false }],
     scope: { writes: true, reach: "document", reversible: true },
+    surfaces: [],
   };
 
   it("un buffer sporco si salva prima che note.create parta", async () => {
@@ -1977,6 +2266,7 @@ describe("la palette flussa prima di un comando che scrive", () => {
       keybinding: null,
       params: [{ name: "query", title: "Query", description: "", kind: { kind: "text" }, required: true }],
       scope: { writes: false, reach: "session", reversible: true },
+      surfaces: [],
     };
     const host = await start(VAULT, [], undefined, null, [specSearchOpen]);
     typeInEditor("testo non ancora salvato");
@@ -2005,31 +2295,31 @@ describe("la palette flussa prima di un comando che scrive", () => {
   });
 });
 
+/// Divide dal registro e non col tasto: una tastiera dei gesti precedenti,
+/// su un `document` che nessuno smonta, riceverebbe anche lei l'accordo.
+async function splitRight(): Promise<void> {
+  const registry = await import("./ui/commands");
+  await registry.allCommands().find((entry) => entry.id === "shell.pane.split.right")?.run?.();
+}
+
+/// Due riquadri: il primo su Benvenuto, il secondo su Riunione, col fuoco.
+async function twoPanes(): Promise<void> {
+  await splitRight();
+  await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+  await settle();
+  document.querySelector<HTMLElement>("#file-list .tree-row.folder")?.click();
+  await waitFor("la cartella si apre", () => rowsOfNote().length === 3);
+  [...document.querySelectorAll<HTMLElement>(".pane")][1]!
+    .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  row("Riunione").click();
+  await waitFor(
+    "Riunione arriva nel secondo riquadro",
+    () => editorViews()[1]?.state.doc.toString().includes("Appunti") === true,
+  );
+  await settle();
+}
+
 describe("i riquadri dopo un'attesa", () => {
-  /// Divide dal registro e non col tasto: una tastiera dei gesti precedenti,
-  /// su un `document` che nessuno smonta, riceverebbe anche lei l'accordo.
-  async function splitRight(): Promise<void> {
-    const registry = await import("./ui/commands");
-    await registry.allCommands().find((entry) => entry.id === "shell.pane.split.right")?.run?.();
-  }
-
-  /// Due riquadri: il primo su Benvenuto, il secondo su Riunione, col fuoco.
-  async function twoPanes(): Promise<void> {
-    await splitRight();
-    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
-    await settle();
-    document.querySelector<HTMLElement>("#file-list .tree-row.folder")?.click();
-    await waitFor("la cartella si apre", () => rowsOfNote().length === 3);
-    [...document.querySelectorAll<HTMLElement>(".pane")][1]!
-      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    row("Riunione").click();
-    await waitFor(
-      "Riunione arriva nel secondo riquadro",
-      () => editorViews()[1]?.state.doc.toString().includes("Appunti") === true,
-    );
-    await settle();
-  }
-
   it("il banner del conflitto risolve la nota che nomina, non quella col fuoco", async () => {
     const host = await start(VAULT);
     await twoPanes();
@@ -2067,6 +2357,61 @@ describe("i riquadri dopo un'attesa", () => {
     expect(textToVideo()).toContain("pane, latte");
   });
 
+  const errorSurfaces = () => [...document.querySelectorAll<HTMLElement>(".document-surface-error")];
+
+  it("un canvas rotto da fuori passa alla superficie d'errore e torna quando guarisce", async () => {
+    const good = JSON.stringify({
+      nodes: [{ id: "a", type: "text", text: "ciao", x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    });
+    const host = await start({ ...VAULT, "lavagna.canvas": good });
+    const { openDocument } = await import("./panels/document");
+    await openDocument("lavagna.canvas");
+    await waitFor("il canvas si monta", () => document.querySelector(".canvas-surface-host") !== null);
+
+    // Un'altra app lo riscrive male: la superficie non resta coi nodi di
+    // prima, dove una modifica sembrerebbe presa e non si salverebbe.
+    host.writeFromOutside("lavagna.canvas", "{rotto");
+    await waitFor("la superficie d'errore prende il posto del canvas", () => errorSurfaces().length === 1);
+    expect(document.querySelector(".canvas-surface-host")).toBeNull();
+
+    host.writeFromOutside("lavagna.canvas", good);
+    await waitFor("il canvas torna", () => document.querySelector(".canvas-surface-host") !== null);
+    expect(errorSurfaces()).toHaveLength(0);
+  });
+
+  it("uno sheet rotto mostra la superficie d'errore, non un riquadro vuoto", async () => {
+    await start({ ...VAULT, "conti.fubsheet": "{rotto" });
+    const { openDocument } = await import("./panels/document");
+    await openDocument("conti.fubsheet");
+    await settle();
+
+    expect(errorSurfaces()).toHaveLength(1);
+    expect(errorSurfaces()[0]!.textContent).not.toBe("");
+  });
+
+  it("un riquadro che non si monta non ferma l'altro", async () => {
+    await start({ ...VAULT, "conti.fubsheet": "{rotto" });
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    const { openDocument } = await import("./panels/document");
+    const { state } = await import("./state/store");
+    const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+
+    panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await openDocument("conti.fubsheet");
+    await waitFor("il primo riquadro mostra l'errore", () => errorSurfaces().length === 1);
+
+    panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await openDocument("note/Spesa.md");
+    await settle();
+
+    expect(panes()[1]!.querySelector(".cm-content")?.textContent).toContain("pane, latte");
+    expect(state.currentDoc).toBe("note/Spesa.md");
+    expect(panes()[0]!.querySelector(".document-surface-error")).not.toBeNull();
+  });
+
   it("il secondo editor si monta col testo che la sessione ha adesso", async () => {
     const host = await start(VAULT);
     // Le forme sintattiche passano da `queryIndex`: frenarlo ferma il secondo
@@ -2083,5 +2428,197 @@ describe("i riquadri dopo un'attesa", () => {
     const texts = editorTexts();
     expect(texts[1]).toBe(texts[0]);
     expect(texts[1]).toContain("[durante il montaggio]");
+  });
+});
+
+/// Un foglio minimo che la superficie a griglia accetta.
+const SHEET = JSON.stringify({
+  version: 1,
+  sheets: [{
+    id: "main",
+    name: "Main",
+    rows: [{ id: "r0", hidden: false }],
+    columns: [{ id: "c0", hidden: false }],
+    cells: [{ row: "r0", column: "c0", input: "1" }],
+  }],
+});
+
+/// Una tela con due carte: la seconda lontana dalla prima.
+const BOARD = JSON.stringify({
+  nodes: [
+    { id: "prima", type: "text", text: "prima", x: 0, y: 0, width: 10, height: 10 },
+    { id: "seconda", type: "text", text: "seconda", x: 900, y: 700, width: 10, height: 10 },
+  ],
+  edges: [],
+});
+
+describe("portare a schermo un punto", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const cursor = (index: number) => editorViews()[index]!.state.selection.main.head;
+  const toast = () => document.getElementById("toast")?.textContent ?? "";
+
+  it("il punto va al riquadro che mostra il documento, non a quello col fuoco", async () => {
+    await start(VAULT);
+    await twoPanes();
+    const { applyIntent } = await import("./ui/intents");
+    expect(panes()[1]!.classList.contains("focus")).toBe(true);
+    const before = cursor(1);
+
+    // Lo span nomina Benvenuto, che sta nel primo riquadro: l'offset misurato
+    // su quel testo non deve finire nel testo di Riunione.
+    await applyIntent({ kind: "reveal", doc_id: "Benvenuto.md", span: { start: 10, end: 10 } });
+    await settle();
+
+    expect(panes()[0]!.classList.contains("focus"), "il riquadro di Benvenuto prende il fuoco").toBe(true);
+    expect(cursor(0)).toBe(10);
+    expect(cursor(1), "il cursore di Riunione resta dov'era").toBe(before);
+    expect(editorTexts()[1]).toContain("Appunti");
+  });
+
+  it("una linguetta dietro un'altra torna davanti prima di portarci il punto", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    const { applyIntent } = await import("./ui/intents");
+    const { state } = await import("./state/store");
+    await openDocument("note/Riunione.md");
+    await settle();
+    expect(state.currentDoc).toBe("note/Riunione.md");
+
+    await applyIntent({ kind: "reveal", doc: "Benvenuto.md", span: { start: 9, end: 9 } });
+    await settle();
+
+    expect(state.currentDoc).toBe("Benvenuto.md");
+    expect(editorTexts()).toHaveLength(1);
+    expect(editorTexts()[0]).toContain("Il primo documento");
+    expect(cursor(0)).toBe(9);
+    expect(panes()[0]!.querySelectorAll(".tab"), "nessuna linguetta in più").toHaveLength(2);
+  });
+
+  it("una superficie che non sa portarci lo dice, invece di non fare niente", async () => {
+    await start({ ...VAULT, "conti.fubsheet": SHEET });
+    const { applyIntent } = await import("./ui/intents");
+    const { t } = await import("./i18n/strings");
+
+    await applyIntent({ kind: "reveal", doc: "conti.fubsheet", span: { start: 3, end: 3 } });
+    await settle();
+
+    expect(panes()[0]!.querySelector("[data-surface-mode='sheet']"), "lo sheet è aperto").not.toBeNull();
+    expect(toast()).toContain(t("document.reveal_unavailable", { doc: "conti" }));
+  });
+
+  it("sulla tela il punto è la carta che lo contiene", async () => {
+    await start({ ...VAULT, "lavagna.canvas": BOARD });
+    const { applyIntent } = await import("./ui/intents");
+    const { t } = await import("./i18n/strings");
+    const at = BOARD.indexOf('"seconda"');
+
+    await applyIntent({ kind: "reveal", doc: "lavagna.canvas", span: { start: at, end: at } });
+    await waitFor("una carta è selezionata", () => document.querySelector(".canvas-node.selected") !== null);
+
+    expect([...document.querySelectorAll<HTMLElement>(".canvas-node.selected")].map((node) => node.dataset.node))
+      .toEqual(["seconda"]);
+    expect(toast()).not.toContain(t("document.reveal_unavailable", { doc: "lavagna" }));
+  });
+
+  it("il menu del riquadro offre ciò che la superficie dichiara di saper fare", async () => {
+    await start({ ...VAULT, "lavagna.canvas": BOARD, "conti.fubsheet": SHEET });
+    const { openDocument } = await import("./panels/document");
+    const { t } = await import("./i18n/strings");
+    const { closeContextMenu } = await import("./ui/menu");
+    const gestures = [t("pane.recorder.open"), t("pane.slides"), t("pane.print")];
+    const offered = async (): Promise<string[]> => {
+      panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+      await settle();
+      const menus = [...document.querySelectorAll<HTMLElement>("#context-menu")];
+      const labels = [...(menus[menus.length - 1]?.querySelectorAll("button") ?? [])]
+        .map((button) => button.querySelector(".menu-label")?.textContent ?? button.textContent ?? "");
+      closeContextMenu();
+      await settle();
+      return gestures.filter((gesture) => labels.includes(gesture));
+    };
+
+    expect(await offered(), "la nota Markdown").toEqual(gestures);
+    await openDocument("lavagna.canvas");
+    await settle();
+    // La tela si stampa dal suo provider; non ha una resa da presentare né
+    // una sintassi in cui scrivere un rimando.
+    expect(await offered(), "la tela").toEqual([t("pane.print")]);
+    await openDocument("conti.fubsheet");
+    await settle();
+    expect(await offered(), "lo sheet, che non ha un provider di stampa").toEqual([]);
+  });
+});
+
+describe("la modalità di ogni famiglia di superfici", () => {
+  const paneMode = () => document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode;
+  const choose = async (mode: string) => {
+    document.querySelector<HTMLButtonElement>(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`)!.click();
+    await settle();
+  };
+
+  it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {
+    await start({ ...VAULT, "lavagna.canvas": BOARD });
+    const { openDocument } = await import("./panels/document");
+    await choose("source");
+    expect(paneMode()).toBe("source");
+
+    await openDocument("lavagna.canvas");
+    await settle();
+    expect(paneMode(), "la tela si apre sulla tela").toBe("canvas");
+    expect(document.querySelector(".pane.focus [data-surface-mode='canvas']")).not.toBeNull();
+
+    await openDocument("Benvenuto.md");
+    await settle();
+    expect(paneMode(), "la nota ritrova la Sorgente scelta").toBe("source");
+  });
+
+  it("la modalità scelta sulla tela non decide come si apre la nota", async () => {
+    await start({ ...VAULT, "lavagna.canvas": BOARD });
+    const { openDocument } = await import("./panels/document");
+    expect(paneMode()).toBe("live_preview");
+    await openDocument("lavagna.canvas");
+    await settle();
+    await choose("source");
+    await choose("canvas");
+
+    await openDocument("Benvenuto.md");
+    await settle();
+    expect(paneMode(), "non la Sorgente, prima modalità del testo").toBe("live_preview");
+
+    await openDocument("lavagna.canvas");
+    await settle();
+    await choose("source");
+    await openDocument("Benvenuto.md");
+    await settle();
+    expect(paneMode()).toBe("live_preview");
+    await openDocument("lavagna.canvas");
+    await settle();
+    expect(paneMode(), "la tela ritrova il suo sorgente").toBe("source");
+  });
+
+  // Il contratto non nomina le modalità di una superficie: dice che vista è.
+  // La tela e il foglio si scrivono attraverso una resa, non sul sorgente.
+  it("il contesto pubblicato dice che vista è, non una modalità Markdown", async () => {
+    const host = await start({ ...VAULT, "lavagna.canvas": BOARD, "conti.fubsheet": SHEET });
+    const { openDocument } = await import("./panels/document");
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] as { doc: string | null; mode: string } | undefined);
+    };
+
+    await openDocument("lavagna.canvas");
+    await settle();
+    expect(published()).toMatchObject({ doc: "lavagna.canvas", mode: "live_preview" });
+    await choose("source");
+    expect(published()).toMatchObject({ doc: "lavagna.canvas", mode: "source" });
+
+    await openDocument("conti.fubsheet");
+    await settle();
+    expect(published()).toMatchObject({ doc: "conti.fubsheet", mode: "live_preview" });
+
+    await openDocument("Benvenuto.md");
+    await settle();
+    await choose("reading");
+    expect(published()).toMatchObject({ doc: "Benvenuto.md", mode: "reading" });
   });
 });

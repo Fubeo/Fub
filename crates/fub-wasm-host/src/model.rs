@@ -216,7 +216,7 @@ fn from_span(s: wm::Span) -> Result<rm::Span, FormatError> {
     .try_into()
     .map_err(|e: arena::ArenaError| parse_error(e.to_string()))
 }
-fn from_target(t: wm::LinkTarget) -> rm::LinkTarget {
+pub(crate) fn from_target(t: wm::LinkTarget) -> rm::LinkTarget {
     match t {
         wm::LinkTarget::Wiki(v) => rm::LinkTarget::Wiki {
             page: v.page,

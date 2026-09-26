@@ -21,6 +21,7 @@ pub use model::{
     MAX_SUMMARIES, MAX_VIEWS, MAX_VIEW_BYTES,
 };
 
+use fub_abi::custom::SECTIONS_ATTR;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
@@ -66,14 +67,16 @@ impl FormatProvider for BaseProvider {
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = text.to_string();
         let attrs = match BaseDefinition::parse(text) {
+            // Le viste sono le sezioni nominate del blocco: `[[x.base#Vista]]`
+            // ne sceglie una, e il kernel la consegna in `SECTION_ATTR`.
             Ok(definition) => serde_json::json!({
                 "source": text,
                 "view": definition.views.first().map(|view| &view.name),
-                "views": definition.views.iter().map(|view| &view.name).collect::<Vec<_>>(),
+                SECTIONS_ATTR: definition.views.iter().map(|view| &view.name).collect::<Vec<_>>(),
                 "container": ctx.doc_id,
             }),
             Err(_) => {
-                serde_json::json!({ "source": text, "view": null, "views": [], "container": ctx.doc_id })
+                serde_json::json!({ "source": text, "view": null, SECTIONS_ATTR: [], "container": ctx.doc_id })
             }
         };
         model.body.push(Block::Custom {

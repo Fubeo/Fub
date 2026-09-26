@@ -758,7 +758,7 @@ fn a_escape_not_is_loses_and_not_becomes_a_feature() {
 
 /// **Una reference definition è un blocco a sé, e fa il giro intero.**
 ///
-/// `[etichetta]: destinazione "titolo"` è metadata — declare il bersaglio di
+/// `[etichetta]: destinazione "titolo"` è metadata — dichiara il bersaglio di
 /// un `[a][etichetta]` — e comrak la consuma durante il parsing senza lasciare
 /// un nodo nell'AST: senza il recupero del parser la riga spariva dal modello,
 /// e la prima riscrittura la cancellava dal file. Qui la misura è il giro

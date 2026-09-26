@@ -122,10 +122,7 @@ impl ServiceState {
     pub fn bearer(&self, auth: Option<&str>) -> Result<String, HttpResponse> {
         self.accounts
             .verify_session_token(auth)
-            .map_err(|e| match e.as_str() {
-                "missing credentials" | "bad token" | "token expired" => HttpResponse::err(401, &e),
-                _ => HttpResponse::err(403, &e),
-            })
+            .map_err(|rejection| HttpResponse::err(rejection.status(), rejection.code()))
     }
 }
 

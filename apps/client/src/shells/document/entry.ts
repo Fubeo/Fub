@@ -1,9 +1,16 @@
 import "../../theme/structure.css";
-import "../../theme/serie/skin.css";
+import fonts from "../../theme/serie/fonts.css?raw";
+import sheetDark from "../../theme/serie/sheet-dark.css?raw";
+import sheetLight from "../../theme/serie/sheet-light.css?raw";
+import skin from "../../theme/serie/skin.css?raw";
 import { TextEngine } from "../../editors/text/engine";
+import { textProfileExtensions } from "../../editors/text/profiles/by-id";
 import { t } from "../../i18n/strings";
+import { pageName } from "../../rules/mirrored";
 import { attachChildBridge, type ChildBridge, type DocumentWindowRequest } from "../../state/document-bridge";
+import { mount, mountMirroredTheme, type MirroredTheme } from "../../theme/loader";
 import { openLifetime } from "../../ui/lifetime";
+import { errorText } from "../../host/errors";
 
 function params(): DocumentWindowRequest | null {
   const query = new URLSearchParams(window.location.search);
@@ -13,38 +20,27 @@ function params(): DocumentWindowRequest | null {
   const vault = query.get("vault");
   const session = query.get("session");
   const surfaceId = query.get("surfaceId");
+  const profile = query.get("profile");
   const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-  if (surface !== "document" || !channel || !document || !vault || !session || !surfaceId
+  if (surface !== "document" || !channel || !document || !vault || !session || !surfaceId || !profile
     || !new RegExp(`^docwin-${uuid}$`).test(channel)
     || !new RegExp(`^${uuid}$`).test(session)
-    || !new RegExp(`^remote:${uuid}$`).test(surfaceId)) return null;
-  return { surface, channel, document, vault, session, surfaceId };
+    || !new RegExp(`^remote:${uuid}$`).test(surfaceId)
+    || !/^[a-z0-9-]{1,64}$/.test(profile)) return null;
+  return { surface, channel, document, vault, session, surfaceId, profile };
 }
 
-function mountAppearance(): () => void {
-  const dark = document.getElementById("document-theme-dark") as HTMLLinkElement | null;
-  const light = document.getElementById("document-theme-light") as HTMLLinkElement | null;
-  const system = window.matchMedia("(prefers-color-scheme: dark)");
-  const apply = (): void => {
-    let choice: unknown;
-    try {
-      choice = JSON.parse(localStorage.getItem("fub.appearance.theme") ?? "null")?.light;
-    } catch {
-      choice = null;
-    }
-    const darkMode = choice === "dark" || (choice !== "light" && system.matches);
-    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
-    if (dark) dark.media = darkMode ? "all" : "not all";
-    if (light) light.media = darkMode ? "not all" : "all";
-  };
-  apply();
-  const storage = (event: StorageEvent): void => {
-    if (event.key === "fub.appearance.theme") apply();
-  };
-  const life = openLifetime();
-  life.listen(window, "storage", storage);
-  life.listen(system, "change", apply);
-  return () => life.close();
+/// Questa finestra non ha IPC: il tema è quello della finestra principale, che
+/// lo manda dal bridge come strati già montati. Finché non arriva vale la
+/// serie con la luce del sistema, per non mostrare una pagina nuda a chi trova
+/// la sessione già chiusa.
+function mountSeriesFallback(): "light" | "dark" {
+  const light = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.dataset.theme = light;
+  mount(fonts, "caratteri");
+  mount(light === "dark" ? sheetDark : sheetLight, "foglio");
+  mount(skin, "pelle");
+  return light;
 }
 
 function boot(): void {
@@ -58,26 +54,42 @@ function boot(): void {
     if (root) root.textContent = t("windows.invalid_request");
     return;
   }
-  const unmountAppearance = mountAppearance();
+  const light = mountSeriesFallback();
   keep.textContent = t("windows.keep_local");
   discard.textContent = t("windows.discard_local");
-  document.title = request.document;
+  document.title = pageName(request.document);
   const host = document.createElement("section");
   host.className = "document-window-editor pane-editor";
   host.setAttribute("aria-label", request.document);
   root.appendChild(host);
   let bridge: ChildBridge;
+  // Il profilo lo ha risolto il registro della finestra principale: qui si
+  // monta com'è. Un id che il testo non possiede è una richiesta non valida,
+  // come una senza canale.
+  const extensions = textProfileExtensions(request.profile, {
+    documentId: request.document,
+    openWikilink: (page, heading, block) => bridge.navigate({ kind: "wikilink", page, heading, block }),
+    openPath: (path) => bridge.navigate({ kind: "path", path }),
+    searchTag: (tag) => bridge.navigate({ kind: "tag", tag }),
+  });
+  if (!extensions) {
+    host.remove();
+    root.textContent = t("windows.invalid_request");
+    return;
+  }
   const editor = new TextEngine(host, {
     onChange: (change) => {
       try {
         bridge.sendEdit(change.text, change.operation);
       } catch (error) {
         editor.setReadOnly(true);
-        state.textContent = t("windows.local_error", { reason: String(error) });
+        state.textContent = t("windows.local_error", { reason: errorText(error) });
         choices.hidden = false;
       }
     },
     onSelectionChange: () => {},
+    extensions,
+    theme: light,
   });
   editor.setReadOnly(true);
   let bootstrapped = false;
@@ -99,6 +111,10 @@ function boot(): void {
         ? t("windows.local_error", { reason: status.reason ?? "" })
         : status.kind === "frozen" ? t("windows.saving") : "";
     },
+    (theme: MirroredTheme) => {
+      mountMirroredTheme(theme);
+      editor.setTheme(theme.light === "light" ? "light" : "dark");
+    },
   );
   const controls = new AbortController();
   keep.addEventListener("click", () => bridge.resolveConflict("mine"), { signal: controls.signal });
@@ -108,7 +124,6 @@ function boot(): void {
   const page = openLifetime();
   page.listen(window, "pagehide", () => {
     controls.abort();
-    unmountAppearance();
     if (bridge.dispose()) {
       editor.destroy();
     }

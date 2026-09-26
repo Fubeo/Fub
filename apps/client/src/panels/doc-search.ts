@@ -21,7 +21,7 @@
 //   `IndexQuery::Documents`, o il ranking nasce quattro volte;
 // - **le coordinate ci sono**: la [0049](../../../docs/decisions/0181-modello-documento-e-arene.md)
 //   ha messo le occorrenze nella risposta, e da lì `rowsToShow` e
-//   `revealByteOffset` sono le stesse identiche del pannello della ricerca. Un
+//   `reveal` sono le stesse identiche del pannello della ricerca. Un
 //   risultato che non fosse cliccabile qui sarebbe una lista di conferme che
 //   qualcosa esiste, in un documento che si sta già guardando.
 //
@@ -44,7 +44,7 @@ import { setTooltip } from "../ui/tooltip";
 import { state } from "../state/store";
 import { highlighted } from "../ui/highlight";
 import { enterSurface, exitSurface } from "../ui/motion";
-import { revealByteOffset } from "./document";
+import { reveal } from "./document";
 
 const OVERLAY_ID = "doc-search";
 
@@ -219,10 +219,10 @@ export function openInDocumentSearch(): void {
         button.addEventListener("click", () => {
           if (!isCurrent(owner)) return;
           const targetDoc = owner.doc;
-          if (state.currentDoc !== targetDoc) return;
+          if (targetDoc === null || state.currentDoc !== targetDoc) return;
           closeInDocumentSearch();
           if (state.currentDoc !== targetDoc) return;
-          revealByteOffset(where);
+          void reveal(targetDoc, { span: { start: where, end: where } });
         });
         li.appendChild(button);
       } else {

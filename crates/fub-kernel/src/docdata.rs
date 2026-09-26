@@ -64,6 +64,7 @@ use crate::storage::{EntryKind, VaultStorage};
 /// stessa dell'organizzazione (§11.3): il file è già stato spostato, e far
 /// fallire una rinomina riuscita perché un plugin non ha potuto seguirla sarebbe
 /// il verso sbagliato. La rinomina vale, i dati restano indietro, e qualcuno lo
+/// dice.
 pub(crate) fn migrate_data(
     storage: &dyn VaultStorage,
     roots: &[Utf8PathBuf],
@@ -111,7 +112,12 @@ pub(crate) fn migrate_data(
 /// Il suffisso dello spazio messo di lato durante una migrazione.
 const ASIDE_SUFFIX: &str = ".in-progress";
 
-/// dice.
+/// Il path sotto cui la sorgente sta di lato durante una migrazione.
+fn move_aside(source: &Utf8Path) -> Utf8PathBuf {
+    let name = source.file_name().unwrap_or("space");
+    source.with_file_name(format!("{name}{ASIDE_SUFFIX}"))
+}
+
 /// Sposta una cartella di spazio per-documento, **passando di lato**.
 ///
 /// # La destinazione che era la sorgente
@@ -163,19 +169,15 @@ const ASIDE_SUFFIX: &str = ".in-progress";
 /// codice può indovinare. Un file sulla destinazione resta ugualmente
 /// intatto e viene nominato nell'errore.
 ///
-fn move_aside(source: &Utf8Path) -> Utf8PathBuf {
-    let name = source.file_name().unwrap_or("space");
-    source.with_file_name(format!("{name}{ASIDE_SUFFIX}"))
-}
-
+/// [`collect`]: crate::docdata::collect
 fn move_space(
     storage: &dyn VaultStorage,
     source: &Utf8Path,
     destination: &Utf8Path,
 ) -> std::io::Result<()> {
-    // [`collect`]: crate::docdata::collect
     // Sul filesystem insensibile al caso questo `stat` può rispondere con la
     // **sorgente**, che è una cartella e passa: è il caso di sopra, e a
+    // distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
     let to_clear = match storage.stat(destination) {
         Ok(stat) if stat.is_dir() && storage.same_file(source, destination) => true,
         Ok(stat) if stat.is_dir() => {
@@ -212,7 +214,6 @@ fn move_space(
     storage.rename_no_replace(&aside, destination)
 }
 
-// distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
 /// Toglie gli spazi per-documento delle note che non esistono più, in ogni
 /// spazio dati di plugin. Restituisce quante ne ha tolte.
 ///
@@ -227,6 +228,7 @@ fn move_space(
 /// `continue` e in un `is_ok()`: una cancellazione **parziale** — mezza
 /// cartella tolta, il resto no — tornava indietro come un numero più piccolo,
 /// indistinguibile da un vault in cui c'era meno da raccogliere. Adesso risale,
+/// e chi ha chiamato decide.
 pub(crate) fn collect(
     storage: &dyn VaultStorage,
     roots: &[Utf8PathBuf],
@@ -247,7 +249,6 @@ pub(crate) fn collect(
             let Some(name) = entry.path.file_name() else {
                 continue;
             };
-            // e chi ha chiamato decide.
             // Un nome che il supporto non sa rendere in UTF-8 non l'ha scritto
             // questa convenzione, e non arriva fin qui: `VaultStorage::list` lo
             // rifiuta prima, perché un path non nominabile dal contratto non è
@@ -264,6 +265,7 @@ pub(crate) fn collect(
             // giusta, ed è gratis perché la codifica è reversibile in tutti e
             // due i versi. E dev'essere una **cartella**: uno spazio
             // per-documento lo è, e `remove_dir_all` su un file fallirebbe in
+            // silenzio invece di dire che quel file non era da toccare.
             if entry.stat.kind != EntryKind::Dir
                 || doc_data::encode(&doc_data::decode(name)) != name
             {
@@ -292,7 +294,7 @@ pub(crate) fn collect(
     Ok(removed_count)
 }
 
-// silenzio invece di dire che quel file non era da toccare.
+/// La cartella di `doc` dentro lo spazio dati di **un** plugin.
 fn space_dir(root: &Utf8Path, doc: &DocId) -> Utf8PathBuf {
     root.join(doc_data::DOC_SPACE)
         .join(doc_data::encode(doc.as_str()))
@@ -304,13 +306,13 @@ mod tests {
     use crate::storage::{DirEntry, MemStorage, Merge, Stat};
     use std::io;
 
-    /// La cartella di `doc` dentro lo spazio dati di **un** plugin.
     /// Un supporto che **non distingue il caso**, come APFS e NTFS: due nomi che
     /// differiscono solo per una maiuscola sono lo stesso posto.
     ///
     /// È un doppio e non una macchina, ed è il punto: la macchina su cui il
     /// difetto vive non è quella su cui gira la CI, quindi la proprietà —
     /// «rinominare `Nota.md` in `nota.md` non fa sparire i dati» — o si scrive
+    /// contro un supporto così o non si scrive affatto.
     #[derive(Default)]
     struct CaseInsensitive(MemStorage);
 
@@ -363,8 +365,8 @@ mod tests {
             .ok()
     }
 
-    /// contro un supporto così o non si scrive affatto.
     /// **Correggere una maiuscola non è cancellare i dati.** La destinazione
+    /// «già occupata» era la sorgente stessa, vista con l'altro nome.
     #[test]
     fn case_only_rename_does_not_lose_the_document_space() {
         let storage = CaseInsensitive::default();
@@ -476,8 +478,8 @@ mod tests {
         );
     }
 
-    /// cartella di una nota che non c'è più non blocca la migrazione.
     /// Un supporto che non lascia togliere niente: `remove_dir_all` si compone
+    /// da `remove`, quindi basta rifiutare quello.
     struct CannotDelete(MemStorage);
 
     impl VaultStorage for CannotDelete {
@@ -516,11 +518,11 @@ mod tests {
         }
     }
 
-    /// da `remove`, quindi basta rifiutare quello.
     /// 0193 — **una raccolta a metà non è una raccolta riuscita.**
     ///
     /// L'esito del `remove_dir_all` finiva in un `is_ok()`: ciò che non si era
     /// potuto togliere restava sul disco e il conto tornava semplicemente più
+    /// piccolo, indistinguibile da un vault in cui c'era meno da raccogliere.
     #[test]
     fn a_half_done_sweep_is_not_a_successful_sweep() {
         let storage = CannotDelete(MemStorage::new());
@@ -566,7 +568,7 @@ mod tests {
         );
     }
 
-    /// piccolo, indistinguibile da un vault in cui c'era meno da raccogliere.
+    /// E la raccolta che riesce continua a contare ciò che ha tolto.
     #[test]
     fn a_successful_sweep_counts_what_it_removed() {
         let storage = MemStorage::new();

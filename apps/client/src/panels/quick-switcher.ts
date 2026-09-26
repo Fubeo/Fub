@@ -62,6 +62,7 @@ import { markedTerms } from "../ui/highlight";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { cancelScheduledPreview, hidePreview, schedulePreview, showStickyPreview } from "../state/preview";
 import { openDocument } from "./document";
+import { platformSupports } from "../platform/capabilities";
 
 const OVERLAY_ID = "quick-switcher";
 const LIST_ID = `${OVERLAY_ID}-list`;
@@ -69,6 +70,13 @@ const OPTION_ID_PREFIX = `${OVERLAY_ID}-option`;
 export type SwitcherOpenMode = "here" | "split" | "window";
 let dispatchOpen: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void =
   (doc) => openDocument(doc);
+
+/// Ctrl/Cmd apre accanto, con Maiusc in una finestra nuova. Dove la
+/// piattaforma ha una finestra sola, Maiusc resta un'apertura accanto.
+function openMode(e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): SwitcherOpenMode {
+  if (!e.ctrlKey && !e.metaKey) return "here";
+  return e.shiftKey && platformSupports("multipleWindows") ? "window" : "split";
+}
 
 function entryKey(entry: Entry): string {
   return `${entry.k}:${entry.k === "doc" ? entry.doc : entry.k === "query" ? entry.q : entry.name}`;
@@ -181,7 +189,8 @@ export function openQuickSwitcher(): void {
   const scope = document.createElement("p");
   scope.className = "palette-desc";
   scope.id = `${OVERLAY_ID}-instructions`;
-  scope.textContent = `${t("switcher.title")} · ${t("switcher.actions_hint")}`;
+  const hint = platformSupports("multipleWindows") ? "switcher.actions_hint" : "switcher.actions_hint_single_window";
+  scope.textContent = `${t("switcher.title")} · ${t(hint)}`;
   input.setAttribute("aria-describedby", scope.id);
   const list = document.createElement("ul");
   list.id = LIST_ID;
@@ -246,8 +255,7 @@ export function openQuickSwitcher(): void {
         where.textContent = t("switcher.create");
       }
       button.append(title, where);
-      button.addEventListener("click", (e) => active(entry,
-        e.ctrlKey || e.metaKey ? e.shiftKey ? "window" : "split" : "here"));
+      button.addEventListener("click", (e) => active(entry, openMode(e)));
       if (entry.k === "doc") {
         // Anteprima read-only con lifecycle (F16/shell.preview.*): hover
         // 350 ms, modificatore = subito, uscita = teardown. Stessi verbi
@@ -418,7 +426,7 @@ export function openQuickSwitcher(): void {
         void showStickyPreview(entry.doc, box);
         return;
       }
-      if (entry) active(entry, e.ctrlKey || e.metaKey ? e.shiftKey ? "window" : "split" : "here");
+      if (entry) active(entry, openMode(e));
     } else if (e.key === "Escape") {
       // U16: Escape chiude la superficie appropriata, il focus resta dov'era
       // prima dell'apertura (lo rimette `trapFocus` sciogliendosi). Con una

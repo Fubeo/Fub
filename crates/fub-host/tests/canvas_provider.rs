@@ -150,3 +150,60 @@ fn canvas_preview_and_nested_embed_projections_use_the_registered_provider() {
         "{html}"
     );
 }
+
+/// I55, attraverso i provider veri: `[[board.canvas]]` — la forma in cui
+/// Obsidian scrive i link ai canvas — porta al canvas, il nome nudo accanto a
+/// omonimi di formati diversi porta alla pagina di prosa, e la rinomina
+/// conserva la forma che l'autore aveva scritto.
+#[test]
+fn a_name_with_its_extension_reaches_the_canvas_and_survives_a_rename() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let empty = r#"{"nodes":[],"edges":[]}"#;
+    std::fs::write(root.join("board.canvas"), empty).unwrap();
+    std::fs::write(root.join("Progetto.md"), "# Progetto\n").unwrap();
+    std::fs::write(root.join("Progetto.canvas"), empty).unwrap();
+    std::fs::write(
+        root.join("Progetto.base"),
+        "views:\n  - {name: A, type: table}\n",
+    )
+    .unwrap();
+    let note = "[[board.canvas]] e [[board]], [[Progetto]] e [[Progetto.canvas]]\n";
+    std::fs::write(root.join("Riunione.md"), note).unwrap();
+    let mut mounted = mounted(&root);
+    let workspace = &mut mounted.workspace;
+    let sources = |workspace: &fub_kernel::Workspace, id: &str| -> Vec<String> {
+        workspace
+            .backlinks(&DocId::new(id))
+            .into_iter()
+            .map(|link| link.source.to_string())
+            .collect()
+    };
+
+    assert_eq!(
+        sources(workspace, "board.canvas"),
+        ["Riunione.md", "Riunione.md"]
+    );
+    assert_eq!(sources(workspace, "Progetto.md"), ["Riunione.md"]);
+    assert_eq!(sources(workspace, "Progetto.canvas"), ["Riunione.md"]);
+    assert!(sources(workspace, "Progetto.base").is_empty());
+
+    workspace
+        .rename_document(&DocId::new("board.canvas"), &DocId::new("Lavagna.canvas"))
+        .expect("rename the board");
+    workspace
+        .rename_document(&DocId::new("Progetto.canvas"), &DocId::new("Piano.canvas"))
+        .expect("rename the project board");
+    let riunione = DocId::new("Riunione.md");
+    assert_eq!(
+        workspace.read_source(&riunione).unwrap(),
+        "[[Lavagna.canvas]] e [[Lavagna]], [[Progetto]] e [[Piano.canvas]]\n",
+        "the extension the author wrote stays, the bare name to the page is untouched"
+    );
+    assert_eq!(
+        sources(workspace, "Lavagna.canvas"),
+        ["Riunione.md", "Riunione.md"]
+    );
+    assert_eq!(sources(workspace, "Piano.canvas"), ["Riunione.md"]);
+    assert_eq!(sources(workspace, "Progetto.md"), ["Riunione.md"]);
+}

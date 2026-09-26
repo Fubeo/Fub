@@ -131,6 +131,27 @@ pub struct CommandSpec {
     pub params: Vec<ParamSpec>,
     /// Il raggio dichiarato: cosa questo comando si permette.
     pub scope: CommandScope,
+    /// Dove si offre **oltre** alla palette, che li elenca tutti. Vuoto è la
+    /// norma: la palette basta. Lo dichiara il comando, non una lista della
+    /// shell: un plugin compare nel menu `/` per la stessa via di una feature
+    /// ufficiale, e nessuno indovina dai nomi dei parametri.
+    #[serde(default)]
+    pub surfaces: Vec<CommandSurface>,
+}
+
+/// Una superficie, oltre alla palette, in cui un comando si offre.
+///
+/// Un elenco di casi e non un booleano per superficie: la prossima è un caso in
+/// più, che è additivo, e non un campo in più su ogni spec.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandSurface {
+    /// Il menu `/` dell'editor: il comando agisce dove si sta scrivendo, e i
+    /// parametri che il contesto non riempie li chiede il menu stesso.
+    Slash,
+    /// Il menu `/`, soltanto quando c'è una selezione: il comando la trasforma,
+    /// e senza non ha niente su cui agire.
+    SlashSelection,
 }
 
 impl CommandSpec {
@@ -144,7 +165,16 @@ impl CommandSpec {
             keybinding: None,
             params: Vec::new(),
             scope: CommandScope::read_only(),
+            surfaces: Vec::new(),
         }
+    }
+
+    /// Si offre anche in `surface`, oltre alla palette.
+    pub fn offered_in(mut self, surface: CommandSurface) -> Self {
+        if !self.surfaces.contains(&surface) {
+            self.surfaces.push(surface);
+        }
+        self
     }
 
     pub fn describing(mut self, description: impl Into<Text>) -> Self {

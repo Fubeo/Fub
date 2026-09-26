@@ -94,10 +94,6 @@ export function decideStorage(
   };
 }
 
-export function storageConsequences(choice: MobileStorageChoice): string {
-  return choice === "private" ? "private-uninstall" : "shared-revoke-need-grant";
-}
-
 export interface GrantStore {
   read: () => Promise<MobileStoragePreference>;
   update: (patch: Partial<Pick<MobileStoragePreference, "choice" | "grant">>) => Promise<void>;
@@ -193,10 +189,6 @@ export async function registerPersistedGrant(
 ): Promise<void> {
   const accepted = await bridge.registerTreeGrant(grant);
   await saveTreeGrant(store, accepted);
-}
-
-export function revokeTreeGrant(store: GrantStore): Promise<void> {
-  return saveTreeGrant(store, null);
 }
 
 export async function loadTreeGrant(store: GrantStore): Promise<MobileTreeGrant | null> {

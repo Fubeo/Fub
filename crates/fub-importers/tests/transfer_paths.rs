@@ -1,5 +1,8 @@
 use fub_abi::command::InvokeMode;
-use fub_abi::traits::{CommandProvider, DataRead, Plugin, VaultRead, VaultWrite};
+use fub_abi::model::DocId;
+use fub_abi::traits::{
+    CommandProvider, DataRead, HostQuery, IndexQuery, IndexResult, Plugin, VaultRead, VaultWrite,
+};
 use fub_abi::transfer::{
     ArtifactHandle, ArtifactSink, ExportArtifact, ExportProvider, ExportRequest, ExportSelection,
     ImportMode, ImportOutcome, ImportProvider, ImportRequest, ImportSource,
@@ -17,9 +20,30 @@ const KEEP: &str = include_str!("../../../tests/fixtures/imports/keep.json");
 const ROAM: &str = include_str!("../../../tests/fixtures/imports/roam.json");
 const ENEX: &str = include_str!("../../../tests/fixtures/imports/sample.enex");
 
+/// Every file the host holds, documents and attachments alike: a preview or a
+/// refused archive must leave none of them behind, and `list_documents` only
+/// counts what a format parses.
+fn written(host: &MemoryHost) -> Vec<DocId> {
+    match host
+        .query_index(IndexQuery::Entries {
+            of_kind: None,
+            within: None,
+            page: None,
+        })
+        .unwrap()
+    {
+        IndexResult::Entries(page) => page.items.into_iter().map(|entry| entry.id).collect(),
+        other => panic!("off-topic answer: {}", other.kind_name()),
+    }
+}
+
 #[test]
 fn generic_registry_exposes_and_runs_staged_transfer_jobs() {
-    let mut host = MemoryHost::new();
+    // Il job non porta una lista sua: sceglie fra ciò che l'host ha
+    // registrato, come nel montaggio vero.
+    let mut host = MemoryHost::new()
+        .with_import_provider(Box::new(JsonImport))
+        .with_export_provider(Box::new(CsvExport));
     let source = ImportSource::text_source("bear.json", BEAR);
     let payload = serde_json::json!({
         "op": "prepare", "job": "generic-registry", "source": source,
@@ -46,7 +70,7 @@ fn generic_registry_exposes_and_runs_staged_transfer_jobs() {
     };
     let sampled: serde_json::Value = serde_json::from_str(&sampled).unwrap();
     assert_eq!(sampled["documents"].as_array().unwrap().len(), 1);
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
     let committed = ImportPlugin
         .run_job(
             "import.transfer",
@@ -77,7 +101,7 @@ fn generic_registry_exposes_and_runs_staged_transfer_jobs() {
             &mut host,
         )
         .unwrap();
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
 }
 
 #[test]
@@ -96,7 +120,7 @@ fn bear_wins_over_keep_and_duplicate_titles_keep_distinct_sources() {
         preview.documents[0].outcome,
         ImportOutcome::Created
     ));
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
     let applied = importer
         .import(&source, &ImportRequest::apply(), &mut host)
         .unwrap();
@@ -129,7 +153,7 @@ fn mixed_bear_keep_backup_refuses_without_writing() {
         .import(&source, &ImportRequest::apply(), &mut host)
         .unwrap_err();
     assert!(error.to_string().contains("mixed Bear and Google Keep"));
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
 }
 
 #[test]
@@ -155,10 +179,7 @@ fn source_shapes_remain_distinct_and_preview_has_no_writes() {
             .import(&source, &ImportRequest::preview(), &mut host)
             .unwrap();
         assert!(!planned.documents.is_empty(), "{filename}");
-        assert!(
-            host.list_documents(None).unwrap().items.is_empty(),
-            "{filename}"
-        );
+        assert!(written(&host).is_empty(), "{filename}");
         let applied = provider
             .import(&source, &ImportRequest::apply(), &mut host)
             .unwrap();
@@ -193,14 +214,14 @@ fn staged_plan_survives_reload_and_cancel_never_touches_vault() {
         manifest
     );
     assert_eq!(manifest.verify(&host).unwrap(), BEAR.as_bytes());
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
     StagingManifest::cancel("portable-1", &mut host).unwrap();
     StagingManifest::cancel("portable-1", &mut host).unwrap();
     assert!(host
         .data_read(&StagingManifest::manifest_path("portable-1"))
         .unwrap()
         .is_none());
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
 }
 
 #[test]
@@ -247,11 +268,7 @@ fn committed_plan_is_rerunnable_and_rollback_restores_preimages() {
         host.read_document(&applied.documents[0].doc).unwrap(),
         "original user bytes\n"
     );
-    assert!(!host
-        .list_documents(None)
-        .unwrap()
-        .items
-        .contains(&applied.documents[1].doc));
+    assert!(!written(&host).contains(&applied.documents[1].doc));
     fub_importers::pipeline::rollback("recoverable", &mut host).unwrap();
 }
 
@@ -295,7 +312,7 @@ fn evernote_preview_and_apply_preserve_resource_bytes_and_provenance() {
     let planned = provider
         .import(&source, &ImportRequest::preview(), &mut host)
         .unwrap();
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
     assert_eq!(planned.documents.len(), 2);
     let applied = provider
         .import(&source, &ImportRequest::apply(), &mut host)
@@ -330,7 +347,7 @@ fn joplin_tar_parses_before_writes_and_retains_binary_assets() {
         .import(&source, &ImportRequest::preview(), &mut host)
         .unwrap();
     assert_eq!(planned.documents.len(), 2);
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
     let applied = provider
         .import(&source, &ImportRequest::apply(), &mut host)
         .unwrap();
@@ -348,7 +365,7 @@ fn joplin_tar_parses_before_writes_and_retains_binary_assets() {
     assert!(provider
         .import(&malformed, &ImportRequest::apply(), &mut host)
         .is_err());
-    assert_eq!(host.list_documents(None).unwrap().items.len(), 2);
+    assert_eq!(written(&host).len(), 2);
 }
 
 fn tar_entry(name: &str, bytes: &[u8]) -> Vec<u8> {
@@ -387,7 +404,7 @@ fn staged_textbundle_keeps_relative_links_to_vault_assets_and_rolls_back_bytes()
     )
     .unwrap();
     assert_eq!(plan.preview.documents.len(), 2);
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
     let applied =
         fub_importers::pipeline::commit("textbundle-assets", &mut importer, &mut host).unwrap();
     assert_eq!(plan.preview.documents, applied.documents);
@@ -401,7 +418,7 @@ fn staged_textbundle_keeps_relative_links_to_vault_assets_and_rolls_back_bytes()
         b"\x89PNG\r\n\x1a\nasset-fixture"
     );
     fub_importers::pipeline::rollback("textbundle-assets", &mut host).unwrap();
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
 }
 
 #[test]
@@ -423,7 +440,7 @@ fn proprietary_sources_refuse_without_platform_prerequisites() {
         )
         .unwrap_err();
     assert!(error.to_string().contains("Full Disk Access"));
-    assert!(host.list_documents(None).unwrap().items.is_empty());
+    assert!(written(&host).is_empty());
 }
 
 #[derive(Default)]
@@ -486,9 +503,22 @@ fn csv_has_reversible_source_and_neutralizes_spreadsheet_formulas() {
     assert!(report.log.iter().any(|n| n.message.contains("tags")));
 }
 
+/// Il banco non parsa: il modello lo dà il parser vero del formato, come
+/// farebbe l'host.
+fn with_parsed(host: MemoryHost, doc: &str, source: &str) -> MemoryHost {
+    use fub_abi::format::{DocumentSource, FormatProvider, ParseContext};
+    let model = fub_format_markdown::MarkdownProvider
+        .parse(
+            &DocumentSource::Text(source.to_string()),
+            &ParseContext::obsidian(doc),
+        )
+        .unwrap();
+    host.with_document(doc, source).with_model(doc, model)
+}
+
 #[test]
 fn pdf_uses_valid_stream_length_and_explicit_glyph_warning() {
-    let host = MemoryHost::new().with_document("print.md", "Café 😀\n");
+    let host = with_parsed(MemoryHost::new(), "print.md", "Café 😀\n");
     let mut sink = CollectSink::default();
     let request = ExportRequest::new(
         "importers.pdf.single",
@@ -505,4 +535,35 @@ fn pdf_uses_valid_stream_length_and_explicit_glyph_warning() {
     let stream_start = pdf.find("stream\n").unwrap() + "stream\n".len();
     let stream_end = pdf.find("endstream").unwrap();
     assert_eq!(declared, stream_end - stream_start);
+}
+
+#[test]
+fn pdf_prints_the_model_the_format_read_not_a_markdown_guess() {
+    let source = "---\ntitle: Diario\n---\n\n# Oggi\n\n```\n# non un titolo\n```\n\n- [x] fatto\n";
+    let host = with_parsed(MemoryHost::new(), "note/oggi.markdown", source);
+    let mut sink = fub_abi::transfer::MemorySink::default();
+    let request = ExportRequest::new(
+        "importers.pdf",
+        ExportSelection::Documents(vec![fub_abi::model::DocId::new("note/oggi.markdown")]),
+    );
+    let report = PdfExport.export(&request, &host, &mut sink).unwrap();
+    assert_eq!(
+        report.artifacts[0].path, "note/oggi.pdf",
+        "l'estensione è quella del documento"
+    );
+    let fub_abi::transfer::ArtifactContent::Bytes(bytes) = &report.artifacts[0].content else {
+        panic!("in memoria l'artefatto porta i byte");
+    };
+    let pdf = String::from_utf8_lossy(bytes).into_owned();
+    assert!(pdf.contains("(note / oggi) Tj"), "{pdf}");
+    assert!(
+        pdf.contains("(title: Diario) Tj"),
+        "la proprietà viene dal modello"
+    );
+    assert!(pdf.contains("(OGGI) Tj"));
+    assert!(
+        pdf.contains("(# non un titolo) Tj"),
+        "il contenuto di un fence resta codice"
+    );
+    assert!(pdf.contains("([x] fatto) Tj"));
 }

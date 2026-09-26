@@ -1,30 +1,56 @@
 //! Static projection from the document AST. Never runs a dynamic block or
 //! follows a link to an unapproved vault document.
 use fub_abi::html::{attr, escape};
-use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget};
+use fub_abi::model::{Block, DocId, DocumentModel, Inline, LinkTarget};
+use fub_format_canvas::{parse_canvas, CanvasNodeType};
 use std::collections::{BTreeMap, BTreeSet};
 
-type Projection<'a> = (
-    &'a str,
-    &'a str,
-    &'a BTreeMap<String, String>,
-    &'a BTreeSet<String>,
-);
+/// The local references of one page, already resolved by the vault index
+/// (`IndexQuery::Resolve`): the rule the app follows when it navigates, so a
+/// short `[[Note]]` reaches `dir/Note.md` and a link needs no `.md` guess.
+/// Keys are written forms: a wikilink's page, a local link's path without its
+/// fragment. A reference missing here resolved to nothing.
+#[derive(Debug, Default)]
+pub struct Resolved {
+    pub wiki: BTreeMap<String, DocId>,
+    pub paths: BTreeMap<String, DocId>,
+}
+
+/// What projecting one page knows besides its model.
+#[derive(Clone, Copy)]
+struct Projection<'a> {
+    /// The projected document: relative asset paths start here.
+    source: &'a str,
+    site: &'a str,
+    /// Approved pages: document id -> route inside the site.
+    pages: &'a BTreeMap<String, String>,
+    /// Approved assets, by exact vault path.
+    assets: &'a BTreeSet<String>,
+    links: &'a Resolved,
+}
 
 pub fn page(
     model: &DocumentModel,
     site_id: &str,
     pages: &BTreeMap<String, String>,
     assets: &BTreeSet<String>,
+    links: &Resolved,
 ) -> Result<String, &'static str> {
     let mut html = String::new();
-    blocks(
-        &model.body,
-        (&model.id.0, site_id, pages, assets),
-        &mut html,
-        0,
-    )?;
+    let projection = Projection {
+        source: &model.id.0,
+        site: site_id,
+        pages,
+        assets,
+        links,
+    };
+    blocks(&model.body, projection, &mut html, 0)?;
     Ok(html)
+}
+
+/// The site route of a resolved vault document, if it is an approved page.
+fn route_of<'a>(p: Projection<'a>, doc: Option<&DocId>) -> Option<&'a String> {
+    p.pages.get(doc?.as_str())
 }
 
 fn blocks(
@@ -177,17 +203,18 @@ fn inlines_into(
                         {
                             return Err("unsafe link anchor");
                         }
-                        let id = source_path(p.0, path).ok_or("unsafe link path")?;
+                        let id = source_path(p.source, path).ok_or("unsafe link path")?;
                         if *embed {
-                            if !is_image(&id) || !p.3.contains(&id) {
+                            if !is_image(&id) || !p.assets.contains(&id) {
                                 return Err("image requires approved asset projection");
                             }
-                            format!("/s/{}/{}", p.1, id)
+                            format!("/s/{}/{}", p.site, id)
                         } else {
-                            let route = p.2.get(&id).ok_or("link target is not published")?;
+                            let route = route_of(p, p.links.paths.get(path))
+                                .ok_or("link target is not published")?;
                             format!(
                                 "/s/{}/{}{}{}",
-                                p.1,
+                                p.site,
                                 route,
                                 if fragment.is_empty() { "" } else { "#" },
                                 fragment
@@ -202,14 +229,12 @@ fn inlines_into(
                         if block.is_some() {
                             return Err("block link needs verified projection");
                         }
-                        let id = if page.is_empty() {
-                            p.0.to_string()
-                        } else if page.ends_with(".md") {
-                            page.clone()
+                        let route = if target.names_host() {
+                            p.pages.get(p.source)
                         } else {
-                            format!("{page}.md")
-                        };
-                        let route = p.2.get(&id).ok_or("wikilink target is not published")?;
+                            route_of(p, p.links.wiki.get(page))
+                        }
+                        .ok_or("wikilink target is not published")?;
                         let fragment = heading.as_deref().unwrap_or("");
                         if !fragment
                             .bytes()
@@ -219,7 +244,7 @@ fn inlines_into(
                         }
                         format!(
                             "/s/{}/{}{}{}",
-                            p.1,
+                            p.site,
                             route,
                             if fragment.is_empty() { "" } else { "#" },
                             fragment
@@ -302,104 +327,57 @@ pub fn source_path(source: &str, path: &str) -> Option<String> {
 }
 
 /// JSON Canvas has a deterministic, inert subset: text/group cards and
-/// connections between them. File/web cards and unknown metadata fail closed.
+/// connections between them. The document is read by the canvas format's own
+/// parser; this projector only narrows it. File/web cards, backgrounds and any
+/// member the model keeps as unknown (`extra`) fail closed.
 pub fn canvas(bytes: &[u8]) -> Result<String, &'static str> {
     if bytes.len() > 1_048_576 {
         return Err("canvas exceeds publish cap");
     }
-    let data: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| "bad canvas json")?;
-    let root = data.as_object().ok_or("bad canvas root")?;
-    if root
-        .keys()
-        .any(|key| !matches!(key.as_str(), "nodes" | "edges"))
-    {
+    let source = std::str::from_utf8(bytes).map_err(|_| "bad canvas json")?;
+    let canvas = parse_canvas(source).map_err(|_| "bad canvas json")?;
+    if !canvas.extra.is_empty() {
         return Err("unknown canvas fields need a verified projector");
     }
-    let nodes = root
-        .get("nodes")
-        .and_then(|v| v.as_array())
-        .ok_or("missing canvas nodes")?;
-    let edges = root
-        .get("edges")
-        .and_then(|v| v.as_array())
-        .ok_or("missing canvas edges")?;
-    if nodes.len() > 256 || edges.len() > 1024 {
+    if canvas.nodes.len() > 256 || canvas.edges.len() > 1024 {
         return Err("canvas exceeds publish cap");
     }
-    let mut ids = BTreeSet::new();
     let mut out = String::from(
         "<h1>Canvas</h1><table><thead><tr><th>Card</th><th>Text</th></tr></thead><tbody>",
     );
-    for node in nodes {
-        let map = node.as_object().ok_or("bad canvas node")?;
-        if map.keys().any(|key| {
-            !matches!(
-                key.as_str(),
-                "id" | "type" | "x" | "y" | "width" | "height" | "text" | "label" | "color"
-            )
-        }) {
+    for node in &canvas.nodes {
+        if !node.extra.is_empty() || node.background.is_some() || node.background_style.is_some() {
             return Err("unknown canvas node needs a verified projector");
         }
-        let kind = node
-            .get("type")
-            .and_then(|v| v.as_str())
-            .ok_or("bad canvas card type")?;
-        if !matches!(kind, "text" | "group") {
+        let text = match node.node_type {
+            CanvasNodeType::Text => node.text.as_deref(),
+            CanvasNodeType::Group => node.label.as_deref(),
+            CanvasNodeType::File | CanvasNodeType::Link => {
+                return Err("canvas file or remote card cannot publish")
+            }
+        };
+        // A text or group card that also names a file or a URL carries a
+        // reference this projection would silently drop.
+        if node.file.is_some() || node.subpath.is_some() || node.url.is_some() {
             return Err("canvas file or remote card cannot publish");
         }
-        let id = node
-            .get("id")
-            .and_then(|v| v.as_str())
-            .ok_or("bad canvas card id")?;
-        if id.is_empty() || !ids.insert(id.to_string()) {
-            return Err("duplicate canvas card");
-        }
-        let text = if kind == "text" {
-            node.get("text")
-        } else {
-            node.get("label")
-        }
-        .and_then(|v| v.as_str())
-        .ok_or("canvas card missing text")?;
+        let text = text.ok_or("canvas card missing text")?;
         out.push_str("<tr><td>");
-        out.push_str(&escape(id));
+        out.push_str(&escape(&node.id));
         out.push_str("</td><td>");
         out.push_str(&escape(text));
         out.push_str("</td></tr>");
     }
     out.push_str("</tbody></table><h2>Connections</h2><ul>");
-    for edge in edges {
-        let map = edge.as_object().ok_or("bad canvas edge")?;
-        if map.keys().any(|key| {
-            !matches!(
-                key.as_str(),
-                "id" | "fromNode"
-                    | "toNode"
-                    | "fromSide"
-                    | "toSide"
-                    | "fromEnd"
-                    | "toEnd"
-                    | "color"
-                    | "label"
-            )
-        }) {
+    // The parser has already refused duplicate cards and dangling edges.
+    for edge in &canvas.edges {
+        if !edge.extra.is_empty() {
             return Err("unknown canvas edge needs a verified projector");
         }
-        let from = edge
-            .get("fromNode")
-            .and_then(|v| v.as_str())
-            .ok_or("bad canvas edge")?;
-        let to = edge
-            .get("toNode")
-            .and_then(|v| v.as_str())
-            .ok_or("bad canvas edge")?;
-        if !ids.contains(from) || !ids.contains(to) {
-            return Err("dangling canvas edge");
-        }
         out.push_str("<li>");
-        out.push_str(&escape(from));
+        out.push_str(&escape(&edge.from_node));
         out.push_str(" → ");
-        out.push_str(&escape(to));
+        out.push_str(&escape(&edge.to_node));
         out.push_str("</li>");
     }
     out.push_str("</ul>");

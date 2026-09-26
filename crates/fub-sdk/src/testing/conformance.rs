@@ -3,11 +3,11 @@
 //!
 //! È la differenza fra «il contratto è documentato» e «il contratto è
 //! verificabile da chi lo implementa». Sono ventotto funzioni [conta: conformance-functions],
-//! ed è quel numero che [decision 0054] una volta scrisse come «otto» quando
+//! ed è quel numero che [decisione 0054] una volta scrisse come «otto» quando
 //! erano già quattordici: d'ora in poi conta la guardia del §16.8, non chi
 //! scrive la frase.
 //!
-//! [decision 0054]: https://github.com/Fubeo/Fub/blob/main/../../../../docs/decisions/0196-test-e-artefatti-generati.md
+//! [decisione 0054]: https://github.com/Fubeo/Fub/blob/main/../../../../docs/decisions/0196-test-e-artefatti-generati.md
 //!
 //! Ogni funzione qui corrisponde a una frase del doc-comment di un trait in
 //! `fub-abi/src/traits.rs`, ed è scritta per essere chiamata da un test
@@ -24,7 +24,7 @@
 //!
 //! Il §16.1 elencava «un `IndexProvider` che non perde documenti fra
 //! `on_document_*` e `flush`». Quei metodi si chiamano
-//! `on_documents_indexed`/`on_documents_removed` dalla [decision
+//! `on_documents_indexed`/`on_documents_removed` dalla [decisione
 //! 0051](../../../../docs/decisions/README.md), prendono un
 //! **lotto** e — ed è il punto — restituiscono `Vec<IndexLoss>`.
 //!
@@ -236,7 +236,7 @@ pub fn a_view_respects_the_contract<V: ViewProvider + ?Sized>(view: &V, host: &d
 /// dentro un lotto il primo non arriva, ed è il secondo a farle fare **un**
 /// ridisegno dove prima ne faceva N.»*
 ///
-/// È la [decision 0011](../../../../docs/decisions/README.md) letta
+/// È la [decisione 0011](../../../../docs/decisions/README.md) letta
 /// dal lato dell'autore della view, ed è il peggior difetto che questa suite
 /// possa vedere: una view che sbaglia questo **non si rompe**, smette solo di
 /// aggiornarsi dentro un lotto — cioè proprio quando l'utente ha appena fatto
@@ -244,7 +244,7 @@ pub fn a_view_respects_the_contract<V: ViewProvider + ?Sized>(view: &V, host: &d
 /// funziona.
 pub fn redrawing_on_index_updated_declares_batch_ended<V: ViewProvider + ?Sized>(view: &V) {
     for spec in view.views() {
-        // La regola vive in **un posto solo** ([decision
+        // La regola vive in **un posto solo** ([decisione
         // 0020](../../../../docs/decisions/README.md)):
         // `misses_batches` viene dal contratto, e questa funzione la applica
         // invece di riscriverla. Una seconda idea della stessa regola, scritta
@@ -397,7 +397,7 @@ pub fn subscribed_masks_are_stable<H: EventHandler + ?Sized>(handler: &H) {
 /// dentro un lotto il primo non arriva, ed è il secondo a dirgli che
 /// l'indice si è mosso.»*
 ///
-/// È la [decision 0011](../../../../docs/decisions/README.md) letta
+/// È la [decisione 0011](../../../../docs/decisions/README.md) letta
 /// dal lato dell'autore dell'handler, ed è il peggior difetto che questa suite
 /// possa vedere: un handler che sbaglia questo **non si rompe**, smette solo
 /// di reagire dentro un lotto — cioè proprio quando l'utente ha appena fatto
@@ -406,7 +406,7 @@ pub fn subscribed_masks_are_stable<H: EventHandler + ?Sized>(handler: &H) {
 pub fn redrawing_or_reacting_on_index_updated_declares_batch_ended<H: EventHandler + ?Sized>(
     handler: &H,
 ) {
-    // La regola vive in **un posto solo** ([decision
+    // La regola vive in **un posto solo** ([decisione
     // 0020](../../../../docs/decisions/README.md)):
     // `misses_batches` viene dal contratto, e questa funzione la applica
     // invece di riscriverla. Una seconda idea della stessa regola, scritta
@@ -653,7 +653,7 @@ pub fn the_model_matches_the_given_id(model: &DocumentModel, ctx: &ParseContext)
 /// È la proprietà più preziosa dell'intera suite, e il motivo non è il
 /// pannello sbagliato: le tabelle piatte e gli span sono **le coordinate con
 /// cui un file viene riscritto**. Una modifica programmatica è una patch
-/// chirurgica guidata da uno span ([decision
+/// chirurgica guidata da uno span ([decisione
 /// 0008](../../../../docs/decisions/README.md)): uno span che
 /// mente di un byte non disegna male, **corrompe un documento** — spunta la
 /// task sbagliata, rinomina dentro la parola accanto, taglia un carattere a
@@ -669,7 +669,7 @@ pub fn spans_slice_the_source(model: &DocumentModel, source: &str, claim: Claim)
     let whole = Span::new(0, source.len());
     blocks_are_disjoint_and_contained(&model.body, whole, source, "il corpo del documento", claim);
 
-    // Le tabelle piatte non hanno un padre nell'tree: si affettano, e basta.
+    // Le tabelle piatte non hanno un padre nell'albero: si affettano, e basta.
     for the in &model.links {
         slices(source, the.span, "lo span di un link");
     }
@@ -685,7 +685,7 @@ pub fn spans_slice_the_source(model: &DocumentModel, source: &str, claim: Claim)
         // Il `marker` **non** deve stare dentro `span`, e la prima stesura di
         // questa proprietà lo pretendeva: la forma «ancora su riga propria»
         // (`A paragraph\n\n^abc123\n`), che è quella di Obsidian, mette il
-        // marker *fuori* dal blocco che marca — e giustamente, perché è ciò
+        // marcatore *fuori* dal blocco che marca — e giustamente, perché è ciò
         // che fa sì che l'embed del blocco non si porti l'id dietro. Ciò che
         // si può pretendere è che il marker nomini davvero l'ancora.
         assert!(

@@ -110,7 +110,7 @@
 //! dal vault senza che niente lo dicesse, ed è il danno peggiore di questo
 //! modulo: non è un file che non si vede, è un file che non c'è — nessun
 //! [`DocId`](fub_abi::DocId), nessuna voce d'anagrafe, nessun evento. Per
-//! per questo [`IgnorePolicy::excludes`] chiede la [`Kind`]: la struttura e i
+//! questo [`IgnorePolicy::excludes`] chiede la [`Kind`]: la struttura e i
 //! nascosti valgono per tutte e due, l'elenco dichiarato solo per le cartelle.
 //! Chi cammina l'albero la specie ce l'ha già in mano — gliela dà la voce di
 //! directory —, e chi giudica un path intero sa che tutto ciò che sta *in

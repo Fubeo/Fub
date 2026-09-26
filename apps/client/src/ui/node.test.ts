@@ -14,6 +14,7 @@ vi.mock("./notify", () => ({
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
 import { pair, activeFields, mountTree, patchTree, unmountTree } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
+import { registerIcon } from "./icons";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
 //
@@ -302,6 +303,26 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     handlers[0]!({ action: "tocca", payload: null }, []);
     expect(newItem).toEqual(["tocca"]);
     expect(old).toEqual([]);
+  });
+  it("un renderer custom riceve il contesto del montaggio e si rifà quando cambia", () => {
+    const NS = "prova.contesto";
+    const drawn: Array<string | null> = [];
+    registerCustomRenderer(NS, (_host, _payload, _onAction, context) => {
+      drawn.push(context.container);
+    });
+    const node = (): UiNode =>
+      ({ node: "custom", ns: NS, payload: { n: 1 }, fallback: [] }) as UiNode;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const noop = async () => {};
+    mountTree(host, node(), noop);
+    mountTree(host, node(), noop);
+    mountTree(host, node(), noop, { container: "Note/a.md" });
+    mountTree(host, node(), noop, { container: "Note/a.md" });
+    mountTree(host, node(), noop, { container: "Note/b.md" });
+    expect(drawn).toEqual([null, "Note/a.md", "Note/b.md"]);
+    unmountTree(host);
+    host.remove();
   });
   it("montare, smontare e rimontare conserva un solo instradamento", () => {
     const host = document.createElement("div");
@@ -876,5 +897,30 @@ describe("un'azione in volo", () => {
     expect(calls).toEqual(["restore", "restore"]);
     finish();
     host.remove();
+  });
+});
+
+describe("il nodo icona", () => {
+  const draw = (name: string): HTMLElement => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, { node: "icon", name } as UiNode, async () => {});
+    return host.querySelector<HTMLElement>(".ui-icon")!;
+  };
+
+  it("disegna la figura del set della shell, di serie o registrata", () => {
+    expect(draw("tag").querySelector("svg")).not.toBeNull();
+    const retire = registerIcon("stella-di-prova", ["M12 3l3 6 6 1-4.5 4 1 6-5.5-3-5.5 3 1-6L3 10l6-1z"]);
+    try {
+      expect(draw("stella-di-prova").querySelector("svg path")).not.toBeNull();
+    } finally {
+      retire();
+    }
+  });
+
+  it("un nome che non conosce resta un buco, non un errore", () => {
+    const el = draw("nessuna-figura");
+    expect(el.dataset.icon).toBe("nessuna-figura");
+    expect(el.querySelector("svg")).toBeNull();
   });
 });

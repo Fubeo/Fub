@@ -91,11 +91,11 @@ impl Guest for Componente {
             // Il controllo negativo, dentro lo stesso componente che ospita i
             // due job ostili: gli stessi limiti, la stessa istanza, e una
             // risposta immediata.
-            "eco" => Ok("{\"eco\":true}".to_string()),
+            "demo.ciclo:eco" => Ok("{\"eco\":true}".to_string()),
 
             // Il ciclo che non finisce. Nessuna chiamata, nessuna allocazione:
             // se l'host lo ferma, lo ferma con l'unica cosa che arriva fin qui.
-            "ciclo" => {
+            "demo.ciclo:ciclo" => {
                 let mut n: u64 = 0;
                 loop {
                     n = n.wrapping_add(1);
@@ -125,7 +125,7 @@ impl Guest for Componente {
             // morso: un'allocazione che nessuno scrive potrebbe non far crescere
             // davvero la memoria lineare, e il tetto non lo incontrerebbe
             // nessuno. La memoria non si restituisce mai — è il punto.
-            "mangia" => {
+            "demo.ciclo:mangia" => {
                 // Il fiato per raccontarlo. Chi finisce la memoria e poi vuole
                 // dire com'è andata deve essersi tenuto da parte il posto per la
                 // risposta: senza questa riserva, il `format!` qui sotto

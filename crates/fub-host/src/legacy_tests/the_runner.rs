@@ -10,6 +10,7 @@
 //!
 //! Le prove usano una barriera a due tempi (`Passi`) invece di dormire: un job
 //! dice «sono partito» e aspetta il via, e il test intanto fa la sua mossa. Un
+//! test che aspettasse un tempo fisso proverebbe la macchina su cui gira.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -523,6 +524,7 @@ fn live(host: &Host) -> Vec<JobStatus> {
 ///
 /// Prova insieme le tre metà della voce, e non si possono separare: un elenco
 /// che non si svuota è peggio di un elenco che non c'è, e un progresso che
+/// nessuno può riconciliare è un canale senza freno.
 #[test]
 fn a_job_that_walks_compare_says_where_and_arrived_and_disappears() {
     let v = Vault::new();

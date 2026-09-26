@@ -32,6 +32,7 @@ const LOCK_SUFFIX: &str = ".snapshot.lock";
 const RECORD_SUFFIX: &str = ".record";
 const STAGING_SUFFIX: &str = ".staging";
 const OLD_SUFFIX: &str = ".old";
+const REJECTED_SUFFIX: &str = ".rejected";
 static TRANSACTION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Classificazione esplicita della voce nel manifest.
@@ -425,6 +426,10 @@ pub struct SnapshotApplyReport {
 pub struct SnapshotRecoveryReport {
     /// Transazioni riconosciute e concluse.
     pub recovered: usize,
+    /// Root pubblicate che non corrispondevano al manifest atteso: la recovery
+    /// ha rimesso al loro posto le root precedenti e queste le ha solo spostate
+    /// accanto, senza cancellarle.
+    pub set_aside: Vec<Utf8PathBuf>,
 }
 
 /// Applica snapshot offline con prepare/commit/finalize e recovery persistente.
@@ -640,6 +645,7 @@ struct TransactionPaths {
     staging: Utf8PathBuf,
     old: Utf8PathBuf,
     record: Utf8PathBuf,
+    rejected: Utf8PathBuf,
 }
 
 impl TransactionPaths {
@@ -655,6 +661,7 @@ impl TransactionPaths {
             staging: parent.join(format!("{stem}{STAGING_SUFFIX}")),
             old: parent.join(format!("{stem}{OLD_SUFFIX}")),
             record: parent.join(format!("{stem}{RECORD_SUFFIX}")),
+            rejected: parent.join(format!("{stem}{REJECTED_SUFFIX}")),
         })
     }
 }
@@ -767,12 +774,23 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
                         // lo staging privato.
                         remove_dir_if_exists(&paths.staging)?;
                         remove_file_if_exists(&paths.record)?;
+                    } else if paths.old.is_dir() {
+                        // La root pubblicata non è quella che la transazione
+                        // doveva scrivere, e la precedente è ancora intera.
+                        report
+                            .set_aside
+                            .push(roll_back_published(root, parent, &paths, &record)?);
                     } else {
                         return Err(SnapshotError::RecoveryNeeded {
                             transaction_id: record.transaction_id,
                             reason: "root pubblicata non corrisponde al manifest atteso".into(),
                         });
                     }
+                } else if paths.old.is_dir() && !paths.staging.is_dir() {
+                    // Né root né staging: la recovery di prima si è fermata fra
+                    // le due rename del ritorno indietro. La precedente torna
+                    // al suo posto; ciò che era stato messo da parte resta lì.
+                    restore_old_root(root, parent, &paths, &record)?;
                 } else if paths.old.is_dir() && paths.staging.is_dir() {
                     // Crash dopo il marker Published ma prima della rename:
                     // completare il commit è deterministico e conserva la
@@ -790,13 +808,13 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
                     sync_parent(parent)?;
                     let current = SnapshotBundle::capture(root)?;
                     if current.manifest.digest() != record.expected_manifest {
-                        return Err(SnapshotError::RecoveryNeeded {
-                            transaction_id: record.transaction_id,
-                            reason: "nuova root non coerente dopo recovery".into(),
-                        });
+                        report
+                            .set_aside
+                            .push(roll_back_published(root, parent, &paths, &record)?);
+                    } else {
+                        remove_dir_if_exists(&paths.old)?;
+                        remove_file_if_exists(&paths.record)?;
                     }
-                    remove_dir_if_exists(&paths.old)?;
-                    remove_file_if_exists(&paths.record)?;
                 } else {
                     return Err(SnapshotError::RecoveryNeeded {
                         transaction_id: record.transaction_id,
@@ -810,6 +828,67 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
     }
     Ok(report)
 }
+/// **Il ritorno alla root precedente** quando quella pubblicata non è la
+/// root che la transazione doveva scrivere.
+///
+/// Senza, un vault restava chiuso per sempre: ogni apertura ripeteva la stessa
+/// recovery e riceveva lo stesso `RecoveryNeeded`, con i dati dell'utente
+/// parcheggiati nel contenitore `.old`. Tornare indietro è la metà «old» di
+/// all-or-old-or-new; la root pubblicata però non si cancella, perché può
+/// contenere scritture arrivate dopo la pubblicazione — si sposta accanto, in
+/// `.rejected`, e il chiamante la trova nel rapporto.
+///
+/// Un crash fra le due rename lascia né root né staging, con il record ancora
+/// in `Published`: è il caso che [`restore_old_root`] chiude alla recovery
+/// seguente.
+fn roll_back_published(
+    root: &Utf8Path,
+    parent: &Utf8Path,
+    paths: &TransactionPaths,
+    record: &RecoveryRecord,
+) -> Result<Utf8PathBuf, SnapshotError> {
+    if paths.rejected.exists() {
+        return Err(SnapshotError::RecoveryNeeded {
+            transaction_id: record.transaction_id.clone(),
+            reason: format!("{} esiste già", paths.rejected),
+        });
+    }
+    fs::rename(root.as_std_path(), paths.rejected.as_std_path()).map_err(|source| {
+        SnapshotError::RecoveryNeeded {
+            transaction_id: record.transaction_id.clone(),
+            reason: format!("messa da parte della root pubblicata: {source}"),
+        }
+    })?;
+    sync_parent(parent)?;
+    restore_old_root(root, parent, paths, record)?;
+    tracing::warn!(
+        target: "fub.snapshot",
+        transaction = %record.transaction_id,
+        set_aside = %paths.rejected,
+        "root pubblicata diversa dal manifest atteso: ripristinata la precedente"
+    );
+    Ok(paths.rejected.clone())
+}
+
+/// Rimette la root precedente al suo posto e chiude la transazione.
+fn restore_old_root(
+    root: &Utf8Path,
+    parent: &Utf8Path,
+    paths: &TransactionPaths,
+    record: &RecoveryRecord,
+) -> Result<(), SnapshotError> {
+    fs::rename(paths.old.as_std_path(), root.as_std_path()).map_err(|source| {
+        SnapshotError::RecoveryNeeded {
+            transaction_id: record.transaction_id.clone(),
+            reason: format!("rollback della root precedente: {source}"),
+        }
+    })?;
+    sync_parent(parent)?;
+    remove_dir_if_exists(&paths.staging)?;
+    remove_file_if_exists(&paths.record)?;
+    Ok(())
+}
+
 fn finalize_record(
     paths: &TransactionPaths,
     _record: &RecoveryRecord,
@@ -1948,6 +2027,65 @@ mod tests {
         assert_eq!(fs::read(root.join("a.md")).expect("original a"), b"old-a");
         assert_eq!(fs::read(root.join("b.md")).expect("original b"), b"old-b");
         assert_no_transaction_artifacts(&root);
+    }
+
+    /// Una root pubblicata che non è quella attesa non chiude il vault per
+    /// sempre: torna la precedente, e la pubblicata resta accanto.
+    #[test]
+    fn a_published_root_that_does_not_match_rolls_back_and_is_set_aside() {
+        for crash_between_renames in [false, true] {
+            let (_dir, root) = root();
+            fs::write(root.join("note.md"), b"old").expect("old note");
+            let base = SnapshotBundle::capture(&root).expect("base snapshot");
+            let target_files = BTreeMap::from([("note.md".to_owned(), b"new".to_vec())]);
+            let target_manifest =
+                SnapshotManifest::new(vec![entry_for_path("note.md", b"new").expect("entry")])
+                    .expect("target manifest");
+            let target =
+                SnapshotBundle::new(target_manifest, base.base_revision.clone(), target_files)
+                    .expect("target snapshot");
+            assert!(matches!(
+                SnapshotApplier::apply_with_fault(&root, &target, Some(SnapshotFault::AfterCommit)),
+                Err(SnapshotError::FaultInjected(_))
+            ));
+            // Qualcuno scrive nella root pubblicata prima della finalize.
+            fs::write(root.join("later.md"), b"written after publish").expect("later write");
+            let id = fs::read_dir(root.parent().expect("parent"))
+                .expect("parent listing")
+                .filter_map(Result::ok)
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .find_map(|name| name.strip_suffix(RECORD_SUFFIX).map(str::to_owned))
+                .expect("a pending record");
+            let rejected = root
+                .parent()
+                .expect("parent")
+                .join(format!("{id}{REJECTED_SUFFIX}"));
+            if crash_between_renames {
+                fs::rename(&root, &rejected).expect("first rename of the rollback");
+            }
+
+            let report = SnapshotApplier::recover(&root).expect("the recovery unblocks the vault");
+            assert_eq!(report.recovered, 1);
+            assert_eq!(
+                fs::read(root.join("note.md")).expect("old note back"),
+                b"old"
+            );
+            assert!(!root.join("later.md").exists());
+            assert_eq!(
+                fs::read(rejected.join("later.md")).expect("the published root is kept"),
+                b"written after publish"
+            );
+            if !crash_between_renames {
+                assert_eq!(report.set_aside, vec![rejected.clone()]);
+            }
+            assert_eq!(
+                SnapshotApplier::recover(&root)
+                    .expect("idempotent")
+                    .recovered,
+                0,
+                "the rollback must close the transaction"
+            );
+        }
     }
 
     #[test]

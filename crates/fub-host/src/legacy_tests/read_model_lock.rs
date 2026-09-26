@@ -1451,6 +1451,66 @@ fn scoped_restore_authorizes_the_destination_before_parsing() {
     ));
 }
 
+/// I97: the trash remembers where an entry comes from, and both hosts judge
+/// that origin through the same rule even when the caller names the
+/// destination. A plugin that reads everywhere but may reorganise only
+/// `sandbox/` cannot pull a note trashed from another folder into its own.
+#[test]
+fn an_explicit_destination_does_not_launder_a_foreign_origin() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::create_dir(root.join("reserved")).expect("reserved folder");
+    std::fs::create_dir(root.join("sandbox")).expect("sandbox folder");
+    let original = DocId::new("reserved/Secret.md");
+    std::fs::write(root.join(original.as_str()), "# Secret\n").expect("seed note");
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(MarkdownProvider::new()))
+        .expect("format registers");
+    let mut workspace = Workspace::new(&root, formats).expect("workspace opens");
+    let mut permissions = PluginPermissions::of(&[permission::READ_VAULT]);
+    permissions
+        .granted
+        .set(permission::WRITE_VAULT, serde_json::json!(["sandbox/"]));
+    workspace
+        .register_plugin(
+            PluginManifest::new(PLUGIN, "Sandboxed restore").granting(permissions),
+            Trust::Community,
+        )
+        .expect("scoped caller declares");
+    workspace.reindex().expect("seed note enters the workspace");
+    let entry = workspace
+        .delete_document(&original)
+        .expect("the user trashes the note");
+    let workspace = Custody::new("the sandboxed restore workspace", workspace);
+    let taken = DocId::new("sandbox/Taken.md");
+
+    let direct = workspace
+        .write()
+        .expect("workspace is alive")
+        .with_host(PLUGIN, |host| {
+            assert_eq!(
+                host.list_trash().expect("the entry is readable")[0].id,
+                entry
+            );
+            host.restore_document(&entry, Some(taken.clone()))
+        });
+    assert!(
+        matches!(direct, Err(PluginError::PermissionDenied(_))),
+        "the guard judges the origin too: {direct:?}"
+    );
+    let job = JobHost::new(workspace.clone(), PLUGIN).restore_document(&entry, Some(taken.clone()));
+    assert!(
+        matches!(job, Err(PluginError::PermissionDenied(_))),
+        "and so does the job host: {job:?}"
+    );
+    assert!(!root.join(taken.as_str()).exists());
+    assert!(
+        root.join(entry.as_str()).exists(),
+        "the trash entry stays where it was"
+    );
+}
+
 #[test]
 fn a_stale_restore_result_moves_nothing_and_records_no_fact() {
     let vault = vault("# Before\n");

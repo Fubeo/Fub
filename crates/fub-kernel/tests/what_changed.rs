@@ -182,8 +182,6 @@ fn a_document_that_is_born_has_changed_in_every_way() {
 ///
 /// È la metà della voce che non passa dalla maschera, ed è quella che toglie il
 /// conto vero: chi si sveglia sa già se lo riguardava.
-/// conto vero: chi si sveglia sa già se lo riguardava.
-/// conto vero: chi si sveglia sa già se lo riguardava.
 #[test]
 fn the_event_names_which_properties_and_which_tags() {
     let (_dir, mut ws, log) = vault(EventMask::of([EventKind::DocumentChanged]));
@@ -284,7 +282,6 @@ fn a_mask_on_an_aspect_does_not_wake_up_for_the_others() {
 /// È il caso che distingue `Some(vuoto)` da `None`. Il secondo è *non lo so* e
 /// passa qualunque filtro; confonderli vorrebbe dire o far passare tutto (e il
 /// filtro non toglierebbe niente proprio dove ha la risposta più precisa) o
-/// filtrare via ciò di cui non si sa niente, che è perdere in silenzio.
 /// filtrare via ciò di cui non si sa niente, che è perdere in silenzio.
 #[test]
 fn rewriting_the_same_bytes_changes_nothing_and_that_is_a_fact() {

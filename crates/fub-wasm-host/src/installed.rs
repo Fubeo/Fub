@@ -219,6 +219,64 @@ pub struct InstalledPluginStore {
     directory: Utf8PathBuf,
 }
 
+/// Il tetto dei byte letti da una sorgente scelta dall'utente, per
+/// l'installazione diretta come per l'artefatto del catalogo.
+pub const SOURCE_LIMIT: u64 = 64 * 1024 * 1024;
+
+/// Legge i byte candidati con la disciplina capability della sorgente:
+/// directory esplicita del chiamante, file regolare diretto, niente symlink o
+/// hardlink, nessuna scansione dei sibling e al massimo [`SOURCE_LIMIT`] byte.
+/// È la stessa regola per ogni porta che installa da un file: diretta,
+/// aggiornamento e catalogo.
+pub fn read_source_file(source: &Utf8Path) -> Result<Vec<u8>, InstallError> {
+    let parent = source
+        .parent()
+        .filter(|p| !p.as_str().is_empty())
+        .ok_or_else(|| {
+            InstallError::Invalid("la sorgente richiede un percorso con directory esplicita".into())
+        })?;
+    let input = cap_std::fs::Dir::open_ambient_dir(parent, cap_std::ambient_authority())?;
+    let name = source
+        .file_name()
+        .ok_or_else(|| InstallError::Invalid("sorgente senza nome".into()))?;
+    let metadata = input
+        .symlink_metadata(name)
+        .map_err(|source| InstallError::Operation {
+            operation: "source-metadata",
+            source,
+        })?;
+    if !metadata.is_file() {
+        return Err(InstallError::Invalid(
+            "la sorgente non è un file regolare diretto".into(),
+        ));
+    }
+    // Nessuna scansione dei sibling: un nome o un file concorrente non
+    // pertinente non può cambiare l'esito della sorgente scelta.
+    let file = input.open(name).map_err(|source| InstallError::Operation {
+        operation: "source-open",
+        source,
+    })?;
+    if !file.metadata()?.is_file() {
+        return Err(InstallError::Invalid(
+            "la sorgente aperta non è un file regolare".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(SOURCE_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|source| InstallError::Operation {
+            operation: "source-read",
+            source,
+        })?;
+    if bytes.len() as u64 > SOURCE_LIMIT {
+        return Err(InstallError::Invalid(format!(
+            "la sorgente supera il limite di {} MiB",
+            SOURCE_LIMIT / (1024 * 1024)
+        )));
+    }
+    Ok(bytes)
+}
+
 impl InstalledPluginStore {
     /// Apre la capability della configurazione scelta dalla shell.
     /// La directory deve esistere; nessuna posizione viene dedotta dal guest.
@@ -288,7 +346,7 @@ impl InstalledPluginStore {
         base: &InventorySnapshot,
         source: &Utf8Path,
     ) -> Result<InstalledPlugin, InstallError> {
-        let bytes = self.read_candidate_bytes(source)?;
+        let bytes = read_source_file(source)?;
         self.install_bytes(base, &bytes, None)
     }
 
@@ -371,7 +429,7 @@ impl InstalledPluginStore {
         installation: u64,
         source: &Utf8Path,
     ) -> Result<InstalledPlugin, InstallError> {
-        let bytes = self.read_candidate_bytes(source)?;
+        let bytes = read_source_file(source)?;
         self.update_bytes(base, installation, &bytes, None)
     }
 
@@ -441,53 +499,6 @@ impl InstalledPluginStore {
             let _ = self.storage.remove(&old_path);
         }
         Ok(updated)
-    }
-
-    /// Legge i byte candidati con la disciplina capability della sorgente:
-    /// directory esplicita del chiamante, file regolare diretto, niente
-    /// symlink o hardlink e nessuna scansione dei sibling.
-    fn read_candidate_bytes(&self, source: &Utf8Path) -> Result<Vec<u8>, InstallError> {
-        let parent = source
-            .parent()
-            .filter(|p| !p.as_str().is_empty())
-            .ok_or_else(|| {
-                InstallError::Invalid(
-                    "la sorgente richiede un percorso con directory esplicita".into(),
-                )
-            })?;
-        let input = cap_std::fs::Dir::open_ambient_dir(parent, cap_std::ambient_authority())?;
-        let name = source
-            .file_name()
-            .ok_or_else(|| InstallError::Invalid("sorgente senza nome".into()))?;
-        let metadata = input
-            .symlink_metadata(name)
-            .map_err(|source| InstallError::Operation {
-                operation: "source-metadata",
-                source,
-            })?;
-        if !metadata.is_file() {
-            return Err(InstallError::Invalid(
-                "la sorgente non è un file regolare diretto".into(),
-            ));
-        }
-        // Nessuna scansione dei sibling: un nome o un file concorrente non
-        // pertinente non può cambiare l'esito della sorgente scelta.
-        let mut file = input.open(name).map_err(|source| InstallError::Operation {
-            operation: "source-open",
-            source,
-        })?;
-        if !file.metadata()?.is_file() {
-            return Err(InstallError::Invalid(
-                "la sorgente aperta non è un file regolare".into(),
-            ));
-        }
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
-            .map_err(|source| InstallError::Operation {
-                operation: "source-read",
-                source,
-            })?;
-        Ok(bytes)
     }
 
     /// Pubblica il blob sotto lock CAS senza mai reinterpretare un orfano:

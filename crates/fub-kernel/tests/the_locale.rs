@@ -63,7 +63,6 @@ impl ViewProvider for Spy {
         // Sedici byte con la capacità concessa: qui il `?` non scatta mai, ed è
         // proprio ciò che questa spia deve provare — che una richiesta normale
         // dentro un `render_view` arriva fino al caso del kernel e torna intera.
-        // dentro un `render_view` arriva fino al caso del kernel e torna intera.
         *self.random.lock().unwrap() = host.random_bytes(16)?;
         Ok(UiNode::text(""))
     }
@@ -216,7 +215,6 @@ fn clearing_a_key_returns_to_the_system_and_not_to_nothing() {
 }
 
 /// Il caso arriva fin dentro un `render_view`, e due giri non danno gli stessi
-/// byte: è tutto ciò che la capacità promette, ed è ciò che serve a un'identità.
 /// byte: è tutto ciò che la capacità promette, ed è ciò che serve a un'identità.
 #[test]
 fn randomness_crosses_the_boundary_and_never_repeats() {

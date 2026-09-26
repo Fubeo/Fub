@@ -30,7 +30,8 @@
 //! ruba il nome `nota` a `sub/Nota.md` e sposta i link di terzi; cancellarlo lo
 //! restituisce. L'invariante che rende tutto trattabile è che la risoluzione di
 //! una chiave `K` dipende *solo* dalle voci `path_index[strip_ext(K)]`,
-//! `name_index[K]`, `alias_index[K]`. Quindi:
+//! `name_index[K]`, `name_index[strip_ext(K)]` (il nome scritto con la sua
+//! estensione, `[[board.canvas]]`), `alias_index[K]`. Quindi:
 //!
 //! - `watchers`: chiave d'indice → chiavi di link che ne dipendono;
 //! - `refs_by_key`: chiave di link → documenti che la usano.
@@ -41,13 +42,16 @@
 //! vicinato, non al vault.
 //!
 //! Nota di determinismo: `alias_index` e `path_index` sono multi-mappe ordinate
-//! come `name_index` (vince il path più corto, poi lessicografico). Con la
+//! come `name_index` (vince il path più corto, poi lessicografico; fra formati
+//! diversi dello stesso path, la pagina di prosa: vedi [`ProseFormats`]). Con la
 //! vecchia `HashMap<String, DocId>` due documenti omonimi per alias — o `a.md` e
 //! `a.txt`, che condividono lo stesso path senza estensione — si sovrascrivevano
 //! nell'ordine (casuale) di iterazione della cache dei modelli. Serviva comunque
 //! l'ordinamento per sapere chi subentra quando il vincitore viene rimosso.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::sync::Arc;
 
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget};
 use fub_abi::traits::{BacklinkRef, LinkDirection, NeighborRef};
@@ -107,6 +111,7 @@ impl GraphSource for DocumentModel {
 pub struct GraphSources {
     docs: Vec<GraphDoc>,
     epoch: u64,
+    prose: ProseFormats,
 }
 
 struct GraphDoc {
@@ -141,6 +146,7 @@ impl GraphSources {
     pub(crate) fn from_docs<'a, S: GraphSource + 'a>(
         docs: impl IntoIterator<Item = &'a S>,
         epoch: u64,
+        prose: ProseFormats,
     ) -> Self {
         GraphSources {
             docs: docs
@@ -152,6 +158,7 @@ impl GraphSources {
                 })
                 .collect(),
             epoch,
+            prose,
         }
     }
 
@@ -160,7 +167,7 @@ impl GraphSources {
     pub fn build(self) -> BuiltGraph {
         let _phase = tracing::info_span!(target: "fub.apertura", "rebuild_graph").entered();
         BuiltGraph {
-            graph: LinkGraph::build(self.docs.iter()),
+            graph: LinkGraph::build_with(self.docs.iter(), self.prose),
             epoch: self.epoch,
         }
     }
@@ -200,8 +207,47 @@ struct DocKeys {
     aliases: Vec<String>,
 }
 
+/// Le estensioni dei formati che dichiarano un sorgente di **prosa**
+/// ([`source::PROSE`](fub_abi::options::source::PROSE)).
+///
+/// Servono a uno spareggio solo: documenti con lo stesso path senza estensione
+/// e formati diversi. Accanto a `Progetto.md`, `Progetto.canvas` e
+/// `Progetto.base`, `[[Progetto]]` nomina la pagina, come in Obsidian, e non il
+/// primo in ordine alfabetico. Il kernel lo sa dalla dichiarazione del formato,
+/// non dal nome della sua estensione. Chi vuole un altro formato scrive
+/// l'estensione (`[[Progetto.canvas]]`).
+///
+/// Il registro dei formati è fisso per la vita del `Workspace`, quindi lo è
+/// anche questo insieme: nessun documento cambia posto negli indici senza
+/// essere toccato.
+#[derive(Clone, Debug, Default)]
+pub struct ProseFormats(Arc<HashSet<String>>);
+
+impl ProseFormats {
+    /// Le estensioni, in qualunque caso: il confronto è disarmato come nel
+    /// registro dei formati.
+    pub fn new<S: AsRef<str>>(extensions: impl IntoIterator<Item = S>) -> Self {
+        ProseFormats(Arc::new(
+            extensions
+                .into_iter()
+                .map(|ext| ext.as_ref().to_lowercase())
+                .collect(),
+        ))
+    }
+
+    fn names(&self, id: &DocId) -> bool {
+        let path = id.as_str();
+        let stem = stem_of(path);
+        !self.0.is_empty()
+            && stem.len() < path.len()
+            && self.0.contains(&path[stem.len() + 1..].to_lowercase())
+    }
+}
+
 #[derive(Default)]
 pub struct LinkGraph {
+    /// Chi vince fra formati diversi dello stesso path.
+    prose: ProseFormats,
     /// page name (minuscolo) → documenti con quel nome, in ordine di priorità.
     name_index: HashMap<String, Vec<DocId>>,
     /// alias (minuscolo) → documenti che lo dichiarano, in ordine di priorità.
@@ -233,8 +279,31 @@ impl LinkGraph {
     where
         S: GraphSource + 'a,
     {
+        Self::build_with(docs, ProseFormats::default())
+    }
+
+    /// Un grafo vuoto che conosce i formati di prosa.
+    pub fn with_prose(prose: ProseFormats) -> Self {
+        LinkGraph {
+            prose,
+            ..LinkGraph::default()
+        }
+    }
+
+    /// I formati di prosa che questo grafo conosce, per chi ne costruisce un
+    /// altro uguale.
+    pub(crate) fn prose(&self) -> &ProseFormats {
+        &self.prose
+    }
+
+    /// Come [`build`](Self::build), con i formati di prosa del vault.
+    pub fn build_with<'a, S>(docs: impl IntoIterator<Item = &'a S>, prose: ProseFormats) -> Self
+    where
+        S: GraphSource + 'a,
+    {
         let docs: Vec<&S> = docs.into_iter().collect();
         let mut graph = LinkGraph {
+            prose,
             name_index: HashMap::with_capacity(docs.len()),
             path_index: HashMap::with_capacity(docs.len()),
             alias_index: HashMap::with_capacity(docs.len() / 4),
@@ -369,7 +438,8 @@ impl LinkGraph {
 
     /// Risolve il nome/pagina di un wikilink a un [`DocId`], regole Obsidian:
     /// per path se contiene `/`, altrimenti per nome (fra omonimi vince il
-    /// più vicino alla radice), infine per alias.
+    /// più vicino alla radice), poi per nome con la sua estensione
+    /// (`[[board.canvas]]`), infine per alias.
     pub fn resolve_wiki(&self, page: &str) -> Option<DocId> {
         self.resolve_key(&resolution_key(page), &exact_key(page))
     }
@@ -575,6 +645,27 @@ impl LinkGraph {
         if let Some(id) = self.pick(&self.name_index, key, exact, |id| exact_key(id.page_name())) {
             return Some(id);
         }
+        // Un nome con la sua estensione nomina un file: `[[board.canvas]]` è
+        // `board.canvas`, e non `board.md` che gli sta accanto. È come Obsidian
+        // scrive i link ai canvas. Il nome pagina ha avuto la precedenza sopra
+        // perché `[[v1.2]]` è la pagina `v1.2.md`, non un file di estensione `2`.
+        let stem = strip_ext(key);
+        if stem != key {
+            if let Some(ids) = self.name_index.get(&stem) {
+                if let Some(id) = ids
+                    .iter()
+                    .find(|id| exact_key(file_name(id.as_str())) == exact)
+                {
+                    return Some(id.clone());
+                }
+                if let Some(id) = ids
+                    .iter()
+                    .find(|id| resolution_key(file_name(id.as_str())) == key)
+                {
+                    return Some(id.clone());
+                }
+            }
+        }
         // Gli alias no, ed è una differenza di sostanza: dietro un path e un
         // nome pagina c'è un **file**, e due file che differiscono per una
         // maiuscola sono due cose che il filesystem distingue e la chiave no.
@@ -671,10 +762,10 @@ impl LinkGraph {
                 .map(|a| resolution_key(a))
                 .collect(),
         };
-        insert_sorted(&mut self.name_index, &keys.name, id);
-        insert_sorted(&mut self.path_index, &keys.path, id);
+        insert_sorted(&mut self.name_index, &self.prose, &keys.name, id);
+        insert_sorted(&mut self.path_index, &self.prose, &keys.path, id);
         for alias in &keys.aliases {
-            insert_sorted(&mut self.alias_index, alias, id);
+            insert_sorted(&mut self.alias_index, &self.prose, alias, id);
         }
         if let Some(touched) = touched {
             touched.insert(keys.name.clone());
@@ -688,10 +779,10 @@ impl LinkGraph {
         let Some(keys) = self.keys.remove(id) else {
             return;
         };
-        remove_sorted(&mut self.name_index, &keys.name, id);
-        remove_sorted(&mut self.path_index, &keys.path, id);
+        remove_sorted(&mut self.name_index, &self.prose, &keys.name, id);
+        remove_sorted(&mut self.path_index, &self.prose, &keys.path, id);
         for alias in &keys.aliases {
-            remove_sorted(&mut self.alias_index, alias, id);
+            remove_sorted(&mut self.alias_index, &self.prose, alias, id);
         }
         touched.insert(keys.name);
         touched.insert(keys.path);
@@ -866,20 +957,28 @@ fn first_of(index: &HashMap<String, Vec<DocId>>, key: &str) -> Option<DocId> {
 }
 
 /// Inserisce mantenendo l'ordine di priorità (idempotente).
-fn insert_sorted(index: &mut HashMap<String, Vec<DocId>>, key: &str, id: &DocId) {
+fn insert_sorted(
+    index: &mut HashMap<String, Vec<DocId>>,
+    prose: &ProseFormats,
+    key: &str,
+    id: &DocId,
+) {
     let ids = index.entry(key.to_string()).or_default();
-    let p = priority(id);
-    if let Err(pos) = ids.binary_search_by(|probe| priority(probe).cmp(&p)) {
+    if let Err(pos) = ids.binary_search_by(|probe| precedence(prose, probe, id)) {
         ids.insert(pos, id.clone());
     }
 }
 
-fn remove_sorted(index: &mut HashMap<String, Vec<DocId>>, key: &str, id: &DocId) {
+fn remove_sorted(
+    index: &mut HashMap<String, Vec<DocId>>,
+    prose: &ProseFormats,
+    key: &str,
+    id: &DocId,
+) {
     let Some(ids) = index.get_mut(key) else {
         return;
     };
-    let p = priority(id);
-    if let Ok(pos) = ids.binary_search_by(|probe| priority(probe).cmp(&p)) {
+    if let Ok(pos) = ids.binary_search_by(|probe| precedence(prose, probe, id)) {
         ids.remove(pos);
     }
     if ids.is_empty() {
@@ -889,8 +988,34 @@ fn remove_sorted(index: &mut HashMap<String, Vec<DocId>>, key: &str, id: &DocId)
 
 /// Ordine fra candidati omonimi: vince il path più corto (più vicino alla
 /// radice), a parità quello lessicograficamente minore.
-fn priority(id: &DocId) -> (usize, &str) {
-    (segments(id), id.as_str())
+///
+/// Con un'eccezione sola: fra documenti con lo stesso path senza estensione
+/// (`Progetto.md`, `Progetto.canvas`) vince prima la pagina di prosa
+/// ([`ProseFormats`]). L'ordine resta totale, perché un tale gruppo è contiguo
+/// nell'ordine dei path: i suoi membri coincidono fino al punto
+/// dell'estensione, e ogni altro path sta prima o dopo di tutti loro.
+fn precedence(prose: &ProseFormats, a: &DocId, b: &DocId) -> Ordering {
+    segments(a).cmp(&segments(b)).then_with(|| {
+        let by_path = a.as_str().cmp(b.as_str());
+        if stem_of(a.as_str()) == stem_of(b.as_str()) {
+            prose.names(b).cmp(&prose.names(a)).then(by_path)
+        } else {
+            by_path
+        }
+    })
+}
+
+/// Il path senza l'ultima estensione, come [`strip_ext`] ma senza allocare.
+fn stem_of(path: &str) -> &str {
+    match path.rsplit_once('.') {
+        Some((stem, ext)) if !ext.contains('/') => stem,
+        _ => path,
+    }
+}
+
+/// Il nome del file, con la sua estensione.
+fn file_name(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
 }
 
 fn segments(id: &DocId) -> usize {
@@ -1167,6 +1292,122 @@ mod tests {
         );
         assert_eq!(sources(&graph, "sub/nota.txt"), ["a.md"]);
         assert!(sources(&graph, "sub/nota.md").is_empty());
+    }
+
+    #[test]
+    fn a_name_with_its_extension_names_the_file() {
+        // I55: senza `/` la chiave cercava solo fra i nomi pagina, che non
+        // hanno estensione, e `[[board.canvas]]` — la forma in cui Obsidian
+        // scrive i link ai canvas — non si risolveva mai.
+        let board = DocumentModel::empty(DocId::new("board.canvas"));
+        let note = DocumentModel::empty(DocId::new("b.md"));
+        let deep = DocumentModel::empty(DocId::new("sub/x.canvas"));
+        let twin = DocumentModel::empty(DocId::new("sub/x.md"));
+        let wiki = doc_with_links("a.md", &["board.canvas", "x.canvas"]);
+        let graph = LinkGraph::build([&board, &note, &deep, &twin, &wiki]);
+
+        assert_eq!(
+            graph.resolve_wiki("board.canvas"),
+            Some(DocId::new("board.canvas"))
+        );
+        assert_eq!(
+            graph.resolve_wiki("Board.CANVAS"),
+            Some(DocId::new("board.canvas"))
+        );
+        assert_eq!(graph.resolve_wiki("b.md"), Some(DocId::new("b.md")));
+        assert_eq!(
+            graph.resolve_wiki("x.canvas"),
+            Some(DocId::new("sub/x.canvas"))
+        );
+        assert_eq!(graph.resolve_wiki("x.md"), Some(DocId::new("sub/x.md")));
+        // L'estensione esplicita si prende sul serio: nessun `board.md`.
+        assert_eq!(graph.resolve_wiki("board.md"), None);
+        assert_eq!(
+            graph.resolve_wiki("board"),
+            Some(DocId::new("board.canvas"))
+        );
+        assert_eq!(sources(&graph, "board.canvas"), ["a.md"]);
+        assert_eq!(sources(&graph, "sub/x.canvas"), ["a.md"]);
+        assert!(sources(&graph, "sub/x.md").is_empty());
+    }
+
+    #[test]
+    fn a_name_with_its_extension_follows_the_file_as_it_comes_and_goes() {
+        let wiki = doc_with_links("a.md", &["board.canvas"]);
+        let mut graph = LinkGraph::build([&wiki]);
+        assert!(graph.outgoing(&DocId::new("a.md")).is_empty());
+
+        graph.upsert(&DocumentModel::empty(DocId::new("board.canvas")));
+        assert_eq!(sources(&graph, "board.canvas"), ["a.md"]);
+
+        graph.remove(&DocId::new("board.canvas"));
+        assert!(graph.outgoing(&DocId::new("a.md")).is_empty());
+    }
+
+    #[test]
+    fn homonyms_of_different_formats_name_the_prose_page_first() {
+        // I55: accanto a `Progetto.{base,canvas,md}` il nome nudo cadeva
+        // sull'ordine alfabetico, cioè su `Progetto.base`.
+        let docs = [
+            DocumentModel::empty(DocId::new("Progetto.base")),
+            DocumentModel::empty(DocId::new("Progetto.canvas")),
+            DocumentModel::empty(DocId::new("Progetto.md")),
+            DocumentModel::empty(DocId::new("sub/Piano.canvas")),
+            DocumentModel::empty(DocId::new("sub/Piano.md")),
+            DocumentModel::empty(DocId::new("Radice.canvas")),
+            DocumentModel::empty(DocId::new("sub/Radice.md")),
+        ];
+        let prose = ProseFormats::new(["MD"]);
+        let graph = LinkGraph::build_with(docs.iter(), prose.clone());
+
+        assert_eq!(
+            graph.resolve_wiki("Progetto"),
+            Some(DocId::new("Progetto.md"))
+        );
+        assert_eq!(
+            graph.resolve_wiki("Progetto.canvas"),
+            Some(DocId::new("Progetto.canvas"))
+        );
+        assert_eq!(
+            graph.resolve_wiki("Progetto.base"),
+            Some(DocId::new("Progetto.base"))
+        );
+        assert_eq!(
+            graph.resolve_wiki("sub/Piano"),
+            Some(DocId::new("sub/Piano.md"))
+        );
+        assert_eq!(
+            graph.resolve_wiki("Piano"),
+            Some(DocId::new("sub/Piano.md"))
+        );
+        // Lo spareggio vale solo fra formati dello stesso path: il più vicino
+        // alla radice resta il primo.
+        assert_eq!(
+            graph.resolve_wiki("Radice"),
+            Some(DocId::new("Radice.canvas"))
+        );
+
+        // Lo stesso ordine per upsert successivi, in qualunque ordine arrivino.
+        let mut incremental = LinkGraph::with_prose(prose);
+        for doc in docs.iter().rev() {
+            incremental.upsert(doc);
+        }
+        assert_eq!(
+            incremental.resolve_wiki("Progetto"),
+            Some(DocId::new("Progetto.md"))
+        );
+        incremental.remove(&DocId::new("Progetto.md"));
+        assert_eq!(
+            incremental.resolve_wiki("Progetto"),
+            Some(DocId::new("Progetto.base"))
+        );
+
+        // Senza formati di prosa dichiarati resta l'ordine dei path.
+        let bare = LinkGraph::build(docs.iter());
+        assert_eq!(
+            bare.resolve_wiki("Progetto"),
+            Some(DocId::new("Progetto.base"))
+        );
     }
 
     #[test]

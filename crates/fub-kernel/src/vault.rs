@@ -16,7 +16,7 @@ use crate::error::{KernelError, Result};
 use crate::ignore::{parse_gitignore, GitignoreRules, IgnorePolicy, Kind, GITIGNORE_FILE};
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FileIdentity, Stat, VaultStorage};
-use crate::time::{now_unix, stamp_from_unix};
+use crate::time::{stamp_from_unix, Clock, SystemClock};
 use fub_abi::schema::SchemaVersion;
 
 fn is_absent_path_error(error: &std::io::Error) -> bool {
@@ -110,7 +110,7 @@ pub fn data_root(root: &Utf8Path) -> Utf8PathBuf {
 ///
 /// Se la cartella di lavoro non è leggibile — o non è UTF-8 — non c'è niente di
 /// meglio del path dato: si tiene quello, che è ciò che si faceva sempre.
-pub(crate) fn root_absolute(root: &Utf8Path) -> Utf8PathBuf {
+pub fn root_absolute(root: &Utf8Path) -> Utf8PathBuf {
     if root.is_absolute() {
         return root.to_owned();
     }
@@ -121,13 +121,13 @@ pub(crate) fn root_absolute(root: &Utf8Path) -> Utf8PathBuf {
         .unwrap_or_else(|| root.to_owned())
 }
 
-pub use fub_abi::rules::trash::TRASH_DIR;
 /// Nome della cartella cestino dentro il vault.
 ///
 /// È la stessa che usa Obsidian per "Move to Obsidian trash": un vault
 /// condiviso fra le due app ha **un solo** cestino (vedi
 /// `../../../docs/project/status.md`, "Decisioni (con il perché)", e
 /// `../../../docs/architecture/document-model.md`, "Il cestino").
+pub use fub_abi::rules::trash::TRASH_DIR;
 use fub_abi::rules::trash::{self, file_name_of, strip_stamp};
 
 /// Cartella (dentro [`data_root`]) dei sidecar del cestino: per ogni voce
@@ -697,6 +697,8 @@ pub struct Vault {
     /// politica, cioè il comportamento di prima che fosse dichiarabile.
     settings: Option<SharedSettings>,
     gitignore: GitignoreRules,
+    /// L'orologio con cui il cestino timbra nomi e sidecar.
+    clock: Arc<dyn Clock>,
 }
 
 impl Vault {
@@ -740,9 +742,15 @@ impl Vault {
         Ok(Vault {
             root,
             storage,
+            clock: Arc::new(SystemClock),
             settings: None,
             gitignore,
         })
+    }
+
+    /// L'orologio del vault, al posto di quello di sistema.
+    pub(crate) fn set_clock(&mut self, clock: Arc<dyn Clock>) {
+        self.clock = clock;
     }
 
     /// Aggancia le impostazioni da cui leggere la politica di esclusione.
@@ -1163,7 +1171,7 @@ impl Vault {
         // La cartella del cestino non si crea qui: `VaultStorage::rename` crea
         // le cartelle di destinazione che mancano, e farlo una seconda volta
         // vorrebbe dire avere due idee di quando una cartella esiste.
-        let stamp = stamp_from_unix(now_unix());
+        let stamp = stamp_from_unix(self.clock.now_unix_millis() / 1_000);
         // Il nome nel cestino non se lo costruisce chi cestina: è una regola
         // del contratto, e chi cestina è più di uno (0219).
         let target = DocId::new(trash::trashed_id(id.as_str(), &stamp, &mut |c| {
@@ -1222,7 +1230,7 @@ impl Vault {
             // si deduce dal disco più tardi: il `rename` che ha appena spostato
             // il file non ha lasciato nessuna traccia dell'istante in cui è
             // successo (vedi [`TrashSidecar::deleted_at`]).
-            deleted_at: Some(crate::time::now_unix_millis()),
+            deleted_at: Some(self.clock.now_unix_millis()),
         })
         .expect("a path is always serializable");
         self.storage
@@ -1508,7 +1516,6 @@ impl Vault {
             // tolta (un'altra finestra, un sync) non si conta — il risultato
             // che si voleva c'è già. Un guasto vero del supporto risale, perché
             // un cestino svuotato a metà non è un cestino svuotato (0193).
-            // Il sidecar segue esclusivamente la voce presente nel censimento.
             match crate::error::optional(self.storage.remove(path)) {
                 Ok(Some(())) => {}
                 Ok(None) => continue,
@@ -1520,7 +1527,7 @@ impl Vault {
                 }
             }
             count += 1;
-            // Se nel frattempo è arrivato un sidecar, la cartella non è vuota e
+            // Il sidecar segue esclusivamente la voce presente nel censimento.
             crate::error::optional(self.storage.remove(sidecar)).map_err(|and| {
                 KernelError::Io {
                     path: sidecar.clone(),
@@ -1528,23 +1535,23 @@ impl Vault {
                 }
             })?;
         }
+        // Se nel frattempo è arrivato un sidecar, la cartella non è vuota e
         // resta intatta; non si esegue più uno sweep globale del deposito.
-        // Come una voce lascia il cestino: distrutta, o restituita al vault.
         let _ = self.storage.remove_empty_dir(&self.trash_metadata_dir());
         tracing::info!(target: "fub.kernel", "trash emptied: {count} entries destroyed");
         Ok(count)
     }
 }
 
-/// Una voce del cestino. Vive nel **contratto** dalla decisione 0013, da quando
+/// Come una voce lascia il cestino: distrutta, o restituita al vault.
 enum TrashExit<'a> {
     Destroy,
     To(&'a DocId),
 }
 
+/// Una voce del cestino. Vive nel **contratto** dalla decisione 0013, da quando
 /// `VaultRead::list_trash` la restituisce: qui resta il nome con cui il vault la
 /// costruisce.
-// La politica d'esclusione non guarda il disco: il vault si apre in
 pub use fub_abi::traits::TrashEntry;
 
 #[cfg(test)]
@@ -1555,6 +1562,24 @@ mod tests {
         Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
             .expect("current dir is UTF-8")
             .join("vault-test")
+    }
+
+    #[test]
+    fn a_backslash_id_never_composes_a_path() {
+        // Su Windows `Path::join` legge `\\` come separatore e ne risolve i
+        // `..`: il recinto deve rifiutarlo prima di comporre, su ogni sistema.
+        let root = test_root();
+        let vault = Vault::on(&root, Arc::new(crate::storage::MemStorage::new())).expect("vault");
+        for escape in ["..\\..\\Windows\\System32\\hosts", "note\\..\\..\\x.md"] {
+            assert!(
+                matches!(
+                    vault.path_for(&DocId::new(escape)),
+                    Err(KernelError::BadName { .. })
+                ),
+                "{escape} must not compose a path"
+            );
+        }
+        assert!(vault.path_for(&DocId::new("note/a.md")).is_ok());
     }
 
     #[test]
@@ -1603,8 +1628,8 @@ mod tests {
 
     #[test]
     fn what_is_ignored_is_ignored_at_any_depth() {
+        // La politica d'esclusione non guarda il disco: il vault si apre in
         // memoria, dove una radice che sta per nascere è legittima (0160).
-        // Un file nascosto è nascosto anche in fondo a un path pulito.
         let root = test_root();
         let v = Vault::on(&root, Arc::new(crate::storage::MemStorage::new()))
             .expect("an in-memory vault opens");
@@ -1612,13 +1637,14 @@ mod tests {
         assert!(v.is_ignored(&root.join(".trash/Idea.md")));
         assert!(v.is_ignored(&root.join(".obsidian/plugins/x/main.js")));
         assert!(v.is_ignored(&root.join("node_modules/pacchetto/readme.md")));
-        // Fuori dal vault non è "ignorato": è di qualcun altro, e a dirlo è
+        // Un file nascosto è nascosto anche in fondo a un path pulito.
         assert!(v.is_ignored(&root.join("note/.bozza.md")));
+        // Fuori dal vault non è "ignorato": è di qualcun altro, e a dirlo è
         // `doc_id_for_path`.
-        // **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
         assert!(!v.is_ignored(Utf8Path::new("/altrove/.trash/Idea.md")));
     }
 
+    /// **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
     /// scrive Cargo, e da quando il vault dice *cosa contiene* invece di
     /// filtrare per estensione (§14.1) ogni file lì dentro prendeva un
     /// [`DocId`] ed entrava in anagrafe — decine di migliaia di voci, un indice
@@ -1626,7 +1652,6 @@ mod tests {
     ///
     /// Il banco sta qui e non solo sulla costante perché è un difetto che si
     /// vede **dal vault**, non dalla lista: la lista si legge e sembra a posto.
-    /// Un vault con le impostazioni di un vero montaggio, con la politica di
     #[test]
     fn a_vault_that_is_also_a_repo_does_not_index_what_cargo_writes() {
         let root = test_root();
@@ -1651,8 +1676,8 @@ mod tests {
         assert!(v.is_ignored(&root.join("target/debug/appunti.md")));
     }
 
+    /// Un vault con le impostazioni di un vero montaggio, con la politica di
     /// esclusione già dichiarata.
-    /// **La casella dei nascosti** (§3.2 del catalogo): mostrarli è una
     fn declaring_vault(values: &[(&str, fub_abi::settings::SettingValue)]) -> Vault {
         let root = test_root();
         let storage: Arc<dyn VaultStorage> = Arc::new(crate::storage::MemStorage::new());
@@ -1672,10 +1697,10 @@ mod tests {
             .watching(Arc::new(std::sync::RwLock::new(store)))
     }
 
+    /// **La casella dei nascosti** (§3.2 del catalogo): mostrarli è una
     /// preferenza, e vale davvero — ma non è un grimaldello sulla struttura.
     /// Con l'interruttore acceso la bozza è un documento, e la cartella di Fub,
     /// il cestino e il temporaneo di una scrittura restano fuori.
-    // Il compagno di lock è l'unico dei quattro che non se ne va mai — non
     #[test]
     fn showing_hidden_files_does_not_open_the_structure() {
         use fub_abi::settings::SettingValue;
@@ -1685,24 +1710,24 @@ mod tests {
         assert!(v.is_ignored(&root.join(".fub/data/anagrafe.json")));
         assert!(v.is_ignored(&root.join(".trash/Idea.2026-07-24T15-30-00.md")));
         assert!(v.is_ignored(&root.join("note/.Idea.md.tmp1234-5")));
+        // Il compagno di lock è l'unico dei quattro che non se ne va mai — non
         // si può togliere senza rompere il lock (difetto 0151) — quindi è
         // l'unico per cui «non si vede» deve essere una regola e non un
         // istante. Sta nella radice apposta: oggi ogni file protetto sta dentro
         // `.fub/`, e un banco che lo mettesse lì proverebbe `.fub`.
-        // E l'elenco delle cartelle escluse è l'altra metà, che questa non tocca.
         assert!(
             v.is_ignored(&v.root().join(".Idea.md.lock")),
             "the lock companion of a root-level file was a document, \
              and it never goes away"
         );
-        // La metà che impedisce alla riparazione di diventare «tutto ciò che
+        // E l'elenco delle cartelle escluse è l'altra metà, che questa non tocca.
         assert!(v.is_ignored(&v.root().join("node_modules/pacchetto/readme.md")));
     }
 
+    /// La metà che impedisce alla riparazione di diventare «tutto ciò che
     /// finisce per `.lock`»: un `Cargo.lock` o un `flake.lock` non sono note di
     /// nessuno, ma sono file che uno può tenersi nel vault, e non cominciano
     /// per punto.
-    /// **La casella della costante** (§15.6): l'elenco è dato, e dichiararne uno
     #[test]
     fn a_lock_file_that_is_not_ours_stays_in_the_vault() {
         use fub_abi::settings::SettingValue;
@@ -1717,8 +1742,8 @@ mod tests {
         }
     }
 
+    /// **La casella della costante** (§15.6): l'elenco è dato, e dichiararne uno
     /// diverso cambia cosa il vault contiene senza ricompilare niente.
-    // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
     #[test]
     fn the_excluded_folders_are_declared_by_the_vault() {
         use fub_abi::settings::SettingValue;
@@ -1729,17 +1754,17 @@ mod tests {
         let root = v.root();
         assert!(v.is_ignored(&root.join("build/out.md")));
         assert!(!v.is_ignored(&root.join("node_modules/pacchetto/readme.md")));
+        // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
         // non la rivela.
-        // **La prima metà della 0176, dalle due porte.** `build/` è la forma che
         assert!(v.is_ignored(&root.join(".fub/settings.json")));
     }
 
+    /// **La prima metà della 0176, dalle due porte.** `build/` è la forma che
     /// scrive per prima chi arriva da un `.gitignore`, e confrontata per
     /// uguaglianza con il nome che il disco restituisce non combaciava con
     /// niente: quella riga non escludeva un bel niente, e a dirlo non c'era
     /// nessuno — un'esclusione che non scatta non dà errore, dà un vault che
     /// indicizza `build/`.
-    /// **La seconda metà della 0176, dalle due porte.** L'elenco si chiama
     #[test]
     fn a_folder_declared_with_a_slash_stays_out_of_the_vault() {
         use fub_abi::settings::SettingValue;
@@ -1766,6 +1791,7 @@ mod tests {
         assert!(v.is_ignored(&v.root().join("build/out.md")));
     }
 
+    /// **La seconda metà della 0176, dalle due porte.** L'elenco si chiama
     /// «cartelle escluse»: un file che si chiama come una di loro è un file di
     /// questo vault, e toglierlo è toglierlo davvero — niente [`DocId`],
     /// niente voce d'anagrafe, nessun evento che lo dica.
@@ -1774,7 +1800,6 @@ mod tests {
     /// l'ha in mano dalla voce di directory, il watcher ha in mano un path e
     /// basta, e se le due rispondessero diverso il file rientrerebbe al primo
     /// salvataggio o sparirebbe al primo evento.
-    // E la cartella che si chiama come lui resta fuori, dai due versi: il
     #[test]
     fn a_file_named_like_an_excluded_folder_stays_in_the_vault() {
         use fub_abi::settings::SettingValue;
@@ -1799,16 +1824,16 @@ mod tests {
             "the file \"archivio\" disappeared from the vault along with the folder"
         );
         assert!(!v.is_ignored(&v.root().join("archivio")));
+        // E la cartella che si chiama come lui resta fuori, dai due versi: il
         // path del file dentro, e il path della cartella stessa.
-        // **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
         assert!(v.is_ignored(&v.root().join("note/archivio/vecchia.md")));
         assert!(v.is_ignored(&v.root().join("note/archivio")));
     }
 
+    /// **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
     /// `is_ignored`, la scansione cammina: se le due politiche non fossero la
     /// stessa, un file che la scansione non elenca rientrerebbe al primo
     /// salvataggio — che è il difetto per cui `is_ignored` esiste.
-    /// **La casella dei collegamenti** (§15.6, consegnata dalla 0058): non si
     #[test]
     fn the_watcher_and_the_scan_share_the_same_policy() {
         use fub_abi::settings::SettingValue;
@@ -1847,10 +1872,10 @@ mod tests {
         }
     }
 
+    /// **La casella dei collegamenti** (§15.6, consegnata dalla 0058): non si
     /// seguono, e il caso che lo rende una decisione invece che una preferenza è
     /// questo — una cartella che contiene un collegamento a se stessa. Se la
     /// camminata li seguisse senza saper riconoscere un nodo già visitato,
-    /// questo banco non fallirebbe: non tornerebbe affatto.
     /// questo banco non fallirebbe: non tornerebbe affatto.
     #[cfg(unix)]
     #[test]

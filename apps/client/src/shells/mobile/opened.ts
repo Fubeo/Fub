@@ -8,6 +8,7 @@ import { submitCaptureViaBridge, type CaptureDraft } from "./capture";
 import { registerPersistedGrant, type GrantStore } from "./storage";
 import type { MobileBridge, MobileOpenedUrl, MobileTreeGrant } from "./bridge";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 
 export interface MobileExternalPorts {
   grantStore?: GrantStore;
@@ -154,7 +155,7 @@ export function mountMobileOpenedActions(
           throw new Error(`Azione non supportata: ${action}`);
       }
       queue.shift();
-    })().catch((error: unknown) => notify(String(error), "guasto"))
+    })().catch((error: unknown) => notify(errorText(error), "guasto"))
       .finally(() => {
         busy = false;
         approve.disabled = false;
@@ -167,6 +168,6 @@ export function mountMobileOpenedActions(
       if (lifetime.closed || checked.kind !== event.kind || checked.raw !== event.raw) return;
       queue.push(checked);
       if (queue.length === 1) showNext();
-    }).catch((error: unknown) => notify(String(error), "guasto"));
-  }).then((off) => lifetime.add(off)).catch((error: unknown) => notify(String(error), "guasto"));
+    }).catch((error: unknown) => notify(errorText(error), "guasto"));
+  }).then((off) => lifetime.add(off)).catch((error: unknown) => notify(errorText(error), "guasto"));
 }

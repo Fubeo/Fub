@@ -48,150 +48,6 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     }
     or
 }
-/// A source occurrence of a Markdown footnote. Inline notes own their definition
-/// at the reference site; labelled definitions and references share a label.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FootnoteKind {
-    Reference(String),
-    Definition(String),
-    Inline(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FootnoteOccurrence {
-    pub kind: FootnoteKind,
-    pub span: Span,
-}
-
-/// Extract footnote positions from the Markdown parser, including literal
-/// `^[body]` inline notes and unresolved `[^label]` references which comrak
-/// leaves as text. Scan only parser-owned text nodes: code, HTML, and link
-/// destinations must never become footnotes merely because they contain `[^`.
-pub fn collect_footnotes(source: &str) -> Result<Vec<FootnoteOccurrence>, FormatError> {
-    let offsets = Offsets::new(source);
-    let arena = Arena::new();
-    let options = build_options(&ParseContext::obsidian(""));
-    let root = comrak::parse_document(&arena, text_policy::strip_bom(source), &options);
-    if exceeds_max_depth(root) {
-        return Err(FormatError::Parse(format!(
-            "annidamento del documento oltre {MAX_DEPTH} livelli"
-        )));
-    }
-    let mut found = Vec::new();
-    let mut excluded = Vec::new();
-    let mut pending = vec![root];
-    while let Some(node) = pending.pop() {
-        let span = span_of(node, &offsets);
-        match &node.data.borrow().value {
-            NodeValue::FootnoteReference(f) => found.push(FootnoteOccurrence {
-                kind: FootnoteKind::Reference(f.name.clone()),
-                span,
-            }),
-            NodeValue::FootnoteDefinition(f) => found.push(FootnoteOccurrence {
-                kind: FootnoteKind::Definition(f.name.clone()),
-                span,
-            }),
-            NodeValue::Text(_) => {
-                if let Some(slice) = source.get(span.start..span.end) {
-                    let bytes = slice.as_bytes();
-                    let mut at = 0;
-                    while at + 1 < bytes.len() {
-                        let opener = if bytes[at] == b'^' && bytes[at + 1] == b'[' {
-                            Some(true)
-                        } else if bytes[at] == b'[' && bytes[at + 1] == b'^' {
-                            Some(false)
-                        } else {
-                            None
-                        };
-                        if let Some(inline) = opener {
-                            let start = span.start + at;
-                            if !escaped_at(source.as_bytes(), start) {
-                                // A rich inline footnote can contain emphasis or
-                                // code; its closing bracket may lie beyond this
-                                // text node, but never beyond its block.
-                                let limit = node
-                                    .parent()
-                                    .map(|parent| span_of(parent, &offsets).end)
-                                    .unwrap_or(span.end);
-                                if let Some(end) = footnote_close(source, start + 2, limit) {
-                                    let content = &source[start + 2..end - 1];
-                                    if !content.is_empty() {
-                                        found.push(FootnoteOccurrence {
-                                            kind: if inline {
-                                                FootnoteKind::Inline(content.to_string())
-                                            } else {
-                                                FootnoteKind::Reference(content.to_string())
-                                            },
-                                            span: Span::new(start, end),
-                                        });
-                                        at = end.saturating_sub(span.start);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                        at += 1;
-                    }
-                }
-            }
-            NodeValue::CodeBlock(_)
-            | NodeValue::Code(_)
-            | NodeValue::HtmlBlock(_)
-            | NodeValue::HtmlInline(_)
-            | NodeValue::FrontMatter(_)
-            | NodeValue::Link(_)
-            | NodeValue::Image(_) => {
-                excluded.push(span);
-                continue;
-            }
-            _ => {}
-        }
-        pending.extend(node.children());
-    }
-    collect_definition_lines(source, &excluded, &mut found);
-    found.sort_by_key(|item| (item.span.start, item.span.end));
-    found.dedup_by(|right, left| right.span == left.span);
-    Ok(found)
-}
-
-fn collect_definition_lines(source: &str, excluded: &[Span], found: &mut Vec<FootnoteOccurrence>) {
-    let mut line_start = 0;
-    while line_start < source.len() {
-        let line_end = source[line_start..]
-            .find('\n')
-            .map_or(source.len(), |offset| line_start + offset);
-        let content_end = line_end
-            .checked_sub(1)
-            .filter(|at| source.as_bytes()[*at] == b'\r')
-            .unwrap_or(line_end);
-        if !excluded
-            .iter()
-            .any(|span| line_start < span.end && content_end > span.start)
-        {
-            let line = &source[line_start..content_end];
-            let indent = line.bytes().take_while(|byte| *byte == b' ').count();
-            if indent <= 3 {
-                let candidate = &line[indent..];
-                if let Some(rest) = candidate.strip_prefix("[^") {
-                    if let Some(label_end) = rest.find("]:") {
-                        let label = &rest[..label_end];
-                        if !label.is_empty() && !label.contains(['[', ']']) {
-                            found.push(FootnoteOccurrence {
-                                kind: FootnoteKind::Definition(label.to_string()),
-                                span: Span::new(line_start + indent, content_end),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        if line_end == source.len() {
-            break;
-        }
-        line_start = line_end + 1;
-    }
-}
-
 fn escaped_at(source: &[u8], at: usize) -> bool {
     let mut cursor = at;
     while cursor > 0 && source[cursor - 1] == b'\\' {
@@ -291,11 +147,13 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     // serializer con la stessa mappa vuota, e la riscrittura toglie le due
     // righe di delimitatori invece di ricopiarle.
     let mut frontmatter_present = false;
+    let mut frontmatter_end = 0;
     let mut body: Vec<Block> = Vec::new();
 
     for child in root.children() {
         let value = &child.data.borrow().value;
         if let NodeValue::FrontMatter(raw) = value {
+            frontmatter_end = span_of(child, &offsets).end;
             // Un frontmatter che non si proietta su JSON **non si butta**: resta
             // nel modello come blocco verbatim, e da lì torna sulla sorgente
             // identico a com'era. È contenuto dell'utente, e chi non l'ha capito
@@ -340,6 +198,9 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     // contenitore più profondo che contiene il loro span: il paragrafo che le
     // portava è stato staccato dal pre-pass, e lo span dice dove abitavano.
     insert_definitions(defs, &mut body);
+    if ctx.enabled(syntax::FOOTNOTES) {
+        recover_unreferenced_footnotes(source, frontmatter_end, &mut body);
+    }
 
     Ok(DocumentModel {
         id: DocId::new(ctx.doc_id.clone()),
@@ -352,6 +213,71 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
         text: acc.text.trim().to_string(),
         frontmatter_present,
     })
+}
+
+/// Le definizioni di nota che nessun richiamo usa.
+///
+/// comrak le toglie dall'albero, perché non hanno niente da rendere; nel file
+/// però ci sono, e senza di loro il modello non sa dire «questa nota non è
+/// richiamata da nessuna parte» e `serialize` le perde. Si rileggono dalle
+/// righe che nessun blocco copre, con la forma che comrak riconosce:
+/// `[^etichetta]:` con al più tre spazi di rientro. Entrano marcate
+/// `unreferenced`, in fondo come le altre definizioni, e la resa le salta come
+/// faceva comrak. Il loro testo non entra nella proiezione piatta: non c'era
+/// prima, e la ricerca resta quella di sempre.
+fn recover_unreferenced_footnotes(source: &str, frontmatter_end: usize, body: &mut Vec<Block>) {
+    if !source.contains("[^") {
+        return;
+    }
+    let covered: Vec<Span> = body.iter().map(Block::span).collect();
+    let mut line_start = 0;
+    while line_start < source.len() {
+        let line_end = source[line_start..]
+            .find('\n')
+            .map_or(source.len(), |offset| line_start + offset);
+        let content_end = line_end
+            .checked_sub(1)
+            .filter(|at| *at >= line_start && source.as_bytes()[*at] == b'\r')
+            .unwrap_or(line_end);
+        let free = line_start >= frontmatter_end
+            && !covered
+                .iter()
+                .any(|span| span.start <= line_start && line_start < span.end.max(span.start + 1));
+        if free {
+            let line = &source[line_start..content_end];
+            let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+            let definition = (indent <= 3)
+                .then(|| line[indent..].strip_prefix("[^"))
+                .flatten()
+                .and_then(|rest| rest.find("]:").map(|end| (&rest[..end], &rest[end + 2..])));
+            if let Some((label, rest)) = definition {
+                if !label.is_empty() && !label.contains(['[', ']']) {
+                    let start = line_start + indent;
+                    let text = rest.trim();
+                    let blocks = if text.is_empty() {
+                        Vec::new()
+                    } else {
+                        let at = content_end - rest.trim_start().len();
+                        vec![Block::Paragraph {
+                            inlines: vec![Inline::Text(text.to_string())],
+                            anchor: None,
+                            span: Span::new(at, at + text.len()),
+                        }]
+                    };
+                    body.push(custom(
+                        custom_kind::FOOTNOTE_DEFINITION,
+                        serde_json::json!({ "label": label, "unreferenced": true }),
+                        blocks,
+                        Span::new(start, content_end),
+                    ));
+                }
+            }
+        }
+        if line_end == source.len() {
+            break;
+        }
+        line_start = line_end + 1;
+    }
 }
 
 /// Un paragrafo che è **soltanto** un'ancora: `^abc` su una riga sua.
@@ -1011,13 +937,102 @@ fn convert_inlines<'a>(
     }
     let down = depth.saturating_add(1);
     let mut out = Vec::new();
+    // Una nota in linea con dentro della formattazione (`^[**ricca**]`) per
+    // comrak è testo, un nodo, testo: la si riconosce sul testo che la apre e
+    // si chiude sul testo che contiene la `]`. I nodi in mezzo si convertono
+    // come sempre, perché testo piatto, link e tag restino quelli di prima,
+    // e i loro inline si tolgono: li rappresenta la nota.
+    let node_end = span_of(node, offsets).end;
+    let mut inside_note: Option<usize> = None;
+    let mut swallowed: Option<usize> = None;
     for child in node.children() {
+        if let Some(mark) = swallowed.take() {
+            out.truncate(mark);
+        }
         let span = span_of(child, offsets);
+        if inside_note.is_some_and(|close| span.start >= close) {
+            inside_note = None;
+        }
+        if inside_note.is_some_and(|close| span.end <= close) {
+            swallowed = Some(out.len());
+        }
         let value = child.data.borrow().value.clone();
         match value {
             NodeValue::Text(s) => {
                 let text_base = text_out.len();
                 text_out.push_str(&s);
+                if let Some(slice) = source.get(span.start..span.end) {
+                    if let Some(close) =
+                        inside_note.filter(|close| span.start < *close && *close < span.end)
+                    {
+                        inside_note = None;
+                        let cut = close - span.start;
+                        let head = decode_segment(source, &slice[..cut], span.start);
+                        let mut inside = Vec::new();
+                        let head_slice = &slice[..cut];
+                        push_text_features(
+                            source,
+                            head_slice,
+                            &head,
+                            span.start,
+                            text_base,
+                            ctx,
+                            acc,
+                            &mut inside,
+                        );
+                        let tail = &slice[cut..];
+                        let decoded = decode_segment(source, tail, close);
+                        push_text_features(
+                            source,
+                            tail,
+                            &decoded,
+                            close,
+                            text_base + head.len(),
+                            ctx,
+                            acc,
+                            &mut out,
+                        );
+                        continue;
+                    }
+                    if ctx.enabled(syntax::FOOTNOTES) {
+                        if let Some((open, close)) =
+                            rich_inline_note(child, source, offsets, slice, span, node_end)
+                        {
+                            let head_slice = &slice[..open];
+                            let head = decode_segment(source, head_slice, span.start);
+                            push_text_features(
+                                source, head_slice, &head, span.start, text_base, ctx, acc,
+                                &mut out,
+                            );
+                            let rest = &slice[open..];
+                            let decoded = decode_segment(source, rest, span.start + open);
+                            let mut inside = Vec::new();
+                            push_text_features(
+                                source,
+                                rest,
+                                &decoded,
+                                span.start + open,
+                                text_base + head.len(),
+                                ctx,
+                                acc,
+                                &mut inside,
+                            );
+                            let start = span.start + open;
+                            let body = &source[start + 2..close - 1];
+                            out.push(Inline::Custom {
+                                custom_kind: custom_kind::FOOTNOTE_REFERENCE.to_string(),
+                                attrs: serde_json::json!({
+                                    "label": body,
+                                    "source": body,
+                                    "inline": true,
+                                }),
+                                span: Span::new(start, close),
+                            });
+                            inside_note = Some(close);
+                            continue;
+                        }
+                    }
+                }
                 // Tag ed embed si scandiscono sulla FETTA DI SORGENTE del
                 // nodo, non sul testo decodificato: comrak scioglie escape ed
                 // entità (`\#` → `#`, `&amp;` → `&`) ma la base dello span è
@@ -1242,7 +1257,45 @@ fn convert_inlines<'a>(
             }
         }
     }
+    if let Some(mark) = swallowed {
+        out.truncate(mark);
+    }
     out
+}
+
+/// Una nota in linea `^[…]` che comincia in questo testo e si chiude più
+/// avanti nello stesso blocco, su un testo fratello: `(apertura nella fetta,
+/// fine assoluta)`. Una nota che si chiude nella fetta stessa la legge
+/// [`push_plain_or_tags`]; una `]` che cade dentro un altro costrutto (un
+/// grassetto aperto nella nota e chiuso dopo) non chiude niente.
+fn rich_inline_note<'a>(
+    child: &'a AstNode<'a>,
+    source: &str,
+    offsets: &Offsets<'_>,
+    slice: &str,
+    span: Span,
+    node_end: usize,
+) -> Option<(usize, usize)> {
+    let bytes = slice.as_bytes();
+    let mut at = 0;
+    while at + 1 < bytes.len() {
+        if bytes[at] == b'^' && bytes[at + 1] == b'[' && !is_escaped(source, span.start + at) {
+            let from = span.start + at + 2;
+            if let Some(end) = footnote_close(source, from, span.end) {
+                at = end - span.start;
+                continue;
+            }
+            let close = footnote_close(source, from, node_end)?;
+            let closing = child
+                .following_siblings()
+                .map(|sibling| (sibling, span_of(sibling, offsets)))
+                .find(|(_, sibling)| sibling.start < close && close <= sibling.end)?;
+            let is_text = matches!(closing.0.data.borrow().value, NodeValue::Text(_));
+            return (is_text && close > from + 1).then_some((at, close));
+        }
+        at += 1;
+    }
+    None
 }
 
 /// Divide un frammento di testo in `Text`/`TagRef`, registrando i tag in `acc`.
@@ -1460,23 +1513,37 @@ fn push_plain_or_tags(
 ) -> usize {
     // Inline Obsidian footnotes are text to comrak. Interpret only a complete
     // parser text slice, never code/HTML/link nodes, and retain the source span.
+    //
+    // Lo stesso vale per un richiamo `[^etichetta]` senza definizione: comrak
+    // lo lascia testo, e la resa lo mostra com'è scritto. Nel modello resta un
+    // richiamo, marcato `unresolved`, perché chi elenca le note del documento
+    // (la vista delle note a piè di pagina) deve poter dire «questo richiamo
+    // non porta a niente» senza rileggere la sorgente con una grammatica sua.
     if ctx.enabled(syntax::FOOTNOTES) {
         let bytes = slice.as_bytes();
         let mut at = 0;
         while at + 2 < bytes.len() {
-            if bytes[at] == b'^' && bytes[at + 1] == b'[' && !is_escaped(source, base + at) {
+            let inline = bytes[at] == b'^' && bytes[at + 1] == b'[';
+            let dangling = bytes[at] == b'[' && bytes[at + 1] == b'^';
+            if (inline || dangling) && !is_escaped(source, base + at) {
                 if let Some(end) = footnote_close(source, base + at + 2, base + slice.len()) {
                     let end = end - base;
-                    if end > at + 3 {
+                    let body = &slice[at + 2..end - 1];
+                    let fits = end > at + 3 && (inline || !body.contains(['[', ']']));
+                    if fits {
                         let before = push_plain_or_tags(source, &slice[..at], base, ctx, acc, out);
-                        let body = &slice[at + 2..end - 1];
-                        out.push(Inline::Custom {
-                            custom_kind: custom_kind::FOOTNOTE_REFERENCE.to_string(),
-                            attrs: serde_json::json!({
+                        let attrs = if inline {
+                            serde_json::json!({
                                 "label": decode_segment(source, body, base + at + 2),
                                 "source": body,
                                 "inline": true,
-                            }),
+                            })
+                        } else {
+                            serde_json::json!({ "label": body, "unresolved": true })
+                        };
+                        out.push(Inline::Custom {
+                            custom_kind: custom_kind::FOOTNOTE_REFERENCE.to_string(),
+                            attrs,
                             span: Span::new(base + at, base + end),
                         });
                         let after =
@@ -1850,7 +1917,6 @@ fn recover_definitions<'a>(
     // solo produceva `body: []`. Si rileggono da un'ombra della sorgente a
     // lunghezza uguale in cui comrak non riconosce le definizioni: lì quei
     // paragrafi restano, e la fetta si legge dal vero con lo stesso span.
-    // Definizioni in testa, come le consuma comrak: una dopo l'altra,
     let shadow = shadow_source(source, options.extension.footnotes);
     let arena = Arena::new();
     let shadow_root = comrak::parse_document(&arena, text_policy::strip_bom(&shadow), options);
@@ -1872,23 +1938,23 @@ fn walk_definitions<'a>(
             let Some(slice) = source.get(span.start..span.end) else {
                 return;
             };
+            // Definizioni in testa, come le consuma comrak: una dopo l'altra,
             // finché la riga non comincia più con `[`.
-            // Qui arrivano solo i paragrafi **misti**: quello di sola
             let before = defs.len();
             let pos = definitions_from_slice(slice, span.start, source, defs);
             if defs.len() == before {
                 return;
             }
+            // Qui arrivano solo i paragrafi **misti**: quello di sola
             // definizione comrak lo stacca in `finalize_borrowed`, e lo
             // rilegge l'ombra (`gira_ombra`). Il contenuto residuo comincia
             // alla riga `n`+1, alla colonna del primo byte di contenuto di lì.
-            // Difensivo: comrak ha già staccato il paragrafo vuoto, e se
             let n = terminators_in(&slice[..pos]);
             let remainder = &slice[pos..];
             if remainder.is_empty() {
+                // Difensivo: comrak ha già staccato il paragrafo vuoto, e se
                 // un residuo vuoto arrivasse qui non ci sarebbe nulla da
                 // riscontare.
-                // `row` è la riga sorgente vera: il suo indice nella fetta
                 return;
             }
             let mut sp = node.data.borrow().sourcepos;
@@ -1937,8 +2003,8 @@ fn walk_definitions<'a>(
             }
         }
         _ => {
+            // Gli altri contenitori (footnote, definition list, html…) non
             // aggiungono marcatori di riga propri; i figli si visitano uguale.
-            // Gli span dei paragrafi dell'albero vero, **prima** che la correzione dei
             for child in node.children() {
                 walk_definitions(child, source, offsets, defs, containers);
             }
@@ -1946,10 +2012,9 @@ fn walk_definitions<'a>(
     }
 }
 
+/// Gli span dei paragrafi dell'albero vero, **prima** che la correzione dei
 /// misti li sposti: è contro questi che l'ombra decide se un suo paragrafo è
 /// un paragrafo vero (già letto dal giro principale) o uno staccato da comrak.
-/// L'ombra a lunghezza uguale: ogni `[` diventa una `x`.
-///
 fn paragraph_spans<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &mut Vec<Span>) {
     let value = node.data.borrow().value.clone();
     if matches!(value, NodeValue::Paragraph) {
@@ -1961,6 +2026,8 @@ fn paragraph_spans<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &mut
     }
 }
 
+/// L'ombra a lunghezza uguale: ogni `[` diventa una `x`.
+///
 /// Le reference definition sono l'unico costrutto che comrak consuma dentro un
 /// paragrafo, e le riconosce dal primo carattere: senza `[` i paragrafi di
 /// sola definizione restano paragrafi, con gli **stessi** span — la lunghezza
@@ -1970,8 +2037,6 @@ fn paragraph_spans<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &mut
 /// da recuperare ma un blocco `FootnoteDefinition`, che l'ombra deve
 /// conservare come il vero — sennò una nota tornerebbe come reference
 /// definition.
-// La sostituzione è byte-per-byte a lunghezza uguale, e l'unico byte
-// cambiato è `[` (un byte): la stringa resta UTF-8 valida.
 fn shadow_source(source: &str, footnotes: bool) -> String {
     let b = source.as_bytes();
     let mut shadow = Vec::with_capacity(b.len());
@@ -1982,16 +2047,15 @@ fn shadow_source(source: &str, footnotes: bool) -> String {
             shadow.push(c);
         }
     }
-    // Il giro sull'ombra: legge le definizioni dei paragrafi che nessun paragrafo
-    // vero copre — sono quelli che comrak ha staccato perché di **sola**
+    // La sostituzione è byte-per-byte a lunghezza uguale, e l'unico byte
+    // cambiato è `[` (un byte): la stringa resta UTF-8 valida.
     String::from_utf8(shadow).expect("shadow is a permutation of the source")
 }
 
+/// Il giro sull'ombra: legge le definizioni dei paragrafi che nessun paragrafo
+/// vero copre — sono quelli che comrak ha staccato perché di **sola**
 /// definizione. La fetta si legge dal vero (l'ombra ha gli stessi span), e per
 /// loro non c'è alcun sourcepos da correggere: contenuto residuo non ce n'è.
-// `reali` è ordinato per inizio e disgiunto (pre-order di
-// `span_dei_paragrafi`): il solo candidato a contenere `span` è il
-// primo che non finisce prima di lui.
 fn walk_shadow<'a>(
     node: &'a AstNode<'a>,
     source: &str,
@@ -2002,9 +2066,9 @@ fn walk_shadow<'a>(
     let value = node.data.borrow().value.clone();
     if matches!(value, NodeValue::Paragraph) {
         let span = span_of(node, offsets);
-        // Quante righe hanno consumato le definizioni: il numero di terminatori nella
-        // fetta consumata (`\r\n` è **un** terminatore).
-        // I prefissi di riga del paragrafo: per ogni riga della fetta, quanti byte di
+        // `reali` è ordinato per inizio e disgiunto (pre-order di
+        // `span_dei_paragrafi`): il solo candidato a contenere `span` è il
+        // primo che non finisce prima di lui.
         let idx = real_spans.partition_point(|r| r.end <= span.start);
         if real_spans.get(idx).is_some_and(|r| contains_span(*r, span)) {
             return;
@@ -2019,8 +2083,8 @@ fn walk_shadow<'a>(
     }
 }
 
-/// marcatore e indentazione comrak ha consumato (il suo `line_offsets`, che il
-/// crate tiene privato). `inizio_fetta` è il byte della prima riga nel sorgente.
+/// Quante righe hanno consumato le definizioni: il numero di terminatori nella
+/// fetta consumata (`\r\n` è **un** terminatore).
 fn terminators_in(slice: &str) -> usize {
     let b = slice.as_bytes();
     let mut n = 0;
@@ -2044,10 +2108,11 @@ fn terminators_in(slice: &str) -> usize {
     n
 }
 
-// il terminatore sta fra le righe della fetta? la riga seguente
-// comincia dopo; `righe_di` non lo include.
-/// Le righe di una fetta, senza i terminatori. Restituisce il prefisso
-/// fisico della riga e quello virtuale che `comrak` riflette nei sourcepos.
+/// I prefissi di riga del paragrafo: per ogni riga della fetta, quanti byte di
+/// marcatore e indentazione comrak ha consumato (il suo `line_offsets`, che il
+/// crate tiene privato). `slice_start` è il byte della prima riga nel sorgente.
+/// Restituisce il prefisso fisico della riga e quello virtuale che `comrak`
+/// riflette nei sourcepos.
 fn row_prefixes(
     source: &str,
     slice_start: usize,
@@ -2064,10 +2129,8 @@ fn row_prefixes(
         prefixes.push(physical);
         virtual_prefixes.push(virtual_prefix(row, containers));
         row_start = end;
-        // Quanti byte della riga appartengono ai contenitori (e all'indentazione del
-        // paragrafo): per una riga pigra (citazione che non si apre) il contenuto
-        // reale resta nella stessa posizione fisica, anche se `comrak` ne assume
-        // il marcatore implicito.
+        // il terminatore sta fra le righe della fetta? la riga seguente
+        // comincia dopo; `lines_of` non lo include.
         if row_start < source.len() {
             let was_cr = source.as_bytes()[row_start] == b'\r';
             row_start += 1;
@@ -2079,7 +2142,7 @@ fn row_prefixes(
     (prefixes, virtual_prefixes)
 }
 
-/// comincia al primo byte non bianco.
+/// Le righe di una fetta, senza i terminatori.
 fn lines_of(slice: &str) -> impl Iterator<Item = &str> {
     let mut rest = Some(slice);
     std::iter::from_fn(move || {
@@ -2121,9 +2184,8 @@ fn blockquote_width(source: &str, start: usize) -> usize {
     1 + usize::from(bytes.get(marker + 1) == Some(&b' '))
 }
 
-/// Sposta i sourcepos dei discendenti di un paragrafo misto: righe di `n`,
-/// colonne secondo lo scarto fra il prefisso fisico e quello implicito nei
-/// sourcepos di `comrak`.
+/// I byte della riga che appartengono ai soli contenitori, senza
+/// l'indentazione del paragrafo.
 fn container_prefix(row: &str, containers: &[Container]) -> usize {
     let b = row.as_bytes();
     let mut the = 0;
@@ -2161,6 +2223,10 @@ fn container_prefix(row: &str, containers: &[Container]) -> usize {
     the
 }
 
+/// Quanti byte della riga appartengono ai contenitori (e all'indentazione del
+/// paragrafo): per una riga pigra (citazione che non si apre) il contenuto
+/// reale resta nella stessa posizione fisica, anche se `comrak` ne assume
+/// il marcatore implicito.
 fn row_prefix(row: &str, containers: &[Container]) -> usize {
     let b = row.as_bytes();
     let the = container_prefix(row, containers);
@@ -2211,7 +2277,7 @@ fn virtual_prefix(row: &str, containers: &[Container]) -> usize {
     prefix
 }
 
-/// Una definizione grezza, con la sua estensione consumata (incluso il
+/// La larghezza in byte del marcatore della voce: `- ` → 2, `1. ` → 3.
 fn marker_width(source: &str, offsets: &Offsets<'_>, item: &AstNode<'_>) -> usize {
     let sp = item.data.borrow().sourcepos.start;
     let start = offsets.byte(sp.line, 1);
@@ -2244,8 +2310,9 @@ fn marker_width(source: &str, offsets: &Offsets<'_>, item: &AstNode<'_>) -> usiz
     }
 }
 
-/// terminatore di riga) e le posizioni di url e titolo nella fetta (per la
-/// base di `decodifica_segmento`).
+/// Sposta i sourcepos dei discendenti di un paragrafo misto: righe di `n`,
+/// colonne secondo lo scarto fra il prefisso fisico e quello implicito nei
+/// sourcepos di `comrak`.
 fn shift_descendants<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isize) {
     for child in node.children() {
         shift_node(child, n, delta);
@@ -2268,9 +2335,9 @@ fn shift_node<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isiz
     }
 }
 
-/// Le definizioni in testa a una fetta di paragrafo, decodificate e in `defs`;
-/// restituisce quanti byte (nella fetta) hanno consumato, cioè dove comincia
-/// il contenuto residuo. È il lettore condiviso dal giro vero e dall'ombra.
+/// Una definizione grezza, con la sua estensione consumata (incluso il
+/// terminatore di riga) e le posizioni di url e titolo nella fetta (per la
+/// base di `decodifica_segmento`).
 struct RawDef {
     def: Definition,
     end: usize,
@@ -2278,9 +2345,9 @@ struct RawDef {
     title_start: usize,
 }
 
-// `fine` è già un offset assoluto nella fetta: sommarlo a
-// `pos` raddoppia quanto consumato dalla seconda definizione.
-// La decodifica degli escape e delle entità, con la base nel
+/// Le definizioni in testa a una fetta di paragrafo, decodificate e in `defs`;
+/// restituisce quanti byte (nella fetta) hanno consumato, cioè dove comincia
+/// il contenuto residuo. È il lettore condiviso dal giro vero e dall'ombra.
 fn definitions_from_slice(
     slice: &str,
     base: usize,
@@ -2297,11 +2364,11 @@ fn definitions_from_slice(
                     url_start,
                     title_start,
                 } = d;
-                // sorgente: la stessa regola dei link.
-                // La grammatica è quella di `Parser::parse_reference_inline` di comrak:
+                // `fine` è già un offset assoluto nella fetta: sommarlo a
+                // `pos` raddoppia quanto consumato dalla seconda definizione.
                 pos = end;
-                // `[etichetta]` + `:` + spnl + destinazione + spnl + titolo? + spnl + fine
-                // riga — con il ripiego senza titolo quando il titolo non chiude la riga.
+                // La decodifica degli escape e delle entità, con la base nel
+                // sorgente: la stessa regola dei link.
                 let url = decode_segment(source, &def.url, base + url_start);
                 let title = def
                     .title
@@ -2319,9 +2386,9 @@ fn definitions_from_slice(
     pos
 }
 
-// `titolo_in` restituisce la fine esclusa dopo la chiusura e la fetta
-// senza i delimitatori: l'inizio del **contenuto** è il byte dopo
-// l'apre — `p + 1` — non `fine - t.len()`, che per un contenuto lungo
+/// La grammatica è quella di `Parser::parse_reference_inline` di comrak:
+/// `[etichetta]` + `:` + spnl + destinazione + spnl + titolo? + spnl + fine
+/// riga — con il ripiego senza titolo quando il titolo non chiude la riga.
 fn definition_at(slice: &str, pos: usize, base: usize) -> Option<RawDef> {
     let b = slice.as_bytes();
     let (after_label, label) = label_at(slice, pos)?;
@@ -2334,15 +2401,14 @@ fn definition_at(slice: &str, pos: usize, base: usize) -> Option<RawDef> {
     let before_title = p;
     p = spnl_at(slice, p);
     let (mut title, title_start) = if let Some((end, t)) = title_at(slice, p) {
+        // `titolo_in` restituisce la fine esclusa dopo la chiusura e la fetta
+        // senza i delimitatori: l'inizio del **contenuto** è il byte dopo
+        // l'apre — `p + 1` — non `fine - t.len()`, che per un contenuto lungo
         // L vale `p + 2` (la fine esclusa è `i + 1`, la chiusura sta a `i`).
         // `titolo_inizio` è la base da cui `decodifica_segmento` decide la
         // priorità escape/entità del **primo** carattere del titolo:
         // sbagliata di un byte, `"\"inizio"` legge il vicino sbagliato e
         // l'escape in testa si scioglie o resta a seconda di quello.
-        // Il titolo c'era ma non chiudeva la riga: si ripiega alla
-        // definizione senza titolo, come comrak.
-        // `fine` è la posizione del terminatore di riga (o dell'EOF). Il consumo
-        // del pre-pass include il terminatore; lo span del blocco lo rifila.
         let content_start = p + 1;
         p = end;
         (Some(t), content_start)
@@ -2358,8 +2424,8 @@ fn definition_at(slice: &str, pos: usize, base: usize) -> Option<RawDef> {
         if no_title {
             return None;
         }
-        // `[etichetta]` — il contenuto è rifilato, come in comrak.
-        // La destinazione, nuda o fra `<…>` — come `manual_scan_link_url`.
+        // Il titolo c'era ma non chiudeva la riga: si ripiega alla
+        // definizione senza titolo, come comrak.
         title = None;
         p = before_title;
         end = spaces_at(slice, p);
@@ -2367,8 +2433,8 @@ fn definition_at(slice: &str, pos: usize, base: usize) -> Option<RawDef> {
             return None;
         }
     }
-    // Il titolo fra `"…"`, `'…'` o `(…)` — le parentesi non si annidano.
-    // spnl: spazi/tab, poi al più una fine riga, poi spazi/tab.
+    // `fine` è la posizione del terminatore di riga (o dell'EOF). Il consumo
+    // del pre-pass include il terminatore; lo span del blocco lo rifila.
     let mut consumed = end;
     match b.get(consumed) {
         Some(b'\n') => consumed += 1,
@@ -2401,7 +2467,7 @@ fn definition_at(slice: &str, pos: usize, base: usize) -> Option<RawDef> {
     })
 }
 
-/// Fine riga o fine della fetta (l'EOF conta, come in comrak).
+/// `[etichetta]` — il contenuto è rifilato, come in comrak.
 fn label_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
     let b = slice.as_bytes();
     if b.get(pos) != Some(&b'[') {
@@ -2439,7 +2505,7 @@ fn label_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
     None
 }
 
-/// Inserisce le definizioni nell'albero: il contenitore più profondo che
+/// La destinazione, nuda o fra `<…>` — come `manual_scan_link_url`.
 fn dest_at(slice: &str, pos: usize) -> Option<(usize, &str, usize)> {
     let b = slice.as_bytes();
     if pos >= b.len() {
@@ -2492,7 +2558,7 @@ fn dest_at(slice: &str, pos: usize) -> Option<(usize, &str, usize)> {
     }
 }
 
-/// contiene il loro span, in ordine di sorgente.
+/// Il titolo fra `"…"`, `'…'` o `(…)` — le parentesi non si annidano.
 fn title_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
     let b = slice.as_bytes();
     let (open, close) = match b.get(pos) {
@@ -2541,7 +2607,7 @@ fn spaces_at(slice: &str, mut pos: usize) -> usize {
     pos
 }
 
-/// Fine riga nella fetta.
+/// Fine riga o fine della fetta (l'EOF conta, come in comrak).
 fn eol_at(slice: &str, pos: usize) -> bool {
     pos >= slice.len() || matches!(slice.as_bytes()[pos], b'\n' | b'\r')
 }

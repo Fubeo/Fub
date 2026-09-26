@@ -33,7 +33,9 @@
 mod common;
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandEffect, CommandReach, InvokeMode, ParamKind, UndoStep};
+use fub_abi::command::{
+    CommandEffect, CommandReach, CommandSurface, InvokeMode, ParamKind, UndoStep,
+};
 
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
@@ -124,12 +126,22 @@ fn the_spec_of_a_component_are_in_the_record() {
         assert!(!count.scope.writes, "si è dichiarato di sola lettura");
         assert_eq!(count.scope.reach, CommandReach::Document);
         assert!(count.params.is_empty(), "non chiede niente");
+        assert!(
+            count.surfaces.is_empty(),
+            "solo la palette: {:?}",
+            count.surfaces
+        );
 
         let rich = commands
             .iter()
             .find(|c| c.id == RICH)
             .expect("anche il secondo comando c'è");
         assert_eq!(rich.params.len(), 2, "due parametri: {:?}", rich.params);
+        assert_eq!(
+            rich.surfaces,
+            [CommandSurface::Slash, CommandSurface::SlashSelection],
+            "le superfici dichiarate di là attraversano intere, in ordine"
+        );
 
         let count = &rich.params[0];
         assert_eq!(count.name, "quante");

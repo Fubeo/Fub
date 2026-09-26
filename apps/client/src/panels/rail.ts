@@ -2,23 +2,28 @@
 //
 // Sostituisce la ribbon di prima, che era una barra orizzontale che
 // compariva solo quando una view la dichiarava. La rail è verticale, è
-// sempre lì, e porta le tre icone shell — Note, Cerca, Grafo — prima di
-// quelle che le view dichiarate con `left_sidebar` appendono dopo.
+// sempre lì, e porta le due icone shell — Note, Cerca — prima di quelle
+// delle view dichiarate: le view principali che si aprono senza argomenti,
+// e le view `left_sidebar`.
 //
 // # Perché le icone shell sono qui e non in views.ts
 //
 // `views.ts` scopre le view dal backend e le monta: non sa cosa sia una
 // nota né una ricerca, e non le cablia. La rail invece è **della shell**: i
-// suoi tre bottoni sono la scorciatoia per i tre pannelli che la shell ha
+// suoi due bottoni sono la scorciatoia per i due pannelli che la shell ha
 // sempre avuto. Quindi le icone shell le monta questo modulo, e `views.ts`
 // appende le proprie dopo, nello stesso contenitore `#views-ribbon`.
+//
+// Una view non ha un posto riservato qui: il grafo è una view principale
+// come le altre, e la sua icona c'è finché il suo componente la dichiara.
 //
 // # syncRail
 //
 // Le view dichiarate si scoprono dopo l'apertura del vault
 // (`mountDeclaredViews`), e la rail deve rifletterle. `main.ts` chiama
 // `syncRail()` in coda all'apertura, dopo che `mountDeclaredViews` ha
-// riempito `#views-left`: la rail legge cosa c'è e aggiunge i bottoni.
+// riempito `#views-left` e l'elenco delle view principali: la rail legge
+// cosa c'è e aggiunge i bottoni.
 import { $ } from "../ui/dom";
 import { iconEl } from "../ui/icons";
 import { lastShownPanel, showPanel } from "./sidebar";
@@ -28,19 +33,21 @@ import { setTooltip } from "../ui/tooltip";
 import { showContextMenu } from "../ui/menu";
 import type { ShellGeometry } from "../state/shell-geometry";
 import { settings } from "../host/query";
-import { api } from "../host/ipc";
+import { adoptLegacyChrome, writeChrome } from "../state/machine-chrome";
+import { errorText } from "../host/errors";
+import { Race } from "../ui/race";
 import { notify } from "../ui/notify";
 import type { SettingEntry } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { revealSidePanel, sidePanelVisible, toggleSidePanel } from "../ui/side-panels";
-import { allCommands, displayBinding } from "../ui/commands";
+import { allCommands, ariaBinding, displayBinding } from "../ui/commands";
+import { openPrimaryView, opensWithoutParams, primaryViews } from "../ui/primary-views";
 
 /// Il comando che ogni icona shell esegue, per scriverne l'accordo nel
 /// suggerimento.
 const RAIL_COMMANDS: Record<string, string> = {
   files: "shell.panel.files",
   search: "shell.panel.search",
-  graph: "shell.graph",
 };
 
 /// Il clic su un'icona della rail: mostra il pannello, e se è già quello
@@ -57,9 +64,31 @@ function railClick(panel: string): void {
 const CHROME_VERSION = "chrome.schema";
 const RAIL_VISIBLE = "chrome.rail.visible";
 const RAIL_ORDER = "chrome.rail.order";
+const RAIL_HIDDEN = "chrome.rail.hidden";
+/// Dove stavano ordine e icone nascoste prima di `chrome.*`: si legge una
+/// volta sola, per adottarne le icone nascoste (`state/machine-chrome.ts`).
+const LEGACY_RAIL = "fub.shell.rail.v1";
+/// Ordine e icone nascoste di un workspace applicato: valgono per la sessione
+/// sopra le impostazioni della macchina, che restano la base.
 let geometryOrder: string[] | null = null;
+let geometryHidden: string[] | null = null;
 let chromeOrder: string[] = [];
+let chromeHidden: string[] = [];
 let chromeVisible = true;
+let order: string[] = [];
+let hiddenPanels: string[] = [];
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? [...new Set(value)] : [];
+}
+
+/// Le icone nascoste della chiave di prima; `null` se non ce n'erano.
+function legacyHidden(raw: string): string[] | null {
+  const config = JSON.parse(raw) as unknown;
+  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
+  const hidden = stringList((config as Record<string, unknown>).hidden);
+  return hidden.length > 0 ? hidden : null;
+}
 
 /** Machine chrome settings are versioned. Unknown future versions do not
  * silently apply potentially incompatible layout values. */
@@ -68,34 +97,19 @@ export function applyRailMachineSettings(entries: readonly SettingEntry[]): void
   if (values.get(CHROME_VERSION) !== 1) {
     chromeVisible = true;
     chromeOrder = [];
+    chromeHidden = [];
   } else {
     chromeVisible = values.get(RAIL_VISIBLE) !== false;
-    const ordered = values.get(RAIL_ORDER);
-    chromeOrder = Array.isArray(ordered) && ordered.every((value) => typeof value === "string")
-      ? [...new Set(ordered)] : [];
+    chromeOrder = stringList(values.get(RAIL_ORDER));
+    chromeHidden = stringList(values.get(RAIL_HIDDEN));
   }
   const ribbon = document.getElementById("views-ribbon");
   if (ribbon) {
     ribbon.hidden = !chromeVisible;
     if (!geometryOrder) order = [...chromeOrder];
+    if (!geometryHidden) hiddenPanels = [...chromeHidden];
     arrangeRail();
   }
-}
-
-const RAIL_KEY = "fub.shell.rail.v1";
-let order: string[] = [];
-let hiddenPanels: string[] = [];
-try {
-  const raw = JSON.parse(localStorage.getItem(RAIL_KEY) ?? "null") as unknown;
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const config = raw as Record<string, unknown>;
-    if (Array.isArray(config.order) && config.order.every((v) => typeof v === "string")) order = config.order;
-    if (Array.isArray(config.hidden) && config.hidden.every((v) => typeof v === "string")) hiddenPanels = config.hidden;
-  }
-} catch { /* An unavailable/invalid machine preference is not a vault failure. */ }
-
-function persistRail(): void {
-  try { localStorage.setItem(RAIL_KEY, JSON.stringify({ order, hidden: hiddenPanels })); } catch { /* read-only machine */ }
 }
 
 function railButtons(): HTMLButtonElement[] {
@@ -119,9 +133,23 @@ function arrangeRail(): void {
 export function configureRail(geometry: ShellGeometry): void {
   geometryOrder = geometry.railOrder ? [...geometry.railOrder] : null;
   order = geometryOrder ? [...geometryOrder] : [...chromeOrder];
-  if (geometry.hiddenPanels) hiddenPanels = [...geometry.hiddenPanels];
+  geometryHidden = geometry.hiddenPanels ? [...geometry.hiddenPanels] : null;
+  hiddenPanels = geometryHidden ? [...geometryHidden] : [...chromeHidden];
   arrangeRail();
-  persistRail();
+}
+
+/// Nasconde o mostra icone, e lo ricorda sulla macchina come l'ordine.
+function setHiddenPanels(next: string[]): void {
+  const previous = [...hiddenPanels];
+  hiddenPanels = next;
+  geometryHidden = [...next];
+  arrangeRail();
+  void writeChrome(RAIL_HIDDEN, [...next]).catch((error: unknown) => {
+    hiddenPanels = previous;
+    geometryHidden = [...previous];
+    arrangeRail();
+    notify(t("rail.hidden_failed", { reason: errorText(error) }), "guasto");
+  });
 }
 
 function manageRail(at: MouseEvent, selected?: string): void {
@@ -132,9 +160,7 @@ function manageRail(at: MouseEvent, selected?: string): void {
     const name = names[index]!;
     return [
       { separator: index > 0, label: t(button.hidden ? "rail.show" : "rail.hide", { name }), run: () => {
-        hiddenPanels = button.hidden ? hiddenPanels.filter((value) => value !== id) : [...hiddenPanels, id];
-        arrangeRail();
-        persistRail();
+        setHiddenPanels(button.hidden ? hiddenPanels.filter((value) => value !== id) : [...hiddenPanels, id]);
       } },
       ...(index > 0 ? [{ label: t("rail.move_up", { name }), run: () => shiftRail(id, -1) }] : []),
       ...(index < buttons.length - 1 ? [{ label: t("rail.move_down", { name }), run: () => shiftRail(id, 1) }] : []),
@@ -150,13 +176,11 @@ function shiftRail(id: string, delta: number): void {
   [order[at], order[to]] = [order[to]!, order[at]!];
   geometryOrder = [...order];
   arrangeRail();
-  persistRail();
-  void api.setSetting(RAIL_ORDER, [...order]).catch((error: unknown) => {
+  void writeChrome(RAIL_ORDER, [...order]).catch((error: unknown) => {
     order = previous;
     geometryOrder = [...previous];
     arrangeRail();
-    persistRail();
-    notify(t("rail.order_failed", { reason: String(error) }), "guasto");
+    notify(t("rail.order_failed", { reason: errorText(error) }), "guasto");
   });
   railButtons().find((button) => button.dataset.panel === id)?.focus();
 }
@@ -179,9 +203,7 @@ function wireConfiguration(button: HTMLButtonElement): void {
   });
 }
 
-/// Le tre icone shell, nell'ordine canonico. Il grafo è uno di loro, e
-// conserva il suo id `#show-graph` — `mountGraph` ascolta quell'id, e non
-// va toccato.
+/// Le due icone shell, nell'ordine canonico.
 const SHELL = [
   { id: "files", icon: "notes", label: "rail.notes", hint: "rail.notes.hint" },
   { id: "search", icon: "search", label: "rail.search", hint: "rail.search.hint" },
@@ -192,16 +214,22 @@ const SHELL = [
 export function mountRail(): Teardown {
   const shell = $("#rail-shell");
   let disposed = false;
-  const readChrome = async () => {
-    try {
-      const entries = await settings();
-      if (!disposed) applyRailMachineSettings(entries);
-    } catch {
-      // A machine configuration without a vault may not yet be available.
-    }
-  };
+  const reads = new Race();
+  const readChrome = () => reads.last(async (expected) => {
+    // A machine configuration without a vault may not yet be available.
+    let entries = await expected(settings().catch(() => null));
+    if (!entries) return;
+    const hidden = await expected(adoptLegacyChrome(
+      LEGACY_RAIL,
+      entries.find((entry) => entry.spec.key === RAIL_HIDDEN),
+      legacyHidden,
+    ));
+    if (hidden) entries = entries.map((entry) => entry.spec.key === RAIL_HIDDEN ? { ...entry, value: hidden } : entry);
+    if (!disposed) applyRailMachineSettings(entries);
+  });
   const offSetting = onEvent("setting_changed", (event) => {
-    if (event.key === CHROME_VERSION || event.key === RAIL_VISIBLE || event.key === RAIL_ORDER) {
+    if (event.key === CHROME_VERSION || event.key === RAIL_VISIBLE || event.key === RAIL_ORDER
+      || event.key === RAIL_HIDDEN) {
       void readChrome();
     }
   });
@@ -219,15 +247,6 @@ export function mountRail(): Teardown {
     shell.append(btn);
   }
 
-  // Il grafo è un bottone shell ma conserva il suo id storico: `mountGraph`
-  // ascolta `#show-graph`, e l'handler è di là. Qui lo creiamo con quell'id
-  // e non attacchiamo un listener nostro — il suo click lo gestisce `graph.ts`.
-  const graph = createRailButton("graph", "rail.graph", "rail.graph.hint");
-  graph.id = "show-graph";
-  shell.append(graph);
-  graph.dataset.panel = "graph";
-  wireConfiguration(graph);
-
   const manage = document.createElement("button");
   manage.type = "button";
   manage.className = "rail-btn rail-btn-manage";
@@ -243,6 +262,7 @@ export function mountRail(): Teardown {
   const offLanguage = onLanguage(() => updateLabel());
   return () => {
     disposed = true;
+    reads.cancel();
     offSetting();
     offLanguage();
   };
@@ -270,9 +290,12 @@ function updateLabel(): void {
 export function labelRailButton(btn: HTMLElement, name: string, panel?: string): void {
   btn.setAttribute("aria-label", name);
   const id = panel ? RAIL_COMMANDS[panel] : undefined;
-  const chord = id ? displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null) : "";
+  const binding = id ? allCommands().find((entry) => entry.id === id)?.binding ?? null : null;
+  const chord = displayBinding(binding);
   setTooltip(btn, chord ? `${name} (${chord})` : name);
-  if (chord) btn.setAttribute("aria-keyshortcuts", chord);
+  // Il suggerimento si legge (`⌘⇧E`), l'attributo si annuncia (`Meta+Shift+E`).
+  const aria = ariaBinding(binding);
+  if (aria) btn.setAttribute("aria-keyshortcuts", aria);
   else btn.removeAttribute("aria-keyshortcuts");
 }
 
@@ -281,18 +304,36 @@ export function refreshRailShortcuts(): void {
   updateLabel();
 }
 
-/// Riscopre le view `left_sidebar` montate in `#views-left` e aggiunge un
-/// bottone rail per ciascuna. Da chiamare dopo `mountDeclaredViews`.
+/// Riscopre le view dichiarate e aggiunge un bottone rail per ciascuna: prima
+/// le view principali che si aprono senza argomenti, poi le view
+/// `left_sidebar` montate in `#views-left`. Da chiamare dopo
+/// `mountDeclaredViews`.
 ///
-/// Non cabla id di feature: legge il DOM di `#views-left`, che
-/// `mountDeclaredViews` riempie con i pannelli delle view dichiarate. Ogni
-/// pannello ha `data-view-id` e un titolo; la rail ne fa un bottone icona.
+/// Non cabla id di feature: le view principali le legge dall'elenco che
+/// `mountDeclaredViews` scrive, quelle di barra dal DOM di `#views-left`, che
+/// riempie con i loro pannelli. Ogni pannello ha `data-view-id` e un titolo;
+/// la rail ne fa un bottone icona.
 export function syncRail(): void {
   const ribbon = $("#views-ribbon");
   // Rimuove i bottoni delle view dichiarate di un eventuale giro precedente:
   // le icone shell (dentro `#rail-shell`) non si toccano.
   for (const old of ribbon.querySelectorAll(".rail-btn-view")) {
     old.remove();
+  }
+  // Una view principale non è un pannello della barra: il clic la apre nel
+  // riquadro col fuoco, come la palette e un `OpenView`, e il bottone non ha
+  // uno stato «premuto» — la linguetta è nel riquadro, non qui.
+  for (const spec of primaryViews()) {
+    if (!opensWithoutParams(spec)) continue;
+    const btn = createRailButton(spec.icon ?? "outline", "rail.notes", "rail.notes.hint");
+    btn.classList.add("rail-btn-view", "rail-btn-main");
+    btn.dataset.panel = spec.id;
+    btn.dataset.label = spec.title;
+    btn.dataset.hint = spec.title;
+    labelRailButton(btn, spec.title);
+    btn.addEventListener("click", () => openPrimaryView(spec.id));
+    ribbon.append(btn);
+    wireConfiguration(btn);
   }
   const viewsLeft = $("#views-left");
   for (const panel of viewsLeft.querySelectorAll<HTMLElement>(

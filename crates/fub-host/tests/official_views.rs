@@ -35,11 +35,17 @@
 //! niente — è lo stato in cui sta il versioning spento (§11.1) — e una view può
 //! comparire da un bundle che con l'inventario non c'entra. Sono due domande, e
 //! vanno fatte tutte e due.
+//!
+//! Un terzo giro guarda ciò che una riga dichiara oltre ai provider: le
+//! impostazioni arrivano al bundle montato, e un servizio richiesto che manca
+//! tiene fuori chi lo richiede. Il ciclo di mount non confronta id, quindi
+//! queste proprietà discendono dalla riga o non ci sono.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
+use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_host::CORE_ID;
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
 
@@ -154,5 +160,97 @@ fn mounted_views_are_exactly_the_inventory_views() {
         missing.is_empty(),
         "these views are in the inventory but not mounted: {missing:?}\n\
          Either the mount loop no longer picks them up, or their bundle did not register"
+    );
+}
+
+fn declared_plugins(mounted: &fub_host::Mounted) -> BTreeSet<String> {
+    mounted
+        .workspace
+        .plugins()
+        .into_iter()
+        .map(|plugin| plugin.id)
+        .collect()
+}
+
+#[test]
+fn declared_settings_reach_the_mounted_bundle() {
+    let (_dir, root) = vault();
+    let mounted = mount(&root);
+
+    let mut checked = 0;
+    for feature in fub_features::every_official_feature() {
+        let Some(build) = feature.settings else {
+            continue;
+        };
+        let promised: BTreeSet<String> = build().into_iter().map(|spec| spec.key).collect();
+        let entries = match mounted.workspace.query_index(IndexQuery::Settings {
+            plugin: Some(feature.id.to_string()),
+        }) {
+            Ok(IndexResult::Settings(entries)) => entries,
+            other => panic!("settings of `{}` answered {other:?}", feature.id),
+        };
+        let mounted_keys: BTreeSet<String> =
+            entries.into_iter().map(|entry| entry.spec.key).collect();
+        let missing: Vec<&String> = promised.difference(&mounted_keys).collect();
+        assert!(
+            missing.is_empty(),
+            "`{}` declares {missing:?} in the inventory but its mounted bundle does not",
+            feature.id
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "no row declares settings: a guard that iterates zero elements always passes"
+    );
+}
+
+#[test]
+fn a_required_service_that_is_off_keeps_its_dependent_out() {
+    let features = fub_features::every_official_feature();
+    let mut checked = 0;
+    for dependent in features
+        .iter()
+        .filter(|feature| !feature.requires.is_empty())
+    {
+        let providers: Vec<&str> = features
+            .iter()
+            .filter(|feature| {
+                feature
+                    .provides
+                    .iter()
+                    .any(|service| dependent.requires.contains(service))
+            })
+            .map(|feature| feature.id)
+            .collect();
+        assert!(
+            !providers.is_empty(),
+            "`{}` requires {:?} and no row provides it",
+            dependent.id,
+            dependent.requires
+        );
+
+        let (_dir, root) = vault();
+        std::fs::create_dir_all(root.join(".fub")).unwrap();
+        std::fs::write(
+            root.join(".fub").join("settings.json"),
+            serde_json::json!({"version": 1, "values": {"plugins.disabled": providers}})
+                .to_string(),
+        )
+        .unwrap();
+        let declared = declared_plugins(&mount(&root));
+        for provider in &providers {
+            assert!(!declared.contains(*provider), "`{provider}` is disabled");
+        }
+        assert!(
+            !declared.contains(dependent.id),
+            "`{}` mounted although {providers:?}, which provide what it requires, are off",
+            dependent.id
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "no row requires a service: a guard that iterates zero elements always passes"
     );
 }

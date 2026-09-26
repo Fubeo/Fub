@@ -212,29 +212,60 @@ fn crc32(data: &[u8]) -> u32 {
     !crc
 }
 
-/// Extract and validate one entry body.
-///
-/// `total_so_far` is the running archive total; exceeding
-/// [`MAX_TOTAL_UNCOMPRESSED`] (or the ratio check on large entries) is
-/// `BadArgs`, which aborts the whole import — a bomb is not one bad entry.
+/// Why one entry could not be extracted, decided where it happens: the
+/// importer stops or keeps going on this, never on the message text, which
+/// quotes the entry name (I73).
+#[derive(Debug)]
+pub enum EntryFailure {
+    /// This entry only (encrypted, truncated, corrupt, CRC, unsupported
+    /// method): the rest of the archive can still be imported.
+    Entry(PluginError),
+    /// The whole archive (a bomb, the total budget): the import stops — a
+    /// bomb is not one bad entry.
+    Archive(PluginError),
+}
+
+impl EntryFailure {
+    pub fn into_error(self) -> PluginError {
+        match self {
+            EntryFailure::Entry(error) | EntryFailure::Archive(error) => error,
+        }
+    }
+}
+
+/// Extract and validate one entry body, for an importer that treats any
+/// failure alike. See [`extract_entry`].
 pub fn extract(
     data: &[u8],
     entry: &ZipEntry,
     total_so_far: &mut u64,
 ) -> Result<Vec<u8>, PluginError> {
+    extract_entry(data, entry, total_so_far).map_err(EntryFailure::into_error)
+}
+
+/// Extract and validate one entry body.
+///
+/// `total_so_far` is the running archive total; exceeding
+/// [`MAX_TOTAL_UNCOMPRESSED`] (or the ratio check on large entries) is
+/// [`EntryFailure::Archive`]; everything else is [`EntryFailure::Entry`].
+pub fn extract_entry(
+    data: &[u8],
+    entry: &ZipEntry,
+    total_so_far: &mut u64,
+) -> Result<Vec<u8>, EntryFailure> {
     if entry.encrypted {
-        return Err(bad_args(format!(
+        return Err(EntryFailure::Entry(bad_args(format!(
             "ZIP entry `{}` is encrypted: re-export it without a password",
             entry.name
-        )));
+        ))));
     }
     if entry.uncompressed_size > MAX_ENTRY_BYTES && entry.uncompressed_size != 0 {
-        return Err(bad_args(format!(
+        return Err(EntryFailure::Entry(bad_args(format!(
             "ZIP entry `{}` declares {} bytes (max {MAX_ENTRY_BYTES})",
             entry.name, entry.uncompressed_size
-        )));
+        ))));
     }
-    let (declared, body, descriptor) = entry_body(data, entry)?;
+    let (declared, body, descriptor) = entry_body(data, entry).map_err(EntryFailure::Entry)?;
     let out = match entry.method {
         0 => {
             if descriptor {
@@ -242,10 +273,10 @@ pub fn extract(
                 // archive budget.
                 let cap = MAX_TOTAL_UNCOMPRESSED.saturating_sub(*total_so_far);
                 if body.len() as u64 > cap.min(MAX_ENTRY_BYTES) {
-                    return Err(bad_args(format!(
+                    return Err(EntryFailure::Archive(bad_args(format!(
                         "ZIP entry `{}` exceeds the archive budget",
                         entry.name
-                    )));
+                    ))));
                 }
                 body.to_vec()
             } else {
@@ -268,24 +299,29 @@ pub fn extract(
                 declared.min(MAX_ENTRY_BYTES)
             };
             if cap == 0 {
-                return Err(bad_args("ZIP archive exceeds the 256 MiB total budget"));
+                return Err(EntryFailure::Archive(bad_args(
+                    "ZIP archive exceeds the 256 MiB total budget",
+                )));
             }
             let mut out = Vec::new();
             let mut input = body;
             let mut buf = vec![0u8; 256 * 1024];
             loop {
                 if out.len() as u64 > cap {
-                    return Err(bad_args(format!(
+                    return Err(EntryFailure::Entry(bad_args(format!(
                         "ZIP entry `{}` exceeds {} bytes after inflation",
                         entry.name, cap
-                    )));
+                    ))));
                 }
                 let before_in = de.total_in();
                 let before_out = de.total_out();
                 let status = de
                     .decompress(input, &mut buf, FlushDecompress::None)
                     .map_err(|e| {
-                        io_error(format!("ZIP inflate failed for `{}`: {e}", entry.name))
+                        EntryFailure::Entry(io_error(format!(
+                            "ZIP inflate failed for `{}`: {e}",
+                            entry.name
+                        )))
                     })?;
                 let used_in = (de.total_in() - before_in) as usize;
                 let made = (de.total_out() - before_out) as usize;
@@ -301,10 +337,10 @@ pub fn extract(
                                 let s = de
                                     .decompress(&[], &mut buf, FlushDecompress::Finish)
                                     .map_err(|e| {
-                                        io_error(format!(
+                                        EntryFailure::Entry(io_error(format!(
                                             "ZIP inflate failed for `{}`: {e}",
                                             entry.name
-                                        ))
+                                        )))
                                     })?;
                                 let made2 = (de.total_out() - before_out) as usize
                                     - made.min((de.total_out() - before_out) as usize);
@@ -315,20 +351,20 @@ pub fn extract(
                                 }
                             }
                             if !done {
-                                return Err(bad_args(format!(
+                                return Err(EntryFailure::Entry(bad_args(format!(
                                     "ZIP entry `{}` ends mid-stream",
                                     entry.name
-                                )));
+                                ))));
                             }
                             break;
                         }
                     }
                 }
                 if out.len() as u64 > cap {
-                    return Err(bad_args(format!(
+                    return Err(EntryFailure::Entry(bad_args(format!(
                         "ZIP entry `{}` exceeds {} bytes after inflation",
                         entry.name, cap
-                    )));
+                    ))));
                 }
             }
             // Ratio check on large outputs: legitimate text rarely exceeds
@@ -338,42 +374,44 @@ pub fn extract(
                 && out.len() as u64 >= BOMB_MIN_BYTES
                 && out.len() as u64 / (body.len().max(1) as u64) > BOMB_RATIO
             {
-                return Err(bad_args(format!(
+                return Err(EntryFailure::Archive(bad_args(format!(
                     "ZIP entry `{}` looks like a compression bomb ({}x)",
                     entry.name,
                     out.len() / body.len().max(1)
-                )));
+                ))));
             }
             out
         }
         m => {
-            return Err(bad_args(format!(
+            return Err(EntryFailure::Entry(bad_args(format!(
                 "ZIP entry `{}` uses unsupported method {m}",
                 entry.name
-            )));
+            ))));
         }
     };
     if !descriptor {
         if out.len() as u64 != entry.uncompressed_size && entry.uncompressed_size != 0 {
-            return Err(bad_args(format!(
+            return Err(EntryFailure::Entry(bad_args(format!(
                 "ZIP entry `{}` inflated to {} bytes, declared {}",
                 entry.name,
                 out.len(),
                 entry.uncompressed_size
-            )));
+            ))));
         }
         if entry.crc32 != 0 && crc32(&out) != entry.crc32 {
-            return Err(bad_args(format!(
+            return Err(EntryFailure::Entry(bad_args(format!(
                 "ZIP entry `{}` fails its CRC check",
                 entry.name
-            )));
+            ))));
         }
     }
-    *total_so_far = total_so_far
-        .checked_add(out.len() as u64)
-        .ok_or_else(|| bad_args("ZIP archive exceeds the 256 MiB total budget"))?;
+    *total_so_far = total_so_far.checked_add(out.len() as u64).ok_or_else(|| {
+        EntryFailure::Archive(bad_args("ZIP archive exceeds the 256 MiB total budget"))
+    })?;
     if *total_so_far > MAX_TOTAL_UNCOMPRESSED {
-        return Err(bad_args("ZIP archive exceeds the 256 MiB total budget"));
+        return Err(EntryFailure::Archive(bad_args(
+            "ZIP archive exceeds the 256 MiB total budget",
+        )));
     }
     Ok(out)
 }

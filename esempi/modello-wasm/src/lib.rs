@@ -83,14 +83,14 @@ impl Guest for Componente {
         match job.as_str() {
             // Il documento buono: si chiede il modello e si risponde con ciò
             // che ci si è trovato dentro.
-            "modello" => Ok(referto(&fub::abi::host_vault_read::read_model(
+            "demo.modello:modello" => Ok(referto(&fub::abi::host_vault_read::read_model(
                 "Modello.md",
             )?)),
             // Il documento malato: qui non c'è niente da riferire, perché
             // `read-model` **non risponde**. Il `?` lascia passare il rifiuto
             // dell'host così com'è, ed è quello che il test vuole vedere
             // arrivare fin qui: un errore che si legge, non un'istanza abbattuta.
-            "modello-profondo" => Ok(referto(&fub::abi::host_vault_read::read_model(
+            "demo.modello:modello-profondo" => Ok(referto(&fub::abi::host_vault_read::read_model(
                 "Profondo.md",
             )?)),
             altro => Err(PluginError::UnknownJob(fub::abi::text::Text::Literal(

@@ -1,15 +1,15 @@
 //! Generic registry entry points for staged imports and portable exports.
 //! Command invocation only validates and queues; the plugin runner owns I/O.
+//! The importer and the exporter are the ones the host has registered
+//! (`HostServices::run_import` / `run_export`), not a list carried here: a
+//! third-party provider takes part in the same dispatch as the bundled ones.
 
 use fub_abi::command::{
     CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::text::Text;
 use fub_abi::traits::{HostApi, JobProgress, JobSpec};
-use fub_abi::transfer::{
-    ArtifactHandle, ArtifactSink, ExportArtifact, ExportRequest, ImportMode, ImportRequest,
-    ImportSource, SourceContent,
-};
+use fub_abi::transfer::{ExportRequest, ImportMode, ImportRequest, ImportSource, SourceContent};
 use fub_abi::PluginError;
 
 use crate::common::bad_args;
@@ -134,9 +134,10 @@ pub fn invoke(
     } else if command == EXPORT_RUN {
         let request: ExportRequest = serde_json::from_str(required(&args, "request_json")?)
             .map_err(|e| bad_args(format!("request_json is not an ExportRequest: {e}")))?;
-        if !export_providers()
+        if !host
+            .export_targets()?
             .iter()
-            .any(|p| p.targets().iter().any(|t| t.id == request.target))
+            .any(|t| t.id == request.target)
         {
             return Err(bad_args(format!(
                 "unknown export target `{}`",
@@ -162,24 +163,6 @@ pub fn invoke(
     ))))
 }
 
-fn import_provider(
-    source: &ImportSource,
-) -> Result<Box<dyn fub_abi::transfer::ImportProvider>, PluginError> {
-    let markdown = fub_format_markdown::MarkdownImport::boxed();
-    if markdown.can_handle(source) {
-        return Ok(markdown);
-    }
-    crate::import_providers()
-        .into_iter()
-        .find(|p| p.can_handle(source))
-        .ok_or_else(|| bad_args(format!("no importer accepts `{}`", source.name)))
-}
-fn export_providers() -> Vec<Box<dyn fub_abi::transfer::ExportProvider>> {
-    let mut providers = vec![fub_format_markdown::MarkdownExport::boxed()];
-    providers.extend(crate::export_providers());
-    providers
-}
-
 pub fn run_job(
     job: &str,
     payload: serde_json::Value,
@@ -201,28 +184,14 @@ pub fn run_job(
                 .map_err(|e| bad_args(format!("invalid job source: {e}")))?;
             let request: ImportRequest = serde_json::from_value(payload["request"].clone())
                 .map_err(|e| bad_args(format!("invalid job request: {e}")))?;
-            let mut provider = import_provider(&source)?;
             let now_ms = host.now_unix_millis();
-            result(StagingManifest::prepare(
-                name,
-                &source,
-                &request,
-                provider.as_mut(),
-                host,
-                now_ms,
+            result(StagingManifest::prepare_registered(
+                name, &source, &request, host, now_ms,
             )?)?
         }
         "commit" => {
             let name = required(&payload, "job")?;
-            let manifest = StagingManifest::load(name, host)?;
-            let bytes = manifest.verify(host)?;
-            let source = ImportSource {
-                name: manifest.source_name,
-                media_type: manifest.media_type,
-                content: SourceContent::Bytes(bytes),
-            };
-            let mut provider = import_provider(&source)?;
-            result(crate::migration::commit(name, provider.as_mut(), host)?)?
+            result(crate::migration::commit_registered(name, host)?)?
         }
         "cancel" => {
             StagingManifest::cancel(required(&payload, "job")?, host)?;
@@ -235,12 +204,7 @@ pub fn run_job(
         "export" => {
             let request: ExportRequest = serde_json::from_value(payload["request"].clone())
                 .map_err(|e| bad_args(format!("invalid export request: {e}")))?;
-            let provider = export_providers()
-                .into_iter()
-                .find(|p| p.targets().iter().any(|t| t.id == request.target))
-                .ok_or_else(|| bad_args(format!("unknown export target `{}`", request.target)))?;
-            let mut sink = BoundedSink::default();
-            result(provider.export(&request, host, &mut sink)?)?
+            result(host.run_export(&request)?)?
         }
         _ => return Err(bad_args(format!("unknown transfer job operation `{op}`"))),
     };
@@ -250,64 +214,4 @@ pub fn run_job(
         label: Some(format!("{op} complete")),
     });
     Ok(value)
-}
-
-#[derive(Default)]
-struct BoundedSink {
-    artifacts: Vec<Option<(String, String, Vec<u8>)>>,
-    bytes: usize,
-}
-impl ArtifactSink for BoundedSink {
-    fn open_artifact(
-        &mut self,
-        path: &str,
-        media_type: &str,
-    ) -> Result<ArtifactHandle, PluginError> {
-        if path.is_empty()
-            || path.starts_with('/')
-            || path
-                .split('/')
-                .any(|p| p.is_empty() || p == "." || p == "..")
-        {
-            return Err(bad_args("export artifact path is not portable"));
-        }
-        self.artifacts
-            .push(Some((path.to_string(), media_type.to_string(), Vec::new())));
-        Ok(ArtifactHandle(self.artifacts.len() as u64))
-    }
-    fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
-        let next = self
-            .bytes
-            .checked_add(bytes.len())
-            .ok_or_else(|| bad_args("export exceeds 32 MiB"))?;
-        if next > 32 * 1024 * 1024 {
-            return Err(bad_args("export exceeds 32 MiB; select fewer documents"));
-        }
-        let entry = self
-            .artifacts
-            .get_mut(
-                handle
-                    .0
-                    .checked_sub(1)
-                    .ok_or_else(|| bad_args("invalid export handle"))? as usize,
-            )
-            .and_then(Option::as_mut)
-            .ok_or_else(|| bad_args("export handle already closed"))?;
-        entry.2.extend_from_slice(bytes);
-        self.bytes = next;
-        Ok(())
-    }
-    fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
-        let entry = self
-            .artifacts
-            .get_mut(
-                handle
-                    .0
-                    .checked_sub(1)
-                    .ok_or_else(|| bad_args("invalid export handle"))? as usize,
-            )
-            .and_then(Option::take)
-            .ok_or_else(|| bad_args("export handle already closed"))?;
-        Ok(ExportArtifact::bytes(entry.0, entry.1, entry.2))
-    }
 }

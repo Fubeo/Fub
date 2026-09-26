@@ -8,10 +8,12 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, LinkRewrite,
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, LinkInsert, LinkRewrite,
     ParseContext, RenderOptions, RenderTarget,
 };
-use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, LinkTarget, Span};
+use fub_abi::model::{
+    Block, DocId, DocumentModel, Frontmatter, Inline, LinkTarget, Span, TaskMarker,
+};
 use fub_abi::traits::ViewInstance;
 use fub_abi::PluginError;
 use fub_abi::Text;
@@ -439,6 +441,53 @@ fn installed_wasm_format_crosses_parse_and_render_routes() {
     host.close();
 }
 
+/// Disabilitare il plugin spegne il suo parser nel vault aperto: il registro
+/// dei formati resta quello dell'apertura, ma il codice del plugin non gira più
+/// (I69). Alla riapertura, riacceso, il formato torna a servire.
+#[test]
+fn disabling_the_plugin_retires_its_format_in_the_open_vault() {
+    let vault = Vault::new();
+    let (manager, host) = enabled_manager(&vault);
+    let doc = DocId::new(FILE);
+    host.read_model(None, &doc)
+        .expect("the enabled format parses");
+    let installation = manager
+        .list(&host, None)
+        .expect("inventory")
+        .into_iter()
+        .find(|plugin| plugin.bundle.id == ID)
+        .expect("installed")
+        .installation;
+
+    manager
+        .set_enabled(&host, installation, false)
+        .expect("disabling persists");
+    let error = host
+        .read_model(None, &doc)
+        .expect_err("a disabled plugin no longer parses");
+    assert!(
+        error.to_string().contains("ritirato"),
+        "the refusal names the retirement: {error}"
+    );
+    assert!(host.render_preview(None, &doc).is_err(), "nor renders");
+
+    manager
+        .set_enabled(&host, installation, true)
+        .expect("enabling persists");
+    assert!(
+        host.read_model(None, &doc).is_err(),
+        "the retired provider stays off until the vault reopens"
+    );
+    host.close_vault(&vault.root).expect("session closes");
+    host.open(&vault.root).expect("session reopens");
+    host.wait_indexed(None).expect("indexed");
+    let model = host
+        .read_model(None, &doc)
+        .expect("reopened, the enabled format parses again");
+    assert_eq!(model.text, SOURCE);
+    host.close();
+}
+
 #[test]
 fn stateful_wasm_format_observes_plugin_activation_on_same_opening() {
     let vault = Vault::new();
@@ -592,6 +641,57 @@ fn format_links_guest_rewrites_source_without_flattening_surrounding_syntax() {
         provider.rewrite_links(&DocumentSource::Text(source.into()), &context, &[stale]),
         Err(FormatError::Parse(_))
     ));
+}
+
+#[test]
+fn format_edits_guest_writes_links_and_declines_tasks() {
+    let wasm = common::component("format-wasm", "format_wasm", "");
+    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("format component loads");
+    let provider = bundle
+        .format_provider()
+        .expect("format provider prepares")
+        .expect("guest exports format");
+    let context = ParseContext::bare("links.fubfmt");
+    let link = LinkInsert {
+        target: LinkTarget::wiki("Kant"),
+        label: Some("il filosofo".into()),
+        embed: true,
+    };
+    assert_eq!(
+        provider
+            .format_link(&context, &link)
+            .expect("il componente risponde"),
+        Some("![[Kant|il filosofo]]".to_string())
+    );
+    let path = LinkInsert {
+        target: LinkTarget::Path("a.png".into()),
+        label: None,
+        embed: false,
+    };
+    assert_eq!(
+        provider.format_link(&context, &path).expect("risposta"),
+        None,
+        "«non so scriverlo» attraversa il confine come tale"
+    );
+    let broken = LinkInsert {
+        target: LinkTarget::wiki("a|b"),
+        label: None,
+        embed: false,
+    };
+    assert!(matches!(
+        provider.format_link(&context, &broken),
+        Err(FormatError::Serialize(_))
+    ));
+    let marker = TaskMarker {
+        symbol: None,
+        span: Span { start: 3, end: 4 },
+    };
+    assert_eq!(
+        provider
+            .set_task_state(&DocumentSource::Text("- [ ] x".into()), &marker, true)
+            .expect("risposta"),
+        None
+    );
 }
 
 fn assert_bad_variant_is_recoverable(variant: &str) {

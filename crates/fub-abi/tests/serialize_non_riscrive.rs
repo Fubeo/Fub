@@ -95,6 +95,7 @@ const THE_GUARANTEE: &str = "Il kernel non riscrive mai un file esistente passan
 /// dipende da `rustfmt` e dalla larghezza della colonna: cercarla come sta
 /// scritta vorrebbe dire un presidio che diventa rosso quando qualcuno aggiunge
 /// una parola tre righe più su. Ciò che si presidia è la **frase**, non
+/// l'impaginazione.
 fn prose_normalized(source: &str) -> String {
     let mut out = String::new();
     for line in source.lines() {
@@ -116,19 +117,18 @@ fn prose_normalized(source: &str) -> String {
     out
 }
 
-// l'impaginazione.
 // ---------------------------------------------------------------------------
 // Le ragioni
-
 // ---------------------------------------------------------------------------
+
 /// **Perché quel punto di codice può nominare `serialize`.**
 ///
 /// Sono due, e nessuna delle due è «sto modificando un documento». Se la ragione
 /// che ti serve non è qui dentro, la risposta quasi sempre non è aggiungerne una
 /// terza: è che quella modifica va fatta con
+/// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
 #[derive(Debug)]
 enum Reason {
-    /// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
     /// **Non è questo `serialize`.** È l'altro — quello di `serde::Serializer`,
     /// che ha lo stesso nome e nessun rapporto con i documenti: qui sono i
     /// `u64_string::serialize` con cui un id numerico attraversa l'IPC come
@@ -137,8 +137,8 @@ enum Reason {
     /// Sta nell'allowlist e non in un'esclusione dell'estrattore perché
     /// distinguerli a occhio è ciò che il presidio deve costringere a fare: un
     /// filtro che togliesse «i serialize di serde» dovrebbe indovinare quale sia
-    AnotherSerialize,
     /// quale, e indovinerebbe in silenzio.
+    AnotherSerialize,
     /// **Il formato che lo implementa.** È il *corpo* del metodo del trait, che
     /// delega alla funzione libera del proprio modulo: non una chiamata a
     /// `FormatProvider::serialize`, ma ciò che quel metodo fa. E da lì un file
@@ -248,11 +248,12 @@ fn root() -> PathBuf {
 /// Ogni `.rs` che sta sotto una cartella `src/`, per percorso relativo alla
 /// radice del repo e con i separatori sempre `/`.
 ///
-/// Non c'è un elenco di crate: un crate nuovo enter nel presidio perché esiste,
+/// Non c'è un elenco di crate: un crate nuovo entra nel presidio perché esiste,
 /// non perché qualcuno si è ricordato di scriverlo qui. Che il cammino funzioni
 /// davvero non è dato per buono — lo verifica
 /// [`the_walk_finds_the_contract`], e prima ancora lo verifica il confronto
 /// nei due versi: se questa funzione tornasse a vuoto, le tre righe
+/// dell'allowlist risulterebbero tutte sparite.
 fn production_sources() -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     walk(&root(), "", &mut out);
@@ -289,11 +290,10 @@ fn walk(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
     }
 }
 
-// dell'allowlist risulterebbero tutte sparite.
 // ---------------------------------------------------------------------------
 // L'estrattore
-
 // ---------------------------------------------------------------------------
+
 /// `true` se la riga è **prosa**: un commento di riga, di documentazione o di
 /// modulo.
 ///
@@ -305,6 +305,7 @@ fn walk(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
 ///
 /// Vale solo per i commenti di riga. Un `/* … */` che nominasse `serialize`
 /// produrrebbe un **falso positivo** — il verso innocuo: qualcuno guarda e
+/// toglie la riga, invece di non accorgersi di niente.
 fn is_prose(line: &str) -> bool {
     line.trim_start().starts_with("//")
 }
@@ -313,7 +314,6 @@ fn is_ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-/// toglie la riga, invece di non accorgersi di niente.
 /// Dove finisce un `#[cfg(test)] mod … { … }` scritto a colonna zero, se è di
 /// quella forma.
 ///
@@ -322,6 +322,7 @@ fn is_ident(c: char) -> bool {
 /// `cargo fmt --all --check` è verde — dentro un blocco indentato non c'è
 /// nessun'altra `}` in prima colonna. `None` quando la forma è un'altra
 /// (`#[cfg(test)]` su una funzione: succede due volte nel repo), e allora non si
+/// salta niente: contare di più è il verso innocuo.
 fn test_module_end(lines: &[&str], attribute: usize) -> Option<usize> {
     let opening = lines.get(attribute + 1)?;
     if !(opening.starts_with("mod ") && opening.ends_with('{')) {
@@ -342,7 +343,6 @@ fn test_module_end(lines: &[&str], attribute: usize) -> Option<usize> {
     }))
 }
 
-/// salta niente: contare di più è il verso innocuo.
 /// Le **forme** con cui una riga nomina `serialize` come funzione.
 ///
 /// Conta un'occorrenza quando `serialize` è un identificatore intero e:
@@ -359,6 +359,7 @@ fn test_module_end(lines: &[&str], attribute: usize) -> Option<usize> {
 ///
 /// Ciò che non rientra in nessuno di questi casi non è una chiamata: la parola
 /// dentro una stringa (`"serialize fallito"`), o il nome di un modulo dentro un
+/// percorso più lungo.
 fn forms(line: &str) -> Vec<String> {
     const NEEDLE: &str = "serialize";
     let mut out = Vec::new();
@@ -370,8 +371,8 @@ fn forms(line: &str) -> Vec<String> {
 
         let before = &line[..the];
         let after = &line[the + NEEDLE.len()..];
-        // percorso più lungo.
         // Confini di identificatore: `deserialize` e `serialize_with` non sono
+        // questa funzione.
         if before.chars().next_back().is_some_and(is_ident)
             || after.chars().next().is_some_and(is_ident)
         {
@@ -426,6 +427,7 @@ fn citations(source: &str) -> BTreeMap<String, usize> {
     out
 }
 
+/// Tutte le citazioni del codice di produzione, per `(file, forma)`.
 fn production_citations() -> BTreeMap<(String, String), usize> {
     let mut out = BTreeMap::new();
     for (file, source) in production_sources() {
@@ -444,12 +446,12 @@ fn list(points: &BTreeSet<(String, String)>) -> String {
         .join("\n")
 }
 
-// Tutte le citazioni del codice di produzione, per `(file, forma)`.
 // ---------------------------------------------------------------------------
 // La rete
-
 // ---------------------------------------------------------------------------
+
 /// **Il cuore**: chi nomina `serialize` è l'allowlist, nei due versi e col
+/// conteggio.
 #[test]
 fn serialize_is_not_the_way_to_rewrite_an_existing_document() {
     let found = production_citations();
@@ -511,13 +513,13 @@ fn serialize_is_not_the_way_to_rewrite_an_existing_document() {
     }
 }
 
-/// conteggio.
 /// **La frase presidiata esiste ancora, ed è là dove il contratto la fa.**
 ///
 /// Senza questa, il giorno in cui qualcuno riscrivesse il doc di `serialize`
 /// resterebbe in piedi un test che difende una regola che nessun documento
 /// dichiara più — e chi lo trovasse rosso non saprebbe da dove viene. È la sesta
 /// specie presa dal verso in cui si presidia, come in `lean_ipc.rs`: una
+/// garanzia meccanica deve rimandare a una frase che una macchina sa cercare.
 #[test]
 fn the_guarantee_is_still_written_in_the_contract() {
     assert!(
@@ -530,13 +532,13 @@ fn the_guarantee_is_still_written_in_the_contract() {
     );
 }
 
-// garanzia meccanica deve rimandare a una frase che una macchina sa cercare.
 // ---------------------------------------------------------------------------
 // I test del test
-
 // ---------------------------------------------------------------------------
+
 /// Il cammino guarda davvero i sorgenti: se sbagliasse radice tornerebbe a
 /// vuoto, e un insieme vuoto non contraddice nessuna allowlist dal verso che si
+/// guarda per primo.
 #[test]
 fn the_walk_finds_the_contract() {
     let sources = production_sources();
@@ -554,11 +556,11 @@ fn the_walk_finds_the_contract() {
     );
 }
 
-/// guarda per primo.
 /// **La rete deve sapersi chiudere**: l'estrattore vede la strada sbagliata.
 ///
 /// È la prova che si è fatta a mano una volta — mettendo la funzione nel kernel e
 /// guardando il presidio diventare rosso — resa permanente. Un presidio che non
+/// può diventare rosso è la sesta specie con un nome nuovo.
 #[test]
 fn the_extractor_sees_the_wrong_path() {
     let fake = "\
@@ -577,17 +579,17 @@ impl Workspace {\n\
     );
 }
 
-/// può diventare rosso è la sesta specie con un nome nuovo.
 /// E deve distinguere ciò che nomina `serialize` da ciò che lo **è**, senza
+/// contare la prosa che ne parla.
 #[test]
 fn the_extractor_distinguishes_definition_from_call() {
     let fake = "\
-/// contare la prosa che ne parla.
+//! Un modulo che parla di `FormatProvider::serialize` e di `provider.serialize(&m)`.\n\
 mod serialize;\n\
 use fub_abi::traits::serialize;\n\
 \n\
 impl FormatProvider for Fake {\n\
-//! Un modulo che parla di `FormatProvider::serialize` e di `provider.serialize(&m)`.\n\
+    /// Il doc, che cita `.serialize(` per spiegarsi.\n\
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {\n\
         Ok(serialize::serialize(model))\n\
     }\n\
@@ -611,15 +613,15 @@ mod tests {\n\
     assert_eq!(
         citations(fake),
         BTreeMap::from([
-            // Il doc, che cita `.serialize(` per spiegarsi.\n\
             // Il `use`: passa dal `::`, ed è il modo in cui una chiamata libera
-            ("traits::serialize".to_string(), 1),
             // arriva senza nominare nessuno.
-            ("serialize::serialize".to_string(), 1),
+            ("traits::serialize".to_string(), 1),
             // La delega del provider al proprio modulo.
-            ("u64_string::serialize".to_string(), 1),
+            ("serialize::serialize".to_string(), 1),
             // L'altro `serialize`, quello di serde.
+            ("u64_string::serialize".to_string(), 1),
             // La chiamata libera, e il metodo preso senza parentesi (UFCS): due
+            // forme che un estrattore ingenuo lascerebbe passare.
             ("serialize".to_string(), 1),
             ("FormatProvider::serialize".to_string(), 1),
         ]),
@@ -628,8 +630,8 @@ mod tests {\n\
     );
 }
 
-// forme che un estrattore ingenuo lascerebbe passare.
 /// Un `#[cfg(test)]` che non apre un modulo non fa saltare niente: succede due
+/// volte nel repo, ed è il caso in cui saltare sarebbe **il verso sbagliato**.
 #[test]
 fn a_cfg_test_on_a_function_does_not_open_a_module() {
     let fake = "\

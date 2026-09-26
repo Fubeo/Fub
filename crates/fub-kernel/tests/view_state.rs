@@ -220,7 +220,6 @@ fn not_drawing_a_view_means_no_view_state() {
 
 /// Il recinto fra proprietari: due provider che usano **la stessa chiave** non
 /// si vedono, perché l'id di chi scrive non è un parametro ma lo timbra l'host.
-/// si vedono, perché l'id di chi scrive non è un parametro ma lo timbra l'host.
 #[test]
 fn two_providers_with_the_same_key_do_not_see_each_other() {
     let ws = vault();
@@ -234,7 +233,6 @@ fn two_providers_with_the_same_key_do_not_see_each_other() {
 }
 
 /// Lo stato di vista **non viaggia col vault**, e non è nemmeno del vault: sta
-/// nel file della macchina, e lo stesso esemplare in due vault ha due stati.
 /// nel file della macchina, e lo stesso esemplare in due vault ha due stati.
 #[test]
 fn the_same_panel_in_two_vaults_remembers_two_things() {

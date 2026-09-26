@@ -38,10 +38,16 @@ default = [
 search = ["dep:tantivy", "dep:regex"]
 versioning = []
 backlinks = []
-outline = ["dep:fub-format-markdown"]
+outline = []
 tags = []
 properties = ["dep:serde_yaml_ng"]
-template = ["dep:serde_yaml_ng", "dep:jiff"]
+# Il template fonde le proprietà del proprio frontmatter nella nota con
+# `note.property.set`, che è un comando di `properties`: come per il cestino è
+# una dipendenza di **funzionamento**, e dichiararla qui è il modo di non
+# spedire una build in cui ogni inserimento con proprietà riesce a metà. Il
+# manifest la ripete (`requires` nell'inventario), per chi spegne `properties`
+# a runtime.
+template = ["dep:serde_yaml_ng", "dep:jiff", "properties"]
 queries = []
 dashboard = []
 backup = []
@@ -54,16 +60,19 @@ stats = []
 # comandi. Dichiararla qui è il modo di non spedire quella build.
 trash = ["commands"]
 graph = []
-commands = []
+# `note.create` scrive le proprietà iniziali come frontmatter YAML.
+commands = ["dep:serde_yaml_ng"]
 blocks = []
-base = ["dep:fub-format-base"]
+# Modificare una cella di una Base pianifica `note.property.set`/`remove`, che
+# sono comandi di `properties`: stessa dipendenza di funzionamento del template,
+# ripetuta nel manifest.
+base = ["dep:fub-format-base", "properties"]
 
 [dependencies]
 camino.workspace = true
 fub-abi = { workspace = true }
 serde = { workspace = true }
 fub-format-base = { workspace = true, optional = true }
-fub-format-markdown = { workspace = true, optional = true }
 serde_json = { workspace = true }
 # Dietro `properties`: stessa crate/versione del provider markdown, usata solo
 # per riscrivere la mappa del frontmatter (mai `FormatProvider::serialize`).

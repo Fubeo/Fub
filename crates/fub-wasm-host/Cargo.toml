@@ -31,6 +31,9 @@ serde.workspace = true
 serde_json.workspace = true
 serde_ignored.workspace = true
 thiserror.workspace = true
+# Il guasto di un guest dove il trait non ha un esito (gli interessi di una
+# view) si registra invece di far cadere il processo.
+tracing.workspace = true
 # Firma Ed25519 e digest dei cataloghi; chiavi e firme sono codificate in base64.
 ring = { workspace = true }
 base64 = { workspace = true }
@@ -43,5 +46,6 @@ base64 = { workspace = true }
 wasmtime = { workspace = true }
 
 [dev-dependencies]
+fub-format-sheet.workspace = true
 fub-testkit.workspace = true
 tempfile.workspace = true

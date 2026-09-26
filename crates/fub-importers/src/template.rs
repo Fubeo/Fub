@@ -234,7 +234,8 @@ impl StagingManifest {
         Ok(())
     }
 
-    /// Generate the full write-free plan from exactly the bytes staged.
+    /// Generate the full write-free plan from exactly the bytes staged, with
+    /// one given importer.
     pub fn prepare(
         job: &str,
         source: &ImportSource,
@@ -243,14 +244,44 @@ impl StagingManifest {
         host: &mut dyn HostApi,
         now_ms: u64,
     ) -> Result<Self, PluginError> {
+        Self::prepare_with(
+            job,
+            source,
+            request,
+            Importer::Provider(provider),
+            host,
+            now_ms,
+        )
+    }
+
+    /// Like [`prepare`](Self::prepare), with the importer the host has
+    /// registered for the source ([`HostServices::run_import`]).
+    ///
+    /// [`HostServices::run_import`]: fub_abi::traits::HostServices::run_import
+    pub fn prepare_registered(
+        job: &str,
+        source: &ImportSource,
+        request: &ImportRequest,
+        host: &mut dyn HostApi,
+        now_ms: u64,
+    ) -> Result<Self, PluginError> {
+        Self::prepare_with(job, source, request, Importer::Registered, host, now_ms)
+    }
+
+    fn prepare_with(
+        job: &str,
+        source: &ImportSource,
+        request: &ImportRequest,
+        mut importer: Importer<'_>,
+        host: &mut dyn HostApi,
+        now_ms: u64,
+    ) -> Result<Self, PluginError> {
         Self::validate_job(job)?;
         preflight(source, MAX_SOURCE_BYTES)?;
         if request.options.get("token").is_some() {
             return Err(bad_args("staging does not persist API tokens: use options.token_env with an injected secret"));
         }
-        if !provider.can_handle(source) {
-            return Err(bad_args(format!("no importer for `{}`", source.name)));
-        }
+        importer.check(source)?;
         let bytes = match &source.content {
             SourceContent::Bytes(bytes) => bytes.clone(),
             SourceContent::Streamed(stream) => {
@@ -276,7 +307,7 @@ impl StagingManifest {
         };
         let mut dry = request.clone();
         dry.mode = ImportMode::Preview;
-        let preview = provider.import(&exact, &dry, host)?;
+        let preview = importer.import(&exact, &dry, host)?;
         let losses = preview
             .log
             .iter()
@@ -311,6 +342,39 @@ impl StagingManifest {
             mode: self.preview.mode,
             documents: self.preview.documents.iter().take(limit).cloned().collect(),
             log: self.preview.log.iter().take(limit).cloned().collect(),
+        }
+    }
+}
+
+/// Who runs the import of a staged job: one given importer (benches, direct
+/// callers) or the host registry, which picks the first registered importer
+/// that recognizes the source.
+pub(crate) enum Importer<'a> {
+    Provider(&'a mut dyn ImportProvider),
+    Registered,
+}
+
+impl Importer<'_> {
+    /// A given importer must recognize the source; the registry answers for
+    /// itself when asked to import.
+    pub(crate) fn check(&self, source: &ImportSource) -> Result<(), PluginError> {
+        match self {
+            Importer::Provider(provider) if !provider.can_handle(source) => {
+                Err(bad_args(format!("no importer for `{}`", source.name)))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn import(
+        &mut self,
+        source: &ImportSource,
+        request: &ImportRequest,
+        host: &mut dyn HostApi,
+    ) -> Result<ImportReport, PluginError> {
+        match self {
+            Importer::Provider(provider) => provider.import(source, request, host),
+            Importer::Registered => host.run_import(source, request),
         }
     }
 }

@@ -41,7 +41,7 @@ Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
 URL non producono un errore. Un errore di sintassi porta la specie e la
 colonna, e la barra lo mostra al posto dei risultati. Un gruppo negato non è
 ammesso, e un'espressione che dopo la distribuzione supera 32 alternative viene
-rifiutata.
+rifiutata, come una che annida più di 32 gruppi uno dentro l'altro.
 
 I tag di una nota sono quelli nel testo e quelli dichiarati dalla chiave `tags`
 del frontmatter, come elenco o come stringa separata da virgole o spazi. Il
@@ -61,16 +61,22 @@ Il kernel risolve l'intento rispetto al vault e agli indici correnti. La
 sorgente conserva ciò che l'utente ha scritto; la risoluzione è un dato
 derivato.
 Wikilink e path seguono regole diverse: il primo risolve per path con slash,
-nome e alias con priorità deterministica fra omonimi; il secondo solo per
-path relativo al documento. Heading e blocchi condividono slug e ancore
+nome, nome con l'estensione (`[[board.canvas]]`) e alias con priorità
+deterministica fra omonimi; il secondo solo per path relativo al documento.
+Fra omonimi vince il più vicino alla radice, poi l'ordine dei path; fra
+formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il nome
+nudo porta prima al formato che dichiara un sorgente di prosa
+(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Heading e blocchi condividono slug e ancore
 canoniche; un punto rinominato apre la nota senza inventare una destinazione.
 Completamento e cambio rapido propongono nomi per pertinenza senza riordinare
-nella shell, e la rinomina riscrive soltanto i wikilink che nominavano la nota.
+nella shell, e la rinomina riscrive soltanto i wikilink che nominavano la nota,
+conservando l'estensione se l'autore l'aveva scritta.
 Il pannello mostra incoming, outgoing con contesto per riferimento, menzioni
 non collegate in entrata e in uscita con filtro, e la conversione esplicita
 della menzione in wikilink con revisione e span dichiarati. Il riferimento
 scritto è il più corto che la risoluzione del vault manda davvero alla nota
-(il nome, poi il percorso senza estensione, poi il percorso intero); se la
+(il nome, poi il nome con l'estensione, poi il percorso senza estensione, poi
+il percorso intero); se la
 parola trovata è scritta altrimenti, per esempio un alias, resta come testo del
 link (`[[Rossi|Mario]]`).
 Il pannello tag mostra gerarchia piatta o ad albero, ordinamento per nome o
@@ -100,6 +106,13 @@ link che non si risolve non apre niente.
 Un backlink parte dal documento sorgente e conserva un contesto leggibile. Le
 query per vicini e direzione usano gli stessi dati di identità del grafo.
 
+Il grafo dei link tiene solo documenti. Un allegato nominato da una nota
+(`![[foto.png]]`, o un link Markdown a un PDF) entra nei vicini uscenti come foglia,
+un passo oltre la nota; la sua posizione dipende dalla cartella degli allegati,
+quindi si risolve al momento della domanda. I backlink di un allegato elencano
+le note che lo nominano. Il pannello Collegamenti elenca fra gli uscenti solo i
+documenti.
+
 Il pannello Collegamenti mostra una sezione per parte (entranti, uscenti,
 menzioni non collegate nei due versi) con il numero nel titolo; una parte vuota
 resta chiusa su una riga. Il contesto si legge come testo: un wikilink compare
@@ -124,8 +137,15 @@ Il provider ufficiale prepara un payload dichiarativo con nodi e archi. La
 shell possiede il renderer Canvas e l'interazione. Il kernel non conosce pixel,
 camera o animazioni. Il payload dichiara vista locale fino a tre passi, gruppi
 per cartella o primo tag, filtri per orfani e allegati e timestamp di modifica;
-assenti valgono il grafo globale. Posizione e animazione restano stato della
+assenti valgono il grafo globale. Gli allegati sono nascosti di default; il
+filtro li aggiunge come nodi con i loro archi. Quale nodo è un documento lo
+dice il registro dei formati. Posizione e animazione restano stato della
 shell, in memoria e mai nel vault.
+
+Il grafo non ha un posto riservato nella shell. Si apre con il comando
+`graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
+Vista o dalla rail, che mostrano ogni view principale apribile senza argomenti.
+Con il componente spento spariscono anche comando, voce di menu e icona.
 
 Questo confine deve restare stabile:
 

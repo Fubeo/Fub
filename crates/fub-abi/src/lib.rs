@@ -81,8 +81,8 @@ pub mod ui;
 // sono quelli dichiarati là dentro, con la ragione per cui lo sono.
 pub use command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
-    CommandSpec, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
-    Undone,
+    CommandSpec, CommandSurface, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit,
+    Undo, UndoStep, Undone,
 };
 pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
@@ -96,7 +96,7 @@ pub use event::{
 };
 pub use format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
-    LinkRewrite, ParseContext, RenderOptions, RenderTarget, SourceKind,
+    LinkInsert, LinkRewrite, ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 pub use gate::Gate;
 pub use grid::{
@@ -151,8 +151,8 @@ pub use traits::{
 pub use transfer::{
     ArtifactContent, ArtifactHandle, ArtifactSink, ConflictPolicy, ExportArtifact, ExportProvider,
     ExportReport, ExportRequest, ExportSelection, ExportTarget, ImportMode, ImportOutcome,
-    ImportProvider, ImportReport, ImportRequest, ImportSource, ImportedDocument, NoteLevel,
-    SourceContent, SourceHandle, StreamedSource, TransferNote,
+    ImportProvider, ImportReport, ImportRequest, ImportSource, ImportedDocument, MemorySink,
+    NoteLevel, SourceContent, SourceHandle, StreamedSource, TransferNote,
 };
 pub use ui::{
     ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,

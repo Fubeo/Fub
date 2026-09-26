@@ -159,7 +159,6 @@ fn the_two_implementations_answer_alike() {
         // riga la dimenticherebbe qualcuno. È l'ottava operazione (§15.2), e sta
         // qui perché il registro delle mutazioni deve poter vivere su un
         // supporto che non è il disco tanto quanto ci vive il vault.
-        // supporto che non è il disco tanto quanto ci vive il vault.
         let reg = root.join("journal/lines.jsonl");
         storage
             .append(&reg, b"one\n")
@@ -188,7 +187,6 @@ fn the_two_implementations_answer_alike() {
 
         // `remove` è dei file soltanto: per una cartella c'è `remove_dir_all`,
         // e la distinzione è ciò che impedisce a un `data_remove` di un plugin
-        // di portarsi via un albero intero con un path che finisce bene.
         // di portarsi via un albero intero con un path che finisce bene.
         assert!(
             storage.remove(&root.join("old")).is_err(),
@@ -295,7 +293,6 @@ fn the_two_implementations_answer_alike() {
 
         // Un `fondi` che va in panico non porta via il supporto con sé: di là
         // il lucchetto del file si rilascia e si continua a leggere, di qua il
-        // `Mutex` resterebbe avvelenato e ogni accesso successivo morirebbe.
         // `Mutex` resterebbe avvelenato e ogni accesso successivo morirebbe.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = storage.update(&root.join("merge.md"), &mut |_| {
@@ -408,7 +405,6 @@ fn a_full_vault_on_a_storage_that_is_not_the_disk() {
     // l'elenco lo dice. È il giro in cui il vault scrive **tre** posti diversi
     // (il cestino, il sidecar sotto `.fub/data/`, e il file d'origine), quindi
     // è quello che si accorge se uno solo dei tre è rimasto su `std::fs`.
-    // Svuotare toglie le voci **e** i sidecar.
     let (trashed, trouble) = vault.trash(&renamed).unwrap();
     assert!(trouble.is_none(), "the sidecar was written: {trouble:?}");
     assert!(trashed.as_str().starts_with(".trash/"));

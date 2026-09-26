@@ -474,15 +474,22 @@ impl MountRegistry {
 
     /// Commit merge-aware di una sola aggiunta già preparata. Il callback di
     /// update legge soltanto `.fub/`: nessuno stat esterno attraversa il lock.
-    pub fn persist_add(&self, storage: &dyn VaultStorage, name: &str) -> io::Result<()> {
+    /// Scrive il mount nel registro del vault (`vault`) dopo aver verificato che
+    /// il target sulla macchina (`targets`) sia ancora quello preparato.
+    pub fn persist_add(
+        &self,
+        vault: &dyn VaultStorage,
+        targets: &dyn VaultStorage,
+        name: &str,
+    ) -> io::Result<()> {
         let config = Self::config_path(&self.root);
         let candidate = self
             .mounts
             .get(name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "mount non preparato"))?;
-        reject_symlink_components(storage, &candidate.target)
+        reject_symlink_components(targets, &candidate.target)
             .map_err(|e| invalid_doc(&config, e))?;
-        if identity_of(storage, &candidate.target).map_err(|e| invalid_doc(&config, e))?
+        if identity_of(targets, &candidate.target).map_err(|e| invalid_doc(&config, e))?
             != self.identities[name]
         {
             return Err(invalid_doc(
@@ -491,7 +498,7 @@ impl MountRegistry {
             ));
         }
         let entry = self.stored(name);
-        storage.update(&config, &mut |current| {
+        vault.update(&config, &mut |current| {
             let mut entries = current
                 .map(|raw| decode(raw, &config))
                 .transpose()?
@@ -511,12 +518,12 @@ impl MountRegistry {
             entries.sort_by(|a, b| a.mount.name.cmp(&b.mount.name));
             Ok(Some(encode(entries, &config)?))
         })?;
-        let still_same = reject_symlink_components(storage, &candidate.target).is_ok()
-            && identity_of(storage, &candidate.target).ok() == Some(self.identities[name]);
+        let still_same = reject_symlink_components(targets, &candidate.target).is_ok()
+            && identity_of(targets, &candidate.target).ok() == Some(self.identities[name]);
         if still_same {
             return Ok(());
         }
-        let rollback = self.persist_remove(storage, name);
+        let rollback = self.persist_remove(vault, name);
         Err(invalid_doc(
             &config,
             match rollback {
@@ -554,9 +561,17 @@ impl MountRegistry {
     /// errore di apertura. Una singola rotta valida ma temporaneamente
     /// irraggiungibile viene invece disattivata con diagnostica: nessun byte
     /// esterno viene esposto e il vault principale continua ad aprirsi.
-    pub fn load(storage: &dyn VaultStorage, root: &Utf8Path) -> Result<Self> {
+    /// `vault` è il supporto del vault, dove sta `.fub/mounts.json`; `targets`
+    /// è il filesystem della macchina, dove stanno le cartelle montate: sono
+    /// fuori dal vault per definizione, e un supporto ancorato alla radice non
+    /// le vede. Nei banchi sono lo stesso `MemStorage`.
+    pub fn load(
+        vault: &dyn VaultStorage,
+        targets: &dyn VaultStorage,
+        root: &Utf8Path,
+    ) -> Result<Self> {
         let config = Self::config_path(root);
-        let raw = match storage.read(&config) {
+        let raw = match vault.read(&config) {
             Ok(raw) => raw,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Self::new(root)),
             Err(source) => {
@@ -575,7 +590,7 @@ impl MountRegistry {
             let name = entry.mount.name.clone();
             let target = entry.mount.target.clone();
             let outcome = registry.mount(
-                storage,
+                targets,
                 &entry.mount.name,
                 &entry.mount.target,
                 &entry.mount.namespace,
@@ -948,8 +963,8 @@ mod tests {
             .register(&mem, "x", &abs("/var/x"), "n")
             .expect("antenato risolto");
         assert_eq!(real, abs("/private/var/x"));
-        reg.persist_add(&mem, "x").unwrap();
-        let loaded = MountRegistry::load(&mem, &root).unwrap();
+        reg.persist_add(&mem, &mem, "x").unwrap();
+        let loaded = MountRegistry::load(&mem, &mem, &root).unwrap();
         assert!(
             loaded.diagnostics().is_empty(),
             "{:?}",
@@ -1039,20 +1054,20 @@ mod tests {
         let config = MountRegistry::config_path(&root);
         let mut first = MountRegistry::new(&root);
         first.mount(&mem, "a", &abs("/ext/a"), "n1").unwrap();
-        first.persist_add(&mem, "a").unwrap();
+        first.persist_add(&mem, &mem, "a").unwrap();
         let mut second = MountRegistry::new(&root);
         second.mount(&mem, "b", &abs("/ext/b"), "n2").unwrap();
-        second.persist_add(&mem, "b").unwrap();
-        let loaded = MountRegistry::load(&mem, &root).unwrap();
+        second.persist_add(&mem, &mem, "b").unwrap();
+        let loaded = MountRegistry::load(&mem, &mem, &root).unwrap();
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded.resolve(&mem, "n1", "file"), Some(abs("/ext/a/file")));
         assert_eq!(loaded.resolve(&mem, "n2", "file"), Some(abs("/ext/b/file")));
 
         for broken in [b"{no".as_slice(), br#"{"schema":2,"mounts":[]}"#.as_slice()] {
             mem.write(&config, broken).unwrap();
-            assert!(MountRegistry::load(&mem, &root).is_err());
+            assert!(MountRegistry::load(&mem, &mem, &root).is_err());
             assert!(first.persist_remove(&mem, "a").is_err());
-            assert!(first.persist_add(&mem, "a").is_err());
+            assert!(first.persist_add(&mem, &mem, "a").is_err());
             assert_eq!(mem.read(&config).unwrap(), broken);
         }
     }
@@ -1074,8 +1089,10 @@ mod tests {
             .unwrap();
         let file = target.join("treasure.txt");
         std::fs::write(&file, b"precious").unwrap();
-        prepared.persist_add(&storage, "external").unwrap();
-        let loaded = MountRegistry::load(&storage, &root).unwrap();
+        prepared
+            .persist_add(&storage, &storage, "external")
+            .unwrap();
+        let loaded = MountRegistry::load(&storage, &storage, &root).unwrap();
         let mut with_existing = loaded.clone();
         let child = target.join("child");
         std::fs::create_dir(&child).unwrap();
@@ -1102,7 +1119,7 @@ mod tests {
         symlink(&root, &inside).unwrap();
         assert!(loaded.resolve(&storage, "photos", "nested/file").is_none());
         loaded.persist_remove(&storage, "external").unwrap();
-        assert!(MountRegistry::load(&storage, &root)
+        assert!(MountRegistry::load(&storage, &storage, &root)
             .unwrap()
             .routing_table()
             .is_empty());
@@ -1123,8 +1140,10 @@ mod tests {
             .unwrap();
         std::fs::rename(&target, target.with_file_name("original")).unwrap();
         std::fs::create_dir(&target).unwrap();
-        assert!(prepared.persist_add(&storage, "chosen").is_err());
-        assert!(MountRegistry::load(&storage, &root).unwrap().is_empty());
+        assert!(prepared.persist_add(&storage, &storage, "chosen").is_err());
+        assert!(MountRegistry::load(&storage, &storage, &root)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -1137,16 +1156,17 @@ mod tests {
         let storage = crate::storage::FsStorage;
         let mut prepared = MountRegistry::new(&root);
         let target = prepared.register(&storage, "usb", &chosen, "usb").unwrap();
-        prepared.persist_add(&storage, "usb").unwrap();
+        prepared.persist_add(&storage, &storage, "usb").unwrap();
         std::fs::remove_dir(&target).unwrap();
 
-        let loaded = MountRegistry::load(&storage, &root).expect("il vault resta apribile");
+        let loaded =
+            MountRegistry::load(&storage, &storage, &root).expect("il vault resta apribile");
         assert!(loaded.routing_table().is_empty());
         assert!(loaded.is_configured("usb"));
         assert_eq!(loaded.diagnostics().len(), 1);
         assert_eq!(loaded.diagnostics()[0].name, "usb");
         loaded.persist_remove(&storage, "usb").unwrap();
-        assert!(MountRegistry::load(&storage, &root)
+        assert!(MountRegistry::load(&storage, &storage, &root)
             .unwrap()
             .diagnostics()
             .is_empty());

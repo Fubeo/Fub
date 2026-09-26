@@ -131,6 +131,7 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 // Il registro dei provider (§8.1)
 // ---------------------------------------------------------------------------
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
@@ -214,6 +215,10 @@ pub(crate) struct RegisteredGrid {
     pub(crate) specs: Vec<GridSurfaceSpec>,
 }
 
+/// Un provider di import condiviso fra il registro e i job che lo chiamano
+/// fuori dal lock del workspace, dietro il proprio lucchetto.
+pub(crate) type SharedImport = Arc<SharedShelter<Box<dyn ImportProvider>>>;
+
 /// **Chi è registrato, cosa ha dichiarato, e chi possiede quale nome.**
 ///
 /// Uno dei cinque componenti in cui il §8.1 scompone il `Workspace`. Mette
@@ -256,10 +261,15 @@ pub(crate) struct ProviderRegistry {
     /// Provider di import, interpellati **in ordine**: il primo che riconosce
     /// una sorgente la prende. Come per handler e indici, l'id è lo spazio dati
     /// che l'`HostApi` concede al provider.
-    pub(crate) imports: ProviderTable<(String, Box<dyn ImportProvider>)>,
+    ///
+    /// Condivisi come view e servizi: chi esegue un import da un job prende il
+    /// provider sotto il lock e lo chiama **fuori**, e un import (`&mut self`)
+    /// si mette in fila dietro il proprio lucchetto, non dietro il workspace.
+    pub(crate) imports: ProviderTable<(String, SharedImport)>,
     /// Provider di export. Non hanno un ordine che conta: una richiesta nomina
-    /// una destinazione, e la destinazione ha un proprietario solo.
-    pub(crate) exports: ProviderTable<(String, Box<dyn ExportProvider>)>,
+    /// una destinazione, e la destinazione ha un proprietario solo. `&self`,
+    /// quindi basta condividere il puntatore.
+    pub(crate) exports: ProviderTable<(String, Arc<dyn ExportProvider>)>,
     /// View dichiarative registrate, col grado di fiducia di chi le produce.
     /// Ogni albero di UI che entra nell'host passa dal `Workspace`, che è il
     /// punto unico in cui `UiNode::validate_untrusted` viene applicato: qui c'è
@@ -271,7 +281,7 @@ pub(crate) struct ProviderRegistry {
     /// stringa che l'esito porta all'utente (`notify`) è testo semplice. Ciò
     /// che serve a un comando è un *permesso* (§7.3), che è un'altra domanda.
     ///
-    /// Sono `Arc` e non `Box` — soli fra i provider, con i servizi — perché
+    /// Sono `Arc` e non `Box` — come servizi, import ed export — perché
     /// devono restare **raggiungibili durante una propria chiamata**: col
     /// `run_command` della decisione 0013 un comando ne invoca un altro, e se il
     /// registro fosse svuotato per la durata dell'invocazione (la disciplina di
@@ -285,7 +295,15 @@ pub(crate) struct ProviderRegistry {
     /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
     /// comandi registrati sono finiti e nessuno può comparire due volte.
     pub(crate) command_stack: Vec<String>,
+    /// Gli id dei comandi che l'host esegue in proprio, fuori dal registro
+    /// (`mount.*`, `folder.create`, ...). Chi monta li riserva una volta: un
+    /// plugin che li invoca sente che non sono suoi da chiamare, e nessun
+    /// provider ne registra un omonimo che l'host nasconderebbe.
+    pub(crate) host_commands: BTreeSet<String>,
 }
+
+/// Il nome con cui l'host figura come incumbent di un comando riservato.
+pub(crate) const HOST_OWNER: &str = "host";
 
 impl ProviderRegistry {
     pub(crate) fn new() -> Self {
@@ -300,6 +318,7 @@ impl ProviderRegistry {
             commands: ProviderTable::new(),
             grids: ProviderTable::new(),
             command_stack: Vec::new(),
+            host_commands: BTreeSet::new(),
         }
     }
 
@@ -371,11 +390,43 @@ impl ProviderRegistry {
             .ok_or_else(|| PluginError::UnknownView(view.to_string().into()))
     }
 
-    /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
+    /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno;
+    /// `Unserved` se è un comando dell'host, che il registro non serve.
     pub(crate) fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
+        if self.host_commands.contains(command) {
+            return Err(PluginError::Unserved(
+                format!("`{command}` is a host command: the shell invokes it, a plugin cannot")
+                    .into(),
+            ));
+        }
         self.commands
             .position(|r| r.specs.iter().any(|spec| spec.id == command))
             .ok_or_else(|| PluginError::UnknownCommand(command.to_string().into()))
+    }
+
+    /// Una registrazione di comandi non tocca un id riservato all'host: è
+    /// `Claimed`, con l'host come incumbent.
+    pub(crate) fn refuse_host_commands(
+        &self,
+        plugin: &str,
+        kind: RegistrationKind,
+        ids: &[String],
+    ) -> std::result::Result<(), RegistryError> {
+        if kind != RegistrationKind::Command {
+            return Ok(());
+        }
+        match ids
+            .iter()
+            .find(|id| self.host_commands.contains(id.as_str()))
+        {
+            Some(id) => Err(RegistryError::Claimed {
+                kind,
+                id: id.clone(),
+                incumbent: HOST_OWNER.to_string(),
+                challenger: plugin.to_string(),
+            }),
+            None => Ok(()),
+        }
     }
 
     /// I parametri di un'istanza reggono la spec che il provider ha dichiarato?

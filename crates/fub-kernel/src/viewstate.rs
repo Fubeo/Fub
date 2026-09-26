@@ -207,7 +207,7 @@ impl ViewStates {
         })
     }
 
-    /// Una mutatezione dello stato di vista: si applica a ciò che **sul disco c'è
+    /// Una mutazione dello stato di vista: si applica a ciò che **sul disco c'è
     /// adesso**, non alla copia in memoria di chi la chiede.
     ///
     /// È la forma che il §15.2 chiede a chi ricompone un file della macchina
@@ -217,7 +217,7 @@ impl ViewStates {
     /// quelli dell'altra. Ciò che le due si scambiano non è mai la stessa
     /// chiave, quindi la fusione le tiene entrambe.
     ///
-    /// La mutatezione si scrive **una volta sola** e vale per i due casi: in
+    /// La mutazione si scrive **una volta sola** e vale per i due casi: in
     /// memoria si applica alla mappa che c'è, su disco a quella riletta.
     fn mutate(&self, f: impl FnOnce(&mut BTreeMap<String, Owners>)) -> Result<(), String> {
         let mut vaults = self.vaults.write().expect("stato di vista");

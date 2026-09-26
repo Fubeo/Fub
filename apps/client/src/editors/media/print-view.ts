@@ -4,6 +4,7 @@
 import type { RenderedDocument } from "../../host/contract";
 import { setSanitizedHtml } from "../../ui/sanitize";
 import { openLifetime } from "../../ui/lifetime";
+import { writeClipboardText } from "../../platform/clipboard";
 
 export interface PrintOptions {
   title: string;
@@ -94,7 +95,7 @@ export function printRendered(options: PrintOptions): () => void {
 export async function copyRenderedText(text: string): Promise<void> {
   if (!text) throw new Error("nothing to copy: the rendered text is empty");
   try {
-    await navigator.clipboard.writeText(text);
+    await writeClipboardText(text);
   } catch (error) {
     throw new Error(
       `cannot copy ${text.length} characters: ${error instanceof Error ? error.message : String(error)}`,

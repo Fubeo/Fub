@@ -94,6 +94,10 @@ use fub_wasm_host::{Component, WasmBundle};
 /// due gira sul proprio banco appena costruito.
 const ID: &str = "demo.ping";
 
+/// Il job che i due backend servono, nel namespace dell'id come ogni nome di
+/// un plugin che non è core (§7.4).
+const JOB: &str = "demo.ping:ping";
+
 /// Quante volte si attraversa il confine per la misura che conta. Mille è il
 /// numero oltre il quale la mediana smette di muoversi fra due esecuzioni su
 /// questa macchina; sotto le poche centinaia si legge ancora il rumore.
@@ -273,7 +277,7 @@ impl Plugin for PingNativo {
         host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         match job {
-            "ping" => {
+            JOB => {
                 let text = host.read_document(&DocId::new("Nota.md"))?;
                 Ok(serde_json::json!({
                     "nota": "Nota.md",
@@ -413,10 +417,10 @@ fn measure_backend(bundle: Arc<dyn Bundle>, mut load: impl FnMut()) -> Measures 
     //    la coda e senza il risveglio di thread in mezzo. Il prestito dell'host
     //    sta **fuori** dal ciclo: dentro ci resta solo la chiamata.
     let answer = host
-        .invoke_job(None, ID, "ping", serde_json::json!(null))
+        .invoke_job(None, ID, JOB, serde_json::json!(null))
         .expect("il ping risponde");
     let job = sample(REPEATS_JOB, WARMUP, || {
-        let status = host.invoke_job(None, ID, "ping", serde_json::json!(null));
+        let status = host.invoke_job(None, ID, JOB, serde_json::json!(null));
         black_box(status).expect("il ping risponde");
     });
 
@@ -428,13 +432,13 @@ fn measure_backend(bundle: Arc<dyn Bundle>, mut load: impl FnMut()) -> Measures 
         // thread, e ciò che si scalda — la coda, il pool, l'istanza — è già
         // caldo dopo pochissimi.
         for _ in 0..10 {
-            ask(&host, "ping");
+            ask(&host, JOB);
             status(&events).expect("il ping risponde");
         }
         let mut durations = Vec::with_capacity(POOL_REPETITIONS);
         for _ in 0..POOL_REPETITIONS {
             let start = Instant::now();
-            ask(&host, "ping");
+            ask(&host, JOB);
             let answer = status(&events);
             durations.push(start.elapsed());
             black_box(answer).expect("il ping risponde");

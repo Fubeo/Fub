@@ -19,10 +19,12 @@
 //! # Non è una copia: è la sorgente
 //!
 //! `fub_host::mount` non elenca più le feature — le **itera da qui**, in
-//! quest'ordine, e ciò che gli resta di suo è soltanto *cosa registra* ognuna
-//! (l'indice si apre e può non aprirsi, il versioning ha bisogno di uno store
-//! che vive fuori, i blocchi registrano tre regole e due renderer). Ne segue
-//! la proprietà che serviva: una feature fuori da questo elenco non è montata,
+//! quest'ordine, e monta ognuna con lo stesso ciclo: ciò che registra, le
+//! impostazioni che dichiara e i servizi che fornisce o richiede sono campi di
+//! questa riga, non rami scritti nell'host per id. Ciò che soltanto chi monta sa
+//! fare — aprire l'indice di ricerca nella cartella dati che assegna, tenere lo
+//! store delle versioni — è anch'esso dichiarato qui, come [`HostWiring`]. Ne
+//! segue la proprietà che serviva: una feature fuori da questo elenco non è montata,
 //! quindi non esiste per l'utente, e non c'è nessuno stato in cui l'inventario
 //! sia incompleto *e* l'app funzioni. Prima l'elenco vero stava in `mount.rs`
 //! e questo sarebbe stato la quinta copia.
@@ -75,23 +77,28 @@
 //! è anche l'unica forma onesta: due mount dello stesso vault non devono
 //! condividere un'istanza di pannello.
 
+use fub_abi::custom::{CustomRenderer, SyntaxRule};
+use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
-use fub_abi::traits::{CommandProvider, ViewProvider};
+use fub_abi::traits::{CommandProvider, IndexProvider, ViewProvider};
 
 #[cfg(feature = "backlinks")]
 use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
 #[cfg(feature = "backup")]
 use crate::backup::{self, BackupCommands, BackupView, BACKUP_ID};
 #[cfg(feature = "base")]
-use crate::base::BASE_ID;
+use crate::base::{BaseIndex, BASE_ID};
 #[cfg(feature = "blocks")]
-use crate::blocks::{self, BLOCKS_ID};
+use crate::blocks::{
+    self, CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule,
+    BLOCKS_ID,
+};
 #[cfg(feature = "commands")]
 use crate::commands::{self, CoreCommands, COMMANDS_ID};
 #[cfg(feature = "dashboard")]
 use crate::dashboard::{self, DashboardView, DASHBOARD_ID};
 #[cfg(feature = "graph")]
-use crate::graph::{self, GraphView, GRAPH_ID};
+use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineView, OUTLINE_ID};
 #[cfg(feature = "properties")]
@@ -111,21 +118,24 @@ use crate::trash::{self, TrashView, TRASH_ID};
 #[cfg(feature = "versioning")]
 use crate::versioning::{self, HistoryView, VersioningCommands, VERSIONING_ID};
 
+/// Costruisce le regole di sintassi di una feature.
+pub type SyntaxRules = fn() -> Vec<Box<dyn SyntaxRule>>;
+/// Costruisce i renderer di una feature.
+pub type Renderers = fn() -> Vec<Box<dyn CustomRenderer>>;
+
 /// Una riga dell'inventario: una feature ufficiale di questo repo.
 ///
-/// I campi sono ciò che serve a **dichiararla** — id, nome, stringhe — più i
-/// provider che si costruiscono con una chiamata e basta. Non c'è un campo per
-/// ogni trait del contratto, e non deve esserci: l'indice di ricerca può non
-/// aprirsi, l'handler del versioning ha bisogno di uno store che vive in chi
-/// monta, i blocchi registrano cinque cose in due famiglie. Quelle tre
-/// registrazioni restano scritte in `mount.rs` perché sono davvero irregolari, e
-/// forzarle qui dentro vorrebbe dire inventare un campo per ciascuna eccezione —
-/// cioè riscrivere `mount` in forma di tabella, che è più codice per la stessa
-/// cosa.
+/// I campi sono ciò che serve a **dichiararla** — id, nome, stringhe,
+/// impostazioni, servizi forniti e richiesti — più i provider che si costruiscono
+/// con una chiamata e basta. Chi monta li legge tutti con lo stesso ciclo e non
+/// confronta l'id con niente: una feature nuova che registra un indice, una
+/// regola o un renderer lo dichiara qui e basta.
 ///
-/// Ciò che l'inventario garantisce è più stretto e più utile: **chi c'è**. Che
-/// una feature esista, come si chiama, e che le sue stringhe abbiano un
-/// proprietario.
+/// Resta fuori ciò che una chiamata non costruisce: l'indice di ricerca si apre
+/// nella cartella dati che l'host assegna e può non aprirsi, l'handler del
+/// versioning ha bisogno di uno store che vive in chi monta. Quelle due non
+/// diventano un campo per eccezione: la riga dichiara *quale* collegamento le
+/// serve ([`HostWiring`]) e l'host sa farlo.
 pub struct OfficialFeature {
     /// L'id del **componente**: lo spazio dati, l'intestazione dell'`HostApi`,
     /// la chiave nell'inventario dei bundle e in `plugins.disabled`. Non è l'id
@@ -138,7 +148,7 @@ pub struct OfficialFeature {
     /// sono scritte.
     pub catalog: fn() -> Vec<StringCatalog>,
     /// Come si costruisce il suo [`ViewProvider`], se ne registra uno. `None`
-    /// per ricerca, versioning, comandi e blocchi, che registrano altro.
+    /// per ricerca, comandi, blocchi e base, che registrano altro.
     ///
     /// Ne nasce uno per montaggio: un pannello non ha stato da condividere fra
     /// vault diversi, e se un giorno ne avesse sarebbe una ragione in più per
@@ -149,6 +159,54 @@ pub struct OfficialFeature {
     /// un caso speciale scritto nel presidio: «oggi è uno solo» è la premessa
     /// che il §16.7 accusa, non una che si possa dare per buona.
     pub commands: Option<fn() -> Box<dyn CommandProvider>>,
+    /// Come si costruisce il suo [`IndexProvider`], se ne registra uno che non
+    /// chiede niente a chi monta.
+    pub index: Option<fn() -> Box<dyn IndexProvider>>,
+    /// Le regole di sintassi che innesta, nell'ordine in cui si registrano.
+    pub syntax: Option<SyntaxRules>,
+    /// I renderer delle specie che quelle regole producono.
+    pub renderers: Option<Renderers>,
+    /// Le impostazioni che il componente dichiara nel proprio manifest.
+    pub settings: Option<fn() -> Vec<SettingSpec>>,
+    /// I servizi che il bundle fornisce ad altri bundle. È una dipendenza di
+    /// montaggio, non un provider: il provider vero resta nel suo registro.
+    pub provides: &'static [&'static str],
+    /// I servizi senza i quali il bundle non si monta.
+    pub requires: &'static [&'static str],
+    /// Il collegamento che soltanto chi monta sa fare.
+    pub wiring: HostWiring,
+}
+
+/// Il collegamento che una feature **dichiara** e che soltanto l'host sa fare.
+///
+/// Non è un id travestito: due feature con lo stesso bisogno dichiarerebbero la
+/// stessa variante, e l'host non saprebbe (né dovrebbe sapere) quale delle due
+/// sta montando.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostWiring {
+    /// Nessuno: bastano i provider dichiarati nella riga.
+    None,
+    /// L'indice full-text si apre nella cartella dati che l'host assegna al
+    /// componente, e può non aprirsi. L'host registra anche l'handler che ne
+    /// aggiorna i pesi quando cambiano le impostazioni.
+    SearchIndex,
+    /// Lo store delle versioni vive in chi monta, che lo pubblica soltanto
+    /// quando tutti i provider della riga sono entrati. L'interruttore è
+    /// dell'host: spento, la feature si dichiara e non registra niente.
+    VersionStore,
+}
+
+impl OfficialFeature {
+    /// Una riga che non dichiara niente da registrare: nessun provider e nessun
+    /// collegamento. Chi monta la rifiuta invece di montare un bundle vuoto.
+    pub fn registers_nothing(&self) -> bool {
+        self.view.is_none()
+            && self.commands.is_none()
+            && self.index.is_none()
+            && self.syntax.is_none()
+            && self.renderers.is_none()
+            && self.wiring == HostWiring::None
+    }
 }
 
 /// L'elenco, **in ordine di montaggio** — e di questa build.
@@ -166,19 +224,32 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: search::catalog,
         view: None,
         commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: Some(search::settings),
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::SearchIndex,
     },
     #[cfg(feature = "versioning")]
     OfficialFeature {
         id: VERSIONING_ID,
         name: "Versioning",
         catalog: versioning::catalog,
-        // Le due righe che rendono questa feature meno irregolare di quanto
-        // sembri: la cronologia (§1.2) e `version.restore` sono dichiarate qui
-        // come quelle di chiunque altro. Ciò che resta di irregolare è **quando**
-        // si registrano — insieme all'handler e sotto l'interruttore del
-        // versioning — e quello sta in `fub_host::mount`.
+        // La cronologia (§1.2) e `version.restore` sono dichiarate qui come
+        // quelle di chiunque altro. Ciò che resta dell'host è **quando** si
+        // registrano — insieme all'handler e sotto l'interruttore del
+        // versioning — e lo dice `wiring`.
         view: Some(|| Box::new(HistoryView)),
         commands: Some(|| Box::new(VersioningCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::VersionStore,
     },
     #[cfg(feature = "backlinks")]
     OfficialFeature {
@@ -187,6 +258,13 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: backlinks::catalog,
         view: Some(|| Box::new(BacklinksView)),
         commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "outline")]
     OfficialFeature {
@@ -195,6 +273,13 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: outline::catalog,
         view: Some(|| Box::new(OutlineView)),
         commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "tags")]
     OfficialFeature {
@@ -203,6 +288,13 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: tags::catalog,
         view: Some(|| Box::new(TagPanelView)),
         commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "properties")]
     OfficialFeature {
@@ -211,6 +303,14 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: properties::catalog,
         view: Some(|| Box::new(PropertiesView)),
         commands: Some(|| Box::new(PropertiesCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        // `note.property.set`/`remove`, che template e Base invocano.
+        provides: &[PROPERTIES_ID],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "template")]
     OfficialFeature {
@@ -219,6 +319,18 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: template::catalog,
         view: Some(|| Box::new(TemplateView)),
         commands: Some(|| Box::new(TemplateCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        // Le giornaliere e gli inserimenti leggono impostazioni che il loro
+        // componente dichiara: senza questa riga `daily.folder` e compagne non
+        // sarebbero di nessuno, il pannello non le mostrerebbe e ogni lettura
+        // cadrebbe sul default.
+        settings: Some(TemplateCommands::settings),
+        provides: &[],
+        // Fonde le proprietà del template con `note.property.set`.
+        requires: &[PROPERTIES_ID],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "queries")]
     OfficialFeature {
@@ -227,6 +339,13 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: queries::catalog,
         view: Some(|| Box::new(QueriesView)),
         commands: Some(|| Box::new(QueriesCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "dashboard")]
     OfficialFeature {
@@ -235,6 +354,13 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: dashboard::catalog,
         view: Some(|| Box::new(DashboardView)),
         commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "backup")]
     OfficialFeature {
@@ -243,6 +369,13 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: backup::catalog,
         view: Some(|| Box::new(BackupView)),
         commands: Some(|| Box::new(BackupCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: Some(backup::settings),
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "trash")]
     OfficialFeature {
@@ -251,6 +384,15 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: trash::catalog,
         view: Some(|| Box::new(TrashView)),
         commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        // Il pannello invoca `trash.restore`/`trash.empty`, che appartengono al
+        // bundle dei comandi: senza quel servizio il cestino non si monta.
+        requires: &[COMMANDS_ID],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "graph")]
     OfficialFeature {
@@ -258,7 +400,15 @@ static OFFICIALS: &[OfficialFeature] = &[
         name: "Graph",
         catalog: graph::catalog,
         view: Some(|| Box::new(GraphView)),
-        commands: None,
+        // Il comando che la apre è suo: vedi `graph::GRAPH_OPEN`.
+        commands: Some(|| Box::new(GraphCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "stats")]
     OfficialFeature {
@@ -267,6 +417,13 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: stats::catalog,
         view: Some(|| Box::new(StatsView)),
         commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "base")]
     OfficialFeature {
@@ -275,6 +432,14 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: fub_format_base::embed_catalog,
         view: None,
         commands: None,
+        index: Some(|| Box::new(BaseIndex::new())),
+        syntax: Some(|| vec![Box::new(fub_format_base::BaseRule)]),
+        renderers: Some(|| vec![Box::new(fub_format_base::BaseRenderer)]),
+        settings: None,
+        provides: &[],
+        // Una cella modificata diventa `note.property.set`/`remove`.
+        requires: &[PROPERTIES_ID],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "commands")]
     OfficialFeature {
@@ -283,6 +448,15 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: commands::catalog,
         view: None,
         commands: Some(|| Box::new(CoreCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        // Il servizio che il cestino richiede. L'atomicità del registro
+        // garantisce che non sopravviva a una registrazione fallita.
+        provides: &[COMMANDS_ID],
+        requires: &[],
+        wiring: HostWiring::None,
     },
     #[cfg(feature = "blocks")]
     OfficialFeature {
@@ -291,6 +465,20 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: blocks::catalog,
         view: None,
         commands: None,
+        index: None,
+        syntax: Some(|| {
+            vec![
+                Box::new(DiagramRule),
+                Box::new(MathRule),
+                Box::new(HighlightRule),
+                Box::new(CommentRule),
+            ]
+        }),
+        renderers: Some(|| vec![Box::new(DiagramRenderer), Box::new(MathRenderer)]),
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
     },
 ];
 

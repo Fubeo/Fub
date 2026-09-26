@@ -158,6 +158,20 @@ fn the_panel_lists_the_trash_and_the_says_when_and_empty() {
     assert_eq!(entries(&tree), vec!["Uno".to_string()]);
 }
 
+/// Il nome di una voce è quello della pagina, qualunque estensione abbia il
+/// file: non soltanto `.md`.
+#[test]
+fn an_entry_is_named_without_its_extension_whatever_it_is() {
+    let vault = Vault::new();
+    vault.put("Due.markdown", "secondo\n");
+    let mut ws = vault.open();
+
+    ws.delete_document(&fub_abi::model::DocId::new("Due.markdown"))
+        .expect("cestinata");
+    let tree = ws.render_view(&instance()).unwrap();
+    assert_eq!(entries(&tree), vec!["Due".to_string()]);
+}
+
 #[test]
 fn restore_passes_from_the_record_of_the_commands_and_brings_back_the_notes_in_the_vault() {
     let vault = Vault::new();

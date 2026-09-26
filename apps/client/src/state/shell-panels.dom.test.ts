@@ -27,8 +27,9 @@ vi.mock("../ui/tooltip", () => ({ setTooltip: vi.fn() }));
 vi.mock("../i18n/strings", () => ({ t: (key: string) => key }));
 
 import { openLifetime } from "../ui/lifetime";
-import { mountBookmarksPanel } from "./bookmarks-ui";
-import { mountWorkspacesPanel } from "./workspaces-ui";
+import { refreshPanel, registeredPanels } from "../ui/panel-host";
+import { mountBookmarksPanel, toggleBookmarksPanel } from "./bookmarks-ui";
+import { mountWorkspacesPanel, toggleWorkspacesPanel } from "./workspaces-ui";
 
 const settle = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
 
@@ -60,5 +61,48 @@ describe("shell panel lifetimes", () => {
     expect(document.querySelectorAll("#bookmarks-panel, #workspaces-panel")).toHaveLength(2);
     second.close();
     expect(document.querySelectorAll("#bookmarks-panel, #workspaces-panel")).toHaveLength(0);
+  });
+});
+
+describe("segnalibri e workspace passano dal registro dei pannelli", () => {
+  it("si dichiarano a panel-host, e l'host non ridisegna ciò che non si vede", async () => {
+    document.body.innerHTML = '<aside id="sidebar"></aside>';
+    fake.loadBookmarks.mockResolvedValue({ kind: "empty" });
+    fake.loadWorkspaces.mockResolvedValue({ kind: "empty" });
+    const life = openLifetime();
+    mountBookmarksPanel(life);
+    mountWorkspacesPanel(life);
+    await settle();
+
+    const bookmarks = registeredPanels().find((panel) => panel.id === "shell:bookmarks");
+    const workspaces = registeredPanels().find((panel) => panel.id === "shell:workspaces");
+    expect(bookmarks?.placement).toBe("left_sidebar");
+    expect(workspaces?.placement).toBe("left_sidebar");
+    // La rinomina invecchia i segnalibri per maschera dichiarata, non per
+    // un'iscrizione privata al bus.
+    expect(bookmarks?.refresh.kinds).toEqual(["document_renamed"]);
+    expect(workspaces?.refresh.kinds).toEqual([]);
+    expect(fake.on.mock.calls.map(([event]) => event)).not.toContain("document_renamed");
+
+    // Nascosti: l'host non li ridisegna. La visibilità è il DOM, non un flag.
+    const bookmarksEl = document.getElementById("bookmarks-panel")!;
+    const workspacesEl = document.getElementById("workspaces-panel")!;
+    expect(bookmarks?.visible?.()).toBe(false);
+    await refreshPanel("shell:bookmarks");
+    expect(bookmarksEl.childElementCount).toBe(0);
+
+    toggleBookmarksPanel();
+    toggleWorkspacesPanel();
+    await settle();
+    expect(bookmarks?.visible?.()).toBe(true);
+    expect(workspaces?.visible?.()).toBe(true);
+    expect(bookmarksEl.hidden).toBe(false);
+    expect(workspacesEl.hidden).toBe(false);
+    expect(bookmarksEl.querySelector(".panel-title")).not.toBeNull();
+    expect(workspacesEl.querySelector(".panel-title")).not.toBeNull();
+
+    life.close();
+    expect(registeredPanels().map((panel) => panel.id)).not.toContain("shell:bookmarks");
+    expect(registeredPanels().map((panel) => panel.id)).not.toContain("shell:workspaces");
   });
 });

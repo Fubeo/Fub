@@ -125,6 +125,15 @@ pub fn check(id: &str, owner: Owner<'_>) -> Result<(), IdFault> {
         Some((ns, name)) if ns.is_empty() || name.is_empty() => {
             Err(IdFault::Malformed { id: id.to_string() })
         }
+        // Il namespace del core non è di nessun plugin, nemmeno di uno che si
+        // chiami `fub`: con quell'id un componente di terze parti avrebbe
+        // nominato come le feature ufficiali, e occupato i loro nomi quando
+        // sono spente.
+        Some((ns, _)) if ns == CORE_NS && owner != Owner::Core => Err(IdFault::Foreign {
+            id: id.to_string(),
+            namespace: ns.to_string(),
+            owner: owner.namespace().to_string(),
+        }),
         Some((ns, _)) if ns == owner.namespace() => Ok(()),
         Some((ns, _)) => Err(IdFault::Foreign {
             id: id.to_string(),
@@ -167,9 +176,14 @@ mod tests {
             check("board", acme),
             Err(IdFault::Unnamespaced { .. })
         ));
-        // E il namespace del core non è di nessun plugin.
+        // E il namespace del core non è di nessun plugin, nemmeno di quello
+        // che prende `fub` come id.
         assert!(matches!(
             check("fub:diagrams", acme),
+            Err(IdFault::Foreign { .. })
+        ));
+        assert!(matches!(
+            check("fub:diagrams", Owner::Plugin(CORE_NS)),
             Err(IdFault::Foreign { .. })
         ));
     }
