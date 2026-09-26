@@ -37,6 +37,10 @@ jobs:
         run: node .github/scripts/check-host-workspace-boundary.mjs
       - name: gli errori letterali non crescono
         run: node .github/scripts/check-error-literals.mjs
+      - name: il lettore dei commenti di Rust distingue la prosa da stringhe e caratteri
+        run: node .github/scripts/check-rust-comments.mjs --self-test
+      - name: i commenti di Rust restano attaccati a ciò che descrivono
+        run: node .github/scripts/check-rust-comments.mjs
       - name: aggiungi il bersaglio del confine
         run: rustup target add wasm32-unknown-unknown
       - name: il contratto attraversa il confine

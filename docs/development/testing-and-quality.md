@@ -220,6 +220,11 @@ I guard documentali controllano:
 - riferimenti legacy e cronaca vietata;
 - allineamento del ciclo locale.
 
+Il [guard dei commenti di Rust](../../.github/scripts/check-rust-comments.mjs)
+controlla che ogni `///` stia sopra l'item che descrive: niente righe
+ripetute, niente doc staccati da una riga vuota o da un commento, niente
+intestazioni di sezione spezzate.
+
 ## Matrice per modifica
 
 | Modifica | Test necessari |

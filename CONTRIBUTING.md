@@ -66,6 +66,7 @@ npm test
 npm run build
 node .github/scripts/check-host-workspace-boundary.mjs
 node .github/scripts/check-error-literals.mjs
+node .github/scripts/check-rust-comments.mjs
 node .github/scripts/check-codemirror-boundary.mjs
 node .github/scripts/check-doc-links.mjs
 node .github/scripts/check-doc-orphans.mjs
