@@ -63,6 +63,10 @@ impl std::fmt::Display for TokenRejection {
 /// Il nome d'account più lungo, in byte dopo il `trim`. Un login con un nome
 /// più lungo non nomina nessuno, e si rifiuta prima di verificarlo.
 pub const MAX_ACCOUNT_NAME: usize = 128;
+/// Sessioni vive per account. Ogni login ne emette una e ogni emissione
+/// riscrive il registro: senza tetto, login ripetuti con credenziali giuste
+/// lo gonfiavano per 30 giorni. Oltre il tetto cade la più vecchia.
+pub const MAX_SESSIONS_PER_ACCOUNT: usize = 64;
 
 /// Hash persistito della password account (mai la chiave dati).
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -287,6 +291,18 @@ impl AccountStore {
         // Una sessione scaduta non vale più niente: si toglie quando se ne
         // emette una nuova, o il registro crescerebbe di un token per login.
         self.sessions.retain(|_, session| session.expires_ms >= now);
+        let mut own: Vec<(u64, String)> = self
+            .sessions
+            .values()
+            .filter(|session| session.account_id == account_id)
+            .map(|session| (session.created_ms, session.token_b64.clone()))
+            .collect();
+        if own.len() >= MAX_SESSIONS_PER_ACCOUNT {
+            own.sort_unstable();
+            for (_, oldest) in &own[..=own.len() - MAX_SESSIONS_PER_ACCOUNT] {
+                self.sessions.remove(oldest);
+            }
+        }
         self.sessions.insert(
             token.clone(),
             SessionToken {
@@ -407,6 +423,36 @@ mod tests {
             store.verify_session_token(Some(&format!("Bearer {new}"))),
             Ok(account)
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn repeated_logins_keep_a_bounded_number_of_sessions() {
+        let dir = std::env::temp_dir().join(format!("fub-services-auth-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut store = AccountStore::load(&dir).unwrap();
+        let account = store.create_account("assiduo", "correct-horse-99").unwrap();
+        let other = store.create_account("altro", "correct-horse-99").unwrap();
+        let kept = store.issue_session_token(&other).unwrap();
+        let first = store.issue_session_token(&account).unwrap();
+        store.sessions.get_mut(&first).unwrap().created_ms = 0;
+        for _ in 0..MAX_SESSIONS_PER_ACCOUNT {
+            store.issue_session_token(&account).unwrap();
+        }
+        let own = store
+            .sessions
+            .values()
+            .filter(|session| session.account_id == account)
+            .count();
+        assert_eq!(own, MAX_SESSIONS_PER_ACCOUNT);
+        assert!(!store.sessions.contains_key(&first), "the oldest goes");
+        assert_eq!(
+            store.verify_session_token(Some(&format!("Bearer {kept}"))),
+            Ok(other),
+            "another account's session is not its to lose"
+        );
+        let reloaded = AccountStore::load(&dir).unwrap();
+        assert_eq!(reloaded.sessions.len(), MAX_SESSIONS_PER_ACCOUNT + 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
