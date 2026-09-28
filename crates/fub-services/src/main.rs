@@ -1330,6 +1330,8 @@ mod sync_http_tests {
         let (status, body) = exchange(&state, &dir.0, oversized);
         assert_eq!(status, 413);
         assert_eq!(body["error"], "body too large");
+        assert!(exchange_raw(&state, &dir.0, oversized)
+            .starts_with(b"HTTP/1.1 413 Content Too Large\r\n"));
         let duplicate = b"POST /v1/sync/invite HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n{}";
         let (status, body) = exchange(&state, &dir.0, duplicate);
         assert_eq!(status, 400);

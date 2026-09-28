@@ -50,7 +50,8 @@ impl HttpResponse {
         Self::json(status, &serde_json::json!({ "error": code }))
     }
 
-    /// Testo di stato HTTP per lo status numerico.
+    /// Testo di stato HTTP per lo status numerico. Uno status senza testo
+    /// noto ne riceve uno vuoto, che HTTP/1.1 ammette, mai "OK".
     pub fn status_text(&self) -> &'static str {
         match self.status {
             200 => "OK",
@@ -61,14 +62,18 @@ impl HttpResponse {
             404 => "Not Found",
             408 => "Request Timeout",
             409 => "Conflict",
+            410 => "Gone",
+            413 => "Content Too Large",
             414 => "Request-URI Too Long",
             417 => "Expectation Failed",
             422 => "Unprocessable Entity",
             429 => "Too Many Requests",
             431 => "Request Header Fields Too Large",
             500 => "Internal Server Error",
+            501 => "Not Implemented",
             503 => "Service Unavailable",
-            _ => "OK",
+            507 => "Insufficient Storage",
+            _ => "",
         }
     }
 }
