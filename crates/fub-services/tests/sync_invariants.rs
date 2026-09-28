@@ -48,6 +48,11 @@ use fub_services::sync::{self, OpKind, SyncOp};
 
 const VAULT: &str = "vault-test-pairing";
 
+/// La cartella sync del vault del banco: stato ripiegato e code.
+fn vault_sync_dir(dir: &Path) -> PathBuf {
+    sync::vault_dir(&fub_services::schema::sync_dir(dir), VAULT)
+}
+
 fn temp_data_dir(name: &str) -> PathBuf {
     let mut dir = std::env::temp_dir();
     dir.push(format!(
@@ -295,7 +300,7 @@ fn partition_rejoin_converges_or_conflicts() {
     learn(&mut b, &pb.ops);
     assert_eq!(a.vv, b.vv, "vectors converge after rejoin");
     // No silent divergence: the shared doc has 2 versions (both preserved).
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert_eq!(folded.versions["notes/shared.md"].len(), 2);
 }
@@ -329,7 +334,7 @@ fn reorder_and_duplicates_are_idempotent() {
     ];
     let r = push(&mut state, &auth, &a.id, &shuffled);
     assert_eq!(r.ack.len(), shuffled.len(), "every delivery acked");
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     // No write lost: the dominating version (v3) is present; stale replays
     // were acked and skipped, never stored as extra versions.
@@ -468,7 +473,7 @@ fn divergent_clocks_do_not_decide() {
     push(&mut state, &auth, &c.id, &[sc]);
     let r2 = push(&mut state, &auth, &d.id, &[sd]);
     assert!(r2.conflicts.is_empty(), "settings converge by LWW");
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert_eq!(folded.versions["config-shared/app.json"].len(), 2);
 }
@@ -502,7 +507,7 @@ fn restart_mid_queue_converges() {
     ack(&mut state2, &auth, "replica-b", &ids);
     drop(state2);
     let _state3 = open_state(&dir);
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let wal = fub_services::sync::queue::load_ops(&dir_sync, "replica-b").unwrap();
     assert!(wal.is_empty(), "acked WAL entries stay gone across restart");
 }
@@ -546,7 +551,7 @@ fn attachment_integrity_roundtrip() {
         .verify_session_token(Some(&auth))
         .expect("session valid");
     // Quota path: oversized attachment rejected, small one accounted.
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let mut folded = fub_services::sync::versions::load(&dir_sync).unwrap_or_default();
     assert!(fub_services::sync::versions::account_attachment(
         &mut folded,
@@ -836,7 +841,7 @@ fn queue_and_memory_bounds_hold() {
             assert_eq!(r.ack.len(), batch.len());
         }
     }
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert_eq!(
         folded.versions["notes/hot.md"].len(),
@@ -853,7 +858,7 @@ fn queue_and_memory_bounds_hold() {
 #[test]
 fn dedup_index_is_bounded_without_duplicate_live_versions() {
     let dir = temp_data_dir("seen-bound");
-    let sync_dir = fub_services::schema::sync_dir(&dir);
+    let sync_dir = vault_sync_dir(&dir);
     std::fs::create_dir_all(&sync_dir).unwrap();
     let mut folded = fub_services::sync::versions::SyncState::default();
     for n in 0..=sync::MAX_SEEN_OP_IDS {
@@ -889,7 +894,7 @@ fn queue_corruption_quarantines_and_resyncs() {
     // explicit resync replay converges.
     use fub_services::sync::queue;
     let dir = temp_data_dir("corrupt");
-    let sync_dir = fub_services::schema::sync_dir(&dir);
+    let sync_dir = vault_sync_dir(&dir);
     std::fs::create_dir_all(&sync_dir).unwrap();
     let mut a = Replica::new("a");
     let good = a.op("notes/good.md", OpKind::Create, "good");
@@ -927,7 +932,7 @@ fn queue_full_is_backpressure_never_drop() {
     // a silent drop: the caller must drain via pull+ack first.
     use fub_services::sync::queue;
     let dir = temp_data_dir("queuefull");
-    let sync_dir = fub_services::schema::sync_dir(&dir);
+    let sync_dir = vault_sync_dir(&dir);
     std::fs::create_dir_all(&sync_dir).unwrap();
     let mut a = Replica::new("a");
     let ops: Vec<_> = (0..queue::MAX_QUEUE_OPS)
@@ -1122,7 +1127,7 @@ fn device_only_never_syncs() {
     let op = evil.op("secrets/token.txt", OpKind::Create, "s3cr3t");
     let r = push(&mut state, &auth, &evil.id, &[op]);
     assert_eq!(r.conflicts.len(), 1);
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert!(!folded.versions.contains_key("secrets/token.txt"));
     // Ciphertext opacity: nothing stored contains the word "plaintext".
@@ -1161,7 +1166,7 @@ fn no_secret_in_persisted_state() {
     let mut a = Replica::new("a");
     let op = a.op("notes/clean.md", OpKind::Create, "CT:opaque");
     push(&mut state, &auth, &a.id, &[op]);
-    let dir_sync = fub_services::schema::sync_dir(&dir);
+    let dir_sync = vault_sync_dir(&dir);
     let mut blob = Vec::new();
     for entry in std::fs::read_dir(&dir_sync).unwrap() {
         let entry = entry.unwrap();
@@ -1324,7 +1329,7 @@ fn selected_restore_is_authenticated_and_only_a_fresh_write_changes_history() {
     };
     let plaintext = aad_verify(&key, &env, &original.nonce_b64, &original.ciphertext_b64).unwrap();
     assert_eq!(plaintext, b"original bytes");
-    let sync_dir = fub_services::schema::sync_dir(&dir);
+    let sync_dir = vault_sync_dir(&dir);
     assert_eq!(
         fub_services::sync::versions::load(&sync_dir)
             .unwrap()
@@ -1372,14 +1377,14 @@ fn concurrent_rename_and_edit_are_held_without_poisoning_durable_replay() {
     assert!(held.ack.is_empty());
     assert_eq!(held.conflicts.len(), 1);
     assert_eq!(
-        fub_services::sync::queue::load_ops(&fub_services::schema::sync_dir(&dir), &b.id)
+        fub_services::sync::queue::load_ops(&vault_sync_dir(&dir), &b.id)
             .unwrap()
             .len(),
         0
     );
     let unrelated = b.op("notes/independent.md", OpKind::Create, "safe");
     assert_eq!(push(&mut state, &auth, &b.id, &[unrelated]).ack.len(), 1);
-    let folded = fub_services::sync::versions::load(&fub_services::schema::sync_dir(&dir)).unwrap();
+    let folded = fub_services::sync::versions::load(&vault_sync_dir(&dir)).unwrap();
     assert!(folded.versions.contains_key("notes/to.md"));
     assert_eq!(folded.versions["notes/from.md"].len(), 1);
 }
@@ -1400,7 +1405,7 @@ fn edit_before_concurrent_delete_is_preserved_and_reported() {
     let result = push(&mut state, &auth, &b.id, &[delete]);
     assert_eq!(result.ack.len(), 1);
     assert_eq!(result.conflicts.len(), 1);
-    let folded = fub_services::sync::versions::load(&fub_services::schema::sync_dir(&dir)).unwrap();
+    let folded = fub_services::sync::versions::load(&vault_sync_dir(&dir)).unwrap();
     assert_eq!(folded.versions["notes/deleted.md"].len(), 3);
     assert_eq!(folded.conflicts.len(), 1);
     assert!(folded.tombstones.contains_key("notes/deleted.md"));
@@ -1426,7 +1431,7 @@ fn status_rows_are_sourced_from_authenticated_versions_and_wal_does_not_expire()
     assert_eq!(status["entries"][0]["doc_id"], "notes/status.md");
     assert_eq!(status["entries"][0]["server_counter"], "1");
     assert_eq!(status["log"][0]["kind"], "create");
-    let sync_dir = fub_services::schema::sync_dir(&dir);
+    let sync_dir = vault_sync_dir(&dir);
     let quotas = fub_services::schema::ServiceQuotas::default();
     fub_services::sync::queue::enforce_cap(
         &sync_dir,

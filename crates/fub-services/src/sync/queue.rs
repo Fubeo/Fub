@@ -1,7 +1,7 @@
 //! Durable per-replica queue (P16.1, Main-ordered recovery).
 //!
-//! Layout: `<data>/sync/queue-<replica>.jsonl`, one [`super::SyncOp`] per
-//! line. Every batch ends with `File::sync_all` + parent-dir fsync, so a
+//! Layout: `<vault>/queue-<replica>.jsonl` inside the vault directory
+//! ([`super::vault_dir`]), one [`super::SyncOp`] per line. Every batch ends with `File::sync_all` + parent-dir fsync, so a
 //! crash mid-queue loses at most the in-flight batch.
 //!
 //! Authority model (Main): the unacked queue is AUTHORITY (must never drop),
@@ -67,7 +67,7 @@ impl std::fmt::Display for QueueError {
     }
 }
 
-/// `<data>/sync/queue-<replica>.jsonl`. Replica ids are UUID v4; sanitize
+/// `<vault>/queue-<replica>.jsonl`. Replica ids are UUID v4; sanitize
 /// defensively so a hostile id cannot escape the sync dir.
 pub fn queue_path(sync_dir: &Path, replica_id: &str) -> PathBuf {
     let safe: String = replica_id

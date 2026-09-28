@@ -94,7 +94,7 @@ pub struct SyncState {
     pub vault_epochs: BTreeMap<String, u32>,
 }
 
-/// `<data>/sync/state.json`.
+/// `<vault>/state.json` inside the vault directory ([`super::vault_dir`]).
 pub fn state_path(sync_dir: &Path) -> PathBuf {
     sync_dir.join("state.json")
 }

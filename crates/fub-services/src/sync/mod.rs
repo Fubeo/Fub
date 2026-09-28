@@ -25,6 +25,15 @@
 //! a path; a rename keeps the replica stable because the path is an
 //! attribute of the op, not the identity of the replica.
 //!
+//! Layout under `<data>/sync/`: `shares.json` holds grants, invites and
+//! wrapped keys indexed by vault; every vault has its own
+//! `vaults/<sha256(vault_id)>/` with the folded `state.json` and the replica
+//! queues. Chains, tombstones, trash, server vector, dedup set and quota are
+//! per vault, so two vaults that share a `doc_id` never meet. State written
+//! by an older version straight into `sync/` is adopted when it holds a
+//! single vault; a state mixing vaults stops sync until the operator
+//! recovers it (see [`vault_dir`]).
+//!
 //! A replica is NOT a backup: versions/tombstones/conflicts expire by
 //! `retention_days`; restore is a new write, never a resurrection of an old
 //! vector.
@@ -37,7 +46,7 @@ pub mod queue;
 pub mod versions;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -486,7 +495,7 @@ fn unclaimed_vault(
         return Ok(false);
     }
     let folded =
-        versions::load(&sync_dir(&state.data_dir)).map_err(|e| HttpResponse::err(500, &e))?;
+        versions::load(&vault_dir_of(state, vault_id)?).map_err(|e| HttpResponse::err(500, &e))?;
     Ok(!folded
         .versions
         .values()
@@ -938,6 +947,121 @@ fn sync_dir_of(state: &ServiceState) -> std::path::PathBuf {
     dir
 }
 
+/// Cartella di un vault sotto `sync/`: stato ripiegato, code delle repliche e
+/// quarantene. Catene, tombstone, cestino, vettore del server e quota di un
+/// vault non incontrano mai quelli di un altro, anche con lo stesso `doc_id`.
+/// Il nome è lo SHA-256 dell'id, così un id ostile non esce dalla cartella.
+pub fn vault_dir(sync_dir: &Path, vault_id: &str) -> PathBuf {
+    let digest = ring::digest::digest(&ring::digest::SHA256, vault_id.as_bytes());
+    let name: String = digest
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    sync_dir.join("vaults").join(name)
+}
+
+/// Cartella del vault, dopo aver adottato lo stato di una versione
+/// precedente. Non la crea: leggere un vault senza dati non lascia cartelle.
+fn vault_dir_of(state: &ServiceState, vault_id: &str) -> Result<PathBuf, HttpResponse> {
+    let dir = sync_dir(&state.data_dir);
+    adopt_legacy(&dir).map_err(|e| HttpResponse::err(500, &e))?;
+    Ok(vault_dir(&dir, vault_id))
+}
+
+/// Dove finisce uno stato precedente che non contiene alcun vault.
+pub const LEGACY_STATE_ASIDE: &str = "state.pre-vaults.json";
+
+/// Adotta lo stato di una versione precedente, scritto direttamente in
+/// `sync/` e condiviso da tutti i vault.
+///
+/// - Un solo vault fra catene e code: code, quarantene e stato passano nella
+///   sua cartella, lo stato per ultimo, così un'interruzione riprende da capo.
+/// - Nessun vault: lo stato si mette da parte in [`LEGACY_STATE_ASIDE`].
+/// - Più vault: catene, tombstone e cestino sono già mescolati e non si
+///   separano per tentativi. Il sync resta fermo finché l'operatore non
+///   recupera lo stato; niente viene riscritto o cancellato.
+fn adopt_legacy(sync_dir: &Path) -> Result<(), String> {
+    let legacy = versions::state_path(sync_dir);
+    if !legacy.exists() {
+        return Ok(());
+    }
+    let state = versions::load(sync_dir)?;
+    let mut vaults: BTreeSet<String> = state
+        .versions
+        .values()
+        .flatten()
+        .map(|version| version.vault_id.clone())
+        .collect();
+    let mut queues = Vec::new();
+    let entries = std::fs::read_dir(sync_dir).map_err(|e| format!("sync dir read: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("sync dir entry: {e}"))?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !name.starts_with("queue-") || !name.ends_with(".jsonl") {
+            continue;
+        }
+        if !name.contains(".corrupt-") {
+            let text = std::fs::read_to_string(entry.path())
+                .map_err(|e| format!("legacy sync queue read: {e}"))?;
+            for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+                let op: SyncOp = serde_json::from_str(line).map_err(|_| {
+                    "legacy sync queue has an unreadable line: operator recovery required"
+                        .to_string()
+                })?;
+                vaults.insert(op.vault_id);
+            }
+        }
+        queues.push(entry.path());
+    }
+    let mut vaults = vaults.into_iter();
+    let vault_id = match (vaults.next(), vaults.next()) {
+        (Some(vault_id), None) => vault_id,
+        (Some(_), Some(_)) => {
+            return Err(
+                "sync state predates vault partitions and mixes vaults: operator recovery required"
+                    .to_string(),
+            )
+        }
+        (None, _) => {
+            let aside = sync_dir.join(LEGACY_STATE_ASIDE);
+            if aside.exists() {
+                return Err(
+                    "legacy sync state already set aside: operator recovery required".to_string(),
+                );
+            }
+            return std::fs::rename(&legacy, &aside).map_err(|e| format!("legacy sync state: {e}"));
+        }
+    };
+    let target = vault_dir(sync_dir, &vault_id);
+    std::fs::create_dir_all(&target).map_err(|e| format!("vault sync dir: {e}"))?;
+    let adopted = versions::state_path(&target);
+    let clash = |to: &Path| {
+        to.exists()
+            .then(|| "legacy sync state clashes with a vault partition".to_string())
+    };
+    if let Some(error) = clash(&adopted) {
+        return Err(error);
+    }
+    for path in &queues {
+        let to = target.join(path.file_name().expect("read_dir entry has a name"));
+        if let Some(error) = clash(&to) {
+            return Err(error);
+        }
+        std::fs::rename(path, &to).map_err(|e| format!("legacy sync queue move: {e}"))?;
+    }
+    std::fs::rename(&legacy, &adopted).map_err(|e| format!("legacy sync state move: {e}"))?;
+    for dir in [target.as_path(), sync_dir] {
+        if let Ok(dir) = std::fs::File::open(dir) {
+            let _ = dir.sync_all();
+        }
+    }
+    Ok(())
+}
+
 fn load_folded(dir: &Path) -> Result<SyncState, HttpResponse> {
     versions::load(dir).map_err(|e| HttpResponse::err(500, &e))
 }
@@ -1010,13 +1134,16 @@ fn handle_push(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
     if let Err(r) = authorize(state, &resource, &account, Role::Writer) {
         return r;
     }
-    let dir = sync_dir_of(state);
+    let dir = match vault_dir_of(state, &vault_id) {
+        Ok(dir) => dir,
+        Err(response) => return response,
+    };
     let now = schema::now_ms();
     let mut folded = match load_folded(&dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    let shares = match load_shares(&dir) {
+    let shares = match load_shares(&sync_dir_of(state)) {
         Ok(shares) => shares,
         Err(e) => return HttpResponse::err(500, &e),
     };
@@ -1297,12 +1424,11 @@ fn handle_pull(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
     if let Err(r) = check_role(state, &resource, &account, Role::Reader) {
         return r;
     }
-    let dir = sync_dir_of(state);
-    let folded = match load_folded(&dir) {
+    let folded = match vault_dir_of(state, &req.vault_id).and_then(|dir| load_folded(&dir)) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    let shares = match load_shares(&dir) {
+    let shares = match load_shares(&sync_dir_of(state)) {
         Ok(shares) => shares,
         Err(e) => return HttpResponse::err(500, &e),
     };
@@ -1395,7 +1521,10 @@ fn handle_ack(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Http
     if let Err(r) = check_role(state, &resource, &account, Role::Reader) {
         return r;
     }
-    let dir = sync_dir_of(state);
+    let dir = match vault_dir_of(state, &req.vault_id) {
+        Ok(dir) => dir,
+        Err(response) => return response,
+    };
     match queue::ack_ops(&dir, &req.replica_id, &req.ack) {
         Err(queue::QueueError::RecoveryNeeded {
             quarantined,
@@ -1444,21 +1573,14 @@ fn handle_status(
     if !valid_replica_id(&replica_id) {
         return HttpResponse::err(400, "invalid replica_id");
     }
-    let dir = sync_dir_of(state);
+    let dir = match vault_dir_of(state, vault_id) {
+        Ok(dir) => dir,
+        Err(response) => return response,
+    };
     let folded = match load_folded(&dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    // Aggregate vectors, trash and tombstones are not vault-partitioned.
-    // Never expose them under an ACL for only one of several vaults.
-    if folded
-        .versions
-        .values()
-        .flatten()
-        .any(|v| v.vault_id != vault_id)
-    {
-        return HttpResponse::err(409, "sync status requires vault-partitioned state");
-    }
     let pending = match queue::load_ops(&dir, &replica_id) {
         Ok(ops) => ops.len(),
         Err(_) => return HttpResponse::err(500, "sync queue recovery needed"),
@@ -1535,23 +1657,16 @@ fn handle_versions(
     if doc_id.is_empty() {
         return HttpResponse::err(400, "missing doc_id");
     }
-    let dir = sync_dir_of(state);
-    let folded = match load_folded(&dir) {
+    let folded = match vault_dir_of(state, vault_id).and_then(|dir| load_folded(&dir)) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    if folded.versions.get(&doc_id).is_some_and(|chain| {
-        chain.iter().any(|v| v.vault_id == vault_id) && chain.iter().any(|v| v.vault_id != vault_id)
-    }) {
-        return HttpResponse::err(409, "versions require a single-vault document chain");
-    }
     let versions: Vec<serde_json::Value> = folded
         .versions
         .get(&doc_id)
         .map(|chain| {
             chain
                 .iter()
-                .filter(|v| v.vault_id == vault_id)
                 .map(|v| {
                     serde_json::json!({
                         "doc_id": v.doc_id,
@@ -1570,9 +1685,7 @@ fn handle_versions(
         &serde_json::json!({
             "doc_id": doc_id,
             "versions": versions,
-            "in_trash": folded.trash.contains_key(&doc_id)
-                && folded.versions.get(&doc_id).is_some_and(|chain|
-                    !chain.is_empty() && chain.iter().all(|v| v.vault_id == vault_id)),
+            "in_trash": folded.trash.contains_key(&doc_id),
         }),
     )
 }
@@ -1599,19 +1712,20 @@ fn handle_trash(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Ht
     if let Err(r) = authorize(state, &resource, &account, Role::Writer) {
         return r;
     }
-    let dir = sync_dir_of(state);
+    let dir = match vault_dir_of(state, &req.vault_id) {
+        Ok(dir) => dir,
+        Err(response) => return response,
+    };
     let mut folded = match load_folded(&dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    // Trash is still keyed only by doc_id. Reject absent or mixed-vault
-    // chains rather than changing another vault's marker.
-    if !folded
+    if folded
         .versions
         .get(&req.doc_id)
-        .is_some_and(|chain| !chain.is_empty() && chain.iter().all(|v| v.vault_id == req.vault_id))
+        .is_none_or(|chain| chain.is_empty())
     {
-        return HttpResponse::err(409, "trash requires a single-vault version chain");
+        return HttpResponse::err(409, "trash requires a version chain");
     }
     let now = schema::now_ms();
     // Trash without content: snapshot the current server vector so a later
@@ -1656,17 +1770,20 @@ fn handle_restore(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> 
     if let Err(r) = authorize(state, &resource, &account, Role::Writer) {
         return r;
     }
-    let dir = sync_dir_of(state);
+    let dir = match vault_dir_of(state, &req.vault_id) {
+        Ok(dir) => dir,
+        Err(response) => return response,
+    };
     let mut folded = match load_folded(&dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    if !folded
+    if folded
         .versions
         .get(&req.doc_id)
-        .is_some_and(|chain| !chain.is_empty() && chain.iter().all(|v| v.vault_id == req.vault_id))
+        .is_none_or(|chain| chain.is_empty())
     {
-        return HttpResponse::err(409, "restore requires a single-vault version chain");
+        return HttpResponse::err(409, "restore requires a version chain");
     }
     if let Some(version) = requested_version {
         let Some(source) = folded.versions.get(&req.doc_id).and_then(|chain| {
@@ -2079,13 +2196,29 @@ mod authenticated_version_tests {
 
     fn sealed_op(kind: OpKind, doc_id: &str, count: u64, plaintext: &[u8]) -> SyncOp {
         let vv = BTreeMap::from([("replica-a".to_string(), count)]);
+        sealed_op_in(VAULT, "replica-a", vv, kind, doc_id, plaintext)
+    }
+
+    fn sealed_op_in(
+        vault_id: &str,
+        replica_id: &str,
+        vv: VersionVector,
+        kind: OpKind,
+        doc_id: &str,
+        plaintext: &[u8],
+    ) -> SyncOp {
+        let count = vv[replica_id];
         let (rename_from, rename_to) = match &kind {
             OpKind::Rename { from, to } => (Some(from.clone()), Some(to.clone())),
             _ => (None, None),
         };
         let mut op = SyncOp {
-            op_id: format!("op-{count}"),
-            replica_id: "replica-a".to_string(),
+            op_id: if vault_id == VAULT && replica_id == "replica-a" {
+                format!("op-{count}")
+            } else {
+                format!("op-{vault_id}-{replica_id}-{count}")
+            },
+            replica_id: replica_id.to_string(),
             doc_id: doc_id.to_string(),
             kind,
             vv,
@@ -2093,7 +2226,7 @@ mod authenticated_version_tests {
             nonce_b64: String::new(),
             aad: String::new(),
             ts_ms: 1_700_000_000_000 + count,
-            vault_id: VAULT.to_string(),
+            vault_id: vault_id.to_string(),
             key_epoch: 2,
             rename_from,
             rename_to,
@@ -2259,7 +2392,7 @@ mod authenticated_version_tests {
 
         // Simulate a pre-migration chain without kind: neither pull nor push
         // may guess an AAD or replace the original state file.
-        let path = versions::state_path(&schema::sync_dir(&dir));
+        let path = versions::state_path(&vault_dir(&schema::sync_dir(&dir), VAULT));
         let mut raw: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         raw["versions"]["notes/source.md"][0]
@@ -2414,7 +2547,7 @@ mod authenticated_version_tests {
         folded
             .server_vv
             .insert("replica-a".to_string(), PULL_MAX_OPS as u64 + 1);
-        versions::save(&sync_dir_of(&state), &folded).unwrap();
+        versions::save(&vault_dir(&sync_dir_of(&state), VAULT), &folded).unwrap();
 
         let mut request = PullRequest {
             protocol: Some(SYNC_PROTOCOL.to_string()),
@@ -2461,7 +2594,7 @@ mod authenticated_version_tests {
         folded
             .server_vv
             .insert("replica-a".to_string(), PULL_MAX_OPS as u64 + 2);
-        versions::save(&sync_dir_of(&state), &folded).unwrap();
+        versions::save(&vault_dir(&sync_dir_of(&state), VAULT), &folded).unwrap();
         assert_eq!(
             handle(
                 &mut state,
@@ -2473,6 +2606,250 @@ mod authenticated_version_tests {
             .status,
             409
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn bearer(state: &mut ServiceState, name: &str) -> (String, String) {
+        let account = state
+            .accounts
+            .create_account(name, "correct-horse-99")
+            .unwrap();
+        let token = state.accounts.issue_session_token(&account).unwrap();
+        (account, format!("Bearer {token}"))
+    }
+
+    fn post(
+        state: &mut ServiceState,
+        path: &str,
+        auth: &str,
+        body: &impl Serialize,
+    ) -> (u16, serde_json::Value) {
+        let response = handle(
+            state,
+            "POST",
+            path,
+            Some(auth),
+            &serde_json::to_vec(body).unwrap(),
+        );
+        let value = serde_json::from_slice(&response.body).unwrap_or_default();
+        (response.status, value)
+    }
+
+    fn pull_request(vault_id: &str, replica_id: &str) -> PullRequest {
+        PullRequest {
+            protocol: Some(SYNC_PROTOCOL.to_string()),
+            replica_id: replica_id.to_string(),
+            vault_id: vault_id.to_string(),
+            since_vv: BTreeMap::new(),
+            offset: None,
+            snapshot_vv: BTreeMap::new(),
+        }
+    }
+
+    fn pulled_ids(value: &serde_json::Value) -> BTreeSet<String> {
+        value["ops"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|op| op["op_id"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn two_vaults_with_the_same_doc_id_never_share_a_chain() {
+        let dir = std::env::temp_dir().join(format!("fub-sync-vaults-{}", schema::new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut state = ServiceState::open(Some(dir.clone())).unwrap();
+        let (_, alice) = bearer(&mut state, "vault-alice");
+        let (_, bob) = bearer(&mut state, "vault-bob");
+        let vv = |pairs: &[(&str, u64)]| -> VersionVector {
+            pairs.iter().map(|(id, n)| (id.to_string(), *n)).collect()
+        };
+        let op = |vault: &str, replica: &str, counters: &[(&str, u64)], kind, doc: &str| {
+            sealed_op_in(vault, replica, vv(counters), kind, doc, b"bytes")
+        };
+        // Alice cancella il suo `notes/same.md` e scrive un vettore che
+        // domina i contatori futuri della replica di Bob.
+        let alice_ops = vec![
+            op(
+                "vault-a",
+                "replica-a",
+                &[("replica-a", 1)],
+                OpKind::Create,
+                "notes/same.md",
+            ),
+            op(
+                "vault-a",
+                "replica-a",
+                &[("replica-a", 2)],
+                OpKind::Delete,
+                "notes/same.md",
+            ),
+            op(
+                "vault-a",
+                "replica-a",
+                &[("replica-a", 3), ("replica-b", 100)],
+                OpKind::Create,
+                "notes/other.md",
+            ),
+        ];
+        let push = PushRequest {
+            protocol: Some(SYNC_PROTOCOL.to_string()),
+            replica_id: "replica-a".to_string(),
+            ops: alice_ops.clone(),
+        };
+        let (status, body) = post(&mut state, "/v1/sync/push", &alice, &push);
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(body["ack"].as_array().unwrap().len(), 3);
+
+        // Gli stessi nomi nel vault di Bob: né la tombstone né il vettore di
+        // Alice li trattengono o li scartano.
+        let bob_ops = vec![
+            op(
+                "vault-b",
+                "replica-b",
+                &[("replica-b", 1)],
+                OpKind::Create,
+                "notes/same.md",
+            ),
+            op(
+                "vault-b",
+                "replica-b",
+                &[("replica-b", 2)],
+                OpKind::Create,
+                "notes/other.md",
+            ),
+        ];
+        let bob_ids: BTreeSet<String> = bob_ops.iter().map(|op| op.op_id.clone()).collect();
+        let push = PushRequest {
+            protocol: Some(SYNC_PROTOCOL.to_string()),
+            replica_id: "replica-b".to_string(),
+            ops: bob_ops,
+        };
+        let (status, body) = post(&mut state, "/v1/sync/push", &bob, &push);
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(body["conflicts"], serde_json::json!([]));
+        let (status, body) = post(
+            &mut state,
+            "/v1/sync/pull",
+            &bob,
+            &pull_request("vault-b", "replica-b"),
+        );
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(pulled_ids(&body), bob_ids);
+        assert!(body["server_vv"].get("replica-a").is_none());
+        let (status, body) = post(
+            &mut state,
+            "/v1/sync/pull",
+            &alice,
+            &pull_request("vault-a", "replica-a"),
+        );
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(
+            pulled_ids(&body),
+            alice_ops.iter().map(|op| op.op_id.clone()).collect()
+        );
+
+        // La coda di una replica sta nel suo vault: Alice non la svuota
+        // nominando il proprio.
+        let status_path = "/v1/sync/status?vault_id=vault-b&replica_id=replica-b";
+        let pending = |state: &mut ServiceState| {
+            let response = handle(state, "GET", status_path, Some(&bob), &[]);
+            assert_eq!(response.status, 200);
+            let value: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+            value["pending"].as_u64().unwrap()
+        };
+        assert_eq!(pending(&mut state), 2);
+        let ack = serde_json::json!({
+            "replica_id": "replica-b", "vault_id": "vault-a", "ack": bob_ids,
+        });
+        let (status, body) = post(&mut state, "/v1/sync/ack", &alice, &ack);
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(body["removed"], 0);
+        assert_eq!(pending(&mut state), 2);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_single_vault_legacy_state_is_adopted_and_a_mixed_one_stops_sync() {
+        let legacy_service = |label: &str, folded: &SyncState, wal: &[SyncOp]| {
+            let dir = std::env::temp_dir().join(format!("fub-sync-{label}-{}", schema::new_id()));
+            let root = sync_dir(&dir);
+            versions::save(&root, folded).unwrap();
+            if !wal.is_empty() {
+                queue::append_ops(&root, "replica-a", wal).unwrap();
+            }
+            let mut state = ServiceState::open(Some(dir.clone())).unwrap();
+            let (owner, auth) = bearer(&mut state, label);
+            let mut grant = ShareAcl::new(&vault_resource(VAULT));
+            grant.grant(&owner, Role::Owner);
+            let shares = SyncShares {
+                grants: BTreeMap::from([(vault_resource(VAULT), grant)]),
+                ..SyncShares::default()
+            };
+            save_shares(&root, &shares).unwrap();
+            (dir, root, state, auth)
+        };
+        let op = sealed_op(OpKind::Create, "notes/legacy.md", 1, b"legacy");
+        let mut single = SyncState::default();
+        versions::push_version(&mut single, &op, "notes/legacy.md");
+        single.server_vv = op.vv.clone();
+
+        // Un solo vault: stato e coda passano nella sua cartella.
+        let (dir, root, mut state, auth) =
+            legacy_service("legacy-single", &single, std::slice::from_ref(&op));
+        let (status, body) = post(
+            &mut state,
+            "/v1/sync/pull",
+            &auth,
+            &pull_request(VAULT, "replica-b"),
+        );
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(pulled_ids(&body), BTreeSet::from([op.op_id.clone()]));
+        let partition = vault_dir(&root, VAULT);
+        assert!(!versions::state_path(&root).exists());
+        assert!(!queue::queue_path(&root, "replica-a").exists());
+        assert!(versions::state_path(&partition).exists());
+        assert_eq!(queue::load_ops(&partition, "replica-a").unwrap().len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
+
+        // Due vault nello stesso stato: nessuna separazione per tentativi,
+        // il sync si ferma e lo stato resta com'era.
+        let mut mixed = single.clone();
+        let other = sealed_op_in(
+            "vault-other",
+            "replica-b",
+            BTreeMap::from([("replica-b".to_string(), 1)]),
+            OpKind::Create,
+            "notes/legacy.md",
+            b"other",
+        );
+        versions::push_version(&mut mixed, &other, "notes/legacy.md");
+        let (dir, root, mut state, auth) = legacy_service("legacy-mixed", &mixed, &[]);
+        let before = std::fs::read(versions::state_path(&root)).unwrap();
+        let (status, _) = post(
+            &mut state,
+            "/v1/sync/pull",
+            &auth,
+            &pull_request(VAULT, "replica-b"),
+        );
+        assert_eq!(status, 500);
+        assert_eq!(std::fs::read(versions::state_path(&root)).unwrap(), before);
+        assert!(!vault_dir(&root, VAULT).exists());
+        std::fs::remove_dir_all(dir).unwrap();
+
+        // Nessun vault: lo stato si mette da parte, non si cancella.
+        let (dir, root, mut state, auth) =
+            legacy_service("legacy-empty", &SyncState::default(), &[]);
+        let (status, body) = post(
+            &mut state,
+            "/v1/sync/pull",
+            &auth,
+            &pull_request(VAULT, "replica-b"),
+        );
+        assert_eq!(status, 200, "{body}");
+        assert!(!versions::state_path(&root).exists());
+        assert!(root.join(LEGACY_STATE_ASIDE).exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
