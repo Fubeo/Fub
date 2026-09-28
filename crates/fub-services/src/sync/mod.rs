@@ -221,6 +221,11 @@ pub struct AckResponse {
     pub removed: usize,
 }
 
+/// Durata massima di un invito (30 giorni).
+pub const MAX_INVITE_TTL_MS: u64 = 30 * 24 * 3600 * 1000;
+/// Inviti pendenti per risorsa.
+pub const MAX_PENDING_INVITES: usize = 64;
+
 /// Cap on ops returned by one pull; a continuation offset advances the page
 /// while the snapshot vector is unchanged.
 pub const PULL_MAX_OPS: usize = 5_000;
@@ -1900,6 +1905,23 @@ fn handle_invite(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
     let vault = resource.strip_prefix("vault:").unwrap_or("");
     let key_epoch = shares.key_epochs.get(vault).copied().unwrap_or(0);
     let ttl = req.ttl_ms.unwrap_or(7 * 24 * 3600 * 1000);
+    if ttl == 0 || ttl > MAX_INVITE_TTL_MS {
+        return HttpResponse::err(400, "invite ttl out of range");
+    }
+    // `shares.json` si legge a ogni richiesta: gli inviti usati o scaduti
+    // escono, quelli pendenti hanno un tetto per risorsa.
+    let now = schema::now_ms();
+    shares
+        .invites
+        .retain(|stored| !stored.invite.accepted && stored.invite.expires_ms >= now);
+    let pending = shares
+        .invites
+        .iter()
+        .filter(|stored| stored.invite.resource == resource)
+        .count();
+    if pending >= MAX_PENDING_INVITES {
+        return HttpResponse::err(429, "too many pending invites");
+    }
     let invite = match acl::new_invite(&resource, req.role, ttl) {
         Ok(i) => i,
         Err(e) => return HttpResponse::err(500, &e),
@@ -2019,7 +2041,16 @@ fn handle_revoke(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
         Err(e) => return HttpResponse::err(500, &e),
     };
     merge_grants(state, &shares);
-    state.acl_mut(&resource).revoke(&req.account_id);
+    let live = state.acl_mut(&resource);
+    match acl::check_revoke(live, &account, &req.account_id) {
+        Ok(()) => live.revoke(&req.account_id),
+        Err(acl::RevokeDenied::LastOwner) => {
+            return HttpResponse::err(409, "cannot revoke the last owner")
+        }
+        Err(acl::RevokeDenied::Outranked) => {
+            return HttpResponse::err(403, "forbidden: cannot revoke an equal or higher role")
+        }
+    }
     for (res, live) in &state.acls {
         shares.grants.insert(res.clone(), live.clone());
     }

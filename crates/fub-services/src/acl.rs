@@ -90,6 +90,34 @@ impl ShareAcl {
     }
 }
 
+/// Perché una revoca non passa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RevokeDenied {
+    /// Resterebbe una risorsa senza nessuno che possa amministrarla.
+    LastOwner,
+    /// Il ruolo da togliere è pari o superiore a quello di chi revoca.
+    Outranked,
+}
+
+/// Chi può togliere il ruolo di `target`: chi se ne va da sé, un Owner, o chi
+/// sta sopra al ruolo da togliere. L'ultimo Owner non si toglie mai, nemmeno
+/// da sé.
+pub fn check_revoke(acl: &ShareAcl, by: &str, target: &str) -> Result<(), RevokeDenied> {
+    let Some(role) = acl.role_of(target) else {
+        return Ok(());
+    };
+    let owners = acl.grants.iter().filter(|g| g.role == Role::Owner).count();
+    if role == Role::Owner && owners == 1 {
+        return Err(RevokeDenied::LastOwner);
+    }
+    match acl.role_of(by) {
+        _ if by == target => Ok(()),
+        Some(Role::Owner) => Ok(()),
+        Some(own) if own > role => Ok(()),
+        _ => Err(RevokeDenied::Outranked),
+    }
+}
+
 /// `Ok(())` se `account_id` copre `need` su `acl`, altrimenti errore tipizzato.
 pub fn check(acl: &ShareAcl, account_id: &str, need: Role) -> Result<(), String> {
     match acl.role_of(account_id) {
@@ -115,7 +143,7 @@ impl Invite {
             resource: resource.to_string(),
             role,
             created_ms: now,
-            expires_ms: now + ttl_ms,
+            expires_ms: now.saturating_add(ttl_ms),
             accepted: false,
         })
     }
@@ -149,4 +177,60 @@ pub fn accept_invite(
     account_id: &str,
 ) -> Result<(), String> {
     invite.accept_invite(acl, account_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn acl(grants: &[(&str, Role)]) -> ShareAcl {
+        let mut acl = ShareAcl::new("vault:v");
+        for (account, role) in grants {
+            acl.grant(account, *role);
+        }
+        acl
+    }
+
+    #[test]
+    fn a_revocation_never_climbs_above_the_revoker() {
+        let shared = acl(&[
+            ("owner", Role::Owner),
+            ("admin", Role::Admin),
+            ("other-admin", Role::Admin),
+            ("writer", Role::Writer),
+        ]);
+        assert_eq!(check_revoke(&shared, "admin", "writer"), Ok(()));
+        assert_eq!(check_revoke(&shared, "admin", "admin"), Ok(()));
+        assert_eq!(check_revoke(&shared, "owner", "admin"), Ok(()));
+        assert_eq!(check_revoke(&shared, "admin", "nobody"), Ok(()));
+        assert_eq!(
+            check_revoke(&shared, "admin", "other-admin"),
+            Err(RevokeDenied::Outranked)
+        );
+        assert_eq!(
+            check_revoke(&shared, "admin", "owner"),
+            Err(RevokeDenied::LastOwner)
+        );
+        assert_eq!(
+            check_revoke(&shared, "owner", "owner"),
+            Err(RevokeDenied::LastOwner)
+        );
+        let two_owners = acl(&[
+            ("owner", Role::Owner),
+            ("co-owner", Role::Owner),
+            ("admin", Role::Admin),
+        ]);
+        assert_eq!(check_revoke(&two_owners, "owner", "co-owner"), Ok(()));
+        assert_eq!(check_revoke(&two_owners, "co-owner", "co-owner"), Ok(()));
+        assert_eq!(
+            check_revoke(&two_owners, "admin", "owner"),
+            Err(RevokeDenied::Outranked)
+        );
+    }
+
+    #[test]
+    fn an_endless_invite_does_not_wrap_into_the_past() {
+        let invite = new_invite("vault:v", Role::Reader, u64::MAX).unwrap();
+        assert_eq!(invite.expires_ms, u64::MAX);
+    }
 }

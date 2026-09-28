@@ -671,6 +671,139 @@ fn revocation_blocks_future_pushes() {
     assert!(p.ops.iter().any(|o| o.doc_id == "notes/guest.md"));
 }
 
+fn member(state: &mut ServiceState, name: &str) -> (String, String) {
+    let id = state
+        .accounts
+        .create_account(name, "correct-horse-99")
+        .unwrap();
+    let token = state.accounts.issue_session_token(&id).unwrap();
+    (id, format!("Bearer {token}"))
+}
+
+fn call(
+    state: &mut ServiceState,
+    path: &str,
+    auth: &str,
+    body: serde_json::Value,
+) -> (u16, serde_json::Value) {
+    let resp = sync::handle(
+        state,
+        "POST",
+        path,
+        Some(auth),
+        &serde_json::to_vec(&body).unwrap(),
+    );
+    let value = serde_json::from_slice(&resp.body).unwrap_or_default();
+    (resp.status, value)
+}
+
+fn join(state: &mut ServiceState, owner: &str, guest: &str, role: &str) {
+    let (status, invite) = call(
+        state,
+        "/v1/sync/invite",
+        owner,
+        serde_json::json!({ "vault_id": VAULT, "role": role }),
+    );
+    assert_eq!(status, 201, "{invite}");
+    let token = invite["token_b64"].clone();
+    let (status, body) = call(
+        state,
+        "/v1/sync/invite/accept",
+        guest,
+        serde_json::json!({ "token_b64": token }),
+    );
+    assert_eq!(status, 200, "{body}");
+}
+
+#[test]
+fn an_admin_cannot_revoke_the_owner_or_a_peer() {
+    let dir = temp_data_dir("revoke-rank");
+    let mut state = open_state(&dir);
+    let (owner_id, owner) = member(&mut state, "rank-owner");
+    let (admin_id, admin) = member(&mut state, "rank-admin");
+    let (peer_id, peer) = member(&mut state, "rank-peer");
+    let (writer_id, writer) = member(&mut state, "rank-writer");
+    let mut a = Replica::new("rank");
+    let op = a.op("notes/rank.md", OpKind::Create, "claim");
+    push(&mut state, &owner, &a.id, &[op]);
+    join(&mut state, &owner, &admin, "admin");
+    join(&mut state, &owner, &peer, "admin");
+    join(&mut state, &admin, &writer, "writer");
+    let revoke = |account: &str| serde_json::json!({ "vault_id": VAULT, "account_id": account });
+
+    // L'ultimo Owner resta: né un Admin né l'Owner stesso lo tolgono.
+    assert_eq!(
+        call(&mut state, "/v1/sync/revoke", &admin, revoke(&owner_id)).0,
+        409
+    );
+    assert_eq!(
+        call(&mut state, "/v1/sync/revoke", &owner, revoke(&owner_id)).0,
+        409
+    );
+    // Un Admin non toglie un altro Admin, ma toglie un Writer e sé stesso.
+    assert_eq!(
+        call(&mut state, "/v1/sync/revoke", &admin, revoke(&peer_id)).0,
+        403
+    );
+    assert_eq!(
+        call(&mut state, "/v1/sync/revoke", &admin, revoke(&writer_id)).0,
+        200
+    );
+    assert_eq!(
+        call(&mut state, "/v1/sync/revoke", &admin, revoke(&admin_id)).0,
+        200
+    );
+    // L'Owner toglie chiunque altro.
+    assert_eq!(
+        call(&mut state, "/v1/sync/revoke", &owner, revoke(&peer_id)).0,
+        200
+    );
+    let p = pull(&mut state, &owner, "replica-owner", &BTreeMap::new());
+    assert!(p.ops.iter().any(|o| o.doc_id == "notes/rank.md"));
+}
+
+#[test]
+fn pending_invites_are_bounded() {
+    let dir = temp_data_dir("invite-bound");
+    let mut state = open_state(&dir);
+    let owner = auth_for(&mut state, "bound-owner");
+    let invite = |ttl: serde_json::Value| serde_json::json!({ "vault_id": VAULT, "role": "reader", "ttl_ms": ttl });
+    for ttl in [serde_json::json!(0), serde_json::json!(u64::MAX)] {
+        assert_eq!(
+            call(&mut state, "/v1/sync/invite", &owner, invite(ttl)).0,
+            400
+        );
+    }
+    for _ in 0..sync::MAX_PENDING_INVITES {
+        assert_eq!(
+            call(&mut state, "/v1/sync/invite", &owner, invite(60_000.into())).0,
+            201
+        );
+    }
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &owner, invite(60_000.into())).0,
+        429
+    );
+    // Un invito accettato libera il suo posto.
+    let (_, guest) = member(&mut state, "bound-guest");
+    let shares: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(fub_services::schema::sync_dir(&dir).join("shares.json")).unwrap(),
+    )
+    .unwrap();
+    let token = shares["invites"][0]["invite"]["token_b64"].clone();
+    let (status, body) = call(
+        &mut state,
+        "/v1/sync/invite/accept",
+        &guest,
+        serde_json::json!({ "token_b64": token }),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &owner, invite(60_000.into())).0,
+        201
+    );
+}
+
 #[test]
 fn stale_key_epoch_holds_never_applies() {
     // Epoch 1 establishes the vault record; an epoch-0 replay is held
