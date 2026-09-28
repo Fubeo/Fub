@@ -61,9 +61,17 @@ function identChar(ch) {
 
 /// Le righe di un sorgente, ciascuna con ciò che il lessico sa di lei: se
 /// comincia dentro una stringa o un commento a blocco (`literal`), se è vuota,
-/// un commento di riga o codice, e a che profondità di parentesi comincia.
+/// un commento di riga o codice, a che profondità di parentesi comincia, e il
+/// suo codice (`code`) con letterali e commenti coperti da spazi, così che una
+/// `]` o un `//` dentro una stringa non contino.
 function lex(source) {
   const text = source.replace(/\r\n/g, "\n");
+  // Per unità UTF-16, come gli indici: `[...text]` andrebbe per code point e
+  // uno sfasamento a ogni emoji.
+  const masked = text.split("");
+  const blank = (from, to) => {
+    for (let p = from; p < to; p++) if (masked[p] !== "\n") masked[p] = " ";
+  };
   const lines = [];
   let depth = 0;
   let state = null;
@@ -75,7 +83,8 @@ function lex(source) {
 
   const push = (end) => {
     const raw = text.slice(lineStart, end);
-    const line = { raw, depth: startDepth, kind: "code" };
+    const code = masked.slice(lineStart, end).join("");
+    const line = { raw, code, depth: startDepth, kind: "code" };
     const trimmed = raw.trimStart();
     if (startState) {
       line.kind = "literal";
@@ -104,6 +113,7 @@ function lex(source) {
       i += 1;
       continue;
     }
+    const from = i;
     if (state === "block") {
       if (text.startsWith("*/", i)) {
         nest -= 1;
@@ -115,16 +125,18 @@ function lex(source) {
       } else {
         i += 1;
       }
+      blank(from, i);
       continue;
     }
     if (state === "str") {
       if (c === "\\") {
         // La continuazione `\` a fine riga lascia che l'a capo passi di qui.
         i += text[i + 1] === "\n" ? 1 : 2;
-        continue;
+      } else {
+        if (c === '"') state = null;
+        i += 1;
       }
-      if (c === '"') state = null;
-      i += 1;
+      blank(from, i);
       continue;
     }
     if (state === "raw") {
@@ -134,17 +146,20 @@ function lex(source) {
       } else {
         i += 1;
       }
+      blank(from, i);
       continue;
     }
     if (text.startsWith("//", i)) {
       const end = text.indexOf("\n", i);
       i = end < 0 ? text.length : end;
+      blank(from, i);
       continue;
     }
     if (text.startsWith("/*", i)) {
       state = "block";
       nest = 1;
       i += 2;
+      blank(from, i);
       continue;
     }
     if (!identChar(text[i - 1])) {
@@ -154,18 +169,25 @@ function lex(source) {
         state = "raw";
         hashes = raw[1];
         i = RAW.lastIndex;
+        blank(from, i);
         continue;
       }
     }
     if (c === '"') {
       state = "str";
       i += 1;
+      blank(from, i);
       continue;
     }
     if (c === "'") {
       // Un carattere si chiude subito; una lifetime o un'etichetta no.
       CHAR.lastIndex = i;
-      i = CHAR.exec(text) ? CHAR.lastIndex : i + 1;
+      if (CHAR.exec(text)) {
+        i = CHAR.lastIndex;
+        blank(from, i);
+      } else {
+        i += 1;
+      }
       continue;
     }
     if (OPEN.has(c)) depth += 1;
@@ -277,14 +299,39 @@ function check(file, source) {
 const isAttribute = (line) => line?.kind === "code" && /^#!?\[/.test(line.raw.trimStart());
 const isOuterAttribute = (line) => line?.kind === "code" && /^#\[/.test(line.raw.trimStart());
 
+/// Dove si chiudono gli attributi che cominciano in `k`, anche più d'uno di
+/// fila sulla stessa riga: la riga dell'ultima `]` e il codice che la segue su
+/// quella riga. Le parentesi si contano sul codice, quindi una `]` o un `//`
+/// dentro una stringa non chiudono niente.
+function attributesClose(lines, k) {
+  let j = k;
+  let code = lines[k].code.trimStart();
+  let at = code.indexOf("[");
+  let level = 0;
+  for (;;) {
+    for (; at < code.length; at++) {
+      if (OPEN.has(code[at])) level += 1;
+      else if (CLOSE.has(code[at]) && --level === 0) {
+        const rest = code.slice(at + 1);
+        if (!/^\s*#!?\[/.test(rest)) return { line: j, rest: rest.trim() };
+        code = rest.trimStart();
+        at = code.indexOf("[") - 1;
+      }
+    }
+    j += 1;
+    if (j >= lines.length) return { line: lines.length - 1, rest: "" };
+    code = lines[j].code;
+    at = 0;
+  }
+}
+
 /// La riga dopo l'attributo che comincia in `k`, se sta da solo sulle sue
-/// righe; altrimenti `k`. Un attributo su più righe finisce dove la profondità
-/// torna la sua. Uno che condivide la riga con l'item (`#[test] fn a() {`)
-/// non è sopra niente: il `///` che segue il corpo è dell'item dopo.
+/// righe; altrimenti `k`. Uno che condivide la riga con l'item
+/// (`#[test] fn a() {`) non è sopra niente: il `///` che segue il corpo è
+/// dell'item dopo.
 function attributeEnd(lines, k) {
-  let j = k + 1;
-  while (j < lines.length && lines[j].depth > lines[k].depth) j += 1;
-  return /\]$/.test(lines[j - 1].raw.replace(/\/\/.*$/, "").trimEnd()) ? j : k;
+  const close = attributesClose(lines, k);
+  return close.rest ? k : close.line + 1;
 }
 
 /// Dall'ultima riga di un `///`: saltati commenti e attributi, deve venire un
@@ -293,6 +340,7 @@ function attributeEnd(lines, k) {
 function attachment(lines, k, report) {
   let j = k + 1;
   let between = null;
+  let itemCode = null;
   while (j < lines.length) {
     const line = lines[j];
     if (line.kind === "comment") {
@@ -303,20 +351,23 @@ function attachment(lines, k, report) {
       }
       j += 1;
     } else if (isAttribute(line)) {
-      // Un attributo su più righe finisce dove la profondità torna la sua.
-      const depth = line.depth;
-      j += 1;
-      while (j < lines.length && lines[j].depth > depth) j += 1;
+      // L'item può stare sulla riga dove l'attributo si chiude.
+      const close = attributesClose(lines, j);
+      if (close.rest) {
+        itemCode = close.rest;
+        break;
+      }
+      j = close.line + 1;
     } else {
       break;
     }
   }
   const target = lines[j];
-  if (!target || target.kind !== "code") {
+  if (itemCode === null && (!target || target.kind !== "code")) {
     report(k, "doc-senza-item");
     return;
   }
-  const code = target.raw.trimStart();
+  const code = itemCode ?? target.raw.trimStart();
   if (!isItem(code)) report(k, "doc-senza-item");
   else if (/^use\b/.test(code)) report(k, "doc-su-use");
   else if (between !== null) report(between, "commento-fra-doc-e-item");
@@ -503,6 +554,40 @@ pub fn quoted<'b>(value: &'b str) -> &'b str {
 pub fn after() {}
 `;
 
+/// Casi mirati: un sorgente e le regole, in ordine, che deve far scattare.
+const CASES = [
+  {
+    name: "un `//` in una stringa non nasconde l'attributo sopra il doc",
+    source: '#[doc = "https://example.com"]\n/// Un doc sotto un attributo.\npub fn linked() {}\n',
+    rules: ["attributo-sopra-doc"],
+  },
+  {
+    name: "una `]` in una stringa non chiude l'attributo",
+    source: '#[cfg_attr(test, doc = "a ] b")]\n/// Un doc sotto un attributo.\npub fn bracket() {}\n',
+    rules: ["attributo-sopra-doc"],
+  },
+  {
+    name: "l'item sulla riga del suo attributo è l'item del doc",
+    source: "/// Il doc di `same_line`.\n#[inline] pub fn same_line() {}\nuse std::fmt as _;\n",
+    rules: [],
+  },
+  {
+    name: "due attributi e l'item sulla stessa riga",
+    source: "/// Il doc di `two`.\n#[inline] #[must_use] pub fn two() -> u8 {\n    2\n}\n\nlet stray = 1;\n",
+    rules: [],
+  },
+  {
+    name: "un carattere fuori dal piano base non sfasa il codice che segue",
+    source: 'const PIN: &str = "📌";\n\n/// Il doc di `pinned`.\n#[test]\nfn pinned() {}\n',
+    rules: [],
+  },
+  {
+    name: "un attributo sulla riga di un'istruzione non la rende un item",
+    source: "/// Un doc sopra un'istruzione.\n#[allow(unused)] let stray = 1;\n",
+    rules: ["doc-senza-item"],
+  },
+];
+
 function selfTest() {
   const expected = Object.keys(RULES).sort();
   const seen = [...new Set(check("difetti.rs", DEFECTS).map((finding) => finding.rule))].sort();
@@ -512,12 +597,20 @@ function selfTest() {
     failures.push(`regole viste ${seen.join(", ")}; attese ${expected.join(", ")}`);
   }
   for (const finding of clean) failures.push(`falso positivo: ${finding.line} [${finding.rule}] ${finding.text}`);
+  for (const { name, source, rules } of CASES) {
+    const got = check("caso.rs", source).map((finding) => finding.rule);
+    if (got.join(",") !== rules.join(",")) {
+      failures.push(`${name}: regole ${got.join(", ") || "nessuna"}; attese ${rules.join(", ") || "nessuna"}`);
+    }
+  }
   if (failures.length) {
     console.error("Autoprova di check-rust-comments fallita:\n");
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log(`Autoprova di check-rust-comments riuscita: ${expected.length} regole.`);
+  console.log(
+    `Autoprova di check-rust-comments riuscita: ${expected.length} regole, ${CASES.length} casi mirati.`,
+  );
 }
 
 if (args.includes("--self-test")) {
