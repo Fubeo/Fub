@@ -176,7 +176,6 @@ fn create_and_uri_new_write_into_the_note_the_command_made() {
     );
 }
 
-#[cfg(unix)]
 /// Un comando secco apre il vault, domanda ed esce: le domande sul grafo e il
 /// piano di un `--dry-run` rispondono a indice pronto, non a indice vuoto con
 /// `ok: true`. Le note sono abbastanza perché l'indicizzazione dell'apertura
@@ -246,6 +245,7 @@ fn a_one_shot_command_answers_from_a_ready_index() {
     assert!(vault.join("b.md").is_file(), "a dry run does not rename");
 }
 
+#[cfg(unix)]
 #[test]
 fn second_process_cannot_take_writer_and_sigint_exits_repl() {
     use std::io::{Read, Write};

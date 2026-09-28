@@ -962,9 +962,12 @@ fn mount_failure_preserves_primary_error_and_drops_later_resources() {
             .retain(SignalOnDrop(Arc::clone(&later))))
     });
     // La radice, per il supporto del vault, è un file: il kernel rifiuta di
-    // montarla dopo che le risorse dei formati sono già state preparate.
+    // montarla dopo che le risorse dei formati sono già state preparate. Il
+    // file sta sulla radice canonica, quella che l'apertura passa al supporto:
+    // su macOS il tempdir passa da `/var`.
     let memory = Arc::new(fub_kernel::MemStorage::new());
-    fub_kernel::storage::VaultStorage::write(&*memory, &root, b"not a folder")
+    let canonical = root.canonicalize_utf8().expect("the root resolves");
+    fub_kernel::storage::VaultStorage::write(&*memory, &canonical, b"not a folder")
         .expect("the root is a file in memory");
     let host = fub_host::Host::new()
         .with_watcher(Box::new(fub_host::NoWatcher))

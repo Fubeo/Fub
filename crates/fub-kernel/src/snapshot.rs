@@ -2076,7 +2076,17 @@ mod tests {
                 b"written after publish"
             );
             if !crash_between_renames {
-                assert_eq!(report.set_aside, vec![rejected.clone()]);
+                // Il ripristino parla con la root canonica: su macOS il
+                // tempdir passa da `/var`, e il path scritto qui no.
+                let canonical = |path: &Utf8Path| fs::canonicalize(path).expect("canonical");
+                assert_eq!(
+                    report
+                        .set_aside
+                        .iter()
+                        .map(|path| canonical(path))
+                        .collect::<Vec<_>>(),
+                    vec![canonical(&rejected)]
+                );
             }
             assert_eq!(
                 SnapshotApplier::recover(&root)
