@@ -235,9 +235,10 @@
   color: var(--text);
 }
 
-/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
-   Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`.
-   La colonna è della struttura; qui è il respiro e il filetto. */
+/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca).
+   Le view dichiarate, grafo compreso, si appendono dopo, sempre in
+   `#views-ribbon`. La colonna è della struttura; qui è il respiro e il
+   filetto. */
 .rail-shell {
   gap: var(--space-3);
   padding-bottom: var(--space-6);
@@ -280,8 +281,8 @@
   height: 18px;
 }
 
-/* I bottoni delle view dichiarate (`left_sidebar`) si distinguono dalle
-   shell per una sottile separazione. */
+/* I bottoni delle view dichiarate (le principali e le `left_sidebar`) si
+   distinguono dalle shell per una sottile separazione. */
 .rail-btn-view {
   margin-top: var(--space-1);
 }

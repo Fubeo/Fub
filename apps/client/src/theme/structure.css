@@ -330,8 +330,9 @@ html, body, #app {
   flex: none;
 }
 
-/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
-   Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`. */
+/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca).
+   Le view dichiarate, grafo compreso, si appendono dopo, sempre in
+   `#views-ribbon`. */
 #rail-shell {
   display: flex;
   flex-direction: column;
