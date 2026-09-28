@@ -223,7 +223,9 @@ I guard documentali controllano:
 Il [guard dei commenti di Rust](../../.github/scripts/check-rust-comments.mjs)
 controlla che ogni `///` stia sopra l'item che descrive: niente righe
 ripetute, niente doc staccati da una riga vuota o da un commento, niente
-intestazioni di sezione spezzate.
+attributi sopra il doc, niente intestazioni di sezione spezzate. Gli attributi
+stanno fra il doc e l'item: uno sopra il doc passa all'item di un altro doc
+appena qualcuno inserisce un item nel mezzo.
 
 ## Matrice per modifica
 

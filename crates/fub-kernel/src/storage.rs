@@ -1184,10 +1184,10 @@ impl FsStorage {
         Ok((how, stat))
     }
 
-    #[cfg(not(windows))]
     /// Fallback esplicito per i sistemi che non offrono una syscall
     /// no-replace. Il lock è obbligatorio: senza di esso `exists` e `rename`
     /// avrebbero di nuovo la finestra che questa API deve chiudere.
+    #[cfg(not(windows))]
     fn rename_no_replace_with_lock(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
         let _lock = exclusive_lock_required(to)?;
         match std::fs::symlink_metadata(to) {

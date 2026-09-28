@@ -4179,11 +4179,11 @@ impl Host {
     // col comando `version.restore`, come farebbe un plugin. Restano nascoste
     // dalla documentazione finché un consumer vero non ne fa un'API.
 
-    #[cfg(feature = "versioning")]
-    #[doc(hidden)]
     /// Lo store delle versioni di un vault, o l'errore se il versioning è
     /// spento: un chiamante che risponde "vuoto" quando la feature non c'è
     /// racconterebbe che non ci sono versioni, che è un'altra cosa.
+    #[cfg(feature = "versioning")]
+    #[doc(hidden)]
     pub fn versions(&self, vault: Option<&str>) -> Result<VersionStore, PluginError> {
         self.with_session(vault, |s| s.versions.clone())?
             // `Unserved` e non `Internal`: nessuno serve le versioni in questo

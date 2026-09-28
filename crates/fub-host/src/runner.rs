@@ -469,12 +469,12 @@ impl Alarms {
     }
 }
 
-#[cfg(test)]
 /// Presidia la finestra fra il controllo di `stopping` e la presa del biglietto.
 ///
 /// Il banco della corsa deve poter mettere in scena quell'ordine senza
 /// aspettare che lo scheduler lo scelga. È un gancio solo per i test: in
 /// produzione non esiste né stato né attesa aggiuntiva.
+#[cfg(test)]
 pub(crate) struct StopRaceProbe {
     reached: Barrier,
     stopping: Barrier,

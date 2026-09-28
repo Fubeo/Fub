@@ -35,6 +35,8 @@ const RULES = {
   "doc-su-use":
     "un `///` sopra un `use` privato: rustdoc non lo mostra, ed è quasi sempre il doc di qualcos'altro",
   "commento-fra-doc-e-item": "un commento `//` fra un `///` e il suo item",
+  "attributo-sopra-doc":
+    "un attributo sopra un `///`: gli attributi stanno fra il doc e l'item, e uno sopra il doc è quasi sempre di un altro item",
   "vuota-a-metà-frase":
     "una riga di commento vuota fra una riga che non chiude la frase e una che comincia in minuscolo",
   "intestazione-spezzata": "un'intestazione di sezione spezzata da una riga vuota",
@@ -224,6 +226,7 @@ function check(file, source) {
   for (let k = 0; k < lines.length; k++) {
     const line = lines[k];
     const next = lines[k + 1];
+    if (isOuterAttribute(line) && isDoc(lines[attributeEnd(lines, k)])) report(k, "attributo-sopra-doc");
     if (line.kind !== "comment") continue;
     const text = line.text.trim();
 
@@ -272,6 +275,17 @@ function check(file, source) {
 }
 
 const isAttribute = (line) => line?.kind === "code" && /^#!?\[/.test(line.raw.trimStart());
+const isOuterAttribute = (line) => line?.kind === "code" && /^#\[/.test(line.raw.trimStart());
+
+/// La riga dopo l'attributo che comincia in `k`, se sta da solo sulle sue
+/// righe; altrimenti `k`. Un attributo su più righe finisce dove la profondità
+/// torna la sua. Uno che condivide la riga con l'item (`#[test] fn a() {`)
+/// non è sopra niente: il `///` che segue il corpo è dell'item dopo.
+function attributeEnd(lines, k) {
+  let j = k + 1;
+  while (j < lines.length && lines[j].depth > lines[k].depth) j += 1;
+  return /\]$/.test(lines[j - 1].raw.replace(/\/\/.*$/, "").trimEnd()) ? j : k;
+}
 
 /// Dall'ultima riga di un `///`: saltati commenti e attributi, deve venire un
 /// item — e fra il doc e l'item non ci sta un commento qualunque. Ci sta quello
@@ -373,6 +387,11 @@ use std::fmt;
 // Il commento finito qui per sbaglio.
 pub fn interleaved() {}
 
+#[cfg(unix)]
+/// Un doc che ha ereditato l'attributo dell'item di sopra.
+#[test]
+pub fn inherited() {}
+
 /// Una frase che si interrompe
 ///
 /// a metà, e riprende sotto.
@@ -449,6 +468,11 @@ unsafe impl Send for Kind {}
 // La spiegazione sta sopra l'attributo che spiega.
 #[derive(Debug)]
 pub struct Explained;
+
+#[inline] pub fn inline() {
+}
+/// Il doc dell'item dopo un attributo sulla riga del suo item.
+pub fn next() {}
 
 /// Un esempio recintato, che non è prosa:
 ///
