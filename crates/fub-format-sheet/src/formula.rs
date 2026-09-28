@@ -815,6 +815,13 @@ impl<'a> Lexer<'a> {
     }
 }
 
+/// Le precedenze degli operatori binari, dal legame più lasco al più stretto.
+/// I segni legano più di tutti: `-2^2` è `(-2)^2`.
+const COMPARISON: usize = 0;
+const ADDITIVE: usize = 1;
+const MULTIPLICATIVE: usize = 2;
+const POWER: usize = 3;
+
 struct Parser {
     tokens: Vec<Token>,
     index: usize,
@@ -831,17 +838,16 @@ impl Parser {
             index: 0,
             depth: 0,
         };
-        let expression = parser.comparison()?;
+        let expression = parser.expression(COMPARISON)?;
         if parser.index == parser.tokens.len() {
-            Ok(expression)
+            Ok(*expression)
         } else {
             Err(())
         }
     }
 
-    /// Apre un livello. Un anello di una catena di operatori ne apre uno che
-    /// resta aperto per il resto della catena: l'albero a sinistra si
-    /// approfondisce di uno per anello anche senza ricorsione del parser.
+    /// Apre un livello: una parentesi, un segno, gli argomenti di una
+    /// funzione.
     fn deeper(&mut self) -> Result<(), ()> {
         self.depth += 1;
         if self.depth > MAX_FORMULA_DEPTH {
@@ -851,93 +857,103 @@ impl Parser {
         }
     }
 
-    fn comparison(&mut self) -> Result<Ast, ()> {
+    /// Una catena di operatori che legano almeno quanto `min`, per risalita
+    /// di precedenza: un frame per catena, non uno per ogni precedenza che
+    /// la catena attraversa. Una parentesi scende così di tre frame
+    /// (`expression`, `operand`, `primary`) e non di sei, e ogni frame tiene
+    /// l'albero in una `Box` e non per valore: al tetto la lettura sta in un
+    /// quarto dello stack di un thread di test anche senza ottimizzazioni.
+    ///
+    /// Un anello apre un livello che resta aperto per il resto della sua
+    /// catena: l'albero a sinistra si approfondisce di uno per anello anche
+    /// senza ricorsione. Un anello chiude quelli più stretti che lo precedono,
+    /// perché la loro catena è finita. La potenza lega a destra e si
+    /// annida invece per ricorsione.
+    fn expression(&mut self, min: usize) -> Result<Box<Ast>, ()> {
         let entry = self.depth;
-        let mut expression = self.additive()?;
-        while let Some(operator) = self.take_comparison() {
-            self.deeper()?;
-            let right = self.additive()?;
-            expression = Ast::Binary(operator, Box::new(expression), Box::new(right));
+        let mut rings = [0usize; POWER + 1];
+        let mut expression = self.operand()?;
+        while let Some((operator, precedence)) = self.peek_binary() {
+            if precedence < min {
+                break;
+            }
+            self.index += 1;
+            rings[precedence + 1..].fill(0);
+            rings[precedence] += 1;
+            self.depth = entry + rings.iter().sum::<usize>();
+            if self.depth > MAX_FORMULA_DEPTH {
+                return Err(());
+            }
+            let right = if precedence == POWER {
+                self.expression(POWER)?
+            } else {
+                self.expression(precedence + 1)?
+            };
+            expression = Box::new(Ast::Binary(operator, expression, right));
         }
         self.depth = entry;
         Ok(expression)
     }
 
-    fn additive(&mut self) -> Result<Ast, ()> {
+    /// I segni davanti a un primario, un livello ciascuno, letti in un giro:
+    /// `----1` non scende di un frame per segno.
+    fn operand(&mut self) -> Result<Box<Ast>, ()> {
         let entry = self.depth;
-        let mut expression = self.multiplicative()?;
+        let mut signs = Vec::new();
         loop {
-            let operator = if self.take(&Token::Plus) {
-                Binary::Add
+            let sign = if self.take(&Token::Plus) {
+                Unary::Plus
             } else if self.take(&Token::Minus) {
-                Binary::Subtract
+                Unary::Minus
             } else {
                 break;
             };
             self.deeper()?;
-            let right = self.multiplicative()?;
-            expression = Ast::Binary(operator, Box::new(expression), Box::new(right));
+            signs.push(sign);
+        }
+        let mut operand = self.primary()?;
+        for sign in signs.into_iter().rev() {
+            operand = Box::new(Ast::Unary(sign, operand));
         }
         self.depth = entry;
-        Ok(expression)
+        Ok(operand)
     }
 
-    fn multiplicative(&mut self) -> Result<Ast, ()> {
-        let entry = self.depth;
-        let mut expression = self.power()?;
-        loop {
-            let operator = if self.take(&Token::Star) {
-                Binary::Multiply
-            } else if self.take(&Token::Slash) {
-                Binary::Divide
-            } else {
-                break;
-            };
-            self.deeper()?;
-            let right = self.power()?;
-            expression = Ast::Binary(operator, Box::new(expression), Box::new(right));
-        }
-        self.depth = entry;
-        Ok(expression)
-    }
-
-    fn power(&mut self) -> Result<Ast, ()> {
-        let left = self.unary()?;
-        if self.take(&Token::Caret) {
+    /// Un primario. Le parentesi e le chiamate sono le sole strade che
+    /// tornano a [`Parser::expression`], e passano da qui con un frame
+    /// piccolo: gli altri casi stanno in [`Parser::atom`], che non ricorre e
+    /// quindi non resta aperto mentre la formula scende.
+    fn primary(&mut self) -> Result<Box<Ast>, ()> {
+        let expression = if self.take(&Token::LeftParen) {
             let entry = self.depth;
             self.deeper()?;
-            let right = self.power()?;
+            let value = self.expression(COMPARISON)?;
             self.depth = entry;
-            Ok(Ast::Binary(Binary::Power, Box::new(left), Box::new(right)))
+            if !self.take(&Token::RightParen) {
+                return Err(());
+            }
+            value
+        } else if matches!(self.tokens.get(self.index), Some(Token::Identifier(_)))
+            && self.tokens.get(self.index + 1) == Some(&Token::LeftParen)
+        {
+            let Some(Token::Identifier(name)) = self.next() else {
+                return Err(());
+            };
+            self.call(name)?
         } else {
-            Ok(left)
-        }
-    }
-
-    fn unary(&mut self) -> Result<Ast, ()> {
-        let operator = if self.take(&Token::Plus) {
-            Unary::Plus
-        } else if self.take(&Token::Minus) {
-            Unary::Minus
-        } else {
-            return self.primary();
+            self.atom()?
         };
-        let entry = self.depth;
-        self.deeper()?;
-        let value = self.unary()?;
-        self.depth = entry;
-        Ok(Ast::Unary(operator, Box::new(value)))
+        self.range(expression)
     }
 
-    fn primary(&mut self) -> Result<Ast, ()> {
-        let token = self.next().ok_or(())?;
-        let mut expression = match token {
+    /// Un primario che non contiene altre espressioni: numero, testo,
+    /// booleano, riferimento.
+    fn atom(&mut self) -> Result<Box<Ast>, ()> {
+        Ok(Box::new(match self.next().ok_or(())? {
             Token::Number(value) => Ast::Number(value),
             Token::String(value) => Ast::Text(value),
             Token::Identifier(value) => {
-                if self.peek_is(&Token::LeftParen) {
-                    self.call(value)?
-                } else if matches_ignore_ascii_case(&value, &["TRUE"]) {
+                if matches_ignore_ascii_case(&value, &["TRUE"]) {
                     Ast::Boolean(true)
                 } else if matches_ignore_ascii_case(&value, &["FALSE"]) {
                     Ast::Boolean(false)
@@ -954,40 +970,34 @@ impl Parser {
                 };
                 Ast::Reference(reference(Some(sheet), &address)?)
             }
-            Token::LeftParen => {
-                let entry = self.depth;
-                self.deeper()?;
-                let value = self.comparison()?;
-                self.depth = entry;
-                if !self.take(&Token::RightParen) {
-                    return Err(());
-                }
-                value
-            }
             _ => return Err(()),
-        };
-        if self.take(&Token::Colon) {
-            let Ast::Reference(start) = expression else {
-                return Err(());
-            };
-            let end = self.reference_token()?;
-            expression = Ast::Range(start, end);
-        }
-        Ok(expression)
+        }))
     }
 
-    fn call(&mut self, name: String) -> Result<Ast, ()> {
+    /// Il seguito `:fine` che fa di un riferimento un intervallo.
+    fn range(&mut self, expression: Box<Ast>) -> Result<Box<Ast>, ()> {
+        if !self.take(&Token::Colon) {
+            return Ok(expression);
+        }
+        let Ast::Reference(start) = *expression else {
+            return Err(());
+        };
+        let end = self.reference_token()?;
+        Ok(Box::new(Ast::Range(start, end)))
+    }
+
+    fn call(&mut self, name: String) -> Result<Box<Ast>, ()> {
         if !self.take(&Token::LeftParen) {
             return Err(());
         }
         let mut arguments = Vec::new();
         if self.take(&Token::RightParen) {
-            return Ok(Ast::Call(name, arguments));
+            return Ok(Box::new(Ast::Call(name, arguments)));
         }
         let entry = self.depth;
         self.deeper()?;
         loop {
-            arguments.push(self.comparison()?);
+            arguments.push(*self.expression(COMPARISON)?);
             if self.take(&Token::RightParen) {
                 break;
             }
@@ -996,7 +1006,7 @@ impl Parser {
             }
         }
         self.depth = entry;
-        Ok(Ast::Call(name, arguments))
+        Ok(Box::new(Ast::Call(name, arguments)))
     }
 
     fn reference_token(&mut self) -> Result<Reference, ()> {
@@ -1030,18 +1040,23 @@ impl Parser {
         }
     }
 
-    fn take_comparison(&mut self) -> Option<Binary> {
-        let operator = match self.tokens.get(self.index)? {
-            Token::Equal => Binary::Equal,
-            Token::NotEqual => Binary::NotEqual,
-            Token::Less => Binary::Less,
-            Token::LessEqual => Binary::LessEqual,
-            Token::Greater => Binary::Greater,
-            Token::GreaterEqual => Binary::GreaterEqual,
+    /// L'operatore binario sotto il cursore e la sua precedenza, senza
+    /// consumarlo.
+    fn peek_binary(&self) -> Option<(Binary, usize)> {
+        Some(match self.tokens.get(self.index)? {
+            Token::Equal => (Binary::Equal, COMPARISON),
+            Token::NotEqual => (Binary::NotEqual, COMPARISON),
+            Token::Less => (Binary::Less, COMPARISON),
+            Token::LessEqual => (Binary::LessEqual, COMPARISON),
+            Token::Greater => (Binary::Greater, COMPARISON),
+            Token::GreaterEqual => (Binary::GreaterEqual, COMPARISON),
+            Token::Plus => (Binary::Add, ADDITIVE),
+            Token::Minus => (Binary::Subtract, ADDITIVE),
+            Token::Star => (Binary::Multiply, MULTIPLICATIVE),
+            Token::Slash => (Binary::Divide, MULTIPLICATIVE),
+            Token::Caret => (Binary::Power, POWER),
             _ => return None,
-        };
-        self.index += 1;
-        Some(operator)
+        })
     }
 
     fn next(&mut self) -> Option<Token> {
