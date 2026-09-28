@@ -35,6 +35,10 @@ pub struct ServiceQuotas {
     pub max_asset_bytes: u64,
     /// Siti pubblicabili per account (default 16).
     pub max_sites: u16,
+    /// Vault di cui un account può essere proprietario (default 16). Manca
+    /// nei `services.json` scritti prima che esistesse.
+    #[serde(default = "default_max_vaults")]
+    pub max_vaults: u16,
     /// Giorni di conservazione di tombstone/versioni/cestino (default 30).
     pub retention_days: u32,
     /// Regioni dichiarate. Solo `local` senza deployment reale.
@@ -47,10 +51,15 @@ impl Default for ServiceQuotas {
             max_vault_bytes: 256 * 1024 * 1024,
             max_asset_bytes: 64 * 1024 * 1024,
             max_sites: 16,
+            max_vaults: default_max_vaults(),
             retention_days: 30,
             regions: vec!["local".to_string()],
         }
     }
+}
+
+fn default_max_vaults() -> u16 {
+    16
 }
 
 fn default_loopback() -> bool {
@@ -146,4 +155,23 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// `true` se la categoria non deve mai lasciare il dispositivo.
 pub fn is_device_only(category: &str) -> bool {
     SYNC_EXCLUDE.contains(&category)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_config_written_before_max_vaults_still_loads() {
+        let config: ServicesConfig = serde_json::from_str(
+            r#"{"quotas":{"max_vault_bytes":1,"max_asset_bytes":1,"max_sites":2,
+                "retention_days":3,"regions":["local"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(config.quotas.max_sites, 2);
+        assert_eq!(
+            config.quotas.max_vaults,
+            ServiceQuotas::default().max_vaults
+        );
+    }
 }

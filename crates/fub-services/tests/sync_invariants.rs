@@ -805,6 +805,37 @@ fn pending_invites_are_bounded() {
 }
 
 #[test]
+fn an_account_owns_at_most_max_vaults() {
+    let dir = temp_data_dir("vault-quota");
+    let mut state = open_state(&dir);
+    state.config.quotas.max_vaults = 2;
+    let greedy = auth_for(&mut state, "greedy");
+    let other = auth_for(&mut state, "other");
+    let claim = |vault: &str| serde_json::json!({ "vault_id": vault, "role": "reader" });
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &greedy, claim("v1")).0,
+        201
+    );
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &greedy, claim("v2")).0,
+        201
+    );
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &greedy, claim("v3")).0,
+        413
+    );
+    // I vault già suoi restano usabili, e il tetto è per account.
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &greedy, claim("v1")).0,
+        201
+    );
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &other, claim("v3")).0,
+        201
+    );
+}
+
+#[test]
 fn stale_key_epoch_holds_never_applies() {
     // Epoch 1 establishes the vault record; an epoch-0 replay is held
     // explicitly (surfaced in conflicts), never applied.

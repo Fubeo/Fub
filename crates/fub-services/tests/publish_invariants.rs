@@ -390,6 +390,48 @@ fn authed_state(data: &std::path::Path) -> (ServiceState, String, String) {
 }
 
 #[test]
+fn the_site_quota_is_per_account_and_a_refused_commit_leaves_no_site() {
+    let data = temp_data_dir("site-quota");
+    let (mut state, alice, _) = authed_state(&data);
+    state.config.quotas.max_sites = 1;
+    let bob_id = state.accounts.create_account("bob", "password123").unwrap();
+    let bob = format!(
+        "Bearer {}",
+        state.accounts.issue_session_token(&bob_id).unwrap()
+    );
+    let commit = |site_id: &str| {
+        let (mut manifest, pages) = manifest_v1();
+        manifest.site_id = site_id.to_string();
+        serde_json::to_vec(&CommitRequest {
+            protocol: "fub-publish/1".to_string(),
+            site_id: site_id.to_string(),
+            manifest,
+            pages,
+            assets: vec![],
+            excluded_private: vec![],
+        })
+        .unwrap()
+    };
+    let mut status = |auth: &str, site_id: &str| {
+        fub_services::publish::handle(
+            &mut state,
+            "POST",
+            COMMIT_PATH,
+            Some(auth),
+            &commit(site_id),
+        )
+        .status
+    };
+    assert_eq!(status(&alice, "blog"), 200);
+    // Il secondo sito di Alice resta rifiutato anche al tentativo dopo.
+    assert_eq!(status(&alice, "second"), 413);
+    assert_eq!(status(&alice, "second"), 413);
+    assert!(load_record(&data, "second").is_err());
+    // La quota di Alice non tocca quella di Bob.
+    assert_eq!(status(&bob, "bob-blog"), 200);
+}
+
+#[test]
 fn handle_dry_run_commit_status_static_unpublish_rollback() {
     let data = temp_data_dir("handle");
     let (mut state, auth, _alice) = authed_state(&data);

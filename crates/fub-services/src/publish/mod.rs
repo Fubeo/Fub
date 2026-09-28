@@ -332,7 +332,8 @@ pub fn handle_site_admin(
         if let Err(r) = authorize_administer(state, &request.site_id, &account) {
             return r;
         }
-    } else if count_sites(&state.data_dir) >= state.config.quotas.max_sites as usize {
+    } else if count_owned_sites(&state.data_dir, &account) >= state.config.quotas.max_sites as usize
+    {
         return HttpResponse::err(413, "site quota exceeded");
     }
     let password_hash = match request.password {
@@ -520,7 +521,14 @@ fn handle_commit(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
         return response;
     }
     let is_new = site::load_record(&state.data_dir, &site_id).is_err();
+    let site_count = count_owned_sites(&state.data_dir, &account);
+    let max_sites = state.config.quotas.max_sites as usize;
     if is_new {
+        // La quota si controlla prima di creare il record: un record creato
+        // e poi rifiutato renderebbe il sito "esistente" al tentativo dopo.
+        if site_count >= max_sites {
+            return HttpResponse::err(413, "site quota exceeded");
+        }
         // First commit creates the site with the committer as owner.
         // A lost race (record appeared meanwhile) falls through to commit.
         match site::create_site(&state.data_dir, &site_id, &account, None) {
@@ -533,13 +541,12 @@ fn handle_commit(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
         max_asset_bytes: quotas.max_asset_bytes,
         max_site_bytes: quotas.max_vault_bytes,
     };
-    let site_count = count_sites(&state.data_dir);
     match site::commit_site(
         &state.data_dir,
         &request,
         &request.excluded_private,
         quota,
-        quotas.max_sites as usize,
+        max_sites,
         site_count,
         is_new,
     ) {
@@ -693,12 +700,17 @@ fn handle_static(
     }
 }
 
-fn count_sites(data_dir: &std::path::Path) -> usize {
+/// Siti di cui `account` è proprietario: `max_sites` è una quota per
+/// account, non un tetto del server che un solo account esaurisce per tutti.
+fn count_owned_sites(data_dir: &std::path::Path, account: &str) -> usize {
     std::fs::read_dir(crate::schema::sites_dir(data_dir))
         .map(|entries| {
             entries
                 .filter_map(|e| e.ok())
-                .filter(|e| e.path().join("record.json").is_file())
+                .filter_map(|e| e.file_name().to_str().map(str::to_string))
+                .filter(|site_id| {
+                    site::load_record(data_dir, site_id).is_ok_and(|r| r.owner == account)
+                })
                 .count()
         })
         .unwrap_or(0)

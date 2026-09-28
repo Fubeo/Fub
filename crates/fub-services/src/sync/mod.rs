@@ -548,6 +548,19 @@ fn authorize(
                 "vault has no recoverable owner grant",
             ));
         }
+        // Ogni vault rivendicato resta in `shares.json`, letto a ogni
+        // richiesta, e ha la propria quota di byte: senza tetto per account
+        // uno solo li moltiplicherebbe a piacere.
+        let owned = shares
+            .grants
+            .iter()
+            .filter(|(owned, acl)| {
+                owned.starts_with("vault:") && acl.role_of(account) == Some(Role::Owner)
+            })
+            .count();
+        if owned >= usize::from(state.config.quotas.max_vaults) {
+            return Err(HttpResponse::err(413, "vault quota exceeded"));
+        }
         let mut grant = ShareAcl::new(resource);
         grant.grant(account, Role::Owner);
         shares.grants.insert(resource.to_string(), grant.clone());
