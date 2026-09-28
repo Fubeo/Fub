@@ -595,20 +595,25 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
     }
     state.logins.forgive(&key);
     // Step-up TOTP: record clonato, `check_totp` su borrow locali (HMAC veloce
-    // sotto lock breve, mai KDF), write-back solo al successo.
-    if state.totps.contains_key(&account_id) {
+    // sotto lock breve, mai KDF). Il contatore usato si scrive prima di
+    // emettere il token: se non si riesce a scriverlo, il codice resterebbe
+    // rigiocabile dopo un riavvio, e il login non passa.
+    if let Some(mut record) = state.accounts.totp(&account_id).active {
         let code = match login.code.as_deref() {
             Some(code) if !code.trim().is_empty() => code.to_string(),
             _ => return HttpResponse::err(401, "mfa required"),
         };
-        let mut record = match state.totps.get(&account_id) {
-            Some(record) => record.clone(),
-            None => return HttpResponse::err(401, "mfa required"),
-        };
-        let step_key = format!("login:{account_id}");
-        match state.logins.check_totp(&mut record, &step_key, &code) {
+        match state
+            .totp_attempts
+            .check_totp(&mut record, &account_id, &code)
+        {
             Ok(true) => {
-                state.totps.insert(account_id.clone(), record);
+                if let Err(e) = state
+                    .accounts
+                    .update_totp(&account_id, |totp| totp.active = Some(record))
+                {
+                    return HttpResponse::err(500, &e);
+                }
             }
             Ok(false) => return HttpResponse::err(401, "bad totp"),
             Err(e) => return HttpResponse::err(429, &e),
@@ -625,6 +630,11 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
 }
 
 /// MFA enroll/verify: solo HMAC veloci sotto lock breve, mai KDF.
+///
+/// `enroll` prepara un segreto in attesa; il primo `code` che lo prova lo
+/// rende attivo. Un secondo fattore già attivo si sostituisce soltanto
+/// mostrando un suo codice: altrimenti un token di sessione rubato basterebbe
+/// a rimpiazzarlo, e con lui lo step-up che protegge inviti e revoche.
 fn handle_mfa(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {
     let account_id = match state.bearer(auth) {
         Ok(id) => id,
@@ -639,31 +649,56 @@ fn handle_mfa(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Http
         Err(_) => return HttpResponse::err(400, "bad mfa body"),
         Ok(parsed) => parsed,
     };
+    let code = parsed
+        .code
+        .as_deref()
+        .filter(|code| !code.trim().is_empty());
+    let mut totp = state.accounts.totp(&account_id);
     if parsed.enroll == Some(true) {
-        match fub_services::mfa::generate_secret() {
+        if let Some(active) = totp.active.as_mut() {
+            let Some(code) = code else {
+                return HttpResponse::err(401, "mfa required");
+            };
+            match state.totp_attempts.check_totp(active, &account_id, code) {
+                Ok(true) => {}
+                Ok(false) => return HttpResponse::err(401, "bad totp"),
+                Err(e) => return HttpResponse::err(429, &e),
+            }
+        }
+        let secret = match fub_services::mfa::generate_secret() {
+            Err(e) => return HttpResponse::err(500, &e),
+            Ok(secret) => secret,
+        };
+        totp.pending = Some(fub_services::mfa::TotpRecord {
+            secret_b64: secret.secret_b64.clone(),
+            last_counter: None,
+        });
+        return match state.accounts.update_totp(&account_id, |t| *t = totp) {
             Err(e) => HttpResponse::err(500, &e),
-            Ok(secret) => {
-                state.totps.insert(
-                    account_id,
-                    fub_services::mfa::TotpRecord {
-                        secret_b64: secret.secret_b64.clone(),
-                        last_counter: None,
-                    },
-                );
+            Ok(()) => {
                 HttpResponse::json(201, &serde_json::json!({ "secret_b64": secret.secret_b64 }))
             }
-        }
-    } else {
-        match (state.totps.get_mut(&account_id), parsed.code) {
-            (Some(record), Some(code)) => {
-                let now = fub_services::schema::now_ms();
-                match fub_services::mfa::verify_totp(record, &code, now) {
-                    Ok(true) => HttpResponse::json(200, &serde_json::json!({ "ok": true })),
-                    _ => HttpResponse::err(401, "bad totp"),
-                }
-            }
-            _ => HttpResponse::err(400, "mfa not enrolled or code missing"),
-        }
+        };
+    }
+    let Some(code) = code else {
+        return HttpResponse::err(400, "mfa not enrolled or code missing");
+    };
+    // Un segreto in attesa si conferma: è lui che il codice deve provare.
+    let confirming = totp.pending.is_some();
+    let Some(record) = totp.pending.as_mut().or(totp.active.as_mut()) else {
+        return HttpResponse::err(400, "mfa not enrolled or code missing");
+    };
+    match state.totp_attempts.check_totp(record, &account_id, code) {
+        Ok(true) => {}
+        Ok(false) => return HttpResponse::err(401, "bad totp"),
+        Err(e) => return HttpResponse::err(429, &e),
+    }
+    if confirming {
+        totp.active = totp.pending.take();
+    }
+    match state.accounts.update_totp(&account_id, |t| *t = totp) {
+        Err(e) => HttpResponse::err(500, &e),
+        Ok(()) => HttpResponse::json(200, &serde_json::json!({ "ok": true })),
     }
 }
 
@@ -1170,6 +1205,84 @@ mod sync_http_tests {
             state.lock().logins.note_fail("limite", now);
         }
         assert_eq!(login("limite", "correct-horse-99").0, 429);
+    }
+
+    /// Il secondo fattore è un fatto persistito dell'account: sopravvive al
+    /// riavvio, si attiva soltanto con un codice che prova il segreto, e un
+    /// token di sessione da solo non lo sostituisce. I login falliti, qualunque
+    /// nome portino, non consumano i tentativi TOTP di nessuno.
+    #[test]
+    fn mfa_survives_a_restart_and_a_session_token_alone_cannot_replace_it() {
+        let dir = TempDir::new();
+        let mut state = ServiceState::open(Some(dir.0.clone())).unwrap();
+        let alice = state
+            .accounts
+            .create_account("alice", "correct-horse-99")
+            .unwrap();
+        let state = Arc::new(Mutex::new(state));
+        let login = |state: &Arc<Mutex<ServiceState>>, code: Option<String>| {
+            request(
+                state,
+                &dir.0,
+                "POST",
+                "/v1/account/login",
+                None,
+                json!({ "name": "alice", "password": "correct-horse-99", "code": code }),
+            )
+        };
+        let (status, body) = login(&state, None);
+        assert_eq!(status, 200, "{body}");
+        let bearer = format!("Bearer {}", body["token"].as_str().unwrap());
+        let mfa = |state: &Arc<Mutex<ServiceState>>, body: Value| {
+            request(state, &dir.0, "POST", "/v1/mfa/verify", Some(&bearer), body)
+        };
+
+        let (status, body) = mfa(&state, json!({ "enroll": true }));
+        assert_eq!(status, 201, "{body}");
+        let secret = body["secret_b64"].as_str().unwrap().to_string();
+        assert_eq!(
+            login(&state, None).0,
+            200,
+            "un'iscrizione non confermata non chiude fuori nessuno"
+        );
+        let now = fub_services::schema::now_ms();
+        let code = |at: u64| fub_services::mfa::totp_code(&secret, at).unwrap();
+        let (status, body) = mfa(&state, json!({ "code": code(now) }));
+        assert_eq!(status, 200, "{body}");
+
+        let restarted = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        let (status, body) = login(&restarted, None);
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (401, Some("mfa required")),
+            "il riavvio non spegne il secondo fattore: {body}"
+        );
+        let (status, body) = mfa(&restarted, json!({ "enroll": true }));
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (401, Some("mfa required")),
+            "il token da solo non rimpiazza il segreto: {body}"
+        );
+        assert_eq!(
+            login(&restarted, Some(code(now))).0,
+            401,
+            "il codice della conferma non si rigioca dopo il riavvio"
+        );
+
+        for name in [format!("login:{alice}"), alice.clone()] {
+            for _ in 0..5 {
+                request(
+                    &restarted,
+                    &dir.0,
+                    "POST",
+                    "/v1/account/login",
+                    None,
+                    json!({ "name": name, "password": "sbagliata-123" }),
+                );
+            }
+        }
+        let (status, body) = login(&restarted, Some(code(now + 30_000)));
+        assert_eq!(status, 200, "{body}");
     }
 
     #[test]

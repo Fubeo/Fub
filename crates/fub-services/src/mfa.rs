@@ -1,8 +1,9 @@
 //! # MFA TOTP RFC6238 con anti-replay e rate limiting (P16.3, F40)
 //!
-//! Segreto 20 B base32, codice a 6 cifre con finestra 30 s ±1 passo,
-//! confronto in tempo costante, rigetto del contatore già usato
+//! Segreto 20 B (base64 sul wire), codice a 6 cifre con finestra 30 s ±1
+//! passo, confronto in tempo costante, rigetto del contatore già usato
 //! (anti-replay) e limite di 5 tentativi falliti / 5 minuti per account.
+//! Segreto e contatore si persistono con l'account ([`TotpState`]).
 
 use std::collections::BTreeMap;
 
@@ -23,6 +24,26 @@ const WINDOW_MS: u64 = 5 * 60 * 1000;
 pub struct TotpRecord {
     pub secret_b64: String,
     pub last_counter: Option<u64>,
+}
+
+/// Il secondo fattore di un account, persistito con l'account.
+///
+/// `active` è quello che login e step-up chiedono; `pending` è un segreto
+/// appena mostrato che diventa attivo soltanto quando l'utente ne prova il
+/// possesso con un codice. Attivarlo subito chiuderebbe fuori chi perde la
+/// risposta dell'iscrizione prima di averlo salvato.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TotpState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active: Option<TotpRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<TotpRecord>,
+}
+
+impl TotpState {
+    pub fn is_empty(&self) -> bool {
+        self.active.is_none() && self.pending.is_none()
+    }
 }
 
 /// Segreto appena generato (mostrato UNA volta all'utente in enrollment).

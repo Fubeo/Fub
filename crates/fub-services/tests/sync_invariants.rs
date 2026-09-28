@@ -804,6 +804,45 @@ fn pending_invites_are_bounded() {
     );
 }
 
+/// Lo step-up della condivisione legge il secondo fattore persistito: dopo
+/// un riavvio un invito chiede ancora il codice, e un codice già usato non si
+/// rigioca.
+#[test]
+fn invite_step_up_survives_a_restart() {
+    let dir = temp_data_dir("step-up");
+    let mut state = open_state(&dir);
+    let (id, owner) = member(&mut state, "step-owner");
+    let secret = fub_services::mfa::generate_secret().unwrap().secret_b64;
+    state
+        .accounts
+        .update_totp(&id, |totp| {
+            totp.active = Some(fub_services::mfa::TotpRecord {
+                secret_b64: secret.clone(),
+                last_counter: None,
+            })
+        })
+        .unwrap();
+    let invite = |code: Option<&str>| serde_json::json!({ "vault_id": VAULT, "role": "reader", "code": code });
+
+    let mut state = open_state(&dir);
+    let (status, body) = call(&mut state, "/v1/sync/invite", &owner, invite(None));
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (401, Some("mfa required")),
+        "{body}"
+    );
+    let code = fub_services::mfa::totp_code(&secret, fub_services::schema::now_ms()).unwrap();
+    let (status, body) = call(&mut state, "/v1/sync/invite", &owner, invite(Some(&code)));
+    assert_eq!(status, 201, "{body}");
+
+    let mut state = open_state(&dir);
+    assert_eq!(
+        call(&mut state, "/v1/sync/invite", &owner, invite(Some(&code))).0,
+        401,
+        "il codice usato resta usato dopo il riavvio"
+    );
+}
+
 #[test]
 fn an_account_owns_at_most_max_vaults() {
     let dir = temp_data_dir("vault-quota");

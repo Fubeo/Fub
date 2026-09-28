@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 
 use crate::crypto::{derive_kek, KdfParams};
+use crate::mfa::TotpState;
 use crate::schema::{accounts_path, atomic_write, now_ms};
 
 /// Perché un bearer non vale. Lo status HTTP si sceglie sulla variante, mai
@@ -88,6 +89,10 @@ pub struct Account {
     pub created_ms: u64,
     /// Cancellato remoto: sessioni revocate, copie locali altrui intatte.
     pub deleted: bool,
+    /// Il secondo fattore: vive qui perché sopravviva al riavvio, e con lui il
+    /// contatore che impedisce di rigiocare un codice.
+    #[serde(default, skip_serializing_if = "TotpState::is_empty")]
+    pub totp: TotpState,
 }
 
 /// Sessione opaca (token 32 B casuali, scadenza 30 giorni).
@@ -185,6 +190,7 @@ impl AccountStore {
                 devices: Vec::new(),
                 created_ms: now,
                 deleted: false,
+                totp: TotpState::default(),
             },
         );
         self.by_name.insert(name, id.clone());
@@ -214,6 +220,7 @@ impl AccountStore {
                 devices: Vec::new(),
                 created_ms: now,
                 deleted: false,
+                totp: TotpState::default(),
             },
         );
         self.by_name.insert(name, id.clone());
@@ -317,6 +324,37 @@ impl AccountStore {
             return Err(TokenRejection::AccountDeleted);
         }
         Ok(acc.id.clone())
+    }
+
+    /// Il secondo fattore dell'account (vuoto se non c'è o l'account non esiste).
+    pub fn totp(&self, account_id: &str) -> TotpState {
+        self.accounts
+            .get(account_id)
+            .map(|account| account.totp.clone())
+            .unwrap_or_default()
+    }
+
+    /// Cambia il secondo fattore e lo rende persistente. Se la scrittura
+    /// fallisce resta quello di prima, anche in memoria: il chiamante che
+    /// riceve l'errore non concede niente.
+    pub fn update_totp(
+        &mut self,
+        account_id: &str,
+        change: impl FnOnce(&mut TotpState),
+    ) -> Result<(), String> {
+        let account = self
+            .accounts
+            .get_mut(account_id)
+            .ok_or_else(|| "unknown account".to_string())?;
+        let previous = account.totp.clone();
+        change(&mut account.totp);
+        if let Err(error) = self.save() {
+            if let Some(account) = self.accounts.get_mut(account_id) {
+                account.totp = previous;
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Registra un dispositivo per l'account.

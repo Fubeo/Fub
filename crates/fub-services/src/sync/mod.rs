@@ -582,22 +582,22 @@ fn step_up_mfa(
     account_id: &str,
     code: Option<&str>,
 ) -> Result<(), HttpResponse> {
-    // Split dei borrow: il record TOTP è clonato dentro uno scope, così
-    // `check_totp` (che prende `&mut logins` + `&mut record` locale) non
-    // compete con `state.totps` sullo stesso `&mut state`.
-    let mut record = match state.totps.get(account_id) {
-        None => return Ok(()),
-        Some(record) => record.clone(),
+    // Il record TOTP è una copia: `check_totp` lo aggiorna in locale, e il
+    // contatore usato torna nell'account (persistito) prima di concedere.
+    let Some(mut record) = state.accounts.totp(account_id).active else {
+        return Ok(());
     };
     let code = code
         .filter(|c| !c.trim().is_empty())
         .ok_or_else(|| HttpResponse::err(401, "mfa required"))?;
-    let key = format!("sync-stepup:{account_id}");
-    match state.logins.check_totp(&mut record, &key, code) {
-        Ok(true) => {
-            state.totps.insert(account_id.to_string(), record);
-            Ok(())
-        }
+    match state
+        .totp_attempts
+        .check_totp(&mut record, account_id, code)
+    {
+        Ok(true) => state
+            .accounts
+            .update_totp(account_id, |totp| totp.active = Some(record))
+            .map_err(|e| HttpResponse::err(500, &e)),
         Ok(false) => Err(HttpResponse::err(401, "bad totp")),
         Err(e) => Err(HttpResponse::err(429, &e)),
     }
