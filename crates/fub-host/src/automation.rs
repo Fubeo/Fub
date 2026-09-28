@@ -11,7 +11,6 @@
 //! source_url http/https <=2048, folder/note relativi senza `..`/assoluti/drive,
 //! envelope {nonce univoco, origin `clipper-extension`}, framing NM max 2MiB.
 
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
 /// Il suffisso del **lock di scrittura** di un vault: il file è fratello della
@@ -73,9 +72,14 @@ pub(crate) fn lock_vault_writer(root: &std::path::Path) -> std::io::Result<Vault
         .create(true)
         .truncate(false)
         .open(path)?;
-    // `fs2` maps to `flock`/`LockFileEx` and keeps the process-crash
-    // semantics on every desktop target. The open handle owns the lease.
-    file.try_lock_exclusive()?;
+    // Il lock di std è `flock` su Unix e `LockFileEx` su Windows, e muore col
+    // processo; l'handle aperto possiede il lease. La contesa è `WouldBlock`
+    // su ogni piattaforma: `fs2` su Windows dava l'errore grezzo 33, e un
+    // secondo scrittore diventava un guasto di I/O invece che «occupato».
+    file.try_lock().map_err(|error| match error {
+        std::fs::TryLockError::WouldBlock => std::io::Error::from(std::io::ErrorKind::WouldBlock),
+        std::fs::TryLockError::Error(error) => error,
+    })?;
     Ok(VaultWriterLock { _file: file })
 }
 

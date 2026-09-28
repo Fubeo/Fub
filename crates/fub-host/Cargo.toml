@@ -27,7 +27,6 @@ cap-std = { workspace = true }
 ring = { workspace = true }
 base64 = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
-fs2 = "0.4.3"
 
 # Il watcher di default, e l'unico che oggi esiste. Sta dietro una cargo feature
 # perché il trait `VaultWatcher` esiste proprio per i posti dove `notify` non
