@@ -1483,12 +1483,12 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 Family::FolderBoundary,
                 "toglie gli slash iniziali del resto del path prima di risolvere il file statico: \
                  il resto arriva da un URL e non da un `DocId`, e la radice si serve come \
-                 `index.html`. Diverge da `resolve_static` perché qui la risoluzione è del canale \
+                 `index.html`. Diverge da `read_static` perché qui la risoluzione è del canale \
                  servizi con la sua gestione d'errore, là del canale sito.",
             ),
         ),
         (
-            "crates/fub-services/src/publish/site.rs::resolve_static",
+            "crates/fub-services/src/publish/site.rs::read_static",
             (
                 Family::FolderBoundary,
                 "toglie gli slash iniziali del path richiesto prima di cercare il file pubblicato: \
@@ -1503,7 +1503,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 Family::FolderBoundary,
                 "toglie gli slash iniziali del path richiesto prima di cercarlo nella tabella dei \
                  redirect: la tabella ha chiavi senza slash iniziale e la cortesia dell'URL non deve \
-                 mancare la corrispondenza. Diverge da `resolve_static` perché qui la risposta è un \
+                 mancare la corrispondenza. Diverge da `read_static` perché qui la risposta è un \
                  «altrove», non un file.",
             ),
         ),
