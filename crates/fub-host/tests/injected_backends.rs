@@ -79,16 +79,19 @@ fn the_vault_lives_on_the_storage_the_host_was_given() {
     );
 }
 
-/// Ogni path sotto `dir`, relativo a `base`: il nome di chi ha scritto sul disco.
+/// Ogni path sotto `dir`, relativo a `base` e con `/` su ogni sistema: il nome
+/// di chi ha scritto sul disco.
 fn walk(dir: &std::path::Path, base: &std::path::Path) -> Vec<String> {
     let mut found = Vec::new();
     for entry in std::fs::read_dir(dir).expect("a directory") {
         let path = entry.expect("entry").path();
+        let relative = path.strip_prefix(base).expect("under base");
         found.push(
-            path.strip_prefix(base)
-                .expect("under base")
-                .display()
-                .to_string(),
+            relative
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/"),
         );
         if path.is_dir() {
             found.extend(walk(&path, base));
