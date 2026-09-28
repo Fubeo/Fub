@@ -59,6 +59,10 @@ impl std::fmt::Display for TokenRejection {
     }
 }
 
+/// Il nome d'account più lungo, in byte dopo il `trim`. Un login con un nome
+/// più lungo non nomina nessuno, e si rifiuta prima di verificarlo.
+pub const MAX_ACCOUNT_NAME: usize = 128;
+
 /// Hash persistito della password account (mai la chiave dati).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PasswordHash {
@@ -160,7 +164,7 @@ impl AccountStore {
     /// Crea un account (`POST /v1/account/register {name,password}`).
     pub fn create_account(&mut self, name: &str, password: &str) -> Result<String, String> {
         let name = name.trim().to_string();
-        if name.is_empty() || name.len() > 128 {
+        if name.is_empty() || name.len() > MAX_ACCOUNT_NAME {
             return Err("bad account name".to_string());
         }
         if password.len() < 8 {
@@ -193,7 +197,7 @@ impl AccountStore {
     /// senza lock, poi inserisce qui in un secondo lock breve.
     pub fn insert_prepared(&mut self, name: &str, pw: PasswordHash) -> Result<String, String> {
         let name = name.trim().to_string();
-        if name.is_empty() || name.len() > 128 {
+        if name.is_empty() || name.len() > MAX_ACCOUNT_NAME {
             return Err("bad account name".to_string());
         }
         if self.by_name.contains_key(&name) {
@@ -273,6 +277,9 @@ impl AccountStore {
         }
         let token = Self::random_token()?;
         let now = now_ms();
+        // Una sessione scaduta non vale più niente: si toglie quando se ne
+        // emette una nuova, o il registro crescerebbe di un token per login.
+        self.sessions.retain(|_, session| session.expires_ms >= now);
         self.sessions.insert(
             token.clone(),
             SessionToken {
@@ -339,5 +346,29 @@ impl AccountStore {
         self.sessions.retain(|_, s| s.account_id != account_id);
         self.save()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_expired_session_goes_when_a_new_one_is_issued() {
+        let dir = std::env::temp_dir().join(format!("fub-services-auth-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut store = AccountStore::load(&dir).unwrap();
+        let account = store
+            .create_account("scadenze", "correct-horse-99")
+            .unwrap();
+        let old = store.issue_session_token(&account).unwrap();
+        store.sessions.get_mut(&old).unwrap().expires_ms = 0;
+        let new = store.issue_session_token(&account).unwrap();
+        assert!(!store.sessions.contains_key(&old));
+        assert_eq!(
+            store.verify_session_token(Some(&format!("Bearer {new}"))),
+            Ok(account)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

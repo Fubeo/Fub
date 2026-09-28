@@ -512,7 +512,7 @@ fn handle_register(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpRespons
         Ok(creds) => creds,
     };
     let name = creds.name.trim().to_string();
-    if name.is_empty() || name.len() > 128 {
+    if name.is_empty() || name.len() > fub_services::auth::MAX_ACCOUNT_NAME {
         return HttpResponse::err(422, "bad account name");
     }
     if creds.password.len() < 8 {
@@ -561,12 +561,22 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
         Ok(login) => login,
     };
     let key = login.name.trim().to_string();
+    // Un nome che nessun account può portare non si verifica e non si ricorda:
+    // la chiave del limite peserebbe quanto il corpo della richiesta.
+    if key.is_empty() || key.len() > fub_services::auth::MAX_ACCOUNT_NAME {
+        return HttpResponse::err(401, "bad credentials");
+    }
     let now = fub_services::schema::now_ms();
     let snapshot = {
-        let state = state.lock();
+        let mut state = state.lock();
         if state.logins.blocked(&key, now) {
             return HttpResponse::err(429, "rate limited");
         }
+        // Il tentativo conta **prima** della verifica, che gira fuori dal
+        // lock: login paralleli sullo stesso nome non passano tutti il
+        // controllo prima che il primo fallisca. Una password giusta lo
+        // restituisce.
+        state.logins.note_fail(&key, now);
         state.accounts.password_hash_of(&login.name)
     };
     let (account_id, pw) = match snapshot {
@@ -574,8 +584,6 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
             // Hash fittizio per pari tempo di risposta (no user enumeration
             // temporale), poi 401 generico.
             let _ = AccountStore::prepare_hash(&login.password);
-            let mut state = state.lock();
-            state.logins.note_fail(&key, now);
             return HttpResponse::err(401, "bad credentials");
         }
         Ok(snapshot) => snapshot,
@@ -583,9 +591,9 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
     let ok = AccountStore::check_hash(&login.password, &pw).unwrap_or(false);
     let mut state = state.lock();
     if !ok {
-        state.logins.note_fail(&key, now);
         return HttpResponse::err(401, "bad credentials");
     }
+    state.logins.forgive(&key);
     // Step-up TOTP: record clonato, `check_totp` su borrow locali (HMAC veloce
     // sotto lock breve, mai KDF), write-back solo al successo.
     if state.totps.contains_key(&account_id) {
@@ -1118,6 +1126,50 @@ mod sync_http_tests {
         );
         assert_eq!(forbidden.0, 403, "{forbidden:?}");
         assert!(forbidden.1["error"].is_string());
+    }
+
+    /// Il limite dei login ricorda soltanto nomi che un account può portare,
+    /// conta il tentativo prima della verifica e lo restituisce a una
+    /// password giusta.
+    #[test]
+    fn login_limit_remembers_only_names_an_account_can_have() {
+        let dir = TempDir::new();
+        let mut state = ServiceState::open(Some(dir.0.clone())).unwrap();
+        state
+            .accounts
+            .create_account("limite", "correct-horse-99")
+            .unwrap();
+        let state = Arc::new(Mutex::new(state));
+        let login = |name: &str, password: &str| {
+            request(
+                &state,
+                &dir.0,
+                "POST",
+                "/v1/account/login",
+                None,
+                json!({ "name": name, "password": password }),
+            )
+        };
+
+        let long = "n".repeat(fub_services::auth::MAX_ACCOUNT_NAME + 1);
+        assert_eq!(login(&long, "qualunque").0, 401);
+        assert_eq!(
+            state.lock().logins.tracked(),
+            0,
+            "un nome impossibile non pesa"
+        );
+
+        assert_eq!(login("limite", "sbagliata-123").0, 401);
+        assert_eq!(state.lock().logins.tracked(), 1);
+        let (status, body) = login("limite", "correct-horse-99");
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(state.lock().logins.tracked(), 0);
+
+        let now = fub_services::schema::now_ms();
+        for _ in 0..5 {
+            state.lock().logins.note_fail("limite", now);
+        }
+        assert_eq!(login("limite", "correct-horse-99").0, 429);
     }
 
     #[test]

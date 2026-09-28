@@ -88,10 +88,22 @@ pub fn verify(record: &mut TotpRecord, code: &str, at_ms: u64) -> Result<bool, S
     Ok(false)
 }
 
-/// Rate limiting login: 5 fallimenti / 5 minuti per chiave (account+ip).
+/// Sotto questa soglia la mappa dei fallimenti non si pota: poche chiavi
+/// costano meno di una scansione.
+const PRUNE_FLOOR: usize = 1024;
+
+/// Rate limiting login: 5 fallimenti / 5 minuti per chiave (il nome
+/// dell'account, o la chiave di un passo MFA).
+///
+/// Il nome lo sceglie chi chiama, anche quando nessun account lo porta: le
+/// finestre scadute si potano, o una pioggia di nomi sempre nuovi farebbe
+/// crescere la mappa senza fine. La potatura scatta quando la mappa raddoppia,
+/// quindi costa O(1) ammortizzato per fallimento.
 #[derive(Clone, Debug, Default)]
 pub struct LoginRateLimit {
     fails: BTreeMap<String, (u32, u64)>,
+    /// La dimensione della mappa a cui scatta la prossima potatura.
+    prune_at: usize,
 }
 
 impl LoginRateLimit {
@@ -106,12 +118,30 @@ impl LoginRateLimit {
 
     /// Registra un fallimento; la finestra riparte dopo la scadenza.
     pub fn note_fail(&mut self, key: &str, at_ms: u64) {
-        match self.fails.get(key) {
+        match self.fails.get_mut(key) {
             Some((n, first)) if at_ms.saturating_sub(*first) < WINDOW_MS => {
-                self.fails.insert(key.to_string(), (n + 1, *first));
+                *n = n.saturating_add(1);
             }
-            _ => {
+            Some(entry) => *entry = (1, at_ms),
+            None => {
+                if self.fails.len() >= self.prune_at {
+                    self.fails
+                        .retain(|_, (_, first)| at_ms.saturating_sub(*first) < WINDOW_MS);
+                    self.prune_at = (self.fails.len() * 2).max(PRUNE_FLOOR);
+                }
                 self.fails.insert(key.to_string(), (1, at_ms));
+            }
+        }
+    }
+
+    /// Restituisce un fallimento contato in anticipo: il login conta il
+    /// tentativo prima di verificare la password, fuori dal lock, e una
+    /// password giusta non è un fallimento.
+    pub fn forgive(&mut self, key: &str) {
+        if let Some((n, _)) = self.fails.get_mut(key) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                self.fails.remove(key);
             }
         }
     }
@@ -119,6 +149,11 @@ impl LoginRateLimit {
     /// Pulisce dopo un login riuscito.
     pub fn note_success(&mut self, key: &str) {
         self.fails.remove(key);
+    }
+
+    /// Quante chiavi tiene: la memoria che il limite occupa.
+    pub fn tracked(&self) -> usize {
+        self.fails.len()
     }
 
     /// Alias con firma `verify_totp`-compatibile per i discendenti:
@@ -146,4 +181,52 @@ impl LoginRateLimit {
 /// Firma `verify_totp` attesa dai discendenti (stateless: rate limit a parte).
 pub fn verify_totp(record: &mut TotpRecord, code: &str, at_ms: u64) -> Result<bool, String> {
     verify(record, code, at_ms)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expired_windows_are_pruned_as_new_names_arrive() {
+        let mut limit = LoginRateLimit::new();
+        for n in 0..PRUNE_FLOOR {
+            limit.note_fail(&format!("nome-{n}"), 0);
+        }
+        assert_eq!(limit.tracked(), PRUNE_FLOOR);
+        // Le finestre di prima sono scadute: i nomi nuovi prendono il loro
+        // posto invece di aggiungersi.
+        for n in 0..PRUNE_FLOOR * 4 {
+            limit.note_fail(&format!("altro-{n}"), WINDOW_MS);
+        }
+        assert_eq!(limit.tracked(), PRUNE_FLOOR * 4);
+        assert!(!limit.blocked("altro-0", WINDOW_MS));
+    }
+
+    #[test]
+    fn live_windows_survive_the_pruning() {
+        let mut limit = LoginRateLimit::new();
+        for _ in 0..MAX_FAILS {
+            limit.note_fail("bersaglio", 0);
+        }
+        for n in 0..PRUNE_FLOOR * 2 {
+            limit.note_fail(&format!("nome-{n}"), 1);
+        }
+        assert!(limit.blocked("bersaglio", 2), "la potatura non sblocca");
+    }
+
+    #[test]
+    fn a_forgiven_attempt_does_not_count() {
+        let mut limit = LoginRateLimit::new();
+        for _ in 0..MAX_FAILS {
+            limit.note_fail("nome", 0);
+            limit.forgive("nome");
+        }
+        assert!(!limit.blocked("nome", 0));
+        assert_eq!(limit.tracked(), 0);
+        for _ in 0..MAX_FAILS {
+            limit.note_fail("nome", 0);
+        }
+        assert!(limit.blocked("nome", 0));
+    }
 }
