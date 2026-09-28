@@ -1298,16 +1298,17 @@ fn handle_push(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
         let batch_bytes = lines
             .iter()
             .fold(0u64, |sum, line| sum.saturating_add(line.len() as u64 + 1));
-        let stored_bytes = folded
-            .attachments
-            .values()
-            .copied()
-            .fold(0u64, u64::saturating_add)
-            .saturating_add(queue::queue_bytes(&dir, &req.replica_id));
-        if state.config.quotas.max_vault_bytes > 0
-            && stored_bytes.saturating_add(batch_bytes) > state.config.quotas.max_vault_bytes
-        {
-            return HttpResponse::err(413, "vault quota exceeded");
+        // The quota measures what the vault holds: the version chain (the
+        // fold above already added this batch), every replica queue and the
+        // batch about to join one. Old history yields first; what is left
+        // is refused before anything is written.
+        let budget = state.config.quotas.max_vault_bytes;
+        if budget > 0 {
+            let queued = queue::vault_queue_bytes(&dir).saturating_add(batch_bytes);
+            let stored = versions::fit_history(&mut folded, budget.saturating_sub(queued));
+            if stored.saturating_add(queued) > budget {
+                return HttpResponse::err(413, "vault quota exceeded");
+            }
         }
         if let Err(e) = queue::append_lines(&dir, &req.replica_id, &lines) {
             match e {
@@ -2895,5 +2896,54 @@ mod authenticated_version_tests {
         assert!(!versions::state_path(&root).exists());
         assert!(root.join(LEGACY_STATE_ASIDE).exists());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn history_yields_to_the_quota_but_never_what_it_still_serves() {
+        let mut folded = SyncState::default();
+        let mut count = 0;
+        let mut put = |folded: &mut SyncState, kind: OpKind, doc: &str| {
+            count += 1;
+            let op = sealed_op(kind, doc, count, &[b'x'; 512]);
+            if op.kind.is_delete() {
+                move_to_trash(folded, doc, op.vv.clone(), &op.replica_id, op.ts_ms);
+            }
+            versions::push_version(folded, &op, doc);
+        };
+        put(&mut folded, OpKind::Create, "notes/plain.md");
+        for _ in 0..3 {
+            put(&mut folded, OpKind::Update, "notes/plain.md");
+        }
+        for _ in 0..3 {
+            put(&mut folded, OpKind::Update, "notes/conflict.md");
+        }
+        put(&mut folded, OpKind::Create, "notes/trashed.md");
+        put(&mut folded, OpKind::Update, "notes/trashed.md");
+        put(&mut folded, OpKind::Delete, "notes/trashed.md");
+        folded.conflicts.push(SyncConflict {
+            doc_id: "notes/conflict.md".to_string(),
+            reason: "concurrent edit".to_string(),
+            replicas: vec!["replica-a".to_string(), "replica-b".to_string()],
+            ts_ms: 1,
+        });
+        let chain = |folded: &SyncState, doc: &str| -> Vec<u64> {
+            folded.versions[doc].iter().map(|v| v.version).collect()
+        };
+        let total = versions::stored_bytes(&folded);
+        assert_eq!(versions::fit_history(&mut folded, total), total);
+        let one = folded.versions["notes/plain.md"][0].ciphertext_b64.len() as u64
+            + folded.versions["notes/plain.md"][0].nonce_b64.len() as u64;
+        // The oldest history goes first, and only as much as needed.
+        assert_eq!(versions::fit_history(&mut folded, total - 1), total - one);
+        assert_eq!(chain(&folded, "notes/plain.md"), vec![2, 3, 4]);
+        assert_eq!(chain(&folded, "notes/trashed.md"), vec![1, 2, 3]);
+        // Nothing left to yield: the latest version, an open conflict's
+        // chain and the version the trash restores stay, over budget.
+        let left = versions::fit_history(&mut folded, 0);
+        assert_eq!(left, versions::stored_bytes(&folded));
+        assert!(left > 0);
+        assert_eq!(chain(&folded, "notes/plain.md"), vec![4]);
+        assert_eq!(chain(&folded, "notes/conflict.md"), vec![1, 2, 3]);
+        assert_eq!(chain(&folded, "notes/trashed.md"), vec![2, 3]);
     }
 }

@@ -171,6 +171,64 @@ pub fn push_version(state: &mut SyncState, op: &SyncOp, indexed_doc_id: &str) ->
     version
 }
 
+/// Bytes the vault's state holds as content: ciphertext and nonce of every
+/// retained version, plus accounted attachments. This is what the vault quota
+/// measures; the chain dominates it, so leaving it out left no quota at all.
+pub fn stored_bytes(state: &SyncState) -> u64 {
+    let versions = state.versions.values().flatten().fold(0u64, |sum, v| {
+        sum.saturating_add((v.ciphertext_b64.len() + v.nonce_b64.len()) as u64)
+    });
+    state
+        .attachments
+        .values()
+        .fold(versions, |sum, bytes| sum.saturating_add(*bytes))
+}
+
+/// Prune the oldest history until the state fits `budget` bytes. What the
+/// chain still serves stays: the last version of every document, the whole
+/// chain of a document with an open conflict (the concurrent versions live
+/// there) and the version the trash restores. Returns the bytes left, above
+/// `budget` when the protected versions alone do not fit.
+pub fn fit_history(state: &mut SyncState, budget: u64) -> u64 {
+    let mut total = stored_bytes(state);
+    if total <= budget {
+        return total;
+    }
+    let conflicted: BTreeSet<&str> = state.conflicts.iter().map(|c| c.doc_id.as_str()).collect();
+    let mut candidates: Vec<(u64, &str, u64, u64)> = Vec::new();
+    for (doc_id, chain) in &state.versions {
+        if conflicted.contains(doc_id.as_str()) {
+            continue;
+        }
+        let restorable = state.trash.get(doc_id).and_then(|entry| entry.last_version);
+        let Some((_, older)) = chain.split_last() else {
+            continue;
+        };
+        for v in older.iter().filter(|v| Some(v.version) != restorable) {
+            let size = (v.ciphertext_b64.len() + v.nonce_b64.len()) as u64;
+            candidates.push((v.ts_ms, doc_id.as_str(), v.version, size));
+        }
+    }
+    candidates.sort_unstable();
+    let mut pruned: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
+    for (_, doc_id, version, size) in candidates {
+        if total <= budget {
+            break;
+        }
+        total = total.saturating_sub(size);
+        pruned
+            .entry(doc_id.to_string())
+            .or_default()
+            .insert(version);
+    }
+    for (doc_id, versions) in pruned {
+        if let Some(chain) = state.versions.get_mut(&doc_id) {
+            chain.retain(|v| !versions.contains(&v.version));
+        }
+    }
+    total
+}
+
 /// Latest live (non-deleted) version, if any.
 pub fn latest_live<'a>(state: &'a SyncState, doc_id: &str) -> Option<&'a DocVersion> {
     state

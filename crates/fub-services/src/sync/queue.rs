@@ -352,6 +352,24 @@ pub fn enforce_cap(
     Ok((0, false))
 }
 
+/// Bytes every replica queue of the vault occupies, quarantined lines
+/// included. Replica ids are the caller's to choose: counting only the
+/// pushing replica's queue let a writer multiply the quota by inventing ids.
+pub fn vault_queue_bytes(sync_dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(sync_dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("queue-") && name.ends_with(".jsonl")
+        })
+        .filter_map(|entry| entry.metadata().ok())
+        .fold(0u64, |sum, meta| sum.saturating_add(meta.len()))
+}
+
 /// Byte size of a replica queue file (0 when absent).
 pub fn queue_bytes(sync_dir: &Path, replica_id: &str) -> u64 {
     std::fs::metadata(queue_path(sync_dir, replica_id))

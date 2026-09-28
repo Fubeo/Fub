@@ -1651,3 +1651,45 @@ fn status_rows_are_sourced_from_authenticated_versions_and_wal_does_not_expire()
         "unacked authority cannot expire by wall clock"
     );
 }
+
+#[test]
+fn the_vault_quota_counts_history_and_every_replica_queue() {
+    let dir = temp_data_dir("vault-quota");
+    let mut state = open_state(&dir);
+    state.config.quotas.max_vault_bytes = 64 * 1024;
+    let auth = auth_for(&mut state, "quota-user");
+    let body = "x".repeat(4 * 1024);
+    let sync_dir = vault_sync_dir(&dir);
+    // Una nota riscritta molte volte: la storia vecchia cede, l'ultima resta.
+    let mut a = Replica::new("a");
+    let mut last = String::new();
+    for round in 0..64 {
+        let op = a.op("notes/a.md", OpKind::Update, &format!("{round}{body}"));
+        last = op.ciphertext_b64.clone();
+        let id = a.id.clone();
+        let resp = push(&mut state, &auth, &id, &[op]);
+        ack(&mut state, &auth, &id, &resp.ack);
+    }
+    let folded = sync::versions::load(&sync_dir).unwrap();
+    assert!(sync::versions::stored_bytes(&folded) <= 64 * 1024);
+    let chain = &folded.versions["notes/a.md"];
+    assert!(chain.len() < 64);
+    assert_eq!(chain.last().unwrap().ciphertext_b64, last);
+    // Repliche inventate che non fanno ack: ognuna aveva la propria quota.
+    let refused = (0..64).any(|n| {
+        let mut spam = Replica::new(&format!("spam{n}"));
+        let op = spam.op(&format!("notes/spam{n}.md"), OpKind::Update, &body);
+        let resp = push_raw(&mut state, &auth, &spam.id, &[op]);
+        assert!(matches!(resp.status, 200 | 413), "{}", resp.status);
+        resp.status == 413
+    });
+    assert!(refused, "the quota never refused a push");
+    let folded = sync::versions::load(&sync_dir).unwrap();
+    let held = sync::versions::stored_bytes(&folded) + sync::queue::vault_queue_bytes(&sync_dir);
+    assert!(held <= 64 * 1024, "{held}");
+    assert_eq!(
+        folded.versions["notes/a.md"].last().unwrap().ciphertext_b64,
+        last
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
