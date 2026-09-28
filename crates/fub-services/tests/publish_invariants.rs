@@ -1173,3 +1173,54 @@ fn versions_round_trip_as_strings_past_js_precision() {
     let wire = serde_json::to_value(&status).unwrap();
     assert_eq!(wire["live_version"], serde_json::json!("1"));
 }
+
+#[test]
+fn an_admin_cannot_revoke_or_demote_another_admin() {
+    let data = temp_data_dir("site-hierarchy");
+    let (mut state, alice, _) = authed_state(&data);
+    let mut member = |name: &str| {
+        let id = state.accounts.create_account(name, "password123").unwrap();
+        let token = state.accounts.issue_session_token(&id).unwrap();
+        (id, format!("Bearer {token}"))
+    };
+    let (first, first_auth) = member("first-admin");
+    let (second, _) = member("second-admin");
+    let (writer, _) = member("writer");
+    let (newcomer, _) = member("newcomer");
+    let mut admin = |auth: &str, body: serde_json::Value| {
+        let mut body = body;
+        body["protocol"] = "fub-publish/1".into();
+        body["site_id"] = "blog".into();
+        fub_services::publish::handle(
+            &mut state,
+            "POST",
+            SITE_ADMIN_PATH,
+            Some(auth),
+            &serde_json::to_vec(&body).unwrap(),
+        )
+        .status
+    };
+    for (id, role) in [(&first, "admin"), (&second, "admin"), (&writer, "writer")] {
+        let grant = serde_json::json!({ "grant": { "account_id": id, "role": role } });
+        assert_eq!(admin(&alice, grant), 200);
+    }
+    assert_eq!(
+        admin(&first_auth, serde_json::json!({ "revoke": second })),
+        403
+    );
+    let demote = serde_json::json!({ "grant": { "account_id": second, "role": "reader" } });
+    assert_eq!(admin(&first_auth, demote), 403);
+    assert_eq!(
+        admin(&first_auth, serde_json::json!({ "revoke": writer })),
+        200
+    );
+    let invite = serde_json::json!({ "grant": { "account_id": newcomer, "role": "reader" } });
+    assert_eq!(admin(&first_auth, invite), 200);
+    assert_eq!(admin(&alice, serde_json::json!({ "revoke": second })), 200);
+    let record = load_record(&data, "blog").unwrap();
+    assert_eq!(record.collaborator_roles.keys().collect::<Vec<_>>(), {
+        let mut left = vec![&first, &newcomer];
+        left.sort();
+        left
+    });
+}

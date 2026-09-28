@@ -241,6 +241,26 @@ fn authorize_administer(
     }
 }
 
+/// Il ruolo di `account` sul sito: proprietario, collaboratore o grant ACL.
+fn site_role(
+    state: &ServiceState,
+    record: &site::SiteRecord,
+    account: &str,
+) -> Option<crate::acl::Role> {
+    if record.owner == account {
+        return Some(crate::acl::Role::Owner);
+    }
+    if record.revoked.iter().any(|id| id == account) {
+        return None;
+    }
+    record.collaborator_roles.get(account).copied().or_else(|| {
+        state
+            .acls
+            .get(&site_resource(&record.site_id))
+            .and_then(|acl| acl.role_of(account))
+    })
+}
+
 /// Read capability (status, password-gated static): owner or any grant.
 /// Revoked collaborators are rejected even if a stale grant lingers.
 fn authorize_read(state: &ServiceState, site_id: &str, account: &str) -> Result<(), HttpResponse> {
@@ -401,6 +421,25 @@ pub fn handle_site_admin(
             == id
     }) {
         return HttpResponse::err(400, "cannot revoke site owner");
+    }
+    // La gerarchia dei vault (`acl::check_revoke`): chi non è il proprietario
+    // tocca soltanto ruoli sotto il proprio, quindi un Admin non revoca né
+    // declassa un altro Admin per restare il solo a governare il sito.
+    if let Some(record) = &existing {
+        let own = site_role(state, record, &account);
+        let outranks = |target: &str| {
+            own == Some(crate::acl::Role::Owner)
+                || site_role(state, record, target)
+                    .is_none_or(|role| own.is_some_and(|own| own > role))
+        };
+        if request.revoke.as_deref().is_some_and(|id| !outranks(id))
+            || request
+                .grant
+                .as_ref()
+                .is_some_and(|grant| !outranks(&grant.account_id))
+        {
+            return HttpResponse::err(403, "role too low");
+        }
     }
     let mut record = match existing {
         Some(record) => record,
