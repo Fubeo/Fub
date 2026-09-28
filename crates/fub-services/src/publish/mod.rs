@@ -30,11 +30,11 @@ pub use manifest::{
 pub use site::{
     build_feed, build_nav, build_robots, build_search_index, build_site_graph, build_sitemap,
     can_administer, can_publish, check_password_gate, commit_site, content_type_for, create_site,
-    load_record, page_outline, prune_versions, public_base_path, read_live_version,
-    recover_interrupted_commit, resolve_redirect, resolve_static, revoke_collaborator,
-    rollback_site, save_record, seo_head, site_dir, sites_root, static_content_type, status_of,
-    unpublish_site, PasswordGate, Redirect, SearchEntry, SiteQuota, SiteRecord, StagedPage,
-    TlsConfig,
+    live_needs_repair, load_record, page_outline, prune_versions, public_base_path,
+    read_live_version, read_static, recover_interrupted_commit, resolve_redirect, resolve_static,
+    revoke_collaborator, rollback_site, save_record, seo_head, site_dir, sites_root,
+    static_content_type, status_of, unpublish_site, PasswordGate, Redirect, SearchEntry, SiteQuota,
+    SiteRecord, StagedPage, TlsConfig,
 };
 
 /// Wire protocol version — single source of truth is the parent routing

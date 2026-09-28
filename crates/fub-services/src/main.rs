@@ -852,7 +852,15 @@ fn handle_static(
     } else {
         clean
     };
-    let (bytes, _) = match site_api::resolve_static(data_dir, site_id, clean) {
+    // Riparare `live` scrive l'albero del sito: lo fa soltanto chi tiene il
+    // lock, come commit, rollback e unpublish. La lettura non ne ha bisogno.
+    if site_api::live_needs_repair(data_dir, site_id) {
+        let _state = state.lock();
+        if site_api::recover_interrupted_commit(data_dir, site_id).is_err() {
+            return HttpResponse::err(404, "static not found");
+        }
+    }
+    let (bytes, _) = match site_api::read_static(data_dir, site_id, clean) {
         Err(_) => return HttpResponse::err(404, "static not found"),
         Ok(found) => found,
     };

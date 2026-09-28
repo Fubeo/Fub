@@ -899,6 +899,9 @@ pub fn recover_interrupted_commit(
 ) -> Result<Option<u64>, SiteError> {
     let record = load_record(data_dir, site_id)?;
     let dir = site_dir(data_dir, site_id);
+    if live_matches(&dir, &record) {
+        return Ok(None);
+    }
     let live = dir.join("live");
     match record.live_version {
         None => {
@@ -931,6 +934,36 @@ pub fn recover_interrupted_commit(
             Ok(Some(version))
         }
     }
+}
+
+/// Whether `live` disagrees with the record, asked without writing: the
+/// static path runs outside the service lock, and a repair from there raced
+/// commit, rollback and unpublish (and other repairs), so it could put back
+/// a version a rollback had just withdrawn. Only a lock holder repairs.
+pub fn live_needs_repair(data_dir: &Path, site_id: &str) -> bool {
+    load_record(data_dir, site_id)
+        .is_ok_and(|record| !live_matches(&site_dir(data_dir, site_id), &record))
+}
+
+/// `live` is exactly what the record commits to, with no migration backup
+/// left behind: nothing for [`recover_interrupted_commit`] to do.
+fn live_matches(dir: &Path, record: &SiteRecord) -> bool {
+    let live = dir.join("live");
+    if dir.join(".live-previous").is_dir() {
+        return false;
+    }
+    let Some(version) = record.live_version else {
+        return fs::symlink_metadata(&live).is_err();
+    };
+    if fs::read_link(&live).is_ok_and(|link| link == bundle_link_target(version)) {
+        return live.is_dir();
+    }
+    // A pre-migration live directory carries its version marker.
+    fs::symlink_metadata(&live).is_ok_and(|meta| meta.is_dir() && !meta.file_type().is_symlink())
+        && fs::read_to_string(live.join(".fub-cache-epoch"))
+            .ok()
+            .and_then(|text| text.trim().parse::<u64>().ok())
+            == Some(version)
 }
 
 pub fn read_live_version(data_dir: &Path, site_id: &str) -> Result<Option<u64>, SiteError> {
@@ -978,12 +1011,24 @@ const HOME: &str = "index.html";
 
 /// Resolve a static request path inside the live tree. Returns file bytes
 /// and a content-type sniffed from the extension. Never escapes `live/`.
+/// Repairs `live` first, so the caller holds the service lock.
 pub fn resolve_static(
     data_dir: &Path,
     site_id: &str,
     request_path: &str,
 ) -> Result<(Vec<u8>, String), SiteError> {
     recover_interrupted_commit(data_dir, site_id)?;
+    read_static(data_dir, site_id, request_path)
+}
+
+/// [`resolve_static`] without the repair: it only reads, so it may run
+/// outside the service lock once [`live_needs_repair`] says there is nothing
+/// to repair.
+pub fn read_static(
+    data_dir: &Path,
+    site_id: &str,
+    request_path: &str,
+) -> Result<(Vec<u8>, String), SiteError> {
     let record = load_record(data_dir, site_id)?;
     if record.live_version.is_none() {
         return Err(SiteError::NotPublished(site_id.to_string()));
@@ -1528,6 +1573,36 @@ mod lifecycle_tests {
             resolve_static(&data, "blog", "manifest.json"),
             Err(SiteError::StaticNotFound(_))
         ));
+        fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn static_reads_never_repair_and_report_the_drift() {
+        let data = fixture();
+        assert_eq!(publish(&data, "one"), 1);
+        assert_eq!(publish(&data, "two"), 2);
+        assert!(!live_needs_repair(&data, "blog"));
+        let dir = site_dir(&data, "blog");
+        let temp = dir.join(".simulated-swap");
+        link_bundle(&bundle_link_target(1), &temp).unwrap();
+        fs::rename(&temp, dir.join("live")).unwrap(); // live disagrees with the record
+        assert!(live_needs_repair(&data, "blog"));
+        read_static(&data, "blog", "index.html").unwrap();
+        assert_eq!(
+            fs::read_link(dir.join("live")).unwrap(),
+            bundle_link_target(1),
+            "a read never repairs"
+        );
+        assert_eq!(recover_interrupted_commit(&data, "blog").unwrap(), Some(2));
+        assert!(!live_needs_repair(&data, "blog"));
+        fs::create_dir(dir.join(".live-previous")).unwrap();
+        assert!(live_needs_repair(&data, "blog"));
+        assert_eq!(recover_interrupted_commit(&data, "blog").unwrap(), None);
+        assert!(!dir.join(".live-previous").exists());
+        unpublish_site(&data, "blog").unwrap();
+        assert!(!live_needs_repair(&data, "blog"));
+        link_bundle(&bundle_link_target(2), &dir.join("live")).unwrap();
+        assert!(live_needs_repair(&data, "blog"));
         fs::remove_dir_all(data).unwrap();
     }
 
