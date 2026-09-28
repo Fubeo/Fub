@@ -343,11 +343,13 @@ pub fn commit_site(
     }
     validate_manifest_for_commit(manifest, &request.pages, &request.assets)
         .map_err(SiteError::Manifest)?;
+    let excluded: std::collections::BTreeSet<&str> =
+        excluded_ids.iter().map(String::as_str).collect();
     if let Some(id) = request
         .pages
         .iter()
         .filter_map(|page| page.doc_id.as_deref())
-        .find(|id| excluded_ids.iter().any(|excluded| excluded == id))
+        .find(|id| excluded.contains(id))
     {
         return Err(SiteError::PrivateLeak(vec![format!(
             "{id} is excluded from publication"
@@ -396,8 +398,10 @@ pub fn commit_site(
     // everything BEFORE any unapproved bytes reach a staging directory.
     let mut surfaces: Vec<(String, Vec<u8>)> =
         Vec::with_capacity(request.pages.len() + request.assets.len() + 6);
+    let page_shas = manifest_shas(manifest.pages.iter().map(|p| (&p.path, &p.html_sha)));
+    let asset_shas = manifest_shas(manifest.assets.iter().map(|a| (&a.path, &a.sha)));
     for page in &request.pages {
-        if sha256_hex(page.html.as_bytes()) != manifest_page_sha(manifest, &page.path)? {
+        if sha256_hex(page.html.as_bytes()) != manifest_sha(&page_shas, &page.path, "pages")? {
             return Err(SiteError::ShaMismatch(page.path.clone()));
         }
     }
@@ -410,7 +414,7 @@ pub fn commit_site(
             )));
         }
         validate_public_asset(&asset.path, &bytes)?;
-        if sha256_hex(&bytes) != manifest_asset_sha(manifest, &asset.path)? {
+        if sha256_hex(&bytes) != manifest_sha(&asset_shas, &asset.path, "assets")? {
             return Err(SiteError::ShaMismatch(asset.path.clone()));
         }
         surfaces.push((asset.path.clone(), bytes));
@@ -498,18 +502,21 @@ pub fn commit_site(
         record.versions.sort_unstable();
     }
     // Permalink stability: paths that vanished since the previous version
-    // redirect to the site home instead of 404ing bookmarks.
-    if let Some(prev) = record.live_version {
+    // redirect to the site home instead of 404ing bookmarks. A path published
+    // again drops its redirect, and the home never redirects to itself: a
+    // version without `index.html` leaves its vanished paths as 404s.
+    let new_paths: std::collections::BTreeSet<&str> =
+        manifest.pages.iter().map(|p| p.path.as_str()).collect();
+    record
+        .redirects
+        .retain(|from, _| !new_paths.contains(from.as_str()));
+    if let Some(prev) = record.live_version.filter(|_| new_paths.contains(HOME)) {
         if let Ok(old_manifest) = load_version_manifest(data_dir, &manifest.site_id, prev) {
-            let new_paths: std::collections::BTreeSet<&str> =
-                manifest.pages.iter().map(|p| p.path.as_str()).collect();
             for old in &old_manifest.pages {
                 if !new_paths.contains(old.path.as_str())
                     && !record.redirects.contains_key(&old.path)
                 {
-                    record
-                        .redirects
-                        .insert(old.path.clone(), "index.html".to_string());
+                    record.redirects.insert(old.path.clone(), HOME.to_string());
                 }
             }
         }
@@ -529,22 +536,24 @@ pub fn commit_site(
     Ok((record, next_version))
 }
 
-fn manifest_page_sha(manifest: &PublishManifest, path: &str) -> Result<String, SiteError> {
-    manifest
-        .pages
-        .iter()
-        .find(|p| p.path == path)
-        .map(|p| p.html_sha.clone())
-        .ok_or_else(|| SiteError::Manifest(ManifestError::BodyMismatch("pages".to_string())))
+/// Manifest shas by path, built once: a lookup per body entry kept the
+/// commit quadratic in the page count, under the service lock.
+fn manifest_shas<'a>(
+    entries: impl Iterator<Item = (&'a String, &'a String)>,
+) -> BTreeMap<&'a str, &'a str> {
+    entries
+        .map(|(path, sha)| (path.as_str(), sha.as_str()))
+        .collect()
 }
 
-fn manifest_asset_sha(manifest: &PublishManifest, path: &str) -> Result<String, SiteError> {
-    manifest
-        .assets
-        .iter()
-        .find(|a| a.path == path)
-        .map(|a| a.sha.clone())
-        .ok_or_else(|| SiteError::Manifest(ManifestError::BodyMismatch("assets".to_string())))
+fn manifest_sha<'a>(
+    shas: &BTreeMap<&str, &'a str>,
+    path: &str,
+    set: &str,
+) -> Result<&'a str, SiteError> {
+    shas.get(path)
+        .copied()
+        .ok_or_else(|| SiteError::Manifest(ManifestError::BodyMismatch(set.to_string())))
 }
 
 /// Only deterministic, inert asset types enter the public tree. JavaScript
@@ -964,6 +973,9 @@ pub fn prune_versions(data_dir: &Path, site_id: &str, keep: usize) -> Result<Vec
 // Static serving + redirects.
 // ---------------------------------------------------------------------------
 
+/// The page a site serves at its root, and where vanished paths redirect.
+const HOME: &str = "index.html";
+
 /// Resolve a static request path inside the live tree. Returns file bytes
 /// and a content-type sniffed from the extension. Never escapes `live/`.
 pub fn resolve_static(
@@ -977,21 +989,26 @@ pub fn resolve_static(
         return Err(SiteError::NotPublished(site_id.to_string()));
     }
     let clean = request_path.trim_start_matches('/');
-    let clean = if clean.is_empty() {
-        "index.html"
-    } else {
-        clean
-    };
+    let clean = if clean.is_empty() { HOME } else { clean };
     if clean != ".fub-cache-epoch" {
         check_publish_path(clean).map_err(|_| SiteError::StaticNotFound(clean.to_string()))?;
     }
-    // Redirects from prior URLs (permalinks) resolve before files.
-    if let Some(target) = record.redirects.get(clean) {
-        return resolve_static(data_dir, site_id, target);
+    let base = public_base_path(data_dir, site_id);
+    if let Ok(bytes) = fs::read(base.join(clean)) {
+        return Ok((bytes, content_type(clean)));
     }
-    let file = public_base_path(data_dir, site_id).join(clean);
-    let bytes = fs::read(&file).map_err(|_| SiteError::StaticNotFound(clean.to_string()))?;
-    Ok((bytes, content_type(clean)))
+    // A vanished URL (permalink) follows its redirect once, to a page of the
+    // live version. Never a chain: a record written before redirects were
+    // bounded may hold a cycle, and following it recursed until the stack
+    // overflow aborted the whole server.
+    if let Some(target) = record.redirects.get(clean) {
+        if check_publish_path(target).is_ok() {
+            if let Ok(bytes) = fs::read(base.join(target)) {
+                return Ok((bytes, content_type(target)));
+            }
+        }
+    }
+    Err(SiteError::StaticNotFound(clean.to_string()))
 }
 
 /// Look up a permalink redirect without serving. Used by the dispatcher to

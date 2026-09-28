@@ -208,58 +208,97 @@ pub fn diff_manifest(old: &PublishManifest, new: &PublishManifest) -> ManifestDi
     diff
 }
 
-/// Minimal glob matcher for allowlists: `*` (within a segment), `**`
-/// (across segments), `?` (one char). Full regex is deliberately out —
-/// allowlists stay readable and auditable.
+/// Minimal glob matcher for allowlists: `*` and `**` (any bytes, `/`
+/// included; `**/` may also match nothing), `?` (one byte). Full regex is
+/// deliberately out — allowlists stay readable and auditable.
 pub fn glob_match(pattern: &str, path: &str) -> bool {
-    glob_segments(pattern.as_bytes(), path.as_bytes())
+    let mut budget = GLOB_BUDGET;
+    glob_within(pattern.as_bytes(), path.as_bytes(), &mut budget)
 }
 
-fn glob_segments(pat: &[u8], text: &[u8]) -> bool {
+pub fn matches_allowlist(allowlist: &[String], path: &str) -> bool {
+    Allowlist::new(allowlist).matches(path)
+}
+
+/// Steps one allowlist may spend on globs. The allowlist comes from the
+/// client and is matched under the service lock: without a ceiling a hostile
+/// glob set held that lock for as long as it liked.
+const GLOB_BUDGET: u64 = 50_000_000;
+
+/// An allowlist compiled once per manifest. Exact paths, which is what the
+/// host client sends, are a set lookup; globs share one step budget, and a
+/// path the exhausted budget cannot decide is outside the allowlist.
+pub struct Allowlist<'a> {
+    exact: std::collections::BTreeSet<&'a str>,
+    globs: Vec<&'a [u8]>,
+    budget: u64,
+}
+
+impl<'a> Allowlist<'a> {
+    pub fn new(patterns: &'a [String]) -> Self {
+        let (globs, exact): (Vec<&String>, Vec<&String>) = patterns
+            .iter()
+            .partition(|pattern| pattern.contains(['*', '?']));
+        Self {
+            exact: exact.into_iter().map(String::as_str).collect(),
+            globs: globs
+                .into_iter()
+                .map(|pattern| pattern.as_bytes())
+                .collect(),
+            budget: GLOB_BUDGET,
+        }
+    }
+
+    pub fn matches(&mut self, path: &str) -> bool {
+        self.exact.contains(path)
+            || self
+                .globs
+                .iter()
+                .any(|pattern| glob_within(pattern, path.as_bytes(), &mut self.budget))
+    }
+}
+
+/// Iterative wildcard matching: a failed literal resumes from the last star,
+/// one byte further, so the cost is at most pattern × text steps, never a
+/// recursion per `**`. `*` and `**` both match any bytes (`/` included); a
+/// `**` also swallows the `/` after it, so `**/x` matches `x`.
+fn glob_within(pat: &[u8], text: &[u8], budget: &mut u64) -> bool {
     let (mut px, mut tx) = (0usize, 0usize);
-    let (mut star, mut mark) = (None, 0usize);
+    // Where the last star run ended in the pattern, and the text byte it
+    // absorbs next when the pattern after it fails.
+    let mut resume: Option<(usize, usize)> = None;
     while tx < text.len() {
+        if *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
         if px < pat.len() && (pat[px] == b'?' || pat[px] == text[tx]) {
             px += 1;
             tx += 1;
         } else if px < pat.len() && pat[px] == b'*' {
-            if px + 1 < pat.len() && pat[px + 1] == b'*' {
-                // `**`: skip the run, then match the rest anywhere ahead.
-                while px < pat.len() && pat[px] == b'*' {
-                    px += 1;
-                }
-                if px == pat.len() {
-                    return true;
-                }
-                if pat[px] == b'/' {
-                    px += 1;
-                }
-                for skip in tx..=text.len() {
-                    if glob_segments(&pat[px..], &text[skip..]) {
-                        return true;
-                    }
-                }
-                return false;
+            let run = pat[px..].iter().take_while(|&&b| b == b'*').count();
+            px += run;
+            if run > 1 && pat.get(px) == Some(&b'/') {
+                px += 1;
             }
-            star = Some(px);
-            mark = tx;
-            px += 1;
-        } else if let Some(s) = star {
-            px = s + 1;
-            mark += 1;
-            tx = mark;
+            if px == pat.len() {
+                return true;
+            }
+            resume = Some((px, tx));
+        } else if let Some((star_px, star_tx)) = resume {
+            px = star_px;
+            tx = star_tx + 1;
+            resume = Some((star_px, tx));
         } else {
             return false;
         }
     }
+    // Text consumed: trailing stars match nothing, but the `/` of a `**/`
+    // reached only now still needs a byte.
     while px < pat.len() && pat[px] == b'*' {
         px += 1;
     }
     px == pat.len()
-}
-
-pub fn matches_allowlist(allowlist: &[String], path: &str) -> bool {
-    allowlist.iter().any(|pat| glob_match(pat, path))
 }
 
 /// Site ids are filesystem names: lowercase alphanumerics, `-` and `_`,
@@ -317,15 +356,16 @@ pub fn plan_dry_run(manifest: &PublishManifest, vault: &[LinkedDoc]) -> DryRunRe
         warnings.push("allowlist is empty: nothing would publish".to_string());
     }
 
+    let mut allowlist = Allowlist::new(&manifest.allowlist);
     for page in &manifest.pages {
-        if !matches_allowlist(&manifest.allowlist, &page.path) {
+        if !allowlist.matches(&page.path) {
             warnings.push(format!("page outside allowlist: {}", page.path));
             continue;
         }
         would_publish.push(page.path.clone());
     }
     for asset in &manifest.assets {
-        if !matches_allowlist(&manifest.allowlist, &asset.path) {
+        if !allowlist.matches(&asset.path) {
             warnings.push(format!("asset outside allowlist: {}", asset.path));
             continue;
         }
@@ -365,16 +405,17 @@ pub fn validate_manifest_for_commit(
     pages: &[PageBody],
     assets: &[AssetBody],
 ) -> Result<(), ManifestError> {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     check_site_id(&manifest.site_id)?;
     if !manifest.no_private_leak {
         return Err(ManifestError::PrivateLeakNotAsserted);
     }
+    let mut allowlist = Allowlist::new(&manifest.allowlist);
     let mut seen = BTreeSet::new();
     for page in &manifest.pages {
         check_publish_path(&page.path)?;
         check_reserved_path(&page.path)?;
-        if !matches_allowlist(&manifest.allowlist, &page.path) {
+        if !allowlist.matches(&page.path) {
             return Err(ManifestError::OutsideAllowlist(page.path.clone()));
         }
         if !seen.insert(page.path.clone()) {
@@ -384,7 +425,7 @@ pub fn validate_manifest_for_commit(
     for asset in &manifest.assets {
         check_publish_path(&asset.path)?;
         check_reserved_path(&asset.path)?;
-        if !matches_allowlist(&manifest.allowlist, &asset.path) {
+        if !allowlist.matches(&asset.path) {
             return Err(ManifestError::OutsideAllowlist(asset.path.clone()));
         }
         if !seen.insert(asset.path.clone()) {
@@ -402,14 +443,13 @@ pub fn validate_manifest_for_commit(
     if manifest_assets != body_assets {
         return Err(ManifestError::BodyMismatch("assets".to_string()));
     }
+    let doc_ids: BTreeMap<&str, Option<&String>> = manifest
+        .pages
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry.doc_id.as_ref()))
+        .collect();
     for page in pages {
-        if manifest
-            .pages
-            .iter()
-            .find(|entry| entry.path == page.path)
-            .and_then(|entry| entry.doc_id.as_ref())
-            != page.doc_id.as_ref()
-        {
+        if doc_ids.get(page.path.as_str()).copied().flatten() != page.doc_id.as_ref() {
             return Err(ManifestError::BodyMismatch("page doc ids".to_string()));
         }
         check_publish_path(&page.path)?;

@@ -296,6 +296,104 @@ fn rollback_restores_prior_content() {
     assert!(rollback_site(&data, "blog", 99).is_err());
 }
 
+/// Una pagina tolta rimanda alla home, ma una home tolta non rimanda a sé
+/// stessa: la catena si seguiva per ricorsione, e un ciclo abbatteva l'intero
+/// processo per stack overflow alla prima visita. Una pagina ripubblicata
+/// torna a servire il proprio file, e un ciclo già scritto su disco è un 404.
+#[test]
+fn redirects_never_loop_and_never_shadow_a_published_page() {
+    let data = temp_data_dir("redirects");
+    create_site(&data, "blog", "alice", None).unwrap();
+    let commit = |version: u64, pages: &[(&str, &str)]| {
+        let (bodies, entries): (Vec<_>, Vec<_>) = pages
+            .iter()
+            .map(|(path, html)| page(path, &format!("notes/{path}.md"), html))
+            .unzip();
+        let request = CommitRequest {
+            protocol: "fub-publish/1".to_string(),
+            site_id: "blog".to_string(),
+            manifest: PublishManifest {
+                site_id: "blog".to_string(),
+                version,
+                allowlist: vec!["*.html".to_string()],
+                pages: entries,
+                assets: vec![],
+                no_private_leak: true,
+            },
+            pages: bodies,
+            assets: vec![],
+            excluded_private: vec![],
+        };
+        commit_site(&data, &request, &[], quota(), 16, 1, false).unwrap();
+    };
+    let body = |path: &str| {
+        resolve_static(&data, "blog", path).map(|(bytes, _)| String::from_utf8(bytes).unwrap())
+    };
+
+    commit(
+        1,
+        &[
+            ("index.html", "<h1>Home</h1>"),
+            ("about.html", "<h1>About</h1>"),
+        ],
+    );
+    commit(2, &[("index.html", "<h1>Home</h1>")]);
+    assert!(body("about.html").unwrap().contains("<h1>Home</h1>"));
+
+    commit(3, &[("about.html", "<h1>About again</h1>")]);
+    assert!(body("about.html").unwrap().contains("<h1>About again</h1>"));
+    assert!(
+        body("index.html").is_err(),
+        "senza home è un 404, non un ciclo"
+    );
+
+    let mut record = load_record(&data, "blog").unwrap();
+    record
+        .redirects
+        .insert("x.html".to_string(), "y.html".to_string());
+    record
+        .redirects
+        .insert("y.html".to_string(), "x.html".to_string());
+    fub_services::publish::site::save_record(&data, &record).unwrap();
+    assert!(body("x.html").is_err());
+}
+
+/// Un'allowlist costa al più un budget fisso di passi, qualunque glob scriva
+/// il client: un pattern con molti `**` ricorreva in modo esponenziale sotto
+/// il lock globale e fermava il server per sempre. La semantica dei glob resta
+/// quella di prima.
+#[test]
+fn allowlist_matching_is_bounded_and_keeps_its_semantics() {
+    use fub_services::publish::glob_match;
+    let (mut manifest, _) = manifest_v1();
+    let hostile_path = "a".repeat(500);
+    manifest.allowlist = vec![format!("{}b", "**a".repeat(40))];
+    manifest.pages[0].path = hostile_path.clone();
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done.send(plan_dry_run(&manifest, &[]));
+    });
+    let plan = finished
+        .recv_timeout(std::time::Duration::from_secs(60))
+        .expect("allowlist matching must terminate");
+    assert!(!plan.would_publish.contains(&hostile_path));
+
+    for (pattern, path, expected) in [
+        ("*.html", "index.html", true),
+        ("*.html", "notes/a.html", true),
+        ("**/x.html", "x.html", true),
+        ("docs/**", "docs/a/b.html", true),
+        ("docs/**/b.html", "docs/a/b.html", true),
+        ("?.md", "a.md", true),
+        ("a*c", "abbbc", true),
+        ("a.html", "b.html", false),
+        ("*.css", "a.html", false),
+        ("a**/", "a", false),
+    ] {
+        assert_eq!(glob_match(pattern, path), expected, "{pattern} ~ {path}");
+    }
+}
+
 #[test]
 fn unpublish_removes_live_keeps_record() {
     let data = temp_data_dir("unpublish");
