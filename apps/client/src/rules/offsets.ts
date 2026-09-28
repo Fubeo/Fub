@@ -47,6 +47,19 @@ export function byteToCharIndex(text: string, byteOffset: number): number {
 /// coppia surrogata — che CodeMirror non produce, ma un calcolo sì — si
 /// arrotonda al confine di code point successivo, e oltre la fine si ottiene
 /// la lunghezza in byte del documento.
+export function charToByteIndex(text: string, charIndex: number): number {
+  if (charIndex <= 0) return 0;
+  let bytes = 0;
+  let units = 0;
+  for (const ch of text) {
+    if (units >= charIndex) return bytes;
+    const cp = ch.codePointAt(0)!;
+    bytes += utf8Len(cp);
+    units += cp > 0xffff ? 2 : 1;
+  }
+  return bytes; // oltre la fine → tutto il documento
+}
+
 /// La stessa conversione per **più posizioni insieme**, in un attraversamento
 /// solo del testo.
 ///
@@ -88,19 +101,6 @@ export function charToByteIndices(text: string, charIndexes: readonly number[]):
     k += 1;
   }
   return out;
-}
-
-export function charToByteIndex(text: string, charIndex: number): number {
-  if (charIndex <= 0) return 0;
-  let bytes = 0;
-  let units = 0;
-  for (const ch of text) {
-    if (units >= charIndex) return bytes;
-    const cp = ch.codePointAt(0)!;
-    bytes += utf8Len(cp);
-    units += cp > 0xffff ? 2 : 1;
-  }
-  return bytes; // oltre la fine → tutto il documento
 }
 
 /** The text indexed by Markdown surfaces; persistence keeps the original separators. */

@@ -403,8 +403,8 @@ impl Drafts {
     ///
     /// La destinazione ha già una bozza sua — o un concorrente gliene ha posata
     /// una nel frattempo — e nessuna delle due si sovrascrive: il testo che non
-    /// può atterrare prende `{stelo}~recupero`, e se preso
-    /// `{stelo}~recupero-2`, e così via. Il nome decodifica in un documento che
+    /// può atterrare prende `{stelo}~recovery`, e se preso
+    /// `{stelo}~recovery-2`, e così via. Il nome decodifica in un documento che
     /// non esiste, quindi [`Drafts::read`] lo elenca come bozza **orfana**,
     /// l'unica forma che un recupero ritrova. Ogni candidato si prova con
     /// [`VaultStorage::rename_no_replace`] — la creazione e il rifiuto sono una
@@ -412,11 +412,11 @@ impl Drafts {
     /// arriva dopo, e fra le due un concorrente non può occupare il nome.
     ///
     /// **L'estensione del documento si conserva**: `prima.md` diventa
-    /// `prima~recupero.md`, non `prima.md~recupero`. Il nome di recupero è un
+    /// `prima~recovery.md`, non `prima.md~recovery`. Il nome di recupero è un
     /// documento che un domani si può salvare — e un documento senza
     /// estensione riconosciuta il registro dei formati non sa né salvarlo né
     /// renderlo — quindi l'estensione è la sua, l'ultima, e senza estensione
-    /// resta `prima~recupero`. Estensione e forma restano quelle di ogni
+    /// resta `prima~recovery`. Estensione e forma restano quelle di ogni
     /// bozza: un nome che [`document_from_name`] non riconoscesse sarebbe
     /// testo che nessuno sa leggere.
     fn recovery_name(&self, from: &DocId, old: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
@@ -426,8 +426,8 @@ impl Drafts {
                 "il file di bozza non sta in una cartella",
             )
         })?;
-        // Lo stelo resta com'è, `~recupero` si attacca davanti all'estensione.
-        // Un nome senza doti — o con il punto in testa o in coda — non ha
+        // Lo stelo resta com'è, `~recovery` si attacca davanti all'estensione.
+        // Un nome senza punti — o con il punto in testa o in coda — non ha
         // estensione da conservare, e il suffisso va in fondo al nome.
         let (stem, extension) = match from.as_str().rsplit_once('.') {
             Some((s, and)) if !s.is_empty() && !and.is_empty() => (s, Some(and)),
