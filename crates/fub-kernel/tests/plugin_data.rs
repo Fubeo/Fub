@@ -84,6 +84,53 @@ fn what_a_plugin_writes_it_can_read_back_list_and_remove() {
     });
 }
 
+/// **Un elenco che non si legge non è un elenco vuoto, né uno più corto.**
+///
+/// Il contratto concede il vuoto al solo prefisso che non esiste. Una
+/// cartella dello spazio che il supporto non lascia elencare spariva invece in
+/// silenzio: il ripristino di un backup riportava meno file dicendo di esserci
+/// riuscito, e la ricostruzione dell'indice delle versioni ne dimenticava.
+#[cfg(unix)]
+#[test]
+fn a_listing_that_fails_is_not_a_shorter_list() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
+    ws.with_host("prova.plugin", |host| {
+        host.data_write("index.json", b"{}").unwrap();
+        host.data_write("doc/a.md", b"first").unwrap();
+        assert!(
+            host.data_list("index.json").unwrap().is_empty(),
+            "a blob has no blobs below it"
+        );
+    });
+
+    let doc = root.join(".fub/plugins/prova.plugin/doc");
+    let set = |mode| {
+        std::fs::set_permissions(&doc, std::fs::Permissions::from_mode(mode)).expect("permissions")
+    };
+    set(0o000);
+    if std::fs::read_dir(&doc).is_ok() {
+        // Chi gira da root elenca lo stesso: il guasto non si riproduce.
+        set(0o755);
+        return;
+    }
+    let (whole, below) = ws.with_host("prova.plugin", |host| {
+        (host.data_list(""), host.data_list("doc"))
+    });
+    set(0o755);
+
+    assert!(
+        matches!(whole, Err(PluginError::Io(_))),
+        "a folder that cannot be listed is a fault: {whole:?}"
+    );
+    assert!(
+        matches!(below, Err(PluginError::Io(_))),
+        "the prefix itself cannot be listed: {below:?}"
+    );
+}
+
 #[test]
 fn cache_blobs_use_the_derived_root_without_mixing_authoritative_data() {
     let mut ws = vault();

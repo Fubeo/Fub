@@ -1164,9 +1164,8 @@ impl DataRead for JobHost {
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
         self.stopped()?;
-        Ok(self
-            .prepare_data_io(Capability::DataRead, prefix, "listing blobs")?
-            .list_authoritative())
+        self.prepare_data_io(Capability::DataRead, prefix, "listing blobs")?
+            .list_authoritative()
     }
 
     fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {

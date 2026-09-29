@@ -127,7 +127,8 @@ impl DataRead for ReadHost<'_> {
             )
         };
         let mut out = Vec::new();
-        collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out);
+        collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out)
+            .map_err(|source| crate::KernelError::Io { path: dir, source })?;
         out.sort_unstable();
         Ok(out)
     }

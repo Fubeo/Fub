@@ -3599,16 +3599,21 @@ impl PreparedPluginDataIo {
         }
     }
 
-    pub fn list_authoritative(self) -> Vec<String> {
+    pub fn list_authoritative(self) -> std::result::Result<Vec<String>, PluginError> {
         let (root, dir) = if self.authoritative_uses_canonical() {
             (&self.canonical_root, &self.canonical_path)
         } else {
             (&self.cache_root, &self.cache_path)
         };
         let mut paths = Vec::new();
-        collect_data_files(self.storage.as_ref(), root, dir, &mut paths);
+        collect_data_files(self.storage.as_ref(), root, dir, &mut paths).map_err(|source| {
+            PluginError::from(KernelError::Io {
+                path: dir.clone(),
+                source,
+            })
+        })?;
         paths.sort_unstable();
-        paths
+        Ok(paths)
     }
 
     pub fn read_cache(self) -> std::result::Result<Option<Vec<u8>>, PluginError> {
@@ -13620,20 +13625,34 @@ fn is_safe_component(name: &str) -> bool {
 }
 
 /// Elenca ricorsivamente i file sotto `dir`, come path relativi a `root`.
+///
+/// Una cartella che non c'è è una lista vuota, non un errore: chi interroga
+/// uno storage vuoto non sta sbagliando niente. Lo stesso vale per un prefisso
+/// che nomina un blob, sotto cui non sta niente. Ogni altro guasto risale,
+/// anche quello di una sottocartella: un elenco a metà preso per intero faceva
+/// ripristinare un backup senza i file che non si erano visti, e ricostruire
+/// un indice di versioni che ne dimenticava.
 pub(crate) fn collect_data_files(
     storage: &dyn crate::storage::VaultStorage,
     root: &Utf8Path,
     dir: &Utf8Path,
     out: &mut Vec<String>,
-) {
-    let Ok(entries) = storage.list(dir) else {
-        // Una cartella che non c'è è una lista vuota, non un errore: chi
-        // interroga uno storage vuoto non sta sbagliando niente.
-        return;
+) -> std::io::Result<()> {
+    let entries = match storage.list(dir) {
+        Ok(entries) => entries,
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+            ) =>
+        {
+            return Ok(())
+        }
+        Err(error) => return Err(error),
     };
     for entry in entries {
         if entry.stat.is_dir() {
-            collect_data_files(storage, root, &entry.path, out);
+            collect_data_files(storage, root, &entry.path, out)?;
         } else if let Some(rel) = entry.path.strip_prefix(root).ok().map(Utf8Path::as_str) {
             let rel = rel.replace('\\', "/");
             if rel == PLUGIN_CACHE_MARK || rel.ends_with("/.fub-cache-root") {
@@ -13642,6 +13661,7 @@ pub(crate) fn collect_data_files(
             out.push(rel);
         }
     }
+    Ok(())
 }
 
 /// Sottomodello con i soli blocchi della sezione di un heading: da esso
