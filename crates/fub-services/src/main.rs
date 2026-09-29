@@ -112,15 +112,10 @@ fn main() {
         let rx = Arc::clone(&rx);
         let state = Arc::clone(&state);
         let data_dir = data_dir.clone();
-        std::thread::spawn(move || loop {
-            let (stream, accepted) = {
-                let rx = rx.lock();
-                match rx.recv() {
-                    Ok(job) => job,
-                    Err(_) => return,
-                }
-            };
-            serve(stream, accepted, &state, &data_dir);
+        std::thread::spawn(move || {
+            run_worker(&rx, &|stream, accepted| {
+                serve(stream, accepted, &state, &data_dir)
+            })
         });
     }
     eprintln!("fub-services/0.1.0 on {bind} ({WORKERS} workers, queue {QUEUE})");
@@ -140,6 +135,34 @@ fn main() {
                 }
             }
             Err(_) => continue,
+        }
+    }
+}
+
+/// Un worker del pool: serve connessioni finché la coda resta aperta.
+///
+/// Un panic dentro una richiesta chiude **quella** connessione, non il worker.
+/// Senza la barriera il thread moriva e nessuno lo rifaceva: otto richieste che
+/// trovavano lo stesso difetto spegnevano il pool, la coda si riempiva e da lì
+/// ogni connessione riceveva 503 fino al riavvio. Lo stato condiviso non ne
+/// esce peggio di prima: il lucchetto di `parking_lot` si rilascia anche
+/// srotolando, e gli altri worker lo usavano già dopo un panic.
+fn run_worker(
+    rx: &Mutex<std::sync::mpsc::Receiver<(TcpStream, Instant)>>,
+    serve: &dyn Fn(TcpStream, Instant),
+) {
+    loop {
+        let (stream, accepted) = {
+            let rx = rx.lock();
+            match rx.recv() {
+                Ok(job) => job,
+                Err(_) => return,
+            }
+        };
+        let served =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| serve(stream, accepted)));
+        if served.is_err() {
+            eprintln!("fub-services: una richiesta è andata in panic; il worker continua");
         }
     }
 }
@@ -893,6 +916,39 @@ fn handle_static(
                 body: [head.as_bytes(), &bytes].concat(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod worker_tests {
+    use super::*;
+
+    /// **Un panic spegne una richiesta, non il worker.** La prima connessione
+    /// va in panic, la seconda arriva allo stesso worker e viene servita.
+    #[test]
+    fn a_panicking_request_leaves_the_worker_alive() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let clients: Vec<TcpStream> = (0..2)
+            .map(|_| TcpStream::connect(address).unwrap())
+            .collect();
+        let (tx, rx) = std::sync::mpsc::sync_channel(2);
+        for _ in &clients {
+            tx.send((listener.accept().unwrap().0, Instant::now()))
+                .unwrap();
+        }
+        drop(tx);
+        let served = std::sync::atomic::AtomicUsize::new(0);
+        run_worker(&Mutex::new(rx), &|_, _| {
+            if served.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                panic!("il difetto che una richiesta trova");
+            }
+        });
+        assert_eq!(
+            served.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "dopo il panic il worker ha servito anche la seconda connessione"
+        );
     }
 }
 
