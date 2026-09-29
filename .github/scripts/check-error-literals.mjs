@@ -22,7 +22,7 @@ const root = process.argv[2] ?? process.cwd();
 const THRESHOLDS = {
   "fub-app": 90,
   "fub-features": 80,
-  "fub-host": 379,
+  "fub-host": 377,
   "fub-kernel": 168,
   "fub-wasm-host": 55,
 };
