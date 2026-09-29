@@ -738,7 +738,8 @@ fn a_attachment_moved_from_outside_not_remains_in_registry_col_name_old() {
 
 /// Il disco vero, che conta chi legge **intero** un file il cui path contiene
 /// `watched`, e quanto è grande il pezzo più grande consegnato a chi lo legge
-/// a pezzi.
+/// a pezzi. I metadati di Fub sotto `.fub/` (la scheda JSON di una voce del
+/// cestino porta il nome del file) non sono il file.
 struct PiecesOnly {
     inner: fub_kernel::storage::FsStorage,
     watched: &'static str,
@@ -759,7 +760,7 @@ impl PiecesOnly {
 
 impl VaultStorage for PiecesOnly {
     fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
-        if path.as_str().contains(self.watched) {
+        if path.as_str().contains(self.watched) && !path.as_str().contains("/.fub/") {
             self.whole_reads.fetch_add(1, Ordering::Relaxed);
         }
         self.inner.read(path)
@@ -1099,6 +1100,24 @@ fn a_document_over_the_limit_is_kept_and_never_read() {
             .len(),
         size
     );
+
+    // Dal cestino torna come ci è andato: un file, senza passare dal parse.
+    let restored = fub_testkit::restore_document(&mut ws, &trashed, None)
+        .expect("torna dal cestino come un allegato");
+    assert_eq!(restored, DocId::new("grande-vecchia.txt"));
+    assert_eq!(
+        std::fs::metadata(f.root.join("grande-vecchia.txt"))
+            .unwrap()
+            .len(),
+        size
+    );
+    let back = entries(&ws, Some(EntryKind::Document), None)
+        .into_iter()
+        .find(|entry| entry.id == restored)
+        .expect("il file ripristinato è di nuovo in anagrafe");
+    assert_eq!(back.size, size);
+    ws.rename_document(&restored, &DocId::new("grande.txt"))
+        .expect("e si rinomina ancora");
     assert_eq!(f.parses(), 1);
     assert_eq!(storage.whole_reads.load(Ordering::Relaxed), 0);
 }

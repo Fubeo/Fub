@@ -257,6 +257,12 @@ impl Workspace {
         }
         let documents = self.docs.detached();
         let content = match documents.prepare_parse_with_kind(&target)? {
+            // Un documento oltre il tetto torna com'era andato: un file che
+            // l'anagrafe tiene senza modello, come all'apertura. Il parse lo
+            // rifiuterebbe, e il file resterebbe chiuso nel cestino.
+            Some(_) if entry.size > crate::documents::MAX_DOCUMENT_SOURCE_BYTES => {
+                RestoreContent::Attachment
+            }
             Some((source_kind, parser)) => RestoreContent::Document {
                 source_kind,
                 parser: Box::new(parser),
