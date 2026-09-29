@@ -20,6 +20,11 @@
 
   var MAX_INPUT = 2 * 1024 * 1024; // 2 MiB HTML in; markdown capped by capture.js (1 MiB)
   var MAX_ASSETS = 50;
+  // Livelli di lista oltre i quali una voce non rientra più (come
+  // MAX_LIST_INDENT in Rust): il rientro costa due spazi per livello per ogni
+  // voce, e senza tetto una lista annidata centomila volte diventava decine di
+  // GB di Markdown.
+  var MAX_LIST_INDENT = 16;
 
   function templateVars() {
     return ["source_url", "title", "clipped_at", "excerpt"];
@@ -108,6 +113,7 @@
     var skipDepth = 0; // inside script/style/noscript/template
     var blockquoteDepth = 0;
     var tableCell = 0;
+    var flattened = false;
     var pushAsset = function (url, entry) {
       if (assets.length >= MAX_ASSETS) {
         notes.push({ level: "warn", message: "asset limit reached, extra images kept as URLs", entry: entry || "img" });
@@ -212,7 +218,12 @@
           break;
         case "li":
           if (!closing) {
-            var indent = new Array(listStack.length).join("  ");
+            var depth = Math.max(listStack.length - 1, 0);
+            if (depth > MAX_LIST_INDENT && !flattened) {
+              flattened = true;
+              notes.push({ level: "warn", message: "list nesting deeper than " + MAX_LIST_INDENT + " levels kept at that level", entry: "li" });
+            }
+            var indent = "  ".repeat(Math.min(depth, MAX_LIST_INDENT));
             var top = listStack[listStack.length - 1];
             out.push("\n" + indent + (top && top.type === "ol" ? (top.n++) + ". " : "- "));
           }
@@ -284,6 +295,7 @@
   return {
     MAX_INPUT: MAX_INPUT,
     MAX_ASSETS: MAX_ASSETS,
+    MAX_LIST_INDENT: MAX_LIST_INDENT,
     templateVars: templateVars,
     htmlToMarkdown: htmlToMarkdown,
     clipHtml: clipHtml,

@@ -24,6 +24,12 @@ pub const MAX_INPUT: usize = 2 * 1024 * 1024;
 pub const MAX_ASSETS: usize = 50;
 /// Body ceiling after frontmatter (matches the clipper's 1 MiB capture).
 pub(crate) const CAPTURE_LIMIT: usize = 1024 * 1024;
+/// Livelli di lista oltre i quali una voce non rientra più (come il clipper).
+/// Il rientro costa due spazi per livello **per ogni voce**: senza tetto,
+/// centomila `<ul><li>` annidati in 2 MiB di HTML diventavano decine di GB di
+/// Markdown, e l'importazione finiva la memoria dell'app. Le voci più profonde
+/// restano a questo livello, col testo intero.
+pub const MAX_LIST_INDENT: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClipAsset {
@@ -270,6 +276,7 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
     let mut pre_depth = 0usize;
     let mut skip_depth = 0usize;
     let mut blockquote_depth = 0usize;
+    let mut flattened = false;
 
     let need_blank = |out: &mut Vec<String>| {
         if out.last().is_some_and(|s| s != "\n\n") {
@@ -486,7 +493,18 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
             }
             "li" => {
                 if !closing {
-                    let indent = "  ".repeat(list_stack.len().saturating_sub(1));
+                    let depth = list_stack.len().saturating_sub(1);
+                    if depth > MAX_LIST_INDENT && !flattened {
+                        flattened = true;
+                        notes.push(ClipNote {
+                            level: "warn",
+                            message: format!(
+                                "list nesting deeper than {MAX_LIST_INDENT} levels kept at that level"
+                            ),
+                            entry: "li".to_string(),
+                        });
+                    }
+                    let indent = "  ".repeat(depth.min(MAX_LIST_INDENT));
                     let marker = match list_stack.last_mut() {
                         Some((true, n)) => {
                             let m = format!("{n}. ");
@@ -723,4 +741,30 @@ impl ImportProvider for HtmlImport {
 /// for the pipeline and template preview.
 pub fn convert_fragment(html: &str) -> Result<ClipResult, PluginError> {
     clip_html(html, &ClipOptions::default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Una lista annidata oltre ogni ragione costa quanto è lunga: il testo di
+    /// ogni voce resta, il rientro si ferma al tetto e una nota lo dice.
+    #[test]
+    fn deep_lists_stay_linear_and_keep_their_text() {
+        let depth = 50_000;
+        let html = "<ul><li>x".repeat(depth);
+        let (md, _, notes) = html_to_markdown(&html, &ClipOptions::default());
+        assert!(
+            md.len() <= depth * (2 * MAX_LIST_INDENT + 8),
+            "{}",
+            md.len()
+        );
+        assert_eq!(md.matches("- x").count(), depth);
+        assert_eq!(notes.iter().filter(|note| note.entry == "li").count(), 1);
+
+        let shallow = "<ul><li>a<ul><li>b</li></ul></li></ul>";
+        let (md, _, notes) = html_to_markdown(shallow, &ClipOptions::default());
+        assert!(md.contains("\n  - b"), "{md:?}");
+        assert!(notes.is_empty());
+    }
 }

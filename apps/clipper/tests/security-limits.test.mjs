@@ -171,6 +171,18 @@ describe("convert mirror (TransferOwner schema)", () => {
     assert.equal(emoji.markdown.includes("\uFFFD"), false, "never split a UTF-8 code point");
   });
 
+  it("deep lists stay linear and keep their text, like the Rust twin", () => {
+    const depth = 50000;
+    const notes = [];
+    const md = Convert.htmlToMarkdown("<ul><li>x".repeat(depth), {}, [], notes);
+    assert.ok(md.length <= depth * (2 * Convert.MAX_LIST_INDENT + 8), String(md.length));
+    assert.equal(md.split("- x").length - 1, depth);
+    assert.equal(notes.filter((n) => n.entry === "li").length, 1);
+    const shallowNotes = [];
+    assert.ok(Convert.htmlToMarkdown("<ul><li>a<ul><li>b</li></ul></li></ul>", {}, [], shallowNotes).includes("\n  - b"));
+    assert.equal(shallowNotes.length, 0);
+  });
+
   it("rejects non-string and over-limit HTML by UTF-8 bytes", () => {
     assert.throws(() => Convert.clipHtml(42, {}), (e) => e.code === "bad_args");
     assert.throws(() => Convert.clipHtml("x".repeat(Convert.MAX_INPUT + 1), {}), (e) => e.code === "bad_args");
