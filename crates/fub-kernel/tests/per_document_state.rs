@@ -444,6 +444,60 @@ fn an_unreadable_trash_sidecar_collects_nothing() {
     );
 }
 
+/// **Nemmeno il ripristino indovina.** Con il sidecar illeggibile la voce
+/// risultava `Idea.md` nella radice, e il ripristino ce la rimetteva: la nota
+/// usciva dal cestino fuori da `Diario/`, e i suoi dati — intestati a
+/// `Diario/Idea.md`, che nessuna rinomina aveva spostato — restavano di una
+/// nota che non c'era più, pronti per la raccolta. Un guasto del supporto
+/// ferma l'elenco e il ripristino; tornato leggibile, la nota torna a casa.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_trash_sidecar_stops_the_restore() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_g, root, mut ws) = vault();
+    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    let trashed = ws.list_trash().expect("il cestino")[0].id.clone();
+    let set = |mode| {
+        std::fs::set_permissions(&sidecar, std::fs::Permissions::from_mode(mode))
+            .expect("permessi del sidecar")
+    };
+    set(0o000);
+    if std::fs::read(&sidecar).is_ok() {
+        // Chi gira da root legge comunque: il guasto non si riproduce.
+        set(0o644);
+        return;
+    }
+
+    let listed = ws.list_trash();
+    let restored = restore_document(&mut ws, &trashed, None);
+    set(0o644);
+    assert!(
+        listed.is_err(),
+        "l'elenco ha indovinato l'origine: {listed:?}"
+    );
+    assert!(
+        restored.is_err(),
+        "il ripristino ha indovinato l'origine: {restored:?}"
+    );
+    assert!(
+        !root.join("Idea.md").exists(),
+        "la nota è tornata in radice"
+    );
+    assert!(
+        root.join(trashed.as_str()).exists(),
+        "la nota è uscita dal cestino"
+    );
+
+    let returned = restore_document(&mut ws, &trashed, None).expect("ripristino");
+    assert_eq!(returned, DocId::new("Diario/Idea.md"));
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "i dati non sono tornati con la nota"
+    );
+}
+
 /// Lo stesso per un sidecar scritto da una versione più nuova di Fub (un
 /// vault sincronizzato fra due macchine): questa copia non sa leggerlo, e
 /// non sapere non è sapere che la nota non c'è.

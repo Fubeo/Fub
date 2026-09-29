@@ -1335,8 +1335,13 @@ impl Vault {
     }
 
     /// Ciò che questo vault sa di una voce cestinata, se è stata Fub a
-    /// cestinarla. Un sidecar assente o illeggibile non è un errore: è una
-    /// voce cestinata da qualcun altro (Obsidian), o di un'altra epoca.
+    /// cestinarla. Un sidecar assente o che non si comprende non è un errore:
+    /// è una voce cestinata da qualcun altro (Obsidian), o di un'altra epoca.
+    /// **Un sidecar che il supporto non sa leggere invece lo è**, e risale:
+    /// degradarlo al nome nella radice era indovinare, e il ripristino ci
+    /// rimetteva la nota fuori dalla sua cartella, lasciando i suoi dati
+    /// per-documento a un path che non c'era più. Vale anche per chi cancella:
+    /// scambierebbe un censimento incompleto per un cestino vuoto.
     ///
     /// Torna il sidecar **intero** e non un campo solo perché le domande che
     /// gli si fanno sono due — da dove veniva la voce, e quando è stata
@@ -1355,15 +1360,6 @@ impl Vault {
     /// si dà solo aprendo il vault con una copia di Fub più vecchia di quella
     /// che l'ha cestinata; se un giorno il sidecar porterà qualcosa che il
     /// degrado non sa rifare, quel campo sarà da scrivere.
-    fn trash_sidecar(&self, trashed: &DocId, stat: &Stat) -> Option<TrashSidecar> {
-        self.read_trash_sidecar(trashed, stat).ok().flatten()
-    }
-
-    /// Legge un sidecar distinguendo la sua assenza da un guasto del supporto.
-    ///
-    /// L'elenco del cestino usa il degrado discreto di [`Self::trash_sidecar`];
-    /// un'operazione distruttiva deve invece far risalire il guasto, altrimenti
-    /// scambierebbe un censimento incompleto per un cestino vuoto.
     fn read_trash_sidecar(&self, trashed: &DocId, stat: &Stat) -> Result<Option<TrashSidecar>> {
         let path = self.trash_sidecar_path(trashed);
         let raw = match crate::error::optional(self.storage.read(&path)).map_err(|source| {
@@ -1451,7 +1447,7 @@ impl Vault {
         self.trash_files(dir, &mut files)?;
         for (id, stat) in files {
             let name = file_name_of(id.as_str());
-            let sidecar = self.trash_sidecar(&id, &stat);
+            let sidecar = self.read_trash_sidecar(&id, &stat)?;
             out.push(TrashEntry {
                 // Il sidecar sa da quale cartella veniva; senza (voce di
                 // Obsidian, o di un'altra epoca) si degrada al nome

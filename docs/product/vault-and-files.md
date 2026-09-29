@@ -173,7 +173,9 @@ la posizione originale e consentire il ripristino.
 
 Il sidecar è un aiuto, non l'unica copia della nota. Se manca o non è
 compatibile, il comportamento di degrado deve preservare il contenuto e usare
-una destinazione sicura.
+una destinazione sicura. Un sidecar presente che il disco non sa leggere non
+vale come assente: l'elenco del cestino e il ripristino si fermano con l'errore
+invece di rimettere la nota nella radice.
 
 Finché una nota sta nel cestino, i suoi dati per-documento restano: la raccolta
 degli spazi orfani li conserva. Se il cestino non si elenca, o un sidecar
