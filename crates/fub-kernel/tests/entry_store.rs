@@ -664,6 +664,37 @@ fn a_attachment_that_compare_and_changes_the_announces_saying_what_and() {
     assert!(entries(&ws, Some(EntryKind::Asset), None).is_empty());
 }
 
+/// **Un allegato arrivato a Fub aperto si rinomina subito.**
+///
+/// Il rilevatore lo mette in anagrafe con dimensione e data, senza impronta:
+/// quella la prende l'apertura. La rinomina chiedeva l'impronta e, non
+/// trovandola, rispondeva `Stale`: l'immagine appena trascinata nel vault non
+/// si poteva rinominare fino alla riapertura.
+#[test]
+fn a_watched_attachment_renames_without_a_fingerprint() {
+    let f = Fixture::new();
+    f.write("nota.txt", "una nota");
+    let mut ws = f.open(false);
+    f.write("img/foto.png", "\u{89}PNG");
+    assert!(ws.sync_path(&f.root.join("img/foto.png")).expect("sync"));
+    assert_eq!(
+        entries(&ws, Some(EntryKind::Asset), None)[0].fingerprint,
+        None,
+        "il rilevatore non legge l'allegato"
+    );
+
+    ws.rename_document(&DocId::new("img/foto.png"), &DocId::new("img/gatto.png"))
+        .expect("si rinomina senza impronta");
+    let renamed = entries(&ws, Some(EntryKind::Asset), None);
+    assert_eq!(renamed[0].id, DocId::new("img/gatto.png"));
+    assert_eq!(
+        renamed[0].fingerprint,
+        Some(Revision::of_bytes("\u{89}PNG".as_bytes())),
+        "e la rinomina, che l'ha letto, gliela lascia"
+    );
+    assert!(f.root.join("img/gatto.png").exists());
+}
+
 #[test]
 fn a_attachment_moved_from_outside_not_remains_in_registry_col_name_old() {
     // Il buco che questa voce chiude: `sync_renamed_path` sapeva migrare

@@ -8533,7 +8533,15 @@ impl Workspace {
         let snapshot = &moved.snapshot;
         let current_from = self.indexes.core.entries.get(&snapshot.from);
         let current_to = self.indexes.core.entries.get(&snapshot.to);
-        let source_matches = snapshot.from_entry.fingerprint.as_ref() == Some(&moved.fingerprint)
+        // Una voce senza impronta — un allegato arrivato dal rilevatore o dal
+        // cestino, che la prende solo alla prossima apertura — si riconosce da
+        // dimensione e data, il criterio dell'anagrafe (§14.1). Chiedere
+        // un'impronta che non c'è rispondeva `Stale` a ogni rinomina.
+        let source_matches = snapshot
+            .from_entry
+            .fingerprint
+            .as_ref()
+            .is_none_or(|fingerprint| *fingerprint == moved.fingerprint)
             && snapshot.from_entry.size == moved.stat.size
             && snapshot.from_entry.mtime == moved.stat.mtime;
         let paths_match = self.docs.vault.path_for(&snapshot.from).ok().as_ref()
