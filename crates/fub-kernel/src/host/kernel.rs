@@ -313,7 +313,7 @@ impl DataRead for KernelHost<'_> {
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
         let canonical = self.ws.plugin_data_root(self.plugin);
-        let (root, dir) = if self.ws.plugin_authoritative_uses_canonical(self.plugin) {
+        let (root, dir) = if self.ws.plugin_authoritative_uses_canonical(self.plugin)? {
             (canonical, self.ws.plugin_data_path(self.plugin, prefix)?)
         } else {
             (

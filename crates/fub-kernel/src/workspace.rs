@@ -3575,23 +3575,43 @@ pub struct PreparedPluginDataIo {
     cache_path: Utf8PathBuf,
 }
 
+/// La domanda «c'è?» che sceglie fra dati autorevoli e cache di un plugin:
+/// soltanto un «non c'è» del supporto vale «no». Una `stat` fallita letta come
+/// assenza sceglieva la radice sbagliata — la lettura rispondeva «mai
+/// scritto», e una scrittura di cache posava il marcatore dentro i dati
+/// vecchi, che da lì in poi nessuno leggeva più.
+fn plugin_root_present(
+    storage: &dyn crate::storage::VaultStorage,
+    path: &Utf8Path,
+) -> std::result::Result<bool, PluginError> {
+    crate::error::optional(storage.stat(path))
+        .map(|stat| stat.is_some())
+        .map_err(|source| {
+            PluginError::from(KernelError::Io {
+                path: path.to_owned(),
+                source,
+            })
+        })
+}
+
 impl PreparedPluginDataIo {
-    fn authoritative_uses_canonical(&self) -> bool {
-        self.storage.exists(&self.canonical_root)
-            || !self.storage.exists(&self.cache_root)
-            || self.storage.exists(&self.cache_mark)
+    fn authoritative_uses_canonical(&self) -> std::result::Result<bool, PluginError> {
+        let present = |path| plugin_root_present(self.storage.as_ref(), path);
+        Ok(present(&self.canonical_root)?
+            || !present(&self.cache_root)?
+            || present(&self.cache_mark)?)
     }
 
-    fn authoritative_path(&self) -> &Utf8Path {
-        if self.authoritative_uses_canonical() {
+    fn authoritative_path(&self) -> std::result::Result<&Utf8Path, PluginError> {
+        Ok(if self.authoritative_uses_canonical()? {
             &self.canonical_path
         } else {
             &self.cache_path
-        }
+        })
     }
 
     pub fn read_authoritative(self) -> std::result::Result<Option<Vec<u8>>, PluginError> {
-        let path = self.authoritative_path();
+        let path = self.authoritative_path()?;
         match self.storage.read(path) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -3600,7 +3620,7 @@ impl PreparedPluginDataIo {
     }
 
     pub fn list_authoritative(self) -> std::result::Result<Vec<String>, PluginError> {
-        let (root, dir) = if self.authoritative_uses_canonical() {
+        let (root, dir) = if self.authoritative_uses_canonical()? {
             (&self.canonical_root, &self.canonical_path)
         } else {
             (&self.cache_root, &self.cache_path)
@@ -3627,7 +3647,7 @@ impl PreparedPluginDataIo {
     }
 
     pub fn write_authoritative(self, bytes: &[u8]) -> std::result::Result<(), PluginError> {
-        let path = self.authoritative_path();
+        let path = self.authoritative_path()?;
         self.storage
             .write(path, bytes)
             .map(|_| ())
@@ -3635,7 +3655,7 @@ impl PreparedPluginDataIo {
     }
 
     pub fn remove_authoritative(self) -> std::result::Result<(), PluginError> {
-        let path = self.authoritative_path();
+        let path = self.authoritative_path()?;
         match self.storage.remove(path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -3644,7 +3664,7 @@ impl PreparedPluginDataIo {
     }
 
     pub fn write_cache(self, bytes: &[u8]) -> std::result::Result<(), PluginError> {
-        if !self.authoritative_uses_canonical() {
+        if !self.authoritative_uses_canonical()? {
             self.storage
                 .rename(&self.cache_root, &self.canonical_root)
                 .map_err(|error| {
@@ -13419,15 +13439,23 @@ impl Workspace {
     }
 
     /// `.fub/data/plugins/<id>/` esiste e **non** è cache: è l'albero vecchio.
-    pub(crate) fn plugin_legacy_is_authoritative(&self, plugin: &str) -> bool {
-        let cache = self.plugin_cache_root(plugin);
-        self.storage().exists(&cache)
-            && !self.storage().exists(&self.plugin_cache_mark_path(plugin))
+    pub(crate) fn plugin_legacy_is_authoritative(
+        &self,
+        plugin: &str,
+    ) -> std::result::Result<bool, PluginError> {
+        let present = |path: &Utf8Path| plugin_root_present(self.storage().as_ref(), path);
+        Ok(present(&self.plugin_cache_root(plugin))?
+            && !present(&self.plugin_cache_mark_path(plugin))?)
     }
 
-    pub(crate) fn plugin_authoritative_uses_canonical(&self, plugin: &str) -> bool {
-        self.storage().exists(&self.plugin_data_root(plugin))
-            || !self.plugin_legacy_is_authoritative(plugin)
+    pub(crate) fn plugin_authoritative_uses_canonical(
+        &self,
+        plugin: &str,
+    ) -> std::result::Result<bool, PluginError> {
+        Ok(
+            plugin_root_present(self.storage().as_ref(), &self.plugin_data_root(plugin))?
+                || !self.plugin_legacy_is_authoritative(plugin)?,
+        )
     }
 
     pub(crate) fn plugin_authoritative_path(
@@ -13435,7 +13463,7 @@ impl Workspace {
         plugin: &str,
         rel: &str,
     ) -> std::result::Result<Utf8PathBuf, PluginError> {
-        if self.plugin_authoritative_uses_canonical(plugin) {
+        if self.plugin_authoritative_uses_canonical(plugin)? {
             self.plugin_data_path(plugin, rel)
         } else {
             self.plugin_cache_path(plugin, rel)
@@ -13473,7 +13501,7 @@ impl Workspace {
         &self,
         plugin: &str,
     ) -> std::result::Result<(), PluginError> {
-        if self.plugin_legacy_is_authoritative(plugin) {
+        if self.plugin_legacy_is_authoritative(plugin)? {
             let from = self.plugin_cache_root(plugin);
             let to = self.plugin_data_root(plugin);
             self.storage().rename(&from, &to).map_err(|and| {

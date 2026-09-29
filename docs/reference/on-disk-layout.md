@@ -339,7 +339,9 @@ documenti, allegati, file sconosciuti, `.trash/`, ogni voce autorevole sotto
 `.fub/` e lo storage autorevole dei plugin. La configurazione macchina resta
 fuori dal vault. Le cache dichiarate ricostruibili non entrano nel manifest:
 `.fub/data/plugins/<id>/` è cache solo quando contiene `.fub-cache-root`;
-altrimenti è storage autorevole legacy.
+altrimenti è storage autorevole legacy. Le letture e le scritture dei dati di
+un plugin scelgono la radice con la stessa regola: se il disco non sa dire se
+la radice o il marker ci sono, rispondono con l'errore invece di scegliere.
 
 Il modulo `fub_kernel::snapshot` usa un manifest schema 1, ordinato per path
 relativo normalizzato. Ogni entry registra classe, proprietario, schema quando

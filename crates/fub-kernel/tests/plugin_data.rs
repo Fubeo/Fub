@@ -8,9 +8,13 @@
 //! che ogni plugin veda solo i propri, e che ogni tentativo di uscirne sia un
 //! `PermissionDenied` e non un file scritto altrove.
 
-use camino::Utf8PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::error::PluginError;
-use fub_kernel::{data_root, FormatRegistry, Workspace};
+use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
+use fub_kernel::{data_root, FormatRegistry, MachineSettings, Workspace};
 use fub_testkit::{Bench, Mounted};
 
 fn vault() -> Mounted {
@@ -235,6 +239,103 @@ fn a_cache_write_migrates_legacy_data_before_creating_cache() {
     assert!(root
         .join(".fub/data/plugins/prova.plugin/.fub-cache-root")
         .exists());
+}
+
+/// Un supporto che, acceso l'interruttore, non sa dire se la radice vecchia
+/// dei dati di `prova.plugin` c'è.
+struct LegacyStatFails {
+    inner: FsStorage,
+    failing: AtomicBool,
+}
+
+impl VaultStorage for LegacyStatFails {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+    fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        if self.failing.load(Ordering::Relaxed) && path.ends_with(".fub/data/plugins/prova.plugin")
+        {
+            return Err(std::io::Error::other("il disco non risponde"));
+        }
+        self.inner.stat(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
+/// **Una radice di cui il disco non sa dire niente non è una radice
+/// assente.** Fra dati autorevoli e cache si sceglie guardando quali radici ci
+/// sono, e una `stat` fallita valeva «non c'è»: la lettura cercava nella
+/// radice sbagliata e rispondeva «mai scritto», e una scrittura di cache
+/// posava il marcatore dentro i dati vecchi — che da lì in poi, tornato il
+/// disco, nessuno leggeva più.
+#[test]
+fn a_legacy_root_that_cannot_be_stat_is_not_taken_for_cache() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let legacy = data_root(&root).join("plugins/prova.plugin/old.json");
+    std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+    std::fs::write(&legacy, b"legacy").unwrap();
+    let storage = Arc::new(LegacyStatFails {
+        inner: FsStorage,
+        failing: AtomicBool::new(false),
+    });
+    let mut ws = Workspace::on(
+        &root,
+        FormatRegistry::new(),
+        storage.clone() as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    ws.register_core_feature("prova.plugin", "prova.plugin")
+        .expect("dichiarato");
+
+    storage.failing.store(true, Ordering::Relaxed);
+    ws.with_host("prova.plugin", |host| {
+        assert!(
+            host.data_read("old.json").is_err(),
+            "letto come mai scritto"
+        );
+        assert!(
+            host.data_list("").is_err(),
+            "elencato dalla radice sbagliata"
+        );
+        assert!(host.cache_write("index.json", b"rebuildable").is_err());
+    });
+    let io = |rel| ws.prepare_plugin_data_io("prova.plugin", rel).unwrap();
+    assert!(io("old.json").read_authoritative().is_err());
+    assert!(io("index.json").write_cache(b"rebuildable").is_err());
+    storage.failing.store(false, Ordering::Relaxed);
+
+    ws.with_host("prova.plugin", |host| {
+        assert_eq!(
+            host.data_read("old.json").unwrap().as_deref(),
+            Some(&b"legacy"[..]),
+            "i dati vecchi sono diventati cache"
+        );
+    });
 }
 
 #[test]
