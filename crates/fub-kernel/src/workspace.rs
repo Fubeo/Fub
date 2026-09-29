@@ -13107,11 +13107,26 @@ impl Workspace {
         // essi gira quando quel dubbio non è più in vista.
         let suspended = &self.suspended_from_rejoin;
         let storage = Arc::clone(self.docs.vault.storage());
+        // **L'anagrafe dice cosa partecipa al vault, non cosa c'è sul disco.**
+        // Una nota di una cartella aggiunta a `files.excluded-folders`, o un
+        // dotfile quando i nascosti tornano nascosti, esce dall'anagrafe ma
+        // resta dov'era: togliere l'impostazione la rimette com'era, e la
+        // raccolta era l'unica mossa della catena che non si disfaceva. Si
+        // chiede quindi al disco, e soltanto per chi è già candidato: un file
+        // che c'è non è sparito, e un `stat` che fallisce per altro che
+        // l'assenza non dice che sia sparito.
+        let on_disk = |doc: &DocId| {
+            self.docs
+                .vault
+                .path_for(doc)
+                .is_ok_and(|path| !matches!(crate::error::optional(storage.stat(&path)), Ok(None)))
+        };
         crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
             metas.contains_key(doc)
                 || entries.contains_key(doc)
                 || trashed.contains(doc)
                 || suspended.contains(doc)
+                || on_disk(doc)
         })
     }
 

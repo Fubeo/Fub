@@ -48,6 +48,12 @@ leggere parte vuota allo stesso modo, ma in quella sessione non si riscrive e
 la raccolta degli spazi orfani non gira: i dati delle note rinominate restano
 dove sono, e le riconosce la prima apertura che torna a leggerla.
 
+La raccolta toglie lo spazio per-documento soltanto di una nota che non c'è più
+sul disco. Una nota che le impostazioni escludono dal vault, perché sta in una
+cartella di `files.excluded-folders` o perché è un file nascosto, esce
+dall'albero e dagli indici ma conserva i suoi dati: togliere l'esclusione la
+rimette com'era.
+
 Un documento oltre 64 MiB non si legge per intero. Il parse costa decine di
 volte la sorgente, e una nota da qualche centinaio di MB esauriva la memoria a
 ogni apertura. Oltre quel limite il documento resta nell'albero e si rinomina,

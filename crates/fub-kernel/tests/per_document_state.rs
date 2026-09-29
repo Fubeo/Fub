@@ -19,8 +19,10 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
+use fub_abi::settings::SettingValue;
+use fub_abi::traits::PluginManifest;
 use fub_abi::FormatProvider;
-use fub_kernel::{data_root, FormatRegistry, Workspace};
+use fub_kernel::{data_root, FormatRegistry, Trust, Workspace};
 use fub_testkit::restore_document;
 
 /// Un provider che non legge niente: qui i documenti servono a esistere, non a
@@ -495,6 +497,43 @@ fn an_unreadable_trash_sidecar_stops_the_restore() {
         read_data_item(&root, OFF, &rel).as_deref(),
         Some(&b"dato"[..]),
         "i dati non sono tornati con la nota"
+    );
+}
+
+/// **Una nota esclusa dalle impostazioni non è sparita.** Aggiungere una
+/// cartella a `files.excluded-folders` la toglie dall'albero e dagli indici, e
+/// basta: toglierla di nuovo dall'elenco la rimette com'era. Ma la raccolta
+/// guardava soltanto l'anagrafe, e alla riapertura cancellava lo spazio
+/// per-documento di ogni nota della cartella — l'unica mossa della catena che
+/// l'impostazione non sa disfare.
+#[test]
+fn an_excluded_folder_keeps_the_space_of_its_notes() {
+    let (_g, root, mut ws) = vault();
+    let doc = notes(&mut ws, "Archivio/Idea.md", "resto sul disco");
+    let rel = doc_data::path(&doc, "x");
+    write_data_item(&root, OFF, &rel, b"dato");
+
+    // Le chiavi dell'esclusione le dichiara il montaggio dell'host; qui le
+    // dichiara un manifest di core, come farebbe lui.
+    ws.register_plugin(
+        PluginManifest::core("fub.core", "Fub").configuring(fub_kernel::ignore::ignore_settings()),
+        Trust::Core,
+    )
+    .expect("le impostazioni dell'esclusione");
+    ws.set_setting(
+        fub_kernel::ignore::EXCLUDED_FOLDERS,
+        SettingValue::List(vec!["Archivio".into()]),
+    )
+    .expect("esclusione");
+    ws.reindex().expect("riapertura con la cartella esclusa");
+    assert!(
+        !ws.documents().contains(&doc),
+        "la cartella esclusa è ancora nel vault"
+    );
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "la raccolta ha preso una nota esclusa per una nota sparita"
     );
 }
 

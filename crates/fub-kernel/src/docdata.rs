@@ -218,7 +218,8 @@ fn move_space(
 /// spazio dati di plugin. Restituisce quante ne ha tolte.
 ///
 /// `esiste` risponde alla sola domanda che il disco non sa fare da sé: *questo
-/// documento è ancora nell'anagrafe del vault, o nel suo cestino?*
+/// documento è ancora nell'anagrafe del vault, nel suo cestino, o sul disco
+/// fuori dall'anagrafe perché le impostazioni lo escludono?*
 ///
 /// # Ciò che non si è potuto togliere **si dice**
 ///
