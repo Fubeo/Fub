@@ -1568,25 +1568,39 @@ impl IndexProvider for CoreIndex {
             // pagina tagliata sull'anagrafe intera e poi filtrata sarebbe una
             // pagina con dentro un numero di righe che dipende da cosa c'è nel
             // resto del vault (§14.4).
+            //
+            // Le voci di una cartella sono un tratto contiguo della mappa, come
+            // in `folders_under`: il giro parte dalla sua soglia e si ferma dove
+            // il prefisso non regge più, e la risposta cresce con la cartella e
+            // non col vault. Il filtro resta la regola.
             IndexQuery::Entries {
                 of_kind,
                 within,
                 page,
-            } => Ok(IndexResult::Entries(Paged::from_source(
-                self.entries
-                    .values()
-                    .filter(|and| of_kind.is_none_or(|k| and.kind == k))
-                    .filter(|and| match &within {
-                        Some(scope) => in_folder(&and.id, &scope.path, scope.descendants),
-                        None => true,
-                    }),
-                page,
-                // La clonazione è **qui dentro** e non un `.cloned()` sulla
-                // catena: il filtro cammina l'anagrafe intera per dire quanti
-                // sono, ma una `VaultEntry` la si copia solo se sta nella
-                // finestra.
-                VaultEntry::clone,
-            ))),
+            } => {
+                let from = subtree_start(
+                    within
+                        .as_ref()
+                        .map_or("", |scope| fub_abi::rules::folders::normalized(&scope.path)),
+                );
+                Ok(IndexResult::Entries(Paged::from_source(
+                    self.entries
+                        .range(DocId::new(from.as_str())..)
+                        .map(|(_, entry)| entry)
+                        .take_while(|entry| entry.id.as_str().starts_with(&from))
+                        .filter(|and| of_kind.is_none_or(|k| and.kind == k))
+                        .filter(|and| match &within {
+                            Some(scope) => in_folder(&and.id, &scope.path, scope.descendants),
+                            None => true,
+                        }),
+                    page,
+                    // La clonazione è **qui dentro** e non un `.cloned()` sulla
+                    // catena: il filtro cammina il tratto intero per dire quanti
+                    // sono, ma una `VaultEntry` la si copia solo se sta nella
+                    // finestra.
+                    VaultEntry::clone,
+                )))
+            }
             IndexQuery::Folders { under, page } => Ok(IndexResult::Folders(Paged::window(
                 self.folders_under(under.as_ref()),
                 page,
@@ -1980,5 +1994,77 @@ mod tests {
             .expect("la nota c'è lo stesso");
         assert_eq!(vanished.doc, id);
         assert_eq!(vanished.at, None);
+    }
+
+    /// Le voci di una cartella si chiedono al suo tratto della mappa, non al
+    /// vault: chi lo chiede a ogni evento (il versioning, per la dimensione di
+    /// un file) pagava il vault intero ogni volta. I vicini di nome che non
+    /// stanno nella cartella restano fuori, e la radice resta tutto.
+    #[test]
+    fn the_entries_of_a_folder_cost_the_folder_not_the_vault() {
+        let storage = Arc::new(crate::storage::MemStorage::new());
+        let settings = Arc::new(std::sync::RwLock::new(
+            crate::settings::SettingsStore::open(
+                camino::Utf8Path::new("/vault"),
+                storage.clone(),
+                crate::settings::MachineSettings::in_memory(),
+            ),
+        ));
+        let mut index = CoreIndex::new(
+            Arc::new(crate::registry::FormatRegistry::new()),
+            settings,
+            crate::organization::OrganizationStore::in_memory(),
+            Arc::new(crate::drafts::Drafts::open(
+                camino::Utf8Path::new("/vault"),
+                storage,
+            )),
+        );
+        let entry = |path: &str| VaultEntry {
+            id: DocId::new(path),
+            kind: EntryKind::Asset,
+            size: 1,
+            mtime: 0,
+            fingerprint: None,
+        };
+        const N: usize = 100_000;
+        for i in 0..N {
+            index.set_entry_from_scan(entry(&format!("archivio/{i}.png")));
+        }
+        for path in [
+            "a b/x.png",
+            "a-b/x.png",
+            "a.png",
+            "a/x.png",
+            "a/y/z.png",
+            "ab/x.png",
+        ] {
+            index.set_entry_from_scan(entry(path));
+        }
+        let ids = |index: &CoreIndex, scope: Option<FolderScope>| -> Vec<String> {
+            let Ok(IndexResult::Entries(page)) = index.query(IndexQuery::Entries {
+                of_kind: None,
+                within: scope,
+                page: None,
+            }) else {
+                panic!("il kernel serve l'anagrafe");
+            };
+            page.items.into_iter().map(|entry| entry.id.0).collect()
+        };
+
+        for _ in 0..N / 5 {
+            assert_eq!(ids(&index, Some(FolderScope::direct("/a/"))), ["a/x.png"]);
+        }
+        assert_eq!(
+            ids(
+                &index,
+                Some(FolderScope {
+                    path: "a".into(),
+                    descendants: true,
+                })
+            ),
+            ["a/x.png", "a/y/z.png"]
+        );
+        assert_eq!(ids(&index, Some(FolderScope::direct(""))), ["a.png"]);
+        assert_eq!(ids(&index, None).len(), N + 6);
     }
 }
