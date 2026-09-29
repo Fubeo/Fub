@@ -343,8 +343,8 @@ fn encode(record: &Record, path: &Utf8Path) -> Result<Vec<u8>> {
 }
 
 fn revision_at(storage: &dyn VaultStorage, path: &Utf8Path) -> Result<Option<Revision>> {
-    match storage.read(path) {
-        Ok(bytes) => Ok(Some(Revision::of_bytes(&bytes))),
+    match crate::vault::fingerprint_of(storage, path) {
+        Ok(revision) => Ok(Some(revision)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(source) => Err(io_error(path.to_owned(), source)),
     }

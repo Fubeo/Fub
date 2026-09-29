@@ -933,12 +933,12 @@ impl ParsedExplicitRename {
                     path: snapshot.to_path.clone(),
                     source,
                 })?;
-        let bytes = storage
-            .read(&snapshot.to_path)
-            .map_err(|source| KernelError::Io {
+        let current = crate::vault::fingerprint_of(storage.as_ref(), &snapshot.to_path).map_err(
+            |source| KernelError::Io {
                 path: snapshot.to_path.clone(),
                 source,
-            })?;
+            },
+        )?;
         let after = storage
             .stat(&snapshot.to_path)
             .map_err(|source| KernelError::Io {
@@ -956,7 +956,7 @@ impl ParsedExplicitRename {
             || before != after
             || identity_before != identity
             || identity_after != identity
-            || Revision::of_bytes(&bytes) != fingerprint
+            || current != fingerprint
         {
             return Err(KernelError::Stale(snapshot.to.to_string()));
         }
@@ -1212,10 +1212,13 @@ impl PreparedExplicitAssetRename {
                 path: path.clone(),
                 source,
             })?;
-        let bytes = storage.read(&path).map_err(|source| KernelError::Io {
-            path: path.clone(),
-            source,
-        })?;
+        let fingerprint =
+            crate::vault::fingerprint_of(storage.as_ref(), &path).map_err(|source| {
+                KernelError::Io {
+                    path: path.clone(),
+                    source,
+                }
+            })?;
         let after = storage.stat(&path).map_err(|source| KernelError::Io {
             path: path.clone(),
             source,
@@ -1230,7 +1233,6 @@ impl PreparedExplicitAssetRename {
             return Err(KernelError::Stale(snapshot.from.to_string()));
         }
         let identity = identity_after;
-        let fingerprint = Revision::of_bytes(&bytes);
         let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
         let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
         if !same_file && storage.exists(&snapshot.to_path) {
@@ -1321,12 +1323,12 @@ impl MovedExplicitAssetRename {
                     path: snapshot.to_path.clone(),
                     source,
                 })?;
-        let bytes = storage
-            .read(&snapshot.to_path)
-            .map_err(|source| KernelError::Io {
+        let current = crate::vault::fingerprint_of(storage.as_ref(), &snapshot.to_path).map_err(
+            |source| KernelError::Io {
                 path: snapshot.to_path.clone(),
                 source,
-            })?;
+            },
+        )?;
         let after = storage
             .stat(&snapshot.to_path)
             .map_err(|source| KernelError::Io {
@@ -1345,7 +1347,7 @@ impl MovedExplicitAssetRename {
             || before != after
             || identity_before != identity
             || identity_after != identity
-            || Revision::of_bytes(&bytes) != fingerprint
+            || current != fingerprint
         {
             return Err(KernelError::Stale(snapshot.to.to_string()));
         }
@@ -1686,15 +1688,17 @@ impl PreparedExternalAssetRename {
             fallback,
         } = self;
         let verified = match storage.stat(&snapshot.to_path) {
-            Ok(before) if before.is_file() => match storage.read(&snapshot.to_path) {
-                Ok(bytes) => match storage.stat(&snapshot.to_path) {
-                    Ok(after) if after.is_file() && before == after => {
-                        Some((after, Revision::of_bytes(&bytes)))
-                    }
-                    _ => None,
-                },
-                Err(_) => None,
-            },
+            Ok(before) if before.is_file() => {
+                match crate::vault::fingerprint_of(storage.as_ref(), &snapshot.to_path) {
+                    Ok(fingerprint) => match storage.stat(&snapshot.to_path) {
+                        Ok(after) if after.is_file() && before == after => {
+                            Some((after, fingerprint))
+                        }
+                        _ => None,
+                    },
+                    Err(_) => None,
+                }
+            }
             _ => None,
         };
         match verified {
@@ -1776,8 +1780,8 @@ impl PreparedCatchUp {
                 .and_then(|entry| entry.fingerprint.as_ref())
                 .is_some_and(|fingerprint| {
                     vault
-                        .read_bytes(&file.id)
-                        .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
+                        .fingerprint(&file.id)
+                        .is_ok_and(|current| current == *fingerprint)
                 });
             on_disk.insert(file.id.clone());
             if !unchanged {
@@ -5381,8 +5385,8 @@ impl Workspace {
             let mut source = None;
             match entry.kind {
                 EntryKind::Asset if entry.fingerprint.is_none() => {
-                    match docs.vault.read_bytes(&entry.id) {
-                        Ok(bytes) => entry.fingerprint = Some(Revision::of_bytes(&bytes)),
+                    match docs.vault.fingerprint(&entry.id) {
+                        Ok(revision) => entry.fingerprint = Some(revision),
                         Err(why) => out.discarded.push((entry.id.clone(), why)),
                     }
                 }
@@ -6649,7 +6653,7 @@ impl Workspace {
     /// un documento è il file, e una revisione derivata da una cache sarebbe
     /// vera solo finché la cache lo è.
     pub fn document_revision(&self, id: &DocId) -> Result<Revision> {
-        Ok(Revision::of_bytes(&self.read_source_bytes(id)?))
+        self.docs.vault.fingerprint(id)
     }
 
     /// Applica una modifica chirurgica: gli edit della richiesta, tutti o
@@ -7835,10 +7839,9 @@ impl Workspace {
                         and.fingerprint.as_ref().and_then(|fingerprint| {
                             ws.docs
                                 .vault
-                                .read_bytes(id)
+                                .fingerprint(id)
                                 .ok()
-                                .filter(|bytes| fingerprint.matches_bytes(bytes))
-                                .map(|_| fingerprint.clone())
+                                .filter(|current| current == fingerprint)
                         })
                     }
                     // Cambiato: l'impronta di prima descriveva un altro

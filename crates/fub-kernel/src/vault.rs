@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::edit::Revision;
+use fub_abi::edit::{Revision, RevisionHasher};
 use fub_abi::rules::path_policy::Naming;
 use fub_abi::rules::{path_policy, text_policy};
 use fub_abi::DocId;
@@ -24,6 +24,28 @@ fn is_absent_path_error(error: &std::io::Error) -> bool {
         error.kind(),
         std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
     ) || matches!(error.raw_os_error(), Some(2 | 3 | 123))
+}
+
+/// L'impronta dei byte a `path`, letti a pezzi (vedi [`Vault::fingerprint`]).
+pub(crate) fn fingerprint_of(
+    storage: &dyn VaultStorage,
+    path: &Utf8Path,
+) -> std::io::Result<Revision> {
+    sized_fingerprint_of(storage, path).map(|(revision, _)| revision)
+}
+
+/// L'impronta e quanti byte l'hanno data.
+fn sized_fingerprint_of(
+    storage: &dyn VaultStorage,
+    path: &Utf8Path,
+) -> std::io::Result<(Revision, u64)> {
+    let mut hasher = RevisionHasher::new();
+    let mut size = 0u64;
+    storage.read_pieces(path, &mut |piece| {
+        size += piece.len() as u64;
+        hasher.update(piece);
+    })?;
+    Ok((hasher.finish(), size))
 }
 
 fn read_gitignore(storage: &dyn VaultStorage, root: &Utf8Path) -> Result<GitignoreRules> {
@@ -336,9 +358,8 @@ impl CompletedOsTrash {
 
     pub fn is_current(&self) -> bool {
         !self.vault.exists(&self.original)
-            && std::fs::read(self.destination.as_std_path())
-                .map(|bytes| Revision::of_bytes(&bytes) == self.revision)
-                .unwrap_or(false)
+            && fingerprint_of(&crate::storage::FsStorage, &self.destination)
+                .is_ok_and(|revision| revision == self.revision)
     }
 
     pub fn receipt(&self) -> crate::os_trash::OsTrashReceipt {
@@ -375,7 +396,7 @@ impl CompletedOsTrashMove {
 impl PreparedVaultTrash {
     /// Sposta il file e scrive il sidecar usando soltanto stato owned.
     pub fn invoke(self) -> Result<CompletedVaultTrash> {
-        let revision = Revision::of_bytes(&self.vault.read_bytes(&self.original)?);
+        let revision = self.vault.fingerprint(&self.original)?;
         let identity = self.vault.file_identity(&self.original);
         let (trashed, sidecar_fault) = self.vault.trash_now(&self.original)?;
         Ok(CompletedVaultTrash {
@@ -397,17 +418,16 @@ impl PreparedVaultTrash {
         use crate::os_trash::FallbackReason;
 
         let original = self.vault.path_for(&self.original)?;
-        let bytes = self.vault.read_bytes(&self.original)?;
-        let revision = Revision::of_bytes(&bytes);
-        let size = bytes.len() as u64;
+        let (revision, size) = self.vault.read_with(&self.original, |storage, path| {
+            sized_fingerprint_of(storage, path)
+        })?;
         match backend.move_file_to_os_trash(&original) {
             Ok(destination) => {
                 if !destination.is_absolute()
                     || destination.starts_with(self.vault.root())
                     || self.vault.exists(&self.original)
-                    || std::fs::read(destination.as_std_path())
-                        .map(|moved| Revision::of_bytes(&moved) != revision)
-                        .unwrap_or(true)
+                    || fingerprint_of(&crate::storage::FsStorage, &destination)
+                        .map_or(true, |moved| moved != revision)
                 {
                     return Err(KernelError::Stale(format!(
                         "{} (destinazione OS: {destination})",
@@ -427,9 +447,8 @@ impl PreparedVaultTrash {
                 // Err non può far scattare una seconda mossa come fallback.
                 if self
                     .vault
-                    .read_bytes(&self.original)
-                    .map(|current| Revision::of_bytes(&current) != revision)
-                    .unwrap_or(true)
+                    .fingerprint(&self.original)
+                    .map_or(true, |current| current != revision)
                 {
                     return Err(KernelError::Stale(self.original.to_string()));
                 }
@@ -476,9 +495,8 @@ impl CompletedVaultTrash {
             }
         }
         self.vault
-            .read_bytes(&self.trashed)
-            .map(|bytes| Revision::of_bytes(&bytes) == self.revision)
-            .unwrap_or(false)
+            .fingerprint(&self.trashed)
+            .is_ok_and(|revision| revision == self.revision)
     }
 
     /// Rimette al suo posto il solo file che questo token ha spostato.
@@ -554,12 +572,12 @@ impl PreparedVaultRestore {
                 path: source.clone(),
                 source: source_error,
             })?;
-        let bytes = vault
-            .storage
-            .read(&source)
-            .map_err(|source_error| KernelError::Io {
-                path: source.clone(),
-                source: source_error,
+        let fingerprint =
+            fingerprint_of(vault.storage.as_ref(), &source).map_err(|source_error| {
+                KernelError::Io {
+                    path: source.clone(),
+                    source: source_error,
+                }
             })?;
         let stat_after = vault
             .storage
@@ -575,9 +593,7 @@ impl PreparedVaultRestore {
                 path: source.clone(),
                 source: source_error,
             })?;
-        if stat_before != stat_after
-            || identity_before != identity_after
-            || Revision::of_bytes(&bytes) != revision
+        if stat_before != stat_after || identity_before != identity_after || fingerprint != revision
         {
             return Err(KernelError::Stale(entry.id.to_string()));
         }
@@ -636,14 +652,12 @@ impl CompletedVaultRestore {
                     path: source.clone(),
                     source: source_error,
                 })?;
-        let current_revision = self
-            .vault
-            .storage
-            .read(&source)
-            .map(|bytes| Revision::of_bytes(&bytes))
-            .map_err(|source_error| KernelError::Io {
-                path: source.clone(),
-                source: source_error,
+        let current_revision =
+            fingerprint_of(self.vault.storage.as_ref(), &source).map_err(|source_error| {
+                KernelError::Io {
+                    path: source.clone(),
+                    source: source_error,
+                }
             })?;
         if self.vault.exists(&self.entry.id)
             || current_stat != self.stat
@@ -1057,6 +1071,26 @@ impl Vault {
     /// decodifica opzionalmente, perché chi legge testo non deve poter
     /// dimenticare di decodificare.
     pub fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
+        self.read_with(id, |storage, path| storage.read(path))
+    }
+
+    /// L'impronta dei byte di `id`, presa leggendo il file a pezzi: la stessa
+    /// [`Revision::of_bytes`] di ciò che [`read_bytes`](Vault::read_bytes)
+    /// renderebbe, senza tenerlo intero in memoria.
+    ///
+    /// È la lettura di chi vuole soltanto sapere **se** un file è cambiato. Un
+    /// allegato di qualche GB, letto intero per prenderne l'impronta, era
+    /// un'allocazione di qualche GB all'apertura del vault — una per thread
+    /// dell'indicizzazione — e a ogni cestinata o rinomina.
+    pub fn fingerprint(&self, id: &DocId) -> Result<Revision> {
+        self.read_with(id, |storage, path| fingerprint_of(storage, path))
+    }
+
+    fn read_with<T>(
+        &self,
+        id: &DocId,
+        read: impl FnOnce(&dyn VaultStorage, &Utf8Path) -> std::io::Result<T>,
+    ) -> Result<T> {
         let path = self.path_for(id)?;
         // Windows può restituire `InvalidInput` per un nome illegale che
         // semplicemente non esiste (`?`, `*`, newline). Prima di tentare la
@@ -1070,7 +1104,7 @@ impl Vault {
                 }
             }
         }
-        self.storage.read(&path).map_err(|and| {
+        read(self.storage.as_ref(), &path).map_err(|and| {
             if path_policy::check(id.as_str(), Naming::New).is_err() && is_absent_path_error(&and) {
                 KernelError::NotFound(id.to_string())
             } else {

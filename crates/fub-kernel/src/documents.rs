@@ -194,6 +194,10 @@ impl DocumentStoreHandle {
         self.vault.read_bytes(id)
     }
 
+    pub(crate) fn fingerprint(&self, id: &DocId) -> Result<Revision> {
+        self.vault.fingerprint(id)
+    }
+
     pub(crate) fn prepare_restore(
         &self,
         entry: TrashEntry,
@@ -220,7 +224,7 @@ impl DocumentStoreHandle {
             return Ok(None);
         };
         let identity_before = self.vault.file_identity(id);
-        let revision = Revision::of_bytes(&self.vault.read_bytes(id)?);
+        let revision = self.vault.fingerprint(id)?;
         let Some(after) = self.vault.stat(id) else {
             return Ok(None);
         };

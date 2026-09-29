@@ -486,6 +486,10 @@ impl VaultStorage for RootedFsStorage {
         self.dir.read(self.rel(path)?)
     }
 
+    fn read_pieces(&self, path: &Utf8Path, piece: &mut dyn FnMut(&[u8])) -> io::Result<()> {
+        super::read_in_pieces(self.dir.open(self.rel(path)?)?, piece)
+    }
+
     /// Seek + lettura limitata dentro la capability: apre via `Dir`, salta a
     /// `offset`, legge al massimo `len` byte. `len == 0` non apre oltre la
     /// stat; oltre la fine torna vuoto. Mai path ambientali.

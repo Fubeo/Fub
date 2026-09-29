@@ -165,149 +165,237 @@ impl Default for Fnv1a {
 
 /// SHA-256 usato dalle revisioni. È privato: il contratto espone la revisione
 /// come valore opaco, non l'algoritmo come API da riutilizzare altrove.
-fn sha256(bytes: &[u8]) -> [u8; 32] {
-    const H0: [u32; 8] = [
-        0x6a09_e667,
-        0xbb67_ae85,
-        0x3c6e_f372,
-        0xa54f_f53a,
-        0x510e_527f,
-        0x9b05_688c,
-        0x1f83_d9ab,
-        0x5be0_cd19,
-    ];
-    const K: [u32; 64] = [
-        0x428a_2f98,
-        0x7137_4491,
-        0xb5c0_fbcf,
-        0xe9b5_dba5,
-        0x3956_c25b,
-        0x59f1_11f1,
-        0x923f_82a4,
-        0xab1c_5ed5,
-        0xd807_aa98,
-        0x1283_5b01,
-        0x2431_85be,
-        0x550c_7dc3,
-        0x72be_5d74,
-        0x80de_b1fe,
-        0x9bdc_06a7,
-        0xc19b_f174,
-        0xe49b_69c1,
-        0xefbe_4786,
-        0x0fc1_9dc6,
-        0x240c_a1cc,
-        0x2de9_2c6f,
-        0x4a74_84aa,
-        0x5cb0_a9dc,
-        0x76f9_88da,
-        0x983e_5152,
-        0xa831_c66d,
-        0xb003_27c8,
-        0xbf59_7fc7,
-        0xc6e0_0bf3,
-        0xd5a7_9147,
-        0x06ca_6351,
-        0x1429_2967,
-        0x27b7_0a85,
-        0x2e1b_2138,
-        0x4d2c_6dfc,
-        0x5338_0d13,
-        0x650a_7354,
-        0x766a_0abb,
-        0x81c2_c92e,
-        0x9272_2c85,
-        0xa2bf_e8a1,
-        0xa81a_664b,
-        0xc24b_8b70,
-        0xc76c_51a3,
-        0xd192_e819,
-        0xd699_0624,
-        0xf40e_3585,
-        0x106a_a070,
-        0x19a4_c116,
-        0x1e37_6c08,
-        0x2748_774c,
-        0x34b0_bcb5,
-        0x391c_0cb3,
-        0x4ed8_aa4a,
-        0x5b9c_ca4f,
-        0x682e_6ff3,
-        0x748f_82ee,
-        0x78a5_636f,
-        0x84c8_7814,
-        0x8cc7_0208,
-        0x90be_fffa,
-        0xa450_6ceb,
-        0xbef9_a3f7,
-        0xc671_78f2,
-    ];
-
-    let bit_len = (bytes.len() as u64).wrapping_mul(8);
-    let mut padded = bytes.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
-    }
-    padded.extend_from_slice(&bit_len.to_be_bytes());
-
-    let mut h = H0;
-    for chunk in padded.chunks_exact(64) {
-        let mut w = [0u32; 64];
-        for (slot, word) in w[..16].iter_mut().zip(chunk.chunks_exact(4)) {
-            *slot = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
-        }
-        for i in 16..64 {
-            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16]
-                .wrapping_add(s0)
-                .wrapping_add(w[i - 7])
-                .wrapping_add(s1);
-        }
-
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = h;
-        for (&k, &word) in K.iter().zip(w.iter()) {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let choice = (e & f) ^ ((!e) & g);
-            let t1 = hh
-                .wrapping_add(s1)
-                .wrapping_add(choice)
-                .wrapping_add(k)
-                .wrapping_add(word);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let majority = (a & b) ^ (a & c) ^ (b & c);
-            let t2 = s0.wrapping_add(majority);
-            hh = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(t1);
-            d = c;
-            c = b;
-            b = a;
-            a = t1.wrapping_add(t2);
-        }
-        for (slot, value) in h.iter_mut().zip([a, b, c, d, e, f, g, hh]) {
-            *slot = slot.wrapping_add(value);
-        }
-    }
-
-    let mut out = [0u8; 32];
-    for (slot, value) in out.chunks_exact_mut(4).zip(h) {
-        slot.copy_from_slice(&value.to_be_bytes());
-    }
-    out
+///
+/// Si mangia a pezzi, e un blocco da 64 byte è tutto ciò che tiene oltre lo
+/// stato: prima copiava l'ingresso intero per aggiungere il padding, e
+/// l'impronta di un video da un GB costava un GB in più di memoria.
+#[derive(Clone, Debug)]
+struct Sha256 {
+    state: [u32; 8],
+    block: [u8; 64],
+    filled: usize,
+    len: u64,
 }
 
-fn sha256_text(bytes: &[u8]) -> String {
+const SHA256_H0: [u32; 8] = [
+    0x6a09_e667,
+    0xbb67_ae85,
+    0x3c6e_f372,
+    0xa54f_f53a,
+    0x510e_527f,
+    0x9b05_688c,
+    0x1f83_d9ab,
+    0x5be0_cd19,
+];
+
+const SHA256_K: [u32; 64] = [
+    0x428a_2f98,
+    0x7137_4491,
+    0xb5c0_fbcf,
+    0xe9b5_dba5,
+    0x3956_c25b,
+    0x59f1_11f1,
+    0x923f_82a4,
+    0xab1c_5ed5,
+    0xd807_aa98,
+    0x1283_5b01,
+    0x2431_85be,
+    0x550c_7dc3,
+    0x72be_5d74,
+    0x80de_b1fe,
+    0x9bdc_06a7,
+    0xc19b_f174,
+    0xe49b_69c1,
+    0xefbe_4786,
+    0x0fc1_9dc6,
+    0x240c_a1cc,
+    0x2de9_2c6f,
+    0x4a74_84aa,
+    0x5cb0_a9dc,
+    0x76f9_88da,
+    0x983e_5152,
+    0xa831_c66d,
+    0xb003_27c8,
+    0xbf59_7fc7,
+    0xc6e0_0bf3,
+    0xd5a7_9147,
+    0x06ca_6351,
+    0x1429_2967,
+    0x27b7_0a85,
+    0x2e1b_2138,
+    0x4d2c_6dfc,
+    0x5338_0d13,
+    0x650a_7354,
+    0x766a_0abb,
+    0x81c2_c92e,
+    0x9272_2c85,
+    0xa2bf_e8a1,
+    0xa81a_664b,
+    0xc24b_8b70,
+    0xc76c_51a3,
+    0xd192_e819,
+    0xd699_0624,
+    0xf40e_3585,
+    0x106a_a070,
+    0x19a4_c116,
+    0x1e37_6c08,
+    0x2748_774c,
+    0x34b0_bcb5,
+    0x391c_0cb3,
+    0x4ed8_aa4a,
+    0x5b9c_ca4f,
+    0x682e_6ff3,
+    0x748f_82ee,
+    0x78a5_636f,
+    0x84c8_7814,
+    0x8cc7_0208,
+    0x90be_fffa,
+    0xa450_6ceb,
+    0xbef9_a3f7,
+    0xc671_78f2,
+];
+
+impl Sha256 {
+    fn new() -> Self {
+        Sha256 {
+            state: SHA256_H0,
+            block: [0; 64],
+            filled: 0,
+            len: 0,
+        }
+    }
+
+    fn update(&mut self, mut bytes: &[u8]) {
+        self.len = self.len.wrapping_add(bytes.len() as u64);
+        if self.filled > 0 {
+            let take = (64 - self.filled).min(bytes.len());
+            self.block[self.filled..self.filled + take].copy_from_slice(&bytes[..take]);
+            self.filled += take;
+            bytes = &bytes[take..];
+            if self.filled < 64 {
+                return;
+            }
+            let block = self.block;
+            compress(&mut self.state, &block);
+            self.filled = 0;
+        }
+        let mut blocks = bytes.chunks_exact(64);
+        for block in &mut blocks {
+            compress(&mut self.state, block);
+        }
+        let rest = blocks.remainder();
+        self.block[..rest.len()].copy_from_slice(rest);
+        self.filled = rest.len();
+    }
+
+    fn finish(mut self) -> [u8; 32] {
+        let bit_len = self.len.wrapping_mul(8);
+        // `0x80`, gli zeri fino a 56 byte nel blocco, la lunghezza in bit.
+        let pad = if self.filled < 56 {
+            56 - self.filled
+        } else {
+            120 - self.filled
+        };
+        let mut tail = [0u8; 72];
+        tail[0] = 0x80;
+        tail[pad..pad + 8].copy_from_slice(&bit_len.to_be_bytes());
+        self.update(&tail[..pad + 8]);
+        debug_assert_eq!(self.filled, 0);
+        let mut out = [0u8; 32];
+        for (slot, value) in out.chunks_exact_mut(4).zip(self.state) {
+            slot.copy_from_slice(&value.to_be_bytes());
+        }
+        out
+    }
+}
+
+fn compress(h: &mut [u32; 8], chunk: &[u8]) {
+    let mut w = [0u32; 64];
+    for (slot, word) in w[..16].iter_mut().zip(chunk.chunks_exact(4)) {
+        *slot = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
+    }
+    for i in 16..64 {
+        let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+        let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16]
+            .wrapping_add(s0)
+            .wrapping_add(w[i - 7])
+            .wrapping_add(s1);
+    }
+
+    let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = *h;
+    for (&k, &word) in SHA256_K.iter().zip(w.iter()) {
+        let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+        let choice = (e & f) ^ ((!e) & g);
+        let t1 = hh
+            .wrapping_add(s1)
+            .wrapping_add(choice)
+            .wrapping_add(k)
+            .wrapping_add(word);
+        let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+        let majority = (a & b) ^ (a & c) ^ (b & c);
+        let t2 = s0.wrapping_add(majority);
+        hh = g;
+        g = f;
+        f = e;
+        e = d.wrapping_add(t1);
+        d = c;
+        c = b;
+        b = a;
+        a = t1.wrapping_add(t2);
+    }
+    for (slot, value) in h.iter_mut().zip([a, b, c, d, e, f, g, hh]) {
+        *slot = slot.wrapping_add(value);
+    }
+}
+
+fn sha256_text(digest: [u8; 32]) -> String {
     use std::fmt::Write as _;
 
     let mut out = String::with_capacity(7 + 64);
     out.push_str("sha256:");
-    for byte in sha256(bytes) {
+    for byte in digest {
         write!(&mut out, "{byte:02x}").expect("scrivere dentro String non fallisce");
     }
     out
+}
+
+/// L'impronta di [`Revision::of_bytes`], presa a pezzi: lo stesso valore sulla
+/// concatenazione, senza mai tenere insieme i pezzi.
+///
+/// Serve a chi impronta un file che non deve stare tutto in memoria — un
+/// video del vault — e lo legge a blocchi. Fuori si vede soltanto la
+/// revisione che ne esce, non l'algoritmo.
+///
+/// ```
+/// use fub_abi::{Revision, RevisionHasher};
+/// let mut h = RevisionHasher::new();
+/// h.update(b"un ");
+/// h.update(b"testo");
+/// assert_eq!(h.finish(), Revision::of("un testo"));
+/// ```
+#[derive(Clone, Debug)]
+pub struct RevisionHasher(Sha256);
+
+impl RevisionHasher {
+    pub fn new() -> Self {
+        RevisionHasher(Sha256::new())
+    }
+
+    /// Aggiunge byte a ciò che è già stato mangiato.
+    pub fn update(&mut self, bytes: &[u8]) {
+        self.0.update(bytes);
+    }
+
+    pub fn finish(self) -> Revision {
+        Revision(sha256_text(self.0.finish()))
+    }
+}
+
+impl Default for RevisionHasher {
+    fn default() -> Self {
+        RevisionHasher::new()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -344,7 +432,9 @@ impl Revision {
     /// famiglia e non una seconda: un documento non cambia impronta il giorno
     /// che qualcuno lo rivendica a byte.
     pub fn of_bytes(source: &[u8]) -> Self {
-        Revision(sha256_text(source))
+        let mut hasher = RevisionHasher::new();
+        hasher.update(source);
+        hasher.finish()
     }
 
     /// Verifica una revisione contro i byte reali. Accetta la forma SHA-256
@@ -352,7 +442,7 @@ impl Revision {
     /// Ogni valore nuovo emesso dall'host resta comunque SHA-256.
     pub fn matches_bytes(&self, source: &[u8]) -> bool {
         if self.0.starts_with("sha256:") {
-            return self.0 == sha256_text(source);
+            return *self == Revision::of_bytes(source);
         }
         self.0.len() == 16
             && self.0.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -708,6 +798,37 @@ mod tests {
         assert!(!legacy.matches("barfoo"));
         let request = EditRequest::new(legacy, vec![TextEdit::insert(6, "!")]);
         assert_eq!(request.apply_to("foobar").unwrap().0, "foobar!");
+    }
+
+    /// A pezzi o in un blocco, la stessa impronta: i vettori dello standard
+    /// che attraversano il confine dei 56 byte, e ogni taglio di ingressi
+    /// lunghi fino a tre blocchi.
+    #[test]
+    fn a_revision_taken_in_pieces_is_the_same_revision() {
+        assert_eq!(
+            Revision::of("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq").as_str(),
+            "sha256:248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+        );
+        let mut million = RevisionHasher::new();
+        for _ in 0..1000 {
+            million.update(&[b'a'; 1000]);
+        }
+        assert_eq!(
+            million.finish().as_str(),
+            "sha256:cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+        );
+
+        let bytes: Vec<u8> = (0..200u32).map(|i| (i * 7 + 3) as u8).collect();
+        for len in 0..bytes.len() {
+            let whole = Revision::of_bytes(&bytes[..len]);
+            for cut in 0..=len {
+                let mut pieces = RevisionHasher::new();
+                pieces.update(&bytes[..cut]);
+                pieces.update(&[]);
+                pieces.update(&bytes[cut..len]);
+                assert_eq!(pieces.finish(), whole, "{len} tagliato a {cut}");
+            }
+        }
     }
 
     #[test]

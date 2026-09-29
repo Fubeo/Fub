@@ -125,9 +125,7 @@ impl PreparedDocumentRestore {
                 let revision = Revision::of_bytes(source.bytes());
                 (revision, Some((*parser).invoke(source)?))
             }
-            RestoreContent::Attachment => {
-                (Revision::of_bytes(&documents.read_bytes(&entry.id)?), None)
-            }
+            RestoreContent::Attachment => (documents.fingerprint(&entry.id)?, None),
         };
         let moved = documents
             .prepare_restore(entry, target, source_revision)?

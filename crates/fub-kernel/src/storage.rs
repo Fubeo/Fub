@@ -230,6 +230,18 @@ pub trait VaultStorage: Send + Sync {
         ))
     }
 
+    /// I byte a questo path, consegnati a `piece` a pezzi e in ordine, da un
+    /// file aperto una volta sola: chi li consuma al volo — un'impronta — non
+    /// tiene mai il file intero in memoria.
+    ///
+    /// Il default legge tutto e consegna un pezzo solo: va bene a un supporto
+    /// che il file lo tiene già in memoria. Un supporto su disco lo
+    /// sovrascrive, ed è lì che la promessa vale.
+    fn read_pieces(&self, path: &Utf8Path, piece: &mut dyn FnMut(&[u8])) -> io::Result<()> {
+        piece(&self.read(path)?);
+        Ok(())
+    }
+
     /// Scrive i byte, **creando le cartelle che mancano**, e **o c'è o non
     /// c'è**: chi rilegge dopo un crash trova questi byte o quelli di prima,
     /// mai una metà dei due (§15.2).
@@ -1606,6 +1618,21 @@ pub(crate) fn rename_no_replace_path(from: &Utf8Path, to: &Utf8Path) -> io::Resu
     }
 }
 
+/// Quanto di un file tiene in memoria [`VaultStorage::read_pieces`].
+const PIECE_BYTES: usize = 1 << 20;
+
+fn read_in_pieces(mut file: impl io::Read, piece: &mut dyn FnMut(&[u8])) -> io::Result<()> {
+    let mut buffer = vec![0u8; PIECE_BYTES];
+    loop {
+        match file.read(&mut buffer) {
+            Ok(0) => return Ok(()),
+            Ok(read) => piece(&buffer[..read]),
+            Err(and) if and.kind() == io::ErrorKind::Interrupted => {}
+            Err(and) => return Err(and),
+        }
+    }
+}
+
 fn read_bounded(
     mut file: impl io::Read + io::Seek,
     size: u64,
@@ -1625,6 +1652,10 @@ fn read_bounded(
 impl VaultStorage for FsStorage {
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
         std::fs::read(path)
+    }
+
+    fn read_pieces(&self, path: &Utf8Path, piece: &mut dyn FnMut(&[u8])) -> io::Result<()> {
+        read_in_pieces(std::fs::File::open(path)?, piece)
     }
 
     /// Seek + `take(len)`: apre, salta a `offset`, legge al massimo `len`

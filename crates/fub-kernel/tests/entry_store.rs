@@ -702,6 +702,118 @@ fn a_attachment_moved_from_outside_not_remains_in_registry_col_name_old() {
     assert_eq!(ids, ["img/foto.png"], "una voce sola, quella vera");
 }
 
+// --- un allegato si impronta a pezzi ----------------------------------------
+
+/// Il disco vero, che conta chi legge **intero** un allegato e quanto è
+/// grande il pezzo più grande consegnato a chi lo legge a pezzi.
+struct PiecesOnly {
+    inner: fub_kernel::storage::FsStorage,
+    whole_reads_of_assets: AtomicUsize,
+    largest_piece: AtomicUsize,
+}
+
+impl VaultStorage for PiecesOnly {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        if path.as_str().ends_with(".mp4") {
+            self.whole_reads_of_assets.fetch_add(1, Ordering::Relaxed);
+        }
+        self.inner.read(path)
+    }
+    fn read_pieces(&self, path: &Utf8Path, piece: &mut dyn FnMut(&[u8])) -> std::io::Result<()> {
+        self.inner.read_pieces(path, &mut |bytes| {
+            self.largest_piece.fetch_max(bytes.len(), Ordering::Relaxed);
+            piece(bytes)
+        })
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+    fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
+/// **L'impronta di un allegato non lo tiene intero in memoria.**
+///
+/// L'apertura prende l'impronta di ogni allegato nuovo o cambiato, e la
+/// prendeva leggendolo intero — e l'algoritmo lo ricopiava ancora per il
+/// padding. Un video da 1,5 GB costava quasi 3 GB all'apertura del vault, uno
+/// per thread dell'indicizzazione, e ancora a ogni cestinata. Qui il file è di
+/// qualche MiB: ciò che si guarda è che nessuno lo legga intero e che nessun
+/// pezzo superi il MiB, con la stessa impronta di prima.
+#[test]
+fn an_attachment_is_fingerprinted_in_pieces() {
+    let f = Fixture::new();
+    let bytes: Vec<u8> = (0..(5u32 << 19) + 7).map(|i| (i % 251) as u8).collect();
+    std::fs::write(f.root.join("video.mp4"), &bytes).unwrap();
+    beyond_the_millisecondo();
+
+    let storage = Arc::new(PiecesOnly {
+        inner: fub_kernel::storage::FsStorage,
+        whole_reads_of_assets: AtomicUsize::new(0),
+        largest_piece: AtomicUsize::new(0),
+    });
+    let mut ws = Workspace::on(
+        &f.root,
+        f.registry(false),
+        storage.clone() as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    ws.reindex().expect("reindex");
+
+    let expected = Some(Revision::of_bytes(&bytes));
+    assert_eq!(
+        entries(&ws, Some(EntryKind::Asset), None)[0].fingerprint,
+        expected
+    );
+    assert_eq!(
+        ws.document_revision(&DocId::new("video.mp4")).ok(),
+        expected,
+        "la revisione chiesta da un plugin è la stessa impronta"
+    );
+    // Il ripasso dopo una pausa del rilevatore e l'evento su un file con la
+    // stessa dimensione e la stessa data confrontano l'impronta, non i byte.
+    let catch_up = ws.prepare_catch_up().invoke().expect("scansione");
+    assert!(catch_up.is_empty(), "l'allegato non è cambiato");
+    ws.sync_path(&f.root.join("video.mp4")).expect("evento");
+    assert_eq!(
+        entries(&ws, Some(EntryKind::Asset), None)[0].fingerprint,
+        expected
+    );
+    // Una rinomina esplicita verifica l'identità del file con la stessa impronta.
+    ws.rename_document(&DocId::new("video.mp4"), &DocId::new("film.mp4"))
+        .expect("rinomina");
+    assert_eq!(
+        std::fs::read(f.root.join("film.mp4")).expect("spostato"),
+        bytes
+    );
+    assert_eq!(storage.whole_reads_of_assets.load(Ordering::Relaxed), 0);
+    let largest = storage.largest_piece.load(Ordering::Relaxed);
+    assert!((1..=1 << 20).contains(&largest), "{largest}");
+}
+
 // --- la data che può ancora cambiare ---------------------------------------
 
 /// Un supporto che dà a **una** nota la data di un istante non ancora passato.
