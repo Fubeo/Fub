@@ -31,7 +31,8 @@ use fub_abi::model::{parse_wikilink_inner, LinkTarget};
 use fub_abi::{FormatError, TextEdit};
 
 use super::json_map::{
-    canvas_literals, decoded_to_raw, raw_to_decoded, LiteralPath, MappedLiteral,
+    canvas_literals, decoded_to_raw, literal_containing, raw_to_decoded, CanvasField, LiteralPath,
+    MappedLiteral,
 };
 use super::parse::vault_path_target_for_rewrite;
 
@@ -92,35 +93,29 @@ fn rewrite_file_literal(
             "canvas file rewrite carries a non-path target".to_string(),
         ));
     };
-    // Il nodo si trova per target: il percorso è deciso dal contenuto logico,
-    // non dallo span — ma lo span deve stare dentro quel percorso.
-    let mut found: Option<&MappedLiteral> = None;
-    for lit in literals.iter().filter(|lit| {
-        matches!(
-            lit.path,
-            LiteralPath::Node {
-                field: super::json_map::CanvasField::File,
-                ..
+    // Lo span sta dentro un literale solo (i contenuti sono disgiunti), e
+    // quel literale dev'essere il `file` di un nodo il cui contenuto logico è
+    // il target atteso.
+    let lit = literal_containing(literals, rewrite.span.start, rewrite.span.end)
+        .filter(|lit| {
+            matches!(
+                lit.path,
+                LiteralPath::Node {
+                    field: CanvasField::File,
+                    ..
+                }
+            ) && match vault_path_target_for_rewrite(&lit.decoded) {
+                LinkTarget::Path(normalized) => {
+                    &normalized == expected || path_matches(&normalized, expected)
+                }
+                _ => unreachable!("vault normalizer returns Path"),
             }
-        ) && lit.content_start <= rewrite.span.start
-            && rewrite.span.end <= lit.content_end
-    }) {
-        let normalized = match vault_path_target_for_rewrite(&lit.decoded) {
-            LinkTarget::Path(p) => p,
-            _ => unreachable!("vault normalizer returns Path"),
-        };
-        if &normalized == expected || path_matches(&normalized, expected) {
-            if found.is_some() {
-                return Err(FormatError::Parse(
-                    "canvas rewrite span is ambiguous between file cards".to_string(),
-                ));
-            }
-            found = Some(lit);
-        }
-    }
-    let lit = found.ok_or_else(|| {
-        FormatError::Parse("canvas rewrite span is not inside a matching file literal".to_string())
-    })?;
+        })
+        .ok_or_else(|| {
+            FormatError::Parse(
+                "canvas rewrite span is not inside a matching file literal".to_string(),
+            )
+        })?;
     let rel_start = rewrite.span.start - lit.content_start;
     let rel_end = rewrite.span.end - lit.content_start;
     let raw_len = lit.content_end - lit.content_start;
@@ -179,50 +174,29 @@ fn rewrite_wiki_in_text(
             "canvas text rewrite carries a non-wiki target".to_string(),
         ));
     };
-    // Il nodo si trova per contenuto: lo span deve stare dentro un literale
-    // `text` il cui interno, alle coordinate decodificate dello span, parsa al
-    // target atteso. Il primo percorso che verifica vince; ambiguità fra due
-    // card identiche con lo span dentro entrambe è impossibile perché gli
-    // intervalli dei literali sono disgiunti.
-    let mut found: Option<(
-        &MappedLiteral,
-        std::ops::Range<usize>,
-        fub_abi::model::ParsedWikilink,
-    )> = None;
-    for lit in literals.iter().filter(|lit| {
-        matches!(
-            lit.path,
-            LiteralPath::Node {
-                field: super::json_map::CanvasField::Text,
-                ..
-            }
-        ) && lit.content_start <= rewrite.span.start
-            && rewrite.span.end <= lit.content_end
-    }) {
-        let rel_start = rewrite.span.start - lit.content_start;
-        let rel_end = rewrite.span.end - lit.content_start;
-        let raw_len = lit.content_end - lit.content_start;
-        let Some((ds, de)) = raw_to_decoded(&lit.map, raw_len, rel_start, rel_end) else {
-            continue;
-        };
-        let Some(slice) = lit.decoded.get(ds..de) else {
-            continue;
-        };
-        let Some(inner_span) = strip_brackets(slice) else {
-            continue;
-        };
-        let inner = &slice[inner_span.clone()];
-        let parsed = parse_wikilink_inner(inner);
-        if parsed.target != rewrite.target {
-            continue;
-        }
-        if found.is_some() {
-            return Err(FormatError::Parse(
-                "canvas rewrite span is ambiguous between text cards".to_string(),
-            ));
-        }
-        found = Some((lit, inner_span, parsed));
-    }
+    // Lo span sta dentro un literale solo (i contenuti sono disgiunti): dev'essere
+    // il `text` di un nodo, e alle coordinate decodificate dello span deve
+    // esserci un wikilink che parsa al target atteso.
+    let found = literal_containing(literals, rewrite.span.start, rewrite.span.end)
+        .filter(|lit| {
+            matches!(
+                lit.path,
+                LiteralPath::Node {
+                    field: CanvasField::Text,
+                    ..
+                }
+            )
+        })
+        .and_then(|lit| {
+            let rel_start = rewrite.span.start - lit.content_start;
+            let rel_end = rewrite.span.end - lit.content_start;
+            let raw_len = lit.content_end - lit.content_start;
+            let (ds, de) = raw_to_decoded(&lit.map, raw_len, rel_start, rel_end)?;
+            let slice = lit.decoded.get(ds..de)?;
+            let inner_span = strip_brackets(slice)?;
+            let parsed = parse_wikilink_inner(&slice[inner_span.clone()]);
+            (parsed.target == rewrite.target).then_some((lit, inner_span, parsed))
+        });
     let (lit, inner_span, parsed) = found.ok_or_else(|| {
         FormatError::Parse(
             "canvas rewrite span does not cover a matching wikilink in any text card".to_string(),

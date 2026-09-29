@@ -21,8 +21,16 @@
 //! chiavi arbitrarie e ordinamenti. Campi noti duplicati nello stesso oggetto
 //! sono rifiutati: il parser tipizzato li risolverebbe last-wins in silenzio,
 //! e un'associazione ambigua non deve mai nascere.
+//!
+//! Ogni ricerca qui è per chiave, non una scansione: una card da un mega ha un
+//! milione di char e centomila link, una tela centomila card, e cercare
+//! scorrendo costava char × link all'apertura e alla rinomina.
 
-/// Un char decodificato e i byte grezzi che lo hanno prodotto.
+use std::collections::{HashMap, HashSet};
+
+/// Un char decodificato e i byte grezzi che lo hanno prodotto. In una mappa i
+/// char sono in ordine e tutti e quattro gli estremi crescono strettamente:
+/// le ricerche sono binarie.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CharMap {
     pub dec_start: usize,
@@ -32,7 +40,7 @@ pub(crate) struct CharMap {
 }
 
 /// Quale campo link-bearing di un nodo.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CanvasField {
     Text,
     File,
@@ -41,7 +49,7 @@ pub(crate) enum CanvasField {
 }
 
 /// Percorso strutturale di un literale: il nodo/arco che lo contiene.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum LiteralPath {
     Node { index: usize, field: CanvasField },
     Edge { index: usize },
@@ -361,6 +369,9 @@ impl<'a> Lexer<'a> {
 /// qualunque profondità — è saltata e non è mai un candidato, a prescindere
 /// da chiave e valore. L'ordine delle chiavi nel file è arbitrario: i nodi si
 /// contano nell'ordine dell'array `nodes`, gli archi in quello di `edges`.
+///
+/// Il vettore è in ordine di sorgente e gli intervalli dei contenuti sono
+/// disgiunti (il lexer va solo avanti): [`literal_containing`] ci conta.
 pub(crate) fn canvas_literals(source: &str) -> Result<Vec<MappedLiteral>, String> {
     let mut lx = Lexer {
         source,
@@ -496,7 +507,7 @@ fn parse_node(
     if !lx.eat(b'{') {
         return Err("canvas node must be an object".to_string());
     }
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
     loop {
         lx.ws();
         if lx.eat(b'}') {
@@ -506,10 +517,9 @@ fn parse_node(
             Some(key) => key,
             None => return Err("expected key in canvas node".to_string()),
         };
-        if seen.contains(&key) {
+        if !seen.insert(key.clone()) {
             return Err(format!("duplicate field {key:?} in canvas node"));
         }
-        seen.push(key.clone());
         lx.colon()?;
         let field = match key.as_str() {
             "text" => Some(CanvasField::Text),
@@ -541,7 +551,7 @@ fn parse_edge(
     if !lx.eat(b'{') {
         return Err("canvas edge must be an object".to_string());
     }
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
     loop {
         lx.ws();
         if lx.eat(b'}') {
@@ -551,10 +561,9 @@ fn parse_edge(
             Some(key) => key,
             None => return Err("expected key in canvas edge".to_string()),
         };
-        if seen.contains(&key) {
+        if !seen.insert(key.clone()) {
             return Err(format!("duplicate field {key:?} in canvas edge"));
         }
-        seen.push(key.clone());
         lx.colon()?;
         if key == "label" {
             record_string(lx, out, LiteralPath::Edge { index })?;
@@ -572,25 +581,23 @@ fn parse_edge(
     }
 }
 
-/// Literale del campo di un nodo, o `None` se assente.
-pub(crate) fn find_node_literal(
-    literals: &[MappedLiteral],
-    index: usize,
-    field: CanvasField,
-) -> Option<&MappedLiteral> {
-    literals
-        .iter()
-        .find(|lit| lit.path == LiteralPath::Node { index, field })
+/// I literali per percorso. Un percorso ne ha al più uno: il campo duplicato
+/// nello stesso oggetto è già rifiutato da [`canvas_literals`].
+pub(crate) fn literals_by_path(literals: &[MappedLiteral]) -> HashMap<LiteralPath, &MappedLiteral> {
+    literals.iter().map(|lit| (lit.path, lit)).collect()
 }
 
-/// Literale `label` di un arco, o `None` se assente.
-pub(crate) fn find_edge_literal(
+/// Il literale il cui contenuto contiene `start..end`, se c'è. Al più uno: i
+/// contenuti sono disgiunti e in ordine di sorgente (vedi [`canvas_literals`]),
+/// quindi l'unico candidato è l'ultimo che comincia non dopo `start`.
+pub(crate) fn literal_containing(
     literals: &[MappedLiteral],
-    index: usize,
+    start: usize,
+    end: usize,
 ) -> Option<&MappedLiteral> {
-    literals
-        .iter()
-        .find(|lit| lit.path == LiteralPath::Edge { index })
+    let after = literals.partition_point(|lit| lit.content_start <= start);
+    let lit = &literals[after.checked_sub(1)?];
+    (start <= end && end <= lit.content_end).then_some(lit)
 }
 
 /// Entrambi gli estremi devono cadere su confini di char decodificati,
@@ -609,14 +616,12 @@ pub(crate) fn decoded_to_raw(
     let rs = if start == total {
         raw_content_len
     } else {
-        let m = map.iter().find(|m| m.dec_start == start)?;
-        m.raw_start
+        map[map.binary_search_by_key(&start, |m| m.dec_start).ok()?].raw_start
     };
     let re = if end == total {
         raw_content_len
     } else {
-        let m = map.iter().find(|m| m.dec_end == end)?;
-        m.raw_end
+        map[map.binary_search_by_key(&end, |m| m.dec_end).ok()?].raw_end
     };
     (rs <= re).then_some((rs, re))
 }
@@ -637,12 +642,12 @@ pub(crate) fn raw_to_decoded(
     let ds = if rel_start == raw_content_len {
         map.last().map(|m| m.dec_end).unwrap_or(0)
     } else {
-        map.iter().find(|m| m.raw_start == rel_start)?.dec_start
+        map[map.binary_search_by_key(&rel_start, |m| m.raw_start).ok()?].dec_start
     };
     let de = if rel_end == raw_content_len {
         map.last().map(|m| m.dec_end).unwrap_or(0)
     } else {
-        map.iter().find(|m| m.raw_end == rel_end)?.dec_end
+        map[map.binary_search_by_key(&rel_end, |m| m.raw_end).ok()?].dec_end
     };
     (ds <= de).then_some((ds, de))
 }

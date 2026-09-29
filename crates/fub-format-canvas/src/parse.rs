@@ -33,8 +33,8 @@ use fub_abi::options::{syntax, OptionMap};
 use fub_abi::rules::{path as rules_path, tag};
 use fub_abi::{FormatError, FormatProvider};
 
-use super::json_map::{canvas_literals, decoded_to_raw, find_edge_literal, find_node_literal};
-use super::json_map::{CanvasField, MappedLiteral};
+use super::json_map::{canvas_literals, decoded_to_raw, literals_by_path};
+use super::json_map::{CanvasField, LiteralPath, MappedLiteral};
 use super::model::{Canvas, CanvasError, CanvasNodeType, MAX_SOURCE_BYTES};
 
 pub fn parse_canvas(source: &str) -> Result<Canvas, CanvasError> {
@@ -59,6 +59,8 @@ pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
         CanvasError::Invalid(_) => FormatError::Parse(e.to_string()),
     })?;
     let literals = canvas_literals(source).map_err(FormatError::Parse)?;
+    let by_path = literals_by_path(&literals);
+    let node_literal = |index, field| by_path.get(&LiteralPath::Node { index, field }).copied();
 
     let id = DocId::new(ctx.doc_id.clone());
     let mut links: Vec<Link> = Vec::new();
@@ -71,8 +73,7 @@ pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
         match node.node_type {
             CanvasNodeType::Text => {
                 if let Some(text) = node.text.as_deref() {
-                    let Some(lit) = find_node_literal(&literals, node_index, CanvasField::Text)
-                    else {
+                    let Some(lit) = node_literal(node_index, CanvasField::Text) else {
                         return Err(FormatError::Parse(
                             "canvas text card has no matching JSON literal".to_string(),
                         ));
@@ -96,8 +97,7 @@ pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
             }
             CanvasNodeType::File => {
                 if let Some(file) = node.file.as_deref() {
-                    let Some(lit) = find_node_literal(&literals, node_index, CanvasField::File)
-                    else {
+                    let Some(lit) = node_literal(node_index, CanvasField::File) else {
                         return Err(FormatError::Parse(
                             "canvas file card has no matching JSON literal".to_string(),
                         ));
@@ -114,9 +114,7 @@ pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
                         context: Some(file.to_string()),
                     });
                     if let Some(label) = node.label.as_deref() {
-                        if let Some(lit) =
-                            find_node_literal(&literals, node_index, CanvasField::Label)
-                        {
+                        if let Some(lit) = node_literal(node_index, CanvasField::Label) {
                             if lit.decoded == label {
                                 index_label_tags(label, lit, ctx, &mut tags);
                             }
@@ -128,8 +126,7 @@ pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
             CanvasNodeType::Link => {
                 if let Some(url) = node.url.as_deref() {
                     // URL remoto: mai un arco del grafo; contesto per indice.
-                    let Some(lit) = find_node_literal(&literals, node_index, CanvasField::Url)
-                    else {
+                    let Some(lit) = node_literal(node_index, CanvasField::Url) else {
                         return Err(FormatError::Parse(
                             "canvas link card has no matching JSON literal".to_string(),
                         ));
@@ -150,8 +147,7 @@ pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
             }
             CanvasNodeType::Group => {
                 if let Some(label) = node.label.as_deref() {
-                    if let Some(lit) = find_node_literal(&literals, node_index, CanvasField::Label)
-                    {
+                    if let Some(lit) = node_literal(node_index, CanvasField::Label) {
                         if lit.decoded == label {
                             if ctx.enabled(syntax::TAGS) {
                                 index_label_tags(label, lit, ctx, &mut tags);
@@ -190,7 +186,10 @@ pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     for (edge_index, edge) in canvas.edges.iter().enumerate() {
         if let Some(label) = edge.label.as_deref() {
             if ctx.enabled(syntax::TAGS) {
-                if let Some(lit) = find_edge_literal(&literals, edge_index) {
+                if let Some(lit) = by_path
+                    .get(&LiteralPath::Edge { index: edge_index })
+                    .copied()
+                {
                     if lit.decoded == label {
                         index_label_tags(label, lit, ctx, &mut tags);
                     }
