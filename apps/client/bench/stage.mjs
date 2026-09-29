@@ -157,7 +157,10 @@ export async function openStage({
 /// (`theme.ts` spiega perché). Metterle d'accordo lo stesso toglie di mezzo
 /// l'unica cosa che potrebbe ancora differire — la resa dei controlli nativi,
 /// che il sistema disegna secondo *quella* preferenza e non secondo la nostra.
-export async function openPage(browser, light) {
+///
+/// `clock: false` lascia alla pagina l'ora vera: serve a chi misura l'heap e i
+/// frame e non fotografa niente (`graph-scale.mjs` spiega perché).
+export async function openPage(browser, light, { clock = true } = {}) {
   const context = await browser.newContext({
     viewport: WINDOW,
     deviceScaleFactor: 1,
@@ -170,7 +173,7 @@ export async function openPage(browser, light) {
   // Prima di ogni navigazione: si installa come script d'avvio, quindi la
   // pagina nasce già con l'ora ferma. Dopo il `goto` sarebbe tardi — chi legge
   // l'orologio lo legge montandosi.
-  await page.clock.setFixedTime(MOMENT);
+  if (clock) await page.clock.setFixedTime(MOMENT);
   return page;
 }
 

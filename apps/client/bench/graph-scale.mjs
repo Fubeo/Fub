@@ -392,7 +392,13 @@ async function main() {
     config = args();
     report.config = config;
     stage = await openStage();
-    page = await openPage(stage.browser, "dark");
+    // L'ora vera, non quella ferma del banco visivo. L'orologio di Playwright
+    // guida timer e rAF della pagina con timer reali suoi, e le loro closure
+    // restano nell'heap della pagina: qualche centinaio di byte a finestra,
+    // abbastanza da far salire la coda che il gate heap misura senza che l'app
+    // tenga niente. E un frame, qui, è quello del compositore e non un timer
+    // da 16 ms.
+    page = await openPage(stage.browser, "dark", { clock: false });
     page.on("pageerror", (error) => pageErrors.push(String(error?.message ?? error)));
     page.on("console", (message) => consoleMessages.push({ type: message.type(), text: message.text() }));
     context = page.context();

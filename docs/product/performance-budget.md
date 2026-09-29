@@ -28,6 +28,13 @@ canonico resta **30 s per campione**. Il referto `pass` include i controlli hard
 10k/seed 6 con almeno 16 finestre, anche il gate di stabilizzazione heap.
 I budget di frame time restano osservazionali e non sono applicati dalla CI.
 
+Il banco apre la pagina con l'ora vera, non con l'ora ferma del banco visivo.
+L'orologio di Playwright guida timer e `requestAnimationFrame` con timer
+propri, e le loro closure restano nell'heap della pagina: fanno salire di
+qualche centinaio di byte a finestra la coda che il gate misura, senza che
+l'app trattenga niente. Senza di lui un frame è quello del compositore. Le
+distribuzioni qui sotto sono state misurate prima, con l'ora ferma.
+
 La distribuzione locale è stata misurata su Linux x64
 `6.12.107+deb13-amd64`, Node `22.23.1`, Intel N150 con 4 CPU logiche e
 16 539 889 664 byte di RAM. Il browser era Chromium `149.0.7827.55`, viewport
