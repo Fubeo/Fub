@@ -231,7 +231,9 @@ pota le altre per fasce: tutte sotto le 24 ore, una per ora fino a 7 giorni,
 una per giorno fino a 90. Oltre resta solo la più recente. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
 Gli snapshot conservano i byte originali, anche per allegati binari, senza
-convertire BOM o terminatori di riga. Il nome riprende l'estensione del file;
+convertire BOM o terminatori di riga. Nessuno snapshot supera 64 MiB
+(`MAX_VERSION_BYTES`): la dimensione di un file si legge dall'anagrafe prima di
+aprirlo, e oltre il tetto il file non si fotografa. Il nome riprende l'estensione del file;
 se manca, contiene soltanto il timestamp.
 
 La lettura verifica che il `VersionRef` esista, che il blob sia leggibile e che

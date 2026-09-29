@@ -78,12 +78,14 @@ use fub_abi::command::{
 use fub_abi::edit::Fnv1a;
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
+use fub_abi::rules::media;
 use fub_abi::schema::SchemaVersion;
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
-    CommandProvider, EventHandler, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance,
-    ViewInterests, ViewProvider, ViewSpec, ViewSurface,
+    CommandProvider, EntryKind, EventHandler, FolderScope, HostApi, HostQuery, IndexQuery,
+    IndexResult, ReadApi, VaultEntry, VaultRead, ViewInstance, ViewInterests, ViewProvider,
+    ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
 use fub_abi::PluginError;
@@ -149,6 +151,8 @@ const DIFF_TOO_LARGE: &str = "diff.too_large";
 const DIFF_SKIPPED: &str = "diff.skipped";
 const DIFF_TRUNCATED: &str = "diff.truncated";
 const DIFF_BINARY: &str = "diff.binary";
+const DIFF_CURRENT_TOO_LARGE: &str = "diff.current_too_large";
+const RESTORE_TOO_LARGE: &str = "restore.too_large";
 /// Il titolo di una riga e dell'anteprima: **l'istante**, declinato. È una
 /// chiave e non un `Arg::timestamp` nudo perché un `Text::Message` senza
 /// template nel catalogo ricade sulla chiave nuda — e prima di questa chiave
@@ -171,6 +175,7 @@ const DOC: &str = "doc";
 const WHEN: &str = "when";
 const PATH: &str = "path";
 const REASON: &str = "reason";
+const LIMIT: &str = "limit";
 
 /// Le stringhe del versioning. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
@@ -248,6 +253,15 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 DIFF_BINARY,
                 "Una delle due versioni non è testo: il confronto riga per riga non si applica.",
+            )
+            .with(
+                DIFF_CURRENT_TOO_LARGE,
+                "La nota attuale supera {limit} MiB: non la leggo per confrontarla.",
+            )
+            .with(
+                RESTORE_TOO_LARGE,
+                "{doc} supera {limit} MiB e il versioning non lo fotografa: \
+                 ripristinarlo perderebbe il contenuto attuale.",
             )
             .with(WHEN_TITLE, "Versione del {when}")
             .with(RESTORE_TITLE, "Ripristina una versione")
@@ -335,6 +349,15 @@ pub fn catalog() -> Vec<StringCatalog> {
                 DIFF_BINARY,
                 "One of the two versions is not text: a line-by-line comparison does not apply.",
             )
+            .with(
+                DIFF_CURRENT_TOO_LARGE,
+                "The current note exceeds {limit} MiB: it is not read for a comparison.",
+            )
+            .with(
+                RESTORE_TOO_LARGE,
+                "{doc} exceeds {limit} MiB and versioning does not photograph it: \
+                 restoring it would lose the current content.",
+            )
             .with(WHEN_TITLE, "Version from {when}")
             .with(RESTORE_TITLE, "Restore a version")
             .with(
@@ -371,6 +394,17 @@ const MS_DAY: u64 = 24 * MS_HOUR;
 const BAND_ALL: u64 = MS_DAY;
 const BAND_HOURLY: u64 = 7 * MS_DAY;
 const BAND_DAILY: u64 = 90 * MS_DAY;
+
+/// Il contenuto più grande che il versioning fotografa: 64 MiB.
+///
+/// Una fotografia tiene il file intero in memoria e lo ricopia nello store, e
+/// dagli eventi lo fa mentre presta il workspace. Senza un tetto, un video da
+/// qualche GB che compariva nel vault era un'allocazione di qualche GB e una
+/// copia intera, con il vault fermo per tutto il tempo. Oltre il tetto un file
+/// non ha versioni: la dimensione si chiede all'anagrafe, senza aprirlo, e
+/// [`VersionStore::snapshot`] rifiuta comunque byte più lunghi. È la soglia
+/// oltre la quale nemmeno il client tiene intera in memoria una risorsa.
+pub const MAX_VERSION_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Una versione salvata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -678,12 +712,18 @@ impl VersionStore {
     ///
     /// Restituisce `None` quando il dedup (D6) ha deciso che non c'era niente
     /// di nuovo: è il caso normale del salvataggio che riscrive gli stessi byte.
+    /// `None` anche per un contenuto oltre [`MAX_VERSION_BYTES`], che non ha
+    /// versioni.
     pub fn snapshot(
         &self,
         id: &DocId,
         source: &[u8],
         host: &mut dyn HostApi,
     ) -> Result<Option<VersionRef>, PluginError> {
+        if source.len() as u64 > MAX_VERSION_BYTES {
+            tracing::info!(target: "fub.versioning", "{id} supera il tetto delle versioni: non si fotografa");
+            return Ok(None);
+        }
         let mut inner = self.inner.lock().expect("mutex");
         let hash = Fnv1a::hash(source);
         let dir_doc = inner.dir_for(id, host)?;
@@ -1424,6 +1464,67 @@ fn rebuild_from_store(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions
     Ok(docs)
 }
 
+/// Se l'anagrafe sa già che `id` supera [`MAX_VERSION_BYTES`]: allora non lo
+/// si apre nemmeno. Un file che l'anagrafe non nomina si legge, e sui byte
+/// decide [`VersionStore::snapshot`].
+///
+/// La domanda è la cartella di `id`, e con `kind` soltanto i suoi simili: la
+/// risposta cresce con loro, non col vault.
+fn over_the_cap(
+    id: &DocId,
+    kind: Option<EntryKind>,
+    host: &(impl HostQuery + ?Sized),
+) -> Result<bool, PluginError> {
+    let folder = id
+        .as_str()
+        .rsplit_once('/')
+        .map_or("", |(folder, _)| folder);
+    Ok(entries(host, kind, Some(FolderScope::direct(folder)))?
+        .iter()
+        .any(|entry| entry.id == *id && entry.size > MAX_VERSION_BYTES))
+}
+
+/// Il tetto, chiesto prima di leggere, per ciò che il kernel non legge da sé.
+///
+/// Un documento il kernel lo legge e lo parsa a ogni modifica: rileggerlo
+/// costa quanto quel lavoro, e i suoi byte oltre il tetto li ferma
+/// [`VersionStore::snapshot`]. Chiederlo a ogni salvataggio sarebbe invece un
+/// giro della cartella per nota, e una rinomina che ne riscrive mille lo
+/// pagherebbe mille volte. Un allegato non lo apre nessuno: leggerlo intero per
+/// scoprire che è troppo grande era proprio il difetto.
+fn unread_over_the_cap(
+    id: &DocId,
+    host: &(impl VaultRead + HostQuery + ?Sized),
+) -> Result<bool, PluginError> {
+    match media::kind_of_ext(id, |_| host.format_of(id).is_some()) {
+        EntryKind::Document => Ok(false),
+        kind => over_the_cap(id, Some(kind), host),
+    }
+}
+
+/// Le voci dell'anagrafe in `within`, o del vault intero.
+fn entries(
+    host: &(impl HostQuery + ?Sized),
+    of_kind: Option<EntryKind>,
+    within: Option<FolderScope>,
+) -> Result<Vec<VaultEntry>, PluginError> {
+    match host.query_index(IndexQuery::Entries {
+        of_kind,
+        within,
+        page: None,
+    })? {
+        IndexResult::Entries(paged) => Ok(paged.items),
+        other => Err(PluginError::Internal(
+            format!("l'anagrafe ha risposto con {other:?}").into(),
+        )),
+    }
+}
+
+/// Il tetto in MiB, per i messaggi.
+fn cap_in_mib() -> Arg {
+    Arg::int(LIMIT, (MAX_VERSION_BYTES >> 20) as i64)
+}
+
 /// La stessa impronta stabile fra versioni di Rust e piattaforme che usa
 /// l'indice di ricerca — questi valori sopravvivono su disco. Il commento lo
 /// dichiarava già da prima che fosse vero: adesso è la [`Fnv1a`] del contratto,
@@ -1447,15 +1548,20 @@ impl VersioningHandler {
 
     /// Una passata sull'intero vault, e chi fotografare.
     fn sweep(&self, host: &mut dyn HostApi, who: Pass) -> Result<(), PluginError> {
-        let documents = self.existing(host)?;
+        let entries = self.existing(host)?;
         // Una passata è un **lotto**: le fotografie vanno sul disco una per una
         // — blob e `meta.json`, che sono l'autorità — e l'indice, che è il
         // derivato, si scrive una volta sola in fondo. Fuori di qui l'indice
         // resta scritto a ogni salvataggio: è il costo onesto di un indice, e
         // diventa un difetto solo quando lo si paga N volte di fila.
         let result = self.store.in_batch(host, |host| {
-            for id in documents {
+            for VaultEntry { id, size, .. } in entries {
                 if matches!(who, Pass::OnlyNew) && self.store.has_versions(&id) {
+                    continue;
+                }
+                // Oltre il tetto non si legge: la passata sul vault intero è
+                // proprio quella che, senza, ricopiava ogni video.
+                if size > MAX_VERSION_BYTES {
                     continue;
                 }
                 // Una nota illeggibile o non salvabile non deve impedire
@@ -1530,20 +1636,8 @@ impl VersioningHandler {
     /// dell'indicizzazione. E per questa passata l'anagrafe è la sorgente
     /// giusta anche nel merito: si fotografa ciò che sta **sul disco**, e
     /// `read_document_bytes` legge dal disco, non dall'indice.
-    fn existing(&self, host: &mut dyn HostApi) -> Result<Vec<DocId>, PluginError> {
-        let answer = host.query_index(IndexQuery::Entries {
-            of_kind: None,
-            within: None,
-            page: None,
-        })?;
-        match answer {
-            IndexResult::Entries(paged) => {
-                Ok(paged.items.into_iter().map(|entry| entry.id).collect())
-            }
-            other => Err(PluginError::Internal(
-                format!("l'anagrafe ha risposto con {other:?}").into(),
-            )),
-        }
+    fn existing(&self, host: &mut dyn HostApi) -> Result<Vec<VaultEntry>, PluginError> {
+        entries(host, None, None)
     }
 
     /// La prima fotografia del vault, all'apertura.
@@ -1575,11 +1669,18 @@ impl VersioningHandler {
     /// evita uno snapshot aggiuntivo quando i byte coincidono con l'ultima
     /// versione. Una creazione non ha preimmagine; ogni altro errore ferma la
     /// scrittura prima che perda il contenuto precedente.
+    ///
+    /// Un file oltre [`MAX_VERSION_BYTES`] non ha versioni, e la scrittura
+    /// passa senza fotografia, come a versioning spento. Il ripristino, che
+    /// promette la fotografia di ciò che sostituisce, lì rifiuta da sé.
     pub fn photograph_before_write(
         &self,
         host: &mut dyn HostApi,
         id: &DocId,
     ) -> Result<(), PluginError> {
+        if unread_over_the_cap(id, host)? {
+            return Ok(());
+        }
         match host.read_document_bytes(id) {
             Ok(source) => {
                 self.store.snapshot(id, &source, host)?;
@@ -1616,8 +1717,11 @@ impl VersioningHandler {
         // l'indicizzazione non ha ancora raggiunto (§15.7) — riceverebbe un
         // **tombstone**, cioè il versioning dichiarerebbe morta una nota viva.
         // Chiedendolo all'anagrafe la domanda è quella che si intendeva fare.
-        let live: std::collections::BTreeSet<String> =
-            self.existing(host)?.into_iter().map(|id| id.0).collect();
+        let live: std::collections::BTreeSet<String> = self
+            .existing(host)?
+            .into_iter()
+            .map(|entry| entry.id.0)
+            .collect();
         let mut sepolti = 0usize;
         for id in self.store.documents() {
             if live.contains(id.as_str()) || self.store.is_deleted(&id) {
@@ -1678,7 +1782,14 @@ impl EventHandler for VersioningHandler {
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         match &notice.event {
-            Event::DocumentChanged { id, .. } | Event::EntryChanged { id, .. } => {
+            Event::DocumentChanged { id, .. } => {
+                let source = host.read_document_bytes(id)?;
+                self.store.snapshot(id, &source, host)?;
+            }
+            Event::EntryChanged { id, kind } => {
+                if over_the_cap(id, Some(*kind), host)? {
+                    return Ok(());
+                }
                 let source = host.read_document_bytes(id)?;
                 self.store.snapshot(id, &source, host)?;
             }
@@ -2023,7 +2134,11 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         let payload = serde_json::json!({ DOC: doc.as_str(), TS: ts });
         let text = std::str::from_utf8(&bytes).is_ok();
         let body = if comparing {
-            comparison(&bytes, &host.read_document_bytes(&doc)?)
+            if over_the_cap(&doc, None, host)? {
+                UiNode::text(Text::message(DIFF_CURRENT_TOO_LARGE, vec![cap_in_mib()]))
+            } else {
+                comparison(&bytes, &host.read_document_bytes(&doc)?)
+            }
         } else {
             match String::from_utf8(bytes) {
                 Ok(text) => UiNode::text(text),
@@ -2395,6 +2510,15 @@ impl CommandProvider for VersioningCommands {
                 ))
             })?;
             let base = host.document_revision(&doc)?;
+            // Il gancio non fotografa un file oltre il tetto, e il ripristino
+            // lo sostituirebbe senza lasciarne traccia. Si chiede dopo la base:
+            // se il file cresce dopo, il CAS rifiuta la scrittura.
+            if over_the_cap(&doc, None, host)? {
+                return Err(PluginError::Unserved(Text::message(
+                    RESTORE_TOO_LARGE,
+                    vec![Arg::text(DOC, doc.as_str()), cap_in_mib()],
+                )));
+            }
             let source = version_source_doc(entry, &doc, ts, host)?;
             host.write_document_bytes(&doc, &source, Some(base))?;
         }
@@ -3671,6 +3795,83 @@ mod tests {
         assert_eq!(
             version_source_doc(&docs[doc.as_str()], &doc, versions[1].ts, &host).unwrap(),
             external
+        );
+    }
+
+    /// Oltre [`MAX_VERSION_BYTES`] non nasce una versione da nessuna delle
+    /// strade che fotografano: l'evento, il gancio, la passata dopo un
+    /// `Overflow`. Accanto, un allegato piccolo si fotografa come sempre.
+    #[test]
+    fn a_file_over_the_cap_is_neither_read_nor_copied() {
+        let big = id("video.mp4");
+        let small = id("foto.png");
+        let over = vec![0u8; MAX_VERSION_BYTES as usize + 1];
+        let mut host = MemoryHost::new();
+        host.write_document_bytes(&big, &over, None).unwrap();
+        host.write_document_bytes(&small, b"\x89PNG", None).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+        let mut handler = VersioningHandler::new(store.clone());
+
+        for doc in [&big, &small] {
+            handler
+                .handle(
+                    &Notice::of(Event::EntryChanged {
+                        id: doc.clone(),
+                        kind: EntryKind::Asset,
+                    }),
+                    &mut host,
+                )
+                .unwrap();
+        }
+        handler.photograph_before_write(&mut host, &big).unwrap();
+        handler
+            .handle(&Notice::of(Event::Overflow { dropped: 1 }), &mut host)
+            .unwrap();
+
+        assert_eq!(
+            host.reads_on(big.as_str()),
+            (0, 0),
+            "oltre il tetto non si apre"
+        );
+        assert!(store.list(&big).is_empty());
+        assert_eq!(store.list(&small).len(), 1);
+        assert_eq!(store.snapshot(&big, &over, &mut host).unwrap(), None);
+        let stored: usize = host
+            .data_list("")
+            .unwrap()
+            .iter()
+            .filter_map(|path| host.data_read(path).unwrap())
+            .map(|bytes| bytes.len())
+            .sum();
+        assert!(stored < 1 << 20, "lo store tiene {stored} byte");
+    }
+
+    /// Il ripristino promette la fotografia di ciò che sostituisce: su una nota
+    /// cresciuta oltre il tetto non potrebbe mantenerla, quindi rifiuta e la
+    /// lascia com'è.
+    #[test]
+    fn a_restore_does_not_replace_what_it_cannot_photograph() {
+        let doc = id("dati.csv");
+        let mut host = MemoryHost::new();
+        let base = host.write_document_bytes(&doc, b"a,b\n", None).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+        let version = store.snapshot(&doc, b"a,b\n", &mut host).unwrap().unwrap();
+        let grown = vec![b'x'; MAX_VERSION_BYTES as usize + 1];
+        host.write_document_bytes(&doc, &grown, Some(base)).unwrap();
+
+        let refused = VersioningCommands.invoke(
+            VERSION_RESTORE,
+            serde_json::json!({ DOC: doc.as_str(), TS: version.ts }),
+            InvokeMode::Apply,
+            &mut host,
+        );
+        assert!(
+            matches!(refused, Err(PluginError::Unserved(_))),
+            "{refused:?}"
+        );
+        assert!(
+            fub_abi::traits::VaultRead::read_document_bytes(&host, &doc).unwrap() == grown,
+            "la nota attuale resta com'era"
         );
     }
 }

@@ -206,6 +206,11 @@ ultime 24 ore restano tutte; fino a 7 giorni ne resta una per ora, fino a 90
 giorni una per giorno. Oltre i 90 giorni resta soltanto la versione più recente
 della nota. Le fasce non sono configurabili.
 
+Un file oltre 64 MiB non ha versioni: il versioning non lo apre e non lo
+copia, e una scrittura su di lui passa senza fotografia, come a versioning
+spento. Per la stessa ragione il ripristino rifiuta di sostituire una nota
+cresciuta oltre quel limite, e il pannello non la legge per confrontarla.
+
 ## Cartelle esterne
 
 Le cartelle esterne non vengono scoperte né collegate automaticamente. Dopo aver
