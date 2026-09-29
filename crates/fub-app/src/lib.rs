@@ -1503,11 +1503,23 @@ fn limited_startup(config: Option<&Utf8Path>) -> LimitedMode {
         };
     };
     let path = dir.join("installed-limited.json");
-    if !path.exists() {
-        return LimitedMode {
-            enabled: false,
-            reason: None,
-        };
+    // Soltanto un file che non c'è vale «avvio pieno». `exists` rispondeva
+    // «non c'è» anche a una `stat` fallita, e la scelta illeggibile — che sotto
+    // vale avvio limitato — riapriva i plugin installati.
+    match path.as_std_path().try_exists() {
+        Ok(false) => {
+            return LimitedMode {
+                enabled: false,
+                reason: None,
+            }
+        }
+        Ok(true) => {}
+        Err(error) => {
+            return LimitedMode {
+                enabled: true,
+                reason: Some(format!("invalid limited startup configuration: {error}")),
+            }
+        }
     }
     match bounded_config(&path, 4096).and_then(|bytes| {
         serde_json::from_slice::<LimitedStartupChoice>(&bytes).map_err(|error| {
@@ -2297,6 +2309,32 @@ pub fn run() {
 #[cfg(test)]
 mod installed_ipc_tests {
     use super::*;
+
+    /// Una scelta d'avvio di cui il disco non sa dire se c'è non vale «avvio
+    /// pieno»: illeggibile, vale limitato.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreachable_limited_choice_starts_limited() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let config = Utf8Path::from_path(temp.path()).unwrap().join("config");
+        std::fs::create_dir(&config).unwrap();
+        std::fs::write(
+            config.join("installed-limited.json"),
+            br#"{"enabled":true}"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let reachable = std::fs::metadata(config.join("installed-limited.json")).is_ok();
+        let mode = limited_startup(Some(config.as_path()));
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // Da root la cartella si attraversa lo stesso: non c'è niente da provare.
+        if !reachable {
+            assert!(mode.enabled, "an unreadable choice reopened the plugins");
+        }
+        let missing = config.with_file_name("assente");
+        assert!(!limited_startup(Some(missing.as_path())).enabled);
+    }
 
     #[test]
     fn installation_ids_are_strict_decimal_u64_strings() {
