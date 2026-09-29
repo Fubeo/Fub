@@ -187,6 +187,10 @@ pub fn sync_cmd(
                     .get("held")
                     .and_then(|v| v.as_u64())
                     .ok_or_else(|| Failure::new(4, "protocol", "sync.pass senza held durevole"))?;
+                let too_large = report
+                    .get("too_large")
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| Failure::new(4, "protocol", "sync.pass senza too_large"))?;
                 if pending != 0 || held != 0 {
                     let failure = Failure::new(
                         5,
@@ -210,6 +214,16 @@ pub fn sync_cmd(
                             .min(300),
                     ))?;
                     continue;
+                }
+                // Un file oltre il limite di una op non passa riprovando: il
+                // giro singolo lo dice nell'esito, quello continuo lo riporta a
+                // ogni tick senza rallentare la sync del resto.
+                if too_large != 0 && interval.is_none() {
+                    return Err(Failure::new(
+                        5,
+                        "conflict",
+                        format!("sync incompleto: {too_large} file oltre il limite di 7 MiB"),
+                    ));
                 }
                 failures = 0;
                 tick += 1;

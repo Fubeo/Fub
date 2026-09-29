@@ -568,16 +568,19 @@ fn run_share_action(
                 percent_encode(&state.replica_id)
             );
             let status = http_get(host, &base, &auth, &status_path)?;
-            let docs = collect_job_docs(
+            // Il passaggio salta un file troppo grande; la nuova chiave invece
+            // deve cifrare tutto, quindi qui quel file ferma il rekey.
+            let Collected { docs, too_large } = collect_job_docs(
                 host,
                 &state.user_exclude,
                 &BTreeMap::new(),
                 &BTreeSet::new(),
                 &[],
             )?;
-            if docs
-                .iter()
-                .any(|doc| doc.bytes.len() > super::sync::MAX_DOC_BYTES)
+            if !too_large.is_empty()
+                || docs
+                    .iter()
+                    .any(|doc| doc.bytes.len() > super::sync::MAX_DOC_BYTES)
                 || status["entries_truncated"].as_bool() != Some(false)
             {
                 return Err(PluginError::Conflict(
@@ -878,7 +881,7 @@ pub(crate) fn run_pass_on(
         .into_iter()
         .map(|conflict| conflict.doc_id)
         .collect();
-    let docs = if do_push {
+    let Collected { docs, too_large } = if do_push {
         collect_job_docs(
             host,
             &state.user_exclude,
@@ -887,7 +890,7 @@ pub(crate) fn run_pass_on(
             &queued,
         )?
     } else {
-        Vec::new()
+        Collected::default()
     };
     let mut fresh = Vec::new();
     for doc in &docs {
@@ -1276,11 +1279,7 @@ pub(crate) fn run_pass_on(
             .get("entries_truncated")
             .and_then(|v| v.as_bool())
             .ok_or_else(|| PluginError::Internal("sync status truncation missing".into()))?,
-        last_error: if held > 0 {
-            Some(format!("{held} remote operations held; no ack"))
-        } else {
-            None
-        },
+        last_error: pass_error(held, &too_large),
         paused: false,
     };
     super::atomic_state_write(
@@ -1292,8 +1291,26 @@ pub(crate) fn run_pass_on(
     Ok(serde_json::json!({
         "pushed": acked.len(), "pulled": pulled,
         "applied": applied.len(), "conflicts": conflicts, "held": held,
-        "pending": snapshot.pending,
+        "too_large": too_large.len(), "pending": snapshot.pending,
     }))
+}
+
+/// Cosa il passaggio non ha potuto fare, per la vista di stato: le op remote
+/// trattenute e i file che non stanno in una sola op.
+fn pass_error(held: usize, too_large: &[String]) -> Option<String> {
+    let mut parts = Vec::new();
+    if held > 0 {
+        parts.push(format!("{held} remote operations held; no ack"));
+    }
+    if let Some(first) = too_large.first() {
+        let more = too_large.len() - 1;
+        parts.push(if more == 0 {
+            format!("{first} exceeds the 7 MiB single-op cap; not synced")
+        } else {
+            format!("{first} and {more} more exceed the 7 MiB single-op cap; not synced")
+        });
+    }
+    (!parts.is_empty()).then(|| parts.join("; "))
 }
 
 /// Advisory lock on a stable inode. The kernel releases it after a crash,
@@ -1434,14 +1451,27 @@ struct JobDoc {
     revision: Revision,
 }
 
+/// I documenti da spedire, e quelli che non stanno in una sola op.
+///
+/// Un file oltre il limite resta fuori **da solo**: fermare il passaggio per
+/// lui fermerebbe anche push e pull di tutto il resto del vault, finché
+/// qualcuno non lo toglie. Non sparisce in silenzio: il passaggio lo conta e
+/// la vista di stato lo nomina.
+#[derive(Default)]
+struct Collected {
+    docs: Vec<JobDoc>,
+    too_large: Vec<String>,
+}
+
 fn collect_job_docs(
     host: &mut dyn HostApi,
     user_exclude: &[String],
     synced: &BTreeMap<String, Revision>,
     blocked_docs: &BTreeSet<String>,
     queued: &[serde_json::Value],
-) -> Result<Vec<JobDoc>, PluginError> {
+) -> Result<Collected, PluginError> {
     let mut out = Vec::new();
+    let mut too_large = Vec::new();
     let mut offset: u32 = 0;
     loop {
         let page = host.query_index(IndexQuery::Entries {
@@ -1479,16 +1509,11 @@ fn collect_job_docs(
                 continue;
             }
             if entry.size > super::sync::MAX_DOC_BYTES as u64 {
-                return Err(PluginError::BadArgs(
-                    "sync file exceeds 7 MiB single-op cap; no transfer started".into(),
-                ));
+                too_large.push(path);
+                continue;
             }
             match host.read_document_bytes(&entry.id) {
-                Ok(bytes) if bytes.len() > super::sync::MAX_DOC_BYTES => {
-                    return Err(PluginError::BadArgs(
-                        "sync file grew beyond 7 MiB single-op cap".into(),
-                    ))
-                }
+                Ok(bytes) if bytes.len() > super::sync::MAX_DOC_BYTES => too_large.push(path),
                 Ok(bytes) => {
                     if host.document_revision(&entry.id)? != before {
                         return Err(PluginError::Conflict(
@@ -1510,7 +1535,10 @@ fn collect_job_docs(
         }
         offset += n;
     }
-    Ok(out)
+    Ok(Collected {
+        docs: out,
+        too_large,
+    })
 }
 
 fn vv_wire(vv: &BTreeMap<String, u64>) -> serde_json::Value {
@@ -2080,6 +2108,45 @@ fn ensure_job_vdk(
             Ok(vdk)
         }
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod collect_tests {
+    use super::{collect_job_docs, pass_error};
+    use crate::remote::sync::MAX_DOC_BYTES;
+    use fub_sdk::testing::MemoryHost;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    /// Un video nel vault non ferma la sync delle note: resta fuori da solo, e
+    /// il passaggio lo sa.
+    #[test]
+    fn a_file_over_the_cap_waits_alone() {
+        let mut host = MemoryHost::new()
+            .with_document("Nota.md", "# Nota\n")
+            .with_binary_document("video.mp4", &vec![0; MAX_DOC_BYTES + 1])
+            .with_binary_document("foto.png", &vec![0; MAX_DOC_BYTES]);
+        let collected =
+            collect_job_docs(&mut host, &[], &BTreeMap::new(), &BTreeSet::new(), &[]).unwrap();
+        let sent: Vec<&str> = collected.docs.iter().map(|doc| doc.id.as_str()).collect();
+        assert_eq!(sent, ["Nota.md", "foto.png"]);
+        assert_eq!(collected.too_large, ["video.mp4"]);
+    }
+
+    #[test]
+    fn the_status_names_what_was_left_behind() {
+        assert_eq!(pass_error(0, &[]), None);
+        assert_eq!(
+            pass_error(0, &["video.mp4".into()]).as_deref(),
+            Some("video.mp4 exceeds the 7 MiB single-op cap; not synced")
+        );
+        assert_eq!(
+            pass_error(2, &["a.mp4".into(), "b.mp4".into()]).as_deref(),
+            Some(
+                "2 remote operations held; no ack; \
+                 a.mp4 and 1 more exceed the 7 MiB single-op cap; not synced"
+            )
+        );
     }
 }
 
