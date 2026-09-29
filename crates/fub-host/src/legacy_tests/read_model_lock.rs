@@ -308,13 +308,22 @@ impl VaultStorage for BlockingRestoreStorage {
 
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
         self.mutation_hits.fetch_add(1, Ordering::SeqCst);
+        let source = self
+            .source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
         let probing = self
             .workspace_probe
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .is_some();
-        if probing && from.starts_with(&self.trash_dir) {
-            self.assert_workspace_is_free("VaultStorage::rename_no_replace during restore");
+        // Nel cestino si entra (dalla sorgente) e se ne esce (dal cestino)
+        // con la stessa mossa no-replace.
+        if probing && (from.starts_with(&self.trash_dir) || source.as_deref() == Some(from)) {
+            self.assert_workspace_is_free(
+                "VaultStorage::rename_no_replace during trash or restore",
+            );
             self.traverse(Stage::TrashRename);
         }
         self.inner.rename_no_replace(from, to)

@@ -171,6 +171,12 @@ const TRASH_METADATA_DIR: &str = "trash";
 /// riportare la nota di qualcuno nella cartella sbagliata.
 pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
+/// Quanti nomi del cestino una cestinatura prova dopo averli trovati occupati
+/// soltanto al momento della mossa. Il limite non serve ai casi veri — ogni
+/// rifiuto è un file che c'è — ma a un supporto che rispondesse «occupato» a
+/// ogni nome: là la cestinatura si ferma con l'errore invece di girare.
+const TRASH_NAME_ATTEMPTS: usize = 64;
+
 /// Il contenuto di un sidecar del cestino.
 #[derive(Serialize, Deserialize)]
 struct TrashSidecar {
@@ -1263,16 +1269,36 @@ impl Vault {
         let stamp = stamp_from_unix(self.clock.now_unix_millis() / 1_000);
         // Il nome nel cestino non se lo costruisce chi cestina: è una regola
         // del contratto, e chi cestina è più di uno (0219).
-        let target = DocId::new(trash::trashed_id(id.as_str(), &stamp, &mut |c| {
-            self.exists(&DocId::new(c))
-        }));
-
-        self.storage
-            .rename(&from, &self.path_for(&target)?)
-            .map_err(|and| KernelError::Io {
-                path: from,
-                source: and,
-            })?;
+        //
+        // Il nome si **prova** con una mossa no-replace, non si deduce: un
+        // `exists` seguito da `rename` lasciava fra le due una finestra in cui
+        // chi posava un file — o una voce già cestinata che la `stat` non
+        // sapeva vedere — veniva sostituito, cioè perso per sempre. `exists`
+        // resta soltanto il modo di non provare i nomi che si sanno occupati.
+        let mut refused: Vec<String> = Vec::new();
+        let target = loop {
+            let candidate = DocId::new(trash::trashed_id(id.as_str(), &stamp, &mut |c| {
+                refused.iter().any(|taken| taken == c) || self.exists(&DocId::new(c))
+            }));
+            match self
+                .storage
+                .rename_no_replace(&from, &self.path_for(&candidate)?)
+            {
+                Ok(()) => break candidate,
+                Err(and)
+                    if and.kind() == std::io::ErrorKind::AlreadyExists
+                        && refused.len() < TRASH_NAME_ATTEMPTS =>
+                {
+                    refused.push(candidate.to_string());
+                }
+                Err(and) => {
+                    return Err(KernelError::Io {
+                        path: from,
+                        source: and,
+                    })
+                }
+            }
+        };
         // Il sidecar col path d'origine è best-effort: se non si scrive, la
         // voce degrada al comportamento senza sidecar (ripristino in radice),
         // ma la cancellazione È riuscita e va detta con un Ok. Il sidecar

@@ -842,6 +842,36 @@ fn whoever_occupies_the_destination_after_the_guard_is_not_buried() {
     assert_eq!(fx.read(trashed.as_str()), "the trashed note");
 }
 
+/// Il nome nel cestino occupato **dopo** la guardia non viene sepolto. La
+/// cestinatura sceglieva il nome con un `exists` e poi spostava con un
+/// `rename` che sostituisce: chi posava un file nel frattempo — o una voce
+/// già cestinata che la `stat` non sapeva vedere — spariva per sempre.
+#[test]
+fn a_trash_name_occupied_after_the_guard_is_not_buried() {
+    let fx = Fixture::new();
+    fx.put("Idea.txt", "the trashed note");
+    let storage = Arc::new(RefusingStorage {
+        inner: FsStorage,
+        refuses_remove_in: "never",
+        occupies_destination: std::sync::atomic::AtomicBool::new(false),
+    });
+    let mut ws = fx.workspace_on(storage.clone());
+    storage
+        .occupies_destination
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+    let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
+
+    assert_eq!(
+        fx.read(".trash/Idea.txt"),
+        "concurrent",
+        "whoever took the name first is still there"
+    );
+    assert_ne!(trashed.as_str(), ".trash/Idea.txt");
+    assert_eq!(fx.read(trashed.as_str()), "the trashed note");
+    assert!(!fx.exists("Idea.txt"));
+}
+
 /// 0058 — il ripristino è **una mossa sola**, e non c'è un istante in cui la
 /// nota sta in due posti.
 ///
