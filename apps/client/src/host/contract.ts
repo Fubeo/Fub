@@ -954,9 +954,21 @@ export interface SheetEvaluatedCell extends SheetCellKey {
   value: SheetCellValue;
 }
 
+// Un rettangolo per angoli sullo stesso foglio, posizioni vuote comprese.
+export interface SheetCellRange {
+  sheet: string;
+  start_row: string;
+  start_column: string;
+  end_row: string;
+  end_column: string;
+}
+
 export interface SheetCellDependency {
   cell: SheetCellKey;
+  // Celle nominate una per una; gli intervalli restano rettangoli, e il
+  // campo manca quando la formula non ne nomina.
   depends_on: SheetCellKey[];
+  depends_on_ranges?: SheetCellRange[];
 }
 
 export interface SheetEvaluation {

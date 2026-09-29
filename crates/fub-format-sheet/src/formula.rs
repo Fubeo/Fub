@@ -78,7 +78,26 @@ pub struct EvaluatedCell {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CellDependency {
     pub cell: CellKey,
+    /// Le celle nominate una per una (`A1`, `'Foglio'!B2`), anche vuote.
     pub depends_on: Vec<CellKey>,
+    /// Gli intervalli (`A1:B10`) restano rettangoli. Elencarne le celle
+    /// costava memoria proporzionale all'area per ogni formula: venti `SUM` su
+    /// un foglio da 80 000 righe tenevano quattro GiB, e una sorgente da 16 MiB
+    /// fatta apposta esauriva la RAM dell'app.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on_ranges: Vec<CellRange>,
+}
+
+/// Un rettangolo di posizioni sullo stesso foglio, per angoli: `start` in alto
+/// a sinistra, `end` in basso a destra. Comprende anche le posizioni senza
+/// cella persistita, che una scrittura può riempire.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct CellRange {
+    pub sheet: SheetId,
+    pub start_row: RowId,
+    pub start_column: ColumnId,
+    pub end_row: RowId,
+    pub end_column: ColumnId,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -123,7 +142,135 @@ impl Workbook {
 
 struct IndexedSheet<'a> {
     sheet: &'a Sheet,
-    cells: HashMap<(&'a RowId, &'a ColumnId), &'a Cell>,
+    /// Coordinata → indice in `sheet.cells`, che è anche l'indice in cache.
+    cells: HashMap<(&'a RowId, &'a ColumnId), usize>,
+    /// Per posizione di riga, le celle persistite come (colonna, indice), in
+    /// ordine di colonna: un intervallo visita le celle che ci sono, non l'area.
+    rows: Vec<Vec<(usize, usize)>>,
+    /// Lo stesso, per le sole formule: sono le uniche dipendenze che Tarjan
+    /// deve attraversare.
+    formulas: Vec<Vec<(usize, usize)>>,
+}
+
+impl<'a> IndexedSheet<'a> {
+    fn new(sheet: &'a Sheet) -> Self {
+        let row_at: HashMap<&RowId, usize> = sheet
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| (&row.id, index))
+            .collect();
+        let column_at: HashMap<&ColumnId, usize> = sheet
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(index, column)| (&column.id, index))
+            .collect();
+        let mut rows = vec![Vec::new(); sheet.rows.len()];
+        let mut formulas = vec![Vec::new(); sheet.rows.len()];
+        for (index, cell) in sheet.cells.iter().enumerate() {
+            if let (Some(&row), Some(&column)) =
+                (row_at.get(&cell.row), column_at.get(&cell.column))
+            {
+                rows[row].push((column, index));
+                if cell.input.starts_with('=') {
+                    formulas[row].push((column, index));
+                }
+            }
+        }
+        for row in rows.iter_mut().chain(&mut formulas) {
+            row.sort_unstable_by_key(|(column, _)| *column);
+        }
+        Self {
+            sheet,
+            cells: sheet
+                .cells
+                .iter()
+                .enumerate()
+                .map(|(index, cell)| ((&cell.row, &cell.column), index))
+                .collect(),
+            rows,
+            formulas,
+        }
+    }
+}
+
+/// Un intervallo risolto: foglio e posizioni, estremi compresi.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Area {
+    sheet: usize,
+    top: usize,
+    bottom: usize,
+    left: usize,
+    right: usize,
+}
+
+/// Le dipendenze dirette di una formula: celle nominate e intervalli.
+#[derive(Clone, Debug, Default)]
+struct Direct {
+    cells: Vec<CellKey>,
+    areas: Vec<Area>,
+}
+
+/// Le dipendenze di una cella ancora da guardare. Gli intervalli si
+/// percorrono senza elencarli: la pila di Tarjan può tenere aperte migliaia di
+/// celle, e ognuna terrebbe in memoria l'intera area.
+struct Pending {
+    cells: std::vec::IntoIter<CellKey>,
+    areas: Vec<Area>,
+    /// L'intervallo, la riga e l'indice fra le celle persistite della riga.
+    area: usize,
+    row: usize,
+    at: usize,
+}
+
+impl Pending {
+    fn new(direct: Direct) -> Self {
+        let row = direct.areas.first().map_or(0, |area| area.top);
+        Self {
+            cells: direct.cells.into_iter(),
+            areas: direct.areas,
+            area: 0,
+            row,
+            at: 0,
+        }
+    }
+
+    /// Prima le celle nominate, poi le formule persistite dentro gli
+    /// intervalli: una costante o una posizione vuota non dipende da niente e
+    /// non può chiudere un anello, e il cursore non la guarda nemmeno.
+    fn next(&mut self, sheets: &[IndexedSheet<'_>]) -> Option<CellKey> {
+        if let Some(cell) = self.cells.next() {
+            return Some(cell);
+        }
+        while let Some(area) = self.areas.get(self.area).copied() {
+            let sheet = &sheets[area.sheet];
+            while self.row <= area.bottom {
+                let row = &sheet.formulas[self.row];
+                let at = self
+                    .at
+                    .max(row.partition_point(|(column, _)| *column < area.left));
+                if let Some(&(column, index)) = row.get(at) {
+                    if column <= area.right {
+                        self.at = at + 1;
+                        let cell = &sheet.sheet.cells[index];
+                        return Some(CellKey {
+                            sheet: sheet.sheet.id.clone(),
+                            row: cell.row.clone(),
+                            column: cell.column.clone(),
+                        });
+                    }
+                }
+                self.row += 1;
+                self.at = 0;
+            }
+            self.area += 1;
+            if let Some(next) = self.areas.get(self.area) {
+                self.row = next.top;
+            }
+        }
+        None
+    }
 }
 
 /// Lo stato di Tarjan per [`Evaluator::settle`].
@@ -135,16 +282,16 @@ struct Walk {
     component: Vec<CellKey>,
     on_component: HashSet<CellKey>,
     /// La pila di chiamata esplicita: cella e dipendenze ancora da guardare.
-    stack: Vec<(CellKey, std::vec::IntoIter<CellKey>)>,
+    stack: Vec<(CellKey, Pending)>,
 }
 
 impl Walk {
-    fn open(&mut self, key: CellKey, direct: Vec<CellKey>) {
+    fn open(&mut self, key: CellKey, direct: Direct) {
         let at = self.order.len();
         self.order.insert(key.clone(), (at, at));
         self.component.push(key.clone());
         self.on_component.insert(key.clone());
-        self.stack.push((key, direct.into_iter()));
+        self.stack.push((key, Pending::new(direct)));
     }
 
     fn lower(&mut self, key: &CellKey, reached: usize) {
@@ -158,30 +305,20 @@ struct Evaluator<'a> {
     sheets: Vec<IndexedSheet<'a>>,
     sheet_by_id: HashMap<&'a SheetId, usize>,
     sheet_by_name: HashMap<&'a str, usize>,
-    cache: HashMap<CellKey, CellValue>,
+    /// Per foglio, il valore di ogni cella persistita, per indice.
+    cache: Vec<Vec<Option<CellValue>>>,
     visiting: HashSet<CellKey>,
     /// Livelli di valutazione aperti, contro [`MAX_EVALUATION_FRAMES`].
     frames: usize,
     dependencies: Vec<CellDependency>,
     /// Formule già lette da [`Evaluator::settle`], con le loro dipendenze
     /// dirette: [`Evaluator::evaluate_key`] le consuma invece di rileggerle.
-    parsed: HashMap<CellKey, (Result<Ast, ()>, Vec<CellKey>)>,
+    parsed: HashMap<CellKey, (Result<Ast, ()>, Direct)>,
 }
 
 impl<'a> Evaluator<'a> {
     fn new(workbook: &'a Workbook) -> Self {
-        let sheets: Vec<_> = workbook
-            .sheets
-            .iter()
-            .map(|sheet| IndexedSheet {
-                sheet,
-                cells: sheet
-                    .cells
-                    .iter()
-                    .map(|cell| ((&cell.row, &cell.column), cell))
-                    .collect(),
-            })
-            .collect();
+        let sheets: Vec<_> = workbook.sheets.iter().map(IndexedSheet::new).collect();
         let sheet_by_id = sheets
             .iter()
             .enumerate()
@@ -196,7 +333,11 @@ impl<'a> Evaluator<'a> {
             sheets,
             sheet_by_id,
             sheet_by_name,
-            cache: HashMap::new(),
+            cache: workbook
+                .sheets
+                .iter()
+                .map(|sheet| vec![None; sheet.cells.len()])
+                .collect(),
             visiting: HashSet::new(),
             frames: 0,
             dependencies: Vec::new(),
@@ -214,7 +355,7 @@ impl<'a> Evaluator<'a> {
     /// sempre (è lei a dire `#CYCLE!`, e un `IF` che non prende il ramo non lo
     /// chiude), limitata da [`MAX_EVALUATION_FRAMES`].
     fn settle(&mut self, root: &CellKey) {
-        if self.cache.contains_key(root) {
+        if self.settled(root) {
             return;
         }
         let mut walk = Walk::default();
@@ -223,8 +364,8 @@ impl<'a> Evaluator<'a> {
             let Some((key, pending)) = walk.stack.last_mut() else {
                 break;
             };
-            if let Some(dependency) = pending.next() {
-                if self.cache.contains_key(&dependency) {
+            if let Some(dependency) = pending.next(&self.sheets) {
+                if self.settled(&dependency) {
                     continue;
                 }
                 match walk.order.get(&dependency) {
@@ -266,49 +407,61 @@ impl<'a> Evaluator<'a> {
 
     /// Legge la formula di `key` (una volta) e ne restituisce le dipendenze
     /// dirette; una cella che non è una formula non ne ha.
-    fn read_formula(&mut self, key: &CellKey) -> Vec<CellKey> {
+    fn read_formula(&mut self, key: &CellKey) -> Direct {
         if let Some((_, direct)) = self.parsed.get(key) {
             return direct.clone();
         }
         let Some(formula) = self.cell(key).and_then(|cell| cell.input.strip_prefix('=')) else {
-            return Vec::new();
+            return Direct::default();
         };
         let ast = Parser::parse(formula);
-        let mut direct = Vec::new();
+        let mut direct = Direct::default();
         if let Ok(ast) = &ast {
             self.collect_dependencies(&key.sheet, ast, &mut direct);
-            direct.sort();
-            direct.dedup();
+            direct.cells.sort();
+            direct.cells.dedup();
+            direct.areas.sort();
+            direct.areas.dedup();
         }
         self.parsed.insert(key.clone(), (ast, direct.clone()));
         direct
     }
 
     fn evaluate_key(&mut self, key: &CellKey) -> CellValue {
-        if let Some(value) = self.cache.get(key) {
+        let Some((sheet, index)) = self.locate(key) else {
+            // Una posizione senza cella è vuota, e non c'è niente da ricordare.
+            return if self.frames >= MAX_EVALUATION_FRAMES {
+                CellValue::Error(FormulaErrorCode::Cycle)
+            } else {
+                CellValue::Blank
+            };
+        };
+        if let Some(value) = &self.cache[sheet][index] {
             return value.clone();
         }
         if self.frames >= MAX_EVALUATION_FRAMES || !self.visiting.insert(key.clone()) {
-            self.cache
-                .insert(key.clone(), CellValue::Error(FormulaErrorCode::Cycle));
+            self.cache[sheet][index] = Some(CellValue::Error(FormulaErrorCode::Cycle));
             return CellValue::Error(FormulaErrorCode::Cycle);
         }
         self.frames += 1;
-        let input = self
-            .cell(key)
-            .map(|cell| cell.input.clone())
-            .unwrap_or_default();
+        let input = self.sheets[sheet].sheet.cells[index].input.clone();
         let value = if input.starts_with('=') {
             self.read_formula(key);
             let (ast, direct) = self
                 .parsed
                 .remove(key)
-                .unwrap_or_else(|| (Err(()), Vec::new()));
+                .unwrap_or_else(|| (Err(()), Direct::default()));
             match ast {
                 Ok(ast) => {
+                    let depends_on_ranges = direct
+                        .areas
+                        .iter()
+                        .map(|area| self.cell_range(area))
+                        .collect();
                     self.dependencies.push(CellDependency {
                         cell: key.clone(),
-                        depends_on: direct,
+                        depends_on: direct.cells,
+                        depends_on_ranges,
                     });
                     self.evaluate_ast(&key.sheet, &ast)
                 }
@@ -319,13 +472,37 @@ impl<'a> Evaluator<'a> {
         };
         self.frames -= 1;
         self.visiting.remove(key);
-        self.cache.insert(key.clone(), value.clone());
+        self.cache[sheet][index] = Some(value.clone());
         value
     }
 
-    fn cell(&self, key: &CellKey) -> Option<&Cell> {
-        let sheet = self.sheets.get(*self.sheet_by_id.get(&key.sheet)?)?;
-        sheet.cells.get(&(&key.row, &key.column)).copied()
+    /// Foglio e indice della cella persistita in `key`, se c'è.
+    fn locate(&self, key: &CellKey) -> Option<(usize, usize)> {
+        let sheet = *self.sheet_by_id.get(&key.sheet)?;
+        let index = *self.sheets[sheet].cells.get(&(&key.row, &key.column))?;
+        Some((sheet, index))
+    }
+
+    fn cell(&self, key: &CellKey) -> Option<&'a Cell> {
+        let (sheet, index) = self.locate(key)?;
+        Some(&self.sheets[sheet].sheet.cells[index])
+    }
+
+    /// Una cella da non valutare più: già in cache, o una posizione vuota.
+    fn settled(&self, key: &CellKey) -> bool {
+        self.locate(key)
+            .is_none_or(|(sheet, index)| self.cache[sheet][index].is_some())
+    }
+
+    fn cell_range(&self, area: &Area) -> CellRange {
+        let sheet = self.sheets[area.sheet].sheet;
+        CellRange {
+            sheet: sheet.id.clone(),
+            start_row: sheet.rows[area.top].id.clone(),
+            start_column: sheet.columns[area.left].id.clone(),
+            end_row: sheet.rows[area.bottom].id.clone(),
+            end_column: sheet.columns[area.right].id.clone(),
+        }
     }
 
     fn evaluate_ast(&mut self, current_sheet: &SheetId, ast: &Ast) -> CellValue {
@@ -396,11 +573,44 @@ impl<'a> Evaluator<'a> {
         for argument in arguments {
             match argument {
                 Ast::Range(start, end) => {
-                    let keys = match self.resolve_range(current_sheet, start, end) {
-                        Ok(keys) => keys,
+                    let area = match self.resolve_range(current_sheet, start, end) {
+                        Ok(area) => area,
                         Err(error) => return CellValue::Error(error),
                     };
-                    values.extend(keys.iter().map(|key| self.evaluate_key(key)));
+                    // Le posizioni vuote sono `Blank`, che l'aggregato ignora:
+                    // si visitano soltanto le celle persistite, nello stesso
+                    // ordine per righe.
+                    let sheet: &'a Sheet = self.sheets[area.sheet].sheet;
+                    for row in area.top..=area.bottom {
+                        let mut at = self.sheets[area.sheet].rows[row]
+                            .partition_point(|(column, _)| *column < area.left);
+                        while let Some(&(column, index)) = self.sheets[area.sheet].rows[row].get(at)
+                        {
+                            if column > area.right {
+                                break;
+                            }
+                            at += 1;
+                            // Un valore già calcolato si legge per indice, e
+                            // una costante vale il proprio input: niente chiave
+                            // da allocare, e una colonna di totali progressivi
+                            // resta un conto di somme.
+                            if let Some(value) = &self.cache[area.sheet][index] {
+                                values.push(value.clone());
+                                continue;
+                            }
+                            let cell = &sheet.cells[index];
+                            if !cell.input.starts_with('=') {
+                                values.push(literal_value(&cell.input));
+                                continue;
+                            }
+                            let key = CellKey {
+                                sheet: sheet.id.clone(),
+                                row: cell.row.clone(),
+                                column: cell.column.clone(),
+                            };
+                            values.push(self.evaluate_key(&key));
+                        }
+                    }
                 }
                 _ => values.push(self.evaluate_ast(current_sheet, argument)),
             }
@@ -408,16 +618,16 @@ impl<'a> Evaluator<'a> {
         aggregate(name, values)
     }
 
-    fn collect_dependencies(&self, current_sheet: &SheetId, ast: &Ast, output: &mut Vec<CellKey>) {
+    fn collect_dependencies(&self, current_sheet: &SheetId, ast: &Ast, output: &mut Direct) {
         match ast {
             Ast::Reference(reference) => {
                 if let Some(key) = self.resolve_reference(current_sheet, reference) {
-                    output.push(key);
+                    output.cells.push(key);
                 }
             }
             Ast::Range(start, end) => {
-                if let Ok(keys) = self.resolve_range(current_sheet, start, end) {
-                    output.extend(keys);
+                if let Ok(area) = self.resolve_range(current_sheet, start, end) {
+                    output.areas.push(area);
                 }
             }
             Ast::Unary(_, value) => self.collect_dependencies(current_sheet, value, output),
@@ -454,7 +664,7 @@ impl<'a> Evaluator<'a> {
         current_sheet: &SheetId,
         start: &Reference,
         end: &Reference,
-    ) -> Result<Vec<CellKey>, FormulaErrorCode> {
+    ) -> Result<Area, FormulaErrorCode> {
         let sheet_index = match (start.sheet.as_deref(), end.sheet.as_deref()) {
             (None, None) => *self
                 .sheet_by_id
@@ -488,17 +698,13 @@ impl<'a> Evaluator<'a> {
         if count > MAX_RANGE_CELLS {
             return Err(FormulaErrorCode::Num);
         }
-        let mut keys = Vec::with_capacity(count);
-        for row in row_start..=row_end {
-            for column in column_start..=column_end {
-                keys.push(CellKey {
-                    sheet: sheet.id.clone(),
-                    row: sheet.rows[row].id.clone(),
-                    column: sheet.columns[column].id.clone(),
-                });
-            }
-        }
-        Ok(keys)
+        Ok(Area {
+            sheet: sheet_index,
+            top: row_start,
+            bottom: row_end,
+            left: column_start,
+            right: column_end,
+        })
     }
 }
 
@@ -1376,6 +1582,76 @@ mod tests {
         assert_eq!(evaluation.dependencies.len(), rows - 1);
     }
 
+    /// Una catena fatta di intervalli: ogni riga prende il massimo delle due
+    /// sotto. Tarjan scende per centomila celle tenendo di ciascuna soltanto un
+    /// cursore sull'intervallo, non l'elenco delle sue celle.
+    #[test]
+    fn a_long_chain_through_ranges_evaluates_without_deep_recursion() {
+        let rows = 100_000;
+        let workbook = column_sheet(rows, |index| {
+            if index == rows {
+                "1".to_string()
+            } else if index == rows - 1 {
+                format!("=A{rows}+1")
+            } else {
+                format!("=MAX(A{}:A{})+1", index + 1, index + 2)
+            }
+        });
+        let evaluation = workbook.evaluate().unwrap();
+        assert_eq!(
+            value(&evaluation, "sheet-long", "r1", "c1"),
+            CellValue::Number(rows as f64)
+        );
+        assert_eq!(evaluation.dependencies.len(), rows - 1);
+    }
+
+    /// Cento formule su un'area da quasi un milione di posizioni, con due sole
+    /// celle persistite. Prima ogni formula elencava l'intera area due volte
+    /// (dipendenze e valutazione): cento volte oltre dieci GiB. Ora
+    /// l'intervallo è un rettangolo e la somma visita le sole celle persistite.
+    #[test]
+    fn wide_ranges_cost_the_cells_they_hold_not_their_area() {
+        let side = 1_000;
+        let mut sheet = Sheet::new("sheet-wide", "Wide");
+        sheet.rows = (1..=side)
+            .map(|index| Row {
+                id: format!("r{index}").into(),
+                height: None,
+                hidden: false,
+            })
+            .collect();
+        sheet.columns = (1..=side)
+            .map(|index| Column {
+                id: format!("c{index}").into(),
+                width: None,
+                hidden: false,
+            })
+            .collect();
+        // L'area lascia fuori l'ultima colonna, dove stanno le formule.
+        let last = crate::column_name(side - 2);
+        sheet.cells = vec![
+            cell("r1", "c1", "2"),
+            cell(&format!("r{side}"), &format!("c{}", side - 1), "3"),
+        ];
+        for index in 1..=100 {
+            sheet.cells.push(cell(
+                &format!("r{index}"),
+                &format!("c{side}"),
+                &format!("=SUM(A1:{last}{side})"),
+            ));
+        }
+        let evaluation = Workbook::new(vec![sheet]).evaluate().unwrap();
+        assert_eq!(
+            value(&evaluation, "sheet-wide", "r100", &format!("c{side}")),
+            CellValue::Number(5.0)
+        );
+        assert_eq!(evaluation.dependencies.len(), 100);
+        for dependency in &evaluation.dependencies {
+            assert!(dependency.depends_on.is_empty());
+            assert_eq!(dependency.depends_on_ranges.len(), 1);
+        }
+    }
+
     /// Un anello lungo resta `#CYCLE!` per ogni sua cella, senza scendere
     /// di un livello per cella.
     #[test]
@@ -1470,12 +1746,30 @@ mod tests {
     fn dependencies_are_derived_and_not_part_of_the_serialized_workbook() {
         let workbook = workbook();
         let evaluation = workbook.evaluate().unwrap();
-        let dependency = evaluation
-            .dependencies
-            .iter()
-            .find(|entry| entry.cell.row.as_ref() == "r2" && entry.cell.column.as_ref() == "c2")
-            .unwrap();
-        assert_eq!(dependency.depends_on.len(), 2);
+        let dependency = |row: &str, column: &str| {
+            evaluation
+                .dependencies
+                .iter()
+                .find(|entry| {
+                    entry.cell.row.as_ref() == row && entry.cell.column.as_ref() == column
+                })
+                .unwrap()
+        };
+        let named = dependency("r1", "c2");
+        assert_eq!(named.depends_on.len(), 2);
+        assert!(named.depends_on_ranges.is_empty());
+        let ranged = dependency("r2", "c2");
+        assert!(ranged.depends_on.is_empty());
+        assert_eq!(
+            ranged.depends_on_ranges,
+            [CellRange {
+                sheet: "sheet-1".into(),
+                start_row: "r1".into(),
+                start_column: "c1".into(),
+                end_row: "r2".into(),
+                end_column: "c1".into(),
+            }]
+        );
         let source = workbook.serialize().unwrap();
         let value: serde_json::Value = serde_json::from_str(&source).unwrap();
         assert!(value.get("dependencies").is_none());

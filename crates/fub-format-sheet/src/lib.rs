@@ -18,7 +18,9 @@ pub mod grid;
 pub mod index;
 pub mod session;
 
-pub use formula::{CellDependency, CellValue, EvaluatedCell, FormulaErrorCode, WorkbookEvaluation};
+pub use formula::{
+    CellDependency, CellRange, CellValue, EvaluatedCell, FormulaErrorCode, WorkbookEvaluation,
+};
 
 pub const FORMAT_ID: &str = "fubsheet";
 pub const SCHEMA_VERSION: u32 = 1;

@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
+use std::ops::RangeInclusive;
 
 use serde::Serialize;
 
@@ -110,6 +111,23 @@ impl std::error::Error for SheetSessionError {
     }
 }
 
+/// Chi dipende da una cella, per l'invalidazione di un commit: per nome, oppure
+/// perché la cella cade dentro un intervallo della formula. Un intervallo resta
+/// un rettangolo di posizioni, comprese quelle vuote che la scrittura riempie.
+#[derive(Debug, Default)]
+struct Dependents {
+    cells: HashMap<CellKey, Vec<CellKey>>,
+    ranges: Vec<RangeDependent>,
+}
+
+#[derive(Debug)]
+struct RangeDependent {
+    formula: CellKey,
+    sheet: usize,
+    rows: RangeInclusive<usize>,
+    columns: RangeInclusive<usize>,
+}
+
 /// Una sola valutazione per apertura/reload. Le letture successive visitano
 /// soltanto le coordinate richieste; non riparsano e non rivalutano il workbook.
 /// Tutti i dati sono derivati e posseduti: il drop non lascia risorse esterne.
@@ -119,7 +137,7 @@ pub struct SheetSession<R> {
     source: String,
     workbook: Workbook,
     values: HashMap<CellKey, CellValue>,
-    dependents: HashMap<CellKey, Vec<CellKey>>,
+    dependents: Dependents,
     sheet_by_id: HashMap<SheetId, usize>,
     rows_by_id: Vec<HashMap<RowId, usize>>,
     columns_by_id: Vec<HashMap<crate::ColumnId, usize>>,
@@ -149,20 +167,6 @@ impl<R: Eq + Serialize> SheetSession<R> {
                 )
             })
             .collect();
-        let mut dependents: HashMap<CellKey, Vec<CellKey>> = HashMap::new();
-        for dependency in evaluation.dependencies {
-            for source in dependency.depends_on {
-                dependents
-                    .entry(source)
-                    .or_default()
-                    .push(dependency.cell.clone());
-            }
-        }
-        for cells in dependents.values_mut() {
-            cells.sort();
-            cells.dedup();
-        }
-
         let mut sheet_by_id = HashMap::with_capacity(workbook.sheets.len());
         let mut rows_by_id = Vec::with_capacity(workbook.sheets.len());
         let mut columns_by_id = Vec::with_capacity(workbook.sheets.len());
@@ -195,6 +199,43 @@ impl<R: Eq + Serialize> SheetSession<R> {
             columns_by_id.push(columns);
             cells_by_position.push(positions);
         }
+
+        let mut dependents = Dependents::default();
+        for dependency in evaluation.dependencies {
+            for range in dependency.depends_on_ranges {
+                let sheet = *sheet_by_id
+                    .get(&range.sheet)
+                    .ok_or(SheetSessionError::EvaluationMismatch)?;
+                let row = |id| rows_by_id[sheet].get(id).copied();
+                let column = |id| columns_by_id[sheet].get(id).copied();
+                let (Some(top), Some(bottom), Some(left), Some(right)) = (
+                    row(&range.start_row),
+                    row(&range.end_row),
+                    column(&range.start_column),
+                    column(&range.end_column),
+                ) else {
+                    return Err(SheetSessionError::EvaluationMismatch);
+                };
+                dependents.ranges.push(RangeDependent {
+                    formula: dependency.cell.clone(),
+                    sheet,
+                    rows: top..=bottom,
+                    columns: left..=right,
+                });
+            }
+            for source in dependency.depends_on {
+                dependents
+                    .cells
+                    .entry(source)
+                    .or_default()
+                    .push(dependency.cell.clone());
+            }
+        }
+        for cells in dependents.cells.values_mut() {
+            cells.sort();
+            cells.dedup();
+        }
+
         Ok(Self {
             revision: revision_of(source),
             source: source.to_owned(),
@@ -210,6 +251,14 @@ impl<R: Eq + Serialize> SheetSession<R> {
 
     pub fn revision(&self) -> &R {
         &self.revision
+    }
+
+    /// Foglio, riga e colonna di una coordinata stabile, se esiste.
+    fn position(&self, key: &CellKey) -> Option<(usize, usize, usize)> {
+        let sheet = *self.sheet_by_id.get(&key.sheet)?;
+        let row = *self.rows_by_id[sheet].get(&key.row)?;
+        let column = *self.columns_by_id[sheet].get(&key.column)?;
+        Some((sheet, row, column))
     }
 
     /// Sorgente autorevole da cui deriva la sessione corrente.

@@ -36,7 +36,10 @@ La shell usa `IndexQuery::Custom` con namespace `fub.sheet` soltanto per la
 valutazione read-only della vertical slice, non per il protocollo Grid a
 finestre. Il payload privato è `{kind: "evaluate", version: 1, source: string}`:
 versioni, specie o campi sconosciuti sono `BadArgs`. La risposta è
-`IndexResult::Custom` con la forma `SheetEvaluation` del mirror TypeScript.
+`IndexResult::Custom` con la forma `SheetEvaluation` del mirror TypeScript. Ogni
+dipendenza elenca in `depends_on` le celle nominate una per una e, in
+`depends_on_ranges`, gli intervalli come rettangoli per angoli; il secondo campo
+manca quando la formula non nomina intervalli.
 
 `query_index` non applica patch e non possiede lifecycle: resta una porta di
 sola lettura. La famiglia Grid usa invece le porte strettamente tipate

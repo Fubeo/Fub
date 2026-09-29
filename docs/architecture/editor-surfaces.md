@@ -294,9 +294,12 @@ canonicalizzazione di una sorgente non canonica può quindi fallire in modo
 esplicito senza sostituire la sessione.
 
 L'invalidazione include le coordinate modificate e le dipendenti transitive del
-nuovo workbook, comprese formule che puntavano a celle prima assenti. Fino a
-32.768 coordinate restituisce l'elenco ordinato; oltre la soglia restituisce
-`all`. L'adapter `fub-host::sheet` conserva la derivazione comune
+nuovo workbook, comprese formule che puntavano a celle prima assenti. Un
+intervallo resta un rettangolo di posizioni, vuote comprese, e non viene
+elencato cella per cella: la valutazione visita soltanto le celle persistite,
+quindi memoria e tempo seguono le celle, non l'area. Fino a 32.768 coordinate
+restituisce l'elenco ordinato; oltre la soglia, o quando i confronti fra celle
+in coda e intervalli superano il budget, restituisce `all`. L'adapter `fub-host::sheet` conserva la derivazione comune
 `Revision::of` ed espone la stessa semantica nativa. Il crate formato non
 dipende dall'host ed è compilabile per WASM.
 

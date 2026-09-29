@@ -3,12 +3,17 @@ use std::io::{self, Write};
 
 use serde::{Deserialize, Serialize};
 
-use super::{check_response_size, SheetSession, SheetSessionError};
+use super::{check_response_size, Dependents, SheetSession, SheetSessionError};
 use crate::{Cell, CellKey, CellStyle, SheetError, Workbook, MAX_SOURCE_BYTES};
 
 pub const MAX_OPERATION_PATCHES: usize = 16_384;
 pub const MAX_OPERATION_INPUT_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_INVALIDATED_CELLS: usize = 32_768;
+/// Quanti confronti cella-intervallo un'invalidazione può fare prima di
+/// rispondere `all`, che è sempre corretto. Ogni cella in coda si confronta
+/// con ogni intervallo del workbook: mille `SUM` per trentamila celle incollate
+/// sono trenta milioni di confronti.
+const MAX_RANGE_CHECKS: usize = 1 << 24;
 
 /// Una patch del protocollo grid: identità stabile, preimmagine dell'input e
 /// nuovo input. Lo stile persistito della cella resta intatto.
@@ -119,7 +124,9 @@ impl<R: Clone + Eq + Serialize> SheetSession<R> {
         // sessione resta intatta finché anche invalidazione e risposta passano.
         let replacement = SheetSession::open(&source, revision_of)?;
         let changed: Vec<_> = resolved.iter().map(|patch| patch.cell.clone()).collect();
-        let mut invalidation = invalidation(&changed, &replacement.dependents);
+        let mut invalidation = invalidation(&changed, &replacement.dependents, |key| {
+            replacement.position(key)
+        });
         let edit = source_edit_bounds(&self.source, &source);
 
         // La preview ha esattamente la forma JSON della risposta finale, ma
@@ -331,12 +338,15 @@ fn fit_commit_response<R: Serialize>(
     }
 }
 
+/// `position` dà foglio, riga e colonna di una cella nel workbook nuovo.
 fn invalidation(
     changed: &[CellKey],
-    dependents: &HashMap<CellKey, Vec<CellKey>>,
+    dependents: &Dependents,
+    position: impl Fn(&CellKey) -> Option<(usize, usize, usize)>,
 ) -> SheetInvalidation {
     let mut queue: VecDeque<_> = changed.iter().cloned().collect();
     let mut seen = HashSet::with_capacity(changed.len());
+    let mut checks = 0usize;
     while let Some(cell) = queue.pop_front() {
         if !seen.insert(cell.clone()) {
             continue;
@@ -344,9 +354,30 @@ fn invalidation(
         if seen.len() > MAX_INVALIDATED_CELLS {
             return SheetInvalidation::All;
         }
-        if let Some(next) = dependents.get(&cell) {
+        if let Some(next) = dependents.cells.get(&cell) {
             queue.extend(next.iter().cloned());
         }
+        if dependents.ranges.is_empty() {
+            continue;
+        }
+        checks += dependents.ranges.len();
+        if checks > MAX_RANGE_CHECKS {
+            return SheetInvalidation::All;
+        }
+        let Some((sheet, row, column)) = position(&cell) else {
+            continue;
+        };
+        queue.extend(
+            dependents
+                .ranges
+                .iter()
+                .filter(|range| {
+                    range.sheet == sheet
+                        && range.rows.contains(&row)
+                        && range.columns.contains(&column)
+                })
+                .map(|range| range.formula.clone()),
+        );
     }
     let mut cells: Vec<_> = seen.into_iter().collect();
     cells.sort();
@@ -510,16 +541,48 @@ mod tests {
     fn invalidation_becomes_all_only_after_the_explicit_limit() {
         let root = key(0);
         let exact: Vec<_> = (1..=MAX_INVALIDATED_CELLS - 1).map(key).collect();
-        let mut dependents = HashMap::new();
-        dependents.insert(root.clone(), exact);
+        let mut dependents = Dependents::default();
+        dependents.cells.insert(root.clone(), exact);
         assert!(matches!(
-            invalidation(std::slice::from_ref(&root), &dependents),
+            invalidation(std::slice::from_ref(&root), &dependents, |_| None),
             SheetInvalidation::Cells(cells) if cells.len() == MAX_INVALIDATED_CELLS
         ));
         dependents
+            .cells
             .get_mut(&root)
             .unwrap()
             .push(key(MAX_INVALIDATED_CELLS));
-        assert_eq!(invalidation(&[root], &dependents), SheetInvalidation::All);
+        assert_eq!(
+            invalidation(&[root], &dependents, |_| None),
+            SheetInvalidation::All
+        );
+    }
+
+    /// Ogni cella in coda costa un confronto per intervallo: oltre il budget la
+    /// risposta è `all`, non un'attesa proporzionale a celle per intervalli.
+    #[test]
+    fn range_checks_past_the_budget_invalidate_everything() {
+        let ranges = 1 << 12;
+        let dependents = Dependents {
+            cells: HashMap::new(),
+            ranges: (0..ranges)
+                .map(|index| super::super::RangeDependent {
+                    formula: key(index),
+                    sheet: 1,
+                    rows: 0..=0,
+                    columns: 0..=0,
+                })
+                .collect(),
+        };
+        let changed: Vec<_> = (0..MAX_RANGE_CHECKS / ranges).map(key).collect();
+        assert!(matches!(
+            invalidation(&changed, &dependents, |_| Some((0, 0, 0))),
+            SheetInvalidation::Cells(_)
+        ));
+        let changed: Vec<_> = (0..=MAX_RANGE_CHECKS / ranges).map(key).collect();
+        assert_eq!(
+            invalidation(&changed, &dependents, |_| Some((0, 0, 0))),
+            SheetInvalidation::All
+        );
     }
 }
