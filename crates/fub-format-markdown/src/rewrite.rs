@@ -17,13 +17,19 @@ pub(crate) fn rewrite_links(
     rewrites: &[LinkRewrite],
 ) -> Result<Vec<TextEdit>, FormatError> {
     let model = parse_markdown(source, ctx)?;
+    // I link per span, per cercarli invece di scorrerli: una rinomina che
+    // riscrive centomila link di una nota lunga li scorreva centomila volte.
+    let mut observed_links: Vec<_> = model.links.iter().collect();
+    observed_links.sort_by_key(|link| (link.span.start, link.span.end));
     let mut edits = Vec::with_capacity(rewrites.len());
 
     for rewrite in rewrites {
-        let observed = model
-            .links
+        let key = (rewrite.span.start, rewrite.span.end);
+        let first = observed_links.partition_point(|link| (link.span.start, link.span.end) < key);
+        let observed = observed_links[first..]
             .iter()
-            .any(|link| link.span == rewrite.span && link.target == rewrite.target);
+            .take_while(|link| link.span == rewrite.span)
+            .any(|link| link.target == rewrite.target);
         if !observed {
             return Err(FormatError::Parse(format!(
                 "markdown link changed under rewrite at {}..{}",

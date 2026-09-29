@@ -48,25 +48,31 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     }
     or
 }
-fn escaped_at(source: &[u8], at: usize) -> bool {
-    let mut cursor = at;
-    while cursor > 0 && source[cursor - 1] == b'\\' {
-        cursor -= 1;
-    }
-    (at - cursor) % 2 != 0
+/// Quanti backslash contigui precedono `at`.
+fn backslashes_before(bytes: &[u8], at: usize) -> usize {
+    bytes[..at]
+        .iter()
+        .rev()
+        .take_while(|&&b| b == b'\\')
+        .count()
 }
 
 fn footnote_close(source: &str, start: usize, limit: usize) -> Option<usize> {
     let bytes = source.as_bytes();
     let mut depth = 1;
-    for at in start..limit.min(bytes.len()) {
-        if matches!(bytes[at], b'\r' | b'\n') {
+    // La fila di backslash si conta andando avanti: ricontarla a ritroso per
+    // ogni byte costava il quadrato di una fila lunga.
+    let mut run = backslashes_before(bytes, start.min(bytes.len()));
+    for (at, &byte) in bytes.iter().enumerate().take(limit).skip(start) {
+        if matches!(byte, b'\r' | b'\n') {
             return None;
         }
-        if escaped_at(bytes, at) {
+        let escaped = run % 2 != 0;
+        run = if byte == b'\\' { run + 1 } else { 0 };
+        if escaped {
             continue;
         }
-        match bytes[at] {
+        match byte {
             b'[' => depth += 1,
             b']' => {
                 depth -= 1;
@@ -229,7 +235,23 @@ fn recover_unreferenced_footnotes(source: &str, frontmatter_end: usize, body: &m
     if !source.contains("[^") {
         return;
     }
-    let covered: Vec<Span> = body.iter().map(Block::span).collect();
+    // Gli span in ordine d'inizio, ciascuno con la fine più lontana raggiunta
+    // fin lì: una riga è coperta se un blocco comincia non dopo di lei e
+    // finisce dopo. Chiederlo blocco per blocco costava righe × blocchi, e
+    // ottantamila note citate erano due secondi.
+    let mut covered: Vec<(usize, usize)> = body
+        .iter()
+        .map(|block| {
+            let span = block.span();
+            (span.start, span.end.max(span.start + 1))
+        })
+        .collect();
+    covered.sort_unstable();
+    let mut reach = 0;
+    for (_, end) in &mut covered {
+        reach = reach.max(*end);
+        *end = reach;
+    }
     let mut line_start = 0;
     while line_start < source.len() {
         let line_end = source[line_start..]
@@ -239,10 +261,10 @@ fn recover_unreferenced_footnotes(source: &str, frontmatter_end: usize, body: &m
             .checked_sub(1)
             .filter(|at| *at >= line_start && source.as_bytes()[*at] == b'\r')
             .unwrap_or(line_end);
-        let free = line_start >= frontmatter_end
-            && !covered
-                .iter()
-                .any(|span| span.start <= line_start && line_start < span.end.max(span.start + 1));
+        let free = line_start >= frontmatter_end && {
+            let before = covered.partition_point(|&(start, _)| start <= line_start);
+            before == 0 || covered[before - 1].1 <= line_start
+        };
         if free {
             let line = &source[line_start..content_end];
             let indent = line.bytes().take_while(|byte| *byte == b' ').count();
@@ -1519,44 +1541,97 @@ fn push_plain_or_tags(
     // richiamo, marcato `unresolved`, perché chi elenca le note del documento
     // (la vista delle note a piè di pagina) deve poter dire «questo richiamo
     // non porta a niente» senza rileggere la sorgente con una grammatica sua.
-    if ctx.enabled(syntax::FOOTNOTES) {
-        let bytes = slice.as_bytes();
-        let mut at = 0;
-        while at + 2 < bytes.len() {
-            let inline = bytes[at] == b'^' && bytes[at + 1] == b'[';
-            let dangling = bytes[at] == b'[' && bytes[at + 1] == b'^';
-            if (inline || dangling) && !is_escaped(source, base + at) {
-                if let Some(end) = footnote_close(source, base + at + 2, base + slice.len()) {
-                    let end = end - base;
-                    let body = &slice[at + 2..end - 1];
-                    let fits = end > at + 3 && (inline || !body.contains(['[', ']']));
-                    if fits {
-                        let before = push_plain_or_tags(source, &slice[..at], base, ctx, acc, out);
-                        let attrs = if inline {
-                            serde_json::json!({
-                                "label": decode_segment(source, body, base + at + 2),
-                                "source": body,
-                                "inline": true,
-                            })
-                        } else {
-                            serde_json::json!({ "label": body, "unresolved": true })
-                        };
-                        out.push(Inline::Custom {
-                            custom_kind: custom_kind::FOOTNOTE_REFERENCE.to_string(),
-                            attrs,
-                            span: Span::new(base + at, base + end),
-                        });
-                        let after =
-                            push_plain_or_tags(source, &slice[end..], base + end, ctx, acc, out);
-                        return before
-                            + decode_segment(source, &slice[at..end], base + at).len()
-                            + after;
-                    }
+    if !ctx.enabled(syntax::FOOTNOTES) {
+        return push_tags(source, slice, base, ctx, acc, out);
+    }
+    // Un giro solo, non una ricorsione per richiamo: ventimila richiami in un
+    // paragrafo erano ventimila frame, e lo stack non li reggeva.
+    let bytes = slice.as_bytes();
+    let closes = footnote_closes(source, slice, base);
+    let mut written = 0;
+    let mut cursor = 0;
+    let mut at = 0;
+    while at + 2 < bytes.len() {
+        let inline = bytes[at] == b'^' && bytes[at + 1] == b'[';
+        let dangling = bytes[at] == b'[' && bytes[at + 1] == b'^';
+        if (inline || dangling) && !is_escaped(source, base + at) {
+            let opener = if inline { at + 1 } else { at };
+            if let Some(&end) = closes.get(&opener) {
+                let body = &slice[at + 2..end - 1];
+                let fits = end > at + 3 && (inline || !body.contains(['[', ']']));
+                if fits {
+                    written += push_tags(source, &slice[cursor..at], base + cursor, ctx, acc, out);
+                    let attrs = if inline {
+                        serde_json::json!({
+                            "label": decode_segment(source, body, base + at + 2),
+                            "source": body,
+                            "inline": true,
+                        })
+                    } else {
+                        serde_json::json!({ "label": body, "unresolved": true })
+                    };
+                    out.push(Inline::Custom {
+                        custom_kind: custom_kind::FOOTNOTE_REFERENCE.to_string(),
+                        attrs,
+                        span: Span::new(base + at, base + end),
+                    });
+                    written += decode_segment(source, &slice[at..end], base + at).len();
+                    cursor = end;
+                    at = end;
+                    continue;
                 }
             }
-            at += 1;
+        }
+        at += 1;
+    }
+    written + push_tags(source, &slice[cursor..], base + cursor, ctx, acc, out)
+}
+
+/// Per ogni `[` della fetta che apre un richiamo (`[^` o `^[`), il byte dopo
+/// la `]` che la chiude sulla stessa riga: la stessa risposta di
+/// [`footnote_close`], per tutti i richiami in un giro. Chiamata richiamo per
+/// richiamo, una riga lunga di `[^` senza chiusura costava il quadrato della
+/// riga.
+fn footnote_closes(source: &str, slice: &str, base: usize) -> HashMap<usize, usize> {
+    let bytes = slice.as_bytes();
+    let mut closes = HashMap::new();
+    if !bytes.windows(2).any(|pair| pair == b"[^" || pair == b"^[") {
+        return closes;
+    }
+    // Le `[` aperte, ciascuna con il sì/no «apre un richiamo».
+    let mut open: Vec<(usize, bool)> = Vec::new();
+    let mut run = backslashes_before(source.as_bytes(), base);
+    for (at, &byte) in bytes.iter().enumerate() {
+        let escaped = run % 2 != 0;
+        run = if byte == b'\\' { run + 1 } else { 0 };
+        match byte {
+            b'\r' | b'\n' => open.clear(),
+            b'[' if !escaped => {
+                let opens_note =
+                    bytes.get(at + 1) == Some(&b'^') || (at > 0 && bytes[at - 1] == b'^');
+                open.push((at, opens_note));
+            }
+            b']' if !escaped => {
+                if let Some((opener, true)) = open.pop() {
+                    closes.insert(opener, at + 1);
+                }
+            }
+            _ => {}
         }
     }
+    closes
+}
+
+/// Segmento senza richiami: estrae i `#tag` (se abilitati) o emette testo
+/// piatto. Restituisce la lunghezza decodificata, come [`push_plain_or_tags`].
+fn push_tags(
+    source: &str,
+    slice: &str,
+    base: usize,
+    ctx: &ParseContext,
+    acc: &mut Acc,
+    out: &mut Vec<Inline>,
+) -> usize {
     let tags: Vec<Tag> = if ctx.enabled(syntax::TAGS) {
         scan::scan_tags(slice)
             .into_iter()
@@ -2615,44 +2690,118 @@ fn eol_at(slice: &str, pos: usize) -> bool {
 /// Inserisce le definizioni nell'albero: il contenitore più profondo che
 /// contiene il loro span, in ordine di sorgente.
 fn insert_definitions(defs: Vec<Definition>, body: &mut Vec<Block>) {
-    for d in defs {
-        let block = Block::ReferenceDefinition {
+    let mut blocks: Vec<Block> = defs
+        .into_iter()
+        .map(|d| Block::ReferenceDefinition {
             label: d.label,
             url: d.url,
             title: d.title,
             anchor: None,
             span: d.span,
-        };
-        insert_one(block, body);
+        })
+        .collect();
+    // Il giro vero e l'ombra consegnano due sequenze in ordine ciascuna.
+    blocks.sort_by_key(|b| b.span().start);
+    insert_sorted(blocks, body);
+}
+
+/// Colloca le definizioni, in ordine di inizio, nel contenitore più profondo
+/// che contiene il loro span, un livello alla volta e tutte insieme: una per
+/// una, fra ricerca lineare del contenitore e `insert`, costavano il quadrato
+/// del loro numero (quarantamila righe `[lN]: /u` superavano il secondo).
+fn insert_sorted(defs: Vec<Block>, blocks: &mut Vec<Block>) {
+    let siblings = Siblings::new(blocks.iter().map(Block::span));
+    let mut here = Vec::new();
+    let mut inside: Vec<(usize, Vec<Block>)> = Vec::new();
+    for d in defs {
+        match siblings
+            .holding(d.span())
+            .filter(|&index| is_definition_container(&blocks[index]))
+        {
+            Some(index) => push_grouped(&mut inside, index, d),
+            None => here.push(d),
+        }
+    }
+    for (index, group) in inside {
+        match &mut blocks[index] {
+            Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {
+                insert_sorted(group, blocks);
+            }
+            Block::List { items, .. } => {
+                let siblings = Siblings::new(items.iter().map(|item| item.span));
+                let mut per_item: Vec<(usize, Vec<Block>)> = Vec::new();
+                for d in group {
+                    match siblings.holding(d.span()) {
+                        Some(item) => push_grouped(&mut per_item, item, d),
+                        None => here.push(d),
+                    }
+                }
+                for (item, group) in per_item {
+                    insert_sorted(group, &mut items[item].blocks);
+                }
+            }
+            _ => here.extend(group),
+        }
+    }
+    if here.is_empty() {
+        return;
+    }
+    here.sort_by_key(|b| b.span().start);
+    // Ogni definizione va prima del primo fratello che non comincia prima di
+    // lei: su un livello in ordine è la `partition_point` di sempre, e resta
+    // definito anche con le note citate che comrak porta in fondo.
+    let old = std::mem::take(blocks);
+    blocks.reserve(old.len() + here.len());
+    let mut old = old.into_iter().peekable();
+    for d in here {
+        let start = d.span().start;
+        while let Some(b) = old.next_if(|b| b.span().start < start) {
+            blocks.push(b);
+        }
+        blocks.push(d);
+    }
+    blocks.extend(old);
+}
+
+fn is_definition_container(block: &Block) -> bool {
+    matches!(
+        block,
+        Block::Quote { .. } | Block::Custom { .. } | Block::List { .. }
+    )
+}
+
+fn push_grouped(groups: &mut Vec<(usize, Vec<Block>)>, index: usize, d: Block) {
+    match groups.last_mut() {
+        Some((last, group)) if *last == index => group.push(d),
+        _ => groups.push((index, vec![d])),
     }
 }
 
-fn insert_one(d: Block, blocks: &mut Vec<Block>) {
-    let Some(pos) = blocks
-        .iter()
-        .position(|b| contains_span(b.span(), d.span()))
-    else {
-        insert_in_order(d, blocks);
-        return;
-    };
-    match &mut blocks[pos] {
-        Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => insert_one(d, blocks),
-        Block::List { items, .. } => {
-            if let Some(pos) = items.iter().position(|it| contains_span(it.span, d.span())) {
-                insert_one(d, &mut items[pos].blocks);
-            } else {
-                insert_in_order(d, blocks);
-            }
-        }
-        _ => insert_in_order(d, blocks),
+/// Gli span di un livello di fratelli, ordinati per inizio. I fratelli sono
+/// disgiunti, quindi il solo che può contenere uno span è l'ultimo che
+/// comincia non dopo di lui; l'ordine del vettore non basta, perché comrak
+/// porta in fondo le note a piè di pagina citate.
+struct Siblings(Vec<(Span, usize)>);
+
+impl Siblings {
+    fn new(spans: impl Iterator<Item = Span>) -> Self {
+        let mut order: Vec<(Span, usize)> = spans
+            .enumerate()
+            .map(|(index, span)| (span, index))
+            .collect();
+        order.sort_by_key(|(span, _)| span.start);
+        Siblings(order)
+    }
+
+    fn holding(&self, span: Span) -> Option<usize> {
+        let after = self
+            .0
+            .partition_point(|(sibling, _)| sibling.start <= span.start);
+        let (sibling, index) = *self.0.get(after.checked_sub(1)?)?;
+        contains_span(sibling, span).then_some(index)
     }
 }
 
 fn contains_span(parent: Span, child: Span) -> bool {
     parent.start <= child.start && child.end <= parent.end
-}
-
-fn insert_in_order(d: Block, blocks: &mut Vec<Block>) {
-    let pos = blocks.partition_point(|b| b.span().start < d.span().start);
-    blocks.insert(pos, d);
 }
