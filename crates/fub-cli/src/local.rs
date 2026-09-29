@@ -1584,7 +1584,14 @@ pub fn config_path(global: &GlobalArgs, name: &str) -> Result<std::path::PathBuf
 
 pub fn load_pairs(global: &GlobalArgs) -> Result<Vec<fub_host::automation::PairEntry>, Failure> {
     let path = config_path(global, "clipper-pairing.json")?;
-    let raw = std::fs::read_to_string(&path).unwrap_or_else(|_| "{\"pairs\":[]}".to_string());
+    // Soltanto un file assente è «nessun abbinamento»: un file che non si
+    // legge, letto come vuoto, sarebbe riscritto dal prossimo `pair` con il
+    // solo abbinamento nuovo.
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(Failure::local(format!("pairing illeggibile: {e}"))),
+    };
     let value: serde_json::Value = serde_json::from_str(&raw)
         .map_err(|e| Failure::local(format!("pairing illeggibile: {e}")))?;
     let pairs = value
@@ -1819,5 +1826,40 @@ mod tests {
             std::fs::read_to_string(&other).unwrap(),
             "dell'altra applicazione\n"
         );
+    }
+
+    /// Un file degli abbinamenti che non si lascia leggere non è un file
+    /// assente: `pair` lo riscriveva con il solo abbinamento nuovo, e tutte le
+    /// estensioni già abbinate perdevano il permesso di scrivere.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_pairing_file_is_not_replaced() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let vault = tempfile::tempdir().unwrap();
+        let config = tempfile::tempdir().unwrap();
+        let global = global_on(vault.path(), config.path());
+        let add = |id: &str| PairAction::Add {
+            extension_id: id.to_string(),
+            vault: None,
+            folder: None,
+        };
+        pairing(&global, &OutputFormat::Json, add("prima"), |_| {}).unwrap();
+        let path = config.path().join("clipper-pairing.json");
+        let before = std::fs::read(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        // Da root il file si legge lo stesso, e il banco non prova niente.
+        if std::fs::read(&path).is_ok() {
+            eprintln!("si salta: questo utente legge anche un file 000");
+            return;
+        }
+
+        let listed = pairing(&global, &OutputFormat::Json, PairAction::List, |_| {});
+        let added = pairing(&global, &OutputFormat::Json, add("seconda"), |_| {});
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(listed.is_err(), "an unreadable file is not an empty list");
+        assert!(added.is_err(), "an unreadable file was replaced");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
     }
 }
