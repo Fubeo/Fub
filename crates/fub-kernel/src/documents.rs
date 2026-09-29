@@ -69,6 +69,31 @@ fn plugin_data_roots(vault: &Vault) -> Vec<Utf8PathBuf> {
     roots
 }
 
+/// Il sorgente più grande che il kernel legge per intero e consegna a un
+/// provider di formato: 64 MiB.
+///
+/// Il parse non costa i byte del file ma un multiplo di essi: l'albero di un
+/// Markdown fitto di link e marcature occupa decine di volte la sua sorgente, e
+/// l'indicizzazione parsa più documenti alla volta. Senza un tetto, una nota da
+/// qualche centinaio di MB esauriva la memoria a ogni apertura del vault, che
+/// quindi non si apriva più. Oltre il tetto il documento resta nel vault e
+/// nell'anagrafe, e si rinomina, si sposta e si cestina come un allegato, ma
+/// non si apre, non si indicizza e non si salva. È la soglia oltre la quale il
+/// versioning non fotografa e un componente WASM non ha memoria.
+pub const MAX_DOCUMENT_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Rifiuta un sorgente oltre [`MAX_DOCUMENT_SOURCE_BYTES`].
+pub(crate) fn within_source_limit(id: &DocId, size: u64) -> Result<()> {
+    if size > MAX_DOCUMENT_SOURCE_BYTES {
+        return Err(KernelError::TooLarge {
+            doc: id.to_string(),
+            size,
+            limit: MAX_DOCUMENT_SOURCE_BYTES,
+        });
+    }
+    Ok(())
+}
+
 /// Parser risolto senza eseguire codice esterno. Provider, descriptor e regole
 /// sono una fotografia coerente che può attraversare il confine del lock.
 pub(crate) struct PreparedParse {
@@ -80,6 +105,10 @@ pub(crate) struct PreparedParse {
 
 impl PreparedParse {
     pub(crate) fn invoke(&self, source: DocumentSource) -> Result<DocumentModel> {
+        // Il presidio sta qui perché ogni parse ci passa: indice, rilevatore,
+        // salvataggio, rinomina e ripristino. Chi legge dal disco lo anticipa
+        // con la dimensione, per non leggere nemmeno.
+        within_source_limit(&self.id, source.bytes().len() as u64)?;
         let ctx = ParseContext::obsidian(self.id.as_str());
         let mut model = crate::safety::caught(
             &self.descriptor.id,
@@ -392,10 +421,28 @@ impl DocumentStore {
             .registry
             .descriptor_for_ext(&ext)
             .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+        if let Some((size, _)) = self.vault.stat(id) {
+            within_source_limit(id, size)?;
+        }
         Ok(match descriptor.source {
             SourceKind::Text => DocumentSource::Text(self.vault.read(id)?),
             SourceKind::Bytes => DocumentSource::Bytes(self.vault.read_bytes(id)?),
         })
+    }
+
+    /// Il testo di un file, per chi lo mostra o lo legge per intero.
+    ///
+    /// Un documento oltre [`MAX_DOCUMENT_SOURCE_BYTES`] non si legge: aprirlo
+    /// darebbe un buffer che nessun salvataggio potrebbe più scrivere. Un file
+    /// senza formato resta una lettura e basta.
+    pub(crate) fn read_text(&self, id: &DocId) -> Result<String> {
+        let ext = extension_of(id).unwrap_or_default();
+        if self.registry.descriptor_for_ext(&ext).is_some() {
+            if let Some((size, _)) = self.vault.stat(id) {
+                within_source_limit(id, size)?;
+            }
+        }
+        self.vault.read(id)
     }
 
     /// Legge e parsa un documento nella forma che il suo provider chiede.

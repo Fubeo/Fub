@@ -33,6 +33,14 @@ L'apertura procede a fasi:
 Durante l'indicizzazione la ricerca espone lo stato del lavoro invece di
 restituire silenziosamente un risultato incompleto.
 
+Un documento oltre 64 MiB non si legge per intero. Il parse costa decine di
+volte la sorgente, e una nota da qualche centinaio di MB esauriva la memoria a
+ogni apertura. Oltre quel limite il documento resta nell'albero e si rinomina,
+si sposta e si cestina come un allegato, ma non si apre, non entra negli
+indici e un salvataggio che lo farebbe crescere oltre è rifiutato. Il file non
+viene toccato. La stessa regola vale per ogni formato, e un formato può averne
+una più stretta: un foglio si ferma a 16 MiB.
+
 ## Modifiche sicure
 
 Le scritture usano una revisione di base. Se il file è cambiato da quando una

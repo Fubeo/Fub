@@ -788,6 +788,7 @@ impl PreparedExplicitRename {
         if !before.is_file() {
             return Err(KernelError::NotFound(snapshot.from.to_string()));
         }
+        crate::documents::within_source_limit(&snapshot.from, before.size)?;
         let identity_before = storage
             .file_identity(&path)
             .map_err(|source| KernelError::Io {
@@ -1468,14 +1469,16 @@ impl PreparedExternalDocumentRename {
             side_data,
         } = self;
         let state = match storage.stat(&snapshot.to_path) {
-            Ok(before) if before.is_file() => match storage.read(&snapshot.to_path) {
-                Ok(bytes) => match storage.stat(&snapshot.to_path) {
-                    Ok(after) if after.is_file() && before == after => {
-                        let fingerprint = Revision::of_bytes(&bytes);
-                        let source =
-                            match source_kind {
-                                SourceKind::Text => {
-                                    match fub_abi::rules::text_policy::decode(&bytes) {
+            Ok(before) if before.is_file() => {
+                match crate::documents::within_source_limit(&snapshot.to_id, before.size) {
+                    Err(error) => ParsedExternalDocumentState::Failed(error),
+                    Ok(()) => match storage.read(&snapshot.to_path) {
+                        Ok(bytes) => match storage.stat(&snapshot.to_path) {
+                            Ok(after) if after.is_file() && before == after => {
+                                let fingerprint = Revision::of_bytes(&bytes);
+                                let source = match source_kind {
+                                    SourceKind::Text => {
+                                        match fub_abi::rules::text_policy::decode(&bytes) {
                                     Ok(text) => Ok(DocumentSource::Text(text.to_string())),
                                     Err(at) => Err(KernelError::Io {
                                         path: snapshot.to_path.clone(),
@@ -1487,31 +1490,37 @@ impl PreparedExternalDocumentRename {
                                         ),
                                     }),
                                 }
+                                    }
+                                    SourceKind::Bytes => Ok(DocumentSource::Bytes(bytes)),
+                                };
+                                match source.and_then(|source| parser.invoke(source)) {
+                                    Ok(model) => ParsedExternalDocumentState::Ready {
+                                        model: Box::new(model),
+                                        fingerprint,
+                                        stat: after,
+                                    },
+                                    Err(error) => ParsedExternalDocumentState::Failed(error),
                                 }
-                                SourceKind::Bytes => Ok(DocumentSource::Bytes(bytes)),
-                            };
-                        match source.and_then(|source| parser.invoke(source)) {
-                            Ok(model) => ParsedExternalDocumentState::Ready {
-                                model: Box::new(model),
-                                fingerprint,
-                                stat: after,
-                            },
-                            Err(error) => ParsedExternalDocumentState::Failed(error),
+                            }
+                            Ok(_) => ParsedExternalDocumentState::Stale,
+                            Err(error) if sync_path_is_absent(&error) => {
+                                ParsedExternalDocumentState::Stale
+                            }
+                            Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                                path: snapshot.to_path.clone(),
+                                source,
+                            }),
+                        },
+                        Err(error) if sync_path_is_absent(&error) => {
+                            ParsedExternalDocumentState::Stale
                         }
-                    }
-                    Ok(_) => ParsedExternalDocumentState::Stale,
-                    Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
-                    Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
-                        path: snapshot.to_path.clone(),
-                        source,
-                    }),
-                },
-                Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
-                Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
-                    path: snapshot.to_path.clone(),
-                    source,
-                }),
-            },
+                        Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                            path: snapshot.to_path.clone(),
+                            source,
+                        }),
+                    },
+                }
+            }
             Ok(_) => ParsedExternalDocumentState::Stale,
             Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
             Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
@@ -1842,6 +1851,9 @@ fn invoke_sync_read(
             })
         }
     };
+    if let Err(error) = crate::documents::within_source_limit(&snapshot.id, before.size) {
+        return ParsedChangeState::Failed(error);
+    }
     let bytes = match storage.read(&snapshot.path) {
         Ok(bytes) => bytes,
         Err(error) if sync_path_is_absent(&error) => return ParsedChangeState::Missing,
@@ -5396,7 +5408,14 @@ impl Workspace {
                             entry.fingerprint = Some(Revision::of_bytes(read.bytes()));
                             source = Some(read);
                         }
-                        Err(why) => out.discarded.push((entry.id.clone(), why)),
+                        Err(why) => {
+                            // Un documento che non si legge come sorgente, troppo
+                            // grande o non UTF-8, resta un file: l'impronta dei
+                            // suoi byte è ciò con cui una rinomina verifica di
+                            // spostare lo stesso file, come per un allegato.
+                            entry.fingerprint = docs.vault.fingerprint(&entry.id).ok();
+                            out.discarded.push((entry.id.clone(), why));
+                        }
                     }
                 }
                 _ => {}
@@ -5935,7 +5954,7 @@ impl Workspace {
 
     /// Sorgente grezza di un documento dal disco.
     pub fn read_source(&self, id: &DocId) -> Result<String> {
-        self.docs.vault.read(id)
+        self.docs.read_text(id)
     }
 
     /// I byte di un documento, senza decodificarli (§21.8).

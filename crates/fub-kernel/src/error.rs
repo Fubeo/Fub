@@ -44,6 +44,15 @@ pub enum KernelError {
     BadName { name: String, why: String },
     #[error("documento non trovato: {0}")]
     NotFound(String),
+    /// Il documento supera il sorgente più grande che il kernel legge per
+    /// intero e consegna a un formato
+    /// ([`MAX_DOCUMENT_SOURCE_BYTES`](crate::documents::MAX_DOCUMENT_SOURCE_BYTES)).
+    /// Il file non è stato letto né toccato.
+    #[error(
+        "{doc} pesa {size} byte: un documento oltre {} MiB non si legge",
+        .limit / (1024 * 1024)
+    )]
+    TooLarge { doc: String, size: u64, limit: u64 },
     #[error("esiste già un documento: {0}")]
     AlreadyExists(String),
     #[error("path fuori dal vault: {0}")]
@@ -194,6 +203,12 @@ pub fn optional<T, E: Missing>(
 ///   quando lo diventeranno tutte, in un posto solo.
 ///
 ///   [`Text::Message`]: fub_abi::text::Text::Message
+///
+/// - [`TooLarge`](KernelError::TooLarge) va in `Unserved` per la stessa
+///   ragione di `Unsupported`: il documento c'è, ed è il kernel a non servirlo.
+///   Riprovare non cambia la risposta finché il file non cambia. La frase è il
+///   `Display` della variante, come per `Io`: prosa del kernel, scritta una
+///   volta sola, che nomina dimensione e limite.
 impl From<KernelError> for PluginError {
     fn from(and: KernelError) -> Self {
         match and {
@@ -222,6 +237,7 @@ impl From<KernelError> for PluginError {
             KernelError::NoDefaultFormat => {
                 PluginError::Unserved("no format registered: cannot create a note".into())
             }
+            and @ KernelError::TooLarge { .. } => PluginError::Unserved(and.to_string().into()),
             KernelError::Format(FormatError::Unsupported { format, got }) => PluginError::Unserved(
                 format!(
                     "the format \"{format}\" cannot read this file: it received \

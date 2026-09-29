@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::edit::Revision;
+use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, Notice};
 use fub_abi::format::{
@@ -29,8 +29,9 @@ use fub_abi::traits::{
     VaultEntry,
 };
 use fub_abi::FormatProvider;
+use fub_kernel::documents::MAX_DOCUMENT_SOURCE_BYTES;
 use fub_kernel::storage::{DirEntry, MemStorage, Merge, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
+use fub_kernel::{FormatRegistry, KernelError, MachineSettings, Subscription, Workspace};
 
 /// Provider `.txt` che **conta quante volte gli è stato chiesto di parsare**.
 ///
@@ -704,18 +705,31 @@ fn a_attachment_moved_from_outside_not_remains_in_registry_col_name_old() {
 
 // --- un allegato si impronta a pezzi ----------------------------------------
 
-/// Il disco vero, che conta chi legge **intero** un allegato e quanto è
-/// grande il pezzo più grande consegnato a chi lo legge a pezzi.
+/// Il disco vero, che conta chi legge **intero** un file il cui path contiene
+/// `watched`, e quanto è grande il pezzo più grande consegnato a chi lo legge
+/// a pezzi.
 struct PiecesOnly {
     inner: fub_kernel::storage::FsStorage,
-    whole_reads_of_assets: AtomicUsize,
+    watched: &'static str,
+    whole_reads: AtomicUsize,
     largest_piece: AtomicUsize,
+}
+
+impl PiecesOnly {
+    fn watching(watched: &'static str) -> Self {
+        PiecesOnly {
+            inner: fub_kernel::storage::FsStorage,
+            watched,
+            whole_reads: AtomicUsize::new(0),
+            largest_piece: AtomicUsize::new(0),
+        }
+    }
 }
 
 impl VaultStorage for PiecesOnly {
     fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
-        if path.as_str().ends_with(".mp4") {
-            self.whole_reads_of_assets.fetch_add(1, Ordering::Relaxed);
+        if path.as_str().contains(self.watched) {
+            self.whole_reads.fetch_add(1, Ordering::Relaxed);
         }
         self.inner.read(path)
     }
@@ -769,11 +783,7 @@ fn an_attachment_is_fingerprinted_in_pieces() {
     std::fs::write(f.root.join("video.mp4"), &bytes).unwrap();
     beyond_the_millisecondo();
 
-    let storage = Arc::new(PiecesOnly {
-        inner: fub_kernel::storage::FsStorage,
-        whole_reads_of_assets: AtomicUsize::new(0),
-        largest_piece: AtomicUsize::new(0),
-    });
+    let storage = Arc::new(PiecesOnly::watching(".mp4"));
     let mut ws = Workspace::on(
         &f.root,
         f.registry(false),
@@ -809,7 +819,7 @@ fn an_attachment_is_fingerprinted_in_pieces() {
         std::fs::read(f.root.join("film.mp4")).expect("spostato"),
         bytes
     );
-    assert_eq!(storage.whole_reads_of_assets.load(Ordering::Relaxed), 0);
+    assert_eq!(storage.whole_reads.load(Ordering::Relaxed), 0);
     let largest = storage.largest_piece.load(Ordering::Relaxed);
     assert!((1..=1 << 20).contains(&largest), "{largest}");
 }
@@ -975,4 +985,111 @@ fn same_size_and_mtime_do_not_hide_changed_bytes() {
         "stessa size e stesso mtime non autorizzano il riuso: il digest dei byte è cambiato"
     );
     assert_eq!(ws.read_source(&DocId::new("nota.txt")).unwrap(), "BBBB");
+}
+
+// --- un documento oltre il tetto resta un file ------------------------------
+
+/// **Un documento oltre il tetto resta nel vault, e nessuno lo legge.**
+///
+/// Il parse costa un multiplo della sorgente, e l'apertura parsava ogni
+/// documento nuovo: una nota da qualche centinaio di MB esauriva la memoria a
+/// ogni apertura, e il vault non si apriva più. Oltre
+/// [`MAX_DOCUMENT_SOURCE_BYTES`] il kernel non la legge: resta in anagrafe
+/// con la sua specie, chi la apre riceve un rifiuto tipizzato, e si rinomina
+/// come un allegato. Il file è sparso: pesa il tetto senza occupare il disco.
+#[test]
+fn a_document_over_the_limit_is_kept_and_never_read() {
+    let f = Fixture::new();
+    f.write("nota.txt", "ciao");
+    let size = MAX_DOCUMENT_SOURCE_BYTES + 1;
+    std::fs::File::create(f.root.join("grande.txt"))
+        .and_then(|file| file.set_len(size))
+        .expect("file sparso");
+    beyond_the_millisecondo();
+
+    let storage = Arc::new(PiecesOnly::watching("grande"));
+    let mut ws = Workspace::on(
+        &f.root,
+        f.registry(false),
+        storage.clone() as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    ws.reindex()
+        .expect("il documento troppo grande non ferma l'apertura");
+    assert_eq!(f.parses(), 1, "si parsa soltanto la nota");
+    let big = entries(&ws, Some(EntryKind::Document), None)
+        .into_iter()
+        .find(|entry| entry.id.as_str() == "grande.txt")
+        .expect("il documento resta in anagrafe");
+    assert_eq!(big.size, size);
+
+    let id = DocId::new("grande.txt");
+    let refused = ws.read_source(&id).expect_err("non si apre");
+    assert!(
+        matches!(refused, KernelError::TooLarge { size: s, limit, .. }
+            if s == size && limit == MAX_DOCUMENT_SOURCE_BYTES),
+        "{refused:?}"
+    );
+    assert!(matches!(
+        PluginError::from(refused),
+        PluginError::Unserved(_)
+    ));
+    assert!(ws.sync_path(&f.root.join("grande.txt")).is_err());
+
+    // Il salvataggio passa dallo stesso parse: il tetto vale anche per il
+    // testo che arriva dall'editor, e il file resta com'era.
+    let grown = "a".repeat(size as usize);
+    assert!(matches!(
+        ws.write_document(&DocId::new("nota.txt"), &grown, WriteBase::Dictated),
+        Err(KernelError::TooLarge { .. })
+    ));
+    drop(grown);
+    assert_eq!(
+        std::fs::read_to_string(f.root.join("nota.txt")).unwrap(),
+        "ciao"
+    );
+
+    ws.rename_document(&id, &DocId::new("grande-vecchia.txt"))
+        .expect("si rinomina come un allegato");
+    assert_eq!(
+        std::fs::metadata(f.root.join("grande-vecchia.txt"))
+            .unwrap()
+            .len(),
+        size
+    );
+    let trashed = ws
+        .delete_document(&DocId::new("grande-vecchia.txt"))
+        .expect("si cestina come un allegato");
+    assert!(!f.root.join("grande-vecchia.txt").exists());
+    assert_eq!(
+        std::fs::metadata(f.root.join(trashed.as_str()))
+            .unwrap()
+            .len(),
+        size
+    );
+    assert_eq!(f.parses(), 1);
+    assert_eq!(storage.whole_reads.load(Ordering::Relaxed), 0);
+}
+
+/// **Un documento che non si legge come testo si rinomina lo stesso.**
+///
+/// La rinomina di un file senza modello verifica di spostare gli stessi byte
+/// con l'impronta dell'anagrafe, e un documento non UTF-8 non ne aveva una:
+/// l'indice la prendeva soltanto da una sorgente letta, e la rinomina
+/// rispondeva `Stale` a ogni tentativo.
+#[test]
+fn a_document_that_is_not_utf8_still_renames() {
+    let f = Fixture::new();
+    std::fs::write(f.root.join("latino.txt"), b"caff\xe8").unwrap();
+    beyond_the_millisecondo();
+    let mut ws = f.open(false);
+    assert_eq!(f.parses(), 0);
+
+    ws.rename_document(&DocId::new("latino.txt"), &DocId::new("archivio.txt"))
+        .expect("si rinomina come un allegato");
+    assert_eq!(
+        std::fs::read(f.root.join("archivio.txt")).unwrap(),
+        b"caff\xe8"
+    );
 }
