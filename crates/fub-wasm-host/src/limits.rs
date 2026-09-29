@@ -276,7 +276,8 @@ fn tick(engine: Engine) {
 /// permette a un limitatore di avere memoria di ciò che ha già concesso.
 ///
 /// Le altre manopole di [`StoreLimitsBuilder`] — `instances`, `tables`,
-/// `memories` — restano ai valori di wasmtime, e non per distrazione. Quante istanze e quante memorie **core** diventi un componente è
+/// `memories` — restano ai valori di wasmtime, e non per distrazione. Quante
+/// istanze e quante memorie **core** diventi un componente è
 /// un fatto della catena che lo ha compilato, non del plugin: un numero scelto
 /// qui sarebbe una previsione sul compilatore di qualcun altro, e un plugin
 /// onesto rifiutato per averne una di troppo verrebbe rifiutato per la ragione
