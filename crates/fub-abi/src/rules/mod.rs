@@ -48,6 +48,9 @@
 //!   domanda diversa da quali ne contiene (§15.5);
 //! - [`text_policy`] — **che forma hanno i byte** di un file: BOM, terminatori
 //!   di riga, UTF-8. Rileva e dichiara, non converte (§15.5);
+//! - [`yaml`] — **quando uno YAML non si legge**: il tetto al costo del parser
+//!   che un frontmatter, un `.base` o un template scritti da altri non possono
+//!   far esplodere;
 //! - [`snippet`] — **quanto testo porta una riga di risultato**: la finestra
 //!   di contesto attorno a un link e il tetto dello snippet di ricerca
 //!   (§25.4);
@@ -100,6 +103,7 @@ pub mod snippet;
 pub mod tag;
 pub mod text_policy;
 pub mod trash;
+pub mod yaml;
 
 pub use crate::model::{
     canonical_anchor, canonical_tag, heading_matches, heading_slug, heading_slugs, valid_anchor,

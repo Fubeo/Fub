@@ -16,6 +16,7 @@ use fub_abi::model::{
 use fub_abi::options::syntax;
 use fub_abi::rules::snippet;
 use fub_abi::rules::text_policy;
+use fub_abi::rules::yaml;
 use fub_abi::FormatError;
 use fub_sdk::scan;
 
@@ -1884,6 +1885,9 @@ fn parse_frontmatter(raw: &str) -> Result<Frontmatter, String> {
     let inner = inner.strip_suffix("---").unwrap_or(inner).trim();
     if inner.is_empty() {
         return Ok(Frontmatter::default());
+    }
+    if !yaml::within_budget(inner) {
+        return Err(yaml::OVER_BUDGET.to_string());
     }
     match serde_yaml_ng::from_str::<serde_json::Value>(inner) {
         Ok(serde_json::Value::Object(map)) => Ok(Frontmatter(map)),

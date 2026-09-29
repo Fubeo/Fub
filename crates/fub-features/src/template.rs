@@ -26,6 +26,7 @@ use fub_abi::model::{valid_civil_date, DocId, LinkTarget};
 use fub_abi::options::syntax;
 use fub_abi::rules::path_policy::{check as check_name, Naming};
 use fub_abi::rules::text_policy;
+use fub_abi::rules::yaml as yaml_rule;
 use fub_abi::session::ContextMask;
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -1799,6 +1800,11 @@ fn split_frontmatter(src: &str) -> Result<(Vec<(String, String)>, String), Plugi
     let body = format!("{}{}", &src[..start], &after_open[body_start..]);
     let parsed = if yaml.is_empty() {
         serde_json::Value::Null
+    } else if !yaml_rule::within_budget(yaml) {
+        return Err(PluginError::BadArgs(Text::message(
+            E_BAD_FRONTMATTER,
+            vec![Arg::text("reason", yaml_rule::OVER_BUDGET)],
+        )));
     } else {
         serde_yaml_ng::from_str::<serde_json::Value>(yaml).map_err(|and| {
             PluginError::BadArgs(Text::message(
@@ -2465,6 +2471,16 @@ mod tests {
     #[test]
     fn malformed_template_properties_fail_before_any_text_is_extracted() {
         assert!(split_frontmatter("---\naliases: [unterminated\n---\nbody").is_err());
+        // Un annidamento che il parser pagherebbe in tempo quadratico non gli
+        // arriva: il motivo è quello della regola condivisa.
+        let deep = format!("---\na: {}\n---\nbody", "[".repeat(100_000));
+        let Err(PluginError::BadArgs(text)) = split_frontmatter(&deep) else {
+            panic!("il frontmatter troppo annidato è stato accettato");
+        };
+        assert!(
+            format!("{text:?}").contains(yaml_rule::OVER_BUDGET),
+            "{text:?}"
+        );
         assert!(split_frontmatter("---\njust a scalar\n---\nbody").is_err());
         assert_eq!(split_frontmatter("---\n---\nbody").unwrap().1, "body");
     }

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use fub_abi::rules::yaml;
 use fub_abi::FormatError;
 
 pub const BASE_FORMAT_ID: &str = "base";
@@ -77,6 +78,9 @@ impl BaseDefinition {
                 what: "source bytes",
                 limit: MAX_BASE_SOURCE_BYTES,
             });
+        }
+        if !yaml::within_budget(source) {
+            return Err(BaseError::Yaml(yaml::OVER_BUDGET.to_string()));
         }
         let value: Value =
             serde_yaml_ng::from_str(source).map_err(|error| BaseError::Yaml(error.to_string()))?;
@@ -459,6 +463,18 @@ mod tests {
     fn yaml_rotto_e_un_errore_non_un_default() {
         let err = BaseDefinition::parse("filters: [non chiuso\n").unwrap_err();
         assert!(matches!(err, BaseError::Yaml(_)));
+    }
+
+    /// Un annidamento che libyaml pagherebbe in tempo quadratico (un mega di
+    /// `[` sono minuti) non arriva al parser.
+    #[test]
+    fn yaml_troppo_annidato_rifiutato_prima_del_parser() {
+        let source = format!("filters: {}", "[".repeat(100_000));
+        let err = BaseDefinition::parse(&source).unwrap_err();
+        assert!(
+            matches!(&err, BaseError::Yaml(reason) if reason == yaml::OVER_BUDGET),
+            "{err:?}"
+        );
     }
     #[test]
     fn summaries_are_bounded_and_duplicate_names_do_not_overwrite() {

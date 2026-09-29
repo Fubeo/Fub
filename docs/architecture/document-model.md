@@ -116,6 +116,12 @@ piatte, numeri, checkbox, date, date-ora, tag e link. Il registro
 `PropertyTypes` associa facoltativamente un tipo al nome in tutto il vault; è
 metadato di interpretazione, non una copia dei valori.
 
+Un frontmatter che non si proietta su una mappa JSON resta nel modello come
+blocco `frontmatter-unparsed`, verbatim e col motivo, e non diventa un
+frontmatter vuoto. Fra i motivi c'è uno YAML che il parser pagherebbe oltre il
+tetto di `fub_abi::rules::yaml`: troppe `[` e `{` per la sua lunghezza. Lo
+stesso tetto rifiuta un `.base` o un template prima del parser.
+
 Senza dichiarazione restano valide le convenzioni `aliases`/`alias`,
 `tags` e `cssclasses`/`cssclass`. Una dichiarazione incompatibile, un valore
 annidato o uno schema futuro non viene convertito: resta JSON autorevole e si

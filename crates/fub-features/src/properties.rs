@@ -1384,6 +1384,10 @@ pub(crate) fn parse_yaml_value(s: &str) -> serde_json::Value {
     if t.starts_with("[[") && t.ends_with("]]") {
         return serde_json::Value::String(t.to_string());
     }
+    // Uno YAML che il parser pagherebbe troppo resta testo, come uno rotto.
+    if !fub_abi::rules::yaml::within_budget(s) {
+        return serde_json::Value::String(s.to_string());
+    }
     match serde_yaml_ng::from_str::<serde_json::Value>(s) {
         Ok(v) => v,
         Err(_) => serde_json::Value::String(s.to_string()),
@@ -1825,6 +1829,10 @@ mod tests {
         assert_eq!(parse_yaml_value("true"), serde_json::json!(true));
         assert_eq!(parse_yaml_value("3"), serde_json::json!(3));
         assert_eq!(parse_yaml_value("[[page]]"), serde_json::json!("[[page]]"));
+        // Oltre il tetto di `rules::yaml` il valore resta testo senza passare
+        // dal parser, che su centomila `[` impiegherebbe secondi.
+        let deep = "[".repeat(100_000);
+        assert_eq!(parse_yaml_value(&deep), serde_json::json!(deep));
     }
 
     #[test]

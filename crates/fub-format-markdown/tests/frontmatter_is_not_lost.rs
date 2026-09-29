@@ -147,6 +147,34 @@ fn the_preserved_block_states_what_it_preserves_and_why() {
     }
 }
 
+/// Un frontmatter che il parser YAML pagherebbe in tempo quadratico (tante
+/// `[` annidate: 160 KB costavano nove secondi a ogni parse) non gli arriva:
+/// resta verbatim col motivo della regola condivisa, e il giro completo lo
+/// riscrive identico.
+#[test]
+fn a_frontmatter_too_costly_to_parse_is_preserved_without_parsing_it() {
+    let source = format!(
+        "---\na: {}{}\n---\n\nCorpo.\n",
+        "[".repeat(50_000),
+        "]".repeat(50_000)
+    );
+    let model = parse(&source);
+    let Some(Block::Custom {
+        custom_kind: kind,
+        attrs,
+        ..
+    }) = model.body.first()
+    else {
+        panic!("il frontmatter troppo annidato non è nel modello");
+    };
+    assert_eq!(kind, custom_kind::FRONTMATTER_UNPARSED);
+    assert_eq!(
+        attrs.get("error").and_then(|v| v.as_str()),
+        Some(fub_abi::rules::yaml::OVER_BUDGET)
+    );
+    assert_eq!(serialize(&model), source);
+}
+
 /// Un frontmatter **leggibile** resta quello di prima: il ramo nuovo non si
 /// prende ciò che non è suo.
 #[test]
