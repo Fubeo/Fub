@@ -294,8 +294,26 @@ impl Indexing {
         &self.opening
     }
 
+    /// Fino a [`FEED_BATCH`] voci, e fino a
+    /// [`MAX_DOCUMENT_SOURCE_BYTES`](crate::documents::MAX_DOCUMENT_SOURCE_BYTES)
+    /// di documenti: una fetta tiene in memoria tutte le sorgenti che legge e
+    /// tutti i modelli che parsa finché non si applica, e il parse costa decine
+    /// di volte la sorgente. Dieci note da 30 MB nella stessa fetta portavano
+    /// l'apertura a 3 GB. La dimensione viene dalla scansione, prima di leggere;
+    /// un documento più grande del tetto fa una fetta da solo.
     fn next_slice(&mut self) -> Vec<VaultEntry> {
-        let end = (self.cursor + FEED_BATCH).min(self.from_do.len());
+        let mut end = self.cursor;
+        let mut bytes = 0u64;
+        while end < self.from_do.len() && end - self.cursor < FEED_BATCH {
+            let entry = &self.from_do[end];
+            if entry.kind == EntryKind::Document {
+                bytes = bytes.saturating_add(entry.size);
+                if bytes > crate::documents::MAX_DOCUMENT_SOURCE_BYTES && end > self.cursor {
+                    break;
+                }
+            }
+            end += 1;
+        }
         let slice = self.from_do[self.cursor..end].to_vec();
         self.cursor = end;
         slice
@@ -13805,5 +13823,77 @@ impl std::ops::Deref for Batch<'_> {
 impl std::ops::DerefMut for Batch<'_> {
     fn deref_mut(&mut self) -> &mut Workspace {
         self.ws
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::documents::MAX_DOCUMENT_SOURCE_BYTES;
+
+    fn entry(name: &str, kind: EntryKind, size: u64) -> VaultEntry {
+        VaultEntry {
+            id: DocId::new(name),
+            kind,
+            size,
+            mtime: 0,
+            fingerprint: None,
+        }
+    }
+
+    fn slices(mut work: Indexing) -> Vec<Vec<String>> {
+        let mut out = Vec::new();
+        while !work.finished() {
+            out.push(
+                work.next_slice()
+                    .into_iter()
+                    .map(|entry| entry.id.to_string())
+                    .collect(),
+            );
+        }
+        out
+    }
+
+    /// **Una fetta non tiene più documenti di quanti il kernel ne legga uno.**
+    ///
+    /// Sorgenti e modelli di una fetta restano in memoria insieme fino
+    /// all'applicazione: le fette si contano in byte di documenti oltre che in
+    /// voci. Gli allegati non pesano, perché la loro impronta si prende a pezzi.
+    #[test]
+    fn a_slice_holds_at_most_the_largest_readable_document() {
+        let half = MAX_DOCUMENT_SOURCE_BYTES / 2;
+        let work = Indexing::new(vec![
+            entry("a.md", EntryKind::Document, half),
+            entry("b.md", EntryKind::Document, half),
+            entry("film.mp4", EntryKind::Asset, 10 * MAX_DOCUMENT_SOURCE_BYTES),
+            entry("c.md", EntryKind::Document, 1),
+            entry(
+                "enorme.md",
+                EntryKind::Document,
+                2 * MAX_DOCUMENT_SOURCE_BYTES,
+            ),
+            entry("d.md", EntryKind::Document, 1),
+        ]);
+        assert_eq!(
+            slices(work),
+            [
+                vec!["a.md", "b.md", "film.mp4"],
+                vec!["c.md"],
+                vec!["enorme.md"],
+                vec!["d.md"],
+            ]
+        );
+    }
+
+    /// Le note piccole riempiono la fetta fino al conto delle voci.
+    #[test]
+    fn small_notes_still_fill_a_slice() {
+        let work = Indexing::new(
+            (0..FEED_BATCH + 1)
+                .map(|n| entry(&format!("{n}.md"), EntryKind::Document, 10_000))
+                .collect(),
+        );
+        let sizes: Vec<usize> = slices(work).iter().map(Vec::len).collect();
+        assert_eq!(sizes, [FEED_BATCH, 1]);
     }
 }
