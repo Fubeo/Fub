@@ -522,7 +522,7 @@ enum PartialSyncPath {
 
 /// Un primo documento valido committa core e feed; il secondo, ordinato dopo,
 /// fallisce sul testo UTF-8. Il feed già staged deve essere flushato una volta
-/// senza coprire la diagnosi che ha interrotto l'applicazione.
+/// senza coprire la diagnosi del file guasto.
 #[test]
 fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
     const INDEX: &str = "test.watcher-partial-flush";
@@ -635,6 +635,59 @@ fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
         );
     }
 }
+/// Un file che non si legge è un guasto **di quel percorso**: i file che nel
+/// lotto vengono dopo si sincronizzano lo stesso. Prima il lotto si fermava al
+/// primo errore, e il catch-up d'apertura con lui: un solo file non UTF-8
+/// lasciava indietro, a ogni apertura, tutto ciò che in ordine lo seguiva.
+#[test]
+fn a_bad_file_does_not_hold_back_the_rest_of_the_batch() {
+    for path in [PartialSyncPath::Batch, PartialSyncPath::CatchUp] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+        let mut formats = FormatRegistry::new();
+        formats
+            .register(Box::new(Slow(Arc::default())))
+            .expect("no conflict");
+        let mut workspace = Workspace::new(&root, formats).expect("the vault opens");
+        workspace.reindex().expect("initial empty scan");
+        let workspace = Custody::new("the stubborn file vault", workspace);
+        workspace
+            .read()
+            .expect("the vault is alive")
+            .watch_flag()
+            .store(true, Ordering::SeqCst);
+
+        let bad = root.join("a-bad.md");
+        let good = root.join("z-good.md");
+        std::fs::write(&bad, [0xff]).expect("invalid UTF-8 external document");
+        std::fs::write(&good, "indicizzabile\n").expect("valid external document");
+
+        let mut sync = ExternalSync::new(workspace.clone());
+        match path {
+            PartialSyncPath::Batch => {
+                sync.batch(&[ExternalChange::Touched(bad), ExternalChange::Touched(good)])
+            }
+            PartialSyncPath::CatchUp => sync.catch_up(),
+        }
+
+        assert_eq!(
+            entry(&workspace.read().unwrap(), &DocId::new("z-good.md")).fingerprint,
+            Some(Revision::of("indicizzabile\n")),
+            "{path:?} dropped the file after the bad one"
+        );
+        let status = match workspace
+            .read()
+            .unwrap()
+            .query_index(IndexQuery::VaultStatus)
+        {
+            Ok(IndexResult::VaultStatus(status)) => status,
+            other => panic!("expected vault status, got {other:?}"),
+        };
+        assert!(status.watching, "{path:?} a bad file stopped the watcher");
+        assert_eq!(status.sync_failures, 1, "{path:?} lost the bad file");
+    }
+}
+
 #[test]
 fn fatal_watcher_failure_is_reported_and_clears_status() {
     let bench = bench();

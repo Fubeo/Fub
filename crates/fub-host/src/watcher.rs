@@ -966,7 +966,9 @@ impl ExternalSync {
             }
         };
         let mut mutated = false;
-        let mut outcome_reported = false;
+        // Il primo guasto di un percorso: il kernel l'ha già annotato e
+        // riferito, e il lotto prosegue con gli altri file.
+        let mut path_failure: Option<PluginError> = None;
         let outcome: Result<(), PluginError> = (|| {
             for change in changes {
                 match change {
@@ -979,9 +981,10 @@ impl ExternalSync {
                                     // The kernel records this per-path failure
                                     // (including malformed input) before
                                     // returning it; the caller must not emit a
-                                    // duplicate Trouble.
-                                    outcome_reported = true;
-                                    return Err(error.into());
+                                    // duplicate Trouble. It belongs to this
+                                    // path only: the rest of the batch goes on.
+                                    path_failure.get_or_insert(error.into());
+                                    continue;
                                 }
                             }
                         };
@@ -1051,8 +1054,13 @@ impl ExternalSync {
         })();
         let restored = dispatch.restore();
         let drained = drain_events(&self.workspace);
+        let outcome = outcome.and(restored).and(drained);
+        let outcome_reported = outcome.is_ok() && path_failure.is_some();
         BatchApply {
-            outcome: outcome.and(restored).and(drained),
+            outcome: match path_failure {
+                Some(error) if outcome.is_ok() => Err(error),
+                _ => outcome,
+            },
             mutated,
             outcome_reported,
         }
