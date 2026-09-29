@@ -32,25 +32,62 @@ converter.addRule("gfm-strikethrough", {
   filter: ["del", "s"],
   replacement: (content) => (content.trim() ? `~~${content}~~` : content),
 });
+// Il Markdown di ogni cella, scritto una volta sola mentre Turndown scende
+// l'albero, e ritrovato qui dalla tabella che la contiene. Prima la tabella
+// riconvertiva ogni cella dal suo `innerHTML`, tabelle annidate comprese: il
+// lavoro raddoppiava a ogni livello, e poche centinaia di byte di tabelle una
+// dentro l'altra, incollate da una pagina, bloccavano l'editor.
+const cellMarkdown = new WeakMap<Node, string>();
+/// Le colonne fino alle quali una riga corta si completa con celle vuote.
+const PADDED_COLUMNS = 64;
+converter.addRule("gfm-table-cell", {
+  filter: ["th", "td"],
+  replacement: (content, node, options) => {
+    // La cella in Markdown è una riga sola: gli a capo diventano spazi e la
+    // barra, che chiuderebbe la colonna, si scrive protetta.
+    cellMarkdown.set(node, content.replace(/\s*\n+\s*/g, " ").replace(/\|/g, "\\|").trim());
+    return options.defaultReplacement?.(content, node, options) ?? content;
+  },
+});
+/// Le righe e le celle della tabella **stessa**, senza quelle delle tabelle
+/// annidate: è ciò che `rows` e `cells` danno in un browser, scritto a mano
+/// perché happy-dom, dove girano i test, ci mette anche le annidate.
+function ownRows(table: Element): Element[] {
+  const sections = Array.from(table.children);
+  const rowsOf = (section: Element) => Array.from(section.children).filter((row) => row.nodeName === "TR");
+  return [
+    ...sections.filter((section) => section.nodeName === "THEAD").flatMap(rowsOf),
+    ...sections.flatMap((section) =>
+      section.nodeName === "TR" ? [section] : section.nodeName === "TBODY" ? rowsOf(section) : []),
+    ...sections.filter((section) => section.nodeName === "TFOOT").flatMap(rowsOf),
+  ];
+}
+function ownCells(row: Element): Element[] {
+  return Array.from(row.children).filter((cell) => cell.nodeName === "TD" || cell.nodeName === "TH");
+}
 converter.addRule("gfm-table", {
   filter: "table",
   replacement: (_content, node) => {
-    const rows = Array.from((node as HTMLTableElement).rows);
+    const rows = ownRows(node as HTMLTableElement).map(ownCells);
     if (rows.length === 0) return "";
-    // La cella in Markdown è una riga sola: gli a capo diventano spazi e la
-    // barra, che chiuderebbe la colonna, si scrive protetta.
-    const cell = (el: HTMLTableCellElement) =>
-      converter.turndown(el.innerHTML).replace(/\s*\n+\s*/g, " ").replace(/\|/g, "\\|").trim();
-    const width = Math.max(...rows.map((row) => row.cells.length));
-    const line = (cells: string[]) =>
-      `| ${[...cells, ...Array(width - cells.length).fill("")].join(" | ")} |`;
+    const cell = (el: Element) => cellMarkdown.get(el) ?? "";
+    const width = rows.reduce((widest, cells) => Math.max(widest, cells.length), 0);
+    // Una riga corta si completa con celle vuote, ma solo in una tabella che
+    // si legge: GFM le completa da sé, e su una riga di centomila celle sopra
+    // centomila righe corte il completamento costava righe × colonne.
+    const padded = width <= PADDED_COLUMNS;
+    const line = (cells: string[], pad = padded) =>
+      `| ${[...cells, ...Array(pad ? width - cells.length : 0).fill("")].join(" | ")} |`;
     const header = rows[0]!;
     const align = Array.from({ length: width }, (_, i) => {
-      const value = (header.cells[i]?.getAttribute("align") ?? header.cells[i]?.style.textAlign ?? "").toLowerCase();
+      const th = header[i] as HTMLElement | undefined;
+      const value = (th?.getAttribute("align") ?? th?.style.textAlign ?? "").toLowerCase();
       return value === "center" ? ":---:" : value === "right" ? "---:" : value === "left" ? ":---" : "---";
     });
-    const body = rows.slice(1).map((row) => line(Array.from(row.cells).map(cell)));
-    return `\n\n${[line(Array.from(header.cells).map(cell)), `| ${align.join(" | ")} |`, ...body].join("\n")}\n\n`;
+    const body = rows.slice(1).map((cells) => line(cells.map(cell)));
+    // L'intestazione invece si completa sempre: fissa le colonne, e una cella
+    // oltre la sua larghezza GFM la scarterebbe.
+    return `\n\n${[line(header.map(cell), true), `| ${align.join(" | ")} |`, ...body].join("\n")}\n\n`;
   },
 });
 // Una casella di un elenco di attività: il sanitizzatore la tiene come

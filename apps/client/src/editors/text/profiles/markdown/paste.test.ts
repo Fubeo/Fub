@@ -136,6 +136,37 @@ describe("Markdown clipboard paste", () => {
     ))).toBe("testo **forte**");
   });
 
+  it("converts each table cell once, whatever the nesting and the raggedness", () => {
+    const clipboard = (html: string) => ({
+      getData: (type: string) => (type === "text/html" ? html : ""),
+    }) as unknown as DataTransfer;
+    // Una tabella dentro una cella resta nella sua cella: le righe della
+    // tabella esterna sono le sue, non anche quelle annidate.
+    expect(markdownFromClipboard(clipboard(
+      "<table><tr><th>esterna</th></tr><tr><td><table><tr><th>a</th><th>b</th></tr></table></td></tr></table>",
+    ))!.trim().split("\n")).toEqual([
+      "| esterna |",
+      "| --- |",
+      "| \\| a \\| b \\| \\| --- \\| --- \\| |",
+    ]);
+    // Ogni livello riconvertiva le sue celle, e il lavoro raddoppiava: trenta
+    // livelli erano un miliardo di conversioni.
+    const depth = 30;
+    const nested = markdownFromClipboard(clipboard(
+      "<table><tr><td>".repeat(depth) + "fondo" + "</td></tr></table>".repeat(depth),
+    ))!;
+    expect(nested).toContain("fondo");
+    // Una riga larga sopra molte righe corte: GFM completa da sé le righe
+    // corte, e completarle costava righe × colonne.
+    const cells = 2000;
+    const ragged = markdownFromClipboard(clipboard(
+      "<table><tr>" + "<th>h</th>".repeat(cells) + "</tr>" + "<tr><td>b</td></tr>".repeat(cells) + "</table>",
+    ))!.trim().split("\n");
+    expect(ragged[0]!.split("| h").length - 1).toBe(cells);
+    expect(ragged[2]).toBe("| b |");
+    expect(ragged).toHaveLength(cells + 2);
+  });
+
   it("does not intercept HTML paste during composition", () => {
     const { engine, view, host } = paste("<b>bold</b>", "bold", "", undefined, false);
     view.contentDOM.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
