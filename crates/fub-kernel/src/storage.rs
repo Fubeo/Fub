@@ -2928,8 +2928,9 @@ mod tests {
 
     /// Un nome che non si scrive in UTF-8 non è una voce, sui due supporti su
     /// disco: l'elenco salta lui e resta intero per gli altri, file e
-    /// cartelle.
-    #[cfg(unix)]
+    /// cartelle. Darwin rifiuta un nome così prima di crearlo: il banco
+    /// gira dove il filesystem accetta byte grezzi.
+    #[cfg(target_os = "linux")]
     #[test]
     fn list_skips_a_name_not_in_utf8() {
         use std::ffi::OsStr;

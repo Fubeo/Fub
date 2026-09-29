@@ -362,8 +362,9 @@ fn a_vault_that_not_is_scans_not_is_opens_a_metadata() {
 /// quindi l'elenco senza quel nome è ancora l'insieme completo, e nessun
 /// indice pota niente che conoscesse. Prima un solo nome così, in una
 /// cartella qualunque, faceva fallire la camminata e con lei l'apertura
-/// intera.
-#[cfg(unix)]
+/// intera. Darwin rifiuta un nome così prima di crearlo: il banco gira dove
+/// il filesystem accetta byte grezzi.
+#[cfg(target_os = "linux")]
 #[test]
 fn a_name_not_in_utf8_does_not_stop_the_opening() {
     use std::ffi::OsStr;
