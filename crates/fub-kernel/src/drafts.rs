@@ -226,12 +226,19 @@ impl Drafts {
     /// una nota che non era sporca chiede di buttare una bozza che non esiste, e
     /// pretendere che il chiamante lo sappia prima vorrebbe dire una lettura per
     /// ogni salvataggio.
+    ///
+    /// «Non c'era» lo dice soltanto un `NotFound` del supporto: chiederlo a
+    /// `exists` voleva dire leggere ogni errore come un'assenza, e rispondere
+    /// «fatto» lasciando la bozza dov'era.
     pub(crate) fn discard(&self, doc: &DocId) -> std::io::Result<()> {
         let path = self.path(doc);
-        if !self.storage.exists(&path) {
+        if crate::error::optional(self.storage.stat(&path))?.is_none() {
             return Ok(());
         }
-        self.storage.remove(&path)
+        match self.storage.remove(&path) {
+            Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            result => result,
+        }
     }
 
     /// Tutte le bozze, dalla più recente.
@@ -369,7 +376,9 @@ impl Drafts {
     pub(crate) fn migrate(&self, from: &DocId, to: &DocId) -> std::io::Result<()> {
         let old = self.path(from);
         let new = self.path(to);
-        if !self.storage.exists(&old) {
+        // Soltanto un «non c'è» del supporto vuol dire «niente da migrare»:
+        // ogni altro errore lascerebbe la bozza sotto l'id morto con un Ok.
+        if crate::error::optional(self.storage.stat(&old))?.is_none() {
             return Ok(());
         }
         if !self.storage.same_file(&old, &new) {
@@ -513,6 +522,68 @@ mod tests {
         fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
             self.0.remove_empty_dir(dir)
         }
+    }
+
+    /// Un supporto che sa leggere, scrivere e spostare ma non sa dire di un
+    /// path se c'è.
+    struct StatFails(MemStorage);
+
+    impl VaultStorage for StatFails {
+        fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
+            self.0.read(path)
+        }
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
+            self.0.write(path, bytes)
+        }
+        fn update(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()> {
+            self.0.update(path, merge_entries)
+        }
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+            self.0.append(path, bytes)
+        }
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+            self.0.rename(from, to)
+        }
+        fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+            self.0.rename_no_replace(from, to)
+        }
+        fn remove(&self, path: &Utf8Path) -> io::Result<()> {
+            self.0.remove(path)
+        }
+        fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
+            self.0.list(dir)
+        }
+        fn stat(&self, _path: &Utf8Path) -> io::Result<Stat> {
+            Err(io::Error::other("il disco non risponde"))
+        }
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+            self.0.remove_empty_dir(dir)
+        }
+    }
+
+    /// Una bozza di cui il supporto non sa dire se c'è **non è una bozza che
+    /// non c'è**. `exists` rispondeva «no» a ogni errore: la rinomina lasciava
+    /// la bozza sotto l'id morto dicendo «fatto», e scartarla diceva «fatto»
+    /// senza toglierla — una bozza vecchia che tornava a proporsi.
+    #[test]
+    fn a_draft_the_support_cannot_stat_is_not_a_missing_draft() {
+        let d = Drafts::open(
+            Utf8Path::new("/vault"),
+            Arc::new(StatFails(MemStorage::new())) as Arc<dyn VaultStorage>,
+        );
+        d.save(&doc("a.md"), "il mio testo", None, 10).unwrap();
+
+        assert!(
+            d.migrate(&doc("a.md"), &doc("b.md")).is_err(),
+            "a draft left under the dead id was reported as migrated"
+        );
+        assert_eq!(d.get(&doc("a.md")).unwrap().unwrap().text, "il mio testo");
+
+        assert!(
+            d.discard(&doc("a.md")).is_err(),
+            "a discard that removed nothing was reported as done"
+        );
+        assert!(d.get(&doc("a.md")).unwrap().is_some());
     }
 
     /// 0169 — **una migrazione a metà lasciava due bozze per un documento
