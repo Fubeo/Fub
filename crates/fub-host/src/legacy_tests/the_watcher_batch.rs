@@ -637,11 +637,18 @@ fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
 }
 /// Un file che non si legge è un guasto **di quel percorso**: i file che nel
 /// lotto vengono dopo si sincronizzano lo stesso. Prima il lotto si fermava al
-/// primo errore, e il catch-up d'apertura con lui: un solo file non UTF-8
-/// lasciava indietro, a ogni apertura, tutto ciò che in ordine lo seguiva.
+/// primo errore, e la riconciliazione con lui (eventi persi, una cartella
+/// portata nel vault): un solo file non UTF-8 lasciava fuori dall'anagrafe
+/// tutto ciò che in ordine lo seguiva, fino alla riapertura.
 #[test]
 fn a_bad_file_does_not_hold_back_the_rest_of_the_batch() {
-    for path in [PartialSyncPath::Batch, PartialSyncPath::CatchUp] {
+    #[derive(Clone, Copy, Debug)]
+    enum Via {
+        Files,
+        Folder,
+        CatchUp,
+    }
+    for via in [Via::Files, Via::Folder, Via::CatchUp] {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
         let mut formats = FormatRegistry::new();
@@ -657,23 +664,30 @@ fn a_bad_file_does_not_hold_back_the_rest_of_the_batch() {
             .watch_flag()
             .store(true, Ordering::SeqCst);
 
-        let bad = root.join("a-bad.md");
-        let good = root.join("z-good.md");
+        let folder = root.join("cartella");
+        std::fs::create_dir(&folder).expect("the folder arrives");
+        let bad = folder.join("a-bad.md");
+        let good = folder.join("z-good.md");
         std::fs::write(&bad, [0xff]).expect("invalid UTF-8 external document");
         std::fs::write(&good, "indicizzabile\n").expect("valid external document");
 
         let mut sync = ExternalSync::new(workspace.clone());
-        match path {
-            PartialSyncPath::Batch => {
+        match via {
+            Via::Files => {
                 sync.batch(&[ExternalChange::Touched(bad), ExternalChange::Touched(good)])
             }
-            PartialSyncPath::CatchUp => sync.catch_up(),
+            Via::Folder => sync.batch(&[ExternalChange::Touched(folder)]),
+            Via::CatchUp => sync.catch_up(),
         }
 
         assert_eq!(
-            entry(&workspace.read().unwrap(), &DocId::new("z-good.md")).fingerprint,
+            entry(
+                &workspace.read().unwrap(),
+                &DocId::new("cartella/z-good.md")
+            )
+            .fingerprint,
             Some(Revision::of("indicizzabile\n")),
-            "{path:?} dropped the file after the bad one"
+            "{via:?} dropped the file after the bad one"
         );
         let status = match workspace
             .read()
@@ -683,8 +697,8 @@ fn a_bad_file_does_not_hold_back_the_rest_of_the_batch() {
             Ok(IndexResult::VaultStatus(status)) => status,
             other => panic!("expected vault status, got {other:?}"),
         };
-        assert!(status.watching, "{path:?} a bad file stopped the watcher");
-        assert_eq!(status.sync_failures, 1, "{path:?} lost the bad file");
+        assert!(status.watching, "{via:?} a bad file stopped the watcher");
+        assert_eq!(status.sync_failures, 1, "{via:?} lost the bad file");
     }
 }
 
