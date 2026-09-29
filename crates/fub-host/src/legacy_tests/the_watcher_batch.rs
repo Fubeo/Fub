@@ -909,6 +909,75 @@ fn an_explicit_rename_batch_migrates_identity_exactly_once() {
     assert_eq!(renamed, 1);
 }
 
+/// Gli id in anagrafe, in ordine.
+fn ids(ws: &Custody<Workspace>) -> Vec<String> {
+    let IndexResult::Entries(page) = ws
+        .read()
+        .expect("the vault is alive")
+        .query_index(IndexQuery::Entries {
+            of_kind: None,
+            within: None,
+            page: None,
+        })
+        .expect("the kernel serves the index")
+    else {
+        panic!("expected the index");
+    };
+    let mut ids: Vec<String> = page.items.into_iter().map(|entry| entry.id.0).collect();
+    ids.sort();
+    ids
+}
+
+/// **Una cartella arriva dal rilevatore come un path solo.** Spostata dentro,
+/// rinominata o portata via, i file che contiene non producono eventi propri:
+/// il lotto li riallinea dalla cartella, invece di lasciare l'anagrafe ai path
+/// vecchi fino alla riapertura. Un file che il lotto nomina anche da solo, o
+/// che sta sotto due cartelle toccate, si applica una volta sola.
+#[test]
+fn a_folder_arrives_as_one_path_and_brings_its_files() {
+    let bench = bench();
+    let outside = tempfile::tempdir().expect("outside the vault");
+    let outside = Utf8PathBuf::from_path_buf(outside.path().to_path_buf()).expect("utf8");
+    let arriving = outside.join("Sub");
+    std::fs::create_dir_all(arriving.join("Dentro")).expect("folders");
+    std::fs::write(arriving.join("a.md"), "a\n").expect("note");
+    std::fs::write(arriving.join("Dentro/b.md"), "b\n").expect("nested note");
+    let mut sync = ExternalSync::new(bench.ws.clone());
+
+    let moved_in = bench.root.join("Sub");
+    std::fs::rename(&arriving, &moved_in).expect("moved in");
+    sync.batch(&[
+        ExternalChange::Touched(moved_in.clone()),
+        ExternalChange::Touched(moved_in.join("Dentro")),
+        ExternalChange::Touched(moved_in.join("a.md")),
+    ]);
+    assert_eq!(
+        ids(&bench.ws),
+        ["Sub/Dentro/b.md", "Sub/a.md", "nota.md"],
+        "the files of a folder moved in are indexed"
+    );
+
+    let renamed = bench.root.join("Altra");
+    std::fs::rename(&moved_in, &renamed).expect("renamed");
+    sync.batch(&[ExternalChange::Renamed {
+        from: moved_in,
+        to: renamed.clone(),
+    }]);
+    assert_eq!(
+        ids(&bench.ws),
+        ["Altra/Dentro/b.md", "Altra/a.md", "nota.md"],
+        "a renamed folder leaves no stale path and hides no new one"
+    );
+
+    std::fs::rename(&renamed, outside.join("Altra")).expect("moved out");
+    sync.batch(&[ExternalChange::Touched(renamed)]);
+    assert_eq!(
+        ids(&bench.ws),
+        ["nota.md"],
+        "the files of a folder moved out leave the index"
+    );
+}
+
 /// Un path senza `FormatProvider` attraversa le stesse tre fasi del documento:
 /// lo `stat` avviene detached e la finalizzazione conserva l'anagrafe e gli
 /// eventi di creazione, modifica, no-op e rimozione.

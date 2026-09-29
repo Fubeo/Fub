@@ -615,6 +615,9 @@ struct ExternalRenameSnapshot {
 /// vault e verifica le impronte dopo che la guardia di [`Workspace`] è caduta.
 pub struct PreparedCatchUp {
     vault: crate::Vault,
+    /// `None` è il vault intero; altrimenti la sola cartella assoluta, e
+    /// `entries` contiene soltanto le voci che stanno sotto di lei.
+    within: Option<Utf8PathBuf>,
     entries: BTreeMap<DocId, VaultEntry>,
 }
 
@@ -623,6 +626,13 @@ pub struct PreparedCatchUp {
 /// questa fotografia in piani legati allo stato corrente del workspace.
 pub struct CatchUpSnapshot {
     candidates: BTreeMap<DocId, Utf8PathBuf>,
+}
+
+impl CatchUpSnapshot {
+    /// La scansione non ha trovato niente da riallineare.
+    pub fn is_empty(&self) -> bool {
+        self.candidates.is_empty()
+    }
 }
 
 /// Esito già invocato della fase detached di una sincronizzazione esterna.
@@ -1746,10 +1756,17 @@ impl PreparedCatchUp {
     /// l'impronta sui byte decide poi se è davvero rimasto uguale. Un metadato
     /// diverso o una lettura fallita resta candidato.
     pub fn invoke(self) -> Result<CatchUpSnapshot> {
-        let PreparedCatchUp { vault, entries } = self;
+        let PreparedCatchUp {
+            vault,
+            within,
+            entries,
+        } = self;
         // La camminata è quella della scansione — stessa politica di
         // esclusione, stesse specie.
-        let scanned = vault.scan()?;
+        let scanned = match &within {
+            None => vault.scan()?,
+            Some(dir) => vault.scan_within(dir)?,
+        };
         let mut candidates = BTreeMap::new();
         let mut on_disk = BTreeSet::new();
         for file in scanned.files {
@@ -7638,7 +7655,40 @@ impl Workspace {
     pub fn prepare_catch_up(&self) -> PreparedCatchUp {
         PreparedCatchUp {
             vault: self.docs.vault.clone(),
+            within: None,
             entries: self.indexes.core.entries.clone(),
+        }
+    }
+
+    /// La stessa fotografia di [`prepare_catch_up`](Self::prepare_catch_up),
+    /// ristretta a ciò che sta sotto `abs`.
+    ///
+    /// Il rilevatore riferisce una cartella intera come un path solo: spostata
+    /// dentro il vault, rinominata o portata via, i file che contiene non
+    /// producono eventi propri. Senza questa riconciliazione l'anagrafe restava
+    /// ferma ai path vecchi e non vedeva quelli nuovi fino alla riapertura, e
+    /// chi la legge, come la sincronizzazione remota, propagava la sparizione
+    /// dei vecchi senza mai conoscere i nuovi. Su un file o su un path che non
+    /// nomina niente sotto di sé la scansione risponde vuota e costa una `stat`.
+    pub fn prepare_catch_up_within(&self, abs: &Utf8Path) -> PreparedCatchUp {
+        let entries = match self.docs.vault.doc_id_for_path(abs) {
+            Ok(folder) => {
+                let prefix = format!("{}/", folder.as_str());
+                self.indexes
+                    .core
+                    .entries
+                    .range(folder.clone()..)
+                    .take_while(|(id, _)| id.as_str().starts_with(folder.as_str()))
+                    .filter(|(id, _)| id.as_str().starts_with(&prefix))
+                    .map(|(id, entry)| (id.clone(), entry.clone()))
+                    .collect()
+            }
+            Err(_) => BTreeMap::new(),
+        };
+        PreparedCatchUp {
+            vault: self.docs.vault.clone(),
+            within: Some(abs.to_owned()),
+            entries,
         }
     }
 

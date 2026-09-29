@@ -21,6 +21,7 @@
 //! quando smette, e chiunque può leggerla dal canale dati
 //! (`IndexQuery::VaultStatus`).
 
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -29,7 +30,7 @@ use fub_abi::{PluginError, Severity};
 use fub_kernel::workspace::{ParsedExternalDocumentRename, PreparedExternalDocumentRename};
 use fub_kernel::{
     ExternalRenamePlan, ParsedChange, ParsedExternalAssetRename, ParsedExternalRename,
-    PreparedExternalAssetRename, PreparedIgnoreCheck, SyncPlan, Workspace,
+    PreparedCatchUp, PreparedExternalAssetRename, PreparedIgnoreCheck, SyncPlan, Workspace,
 };
 
 use crate::custody::{Custody, WriteTurn};
@@ -464,6 +465,32 @@ impl WatcherPreflight {
 }
 
 impl PreflightedWatcherChange {
+    /// Ogni path che il cambiamento nomina, ammesso o no.
+    fn paths(&self) -> Vec<&Utf8PathBuf> {
+        match self {
+            PreflightedWatcherChange::Sync { path, .. } => vec![path],
+            PreflightedWatcherChange::Rename { from, to, .. } => vec![from, to],
+        }
+    }
+
+    /// I path che il filtro di esclusione lascia passare.
+    fn admitted_paths(&self) -> Vec<&Utf8PathBuf> {
+        match self {
+            PreflightedWatcherChange::Sync { path, admitted } => {
+                admitted.then_some(path).into_iter().collect()
+            }
+            PreflightedWatcherChange::Rename {
+                from,
+                from_admitted,
+                to,
+                to_admitted,
+            } => [(from, *from_admitted), (to, *to_admitted)]
+                .into_iter()
+                .filter_map(|(path, admitted)| admitted.then_some(path))
+                .collect(),
+        }
+    }
+
     fn plan(self, workspace: &Workspace) -> Vec<PlannedWatcherChange> {
         match self {
             PreflightedWatcherChange::Sync { path, admitted } => {
@@ -717,8 +744,18 @@ impl ExternalSync {
             .into_iter()
             .map(WatcherPreflight::invoke)
             .collect::<Vec<_>>();
+        let named = preflighted
+            .iter()
+            .flat_map(PreflightedWatcherChange::paths)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let admitted = preflighted
+            .iter()
+            .flat_map(PreflightedWatcherChange::admitted_paths)
+            .cloned()
+            .collect::<BTreeSet<_>>();
         // Fase 1c — routing e piani puri sotto read, dai soli esiti del filtro.
-        let planned = {
+        let (planned, scopes) = {
             let ws = match self.workspace.read() {
                 Ok(ws) => ws,
                 Err(error) => {
@@ -726,13 +763,31 @@ impl ExternalSync {
                     return SyncDisposition::Fatal;
                 }
             };
-            preflighted
+            let planned = preflighted
                 .into_iter()
                 .flat_map(|change| change.plan(&ws))
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            let scopes = admitted
+                .iter()
+                .map(|path| ws.prepare_catch_up_within(path))
+                .collect::<Vec<_>>();
+            (planned, scopes)
+        };
+        // Fase 1c-bis — le cartelle. Una cartella spostata dentro, rinominata
+        // o portata via arriva come un path solo, senza eventi per i file che
+        // contiene: la loro differenza si calcola come la riconciliazione
+        // d'apertura, ristretta a quella cartella. Su un file costa una `stat`.
+        let Some((folders, scope_failed)) = self.folder_plans(scopes, &named) else {
+            return SyncDisposition::Fatal;
         };
         // Fase 1d — stat/read/parse e side-data restano fuori da Custody.
-        let invoked = planned.into_iter().flat_map(PlannedWatcherChange::invoke);
+        let invoked =
+            planned
+                .into_iter()
+                .flat_map(PlannedWatcherChange::invoke)
+                .chain(folders.into_iter().map(|(path, plan)| {
+                    InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke))
+                }));
         let apply = self.apply_batch_prepared(invoked);
         // Fase 3 — la durevolezza è un finally soltanto dopo una mutazione:
         // un errore di prepare pulito non ha feed staged da flushare.
@@ -741,7 +796,62 @@ impl ExternalSync {
         } else {
             Ok(false)
         };
-        self.finish_batch(apply, flushed)
+        match self.finish_batch(apply, flushed) {
+            SyncDisposition::Complete if scope_failed => SyncDisposition::Warning,
+            disposition => disposition,
+        }
+    }
+
+    /// I piani dei file che stanno sotto le cartelle toccate dal lotto.
+    ///
+    /// La camminata gira fuori da `Custody`; i piani si fanno sotto prestito
+    /// condiviso, come quelli del lotto. Un path che il lotto nomina già resta
+    /// al suo piano, e un file sotto due cartelle toccate esce una volta sola:
+    /// due piani dello stesso path presi dallo stesso stato non si applicano
+    /// uno dopo l'altro. Una camminata fallita è un avviso del vault, come
+    /// nella riconciliazione d'apertura, e non ferma il resto del lotto.
+    /// `None` vuol dire workspace inservibile, già riferito come guasto.
+    #[allow(clippy::type_complexity)]
+    fn folder_plans(
+        &self,
+        scopes: Vec<PreparedCatchUp>,
+        named: &BTreeSet<Utf8PathBuf>,
+    ) -> Option<(Vec<(Utf8PathBuf, Option<SyncPlan>)>, bool)> {
+        let mut snapshots = Vec::new();
+        let mut failed = false;
+        for scope in scopes {
+            match scope.invoke() {
+                Ok(snapshot) if snapshot.is_empty() => {}
+                Ok(snapshot) => snapshots.push(snapshot),
+                Err(error) => {
+                    failed = true;
+                    match self.workspace.write() {
+                        Ok(mut ws) => ws.note_catch_up_failure(error),
+                        Err(error) => {
+                            self.report_fatal(error);
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+        if snapshots.is_empty() {
+            return Some((Vec::new(), failed));
+        }
+        let ws = match self.workspace.read() {
+            Ok(ws) => ws,
+            Err(error) => {
+                self.report_fatal(error);
+                return None;
+            }
+        };
+        let mut seen = BTreeSet::new();
+        let plans = snapshots
+            .into_iter()
+            .flat_map(|snapshot| ws.plan_catch_up(snapshot))
+            .filter(|(path, _)| !named.contains(path) && seen.insert(path.clone()))
+            .collect();
+        Some((plans, failed))
     }
 
     /// **Il primo lotto del rilevatore, calcolato per differenza** (§15.7).
@@ -764,12 +874,16 @@ impl ExternalSync {
     /// fotografie e le brevi mutazioni del core. Anche un vault senza
     /// rilevatore la chiama: la finestra c'è per ogni fabbrica, e ciò che il
     /// rilevatore avrebbe visto se fosse stato acceso lo vede il workspace.
-    #[cfg(test)]
+    ///
+    /// La usa anche il rilevatore quando il backend dichiara di aver perso
+    /// eventi (`Rescan`, per esempio la coda di inotify piena): quali path
+    /// siano cambiati non si sa più, e si riallinea tutto il vault.
+    #[cfg(any(test, feature = "notify-watcher"))]
     pub(crate) fn catch_up(&mut self) {
         self.catch_up_outcome();
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "notify-watcher"))]
     fn catch_up_outcome(&mut self) -> SyncDisposition {
         let Some(_operation) = self.lifecycle.enter() else {
             return SyncDisposition::Complete;
@@ -1218,6 +1332,39 @@ mod notify_watcher {
         out
     }
 
+    /// Un lotto del debouncer, dall'evento al workspace.
+    fn deliver(sync: &mut ExternalSync, events: Vec<notify_debouncer_full::DebouncedEvent>) {
+        // Il backend ha perso eventi (coda di inotify piena, FSEvents che
+        // chiede di riscandire): l'evento non ha path, e un lotto vuoto lo
+        // lasciava cadere in silenzio con l'anagrafe ferma fino alla
+        // riapertura.
+        if events.iter().any(|event| event.need_rescan()) {
+            sync.catch_up();
+            return;
+        }
+        // **Leggere un file non è cambiarlo.** inotify riporta anche le
+        // aperture e gli accessi (`Access(Open)`, `Access(Close(Read))`, e
+        // l'atime che ne segue), e chi apre i documenti di questo vault più
+        // spesso di chiunque altro è Fub stesso: la localizzazione delle
+        // occorrenze (§21.3) apre il sorgente di ogni riga di una pagina di
+        // risultati. Trattare quelle aperture come cambiamenti chiudeva un
+        // anello: una ricerca leggeva sessanta note, il rilevatore riferiva
+        // sessanta «modifiche», il kernel rileggeva quelle note per scoprire
+        // che erano identiche — e quelle riletture erano altre sessanta
+        // aperture. Il giro si alimentava da solo, con un `DocumentChanged` a
+        // vuoto e un `IndexUpdated` per ogni passaggio, finché il ponte non
+        // andava in overflow e la shell non rispondeva più.
+        let events: Vec<_> = events.into_iter().filter(is_a_change).collect();
+        // Un lotto di sole letture non è un lotto: non c'è niente da
+        // sincronizzare e niente da rendere durevole, e prendere il lucchetto
+        // esclusivo per non fare niente toglierebbe il vault ai lettori a ogni
+        // ricerca.
+        if events.is_empty() {
+            return;
+        }
+        sync.batch(&changes(events));
+    }
+
     fn is_a_change_kind(kind: &EventKind) -> bool {
         match kind {
             // Aperture, letture, chiusure: nessun byte è diverso da prima.
@@ -1247,32 +1394,7 @@ mod notify_watcher {
                 Duration::from_millis(300),
                 None,
                 move |result: DebounceEventResult| match result {
-                    Ok(events) => {
-                        // **Leggere un file non è cambiarlo.** inotify riporta
-                        // anche le aperture e gli accessi (`Access(Open)`,
-                        // `Access(Close(Read))`, e l'atime che ne segue), e chi
-                        // apre i documenti di questo vault più spesso di
-                        // chiunque altro è Fub stesso: la localizzazione delle
-                        // occorrenze (§21.3) apre il sorgente di ogni riga di
-                        // una pagina di risultati. Trattare quelle aperture come
-                        // cambiamenti chiudeva un anello: una ricerca leggeva
-                        // sessanta note, il rilevatore riferiva sessanta
-                        // «modifiche», il kernel rileggeva quelle note per
-                        // scoprire che erano identiche — e quelle riletture
-                        // erano altre sessanta aperture. Il giro si alimentava
-                        // da solo, con un `DocumentChanged` a vuoto e un
-                        // `IndexUpdated` per ogni passaggio, finché il ponte non
-                        // andava in overflow e la shell non rispondeva più.
-                        let events: Vec<_> = events.into_iter().filter(is_a_change).collect();
-                        // Un lotto di sole letture non è un lotto: non c'è
-                        // niente da sincronizzare e niente da rendere durevole,
-                        // e prendere il lucchetto esclusivo per non fare niente
-                        // toglierebbe il vault ai lettori a ogni ricerca.
-                        if events.is_empty() {
-                            return;
-                        }
-                        sync.batch(&changes(events));
-                    }
+                    Ok(events) => deliver(&mut sync, events),
                     Err(errors) => {
                         let Some(_operation) = sync.lifecycle.enter() else {
                             return;
@@ -1395,6 +1517,48 @@ mod notify_watcher {
         /// di una ricerca: se contassero come cambiamenti, il rilevatore
         /// chiederebbe al kernel di rileggere ciò che il kernel ha appena
         /// letto — e la rilettura sarebbe un'altra apertura.
+        /// Un backend che ha perso eventi lo dice con un `Rescan` senza path.
+        /// Quali file siano cambiati non si sa più: la consegna riallinea
+        /// tutto il vault invece di lasciar cadere l'avviso come un lotto vuoto.
+        #[test]
+        fn a_rescan_realigns_the_whole_vault() {
+            let dir = tempfile::tempdir().expect("a vault");
+            let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+            std::fs::write(root.join("vecchia.txt"), "prima").expect("seeds");
+            let mut ws =
+                Workspace::new(&root, fub_kernel::FormatRegistry::new()).expect("the vault opens");
+            ws.reindex().expect("initial scan");
+            let ws = Custody::new("the rescan vault", ws);
+            std::fs::remove_file(root.join("vecchia.txt")).expect("removed behind the back");
+            std::fs::create_dir(root.join("Nuova")).expect("a folder");
+            std::fs::write(root.join("Nuova/arrivata.txt"), "dopo")
+                .expect("written behind the back");
+
+            let rescan = notify::Event::new(EventKind::Other).set_flag(notify::event::Flag::Rescan);
+            deliver(
+                &mut ExternalSync::new(ws.clone()),
+                vec![notify_debouncer_full::DebouncedEvent::new(
+                    rescan,
+                    std::time::Instant::now(),
+                )],
+            );
+
+            let fub_abi::traits::IndexResult::Entries(page) = ws
+                .read()
+                .expect("the vault is alive")
+                .query_index(fub_abi::traits::IndexQuery::Entries {
+                    of_kind: None,
+                    within: None,
+                    page: None,
+                })
+                .expect("the kernel serves the index")
+            else {
+                panic!("expected the index");
+            };
+            let ids: Vec<_> = page.items.iter().map(|entry| entry.id.as_str()).collect();
+            assert_eq!(ids, ["Nuova/arrivata.txt"]);
+        }
+
         #[test]
         fn reading_a_document_is_not_changing_it() {
             for kind in [

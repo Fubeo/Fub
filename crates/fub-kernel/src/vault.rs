@@ -878,6 +878,61 @@ impl Vault {
         Ok(out)
     }
 
+    /// La camminata di [`scan`](Self::scan) dentro **una** cartella del vault.
+    ///
+    /// Serve a chi ha visto cambiare una cartella intera, e non i file che
+    /// contiene: una cartella spostata dentro, rinominata o portata via arriva
+    /// dal rilevatore come un path solo. Stessa politica di esclusione e
+    /// stesse specie della scansione intera. La radice, un path fuori dal
+    /// vault, un file, un collegamento o una cartella che non c'è più non
+    /// camminano niente: rispondono una scansione vuota. Anche un supporto che
+    /// non sa distinguere un collegamento da una cartella non cammina: la
+    /// scansione intera non segue i collegamenti, e questa non li deve seguire
+    /// per ipotesi.
+    pub fn scan_within(&self, dir: &Utf8Path) -> Result<Scan> {
+        let mut out = Scan {
+            files: Vec::new(),
+            folders: Vec::new(),
+            temporary_remaining_back: Vec::new(),
+        };
+        let Ok(rel) = dir.strip_prefix(&self.root) else {
+            return Ok(out);
+        };
+        if rel.as_str().is_empty() {
+            return Ok(out);
+        }
+        match self.storage.stat_no_follow(dir) {
+            Ok(stat) if stat.kind == EntryKind::Dir => {}
+            Ok(_) => return Ok(out),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::NotADirectory
+                        | std::io::ErrorKind::Unsupported
+                ) =>
+            {
+                return Ok(out)
+            }
+            Err(source) => {
+                return Err(KernelError::Io {
+                    path: dir.to_owned(),
+                    source,
+                })
+            }
+        }
+        let policy = crate::ignore::resolve(self.settings.as_ref())
+            .with_gitignore(read_gitignore(self.storage.as_ref(), &self.root)?);
+        if policy.excludes_path(rel, Kind::Folder) {
+            return Ok(out);
+        }
+        self.walk(dir, &policy, &mut out)?;
+        out.files.sort_by(|a, b| a.id.cmp(&b.id));
+        out.folders.sort();
+        out.temporary_remaining_back.sort();
+        Ok(out)
+    }
+
     fn walk(&self, dir: &Utf8Path, policy: &IgnorePolicy, out: &mut Scan) -> Result<()> {
         let entries = self.storage.list(dir).map_err(|and| KernelError::Io {
             path: dir.to_owned(),

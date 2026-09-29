@@ -48,6 +48,15 @@ L'apertura separa struttura e contenuto:
 La prima fotografia del vault viene consegnata senza lasciare una finestra in
 cui watcher e scansione possano perdere una modifica.
 
+## Modifiche esterne
+
+Il watcher consegna lotti di path toccati o rinominati. Una cartella spostata
+dentro il vault, rinominata o portata via arriva come un path solo: il lotto
+riallinea i file che stanno sotto quella cartella con la stessa differenza fra
+disco e anagrafe della riconciliazione d'apertura. Se il backend dichiara di
+aver perso eventi, per esempio per una coda di notifica piena, la
+riconciliazione copre l'intero vault.
+
 ## Lettura e scrittura
 
 Le scritture autorevoli passano dal kernel. Il percorso comune:
