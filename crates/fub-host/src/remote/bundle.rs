@@ -1795,23 +1795,7 @@ fn apply_remote_op(
     if current.is_some() && current.as_ref() != prior {
         // The remote version is deposited in a deterministic, create-only
         // sibling. Never replace a locally divergent original.
-        let (stem, ext) = op
-            .doc_id
-            .rsplit_once('.')
-            .map_or((op.doc_id.as_str(), ""), |(stem, ext)| (stem, ext));
-        let digest = ring::digest::digest(&ring::digest::SHA256, op.op_id.as_bytes());
-        let mut digest_name = String::with_capacity(24);
-        use std::fmt::Write as _;
-        for byte in digest.as_ref().iter().take(12) {
-            write!(&mut digest_name, "{byte:02x}")
-                .map_err(|_| PluginError::Internal("sync conflict name failed".into()))?;
-        }
-        let suffix = if ext.is_empty() {
-            String::new()
-        } else {
-            format!(".{ext}")
-        };
-        let copy = DocId::new(format!("{stem}.sync-conflict-{digest_name}{suffix}"));
+        let copy = conflict_copy_id(&op.doc_id, &op.op_id)?;
         let deposited = match host.write_document_bytes(&copy, &plain, None) {
             Ok(_) => true,
             Err(PluginError::AlreadyExists(_)) | Err(PluginError::Conflict(_)) => {
@@ -1843,6 +1827,31 @@ fn apply_remote_op(
             Err(e) => Err(e),
         }
     }
+}
+
+/// Il nome della copia di conflitto: accanto all'originale, deterministico
+/// sull'op, con l'estensione dell'originale in coda.
+///
+/// L'estensione si cerca nel **nome** del file, non nel path: in
+/// `Progetti.2024/nota` il punto è della cartella, e la copia che lo usasse
+/// finirebbe in una cartella nuova, lontana dal file in conflitto. Un nome che
+/// comincia col punto (`.gitignore`) non ha estensione.
+fn conflict_copy_id(doc_id: &str, op_id: &str) -> Result<DocId, PluginError> {
+    let name_start = doc_id.rfind('/').map_or(0, |slash| slash + 1);
+    let (stem, suffix) = match doc_id[name_start..].rfind('.') {
+        Some(dot) if dot > 0 => doc_id.split_at(name_start + dot),
+        _ => (doc_id, ""),
+    };
+    let digest = ring::digest::digest(&ring::digest::SHA256, op_id.as_bytes());
+    let mut digest_name = String::with_capacity(24);
+    use std::fmt::Write as _;
+    for byte in digest.as_ref().iter().take(12) {
+        write!(&mut digest_name, "{byte:02x}")
+            .map_err(|_| PluginError::Internal("sync conflict name failed".into()))?;
+    }
+    Ok(DocId::new(format!(
+        "{stem}.sync-conflict-{digest_name}{suffix}"
+    )))
 }
 
 // --- state_helpers (file atomici sotto root TRUSTED) ---
@@ -2071,6 +2080,52 @@ fn ensure_job_vdk(
             Ok(vdk)
         }
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod conflict_copy_tests {
+    use super::conflict_copy_id;
+
+    fn copy(doc_id: &str) -> String {
+        let id = conflict_copy_id(doc_id, "op-1").unwrap().to_string();
+        let digest = id
+            .split(".sync-conflict-")
+            .nth(1)
+            .unwrap()
+            .get(..24)
+            .unwrap()
+            .to_string();
+        id.replace(&digest, "H")
+    }
+
+    #[test]
+    fn the_copy_stays_beside_the_original() {
+        assert_eq!(copy("note/idea.md"), "note/idea.sync-conflict-H.md");
+        assert_eq!(copy("idea.md"), "idea.sync-conflict-H.md");
+        assert_eq!(copy("a/b.tar.gz"), "a/b.tar.sync-conflict-H.gz");
+        // Il punto della cartella non è un'estensione del file.
+        assert_eq!(
+            copy("Progetti.2024/nota"),
+            "Progetti.2024/nota.sync-conflict-H"
+        );
+        assert_eq!(
+            copy("Progetti.2024/.gitignore"),
+            "Progetti.2024/.gitignore.sync-conflict-H"
+        );
+        assert_eq!(copy("LICENSE"), "LICENSE.sync-conflict-H");
+    }
+
+    #[test]
+    fn the_same_op_names_the_same_copy() {
+        assert_eq!(
+            conflict_copy_id("a.md", "op-1").unwrap(),
+            conflict_copy_id("a.md", "op-1").unwrap()
+        );
+        assert_ne!(
+            conflict_copy_id("a.md", "op-1").unwrap(),
+            conflict_copy_id("a.md", "op-2").unwrap()
+        );
     }
 }
 
