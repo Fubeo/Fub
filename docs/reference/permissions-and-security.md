@@ -82,7 +82,7 @@ Il runtime:
 - non collega WASI;
 - non concede filesystem o rete direttamente;
 - serve soltanto le famiglie host disponibili;
-- applica limite di memoria;
+- applica limiti alla memoria lineare e alle tabelle;
 - interrompe chiamate oltre la deadline;
 - converte trap in errori tipizzati;
 - limita la ricorsione delle forme;

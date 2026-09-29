@@ -107,6 +107,17 @@ const TIMEOUT_IN_TICKS: u64 = 50;
 /// vede nel monitor delle attività senza che l'app sia già in ginocchio.
 const MEMORY_CEILING: usize = 64 * 1024 * 1024;
 
+/// Il tetto degli elementi di **una** tabella: lo stesso ordine di memoria
+/// della memoria lineare.
+///
+/// Una tabella non vive nella memoria del plugin ma in quella dell'host, e
+/// `table.grow` la alloca e la riempie tutta prima di rispondere: senza tetto,
+/// la RAM che [`MEMORY_CEILING`] nega a `memory.grow` un plugin la prende a
+/// tabelle, un salto alla volta, finché c'è. Un elemento costa all'host circa
+/// un puntatore, da qui l'ottavo. La tabella di un componente vero ha qualche
+/// migliaio di voci, tre ordini di grandezza sotto.
+const TABLE_CEILING: usize = MEMORY_CEILING / 8;
+
 // ---------------------------------------------------------------------------
 // Il motore, e il suo battito
 // ---------------------------------------------------------------------------
@@ -265,14 +276,14 @@ fn tick(engine: Engine) {
 /// permette a un limitatore di avere memoria di ciò che ha già concesso.
 ///
 /// Le altre manopole di [`StoreLimitsBuilder`] — `instances`, `tables`,
-/// `memories`, `table_elements` — restano ai valori di wasmtime, e non per
-/// distrazione. Quante istanze e quante memorie **core** diventi un componente è
+/// `memories` — restano ai valori di wasmtime, e non per distrazione. Quante istanze e quante memorie **core** diventi un componente è
 /// un fatto della catena che lo ha compilato, non del plugin: un numero scelto
 /// qui sarebbe una previsione sul compilatore di qualcun altro, e un plugin
 /// onesto rifiutato per averne una di troppo verrebbe rifiutato per la ragione
-/// sbagliata. `memory_size` è il solo tetto il cui significato non cambia da una
-/// catena all'altra — quanta memoria può prendersi il plugin — ed è quello che
-/// stiamo mettendo.
+/// sbagliata. `memory_size` e `table_elements` sono i tetti il cui significato
+/// non cambia da una catena all'altra — quanta memoria può prendersi il plugin,
+/// nella sua memoria lineare o in quella dell'host a tabelle — e sono quelli
+/// che stiamo mettendo ([`TABLE_CEILING`]).
 ///
 /// Nota che `memory_size` vale **per memoria**: un componente con due memorie
 /// lineari può arrivare a due volte il tetto. È vero, è dichiarato, e non
@@ -291,6 +302,7 @@ fn tick(engine: Engine) {
 pub(crate) fn ceiling() -> StoreLimits {
     StoreLimitsBuilder::new()
         .memory_size(MEMORY_CEILING)
+        .table_elements(TABLE_CEILING)
         .build()
 }
 
@@ -327,4 +339,55 @@ pub(crate) fn arm(store: &mut Store<State>) {
 /// funzione è `pub(crate)` invece di stare dentro [`arm`].
 pub(crate) fn renew(store: &mut Store<State>) {
     store.set_epoch_deadline(TIMEOUT_IN_TICKS);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{arm, engine, TABLE_CEILING};
+    use crate::borrow::State;
+    use wasmtime::{Instance, Module, Store};
+
+    /// Un modulo con una tabella di funzioni da un elemento e una funzione che
+    /// la fa crescere: `(func (export "grow") (param i32) (result i32)
+    /// (table.grow 0 (ref.null func) (local.get 0)))`. Scritto in binario
+    /// perché il crate non accende `wat`.
+    const GROWS_A_TABLE: &[u8] = &[
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // intestazione
+        0x01, 0x06, 0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f, // tipo (i32) -> i32
+        0x03, 0x02, 0x01, 0x00, // una funzione di quel tipo
+        0x04, 0x04, 0x01, 0x70, 0x00, 0x01, // tabella funcref, minimo 1, senza massimo
+        0x07, 0x08, 0x01, 0x04, b'g', b'r', b'o', b'w', 0x00, 0x00, // export "grow"
+        0x0a, 0x0b, 0x01, 0x09, 0x00, 0xd0, 0x70, 0x20, 0x00, 0xfc, 0x0f, 0x00, 0x0b,
+    ];
+
+    /// **Una tabella trova il suo tetto come la memoria.** Senza, `table.grow`
+    /// fa allocare e riempire all'host quanti elementi chiede il plugin: la
+    /// memoria che il tetto della memoria lineare nega, il plugin la prende di
+    /// qui, e l'esito è la RAM dell'app intera invece di un `-1` al plugin.
+    #[test]
+    fn a_table_finds_the_ceiling_like_memory() {
+        let engine = engine();
+        let module = Module::new(&engine, GROWS_A_TABLE).expect("the module compiles");
+        let mut store = Store::new(&engine, State::empty());
+        arm(&mut store);
+        let instance = Instance::new(&mut store, &module, &[]).expect("the module instantiates");
+        let grow = instance
+            .get_typed_func::<i32, i32>(&mut store, "grow")
+            .expect("grow is exported");
+
+        // Un plugin onesto cresce: la tabella di un componente vero ha qualche
+        // migliaio di voci.
+        assert_eq!(grow.call(&mut store, 10_000).unwrap(), 1);
+        let beyond = i32::try_from(TABLE_CEILING).unwrap();
+        assert_eq!(
+            grow.call(&mut store, beyond).unwrap(),
+            -1,
+            "oltre il tetto `table.grow` risponde -1, come `memory.grow`"
+        );
+        assert_eq!(
+            grow.call(&mut store, 1).unwrap(),
+            10_001,
+            "il rifiuto non ha cambiato la tabella"
+        );
+    }
 }

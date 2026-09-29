@@ -241,7 +241,8 @@ Il component model isola la memoria. Il runtime corrente:
   che genera identità o chiavi non riceva valori prevedibili; ogni altro import
   WASI è collegato a una trap;
 - non concede filesystem o rete diretti;
-- impone un limite alla memoria lineare;
+- impone un limite alla memoria lineare e agli elementi di ogni tabella, che
+  l'host alloca per il componente;
 - usa epoch interruption per la deadline;
 - converte trap e timeout in `PluginError`;
 - limita la profondità delle conversioni ricorsive;
