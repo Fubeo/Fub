@@ -516,3 +516,57 @@ fn copy_then_delete_with_the_same_bytes_is_not_a_rename() {
         "e non eredita lo stato per-documento della sorgente"
     );
 }
+
+/// **Un'anagrafe che non si legge non è un'anagrafe vuota.** Il disco che
+/// risponde con un errore non dice che ieri non c'era niente: prenderla per
+/// vuota spegneva il ricongiungimento, e la raccolta toglieva lo spazio
+/// per-documento della nota rinominata ad app chiusa; poi la sessione
+/// riscriveva l'anagrafe senza la voce vecchia, e nemmeno la riapertura
+/// successiva avrebbe più potuto riconoscere la rinomina. Tornata leggibile,
+/// la rinomina si riconosce come sempre.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_entry_store_collects_nothing_and_is_not_rewritten() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let f = Fixture::new();
+    f.write("nota.txt", "un contenuto che sta in una nota sola");
+    let ws = f.open();
+    f.attach_data("nota.txt");
+    drop(ws);
+    f.rename("nota.txt", "Progetti/nota rinominata.txt");
+
+    let store = f.root.join(".fub/data/entries.json");
+    let before = std::fs::read(&store).expect("l'anagrafe scritta alla chiusura");
+    let set = |mode| {
+        std::fs::set_permissions(&store, std::fs::Permissions::from_mode(mode))
+            .expect("permessi dell'anagrafe")
+    };
+    set(0o000);
+    if std::fs::read(&store).is_ok() {
+        // Chi gira da root legge comunque: il guasto non si riproduce.
+        set(0o644);
+        return;
+    }
+    let ws = f.open();
+    drop(ws);
+    set(0o644);
+    assert_eq!(
+        f.data_of("nota.txt").as_deref(),
+        Some("i dati di nota.txt"),
+        "la raccolta ha preso un'anagrafe illeggibile per un'anagrafe vuota"
+    );
+    assert_eq!(
+        std::fs::read(&store).expect("l'anagrafe"),
+        before,
+        "un'anagrafe che non si è letta è stata riscritta"
+    );
+
+    let _ws = f.open();
+    assert_eq!(
+        f.data_of("Progetti/nota rinominata.txt").as_deref(),
+        Some("i dati di nota.txt"),
+        "tornata leggibile, l'anagrafe riconosce la rinomina"
+    );
+    assert!(f.data_of("nota.txt").is_none());
+}

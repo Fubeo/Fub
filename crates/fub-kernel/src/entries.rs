@@ -281,21 +281,49 @@ pub(crate) struct EntryStore {
     /// questo campo si assegnava prima della scrittura, e una scrittura fallita
     /// lasciava in memoria una tabella che il disco non aveva.
     known: RwLock<Durable<BTreeMap<DocId, StoredEntry>>>,
+    /// Il guasto con cui il file non si è letto all'apertura, se c'è stato.
+    ///
+    /// Un file assente, rotto o di una versione che non si conosce è un
+    /// derivato perso, e si rifà. Un errore del supporto no: il file può essere
+    /// intatto, e sapere cosa c'era ieri — cioè quali note sono sparite ad app
+    /// chiusa — è ciò che il ricongiungimento gli chiede. Presa per vuota, la
+    /// tabella spegneva il ricongiungimento, la raccolta toglieva lo spazio
+    /// per-documento delle note rinominate, e la sessione riscriveva il file
+    /// senza le loro voci. Qui la tabella parte vuota lo stesso — rileggere il
+    /// vault costa soltanto tempo — ma la sessione non la riscrive e non
+    /// raccoglie ([`unread_fault`](Self::unread_fault)).
+    unread: Option<std::io::ErrorKind>,
 }
 
 impl EntryStore {
-    /// Apre la tabella di un vault. **Non fallisce mai**: ciò che non si legge
-    /// non c'è, e ciò che non c'è si ricostruisce leggendo il vault — che è la
-    /// definizione di dato derivato.
+    /// Apre la tabella di un vault. **Non fallisce mai**: ciò che non c'è si
+    /// ricostruisce leggendo il vault — che è la definizione di dato derivato.
+    /// Un guasto del supporto apre una tabella vuota che non si riscrive
+    /// (vedi il campo `unread`).
     pub(crate) fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> Self {
         let path = data_root(root).join(FILE);
+        let (table, unread) = match load(&path, storage.as_ref()) {
+            Ok(table) => (table.unwrap_or_default(), None),
+            Err(and) => {
+                tracing::warn!(target: "fub.kernel", %path, "anagrafe illeggibile: {and}");
+                (BTreeMap::new(), Some(and.kind()))
+            }
+        };
         EntryStore {
-            known: RwLock::new(Durable::new(
-                load(&path, storage.as_ref()).unwrap_or_default(),
-            )),
+            known: RwLock::new(Durable::new(table)),
             path,
             storage,
+            unread,
         }
+    }
+
+    /// Il guasto con cui la tabella non si è letta all'apertura: finché c'è,
+    /// «ieri» non si conosce, e chi ne ricaverebbe una cancellazione si ferma.
+    pub(crate) fn unread_fault(&self) -> Option<crate::KernelError> {
+        self.unread.map(|kind| crate::KernelError::Io {
+            path: self.path.clone(),
+            source: std::io::Error::new(kind, "l'anagrafe non si è letta all'apertura"),
+        })
     }
 
     /// Cosa si sapeva di questo file l'ultima volta.
@@ -357,6 +385,12 @@ impl EntryStore {
     /// essersi allungata di record altrui fra la nostra lettura e il
     /// lucchetto, e quelli non si buttano.
     pub(crate) fn store(&self, entries: BTreeMap<DocId, StoredEntry>) -> Result<(), String> {
+        if let Some(kind) = self.unread {
+            return Err(format!(
+                "{} is not rewritten: it could not be read at opening ({kind})",
+                self.path
+            ));
+        }
         {
             let known = self.known.read().map_err(|and| and.to_string())?;
             if entries == **known {
@@ -370,8 +404,9 @@ impl EntryStore {
             // La coda che c'è adesso, e la tabella che ne esce. `None` per un
             // file che non c'è o che non è una coda nostra (v3, rotto): in
             // quel caso non c'è un diff da fare, c'è una fotografia da
-            // scrivere.
-            let raw = storage.read(path).ok();
+            // scrivere. Un file che non si legge non si sovrascrive.
+            let raw = crate::error::optional(storage.read(path))
+                .map_err(|and| format!("cannot read {path}: {and}"))?;
             let old = raw.as_deref().and_then(decode);
             let mut table = entries.clone();
             if let Some(old) = &old {
@@ -614,17 +649,21 @@ fn compact(
 
 /// Legge la tabella.
 ///
-/// `None` per tutto ciò che non è «un file nostro, di questa versione, leggibile
-/// per intero»: un errore di I/O, un file che non è una coda, una versione che
-/// non si conosce. Nessuno dei tre è un avviso — sono tutti «ricomincia dal
-/// vault». Una coda v4 con righe rotte in coda **non** è `None`: si legge ciò
-/// che si capisce, e ciò che non si capisce si scarta (§15.7).
+/// `None` per un file che non c'è, che non è una coda, o di una versione che
+/// non si conosce: nessuno dei tre è un avviso — sono tutti «ricomincia dal
+/// vault». Un errore di I/O invece risale, perché non dice che il file non
+/// c'è (vedi il campo `unread` di [`EntryStore`]). Una coda v4 con righe rotte
+/// in coda **non** è `None`: si legge ciò che si capisce, e ciò che non si
+/// capisce si scarta (§15.7).
 ///
 /// Qui non c'è più nessun vaglio *racily clean*, e non perché la regola sia
 /// caduta: è stata spostata dove si osserva, cioè al momento in cui una voce
 /// entra in anagrafe (difetto 0187). Ciò che è scritto qui è già passato di lì.
-fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Option<BTreeMap<DocId, StoredEntry>> {
-    decode(&storage.read(path).ok()?)
+fn load(
+    path: &Utf8Path,
+    storage: &dyn VaultStorage,
+) -> std::io::Result<Option<BTreeMap<DocId, StoredEntry>>> {
+    Ok(crate::error::optional(storage.read(path))?.and_then(|raw| decode(&raw)))
 }
 
 #[cfg(test)]

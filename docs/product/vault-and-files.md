@@ -40,6 +40,14 @@ nominare, quindi nessun documento del vault può trovarsi lì. Una cartella che
 non si lascia elencare invece ferma l'apertura: senza il suo contenuto l'elenco
 dei documenti sarebbe incompleto, e gli indici poterebbero ciò che non vedono.
 
+L'anagrafe ricorda i file dell'apertura precedente: da lì Fub riconosce una
+nota rinominata ad app chiusa, per esempio da un client di sync, e le fa
+seguire bozza e dati per-documento. Un'anagrafe assente, rotta o di una
+versione più nuova si ricostruisce dal vault. Un'anagrafe che il disco non sa
+leggere parte vuota allo stesso modo, ma in quella sessione non si riscrive e
+la raccolta degli spazi orfani non gira: i dati delle note rinominate restano
+dove sono, e le riconosce la prima apertura che torna a leggerla.
+
 Un documento oltre 64 MiB non si legge per intero. Il parse costa decine di
 volte la sorgente, e una nota da qualche centinaio di MB esauriva la memoria a
 ogni apertura. Oltre quel limite il documento resta nell'albero e si rinomina,

@@ -13086,6 +13086,12 @@ impl Workspace {
         if roots.is_empty() {
             return Ok(0);
         }
+        // Un'anagrafe che non si è letta non dice cosa c'era ieri: il
+        // ricongiungimento non ha visto le rinomine fatte ad app chiusa, e chi
+        // raccogliesse ora toglierebbe i dati di note che hanno cambiato nome.
+        if let Some(fault) = self.entry_store.unread_fault() {
+            return Err(fault);
+        }
         let _phase = tracing::info_span!(target: "fub.apertura", "collect_doc_data").entered();
         // Un cestino illeggibile ferma la raccolta: preso per vuoto, toglieva
         // i dati di ogni nota cestinata, che è ancora recuperabile.
