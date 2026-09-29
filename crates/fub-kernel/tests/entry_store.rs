@@ -739,7 +739,8 @@ fn a_attachment_moved_from_outside_not_remains_in_registry_col_name_old() {
 /// Il disco vero, che conta chi legge **intero** un file il cui path contiene
 /// `watched`, e quanto è grande il pezzo più grande consegnato a chi lo legge
 /// a pezzi. I metadati di Fub sotto `.fub/` (la scheda JSON di una voce del
-/// cestino porta il nome del file) non sono il file.
+/// cestino porta il nome del file) non sono il file: si riconoscono dal
+/// componente, perché su Windows il separatore non è `/`.
 struct PiecesOnly {
     inner: fub_kernel::storage::FsStorage,
     watched: &'static str,
@@ -760,7 +761,8 @@ impl PiecesOnly {
 
 impl VaultStorage for PiecesOnly {
     fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
-        if path.as_str().contains(self.watched) && !path.as_str().contains("/.fub/") {
+        if path.as_str().contains(self.watched) && !path.components().any(|c| c.as_str() == ".fub")
+        {
             self.whole_reads.fetch_add(1, Ordering::Relaxed);
         }
         self.inner.read(path)
