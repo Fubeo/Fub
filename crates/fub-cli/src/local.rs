@@ -217,23 +217,47 @@ pub fn write(
     args: WriteArgs,
     print: impl Fn(&serde_json::Value),
 ) -> Result<(), Failure> {
+    write_with(
+        connection,
+        global,
+        args,
+        |prompt| confirm_write(global, prompt),
+        print,
+    )
+}
+
+/// [`write`] con la conferma passata da fuori: fra la lettura della base e la
+/// scrittura c'è l'attesa di una persona, e il banco ci deve poter mettere
+/// dentro un'altra applicazione.
+fn write_with(
+    connection: &mut Connection,
+    global: &GlobalArgs,
+    args: WriteArgs,
+    confirm: impl FnOnce(&str) -> Result<(), Failure>,
+    print: impl Fn(&serde_json::Value),
+) -> Result<(), Failure> {
     vault_required(connection)?;
     let id = doc_id(&args.doc)?;
     let source = resolve_source(args.stdin, args.text, args.file)?;
     // La scrittura diretta usa la guardia CAS: base letta, o force detta.
+    // `None` è una nota che non c'era: la si **crea**, in modo esclusivo.
     let base = if let Some(base) = args.base.as_deref() {
-        fub_abi::WriteBase::DescendsFrom(fub_abi::Revision::new(base))
+        Some(fub_abi::WriteBase::DescendsFrom(fub_abi::Revision::new(
+            base,
+        )))
     } else if args.force {
-        fub_abi::WriteBase::Dictated
+        Some(fub_abi::WriteBase::Dictated)
     } else {
         // Senza base si legge la revisione corrente: un secondo writer nel
-        // frattempo = Conflict, mai lost update silenziosa.
+        // frattempo = Conflict, mai lost update silenziosa. Vale anche per chi
+        // la nota la crea mentre si aspetta la conferma: scriverla `Dictated`
+        // copriva ciò che l'altra applicazione ci aveva appena messo.
         match connection
             .host
             .read_document(connection.vault_selector(), &id)
         {
-            Ok((_, revision)) => fub_abi::WriteBase::DescendsFrom(revision),
-            Err(fub_abi::PluginError::NotFound(_)) => fub_abi::WriteBase::Dictated,
+            Ok((_, revision)) => Some(fub_abi::WriteBase::DescendsFrom(revision)),
+            Err(fub_abi::PluginError::NotFound(_)) => None,
             Err(e) => return Err(Failure::from_plugin(&e)),
         }
     };
@@ -243,11 +267,21 @@ pub fn write(
         ));
         return Ok(());
     }
-    confirm_write(global, &format!("scrivere `{}`", args.doc))?;
-    let revision = connection
-        .host
-        .write_document(connection.vault_selector(), &id, &source, base)
-        .map_err(|error| Failure::from_plugin(&error))?;
+    confirm(&format!("scrivere `{}`", args.doc))?;
+    let revision = match base {
+        Some(base) => {
+            connection
+                .host
+                .write_document(connection.vault_selector(), &id, &source, base)
+        }
+        None => connection.host.write_document_bytes(
+            connection.vault_selector(),
+            &id,
+            source.as_bytes(),
+            None,
+        ),
+    }
+    .map_err(|error| Failure::from_plugin(&error))?;
     print(&envelope_ok(
         serde_json::json!({ "doc": id.as_str(), "revision": revision.as_str() }),
     ));
@@ -1703,5 +1737,87 @@ pub fn pairing(
             ));
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn global_on(vault: &std::path::Path, config: &std::path::Path) -> GlobalArgs {
+        GlobalArgs {
+            vault: Some(vault.to_str().unwrap().to_string()),
+            config_dir: Some(config.to_str().unwrap().to_string()),
+            no_watcher: true,
+            yes: true,
+            ..GlobalArgs::default()
+        }
+    }
+
+    fn text_args(global: &GlobalArgs, doc: &str, text: &str) -> WriteArgs {
+        WriteArgs {
+            global: global.clone(),
+            doc: doc.into(),
+            base: None,
+            force: false,
+            stdin: false,
+            text: Some(text.into()),
+            file: None,
+        }
+    }
+
+    #[test]
+    fn a_new_note_is_written_and_its_revision_told() {
+        let vault = tempfile::tempdir().unwrap();
+        let config = tempfile::tempdir().unwrap();
+        let global = global_on(vault.path(), config.path());
+        let mut connection = Connection::open(&global).unwrap();
+        let printed = std::cell::RefCell::new(None);
+
+        write_with(
+            &mut connection,
+            &global,
+            text_args(&global, "Nuova.md", "dalla riga di comando\n"),
+            |_| Ok(()),
+            |value| *printed.borrow_mut() = Some(value.clone()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(vault.path().join("Nuova.md")).unwrap(),
+            "dalla riga di comando\n"
+        );
+        let printed = printed.into_inner().expect("the outcome is printed");
+        assert!(printed.to_string().contains("revision"), "{printed}");
+    }
+
+    /// Una nota che non c'era quando la base si è letta, e che un'altra
+    /// applicazione crea mentre si aspetta il «y», non si sovrascrive: la
+    /// scrittura di una nota nuova è una creazione, e una creazione non copre
+    /// ciò che qualcun altro ha appena scritto.
+    #[test]
+    fn a_note_created_during_the_prompt_is_not_overwritten() {
+        let vault = tempfile::tempdir().unwrap();
+        let config = tempfile::tempdir().unwrap();
+        let global = global_on(vault.path(), config.path());
+        let mut connection = Connection::open(&global).unwrap();
+        let other = vault.path().join("Nuova.md");
+
+        let result = write_with(
+            &mut connection,
+            &global,
+            text_args(&global, "Nuova.md", "dalla riga di comando\n"),
+            |_| {
+                std::fs::write(&other, "dell'altra applicazione\n").unwrap();
+                Ok(())
+            },
+            |_| {},
+        );
+
+        assert!(result.is_err(), "the other application's note was covered");
+        assert_eq!(
+            std::fs::read_to_string(&other).unwrap(),
+            "dell'altra applicazione\n"
+        );
     }
 }
