@@ -14,7 +14,7 @@ use subtle::ConstantTimeEq;
 
 use crate::crypto::{derive_kek, KdfParams};
 use crate::mfa::TotpState;
-use crate::schema::{accounts_path, atomic_write, now_ms};
+use crate::schema::{accounts_path, atomic_write, now_ms, read_if_present};
 
 /// Perché un bearer non vale. Lo status HTTP si sceglie sulla variante, mai
 /// sul testo del messaggio (I73): [`TokenRejection::status`].
@@ -122,13 +122,12 @@ impl AccountStore {
     /// Carica (o crea vuoto) dalla data dir.
     pub fn load(data_dir: &Path) -> Result<Self, String> {
         let path = accounts_path(data_dir);
-        if !path.exists() {
+        let Some(bytes) = read_if_present(&path).map_err(|e| format!("accounts read: {e}"))? else {
             return Ok(Self {
                 path,
                 ..Default::default()
             });
-        }
-        let bytes = std::fs::read(&path).map_err(|e| format!("accounts read: {e}"))?;
+        };
         let mut store: AccountStore =
             serde_json::from_slice(&bytes).map_err(|e| format!("accounts parse: {e}"))?;
         store.path = path;
@@ -453,6 +452,29 @@ mod tests {
         );
         let reloaded = AccountStore::load(&dir).unwrap();
         assert_eq!(reloaded.sessions.len(), MAX_SESSIONS_PER_ACCOUNT + 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Un registro che il disco non sa dire non è un registro vuoto: caricato
+    /// vuoto, il primo salvataggio avrebbe riscritto `accounts.json` senza
+    /// nessun account.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreachable_account_store_is_an_error_not_an_empty_one() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("fub-services-auth-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut store = AccountStore::load(&dir).unwrap();
+        store.create_account("resta", "correct-horse-99").unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let reachable = std::fs::metadata(accounts_path(&dir)).is_ok();
+        let loaded = AccountStore::load(&dir);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // Da root la cartella si attraversa lo stesso: non c'è niente da provare.
+        if !reachable {
+            assert!(loaded.is_err(), "{:?}", loaded.map(|s| s.accounts.len()));
+        }
+        assert_eq!(AccountStore::load(&dir).unwrap().accounts.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

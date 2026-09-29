@@ -101,11 +101,11 @@ pub fn state_path(sync_dir: &Path) -> PathBuf {
 
 /// Load or default (missing file = fresh service, not an error).
 pub fn load(sync_dir: &Path) -> Result<SyncState, String> {
-    let path = state_path(sync_dir);
-    if !path.exists() {
+    let Some(bytes) = crate::schema::read_if_present(&state_path(sync_dir))
+        .map_err(|e| format!("sync state read: {e}"))?
+    else {
         return Ok(SyncState::default());
-    }
-    let bytes = std::fs::read(&path).map_err(|e| format!("sync state read: {e}"))?;
+    };
     let state: SyncState =
         serde_json::from_slice(&bytes).map_err(|e| format!("sync state parse: {e}"))?;
     for (doc_id, chain) in &state.versions {
@@ -345,10 +345,11 @@ pub fn sha256_b64(bytes: &[u8]) -> String {
 /// reported. Used by the invariant tests to prove no doc_id/replica/body
 /// ever reaches logs.
 pub fn find_non_allowlist_log_lines(log_path: &Path) -> Result<Vec<String>, String> {
-    if !log_path.exists() {
-        return Ok(Vec::new());
-    }
-    let file = File::open(log_path).map_err(|e| format!("log read: {e}"))?;
+    let file = match File::open(log_path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("log read: {e}")),
+    };
     let mut bad = Vec::new();
     for line in BufReader::new(file).lines() {
         let line = line.map_err(|e| format!("log read: {e}"))?;

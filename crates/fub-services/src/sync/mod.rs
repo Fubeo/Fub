@@ -447,11 +447,11 @@ fn shares_path(sync_dir: &Path) -> std::path::PathBuf {
 }
 
 fn load_shares(sync_dir: &Path) -> Result<SyncShares, String> {
-    let path = shares_path(sync_dir);
-    if !path.exists() {
+    let Some(bytes) =
+        schema::read_if_present(&shares_path(sync_dir)).map_err(|e| format!("shares read: {e}"))?
+    else {
         return Ok(SyncShares::default());
-    }
-    let bytes = std::fs::read(&path).map_err(|e| format!("shares read: {e}"))?;
+    };
     serde_json::from_slice(&bytes).map_err(|e| format!("shares parse: {e}"))
 }
 
@@ -1001,7 +1001,14 @@ pub const LEGACY_STATE_ASIDE: &str = "state.pre-vaults.json";
 ///   recupera lo stato; niente viene riscritto o cancellato.
 fn adopt_legacy(sync_dir: &Path) -> Result<(), String> {
     let legacy = versions::state_path(sync_dir);
-    if !legacy.exists() {
+    // `try_exists`, non `exists`: le rename qui sotto sostituiscono la
+    // destinazione, e uno stat fallito letto come «non c'è» le farebbe
+    // passare sopra uno stato vero.
+    let present = |path: &Path| {
+        path.try_exists()
+            .map_err(|e| format!("legacy sync state stat: {e}"))
+    };
+    if !present(&legacy)? {
         return Ok(());
     }
     let state = versions::load(sync_dir)?;
@@ -1046,7 +1053,7 @@ fn adopt_legacy(sync_dir: &Path) -> Result<(), String> {
         }
         (None, _) => {
             let aside = sync_dir.join(LEGACY_STATE_ASIDE);
-            if aside.exists() {
+            if present(&aside)? {
                 return Err(
                     "legacy sync state already set aside: operator recovery required".to_string(),
                 );
@@ -1058,17 +1065,15 @@ fn adopt_legacy(sync_dir: &Path) -> Result<(), String> {
     std::fs::create_dir_all(&target).map_err(|e| format!("vault sync dir: {e}"))?;
     let adopted = versions::state_path(&target);
     let clash = |to: &Path| {
-        to.exists()
-            .then(|| "legacy sync state clashes with a vault partition".to_string())
+        if present(to)? {
+            return Err("legacy sync state clashes with a vault partition".to_string());
+        }
+        Ok(())
     };
-    if let Some(error) = clash(&adopted) {
-        return Err(error);
-    }
+    clash(&adopted)?;
     for path in &queues {
         let to = target.join(path.file_name().expect("read_dir entry has a name"));
-        if let Some(error) = clash(&to) {
-            return Err(error);
-        }
+        clash(&to)?;
         std::fs::rename(path, &to).map_err(|e| format!("legacy sync queue move: {e}"))?;
     }
     std::fs::rename(&legacy, &adopted).map_err(|e| format!("legacy sync state move: {e}"))?;
@@ -2945,5 +2950,38 @@ mod authenticated_version_tests {
         assert_eq!(chain(&folded, "notes/plain.md"), vec![4]);
         assert_eq!(chain(&folded, "notes/conflict.md"), vec![1, 2, 3]);
         assert_eq!(chain(&folded, "notes/trashed.md"), vec![2, 3]);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod unreachable_state_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// Uno stato che il disco non sa dire non è uno stato vuoto: caricato
+    /// vuoto, il salvataggio della richiesta successiva avrebbe cancellato
+    /// catene, condivisioni e code del vault.
+    #[test]
+    fn an_unreachable_sync_dir_is_an_error_not_an_empty_state() {
+        let dir = std::env::temp_dir().join(format!("fub-services-sync-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        versions::save(&dir, &versions::SyncState::default()).unwrap();
+        save_shares(&dir, &SyncShares::default()).unwrap();
+        std::fs::write(queue::queue_path(&dir, "replica-a"), b"").unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let reachable = std::fs::metadata(versions::state_path(&dir)).is_ok();
+        let state = versions::load(&dir).map(drop);
+        let shares = load_shares(&dir).map(drop);
+        let ops = queue::load_ops(&dir, "replica-a").map(drop);
+        let adopted = adopt_legacy(&dir);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // Da root la cartella si attraversa lo stesso: non c'è niente da provare.
+        if !reachable {
+            assert!(state.is_err(), "{state:?}");
+            assert!(shares.is_err(), "{shares:?}");
+            assert!(ops.is_err(), "{ops:?}");
+            assert!(adopted.is_err(), "{adopted:?}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

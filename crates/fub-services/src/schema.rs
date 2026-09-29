@@ -130,6 +130,18 @@ pub fn config_path(base: &Path) -> PathBuf {
     base.join("services.json")
 }
 
+/// Legge un file che può mancare: `None` soltanto se non c'è. Ogni altro
+/// guasto risale col suo tipo — un registro che il disco non sa dire non è un
+/// registro vuoto, e il salvataggio successivo lo cancellerebbe. È la
+/// differenza che `Path::exists` non fa: per lui un errore vale «assente».
+pub fn read_if_present(path: &Path) -> std::io::Result<Option<Vec<u8>>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 /// Scrittura atomica (tmp + rename + fsync dir): code durevoli, ack durevoli.
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write as _;

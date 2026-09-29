@@ -156,12 +156,20 @@ pub fn append_ops(
     append_lines(sync_dir, replica_id, &lines?)
 }
 
-fn count_lines(sync_dir: &Path, replica_id: &str) -> Result<usize, QueueError> {
-    let path = queue_path(sync_dir, replica_id);
-    if !path.exists() {
-        return Ok(0);
+/// La coda, se c'è: una coda che il disco non sa aprire non è una coda vuota,
+/// e chi la legge vuota ne riscriverebbe una senza le op ancora da consegnare.
+fn open_if_present(path: &Path) -> Result<Option<File>, QueueError> {
+    match File::open(path) {
+        Ok(file) => Ok(Some(file)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(QueueError::Io(format!("queue read: {e}"))),
     }
-    let file = File::open(&path).map_err(|e| QueueError::Io(format!("queue read: {e}")))?;
+}
+
+fn count_lines(sync_dir: &Path, replica_id: &str) -> Result<usize, QueueError> {
+    let Some(file) = open_if_present(&queue_path(sync_dir, replica_id))? else {
+        return Ok(0);
+    };
     let mut n = 0;
     for line in BufReader::new(file).lines() {
         line.map_err(|e| QueueError::Io(format!("queue read: {e}")))?;
@@ -178,10 +186,9 @@ fn count_lines(sync_dir: &Path, replica_id: &str) -> Result<usize, QueueError> {
 /// corruption. Callers replay via [`recovery_replay`] explicitly.
 pub fn load_ops(sync_dir: &Path, replica_id: &str) -> Result<Vec<super::SyncOp>, QueueError> {
     let path = queue_path(sync_dir, replica_id);
-    if !path.exists() {
+    let Some(file) = open_if_present(&path)? else {
         return Ok(Vec::new());
-    }
-    let file = File::open(&path).map_err(|e| QueueError::Io(format!("queue read: {e}")))?;
+    };
     let reader = BufReader::new(file);
     let mut out = Vec::new();
     let mut bad: Vec<String> = Vec::new();

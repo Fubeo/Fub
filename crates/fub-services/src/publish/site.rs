@@ -272,7 +272,12 @@ pub fn create_site(
         return Err(SiteError::EmptyOwner);
     }
     let dir = site_dir(data_dir, site_id);
-    if record_path(data_dir, site_id).exists() {
+    // `try_exists`: uno stat fallito letto come «non c'è» farebbe riscrivere
+    // il record di un sito vero con uno senza versioni.
+    if record_path(data_dir, site_id)
+        .try_exists()
+        .map_err(SiteError::Io)?
+    {
         return Err(SiteError::AlreadyExists(site_id.to_string()));
     }
     if fs::symlink_metadata(&dir).is_ok_and(|meta| !meta.is_dir() || meta.file_type().is_symlink())

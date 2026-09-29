@@ -101,11 +101,11 @@ impl ServiceState {
         std::fs::create_dir_all(&data_dir).map_err(|e| format!("data dir: {e}"))?;
         let config = {
             let path = config_path(&data_dir);
-            if path.exists() {
-                let bytes = std::fs::read(&path).map_err(|e| format!("config read: {e}"))?;
-                serde_json::from_slice(&bytes).map_err(|e| format!("config parse: {e}"))?
-            } else {
-                ServicesConfig::default()
+            match crate::schema::read_if_present(&path).map_err(|e| format!("config read: {e}"))? {
+                Some(bytes) => {
+                    serde_json::from_slice(&bytes).map_err(|e| format!("config parse: {e}"))?
+                }
+                None => ServicesConfig::default(),
             }
         };
         let accounts = AccountStore::load(&data_dir)?;
