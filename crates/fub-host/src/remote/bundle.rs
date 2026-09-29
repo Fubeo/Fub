@@ -1500,16 +1500,18 @@ fn collect_job_docs(
             {
                 continue;
             }
+            // La dimensione prima dell'impronta: un file che resta fuori non
+            // si legge per intero a ogni passaggio solo per saperlo.
+            if entry.size > super::sync::MAX_DOC_BYTES as u64 {
+                too_large.push(path);
+                continue;
+            }
             let before = match host.document_revision(&entry.id) {
                 Ok(revision) => revision,
                 Err(PluginError::NotFound(_)) => continue,
                 Err(e) => return Err(e),
             };
             if synced.get(&path) == Some(&before) {
-                continue;
-            }
-            if entry.size > super::sync::MAX_DOC_BYTES as u64 {
-                too_large.push(path);
                 continue;
             }
             match host.read_document_bytes(&entry.id) {
@@ -2131,6 +2133,7 @@ mod collect_tests {
         let sent: Vec<&str> = collected.docs.iter().map(|doc| doc.id.as_str()).collect();
         assert_eq!(sent, ["Nota.md", "foto.png"]);
         assert_eq!(collected.too_large, ["video.mp4"]);
+        assert_eq!(host.reads_on("video.mp4"), (0, 0));
     }
 
     #[test]
