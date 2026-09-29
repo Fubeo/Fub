@@ -228,22 +228,33 @@ fn commit_with(
     let result = importer.import(&source, &apply, host);
     let mut persist_error = None;
     if let Ok(report) = &result {
-        for entry in &mut journal.entries {
-            if let Ok(bytes) = host.read_document_bytes(&entry.doc) {
-                entry.after_sha = Some(content_hash_hex(&bytes));
-            }
-        }
         if report.documents == manifest.preview.documents
             && !report
                 .documents
                 .iter()
                 .any(|d| matches!(d.outcome, ImportOutcome::Failed(_)))
         {
-            journal.committed = Some(report.clone());
-            if let Err(e) = save_receipt(job, &journal, host) {
-                persist_error = Some(e);
-            } else {
-                return Ok(report.clone());
+            // Il journal committato è ciò che protegge dal rollback le
+            // modifiche successive dell'utente: senza l'impronta del dopo, il
+            // rollback non distinguerebbe l'import da ciò che l'utente ha
+            // scritto poi. Un bersaglio che non si rilegge — assente dopo un
+            // Created/Replaced, o un disco che non risponde — non si committa.
+            for entry in &mut journal.entries {
+                match host.read_document_bytes(&entry.doc) {
+                    Ok(bytes) => entry.after_sha = Some(content_hash_hex(&bytes)),
+                    Err(error) => {
+                        persist_error = Some(error);
+                        break;
+                    }
+                }
+            }
+            if persist_error.is_none() {
+                journal.committed = Some(report.clone());
+                if let Err(e) = save_receipt(job, &journal, host) {
+                    persist_error = Some(e);
+                } else {
+                    return Ok(report.clone());
+                }
             }
         }
     }

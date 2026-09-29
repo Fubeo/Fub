@@ -304,6 +304,62 @@ fn rollback_refuses_to_erase_a_later_user_edit() {
         .contains("Second note"));
 }
 
+/// Un importer che dichiara di aver creato una nota e non la scrive: dopo
+/// l'applicazione la nota non si rilegge, e il journal non sa che cosa
+/// l'import ci ha lasciato.
+struct Hollow;
+
+impl ImportProvider for Hollow {
+    fn can_handle(&self, _: &ImportSource) -> bool {
+        true
+    }
+
+    fn import(
+        &mut self,
+        _: &ImportSource,
+        request: &ImportRequest,
+        _: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<fub_abi::transfer::ImportReport, fub_abi::PluginError> {
+        let mut report = fub_abi::transfer::ImportReport::new(request.mode);
+        report.documents.push(fub_abi::transfer::ImportedDocument {
+            doc: DocId::new("Hollow.md"),
+            outcome: ImportOutcome::Created,
+            entry: None,
+        });
+        Ok(report)
+    }
+}
+
+/// Un commit che non rilegge ciò che l'import ha lasciato non si chiude: un
+/// journal senza l'impronta del dopo lascerebbe al rollback cestinare o
+/// sovrascrivere ciò che l'utente scrive dopo, senza accorgersene.
+#[test]
+fn a_commit_that_cannot_reread_its_targets_is_not_committed() {
+    let mut host = MemoryHost::new();
+    let source = ImportSource::text_source("hollow.txt", "hollow");
+    StagingManifest::prepare(
+        "hollow",
+        &source,
+        &ImportRequest::apply(),
+        &mut Hollow,
+        &mut host,
+        42,
+    )
+    .unwrap();
+    assert!(fub_importers::pipeline::commit("hollow", &mut Hollow, &mut host).is_err());
+    host.write_document(
+        &DocId::new("Hollow.md"),
+        "user note",
+        fub_abi::edit::WriteBase::Dictated,
+    )
+    .unwrap();
+    let _ = fub_importers::pipeline::rollback("hollow", &mut host);
+    assert_eq!(
+        host.read_document(&DocId::new("Hollow.md")).unwrap(),
+        "user note"
+    );
+}
+
 #[test]
 fn evernote_preview_and_apply_preserve_resource_bytes_and_provenance() {
     let mut host = MemoryHost::new();
