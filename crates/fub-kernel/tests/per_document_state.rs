@@ -11,7 +11,10 @@
 //! La convenzione dei path è del contratto (`fub_abi::rules::doc_data`); qui
 //! si prova la parte che richiede il disco e l'anagrafe del vault.
 
-use camino::Utf8PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
@@ -22,7 +25,8 @@ use fub_abi::rules::doc_data;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::PluginManifest;
 use fub_abi::FormatProvider;
-use fub_kernel::{data_root, FormatRegistry, Trust, Workspace};
+use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
+use fub_kernel::{data_root, FormatRegistry, MachineSettings, Trust, Workspace};
 use fub_testkit::restore_document;
 
 /// Un provider che non legge niente: qui i documenti servono a esistere, non a
@@ -397,6 +401,93 @@ fn an_unreadable_trash_collects_nothing() {
         Some(&b"dato"[..]),
         "la raccolta ha preso un cestino illeggibile per un cestino vuoto"
     );
+}
+
+/// Un supporto che, acceso l'interruttore, non sa dire se `.trash/` c'è: un
+/// disco che comincia a fallire proprio lì.
+struct TrashStatFails {
+    inner: fub_kernel::storage::FsStorage,
+    failing: AtomicBool,
+}
+
+impl VaultStorage for TrashStatFails {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+    fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        if self.failing.load(Ordering::Relaxed) && path.file_name() == Some(".trash") {
+            return Err(std::io::Error::other("il disco non risponde"));
+        }
+        self.inner.stat(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
+/// **Un cestino di cui non si sa se c'è non è un cestino vuoto.** Il cestino
+/// si guardava con un `exists`, che per una `stat` fallita risponde «no»: la
+/// raccolta non vedeva più le note cestinate e ne toglieva gli spazi
+/// per-documento, e l'elenco del cestino si mostrava vuoto.
+#[test]
+fn a_trash_that_cannot_be_stat_collects_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(Box::new(NudoProvider))
+        .expect("nessun conflitto");
+    let storage = Arc::new(TrashStatFails {
+        inner: fub_kernel::storage::FsStorage,
+        failing: AtomicBool::new(false),
+    });
+    let mut ws = Workspace::on(
+        &root,
+        registry,
+        storage.clone() as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    ws.reindex().expect("reindex del vault vuoto");
+    let doc = notes(&mut ws, "Cestinata.md", "vado nel cestino");
+    let rel = doc_data::path(&doc, "x");
+    write_data_item(&root, OFF, &rel, b"dato");
+    ws.delete_document(&doc).expect("cestina");
+
+    storage.failing.store(true, Ordering::Relaxed);
+    assert!(
+        ws.list_trash().is_err(),
+        "un cestino di cui non si sa niente si mostrava vuoto"
+    );
+    ws.reindex().expect("riapertura col cestino muto");
+    storage.failing.store(false, Ordering::Relaxed);
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "la raccolta ha preso un cestino muto per un cestino vuoto"
+    );
+    assert_eq!(ws.list_trash().expect("il cestino torna").len(), 1);
 }
 
 /// Il sidecar dell'unica voce del cestino, e la nota cestinata da una

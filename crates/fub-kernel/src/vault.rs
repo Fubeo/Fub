@@ -1392,6 +1392,20 @@ impl Vault {
         Ok(Some(sidecar))
     }
 
+    /// C'è una cartella del cestino? Soltanto un «non c'è» del supporto vale
+    /// «no»: una `stat` che fallisce non dice che il cestino è vuoto, e chi
+    /// lo prendesse per vuoto — l'elenco, e la raccolta che ci conta per
+    /// sapere quali note sono ancora recuperabili — perderebbe le note
+    /// cestinate e i loro dati.
+    fn has_trash(&self, dir: &Utf8Path) -> Result<bool> {
+        crate::error::optional(self.storage.stat(dir))
+            .map(|stat| stat.is_some())
+            .map_err(|source| KernelError::Io {
+                path: dir.to_owned(),
+                source,
+            })
+    }
+
     /// Il contenuto del cestino, dal più recente al più vecchio.
     ///
     /// Elenca **tutti** i file utente, anche quelli che nessun provider saprebbe
@@ -1403,7 +1417,7 @@ impl Vault {
     /// filesystem per conservare l'identità del protocollo.
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
         let dir = self.root.join(TRASH_DIR);
-        if !self.storage.exists(&dir) {
+        if !self.has_trash(&dir)? {
             return Ok(Vec::new());
         }
         let mut out = Vec::new();
@@ -1493,7 +1507,7 @@ impl Vault {
     /// Obsidian) o che parla di un altro file, cioè di una voce che non c'è più.
     pub fn trash_originals(&self) -> Result<Vec<DocId>> {
         let dir = self.root.join(TRASH_DIR);
-        if !self.storage.exists(&dir) {
+        if !self.has_trash(&dir)? {
             return Ok(Vec::new());
         }
         let mut files = Vec::new();
@@ -1662,7 +1676,7 @@ impl Vault {
     pub fn empty_trash(&self) -> Result<usize> {
         let dir = self.root.join(TRASH_DIR);
         let mut cataloged = Vec::new();
-        if self.storage.exists(&dir) {
+        if self.has_trash(&dir)? {
             self.trash_entries_with_sidecars(&dir, &mut cataloged)?;
         }
         let mut count = 0;

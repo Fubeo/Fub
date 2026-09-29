@@ -192,9 +192,11 @@ vale come assente: l'elenco del cestino e il ripristino si fermano con l'errore
 invece di rimettere la nota nella radice.
 
 Finché una nota sta nel cestino, i suoi dati per-documento restano: la raccolta
-degli spazi orfani li conserva. Se il cestino non si elenca, o un sidecar
-presente non si legge o viene da una versione più nuova di Fub, la raccolta si
-ferma invece di indovinare da quale cartella venisse la nota.
+degli spazi orfani li conserva. Se il disco non sa dire se il cestino c'è, se
+il cestino non si elenca, o se un sidecar presente non si legge o viene da una
+versione più nuova di Fub, la raccolta si ferma invece di indovinare da quale
+cartella venisse la nota. Anche l'elenco del cestino risponde con l'errore
+invece di mostrarsi vuoto.
 
 L'impostazione di vault `files.trash` sceglie dove finisce una nota cancellata
 dalla shell. `vault` (default) usa il cestino interno. `system` usa il comando
