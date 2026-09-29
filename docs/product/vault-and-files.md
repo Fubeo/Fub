@@ -175,6 +175,11 @@ Il sidecar è un aiuto, non l'unica copia della nota. Se manca o non è
 compatibile, il comportamento di degrado deve preservare il contenuto e usare
 una destinazione sicura.
 
+Finché una nota sta nel cestino, i suoi dati per-documento restano: la raccolta
+degli spazi orfani li conserva. Se il cestino non si elenca, o un sidecar
+presente non si legge o viene da una versione più nuova di Fub, la raccolta si
+ferma invece di indovinare da quale cartella venisse la nota.
+
 L'impostazione di vault `files.trash` sceglie dove finisce una nota cancellata
 dalla shell. `vault` (default) usa il cestino interno. `system` usa il comando
 `trash.os`, che prova il cestino del sistema operativo e, se non è disponibile,

@@ -1422,23 +1422,36 @@ impl Vault {
         Ok(out)
     }
 
-    fn walk_trash(&self, dir: &Utf8Path, out: &mut Vec<TrashEntry>) -> Result<()> {
-        let io = |path: &Utf8Path, and: std::io::Error| KernelError::Io {
-            path: path.to_owned(),
+    /// I file del cestino, con i loro metadati: la camminata che l'elenco e
+    /// la raccolta condividono.
+    fn trash_files(&self, dir: &Utf8Path, out: &mut Vec<(DocId, Stat)>) -> Result<()> {
+        let entries = self.storage.list(dir).map_err(|and| KernelError::Io {
+            path: dir.to_owned(),
             source: and,
-        };
-        for entry in self.storage.list(dir).map_err(|and| io(dir, and))? {
-            let path = entry.path;
+        })?;
+        for entry in entries {
             if entry.stat.is_dir() {
-                self.walk_trash(&path, out)?;
+                self.trash_files(&entry.path, out)?;
                 continue;
             }
-            if path.file_name().is_some_and(crate::storage::is_write_lock) {
+            if entry
+                .path
+                .file_name()
+                .is_some_and(crate::storage::is_write_lock)
+            {
                 continue;
             }
-            let id = self.doc_id_for_path(&path)?;
+            out.push((self.doc_id_for_path(&entry.path)?, entry.stat));
+        }
+        Ok(())
+    }
+
+    fn walk_trash(&self, dir: &Utf8Path, out: &mut Vec<TrashEntry>) -> Result<()> {
+        let mut files = Vec::new();
+        self.trash_files(dir, &mut files)?;
+        for (id, stat) in files {
             let name = file_name_of(id.as_str());
-            let sidecar = self.trash_sidecar(&id, &entry.stat);
+            let sidecar = self.trash_sidecar(&id, &stat);
             out.push(TrashEntry {
                 // Il sidecar sa da quale cartella veniva; senza (voce di
                 // Obsidian, o di un'altra epoca) si degrada al nome
@@ -1462,13 +1475,70 @@ impl Vault {
                 deleted_at: sidecar
                     .as_ref()
                     .and_then(|s| s.deleted_at)
-                    .unwrap_or(entry.stat.mtime)
+                    .unwrap_or(stat.mtime)
                     / 1000,
-                size: entry.stat.size,
+                size: stat.size,
                 id,
             });
         }
         Ok(())
+    }
+
+    /// Da quali documenti vengono le voci del cestino, per chi ne ricava una
+    /// cancellazione: la raccolta degli spazi per-documento.
+    ///
+    /// [`list_trash`](Self::list_trash) degrada un sidecar che non sa leggere
+    /// al nome de-timbrato nella radice, e per mostrare una riga va bene. Qui
+    /// no: una nota di `Diario/` con il sidecar illeggibile risultava
+    /// `Idea.md`, e la raccolta toglieva i dati di `Diario/Idea.md` mentre la
+    /// nota era ancora recuperabile. Un guasto del supporto e un sidecar
+    /// presente ma non compreso — rotto, o scritto da una versione più nuova —
+    /// risalgono. Degrada al nome soltanto un sidecar che non c'è (una voce di
+    /// Obsidian) o che parla di un altro file, cioè di una voce che non c'è più.
+    pub fn trash_originals(&self) -> Result<Vec<DocId>> {
+        let dir = self.root.join(TRASH_DIR);
+        if !self.storage.exists(&dir) {
+            return Ok(Vec::new());
+        }
+        let mut files = Vec::new();
+        self.trash_files(&dir, &mut files)?;
+        let mut out = Vec::with_capacity(files.len());
+        for (id, stat) in files {
+            let path = self.trash_sidecar_path(&id);
+            let unreadable = |why: String| KernelError::Io {
+                path: path.clone(),
+                source: std::io::Error::new(std::io::ErrorKind::InvalidData, why),
+            };
+            let raw = crate::error::optional(self.storage.read(&path)).map_err(|source| {
+                KernelError::Io {
+                    path: path.clone(),
+                    source,
+                }
+            })?;
+            let guessed = || DocId::new(strip_stamp(file_name_of(id.as_str())));
+            let Some(raw) = raw else {
+                out.push(guessed());
+                continue;
+            };
+            let sidecar = serde_json::from_slice::<TrashSidecar>(&raw)
+                .map_err(|and| unreadable(and.to_string()))?;
+            if sidecar.v != SCHEMA_VERSION {
+                return Err(unreadable(format!(
+                    "sidecar del cestino in versione {}, questa copia legge la {}",
+                    sidecar.v, SCHEMA_VERSION
+                )));
+            }
+            let stamp = TrashStamp {
+                size: stat.size,
+                mtime: stat.mtime,
+            };
+            if sidecar.file.is_some_and(|f| f != stamp) {
+                out.push(guessed());
+            } else {
+                out.push(DocId::new(sidecar.original));
+            }
+        }
+        Ok(out)
     }
 
     /// Cancella davvero un file, ma **solo** dentro il cestino.

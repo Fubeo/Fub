@@ -397,6 +397,73 @@ fn an_unreadable_trash_collects_nothing() {
     );
 }
 
+/// Il sidecar dell'unica voce del cestino, e la nota cestinata da una
+/// cartella che il nome da solo non ricorda.
+fn trashed_in_a_folder(root: &Utf8PathBuf, ws: &mut Workspace) -> (String, std::path::PathBuf) {
+    let doc = notes(ws, "Diario/Idea.md", "vado nel cestino");
+    let rel = doc_data::path(&doc, "x");
+    write_data_item(root, OFF, &rel, b"dato");
+    ws.delete_document(&doc).expect("cestina");
+    let sidecars: Vec<_> = std::fs::read_dir(root.join(".fub/data/trash"))
+        .expect("i sidecar del cestino")
+        .map(|entry| entry.expect("voce").path())
+        .collect();
+    assert_eq!(sidecars.len(), 1, "{sidecars:?}");
+    (rel, sidecars.into_iter().next().unwrap())
+}
+
+/// **Un sidecar che non si legge non autorizza a indovinare.** Senza il
+/// sidecar la voce del cestino degrada al nome nella radice — `Idea.md` — e
+/// per mostrare una riga va bene; ma la raccolta ci contava per sapere quali
+/// note sono ancora recuperabili, e toglieva i dati di `Diario/Idea.md`.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_trash_sidecar_collects_nothing() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_g, root, mut ws) = vault();
+    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    let set = |mode| {
+        std::fs::set_permissions(&sidecar, std::fs::Permissions::from_mode(mode))
+            .expect("permessi del sidecar")
+    };
+    set(0o000);
+    if std::fs::read(&sidecar).is_ok() {
+        // Chi gira da root legge comunque: il guasto non si riproduce.
+        set(0o644);
+        return;
+    }
+
+    let reopened = ws.reindex();
+    set(0o644);
+    reopened.expect("riapertura col sidecar illeggibile");
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "la raccolta ha indovinato l'origine di una nota cestinata"
+    );
+}
+
+/// Lo stesso per un sidecar scritto da una versione più nuova di Fub (un
+/// vault sincronizzato fra due macchine): questa copia non sa leggerlo, e
+/// non sapere non è sapere che la nota non c'è.
+#[test]
+fn a_trash_sidecar_from_a_newer_version_collects_nothing() {
+    let (_g, root, mut ws) = vault();
+    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    let mut json: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&sidecar).unwrap()).unwrap();
+    json["v"] = serde_json::json!(99);
+    std::fs::write(&sidecar, serde_json::to_vec(&json).unwrap()).unwrap();
+
+    ws.reindex().expect("riapertura col sidecar più nuovo");
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "la raccolta ha preso un sidecar sconosciuto per un sidecar assente"
+    );
+}
+
 #[test]
 fn empty_the_trash_and_reopen_collects() {
     // Il seguito del test di sopra: finché la nota è recuperabile i dati

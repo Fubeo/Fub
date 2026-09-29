@@ -13112,15 +13112,12 @@ impl Workspace {
     /// I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
     /// sparito**, è recuperabile.
     ///
-    /// Un cestino che non si elenca non è un cestino vuoto, e l'errore risale:
-    /// chi ne ricava una cancellazione deve potersi fermare.
+    /// Un cestino che non si elenca non è un cestino vuoto, e un sidecar che
+    /// non si legge non è un sidecar assente: l'errore risale, perché chi ne
+    /// ricava una cancellazione deve potersi fermare
+    /// ([`Vault::trash_originals`](crate::vault::Vault::trash_originals)).
     fn trashed_originals(&self) -> Result<std::collections::HashSet<DocId>> {
-        Ok(self
-            .docs
-            .list_trash()?
-            .into_iter()
-            .map(|and| and.original)
-            .collect())
+        Ok(self.docs.vault.trash_originals()?.into_iter().collect())
     }
 
     /// **Riconosce le rinomine che non ha visto nessuno** (§23.1), e restituisce
