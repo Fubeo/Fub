@@ -135,19 +135,30 @@ pub fn ensure_seeded(config_dir: Option<&Utf8Path>) -> Result<Utf8PathBuf, Plugi
             ))
         }
     }
+    let unwritten = |and: std::io::Error| {
+        PluginError::Io(format!("non riesco a scrivere la demo in {root}: {and}").into())
+    };
     for seed in SEED_NOTES {
         let path = root.join(seed.path);
-        if path.exists() {
-            continue;
-        }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent.as_std_path()).map_err(|and| {
                 PluginError::Io(format!("non riesco a preparare la demo in {root}: {and}").into())
             })?;
         }
-        std::fs::write(path.as_std_path(), seed.text).map_err(|and| {
-            PluginError::Io(format!("non riesco a scrivere la demo in {root}: {and}").into())
-        })?;
+        // «C'è già» lo dice la creazione esclusiva, non un `exists` chiesto
+        // prima: quello legge ogni errore — e un collegamento rotto — come
+        // un'assenza, e la scrittura che seguiva sovrascriveva la nota
+        // dell'utente o, attraverso il collegamento, un file fuori dalla demo.
+        let mut file = match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path.as_std_path())
+        {
+            Ok(file) => file,
+            Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(and) => return Err(unwritten(and)),
+        };
+        file.write_all(seed.text.as_bytes()).map_err(unwritten)?;
     }
     Ok(root)
 }
@@ -1050,6 +1061,32 @@ pub fn seed_note_paths() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un nome seme che per `exists` «non c'è» ma è occupato — qui da un
+    /// collegamento rotto — non si scrive attraverso: la demo non tocca niente
+    /// fuori dalla sua cartella, e una nota che c'è resta com'è.
+    #[cfg(unix)]
+    #[test]
+    fn seeding_does_not_write_through_a_dangling_link() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = Utf8Path::from_path(temp.path()).unwrap();
+        let root = ensure_seeded(Some(config)).unwrap();
+        let outside = temp.path().join("fuori.md");
+        let seed = root.join(SEED_NOTES[0].path);
+        std::fs::remove_file(&seed).unwrap();
+        std::os::unix::fs::symlink(&outside, &seed).unwrap();
+
+        ensure_seeded(Some(config)).unwrap();
+
+        assert!(
+            std::fs::symlink_metadata(&outside).is_err(),
+            "seeding wrote through a link, outside the demo"
+        );
+        assert!(std::fs::symlink_metadata(&seed)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+    }
 
     #[test]
     fn demo_refuses_unowned_vault_without_changing_session_or_files() {
