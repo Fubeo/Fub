@@ -2128,7 +2128,7 @@ fn merge(
     );
     if mode.is_dry_run() {
         let revision = host.document_revision(&into)?;
-        let source = host.read_document(&into).unwrap_or_default();
+        let source = host.read_document(&into)?;
         let at = snap_to_boundary(&source, if prepend { 0 } else { source.len() });
         let preview = if prepend {
             format!("{}{separator}", join_bodies(&bodies, &separator))

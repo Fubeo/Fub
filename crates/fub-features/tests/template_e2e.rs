@@ -471,6 +471,27 @@ fn merge_refuses_to_trash_a_source_with_incoming_references() {
     );
 }
 
+/// Il piano di un'unione dice dove finisce il testo: se la destinazione non si
+/// legge, non si sa dov'è la fine, e un piano che inserisse all'inizio
+/// mentirebbe su ciò che l'applicazione farebbe.
+#[test]
+fn merge_dry_run_on_an_unreadable_target_plans_nothing() {
+    let vault = Vault::new();
+    vault.put("source.md", "source text");
+    std::fs::write(vault.root.join("target.md"), b"target \xff text").unwrap();
+    let mut ws = vault.open();
+    let outcome = ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target.md", "trash": false}),
+        InvokeMode::DryRun,
+        Actor::User,
+    );
+    assert!(
+        matches!(outcome, Err(fub_abi::PluginError::Io(_))),
+        "{outcome:?}"
+    );
+}
+
 #[test]
 fn extract_refuses_to_move_relative_embedded_assets_across_folders() {
     let vault = Vault::new();
