@@ -39,6 +39,9 @@ nell'albero, non ferma l'apertura e il log lo annota. Nessun `DocId` lo sa
 nominare, quindi nessun documento del vault può trovarsi lì. Una cartella che
 non si lascia elencare invece ferma l'apertura: senza il suo contenuto l'elenco
 dei documenti sarebbe incompleto, e gli indici poterebbero ciò che non vedono.
+Le cartelle che il sistema scrive nella radice di un disco (`lost+found`,
+`System Volume Information`, `$RECYCLE.BIN`) stanno fra le cartelle escluse di
+serie, quindi un vault nella radice di una chiavetta si apre.
 
 L'anagrafe ricorda i file dell'apertura precedente: da lì Fub riconosce una
 nota rinominata ad app chiusa, per esempio da un client di sync, e le fa

@@ -291,7 +291,24 @@ pub fn parse_gitignore(content: &str) -> GitignoreRules {
 /// casella che l'utente compila. Questo è un default, non una regola: chi
 /// dichiara la propria lista la sostituisce, e chi tiene le sue note in una
 /// cartella che si chiama `target` scrive una riga e ha finito.
-pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "target"];
+///
+/// Le ultime tre passano lo stesso metro dall'altra parte: non le scrive un
+/// attrezzo dell'utente ma il **sistema**, nella radice di un disco. Dentro
+/// `lost+found` `fsck` posa i frammenti che ha raccolto, in `System Volume
+/// Information` Windows tiene i punti di ripristino, `$RECYCLE.BIN` è il suo
+/// cestino. Nessuna è una cartella di note, e di solito non si lasciano
+/// nemmeno elencare: una cartella che non si elenca ferma l'apertura, quindi un
+/// vault nella radice di una chiavetta restava chiuso, e l'unica uscita era
+/// un'impostazione da scrivere dentro il vault che non si apriva.
+pub const DEFAULT_EXCLUDED: &[&str] = &[
+    ".obsidian",
+    ".git",
+    "node_modules",
+    "target",
+    "lost+found",
+    "System Volume Information",
+    "$RECYCLE.BIN",
+];
 
 /// Questa **chiave** è struttura, cioè non è roba dell'utente?
 ///
@@ -617,6 +634,9 @@ mod tests {
             ".trash",
             "node_modules",
             "target",
+            "lost+found",
+            "System Volume Information",
+            "$RECYCLE.BIN",
         ] {
             assert!(p.excludes(name, Kind::Folder), "{name}");
         }

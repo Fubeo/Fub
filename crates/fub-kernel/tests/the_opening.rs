@@ -352,6 +352,54 @@ fn a_vault_that_not_is_scans_not_is_opens_a_metadata() {
         .expect("permesso restituito per la pulizia");
 }
 
+/// **Le cartelle che il filesystem scrive nella propria radice non sono
+/// note**, e un vault che sta nella radice di un disco non ne resta chiuso.
+///
+/// Il confine di sopra vale per le cartelle dell'utente. `lost+found` è di
+/// `fsck` e di root, e sulla radice di una chiavetta ext4 non si elenca: senza
+/// un'esclusione di serie il vault intero non si apriva, e la sola via era
+/// scrivere a mano un'impostazione dentro un vault che non si apre.
+#[cfg(unix)]
+#[test]
+fn the_filesystem_own_folders_do_not_stop_the_opening() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let lost = dir.path().join("lost+found");
+    std::fs::create_dir(&lost).expect("cartella");
+    std::fs::write(dir.path().join("nota.md"), "# Nota\n").expect("semina");
+    std::fs::set_permissions(&lost, std::fs::Permissions::from_mode(0o000))
+        .expect("permesso tolto");
+    let blocked = std::fs::read_dir(&lost).is_err();
+    let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("la radice vera si apre");
+
+    let outcome = ws.reindex();
+
+    std::fs::set_permissions(&lost, std::fs::Permissions::from_mode(0o700))
+        .expect("permesso restituito");
+    // Da root la cartella si elenca lo stesso: il banco resta vero, ma non
+    // prova l'ostacolo.
+    if !blocked {
+        eprintln!("questo utente elenca anche una cartella 000");
+    }
+    outcome.expect("una cartella del filesystem non ferma l'apertura");
+    let entries = match ws.query_index(IndexQuery::Entries {
+        of_kind: None,
+        within: None,
+        page: None,
+    }) {
+        Ok(IndexResult::Entries(paged)) => paged,
+        other => panic!("attesa l'anagrafe, trovato {other:?}"),
+    };
+    let names: Vec<String> = entries.items.iter().map(|and| and.id.to_string()).collect();
+    assert_eq!(
+        names,
+        ["nota.md"],
+        "la cartella del filesystem non è una voce"
+    );
+}
+
 /// **Un nome che non è UTF-8 non è una voce del vault, e non ne ferma
 /// l'apertura.**
 ///
