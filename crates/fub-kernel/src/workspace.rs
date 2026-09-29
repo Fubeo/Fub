@@ -13082,7 +13082,9 @@ impl Workspace {
             return Ok(0);
         }
         let _phase = tracing::info_span!(target: "fub.apertura", "collect_doc_data").entered();
-        let trashed = self.trashed_originals();
+        // Un cestino illeggibile ferma la raccolta: preso per vuoto, toglieva
+        // i dati di ogni nota cestinata, che è ancora recuperabile.
+        let trashed = self.trashed_originals()?;
         let metas = &self.indexes.core.metas;
         // Un allegato non è un documento ma è una voce dell'anagrafe, e il suo
         // spazio per-documento è vivo quanto quello di una nota: è la stessa
@@ -13104,13 +13106,16 @@ impl Workspace {
 
     /// I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
     /// sparito**, è recuperabile.
-    fn trashed_originals(&self) -> std::collections::HashSet<DocId> {
-        self.docs
-            .list_trash()
-            .unwrap_or_default()
+    ///
+    /// Un cestino che non si elenca non è un cestino vuoto, e l'errore risale:
+    /// chi ne ricava una cancellazione deve potersi fermare.
+    fn trashed_originals(&self) -> Result<std::collections::HashSet<DocId>> {
+        Ok(self
+            .docs
+            .list_trash()?
             .into_iter()
             .map(|and| and.original)
-            .collect()
+            .collect())
     }
 
     /// **Riconosce le rinomine che non ha visto nessuno** (§23.1), e restituisce
@@ -13180,7 +13185,10 @@ impl Workspace {
     ///   ricongiungimento è una capacità di un **derivato**, e perso il derivato
     ///   si perde anche lei — per un giro, e in silenzio.
     fn rejoin_renamed_while_closed(&mut self) -> BTreeSet<DocId> {
-        let trashed = self.trashed_originals();
+        // Qui il cestino è una cautela in più, non la guardia: l'accoppiamento
+        // chiede lo stesso file (identità e impronta), e un file che sta nel
+        // cestino non è una voce del vault di oggi.
+        let trashed = self.trashed_originals().unwrap_or_default();
         // C'era ieri, oggi non c'è, e portava l'impronta di un contenuto.
         let mut disappeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
             BTreeMap::new();

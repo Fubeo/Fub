@@ -359,6 +359,44 @@ fn the_collection_removes_only_that_that_no_one_notes_names_more() {
     );
 }
 
+/// **Un cestino che non si legge non è un cestino vuoto.** Una cartella
+/// `.trash/` che il supporto non lascia elencare (un permesso tolto da
+/// un'altra applicazione, un disco che comincia a fallire) veniva presa per un
+/// cestino vuoto, e la raccolta toglieva gli spazi per-documento di ogni nota
+/// cestinata, ancora recuperabile.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_trash_collects_nothing() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_g, root, mut ws) = vault();
+    let doc = notes(&mut ws, "Cestinata.md", "vado nel cestino");
+    let rel = doc_data::path(&doc, "x");
+    write_data_item(&root, OFF, &rel, b"dato");
+    ws.delete_document(&doc).expect("cestina");
+
+    let trash = root.join(".trash");
+    let set = |mode| {
+        std::fs::set_permissions(&trash, std::fs::Permissions::from_mode(mode))
+            .expect("permessi del cestino")
+    };
+    set(0o000);
+    if ws.list_trash().is_ok() {
+        // Chi gira da root legge comunque: il guasto non si riproduce.
+        set(0o755);
+        return;
+    }
+
+    let reopened = ws.reindex();
+    set(0o755);
+    reopened.expect("riapertura col cestino illeggibile");
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "la raccolta ha preso un cestino illeggibile per un cestino vuoto"
+    );
+}
+
 #[test]
 fn empty_the_trash_and_reopen_collects() {
     // Il seguito del test di sopra: finché la nota è recuperabile i dati
