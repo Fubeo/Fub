@@ -380,21 +380,24 @@ fn restore(
         .map(|d| d.0)
         .collect();
     let prefix = format!("{id}/");
-    let from_create: Vec<(DocId, String)> = files
-        .into_iter()
-        .filter_map(|path| {
-            let rel = path.strip_prefix(&prefix)?;
-            if existing.contains(rel) {
-                return None;
-            }
-            Some(DocId::new(rel))
-        })
-        .filter_map(|doc| {
-            let path = format!("{id}/{}", doc.as_str());
-            let bytes = host.data_read(&path).ok().flatten()?;
-            String::from_utf8(bytes).ok().map(|src| (doc, src))
-        })
-        .collect();
+    let mut from_create: Vec<(DocId, String)> = Vec::new();
+    for path in &files {
+        let Some(rel) = path.strip_prefix(&prefix) else {
+            continue;
+        };
+        if existing.contains(rel) {
+            continue;
+        }
+        // Una copia che non si legge ferma il ripristino prima che crei
+        // qualcosa: saltata, il ripristino riportava meno note dicendo di
+        // esserci riuscito.
+        let Some(bytes) = host.data_read(path)? else {
+            continue;
+        };
+        if let Ok(src) = String::from_utf8(bytes) {
+            from_create.push((DocId::new(rel), src));
+        }
+    }
     let n = from_create.len() as i64;
     if mode.is_dry_run() {
         return Ok(CommandOutcome::notify(Text::message(

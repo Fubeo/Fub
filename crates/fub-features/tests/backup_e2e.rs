@@ -125,6 +125,64 @@ fn backup_and_restore_deleted_notes() {
     assert!(src.contains("# A"), "{src}");
 }
 
+/// **Un file dello snapshot che non si legge ferma il ripristino, prima che
+/// crei qualcosa.** Veniva saltato: il ripristino riportava meno note dicendo
+/// di esserci riuscito, e chi l'aveva chiesto non sapeva quale mancava.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_snapshot_file_stops_the_restore() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    let mut ws = vault.open();
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("backup");
+    let tree = ws.render_view(&ViewInstance::only(BACKUP_VIEW)).unwrap();
+    let id = titles(&tree)
+        .iter()
+        .find_map(|t| t.split_whitespace().next().map(str::to_string))
+        .expect("id snapshot");
+    ws.delete_document(&DocId::new("a.md")).expect("cestina");
+    ws.delete_document(&DocId::new("b.md")).expect("cestina");
+
+    let copy = vault
+        .root
+        .join(".fub/plugins")
+        .join(BACKUP_ID)
+        .join(&id)
+        .join("a.md");
+    let set = |mode| {
+        std::fs::set_permissions(&copy, std::fs::Permissions::from_mode(mode))
+            .expect("permessi della copia")
+    };
+    set(0o000);
+    if std::fs::read(&copy).is_ok() {
+        // Chi gira da root legge lo stesso: il guasto non si riproduce.
+        set(0o644);
+        return;
+    }
+    let restored = ws.invoke_command(
+        VAULT_BACKUP_RESTORE,
+        serde_json::json!({ "id": id }),
+        InvokeMode::Apply,
+        Actor::User,
+    );
+    set(0o644);
+
+    assert!(restored.is_err(), "{restored:?}");
+    assert!(
+        ws.read_source(&DocId::new("b.md")).is_err(),
+        "un ripristino fermato non crea niente a metà"
+    );
+}
+
 #[test]
 fn dry_run_not_writes() {
     let vault = Vault::new();
