@@ -410,6 +410,15 @@ pub trait VaultStorage: Send + Sync {
     /// L'ordine è del supporto e non di chi chiama, perché chi chiama sarebbe
     /// costretto a riordinare comunque: `read_dir` restituisce l'ordine del
     /// filesystem, che cambia fra due macchine e fra due corse.
+    ///
+    /// Un nome che non si scrive in UTF-8 **non è una voce**: si salta e si
+    /// annota nel log, e l'elenco resta completo. Nessun [`DocId`] lo sa
+    /// nominare, quindi nessuna voce del vault può stare lì sotto, e chi ne
+    /// ricava un'assenza non perde niente che conoscesse. Farlo fallire
+    /// voleva dire che un solo file in Latin-1, in una cartella qualunque,
+    /// fermava l'apertura del vault intero.
+    ///
+    /// [`DocId`]: fub_abi::DocId
     fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>>;
 
     /// Specie, dimensione e data di **un** path.
@@ -1223,6 +1232,24 @@ impl FsStorage {
     }
 }
 
+/// Il path di una voce di directory, se il suo nome si scrive in UTF-8
+/// (vedi [`VaultStorage::list`]). Un nome che non si scrive non è una voce, e
+/// lo dice il log.
+pub(crate) fn utf8_entry_path(dir: &Utf8Path, name: &std::ffi::OsStr) -> Option<Utf8PathBuf> {
+    match name.to_str() {
+        Some(name) => Some(dir.join(name)),
+        None => {
+            tracing::warn!(
+                target: "fub.storage",
+                %dir,
+                name = %name.to_string_lossy(),
+                "nome non rappresentabile in UTF-8: resta fuori dal vault"
+            );
+            None
+        }
+    }
+}
+
 fn not_utf8(path: &std::path::Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
@@ -1896,8 +1923,9 @@ impl VaultStorage for FsStorage {
         let mut raw_entries = Vec::new();
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
-            let path =
-                Utf8PathBuf::from_path_buf(entry.path()).map_err(|raw| not_utf8(raw.as_path()))?;
+            let Some(path) = utf8_entry_path(dir, &entry.file_name()) else {
+                continue;
+            };
             let file_type = entry.file_type()?;
             let kind = if file_type.is_dir() {
                 EntryKind::Dir
@@ -2895,6 +2923,39 @@ mod tests {
             storage.write(&path, b"0123456789").unwrap();
             assert!(storage.read_at(&path, u64::MAX, 1).unwrap().is_empty());
             assert_eq!(storage.read_at(&path, 8, usize::MAX).unwrap(), b"89");
+        }
+    }
+
+    /// Un nome che non si scrive in UTF-8 non è una voce, sui due supporti su
+    /// disco: l'elenco salta lui e resta intero per gli altri, file e
+    /// cartelle.
+    #[cfg(unix)]
+    #[test]
+    fn list_skips_a_name_not_in_utf8() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(temp.path()).unwrap();
+        for which in ["fs", "rooted"] {
+            let root = base.join(which);
+            std::fs::create_dir(&root).unwrap();
+            std::fs::write(root.join("a.md"), b"a").unwrap();
+            std::fs::create_dir(root.join("b")).unwrap();
+            let raw = root.as_std_path();
+            std::fs::write(raw.join(OsStr::from_bytes(b"caff\xe8.md")), b"x").unwrap();
+            std::fs::create_dir(raw.join(OsStr::from_bytes(b"cart\xe8"))).unwrap();
+            let storage: Box<dyn VaultStorage> = match which {
+                "fs" => Box::new(FsStorage),
+                _ => Box::new(rooted::RootedFsStorage::open(&root).unwrap()),
+            };
+            let listed: Vec<Utf8PathBuf> = storage
+                .list(&root)
+                .unwrap_or_else(|and| panic!("{which}: {and}"))
+                .into_iter()
+                .map(|entry| entry.path)
+                .collect();
+            assert_eq!(listed, [root.join("a.md"), root.join("b")], "{which}");
         }
     }
 

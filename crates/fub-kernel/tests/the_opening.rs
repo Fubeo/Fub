@@ -352,6 +352,46 @@ fn a_vault_that_not_is_scans_not_is_opens_a_metadata() {
         .expect("permesso restituito per la pulizia");
 }
 
+/// **Un nome che non è UTF-8 non è una voce del vault, e non ne ferma
+/// l'apertura.**
+///
+/// Il confine di sopra resta: una cartella che non si elenca non si apre in
+/// parte. Un nome che il supporto elenca ma che nessun [`DocId`] sa scrivere è
+/// un'altra cosa — un file estratto da un vecchio archivio, un nome in Latin-1
+/// arrivato da un altro sistema. Nessuna voce del vault può stare lì sotto,
+/// quindi l'elenco senza quel nome è ancora l'insieme completo, e nessun
+/// indice pota niente che conoscesse. Prima un solo nome così, in una
+/// cartella qualunque, faceva fallire la camminata e con lei l'apertura
+/// intera.
+#[cfg(unix)]
+#[test]
+fn a_name_not_in_utf8_does_not_stop_the_opening() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (mut bench, probe) = bench_from_open();
+    let root = bench.root().as_std_path().to_path_buf();
+    std::fs::write(root.join("fuori.md"), "resto").expect("semina");
+    std::fs::create_dir(root.join("cartella")).expect("cartella");
+    std::fs::write(root.join("cartella/nota.md"), "anche io").expect("semina");
+    std::fs::write(
+        root.join("cartella")
+            .join(OsStr::from_bytes(b"caff\xe8.md")),
+        "latin-1",
+    )
+    .expect("un nome non UTF-8");
+    let foreign = root.join(OsStr::from_bytes(b"cart\xe8"));
+    std::fs::create_dir(&foreign).expect("una cartella non UTF-8");
+    std::fs::write(foreign.join("dentro.md"), "irraggiungibile").expect("semina");
+
+    bench
+        .reindex()
+        .expect("un nome non rappresentabile non ferma l'apertura");
+
+    let existing = probe.existing.lock().unwrap().clone();
+    assert_eq!(existing, ["cartella/nota.md", "fuori.md"]);
+}
+
 #[test]
 fn that_that_not_is_and_read_remains_between_the_documents_that_exist() {
     let (mut bench, probe) = bench_from_open();

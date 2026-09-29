@@ -638,14 +638,9 @@ impl VaultStorage for RootedFsStorage {
         let mut out = Vec::new();
         for entry in read {
             let entry = entry?;
-            let name = entry.file_name();
-            let name = name.to_str().ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "nome non rappresentabile in UTF-8",
-                )
-            })?;
-            let path = dir.join(name);
+            let Some(path) = super::utf8_entry_path(dir, &entry.file_name()) else {
+                continue;
+            };
             let file_type = entry.file_type()?;
             let kind = if file_type.is_dir() {
                 EntryKind::Dir

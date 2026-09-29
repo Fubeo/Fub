@@ -33,6 +33,13 @@ L'apertura procede a fasi:
 Durante l'indicizzazione la ricerca espone lo stato del lavoro invece di
 restituire silenziosamente un risultato incompleto.
 
+Un file o una cartella il cui nome non si scrive in UTF-8, per esempio un nome
+in Latin-1 estratto da un vecchio archivio, resta fuori dal vault: non compare
+nell'albero, non ferma l'apertura e il log lo annota. Nessun `DocId` lo sa
+nominare, quindi nessun documento del vault può trovarsi lì. Una cartella che
+non si lascia elencare invece ferma l'apertura: senza il suo contenuto l'elenco
+dei documenti sarebbe incompleto, e gli indici poterebbero ciò che non vedono.
+
 Un documento oltre 64 MiB non si legge per intero. Il parse costa decine di
 volte la sorgente, e una nota da qualche centinaio di MB esauriva la memoria a
 ogni apertura. Oltre quel limite il documento resta nell'albero e si rinomina,

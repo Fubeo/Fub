@@ -416,9 +416,12 @@ impl WatcherFactory for FailsScanAfterStart {
             .expect("scan failure workspaces")
             .push(workspace);
         if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
-            use std::os::unix::ffi::OsStringExt;
-            let invalid = std::ffi::OsString::from_vec(vec![0xff]);
-            std::fs::write(root.as_std_path().join(invalid), b"invalid utf8")
+            // Una cartella che non si lascia elencare: la camminata resta
+            // fatale lì, mentre un nome non UTF-8 ormai si salta.
+            use std::os::unix::fs::PermissionsExt;
+            let obstacle = root.join(UNLISTABLE);
+            std::fs::create_dir(&obstacle).map_err(|error| error.to_string())?;
+            std::fs::set_permissions(&obstacle, std::fs::Permissions::from_mode(0o000))
                 .map_err(|error| error.to_string())?;
         }
         Ok(Box::new(Live(watching)))
@@ -426,9 +429,28 @@ impl WatcherFactory for FailsScanAfterStart {
 }
 
 #[cfg(unix)]
+const UNLISTABLE: &str = "non-elencabile";
+
+#[cfg(unix)]
 #[test]
 fn a_scan_error_after_watcher_start_rolls_back_the_whole_opening() {
+    use std::os::unix::fs::PermissionsExt;
+
     let (_dir, root) = root();
+    // Da root una cartella 000 si elenca lo stesso, e il banco non può
+    // dimostrare niente.
+    let probe = root.join("sonda-000");
+    std::fs::create_dir(&probe).expect("probe folder");
+    std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o000))
+        .expect("probe permissions");
+    let listable = std::fs::read_dir(&probe).is_ok();
+    std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o700))
+        .expect("probe permissions restored");
+    std::fs::remove_dir(&probe).expect("probe removed");
+    if listable {
+        eprintln!("skipped: this user lists a 000 folder too");
+        return;
+    }
     let calls = Arc::new(AtomicUsize::new(0));
     let factory = Arc::new(FailsScanAfterStart {
         calls: Arc::clone(&calls),
@@ -451,13 +473,10 @@ fn a_scan_error_after_watcher_start_rolls_back_the_whole_opening() {
         .clone();
     Probe::assert_rolled_back(&abandoned);
 
-    use std::os::unix::ffi::OsStringExt;
-    let invalid = std::ffi::OsString::from_vec(vec![0xff]);
-    match std::fs::remove_file(root.as_std_path().join(invalid)) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => panic!("remove invalid scan entry: {error}"),
-    }
+    let obstacle = root.join(UNLISTABLE);
+    std::fs::set_permissions(&obstacle, std::fs::Permissions::from_mode(0o700))
+        .expect("obstacle permissions restored");
+    std::fs::remove_dir(&obstacle).expect("obstacle removed");
     open_with_timeout(Arc::clone(&host), root).expect("the same host retries after scan failure");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     assert!(close_with_timeout(host).is_empty());
