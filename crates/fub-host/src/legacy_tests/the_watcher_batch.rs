@@ -976,6 +976,57 @@ fn an_explicit_rename_batch_migrates_identity_exactly_once() {
     assert_eq!(renamed, 1);
 }
 
+/// Una rinomina che non si convalida degrada ai due path, come per un
+/// allegato: la sorgente se n'è andata, la destinazione è quello che è. Prima
+/// la rinomina si perdeva, e l'id vecchio restava in anagrafe — un fantasma
+/// che nessuno poteva aprire — fino alla riapertura del vault.
+#[test]
+fn a_rename_that_cannot_be_verified_still_leaves_no_ghost() {
+    // Rinominata due volte dentro lo stesso lotto: `b.md` non c'è più quando
+    // la prima rinomina la cerca.
+    let chain = bench();
+    let a = chain.root.join("nota.md");
+    let b = chain.root.join("b.md");
+    let c = chain.root.join("c.md");
+    std::fs::rename(&a, &b).expect("first external rename");
+    std::fs::rename(&b, &c).expect("second external rename");
+    ExternalSync::new(chain.ws.clone()).batch(&[
+        ExternalChange::Renamed {
+            from: a,
+            to: b.clone(),
+        },
+        ExternalChange::Renamed { from: b, to: c },
+    ]);
+    assert_eq!(ids(&chain.ws), ["c.md"]);
+
+    // Rinominata e riscritta in un testo che non si legge: la sorgente va
+    // via, la destinazione resta fuori e il guasto si dice una volta.
+    let unreadable = bench();
+    unreadable
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .watch_flag()
+        .store(true, Ordering::SeqCst);
+    let a = unreadable.root.join("nota.md");
+    let b = unreadable.root.join("b.md");
+    std::fs::rename(&a, &b).expect("external rename");
+    std::fs::write(&b, [0xff]).expect("invalid UTF-8 external document");
+    ExternalSync::new(unreadable.ws.clone()).batch(&[ExternalChange::Renamed { from: a, to: b }]);
+    assert!(ids(&unreadable.ws).is_empty());
+    let status = match unreadable
+        .ws
+        .read()
+        .unwrap()
+        .query_index(IndexQuery::VaultStatus)
+    {
+        Ok(IndexResult::VaultStatus(status)) => status,
+        other => panic!("expected vault status, got {other:?}"),
+    };
+    assert!(status.watching, "an unreadable file stopped the watcher");
+    assert_eq!(status.sync_failures, 1, "the failure was not said once");
+}
+
 /// Gli id in anagrafe, in ordine.
 fn ids(ws: &Custody<Workspace>) -> Vec<String> {
     let IndexResult::Entries(page) = ws

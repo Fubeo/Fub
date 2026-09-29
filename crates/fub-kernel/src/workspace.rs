@@ -517,8 +517,20 @@ enum ParsedExternalDocumentState {
         fingerprint: Revision,
         stat: crate::storage::Stat,
     },
-    Failed(KernelError),
-    Stale,
+    /// La destinazione non si è potuta leggere come il documento rinominato.
+    Unverified,
+}
+
+impl ParsedExternalDocumentRename {
+    /// Da dove a dove: i due path che il chiamante riconcilia quando
+    /// [`prepare_external_document_rename`](Workspace::prepare_external_document_rename)
+    /// non convalida la rinomina.
+    pub fn paths(&self) -> (Utf8PathBuf, Utf8PathBuf) {
+        (
+            self.snapshot.from_path.clone(),
+            self.snapshot.to_path.clone(),
+        )
+    }
 }
 
 /// Handle owned per spostare i dati autorevoli di una rinomina fuori dal
@@ -1478,6 +1490,12 @@ impl PendingIdentityMigration {
 
 impl PreparedExternalDocumentRename {
     /// Esegue stat-read-stat e parse nella forma dichiarata dal formato.
+    ///
+    /// Qualunque cosa impedisca di convalidarla — destinazione sparita o
+    /// instabile, troppo grande, non UTF-8, rifiutata dal parser — rende la
+    /// rinomina [non convalidata](ParsedExternalDocumentState::Unverified), senza
+    /// diagnosi: chi chiama riconcilia i due path, e il guasto della
+    /// destinazione lo dice quella sincronizzazione, una volta sola.
     pub fn invoke(self) -> ParsedExternalDocumentRename {
         let PreparedExternalDocumentRename {
             snapshot,
@@ -1486,66 +1504,34 @@ impl PreparedExternalDocumentRename {
             source_kind,
             side_data,
         } = self;
-        let state = match storage.stat(&snapshot.to_path) {
-            Ok(before) if before.is_file() => {
-                match crate::documents::within_source_limit(&snapshot.to_id, before.size) {
-                    Err(error) => ParsedExternalDocumentState::Failed(error),
-                    Ok(()) => match storage.read(&snapshot.to_path) {
-                        Ok(bytes) => match storage.stat(&snapshot.to_path) {
-                            Ok(after) if after.is_file() && before == after => {
-                                let fingerprint = Revision::of_bytes(&bytes);
-                                let source = match source_kind {
-                                    SourceKind::Text => {
-                                        match fub_abi::rules::text_policy::decode(&bytes) {
-                                    Ok(text) => Ok(DocumentSource::Text(text.to_string())),
-                                    Err(at) => Err(KernelError::Io {
-                                        path: snapshot.to_path.clone(),
-                                        source: std::io::Error::new(
-                                            std::io::ErrorKind::InvalidData,
-                                            format!(
-                                                "il file non è UTF-8: il primo byte non valido è a {at}"
-                                            ),
-                                        ),
-                                    }),
-                                }
-                                    }
-                                    SourceKind::Bytes => Ok(DocumentSource::Bytes(bytes)),
-                                };
-                                match source.and_then(|source| parser.invoke(source)) {
-                                    Ok(model) => ParsedExternalDocumentState::Ready {
-                                        model: Box::new(model),
-                                        fingerprint,
-                                        stat: after,
-                                    },
-                                    Err(error) => ParsedExternalDocumentState::Failed(error),
-                                }
-                            }
-                            Ok(_) => ParsedExternalDocumentState::Stale,
-                            Err(error) if sync_path_is_absent(&error) => {
-                                ParsedExternalDocumentState::Stale
-                            }
-                            Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
-                                path: snapshot.to_path.clone(),
-                                source,
-                            }),
-                        },
-                        Err(error) if sync_path_is_absent(&error) => {
-                            ParsedExternalDocumentState::Stale
-                        }
-                        Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
-                            path: snapshot.to_path.clone(),
-                            source,
-                        }),
-                    },
-                }
-            }
-            Ok(_) => ParsedExternalDocumentState::Stale,
-            Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
-            Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
-                path: snapshot.to_path.clone(),
-                source,
-            }),
-        };
+        let state = (|| {
+            let before = storage
+                .stat(&snapshot.to_path)
+                .ok()
+                .filter(|stat| stat.is_file())?;
+            crate::documents::within_source_limit(&snapshot.to_id, before.size).ok()?;
+            let bytes = storage.read(&snapshot.to_path).ok()?;
+            let stat = storage
+                .stat(&snapshot.to_path)
+                .ok()
+                .filter(|after| after.is_file() && *after == before)?;
+            let fingerprint = Revision::of_bytes(&bytes);
+            let source = match source_kind {
+                SourceKind::Text => DocumentSource::Text(
+                    fub_abi::rules::text_policy::decode(&bytes)
+                        .ok()?
+                        .to_string(),
+                ),
+                SourceKind::Bytes => DocumentSource::Bytes(bytes),
+            };
+            let model = parser.invoke(source).ok()?;
+            Some(ParsedExternalDocumentState::Ready {
+                model: Box::new(model),
+                fingerprint,
+                stat,
+            })
+        })()
+        .unwrap_or(ParsedExternalDocumentState::Unverified);
         ParsedExternalDocumentRename {
             snapshot,
             state,
@@ -7115,6 +7101,13 @@ impl Workspace {
     }
 
     /// Riconvalida la fotografia e installa remove+feed nel solo core.
+    ///
+    /// `None` è una rinomina **che non si è potuta convalidare**: destinazione
+    /// sparita, instabile o illeggibile, oppure una fotografia che il workspace
+    /// ha superato. Il file però si è spostato lo stesso, e chi chiama
+    /// riconcilia i due path (`from` e `to` di
+    /// [`paths`](ParsedExternalDocumentRename::paths)) come due `Touched`: senza,
+    /// l'id vecchio restava in anagrafe fino alla riapertura.
     pub fn prepare_external_document_rename(
         &mut self,
         parsed: ParsedExternalDocumentRename,
@@ -7130,12 +7123,7 @@ impl Workspace {
                 fingerprint,
                 stat,
             } => (model, fingerprint, stat),
-            ParsedExternalDocumentState::Failed(error) => {
-                let outcome: Result<()> = Err(error);
-                self.notes_sync(&snapshot.to_path, &outcome);
-                return Ok(None);
-            }
-            ParsedExternalDocumentState::Stale => return Ok(None),
+            ParsedExternalDocumentState::Unverified => return Ok(None),
         };
         let current_from = self.indexes.core.entries.get(&snapshot.from_id);
         let current_to = self.indexes.core.entries.get(&snapshot.to_id);

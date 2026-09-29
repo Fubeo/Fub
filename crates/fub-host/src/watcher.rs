@@ -966,41 +966,13 @@ impl ExternalSync {
             }
         };
         let mut mutated = false;
-        // Il primo guasto di un percorso: il kernel l'ha già annotato e
-        // riferito, e il lotto prosegue con gli altri file.
+        // Il primo guasto di un percorso (vedi `apply_sync`).
         let mut path_failure: Option<PluginError> = None;
         let outcome: Result<(), PluginError> = (|| {
             for change in changes {
                 match change {
                     InvokedWatcherChange::Sync(path, parsed) => {
-                        let pending = {
-                            let mut ws = self.workspace.write()?;
-                            match ws.prepare_sync_path_prepared(&path, parsed) {
-                                Ok(pending) => pending,
-                                Err(error) => {
-                                    // The kernel records this per-path failure
-                                    // (including malformed input) before
-                                    // returning it; the caller must not emit a
-                                    // duplicate Trouble. It belongs to this
-                                    // path only: the rest of the batch goes on.
-                                    path_failure.get_or_insert(error.into());
-                                    continue;
-                                }
-                            }
-                        };
-                        let Some(pending) = pending else {
-                            continue;
-                        };
-                        let completed = pending.invoke();
-                        match self.workspace.write()?.finish_sync_path_prepared(completed) {
-                            Ok(true) => mutated = true,
-                            Ok(false) => continue,
-                            Err(failure) => {
-                                let (error, completed) = *failure;
-                                drop(completed);
-                                return Err(error);
-                            }
-                        }
+                        self.apply_sync(&path, parsed, &mut mutated, &mut path_failure)?;
                     }
                     InvokedWatcherChange::Asset(parsed) => {
                         let pending = self
@@ -1026,11 +998,27 @@ impl ExternalSync {
                         }
                     }
                     InvokedWatcherChange::Document(parsed) => {
+                        let (from, to) = parsed.paths();
                         let pending = self
                             .workspace
                             .write()?
                             .prepare_external_document_rename(parsed)?;
                         let Some(pending) = pending else {
+                            // Non convalidata, ma il file si è spostato lo
+                            // stesso: i due path si riconciliano come due
+                            // `Touched`, pianificati adesso. Un piano fatto
+                            // prima del lotto potrebbe essere già superato.
+                            let plans = {
+                                let ws = self.workspace.read()?;
+                                [from, to].map(|path| {
+                                    let plan = ws.plan_sync_admitted(&path);
+                                    (path, plan)
+                                })
+                            };
+                            for (path, plan) in plans {
+                                let parsed = plan.map(SyncPlan::invoke);
+                                self.apply_sync(&path, parsed, &mut mutated, &mut path_failure)?;
+                            }
                             continue;
                         };
                         let completed = pending.invoke();
@@ -1065,6 +1053,47 @@ impl ExternalSync {
             outcome_reported,
         }
     }
+    /// Porta nel workspace un path già letto fuori da `Custody`.
+    ///
+    /// Un guasto di quel path — il kernel l'ha già annotato e riferito — resta
+    /// suo: si ricorda il primo e il lotto prosegue. Un `Err` è la macchina
+    /// stessa che non tiene più.
+    fn apply_sync(
+        &self,
+        path: &Utf8Path,
+        parsed: Option<ParsedChange>,
+        mutated: &mut bool,
+        path_failure: &mut Option<PluginError>,
+    ) -> Result<(), PluginError> {
+        let pending = {
+            let mut ws = self.workspace.write()?;
+            match ws.prepare_sync_path_prepared(path, parsed) {
+                Ok(pending) => pending,
+                Err(error) => {
+                    // The kernel records this per-path failure (including
+                    // malformed input) before returning it; the caller must
+                    // not emit a duplicate Trouble.
+                    path_failure.get_or_insert(error.into());
+                    return Ok(());
+                }
+            }
+        };
+        let Some(pending) = pending else {
+            return Ok(());
+        };
+        let completed = pending.invoke();
+        match self.workspace.write()?.finish_sync_path_prepared(completed) {
+            Ok(true) => *mutated = true,
+            Ok(false) => {}
+            Err(failure) => {
+                let (error, completed) = *failure;
+                drop(completed);
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     /// Conclude a batch without losing either half of its durability attempt.
     ///
     /// Per-path parse/read failures have already gone through the kernel's

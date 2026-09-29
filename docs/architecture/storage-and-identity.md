@@ -57,6 +57,12 @@ disco e anagrafe della riconciliazione d'apertura. Se il backend dichiara di
 aver perso eventi, per esempio per una coda di notifica piena, la
 riconciliazione copre l'intero vault.
 
+Un file del lotto che non si legge, perché non è UTF-8, supera il tetto o il
+parser lo rifiuta, è un avviso di quel path: il resto del lotto prosegue. Una
+rinomina che non si può convalidare, con la destinazione già spostata di nuovo
+o illeggibile, si riconcilia come due path toccati, così l'id vecchio non resta
+in anagrafe.
+
 ## Lettura e scrittura
 
 Le scritture autorevoli passano dal kernel. Il percorso comune:
