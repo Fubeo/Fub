@@ -31,6 +31,7 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine, type CursorContext } from "../../engine";
 import type { CompletionSources } from "./completions";
 import { createMarkdownProfile } from "./profile";
+import type { TableGridActions } from "./table-grid";
 import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import {
   ACTION_UNAVAILABLE,
@@ -120,10 +121,20 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const resources = acquireMarkdownResources(documentId);
   const openWikilink = (page: string, heading?: string | null, block?: string | null) =>
     opts.onOpenWikilink(page, heading ?? null, block ?? null);
+  /// La griglia di tabella che ha il fuoco: le azioni della barra agiscono
+  /// sulle sue celle invece che sul cursore del testo.
+  let tableGrid: TableGridActions | null = null;
   const profile = createMarkdownProfile({
     callbacks: {
       openWikilink,
       searchTag: opts.onSearchTag,
+      tableGrid: {
+        active: (grid) => {
+          tableGrid = grid;
+          actionsChanged();
+        },
+        changed: () => actionsChanged(),
+      },
       mountRendered: (container, html, actions) => mountMarkdown(container, html, {
         ...actions,
         get documentId() { return resources?.documentId ?? documentId; },
@@ -152,7 +163,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (
       !slash || event.key !== "/" || event.defaultPrevented || event.isComposing ||
       event.altKey || event.ctrlKey || event.metaKey || readOnly || mode === "reading" ||
-      !(event.target instanceof Element) || !event.target.closest(".cm-content")
+      !(event.target instanceof Element) || !event.target.closest(".cm-content") ||
+      // Una griglia di tabella scrive le sue celle: il `/` è testo.
+      event.target.closest(".cm-md-grid-block")
     ) return;
     if (slash.currentDoc() !== documentId) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
@@ -373,6 +386,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
       }
+      if (tableGrid) return tableGrid.actionState(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return ACTION_UNAVAILABLE;
       return engine.readState((state) => markdownActionState(action, state));
@@ -382,6 +396,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       closeSlashPalette(parent);
       if (id === "text.undo") return engine.undo();
       if (id === "text.redo") return engine.redo();
+      if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
       if (!engine.readState((state) => markdownActionState(action, state)).enabled) return false;

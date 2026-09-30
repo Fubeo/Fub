@@ -209,6 +209,21 @@ montaggio in `apps/client/src/editors/text/profiles/markdown/mount.ts`; i blocch
 la sorgente. Il task passa da normale modifica undoabile della sessione e
 `readOnly` disabilita l'input.
 
+Le tabelle GFM di primo livello fanno eccezione in Live: restano un widget
+anche col cursore dentro, la griglia di `profiles/markdown/table-widget.ts`.
+Il modello puro (`table-model.ts`) legge la tabella dalla sorgente e calcola
+le modifiche: una cella cambia soltanto il proprio intervallo, un cambio di
+forma riscrive la tabella. Il controller (`table-grid.ts`) possiede DOM,
+selezione e tastiera senza importare CodeMirror; il widget applica le
+modifiche con `dispatch` e `userEvent: "input"`, quindi nella cronologia
+nativa della superficie, e usa annulla e ripeti nativi. CodeMirror ignora
+gli eventi dentro la griglia (`ignoreEvent`), e dopo una modifica il widget
+aggiorna il DOM sul posto (`updateDOM`), così fuoco e selezione restano. La
+resa in riga delle celle viene dal renderer condiviso (`MarkdownBlock.cells`,
+per offset relativo alla tabella), perché la resa HTML della tabella salta le
+celle vuote. La griglia a fuoco riceve le azioni dell'editor della superficie
+(`editorActions`) finché il fuoco non torna al testo.
+
 Risorse native ed embed in `apps/client/src/ui/markdown-resources.ts` sono
 condivisi per `DocumentSession`, con conteggio dei riferimenti, controllo delle
 esecuzioni superate e invalidazione. I renderer nativi arricchiscono soltanto
@@ -344,6 +359,9 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/text/profiles/markdown/profile.ts`
 - `apps/client/src/editors/text/profiles/markdown/commands.ts`
 - `apps/client/src/editors/text/profiles/markdown/actions.ts`
+- `apps/client/src/editors/text/profiles/markdown/table-model.ts`
+- `apps/client/src/editors/text/profiles/markdown/table-grid.ts`
+- `apps/client/src/editors/text/profiles/markdown/table-widget.ts`
 - `apps/client/src/editors/core/editor-actions.ts`
 - `apps/client/src/panels/format-bar.ts`
 - `apps/client/src/editors/text/profiles/markdown/completions.ts`

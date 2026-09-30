@@ -625,6 +625,18 @@ function renderTableNode(node: SyntaxNode, aux: RenderAux): string {
   return `<table${mdAttrs(node.from, node.to)}>${head}<tbody>${body}</tbody></table>`;
 }
 
+/// La resa in riga di ogni cella non vuota, per offset d'inizio relativo alla
+/// tabella: la griglia della Live posa le celle per coordinate sorgente.
+function renderTableCells(node: SyntaxNode, aux: RenderAux): ReadonlyMap<number, string> {
+  const cells = new Map<number, string>();
+  for (let row = node.firstChild; row; row = row.nextSibling) {
+    if (row.name !== "TableHeader" && row.name !== "TableRow") continue;
+    for (const cell of directChildren(row, "TableCell")) {
+      cells.set(cell.from - node.from, renderInline(aux.ctx, cell.from, cell.to, cell));
+    }
+  }
+  return cells;
+}
 
 function renderFootnoteDefNode(node: SyntaxNode, aux: RenderAux): string {
   const source = aux.ctx.source;
@@ -652,10 +664,12 @@ interface BlockRecord {
   readonly source: string;
   id: string | null;
   readonly render: (id: string | null) => string;
+  readonly cells?: () => ReadonlyMap<number, string>;
 }
 
 class LazyBlock implements MarkdownBlock {
   private cached: string | undefined;
+  private cachedCells: ReadonlyMap<number, string> | undefined;
   constructor(private readonly record: BlockRecord) {}
   get from(): number {
     return this.record.from;
@@ -672,6 +686,11 @@ class LazyBlock implements MarkdownBlock {
   get html(): string {
     if (this.cached === undefined) this.cached = this.record.render(this.record.id);
     return this.cached;
+  }
+  get cells(): ReadonlyMap<number, string> | undefined {
+    if (!this.record.cells) return undefined;
+    if (this.cachedCells === undefined) this.cachedCells = this.record.cells();
+    return this.cachedCells;
   }
 }
 
@@ -796,6 +815,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
           source: slice,
           id: null,
           render: () => renderTableNode(node, aux),
+          cells: () => renderTableCells(node, aux),
         });
         return;
       case "BulletList":

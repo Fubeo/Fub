@@ -145,3 +145,67 @@ describe("wikilink in Live", () => {
     }
   });
 });
+
+describe("tabelle in Live", () => {
+  const table = "Testo\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+  function editorWith(doc: string) {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownLanguage }),
+        livePreview({ openWikilink() {}, searchTag() {} }),
+      ],
+    });
+    engine.setDoc(doc);
+    const cell = (row: number, col: number) =>
+      parent.querySelector<HTMLElement>(`.cm-md-grid [data-row="${row}"][data-col="${col}"]`)!;
+    return { parent, engine, cell, cleanup: () => { engine.destroy(); parent.remove(); } };
+  }
+
+  it("sono griglie anche col cursore dentro, e non tornano sorgente", () => {
+    const { parent, engine, cell, cleanup } = editorWith(table);
+    try {
+      expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+      expect(cell(1, 1).textContent).toBe("2");
+      engine.revealByteOffset("Testo\n\n| a | b |\n| --- | --- |\n| ".length);
+      expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+      expect(parent.querySelectorAll(".cm-markdown-block").length).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("scrivere in una cella cambia soltanto quella cella, e annulla la riporta", () => {
+    const { parent, engine, cell, cleanup } = editorWith(table);
+    try {
+      const grid = parent.querySelector<HTMLElement>(".cm-md-grid")!;
+      cell(1, 0).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key: "u", bubbles: true, cancelable: true }));
+      const input = cell(1, 0).querySelector("input")!;
+      input.value = "uno";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      expect(engine.getDoc()).toBe("Testo\n\n| a | b |\n| --- | --- |\n| uno | 2 |\n");
+      expect(cell(1, 0).textContent).toBe("uno");
+      engine.undo();
+      expect(engine.getDoc()).toBe(table);
+      expect(cell(1, 0).textContent).toBe("1");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("una riga aggiunta dalla griglia riscrive la tabella in forma canonica", () => {
+    const { parent, engine, cleanup } = editorWith("|a|b|\n|---|---|\n|1|2|\n\nFine");
+    try {
+      const add = parent.querySelector<HTMLButtonElement>('.cm-md-grid-add[data-add="row"]')!;
+      add.click();
+      expect(engine.getDoc()).toBe("| a | b |\n| --- | --- |\n| 1 | 2 |\n|  |  |\n\nFine");
+      expect(parent.querySelectorAll(".cm-md-grid tbody tr").length).toBe(3);
+    } finally {
+      cleanup();
+    }
+  });
+});

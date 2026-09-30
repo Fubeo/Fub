@@ -313,6 +313,44 @@ comando della palette, a cui si può assegnare una scorciatoia. Invocato dalla
 palette, il comando agisce nel riquadro col fuoco; se lì non c'è una nota
 Markdown in scrittura, un avviso lo dice.
 
+## Tabelle in Live
+
+In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
+dentro; la sorgente con le pipe resta della modalità Sorgente, e Lettura la
+mostra resa. Sulla griglia compaiono le lettere delle colonne e i numeri
+delle righe; la prima riga è l'intestazione della tabella.
+
+- Le frecce muovono la cella attiva, Maiusc allarga la selezione, Mod le porta
+  al bordo, Home ed End ai capi della riga; Tab e Maiusc+Tab avanzano lungo le
+  righe, e Tab dall'ultima cella aggiunge una riga. Un clic sceglie una cella,
+  il trascinamento o Maiusc+clic un rettangolo, la lettera una colonna, il
+  numero una riga, l'angolo tutta la tabella.
+- Un carattere riscrive la cella da capo; Invio, F2 o il doppio clic la
+  modificano col suo testo. Dentro la cella Invio conferma e scende, Tab
+  conferma e avanza, Escape annulla; le frecce laterali confermano quando la
+  modifica è cominciata con un carattere e muovono il cursore quando è
+  cominciata con Invio. Una pipe scritta in una cella diventa `\|` nel file.
+- Canc svuota le celle selezionate; Mod+C, Mod+X e Mod+V passano tabulazioni e
+  a capo, come fra fogli di calcolo, e incollare oltre il bordo allarga la
+  tabella. Mod+B, Mod+I e Mod+Maiusc+X mettono grassetto, corsivo e barrato
+  alle celle selezionate.
+- Il menu contestuale (tasto destro, tasto menu o Maiusc+F10) inserisce,
+  sposta ed elimina righe e colonne, ordina secondo la colonna attiva,
+  allinea a sinistra, al centro o a destra, copia, taglia e svuota. I
+  pulsanti «+ Riga» e «+ Colonna» sotto la tabella aggiungono in fondo.
+- Freccia su dalla prima riga, freccia giù dall'ultima ed Escape tornano al
+  testo; freccia giù dalla riga sopra la tabella, e su da quella sotto, vi
+  entrano. Mod+Z e Mod+Y annullano e ripetono come nel resto della nota.
+
+Ogni gesto è una modifica del testo nella cronologia del riquadro. Cambiare
+il contenuto di una cella tocca soltanto quella cella, spazi compresi;
+aggiungere, togliere, spostare, ordinare o allineare riscrive la tabella in
+forma canonica. Le celle mostrano la resa in riga (grassetto, codice, link,
+formule); Mod+clic segue un link o un tag. Con la griglia a fuoco la barra di
+formattazione agisce sulle celle selezionate: formattazione in riga e
+operazioni sulla tabella; titoli, elenchi e blocchi sono spenti. In sola
+lettura la griglia si seleziona e si copia, ma non si scrive.
+
 ## Formato pilota `.fubsheet`
 
 Il formato persistente della griglia è un documento JSON testuale versionato.

@@ -30,6 +30,7 @@ import type { MarkdownBlock, MarkdownDocument, MountMarkdown } from "./render-ty
 import { mountMarkdown } from "./mount";
 import { mountMathBlocks } from "./math";
 import { scanInlineMath } from "./render-inline";
+import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -46,6 +47,9 @@ export interface LivePreviewCallbacks {
   /// Click semplice su un tag: riceve il nome senza `#` (es. "area/lavoro").
   searchTag(tag: string): void;
   mountRendered?: MountMarkdown;
+  /// La griglia delle tabelle che ha il fuoco: chi monta l'editor la usa per
+  /// la barra di formattazione. Assente, le griglie funzionano lo stesso.
+  readonly tableGrid?: TableGridCallbacks;
 }
 
 /// Cosa fare di un intervallo. I `kind` sono il vocabolario condiviso tra la
@@ -1006,6 +1010,9 @@ export function livePreview(
     from: number;
     to: number;
     next: number;
+    /// Una tabella che la griglia sa leggere: resta griglia anche col cursore
+    /// dentro, perché la griglia è il modo di scriverla.
+    grid: boolean;
   }
   interface RenderState {
     document: MarkdownDocument;
@@ -1038,6 +1045,9 @@ export function livePreview(
     },
     provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
   });
+  // Le tabelle sono griglie (`table-widget.ts`), anche col cursore dentro: si
+  // scrivono cella per cella, e la sorgente con le pipe è della modalità
+  // Sorgente.
   // I widget coprono solo ciò che il testo non può dire: diagrammi resi,
   // immagini, embed e tabelle complesse non hanno coordinate riga-per-riga
   // nel testo e il click nativo non li raggiunge. Tutto il resto — titoli,
@@ -1067,6 +1077,7 @@ export function livePreview(
         from: state.doc.lineAt(block.from).from,
         to: block.to,
         next: following ? state.doc.lineAt(following.from).from : state.doc.length,
+        grid: tableOfBlock(block) !== null,
       });
     }
     return candidates;
@@ -1075,15 +1086,17 @@ export function livePreview(
     const ranges: Range<Decoration>[] = [];
     const replaced: { from: number; to: number }[] = [];
     let decisions = "";
-    for (const { block, from, to, next } of candidates) {
-      if (touched(state, from, to)) {
+    for (const { block, from, to, next, grid } of candidates) {
+      if (!grid && touched(state, from, to)) {
         decisions += "s";
         continue;
       }
-      decisions += "r";
+      decisions += grid ? "t" : "r";
       ranges.push(Decoration.replace({
         block: true,
-        widget: new MarkdownWidget(block, document.dependencies, state.readOnly, callbacks, document.anchors),
+        widget: grid
+          ? new TableWidget(block, from, document.dependencies, state.readOnly, callbacks)
+          : new MarkdownWidget(block, document.dependencies, state.readOnly, callbacks, document.anchors),
       }).range(from, to));
       replaced.push({ from, to });
       let line = state.doc.lineAt(to);
@@ -1199,5 +1212,5 @@ export function livePreview(
       click(event, view) { return handleClick(event, view, callbacks); },
     },
   });
-  return [theme, blocks, plugin];
+  return [theme, blocks, plugin, tableGrids(callbacks)];
 }

@@ -448,3 +448,32 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 });
+
+describe("le tabelle della superficie Markdown", () => {
+  const table = "| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+
+  it("sono griglie soltanto in Live", () => {
+    const { ed, parent } = editor();
+    ed.buffer.setDoc(table);
+    expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+    ed.setMode("source");
+    expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(0);
+    ed.setMode("live_preview");
+    expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+    ed.destroy();
+  });
+
+  it("con la griglia a fuoco la barra agisce sulle sue celle", () => {
+    const texts: string[] = [];
+    const { ed, parent } = editor((text) => texts.push(text));
+    ed.buffer.setDoc(table);
+    parent.querySelector<HTMLElement>(".cm-md-grid")!.focus();
+    expect(ed.editorActions.state("markdown.heading.1").enabled).toBe(false);
+    expect(ed.editorActions.state("markdown.table.column.after").enabled).toBe(true);
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("| **a** | b |\n| --- | --- |\n| 1 | 2 |\n");
+    expect(texts[texts.length - 1]).toBe(ed.buffer.getDoc());
+    expect(ed.editorActions.state("markdown.bold").active).toBe(true);
+    ed.destroy();
+  });
+});

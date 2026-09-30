@@ -30,6 +30,12 @@ export interface MarkdownBlock {
   readonly source: string;
   /** Computed lazily: offscreen live blocks need no HTML or DOM allocation. */
   readonly html: string;
+  /**
+   * Tables only: the inline HTML of every non-empty cell, keyed by where its
+   * text starts, relative to `from`. The Live grid places cells by source
+   * position; the table HTML skips empty cells and cannot be matched by index.
+   */
+  readonly cells?: ReadonlyMap<number, string>;
 }
 
 export interface MarkdownDocument {

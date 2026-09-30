@@ -16,6 +16,10 @@ la sezione seguente raccoglie le modifiche per la prima versione.
 - parsing, modello comune, rendering e serializzazione tramite provider;
 - wikilink, tag, backlink, ricerca full-text e Graph View;
 - editor CodeMirror, live preview e modalità di lettura;
+- tabelle Markdown come griglie da foglio di calcolo in Live: selezione a
+  rettangolo, modifica nella cella, righe e colonne da menu, ordinamento,
+  allineamento, appunti in TSV e cronologia locale, con la sorgente toccata
+  soltanto dove cambia;
 - barra di formattazione Markdown come plugin ufficiale `fub.formatting`:
   titoli, testo in riga, collegamenti, elenchi, blocchi e tabelle, con stato
   premuto e spento dalla superficie, tastiera e menu per l'eccedenza; nuova
