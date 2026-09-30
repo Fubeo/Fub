@@ -19,7 +19,7 @@ export type ColumnAlign = "none" | "left" | "center" | "right";
 
 export type CommandReach = "session" | "document" | "documents" | "vault" | "settings";
 
-export type CommandSurface = "slash" | "slash_selection";
+export type CommandSurface = "slash" | "slash_selection" | "toolbar";
 
 export type ConflictPolicy = "skip" | "replace" | "rename";
 

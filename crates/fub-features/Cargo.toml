@@ -34,6 +34,7 @@ default = [
     "commands",
     "blocks",
     "base",
+    "formatting",
 ]
 search = ["dep:tantivy", "dep:regex"]
 versioning = []
@@ -67,6 +68,9 @@ blocks = []
 # sono comandi di `properties`: stessa dipendenza di funzionamento del template,
 # ripetuta nel manifest.
 base = ["dep:fub-format-base", "properties"]
+# La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
+# dipendenza, di compilazione o di funzionamento.
+formatting = []
 
 [dependencies]
 camino.workspace = true

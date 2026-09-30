@@ -753,6 +753,26 @@ html, body, #app {
   min-height: 36px;
   max-height: 36px;
 }
+/* Barra di formattazione (panels/format-bar.ts): una riga sotto la toolbar,
+   i gruppi in fila senza andare a capo; ciò che non entra scende nel menu
+   «altri», che sta in fondo a destra. */
+.format-bar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.format-bar-group {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.format-bar-overflow {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
 /* Divisori con semantica separator: hit area 8px via padding invisibile,
    alternativa tastiera via focus + frecce (desktop-shell.ts). */
 .layout-divider {

@@ -31,7 +31,7 @@ import type { Tone } from "./notify";
 import { type Key, t } from "../i18n/strings";
 import { allCommands, displayBinding, loadKeyOverrides, type CommandEntry } from "./commands";
 import { enterSurface, exitSurface } from "./motion";
-import { readState, state, writeState } from "../state/store";
+import { readState, setCommandSpecs, writeState } from "../state/store";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { opensWithoutParams, primaryViews } from "./primary-views";
@@ -447,7 +447,7 @@ export async function openCommandPalette(host: PaletteHost) {
   const loaded: Promise<unknown> = Promise.resolve()
     .then(() => api.listCommands())
     .then(async (specs) => {
-      state.commandSpecs = specs;
+      setCommandSpecs(specs);
       await loadKeyOverrides();
       return null;
     })
@@ -518,7 +518,7 @@ export async function openSlashPalette(
     closeSlashPalette(owner);
     return;
   }
-  state.commandSpecs = specs;
+  setCommandSpecs(specs);
   const doc = slashContextDoc();
   const allowed = new Set(slashCandidates(specs, selection).map((spec) => spec.id));
   const entries = orderCommands(allCommands(), paletteHistory).filter((entry) => allowed.has(entry.id));

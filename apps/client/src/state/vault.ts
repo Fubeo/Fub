@@ -14,7 +14,7 @@
 import { api } from "../host/ipc";
 import { settings, vaultEntries } from "../host/query";
 import { COMMANDS, type Undo } from "../host/contract";
-import { emit, state } from "./store";
+import { emit, setCommandSpecs } from "./store";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -141,8 +141,8 @@ export async function loadCommandSpecs(): Promise<void> {
   // dei modi di usare l'app smette di rispondere — e non ne restava una riga da
   // nessuna parte. L'elenco vuoto resta la risposta giusta (un vault si apre
   // comunque, 0068); ciò che mancava è dirlo.
-  state.commandSpecs = await api.listCommands().catch((e: unknown) => {
+  setCommandSpecs(await api.listCommands().catch((e: unknown) => {
     notify(t("commands.list_failed", { reason: errorText(e) }), "guasto");
     return [];
-  });
+  }));
 }

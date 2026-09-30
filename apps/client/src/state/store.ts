@@ -50,6 +50,11 @@ export interface Signals {
   /// diretta, perché chi pubblica il contesto è il pannello del documento e
   /// chi le ridisegna è `ui/panel-host.ts`: chiamarsi per nome sarebbe un ciclo.
   "stale-views": [ids: string[]];
+  /// L'elenco dei comandi del kernel (`state.commandSpecs`) è stato
+  /// sostituito: all'apertura del vault, alla palette, dopo aver acceso o
+  /// spento un componente. **Senza payload**: chi disegna comandi fuori dalla
+  /// palette — la barra di formattazione — rilegge l'elenco.
+  commands: [];
   /// Il tema montato è cambiato: luce, contrasto, foglio, pelle o preferenze.
   /// **Senza payload**: chi lo rispecchia in un'altra finestra legge gli
   /// strati montati da `theme/loader.ts`.
@@ -131,6 +136,13 @@ export function emit<K extends keyof Signals>(
       listenerFailed(signal, e);
     }
   }
+}
+
+/// Sostituisce l'elenco dei comandi del kernel e lo annuncia: è la sola
+/// scrittura di `state.commandSpecs`, così nessuno lo cambia senza dirlo.
+export function setCommandSpecs(specs: CommandSpec[]): void {
+  state.commandSpecs = specs;
+  emit("commands");
 }
 
 // --- lo stato ---------------------------------------------------------------

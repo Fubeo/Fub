@@ -876,13 +876,24 @@ pub const SETTINGS_EXPORT_NS: &str = "settings.export";
 /// la shell ricarica. Ricaricare fa perdere ciò che non è salvato, quindi è
 /// un intento privilegiato.
 pub const VAULT_RESTORED_NS: &str = "fub.vault.restored";
+/// Il `ns` con cui un comando chiede alla shell di eseguire un'**azione
+/// dell'editor** sulla superficie col fuoco: il payload è `{ "action": "<id>" }`,
+/// con gli id di [`crate::command::CommandSurface::Toolbar`]. È una modifica
+/// del testo aperto fatta come una battuta dell'utente, quindi è un intento
+/// privilegiato: un comando di terzi con `writes: false` non ottiene per
+/// questa via di scrivere nella nota di chi lo invoca.
+pub const EDITOR_ACTION_NS: &str = "fub.editor.action";
 
 /// Un intento `Custom` che la shell esegue con un privilegio del processo —
-/// scrivere negli appunti o ricaricare la finestra — e che quindi soltanto un provider col grado
+/// scrivere negli appunti, ricaricare la finestra o modificare il testo aperto —
+/// e che quindi soltanto un provider col grado
 /// del contenuto attivo può chiedere. Il giudizio sul grado è del kernel;
 /// qui c'è soltanto l'elenco, perché la shell e il kernel devono vederlo uguale.
 pub fn privileged_intent(ns: &str) -> bool {
-    ns == CLIPBOARD_TEXT_NS || ns == SETTINGS_EXPORT_NS || ns == VAULT_RESTORED_NS
+    ns == CLIPBOARD_TEXT_NS
+        || ns == SETTINGS_EXPORT_NS
+        || ns == VAULT_RESTORED_NS
+        || ns == EDITOR_ACTION_NS
 }
 
 /// Aggiornamento restituito da un `ViewProvider` dopo un'azione.

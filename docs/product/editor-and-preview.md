@@ -282,6 +282,37 @@ spazi con aggiornamenti incrementali. Di una nota in prosa contano il sorgente;
 di un formato strutturato (canvas, base) il testo del suo modello, non il JSON
 o lo YAML che lo tiene.
 
+## Barra di formattazione
+
+Sopra il testo di una nota Markdown aperta in scrittura (Sorgente o Live) c'è
+una barra con le funzioni testuali: annulla e ripeti, lo stile del paragrafo
+(testo normale, titoli da 1 a 6), grassetto, corsivo, barrato, evidenziato,
+codice e formula in riga, commento `%%`, cancella formattazione, link, link a
+una nota, immagine, nota a piè di pagina, elenchi puntati, numerati e di
+attività, rientro, citazione, riquadro `> [!note]`, blocco di codice, blocco di
+formula, linea di separazione e tabella, con un menu per righe, colonne e
+ordinamento. In Lettura la barra non c'è.
+
+Un pulsante agisce sulla selezione, o sulla parola sotto il cursore, come la
+scorciatoia corrispondente, e la modifica entra nella cronologia locale del
+riquadro. Lo stato si legge sulla barra: il grassetto è premuto con il cursore
+dentro un grassetto, il selettore dello stile dice «Titolo 2» su un titolo di
+secondo livello, le operazioni sulla tabella sono spente fuori da una tabella
+e le formattazioni in riga sono spente dentro il codice. In sola lettura tutto
+è spento.
+
+La barra sta su una riga: i gruppi che non entrano scendono nel menu «altri
+strumenti». La tastiera la raggiunge con un solo arresto di tabulazione:
+dall'editor, dove Tab rientra, Escape e poi Maiusc+Tab risalgono fino a lei. Le frecce,
+Home ed End si muovono fra i pulsanti ed Escape torna al testo; il
+suggerimento di ogni pulsante dice la scorciatoia dell'editor quando c'è.
+
+La barra è il plugin ufficiale `fub.formatting` («Formatting bar»): si spegne e
+si riaccende dal pannello dei componenti, e ogni suo pulsante è anche un
+comando della palette, a cui si può assegnare una scorciatoia. Invocato dalla
+palette, il comando agisce nel riquadro col fuoco; se lì non c'è una nota
+Markdown in scrittura, un avviso lo dice.
+
 ## Formato pilota `.fubsheet`
 
 Il formato persistente della griglia è un documento JSON testuale versionato.
@@ -317,7 +348,9 @@ invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
 - `apps/client/src/editors/core/`
 - `apps/client/src/editors/text/profiles/markdown/`
 - `apps/client/src/panels/document.ts`
+- `apps/client/src/panels/format-bar.ts`
 - `apps/client/src/state/`
+- `crates/fub-features/src/formatting.rs`
 - `crates/fub-abi/src/edit.rs`
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`

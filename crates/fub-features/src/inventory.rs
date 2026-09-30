@@ -97,6 +97,8 @@ use crate::blocks::{
 use crate::commands::{self, CoreCommands, COMMANDS_ID};
 #[cfg(feature = "dashboard")]
 use crate::dashboard::{self, DashboardView, DASHBOARD_ID};
+#[cfg(feature = "formatting")]
+use crate::formatting::{self, FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
 #[cfg(feature = "outline")]
@@ -402,6 +404,22 @@ static OFFICIALS: &[OfficialFeature] = &[
         view: Some(|| Box::new(GraphView)),
         // Il comando che la apre è suo: vedi `graph::GRAPH_OPEN`.
         commands: Some(|| Box::new(GraphCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
+    },
+    #[cfg(feature = "formatting")]
+    OfficialFeature {
+        id: FORMATTING_ID,
+        name: "Formatting bar",
+        catalog: formatting::catalog,
+        view: None,
+        // Ogni pulsante è un comando: la barra è ciò che dichiara.
+        commands: Some(|| Box::new(FormattingCommands)),
         index: None,
         syntax: None,
         renderers: None,

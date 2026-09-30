@@ -747,6 +747,12 @@ async function init(): Promise<Teardown> {
   // stessa che scriverebbe chi cerca a mano: sotto-tag compresi.
   mountDocument(pageWindowLifetime, {
     searchTag: (tag) => searchFor(/[\s"()[\]]/.test(tag) ? `tag:"${tag.replace(/"/g, "")}"` : `tag:${tag}`),
+    // Un pulsante della barra che non è un'azione dell'editor si esegue come
+    // lo eseguirebbe la tastiera: stessa voce, stessa palette per i parametri.
+    runCommand: (id) => {
+      const entry = allCommands().find((e) => e.id === id);
+      if (entry) startCommand(entry, paletteHost);
+    },
   });
 
   // Subito dopo il pannello del documento, perché è il suo testo che protegge, e

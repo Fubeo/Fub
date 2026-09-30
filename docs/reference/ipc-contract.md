@@ -162,6 +162,45 @@ Il protocollo di view usa:
 La shell non interpreta il payload di un'azione. Lo rimanda al provider
 proprietario.
 
+## Barra di formattazione e azioni dell'editor
+
+Un comando con `CommandSurface::Toolbar` (`"toolbar"` in JSON) si offre come
+pulsante nella barra di formattazione del riquadro, nell'ordine in cui il
+provider dichiara i comandi. Se il suo id è un'azione dell'editor che la
+superficie montata conosce, la shell la esegue sulla superficie senza
+invocare il comando: nessuna IPC per pulsante. Un'azione che la superficie non
+conosce non si disegna; un comando che non è un'azione diventa un pulsante col
+suo titolo, invocato come dalla palette. Soltanto il core registra id senza
+namespace, quindi soltanto il core dichiara pulsanti che scrivono nel testo.
+
+Invocato dalla palette o da una scorciatoia, il comando restituisce
+`CommandEffect::Custom` con `ns` `fub.editor.action`
+(`fub_abi::ui::EDITOR_ACTION_NS`) e payload `{ "action": "<id>" }`. La shell
+esegue l'azione nel riquadro col fuoco, o avvisa che lì non si può. È un
+intento privilegiato: vedi [permessi e sicurezza](permissions-and-security.md).
+
+Gli id delle azioni sono un vocabolario stabile fra plugin e shell; cambiarne
+uno spegne il pulsante di chi lo nomina. La superficie Markdown conosce:
+
+- `text.undo`, `text.redo`;
+- `markdown.paragraph`, `markdown.heading.1` … `markdown.heading.6`;
+- `markdown.bold`, `markdown.italic`, `markdown.strikethrough`,
+  `markdown.highlight`, `markdown.code`, `markdown.math`, `markdown.comment`,
+  `markdown.clear`;
+- `markdown.link`, `markdown.wikilink`, `markdown.image`, `markdown.footnote`;
+- `markdown.list.bullet`, `markdown.list.ordered`, `markdown.list.task`,
+  `markdown.list.indent`, `markdown.list.dedent`;
+- `markdown.quote`, `markdown.callout`, `markdown.codeblock`,
+  `markdown.mathblock`, `markdown.rule`, `markdown.table`;
+- `markdown.table.row.before`, `.row.after`, `.row.up`, `.row.down`,
+  `.row.delete`, `.column.before`, `.column.after`, `.column.left`,
+  `.column.right`, `.column.delete`, `.sort.ascending`, `.sort.descending`
+  (tutti col prefisso `markdown.table`).
+
+Icona, gruppo e menu a tendina di ogni azione sono della shell
+(`panels/format-bar.ts`), come le icone della rail: il contratto porta soltanto
+l'id, il titolo e la descrizione del comando.
+
 ## Percorsi
 
 Il frontend invia path relativi o root di vault secondo la porta. Le regole di

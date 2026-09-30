@@ -2,6 +2,7 @@ import type { Theme } from "../../theme/theme";
 import type { SourceKind } from "../../host/enums.generated";
 import type { PaneMode, SelectionSet, Span, SyntaxForm } from "../../host/contract";
 import type { DocumentUpdate, EditorChange } from "./text-operation";
+import type { SurfaceEditorActions } from "./editor-actions";
 
 /**
  * The family of a surface: a name its registration owns, one owner at a time.
@@ -194,6 +195,13 @@ export interface EditorSurface {
    * has no provider, or nothing to print, does not declare it.
    */
   readonly printable?: boolean;
+  /**
+   * The writing gestures this surface runs on its own text — bold, heading 2,
+   * a table row — by the stable id the formatting bar and the
+   * `fub.editor.action` intent name (`editor-actions.ts`). Only ids and
+   * booleans cross it.
+   */
+  readonly editorActions?: SurfaceEditorActions;
   destroy(): void;
 }
 

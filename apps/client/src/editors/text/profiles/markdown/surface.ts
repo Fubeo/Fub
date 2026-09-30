@@ -31,6 +31,12 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine, type CursorContext } from "../../engine";
 import type { CompletionSources } from "./completions";
 import { createMarkdownProfile } from "./profile";
+import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import {
+  ACTION_UNAVAILABLE,
+  type EditorActionState,
+  type SurfaceEditorActions,
+} from "../../../core/editor-actions";
 import { markdownReference } from "./references";
 import { renderMarkdown } from "./render";
 
@@ -77,6 +83,7 @@ export interface MarkdownSurface extends BufferedSurface {
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   insertReferences(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
   mountPresentation(host: HTMLElement): () => void;
+  readonly editorActions: SurfaceEditorActions;
   undo(): boolean;
   redo(): boolean;
 }
@@ -134,6 +141,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   let readOnly = false;
   let unmountReading: (() => void) | null = null;
   const life = openLifetime();
+  /// Chi segue lo stato delle azioni (la barra del riquadro). Un insieme e
+  /// non un callback: la stessa superficie può essere guardata da più parti.
+  const actionListeners = new Set<() => void>();
+  const actionsChanged = () => {
+    for (const listener of [...actionListeners]) listener();
+  };
   life.listen(parent, "keydown", (event) => {
     const slash = opts.slash;
     if (
@@ -174,6 +187,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     onSelectionChange: () => {
       closeSlashPalette(parent);
       opts.onSelectionChange();
+      actionsChanged();
     },
     theme: getCurrentTheme(),
     extensions: () => profile.extensions(),
@@ -346,6 +360,46 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     renderReading();
   }
 
+  /// Le azioni dell'editor: il catalogo del profilo più annulla e ripeti, che
+  /// sono del motore. Si scrive soltanto in una modalità di scrittura e fuori
+  /// dalla sola lettura; negli altri casi ogni azione è spenta, non assente.
+  const editable = () => !readOnly && mode !== "reading" && !life.closed;
+  const editorActions: SurfaceEditorActions = {
+    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo",
+    editable,
+    state(id): EditorActionState {
+      if (!editable()) return ACTION_UNAVAILABLE;
+      if (id === "text.undo" || id === "text.redo") {
+        const depth = engine.historyDepth();
+        return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
+      }
+      const action = MARKDOWN_ACTIONS.get(id);
+      if (!action) return ACTION_UNAVAILABLE;
+      return engine.readState((state) => markdownActionState(action, state));
+    },
+    run(id) {
+      if (!editable()) return false;
+      closeSlashPalette(parent);
+      if (id === "text.undo") return engine.undo();
+      if (id === "text.redo") return engine.redo();
+      const action = MARKDOWN_ACTIONS.get(id);
+      if (!action) return false;
+      if (!engine.readState((state) => markdownActionState(action, state)).enabled) return false;
+      return engine.runCommand(action.run);
+    },
+    chord(id) {
+      if (id === "text.undo") return "Mod-z";
+      if (id === "text.redo") return "Mod-y";
+      return MARKDOWN_ACTIONS.get(id)?.chord ?? null;
+    },
+    subscribe(listener) {
+      actionListeners.add(listener);
+      return () => {
+        actionListeners.delete(listener);
+      };
+    },
+  };
+
   return {
     family: "text",
     profile: "markdown",
@@ -357,6 +411,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     setMode(next) {
       if (!isMarkdownMode(next)) throw new RangeError(`surface mode ${next} is not supported`);
       setMode(next);
+      actionsChanged();
     },
     buffer: {
       setDoc: (text) => {
@@ -426,9 +481,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       engine.setReadOnly(value);
       // Senza callback le caselle risultano disabilitate.
       syncReading();
+      actionsChanged();
     },
     setTheme: (theme) => engine.setTheme(theme),
+    editorActions,
     destroy: () => {
+      actionListeners.clear();
       closeSlashPalette(parent);
       cancelReadingSync();
       life.close();

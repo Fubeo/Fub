@@ -5,10 +5,15 @@ const notified = vi.hoisted(() => [] as Array<[string, string | undefined]>);
 vi.mock("./notify", () => ({
   notify: (message: string, tone?: string) => notified.push([message, tone]),
 }));
+const editorRuns = vi.hoisted(() => ({ calls: [] as string[], outcome: "done" as "done" | "nothing" | "unavailable" }));
 vi.mock("../panels/document", () => ({
   openDocument: vi.fn(),
   openFromView: vi.fn(),
   reveal: vi.fn(),
+  runEditorAction: (action: string) => {
+    editorRuns.calls.push(action);
+    return editorRuns.outcome;
+  },
 }));
 vi.mock("../panels/search", () => ({ searchFor: vi.fn() }));
 // Il layout ricorda se stesso a ogni cambio: qui non c'è un backend a cui dirlo.
@@ -25,6 +30,7 @@ import {
   VAULT_RESTORED_NS,
 } from "./intents";
 import { setPrimaryViews } from "./primary-views";
+import { EDITOR_ACTION_NS } from "../editors/core/editor-actions";
 
 function clipboard(writeText: (text: string) => Promise<void>) {
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -32,6 +38,34 @@ function clipboard(writeText: (text: string) => Promise<void>) {
 
 beforeEach(() => {
   notified.length = 0;
+  editorRuns.calls.length = 0;
+  editorRuns.outcome = "done";
+});
+
+describe("l'intento delle azioni dell'editor", () => {
+  it("esegue l'azione nel riquadro col fuoco, senza dire niente se riesce", async () => {
+    await applyIntent({ kind: "custom", ns: EDITOR_ACTION_NS, payload: { action: "markdown.bold" } });
+    expect(editorRuns.calls).toEqual(["markdown.bold"]);
+    expect(notified).toHaveLength(0);
+  });
+
+  it("senza una superficie che la sappia fare lo dice", async () => {
+    editorRuns.outcome = "unavailable";
+    await applyIntent({ kind: "custom", ns: EDITOR_ACTION_NS, payload: { action: "markdown.bold" } });
+    expect(notified).toEqual([[t("format_bar.unavailable"), undefined]]);
+  });
+
+  it("un'azione che lì non ha niente da cambiare si dice col suo nome", async () => {
+    editorRuns.outcome = "nothing";
+    await applyIntent({ kind: "custom", ns: EDITOR_ACTION_NS, payload: { action: "markdown.table.row.after" } });
+    expect(notified).toEqual([[t("format_bar.not_done", { action: "markdown.table.row.after" }), undefined]]);
+  });
+
+  it("un payload senza id non esegue niente", async () => {
+    await applyIntent({ kind: "custom", ns: EDITOR_ACTION_NS, payload: { action: 3 } });
+    expect(editorRuns.calls).toEqual([]);
+    expect(notified).toHaveLength(0);
+  });
 });
 
 describe("l'intento degli appunti", () => {

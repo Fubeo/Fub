@@ -546,6 +546,7 @@ fn command_spec_samples() -> Vec<Value> {
             .with_keybinding("Mod-k")
             .offered_in(CommandSurface::Slash)
             .offered_in(CommandSurface::SlashSelection)
+            .offered_in(CommandSurface::Toolbar)
             .with_scope(CommandScope::writing(CommandReach::Documents).irreversible()),
         |spec, (the, kind)| {
             spec.with_param(ParamSpec::new(format!("p{the}"), "P", kind).describing("un parametro"))

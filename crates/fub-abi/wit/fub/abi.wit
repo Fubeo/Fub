@@ -1666,6 +1666,10 @@ interface command {
         slash,
         /// Il menu `/`, soltanto con una selezione: il comando la trasforma.
         slash-selection,
+        /// La barra di formattazione del riquadro: un pulsante per comando.
+        /// Un id che è un'azione dell'editor (soltanto il core ne nomina uno
+        /// senza namespace) la esegue la superficie; gli altri si invocano.
+        toolbar,
     }
 
     /// Come si sta invocando. Nessun default: un `apply` implicito è l'errore

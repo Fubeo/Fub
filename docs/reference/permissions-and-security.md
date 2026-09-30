@@ -107,8 +107,11 @@ IPC. Il percorso `ViewProvider` applica lo stesso controllo prima di inoltrare
 la forma alla shell; i provider ancora differiti non creano un bypass.
 
 Alcuni intenti `Custom` fanno eseguire alla shell un'azione con un privilegio
-del processo, cioè scrivere negli appunti: `fub.clipboard.text` e
-`settings.export`. L'elenco è `fub_abi::ui::privileged_intent`. Il kernel
+del processo: scrivere negli appunti (`fub.clipboard.text`,
+`settings.export`), ricaricare la finestra dopo un ripristino
+(`fub.vault.restored`) e modificare il testo della nota aperta come una
+battuta dell'utente (`fub.editor.action`). L'elenco è
+`fub_abi::ui::privileged_intent`. Il kernel
 accetta questi intenti soltanto da provider `Core`, sia come `ViewUpdate` di
 una view sia come `CommandEffect` di un comando, nel percorso sincrono e in
 quello staccato. Da un provider di altro grado l'esito è `PermissionDenied` e

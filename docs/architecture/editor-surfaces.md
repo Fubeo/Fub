@@ -71,6 +71,17 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   riquadro: span ancorati a buffer pulito, testo flottante altrimenti. Una
   feature che scrive nel sorgente chiede `source::PROSE` prima delle coordinate
   e rifiuta per il formato, non per il buffer;
+- `editorActions` esegue le **azioni dell'editor** per id (`markdown.bold`,
+  `markdown.heading.2`, `markdown.table.row.after`, `text.undo`) e ne dice lo
+  stato dove sta il cursore principale: `enabled`, e `active` per chi commuta
+  (`null` per chi inserisce). Attraverso la capacità passano soltanto id e
+  booleani; `subscribe` avvisa a ogni cambio di selezione, testo, modalità o
+  sola lettura. La superficie Markdown le trae dal catalogo del profilo
+  (`profiles/markdown/actions.ts`), che la sua keymap condivide; esegue come
+  una battuta, con `TextEngine.runCommand`, quindi nella cronologia locale e
+  nella sessione. In Lettura o in sola lettura ogni azione è spenta. La barra di
+  formattazione (`panels/format-bar.ts`) e l'intento `fub.editor.action` sono i
+  suoi clienti;
 - `setSyntaxForms(forms)` riceve le sintassi effettive del documento, cioè
   quelle del provider più gli innesti delle `SyntaxRule` del vault. La tela le
   usa per le card di testo: il canvas dichiara con `fub:embedded-grammar`
@@ -332,6 +343,9 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/text/history-footprints.ts`
 - `apps/client/src/editors/text/profiles/markdown/profile.ts`
 - `apps/client/src/editors/text/profiles/markdown/commands.ts`
+- `apps/client/src/editors/text/profiles/markdown/actions.ts`
+- `apps/client/src/editors/core/editor-actions.ts`
+- `apps/client/src/panels/format-bar.ts`
 - `apps/client/src/editors/text/profiles/markdown/completions.ts`
 - `apps/client/src/editors/text/profiles/markdown/livepreview.ts`
 - `apps/client/src/editors/text/profiles/plain-text.ts`

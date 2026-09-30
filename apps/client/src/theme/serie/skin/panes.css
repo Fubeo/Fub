@@ -184,6 +184,69 @@
   opacity: 0.4;
   cursor: default;
 }
+/* La barra di formattazione: sulla carta come la toolbar, con un filetto
+   sotto che la separa dal testo. I pulsanti sono fantasmi come quelli della
+   toolbar; i gruppi si dividono con un filetto verticale. Premuto è il fondo
+   attivo del segmented control: lo stesso «acceso» per la stessa domanda. */
+.format-bar {
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-4);
+  background: var(--doc-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.format-bar-group {
+  gap: var(--space-1);
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border);
+}
+.format-bar-group:last-of-type {
+  border-right: none;
+}
+.format-bar-button,
+.format-bar-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.format-bar-button:hover:not(:disabled),
+.format-bar-menu:hover:not(:disabled),
+.format-bar-menu[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.format-bar-button[aria-pressed="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.format-bar-button:disabled,
+.format-bar-menu:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Il selettore dello stile dice lo stile a parole, come in un elaboratore di
+   testi: largo abbastanza da non ballare fra «Titolo 1» e «Testo normale». */
+.format-bar-style {
+  min-width: 128px;
+  justify-content: space-between;
+  color: var(--text);
+}
+.format-bar-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Il riquadro senza tab: una frase e due gesti al centro, sommessi. */
 .pane-empty {
   flex: 1;

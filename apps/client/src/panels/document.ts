@@ -101,7 +101,7 @@ import {
   type SplitNode,
   type Tab,
 } from "../state/layout";
-import { createNote } from "../state/vault";
+import { createNote, loadCommandSpecs } from "../state/vault";
 import { $ } from "../ui/dom";
 import { showContextMenu } from "../ui/menu";
 import { confirm } from "../host/dialog";
@@ -114,6 +114,7 @@ import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
+import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
 import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 
@@ -122,6 +123,9 @@ export interface DocumentDeps {
   /// il pannello della ricerca apre i documenti, e questo li possiede — se si
   /// importassero a vicenda sarebbe un ciclo.
   searchTag(tag: string): void;
+  /// Esegue un comando come la tastiera e la palette: per i pulsanti della
+  /// barra di formattazione che non sono azioni dell'editor.
+  runCommand(id: string): void;
 }
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
@@ -139,6 +143,9 @@ interface Pane {
   contentEl: HTMLElement;
   tabMenuEl: HTMLButtonElement;
   toolbarEl: HTMLElement;
+  /// La barra di formattazione, sotto la toolbar: i pulsanti che i plugin
+  /// offrono in `CommandSurface::Toolbar`. Vuota e nascosta senza nessuno.
+  formatBar: FormatBar;
   conflictEl: HTMLElement;
   /// Lo stato vuoto: cosa fare quando il riquadro non ha tab.
   emptyEl: HTMLElement;
@@ -355,6 +362,12 @@ function refreshNoteClasses(r: Pane, doc: string): void {
 /// riguardano.
 export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   deps = d;
+  lifetime.add(registerFormatIcons());
+  // I pulsanti della barra sono comandi: quando l'elenco cambia — un
+  // componente acceso o spento — ogni riquadro ridisegna la sua.
+  lifetime.add(on("commands", () => {
+    for (const pane of panes.values()) pane.formatBar.update(state.commandSpecs);
+  }));
   // Una finestra documento a parte non apre niente da sé: i link e i tag che
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
   setDocumentWindowNavigation({ navigate: followRemote });
@@ -446,6 +459,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
       detachSurface(r);
       destroySurface(r);
+      r.formatBar.destroy();
     }
   });
 
@@ -527,6 +541,11 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   lifetime.add(
     onLanguage(() => {
       drawSave();
+      // I titoli dei comandi (e dei pulsanti della barra) li traduce il kernel
+      // quando li elenca: si richiedono nella lingua nuova.
+      void loadCommandSpecs().catch((error: unknown) => {
+        notify(t("commands.list_failed", { reason: errorText(error) }), "guasto");
+      });
       for (const pane of panes.values()) drawToolbar(pane);
       for (const id of layoutPanes()) {
         const pane = panes.get(id);
@@ -997,6 +1016,7 @@ function buildStructure(): void {
       // abbonamento a una sessione che il riquadro non mostra più.
       detachSurface(r);
       destroySurface(r);
+      r.formatBar.destroy();
       r.root.remove();
       panes.delete(id);
     }
@@ -1164,7 +1184,19 @@ function renderPane(id: string): Pane {
   // I collegamenti entranti e uscenti non stanno sotto il testo: li mostra
   // la scheda Collegamenti dell'ispettore, che segue il documento a fuoco.
   contentEl.append(editorEl, viewEl);
-  root.append(tabsShell, toolbarEl, conflictEl, contentEl);
+  const formatBar = createFormatBar({
+    surface: () => {
+      const pane = panes.get(id);
+      return pane?.shown?.k === "doc" ? pane.surface : null;
+    },
+    writing: () => {
+      const pane = panes.get(id);
+      return pane ? selectedMode(pane)?.presentation === "surface" : false;
+    },
+    focusPane: () => focusPane(id),
+    runCommand: (command) => deps.runCommand(command),
+  });
+  root.append(tabsShell, toolbarEl, formatBar.element, conflictEl, contentEl);
   // Toccare un riquadro gli dà il fuoco. `mousedown` e non `click` perché il
   // fuoco deve essere già di questo riquadro quando l'editor riceve l'evento:
   // altrimenti il contesto pubblicato subito dopo sarebbe quello di prima.
@@ -1194,6 +1226,7 @@ function renderPane(id: string): Pane {
     contentEl,
     tabMenuEl,
     toolbarEl,
+    formatBar,
     conflictEl,
     emptyEl,
     editorEl,
@@ -2193,6 +2226,22 @@ function drawToolbar(r: Pane): void {
     button.textContent = mode.label();
     button.setAttribute("aria-pressed", String(active?.id === mode.id));
   });
+  // La barra segue la superficie e la sua modalità: si ridisegna qui, dove
+  // entrambe sono appena state decise.
+  r.formatBar.update(state.commandSpecs);
+}
+
+/// Esegue un'azione dell'editor nella superficie del riquadro col fuoco: è
+/// l'intento `fub.editor.action` di un comando invocato dalla palette o da una
+/// scorciatoia. La barra non passa di qui: agisce sul proprio riquadro.
+export function runEditorAction(action: string): "done" | "nothing" | "unavailable" {
+  const r = panes.get(layout.focus);
+  const surface = r?.shown?.k === "doc" ? r.surface : null;
+  const actions = surface?.editorActions;
+  if (!actions?.has(action) || !actions.editable()) return "unavailable";
+  if (!actions.run(action)) return "nothing";
+  surface?.focus?.();
+  return "done";
 }
 
 /// Porta lo stato del documento a fuoco — `#pane-status`: il salvataggio e

@@ -16,6 +16,11 @@ la sezione seguente raccoglie le modifiche per la prima versione.
 - parsing, modello comune, rendering e serializzazione tramite provider;
 - wikilink, tag, backlink, ricerca full-text e Graph View;
 - editor CodeMirror, live preview e modalità di lettura;
+- barra di formattazione Markdown come plugin ufficiale `fub.formatting`:
+  titoli, testo in riga, collegamenti, elenchi, blocchi e tabelle, con stato
+  premuto e spento dalla superficie, tastiera e menu per l'eccedenza; nuova
+  superficie `CommandSurface::Toolbar` e intento privilegiato
+  `fub.editor.action`;
 - motore testuale condiviso con profili Markdown, plain text e formula;
 - diagrammi Mermaid in Live, Lettura e note trascluse, con sorgente recuperabile,
   errori visibili e resa coerente con la luce del tema;

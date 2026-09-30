@@ -214,6 +214,11 @@ export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 export const toggleWikilink = toggleWrap("[[", "]]");
+/// I delimitatori dichiarati dalle regole ufficiali (`fub:highlight`,
+/// `fub:comments`) e il math in riga: stessa meccanica del grassetto.
+export const toggleHighlight = toggleWrap("==");
+export const toggleComment = toggleWrap("%%");
+export const toggleInlineMath = toggleWrap("$");
 
 // ── Liste ────────────────────────────────────────────────────────────────────
 
@@ -307,7 +312,7 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
 /// Le righe toccate dalla selezione, una volta sola ciascuna. Un capolinea
 /// posato esattamente a inizio riga non "seleziona" quella riga: è la stessa
 /// convenzione dei comandi di riga di CodeMirror.
-function selectedLines(state: EditorState): Line[] {
+export function selectedLines(state: EditorState): Line[] {
   const lines: Line[] = [];
   let last = 0;
   for (const range of state.selection.ranges) {

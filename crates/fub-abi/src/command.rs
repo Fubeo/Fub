@@ -152,6 +152,18 @@ pub enum CommandSurface {
     /// Il menu `/`, soltanto quando c'è una selezione: il comando la trasforma,
     /// e senza non ha niente su cui agire.
     SlashSelection,
+    /// La barra di formattazione del riquadro: un pulsante per comando,
+    /// nell'ordine in cui il provider li dichiara.
+    ///
+    /// Un comando il cui id è un'**azione dell'editor** che la superficie
+    /// conosce (`markdown.bold`, vocabolario in `docs/reference/ipc-contract.md`)
+    /// viene eseguito dalla superficie, senza attraversare il confine: il
+    /// cursore e la cronologia locale sono suoi (0190). Soltanto il core nomina
+    /// un id senza namespace ([`crate::rules::ids::check`]), quindi soltanto il
+    /// core dichiara un pulsante che scrive nel testo aperto. Ogni altro
+    /// comando offerto qui è un pulsante col suo titolo, invocato come dalla
+    /// palette.
+    Toolbar,
 }
 
 impl CommandSpec {

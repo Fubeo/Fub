@@ -6,6 +6,7 @@ import {
   Text,
   Transaction,
   type Extension,
+  type StateCommand,
 } from "@codemirror/state";
 import {
   Decoration,
@@ -346,6 +347,34 @@ export class TextEngine {
     }
     const before = state.doc.sliceString(line.from, main.head);
     return { empty: main.empty, lineBefore: before, nodes, head: main.head };
+  }
+
+  /// Esegue un comando del profilo come una battuta dell'utente: la stessa
+  /// via della tastiera, quindi cronologia locale e sessione. Rifiuta in sola
+  /// lettura e dopo `destroy`, come ogni altra scrittura del motore.
+  public runCommand(command: StateCommand): boolean {
+    if (this.disposed || this.readOnlyEnabled) return false;
+    try {
+      return command({ state: this.view.state, dispatch: (transaction) => this.view.dispatch(transaction) });
+    } catch {
+      return false;
+    }
+  }
+
+  /// Legge lo stato corrente senza toccarlo: per chi chiede se un'azione è
+  /// già applicata dove sta il cursore.
+  public readState<T>(read: (state: EditorState) => T): T {
+    return read(this.view.state);
+  }
+
+  /// Quante modifiche si possono annullare e ripetere adesso.
+  public historyDepth(): { readonly undo: number; readonly redo: number } {
+    if (this.disposed) return { undo: 0, redo: 0 };
+    return { undo: undoDepth(this.view.state), redo: redoDepth(this.view.state) };
+  }
+
+  public isReadOnly(): boolean {
+    return this.readOnlyEnabled;
   }
 
   public destroy(): void {

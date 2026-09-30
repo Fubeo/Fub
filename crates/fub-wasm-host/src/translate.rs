@@ -704,6 +704,7 @@ fn from_command_surface(s: w_command::CommandSurface) -> fub_abi::command::Comma
         w_command::CommandSurface::SlashSelection => {
             fub_abi::command::CommandSurface::SlashSelection
         }
+        w_command::CommandSurface::Toolbar => fub_abi::command::CommandSurface::Toolbar,
     }
 }
 

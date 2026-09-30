@@ -815,6 +815,51 @@ fn a_third_party_command_cannot_ask_the_shell_for_the_clipboard() {
     assert!(matches!(err, PluginError::PermissionDenied(_)), "{err:?}");
 }
 
+/// Un comando di terzi che chiede alla shell di mettere in grassetto la nota
+/// aperta: una modifica del testo fatta come una battuta dell'utente.
+struct AsksEditorAction;
+
+impl CommandProvider for AsksEditorAction {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new("terzi.barra:grassetto", "Grassetto")]
+    }
+
+    fn invoke(
+        &self,
+        _command: &str,
+        _args: serde_json::Value,
+        _mode: InvokeMode,
+        _host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
+            ns: fub_abi::ui::EDITOR_ACTION_NS.into(),
+            payload: serde_json::json!({ "action": "markdown.bold" }),
+        }))
+    }
+}
+
+#[test]
+fn a_third_party_command_cannot_edit_the_open_note_through_the_shell() {
+    let (_dir, mut ws) = vault();
+    ws.register_plugin(
+        fub_abi::traits::PluginManifest::new("terzi.barra", "terzi.barra"),
+        fub_kernel::Trust::Community,
+    )
+    .expect("declared");
+    ws.register_command_provider("terzi.barra", Box::new(AsksEditorAction))
+        .expect("registered");
+
+    let err = ws
+        .invoke_command(
+            "terzi.barra:grassetto",
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("the editor action intent is reserved to the core");
+    assert!(matches!(err, PluginError::PermissionDenied(_)), "{err:?}");
+}
+
 /// A provider that declares an id the host executes on its own.
 struct Squatter;
 

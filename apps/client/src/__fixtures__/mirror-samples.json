@@ -1923,7 +1923,8 @@
       },
       "surfaces": [
         "slash",
-        "slash_selection"
+        "slash_selection",
+        "toolbar"
       ]
     },
     {

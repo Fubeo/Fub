@@ -139,7 +139,11 @@ fn the_spec_of_a_component_are_in_the_record() {
         assert_eq!(rich.params.len(), 2, "due parametri: {:?}", rich.params);
         assert_eq!(
             rich.surfaces,
-            [CommandSurface::Slash, CommandSurface::SlashSelection],
+            [
+                CommandSurface::Slash,
+                CommandSurface::SlashSelection,
+                CommandSurface::Toolbar
+            ],
             "le superfici dichiarate di là attraversano intere, in ordine"
         );
 

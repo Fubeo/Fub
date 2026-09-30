@@ -319,9 +319,13 @@ mod comandi {
                         reach: CommandReach::Documents,
                         reversible: true,
                     },
-                    // Entrambi i casi, perché attraversino in ordine: è il
+                    // Tutti i casi, perché attraversino in ordine: è il
                     // comando che pronuncia la forma più profonda.
-                    surfaces: vec![CommandSurface::Slash, CommandSurface::SlashSelection],
+                    surfaces: vec![
+                        CommandSurface::Slash,
+                        CommandSurface::SlashSelection,
+                        CommandSurface::Toolbar,
+                    ],
                 },
             ]
         }

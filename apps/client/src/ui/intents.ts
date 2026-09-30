@@ -6,7 +6,9 @@
 // il giorno che la si dimentica, un comando naviga e una view no.
 import type { CommandEffect, ViewUpdate } from "../host/contract";
 import { t } from "../i18n/strings";
-import { openDocument, openFromView, reveal } from "../panels/document";
+import { openDocument, openFromView, reveal, runEditorAction } from "../panels/document";
+import { EDITOR_ACTION_NS, editorActionOf } from "../editors/core/editor-actions";
+import { state } from "../state/store";
 import { searchFor } from "../panels/search";
 import { notify } from "./notify";
 import { openPrimaryView } from "./primary-views";
@@ -81,6 +83,10 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
         await copyText(intent.payload);
         break;
       }
+      if (intent.ns === EDITOR_ACTION_NS) {
+        editorAction(intent.payload);
+        break;
+      }
       if (intent.ns === VAULT_RESTORED_NS) {
         try {
           sessionStorage.setItem(NOTICE_AFTER_RELOAD, t("vault.restored"));
@@ -113,6 +119,23 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       const unknown: never = intent;
       console.info(`Fub: intento ignorato (kind: ${(unknown as { kind: string }).kind}).`);
     }
+  }
+}
+
+/// Un'azione dell'editor chiesta da un comando (la barra di formattazione
+/// dalla palette): si esegue nel riquadro col fuoco, e se lì non c'è una
+/// superficie che la sa fare lo si dice invece di non fare niente.
+function editorAction(payload: unknown): void {
+  const action = editorActionOf(payload);
+  if (!action) {
+    console.info("Fub: azione dell'editor senza id, ignorata.");
+    return;
+  }
+  const outcome = runEditorAction(action);
+  if (outcome === "unavailable") notify(t("format_bar.unavailable"));
+  else if (outcome === "nothing") {
+    const title = state.commandSpecs.find((spec) => spec.id === action)?.title ?? action;
+    notify(t("format_bar.not_done", { action: title }));
   }
 }
 

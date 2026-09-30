@@ -206,6 +206,12 @@
     "pane-empty",
     "pane-empty-title",
     "pane-empty-actions",
+    "format-bar",
+    "format-bar-group",
+    "format-bar-button",
+    "format-bar-menu",
+    "format-bar-style",
+    "format-bar-menu-label",
     "focus",
     "pane-preview",
     "grid-surface",
@@ -765,6 +771,25 @@
       "states": [
         "rest",
         "focused"
+      ]
+    },
+    {
+      "name": "format-bar",
+      "hooks": [
+        "format-bar",
+        "format-bar-group",
+        "format-bar-button",
+        "format-bar-menu",
+        "format-bar-style",
+        "format-bar-menu-label"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -1543,10 +1568,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 300,
+    "hooks": 306,
     "state_names": 7,
-    "assigned_states": 129,
-    "components": 42,
+    "assigned_states": 135,
+    "components": 43,
     "unassigned_hooks": 0
   }
 }

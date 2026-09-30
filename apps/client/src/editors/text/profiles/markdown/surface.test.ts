@@ -394,3 +394,57 @@ describe("il cursore letterale della palette slash", () => {
     }
   });
 });
+
+describe("le azioni dell'editor della superficie", () => {
+  it("il grassetto è una battuta: arriva alla sessione, si vede premuto, e annulla lo toglie", () => {
+    const texts: string[] = [];
+    const { ed, view } = editor((text) => texts.push(text));
+    ed.buffer.setDoc("parola");
+    view().dispatch({ selection: { anchor: 2 } });
+    expect(ed.editorActions.state("markdown.bold")).toEqual({ enabled: true, active: false });
+    expect(ed.editorActions.state("text.undo")).toEqual({ enabled: false, active: null });
+
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("**parola**");
+    expect(texts[texts.length - 1]).toBe("**parola**");
+    expect(ed.editorActions.state("markdown.bold").active).toBe(true);
+    expect(ed.editorActions.state("text.undo").enabled).toBe(true);
+
+    expect(ed.editorActions.run("text.undo")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("parola");
+    ed.destroy();
+  });
+
+  it("in lettura e in sola lettura sono spente, e chi le segue lo sa", () => {
+    const { ed } = editor();
+    ed.buffer.setDoc("testo");
+    let calls = 0;
+    const stop = ed.editorActions.subscribe(() => {
+      calls += 1;
+    });
+    ed.setMode("reading");
+    expect(ed.editorActions.editable()).toBe(false);
+    expect(ed.editorActions.state("markdown.bold")).toEqual({ enabled: false, active: null });
+    expect(ed.editorActions.run("markdown.bold")).toBe(false);
+    expect(ed.buffer.getDoc()).toBe("testo");
+
+    ed.setMode("live_preview");
+    ed.setReadOnly(true);
+    expect(ed.editorActions.editable()).toBe(false);
+    expect(ed.editorActions.run("markdown.heading.1")).toBe(false);
+    expect(calls).toBeGreaterThanOrEqual(3);
+    stop();
+    ed.destroy();
+  });
+
+  it("conosce soltanto il proprio vocabolario, e ne dice gli accordi", () => {
+    const { ed } = editor();
+    expect(ed.editorActions.has("markdown.table.row.after")).toBe(true);
+    expect(ed.editorActions.has("text.redo")).toBe(true);
+    expect(ed.editorActions.has("grid.cell.bold")).toBe(false);
+    expect(ed.editorActions.state("grid.cell.bold")).toEqual({ enabled: false, active: null });
+    expect(ed.editorActions.chord("markdown.bold")).toBe("Mod-b");
+    expect(ed.editorActions.chord("markdown.footnote")).toBeNull();
+    ed.destroy();
+  });
+});

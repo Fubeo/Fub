@@ -38,6 +38,11 @@
 //! - [`versioning`] — snapshot per-file del vault come
 //!   [`EventHandler`](fub_abi::traits::EventHandler): il dogfooding più
 //!   completo del contratto, perché usa solo ciò che avrà un plugin di terzi.
+//! - [`formatting`] — la barra di formattazione come
+//!   [`CommandProvider`](fub_abi::traits::CommandProvider): un pulsante per
+//!   azione dell'editor, offerto in
+//!   [`CommandSurface::Toolbar`](fub_abi::command::CommandSurface::Toolbar);
+//!   la modifica la esegue la superficie che scrive.
 //! - [`inventory`] — l'elenco delle feature qui sopra, e non una descrizione di
 //!   esso: è da qui che `fub_host::mount` le monta, quindi una feature fuori
 //!   dall'elenco semplicemente non c'è. Le view ne sono un sottoinsieme
@@ -58,6 +63,8 @@ pub mod dashboard;
 // Ogni feature ne usa una parte, e una build parziale lascia spento il resto.
 #[allow(dead_code)]
 mod formats;
+#[cfg(feature = "formatting")]
+pub mod formatting;
 #[cfg(feature = "graph")]
 pub mod graph;
 pub mod inventory;
@@ -104,6 +111,8 @@ pub use commands::{
 };
 #[cfg(feature = "dashboard")]
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
+#[cfg(feature = "formatting")]
+pub use formatting::{FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_VIEW};
 pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};

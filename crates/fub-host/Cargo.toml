@@ -162,6 +162,7 @@ official-features = [
     "commands",
     "blocks",
     "base",
+    "formatting",
 ]
 search = ["fub-features/search"]
 versioning = ["fub-features/versioning"]
@@ -179,6 +180,7 @@ graph = ["fub-features/graph"]
 commands = ["fub-features/commands"]
 blocks = ["fub-features/blocks"]
 base = ["fub-features/base"]
+formatting = ["fub-features/formatting"]
 
 [dev-dependencies]
 # Il banco del lato host (§16.2).
