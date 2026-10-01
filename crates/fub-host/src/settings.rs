@@ -174,13 +174,8 @@ pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
 /// sceglierne un altro per un diagramma solo, con `%% stile: <id>`.
 pub const APPEARANCE_DIAGRAM_STYLE: &str = "appearance.diagram-style";
 /// Gli stili offerti, il predefinito per primo.
-pub const DIAGRAM_STYLES: [&str; 5] = [
-    "armonia",
-    "acquerello",
-    "aurora",
-    "blueprint",
-    "inchiostro",
-];
+pub const DIAGRAM_STYLES: [&str; 5] =
+    ["armonia", "acquerello", "aurora", "blueprint", "inchiostro"];
 pub const DEFAULT_ZOOM: f64 = 1.0;
 /// La cartella del vault in cui la shell deposita e cerca gli allegati.
 ///
@@ -1476,6 +1471,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DIAGRAM_STYLE_AURORA, "Aurora — vivid and deep")
         .with(C_DIAGRAM_STYLE_BLUEPRINT, "Blueprint — technical drawing")
         .with(C_DIAGRAM_STYLE_INCHIOSTRO, "Ink — editorial")
+        .with(C_CSS_SNIPPETS, "Local CSS snippets")
         .with(C_CSS_SNIPPETS_DESC, "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.")
         .with(C_GROUP_SYNC, "Synchronization")
         .with(C_SYNC_SERVER_URL, "Synchronization server")
