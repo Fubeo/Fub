@@ -83,6 +83,9 @@ export interface Painter {
   redrawBackground(): void;
   updateTints(): void;
   resize(w: number, h: number, dpr: number): void;
+  /// Quanto le etichette sporgono oltre `maxX` alla scala `scale`, in px di
+  /// schermo: il posto che il fit deve lasciare a destra (`labelReach`).
+  labelOverhang(s: Structure, scale: number, maxX: number): number;
   destroy(): void;
 }
 
@@ -129,6 +132,27 @@ export function screenRadius(radius: number, scale: number): number {
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
+}
+
+/// Le etichette comuni entrano in dissolvenza con lo zoom: a scala bassa il
+/// testo si accavalla e non si legge. Sotto 0,5 non ci sono, a 1 sono piene.
+export function labelFade(scale: number): number {
+  return clamp((scale - 0.5) / 0.5, 0, 1);
+}
+
+/// Quanto le etichette sporgono a destra di `maxX` alla scala `scale`, in px di
+/// schermo. Un'etichetta parte dal bordo del suo nodo e ha corpo fisso, quindi
+/// non scala con lo zoom: inquadrare i soli centri lasciava tagliate dal bordo
+/// quelle dei nodi più a destra. A scala senza etichette non sporge niente;
+/// le poche scritte comunque (focus, note aperte) non spostano l'inquadratura.
+export function labelReach(s: Structure, scale: number, maxX: number, width: (i: number) => number): number {
+  if (labelFade(scale) <= 0.01) return 0;
+  let reach = 0;
+  for (let i = 0; i < s.n; i++) {
+    const right = screenRadius(s.radius[i], scale) + LABEL_GAP + width(i) - (maxX - s.x[i]) * scale;
+    if (right > reach) reach = right;
+  }
+  return reach;
 }
 
 export function pulseOpacity(id: string, elapsedMs: number, alpha: number, enabled: boolean): number | undefined {
@@ -399,6 +423,14 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     return width;
   }
 
+  function labelOverhang(s: Structure, scale: number, maxX: number): number {
+    if (!ctx) return 0;
+    // Fuori da `redraw` il font del contesto è quello lasciato dall'ultimo
+    // disegno: le larghezze da misurare sono del corpo normale, chiave «n».
+    ctx.font = `${LABEL_PX}px ${currentFont}`;
+    return labelReach(s, scale, maxX, (i) => labelWidth(ctx, "n" + s.id[i], nodeLabel(s.id[i])));
+  }
+
   function redraw(state: DrawState): void {
     previousState = state;
     if (!ctx) return;
@@ -639,7 +671,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     // si legge). Ognuna prende il suo spazio: una che cadrebbe sopra una già
     // scritta si salta, invece di formare una macchia illeggibile.
     const threshold = 3 * (1 - config.labelDensity) + 1;
-    const fade = clamp((c.scale - 0.5) / 0.5, 0, 1);
+    const fade = labelFade(c.scale);
     taken.fill(0);
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";
@@ -702,5 +734,5 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     main.remove();
   }
 
-  return { redraw, redrawBackground, updateTints, resize, destroy };
+  return { redraw, redrawBackground, updateTints, resize, labelOverhang, destroy };
 }

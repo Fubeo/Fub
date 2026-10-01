@@ -30,7 +30,7 @@ import { IMPACTS, IMPACT_STRIDE, impactCount } from "./sim/forces";
 import { createWobble, kick, stepWobble, type Wobble } from "./sim/wobble";
 import { shake, shockwave, slosh } from "./sim/play";
 import type { WorldBound, Camera, CameraState, Viewport } from "./render/camera";
-import { createCameraState, fit } from "./render/camera";
+import { createCameraState, fitWithOverhang } from "./render/camera";
 import type { Painter, DrawState, MagnetMark } from "./render/painter";
 import { RIPPLE_STRIDE, createPainter } from "./render/painter";
 import type { Interaction, InteractionOptions } from "./interaction";
@@ -347,6 +347,12 @@ export function createChart(options: ChartOptions = {}): Chart {
     return { minX, minY, maxX, maxY };
   }
 
+  /// Lo sporto delle etichette oltre il bordo destro del grafo, per il fit:
+  /// lo misura il pittore, che le scrive.
+  function labelOverhang(scale: number, b: WorldBound): number {
+    return s && painter ? painter.labelOverhang(s, scale, b.maxX) : 0;
+  }
+
   /// Il nodo che accende il quartiere: il trascinato, poi l'hover, poi la
   /// selezione da tastiera.
   function highlightTarget(): number {
@@ -564,7 +570,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     if (v && !initialFitDone && v.w >= MIN_VIEW_SIZE && v.h >= MIN_VIEW_SIZE) {
       const kept = restoredCamera;
       cameraState.set(
-        kept ? { scale: kept.scale, tx: v.w / 2 - kept.centerX * kept.scale, ty: v.h / 2 - kept.centerY * kept.scale } : fit(bound(), v),
+        kept ? { scale: kept.scale, tx: v.w / 2 - kept.centerX * kept.scale, ty: v.h / 2 - kept.centerY * kept.scale } : fitWithOverhang(bound(), v, labelOverhang),
         true,
       );
       initialFitDone = true;
@@ -696,7 +702,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       followingLayout = saved.following;
     }
     computeGroups();
-    cameraState = createCameraState(reduced);
+    cameraState = createCameraState(reduced, labelOverhang);
     unsubscribeReducedMotion = onReducedMotionChange((value) => {
       reduced = value;
       cameraState?.setReducedMotion(value);

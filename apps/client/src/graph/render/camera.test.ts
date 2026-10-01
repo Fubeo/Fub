@@ -9,6 +9,7 @@ import {
   createCameraState,
   createMotionState,
   fit,
+  fitWithOverhang,
   INERTIA_MS,
   MAX_SCALE,
   MIN_SCALE,
@@ -73,6 +74,50 @@ describe("camera", () => {
     const c = fit({ minX: 5, minY: 5, maxX: 5, maxY: 5 }, { w: 800, h: 600 });
     expect(Number.isFinite(c.scale)).toBe(true);
     expect(c.scale).toBe(MAX_SCALE);
+  });
+
+  it("fit con riserva lascia libero a destra il posto delle etichette", () => {
+    const b = { minX: 0, minY: 0, maxX: 1000, maxY: 100 };
+    const v = { w: 800, h: 600 };
+    const c = fit(b, v, 0.08, 120);
+    const left = worldToScreen(c, { x: b.minX, y: 0 }).x;
+    const right = worldToScreen(c, { x: b.maxX, y: 0 }).x;
+    // Il grafo più la riserva stanno nel margine, e ci stanno centrati.
+    expect(left).toBeCloseTo(800 * 0.08, 6);
+    expect(right + 120).toBeCloseTo(800 * 0.92, 6);
+  });
+
+  it("la riserva non mangia più di metà della larghezza utile", () => {
+    const c = fit({ minX: 0, minY: 0, maxX: 1000, maxY: 100 }, { w: 800, h: 600 }, 0.08, 1e6);
+    expect(c.scale).toBeCloseTo((800 * 0.84) / 2 / 1000, 10);
+  });
+
+  it("fitWithOverhang tiene dentro le etichette dei nodi di destra", () => {
+    // Il caso del banco: il nodo più a destra ha un'etichetta lunga, scritta
+    // a partire dal bordo del nodo, a corpo fisso.
+    const b = { minX: 0, minY: 0, maxX: 600, maxY: 300 };
+    const v = { w: 680, h: 600 };
+    const label = (scale: number): number => 6 * scale + 5 + 110;
+    const plain = fit(b, v);
+    expect(worldToScreen(plain, { x: b.maxX, y: 0 }).x + label(plain.scale)).toBeGreaterThan(680 * 0.92);
+    const c = fitWithOverhang(b, v, label);
+    expect(worldToScreen(c, { x: b.maxX, y: 0 }).x + label(c.scale)).toBeLessThanOrEqual(680 * 0.92 + 1e-6);
+    expect(worldToScreen(c, { x: b.minX, y: 0 }).x).toBeGreaterThanOrEqual(680 * 0.08 - 1e-6);
+  });
+
+  it("fitWithOverhang senza sporto è il fit di sempre", () => {
+    const b = { minX: -500, minY: -300, maxX: 700, maxY: 200 };
+    const v = { w: 800, h: 600 };
+    expect(fitWithOverhang(b, v, () => 0)).toEqual(fit(b, v));
+  });
+
+  it("createCameraState con sporto insegue il fit che lascia posto alle etichette", () => {
+    const b = { minX: 0, minY: 0, maxX: 600, maxY: 300 };
+    const v = { w: 680, h: 600 };
+    const label = (scale: number): number => 6 * scale + 5 + 110;
+    const cs = createCameraState(true, label);
+    cs.fit(b, v);
+    expect(cs.step(16)).toEqual(fitWithOverhang(b, v, label));
   });
 
   it("stepCamera converge ai bersagli", () => {

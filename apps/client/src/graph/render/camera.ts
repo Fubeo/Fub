@@ -73,15 +73,44 @@ export function zoomAtPoint(c: Camera, factor: number, screenPoint: Point): Came
 /// margine `pad` da ogni lato, poi il rettangolo centrato. I bound degeneri
 /// (un solo nodo) non devono produrre una scala infinita: `1e-6` è il pavimento
 /// dei lati e il clamp tiene la scala nei limiti.
-export function fit(b: WorldBound, v: Viewport, pad = 0.08): Camera {
+///
+/// `reserve` sono px di schermo tenuti liberi a destra dei bound, dentro il
+/// margine: il posto delle etichette. Non mangia mai più di metà della
+/// larghezza utile, e il rettangolo centrato è quello con la riserva.
+export function fit(b: WorldBound, v: Viewport, pad = 0.08, reserve = 0): Camera {
   const bw = Math.max(1e-6, b.maxX - b.minX);
   const bh = Math.max(1e-6, b.maxY - b.minY);
-  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.min(v.w / bw, v.h / bh) * (1 - 2 * pad)));
+  const kept = Math.min(Math.max(0, reserve), (v.w * (1 - 2 * pad)) / 2);
+  // Con una riserva la larghezza utile è positiva, quindi `1 - 2·pad` lo è.
+  const w = kept > 0 ? v.w - kept / (1 - 2 * pad) : v.w;
+  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.min(w / bw, v.h / bh) * (1 - 2 * pad)));
   return {
     scale,
-    tx: (v.w - bw * scale) / 2 - b.minX * scale,
+    tx: (v.w - bw * scale - kept) / 2 - b.minX * scale,
     ty: (v.h - bh * scale) / 2 - b.minY * scale,
   };
+}
+
+/// Il fit che lascia posto alle etichette. Stanno a destra del nodo, in px di
+/// schermo a corpo fisso: quanto sporgono oltre il bordo destro dei bound
+/// dipende dalla scala, e la scala dallo spazio che resta. `overhang` risponde
+/// alla prima domanda; pochi giri bastano alla seconda, e la riserva tenuta è
+/// la più grande vista, così un giro che sbaglia sbaglia per eccesso.
+export function fitWithOverhang(
+  b: WorldBound,
+  v: Viewport,
+  overhang: (scale: number, b: WorldBound) => number,
+  pad = 0.08,
+): Camera {
+  let c = fit(b, v, pad);
+  let reserve = 0;
+  for (let round = 0; round < 4; round++) {
+    const next = overhang(c.scale, b);
+    if (!(next > reserve + 0.5)) break;
+    reserve = next;
+    c = fit(b, v, pad, reserve);
+  }
+  return c;
 }
 
 /// Lo stato inseguito: i tre valori correnti, i tre bersagli, e la velocità
@@ -156,7 +185,12 @@ export interface CameraState {
   ready(): boolean;
 }
 
-export function createCameraState(reducedMotion = false): CameraState {
+/// `overhang`, se c'è, è lo sporto delle etichette che `fit` lascia libero
+/// (vedi `fitWithOverhang`).
+export function createCameraState(
+  reducedMotion = false,
+  overhang?: (scale: number, b: WorldBound) => number,
+): CameraState {
   let st = createMotionState();
   let reduced = reducedMotion;
   const current = (): Camera => ({ scale: st.scale, tx: st.tx, ty: st.ty });
@@ -213,7 +247,7 @@ export function createCameraState(reducedMotion = false): CameraState {
       if (reduced) arrive();
     },
     fit(b, v) {
-      const f = fit(b, v);
+      const f = overhang ? fitWithOverhang(b, v, overhang) : fit(b, v);
       st = { ...st, targetScale: f.scale, targetTx: f.tx, targetTy: f.ty };
     },
     step(dt) {

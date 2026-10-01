@@ -87,6 +87,9 @@ function painterFactory(): (host: HTMLElement, graphics: GraphicsConfig) => Stub
       resize() {
         p.calls.resize++;
       },
+      labelOverhang() {
+        return 0;
+      },
       destroy() {
         p.calls.destroy++;
       },
