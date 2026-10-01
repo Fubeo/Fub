@@ -75,6 +75,11 @@ const SVG: Record<string, string> = {
 
   // --- l'apri-vault, che è un menu item ma anche un bottone --------------
   vault: '<path d="M3 7a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+
+  // --- le impostazioni: le schede e dove vale un valore -------------------
+  component: '<path d="M5 8h3a2 2 0 1 1 4 0h3a1 1 0 0 1 1 1v3a2 2 0 1 1 0 4v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/>',
+  keyboard: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/>',
 };
 
 /// L'SVG di un'icona, come stringa HTML pronta per `innerHTML`.

@@ -331,13 +331,16 @@
         </div>
         <ul id="notify-list" class="plain-list notify-list" role="list"></ul>
       </div>
-      <!-- Il pannello delle impostazioni (§11.1). Le tre schede sono le tre
+      <!-- Il pannello delle impostazioni (§11.1). Le quattro schede sono le
            cose che questa voce fa esistere: la configurazione (form generato
            dallo schema che i componenti dichiarano), i componenti accesi e
-           spenti, e i vault che questa macchina conosce — l'elenco che non
-           poteva stare in nessun vault.
+           spenti, le scorciatoie e i vault che questa macchina conosce —
+           l'elenco che non poteva stare in nessun vault.
            È una **modale**: mentre è aperta, è quello che si sta facendo. Il
-           fuoco ci resta dentro e Escape la chiude (`ui/a11y.ts`). -->
+           fuoco ci resta dentro e Escape la chiude (`ui/a11y.ts`).
+           Scorre soltanto il corpo: intestazione, navigazione e ricerca
+           restano ferme, così la chiusura e la scheda corrente non escono mai
+           dalla vista. -->
       <div
         id="settings-panel"
         class="settings-panel"
@@ -347,69 +350,94 @@
         tabindex="-1"
         hidden
       >
-        <div class="panel-title">
-          <span id="settings-title" data-i18n="settings.title">Impostazioni</span>
-          <span
-            id="settings-tabs"
-            class="segmented segmented--wide settings-tabs"
-            role="tablist"
-            data-i18n-label="settings.tabs"
-            aria-label="Sezioni delle impostazioni"
-          >
-            <button
-              data-tab="settings"
-              class="segmented-option"
-              role="tab"
-              aria-selected="true"
-              data-i18n="settings.tab.config"
-            >
-              Configurazione
-            </button>
-            <button
-              data-tab="components"
-              class="segmented-option"
-              role="tab"
-              aria-selected="false"
-              data-i18n="settings.tab.components"
-            >
-              Componenti
-            </button>
-            <button
-              data-tab="shortcuts"
-              class="segmented-option"
-              role="tab"
-              aria-selected="false"
-              data-i18n="settings.tab.shortcuts"
-            >
-              Scorciatoie
-            </button>
-            <button
-              data-tab="vault"
-              class="segmented-option"
-              role="tab"
-              aria-selected="false"
-              data-i18n="settings.tab.vaults"
-            >
-              Vault
-            </button>
-          </span>
+        <div class="settings-header">
+          <h2 id="settings-title" class="settings-title" data-i18n="settings.title">Impostazioni</h2>
           <button
             id="settings-close"
-            class="link-button"
-            data-i18n="app.close"
+            type="button"
+            class="settings-close"
+            data-i18n-label="app.close"
             data-i18n-title="app.close"
-          >
-            Chiudi
-          </button>
+            aria-label="Chiudi"
+          ></button>
         </div>
-        <div id="settings-body" class="settings-body"></div>
-        <!-- La superficie `settings_tab` del contratto (§2.2), che questa shell
-             dichiarava non ospitata: le view che la chiedono si montano qui,
-             sotto il form. Una scheda per view vuole il modello di layout
-             (§1.2, FEATURES 3.3), che non c'è: intanto la superficie esiste e
-             una view che la chiede si vede, invece di finire in un avviso in
-             console. -->
-        <div id="views-settings"></div>
+        <div class="settings-layout">
+          <div class="settings-nav">
+            <div
+              id="settings-tabs"
+              class="settings-tabs"
+              role="tablist"
+              aria-orientation="vertical"
+              data-i18n-label="settings.tabs"
+              aria-label="Sezioni delle impostazioni"
+            >
+              <button data-tab="settings" type="button" class="settings-tab" role="tab" aria-selected="true">
+                <span class="settings-tab-label" data-i18n="settings.tab.config">Configurazione</span>
+              </button>
+              <button data-tab="components" type="button" class="settings-tab" role="tab" aria-selected="false">
+                <span class="settings-tab-label" data-i18n="settings.tab.components">Componenti</span>
+              </button>
+              <button data-tab="shortcuts" type="button" class="settings-tab" role="tab" aria-selected="false">
+                <span class="settings-tab-label" data-i18n="settings.tab.shortcuts">Scorciatoie</span>
+              </button>
+              <button data-tab="vault" type="button" class="settings-tab" role="tab" aria-selected="false">
+                <span class="settings-tab-label" data-i18n="settings.tab.vaults">Vault</span>
+              </button>
+            </div>
+            <!-- L'indice della scheda corrente: una voce per sezione, con la
+                 sezione visibile segnata da `aria-current`. Lo riempie
+                 `panels/settings.ts` dopo ogni disegno. -->
+            <nav id="settings-toc" class="settings-toc" aria-labelledby="settings-toc-title" hidden>
+              <div id="settings-toc-title" class="settings-toc-title" data-i18n="settings.toc">In questa pagina</div>
+              <ul id="settings-toc-list" class="settings-toc-list"></ul>
+            </nav>
+          </div>
+          <div class="settings-main">
+            <!-- La ricerca vive fuori dal corpo: un ridisegno (un
+                 `setting_changed` arrivato mentre si scrive) non le toglie il
+                 fuoco né il testo. -->
+            <div id="settings-toolbar" class="settings-toolbar" hidden>
+              <label class="settings-search">
+                <span id="settings-search-icon" class="settings-search-icon" aria-hidden="true"></span>
+                <!-- Nome e segnaposto cambiano con la scheda (impostazioni o
+                     scorciatoie): quelli scritti qui sono della prima, e
+                     `panels/settings.ts` li aggiorna. -->
+                <input
+                  id="settings-search"
+                  type="search"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-controls="settings-body"
+                  data-i18n-label="settings.search"
+                  data-i18n-placeholder="settings.search.placeholder"
+                  aria-label="Cerca nelle impostazioni"
+                  placeholder="Cerca per nome, descrizione o chiave"
+                />
+              </label>
+              <button
+                id="settings-modified"
+                type="button"
+                class="settings-filter"
+                aria-pressed="false"
+                data-i18n="settings.filter.modified"
+                data-i18n-title="settings.filter.modified.hint"
+              >
+                Solo modificate
+              </button>
+              <span id="settings-count" class="settings-count" role="status" aria-live="polite"></span>
+            </div>
+            <div id="settings-scroll" class="settings-scroll">
+              <div id="settings-body" class="settings-body"></div>
+              <!-- La superficie `settings_tab` del contratto (§2.2), che
+                   questa shell dichiarava non ospitata: le view che la
+                   chiedono si montano qui, sotto il form. Una scheda per view
+                   vuole il modello di layout (§1.2, FEATURES 3.3), che non
+                   c'è: intanto la superficie esiste e una view che la chiede
+                   si vede, invece di finire in un avviso in console. -->
+              <div id="views-settings"></div>
+            </div>
+          </div>
+        </div>
       </div>
       <!-- L'`aria-label` è il **ripiego**: il nome vero è il titolo della view
            che occupa la superficie, e glielo lega `ui/views.ts` con un

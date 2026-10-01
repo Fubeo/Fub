@@ -279,6 +279,27 @@ describe("inventario dei componenti installati", () => {
     expect(document.getElementById(`bundle-${plugin.id}`)).toBeNull();
   });
 
+  it("un riquadro dei permessi aperto resta aperto dopo la scrittura del suo interruttore", async () => {
+    const bundle = bundled({ id: "fub.graph", permissions: { "fub:read-vault": true } });
+    box.entries = [grantedReadPermission(bundle.id)];
+    box.host = createFakeHost({ bundles: [bundle], settings: box.entries });
+    await openComponents();
+
+    const details = document.querySelector<HTMLDetailsElement>("details.settings-details")!;
+    expect(details.open).toBe(false);
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+    const input = document.getElementById(`permission-${box.entries[0]!.spec.key}`) as HTMLInputElement;
+    input.checked = false;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(box.entries[0]!.value).toBe(false));
+    await vi.waitFor(() => {
+      const again = document.querySelector<HTMLDetailsElement>("details.settings-details")!;
+      expect(again).not.toBe(details);
+      expect(again.open).toBe(true);
+    });
+  });
+
   it("un'installazione in collisione non prende i controlli permission dell'official", async () => {
     const plugin = installed();
     const official = bundled({ id: plugin.id, permissions: plugin.permissions });
@@ -451,9 +472,8 @@ describe("settings profile boundary", () => {
     const imported = vi.spyOn(host.module.api, "importSettingsProfile").mockResolvedValue(undefined);
     await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
 
-    const machine = [...document.querySelectorAll<HTMLElement>("section.settings-banner")].find(
-      (section) => section.querySelector(".panel-title")?.textContent === "Profili delle impostazioni della macchina",
-    )!;
+    const machine = document.querySelector<HTMLElement>('[data-profile-scope="machine"]')!;
+    expect(machine.querySelector("[role=heading]")?.textContent).toBe("Profili delle impostazioni della macchina");
     const action = (label: string) => [...machine.querySelectorAll<HTMLButtonElement>("button")].find(
       (button) => button.textContent === label,
     )!;

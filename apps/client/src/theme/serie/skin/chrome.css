@@ -113,17 +113,6 @@
   background: var(--bg-active);
 }
 
-/* La riga del tema è di primo piano nel gruppo Appearance: un gradino di
- * bordo e sfondo in più, così l'occhio la trova prima delle altre impostazioni
- * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
- * entrambi i temi. */
-.setting-row--theme {
-  background: var(--bg-panel);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-}
-
 /* Le tre zone della titlebar e la menubar: la geometria (le ali che non si
    stringono, il centro che resta in mezzo, l'altezza dei bottoni di menu)
    è della struttura; qui è il respiro e il fondo. */
