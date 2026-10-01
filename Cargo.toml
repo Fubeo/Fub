@@ -186,3 +186,17 @@ opt-level = 0
 # in sviluppo non lo paga nessuno, e per il profilo `release` non vale, perché
 # `release` questa riga non ce l'ha.
 split-debuginfo = "unpacked"
+
+# Il compilatore dei componenti gira ottimizzato anche in `dev`. Ogni prova di
+# `fub-wasm-host` compila un componente vero, e Cranelift senza ottimizzazioni
+# è lento: con queste righe la suite passa da 106 a 22 secondi, misurati con
+# gli esempi già compilati. Il prezzo è una volta sola, quando si ricompila
+# wasmtime. I crate del workspace restano a `opt-level = 0`, e il debugger li
+# legge come prima.
+[profile.dev.package]
+cranelift-codegen = { opt-level = 3 }
+regalloc2 = { opt-level = 3 }
+wasmparser = { opt-level = 3 }
+wasmtime = { opt-level = 3 }
+wasmtime-environ = { opt-level = 3 }
+wasmtime-internal-cranelift = { opt-level = 3 }
