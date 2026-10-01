@@ -215,6 +215,7 @@ function testoP8(chiave: ChiaveP8, doc = "", n = 0): string {
 function panelCopy(): PanelCopy {
   const presets: Record<string, string> = {
     "organica": t("graph.preset.organica"),
+    "gelatina": t("graph.preset.gelatina"),
     "costellazione": t("graph.preset.costellazione"),
     "alveare": t("graph.preset.alveare"),
     "nebulosa": t("graph.preset.nebulosa"),
@@ -234,10 +235,12 @@ function panelCopy(): PanelCopy {
     theta: t("graph.conf.theta"),
     jitter: t("graph.conf.jitter"),
     cooling: t("graph.conf.raffreddamento"),
+    bounce: t("graph.conf.rimbalzo"),
     glow: t("graph.conf.glow"),
     pulse: t("graph.conf.pulse"),
     trail: t("graph.conf.trail"),
     grid: t("graph.conf.griglia"),
+    wobble: t("graph.conf.gelatina"),
     edgeCurvature: t("graph.conf.curvaturaArchi"),
     labelDensity: t("graph.conf.densitaEtichette"),
   };
@@ -251,6 +254,13 @@ function panelCopy(): PanelCopy {
     close: t("graph.conf.chiudi"),
     physicsSection: testoP8("graph.conf.fisica"),
     viewSection: testoP8("graph.conf.vista"),
+    gesturesSection: t("graph.gesti.titolo"),
+    gestures: [
+      { how: t("graph.gesti.lancio.come"), effect: t("graph.gesti.lancio") },
+      { how: t("graph.gesti.scossa.come"), effect: t("graph.gesti.scossa") },
+      { how: t("graph.gesti.onda.come"), effect: t("graph.gesti.onda") },
+      { how: t("graph.gesti.magnete.come"), effect: t("graph.gesti.magnete") },
+    ],
     presets,
     fields,
   };
@@ -316,7 +326,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
         saveConfig(c);
         next.setConfig(c);
       },
-      onWarm: () => next.warm(1),
+      onWarm: () => next.reheat(),
       onUnpinAll: () => next.unpinNodes(),
       copy: panelCopy,
       restoreFocus: () => {

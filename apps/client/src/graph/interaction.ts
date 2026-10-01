@@ -28,6 +28,20 @@ export interface InteractionActions {
   open(id: string): void;
   warm(level: number): void;
   requestRedraw(): void;
+  /// Una scossa di gelatina al nodo, `strength` 0..1: presa, pin, apertura.
+  poke(index: number, strength: number): void;
+  /// Onda d'urto dal punto di mondo (Shift+click sul vuoto).
+  shockwave(x: number, y: number): void;
+  /// La vista scossa avanti e indietro ha cambiato velocità di (dvx, dvy),
+  /// in px di mondo al secondo: i nodi restano indietro come in una sfera di
+  /// neve.
+  slosh(dvx: number, dvy: number): void;
+  /// Il magnete (pressione lunga sul vuoto) in un punto di mondo col suo
+  /// raggio di mondo. `engaged` falso è la carica: l'anello che cresce prima
+  /// che il pozzo si accenda.
+  magnet(x: number, y: number, radius: number, engaged: boolean): void;
+  /// Fine del magnete o della sua carica.
+  releaseMagnet(): void;
 }
 
 export interface InteractionOptions {
@@ -36,6 +50,9 @@ export interface InteractionOptions {
   cameraState: CameraState;
   actions: InteractionActions;
   isVisible?: (index: number) => boolean;
+  /// I gesti d'impulso (il lancio di un nodo) sono ammessi? Col moto ridotto
+  /// no: il nodo resta dove è stato lasciato. Assente, sì.
+  playful?: () => boolean;
 }
 
 export interface Interaction {
@@ -217,14 +234,34 @@ const KEYBOARD_ZOOM = 1.2;
 /// Un nodo si afferra solo dopo questo spostamento: sotto, il gesto è un
 /// click, e il nodo non deve sussultare né scaldare il grafo.
 const GRAB_THRESHOLD_PX = 3;
-/// Quanta velocità conserva un nodo lasciato andare. Il drag lo muove con la
-/// molla del puntatore (v = Δ/dt), e lasciargliela tutta lo lanciava
-/// attraverso il grafo a ogni rilascio.
-const RELEASE_KEEP = 0.2;
-/// La finestra su cui si misura la velocità del pan al rilascio, e la pausa
-/// oltre la quale il rilascio è da fermo (niente inerzia).
+/// Quanta della velocità del gesto porta con sé un nodo lanciato. Si misura
+/// sul puntatore, non sulla molla del puntatore (v = Δ/dt, che a ogni evento
+/// salta): un lancio va dove va la mano, un rilascio da fermo non lancia.
+const THROW_KEEP = 0.85;
+/// La finestra su cui si misura la velocità del gesto al rilascio, e la pausa
+/// oltre la quale il rilascio è da fermo (niente inerzia, niente lancio).
 const FLING_WINDOW_MS = 90;
 const FLING_IDLE_MS = 60;
+/// Il magnete: dopo `MAGNET_CHARGE_MS` fermi sul vuoto compare l'anello di
+/// carica, dopo altri `MAGNET_ENGAGE_MS` il pozzo si accende. Uno spostamento
+/// oltre `MAGNET_SLOP_PX` prima di allora è un pan. Il raggio è di schermo:
+/// il magnete prende sempre la stessa porzione di vista, a ogni zoom.
+const MAGNET_CHARGE_MS = 150;
+export const MAGNET_ENGAGE_MS = 300;
+const MAGNET_SLOP_PX = 4;
+const MAGNET_RADIUS_PX = 160;
+/// La sfera di neve: un'inversione del pan conta se la velocità supera questa
+/// soglia (px/ms), e dalla seconda inversione entro la finestra ogni
+/// inversione scuote i nodi. Un pan normale non inverte mai così.
+const SHAKE_SPEED = 1.2;
+const SHAKE_WINDOW_MS = 600;
+/// Quanta della variazione di velocità della vista arriva ai nodi: poca, e a
+/// ogni inversione si somma — chi scuote di più vede sobbalzare di più.
+const SLOSH_GAIN = 0.25;
+/// Le scosse di gelatina dei gesti, 0..1.
+const POKE_GRAB = 0.35;
+const POKE_PIN = 0.6;
+const POKE_OPEN = 0.45;
 /// Sensibilità della rotella per pixel di scorrimento; il pinch del trackpad
 /// (rotella con Ctrl) dà delta piccoli e ne vuole di più. Il fattore di un
 /// singolo evento è limitato: un colpo di rotella «a scatti» non deve
@@ -235,7 +272,7 @@ const WHEEL_STEP_MAX = 0.5;
 const WHEEL_LINE_PX = 16;
 
 export function createInteraction(options: InteractionOptions): Interaction {
-  const { canvas, structureRef, cameraState, actions, isVisible = () => true } = options;
+  const { canvas, structureRef, cameraState, actions, isVisible = () => true, playful = () => true } = options;
 
   const s2m = (x: number, y: number): Point => screenToWorld(cameraState.state(), { x, y });
   const hit = (x: number, y: number): number => nodeAt(structureRef(), cameraState.state(), x, y, isVisible);
@@ -249,15 +286,16 @@ export function createInteraction(options: InteractionOptions): Interaction {
   };
   const timeOf = (e: { timeStamp?: number }): number =>
     typeof e.timeStamp === "number" && e.timeStamp > 0 ? e.timeStamp : performance.now();
-  const samplePan = (t: number, p: Point): void => {
-    panSamples.push({ t, x: p.x, y: p.y });
-    while (panSamples.length > 2 && t - panSamples[0].t > FLING_WINDOW_MS) panSamples.shift();
+  const sample = (t: number, p: Point): void => {
+    gestureSamples.push({ t, x: p.x, y: p.y });
+    while (gestureSamples.length > 2 && t - gestureSamples[0].t > FLING_WINDOW_MS) gestureSamples.shift();
   };
-  /// La velocità del pan (px/ms) sugli ultimi campioni, zero se il puntatore
-  /// si era fermato prima di rilasciare.
-  const panVelocity = (t: number): Point => {
-    const first = panSamples[0];
-    const last = panSamples[panSamples.length - 1];
+  /// La velocità del gesto (px/ms) sugli ultimi campioni, zero se il
+  /// puntatore si era fermato prima di rilasciare. La usano l'inerzia del pan
+  /// e il lancio di un nodo.
+  const gestureVelocity = (t: number): Point => {
+    const first = gestureSamples[0];
+    const last = gestureSamples[gestureSamples.length - 1];
     if (!first || !last || t - last.t > FLING_IDLE_MS) return { x: 0, y: 0 };
     const span = last.t - first.t;
     if (span < 8) return { x: 0, y: 0 };
@@ -284,8 +322,23 @@ export function createInteraction(options: InteractionOptions): Interaction {
   /// nodo si trascina da lì, invece di saltare col centro sotto il cursore.
   let grabOffsetX = 0;
   let grabOffsetY = 0;
-  /// Gli ultimi punti del pan, per la velocità al rilascio.
-  const panSamples: Array<{ t: number; x: number; y: number }> = [];
+  /// Gli ultimi punti del gesto (pan o drag), per la velocità al rilascio.
+  const gestureSamples: Array<{ t: number; x: number; y: number }> = [];
+  /// Il timer della pressione lunga sul vuoto: prima la carica, poi il pozzo.
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  /// Lo stato del magnete: 0 niente, 1 in carica, 2 acceso.
+  let magnetStage = 0;
+  let magnetX = 0;
+  let magnetY = 0;
+  /// La sfera di neve: la velocità del pan all'ultimo campione veloce, e gli
+  /// istanti delle ultime inversioni (anello di quattro).
+  let shakeVx = 0;
+  let shakeVy = 0;
+  let shakeLastT = 0;
+  let shakeLastX = 0;
+  let shakeLastY = 0;
+  const reversals = [0, 0, 0, 0];
+  let reversalHead = 0;
   let clickTimeout: ReturnType<typeof setTimeout> | undefined;
   let pendingClick = -1;
   let a11yLabel = "";
@@ -308,23 +361,90 @@ export function createInteraction(options: InteractionOptions): Interaction {
       if (grabbing) {
         s.fixed[i] = pinMap.get(i) ?? 0;
         s.dragged = -1;
-        // Il nodo resta dove è stato lasciato e con poca della velocità del
-        // gesto: si scalda la sim perché i vicini si riassestino attorno a lui.
-        s.vx[i] *= RELEASE_KEEP;
-        s.vy[i] *= RELEASE_KEEP;
-        actions.warm(0.3);
+        // Il lancio: il nodo parte con la velocità della mano (px/ms di
+        // schermo → px/s di mondo), e le molle lo riportano indietro come una
+        // fionda. Da fermo, o col moto ridotto, resta dove è stato lasciato.
+        // Il tetto di velocità lo applica il motore al passo dopo.
+        const v = at !== undefined && playful() ? gestureVelocity(at) : { x: 0, y: 0 };
+        const toWorld = (1000 / cameraState.state().scale) * THROW_KEEP;
+        s.vx[i] = v.x * toWorld;
+        s.vy[i] = v.y * toWorld;
+        actions.warm(v.x !== 0 || v.y !== 0 ? 0.6 : 0.3);
       }
       pinMap.delete(i);
       grabbing = false;
+      gestureSamples.length = 0;
       canvas.style.cursor = state.hovered >= 0 ? "pointer" : "default";
     } else if (state.draggingEmpty) {
       canvas.style.cursor = "default";
-      if (at !== undefined) {
-        const v = panVelocity(at);
+      if (magnetStage === 0 && at !== undefined) {
+        const v = gestureVelocity(at);
         if (v.x !== 0 || v.y !== 0) cameraState.fling(v.x, v.y);
       }
-      panSamples.length = 0;
+      gestureSamples.length = 0;
+      endHold();
     }
+  };
+
+  /// Chiude la pressione lunga: ferma il timer e spegne carica o pozzo.
+  const endHold = (): void => {
+    clearTimeout(holdTimer);
+    holdTimer = undefined;
+    if (magnetStage !== 0) {
+      magnetStage = 0;
+      actions.releaseMagnet();
+    }
+  };
+
+  const magnetRadius = (): number => MAGNET_RADIUS_PX / cameraState.state().scale;
+
+  /// La pressione lunga sul vuoto: fermo per `MAGNET_CHARGE_MS`, l'anello si
+  /// carica; fermo per altri `MAGNET_ENGAGE_MS`, il pozzo si accende.
+  const startHold = (p: Point): void => {
+    clearTimeout(holdTimer);
+    magnetX = p.x;
+    magnetY = p.y;
+    holdTimer = setTimeout(() => {
+      magnetStage = 1;
+      const m = s2m(magnetX, magnetY);
+      actions.magnet(m.x, m.y, magnetRadius(), false);
+      holdTimer = setTimeout(() => {
+        holdTimer = undefined;
+        magnetStage = 2;
+        canvas.style.cursor = "crosshair";
+        const w = s2m(magnetX, magnetY);
+        actions.magnet(w.x, w.y, magnetRadius(), true);
+      }, MAGNET_ENGAGE_MS);
+    }, MAGNET_CHARGE_MS);
+  };
+
+  /// La sfera di neve: legge il pan campione per campione e, quando la mano
+  /// inverte in fretta per la seconda volta entro la finestra, passa ai nodi
+  /// la variazione di velocità della vista.
+  const trackShake = (t: number, p: Point): void => {
+    const dt = t - shakeLastT;
+    const dx = p.x - shakeLastX;
+    const dy = p.y - shakeLastY;
+    shakeLastT = t;
+    shakeLastX = p.x;
+    shakeLastY = p.y;
+    if (dt <= 0 || dt > 100) return;
+    const vx = dx / dt;
+    const vy = dy / dt;
+    if (Math.hypot(vx, vy) < SHAKE_SPEED) return;
+    const reversed = vx * shakeVx + vy * shakeVy < 0;
+    const dvx = vx - shakeVx;
+    const dvy = vy - shakeVy;
+    shakeVx = vx;
+    shakeVy = vy;
+    if (!reversed) return;
+    reversals[reversalHead] = t;
+    reversalHead = (reversalHead + 1) % reversals.length;
+    let recent = 0;
+    for (const r of reversals) if (r > 0 && t - r <= SHAKE_WINDOW_MS) recent++;
+    if (recent < 2) return;
+    const toWorld = (1000 / cameraState.state().scale) * SLOSH_GAIN;
+    actions.slosh(dvx * toWorld, dvy * toWorld);
   };
 
   const onPointerDown = (e: PointerEvent): void => {
@@ -352,6 +472,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
     // soglia prima dell'up, il click non scatta.
     downX = p.x;
     downY = p.y;
+    gestureSamples.length = 0;
     if (state.dragged >= 0) {
       // Il nodo non si prende ancora: lo si prenderà al primo spostamento
       // oltre la soglia (`grab`). Qui si ricorda soltanto da dove.
@@ -365,8 +486,16 @@ export function createInteraction(options: InteractionOptions): Interaction {
       if (typeof canvas.setPointerCapture === "function") canvas.setPointerCapture(e.pointerId);
     } else if (state.draggingEmpty) {
       canvas.style.cursor = "grabbing";
-      panSamples.length = 0;
-      samplePan(timeOf(e), p);
+      const t = timeOf(e);
+      sample(t, p);
+      shakeLastT = t;
+      shakeLastX = p.x;
+      shakeLastY = p.y;
+      shakeVx = 0;
+      shakeVy = 0;
+      reversals.fill(0);
+      // Il tasto primario fermo sul vuoto può diventare un magnete.
+      if (e.button === 0) startHold(p);
       if (typeof canvas.setPointerCapture === "function") canvas.setPointerCapture(e.pointerId);
     }
     actions.requestRedraw();
@@ -402,15 +531,29 @@ export function createInteraction(options: InteractionOptions): Interaction {
         s.dragged = i;
         s.fixed[i] = 2;
         canvas.style.cursor = "grabbing";
+        actions.poke(i, POKE_GRAB);
       }
       if (grabbing) {
         s.px[i] = result.target.x + grabOffsetX;
         s.py[i] = result.target.y + grabOffsetY;
+        sample(timeOf(e), p);
         actions.warm(0.3);
       }
     } else if (state.draggingEmpty) {
-      if (result.panDx !== 0 || result.panDy !== 0) cameraState.pan(result.panDx, result.panDy);
-      samplePan(timeOf(e), p);
+      if (magnetStage === 2) {
+        // Il magnete acceso segue il puntatore e la vista resta ferma.
+        const m = s2m(p.x, p.y);
+        actions.magnet(m.x, m.y, magnetRadius(), true);
+      } else {
+        if (holdTimer !== undefined || magnetStage === 1) {
+          // Mosso prima che il pozzo si accenda: è un pan, non un magnete.
+          if (Math.hypot(p.x - magnetX, p.y - magnetY) > MAGNET_SLOP_PX) endHold();
+        }
+        if (result.panDx !== 0 || result.panDy !== 0) cameraState.pan(result.panDx, result.panDy);
+        const t = timeOf(e);
+        sample(t, p);
+        trackShake(t, p);
+      }
     } else if (state.hovered !== first.hovered) {
       canvas.style.cursor = state.hovered >= 0 ? "pointer" : "default";
     }
@@ -459,6 +602,14 @@ export function createInteraction(options: InteractionOptions): Interaction {
     // Il nodo si decide adesso, sotto il puntatore: fra un quarto di secondo
     // il grafo può essersi mosso, e il click aprirebbe il vicino.
     pendingClick = hit(p.x, p.y);
+    if (e.shiftKey && pendingClick < 0) {
+      // Shift+click sul vuoto: l'onda d'urto parte subito, senza aspettare un
+      // doppio click che sul vuoto non apre niente.
+      const m = s2m(p.x, p.y);
+      actions.shockwave(m.x, m.y);
+      actions.requestRedraw();
+      return;
+    }
     clearTimeout(clickTimeout);
     clickTimeout = setTimeout(() => {
       const i = pendingClick;
@@ -467,6 +618,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
         // Il click è anche un focus: chi arriva da tastiera dopo un click
         // trova il nodo già focalizzato e può riaprirlo con Invio.
         focused = i;
+        actions.poke(i, POKE_OPEN);
         actions.open(structureRef().id[i]);
         actions.requestRedraw();
       }
@@ -485,6 +637,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
       // impegno dell'utente, non uno stato del motore: va salvato e
       // rispettato dal drag (pinMappa).
       s.fixed[i] = s.fixed[i] === 1 ? 0 : 1;
+      actions.poke(i, POKE_PIN);
       cameraState.centerOn(s.x[i], s.y[i], 1.6, viewport());
     } else {
       cameraState.fit(worldBounds(structureRef()), viewport());
@@ -534,6 +687,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
       if (focused >= 0) {
         const s = structureRef();
         s.fixed[focused] = s.fixed[focused] === 1 ? 0 : 1;
+        actions.poke(focused, POKE_PIN);
         actions.requestRedraw();
       }
       e.preventDefault();
@@ -580,6 +734,9 @@ export function createInteraction(options: InteractionOptions): Interaction {
     destroy() {
       clearTimeout(clickTimeout);
       clickTimeout = undefined;
+      clearTimeout(holdTimer);
+      holdTimer = undefined;
+      magnetStage = 0;
       // Il canvas appartiene al chiamante: qui si tolgono solo i gestori.
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);

@@ -13,24 +13,28 @@
 // — i due ascoltatori coesistono, perché l'interazione cattura il puntatore
 // solo al `pointerdown`, non al `pointermove`. L'attrito è nel report.
 
-import type { PhysicsConfig, GraphicsConfig, GraphConfig, GraphData, Structure, Tier } from "./sim/types";
+import type { PhysicsConfig, GraphicsConfig, GraphConfig, GraphData, Structure, Tier, Well } from "./sim/types";
 import {
   clampPhysicsConfig,
   clampGraphicsConfig,
   defaultGraphicsConfig,
   organicConfig,
   createStructure,
+  mulberry32,
   seedOf,
 } from "./sim/types";
 import type { Quadtree } from "./sim/quadtree";
 import { QuadtreePool, build } from "./sim/quadtree";
 import { DT, DT_MAX, baseTier, calculateTier, step, type EngineState } from "./sim/engine";
+import { IMPACTS, IMPACT_STRIDE, impactCount } from "./sim/forces";
+import { createWobble, kick, stepWobble, type Wobble } from "./sim/wobble";
+import { shake, shockwave, slosh } from "./sim/play";
 import type { WorldBound, Camera, CameraState, Viewport } from "./render/camera";
 import { createCameraState, fit } from "./render/camera";
-import type { Painter, DrawState } from "./render/painter";
-import { createPainter } from "./render/painter";
+import type { Painter, DrawState, MagnetMark } from "./render/painter";
+import { RIPPLE_STRIDE, createPainter } from "./render/painter";
 import type { Interaction, InteractionOptions } from "./interaction";
-import { createInteraction, nodeAt } from "./interaction";
+import { MAGNET_ENGAGE_MS, createInteraction, nodeAt } from "./interaction";
 import type { SavedLayout } from "./sim/memory";
 import { restoreLayout, snapshotLayout } from "./sim/memory";
 import { onReducedMotionChange, reducedMotion } from "../theme/reduced-motion";
@@ -59,6 +63,35 @@ const HIGHLIGHT_MS = 90;
 /// La temperatura minima di un layout ripreso con nodi nuovi: abbastanza
 /// perché si sistemino fra i vicini, poca perché il resto non si rimescoli.
 const RESTORE_WARMTH = 0.3;
+/// Le onde visive (Shift+click, urti forti): quante ne vivono insieme, quanto
+/// durano e fin dove arrivano. L'onda d'urto arriva a `SHOCK_REACH_PX` px di
+/// schermo; quella di un urto a una frazione della lunghezza di riposo.
+const RIPPLE_CAPACITY = 6;
+const RIPPLE_MS = 650;
+const SHOCK_REACH_PX = 200;
+const IMPACT_REACH = 0.5;
+/// L'onda d'urto, in px di **schermo**: velocità al centro e raggio di
+/// decadimento. Si sente uguale a ogni zoom, e spinge i vicini di un paio di
+/// centinaia di pixel prima che le molle li riportino indietro — non li
+/// scaglia fuori dalla vista.
+const SHOCK_SPEED_PX = 650;
+const SHOCK_RADIUS_PX = 120;
+/// Il magnete: accelerazione al centro per px di mondo di raggio (al
+/// secondo quadrato). Proporzionale al raggio, così a ogni zoom tira i nodi
+/// dentro nello stesso tempo.
+const WELL_ACCEL = 60;
+/// Riscalda: oltre a scaldare, una scossa leggera — senza energia nuova un
+/// grafo già in equilibrio restava fermo, e il bottone non faceva niente.
+const REHEAT_SPEED = 0.15;
+const REHEAT_SPEED_MAX = 420;
+/// Le scosse di gelatina della chart: al passaggio del puntatore su un nodo
+/// e per un urto forte (a piena velocità d'urto).
+const POKE_HOVER = 0.25;
+const POKE_IMPACT = 0.8;
+/// L'ampiezza di una scossa di gelatina a intensità 1.
+const POKE_AMOUNT = 0.5;
+/// La velocità d'urto (px/s di mondo) che vale una scossa piena.
+const IMPACT_FULL = 2000;
 
 /// Una factory di pittore iniettabile per i test (happy-dom: `getContext`
 /// ritorna null e il pittore vero è un no-op sicuro; i test vogliono però
@@ -129,6 +162,9 @@ export interface Chart {
   setConfig(config: GraphConfig): void;
   /// Riporta l'alpha al livello dato e azzera la quiete: la sim riparte.
   warm(level: number): void;
+  /// Riscalda con una scossa leggera: il grafo si rimescola e cerca un
+  /// equilibrio migliore. Col moto ridotto solo il riscaldo.
+  reheat(): void;
   /// Toglie tutti i pin e il drag: i nodi tornano liberi.
   unpinNodes(): void;
   /// L'aria del canvas (role/aria-label) per la tastiera.
@@ -182,7 +218,23 @@ export function createChart(options: ChartOptions = {}): Chart {
   let groupIndex: Int16Array | null = null;
   /// Quanti colori ha la tavolozza dei gruppi (i token di sintassi del tema).
   const GROUP_COLORS = 8;
-  const engineState: EngineState = { alpha: 1, quietSince: 0 };
+  const engineState: EngineState = { alpha: 1, quietSince: 0, well: null };
+  /// La gelatina: creata al mount con la struttura.
+  let wobble: Wobble | null = null;
+  /// Le onde vive: righe di (x, y, nascita in ms, portata di mondo). Il
+  /// pittore le riceve come (x, y, età 0..1, portata) in `rippleView`.
+  const ripples = new Float32Array(RIPPLE_CAPACITY * RIPPLE_STRIDE);
+  const rippleView = new Float32Array(RIPPLE_CAPACITY * RIPPLE_STRIDE);
+  let rippleCount = 0;
+  /// Il pozzo del magnete e l'anello che il pittore disegna: oggetti fissi,
+  /// mutati in place; `magnetOn` dice se valgono.
+  const well: Well = { x: 0, y: 0, radius: 0, strength: 0 };
+  const magnetMark: MagnetMark = { x: 0, y: 0, radius: 0, charge: 0 };
+  /// 0 spento, 1 in carica, 2 acceso.
+  let magnetStage = 0;
+  let magnetSince = 0;
+  /// Il seme dei giochi: ogni scossa ne prende uno nuovo, deterministico.
+  let playCount = 0;
   // L'hover letto dai nostri listener sul canvas: l'interazione non lo espone,
   // e il pittore lo vuole per il focus. −1 = nessuno.
   let hovered = -1;
@@ -233,6 +285,9 @@ export function createChart(options: ChartOptions = {}): Chart {
     const h = nodeAt(s, cameraState.state(), x, y, isVisible);
     if (h !== hovered) {
       hovered = h;
+      // Un piccolo sussulto di gelatina al passaggio: il nodo si accorge del
+      // puntatore.
+      if (h >= 0) poke(h, POKE_HOVER);
       requestRedraw();
     }
   };
@@ -337,18 +392,125 @@ export function createChart(options: ChartOptions = {}): Chart {
   }
 
   /// Il loop è attivo finché c'è movimento visibile: la sim calda (alpha),
-  /// la camera che converge, o un nodo trascinato. Il pulse è escluso: il
-  /// pittore lo traccia solo con alpha > SOGLIA_PULSE, già coperta da alpha
-  /// > SOGLIA_ATTIVO; aggiungerlo terrebbe il rAF acceso per sempre con
-  /// nodi aperti e grafo fermo, senza produrre nulla.
+  /// la camera che converge, un nodo trascinato, la gelatina che ondeggia,
+  /// un'onda viva o il magnete. Il pulse è escluso: il pittore lo traccia
+  /// solo con alpha > SOGLIA_PULSE, già coperta da alpha > SOGLIA_ATTIVO;
+  /// aggiungerlo terrebbe il rAF acceso per sempre con nodi aperti e grafo
+  /// fermo, senza produrre nulla. Tutto il resto si spegne da solo.
   function active(): boolean {
     if (!s || !cameraState) return false;
     return (
       engineState.alpha > ACTIVE_THRESHOLD ||
       !cameraState.ready() ||
       s.dragged >= 0 ||
-      highlight !== (highlightTarget() >= 0 ? 1 : 0)
+      highlight !== (highlightTarget() >= 0 ? 1 : 0) ||
+      (wobble !== null && wobble.moving) ||
+      rippleCount > 0 ||
+      magnetStage !== 0
     );
+  }
+
+  /// L'intensità della gelatina adesso: spenta col moto ridotto e sui grafi
+  /// enormi (tier 3), dove migliaia di nodi deformati costerebbero un frame.
+  function wobbleIntensity(): number {
+    if (reduced || !s || baseTier(s.n) >= 3) return 0;
+    return liveGraphics.wobble;
+  }
+
+  /// Una scossa di gelatina al nodo `i`, `strength` 0..1.
+  function poke(i: number, strength: number, angle = 0): void {
+    const intensity = wobbleIntensity();
+    if (!wobble || intensity <= 0) return;
+    kick(wobble, i, strength * POKE_AMOUNT * intensity, angle);
+    requestRedraw();
+  }
+
+  /// Un'onda visiva in (x, y) di mondo con la sua portata, nata all'istante
+  /// `at` (ms, lo stesso orologio del loop).
+  function addRipple(x: number, y: number, reach: number, at: number): void {
+    if (reduced) return;
+    // Piena: si sostituisce la più vecchia (la prima riga).
+    if (rippleCount === RIPPLE_CAPACITY) {
+      ripples.copyWithin(0, RIPPLE_STRIDE, RIPPLE_CAPACITY * RIPPLE_STRIDE);
+      rippleCount--;
+    }
+    const o = rippleCount * RIPPLE_STRIDE;
+    ripples[o] = x;
+    ripples[o + 1] = y;
+    ripples[o + 2] = at;
+    ripples[o + 3] = reach;
+    rippleCount++;
+  }
+
+  /// Aggiorna le età delle onde per il pittore e scarta quelle finite.
+  /// Ritorna quante ne restano.
+  function ageRipples(t: number): number {
+    let kept = 0;
+    for (let k = 0; k < rippleCount; k++) {
+      const o = k * RIPPLE_STRIDE;
+      const age = (t - ripples[o + 2]) / RIPPLE_MS;
+      if (age >= 1) continue;
+      const d = kept * RIPPLE_STRIDE;
+      if (d !== o) ripples.copyWithin(d, o, o + RIPPLE_STRIDE);
+      rippleView[d] = ripples[d];
+      rippleView[d + 1] = ripples[d + 1];
+      rippleView[d + 2] = age < 0 ? 0 : age;
+      rippleView[d + 3] = ripples[d + 3];
+      kept++;
+    }
+    rippleCount = kept;
+    return kept;
+  }
+
+  /// Onda d'urto dal punto di mondo (Shift+click sul vuoto).
+  function doShockwave(x: number, y: number): void {
+    if (!s || !cameraState || reduced) return;
+    const scale = cameraState.state().scale;
+    shockwave(s, x, y, SHOCK_RADIUS_PX / scale, SHOCK_SPEED_PX / scale);
+    addRipple(x, y, SHOCK_REACH_PX / scale, clock());
+    warm(0.6);
+  }
+
+  /// La vista scossa: i nodi restano indietro.
+  function doSlosh(dvx: number, dvy: number): void {
+    if (!s || reduced) return;
+    const size = Math.hypot(dvx, dvy);
+    const cap = physics.maxSpeed;
+    const k = size > cap ? cap / size : 1;
+    slosh(s, dvx * k, dvy * k);
+    warm(0.6);
+  }
+
+  /// Il magnete: carica (anello che cresce) o pozzo acceso.
+  function setMagnet(x: number, y: number, radius: number, engaged: boolean): void {
+    if (!s) return;
+    magnetMark.x = x;
+    magnetMark.y = y;
+    magnetMark.radius = radius;
+    if (!engaged) {
+      if (magnetStage === 0) magnetSince = clock();
+      magnetStage = 1;
+      requestRedraw();
+      return;
+    }
+    if (magnetStage !== 2) warm(0.6);
+    magnetStage = 2;
+    well.x = x;
+    well.y = y;
+    well.radius = radius;
+    well.strength = WELL_ACCEL * radius;
+    engineState.well = well;
+    requestRedraw();
+  }
+
+  function releaseMagnet(): void {
+    if (magnetStage === 0) return;
+    const wasOn = magnetStage === 2;
+    magnetStage = 0;
+    engineState.well = null;
+    // Lasciati andare, i nodi si riassestano.
+    if (wasOn) warm(0.4);
+    requestRedraw();
   }
 
   /// Il frame: misura il dt, fa un passo di fisica se la sim è calda, un
@@ -419,7 +581,11 @@ export function createChart(options: ChartOptions = {}): Chart {
       tierSince = t;
     }
 
-    if (engineState.alpha > ACTIVE_THRESHOLD) {
+    // Il magnete acceso tiene la sim sveglia finché la mano non lo lascia.
+    if (magnetStage === 2 && engineState.alpha < 0.3) engineState.alpha = 0.3;
+
+    const stepped = engineState.alpha > ACTIVE_THRESHOLD;
+    if (stepped) {
       // L'albero serve solo alla repulsione, e solo da Barnes-Hut in su:
       // a sim ferma (camera, quartiere) non si costruisce.
       let q: Quadtree | null = null;
@@ -428,6 +594,20 @@ export function createChart(options: ChartOptions = {}): Chart {
         q = build(s, pool);
       }
       step(s, physics, engineState, q, dtS);
+      // Gli urti forti del passo: un'onda piccola e una scossa ai due nodi,
+      // schiacciati lungo la normale. Il registro è del modulo e si legge
+      // subito, prima che un altro grafo faccia il suo passo.
+      const hits = impactCount();
+      for (let k = 0; k < hits; k++) {
+        const o = k * IMPACT_STRIDE;
+        const a = IMPACTS[o];
+        const b = IMPACTS[o + 1];
+        const strength = Math.min(1, IMPACTS[o + 2] / IMPACT_FULL);
+        const across = Math.atan2(IMPACTS[o + 4], IMPACTS[o + 3]) + Math.PI / 2;
+        poke(a, POKE_IMPACT * strength, across);
+        poke(b, POKE_IMPACT * strength, across);
+        if (strength > 0.5) addRipple((s.x[a] + s.x[b]) / 2, (s.y[a] + s.y[b]) / 2, IMPACT_REACH * physics.baseLength * strength, t);
+      }
       // La vista segue il grafo che si distende: il bersaglio è il fit di
       // adesso e la camera lo insegue morbida. L'ultimo giro, a sim spenta,
       // lascia il bersaglio sul grafo fermo; poi il loop si spegne quando la
@@ -442,6 +622,14 @@ export function createChart(options: ChartOptions = {}): Chart {
     }
 
     const cam: Camera = cameraState.step(dtMs);
+
+    // La gelatina segue le velocità sullo schermo: dopo il passo della fisica
+    // e della camera. A sim ferma i nodi non si muovono, qualunque velocità
+    // sia rimasta scritta, e la gelatina si assesta.
+    if (wobble) stepWobble(wobble, s, dtS, wobbleIntensity(), stepped ? cam.scale : 0, true);
+    const liveRipples = ageRipples(t);
+    if (magnetStage === 1) magnetMark.charge = Math.min(1, (t - magnetSince) / MAGNET_ENGAGE_MS);
+    else if (magnetStage === 2) magnetMark.charge = 1;
 
     const target = highlightTarget();
     if (target >= 0) highlightNode = target;
@@ -469,6 +657,10 @@ export function createChart(options: ChartOptions = {}): Chart {
       groups: groupIndex,
       highlightNode,
       highlight,
+      wobble: wobble && wobble.moving ? wobble : null,
+      ripples: rippleView,
+      rippleCount: liveRipples,
+      magnet: magnetStage !== 0 ? magnetMark : null,
     };
     painter.redraw(state);
     // U46: la selezione può cambiare dentro l'interazione (click, frecce,
@@ -491,6 +683,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     if (unmounted || host) return;
     host = h;
     s = createStructure(data, physics, seedOf(data));
+    wobble = createWobble(s);
     tier = baseTier(s.n);
     const saved = options.layout;
     const added = saved ? restoreLayout(s, saved, physics.baseLength) : null;
@@ -539,10 +732,16 @@ export function createChart(options: ChartOptions = {}): Chart {
       structureRef: () => s as Structure,
       cameraState: userCamera,
       isVisible,
+      playful: () => !reduced,
       actions: {
         open: (id: string) => openExternal(id),
         warm: (level: number) => warm(level),
         requestRedraw,
+        poke: (index: number, strength: number) => poke(index, strength),
+        shockwave: doShockwave,
+        slosh: doSlosh,
+        magnet: setMagnet,
+        releaseMagnet,
       },
     });
     if (typeof ResizeObserver !== "undefined") {
@@ -576,6 +775,10 @@ export function createChart(options: ChartOptions = {}): Chart {
     painter = null;
     cameraState = null;
     s = null;
+    wobble = null;
+    engineState.well = null;
+    magnetStage = 0;
+    rippleCount = 0;
     pool = null;
     host = null;
   }
@@ -666,6 +869,14 @@ export function createChart(options: ChartOptions = {}): Chart {
     requestRedraw();
   }
 
+  function reheat(): void {
+    if (s && !reduced) {
+      const speed = Math.min(physics.maxSpeed * REHEAT_SPEED, REHEAT_SPEED_MAX);
+      shake(s, mulberry32(seedOf(data) + ++playCount), speed);
+    }
+    warm(1);
+  }
+
   function unpinNodes(): void {
     if (!s) return;
     for (let i = 0; i < s.n; i++) s.fixed[i] = 0;
@@ -739,6 +950,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     setGroups,
     setConfig,
     warm,
+    reheat,
     unpinNodes,
     setA11yLabel,
     focusNode,

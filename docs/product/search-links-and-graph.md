@@ -171,15 +171,54 @@ Ridimensionare il riquadro tiene fermo il centro della vista.
 La simulazione integra in secondi: attrito e raffreddamento valgono per
 secondo, e i coefficienti della configurazione sono scalati da una costante di
 tempo, così un vault di qualche centinaio di note si assesta in pochi secondi a
-qualunque frequenza di frame. La repulsione cala come 1/d, quindi la densità del
-grafo disteso non dipende dal numero di note. Sotto la soglia di raffreddamento
-lo smorzamento cresce, e il loop si ferma su un grafo già fermo.
+qualunque frequenza di frame. La repulsione cala come 1/d e la gravità è debole:
+tiene insieme le componenti senza schiacciare il grafo in un disco uniforme, così
+la forma la decidono gli archi. Le note isolate sentono un po' più di gravità e
+restano in un anello attorno al grafo. Le molle sono sottosmorzate e l'attrito è
+leggero: il quartiere di un nodo trascinato lo segue ondeggiando, e gli urti
+restituiscono la parte **Rimbalzo** della velocità d'avvicinamento. I preset
+vanno da «Rigido», che non oscilla né rimbalza, a «Gelatina». Sotto la soglia di
+raffreddamento lo smorzamento cresce, e il loop si ferma su un grafo già fermo:
+nessun gioco lascia il grafo in moto perpetuo.
+
+Le foglie, cioè le note con un solo collegamento, stanno attorno al loro nodo:
+
+- la semina visita ogni componente dal suo nodo più collegato e apre i figli a
+  ventaglio dalla parte opposta a quella da cui arriva, alla loro lunghezza di
+  riposo; il **Jitter iniziale** piega i rami, e a zero una catena parte dritta;
+- la lunghezza di riposo di una foglia è il raggio del ventaglio del suo nodo,
+  che cresce coi vicini fino a dodici e poi con la radice, così un nodo con
+  molte foglie fa un soffione e non un anello enorme; due nodi collegati si
+  tengono alla distanza del ventaglio più grande;
+- sotto circa mezza lunghezza base due nodi si allontanano, e mentre il grafo
+  si raffredda un nodo si scosta dagli archi che non sono suoi. Da caldo un
+  nodo può attraversare un arco, o il groviglio della partenza resterebbe;
+- queste forze a corto raggio valgono fino a duemila nodi, come le collisioni.
 
 Un nodo si afferra dopo tre pixel di spostamento, dal punto in cui è stato
-preso; sotto la soglia il gesto è un click. Al rilascio il nodo conserva poca
-della velocità del trascinamento. Il pan segue il puntatore senza inerzia e,
-al rilascio, prosegue con la velocità reale del gesto. La rotella normalizza
-righe e pagine in pixel, e il pinch del trackpad ha una sensibilità propria.
+preso; sotto la soglia il gesto è un click. Al rilascio il nodo parte con la
+velocità reale del puntatore, e le molle lo riportano indietro; un rilascio da
+fermo lo lascia dov'è. Il pan segue il puntatore senza inerzia e, al rilascio,
+prosegue con la velocità reale del gesto. La rotella normalizza righe e pagine
+in pixel, e il pinch del trackpad ha una sensibilità propria.
+
+I giochi nascono dai gesti sul grafo, e il pannello li elenca in una legenda
+senza comandi propri:
+
+- agitare la vista avanti e indietro scuote i nodi, che restano indietro come
+  in una sfera di neve; un pan normale non li disturba;
+- Shift+click sul vuoto lancia un'onda d'urto che spinge i vicini;
+- una pressione lunga sul vuoto carica un anello e poi accende un magnete, che
+  attira i nodi vicini e segue il puntatore finché resta premuto;
+- «Riscalda» dà al grafo una scossa leggera, che lo aiuta a trovare un
+  equilibrio migliore.
+
+La **Gelatina** è solo resa e non tocca il layout. I nodi si allungano lungo la
+velocità che si vede sullo schermo, si schiacciano quando frenano di colpo e
+sussultano alla presa, al pin, all'apertura e al passaggio del puntatore. Gli
+archi strattonati si piegano e vibrano. Gli urti forti fanno un'onda piccola.
+Col moto ridotto restano solo il trascinamento e il magnete: lancio, scossa,
+onde e gelatina sono spenti. Sui grafi oltre duemila nodi la gelatina è spenta.
 
 I nodi scalano con lo zoom come archi e distanze, con un raggio minimo
 visibile; lo sprite si sceglie sui pixel del dispositivo e, oltre il livello

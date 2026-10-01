@@ -21,8 +21,14 @@ function copy(): PanelCopy {
     close: "Chiudi impostazioni",
     physicsSection: "Parametri di simulazione",
     viewSection: "Comandi di vista",
+    gesturesSection: "Gesti",
+    gestures: [
+      { how: "Trascina e lascia un nodo", effect: "Lancio" },
+      { how: "Tieni premuto sul vuoto", effect: "Magnete" },
+    ],
     presets: {
       "organica": "Organica",
+      "gelatina": "Gelatina",
       "costellazione": "Costellazione",
       "alveare": "Alveare",
       "nebulosa": "Nebulosa",
@@ -42,12 +48,14 @@ function copy(): PanelCopy {
       theta: "Apertura Barnes-Hut",
       jitter: "Jitter iniziale",
       cooling: "Raffreddamento",
+      bounce: "Rimbalzo",
       glow: "Bagliore",
       pulse: "Pulsazione",
       trail: "Scie",
       grid: "Grid",
       edgeCurvature: "Curvatura archi",
       labelDensity: "Densità etichette",
+      wobble: "Gelatina",
     },
   };
 }
@@ -319,17 +327,33 @@ describe("createPhysicsPanel", () => {
     p.destroy();
   });
 
-  it("U45: due gruppi dichiarati con titoli distinti (simulazione e vista)", () => {
+  it("U45: gruppi dichiarati con titoli distinti (simulazione, vista, gesti)", () => {
     const p = create();
     const groups = p.element.querySelectorAll<HTMLElement>(".graph-panel-sezione[role='group']");
-    expect(groups).toHaveLength(2);
+    expect(groups).toHaveLength(3);
     expect(groups[0]!.getAttribute("aria-label")).toBe("Parametri di simulazione");
     expect(groups[1]!.getAttribute("aria-label")).toBe("Comandi di vista");
+    expect(groups[2]!.getAttribute("aria-label")).toBe("Gesti");
     expect(groups[0]!.querySelector(".graph-panel-sezione-titolo")!.textContent).toBe("Parametri di simulazione");
     expect(groups[1]!.querySelector(".graph-panel-sezione-titolo")!.textContent).toBe("Comandi di vista");
     // Nessun filtro o algoritmo inventato: solo gli slider/toggle esistenti.
     expect(p.element.querySelectorAll('input[type="range"]').length).toBeGreaterThan(0);
     expect(p.element.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThan(0);
+    p.destroy();
+  });
+
+  it("i giochi: slider di rimbalzo e gelatina, preset gelatina, legenda dei gesti senza comandi", () => {
+    const p = create();
+    const names = [...p.element.querySelectorAll<HTMLElement>(".graph-panel-nome")].map((n) => n.textContent);
+    expect(names).toContain("Rimbalzo");
+    expect(names).toContain("Gelatina");
+    const options = [...p.element.querySelectorAll<HTMLOptionElement>("select option")].map((o) => o.value);
+    expect(options).toContain("gelatina");
+    const legend = p.element.querySelectorAll<HTMLElement>(".graph-panel-sezione[role='group']")[2]!;
+    const rows = [...legend.querySelectorAll<HTMLElement>(".graph-panel-campo")];
+    expect(rows.map((r) => r.textContent)).toEqual(["Trascina e lascia un nodoLancio", "Tieni premuto sul vuotoMagnete"]);
+    // La legenda insegna i gesti: non ha controlli propri.
+    expect(legend.querySelectorAll("input, button, select")).toHaveLength(0);
     p.destroy();
   });
 });

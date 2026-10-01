@@ -17,9 +17,23 @@
 
 import type { GraphicsConfig, Structure, Tier } from "../sim/types";
 import { fnv1a } from "../sim/types";
+import type { Wobble } from "../sim/wobble";
+import { deformationOf } from "../sim/wobble";
 import type { Camera } from "./camera";
 import type { Atlas, Tints, TintRole } from "./atlas";
 import { generateAtlas, readTints, drawNode, RADIUS_BUCKETS } from "./atlas";
+
+/// Un'onda visiva in `DrawState.ripples`: x, y di mondo, età 0..1, portata
+/// di mondo.
+export const RIPPLE_STRIDE = 4;
+
+/// L'anello del magnete: centro e raggio di mondo, carica 0..1 (1 = acceso).
+export interface MagnetMark {
+  x: number;
+  y: number;
+  radius: number;
+  charge: number;
+}
 
 export interface DrawState {
   s: Structure;
@@ -46,6 +60,14 @@ export interface DrawState {
   /// vicino il livello resta pieno. Assenti, valgono il focus corrente e 1.
   highlightNode?: number;
   highlight?: number;
+  /// La gelatina: la forma dei nodi e la curvatura in più degli archi.
+  /// Assente, tutto è tondo e dritto come la sim lo dice.
+  wobble?: Wobble | null;
+  /// Le onde vive, `rippleCount` righe di `RIPPLE_STRIDE`.
+  ripples?: Float32Array;
+  rippleCount?: number;
+  /// Il magnete, se c'è.
+  magnet?: MagnetMark | null;
 }
 
 /// L'etichetta di un nodo: il nome della nota, senza cartella né estensione.
@@ -113,6 +135,16 @@ export function pulseOpacity(id: string, elapsedMs: number, alpha: number, enabl
   if (!enabled || alpha <= PULSE_THRESHOLD) return undefined;
   const phase = ((fnv1a(id) % 1000) / 1000) * Math.PI * 2;
   return 0.5 + 0.5 * Math.sin((elapsedMs / 1000) * Math.PI * 2 * 1.2 + phase);
+}
+
+/// Sotto questo allungamento un nodo si disegna tondo, senza trasformazione:
+/// la differenza non si vede e il percorso veloce resta quello di sempre.
+const DEFORM_MIN = 1.01;
+
+/// L'onda si allarga in fretta e rallenta (ease-out cubica) mentre sbiadisce.
+export function rippleRadius(age: number): number {
+  const a = age < 0 ? 0 : age > 1 ? 1 : age;
+  return 1 - (1 - a) * (1 - a) * (1 - a);
 }
 
 /// Gradini di spaziatura della griglia: la spaziatura **mondo** salta su una
@@ -270,7 +302,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   /// Bbox di un arco (estremi + punto di controllo) in schermo: la curva
   /// quadratica può sporgere di molto oltre i suoi estremi quando è corta e
   /// curva, e il culling deve saperlo.
-  function edgeInView(s: Structure, c: Camera, e: number, curv: number): boolean {
+  function edgeInView(s: Structure, c: Camera, e: number, curv: number, bend: Float32Array | null): boolean {
     const x1 = s.x[s.from[e]];
     const y1 = s.y[s.from[e]];
     const x2 = s.x[s.to[e]];
@@ -278,7 +310,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     const dx = x2 - x1;
     const dy = y2 - y1;
     const L = Math.hypot(dx, dy) || 1;
-    const off = s.curvature[e] * L * curv;
+    const off = (s.curvature[e] * curv + (bend ? bend[e] : 0)) * L;
     const cx = (x1 + x2) / 2 + (-dy / L) * off;
     const cy = (y1 + y2) / 2 + (dx / L) * off;
     const minX = Math.min(x1, x2, cx) * c.scale + c.tx - CULL_MARGIN;
@@ -288,7 +320,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     return maxX >= 0 && minX <= W && maxY >= 0 && minY <= H;
   }
 
-  function addEdge(ctx: CanvasRenderingContext2D, s: Structure, c: Camera, e: number, curv: number): void {
+  function addEdge(ctx: CanvasRenderingContext2D, s: Structure, c: Camera, e: number, curv: number, bend: Float32Array | null): void {
     const x1 = s.x[s.from[e]];
     const y1 = s.y[s.from[e]];
     const x2 = s.x[s.to[e]];
@@ -298,8 +330,9 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     const L = Math.hypot(dx, dy) || 1;
     // Point di controllo = medio + perpendicolare · curva · L · curvatura:
     // due archi a↔b hanno `curvature` di segno opposto (hash dell'identità) e si
-    // separano in due curve speculari invece di giacersi sopra.
-    const off = s.curvature[e] * L * curv;
+    // separano in due curve speculari invece di giacersi sopra. La gelatina
+    // aggiunge la sua curvatura, che vibra quando l'arco viene strattonato.
+    const off = (s.curvature[e] * curv + (bend ? bend[e] : 0)) * L;
     const cx = (x1 + x2) / 2 + (-dy / L) * off;
     const cy = (y1 + y2) / 2 + (dx / L) * off;
     ctx.moveTo(x1 * c.scale + c.tx, y1 * c.scale + c.ty);
@@ -395,6 +428,8 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     }
 
     const curv = config.edgeCurvature;
+    const wobble = state.wobble ?? null;
+    const bend = wobble ? wobble.bend : null;
     // Il «focus» del disegno (anello, etichetta in grassetto): il nodo
     // trascinato vince, poi l'hover del puntatore, poi la selezione da
     // tastiera. Il quartiere acceso è quello che il grafico anima.
@@ -428,8 +463,8 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       for (let e = 0; e < s.m; e++) {
         if (!shown(s.from[e]) || !shown(s.to[e])) continue;
         if (s.from[e] === center || s.to[e] === center) continue;
-        if (!edgeInView(s, c, e, curv)) continue;
-        addEdge(ctx, s, c, e, curv);
+        if (!edgeInView(s, c, e, curv, bend)) continue;
+        addEdge(ctx, s, c, e, curv, bend);
       }
       ctx.globalAlpha = edgeAlpha * dimAlpha;
       ctx.lineWidth = 1;
@@ -439,8 +474,8 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     for (let e = 0; e < s.m; e++) {
       if (!shown(s.from[e]) || !shown(s.to[e])) continue;
       if (lit > 0 && s.from[e] !== center && s.to[e] !== center) continue;
-      if (!edgeInView(s, c, e, curv)) continue;
-      addEdge(ctx, s, c, e, curv);
+      if (!edgeInView(s, c, e, curv, bend)) continue;
+      addEdge(ctx, s, c, e, curv, bend);
     }
     ctx.globalAlpha = edgeAlpha + (0.85 - edgeAlpha) * lit;
     ctx.lineWidth = 1 + 0.5 * lit;
@@ -449,6 +484,82 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
 
     const inView = (sx: number, sy: number, rS: number): boolean =>
       sx >= -rS - CULL_MARGIN && sx <= W + rS + CULL_MARGIN && sy >= -rS - CULL_MARGIN && sy <= H + rS + CULL_MARGIN;
+
+    // Le onde stanno sotto i nodi, come increspature sulla superficie del
+    // grafo: un anello sottile che si allarga e sbiadisce.
+    const rippleCount = state.rippleCount ?? 0;
+    if (rippleCount > 0 && state.ripples) {
+      ctx.strokeStyle = tints.active;
+      ctx.lineWidth = 1.5;
+      for (let k = 0; k < rippleCount; k++) {
+        const o = k * RIPPLE_STRIDE;
+        const age = state.ripples[o + 2];
+        const r = rippleRadius(age) * state.ripples[o + 3] * c.scale;
+        if (r < 0.5) continue;
+        const fade = 1 - age;
+        ctx.globalAlpha = 0.55 * fade * fade;
+        ctx.beginPath();
+        ctx.arc(state.ripples[o] * c.scale + c.tx, state.ripples[o + 1] * c.scale + c.ty, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Il magnete: mentre carica un arco che si chiude attorno al puntatore,
+    // acceso un alone morbido che respira (fermo col moto ridotto).
+    const magnet = state.magnet;
+    if (magnet) {
+      const mx = magnet.x * c.scale + c.tx;
+      const my = magnet.y * c.scale + c.ty;
+      const r = magnet.radius * c.scale;
+      ctx.strokeStyle = tints.active;
+      if (magnet.charge < 1) {
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(mx, my, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * magnet.charge);
+        ctx.stroke();
+      } else {
+        const breath = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin((elapsedMs / 1000) * Math.PI * 2 * 0.8);
+        ctx.globalAlpha = 0.12 + 0.1 * breath;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(mx, my, r * (0.96 + 0.04 * breath), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = tints.active;
+        ctx.beginPath();
+        ctx.arc(mx, my, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Un nodo della gelatina: tondo se la sua forma è tonda, altrimenti
+    // ruotato sull'asse e allungato di `stretch`, schiacciato di traverso
+    // della stessa misura (l'area resta quella del nodo).
+    const shape = { angle: 0, stretch: 1 };
+    const paintNode = (i: number, sx: number, sy: number, rS: number, role: TintRole, halo: number | undefined): void => {
+      if (wobble) deformationOf(wobble, i, shape);
+      else shape.stretch = 1;
+      if (shape.stretch <= DEFORM_MIN) {
+        drawNode(ctx, atlas, sx, sy, rS, role, halo, dpr);
+        return;
+      }
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(shape.angle);
+      ctx.scale(shape.stretch, 1 / shape.stretch);
+      drawNode(ctx, atlas, 0, 0, rS, role, halo, dpr);
+      ctx.restore();
+    };
+    /// L'anello attorno a un nodo, con la stessa forma del nodo: `shape` è
+    /// quella dell'ultimo `paintNode`.
+    const ringPath = (sx: number, sy: number, r: number): void => {
+      ctx.beginPath();
+      if (shape.stretch <= DEFORM_MIN) ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      else ctx.ellipse(sx, sy, r * shape.stretch, r / shape.stretch, shape.angle, 0, Math.PI * 2);
+    };
 
     // Nodi — due passate per non cambiare globalAlpha a ogni nodo: prima i
     // spenti in filigrana, poi i pieni (e i loro anelli).
@@ -460,7 +571,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
         const sy = s.y[i] * c.scale + c.ty;
         const rS = screenRadius(s.radius[i], c.scale);
         if (!inView(sx, sy, rS)) continue;
-        drawNode(ctx, atlas, sx, sy, rS, openDocuments.has(s.id[i]) ? "active" : "node", undefined, dpr);
+        paintNode(i, sx, sy, rS, openDocuments.has(s.id[i]) ? "active" : "node", undefined);
       }
       ctx.globalAlpha = 1;
     }
@@ -475,18 +586,16 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       // L'alone pulsante dei nodi aperti: fase dall'hash dell'id, così i
       // vicini non pulsano in sincrono (sembra vivo, non un semaforo).
       const alone = pulseOpacity(s.id[i], elapsedMs, alpha, !reducedMotion && isOpen && config.pulse);
-      drawNode(ctx, atlas, sx, sy, rS, role, alone, dpr);
+      paintNode(i, sx, sy, rS, role, alone);
       if (i === focus) {
-        ctx.beginPath();
-        ctx.arc(sx, sy, rS + 2.5, 0, Math.PI * 2);
+        ringPath(sx, sy, rS + 2.5);
         ctx.strokeStyle = dragged === i ? tints.active : tints.hover;
         ctx.lineWidth = 2;
         ctx.stroke();
       } else if (s.fixed[i] === 1) {
         // Un pin è un impegno dell'utente: un anello sottile lo rende
         // riconoscibile a colpo d'occhio senza gridare.
-        ctx.beginPath();
-        ctx.arc(sx, sy, rS + 2, 0, Math.PI * 2);
+        ringPath(sx, sy, rS + 2);
         ctx.strokeStyle = tints.active;
         ctx.globalAlpha = 0.7;
         ctx.lineWidth = 1;

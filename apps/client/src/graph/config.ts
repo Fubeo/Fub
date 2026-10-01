@@ -16,8 +16,11 @@ import { PRESETS, clampPhysicsConfig, clampGraphicsConfig, defaultGraphicsConfig
 
 /// La chiave in `localStorage`. Versionata: un formato diverso (campi nuovi,
 /// scale cambiate) deve ripartire dai default invece di clampare alla cieca
-/// valori che non significano più quello che dicevano.
-export const CONFIG_KEY = "fub.graph.conf.v1";
+/// valori che non significano più quello che dicevano. La v2 porta rimbalzo e
+/// gelatina e una fisica meno smorzata: un «personalizzato» della v1 era
+/// tarato sullo sciroppo di prima, e si riparte dai preset. La v1 resta dove
+/// sta: non è di questa versione cancellarla.
+export const CONFIG_KEY = "fub.graph.conf.v2";
 
 /// La conf di ripartenza: il preset «organica» — il punto di partenza
 /// provato — e le impostazioni grafiche predefinite. È anche ciò che il

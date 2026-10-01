@@ -29,6 +29,12 @@ export interface PanelCopy {
   physicsSection: string;
   /// Titolo della sezione comandi di vista (U45).
   viewSection: string;
+  /// Titolo della legenda dei gesti di gioco.
+  gesturesSection: string;
+  /// La legenda: come si fa (a sinistra, smorzato) e cosa succede (a destra).
+  /// I giochi nascono dai gesti sul grafo, non da bottoni: la legenda li fa
+  /// scoprire senza aggiungere comandi.
+  gestures: Array<{ how: string; effect: string }>;
   /// Nome preset → etichetta (include "custom").
   presets: Record<string, string>;
   /// Chiave campo → etichetta.
@@ -85,9 +91,11 @@ const PHYSICS_SLIDERS: NumericField[] = [
   { key: "theta", min: 0.5, max: 1.2, step: 0.01 },
   { key: "jitter", min: 0, max: 1, step: 0.01 },
   { key: "cooling", min: 0.9, max: 0.999, step: 0.001 },
+  { key: "bounce", min: 0, max: 0.9, step: 0.01 },
 ];
 
 const GRAPHICS_SLIDERS: NumericField[] = [
+  { key: "wobble", min: 0, max: 1, step: 0.01 },
   { key: "edgeCurvature", min: 0, max: 1, step: 0.01 },
   { key: "labelDensity", min: 0, max: 1, step: 0.01 },
 ];
@@ -95,7 +103,7 @@ const GRAPHICS_SLIDERS: NumericField[] = [
 const PHYSICS_TOGGLES = ["collisions"] as const;
 const GRAPHICS_TOGGLES = ["glow", "pulse", "trail", "grid"] as const;
 
-const PRESET_NAMES = ["organica", "costellazione", "alveare", "nebulosa", "rigido", "custom"] as const;
+const PRESET_NAMES = ["organica", "gelatina", "costellazione", "alveare", "nebulosa", "rigido", "custom"] as const;
 
 export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   const { config } = o;
@@ -250,6 +258,18 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     });
   }
 
+  // La legenda dei gesti: sola lettura, righe «come si fa → cosa succede».
+  // Sulle classi dei campi, così non chiede una pelle nuova.
+  const gesturesSection = document.createElement("div");
+  gesturesSection.className = "graph-panel-sezione";
+  gesturesSection.setAttribute("role", "group");
+  const gesturesLabel = document.createElement("div");
+  gesturesLabel.className = "graph-panel-sezione-titolo";
+  gesturesSection.append(gesturesLabel);
+  const gestureRows = document.createElement("div");
+  gesturesSection.append(gestureRows);
+  popover.append(gesturesSection);
+
   const actions = document.createElement("div");
   actions.className = "graph-panel-azioni";
   const warmButton = document.createElement("button");
@@ -401,6 +421,21 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     physicsSection.setAttribute("aria-label", copy.physicsSection);
     graphicsLabel.textContent = copy.viewSection;
     graphicsSection.setAttribute("aria-label", copy.viewSection);
+    gesturesLabel.textContent = copy.gesturesSection;
+    gesturesSection.setAttribute("aria-label", copy.gesturesSection);
+    gestureRows.replaceChildren();
+    for (const g of copy.gestures) {
+      const row = document.createElement("div");
+      row.className = "graph-panel-campo";
+      const how = document.createElement("span");
+      how.className = "graph-panel-nome";
+      how.textContent = g.how;
+      const effect = document.createElement("span");
+      effect.className = "graph-panel-valore";
+      effect.textContent = g.effect;
+      row.append(how, effect);
+      gestureRows.append(row);
+    }
     warmButton.textContent = copy.warm;
     unpinButton.textContent = copy.unpin;
     resetButton.textContent = copy.reset;

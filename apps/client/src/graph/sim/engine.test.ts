@@ -4,10 +4,10 @@
 // lenta e una coppia fuori banda non la rientra in 200 passi).
 
 import { describe, expect, it } from "vitest";
-import { accumulateForces, collisions } from "./forces";
-import { DT, TIER_BUDGET_MS, TIER_HOLD_MS, baseTier, calculateTier, energy, step, type EngineState } from "./engine";
+import { IMPACTS, IMPACT_STRIDE, accumulateForces, collisions, impactCount } from "./forces";
+import { ANNEAL_ALPHA, DT, TIER_BUDGET_MS, TIER_HOLD_MS, baseTier, calculateTier, energy, step, type EngineState } from "./engine";
 import { build, QuadtreePool } from "./quadtree";
-import { organicConfig, createStructure, seedOf, type PhysicsConfig, type GraphData, type Structure } from "./types";
+import { PRESETS, organicConfig, createStructure, seedOf, type PhysicsConfig, type GraphData, type Structure } from "./types";
 
 /// Costruisce una `Structure` a mano con n nodi e m archi, tutto zero tranne
 /// massa/raggio (di default 1 e 4). I test la personalizzano dopo.
@@ -301,7 +301,8 @@ describe("motore — energia e quiete", () => {
   it("quietaDa conta i passi sotto soglia e resetta al kick", () => {
     const s = structure(1, 0);
     s.vx[0] = 2;
-    const c = config({ gravity: 0, repulsion: 0 });
+    // L'attrito di una volta: il conto dei passi qui sotto è fatto su 0.86.
+    const c = config({ gravity: 0, repulsion: 0, friction: 0.86 });
     const state = newState();
     // E_0 = 2; E_k = 2·0.86^(2k). Sotto 0.25 (~0.242) al passo ~6-7.
     for (let p = 0; p < 5; p++) step(s, c, state, null, DT);
@@ -547,10 +548,127 @@ describe("motore — assestamento", () => {
     s.x[1] = 3;
     s.vx[0] = 50;
     s.vx[1] = -50;
-    collisions(s, config());
+    collisions(s, config({ bounce: 0 }));
     // Separati, e non più diretti l'uno dentro l'altro: senza la correzione
     // della velocità al passo dopo rientravano, e i nodi a contatto tremavano.
     expect(s.x[1] - s.x[0]).toBeGreaterThan(6);
     expect(s.vx[1] - s.vx[0]).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("motore — elasticità", () => {
+  it("col rimbalzo la velocità di separazione è la restituzione di quella d'avvicinamento", () => {
+    const s = structure(2, 0);
+    s.x[0] = -3;
+    s.x[1] = 3;
+    s.vx[0] = 50;
+    s.vx[1] = -50;
+    collisions(s, config({ bounce: 0.6 }));
+    expect(s.vx[1] - s.vx[0]).toBeCloseTo(0.6 * 100, 3);
+    // Quantità di moto conservata: masse uguali, velocità opposte.
+    expect(s.vx[0] + s.vx[1]).toBeCloseTo(0, 6);
+  });
+
+  it("un nodo che rimbalza su un nodo bloccato torna indietro con la restituzione", () => {
+    const s = structure(2, 0);
+    s.x[0] = -3;
+    s.x[1] = 3;
+    s.vx[0] = 80;
+    s.fixed[1] = 1;
+    collisions(s, config({ bounce: 0.5 }));
+    expect(s.vx[0]).toBeCloseTo(-40, 3);
+    expect(s.vx[1]).toBe(0);
+  });
+
+  it("gli urti forti si annotano per la resa, quelli lievi no", () => {
+    const s = structure(2, 0);
+    s.x[0] = -3;
+    s.x[1] = 3;
+    s.vx[0] = 50;
+    s.vx[1] = -50;
+    collisions(s, config());
+    expect(impactCount()).toBe(0);
+    s.x[0] = -3;
+    s.x[1] = 3;
+    s.vx[0] = 800;
+    s.vx[1] = -800;
+    collisions(s, config());
+    expect(impactCount()).toBe(1);
+    expect(IMPACTS[2]).toBeCloseTo(1600, 0);
+    expect(IMPACT_STRIDE).toBe(5);
+    // Il passo del motore riparte da un registro vuoto.
+    step(structure(1, 0), config(), newState(), null, DT);
+    expect(impactCount()).toBe(0);
+  });
+
+  it("una coppia pizzicata supera l'equilibrio e ci torna: il grafo ondeggia", () => {
+    // Senza gravità né repulsione l'equilibrio è la lunghezza di riposo.
+    const c = config({ gravity: 0, repulsion: 0 });
+    const s = pair(400);
+    const st = newState();
+    const rest = 120;
+    let crossed = false;
+    for (let k = 0; k < 240 && st.alpha > ANNEAL_ALPHA; k++) {
+      step(s, c, st, null, DT);
+      if (s.x[1] - s.x[0] < rest - 5) crossed = true;
+    }
+    expect(crossed).toBe(true);
+  });
+
+  it("col preset rigido la stessa coppia non supera l'equilibrio", () => {
+    const c = { ...PRESETS["rigido"]!(), gravity: 0, repulsion: 0 };
+    const s = pair(400);
+    const st = newState();
+    let minimum = Infinity;
+    for (let k = 0; k < 240; k++) {
+      step(s, c, st, null, DT);
+      minimum = Math.min(minimum, s.x[1] - s.x[0]);
+    }
+    expect(minimum).toBeGreaterThan(120 - 5);
+  });
+
+  it("la gelatina è stabile: un hub di grado 60 a 30 fps resta finito e si assesta", () => {
+    const n = 61;
+    const s = structure(n, 60);
+    for (let e = 0; e < 60; e++) {
+      s.from[e] = 0;
+      s.to[e] = e + 1;
+      const a = (e / 60) * Math.PI * 2;
+      s.x[e + 1] = Math.cos(a) * 300;
+      s.y[e + 1] = Math.sin(a) * 300;
+    }
+    s.degree[0] = 60;
+    for (let i = 1; i < n; i++) s.degree[i] = 1;
+    s.mass[0] = 1 + Math.log1p(60) * 0.8;
+    s.vx[0] = 2000;
+    const c = PRESETS["gelatina"]!();
+    const st = newState();
+    for (let k = 0; k < 600; k++) {
+      step(s, c, st, null, 1 / 30);
+      for (let i = 0; i < n; i++) {
+        expect(Number.isFinite(s.x[i])).toBe(true);
+        expect(Math.abs(s.x[i])).toBeLessThan(5000);
+      }
+    }
+    expect(energy(s)).toBeLessThan(1);
+  });
+
+  it("il magnete attira i nodi dentro il raggio e ignora quelli fuori", () => {
+    const s = structure(3, 0);
+    s.x[0] = 50;
+    s.x[1] = 500;
+    // Dentro il pozzo ma lontano dagli altri: lo spazio personale non c'entra.
+    s.x[2] = -150;
+    s.fixed[2] = 1;
+    const c = config({ gravity: 0, repulsion: 0 });
+    accumulateForces(s, c, null, 1, { x: 0, y: 0, radius: 200, strength: 5000 });
+    expect(s.fx[0]).toBeLessThan(0);
+    expect(s.fx[1]).toBe(0);
+    expect(s.fx[2]).toBe(0);
+    // Un passo col pozzo nello stato del motore sposta il nodo verso il centro.
+    const st: EngineState = { ...newState(), well: { x: 0, y: 0, radius: 200, strength: 5000 } };
+    step(s, c, st, null, DT);
+    expect(s.vx[0]).toBeLessThan(0);
+    expect(s.vx[1]).toBe(0);
   });
 });

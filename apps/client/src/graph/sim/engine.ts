@@ -9,9 +9,9 @@
 // esplodere l'integrazione, ma con 1/30 la fisica resta corretta (solo due
 // volte più lenta di un frame normale).
 
-import { accumulateForces, collisions, setDt } from "./forces";
+import { accumulateForces, clearImpacts, collisions, setDt } from "./forces";
 import type { Quadtree } from "./quadtree";
-import type { PhysicsConfig, Structure, Tier } from "./types";
+import type { PhysicsConfig, Structure, Tier, Well } from "./types";
 
 /// Il dt di taratura della fisica: tutti i coefficienti (attrito, molle,
 /// raffreddamento) sono pensati per 60 passi al secondo.
@@ -33,10 +33,12 @@ export const ANNEAL_FLOOR = 0.55;
 /// Stato persistente del motore fra i passi. `alpha` è la temperatura: decade
 /// per `cooling` e l'integrazione (chart.ts) la può riportare a 1
 /// con un riscaldo. `quietSince` conta i passi consecutivi sotto soglia: il
-/// grafico lo resetta al riscaldo.
+/// grafico lo resetta al riscaldo. `well` è il pozzo del magnete mentre il
+/// gesto dura, assente altrimenti.
 export interface EngineState {
   alpha: number;
   quietSince: number;
+  well?: Well | null;
 }
 
 /// Un passo di simulazione. `dt` è il tempo reale dall'ultimo frame
@@ -57,7 +59,8 @@ export function step(
   // schermo né col carico. Il gradino economico di `calculateTier` tocca la
   // resa, non l'algoritmo.
   const tier = baseTier(s.n);
-  accumulateForces(s, config, q, tier);
+  clearImpacts();
+  accumulateForces(s, config, q, tier, state.well ?? null, state.alpha);
 
   const n = s.n;
   const maxV = config.maxSpeed;
@@ -82,7 +85,9 @@ export function step(
     if (fixed !== 2) {
       // Libero: attrito + tetto di velocità. Il trascinato (fisso 2) no:
       // il deadbeat della molla del puntatore si regge su v = Δ/dt al primo
-      // passo, e l'attrito o il clamp lo romperebbero.
+      // passo, e l'attrito o il clamp lo romperebbero. L'attrito è leggero
+      // (le molle ondeggiano, un nodo lanciato vola): a spegnere il moto è la
+      // ricottura, quando la temperatura scende.
       s.vx[i] *= friction;
       s.vy[i] *= friction;
       const v2 = s.vx[i] * s.vx[i] + s.vy[i] * s.vy[i];

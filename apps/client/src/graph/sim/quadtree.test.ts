@@ -6,10 +6,9 @@ import { describe, expect, it } from "vitest";
 import { build, QuadtreePool, visit, nearest, type Quadtree } from "./quadtree";
 import { organicConfig, createStructure, type GraphData, type Structure } from "./types";
 
-/// Un grafo a forma di stella deterministica: n nodi su spirale di girasole
-/// con jitter fisso, masse crescenti per grado (qualche arco). Abbastanza
-/// nodi da far splittare l'albero, non così tanti da rendere l'O(n²) lento
-/// nel test.
+/// Un grafo deterministico: n nodi dove li mette la semina, con jitter fisso,
+/// masse crescenti per grado (qualche arco). Abbastanza nodi da far
+/// splittare l'albero, non così tanti da rendere l'O(n²) lento nel test.
 function graphTest(n: number, edgeCount: number): Structure {
   const nodes: string[] = [];
   for (let i = 0; i < n; i++) nodes.push("n" + i);

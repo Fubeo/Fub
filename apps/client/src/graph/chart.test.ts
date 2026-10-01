@@ -610,6 +610,121 @@ describe("createChart", () => {
     expect(f.queue).toHaveLength(0);
   });
 
+  it("onda d'urto: spinge i nodi, disegna un'onda che si allarga, poi il loop dorme", () => {
+    g.mount(fakeHost());
+    run(f);
+    expect(f.queue).toHaveLength(0);
+    const s = lastInteraction!.structure();
+    const last = (): DrawState => lastPainter!.states[lastPainter!.states.length - 1];
+    lastInteraction!.actions!.shockwave(s.x[0] - 10, s.y[0]);
+    expect(f.queue.length).toBeGreaterThan(0);
+    expect(s.vx[0]).toBeGreaterThan(0);
+    run(f, 1);
+    expect(last().rippleCount).toBe(1);
+    const firstAge = last().ripples![2]!;
+    run(f, 5);
+    expect(last().ripples![2]!).toBeGreaterThan(firstAge);
+    run(f);
+    expect(last().rippleCount).toBe(0);
+    expect(f.queue).toHaveLength(0);
+  });
+
+  it("la gelatina tiene acceso il loop finché si assesta, poi dorme", () => {
+    const host = fakeHost();
+    g.mount(host);
+    run(f);
+    const last = (): DrawState => lastPainter!.states[lastPainter!.states.length - 1];
+    lastInteraction!.actions!.poke(1, 1);
+    expect(f.queue.length).toBeGreaterThan(0);
+    run(f, 1);
+    expect(last().wobble).not.toBeNull();
+    const frames = run(f);
+    expect(frames).toBeGreaterThan(5);
+    expect(frames).toBeLessThan(120);
+    expect(last().wobble).toBeNull();
+    expect(f.queue).toHaveLength(0);
+
+    // Il puntatore che passa su un nodo lo fa sussultare.
+    const canvas = host.querySelector<HTMLCanvasElement>("canvas.graph-main")!;
+    const s = lastInteraction!.structure();
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: s.x[2], clientY: s.y[2] }));
+    run(f, 1);
+    expect(last().wobble).not.toBeNull();
+    run(f);
+    expect(f.queue).toHaveLength(0);
+  });
+
+  it("Riscalda scuote il grafo e poi lo lascia assestare", () => {
+    g.mount(fakeHost());
+    run(f);
+    const s = lastInteraction!.structure();
+    s.vx.fill(0);
+    s.vy.fill(0);
+    g.reheat();
+    let moving = 0;
+    for (let i = 0; i < s.n; i++) if (Math.hypot(s.vx[i], s.vy[i]) > 1) moving++;
+    expect(moving).toBe(s.n);
+    run(f, 1);
+    expect(lastPainter!.states[lastPainter!.states.length - 1]!.alpha).toBeGreaterThan(0.85);
+    run(f);
+    expect(f.queue).toHaveLength(0);
+  });
+
+  it("il magnete: la carica si disegna, acceso tiene sveglia la sim e attira, rilasciato dorme", () => {
+    g.mount(fakeHost());
+    run(f);
+    const s = lastInteraction!.structure();
+    const last = (): DrawState => lastPainter!.states[lastPainter!.states.length - 1];
+    const cx = s.x[3] + 40;
+    const cy = s.y[3];
+    lastInteraction!.actions!.magnet(cx, cy, 200, false);
+    run(f, 1);
+    expect(last().magnet).not.toBeNull();
+    expect(last().magnet!.charge).toBeGreaterThan(0);
+    expect(last().magnet!.charge).toBeLessThan(1);
+    const before = Math.hypot(s.x[3] - cx, s.y[3] - cy);
+    lastInteraction!.actions!.magnet(cx, cy, 200, true);
+    run(f, 600);
+    expect(f.queue.length).toBeGreaterThan(0);
+    expect(last().magnet!.charge).toBe(1);
+    expect(Math.hypot(s.x[3] - cx, s.y[3] - cy)).toBeLessThan(before);
+    lastInteraction!.actions!.releaseMagnet();
+    run(f);
+    expect(last().magnet).toBeNull();
+    expect(f.queue).toHaveLength(0);
+  });
+
+  it("col moto ridotto niente gelatina, onde né scosse; il magnete sì", () => {
+    g.unmount();
+    setReducedMotionPreference(true);
+    try {
+      g = createChart(baseOptions(f));
+      g.mount(fakeHost());
+      run(f);
+      const s = lastInteraction!.structure();
+      const last = (): DrawState => lastPainter!.states[lastPainter!.states.length - 1];
+      const vx = [...s.vx];
+      lastInteraction!.actions!.poke(0, 1);
+      lastInteraction!.actions!.shockwave(s.x[0] - 10, s.y[0]);
+      lastInteraction!.actions!.slosh(500, 0);
+      g.reheat();
+      expect([...s.vx]).toEqual(vx);
+      run(f);
+      expect(lastPainter!.states.every((st) => !st.wobble && !st.rippleCount)).toBe(true);
+      const mx = s.x[0] + 60;
+      const my = s.y[0];
+      lastInteraction!.actions!.magnet(mx, my, 200, true);
+      run(f, 30);
+      expect(last().magnet).not.toBeNull();
+      expect(Math.hypot(s.x[0] - mx, s.y[0] - my)).toBeLessThan(60);
+      lastInteraction!.actions!.releaseMagnet();
+      run(f);
+      expect(f.queue).toHaveLength(0);
+    } finally {
+      setReducedMotionPreference(false);
+    }
+  });
+
   it("un resize tiene fermo il centro della vista e ridisegna subito", () => {
     // Ridimensionare un canvas lo svuota: aspettare il rAF successivo
     // lasciava un fotogramma vuoto, e dividere il riquadro faceva scivolare

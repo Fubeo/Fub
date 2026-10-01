@@ -139,3 +139,32 @@ describe("saveConfig", () => {
     expect(parsed.physics.repulsion).toBe(20000);
   });
 });
+describe("config v2 — i giochi", () => {
+  it("la chiave è la v2: una conf della v1 non si rilegge", () => {
+    expect(CONFIG_KEY).toBe("fub.graph.conf.v2");
+    localStorage.setItem("fub.graph.conf.v1", JSON.stringify({ preset: "custom", physics: { friction: 0.5 } }));
+    expect(loadConfig().physics.friction).toBe(organicConfig().friction);
+    // La v1 resta dov'era.
+    expect(localStorage.getItem("fub.graph.conf.v1")).not.toBeNull();
+  });
+
+  it("rimbalzo e gelatina si salvano e si clampano", () => {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({
+      preset: "custom",
+      physics: { ...organicConfig(), bounce: 5 },
+      graphics: { ...defaultGraphicsConfig(), wobble: -1 },
+    }));
+    const c = loadConfig();
+    expect(c.physics.bounce).toBe(0.9);
+    expect(c.graphics.wobble).toBe(0);
+  });
+
+  it("il preset gelatina è più vivace di organica, rigido non rimbalza", () => {
+    const jelly = applyPreset("gelatina");
+    const organic = organicConfig();
+    expect(jelly.bounce).toBeGreaterThan(organic.bounce);
+    expect(jelly.springDamping).toBeLessThan(organic.springDamping);
+    expect(jelly.friction).toBeGreaterThan(organic.friction);
+    expect(PRESETS["rigido"]!().bounce).toBe(0);
+  });
+});

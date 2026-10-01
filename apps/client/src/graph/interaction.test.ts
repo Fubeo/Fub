@@ -156,7 +156,17 @@ describe("updateDrag (macchina a stati pura)", () => {
 describe("createInteraction (wiring su canvas finto)", () => {
   let s: Structure;
   let cs: ReturnType<typeof createCameraState>;
-  let actions: InteractionActions & { open: ReturnType<typeof vi.fn>; warm: ReturnType<typeof vi.fn>; requestRedraw: ReturnType<typeof vi.fn> };
+  type Spy = ReturnType<typeof vi.fn>;
+  let actions: InteractionActions & {
+    open: Spy;
+    warm: Spy;
+    requestRedraw: Spy;
+    poke: Spy;
+    shockwave: Spy;
+    slosh: Spy;
+    magnet: Spy;
+    releaseMagnet: Spy;
+  };
   let canvas: ReturnType<typeof fakeCanvas>["canvas"];
   let emit: ReturnType<typeof fakeCanvas>["emit"];
   let interaction: ReturnType<typeof createInteraction>;
@@ -169,11 +179,12 @@ describe("createInteraction (wiring su canvas finto)", () => {
       open: vi.fn(),
       warm: vi.fn(),
       requestRedraw: vi.fn(),
-    } as InteractionActions & {
-      open: ReturnType<typeof vi.fn>;
-      warm: ReturnType<typeof vi.fn>;
-      requestRedraw: ReturnType<typeof vi.fn>;
-    };
+      poke: vi.fn(),
+      shockwave: vi.fn(),
+      slosh: vi.fn(),
+      magnet: vi.fn(),
+      releaseMagnet: vi.fn(),
+    } as unknown as typeof actions;
     const f = fakeCanvas();
     canvas = f.canvas;
     emit = f.emit;
@@ -209,7 +220,121 @@ describe("createInteraction (wiring su canvas finto)", () => {
     emit("pointerup", { clientX: 50, clientY: 40, button: 0, pointerId: 7 });
     expect(s.dragged).toBe(-1);
     expect(s.fixed[0]).toBe(0); // torna com'era: il drag non lascia pin
-    expect(s.vx[0]).toBeCloseTo(120); // il rilascio non lancia il nodo
+    // Un solo campione del gesto: nessuna velocità misurabile, e la velocità
+    // della molla del puntatore (Δ/dt) non lancia il nodo.
+    expect(s.vx[0]).toBe(0);
+    expect(actions.poke).toHaveBeenCalledWith(0, expect.any(Number));
+  });
+
+  it("lancio: il nodo parte con la velocità del gesto in unità di mondo", () => {
+    cs.set({ scale: 2, tx: 0, ty: 0 }, true);
+    // Il nodo 0 è in (0,0) di mondo, cioè (0,0) di schermo.
+    emit("pointerdown", { clientX: 1, clientY: 1, button: 0, timeStamp: 1000 });
+    emit("pointermove", { clientX: 21, clientY: 1, button: 0, timeStamp: 1016 });
+    emit("pointermove", { clientX: 41, clientY: 1, button: 0, timeStamp: 1032 });
+    emit("pointermove", { clientX: 61, clientY: 1, button: 0, timeStamp: 1048 });
+    emit("pointerup", { clientX: 61, clientY: 1, button: 0, timeStamp: 1050 });
+    // 40 px in 32 ms = 1.25 px/ms di schermo → 625 px/s di mondo a scala 2,
+    // per la quota che il lancio conserva.
+    expect(s.vx[0]).toBeGreaterThan(400);
+    expect(s.vx[0]).toBeLessThan(625);
+    expect(Math.abs(s.vy[0])).toBeLessThan(1e-6);
+    expect(actions.warm).toHaveBeenLastCalledWith(0.6);
+  });
+
+  it("lancio: un rilascio da fermo non lancia, e col moto ridotto nemmeno un gesto veloce", () => {
+    emit("pointerdown", { clientX: 1, clientY: 1, button: 0, timeStamp: 1000 });
+    emit("pointermove", { clientX: 21, clientY: 1, button: 0, timeStamp: 1016 });
+    emit("pointermove", { clientX: 41, clientY: 1, button: 0, timeStamp: 1032 });
+    emit("pointerup", { clientX: 41, clientY: 1, button: 0, timeStamp: 1400 });
+    expect(s.vx[0]).toBe(0);
+
+    interaction.destroy();
+    const f = fakeCanvas();
+    emit = f.emit;
+    interaction = createInteraction({ canvas: f.canvas, structureRef: () => s, cameraState: cs, actions, playful: () => false });
+    s.x[0] = 0;
+    s.y[0] = 0;
+    emit("pointerdown", { clientX: 1, clientY: 1, button: 0, timeStamp: 2000 });
+    emit("pointermove", { clientX: 21, clientY: 1, button: 0, timeStamp: 2016 });
+    emit("pointermove", { clientX: 41, clientY: 1, button: 0, timeStamp: 2032 });
+    emit("pointerup", { clientX: 41, clientY: 1, button: 0, timeStamp: 2034 });
+    expect(s.vx[0]).toBe(0);
+  });
+
+  it("Shift+click sul vuoto lancia l'onda d'urto nel punto di mondo; su un nodo apre ancora", () => {
+    cs.set({ scale: 2, tx: 100, ty: 50 }, true);
+    emit("pointerdown", { clientX: 500, clientY: 450, button: 0, shiftKey: true });
+    emit("pointerup", { clientX: 500, clientY: 450, button: 0, shiftKey: true });
+    emit("click", { clientX: 500, clientY: 450, shiftKey: true });
+    expect(actions.shockwave).toHaveBeenCalledWith(200, 200);
+    vi.advanceTimersByTime(300);
+    expect(actions.open).not.toHaveBeenCalled();
+
+    // Il nodo 0 in (0,0) di mondo è in (100,50) di schermo.
+    emit("pointerdown", { clientX: 100, clientY: 50, button: 0, shiftKey: true });
+    emit("pointerup", { clientX: 100, clientY: 50, button: 0, shiftKey: true });
+    emit("click", { clientX: 100, clientY: 50, shiftKey: true });
+    vi.advanceTimersByTime(300);
+    expect(actions.open).toHaveBeenCalledWith("a");
+    expect(actions.shockwave).toHaveBeenCalledTimes(1);
+  });
+
+  it("magnete: la pressione lunga sul vuoto carica, accende, segue il puntatore e si spegne al rilascio", () => {
+    emit("pointerdown", { clientX: 400, clientY: 300, button: 0, timeStamp: 1000 });
+    vi.advanceTimersByTime(160);
+    // La carica: l'anello, non ancora il pozzo.
+    expect(actions.magnet).toHaveBeenLastCalledWith(400, 300, 160, false);
+    vi.advanceTimersByTime(300);
+    expect(actions.magnet).toHaveBeenLastCalledWith(400, 300, 160, true);
+    // Acceso, il puntatore trascina il pozzo e non la vista.
+    emit("pointermove", { clientX: 450, clientY: 320, button: 0, timeStamp: 1500 });
+    expect(actions.magnet).toHaveBeenLastCalledWith(450, 320, 160, true);
+    expect(cs.state().tx).toBe(0);
+    emit("pointerup", { clientX: 450, clientY: 320, button: 0, timeStamp: 1600 });
+    expect(actions.releaseMagnet).toHaveBeenCalledTimes(1);
+    // Nessuna inerzia della vista dopo il magnete.
+    expect(cs.ready()).toBe(true);
+  });
+
+  it("magnete: un movimento prima della soglia è un pan, e distruggere cancella il timer", () => {
+    emit("pointerdown", { clientX: 400, clientY: 300, button: 0, timeStamp: 1000 });
+    emit("pointermove", { clientX: 420, clientY: 300, button: 0, timeStamp: 1050 });
+    vi.advanceTimersByTime(1000);
+    expect(actions.magnet).not.toHaveBeenCalled();
+    expect(cs.state().tx).toBeCloseTo(20);
+    emit("pointerup", { clientX: 420, clientY: 300, button: 0, timeStamp: 2000 });
+
+    emit("pointerdown", { clientX: 400, clientY: 300, button: 0, timeStamp: 3000 });
+    interaction.destroy();
+    vi.advanceTimersByTime(1000);
+    expect(actions.magnet).not.toHaveBeenCalled();
+    interaction = createInteraction({ canvas: fakeCanvas().canvas, structureRef: () => s, cameraState: cs, actions });
+  });
+
+  it("scossa: agitare la vista avanti e indietro scuote i nodi, un pan lineare no", () => {
+    emit("pointerdown", { clientX: 300, clientY: 300, button: 0, timeStamp: 1000 });
+    for (let k = 1; k <= 20; k++) emit("pointermove", { clientX: 300 + 3 * k, clientY: 300, button: 0, timeStamp: 1000 + 16 * k });
+    emit("pointerup", { clientX: 360, clientY: 300, button: 0, timeStamp: 1330 });
+    expect(actions.slosh).not.toHaveBeenCalled();
+
+    emit("pointerdown", { clientX: 300, clientY: 300, button: 0, timeStamp: 5000 });
+    let x = 300;
+    let t = 5000;
+    for (const dir of [1, -1, 1, -1, 1]) {
+      for (let k = 0; k < 4; k++) {
+        x += dir * 30;
+        t += 16;
+        emit("pointermove", { clientX: x, clientY: 300, button: 0, timeStamp: t });
+      }
+    }
+    emit("pointerup", { clientX: x, clientY: 300, button: 0, timeStamp: t + 2 });
+    expect(actions.slosh).toHaveBeenCalled();
+    // La vista va a destra (dopo aver invertito): i nodi restano indietro,
+    // cioè il cambio di velocità passato è quello della vista.
+    const [dvx, dvy] = actions.slosh.mock.calls[actions.slosh.mock.calls.length - 1]!;
+    expect(dvx).toBeGreaterThan(0);
+    expect(dvy).toBe(0);
   });
 
   it("un click su un nodo non lo afferra e non scalda il grafo", () => {
