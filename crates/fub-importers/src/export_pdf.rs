@@ -4,6 +4,7 @@
 //! print projection. The shell print path uses RenderTarget::Print separately.
 
 use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget};
+use fub_abi::rules::loads::text_payload;
 use fub_abi::rules::path::strip_ext;
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
@@ -345,6 +346,20 @@ impl Printer<'_> {
                 out.push('#');
                 out.push_str(name);
             }
+            // A formula is not typeset here (the report says so), but its TeX
+            // stays readable between its dollars instead of vanishing.
+            Inline::Custom {
+                custom_kind, attrs, ..
+            } if custom_kind == fub_abi::model::custom_kind::MATH => {
+                if let Some(tex) = text_payload(custom_kind, attrs) {
+                    let dollars = if attrs.get("display").and_then(|v| v.as_bool()) == Some(true) {
+                        "$$"
+                    } else {
+                        "$"
+                    };
+                    out.push_str(&format!("{dollars}{tex}{dollars}"));
+                }
+            }
             Inline::Custom { attrs, .. } => {
                 if let Some(label) = attrs.get("label").and_then(serde_json::Value::as_str) {
                     out.push_str(&format!("[{label}]"));
@@ -572,5 +587,34 @@ fn warn_unrenderable(lines: &[String], doc: &str, report: &mut ExportReport) {
             )
             .about(doc),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fub_abi::model::{custom_kind, Span};
+
+    #[test]
+    fn a_formula_prints_its_tex_between_its_dollars() {
+        let math = |source: &str, display: bool| Inline::Custom {
+            custom_kind: custom_kind::MATH.into(),
+            attrs: serde_json::json!({ "source": source, "display": display }),
+            span: Span { start: 0, end: 0 },
+        };
+        let mut report = ExportReport::default();
+        let mut printer = Printer {
+            lines: Vec::new(),
+            doc: "nota.md",
+            report: &mut report,
+            embeds_noted: false,
+        };
+        let text = printer.inlines(&[
+            Inline::Text("vale ".into()),
+            math("\\{x\\}", false),
+            Inline::Text(" e ".into()),
+            math("\\sum_i i", true),
+        ]);
+        assert_eq!(text, "vale $\\{x\\}$ e $$\\sum_i i$$");
     }
 }

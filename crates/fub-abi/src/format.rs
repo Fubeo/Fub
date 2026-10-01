@@ -215,7 +215,8 @@ impl ParseContext {
                 .on(syntax::EMBEDS)
                 .on(syntax::FOOTNOTES)
                 .on(syntax::DEFINITION_LISTS)
-                // Le tre che arrivano da una `SyntaxRule` e non dal provider.
+                // Quelle che arrivano da una `SyntaxRule`, `MATH` per metà: i
+                // dollari li legge il provider, il recinto `math` la regola.
                 // Stanno qui insieme alle altre di proposito: chi accende una
                 // sintassi non deve sapere **da dove** viene, o il §3.1 avrebbe
                 // prodotto due categorie di estensioni invece di una.

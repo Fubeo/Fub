@@ -272,6 +272,9 @@ fn observe_inlines(inlines: &[Inline], or: &mut Observed) {
                 if custom_kind == "footnote-reference" {
                     or.syntaxes.insert(syntax::FOOTNOTES.to_string());
                 }
+                if custom_kind == "math" {
+                    or.syntaxes.insert(syntax::MATH.to_string());
+                }
             }
             Inline::Emph(children)
             | Inline::Strong(children)
@@ -308,11 +311,19 @@ fn the_corpus_produces_every_model_variant() {
 ///
 /// Non è una lacuna del corpus: è dove passa il confine del §3.1
 /// ([0017](../../../docs/decisions/0182-provider-e-porte-generiche.md)).
-/// Quattro di questi kind li innesta una `SyntaxRule` registrata — `MathRule`,
-/// `DiagramRule`, `HighlightRule`, `CommentRule` in `fub-features/src/blocks.rs` — e un
+/// Tre di questi kind li innesta una `SyntaxRule` registrata — `DiagramRule`,
+/// `HighlightRule`, `CommentRule` in `fub-features/src/blocks.rs` — e un
 /// provider che li producesse da sé rimetterebbe in piedi le due categorie di
 /// estensioni che quella decisione ha rifiutato. Il loro corpus sta con le
 /// regole, in `fub-features/tests/custom_blocks_e2e.rs`.
+///
+/// `math` è di entrambi, e il confine è lo stesso. Una regola prende ciò che
+/// il parse ha già letto, e non può cambiare come la grammatica spezza il
+/// testo (`fub_abi::custom`, in testa). Il recinto ```` ```math ```` il parser
+/// lo riconosce già come recinto, e lo innesta `MathRule`. Dentro `$…$` il
+/// parse toglierebbe le barre di `\{` e leggerebbe `a*b*c` come corsivo: solo
+/// la grammatica può non leggerlo, e la formula fra dollari la produce il
+/// provider, sotto `syntax::MATH`.
 ///
 /// `block` è un'altra specie: è il **fallback** di `convert_block`, e con
 /// l'insieme di estensioni che `build_options` accende non risulta
@@ -321,7 +332,7 @@ fn the_corpus_produces_every_model_variant() {
 /// toglierlo perché «non serve» vorrebbe dire farlo diventare un `panic` o un
 /// blocco perso.
 fn kind_not_of_the_provider() -> BTreeSet<String> {
-    ["math", "diagram", "highlight", "comment", "block"]
+    ["diagram", "highlight", "comment", "block"]
         .iter()
         .map(|s| s.to_string())
         .collect()

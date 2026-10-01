@@ -54,9 +54,21 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             write!(out, "</h{the}>").unwrap();
         }
         Block::Paragraph { inlines, .. } => {
-            write!(out, "<p{html_attrs}>").unwrap();
-            render_inlines(inlines, opts, out);
-            out.push_str("</p>");
+            // Un paragrafo che è soltanto una formula `$$…$$` è un blocco: la
+            // stessa radice del recinto `math`, che la resa compone a display.
+            if let Some(source) = display_math(inlines) {
+                write!(
+                    out,
+                    "<div{html_attrs} class=\"math-block\"{}>{}</div>",
+                    attr("data-tex", source.trim()),
+                    escape(source.trim())
+                )
+                .unwrap();
+            } else {
+                write!(out, "<p{html_attrs}>").unwrap();
+                render_inlines(inlines, opts, out);
+                out.push_str("</p>");
+            }
         }
         Block::List {
             ordered,
@@ -254,6 +266,28 @@ fn render_row(
     out.push_str("</tr>");
 }
 
+/// Il sorgente della formula `$$…$$` che è **tutto** il paragrafo, spazi e
+/// a-capo a parte.
+fn display_math(inlines: &[Inline]) -> Option<&str> {
+    let mut found = None;
+    for inline in inlines {
+        match inline {
+            Inline::Custom {
+                custom_kind, attrs, ..
+            } if custom_kind == custom_kind::MATH
+                && found.is_none()
+                && attrs.get("display").and_then(|v| v.as_bool()) == Some(true) =>
+            {
+                found = attrs.get("source").and_then(|v| v.as_str());
+            }
+            Inline::Text(text) if text.trim().is_empty() => {}
+            Inline::SoftBreak | Inline::HardBreak => {}
+            _ => return None,
+        }
+    }
+    found
+}
+
 fn render_inlines(inlines: &[Inline], opts: &RenderOptions, out: &mut String) {
     for inline in inlines {
         render_inline(inline, opts, out);
@@ -335,6 +369,21 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
                 )
                 .unwrap();
             }
+        }
+        // Una formula fra dollari: il segnaposto inerte che la shell compone
+        // con KaTeX, come quelli di Lettura. Un `$$…$$` in mezzo al testo
+        // resta in riga; da solo nel paragrafo lo prende `display_math`.
+        Inline::Custom {
+            custom_kind, attrs, ..
+        } if custom_kind == custom_kind::MATH => {
+            let source = attrs.get("source").and_then(|v| v.as_str()).unwrap_or("");
+            write!(
+                out,
+                "<span class=\"math-inline\"{}>{}</span>",
+                attr("data-tex", source),
+                escape(source)
+            )
+            .unwrap();
         }
         // Il degrado generico degli inline. **Prima non c'era**: un
         // `Inline::Custom` che il provider non riconosceva spariva dalla

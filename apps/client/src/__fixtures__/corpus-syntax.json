@@ -540,6 +540,40 @@
     "task": []
   },
   {
+    "name": "formula in riga",
+    "source": "vale $\\{x \\mid x>0\\}$ e $a*b*c\\,d$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "name": "formula a display",
+    "source": "prima\n\n$$\n\\sum_{i=1}^n i\n$$\n\ndopo\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "name": "dollari che non sono formule",
+    "source": "costa $5, \\$x\\$ resta testo e `$y$` è codice\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "name": "formula che scavalcherebbe il codice",
+    "source": "costa $5 per #spesa, usa `$HOME`\n",
+    "tag": [
+      {
+        "name": "spesa",
+        "from": 13,
+        "to": 19
+      }
+    ],
+    "wikilink": [],
+    "task": []
+  },
+  {
     "name": "frontmatter",
     "source": "---\ntitolo: X\n---\n\n# Corpo\n",
     "tag": [],

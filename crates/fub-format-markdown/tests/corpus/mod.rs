@@ -181,6 +181,15 @@ pub fn corpus() -> Vec<Case> {
         case("html a blocco", "<div>blocco</div>\n"),
         case("html inline", "un <b>grassetto</b> inline\n"),
         case("commento html", "<!-- un commento -->\n"),
+        // Le formule fra dollari le legge il parser: dentro, `\{`, `\,` e
+        // `a*b*c` sono TeX e non markdown. Accanto, i dollari che formule non
+        // sono — un prezzo, un dollaro escapato, il codice — restano testo; e
+        // se una formula scavalcherebbe un codice in riga vince il codice,
+        // come nella shell, col tag di mezzo.
+        case("formula in riga", "vale $\\{x \\mid x>0\\}$ e $a*b*c\\,d$\n"),
+        case("formula a display", "prima\n\n$$\n\\sum_{i=1}^n i\n$$\n\ndopo\n"),
+        case("dollari che non sono formule", "costa $5, \\$x\\$ resta testo e `$y$` è codice\n"),
+        case("formula che scavalcherebbe il codice", "costa $5 per #spesa, usa `$HOME`\n"),
         // --- frontmatter ---
         case("frontmatter", "---\ntitolo: X\n---\n\n# Corpo\n"),
         case(

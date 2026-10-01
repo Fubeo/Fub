@@ -292,11 +292,12 @@ un owner distrugge le istanze che possiede.
 Registratore, slide e stampa compaiono nel menu del riquadro soltanto quando la
 superficie montata li sa fare: la stampa c'è anche per il canvas, non per lo
 sheet, che non ha un provider di stampa. La stampa di una nota salva prima il buffer,
-perché la resa di stampa si legge dal disco, poi aspetta diagrammi, formule a
-blocco e immagini del vault, al massimo per `PRINT_WAIT_MS`. La carta è chiara
+perché la resa di stampa si legge dal disco, poi aspetta diagrammi, formule e
+immagini del vault, al massimo per `PRINT_WAIT_MS`. La carta è chiara
 anche col tema scuro, i diagrammi usano la variante chiara del loro stile, e
-didascalie, sorgenti e bottoni di copia non si stampano. Le formule in riga
-restano testo: la resa di stampa dell'host non le marca.
+didascalie, sorgenti e bottoni di copia non si stampano. Le formule fra dollari
+le legge il provider Markdown, quindi si stampano composte come in Lettura; se
+una formula scavalcherebbe un codice in riga vince il codice, come nell'editor.
 Trascinare una nota o un allegato
 scrive un rimando nella sintassi del formato. Un punto chiesto da outline,
 backlink, ricerca o segnalibri si apre nel riquadro che mostra quel documento;

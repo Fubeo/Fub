@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::OnceLock;
 
-use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
+use comrak::nodes::{AstNode, ListType, NodeValue, Sourcepos, TableAlignment};
 use comrak::{Arena, Options};
 use entities::ENTITIES;
 use fub_abi::format::ParseContext;
@@ -46,6 +46,14 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     or.extension.description_lists = true;
     if ctx.enabled(syntax::WIKILINKS) {
         or.extension.wikilinks_title_after_pipe = true;
+    }
+    // `$…$` e `$$…$$` li legge il parser e non una `SyntaxRule`: una regola
+    // prende il testo **dopo** il parse, e dentro una formula il parse ha già
+    // fatto danni — `\{` diventava `{`, `\,` una virgola, `a*b*c` un corsivo.
+    // Il contenuto di una formula non è markdown, e solo la grammatica può
+    // non leggerlo come tale. Il recinto ```` ```math ```` resta della regola.
+    if ctx.enabled(syntax::MATH) {
+        or.extension.math_dollars = true;
     }
     or
 }
@@ -101,6 +109,77 @@ fn exceeds_max_depth<'a>(root: &'a AstNode<'a>) -> bool {
     false
 }
 
+/// Il codice in riga vince sulla formula, come nella shell: lì un `$…$` che
+/// scavalca un `` `…` `` non è una formula (`isFree` della vivi preview), qui
+/// comrak legge i dollari da sinistra e chiude anche sul `$` dentro il codice
+/// che viene dopo. `costa $5, usa `$HOME`` diventava una formula, e col codice
+/// sparivano dal modello i tag e i link che stavano in mezzo.
+///
+/// Nei blocchi dove una formula ha ingoiato un backtick, gli inline si
+/// rileggono da un secondo parse senza dollari, che si paga solo lì. I due
+/// alberi hanno gli stessi blocchi con gli stessi sourcepos: comrak legge
+/// `math_dollars` soltanto nel parser inline. Il giro è iterativo, come
+/// quello di [`exceeds_max_depth`], che dopo misura l'albero innestato.
+fn code_beats_dollars<'a>(
+    arena: &'a Arena<'a>,
+    root: &'a AstNode<'a>,
+    source: &str,
+    options: &Options<'_>,
+) {
+    let mut swallowed: Vec<(BlockKey, &'a AstNode<'a>)> = Vec::new();
+    for node in root.descendants() {
+        let crosses = matches!(
+            &node.data.borrow().value,
+            NodeValue::Math(math) if math.literal.contains('`')
+        );
+        if !crosses {
+            continue;
+        }
+        let mut holder = node.parent();
+        while let Some(block) = holder {
+            if block.data.borrow().value.contains_inlines() {
+                break;
+            }
+            holder = block.parent();
+        }
+        if let Some(block) = holder {
+            let key = block_key(block);
+            if !swallowed.iter().any(|(k, _)| *k == key) {
+                swallowed.push((key, block));
+            }
+        }
+    }
+    if swallowed.is_empty() {
+        return;
+    }
+    let mut plain = options.clone();
+    plain.extension.math_dollars = false;
+    let plain_root = comrak::parse_document(arena, text_policy::strip_bom(source), &plain);
+    let mut pairs = Vec::new();
+    for node in plain_root.descendants() {
+        let key = block_key(node);
+        if let Some(at) = swallowed.iter().position(|(k, _)| *k == key) {
+            pairs.push((swallowed.swap_remove(at).1, node));
+        }
+    }
+    for (block, plain_block) in pairs {
+        for child in block.children().collect::<Vec<_>>() {
+            child.detach();
+        }
+        for child in plain_block.children().collect::<Vec<_>>() {
+            block.append(child);
+        }
+    }
+}
+
+/// Un blocco si riconosce nell'altro albero dalla posizione e dal tipo.
+type BlockKey = (Sourcepos, std::mem::Discriminant<NodeValue>);
+
+fn block_key<'a>(node: &'a AstNode<'a>) -> BlockKey {
+    let data = node.data.borrow();
+    (data.sourcepos, std::mem::discriminant(&data.value))
+}
+
 /// Accumulatore delle tabelle piatte estratte durante la visita.
 #[derive(Default)]
 struct Acc {
@@ -129,6 +208,7 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     let arena = Arena::new();
     let options = build_options(ctx);
     let root = comrak::parse_document(&arena, text_policy::strip_bom(source), &options);
+    code_beats_dollars(&arena, root, source, &options);
     // Le passate di recupero attraversano l'AST prima del convertitore e non
     // possono affidarsi al suo guard ricorsivo: per un documento ostile la
     // ricorsione preventiva sarebbe già sufficiente a esaurire lo stack.
@@ -1122,6 +1202,20 @@ fn convert_inlines<'a>(
             NodeValue::Code(code) => {
                 text_out.push_str(&code.literal);
                 out.push(Inline::Code(code.literal));
+            }
+            // La formula porta il sorgente TeX come comrak l'ha letto, senza i
+            // dollari: è la forma che `custom_kind::MATH` registra, la stessa del
+            // recinto `math`. Nel testo cercabile entra come il codice inline.
+            NodeValue::Math(math) => {
+                text_out.push_str(&math.literal);
+                out.push(Inline::Custom {
+                    custom_kind: custom_kind::MATH.to_string(),
+                    attrs: serde_json::json!({
+                        "source": math.literal,
+                        "display": math.display_math,
+                    }),
+                    span,
+                });
             }
             NodeValue::Link(link) => {
                 let mut label_text = String::new();

@@ -56,6 +56,9 @@ impl FormatProvider for MarkdownProvider {
             syntax::EMBEDS,
             syntax::FOOTNOTES,
             syntax::DEFINITION_LISTS,
+            // Le formule fra dollari, che legge il parser (vedi
+            // `parse::build_options`); il recinto `math` resta della regola.
+            syntax::MATH,
             // Non è una sintassi: dice che il sorgente è prosa, e che le
             // feature possono scriverci testo senza romperlo.
             fub_abi::options::source::PROSE,

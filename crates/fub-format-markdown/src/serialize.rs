@@ -705,6 +705,24 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
                 out.push_str(&format!("[^{label}]"));
             }
         }
+        // Una formula in riga l'ha prodotta questo parser, dai dollari: il
+        // delimitatore è di questa grammatica, come `^[…]` per la nota. Il
+        // recinto `math` di una regola è un blocco, e lì resta il rifiuto.
+        Inline::Custom {
+            custom_kind,
+            attrs,
+            span: _,
+        } if custom_kind == custom_kind::MATH => {
+            let source = required_attr(attrs, "source", custom_kind)?;
+            let dollars = if attrs.get("display").and_then(|v| v.as_bool()) == Some(true) {
+                "$$"
+            } else {
+                "$"
+            };
+            out.push_str(dollars);
+            out.push_str(source);
+            out.push_str(dollars);
+        }
         // Il resto lo dice il contratto, come per i blocchi: un inline che
         // porta **sorgente** si copia, e tutto ciò che porta il corpo di una
         // sintassi — o che il contratto non dichiara affatto — non si scrive,

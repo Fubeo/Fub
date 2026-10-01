@@ -2,6 +2,7 @@
 //! follows a link to an unapproved vault document.
 use fub_abi::html::{attr, escape};
 use fub_abi::model::{Block, DocId, DocumentModel, Inline, LinkTarget};
+use fub_abi::rules::loads::text_payload;
 use fub_format_canvas::{parse_canvas, CanvasNodeType};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -282,6 +283,19 @@ fn inlines_into(
                     }
                     out.push_str("</a>");
                 }
+            }
+            // A static site has no TeX engine: a formula publishes as its TeX
+            // source between its dollars, the text the note itself carries.
+            Inline::Custom {
+                custom_kind, attrs, ..
+            } if custom_kind == fub_abi::model::custom_kind::MATH => {
+                let tex = text_payload(custom_kind, attrs).ok_or("formula without source")?;
+                let dollars = if attrs.get("display").and_then(|v| v.as_bool()) == Some(true) {
+                    "$$"
+                } else {
+                    "$"
+                };
+                out.push_str(&escape(&format!("{dollars}{tex}{dollars}")));
             }
             Inline::Custom { .. } => return Err("unsupported publish inline projection"),
         }
