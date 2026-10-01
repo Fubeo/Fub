@@ -1,19 +1,51 @@
-import { EditorView } from "@codemirror/view";
-import TurndownService from "turndown";
+import { EditorView, ViewPlugin } from "@codemirror/view";
+import type TurndownService from "turndown";
 import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
 
 const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`/u;
 const contentAnchorPrefix = `#${inContentSpace("")}`;
-const converter = new TurndownService({
-  headingStyle: "atx",
-  bulletListMarker: "-",
-  codeBlockStyle: "fenced",
-  emDelimiter: "*",
-});
+
+// Turndown serve solo a un incolla ricco, e stava nel chunk che le tre
+// finestre condividono: ora arriva dopo, in un chunk suo. Lo carica il primo
+// editor Markdown montato, così al primo incolla è quasi sempre già qui.
+let converter: TurndownService | null = null;
+let loading: Promise<TurndownService> | null = null;
+
+function loadConverter(): Promise<TurndownService> {
+  loading ??= import("turndown").then(
+    ({ default: Turndown }) => (converter = createConverter(Turndown)),
+    (error: unknown) => {
+      // Un chunk che non arriva non resta fallito per sempre: il prossimo
+      // incolla riprova.
+      loading = null;
+      throw error;
+    },
+  );
+  return loading;
+}
+
+function createConverter(Turndown: typeof TurndownService): TurndownService {
+  const created = new Turndown({
+    headingStyle: "atx",
+    bulletListMarker: "-",
+    codeBlockStyle: "fenced",
+    emDelimiter: "*",
+  });
+  for (const [key, rule] of rules) created.addRule(key, rule);
+  return created;
+}
+
+/// Le regole si dichiarano qui sotto, in ordine, e si installano su ogni
+/// convertitore creato: Turndown le prova nell'ordine in cui le riceve.
+const rules: [string, TurndownService.Rule][] = [];
+function addRule(key: string, rule: TurndownService.Rule): void {
+  rules.push([key, rule]);
+}
+
 // Il sanitizzatore tiene inerte l'`src` di un'immagine del vault in
 // `data-vault-src`: il Markdown incollato lo riscrive com'era, senza che
 // l'elemento abbia mai chiesto quel path alla webview.
-converter.addRule("vault-image", {
+addRule("vault-image", {
   filter: (node) => node.nodeName === "IMG" && node.hasAttribute(VAULT_SRC_ATTRIBUTE),
   replacement: (_content, node) => {
     const element = node as HTMLElement;
@@ -28,7 +60,7 @@ converter.addRule("vault-image", {
 // Le estensioni GFM che il Markdown di Fub legge e che Turndown da solo non
 // scrive: senza, una tabella incollata da una pagina web diventava righe di
 // testo senza colonne e un barrato perdeva il barrato.
-converter.addRule("gfm-strikethrough", {
+addRule("gfm-strikethrough", {
   filter: ["del", "s"],
   replacement: (content) => (content.trim() ? `~~${content}~~` : content),
 });
@@ -40,7 +72,7 @@ converter.addRule("gfm-strikethrough", {
 const cellMarkdown = new WeakMap<Node, string>();
 /// Le colonne fino alle quali una riga corta si completa con celle vuote.
 const PADDED_COLUMNS = 64;
-converter.addRule("gfm-table-cell", {
+addRule("gfm-table-cell", {
   filter: ["th", "td"],
   replacement: (content, node, options) => {
     // La cella in Markdown è una riga sola: gli a capo diventano spazi e la
@@ -65,7 +97,7 @@ function ownRows(table: Element): Element[] {
 function ownCells(row: Element): Element[] {
   return Array.from(row.children).filter((cell) => cell.nodeName === "TD" || cell.nodeName === "TH");
 }
-converter.addRule("gfm-table", {
+addRule("gfm-table", {
   filter: "table",
   replacement: (_content, node) => {
     const rows = ownRows(node as HTMLTableElement).map(ownCells);
@@ -92,14 +124,14 @@ converter.addRule("gfm-table", {
 });
 // Una casella di un elenco di attività: il sanitizzatore la tiene come
 // `input[type=checkbox]` disabilitato, e qui torna `[ ]` o `[x]`.
-converter.addRule("gfm-task", {
+addRule("gfm-task", {
   filter: (node) => node.nodeName === "INPUT" && (node as HTMLInputElement).type === "checkbox",
   replacement: (_content, node) => ((node as HTMLInputElement).checked ? "[x] " : "[ ] "),
 });
 // La voce di un elenco come la si scrive a mano: `- voce` e `1. voce`, non il
 // `-   voce` di Turndown. Le righe che seguono rientrano quanto il marcatore,
 // così un sottoelenco resta figlio della sua voce.
-converter.addRule("list-item", {
+addRule("list-item", {
   filter: "li",
   replacement: (content, node) => {
     const parent = node.parentNode as HTMLElement | null;
@@ -145,15 +177,22 @@ function semanticHtml(html: string): string {
   return parsed.body.innerHTML;
 }
 
+/// Cosa fare degli appunti, deciso durante l'evento: `null` lascia
+/// l'incolla a CodeMirror, `markdown` è già la sorgente, `html` va convertito.
+type RichPaste = { markdown: string } | { html: string };
+
 /** Plain source copied from a Markdown editor takes precedence over rich HTML. */
-export function markdownFromClipboard(data: DataTransfer): string | null {
+function richPaste(data: DataTransfer): RichPaste | null {
   const html = data.getData("text/html");
   if (!html) return null;
   const declared = data.getData("text/markdown");
-  if (declared) return data.getData("text/plain") ? null : declared;
+  if (declared) return data.getData("text/plain") ? null : { markdown: declared };
   const plain = data.getData("text/plain");
   if (plain && markdownSource.test(plain)) return null;
+  return { html };
+}
 
+function convert(html: string, turndown: TurndownService): string | null {
   // Never mount the clipboard DOM. The shared sanitizer removes active elements,
   // event attributes and unsafe URLs before Turndown sees any nodes.
   const safe = sanitizeFragment(semanticHtml(html));
@@ -165,17 +204,56 @@ export function markdownFromClipboard(data: DataTransfer): string | null {
       anchor.setAttribute("href", `#${href.slice(contentAnchorPrefix.length)}`);
     }
   }
-  const markdown = converter.turndown(safe);
+  const markdown = turndown.turndown(safe);
   return markdown || null;
 }
 
-export const markdownPaste = EditorView.domEventHandlers({
+export async function markdownFromClipboard(data: DataTransfer): Promise<string | null> {
+  const rich = richPaste(data);
+  if (rich === null) return null;
+  return "markdown" in rich ? rich.markdown : convert(rich.html, await loadConverter());
+}
+
+const pasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
     if (view.state.readOnly || view.compositionStarted || !event.clipboardData) return false;
-    const markdown = markdownFromClipboard(event.clipboardData);
-    if (markdown === null) return false;
+    const rich = richPaste(event.clipboardData);
+    if (rich === null) return false;
+    const insert = (markdown: string) =>
+      view.dispatch(view.state.replaceSelection(markdown), { userEvent: "input.paste" });
+    if ("markdown" in rich) {
+      event.preventDefault();
+      insert(rich.markdown);
+      return true;
+    }
+    if (converter) {
+      const markdown = convert(rich.html, converter);
+      if (markdown === null) return false;
+      event.preventDefault();
+      insert(markdown);
+      return true;
+    }
+    // Turndown non è ancora arrivato. Gli appunti si leggono adesso — finito
+    // l'evento il `DataTransfer` è vuoto — e il testo entra appena c'è il
+    // convertitore, sulla selezione di quel momento. Se la conversione è
+    // vuota o il chunk non arriva entra il testo semplice, come avrebbe
+    // fatto CodeMirror.
     event.preventDefault();
-    view.dispatch(view.state.replaceSelection(markdown), { userEvent: "input.paste" });
+    const plain = event.clipboardData.getData("text/plain");
+    void loadConverter()
+      .then((turndown) => convert(rich.html, turndown), () => null)
+      .then((markdown) => {
+        const text = markdown ?? plain;
+        if (text) insert(text);
+      });
     return true;
   },
 });
+
+// Il primo editor Markdown montato fa partire il caricamento di Turndown.
+const preloadConverter = ViewPlugin.define(() => {
+  loadConverter().catch(() => {});
+  return {};
+});
+
+export const markdownPaste = [pasteHandler, preloadConverter];
