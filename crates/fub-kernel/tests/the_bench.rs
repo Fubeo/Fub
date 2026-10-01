@@ -275,6 +275,13 @@ fn reopen(root: &Utf8Path) -> (Workspace, Parser, Batches) {
     (ws, parser, batches)
 }
 
+/// La pausa che porta la semina oltre il millisecondo corrente, perché la
+/// regola *racily clean* (difetto 0187) si fidi della data che ha visto. Il
+/// gemello sta in `the_opening.rs` e `rejoin.rs`.
+fn beyond_the_millisecondo() {
+    std::thread::sleep(std::time::Duration::from_millis(5));
+}
+
 fn folder() -> (tempfile::TempDir, Utf8PathBuf) {
     let dir = tempfile::tempdir().expect("temporary folder");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("UTF-8 root");
@@ -349,6 +356,11 @@ fn reopening_an_intact_vault_costs_no_parse() {
     let count = 600;
     let (_dir, root) = folder();
     let (mut bench, parser, _batches) = seed(&root, count);
+    // «Intatto» vuol dire scritto **prima** di aprirlo: un file con la data
+    // del millisecondo in cui la prima apertura guarda il disco è *racily
+    // clean* (difetto 0187), non entra in anagrafe e la riapertura lo
+    // rilegge, giustamente.
+    beyond_the_millisecondo();
     bench.reindex().expect("first opening");
     assert_eq!(parser.count(), count, "cold, everything is parsed, once");
     drop(bench);
