@@ -927,23 +927,31 @@ impl CoreIndex {
     }
 
     pub(crate) fn set_entry(&mut self, entry: VaultEntry) {
+        self.set_entry_observed(entry, crate::time::now_unix_millis());
+    }
+
+    /// Come [`set_entry`](Self::set_entry), per chi ha guardato il disco
+    /// **prima** di adesso: `observed_at` è l'orologio letto prima di guardare.
+    pub(crate) fn set_entry_observed(&mut self, entry: VaultEntry, observed_at: u64) {
         // **La regola *racily clean*, posta dove si osserva** (difetto 0187).
         //
-        // Una data che non è strettamente nel passato rispetto a adesso è una
-        // data che può ancora cambiare senza cambiare: il file può essere
-        // riscritto in questo stesso millisecondo, dopo che l'abbiamo guardato,
-        // e `mtime + size` direbbe lo stesso di prima. Quella voce si tiene in
-        // memoria — dove è vera, perché il contenuto lo si è appena letto — e
-        // **non si scrive** in anagrafe, così la prossima apertura la rilegge
-        // invece di crederle.
+        // Una data che non è strettamente nel passato rispetto al momento in
+        // cui la si è letta è una data che può ancora cambiare senza cambiare:
+        // il file può essere riscritto in quello stesso millisecondo, dopo che
+        // l'abbiamo guardato, e `mtime + size` direbbe lo stesso di prima.
+        // Quella voce si tiene in memoria — dove è vera, perché il contenuto lo
+        // si è appena letto — e **non si scrive** in anagrafe, così la prossima
+        // apertura la rilegge invece di crederle.
         //
         // Sta qui e non nei chiamanti perché qui ci passano tutti: la
-        // scansione, il rilevatore, la scrittura che sa cosa ha scritto. Ed è
-        // qui e non alla scrittura della tabella perché è *adesso* il momento
-        // dell'osservazione: fra questa riga e l'anagrafe scritta su disco ci
-        // sta una sessione intera, e una soglia presa là dichiarerebbe pulito
-        // tutto ciò che si è visto qui.
-        if entry.mtime < crate::time::now_unix_millis() {
+        // scansione, il rilevatore, la scrittura che sa cosa ha scritto. E la
+        // soglia è l'osservazione, non questa riga né la scrittura della
+        // tabella: la scansione guarda il disco in `prepare_scan_vault` e
+        // arriva qui solo in `finalize_scan_vault`, dopo gli indici; un
+        // orologio letto qui avrebbe dichiarato pulito ciò che là poteva
+        // ancora cambiare. Leggerlo prima di guardare sbaglia solo per
+        // eccesso: rilegge qualche voce in più, mai una in meno.
+        if entry.mtime < observed_at {
             self.observed_in_the_own_instant.remove(&entry.id);
         } else {
             self.observed_in_the_own_instant.insert(entry.id.clone());

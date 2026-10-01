@@ -2781,6 +2781,9 @@ impl PreparedFormatEdit {
 /// La scansione preparata senza chiamare codice esterno. Contiene una
 /// fotografia degli handle degli indici, non una guardia del `Workspace`.
 pub struct PreparedVaultScan {
+    /// L'orologio letto prima di guardare il disco: la soglia *racily clean*
+    /// delle voci di questa scansione (vedi `CoreIndex::set_entry_observed`).
+    observed_at: u64,
     folders: Vec<String>,
     entries: Vec<VaultEntry>,
     documents: Vec<VaultEntry>,
@@ -2791,6 +2794,7 @@ pub struct PreparedVaultScan {
 
 /// La risposta degli indici alla scansione, pronta per la finalizzazione.
 pub struct CompletedVaultScan {
+    observed_at: u64,
     folders: Vec<String>,
     entries: Vec<VaultEntry>,
     documents: Vec<VaultEntry>,
@@ -2803,6 +2807,7 @@ impl PreparedVaultScan {
     /// Esegue soltanto `IndexProvider::up_to_date`, sugli handle staccati.
     pub fn invoke(self) -> CompletedVaultScan {
         let PreparedVaultScan {
+            observed_at,
             folders,
             entries,
             documents,
@@ -2815,6 +2820,7 @@ impl PreparedVaultScan {
             up_to_date.clear();
         }
         CompletedVaultScan {
+            observed_at,
             folders,
             entries,
             documents,
@@ -5135,6 +5141,7 @@ impl Workspace {
     /// Chi apre aspetta la prima e non la seconda.
     pub fn prepare_scan_vault(&self) -> Result<PreparedVaultScan> {
         let _phase = tracing::info_span!(target: "fub.apertura", "scan_vault").entered();
+        let observed_at = crate::time::now_unix_millis();
         let scanned = self.docs.vault.scan()?;
         self.sweep_temporary(&scanned.temporary_remaining_back);
 
@@ -5187,6 +5194,7 @@ impl Workspace {
         }
 
         Ok(PreparedVaultScan {
+            observed_at,
             folders: scanned.folders,
             entries: entries.into_iter().map(|(entry, _)| entry).collect(),
             documents,
@@ -5200,6 +5208,7 @@ impl Workspace {
     /// esterne sono tornate. Nessuna callback provider gira in questa fase.
     pub fn finalize_scan_vault(&mut self, completed: CompletedVaultScan) -> Indexing {
         let CompletedVaultScan {
+            observed_at,
             folders,
             entries,
             documents,
@@ -5235,7 +5244,7 @@ impl Workspace {
         // Le impronte che mancano le riempirà la seconda fase, rimettendo in
         // anagrafe le voci che legge.
         for entry in entries {
-            self.indexes.core.set_entry(entry);
+            self.indexes.core.set_entry_observed(entry, observed_at);
         }
 
         // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
@@ -5831,10 +5840,13 @@ impl Workspace {
     /// della scansione, e vale anche a metà sessione — un provider registrato
     /// dopo l'apertura cambia cosa è un documento.
     fn touch_entry(&mut self, id: &DocId, fingerprint: Option<Revision>) -> Option<EntryKind> {
+        // L'orologio prima della `stat`: la soglia *racily clean* è il momento
+        // in cui si guarda (vedi `CoreIndex::set_entry_observed`).
+        let observed_at = crate::time::now_unix_millis();
         let Some((size, mtime)) = self.docs.vault.stat(id) else {
             return self.indexes.core.remove_entry(id);
         };
-        Some(self.set_entry(id, size, mtime, fingerprint))
+        Some(self.set_entry_observed(id, size, mtime, fingerprint, observed_at))
     }
 
     /// La metà di [`touch_entry`](Workspace::touch_entry) **che non guarda il
@@ -5859,18 +5871,32 @@ impl Workspace {
         mtime: u64,
         fingerprint: Option<Revision>,
     ) -> EntryKind {
+        self.set_entry_observed(id, size, mtime, fingerprint, crate::time::now_unix_millis())
+    }
+
+    fn set_entry_observed(
+        &mut self,
+        id: &DocId,
+        size: u64,
+        mtime: u64,
+        fingerprint: Option<Revision>,
+        observed_at: u64,
+    ) -> EntryKind {
         let kind = media::kind_of_ext(id, |ext| self.docs.registry.has_doc_ext(ext));
         // Un file che c'è dice che le cartelle che attraversa ci sono (§14.3):
         // senza questa riga una nota creata in una cartella nuova comparirebbe
         // in un albero che quella cartella non conosce fino alla riapertura.
         self.indexes.core.ensure_folders_of(id);
-        self.indexes.core.set_entry(VaultEntry {
-            id: id.clone(),
-            kind,
-            size,
-            mtime,
-            fingerprint,
-        });
+        self.indexes.core.set_entry_observed(
+            VaultEntry {
+                id: id.clone(),
+                kind,
+                size,
+                mtime,
+                fingerprint,
+            },
+            observed_at,
+        );
         kind
     }
 

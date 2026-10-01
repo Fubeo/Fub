@@ -869,11 +869,17 @@ fn an_attachment_is_fingerprinted_in_pieces() {
 /// bastano a far passare per assurda una data che il filesystem potrebbe dare
 /// davvero: due macchine con l'orologio non perfettamente allineato su un vault
 /// condiviso fanno esattamente questo.
+///
+/// E la scansione ci mette: dopo aver dato le date, `list` aspetta
+/// [`CurrentDate::SLOW`]. È il runner carico che ha fatto fallire questo test
+/// a caso: con la soglia letta alla chiusura della scansione, e non prima di
+/// guardare, cinque millisecondi passavano e la data instabile veniva creduta.
 #[derive(Default)]
 struct CurrentDate(MemStorage);
 
 impl CurrentDate {
     const UNSTABLE: &'static str = "appena-scritta.txt";
+    const SLOW: std::time::Duration = std::time::Duration::from_millis(20);
 
     fn now() -> u64 {
         std::time::SystemTime::now()
@@ -911,10 +917,15 @@ impl VaultStorage for CurrentDate {
     }
     fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
         let mut entries = self.0.list(dir)?;
+        let mut unstable = false;
         for entry in &mut entries {
             if entry.path.as_str().ends_with(Self::UNSTABLE) {
                 entry.stat.mtime = Self::now() + 5;
+                unstable = true;
             }
+        }
+        if unstable {
+            std::thread::sleep(Self::SLOW);
         }
         Ok(entries)
     }
