@@ -66,7 +66,8 @@
 // Playwright del lockfile, dopo aver incorporato i font e neutralizzato il
 // puntatore fra le scene. Quel commit ha ripetuto il banco 42/42 senza
 // allargare `COLOR_THRESHOLD` o `DIFF_THRESHOLD`; la CI continua a verificare
-// le stesse immagini e poi l'accessibilità nello stesso job `ubuntu-latest`.
+// le stesse immagini e poi l'accessibilità nello stesso job, fissato su
+// `ubuntu-24.04` perché `ubuntu-latest` cambia immagine senza avvisare.
 // Un esito locale diverso su una distribuzione o build di ripiego è drift
 // ambientale da diagnosticare, non un motivo per riscrivere i PNG.
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
