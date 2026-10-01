@@ -408,6 +408,13 @@ describe("autoPairDecision", () => {
     expect(decide("[|]]", "[")).toBeNull();
   });
 
+  it("conta la ] che closeBrackets ha già messo: [[ fa [[|]], non [[|]]]", () => {
+    // La prima `[` la chiude il motore (`[|]`); la seconda deve aggiungere
+    // una sola `]`.
+    expect(decide("[|]", "[")).toEqual({ action: "insert", text: "[]", cursor: 1 });
+    expect(decide("> [|]", "[")).toEqual({ action: "insert", text: "[]", cursor: 1 });
+  });
+
   it("una [ qualunque resta normale", () => {
     expect(decide("ciao |", "[")).toBeNull();
   });

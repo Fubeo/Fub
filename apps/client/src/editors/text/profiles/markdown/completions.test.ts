@@ -144,6 +144,21 @@ describe("wikilinkSource (headless)", () => {
     expect(res.options[0].apply).toBe("Alpha");
   });
 
+  it("fuori dalla prima riga il range resta sulla riga del cursore", async () => {
+    // Il range finiva a `inizio riga + posizione`: oltre la fine del
+    // documento, e Invio falliva lasciando il posto all'a capo.
+    const closed = "prima riga\nvedi [[Al]] fine";
+    const atClose = closed.indexOf("]]");
+    const res = (await wikilinkSource(searchNotes)(ctxAt(closed, atClose))) as CompletionResult;
+    expect(res.from).toBe(closed.indexOf("[[") + 2);
+    expect(res.to).toBe(atClose);
+    expect(res.options[0].apply).toBe("Alpha");
+
+    const open = "prima riga\nvedi [[Al";
+    const tail = (await wikilinkSource(searchNotes)(ctxAt(open, open.length))) as CompletionResult;
+    expect(tail.to).toBe(open.length);
+  });
+
   it("fuori contesto risponde null: nessun popup", async () => {
     const doc = "testo normale";
     expect(await wikilinkSource(searchNotes)(ctxAt(doc, doc.length))).toBeNull();

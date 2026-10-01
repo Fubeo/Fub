@@ -174,7 +174,10 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
     const docs = await searchNotes(match.query);
     return {
       from: line.from + match.from,
-      to: line.from + to,
+      // `to` è già una posizione del documento: sommarci di nuovo l'inizio
+      // della riga la portava oltre la fine fuori dalla prima riga, e Invio
+      // falliva in silenzio lasciando il posto all'a capo.
+      to,
       options: noteCompletions(
         docs,
         after.startsWith("]]") || after.startsWith("|") || after.startsWith("#"),

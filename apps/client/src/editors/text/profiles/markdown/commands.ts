@@ -671,8 +671,10 @@ export function autoPairDecision(
   switch (typed) {
     case "[":
       // `[[` → chiudi subito con `]]`, se una chiusura non è già lì davanti.
-      if (prev(1) === "[" && next(2) !== "]]") return { action: "insert", text: "[]]", cursor: 1 };
-      return null;
+      // Le `]` già davanti contano: la prima `[` l'ha quasi sempre chiusa
+      // `closeBrackets` del motore (`[|]`), e aggiungerne due ne lasciava tre.
+      if (prev(1) !== "[" || next(2) === "]]") return null;
+      return { action: "insert", text: next(1) === "]" ? "[]" : "[]]", cursor: 1 };
     case "]":
       // Davanti a una `]` già presente si scavalca invece di raddoppiare.
       return next(1) === "]" ? { action: "skip" } : null;
