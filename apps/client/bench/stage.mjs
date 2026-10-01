@@ -197,6 +197,11 @@ export async function prepareScene(page, scene, light, base, url) {
   // fotografa lo stato preparato, non un hover accidentale.
   await page.mouse.move(0, 0);
   await page.evaluate(() => document.fonts.ready);
+  // Anche le immagini: un `<img>` che arriva da un lease si decodifica dopo
+  // il montaggio, e fotografarlo a metà è un pixel che cambia a ogni corsa.
+  await page.evaluate(() =>
+    Promise.all([...document.images].map((img) => (img.complete ? null : img.decode().catch(() => null)))),
+  );
   await page.addStyleTag({ content: QUIET });
   // Un fotogramma dopo l'ultimo gesto: il layout è già calcolato, ma ciò che è
   // stato scritto adesso deve ancora essere dipinto.

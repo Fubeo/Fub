@@ -31,7 +31,7 @@ vi.mock("./document-bridge", () => ({
   attachRemoteSurface: fixture.attach,
   DocumentWindowUnsupported: class extends Error {},
 }));
-vi.mock("../panels/document", () => ({ canShowFile: fixture.showsBytes, textProfileFor: () => "markdown" }));
+vi.mock("../panels/document", () => ({ showsFileBytes: fixture.showsBytes, textProfileFor: () => "markdown" }));
 vi.mock("./layout", () => ({ activeDoc: () => null }));
 vi.mock("../ui/notify", () => ({ notify: fixture.notify }));
 vi.mock("../i18n/strings", () => ({ t: (key: string) => key }));

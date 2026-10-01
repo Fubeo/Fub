@@ -523,6 +523,7 @@ describe("CanvasEngine", () => {
     const api: DocumentSessionApi = {
       readDocument: async () => ({ text: original, revision: "rev-1", format_id: "canvas", source_kind: "text" }),
       writeDocument: async () => { throw { kind: "conflict", message: "remote revision changed" }; },
+      resourceWrite: async () => { throw new Error("una tela ha un formato: non si salva a byte"); },
       saveDraft: async () => {},
       discardDraft: async () => {},
     };

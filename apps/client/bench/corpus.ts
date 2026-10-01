@@ -192,11 +192,26 @@ export const CORPUS: Record<string, string> = {
     "Archiviata. Serve al banco per avere una cartella a due livelli.",
   ].join("\n"),
 
-  // Un file che **non** è un documento: l'host finto decide la specie
-  // dall'estensione, come il §14.1 dice che si decide, e l'esploratore deve
-  // saperlo disegnare accanto alle note.
-  "Risorse/schema.png": "(byte di un'immagine finta)",
 };
+
+// ---------------------------------------------------------------------------
+// I file che **non** sono documenti.
+// ---------------------------------------------------------------------------
+
+/// Byte veri: l'host finto decide la specie dall'estensione, come il §14.1
+/// dice che si decide, l'esploratore li disegna accanto alle note e le porte
+/// risorsa li servono davvero — un'immagine citata da una nota si vede.
+/// `schema.png` è uno schema di 240×150 a palette: tre riquadri e le frecce.
+export const RESOURCES: Record<string, { bytes: Uint8Array }> = {
+  "Risorse/schema.png": { bytes: base64("iVBORw0KGgoAAAANSUhEUgAAAPAAAACWCAMAAADXJvXnAAAAElBMVEX49vHEzdtcbozs8PfWelT///+HEQvFAAABnElEQVR42u3ay27DMAxEUYNN//+Xa2+yLWRSfGjurANwDsA6TqXrIoQQQgghhBBCCCHkiNjrTGxiznTQLjS5P/fjShg5p4l7Spg4qYl/yjMnBpzRJGJKjDipSciUe04AOKeJGtiixliPjf63CWDAgAEDBgz4O14ObHJgkwObHNiGgr3/iQLMSvPQ4muJFw9eLfnxABgwYMCtwZwtnQ9WOy6VOxDXu/Igd6lF79qS4MW0hV+t1fcF8+4ltuDm1WhAzq5QLS6YX0mumV2213V/UCWTa58f+cPLH5e5BTp8ISauWJMXgKweXbhZm9aIm1GnGXf3wlk/785WPbn79q4td0+51tz49bPu3tiOE7iRWziEG1V1EDdiGW2W19t4Hte3kyO574uP5b5bTZvsXe8/nbtKmM9dE5/AXXJM935eR0s70nw3/nVlGNntnSb2ex+xlneUOMR7iwEfvdGDdhowYMCAAQMGDBgwYMCAAQMGDBgwYMCAAQMGvFXM2dLpYLXjUrkDcb0rD3KXWi65a0tO80UIIYQQQgghhJDI/AHm73+1IPHBOAAAAABJRU5ErkJggg==") },
+};
+
+function base64(text: string): Uint8Array {
+  const raw = atob(text);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
 
 // ---------------------------------------------------------------------------
 // La nota lunga, generata.

@@ -23,6 +23,14 @@ export interface MenuItem {
   disabled?: boolean;
   /// La scorciatoia del gesto, scritta come si preme.
   hint?: string;
+  /// Una riga che spiega la voce, sotto il nome.
+  description?: string;
+  /// Una striscia di colori prima del nome: la voce è un aspetto da scegliere.
+  swatches?: readonly string[];
+  /// La voce è una scelta: una fra alternative (`radio`) o un interruttore
+  /// (`checkbox`), con il suo stato in `checked`.
+  choice?: "radio" | "checkbox";
+  checked?: boolean;
   run: () => void;
 }
 
@@ -77,12 +85,42 @@ export function showContextMenu(
       menu.appendChild(rule);
     }
     const b = document.createElement("button");
-    b.setAttribute("role", "menuitem");
+    b.setAttribute("role", item.choice ? `menuitem${item.choice}` : "menuitem");
+    if (item.choice) b.setAttribute("aria-checked", String(item.checked === true));
     b.tabIndex = -1;
+    if (item.swatches?.length) {
+      const strip = document.createElement("span");
+      strip.className = "menu-swatches";
+      strip.setAttribute("aria-hidden", "true");
+      for (const color of item.swatches) {
+        const swatch = document.createElement("span");
+        swatch.className = "menu-swatch";
+        swatch.style.background = color;
+        strip.append(swatch);
+      }
+      b.append(strip);
+    }
     const label = document.createElement("span");
     label.className = "menu-label";
     label.textContent = item.label;
-    b.append(label);
+    if (item.description) {
+      const body = document.createElement("span");
+      body.className = "menu-body";
+      const description = document.createElement("span");
+      description.className = "menu-description";
+      description.textContent = item.description;
+      body.append(label, description);
+      b.append(body);
+    } else {
+      b.append(label);
+    }
+    if (item.choice) {
+      const check = document.createElement("span");
+      check.className = "menu-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = item.checked ? "✓" : "";
+      b.append(check);
+    }
     if (item.hint) {
       const hint = document.createElement("kbd");
       hint.className = "menu-hint";

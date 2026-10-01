@@ -13,7 +13,11 @@ Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 - **lettura**, che mostra la resa senza cursore di testo.
 
 La superficie plain text offre soltanto **sorgente**: non simula capacità
-Markdown. I documenti `.fubsheet` usano invece la modalità **foglio** della
+Markdown. Un file `.svg` si apre come testo in **Sorgente**, **Diviso**
+(predefinita, con l'anteprima accanto o sotto) e **Anteprima**. L'anteprima si
+ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta
+lascia l'ultima buona, attenuata, sotto il motivo con riga e colonna. I
+documenti `.fubsheet` usano invece la modalità **foglio** della
 famiglia Grid; se il provider Grid non è servito, la stessa superficie resta
 navigabile e mostra gli input grezzi senza un secondo valutatore formule.
 Il commutatore nella barra di ciascun riquadro legge la dichiarazione della
@@ -68,10 +72,33 @@ anche dentro una nota trasclusa. In Live, portare il cursore nel blocco o usare
 multi-cursori mantengono visibili i blocchi che toccano; un blocco ancora privo
 della chiusura resta sorgente durante l'editing.
 
-La resa usa Mermaid incluso nell'app, senza un servizio esterno. Segue la luce
-chiara o scura e conserva la sorgente in una sezione espandibile. Un errore di
-sintassi o di caricamento mostra il motivo e apre la sorgente: non modifica il
-documento e non impedisce di rendere i diagrammi successivi.
+La resa usa Mermaid incluso nell'app, senza un servizio esterno, e conserva la
+sorgente in una sezione espandibile. Un errore di sintassi o di caricamento
+mostra il motivo e apre la sorgente: non modifica il documento e non impedisce
+di rendere i diagrammi successivi.
+
+Ogni diagramma ha uno stile, con una variante chiara e una scura scelte dalla
+luce del tema: **Armonia** (predefinito, derivato dai token del tema),
+**Acquerello** (pastelli su carta calda), **Aurora** (colori vivi e profondi),
+**Blueprint** (tavola tecnica su griglia) e **Inchiostro** (tratto sottile su
+avorio, una nota rossa). Lo stile generale è l'impostazione di macchina
+`appearance.diagram-style` e si cambia anche dal menu dello stile nella barra
+del diagramma. In Live lo stesso menu scrive o toglie in cima al recinto il
+commento Mermaid `%% stile: <stile>`, che vale soltanto per quel diagramma e
+che GitHub ignora; a mano vale anche `style:` con `harmony`, `watercolor` o
+`ink`. I font dello stile sono incorporati nell'SVG, perché un'immagine non vede
+i webfont della pagina. La barra offre anche **Esporta** (SVG copiato o
+salvato, PNG a risoluzione doppia) e **Schermo intero**, nella lightbox. Una
+resa con lo stesso sorgente, stile e luce si riusa senza ridisegnare.
+
+Dentro un recinto `mermaid` ancora vuoto (righe vuote e commenti `%%` non
+contano) il completamento propone i modelli di diagramma: flusso, sequenza,
+classi, stati, entità e relazioni, Gantt, torta, mappa mentale, linea del
+tempo, grafo git, percorso utente, quadranti, grafico XY e Sankey. Si apre
+scrivendo il tipo o il nome, in italiano o in inglese, oppure con `Ctrl-Space`
+su una riga vuota. Il modello entra nella lingua dell'interfaccia, col rientro
+della riga e, se manca, con la chiusura del recinto; un Gantt parte dalla data
+corrente.
 
 La configurazione usa la modalità di sicurezza `strict`, protegge i limiti di
 Mermaid e non consente alla nota di sostituire la policy o il CSS della shell.
@@ -111,11 +138,21 @@ solo sulla riga del cursore.
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
 si cerca per nome. I byte arrivano dal
-protocollo `fub-asset:` tramite un lease chiuso quando la resa si smonta; un
-riferimento che non si risolve resta marcato come non risolto. Negli embed
-`![[file|120]]` e `![[file|200x100]]` il suffisso è una dimensione, non
+protocollo `fub-asset` (`fub-asset://localhost/…`, su Windows
+`http://fub-asset.localhost/…`) tramite un lease chiuso quando la resa si
+smonta; un riferimento che non si risolve resta marcato come non risolto. Negli
+embed `![[file|120]]` e `![[file|200x100]]` il suffisso è una dimensione, non
 un'etichetta. Audio e video diventano un player con controlli, un PDF un
-collegamento al visualizzatore dedicato.
+collegamento al visualizzatore dedicato. Un media incorporato si mostra senza
+la cornice delle trasclusioni.
+
+Un clic su un'immagine del vault in Lettura apre la lightbox, una finestra
+modale su fondo scuro: rotella, pizzico, `+` e `−` ingrandiscono, `0` adatta,
+`1` mostra le dimensioni reali, trascinamento e frecce spostano, `R` ruota di
+90°, `Esc` chiude. In Live un'immagine del vault dentro una riga (un'immagine
+Markdown su una riga sola, o `![[foto.png|120]]`) si mostra quando il cursore è
+fuori dalla riga; un clic torna alla sorgente, `Mod`-clic apre la lightbox. URL
+remoti, `data:` e immagini per riferimento restano sorgente.
 
 In Live i callout diventano un blocco reso quando il cursore è fuori, e i
 recinti con info string dichiarata (Mermaid, formule) si comportano allo stesso
@@ -219,6 +256,11 @@ scelta dell'utente, e «Usa disco» scarta il buffer e la bozza solo dopo aver
 letto il file. Una bozza recuperata senza revisione di base, su un file che
 esiste, rientra direttamente in conflitto invece di sovrascriverlo.
 
+Un testo che nessun formato serve, come un SVG, non passa da `write_document`,
+che il kernel rifiuterebbe: la sessione lo scrive a byte con `resource_write`
+sulla stessa revisione di base, e le sue modifiche arrivano come
+`entry_changed`, con le stesse regole di eco e di conflitto.
+
 Il rilascio dell'ultima tab esegue il flush della scrittura e, se necessario,
 della bozza prima di chiudere la sessione; il lifecycle del riquadro e
 dell'editor resta separato da quello del documento. Durante la conferma di una
@@ -249,7 +291,13 @@ un owner distrugge le istanze che possiede.
 
 Registratore, slide e stampa compaiono nel menu del riquadro soltanto quando la
 superficie montata li sa fare: la stampa c'è anche per il canvas, non per lo
-sheet, che non ha un provider di stampa. Trascinare una nota o un allegato
+sheet, che non ha un provider di stampa. La stampa di una nota salva prima il buffer,
+perché la resa di stampa si legge dal disco, poi aspetta diagrammi, formule a
+blocco e immagini del vault, al massimo per `PRINT_WAIT_MS`. La carta è chiara
+anche col tema scuro, i diagrammi usano la variante chiara del loro stile, e
+didascalie, sorgenti e bottoni di copia non si stampano. Le formule in riga
+restano testo: la resa di stampa dell'host non le marca.
+Trascinare una nota o un allegato
 scrive un rimando nella sintassi del formato. Un punto chiesto da outline,
 backlink, ricerca o segnalibri si apre nel riquadro che mostra quel documento;
 sul canvas è la carta che lo contiene. Se la vista corrente non ci arriva, un
@@ -385,6 +433,8 @@ invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
 
 - `apps/client/src/editors/core/`
 - `apps/client/src/editors/text/profiles/markdown/`
+- `apps/client/src/editors/text/profiles/svg.ts` e `apps/client/src/editors/media/`
+- `apps/client/src/ui/mermaid.ts`, `mermaid-styles.ts`, `lightbox.ts` e `theme/diagram-style.ts`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/panels/format-bar.ts`
 - `apps/client/src/state/`

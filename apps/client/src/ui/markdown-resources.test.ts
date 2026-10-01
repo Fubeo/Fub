@@ -32,6 +32,7 @@ function apiFor(text: string): DocumentSessionApi {
       source_kind: "text",
     })),
     writeDocument: vi.fn(async () => "rev-2"),
+    resourceWrite: vi.fn(async () => ({ revision: "rev-2" })),
     saveDraft: vi.fn(async () => {}),
     discardDraft: vi.fn(async () => {}),
   };

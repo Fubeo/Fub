@@ -164,6 +164,49 @@ describe("tastiera e fuoco del menu", () => {
   });
 });
 
+describe("le voci a scelta", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("dicono il loro stato, mostrano i colori e restano comandi da un click", () => {
+    const run = vi.fn();
+    showContextMenu(clickEvent(), [
+      { label: "Aurora", description: "Colori vivi", swatches: ["#15122c", "#8d6eff"], choice: "radio", checked: true, run },
+      { label: "Inchiostro", choice: "radio", checked: false, run: () => {} },
+      { label: "Solo qui", choice: "checkbox", checked: false, separator: true, run: () => {} },
+      { label: "Semplice", run: () => {} },
+    ]);
+    const menu = document.getElementById("context-menu")!;
+    const items = [...menu.querySelectorAll<HTMLButtonElement>("button")];
+    expect(items.map((item) => [item.getAttribute("role"), item.getAttribute("aria-checked")])).toEqual([
+      ["menuitemradio", "true"],
+      ["menuitemradio", "false"],
+      ["menuitemcheckbox", "false"],
+      ["menuitem", null],
+    ]);
+    const first = items[0]!;
+    expect([...first.querySelectorAll<HTMLElement>(".menu-swatch")].map((swatch) => swatch.style.background))
+      .toHaveLength(2);
+    expect(first.querySelector(".menu-swatches")!.getAttribute("aria-hidden")).toBe("true");
+    expect(first.querySelector(".menu-body .menu-label")!.textContent).toBe("Aurora");
+    expect(first.querySelector(".menu-body .menu-description")!.textContent).toBe("Colori vivi");
+    expect(first.querySelector(".menu-check")!.textContent).toBe("✓");
+    expect(items[1]!.querySelector(".menu-check")!.textContent).toBe("");
+    expect(items[3]!.querySelector(".menu-check")).toBeNull();
+    // Il nome accessibile resta il nome, seguito dalla sua spiegazione.
+    expect(first.textContent).toBe("AuroraColori vivi✓");
+    first.click();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("il selettore di icona", () => {
   beforeEach(() => {
     vi.useFakeTimers();

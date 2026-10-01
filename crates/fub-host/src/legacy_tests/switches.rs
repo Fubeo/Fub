@@ -720,6 +720,10 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
         ("ACCENT_KEY", fub_host::settings::APPEARANCE_ACCENT),
         ("ZOOM_KEY", fub_host::settings::APPEARANCE_ZOOM),
         ("FRAME_RATE_KEY", fub_host::settings::APPEARANCE_FRAME_RATE),
+        (
+            "DIAGRAM_STYLE_KEY",
+            fub_host::settings::APPEARANCE_DIAGRAM_STYLE,
+        ),
     ];
     let core = fub_host::settings::core_settings();
 
@@ -768,6 +772,28 @@ fn the_frame_rate_caps_are_the_same_here_and_there() {
         .map(|cap| cap.trim().parse().expect("a cap is a number"))
         .collect();
     assert_eq!(declared, fub_host::settings::FRAME_RATE_CAPS.to_vec());
+}
+
+/// Gli stili dei diagrammi sono scritti due volte, come i tetti: il core li
+/// offre nel pannello, la shell li disegna. Uno stile che la shell non
+/// conoscesse resterebbe nel menu e disegnerebbe quello predefinito.
+#[test]
+fn the_diagram_styles_are_the_same_here_and_there() {
+    let styles_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/theme/diagram-style.ts");
+    let source = std::fs::read_to_string(&styles_ts)
+        .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", styles_ts.display()));
+    let declared: Vec<&str> = source
+        .lines()
+        .find_map(|row| {
+            row.strip_prefix("export const DIAGRAM_STYLE_IDS = [")?
+                .strip_suffix("] as const;")
+        })
+        .expect("the shell no longer declares DIAGRAM_STYLE_IDS")
+        .split(',')
+        .map(|id| id.trim().trim_matches('"'))
+        .collect();
+    assert_eq!(declared, fub_host::settings::DIAGRAM_STYLES.to_vec());
 }
 
 /// Come il tema, e per una posta più alta: l'interruttore della **memoria**

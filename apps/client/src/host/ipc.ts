@@ -6,7 +6,7 @@
 // importare `@tauri-apps` (§1.3), e il test `no-tauri-outside-host.test.ts`
 // lo verifica leggendo i sorgenti: un `import` di troppo altrove è rosso, non
 // una svista che si scopre il giorno del port su PWA o mobile.
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
@@ -161,6 +161,12 @@ export const api = {
   resourceReadChunk: (handle: string, offset: number, len: number) =>
     invoke<ArrayBuffer>("resource_read_chunk", { handle, offset, len }),
   resourceClose: (handle: string) => invoke<void>("resource_close", { handle }),
+  /// L'URL con cui la webview chiede i byte di un lease al protocollo
+  /// `fub-asset:`. La forma dipende dalla piattaforma — `fub-asset://localhost/N`
+  /// su Linux e macOS, `http://fub-asset.localhost/N` su Windows e Android —
+  /// e la sa soltanto Tauri: costruirla a mano rompeva le immagini delle note
+  /// su Windows. L'handle è un numero: niente percorso, niente query.
+  assetUrl: (handle: string) => convertFileSrc(handle, "fub-asset"),
   resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string) =>
     writeResource(mediaInvoke, id, bytes, expected, vault),
   viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>

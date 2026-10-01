@@ -1,9 +1,19 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { createTextEngine } from "../../engine";
 import { livePreview } from "./livepreview";
+import { closeContextMenu } from "../../../../ui/menu";
+
+// I diagrammi del test non passano da Mermaid: basta un'immagine qualsiasi.
+vi.mock("mermaid", () => ({
+  default: {
+    initialize() {},
+    render: async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>' }),
+  },
+}));
 
 const source = "Titolo\n\n- [ ] Fare";
 
@@ -204,6 +214,142 @@ describe("tabelle in Live", () => {
       add.click();
       expect(engine.getDoc()).toBe("| a | b |\n| --- | --- |\n| 1 | 2 |\n|  |  |\n\nFine");
       expect(parent.querySelectorAll(".cm-md-grid tbody tr").length).toBe(3);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+describe("un diagramma in Live", () => {
+  const note = "Testo\n\n```mermaid\nflowchart LR\nA-->B\n```\n\nFine";
+
+  function mountNote(readOnly: boolean) {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownLanguage }),
+        livePreview({ openWikilink() {}, searchTag() {} }),
+        EditorState.readOnly.of(readOnly),
+      ],
+    });
+    engine.setDoc(note);
+    return { parent, engine, cleanup: () => { closeContextMenu(); engine.destroy(); parent.remove(); } };
+  }
+
+  function openStyleMenu(parent: HTMLElement): void {
+    parent.querySelector<HTMLButtonElement>(".mermaid-diagram .mermaid-action")!.click();
+  }
+
+  it("«Solo per questo diagramma» scrive la direttiva in cima al recinto, e la toglie", () => {
+    const { parent, engine, cleanup } = mountNote(false);
+    try {
+      expect(parent.querySelector(".mermaid-diagram")).not.toBeNull();
+      openStyleMenu(parent);
+      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      expect(engine.getDoc()).toBe("Testo\n\n```mermaid\n%% stile: armonia\nflowchart LR\nA-->B\n```\n\nFine");
+      // Il widget rinasce dal nuovo sorgente: adesso lo stile è suo.
+      openStyleMenu(parent);
+      const radios = [...document.querySelectorAll<HTMLButtonElement>('#context-menu [role="menuitemradio"]')];
+      radios[2]!.click();
+      expect(engine.getDoc()).toBe("Testo\n\n```mermaid\n%% stile: aurora\nflowchart LR\nA-->B\n```\n\nFine");
+      openStyleMenu(parent);
+      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      expect(engine.getDoc()).toBe(note);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("in sola lettura il sorgente non si scrive", () => {
+    const { parent, engine, cleanup } = mountNote(true);
+    try {
+      openStyleMenu(parent);
+      expect(document.querySelector('#context-menu [role="menuitemcheckbox"]')).toBeNull();
+      expect(engine.getDoc()).toBe(note);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+describe("un'immagine in mezzo al testo, in Live", () => {
+  const note = "Il logo ![Marchio|120](Risorse/logo.png) in riga\n\nAltro";
+
+  function mountNote() {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const mounted: { html: string; container: HTMLElement; disposed: boolean }[] = [];
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownLanguage }),
+        livePreview({
+          openWikilink() {},
+          searchTag() {},
+          // La resa vera sanifica e idrata; qui basta sapere chi è montato e
+          // quando si smonta.
+          mountRendered(container, html) {
+            const record = { html, container, disposed: false };
+            mounted.push(record);
+            container.innerHTML = '<img alt="Marchio" data-vault-id="Risorse/logo.png">';
+            return () => { record.disposed = true; };
+          },
+        }),
+      ],
+    });
+    engine.setDoc(note);
+    const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
+    view.dispatch({ selection: { anchor: note.length } });
+    return { parent, engine, view, mounted, cleanup: () => { engine.destroy(); parent.remove(); } };
+  }
+
+  it("fuori dal cursore la resa monta l'HTML di Lettura; col cursore sopra torna sorgente", () => {
+    const { parent, view, mounted, cleanup } = mountNote();
+    try {
+      const widget = parent.querySelector<HTMLElement>(".cm-line .cm-fub-image");
+      expect(widget).not.toBeNull();
+      expect(mounted).toHaveLength(1);
+      expect(mounted[0]!.html).toBe('<img src="Risorse/logo.png" alt="Marchio" width="120">');
+      expect(mounted[0]!.container).toBe(widget);
+      expect(parent.querySelector(".cm-line")!.textContent).toBe("Il logo  in riga");
+
+      view.dispatch({ selection: { anchor: 3 } });
+      expect(parent.querySelector(".cm-fub-image")).toBeNull();
+      expect(mounted[0]!.disposed).toBe(true);
+      expect(parent.querySelector(".cm-line")!.textContent).toBe("Il logo ![Marchio|120](Risorse/logo.png) in riga");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("scrivere altrove non rimonta l'immagine, cambiarla sì", () => {
+    const { view, mounted, cleanup } = mountNote();
+    try {
+      view.dispatch({ changes: { from: note.length, insert: " e poi" }, selection: { anchor: note.length + 6 } });
+      expect(mounted).toHaveLength(1);
+      expect(mounted[0]!.disposed).toBe(false);
+
+      const at = note.indexOf("120");
+      view.dispatch({ changes: { from: at, to: at + 3, insert: "240" } });
+      expect(mounted).toHaveLength(2);
+      expect(mounted[0]!.disposed).toBe(true);
+      expect(mounted[1]!.html).toContain('width="240"');
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("Mod-clic sull'immagine è della resa: l'editor non sposta il cursore", () => {
+    const { parent, view, cleanup } = mountNote();
+    try {
+      const image = parent.querySelector<HTMLImageElement>(".cm-fub-image img")!;
+      image.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ctrlKey: true }));
+      expect(view.state.selection.main.head).toBe(note.length);
+      expect(parent.querySelector(".cm-fub-image")).not.toBeNull();
     } finally {
       cleanup();
     }

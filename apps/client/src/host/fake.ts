@@ -58,6 +58,7 @@ import type {
   Organization,
   PluginError,
   QueryExpr,
+  ResourceDescriptor,
   QueryPredicate,
   SettingEntry,
   SettingValue,
@@ -72,6 +73,7 @@ import type {
   KnownVault,
 } from "./contract";
 import type { SaveArtifactOutcome } from "./ipc";
+import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
 ///
@@ -84,10 +86,33 @@ export interface Call {
 }
 
 /// Un documento del vault finto: il testo e la revisione che lo nomina.
+/// `bytes` c'è soltanto per i file binari (`Options.resources`): per gli altri
+/// i byte sono l'UTF-8 del testo, come sul disco.
 interface Document {
   text: string;
   revision: string;
+  bytes?: Uint8Array;
+  mime?: string;
 }
+
+/// Un file binario del vault finto: i byte e, se serve, il MIME che l'host
+/// dichiarerebbe (altrimenti lo si deduce dal nome, come fa il kernel).
+export interface FakeResource {
+  bytes: Uint8Array;
+  mime?: string;
+}
+
+/// Un lease aperto dal finto: il documento com'era all'apertura e, pigro,
+/// l'URL `blob:` che `assetUrl` consegna e `resourceClose` revoca.
+interface Lease {
+  id: string;
+  bytes: Uint8Array;
+  mime: string;
+  url: string | null;
+}
+
+/// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
+const CHUNK_MAX = 64 * 1024;
 
 /// Una voce del cestino finto.
 interface Trashed {
@@ -127,6 +152,9 @@ export interface Options {
   customQueries?: Record<string, (query: unknown) => unknown>;
   /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
   knownVaults?: KnownVault[];
+  /// I file binari del vault: path → byte. Compaiono nell'albero come gli
+  /// altri, e le porte risorsa li servono davvero, a fette.
+  resources?: Record<string, FakeResource>;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
 }
@@ -188,6 +216,30 @@ export interface FakeHost {
   emit(event: KernelEvent): boolean;
 }
 
+/// Un path di link letto dalla cartella di `from`, come `resolve_against` in
+/// `fub-abi`: il frammento cade, il percent-encoding si decodifica, `/` parte
+/// dalla radice del vault e un `..` oltre la radice non nomina niente.
+function resolveAgainst(from: string, raw: string): string | null {
+  const bare = raw.split("#")[0]!.trim();
+  let path: string;
+  try {
+    path = decodeURIComponent(bare);
+  } catch {
+    path = bare;
+  }
+  if (!path) return null;
+  const segments = path.startsWith("/") ? [] : from.split("/").slice(0, -1).filter(Boolean);
+  for (const segment of path.replace(/^\//, "").split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      if (segments.pop() === undefined) return null;
+    } else {
+      segments.push(segment);
+    }
+  }
+  return segments.length ? segments.join("/") : null;
+}
+
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
@@ -227,12 +279,51 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const createdFolders = new Set<string>();
 
   for (const [id, text] of Object.entries(options.file ?? {})) write(id, text);
+  for (const [id, resource] of Object.entries(options.resources ?? {})) writeBytes(id, resource.bytes, resource.mime);
+
+  /// I lease aperti, per handle. Un id che non c'è non si apre: il finto
+  /// non inventa byte.
+  const leases = new Map<string, Lease>();
+  let nextLease = 0;
 
   function write(id: string, text: string): string {
     revision += 1;
     const rev = `r${revision}`;
     docs.set(id, { text, revision: rev });
     return rev;
+  }
+
+  /// Posa byte grezzi. Se sono UTF-8 valido il file torna testo — è ciò che
+  /// fa `resource_write` su un `.svg` — altrimenti resta binario, col testo
+  /// vuoto: nessuna ricerca trova parole dentro un PNG.
+  function writeBytes(id: string, bytes: Uint8Array, mime?: string): string {
+    let text: string | null = null;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      text = null;
+    }
+    if (text !== null && mime === undefined) return write(id, text);
+    revision += 1;
+    const rev = `r${revision}`;
+    docs.set(id, { text: text ?? "", revision: rev, bytes: bytes.slice(), mime });
+    return rev;
+  }
+
+  /// I byte di un documento come li vedrebbe il disco.
+  function bytesOf(doc: Document): Uint8Array {
+    return doc.bytes ?? new TextEncoder().encode(doc.text);
+  }
+
+  /// Il formato che il registro dei provider riconoscerebbe dall'estensione,
+  /// o `null`: allora nessun provider serve il file e `write_document` lo
+  /// rifiuta (`unserved`), come nel kernel.
+  function formatOf(id: string): string | null {
+    if (id.endsWith(".fubsheet")) return "fubsheet";
+    if (id.endsWith(".canvas")) return "canvas";
+    if (id.endsWith(".base")) return "base";
+    if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
+    return null;
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -316,10 +407,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
   }
 
   function entry(id: string): VaultEntry {
+    const doc = docs.get(id);
     return {
       id,
       kind: entryKind(id),
-      size: docs.get(id)?.text.length ?? 0,
+      size: doc ? bytesOf(doc).byteLength : 0,
       mtime: 0,
       fingerprint: null,
     };
@@ -467,6 +559,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return { kind: "jobs", value: [] };
       case "resolve": {
         const target = q.target;
+        if (target.kind === "path") {
+          // Come il kernel: relativo alla cartella di chi scrive il link,
+          // senza frammento, e un file del vault qualsiasi — nota o allegato.
+          const path = resolveAgainst(q.from ?? "", target.value);
+          const hit = path === null ? undefined : [path, `${path}.md`].find((id) => docs.has(id));
+          return { kind: "resolved", value: hit ? { doc: hit } : null };
+        }
         if (target.kind !== "wiki") return { kind: "resolved", value: null };
         // Un wikilink **senza pagina** (`[[#Sezione]]`, `[[#^blocco]]`) nomina
         // il documento che lo ospita: il finto lo risponde come il kernel, o
@@ -477,7 +576,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
           return { kind: "resolved", value: q.from ? { doc: q.from } : null };
         }
         const expected = `${page}.md`;
-        const hit = [...docs.keys()].find((id) => id === expected || id.endsWith(`/${expected}`));
+        // Una nota per nome, poi un allegato per nome: `![[foto.png]]`.
+        const hit = [...docs.keys()].find((id) => id === expected || id.endsWith(`/${expected}`))
+          ?? [...docs.keys()].find((id) => id === page || id.endsWith(`/${page}`));
         return { kind: "resolved", value: hit ? { doc: hit } : null };
       }
       case "tags":
@@ -635,25 +736,57 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return gate("readDocument", [id], Promise.resolve({
           text: doc.text,
           revision: doc.revision,
-          format_id: id.endsWith(".fubsheet")
-            ? "fubsheet"
-            : id.endsWith(".canvas")
-              ? "canvas"
-              : id.endsWith(".base")
-                ? "base"
-                : id.endsWith(".md") || id.endsWith(".markdown")
-                  ? "markdown"
-                  : null,
+          format_id: formatOf(id),
           source_kind: "text",
         }));
       },
-      resourceOpen: (id, vault) =>
-        gate("resourceOpen", [id, vault], Promise.reject(new Error("host fake: risorse binarie non disponibili"))),
-      resourceReadChunk: (handle, offset, len) =>
-        gate("resourceReadChunk", [handle, offset, len], Promise.reject(new Error("host fake: risorsa non aperta"))),
-      resourceClose: (handle) => gate("resourceClose", [handle], Promise.resolve()),
-      resourceWrite: (id, bytes, expected, vault) =>
-        gate("resourceWrite", [id, bytes, expected, vault], Promise.reject(new Error("host fake: binary storage is unavailable"))),
+      resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
+        const doc = docs.get(id);
+        if (!doc) throw { kind: "not_found", message: `host fake: «${id}» non c'è` } satisfies PluginError;
+        nextLease += 1;
+        const handle = String(nextLease);
+        const mime = doc.mime ?? mimeOrOctet(id);
+        const bytes = bytesOf(doc);
+        leases.set(handle, { id, bytes, mime, url: null });
+        return { handle, id, len: bytes.byteLength, mime, kind: mediaKindOfMime(mime), revision: doc.revision };
+      })),
+      resourceReadChunk: (handle, offset, len) => gate("resourceReadChunk", [handle, offset, len], Promise.resolve().then(() => {
+        const lease = leases.get(handle);
+        if (!lease) throw new Error("host fake: risorsa non aperta");
+        const start = Math.min(Math.max(0, offset), lease.bytes.byteLength);
+        const end = Math.min(start + Math.max(0, Math.min(len, CHUNK_MAX)), lease.bytes.byteLength);
+        return lease.bytes.slice(start, end).buffer as ArrayBuffer;
+      })),
+      resourceClose: (handle) => gate("resourceClose", [handle], Promise.resolve().then(() => {
+        const lease = leases.get(handle);
+        if (lease?.url) URL.revokeObjectURL(lease.url);
+        leases.delete(handle);
+      })),
+      // Nel browser (banco) l'URL è un `blob:` dei byte del lease, che
+      // `resourceClose` revoca: così un'immagine del vault finto si vede
+      // davvero. Dove `createObjectURL` non c'è (i test in Node) resta la
+      // forma del protocollo, che nessuno carica.
+      assetUrl: (handle) => {
+        const lease = leases.get(handle);
+        if (!lease || typeof URL.createObjectURL !== "function") return `fub-asset://localhost/${handle}`;
+        lease.url ??= URL.createObjectURL(new Blob([lease.bytes as BlobPart], { type: lease.mime }));
+        return lease.url;
+      },
+      // `expected` null è «solo creazione», una stringa è il CAS sulla
+      // revisione: è il contratto di `resource_write`.
+      resourceWrite: (id, bytes, expected, vault) => gate("resourceWrite", [id, bytes, expected, vault], Promise.resolve().then(() => {
+        const before = docs.get(id);
+        if (expected === null && before) {
+          throw { kind: "already_exists", message: `host fake: «${id}» esiste già` } satisfies PluginError;
+        }
+        if (expected !== null && before?.revision !== expected) {
+          throw { kind: "conflict", message: `conflict: «${id}» è cambiato sotto` } satisfies PluginError;
+        }
+        const rev = writeBytes(id, bytes, before?.bytes ? before.mime : undefined);
+        const kind = entryKind(id);
+        emit(kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind });
+        return { id, revision: rev };
+      })),
       viewerOpen: (url, title, policy) =>
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
@@ -699,6 +832,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const fault = faults.get("writeDocument");
         if (fault !== undefined) {
           return gate("writeDocument", [id, source, base], Promise.reject(new Error(fault)));
+        }
+        // Nessun provider serve un file senza formato: il kernel rifiuta la
+        // scrittura (`NoProvider`), e lo fa anche il finto — chi salva un
+        // `.svg` o un `.txt` passa da `resourceWrite`.
+        if (formatOf(id) === null) {
+          const unserved: PluginError = { kind: "unserved", message: `host fake: nessun formato serve «${id}»` };
+          return gate("writeDocument", [id, source, base], Promise.reject(unserved));
         }
         const before = docs.get(id);
         if (base.kind === "descends_from" && before && before.revision !== base.value) {
@@ -970,11 +1110,16 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!before) throw new Error(`host fake: «${from}» non esiste`);
       docs.delete(from);
       docs.set(to, before);
-      emit({ type: "document_renamed", from, to });
+      // Ciò che non è un documento cambia con gli eventi `entry_*`, come nel
+      // kernel: la shell che li ignorasse qui se ne accorgerebbe.
+      const kind = entryKind(from);
+      emit(kind === "document" ? { type: "document_renamed", from, to } : { type: "entry_renamed", from, to, kind });
     },
     writeFromOutside: (id, text) => {
       write(id, text);
-      listener?.({ event: { type: "document_changed", id }, origin: { actor: { kind: "watcher" }, batch: null } });
+      const kind = entryKind(id);
+      const event: KernelEvent = kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind };
+      listener?.({ event, origin: { actor: { kind: "watcher" }, batch: null } });
     },
     requestDocumentWindowClose: (label) => {
       const request = documentWindows.get(label);

@@ -5,8 +5,28 @@ import { renderMarkdown } from "./render";
 
 const query = vi.hoisted(() => ({ renderEmbed: vi.fn() }));
 vi.mock("../../../../host/query", () => query);
-import { mountMarkdown, sourceElementAt } from "./mount";
+// Chi monta i diagrammi, e con quale luce: il resto è il componente vero.
+const diagrams = vi.hoisted(() => ({ appearances: [] as unknown[] }));
+vi.mock("../../../../ui/mermaid", async (original) => {
+  const real = await original<typeof import("../../../../ui/mermaid")>();
+  return {
+    ...real,
+    mountMermaidBlocks: (container: HTMLElement, options?: Parameters<typeof real.mountMermaidBlocks>[1]) => {
+      diagrams.appearances.push(options?.appearance);
+      return real.mountMermaidBlocks(container, options);
+    },
+  };
+});
+vi.mock("mermaid", () => ({
+  default: {
+    initialize() {},
+    render: async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>' }),
+  },
+}));
+import { mountMarkdown, mountRenderedDocument, sourceElementAt } from "./mount";
 import { registerCustomRenderer } from "../../../../ui/custom";
+import { closeLightbox } from "../../../../ui/lightbox";
+import { setReducedMotionPreference } from "../../../../theme/reduced-motion";
 
 const disposers: (() => void)[] = [];
 function mount(html: string, element: HTMLElement = document.createElement("div")): HTMLElement {
@@ -29,6 +49,45 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("la resa dell'host montata come la Lettura (la stampa)", () => {
+  it("marca i recinti che il vault dichiara, disegna i diagrammi nella luce chiesta, e smonta tutto", async () => {
+    diagrams.appearances.length = 0;
+    const container = document.createElement("div");
+    document.body.append(container);
+    const html = '<pre><code class="language-mermaid">flowchart LR\nA--&gt;B</code></pre>'
+      + '<pre><code class="language-math">e^{i\\pi}</code></pre>'
+      + '<pre><code class="language-plantuml">@startuml</code></pre>'
+      + '<pre><code class="language-rust">fn main() {}</code></pre>'
+      + '<div class="embed" data-embed-page="Altra">Altra</div>';
+    const mounted = mountRenderedDocument(container, { html, parts: [] }, {
+      documentId: "Nota.md",
+      declaredFences: new Set(["mermaid", "math"]),
+      diagramAppearance: "light",
+    });
+    expect(container.querySelector(".mermaid-diagram")).not.toBeNull();
+    expect(diagrams.appearances).toEqual(["light"]);
+    expect(container.querySelector<HTMLElement>(".math-block")?.dataset.tex).toBe("e^{i\\pi}");
+    // Un recinto che il vault non dichiara resta codice.
+    expect(container.querySelector("code.language-plantuml")?.parentElement?.hasAttribute("data-declared-fence")).toBe(false);
+    expect(container.querySelector("code.language-rust")).not.toBeNull();
+
+    await mounted.ready;
+    expect(query.renderEmbed).toHaveBeenCalledWith("Altra", null, null);
+    expect(container.querySelector(".embed-loaded")?.textContent).toBe("contenuto");
+
+    mounted.dispose();
+    expect(container.childElementCount).toBe(0);
+  });
+
+  it("senza documento non idrata niente e `ready` è già risolta", async () => {
+    const container = document.createElement("div");
+    const mounted = mountRenderedDocument(container, { html: '<div class="embed" data-embed-page="Altra">Altra</div>', parts: [] }, {});
+    await mounted.ready;
+    expect(query.renderEmbed).not.toHaveBeenCalled();
+    mounted.dispose();
+  });
+});
+
 describe("montaggio Markdown condiviso", () => {
   it("non confonde un'ancora della nota con quella di una trasclusione", () => {
     const root = mount('<div class="embed-loaded"><h2 id="sezione">Incorporata</h2></div><a href="#sezione">Vai</a><h2 id="sezione">Nota</h2>');
@@ -37,6 +96,31 @@ describe("montaggio Markdown condiviso", () => {
     root.querySelector("a")!.click();
     expect(own).toHaveBeenCalledOnce();
     expect(embedded).not.toHaveBeenCalled();
+  });
+
+  it("un clic su un'immagine del vault la apre nella lightbox, non la segue", () => {
+    setReducedMotionPreference(true);
+    try {
+      const root = mount('<p><img alt="Il porto"><img alt="esterna" src="https://esterno/b.png"></p>');
+      const [local, remote] = root.querySelectorAll("img");
+      // L'idratazione segna le immagini del vault con il loro id.
+      local!.dataset.vaultId = "Risorse/porto.png";
+      const click = (img: HTMLImageElement): MouseEvent => {
+        const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+        img.dispatchEvent(event);
+        return event;
+      };
+      click(remote!);
+      expect(document.querySelector(".lightbox")).toBeNull();
+      expect(click(local!).defaultPrevented).toBe(true);
+      const box = document.querySelector<HTMLElement>(".lightbox")!;
+      expect(box.getAttribute("aria-label")).toBe("Il porto");
+      expect(box.querySelector(".lightbox-caption")!.textContent).toBe("Risorse/porto.png");
+      closeLightbox();
+      expect(document.querySelector(".lightbox")).toBeNull();
+    } finally {
+      setReducedMotionPreference(false);
+    }
   });
 
   it("nessun link naviga la webview: relativo al vault, con schema al sistema", () => {

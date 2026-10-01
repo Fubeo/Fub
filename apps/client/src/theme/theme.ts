@@ -25,6 +25,7 @@ import { accentPalette, type ContrastLevel } from "./serie/recipe";
 import { mountCssSnippets } from "./snippets";
 import { setReducedMotionPreference } from "./reduced-motion";
 import { setFrameRatePreference } from "./frame-rate";
+import { setDiagramStylePreference } from "./diagram-style";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
@@ -48,6 +49,7 @@ export const ZOOM_KEY = "appearance.zoom";
 export const THEME_ID_KEY = "appearance.theme-id";
 export const MOTION_KEY = "appearance.motion";
 export const FRAME_RATE_KEY = "appearance.frame-rate";
+export const DIAGRAM_STYLE_KEY = "appearance.diagram-style";
 const THEME_CACHE = "fub.appearance.theme";
 export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
@@ -318,6 +320,7 @@ async function reread(): Promise<void> {
   contrastChoice = typeof contrast === "string" ? contrast : "";
   setReducedMotionPreference(valueOf(entries, MOTION_KEY) === "reduced");
   setFrameRatePreference(valueOf(entries, FRAME_RATE_KEY));
+  setDiagramStylePreference(valueOf(entries, DIAGRAM_STYLE_KEY));
   preferences = normalizedPreferences({
     density: valueOf(entries, DENSITY_KEY) as Density,
     body: valueOf(entries, BODY_KEY) as number,

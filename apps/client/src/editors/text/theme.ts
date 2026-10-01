@@ -167,9 +167,12 @@ const surfaces = EditorView.theme({
     borderTopColor: "var(--doc-tooltip-bg)",
     borderBottomColor: "var(--doc-tooltip-bg)",
   },
+  // La riga su cui cadrà l'Invio, col fondo della palette: quello della riga
+  // attiva sul fondo del tooltip non si distingueva, e con i quattordici
+  // modelli di diagramma bisogna vedere quale si sta per scegliere.
   ".cm-tooltip-autocomplete": {
     "& > ul > li[aria-selected]": {
-      backgroundColor: "var(--doc-active-line)",
+      backgroundColor: "var(--bg-active)",
       color: "var(--doc-fg)",
     },
   },

@@ -1,13 +1,24 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMermaidView, mountMermaidBlocks, registerMermaidRenderer, type MermaidView } from "./mermaid";
+import { createMermaidView, forgetMermaidRenders, mountMermaidBlocks, registerMermaidRenderer, type MermaidView } from "./mermaid";
 import { sourceElementAt } from "../editors/text/profiles/markdown/mount";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { mountTree, unmountTree } from "./node";
 import type { UiNode } from "../host/contract";
+import { closeContextMenu } from "./menu";
+import { closeLightbox } from "./lightbox";
+import { setReducedMotionPreference } from "../theme/reduced-motion";
+import { paletteFor } from "./mermaid-styles";
+import { diagramStylePreference, setDiagramStylePreference } from "../theme/diagram-style";
 
 const renderer = vi.hoisted(() => ({ render: vi.fn(), initialize: vi.fn() }));
 vi.mock("mermaid", () => ({ default: renderer }));
+const ipc = vi.hoisted(() => ({
+  setSetting: vi.fn(async (_key: string, _value: unknown) => {}),
+  saveArtifact: vi.fn(async (_name: string, _type: string, _bytes: readonly number[]) =>
+    ({ status: "saved" as const, path: "/esportati/diagramma.svg" })),
+}));
+vi.mock("../host/ipc", () => ({ api: ipc }));
 const mounted: MermaidView[] = [];
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"><title>Flusso di lavoro</title><text x="0" y="20">A → B</text></svg>';
 const linkedSvg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -37,10 +48,25 @@ function view(source: string): MermaidView {
 }
 
 afterEach(() => {
+  closeContextMenu();
   for (const diagram of mounted.splice(0)) diagram.destroy();
   document.body.replaceChildren();
+  delete document.documentElement.dataset.contrast;
+  forgetMermaidRenders();
+  setDiagramStylePreference(undefined);
+  ipc.setSetting.mockClear();
+  ipc.saveArtifact.mockClear();
   vi.restoreAllMocks();
 });
+
+/// L'ultima configurazione data a Mermaid.
+function lastConfig(): Record<string, unknown> & { themeVariables: Record<string, unknown> } {
+  return renderer.initialize.mock.calls[renderer.initialize.mock.calls.length - 1]![0];
+}
+
+function menuItems(role: string): HTMLButtonElement[] {
+  return [...document.querySelectorAll<HTMLButtonElement>(`#context-menu [role="${role}"]`)];
+}
 
 describe("Mermaid lifecycle", () => {
   it("renders native diagram nodes and preserves fallback when the engine changes", async () => {
@@ -116,7 +142,9 @@ describe("Mermaid lifecycle", () => {
     document.documentElement.dataset.theme = "light";
     await vi.waitFor(() => expect(complete).toBeTypeOf("function"));
     expect(nav.querySelector("a")).toBeNull();
-    document.documentElement.dataset.theme = "dark";
+    // Tornare al buio ritroverebbe la resa in cache: il terzo aspetto è il
+    // contrasto alto, che si ridisegna e fallisce.
+    document.documentElement.dataset.contrast = "high";
     complete({ svg: linkedSvg });
     await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("error"));
     expect(renderer.render.mock.calls.length).toBe(callsBefore + 3);
@@ -200,6 +228,174 @@ describe("Mermaid lifecycle", () => {
     const declared = mountMermaidBlocks(container);
     expect(container.querySelector("figure")).not.toBeNull();
     declared();
+  });
+});
+
+describe("gli stili dei diagrammi", () => {
+  it("disegna con lo stile scelto e ridisegna quando la scelta cambia", async () => {
+    document.documentElement.dataset.theme = "dark";
+    setDiagramStylePreference("aurora");
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:stile");
+    const diagram = view("flowchart LR; A-->B");
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    expect(diagram.element.dataset.diagramStyle).toBe("aurora");
+    expect(lastConfig().theme).toBe("base");
+    expect(lastConfig().themeVariables.primaryColor).toBe(paletteFor("aurora", "dark").primary.fill);
+    // La carta di Aurora allarga il disegno del suo margine.
+    expect(diagram.element.querySelector("img")!.width).toBeGreaterThan(100);
+    const calls = renderer.render.mock.calls.length;
+    setDiagramStylePreference("blueprint");
+    await vi.waitFor(() => expect(renderer.render.mock.calls.length).toBe(calls + 1));
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    expect(diagram.element.dataset.diagramStyle).toBe("blueprint");
+    expect(String(lastConfig().fontFamily)).toContain("JetBrains Mono");
+    expect(diagram.element.querySelector(".mermaid-action")!.getAttribute("aria-label"))
+      .toBe("Stile del diagramma: Blueprint");
+  });
+
+  it("lo stile scritto nel sorgente vince sulla scelta generale", async () => {
+    document.documentElement.dataset.theme = "light";
+    setDiagramStylePreference("aurora");
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:suo");
+    const diagram = view("%% stile: inchiostro\nflowchart LR; A-->B");
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    expect(diagram.element.dataset.diagramStyle).toBe("inchiostro");
+    expect(lastConfig().themeVariables.primaryBorderColor).toBe(paletteFor("inchiostro", "light").primary.border);
+    const calls = renderer.render.mock.calls.length;
+    setDiagramStylePreference("blueprint");
+    await Promise.resolve();
+    expect(renderer.render.mock.calls.length).toBe(calls);
+    expect(diagram.element.querySelector(".mermaid-action")!.getAttribute("aria-label"))
+      .toBe("Stile di questo diagramma: Inchiostro");
+  });
+
+  it("un diagramma già disegnato con lo stesso aspetto non si ridisegna, e ogni vista ha il suo URL", async () => {
+    document.documentElement.dataset.theme = "dark";
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValueOnce("blob:primo").mockReturnValueOnce("blob:secondo");
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const first = view("flowchart LR; A-->B");
+    await vi.waitFor(() => expect(first.element.dataset.state).toBe("ready"));
+    const calls = renderer.render.mock.calls.length;
+    const second = view("flowchart LR; A-->B");
+    expect(second.element.dataset.state).toBe("ready");
+    expect(renderer.render.mock.calls.length).toBe(calls);
+    expect(second.element.querySelector("img")!.getAttribute("src")).toBe("blob:secondo");
+    expect(second.element.querySelector("img")!.alt).toBe("Flusso di lavoro");
+    first.destroy();
+    expect(revoke).toHaveBeenCalledWith("blob:primo");
+    expect(revoke).not.toHaveBeenCalledWith("blob:secondo");
+  });
+
+  it("il menu Stile mostra i cinque stili, segna quello attivo e sceglie per tutti", async () => {
+    document.documentElement.dataset.theme = "dark";
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:menu");
+    const diagram = view("flowchart LR; A-->B");
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    const trigger = diagram.element.querySelector<HTMLButtonElement>(".mermaid-action")!;
+    trigger.click();
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    const items = menuItems("menuitemradio");
+    expect(items.map((item) => item.querySelector(".menu-label")!.textContent))
+      .toEqual(["Armonia", "Acquerello", "Aurora", "Blueprint", "Inchiostro"]);
+    expect(items.map((item) => item.getAttribute("aria-checked"))).toEqual(["true", "false", "false", "false", "false"]);
+    expect(items.every((item) => item.querySelectorAll(".menu-swatch").length === 6)).toBe(true);
+    // In Lettura il sorgente non si scrive: niente «solo questo diagramma».
+    expect(menuItems("menuitemcheckbox")).toHaveLength(0);
+    items[3]!.click();
+    expect(ipc.setSetting).toHaveBeenCalledWith("appearance.diagram-style", "blueprint");
+    expect(diagramStylePreference()).toBe("blueprint");
+    await vi.waitFor(() => expect(diagram.element.dataset.diagramStyle).toBe("blueprint"));
+  });
+
+  it("se l'impostazione non si scrive, la scelta torna indietro", async () => {
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:rifiuto");
+    ipc.setSetting.mockRejectedValueOnce(new Error("disco pieno"));
+    const diagram = view("flowchart LR; A-->B");
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    diagram.element.querySelector<HTMLButtonElement>(".mermaid-action")!.click();
+    menuItems("menuitemradio")[2]!.click();
+    expect(diagramStylePreference()).toBe("aurora");
+    await vi.waitFor(() => expect(diagramStylePreference()).toBe("armonia"));
+  });
+
+  it("«Solo per questo diagramma» scrive la direttiva, e poi la scelta resta sua", async () => {
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:solo");
+    const edits: unknown[] = [];
+    const plain = createMermaidView("flowchart LR; A-->B", { editSource: (edit) => edits.push(edit) });
+    mounted.push(plain);
+    document.body.append(plain.element);
+    await vi.waitFor(() => expect(plain.element.dataset.state).toBe("ready"));
+    plain.element.querySelector<HTMLButtonElement>(".mermaid-action")!.click();
+    const only = menuItems("menuitemcheckbox");
+    expect(only).toHaveLength(1);
+    expect(only[0]!.getAttribute("aria-checked")).toBe("false");
+    only[0]!.click();
+    expect(edits).toEqual([{ from: 0, to: 0, insert: "%% stile: armonia\n" }]);
+
+    const own = createMermaidView("%% stile: aurora\nflowchart LR; A-->B", { editSource: (edit) => edits.push(edit) });
+    mounted.push(own);
+    document.body.append(own.element);
+    await vi.waitFor(() => expect(own.element.dataset.state).toBe("ready"));
+    own.element.querySelector<HTMLButtonElement>(".mermaid-action")!.click();
+    expect(menuItems("menuitemcheckbox")[0]!.getAttribute("aria-checked")).toBe("true");
+    menuItems("menuitemradio")[3]!.click();
+    expect(edits[edits.length - 1]).toEqual({ from: 0, to: 16, insert: "%% stile: blueprint" });
+    expect(ipc.setSetting).not.toHaveBeenCalled();
+    own.element.querySelector<HTMLButtonElement>(".mermaid-action")!.click();
+    menuItems("menuitemcheckbox")[0]!.click();
+    expect(edits[edits.length - 1]).toEqual({ from: 0, to: 17, insert: "" });
+  });
+
+  it("Esporta compare a diagramma pronto e salva un SVG con la sua misura", async () => {
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:esporta");
+    const diagram = view("flowchart LR; A-->B");
+    const exporter = diagram.element.querySelectorAll<HTMLButtonElement>(".mermaid-action")[1]!;
+    expect(exporter.hidden).toBe(true);
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    expect(exporter.hidden).toBe(false);
+    exporter.click();
+    const items = menuItems("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Copia come SVG", "Salva come SVG…", "Salva come PNG…"]);
+    items[1]!.click();
+    await vi.waitFor(() => expect(ipc.saveArtifact).toHaveBeenCalledTimes(1));
+    const [name, type, bytes] = ipc.saveArtifact.mock.calls[0]!;
+    expect(name).toBe("diagramma-flowchart.svg");
+    expect(type).toBe("image/svg+xml");
+    const saved = new TextDecoder().decode(new Uint8Array(bytes));
+    expect(saved).toContain('width="100"');
+    expect(saved).toContain('height="40"');
+  });
+});
+
+describe("il diagramma a schermo intero", () => {
+  it("il bottone compare a diagramma pronto e apre la lightbox; anche un clic sul disegno", async () => {
+    // Senza moto la lightbox si toglie subito, invece che a fine animazione.
+    setReducedMotionPreference(true);
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:intero");
+    const diagram = view("flowchart LR; A-->B");
+    const full = diagram.element.querySelectorAll<HTMLButtonElement>(".mermaid-action")[2]!;
+    expect(full.getAttribute("aria-label") ?? full.textContent).toContain("Schermo intero");
+    expect(full.hidden).toBe(true);
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    expect(full.hidden).toBe(false);
+    full.click();
+    const box = document.querySelector<HTMLElement>(".lightbox")!;
+    expect(box.getAttribute("aria-label")).toBe("Flusso di lavoro");
+    expect(box.querySelector(".lightbox-caption")!.textContent).toBe("Mermaid · flowchart");
+    closeLightbox();
+    expect(document.querySelector(".lightbox")).toBeNull();
+    diagram.element.querySelector<HTMLImageElement>("img")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(document.querySelector(".lightbox")).not.toBeNull();
+    closeLightbox();
+    setReducedMotionPreference(false);
   });
 });
 

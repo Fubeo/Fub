@@ -120,8 +120,18 @@ file che il vault non saprebbe aprire.
 L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene
 ogni voce del disco e non solo i documenti. Dopo sottocartelle e note mostra
 quindi anche allegati e file che nessun provider riconosce. Immagini, audio,
-video e PDF si aprono nel visualizzatore in sola lettura. Per gli altri file la
-shell avvisa che non c'è un visualizzatore e non tenta di leggerli come testo.
+video e PDF si aprono nel visualizzatore in sola lettura. Un SVG si apre invece
+come testo modificabile con l'anteprima accanto, e si salva a byte (vedi
+[Editor e anteprima](editor-and-preview.md)). Per gli altri file la shell
+avvisa che non c'è un visualizzatore e non tenta di leggerli come testo.
+
+Il visualizzatore delle immagini ingrandisce al cursore con la rotella o il
+pizzico, si trascina, ruota di 90°, adatta l'immagine alla finestra o la mostra
+alle dimensioni reali. Sotto la trasparenza alterna una scacchiera, un fondo
+chiaro e uno scuro; la barra dice formato, misure in pixel e peso del file. Un
+SVG, anche con prologo XML, commenti o `<!DOCTYPE>` prima di `<svg>`, si mostra
+come immagine inerte. HEIC e TIFF, che la webview non decodifica, mostrano un
+messaggio al posto dell'immagine e lasciano il file intatto.
 La finestra di duecento voci per livello vale per note e file insieme.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e

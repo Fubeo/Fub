@@ -53,6 +53,40 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
+/* Le voci che sono un aspetto: una striscia dei suoi colori, il nome con una
+   riga di spiegazione, il segno della scelta. */
+.context-menu .menu-swatches {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.context-menu .menu-swatch {
+  width: 7px;
+  height: 22px;
+}
+.context-menu .menu-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.context-menu .menu-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.context-menu .menu-check {
+  flex: 0 0 auto;
+  align-self: center;
+  min-width: 1em;
+  color: var(--accent-soft);
+  font-weight: var(--weight-bold);
+  text-align: center;
+}
 .context-menu button[aria-disabled="true"] {
   color: var(--muted);
   cursor: default;

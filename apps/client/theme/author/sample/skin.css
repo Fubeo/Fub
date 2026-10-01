@@ -1566,6 +1566,13 @@ progress::-moz-progress-bar {
   border-left-color: var(--doc-rule-soft);
   opacity: 0.7;
 }
+/* Un'immagine, un audio o un video incorporati sono il media, non una nota
+   riportata: niente cornice da citazione intorno. */
+.embed.embed-media {
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
 /* L'immagine che non si vede: il suo testo alternativo e il path, dove
    sarebbe stata, invece dell'icona rotta del browser. */
 .image-missing {
@@ -1814,17 +1821,69 @@ progress::-moz-progress-bar {
 }
 .mermaid-diagram figcaption {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-2) var(--space-4);
   margin-bottom: var(--space-3);
   font-weight: var(--weight-medium);
+}
+/* Stile, esportazione e sorgente: gesti secondari, a voce bassa finché non
+   li si cerca. */
+.mermaid-diagram .mermaid-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+.mermaid-diagram .mermaid-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.mermaid-diagram .mermaid-action:hover,
+.mermaid-diagram .mermaid-action:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--doc-fg);
+}
+.mermaid-diagram .mermaid-action[aria-expanded="true"] {
+  border-color: var(--doc-rule-soft);
+  background: var(--bg-active);
+  color: var(--doc-fg);
+}
+/* Tre colori dello stile attivo: lo si riconosce prima di leggerne il nome. */
+.mermaid-diagram .mermaid-swatches {
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--doc-rule-soft);
+}
+.mermaid-diagram .mermaid-swatches span {
+  width: 6px;
+  height: 12px;
 }
 .mermaid-diagram img {
   display: block;
   max-width: 100%;
   height: auto;
   margin-inline: auto;
+}
+/* Uno stile con la sua carta è una tavola appoggiata sulla cornice. Armonia
+   è trasparente e si fonde con la cornice. */
+.mermaid-diagram[data-diagram-style="acquerello"] img,
+.mermaid-diagram[data-diagram-style="aurora"] img,
+.mermaid-diagram[data-diagram-style="blueprint"] img,
+.mermaid-diagram[data-diagram-style="inchiostro"] img {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px var(--doc-rule-soft), 0 6px 18px -12px rgb(0 0 0 / 45%);
 }
 .mermaid-diagram summary {
   cursor: pointer;
@@ -2051,6 +2110,40 @@ progress::-moz-progress-bar {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+/* Le voci che sono un aspetto: una striscia dei suoi colori, il nome con una
+   riga di spiegazione, il segno della scelta. */
+.context-menu .menu-swatches {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.context-menu .menu-swatch {
+  width: 7px;
+  height: 22px;
+}
+.context-menu .menu-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.context-menu .menu-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.context-menu .menu-check {
+  flex: 0 0 auto;
+  align-self: center;
+  min-width: 1em;
+  color: var(--accent-soft);
+  font-weight: var(--weight-bold);
+  text-align: center;
 }
 .context-menu button[aria-disabled="true"] {
   color: var(--muted);
@@ -2654,6 +2747,271 @@ progress::-moz-progress-bar {
 }
 .modale .compare-line[data-side="theirs"] {
   background: var(--danger-wash);
+}
+
+/* ── skin/media.css ─────────────────────────────────────────────────────── */
+
+/* --- i media: visualizzatore, zoom, lightbox ------------------------------ */
+/*
+   Una sola vista ingrandisce tutto (`editors/media/zoom-view.ts`): l'immagine
+   aperta in un riquadro, l'SVG in anteprima, la foto o il diagramma nella
+   lightbox. Qui c'è come si vede; la geometria del palco — il contenuto posato
+   al centro e mosso con una trasformazione — la scrive la vista, perché è
+   gesto e non aspetto.
+
+   Il fondo sotto la trasparenza sta **sotto l'immagine**, non sotto tutto il
+   palco: la scacchiera dice dove finisce il file, e intorno resta la pagina.
+   Le sue caselle hanno la misura dello schermo a ogni scala: il passo lo
+   scrive la vista, perché dipende dallo zoom. */
+
+.media-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+}
+
+.media-image {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+
+.zoom-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.zoom-stage {
+  flex: 1;
+  min-height: 0;
+  cursor: zoom-in;
+  outline-offset: -2px;
+}
+.zoom-stage[data-zoomed="true"] {
+  cursor: grab;
+}
+.zoom-stage[data-dragging] {
+  cursor: grabbing;
+}
+
+.zoom-content {
+  user-select: none;
+  box-shadow: 0 0 0 1px var(--doc-rule-soft), 0 18px 40px -24px rgb(0 0 0 / 45%);
+}
+.zoom-content[data-animate] {
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.zoom-view[data-backdrop="checker"] .zoom-content {
+  background-color: var(--doc-bg);
+  background-image:
+    linear-gradient(45deg, var(--doc-rule-soft) 25%, transparent 25%, transparent 75%, var(--doc-rule-soft) 75%),
+    linear-gradient(45deg, var(--doc-rule-soft) 25%, transparent 25%, transparent 75%, var(--doc-rule-soft) 75%);
+}
+.zoom-view[data-backdrop="light"] .zoom-content {
+  background-color: rgb(255 255 255);
+}
+.zoom-view[data-backdrop="dark"] .zoom-content {
+  background-color: rgb(18 18 18);
+}
+
+/* La barra: i comandi a sinistra, la riga delle informazioni a destra, in
+   cifre tabellari perché la percentuale non balli mentre si zooma. */
+.zoom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--doc-rule-soft);
+  background: var(--doc-bg);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.zoom-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.zoom-button:hover,
+.zoom-button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--doc-fg);
+}
+.zoom-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.zoom-level {
+  min-width: 5ch;
+  text-align: center;
+  color: var(--doc-fg);
+}
+.zoom-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Le immagini della nota e i diagrammi si aprono nella lightbox. */
+.markdown-rendered img[data-vault-id],
+.markdown-preview img[data-vault-id],
+.mermaid-diagram img {
+  cursor: zoom-in;
+}
+
+/* --- la lightbox ---------------------------------------------------------- */
+/*
+   Una `.modale` come le altre, ma a tutta finestra e al buio in entrambe le
+   luci: una foto si guarda su un fondo che non le fa concorrenza. La barra
+   dello zoom diventa una pillola in basso, sopra il fondo. I bianchi valgono
+   solo su quel fondo: le regole dei pezzi passano per `.lightbox`, e un pezzo
+   mostrato da solo (il catalogo dei componenti) resta nell'inchiostro del
+   foglio. */
+.modale.lightbox {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: rgb(12 11 10 / 94%);
+}
+.lightbox .lightbox-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: rgb(255 255 255 / 78%);
+  font-size: var(--text-sm);
+}
+.lightbox-caption {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lightbox .lightbox-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 6%);
+  color: rgb(255 255 255 / 82%);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lightbox .lightbox-close:hover,
+.lightbox .lightbox-close:focus-visible {
+  background: rgb(255 255 255 / 14%);
+  color: rgb(255 255 255);
+}
+.lightbox-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.lightbox .zoom-stage {
+  cursor: default;
+}
+.lightbox .zoom-stage[data-zoomed="true"] {
+  cursor: grab;
+}
+.lightbox .zoom-stage[data-dragging] {
+  cursor: grabbing;
+}
+.lightbox .zoom-content {
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 70%);
+}
+.lightbox .zoom-bar {
+  align-self: center;
+  margin-top: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: rgb(28 27 25 / 92%);
+  color: rgb(255 255 255 / 70%);
+  box-shadow: 0 12px 32px -12px rgb(0 0 0 / 60%);
+}
+.lightbox .zoom-button {
+  border-radius: 999px;
+  color: rgb(255 255 255 / 72%);
+}
+.lightbox .zoom-button:hover,
+.lightbox .zoom-button:focus-visible {
+  background: rgb(255 255 255 / 10%);
+  color: rgb(255 255 255);
+}
+.lightbox .zoom-level {
+  color: rgb(255 255 255 / 92%);
+}
+.lightbox .zoom-info {
+  flex: 0 1 auto;
+  padding: 0 var(--space-2);
+}
+.lightbox .lightbox-error {
+  margin: auto;
+  color: rgb(255 255 255 / 80%);
+}
+
+/* --- l'anteprima di un SVG che si scrive ----------------------------------- */
+/*
+   Accanto al sorgente (modo Diviso) o da sola (Anteprima): è la stessa vista
+   che ingrandisce, e sopra c'è il motivo per cui l'ultima versione scritta non
+   si disegna. Intanto resta l'ultima buona, attenuata: si vede che è vecchia
+   senza perdere il riferimento. Chi mette i due riquadri fianco a fianco o
+   uno sopra l'altro è la struttura, come per i modi di Markdown. */
+.svg-preview {
+  display: flex;
+  flex-direction: column;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+}
+.pane-editor[data-svg-mode="live_preview"] > .svg-preview {
+  border-left: 1px solid var(--doc-rule-soft);
+}
+.pane-editor[data-svg-mode="live_preview"][data-svg-stack] > .svg-preview {
+  border-left: 0;
+  border-top: 1px solid var(--doc-rule-soft);
+}
+.svg-preview[data-stale] .zoom-content {
+  opacity: 0.45;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+.svg-error {
+  order: -1;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--danger);
+  background: var(--danger-wash);
+  color: var(--doc-fg);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── skin/notices.css ───────────────────────────────────────────────────── */

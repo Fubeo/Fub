@@ -18,6 +18,7 @@ vi.mock("./document-session", async (importOriginal) => {
         revision: "disk-1", format_id: "plain", source_kind: "text",
       }),
       writeDocument: async () => "disk-2",
+      resourceWrite: async () => ({ revision: "disk-2" }),
       saveDraft: async () => {},
       discardDraft: async () => {},
     }),

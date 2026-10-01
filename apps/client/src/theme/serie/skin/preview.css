@@ -324,6 +324,13 @@
   border-left-color: var(--doc-rule-soft);
   opacity: 0.7;
 }
+/* Un'immagine, un audio o un video incorporati sono il media, non una nota
+   riportata: niente cornice da citazione intorno. */
+.embed.embed-media {
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
 /* L'immagine che non si vede: il suo testo alternativo e il path, dove
    sarebbe stata, invece dell'icona rotta del browser. */
 .image-missing {
@@ -572,17 +579,69 @@
 }
 .mermaid-diagram figcaption {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-2) var(--space-4);
   margin-bottom: var(--space-3);
   font-weight: var(--weight-medium);
+}
+/* Stile, esportazione e sorgente: gesti secondari, a voce bassa finché non
+   li si cerca. */
+.mermaid-diagram .mermaid-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+.mermaid-diagram .mermaid-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.mermaid-diagram .mermaid-action:hover,
+.mermaid-diagram .mermaid-action:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--doc-fg);
+}
+.mermaid-diagram .mermaid-action[aria-expanded="true"] {
+  border-color: var(--doc-rule-soft);
+  background: var(--bg-active);
+  color: var(--doc-fg);
+}
+/* Tre colori dello stile attivo: lo si riconosce prima di leggerne il nome. */
+.mermaid-diagram .mermaid-swatches {
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--doc-rule-soft);
+}
+.mermaid-diagram .mermaid-swatches span {
+  width: 6px;
+  height: 12px;
 }
 .mermaid-diagram img {
   display: block;
   max-width: 100%;
   height: auto;
   margin-inline: auto;
+}
+/* Uno stile con la sua carta è una tavola appoggiata sulla cornice. Armonia
+   è trasparente e si fonde con la cornice. */
+.mermaid-diagram[data-diagram-style="acquerello"] img,
+.mermaid-diagram[data-diagram-style="aurora"] img,
+.mermaid-diagram[data-diagram-style="blueprint"] img,
+.mermaid-diagram[data-diagram-style="inchiostro"] img {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px var(--doc-rule-soft), 0 6px 18px -12px rgb(0 0 0 / 45%);
 }
 .mermaid-diagram summary {
   cursor: pointer;

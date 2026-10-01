@@ -9,7 +9,7 @@
 // viewer isolato o dal browser esterno, default negato.
 
 import type { Lifetime } from "../../ui/lifetime";
-import type { ResourceDescriptor } from "./media-types";
+import { formatBytes, type ResourceDescriptor } from "./media-types";
 import { t } from "../../i18n/strings";
 
 export interface MediaError {
@@ -45,12 +45,6 @@ function errorBox(error: MediaError, life: Lifetime, onOpenExternal?: () => void
     box.append(open);
   }
   return box;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
 function mountPlayer(

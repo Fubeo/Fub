@@ -7,7 +7,6 @@ export type { MediaKind, ResourceDescriptor, ResourceHandle } from "./media-type
 export {
   MEDIA_IPC_CHUNK,
   MEDIA_MAX_INLINE_BYTES,
-  assetUrl,
   mediaKindOfId,
   mediaKindOfMime,
   mimeOfId,

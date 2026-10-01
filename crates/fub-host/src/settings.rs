@@ -169,6 +169,18 @@ pub const APPEARANCE_MOTION: &str = "appearance.motion";
 pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
 /// I tetti offerti dal pannello, dal più alto.
 pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
+/// Lo stile dei diagrammi Mermaid: uno degli id di [`DIAGRAM_STYLES`]. Lo
+/// disegna la shell (`apps/client/src/ui/mermaid-styles.ts`); una nota può
+/// sceglierne un altro per un diagramma solo, con `%% stile: <id>`.
+pub const APPEARANCE_DIAGRAM_STYLE: &str = "appearance.diagram-style";
+/// Gli stili offerti, il predefinito per primo.
+pub const DIAGRAM_STYLES: [&str; 5] = [
+    "armonia",
+    "acquerello",
+    "aurora",
+    "blueprint",
+    "inchiostro",
+];
 pub const DEFAULT_ZOOM: f64 = 1.0;
 /// La cartella del vault in cui la shell deposita e cerca gli allegati.
 ///
@@ -548,6 +560,19 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 .collect(),
         ),
         choice(
+            APPEARANCE_DIAGRAM_STYLE,
+            C_DIAGRAM_STYLE,
+            C_DIAGRAM_STYLE_DESC,
+            DIAGRAM_STYLES[0],
+            vec![
+                UiOption::new(DIAGRAM_STYLES[0], Text::key(C_DIAGRAM_STYLE_ARMONIA)),
+                UiOption::new(DIAGRAM_STYLES[1], Text::key(C_DIAGRAM_STYLE_ACQUERELLO)),
+                UiOption::new(DIAGRAM_STYLES[2], Text::key(C_DIAGRAM_STYLE_AURORA)),
+                UiOption::new(DIAGRAM_STYLES[3], Text::key(C_DIAGRAM_STYLE_BLUEPRINT)),
+                UiOption::new(DIAGRAM_STYLES[4], Text::key(C_DIAGRAM_STYLE_INCHIOSTRO)),
+            ],
+        ),
+        choice(
             APPEARANCE_FONT,
             C_FONT,
             C_FONT_DESC,
@@ -888,6 +913,13 @@ const C_FRAME_RATE: &str = "core.frame_rate";
 const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
 const C_FRAME_RATE_DISPLAY: &str = "core.frame_rate.display";
 const C_FRAME_RATE_CAP: &str = "core.frame_rate.cap";
+const C_DIAGRAM_STYLE: &str = "core.diagram_style";
+const C_DIAGRAM_STYLE_DESC: &str = "core.diagram_style.desc";
+const C_DIAGRAM_STYLE_ARMONIA: &str = "core.diagram_style.armonia";
+const C_DIAGRAM_STYLE_ACQUERELLO: &str = "core.diagram_style.acquerello";
+const C_DIAGRAM_STYLE_AURORA: &str = "core.diagram_style.aurora";
+const C_DIAGRAM_STYLE_BLUEPRINT: &str = "core.diagram_style.blueprint";
+const C_DIAGRAM_STYLE_INCHIOSTRO: &str = "core.diagram_style.inchiostro";
 const C_GROUP_CHROME: &str = "core.group.chrome";
 const C_CHROME_SCHEMA: &str = "core.chrome.schema";
 const C_CHROME_SCHEMA_DESC: &str = "core.chrome.schema.desc";
@@ -1188,6 +1220,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
         .with(C_FRAME_RATE_DISPLAY, "Massimo dello schermo")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_DIAGRAM_STYLE, "Stile dei diagrammi")
+        .with(
+            C_DIAGRAM_STYLE_DESC,
+            "Colori e tratto dei diagrammi Mermaid; «%% stile: nome» lo cambia per uno solo.",
+        )
+        .with(C_DIAGRAM_STYLE_ARMONIA, "Armonia — segue il tema")
+        .with(C_DIAGRAM_STYLE_ACQUERELLO, "Acquerello — tinte pastello")
+        .with(C_DIAGRAM_STYLE_AURORA, "Aurora — colori vivi e profondi")
+        .with(C_DIAGRAM_STYLE_BLUEPRINT, "Blueprint — tavola tecnica")
+        .with(C_DIAGRAM_STYLE_INCHIOSTRO, "Inchiostro — editoriale")
         .with(C_CSS_SNIPPETS, "Frammenti CSS locali")
         .with(C_CSS_SNIPPETS_DESC, "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.")
         .with(C_GROUP_SYNC, "Sincronizzazione")
@@ -1424,7 +1466,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")
         .with(C_FRAME_RATE_DISPLAY, "Display maximum")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
-        .with(C_CSS_SNIPPETS, "Local CSS snippets")
+        .with(C_DIAGRAM_STYLE, "Diagram style")
+        .with(
+            C_DIAGRAM_STYLE_DESC,
+            "Colors and stroke of Mermaid diagrams; “%% style: name” changes a single one.",
+        )
+        .with(C_DIAGRAM_STYLE_ARMONIA, "Harmony — follows the theme")
+        .with(C_DIAGRAM_STYLE_ACQUERELLO, "Watercolor — pastels on paper")
+        .with(C_DIAGRAM_STYLE_AURORA, "Aurora — vivid and deep")
+        .with(C_DIAGRAM_STYLE_BLUEPRINT, "Blueprint — technical drawing")
+        .with(C_DIAGRAM_STYLE_INCHIOSTRO, "Ink — editorial")
         .with(C_CSS_SNIPPETS_DESC, "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.")
         .with(C_GROUP_SYNC, "Synchronization")
         .with(C_SYNC_SERVER_URL, "Synchronization server")

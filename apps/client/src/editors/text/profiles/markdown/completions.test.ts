@@ -3,6 +3,8 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import {
+  diagramFenceContext,
+  diagramTemplateSource,
   noteCompletions,
   tagCompletions,
   tagContext,
@@ -235,5 +237,93 @@ describe("tagSource (headless)", () => {
   it("su un heading risponde null", async () => {
     const doc = "# Heading";
     expect(await tagSource(listTags)(ctxAt(doc, doc.length))).toBeNull();
+  });
+});
+
+describe("diagramFenceContext", () => {
+  const at = (doc: string, pos = doc.length) => diagramFenceContext(ctxAt(doc, pos).state, pos);
+
+  it("nel corpo di un recinto mermaid ancora aperto, con la chiusura da aggiungere", () => {
+    expect(at("```mermaid\nfl")).toEqual({ from: 11, to: 13, query: "fl", indent: "", close: "\n```" });
+  });
+
+  it("in un recinto chiuso non aggiunge niente, e tiene la marca d'apertura", () => {
+    const doc = "```mermaid\nfl\n```";
+    expect(at(doc, 13)).toMatchObject({ query: "fl", close: "" });
+    expect(at("~~~~Mermaid\nse")).toMatchObject({ query: "se", close: "\n~~~~" });
+  });
+
+  it("su una riga vuota del corpo la parola è vuota", () => {
+    const doc = "Testo.\n\n```mermaid\n\n```";
+    expect(at(doc, doc.indexOf("\n```", 10))).toMatchObject({ query: "", close: "" });
+  });
+
+  it("i commenti %% e le righe vuote non contano: la direttiva di stile può stare prima", () => {
+    expect(at("```mermaid\n%% stile: aurora\n\nga")).toMatchObject({ query: "ga" });
+  });
+
+  it("dentro una lista o una citazione porta il rientro della riga", () => {
+    expect(at("- voce\n\n  ```mermaid\n  fl")).toMatchObject({ query: "fl", indent: "  ", close: "\n  ```" });
+    expect(at("> ```mermaid\n> pi")).toMatchObject({ query: "pi", indent: "> ", close: "\n> ```" });
+  });
+
+  it("un corpo che ha già un diagramma non è un contesto", () => {
+    const doc = "```mermaid\nflowchart LR\n  A --> B\nx\n```";
+    expect(at(doc, doc.indexOf("x\n") + 1)).toBeNull();
+    const after = "```mermaid\nfl\n  A --> B\n```";
+    expect(at(after, 13)).toBeNull();
+  });
+
+  it("né la riga d'apertura, né la chiusura, né testo dopo il cursore, né un altro linguaggio", () => {
+    expect(at("```mermaid")).toBeNull();
+    expect(at("```mermaid\n\n```", 12)).toBeNull();
+    expect(at("```mermaid\n\n```", 15)).toBeNull();
+    expect(at("```mermaid\nfl altro", 13)).toBeNull();
+    expect(at("```python\nfl")).toBeNull();
+    expect(at("fl")).toBeNull();
+  });
+});
+
+describe("diagramTemplateSource (headless)", () => {
+  const today = () => new Date(2026, 9, 1);
+
+  it("scrivendo la prima parola propone i modelli che nomina, già pronti da inserire", async () => {
+    const doc = "```mermaid\nseq";
+    const res = await diagramTemplateSource(today)(ctxAt(doc, doc.length)) as CompletionResult;
+    expect(res).toMatchObject({ from: 11, to: doc.length, filter: false });
+    expect(res.options.map((option) => [option.label, option.detail, option.section])).toEqual([
+      ["Sequenza", "sequenceDiagram", "Modelli di diagramma"],
+    ]);
+    expect(res.options[0]!.info).toBe("Messaggi fra partecipanti, nel tempo");
+    const apply = res.options[0]!.apply as string;
+    expect(apply.startsWith("sequenceDiagram\n  autonumber\n")).toBe(true);
+    expect(apply.endsWith("il giro completo\n```")).toBe(true);
+  });
+
+  it("su una riga vuota solo a richiesta, e allora tutti e quattordici", async () => {
+    const doc = "```mermaid\n\n```";
+    // Senza richiesta risponde subito, senza caricare i modelli.
+    expect(diagramTemplateSource(today)(ctxAt(doc, 11))).toBeNull();
+    const res = await diagramTemplateSource(today)(ctxAt(doc, 11, true)) as CompletionResult;
+    expect(res.options).toHaveLength(14);
+    expect(res.options[0]!.label).toBe("Diagramma di flusso");
+  });
+
+  it("il Gantt parte dal giorno iniettato, rientrato come la riga", async () => {
+    const doc = "- piano\n\n  ```mermaid\n  gan";
+    const res = await diagramTemplateSource(today)(ctxAt(doc, doc.length)) as CompletionResult;
+    const apply = res.options[0]!.apply as string;
+    expect(apply).toContain("\n      Ricerca :done, r1, 2026-10-01, 5d\n");
+    expect(apply.endsWith("\n  ```")).toBe(true);
+  });
+
+  it("una parola che non nomina niente non apre il popup", async () => {
+    const doc = "```mermaid\nzzz";
+    expect(await diagramTemplateSource(today)(ctxAt(doc, doc.length))).toBeNull();
+  });
+
+  it("dentro il recinto le note e i tag restano zitti", async () => {
+    const doc = "```mermaid\n[[Al";
+    expect(await wikilinkSource(async () => ["Alpha.md"])(ctxAt(doc, doc.length))).toBeNull();
   });
 });

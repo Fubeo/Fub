@@ -58,6 +58,11 @@ export type SurfaceChangeResult =
 export interface DocumentSessionApi {
   readDocument(id: string): Promise<DocumentSource>;
   writeDocument(id: string, text: string, base: WriteBase): Promise<string>;
+  /// I byte di un file che nessun formato serve — un `.svg`, un `.txt`. Il
+  /// kernel rifiuta `writeDocument` su quei file, perché non c'è un modello
+  /// da riparsare, e accetta i byte con la stessa guardia: `expected` è la
+  /// revisione attesa sul disco (CAS), `null` una creazione esclusiva.
+  resourceWrite(id: string, bytes: Uint8Array, expected: string | null): Promise<{ readonly revision: string }>;
   saveDraft(id: string, text: string, base: string | null): Promise<void>;
   discardDraft(id: string): Promise<void>;
 }
@@ -842,6 +847,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
   readonly #api: DocumentSessionApi;
   readonly #sessions = new Map<string, DocumentSession>();
   readonly #surfaceDescriptors = new WeakMap<DocumentSession, DocumentSurfaceDescriptor>();
+  /// Le sessioni di un file che il disco ha detto **senza formato**: si
+  /// salvano a byte. Solo una lettura riuscita ce le mette — il ripiego di
+  /// `readForSurface` non sa che file sia, e non indovina.
+  readonly #formatless = new WeakSet<DocumentSession>();
   readonly #listeners = new Set<SessionListener>();
   readonly #identityVersions = new Map<string, number>();
   readonly #renaming = new Set<string>();
@@ -955,11 +964,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       kind: "descends_from",
       value: source.revision,
     });
-    this.#surfaceDescriptors.set(session, {
-      formatId: source.format_id,
-      sourceKind: source.source_kind,
-      revision: source.revision,
-    });
+    this.#describe(session, source);
     return session.text();
   }
 
@@ -991,13 +996,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     }
 
     const current = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
-    if (current) {
-      this.#surfaceDescriptors.set(current, {
-        formatId: source.format_id,
-        sourceKind: source.source_kind,
-        revision: source.revision,
-      });
-    }
+    if (current) this.#describe(current, source);
     return {
       text,
       formatId: source.format_id,
@@ -1373,11 +1372,49 @@ export class DocumentSessionCollection implements DraftBufferStore {
   #invalidate(id: string): void {
     this.#identityVersions.set(id, this.#identityVersion(id) + 1);
   }
+  #describe(session: DocumentSession, source: DocumentSource): void {
+    this.#surfaceDescriptors.set(session, {
+      formatId: source.format_id,
+      sourceKind: source.source_kind,
+      revision: source.revision,
+    });
+    if (source.format_id === null && source.source_kind === "text") this.#formatless.add(session);
+    else this.#formatless.delete(session);
+  }
+
+  /// Il salvataggio di un file senza formato. `Revision::of(testo)` è
+  /// `Revision::of_bytes(utf8)`, quindi la revisione da cui il buffer discende
+  /// è anche l'attesa del CAS, e un file cambiato sotto risponde `conflict`
+  /// come per una nota. Una base dettata non attende niente: si rilegge la
+  /// revisione del disco e il CAS si fa su quella; se il file non c'è più, lo
+  /// si crea — e se nel frattempo qualcuno l'ha creato, è un conflitto.
+  async #writeFormatless(id: string, text: string, base: WriteBase): Promise<string> {
+    const expected =
+      base.kind === "descends_from"
+        ? base.value
+        : await this.#api.readDocument(id).then((source) => source.revision, () => null);
+    const receipt = await this.#api.resourceWrite(id, new TextEncoder().encode(text), expected);
+    return receipt.revision;
+  }
+
   #create(id: string, text: string, base: WriteBase): DocumentSession {
     const existing = this.#sessions.get(id);
     if (existing?.snapshot().lifecycle === "open") return existing;
     if (existing) this.#sessions.delete(id);
-    const session = new DocumentSession(OWNER_TOKEN, id, text, base, this.#api, {
+    // La sessione scrive dalla porta che il suo file accetta: il testo per un
+    // formato, i byte per un file che nessun formato serve. La scelta è della
+    // collezione, che sa cosa ha letto; la sessione vede una porta sola.
+    const api: DocumentSessionApi = {
+      readDocument: (doc) => this.#api.readDocument(doc),
+      writeDocument: (doc, source, writeBase) =>
+        this.#formatless.has(session)
+          ? this.#writeFormatless(doc, source, writeBase)
+          : this.#api.writeDocument(doc, source, writeBase),
+      resourceWrite: (doc, bytes, expected) => this.#api.resourceWrite(doc, bytes, expected),
+      saveDraft: (doc, source, draftBase) => this.#api.saveDraft(doc, source, draftBase),
+      discardDraft: (doc) => this.#api.discardDraft(doc),
+    };
+    const session = new DocumentSession(OWNER_TOKEN, id, text, base, api, {
       emit: (event) => this.#emit(event),
       draftSucceeded: () => {
         this.#blindDraft = false;

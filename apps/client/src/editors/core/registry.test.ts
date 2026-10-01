@@ -297,6 +297,7 @@ describe("DocumentSurfaceRegistry", () => {
           read_chunk: readChunk,
           close,
         },
+        assetUrl: (handle) => `fub-asset://localhost/${handle}`,
       },
     });
     const parent = document.createElement("div");
@@ -426,6 +427,33 @@ describe("DocumentSurfaceRegistry", () => {
     });
     expect(registry.mount({ formatId: "plugin.diagram", sourceKind: "text" }, mountContext).family)
       .toBe("diagram");
+  });
+
+  it("writes an SVG as text beside its preview, and leaves other text files plain", () => {
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    for (const id of ["arte/logo.svg", "ICONA.SVG"]) {
+      expect(registry.resolve({ formatId: null, sourceKind: "text", documentId: id }))
+        .toMatchObject({ owner: "fub.shell.text", family: "text", profile: "svg" });
+      // Il visualizzatore lo declina: un SVG ha un testo, e si scrive.
+      expect(registry.showsBytes(id)).toBe(false);
+      expect(registry.opensWithoutFormat(id)).toBe(true);
+    }
+    // Il testo senza profilo suo resta testo semplice, mai la superficie
+    // d'errore; ma l'esploratore non lo offre come un file da aprire.
+    expect(registry.resolve({ formatId: null, sourceKind: "text", documentId: "leggimi.txt" }))
+      .toMatchObject({ family: "text", profile: "plain-text" });
+    expect(registry.resolve({ formatId: null, sourceKind: "text" }))
+      .toMatchObject({ family: "text", profile: "plain-text" });
+    expect(registry.opensWithoutFormat("leggimi.txt")).toBe(false);
+    expect(registry.opensWithoutFormat("archivio.zip")).toBe(false);
+    expect(registry.opensWithoutFormat("foto.png")).toBe(true);
+    // Un formato vince sulla classificazione della shell.
+    expect(registry.resolve({ formatId: "markdown", sourceKind: "text", documentId: "strano.svg" }))
+      .toMatchObject({ profile: "markdown" });
   });
 
   it("lets the source owner decline a document, which then falls to the error surface", () => {

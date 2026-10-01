@@ -14,6 +14,11 @@
 // Il riconoscimento del contesto è in funzioni pure sul testo prima del
 // cursore (`wikilinkContext`, `tagContext`): sono loro il comportamento da
 // presidiare nei test, senza bisogno di un DOM né di una `EditorView`.
+//
+// Il terzo contesto non viene dal vault: dentro un recinto `mermaid` ancora
+// vuoto si offrono i modelli di diagramma (`diagram-templates.ts`, caricato
+// solo lì). Anche lui si riconosce su un `EditorState` (`diagramFenceContext`),
+// senza vista.
 import {
   autocompletion,
   type Completion,
@@ -21,8 +26,11 @@ import {
   type CompletionResult,
   type CompletionSource,
 } from "@codemirror/autocomplete";
-import type { Extension } from "@codemirror/state";
+import { syntaxTree } from "@codemirror/language";
+import type { EditorState, Extension } from "@codemirror/state";
+import type { SyntaxNode } from "@lezer/common";
 import { isStrictlyInsideCode } from "./parser";
+import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import { childName, pageName, resolutionKey } from "../../../../rules/mirrored";
 import { TAG_CHARACTER } from "../../../../rules/mirrored";
 import { tagInProgress } from "../../../../rules/syntax";
@@ -218,13 +226,101 @@ export function tagSource(listTags: CompletionSources["listTags"]): CompletionSo
   };
 }
 
+/// Il corpo ancora vuoto di un recinto `mermaid`, col cursore dentro: la
+/// parola che si sta scrivendo (`query`, da `from` a `to`, fine riga), il
+/// rientro della riga (`indent`: spazi e `>` di una lista o di una citazione)
+/// e la chiusura da aggiungere dopo il modello se il recinto non ce l'ha.
+export interface DiagramFenceMatch {
+  readonly from: number;
+  readonly to: number;
+  readonly query: string;
+  readonly indent: string;
+  readonly close: string;
+}
+
+/// Il cursore sta nel corpo di un recinto `mermaid` che non ha ancora niente
+/// oltre alla parola che si scrive? «Niente» ammette righe vuote e commenti
+/// `%%`, come la direttiva `%% stile:` messa prima. Un corpo con già un
+/// diagramma non è un contesto: un modello lo raddoppierebbe. Né lo è la riga
+/// d'apertura, dove si scrive l'info, né la chiusura.
+export function diagramFenceContext(state: EditorState, pos: number): DiagramFenceMatch | null {
+  let node: SyntaxNode | null = syntaxTree(state).resolve(pos, -1);
+  while (node && node.name !== "FencedCode") node = node.parent;
+  if (!node) return null;
+  const info = node.getChild("CodeInfo");
+  if (!info || state.sliceDoc(info.from, info.to).trim().toLowerCase() !== "mermaid") return null;
+  const marks = node.getChildren("CodeMark");
+  const opening = state.doc.lineAt(node.from);
+  const closing = marks.length >= 2 ? state.doc.lineAt(marks[marks.length - 1]!.from) : null;
+  if (pos <= opening.to || (closing && pos >= closing.from)) return null;
+  const line = state.doc.lineAt(pos);
+  const typed = /^([\s>]*)([\p{L}\p{N}_-]*)$/u.exec(state.sliceDoc(line.from, pos));
+  if (!typed || state.sliceDoc(pos, line.to).trim() !== "") return null;
+  const bodyEnd = closing ? closing.from - 1 : node.to;
+  const others = [
+    line.from > opening.to + 1 ? state.sliceDoc(opening.to + 1, line.from - 1) : "",
+    line.to < bodyEnd ? state.sliceDoc(line.to + 1, bodyEnd) : "",
+  ].join("\n");
+  const empty = others.split("\n").every((row) => {
+    const content = row.replace(/^[\s>]*/, "");
+    return content === "" || content.startsWith("%%");
+  });
+  if (!empty) return null;
+  const indent = typed[1]!;
+  const mark = marks[0]!;
+  return {
+    from: line.from + indent.length,
+    to: line.to,
+    query: typed[2]!,
+    indent,
+    close: closing ? "" : `\n${indent}${state.sliceDoc(mark.from, mark.to)}`,
+  };
+}
+
+type DiagramTemplates = typeof import("./diagram-templates");
+let templates: Promise<DiagramTemplates> | undefined;
+
+/// La sorgente CM6 dei modelli di diagramma. Si apre scrivendo la prima
+/// parola del corpo, o a richiesta (Ctrl+Spazio) su una riga vuota. Il filtro
+/// è `matchTemplates` e non il fuzzy di CodeMirror, che guarderebbe soltanto
+/// l'etichetta: `torta` deve trovare il grafico a torta anche in inglese, e
+/// `seq` la sequenza anche in italiano. `today` è iniettabile per i test.
+///
+/// Il riconoscimento del recinto è sincrono; i corpi dei modelli arrivano con
+/// un `import()` al primo recinto, così non pesano sul chunk del documento.
+export function diagramTemplateSource(today: () => Date = () => new Date()): CompletionSource {
+  return (ctx: CompletionContext): Promise<CompletionResult | null> | null => {
+    const match = diagramFenceContext(ctx.state, ctx.pos);
+    if (!match || (match.query === "" && !ctx.explicit)) return null;
+    templates ??= import("./diagram-templates").catch((error: unknown) => {
+      templates = undefined;
+      throw error;
+    });
+    return templates.then(({ matchTemplates, templateText }) => {
+      const language = catalogLanguage(resolvedLanguage());
+      const section = t("mermaid.template.section");
+      const day = today();
+      const options = matchTemplates(match.query, (template) => t(template.name)).map((template): Completion => ({
+        label: t(template.name),
+        detail: template.keyword,
+        info: t(template.description),
+        type: "text",
+        section,
+        apply: templateText(template, language, match.indent, day) + match.close,
+      }));
+      if (options.length === 0) return null;
+      return { from: match.from, to: match.to, options, filter: false };
+    });
+  };
+}
+
 /// L'estensione CM6 dell'autocompletamento: attiva durante la digitazione, ma
-/// SOLO dentro i due contesti (fuori, le sorgenti rispondono null e nessun
+/// SOLO dentro i tre contesti (fuori, le sorgenti rispondono null e nessun
 /// popup compare). `override` scavalca le sorgenti di default del linguaggio:
-/// qui completiamo note e tag, non parole qualsiasi.
+/// qui completiamo note, tag e modelli di diagramma, non parole qualsiasi.
 export function markdownCompletions(sources: CompletionSources): Extension {
   return autocompletion({
-    override: [wikilinkSource(sources.searchNotes), tagSource(sources.listTags)],
+    override: [wikilinkSource(sources.searchNotes), tagSource(sources.listTags), diagramTemplateSource()],
     activateOnTyping: true,
   });
 }

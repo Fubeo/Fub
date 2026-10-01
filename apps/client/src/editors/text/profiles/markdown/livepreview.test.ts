@@ -358,8 +358,61 @@ describe("commenti, formule in riga, ID di blocco ed embed dimensionati", () => 
   });
 
   it("un embed con dimensione mostra il bersaglio e nasconde la misura", () => {
-    const ds = decorate("![[foto.png|120]]");
-    expect(ofKind(ds, "wikilink").map((d) => [d.from, d.to])).toEqual([[3, 11]]);
-    expect(ofKind(ds, "hide")).toContainEqual({ from: 11, to: 17, kind: "hide" });
+    const ds = decorate("![[video.mp4|320]]");
+    expect(ofKind(ds, "wikilink").map((d) => [d.from, d.to])).toEqual([[3, 12]]);
+    expect(ofKind(ds, "hide")).toContainEqual({ from: 12, to: 18, kind: "hide" });
+  });
+});
+
+describe("immagini in mezzo al testo", () => {
+  it("fuori dalla riga attiva un'immagine del vault diventa il suo HTML di Lettura", () => {
+    const doc = 'Il logo ![Marchio|120](../Risorse/logo.png "Il nostro") in riga';
+    expect(ofKind(decorate(doc), "image")).toEqual([{
+      from: 8,
+      to: 55,
+      kind: "image",
+      data: '<img src="../Risorse/logo.png" alt="Marchio" title="Il nostro" width="120">',
+    }]);
+    // Il testo alternativo non è sintassi: né tag né enfasi dentro il widget.
+    const tagged = decorate("vedi ![#tag *x*](a.png) qui");
+    expect(ofKind(tagged, "tag")).toEqual([]);
+    expect(ofKind(tagged, "hide")).toEqual([]);
+  });
+
+  it("sulla riga attiva resta sorgente", () => {
+    expect(ofKind(decorate("vedi ![a](a.png) qui", [1]), "image")).toEqual([]);
+  });
+
+  it("gli URL, i riferimenti e le destinazioni fra `<…>` seguono la regola del vault", () => {
+    expect(ofKind(decorate("x ![a](https://e.test/a.png) y"), "image")).toEqual([]);
+    expect(ofKind(decorate("x ![a](data:image/png;base64,AA) y"), "image")).toEqual([]);
+    expect(ofKind(decorate("x ![a][ref] y\n\n[ref]: a.png"), "image")).toEqual([]);
+    expect(ofKind(decorate("x ![a](<foto 1.png>) y"), "image").map((d) => d.data))
+      .toEqual(['<img src="foto 1.png" alt="a">']);
+  });
+
+  it("un embed d'immagine ha l'HTML dell'embed reso, dimensione compresa", () => {
+    expect(ofKind(decorate("prima ![[foto.png|200x100]] dopo"), "image")).toEqual([{
+      from: 6,
+      to: 27,
+      kind: "image",
+      data: '<span class="embed" data-embed-page="foto.png" data-embed-size="200x100">foto.png</span>',
+    }]);
+    // Una nota, un video, un punto dentro l'immagine: restano come prima.
+    expect(ofKind(decorate("a ![[Nota]] b"), "image")).toEqual([]);
+    expect(ofKind(decorate("a ![[film.mp4]] b"), "image")).toEqual([]);
+    expect(ofKind(decorate("a ![[foto.png#x]] b"), "image")).toEqual([]);
+    expect(ofKind(decorate("a ![[foto.png]] b", [1]), "image")).toEqual([]);
+  });
+
+  it("i replace restano disgiunti con immagini, link e marcatori sulla stessa riga", () => {
+    const ds = decorate("**x** [![a](a.png)](https://e.test) e ![[b.png]] e [[c]]");
+    const replaces = ds
+      .filter((d) => d.kind === "hide" || d.kind === "image")
+      .sort((a, b) => a.from - b.from);
+    expect(ofKind(ds, "image")).toHaveLength(2);
+    for (let i = 1; i < replaces.length; i++) {
+      expect(replaces[i].from).toBeGreaterThanOrEqual(replaces[i - 1].to);
+    }
   });
 });

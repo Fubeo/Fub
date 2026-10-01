@@ -766,6 +766,52 @@ describe("apri un vault", () => {
     await waitFor("la riga sparisce", () => !fileRow());
   });
 
+  it("un SVG si apre come testo accanto all'anteprima, si salva a byte e segue il disco", async () => {
+    const logo = '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>';
+    const host = await start({ ...VAULT, "note/logo.svg": logo });
+    const fileRow = (id: string) => document.querySelector<HTMLElement>(`#file-list .tree-row.file[data-path="${id}"]`);
+    const folder = [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.folder")].find(
+      (r) => r.textContent?.includes("note"),
+    );
+    folder?.click();
+    await waitFor("l'SVG compare", () => !!fileRow("note/logo.svg"));
+    fileRow("note/logo.svg")!.click();
+    await waitFor("l'SVG si apre come testo", () => textToVideo().includes('width="8"'));
+    const editor = document.querySelector<HTMLElement>(".pane.focus .pane-editor")!;
+    expect(editor.dataset.svgMode).toBe("live_preview");
+    expect(editor.querySelector(".svg-preview")).not.toBeNull();
+    expect(host.atGate("resourceOpen")).toHaveLength(0);
+    const modes = [...document.querySelectorAll<HTMLElement>(".pane.focus .pane-toolbar button[data-mode]")];
+    expect(modes.map((button) => button.textContent)).toEqual(["Sorgente", "Diviso", "Anteprima"]);
+
+    // Il kernel rifiuta `write_document` su un file senza formato: la battuta
+    // arriva al disco come byte, col CAS sulla revisione letta.
+    const read = await host.module.api.readDocument("note/logo.svg");
+    typeInEditor("<!-- ciao -->");
+    await waitFor("il salvataggio a byte parte", () => host.atGate("resourceWrite").length > 0);
+    const [id, bytes, expected] = host.atGate("resourceWrite")[0]!.args as [string, Uint8Array, string];
+    expect(id).toBe("note/logo.svg");
+    expect(expected).toBe(read.revision);
+    expect(new TextDecoder().decode(bytes)).toBe(`${logo}<!-- ciao -->`);
+    expect(host.atGate("writeDocument").map((call) => call.args[0])).not.toContain("note/logo.svg");
+    await waitFor("il disco ha il testo", () => host.files()["note/logo.svg"] === `${logo}<!-- ciao -->`);
+    await waitFor("salvato", () => document.getElementById("save-state")?.dataset.state !== "in_corso");
+    expect(document.getElementById("save-state")?.dataset.state).not.toBe("conflitto");
+
+    // Un'altra applicazione lo riscrive: arriva `entry_changed`, non
+    // `document_changed`, e il buffer pulito si ricarica lo stesso.
+    host.writeFromOutside("note/logo.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"/>');
+    await waitFor("il cambio esterno arriva all'editor", () => textToVideo().includes('width="16"'));
+
+    // Rinominato da fuori, il riquadro lo segue; sparito, si chiude.
+    host.renameFromOutside("note/logo.svg", "note/marchio.svg");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll(".pane.focus .tab")].some((tab) => tab.textContent?.includes("marchio")));
+    expect(host.emit({ type: "entry_removed", id: "note/marchio.svg", kind: "asset" })).toBe(true);
+    await waitFor("la linguetta si chiude", () =>
+      ![...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("marchio")));
+  });
+
   it("il commutatore e le scorciatoie seguono la superficie attiva", async () => {
     const mounted = await mount({
       "Markdown.md": "# Titolo\n",
@@ -2546,6 +2592,39 @@ describe("portare a schermo un punto", () => {
     await openDocument("conti.fubsheet");
     await settle();
     expect(await offered(), "lo sheet, che non ha un provider di stampa").toEqual([]);
+  });
+
+  it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
+    const host = await start(VAULT);
+    const { t } = await import("./i18n/strings");
+    const previous = Object.getOwnPropertyDescriptor(window, "print");
+    const print = vi.fn();
+    Object.defineProperty(window, "print", { configurable: true, value: print });
+    try {
+      // Il debounce del salvataggio non è ancora scaduto: senza il flush la
+      // resa di stampa, che il kernel legge dal disco, non avrebbe la riga.
+      typeInEditor("Riga appena scritta.");
+      expect(host.atGate("writeDocument")).toHaveLength(0);
+      panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+      await settle();
+      const entry = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
+        .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.print"));
+      entry!.click();
+      await waitFor("la stampa parte", () => print.mock.calls.length > 0);
+
+      const written = host.calls.findIndex((call) => call.gate === "writeDocument");
+      const rendered = host.calls.findIndex((call) =>
+        call.gate === "queryIndex" && (call.args[0] as { kind?: string }).kind === "render_print");
+      expect(written).toBeGreaterThanOrEqual(0);
+      expect(rendered).toBeGreaterThan(written);
+      expect(document.querySelector(".print-host .print-body")?.textContent).toContain("Riga appena scritta.");
+
+      window.dispatchEvent(new Event("afterprint"));
+      expect(document.querySelector(".print-host")).toBeNull();
+    } finally {
+      if (previous) Object.defineProperty(window, "print", previous);
+      else Reflect.deleteProperty(window, "print");
+    }
   });
 });
 

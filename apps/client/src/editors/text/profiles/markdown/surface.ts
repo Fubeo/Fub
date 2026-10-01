@@ -143,6 +143,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         openPath: opts.onOpenPath,
         searchTag: opts.onSearchTag,
         toggleTask: readOnly ? undefined : actions.toggleTask,
+        editFence: readOnly ? undefined : actions.editFence,
       }),
     },
     completions: opts.completions,

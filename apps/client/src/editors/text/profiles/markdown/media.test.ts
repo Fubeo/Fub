@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { LinkTarget } from "../../../../host/contract";
 import { openLifetime } from "../../../../ui/lifetime";
-import { embedSize, hydrateVaultMedia, type MediaPort } from "./media";
+import { embedSize, hydrateVaultMedia, vaultImageSource, type MediaPort } from "./media";
 
 function port(files: Record<string, string>, delay?: Promise<void>) {
   const opened: string[] = [];
@@ -20,6 +20,7 @@ function port(files: Record<string, string>, delay?: Promise<void>) {
       return { handle: `h-${id}` };
     },
     close: (handle) => closed.push(handle),
+    url: (handle) => `fub-asset://localhost/${handle}`,
   };
   return { media, opened, closed, asked };
 }
@@ -54,8 +55,52 @@ describe("i media del vault dentro una nota", () => {
     ]);
     expect(opened.sort()).toEqual(["Risorse/a.png", "img/foto.png"]);
 
+    // Le immagini del vault portano il loro id: la lightbox ci prende un lease suo.
+    expect(local!.dataset.vaultId).toBe("Risorse/a.png");
+    expect(remote!.dataset.vaultId).toBeUndefined();
+    expect(embedded?.dataset.vaultId).toBe("img/foto.png");
+
     life.close();
     expect(closed.sort()).toEqual(["h-Risorse/a.png", "h-img/foto.png"]);
+  });
+
+  it("la lightbox prende un lease suo, che chiude con la sua vita", async () => {
+    const { media, opened, closed } = port({});
+    const life = openLifetime();
+    await expect(vaultImageSource("Risorse/a.png", media)(life)).resolves.toBe("fub-asset://localhost/h-Risorse/a.png");
+    expect(opened).toEqual(["Risorse/a.png"]);
+    expect(closed).toEqual([]);
+    life.close();
+    expect(closed).toEqual(["h-Risorse/a.png"]);
+  });
+
+  it("idrata anche gli embed per path della resa dell'host, e lascia gli URL e le note", async () => {
+    const root = html(
+      '<div class="embed" data-embed-path="../Risorse/porto.png">Il porto</div>'
+        + '<div class="embed" data-embed-path="audio/voce.ogg">voce</div>'
+        + '<div class="embed" data-embed-path="https://esterno/c.png">c</div>'
+        + '<div class="embed" data-embed-path="Altra nota.md">nota</div>'
+        + '<div class="embed" data-embed-path="Risorse/persa.png">persa</div>',
+    );
+    const { media, opened, asked } = port({ "../Risorse/porto.png": "Risorse/porto.png", "audio/voce.ogg": "audio/voce.ogg" });
+    const life = openLifetime();
+    await hydrateVaultMedia(root, "Note/qui.md", same, life, media);
+
+    const picture = root.querySelector<HTMLImageElement>('[data-embed-path="../Risorse/porto.png"] img')!;
+    expect(picture.getAttribute("src")).toBe("fub-asset://localhost/h-Risorse/porto.png");
+    expect(picture.alt).toBe("Il porto");
+    expect(picture.dataset.vaultId).toBe("Risorse/porto.png");
+    expect(root.querySelector('[data-embed-path="audio/voce.ogg"] audio')).not.toBeNull();
+    expect(root.querySelector('[data-embed-path="https://esterno/c.png"]')!.textContent).toBe("c");
+    expect(root.querySelector('[data-embed-path="Altra nota.md"]')!.textContent).toBe("nota");
+    expect(root.querySelector('[data-embed-path="Risorse/persa.png"]')!.classList.contains("unresolved")).toBe(true);
+    expect(asked.map(([target, from]) => [target.kind, target.kind === "path" ? target.value : "", from])).toEqual([
+      ["path", "../Risorse/porto.png", "Note/qui.md"],
+      ["path", "audio/voce.ogg", "Note/qui.md"],
+      ["path", "Risorse/persa.png", "Note/qui.md"],
+    ]);
+    expect(opened.sort()).toEqual(["Risorse/porto.png", "audio/voce.ogg"]);
+    life.close();
   });
 
   it("un riferimento che non si risolve resta non risolto, senza src e senza lease", async () => {

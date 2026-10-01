@@ -5,10 +5,14 @@ import { onLanguage, t } from "../../../../i18n/strings";
 import { highlightMarkdownCode } from "./highlight-code";
 import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifetime";
 import { mountMermaidBlocks } from "../../../../ui/mermaid";
+import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
-import { hydrateVaultMedia } from "./media";
-import { mediaKindOfId } from "../../../media/media-types";
+import { hydrateVaultMedia, vaultImageSource } from "./media";
+import { openLightbox } from "../../../../ui/lightbox";
+import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
 import type { MarkdownResources, NativeMarkdownContent } from "../../../../ui/markdown-resources";
+import type { FenceEdit } from "./render-types";
+import { isMathInfo } from "./render";
 import { mountTree, unmountTree } from "../../../../ui/node";
 import { notify } from "../../../../ui/notify";
 import { Race, type Expected } from "../../../../ui/race";
@@ -25,6 +29,15 @@ export interface MarkdownMountOptions {
   /** UTF-16 offset of the task symbol in the current, LF-normalized buffer. */
   readonly toggleTask?: (sourceOffset: number) => void;
   readonly openSource?: (sourceOffset: number) => void;
+  /** Rewrites part of a fenced block (a diagram's own style) in the buffer. */
+  readonly editFence?: FenceEdit;
+  /**
+   * The fence infos the vault declares, for HTML from a renderer that does not
+   * mark them (the host's): without it a `mermaid` fence stays code.
+   */
+  readonly declaredFences?: ReadonlySet<string>;
+  /** Draws every diagram in one light, whatever the theme (print is paper). */
+  readonly diagramAppearance?: DiagramLight;
 }
 
 const MAX_EMBED_DEPTH = 5;
@@ -39,6 +52,29 @@ function hydrateAllowedHtml(container: HTMLElement): void {
     if (fragment.childNodes.length > 0) block.replaceChildren(fragment);
   }
 }
+/// La regola di `renderCodeNode` applicata all'HTML di un altro renderer: la
+/// resa dell'host non conosce le dichiarazioni del vault, quindi un recinto
+/// dichiarato si marca qui, e una formula dichiarata diventa formula.
+function markDeclaredFences(container: HTMLElement, declared: ReadonlySet<string>): void {
+  for (const code of container.querySelectorAll<HTMLElement>("pre > code")) {
+    const pre = code.parentElement!;
+    if (pre.hasAttribute("data-declared-fence") || pre.closest("[data-ui-slot]")) continue;
+    const language = Array.from(code.classList).find((name) => name.startsWith("language-"));
+    const info = language?.slice("language-".length).toLowerCase() ?? "";
+    if (info === "" || !declared.has(info)) continue;
+    const tex = code.textContent ?? "";
+    if (isMathInfo(info) && tex.trim() !== "") {
+      const formula = document.createElement("div");
+      formula.className = "math-block";
+      formula.dataset.tex = tex;
+      formula.textContent = tex;
+      pre.replaceWith(formula);
+      continue;
+    }
+    pre.setAttribute("data-declared-fence", "");
+  }
+}
+
 function sourceNumber(value: string | undefined): number | null {
   if (value === undefined || !/^\d+$/.test(value)) return null;
   const number = Number(value);
@@ -150,6 +186,20 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
       return;
     }
     const link = target.closest<HTMLAnchorElement>("a");
+    // Un'immagine del vault fuori da un link si apre a tutta finestra.
+    const picture = link ? null : target.closest<HTMLImageElement>("img[data-vault-id]");
+    if (picture) {
+      event.preventDefault();
+      const id = picture.dataset.vaultId!;
+      openLightbox({
+        source: vaultImageSource(id),
+        label: picture.alt || id,
+        caption: id,
+        backdrop: "checker",
+        vector: mimeOfId(id) === "image/svg+xml",
+      });
+      return;
+    }
     if (!link) return;
     const openPath = (path: string): void => {
       if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path)).catch((error: unknown) => {
@@ -229,7 +279,11 @@ function enhanceContent(
       life.add(() => unmountTree(slot));
     }
   }
-  life.add(mountMermaidBlocks(container, { revealSource: options.openSource }));
+  life.add(mountMermaidBlocks(container, {
+    revealSource: options.openSource,
+    editFence: options.editFence,
+    appearance: options.diagramAppearance,
+  }));
   life.add(mountMathBlocks(container));
   wireContent(container, options, life);
   life.add(highlightMarkdownCode(container));
@@ -243,7 +297,45 @@ function mountContent(
 ): void {
   setSanitizedHtml(container, rendered.html);
   hydrateAllowedHtml(container);
+  if (options.declaredFences) markDeclaredFences(container, options.declaredFences);
   enhanceContent(container, rendered.parts, options, life);
+}
+
+/** A host render (the print projection) mounted like Reading. */
+export interface RenderedDocumentMount {
+  /** Settles when embeds and vault media are hydrated, or never will be. */
+  readonly ready: Promise<void>;
+  dispose(): void;
+}
+
+/// Monta una resa dell'host come la Lettura: le parti dei renderer, i
+/// diagrammi, le formule, le note trascluse e i media del vault, ognuno col
+/// suo lease. Niente di interattivo: chi la usa (la stampa) non ha un buffer
+/// in cui scrivere.
+export function mountRenderedDocument(
+  container: HTMLElement,
+  rendered: RenderedDocument,
+  options: Pick<MarkdownMountOptions, "documentId" | "declaredFences" | "diagramAppearance" | "resources">,
+): RenderedDocumentMount {
+  const life = openLifetime();
+  const race = new Race();
+  const mountOptions: MarkdownMountOptions = { ...options };
+  mountContent(container, rendered, mountOptions, life);
+  const documentId = options.documentId;
+  const ready = documentId
+    ? race.last((expected) => Promise.all([
+      hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, mountOptions, life),
+      hydrateVaultMedia(container, documentId, expected, life),
+    ])).then(() => undefined, () => undefined)
+    : Promise.resolve();
+  return {
+    ready,
+    dispose: () => {
+      race.cancel();
+      life.close();
+      container.replaceChildren();
+    },
+  };
 }
 
 async function hydrateEmbeds(
@@ -291,6 +383,7 @@ async function hydrateEmbeds(
       documentId: content.doc_id,
       toggleTask: undefined,
       openSource: undefined,
+      editFence: undefined,
       navigateFragment: undefined,
       openWikilink: (page, heading, block) => options.openWikilink?.(page || content.doc_id, heading, block),
       openPath: (path, from = content.doc_id) => options.openPath?.(path, from),

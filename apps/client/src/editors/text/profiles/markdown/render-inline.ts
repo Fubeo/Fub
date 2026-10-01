@@ -1,6 +1,6 @@
 import type { SyntaxNode } from "@lezer/common";
 import { markdownLanguage } from "@codemirror/lang-markdown";
-import { inlineDelimiters, scanTags, spans, wikilink } from "../../../../rules/syntax";
+import { inlineDelimiters, scanTags, spans, wikilink, type FoundWikilink } from "../../../../rules/syntax";
 import type { MarkdownRenderContext } from "./render-types";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -47,6 +47,33 @@ function imagePresentation(label: string): { alt: string; dimensions: string } {
     alt: match[1]!,
     dimensions: ` width="${width}"${height === null ? "" : ` height="${height}"`}`,
   };
+}
+
+/// Un'immagine Markdown come la scrive la resa. Live la riusa per le immagini
+/// in mezzo al testo: stesse dimensioni (`alt|120`), stesso testo alternativo.
+export function imageHtml(label: string, href: string, caption?: string, attrs = ""): string {
+  const presentation = imagePresentation(label);
+  const titleAttr = caption === undefined ? "" : ` title="${attribute(caption)}"`;
+  return `<img src="${attribute(href)}" alt="${attribute(presentation.alt)}"${titleAttr}${presentation.dimensions}${attrs}>`;
+}
+
+/// `120` o `200x100` dopo la barra di un embed: una dimensione, non un'etichetta.
+export function embedSizeOf(alias: string | null): string | null {
+  return alias !== null && /^\s*\d{1,5}(?:x\d{1,5})?\s*$/.test(alias) ? alias.trim() : null;
+}
+
+/// Un embed `![[…]]` come lo scrive la resa: chi lo idrata (nota trasclusa o
+/// media del vault) legge i `data-embed-*`.
+export function embedHtml(link: Pick<FoundWikilink, "page" | "heading" | "block" | "alias" | "target">, attrs = ""): string {
+  const data = ` data-embed-page="${escapeHtml(link.page)}"`
+    + (link.heading ? ` data-embed-heading="${escapeHtml(link.heading)}"` : "")
+    + (link.block ? ` data-embed-block="${escapeHtml(link.block)}"` : "");
+  // `![[foto.png|120]]` e `![[foto.png|200x100]]`: il dopo-barra è una
+  // dimensione per chi incorpora, non un'etichetta da mostrare.
+  const size = embedSizeOf(link.alias);
+  const shown = size !== null ? link.target : link.alias ?? link.target;
+  const sized = size !== null ? ` data-embed-size="${escapeHtml(size)}"` : "";
+  return `<span class="embed"${data}${sized}${attrs}>${escapeHtml(shown)}</span>`;
 }
 
 interface Piece { from: number; to: number; priority?: number; html: () => string }
@@ -171,10 +198,7 @@ function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
     if (href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
     const caption = title ? source.slice(title.from + 1, title.to - 1) : definition?.title;
     const titleAttr = caption === undefined ? "" : ` title="${attribute(caption)}"`;
-    if (node.name === "Image") {
-      const presentation = imagePresentation(label);
-      return `<img src="${attribute(href)}" alt="${attribute(presentation.alt)}"${titleAttr}${presentation.dimensions}${attrs}>`;
-    }
+    if (node.name === "Image") return imageHtml(label, href, caption, attrs);
     const internal = href !== "" && !href.startsWith("#") && !/^[a-z][\w+.-]*:/i.test(href);
     const anchor = href.startsWith("#") ? ` data-md-anchor="${attribute(href.slice(1))}"` : "";
     return `<a href="${attribute(href)}"${internal ? ` class="internal-path" data-path="${attribute(href)}"` : ""}${anchor}${titleAttr}${attrs}>${renderInline(context, labelFrom, labelTo, node)}</a>`;
@@ -246,18 +270,11 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
       if ((!link.page && !link.heading && !link.block) || !free(start, end)) continue;
       wikiRanges.push({ from: start, to: end });
       pieces.push({ from: start, to: end, priority: 1, html: () => {
+        if (link.embed) return embedHtml(link, sourceAttributes(start, end));
         const label = link.alias ?? link.target;
-        const data = ` data-${link.embed ? "embed" : "wikilink"}-page="${escapeHtml(link.page)}"`
-          + (link.heading ? ` data-${link.embed ? "embed" : "wikilink"}-heading="${escapeHtml(link.heading)}"` : "")
-          + (link.block ? ` data-${link.embed ? "embed" : "wikilink"}-block="${escapeHtml(link.block)}"` : "");
-        if (link.embed) {
-          // `![[foto.png|120]]` e `![[foto.png|200x100]]`: il dopo-barra è una
-          // dimensione per chi incorpora, non un'etichetta da mostrare.
-          const size = link.alias !== null && /^\s*\d{1,5}(?:x\d{1,5})?\s*$/.test(link.alias) ? link.alias.trim() : null;
-          const shown = size !== null ? link.target : label;
-          const sized = size !== null ? ` data-embed-size="${escapeHtml(size)}"` : "";
-          return `<span class="embed"${data}${sized}${sourceAttributes(start, end)}>${escapeHtml(shown)}</span>`;
-        }
+        const data = ` data-wikilink-page="${escapeHtml(link.page)}"`
+          + (link.heading ? ` data-wikilink-heading="${escapeHtml(link.heading)}"` : "")
+          + (link.block ? ` data-wikilink-block="${escapeHtml(link.block)}"` : "");
         let labelFrom = link.alias !== null ? row.indexOf("|", link.innerFrom) + 1 : link.innerFrom;
         if (link.alias !== null) while (labelFrom < link.innerA && /\s/.test(row[labelFrom]!)) labelFrom++;
         const visibleFrom = base + labelFrom;

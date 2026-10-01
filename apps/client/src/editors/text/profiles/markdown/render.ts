@@ -275,6 +275,11 @@ interface RenderAux {
 
 const MATH_INFOS: Record<string, true> = { math: true, latex: true, tex: true };
 
+/// Un recinto con questa info, se il vault lo dichiara, è una formula.
+export function isMathInfo(info: string): boolean {
+  return MATH_INFOS[info.toLowerCase()] === true;
+}
+
 function headingLevel(name: string): number {
   if (name === "SetextHeading1") return 1;
   if (name === "SetextHeading2") return 2;

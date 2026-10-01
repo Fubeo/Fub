@@ -378,6 +378,21 @@ export class DocumentSurfaceRegistry {
     return !!source && this.#sourceProfile(source, { formatId: null, sourceKind: "bytes", documentId }) !== null;
   }
 
+  /**
+   * Whether a file that no vault format serves opens in a pane at all: from
+   * its bytes (an image, a PDF), or as text in a profile the `text` owner
+   * chose for it (an SVG) rather than the generic one any text would get.
+   * The explorer asks here; a file only the generic profile would take stays
+   * one the shell does not offer to open.
+   */
+  opensWithoutFormat(documentId: string): boolean {
+    if (this.showsBytes(documentId)) return true;
+    const text = this.#sources.get("text");
+    if (!text) return false;
+    const profile = this.#sourceProfile(text, { formatId: null, sourceKind: "text", documentId });
+    return profile !== null && profile !== text.profile;
+  }
+
   #sourceProfile(source: Binding, request: SurfaceRequest): string | null {
     const selected = source.registration.selectSourceProfile;
     const profile = selected ? selected(request, source.profile) : source.profile;

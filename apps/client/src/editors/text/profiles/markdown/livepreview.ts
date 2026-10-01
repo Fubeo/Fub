@@ -11,6 +11,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
+import type { SyntaxNode } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
@@ -29,7 +30,9 @@ import { findTrailingAnchor, frontmatterRange, renderMarkdownState } from "./ren
 import type { MarkdownBlock, MarkdownDocument, MountMarkdown } from "./render-types";
 import { mountMarkdown } from "./mount";
 import { mountMathBlocks } from "./math";
-import { scanInlineMath } from "./render-inline";
+import { isVaultPath } from "./media";
+import { embedHtml, embedSizeOf, imageHtml, scanInlineMath } from "./render-inline";
+import { mediaKindOfId } from "../../../media/media-types";
 import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
@@ -63,6 +66,8 @@ export type LiveDecoKind =
   | "checkbox"
   // widget: formula in riga resa, `data` è il TeX
   | "math"
+  // widget: immagine del vault in mezzo al testo, `data` è l'HTML della Lettura
+  | "image"
   // mark di stile sul testo (classi cm-fub-*)
   | "h1"
   | "h2"
@@ -183,6 +188,26 @@ export function computeDecorations(
     if (from < a) out.push({ from: from, to: a, kind });
   };
 
+  // L'HTML di un'immagine `![alt](path "titolo")` scritta su una riga, se la
+  // destinazione è un path del vault; `null` altrimenti.
+  const inlineImage = (node: SyntaxNode): string | null => {
+    if (doc.lineAt(node.from).number !== doc.lineAt(node.to).number) return null;
+    const marks = node.getChildren("LinkMark");
+    const opener = marks[0];
+    const closer = marks.find((mark) => doc.sliceString(mark.from, mark.from + 1) === "]");
+    const url = node.getChild("URL");
+    if (!opener || !closer || !url) return null;
+    let href = doc.sliceString(url.from, url.to);
+    if (href.length >= 2 && href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
+    if (!isVaultPath(href)) return null;
+    const title = node.getChild("LinkTitle");
+    return imageHtml(
+      doc.sliceString(opener.to, closer.from),
+      href,
+      title ? doc.sliceString(title.from + 1, title.to - 1) : undefined,
+    );
+  };
+
   syntaxTree(state).iterate({
     from,
     to,
@@ -292,6 +317,17 @@ export function computeDecorations(
           exclusions.push({ from: node.from, to: node.to });
           return false;
 
+        case "Image": {
+          // Un'immagine del vault fuori dalla riga attiva si vede come in
+          // Lettura: stesso HTML, stessa idratazione. Restano sorgente le
+          // destinazioni per riferimento, gli URL e le immagini su più righe.
+          const html = active(node.from) ? null : inlineImage(node.node);
+          if (html === null) return;
+          exclusions.push({ from: node.from, to: node.to });
+          out.push({ from: node.from, to: node.to, kind: "image", data: html });
+          return false;
+        }
+
         case "Link": {
           // Fuori dalla riga attiva resta solo il testo: `[` e `](url…)`
           // spariscono. Un link spezzato su più righe non si tocca (i
@@ -375,9 +411,15 @@ export function computeDecorations(
         // Sorgente visibile ma link comunque cliccabile e stilato.
         out.push({ from: innerFrom, to: innerA, kind: "wikilink", data });
       } else {
-        // `![[foto.png|120]]`: il dopo-barra è una dimensione, non un alias. Si
+        // Un'immagine incorporata si vede com'è in Lettura, anche in mezzo al
+        // testo: il widget ha lo stesso HTML dell'embed reso.
+        if (w.embed && !w.heading && !w.block && mediaKindOfId(w.page) === "image") {
+          out.push({ from: rangeStart, to: rangeEnd, kind: "image", data: embedHtml(w) });
+          continue;
+        }
+        // `![[foto.pdf|120]]`: il dopo-barra è una dimensione, non un alias. Si
         // mostra il bersaglio e sparisce `|120`, come in Lettura.
-        if (w.embed && w.alias !== null && /^\s*\d{1,5}(?:x\d{1,5})?\s*$/.test(w.alias)) {
+        if (w.embed && embedSizeOf(w.alias) !== null) {
           const targetTo = innerFrom + w.target.length;
           out.push({ from: rangeStart, to: innerFrom, kind: "hide" });
           out.push({ from: innerFrom, to: targetTo, kind: "wikilink", data });
@@ -502,6 +544,48 @@ class InlineMathWidget extends WidgetType {
   }
 }
 
+const imageMounts = new WeakMap<HTMLElement, () => void>();
+
+/// Un'immagine del vault in mezzo al testo, fuori dalla riga attiva. L'HTML è
+/// quello della Lettura e lo monta la stessa resa (`mountRendered`):
+/// sanificato, idratato con un lease del kernel, chiuso con lo smontaggio del
+/// widget. Un clic entra nella sorgente, come su ogni altra decorazione;
+/// Mod-clic apre l'immagine a tutta finestra.
+class InlineImageWidget extends WidgetType {
+  constructor(readonly html: string, readonly callbacks: LivePreviewCallbacks) { super(); }
+  eq(other: InlineImageWidget) {
+    return other.html === this.html;
+  }
+  toDOM(view: EditorView) {
+    const root = document.createElement("span");
+    root.className = "cm-fub-image";
+    const unmount = this.callbacks.mountRendered
+      ? this.callbacks.mountRendered(root, this.html, {})
+      : mountMarkdown(root, this.html, {
+        openWikilink: (page, heading, block) => this.callbacks.openWikilink(page, heading ?? null, block ?? null),
+        searchTag: this.callbacks.searchTag,
+      });
+    // I byte arrivano dopo il widget: la riga cambia altezza quando l'immagine
+    // si carica, e CodeMirror deve rimisurarla.
+    const measure = () => view.requestMeasure();
+    root.addEventListener("load", measure, true);
+    root.addEventListener("markdown-resize", measure);
+    imageMounts.set(root, () => {
+      root.removeEventListener("load", measure, true);
+      root.removeEventListener("markdown-resize", measure);
+      unmount();
+    });
+    return root;
+  }
+  destroy(root: HTMLElement) {
+    imageMounts.get(root)?.();
+    imageMounts.delete(root);
+  }
+  ignoreEvent(event: Event) {
+    return event instanceof MouseEvent && interactiveTarget(event.target instanceof Element ? event.target : null, event);
+  }
+}
+
 /// La linea resa al posto di `---`/`***` fuori dalla riga attiva.
 class RulerWidget extends WidgetType {
   eq() {
@@ -559,7 +643,7 @@ const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   ),
 );
 
-function inDecoration(d: LiveDeco): Decoration {
+function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration {
   switch (d.kind) {
     case "hide":
       return hidden;
@@ -569,6 +653,8 @@ function inDecoration(d: LiveDeco): Decoration {
       return d.data === "x" ? checkedBox : boxEmpty;
     case "math":
       return Decoration.replace({ widget: new InlineMathWidget(d.data ?? "") });
+    case "image":
+      return Decoration.replace({ widget: new InlineImageWidget(d.data ?? "", callbacks) });
     case "codeblock-line":
       return codeLine;
     case "quote-line":
@@ -750,6 +836,19 @@ const theme = EditorView.baseTheme({
     verticalAlign: "middle",
     margin: "0 0.4em 0 0",
   },
+  // Un'immagine in mezzo al testo sta nella riga, con un tetto: una foto
+  // grande si guarda in Lettura o a tutta finestra. Senza dimensioni scritte
+  // (`alt|120`) i due tetti conservano le proporzioni.
+  ".cm-fub-image": { display: "inline-block", maxWidth: "100%", verticalAlign: "bottom" },
+  ".cm-fub-image img": {
+    display: "block",
+    maxWidth: "100%",
+    maxHeight: "16em",
+    height: "auto",
+    objectFit: "contain",
+    borderRadius: "var(--radius-sm, 4px)",
+  },
+  ".cm-fub-image .embed": { display: "inline-block", margin: "0", padding: "0", border: "0", background: "none" },
 });
 
 /// L'estensione live preview, pronta da montare in `editor.ts` accanto a
@@ -763,7 +862,9 @@ const mountedBlocks = new WeakMap<HTMLElement, {
 function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
   if (!target) return false;
   if (target.closest("button, input, select, textarea, summary, [data-ui-slot], .tag[data-tag]")) return true;
-  return !!target.closest("a") && (event.ctrlKey || event.metaKey);
+  // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
+  // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
+  return !!target.closest("a, img[data-vault-id]") && (event.ctrlKey || event.metaKey);
 }
 /// La riga sorgente del blocco sotto il punto, senza leggere l'editor.
 ///
@@ -947,6 +1048,19 @@ class MarkdownWidget extends WidgetType {
         view.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor), userEvent: "select.pointer" });
         view.focus();
       },
+      editFence: this.readOnly ? undefined : (position: number, body: string, edit: { from: number; to: number; insert: string }) => {
+        const doc = view.state.doc;
+        if (view.state.readOnly || position < 0 || position > doc.length) return;
+        // Il corpo comincia alla riga dopo quella che apre il recinto, e deve
+        // essere ancora il testo che la resa ha letto: un recinto dentro una
+        // citazione o un elenco ha prefissi per riga, e lì non si scrive.
+        const opener = doc.lineAt(position);
+        if (opener.number >= doc.lines) return;
+        const start = opener.to + 1;
+        if (edit.from < 0 || edit.to < edit.from || edit.to > body.length
+          || doc.sliceString(start, start + body.length) !== body) return;
+        view.dispatch({ changes: { from: start + edit.from, to: start + edit.to, insert: edit.insert }, userEvent: "input" });
+      },
     };
     const unmount = this.callbacks.mountRendered
       ? this.callbacks.mountRendered(root, this.block.html, actions)
@@ -1129,7 +1243,7 @@ export function livePreview(
         const key = `${item.from}:${item.to}:${item.kind}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const decoration = inDecoration(item);
+        const decoration = inDecoration(item, callbacks);
         // Un titolo porta anche la sua riga: lo stesso respiro verticale della
         // Lettura, così cambiare modalità non fa saltare la pagina.
         const level = HEADING_LINES[item.kind];
@@ -1146,7 +1260,8 @@ export function livePreview(
         } else {
           const range = decoration.range(item.from, item.to);
           decorations.push(range);
-          if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math") atomic.push(range);
+          if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math"
+            || item.kind === "image") atomic.push(range);
         }
       }
     }

@@ -114,6 +114,13 @@ function extOf(path: string): string | null {
   return ext ? ext : null;
 }
 
+/// Un peso leggibile: byte, KiB, MiB.
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 /// Il MIME dedotto dal nome, o `null` quando non si sa (risposta onesta).
 /// I documenti (`md`, `markdown`, `fubsheet`, `base`, `canvas`) non sono
 /// risorse: tornano `null` come `mime_of` torna `None` per le note.
@@ -146,9 +153,4 @@ export function mediaKindOfId(id: string): MediaKind {
 /// Il MIME da servire, o il fallback onesto quando non si sa.
 export function mimeOrOctet(id: string): string {
   return mimeOfId(id) ?? "application/octet-stream";
-}
-
-/// L'URL con cui la shell chiede un handle al protocollo, senza esporre path.
-export function assetUrl(handle: ResourceHandle): string {
-  return `fub-asset://localhost/${handle}`;
 }

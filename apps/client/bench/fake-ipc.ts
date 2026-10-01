@@ -50,7 +50,7 @@ import type {
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
-import { CORPUS, OUTPUT } from "./corpus";
+import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
@@ -824,6 +824,7 @@ const GRID: NonNullable<Options["grid"]> = {
 
 const options: Options = {
   file: CORPUS,
+  resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
   commands: BENCH_COMMANDS,

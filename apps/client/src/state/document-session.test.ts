@@ -15,6 +15,7 @@ function fakeApi(): DocumentSessionApi {
   return {
     readDocument: vi.fn(async (id): Promise<DocumentSource> => ({ text: `${id}: disco`, revision: "rev-1", format_id: "markdown", source_kind: "text" })),
     writeDocument: vi.fn(async () => "rev-2"),
+    resourceWrite: vi.fn(async () => ({ revision: "rev-byte" })),
     saveDraft: vi.fn(async () => {}),
     discardDraft: vi.fn(async () => {}),
   };
@@ -1148,5 +1149,100 @@ describe("le superfici sottoscritte alla sessione", () => {
     expect(log.map((entry) => entry.surface).sort()).toEqual(["riquadro-a", "riquadro-b"]);
     expect(log[0]?.update).toEqual({ kind: "text", text: "testo della bozza" });
     expect(log[1]?.update).toEqual({ kind: "text", text: "testo della bozza" });
+  });
+});
+
+describe("il salvataggio di un file senza formato", () => {
+  let api: DocumentSessionApi;
+
+  beforeEach(() => {
+    api = fakeApi();
+    vi.mocked(api.readDocument).mockImplementation(async (id): Promise<DocumentSource> => ({
+      text: "<svg/>",
+      revision: "rev-disco",
+      format_id: id.endsWith(".md") ? "markdown" : null,
+      source_kind: "text",
+    }));
+    vi.stubGlobal("setTimeout", vi.fn(() => 1));
+    vi.stubGlobal("clearTimeout", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("scrive i byte UTF-8 col CAS sulla revisione da cui il buffer discende", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("disegno.svg");
+    acceptText(sessions, "disegno.svg", "<svg><title>però</title></svg>");
+    await sessions.flush("disegno.svg");
+
+    expect(api.writeDocument).not.toHaveBeenCalled();
+    expect(api.resourceWrite).toHaveBeenCalledWith(
+      "disegno.svg",
+      new TextEncoder().encode("<svg><title>però</title></svg>"),
+      "rev-disco",
+    );
+    expect(sessions.inspect("disegno.svg")).toMatchObject({
+      dirty: false,
+      result: "ok",
+      base: { kind: "descends_from", value: "rev-byte" },
+      echoes: 1,
+    });
+    // L'evento della scrittura (`entry_changed`) è l'eco: la consuma.
+    await sessions.handleExternalChange("disegno.svg", { actor: { kind: "user" }, batch: null });
+    expect(sessions.inspect("disegno.svg")?.echoes).toBe(0);
+  });
+
+  it("un file cambiato sotto è un conflitto, e l'eco non resta appesa", async () => {
+    vi.mocked(api.resourceWrite).mockRejectedValueOnce({ kind: "conflict", message: "cambiato sotto" });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("disegno.svg");
+    acceptText(sessions, "disegno.svg", "<svg>mio</svg>");
+    await sessions.flush("disegno.svg");
+
+    expect(sessions.inspect("disegno.svg")).toMatchObject({ dirty: true, result: "conflitto", echoes: 0 });
+    expect(sessions.text("disegno.svg")).toBe("<svg>mio</svg>");
+  });
+
+  it("«Mantieni il mio» rilegge la revisione del disco, e senza file lo crea", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("disegno.svg");
+    // Una bozza senza base è un conflitto: la sola uscita che detta è la
+    // scelta dell'utente, e la base dettata non ha una revisione da attendere.
+    sessions.restore("disegno.svg", "<svg>bozza</svg>", null);
+    await sessions.resolveConflict("disegno.svg", "mine");
+    expect(api.resourceWrite).toHaveBeenLastCalledWith(
+      "disegno.svg",
+      new TextEncoder().encode("<svg>bozza</svg>"),
+      "rev-disco",
+    );
+
+    vi.mocked(api.readDocument).mockRejectedValue(new Error("non c'è"));
+    sessions.restore("disegno.svg", "<svg>ricreato</svg>", null);
+    await sessions.resolveConflict("disegno.svg", "mine");
+    expect(api.resourceWrite).toHaveBeenLastCalledWith(
+      "disegno.svg",
+      new TextEncoder().encode("<svg>ricreato</svg>"),
+      null,
+    );
+  });
+
+  it("una nota resta sulla porta del testo, e il ripiego senza lettura non indovina", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "# nota");
+    await sessions.flush("nota.md");
+    expect(api.writeDocument).toHaveBeenCalledTimes(1);
+
+    // Una bozza ripristinata di un file che non si lascia più leggere: la
+    // superficie la mostra come testo, ma chi non sa che file sia non passa
+    // ai byte — scriverli a un formato vorrebbe dire saltarne il provider.
+    sessions.restore("sparito.svg", "<svg/>", null);
+    vi.mocked(api.readDocument).mockRejectedValue(new Error("non c'è"));
+    await expect(sessions.readForSurface("sparito.svg")).resolves.toMatchObject({ formatId: null });
+    await sessions.resolveConflict("sparito.svg", "mine");
+    expect(api.writeDocument).toHaveBeenCalledTimes(2);
+    expect(api.resourceWrite).not.toHaveBeenCalled();
   });
 });

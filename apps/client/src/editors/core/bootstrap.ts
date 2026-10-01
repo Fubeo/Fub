@@ -11,7 +11,8 @@ import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
 import { CANVAS_MOUNT, mountCanvasSurface } from "../canvas/surface";
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
-import { mediaKindOfId } from "../media/media-types";
+import { mediaKindOfId, mimeOfId } from "../media/media-types";
+import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
@@ -136,12 +137,23 @@ export function createDocumentSurfaceRegistry(
     owner: "fub.shell.text",
     family: "text",
     defaultProfile: "plain-text",
-    profiles: ["markdown"],
+    profiles: ["markdown", SVG_PROFILE],
     formats: { markdown: "markdown" },
     sources: { text: "plain-text" },
+    // Un file che nessun formato serve si scrive col profilo che la tabella
+    // MIME della shell gli dà: un SVG accanto alla sua anteprima, il resto
+    // come testo semplice. Mai `null`: ciò che si legge come testo si mostra.
+    selectSourceProfile: (request, fallback) =>
+      request.documentId && mimeOfId(request.documentId) === "image/svg+xml" ? SVG_PROFILE : fallback,
     factory: {
       mount(profile, context) {
         context.parent.replaceChildren();
+        if (profile === SVG_PROFILE) {
+          return mountSvgSurface(context, {
+            onChange: (change) => options.onChange(context.paneId, change),
+            onSelectionChange: () => options.onSelectionChange(context.paneId),
+          });
+        }
         if (profile === "markdown") {
           return mountMarkdownSurface(context, {
             onChange: (change) => options.onChange(context.paneId, change),
@@ -279,9 +291,11 @@ export function createDocumentSurfaceRegistry(
     sources: { bytes: "bytes-read-only" },
     // L'unica classificazione di un file senza formato: la tabella MIME della
     // shell sceglie la vista, e ciò che nessuna vista sa mostrare non è di
-    // questa famiglia.
+    // questa famiglia. Un SVG è testo: lo prende la famiglia `text`, che lo
+    // scrive con l'anteprima accanto invece di mostrarlo e basta.
     selectSourceProfile: (request, fallback) => {
       if (!request.documentId) return fallback;
+      if (mimeOfId(request.documentId) === "image/svg+xml") return null;
       const kind = mediaKindOfId(pdfIdWithoutFragment(request.documentId));
       return kind === "other" ? null : profileForKind(kind);
     },

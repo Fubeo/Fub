@@ -32,6 +32,7 @@ import {
 } from "../editors/core/registry";
 import { NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
+import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
@@ -39,7 +40,7 @@ import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
 import { mountSlidePresentation } from "../ui/slides";
-import { mountMarkdown } from "../editors/text/profiles/markdown/mount";
+import { mountMarkdown, mountRenderedDocument } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
 import { iconEl } from "../ui/icons";
@@ -53,7 +54,7 @@ import { onEvent } from "../state/kernel";
 import { emit, on, state } from "../state/store";
 import { CASE_KEY, caseOf, toRecover } from "../state/drafts";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import type { DraftInfo } from "../host/contract";
+import type { DraftInfo, Origin } from "../host/contract";
 import {
   documentSessions,
   flushPendingSave,
@@ -442,6 +443,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
         read_chunk: api.resourceReadChunk,
         close: api.resourceClose,
       },
+      assetUrl: api.assetUrl,
       copyText: writeClipboardText,
     },
   });
@@ -488,45 +490,57 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
     }));
   }
 
-  lifetime.add(
-    onEvent("document_changed", (e, origin) => {
-      void documentSessions.handleExternalChange(e.id, origin).then((outcome) => {
-        void applyExternalChange(e.id, outcome);
+  // Un file che nessun formato serve — un `.svg`, un `.txt` aperto come
+  // testo — non manda `document_*` ma `entry_*` (vedi `KernelEvent`): per chi
+  // lo tiene aperto sono gli stessi tre fatti, e passano dalla stessa via. Per
+  // un'immagine aperta nel visualizzatore la sessione non c'è, e resta il
+  // riquadro: segue la rinomina e si chiude se il file sparisce.
+  const changed = (id: string, origin: Origin): void => {
+    void documentSessions.handleExternalChange(id, origin).then((outcome) => {
+      void applyExternalChange(id, outcome);
+    });
+  };
+  const removed = (id: string, recreate: (text: string) => Promise<unknown>): void => {
+    const outcome = documentSessions.handleExternalRemoval(id);
+    invalidateDocumentCaches(id);
+    invalidateLoads(id);
+    if (outcome.dirty && outcome.text !== undefined) {
+      const text = outcome.text;
+      notify(t("document.deleted_dirty", { doc: id }), "guasto", {
+        label: t("document.recreate"),
+        run: async () => {
+          await recreate(text);
+          await openDocument(id);
+        },
       });
-    }),
-  );
+    }
+    removeEverywhere(id);
+  };
+  const renamed = (from: string, to: string): void => {
+    const outcome = documentSessions.rename(from, to);
+    if (outcome.kind !== "collision") {
+      renameInDocumentCaches(from, to);
+      // The layout still names the old path until `rename` below runs. Keep
+      // those editors read-only across that tiny migration window.
+      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to));
+      rename(from, to);
+    }
+  };
 
+  lifetime.add(onEvent("document_changed", (e, origin) => changed(e.id, origin)));
+  lifetime.add(onEvent("entry_changed", (e, origin) => changed(e.id, origin)));
   lifetime.add(
-    onEvent("document_removed", (e) => {
-      const outcome = documentSessions.handleExternalRemoval(e.id);
-      invalidateDocumentCaches(e.id);
-      invalidateLoads(e.id);
-      if (outcome.dirty && outcome.text !== undefined) {
-        const text = outcome.text;
-        notify(t("document.deleted_dirty", { doc: e.id }), "guasto", {
-          label: t("document.recreate"),
-          run: async () => {
-            await api.writeDocument(e.id, text, { kind: "dictated" });
-            await openDocument(e.id);
-          },
-        });
-      }
-      removeEverywhere(e.id);
-    }),
+    onEvent("document_removed", (e) =>
+      removed(e.id, (text) => api.writeDocument(e.id, text, { kind: "dictated" }))),
   );
-
+  // Ricreare un file senza formato è una creazione esclusiva a byte: se nel
+  // frattempo qualcuno l'ha rifatto, la scrittura lo dice invece di coprirlo.
   lifetime.add(
-    onEvent("document_renamed", (e) => {
-      const outcome = documentSessions.rename(e.from, e.to);
-      if (outcome.kind !== "collision") {
-        renameInDocumentCaches(e.from, e.to);
-        // The layout still names the old path until `rename` below runs. Keep
-        // those editors read-only across that tiny migration window.
-        setReadOnlyForDocument(e.from, documentSessions.isDeletionPending(e.to));
-        rename(e.from, e.to);
-      }
-    }),
+    onEvent("entry_removed", (e) =>
+      removed(e.id, (text) => api.resourceWrite(e.id, new TextEncoder().encode(text), null))),
   );
+  lifetime.add(onEvent("document_renamed", (e) => renamed(e.from, e.to)));
+  lifetime.add(onEvent("entry_renamed", (e) => renamed(e.from, e.to)));
 
   lifetime.add(
     onEvent("overflow", () => {
@@ -1958,9 +1972,16 @@ function handledByVault(doc: string): boolean {
 }
 
 /// Un file che nessun formato del vault gestisce si apre soltanto se una
-/// superficie registrata sa mostrarlo dai suoi byte. L'esploratore chiede
-/// qui, invece di ripetere la classificazione della shell.
+/// superficie registrata sa mostrarlo: dai suoi byte (un'immagine, un PDF) o
+/// come testo con un profilo suo (un SVG). L'esploratore chiede qui, invece di
+/// ripetere la classificazione della shell.
 export function canShowFile(id: string): boolean {
+  return surfaceRegistry?.opensWithoutFormat(id) ?? false;
+}
+
+/// Il file si mostra dai byte e non ha un testo da condividere: una finestra
+/// staccata, che monta soltanto un `TextEngine`, non ha niente da scrivere.
+export function showsFileBytes(id: string): boolean {
   return surfaceRegistry?.showsBytes(id) ?? false;
 }
 
@@ -2300,7 +2321,17 @@ function presentSlides(r: Pane, doc: string): void {
 
 async function presentPrint(r: Pane, doc: string): Promise<void> {
   try {
-    const stop = await printDocument(doc, docTitle(doc), renderPrint);
+    // La resa di stampa il kernel la legge dal disco: ciò che il buffer ha e
+    // il disco non ancora ci arriva prima.
+    await documentSessions.flush(doc);
+    // La resa dell'host non marca i recinti che il vault dichiara: senza,
+    // un diagramma si stamperebbe come codice.
+    const declared = await syntaxForms(doc).then(
+      (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
+      () => new Set<string>(),
+    );
+    const stop = await printDocument(doc, docTitle(doc), renderPrint, (container, rendered) =>
+      mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }));
     if (r.shown?.k !== "doc" || r.shown.doc !== doc) {
       stop();
       return;

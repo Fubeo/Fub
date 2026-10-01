@@ -47,6 +47,7 @@ export const ORDER = [
   "context-menu",
   "graph",
   "modals",
+  "media",
   "notices",
   "declared-views",
   "nodes",

@@ -9,7 +9,7 @@ import type { EditorSurface, SurfaceMode, SurfaceMountContext } from "../core/re
 import type { Lifetime } from "../../ui/lifetime";
 import { openLifetime } from "../../ui/lifetime";
 import { onLanguage, t, type Key } from "../../i18n/strings";
-import { assetUrl, MEDIA_MAX_INLINE_BYTES, mediaKindOfId, type MediaKind, type ResourceDescriptor } from "./media-types";
+import { MEDIA_MAX_INLINE_BYTES, mediaKindOfId, type MediaKind, type ResourceDescriptor } from "./media-types";
 import { openResourcePort, type ResourcePort, type ResourceTransport } from "./resource-port";
 import { decodeImage, mountImageView } from "./image-view";
 import { mountAudioView, mountVideoView } from "./player-view";
@@ -17,6 +17,9 @@ import { mountPdfView, pdfIdWithoutFragment, pdfPageFromFragment, type PdfEngine
 
 export interface MediaSurfaceDeps {
   transport: ResourceTransport;
+  /// L'URL `fub-asset:` con cui audio e video oltre il tetto si leggono in
+  /// streaming: la forma dipende dalla piattaforma e la sa l'host.
+  assetUrl: (handle: string) => string;
   pdfLoader?: PdfEngineLoader;
   openExternal?: (id: string) => void | Promise<void>;
   copyText?: (text: string) => Promise<void>;
@@ -88,8 +91,8 @@ export function mountMediaSurface(
       const descriptor = port.descriptor;
       if ((kind === "audio" || kind === "video") && descriptor.len > MEDIA_MAX_INLINE_BYTES) {
         const view = kind === "audio"
-          ? mountAudioView(descriptor, assetUrl(descriptor.handle), life, deps.openExternal ? () => deps.openExternal!(descriptor.id) : undefined)
-          : mountVideoView(descriptor, assetUrl(descriptor.handle), life, deps.openExternal ? () => deps.openExternal!(descriptor.id) : undefined);
+          ? mountAudioView(descriptor, deps.assetUrl(descriptor.handle), life, deps.openExternal ? () => deps.openExternal!(descriptor.id) : undefined)
+          : mountVideoView(descriptor, deps.assetUrl(descriptor.handle), life, deps.openExternal ? () => deps.openExternal!(descriptor.id) : undefined);
         root.append(view.element);
         const streamPort = port;
         life.add(() => void streamPort.close().catch(() => {}));

@@ -50,7 +50,18 @@ export interface MarkdownRenderActions {
   readonly toggleTask?: (sourceOffset: number) => void;
   readonly openSource?: (sourceOffset: number) => void;
   readonly navigateFragment?: (id: string) => boolean;
+  /** Replaces a range of a fenced block's body; see `MarkdownMountOptions`. */
+  readonly editFence?: FenceEdit;
 }
+
+/// Modifica il corpo del recinto che comincia a `fenceOffset`. `body` è il
+/// testo che la resa ha letto: chi scrive lo confronta col buffer e non tocca
+/// niente se non coincide. `edit` è in offset di `body`.
+export type FenceEdit = (
+  fenceOffset: number,
+  body: string,
+  edit: { readonly from: number; readonly to: number; readonly insert: string },
+) => void;
 
 export type MountMarkdown = (
   container: HTMLElement,

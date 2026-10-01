@@ -11,7 +11,7 @@ import { t } from "../../../../i18n/strings";
 import type { LinkTarget } from "../../../../host/contract";
 import { api } from "../../../../host/ipc";
 import { resolvedReference } from "../../../../host/query";
-import { assetUrl, mediaKindOfId } from "../../../media/media-types";
+import { mediaKindOfId } from "../../../media/media-types";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Expected } from "../../../../ui/race";
 import { VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
@@ -21,6 +21,8 @@ export interface MediaPort {
   resolve(target: LinkTarget, from: string): Promise<string | null>;
   open(id: string): Promise<{ handle: string }>;
   close(handle: string): void;
+  /// L'URL `fub-asset:` di un lease aperto: la forma è dell'host.
+  url(handle: string): string;
 }
 
 const hostPort: MediaPort = {
@@ -29,10 +31,11 @@ const hostPort: MediaPort = {
   close: (handle) => {
     void api.resourceClose(handle).catch(() => {});
   },
+  url: (handle) => api.assetUrl(handle),
 };
 
 /// Un `src` che è già un URL (schema, `//host`, frammento) non è del vault.
-function isVaultPath(src: string): boolean {
+export function isVaultPath(src: string): boolean {
   return src !== "" && !/^[a-z][\w+.-]*:/i.test(src) && !src.startsWith("//") && !src.startsWith("#");
 }
 
@@ -55,7 +58,13 @@ async function lease(
     return null;
   }
   life.add(() => port.close(descriptor.handle));
-  return assetUrl(descriptor.handle);
+  return port.url(descriptor.handle);
+}
+
+/// Un'immagine del vault per chi la mostra altrove (la lightbox): un lease
+/// suo, nella sua vita, indipendente da quello della resa da cui viene.
+export function vaultImageSource(id: string, port: MediaPort = hostPort): (life: Lifetime) => Promise<string | null> {
+  return (life) => lease(port, id, life);
 }
 
 /// Un'immagine che non si vede: al suo posto il testo alternativo e il path,
@@ -73,7 +82,29 @@ function showMissingImage(img: HTMLImageElement, path: string): void {
   img.after(box);
 }
 
-/// Idrata le immagini con `src` locale e gli embed di media del vault.
+/// Il media di un embed risolto al posto del suo segnaposto: `<img>`,
+/// `<audio>` o `<video>`, con la dimensione scritta dopo la barra.
+function showEmbeddedMedia(container: HTMLElement, slot: HTMLElement, id: string, url: string, label: string): void {
+  const kind = mediaKindOfId(id);
+  const media = kind === "audio" || kind === "video"
+    ? Object.assign(document.createElement(kind), { controls: true, preload: "metadata" })
+    : Object.assign(document.createElement("img"), { alt: label, loading: "lazy", decoding: "async" });
+  media.src = url;
+  if (kind !== "audio" && kind !== "video") media.dataset.vaultId = id;
+  const size = embedSize(slot.dataset.embedSize);
+  if (size) {
+    media.setAttribute("width", size.width);
+    if (size.height) media.setAttribute("height", size.height);
+  }
+  slot.dataset.vaultMedia = "loaded";
+  slot.classList.add("embed-media");
+  slot.replaceChildren(media);
+  container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
+}
+
+/// Idrata le immagini con `src` locale e gli embed di media del vault: quelli
+/// per nome (`![[foto.png]]`) e quelli per path che scrive la resa dell'host
+/// (`<div class="embed" data-embed-path>` per `![alt](foto.png)`).
 export async function hydrateVaultMedia(
   container: HTMLElement,
   documentId: string,
@@ -85,13 +116,19 @@ export async function hydrateVaultMedia(
     .filter((img) => !img.dataset.vaultMedia && isVaultPath(img.getAttribute(VAULT_SRC_ATTRIBUTE) ?? ""));
   const embeds = Array.from(container.querySelectorAll<HTMLElement>(".embed[data-embed-page]"))
     .filter((slot) => !slot.dataset.vaultMedia && mediaKindOfId(slot.dataset.embedPage ?? "") !== "other");
+  const placed = Array.from(container.querySelectorAll<HTMLElement>(".embed[data-embed-path]"))
+    .filter((slot) => {
+      const path = slot.dataset.embedPath ?? "";
+      const kind = mediaKindOfId(path);
+      return !slot.dataset.vaultMedia && isVaultPath(path) && (kind === "image" || kind === "audio" || kind === "video");
+    });
   await Promise.all([
     ...images.map(async (img) => {
       const raw = img.getAttribute(VAULT_SRC_ATTRIBUTE)!;
       img.dataset.vaultMedia = "pending";
       const id = await expected(port.resolve({ kind: "path", value: raw }, documentId).catch(() => null));
       const url = id ? await lease(port, id, life).catch(() => null) : null;
-      if (!url) {
+      if (!url || !id) {
         img.dataset.vaultMedia = "unresolved";
         img.classList.add("unresolved");
         img.dataset.vaultMissing = raw;
@@ -99,6 +136,7 @@ export async function hydrateVaultMedia(
         return;
       }
       img.dataset.vaultMedia = "loaded";
+      img.dataset.vaultId = id;
       // Un file che c'è ma non si decodifica è un'immagine rotta anche lui:
       // il segnaposto dice quale, invece dell'icona del browser.
       life.listen(img, "error", () => showMissingImage(img, raw), { once: true });
@@ -126,20 +164,21 @@ export async function hydrateVaultMedia(
         slot.classList.add("unresolved");
         return;
       }
-      const kind = mediaKindOfId(id);
-      const media = kind === "audio" || kind === "video"
-        ? Object.assign(document.createElement(kind), { controls: true, preload: "metadata" })
-        : Object.assign(document.createElement("img"), { alt: page, loading: "lazy", decoding: "async" });
-      media.src = url;
-      const size = embedSize(slot.dataset.embedSize);
-      if (size) {
-        media.setAttribute("width", size.width);
-        if (size.height) media.setAttribute("height", size.height);
+      showEmbeddedMedia(container, slot, id, url, page);
+    }),
+    ...placed.map(async (slot) => {
+      const path = slot.dataset.embedPath!;
+      // Il testo del segnaposto è l'`alt` che la sorgente ha scritto.
+      const label = slot.textContent?.trim() || path;
+      slot.dataset.vaultMedia = "pending";
+      const id = await expected(port.resolve({ kind: "path", value: path }, documentId).catch(() => null));
+      const url = id ? await lease(port, id, life).catch(() => null) : null;
+      if (!url || !id) {
+        slot.dataset.vaultMedia = "unresolved";
+        slot.classList.add("unresolved");
+        return;
       }
-      slot.dataset.vaultMedia = "loaded";
-      slot.classList.add("embed-media");
-      slot.replaceChildren(media);
-      container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
+      showEmbeddedMedia(container, slot, id, url, label);
     }),
   ]);
 }

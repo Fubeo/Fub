@@ -12,7 +12,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MEDIA_IPC_CHUNK,
   MEDIA_MAX_INLINE_BYTES,
-  assetUrl,
   mediaKindOfId,
   mediaKindOfMime,
   mimeOfId,
@@ -56,9 +55,6 @@ describe("le specie media vengono dal nome, come di la'", () => {
     expect(MEDIA_MAX_INLINE_BYTES).toBe(64 * 1024 * 1024);
   });
 
-  it("l'URL asset porta il solo handle", () => {
-    expect(assetUrl("3")).toBe("fub-asset://localhost/3");
-  });
 });
 
 describe("i nomi di deposito non sfuggono", () => {

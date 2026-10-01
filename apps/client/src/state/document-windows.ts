@@ -3,7 +3,7 @@ import { activeDoc } from "./layout";
 import { state } from "./store";
 import { documentSessions, type DocumentSession } from "./document-session";
 import { attachRemoteSurface, DocumentWindowUnsupported, type RemoteSurfaceHandle } from "./document-bridge";
-import { canShowFile, textProfileFor } from "../panels/document";
+import { showsFileBytes, textProfileFor } from "../panels/document";
 import { pageName } from "../rules/mirrored";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
@@ -101,7 +101,7 @@ export async function openCurrentInNewWindow(doc: string | null = activeDoc() ??
   }
   // The window shares the text buffer of a document: the bytes of a media
   // file have none, and a surface that is not text has no window to mount.
-  if (canShowFile(doc)) {
+  if (showsFileBytes(doc)) {
     notify(t("windows.not_text", { doc: pageName(doc) }), "info");
     return;
   }
