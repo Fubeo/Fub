@@ -21,6 +21,10 @@ use super::{
 pub struct RootedFsStorage {
     root: Utf8PathBuf,
     dir: Dir,
+    /// Guasto iniettato nel sync delle cartelle: un `fsync` che fallisce non
+    /// si provoca su un filesystem di prova.
+    #[cfg(test)]
+    dir_sync_fault: std::sync::Mutex<Option<i32>>,
 }
 
 impl std::fmt::Debug for RootedFsStorage {
@@ -105,6 +109,30 @@ fn rename_no_replace_windows(
     Ok(())
 }
 
+/// L'esito del sync di una cartella, al netto di ciò che il supporto non sa
+/// fare.
+///
+/// `EINVAL`, `ENOTSUP`/`EOPNOTSUPP` e `ENOSYS` dicono che quel sync il
+/// filesystem non lo offre (condivisioni di rete, alcuni FUSE): non esiste una
+/// durabilità migliore da ottenere lì, e rifiutare ogni scrittura renderebbe il
+/// vault inutilizzabile. Ogni altro guasto risale.
+#[cfg(unix)]
+fn dir_sync_outcome(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(error)
+            if error.kind() == io::ErrorKind::Unsupported
+                // Una lista e non un pattern: su Linux `ENOTSUP` ed
+                // `EOPNOTSUPP` sono lo stesso numero, su macOS no.
+                || error.raw_os_error().is_some_and(|code| {
+                    [libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP, libc::ENOSYS].contains(&code)
+                }) =>
+        {
+            Ok(())
+        }
+        other => other,
+    }
+}
+
 impl RootedFsStorage {
     pub fn open(root: &Utf8Path) -> io::Result<Self> {
         Self::open_with_authority(root, ambient_authority())
@@ -115,6 +143,8 @@ impl RootedFsStorage {
         let storage = Self {
             root: root.to_owned(),
             dir,
+            #[cfg(test)]
+            dir_sync_fault: std::sync::Mutex::new(None),
         };
         Ok(storage)
     }
@@ -241,6 +271,36 @@ impl RootedFsStorage {
         self.dir.create_dir_all(rel)
     }
 
+    /// [`create_parent`](Self::create_parent) per chi promette durabilità.
+    ///
+    /// Una cartella appena creata è soltanto un nome nel suo genitore: finché
+    /// quel genitore non è sincronizzato, un crash può toglierla insieme al file
+    /// che ci si è appena posato dentro. Il sync del genitore diretto, che fa chi
+    /// pubblica, copre l'ultimo nome e non le cartelle nate qui.
+    fn create_parent_synced(&self, path: &Utf8Path) -> io::Result<()> {
+        let mut missing = Vec::new();
+        let mut cursor = path.parent();
+        while let Some(dir) = cursor {
+            if dir == self.root || dir.as_str().is_empty() {
+                break;
+            }
+            match self.dir.symlink_metadata(self.rel(dir)?) {
+                Ok(_) => break,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => missing.push(dir),
+                Err(error) => return Err(error),
+            }
+            cursor = dir.parent();
+        }
+        self.create_parent(path)?;
+        // Dall'alto verso il basso: ogni nome nuovo diventa durevole prima di
+        // quello che contiene. Una cartella creata nel frattempo da un altro
+        // writer costa soltanto un sync in più.
+        for dir in missing.into_iter().rev() {
+            self.sync_dir(dir.parent().unwrap_or(&self.root))?;
+        }
+        Ok(())
+    }
+
     fn stat_metadata(metadata: &Metadata, kind: EntryKind) -> Stat {
         let mtime = metadata
             .modified()
@@ -320,31 +380,73 @@ impl RootedFsStorage {
         }
     }
 
-    fn sync_dir(&self, dir: &Utf8Path) {
-        let opened = if dir == self.root {
-            self.dir.try_clone()
-        } else {
-            self.rel(dir).and_then(|rel| self.dir.open_dir(rel))
-        };
-        if let Ok(dir) = opened {
-            let _ = dir.into_std_file().sync_all();
+    /// Rende durevoli i nomi dentro `dir`: la rinomina che pubblica una
+    /// scrittura, uno spostamento, una rimozione.
+    ///
+    /// Su Unix l'esito risale. Una scrittura il cui nome non è diventato
+    /// durevole non può rispondere `Ok`: chi la riceve la tratta come
+    /// definitiva e butta la copia di sicurezza (la bozza), che dopo un crash
+    /// sarebbe l'unica rimasta. Si tollera soltanto il supporto che il sync
+    /// di una cartella non lo sa fare affatto ([`dir_sync_outcome`]).
+    ///
+    /// Su Windows una cartella non si sincronizza: `FlushFileBuffers` vuole un
+    /// handle scrivibile, che una cartella aperta qui non ha, e NTFS rende
+    /// durevole il nome col suo journal. Il tentativo resta senza esito, come
+    /// è sempre stato.
+    fn sync_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            // Non l'handle di `Dir` né `open_dir`: su Linux cap-std apre le
+            // cartelle con `O_PATH`, e `fsync` su quel descrittore risponde
+            // sempre `EBADF`. Serve un'apertura in lettura vera.
+            use cap_std::fs::OpenOptionsExt as _;
+            let rel = if dir == self.root {
+                Path::new(".")
+            } else {
+                self.rel(dir)?
+            };
+            let mut options = OpenOptions::new();
+            options.read(true).custom_flags(libc::O_DIRECTORY);
+            let opened = self.dir.open_with(rel, &options)?;
+            #[cfg(test)]
+            if let Some(code) = *self.dir_sync_fault.lock().unwrap() {
+                return dir_sync_outcome(Err(io::Error::from_raw_os_error(code)));
+            }
+            dir_sync_outcome(opened.into_std().sync_all())
+        }
+        #[cfg(not(unix))]
+        {
+            let opened = if dir == self.root {
+                self.dir.try_clone()
+            } else {
+                self.rel(dir).and_then(|rel| self.dir.open_dir(rel))
+            };
+            if let Ok(dir) = opened {
+                let _ = dir.into_std_file().sync_all();
+            }
+            Ok(())
         }
     }
 
-    fn sync_parents(&self, from: &Utf8Path, to: Option<&Utf8Path>) {
+    fn sync_parents(&self, from: &Utf8Path, to: Option<&Utf8Path>) -> io::Result<()> {
         let mut seen = Vec::with_capacity(2);
         for path in std::iter::once(from).chain(to) {
             if let Some(parent) = path.parent() {
                 if !seen.iter().any(|known: &Utf8PathBuf| known == parent) {
                     seen.push(parent.to_owned());
-                    self.sync_dir(parent);
+                    self.sync_dir(parent)?;
                 }
             }
         }
+        Ok(())
     }
 
     fn write_inner(&self, path: &Utf8Path, bytes: &[u8], durable: bool) -> io::Result<Stat> {
-        self.create_parent(path)?;
+        if durable {
+            self.create_parent_synced(path)?;
+        } else {
+            self.create_parent(path)?;
+        }
         if self.unsafe_write_target(path)? {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -400,7 +502,9 @@ impl RootedFsStorage {
             }
             self.dir.rename(&tmp, &self.dir, &rel)?;
             if durable {
-                self.sync_parents(path, None);
+                // Il nome è già pubblicato: un guasto qui non lo ritira, ma
+                // dice a chi chiama che la scrittura non è ancora definitiva.
+                self.sync_parents(path, None)?;
             }
             Ok(stat)
         })();
@@ -410,11 +514,20 @@ impl RootedFsStorage {
         result
     }
 
-    fn with_lock<T>(&self, path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
-        self.create_parent(path).inspect_err(|error| {
-            tracing::error!(target: "fub.storage", %path, %error,
-                operation = "create_parent", "preparazione del lock fallita");
-        })?;
+    /// Apre il compagno di lock di `path`, creandolo se manca, senza
+    /// acquisirlo. `create_parent` è falso per chi il genitore non deve
+    /// crearlo: la sorgente di uno spostamento, che se manca non si sposta.
+    fn open_lock(
+        &self,
+        path: &Utf8Path,
+        create_parent: bool,
+    ) -> io::Result<(Utf8PathBuf, std::fs::File)> {
+        if create_parent {
+            self.create_parent(path).inspect_err(|error| {
+                tracing::error!(target: "fub.storage", %path, %error,
+                    operation = "create_parent", "preparazione del lock fallita");
+            })?;
+        }
         let parent = path.parent().unwrap_or(&self.root);
         let name = path.file_name().unwrap_or("senza-nome");
         let lock_abs = parent.join(format!(".{name}.lock"));
@@ -438,19 +551,68 @@ impl RootedFsStorage {
                 operation = "open_lock", "apertura del lock fallita");
         })?
         .into_std();
+        Ok((lock_abs, lock))
+    }
+
+    fn acquire_lock(path: &Utf8Path, lock: &std::fs::File) -> io::Result<()> {
         // `File::lock` è disponibile dal MSRV 1.89. Per il backend di
         // produzione il lock è parte della promessa CAS: se non si può
         // acquisire, l'operazione fallisce invece di degradare in best-effort.
         lock.lock().inspect_err(|error| {
             tracing::error!(target: "fub.storage", %path, %error,
                 operation = "acquire_lock", "acquisizione del lock fallita");
-        })?;
+        })
+    }
+
+    fn locked_operation<T>(path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
         // Il log distingue il guasto del lock da quello della transazione,
         // senza sostituire l'errore I/O né perdere kind e raw_os_error.
         f().inspect_err(|error| {
             tracing::error!(target: "fub.storage", %path, %error,
                 operation = "locked_operation", "operazione sotto lock fallita");
         })
+    }
+
+    fn with_lock<T>(&self, path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
+        let (_, lock) = self.open_lock(path, true)?;
+        Self::acquire_lock(path, &lock)?;
+        Self::locked_operation(path, f)
+    }
+
+    /// Lo stesso protocollo di [`with_lock`](Self::with_lock) su due path,
+    /// per lo spostamento che li tocca entrambi.
+    ///
+    /// Una CAS che crea la destinazione la pubblica con una rinomina che
+    /// sostituisce: se nel frattempo uno spostamento vi avesse portato un altro
+    /// file, la pubblicazione lo cancellerebbe senza errori. Una CAS sulla
+    /// sorgente, all'inverso, la ricreerebbe accanto al file appena spostato.
+    /// Tenere entrambi i lock rende le due operazioni una prima dell'altra.
+    ///
+    /// L'ordine di acquisizione è l'identità del file di lock, non il nome: due
+    /// spostamenti incrociati si aspettano altrimenti a vicenda, e due nomi
+    /// diversi possono indicare lo stesso lock dove il caso non conta. In quel
+    /// caso (`nota` → `Nota`) il lock si prende una volta sola: un secondo
+    /// lock dello stesso processo sullo stesso file aspetterebbe sé stesso.
+    fn with_move_locks<T>(
+        &self,
+        from: &Utf8Path,
+        to: &Utf8Path,
+        f: impl FnOnce() -> io::Result<T>,
+    ) -> io::Result<T> {
+        let (from_lock_path, from_lock) = self.open_lock(from, false)?;
+        let (to_lock_path, to_lock) = self.open_lock(to, true)?;
+        let from_identity = self.identity(&from_lock_path)?;
+        let to_identity = self.identity(&to_lock_path)?;
+        if from_identity == to_identity {
+            Self::acquire_lock(from, &from_lock)?;
+        } else if from_identity < to_identity {
+            Self::acquire_lock(from, &from_lock)?;
+            Self::acquire_lock(to, &to_lock)?;
+        } else {
+            Self::acquire_lock(to, &to_lock)?;
+            Self::acquire_lock(from, &from_lock)?;
+        }
+        Self::locked_operation(to, f)
     }
 
     fn current_bytes(&self, path: &Utf8Path) -> io::Result<Option<Vec<u8>>> {
@@ -460,24 +622,76 @@ impl RootedFsStorage {
             Err(error) => Err(error),
         }
     }
+    /// Spostamento senza sostituzione per chi non ha la primitiva atomica del
+    /// sistema. I lock di [`with_move_locks`](Self::with_move_locks) sono già
+    /// presi: tengono fuori gli altri writer cooperativi fra la verifica e la
+    /// rinomina.
     #[cfg(not(windows))]
-    fn rename_no_replace_with_lock(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
-        self.with_lock(to, || {
-            match self.dir.symlink_metadata(self.rel(to)?) {
-                Ok(_) => {
-                    if same_parent_resolution_name(from, to) && self.same_file(from, to) {
-                        return self.rename(from, to);
-                    }
-                    return Err(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!("{to}: esiste già"),
-                    ));
+    fn rename_no_replace_checked(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        match self.dir.symlink_metadata(self.rel(to)?) {
+            Ok(_) => {
+                if same_parent_resolution_name(from, to) && self.same_file(from, to) {
+                    return self.rename(from, to);
                 }
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error),
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("{to}: esiste già"),
+                ));
             }
-            self.rename(from, to)
-        })
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        self.rename(from, to)
+    }
+
+    fn rename_no_replace_locked(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+
+            // Aprire i due genitori tramite `Dir` prima della syscall mantiene
+            // la risoluzione dentro la capability anche se un processo cambia
+            // nel frattempo il nome ambientale di una cartella.
+            let (from_parent, from_name) = self.parent_dir_and_name(from)?;
+            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+            match super::rename_no_replace_at(
+                from_parent.as_raw_fd(),
+                &from_name,
+                to_parent.as_raw_fd(),
+                &to_name,
+            ) {
+                Ok(true) => self.sync_parents(from, Some(to)),
+                Ok(false) => self.rename_no_replace_checked(from, to),
+                Err(error)
+                    if error.kind() == io::ErrorKind::AlreadyExists
+                        && same_parent_resolution_name(from, to)
+                        && self.same_file(from, to) =>
+                {
+                    self.rename(from, to)
+                }
+                Err(error) => Err(error),
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            let from_rel = self.rel(from)?;
+            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+            match rename_no_replace_windows(&self.dir, from_rel, &to_parent, &to_name) {
+                Ok(()) => self.sync_parents(from, Some(to)),
+                Err(error)
+                    if error.kind() == io::ErrorKind::AlreadyExists
+                        && same_parent_resolution_name(from, to)
+                        && self.same_file(from, to) =>
+                {
+                    self.rename(from, to)
+                }
+                Err(error) => Err(error),
+            }
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        self.rename_no_replace_checked(from, to)
     }
 }
 
@@ -555,78 +769,24 @@ impl VaultStorage for RootedFsStorage {
     }
 
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
-        self.create_parent(to)?;
+        self.create_parent_synced(to)?;
         self.dir.rename(self.rel(from)?, &self.dir, self.rel(to)?)?;
-        self.sync_parents(from, Some(to));
-        Ok(())
+        self.sync_parents(from, Some(to))
     }
 
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
-        self.create_parent(to)?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::io::AsRawFd;
-
-            // Aprire i due genitori tramite `Dir` prima della syscall mantiene
-            // la risoluzione dentro la capability anche se un processo cambia
-            // nel frattempo il nome ambientale di una cartella.
-            let (from_parent, from_name) = self.parent_dir_and_name(from)?;
-            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
-            match super::rename_no_replace_at(
-                from_parent.as_raw_fd(),
-                &from_name,
-                to_parent.as_raw_fd(),
-                &to_name,
-            ) {
-                Ok(true) => {
-                    self.sync_parents(from, Some(to));
-                    Ok(())
-                }
-                Ok(false) => self.rename_no_replace_with_lock(from, to),
-                Err(error)
-                    if error.kind() == io::ErrorKind::AlreadyExists
-                        && same_parent_resolution_name(from, to)
-                        && self.same_file(from, to) =>
-                {
-                    self.rename(from, to)
-                }
-                Err(error) => Err(error),
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            self.with_lock(from, || {
-                // Serializzare la sorgente prima di aprirla evita due successi
-                // sullo stesso file, anche verso destinazioni differenti.
-                let from_rel = self.rel(from)?;
-                let (to_parent, to_name) = self.parent_dir_and_name(to)?;
-                match rename_no_replace_windows(&self.dir, from_rel, &to_parent, &to_name) {
-                    Ok(()) => {
-                        self.sync_parents(from, Some(to));
-                        Ok(())
-                    }
-                    Err(error)
-                        if error.kind() == io::ErrorKind::AlreadyExists
-                            && same_parent_resolution_name(from, to)
-                            && self.same_file(from, to) =>
-                    {
-                        self.rename(from, to)
-                    }
-                    Err(error) => Err(error),
-                }
-            })
-        }
-
-        #[cfg(not(any(unix, windows)))]
-        self.rename_no_replace_with_lock(from, to)
+        self.create_parent_synced(to)?;
+        // Anche dove la primitiva del sistema è atomica (`renameat2` con
+        // `RENAME_NOREPLACE`) i lock servono: l'atomicità vale contro un file
+        // già presente, non contro una CAS che sta per pubblicarne uno. Su
+        // Windows la sorgente serializzata evita inoltre due successi sullo
+        // stesso file verso destinazioni differenti.
+        self.with_move_locks(from, to, || self.rename_no_replace_locked(from, to))
     }
 
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
         self.dir.remove_file(self.rel(path)?)?;
-        self.sync_parents(path, None);
-        Ok(())
+        self.sync_parents(path, None)
     }
 
     fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
@@ -743,21 +903,18 @@ impl VaultStorage for RootedFsStorage {
 
     fn remove_dir_all(&self, dir: &Utf8Path) -> io::Result<()> {
         self.dir.remove_dir_all(self.rel(dir)?)?;
-        self.sync_parents(dir, None);
-        Ok(())
+        self.sync_parents(dir, None)
     }
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
         self.dir.remove_dir(self.rel(dir)?)?;
-        self.sync_parents(dir, None);
-        Ok(())
+        self.sync_parents(dir, None)
     }
 
     fn create_dir(&self, dir: &Utf8Path) -> io::Result<()> {
-        self.create_parent(dir)?;
+        self.create_parent_synced(dir)?;
         self.dir.create_dir(self.rel(dir)?)?;
-        self.sync_parents(dir, None);
-        Ok(())
+        self.sync_parents(dir, None)
     }
 }
 
@@ -804,6 +961,221 @@ mod tests {
         );
         let final_bytes = a.read(&path).unwrap();
         assert!(final_bytes == b"left" || final_bytes == b"right");
+    }
+
+    /// Esegue `operation` su un altro thread e rende il suo esito se è tornata
+    /// entro `patience`: serve a provare che un'operazione **aspetta** un lock.
+    /// Il ricevitore resta a chi deve raccogliere l'esito più tardi.
+    fn finishes_within<T: Send + 'static>(
+        patience: std::time::Duration,
+        operation: impl FnOnce() -> T + Send + 'static,
+    ) -> (std::sync::mpsc::Receiver<T>, Option<T>) {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(operation());
+        });
+        let early = receiver.recv_timeout(patience).ok();
+        (receiver, early)
+    }
+
+    #[test]
+    fn move_waits_for_a_cas_creating_its_destination() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let cas = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let mover = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let from = root.join("note.md");
+        let to = root.join("renamed.md");
+        cas.write(&from, b"old").unwrap();
+
+        // La CAS che crea `renamed.md` ha confrontato «assente» e sta per
+        // pubblicare: è la finestra in cui lo spostamento portava lì la nota.
+        let (in_window, window) = std::sync::mpsc::channel();
+        let (publish, published) = std::sync::mpsc::channel::<()>();
+        let creator = {
+            let cas = Arc::clone(&cas);
+            let to = to.clone();
+            std::thread::spawn(move || {
+                cas.with_lock(&to, || {
+                    assert!(cas.current_bytes(&to)?.is_none());
+                    in_window.send(()).unwrap();
+                    published.recv().unwrap();
+                    cas.write(&to, b"cas").map(drop)
+                })
+            })
+        };
+        window.recv().unwrap();
+
+        let (moved, finished) = {
+            let mover = Arc::clone(&mover);
+            let (from, to) = (from.clone(), to.clone());
+            finishes_within(std::time::Duration::from_millis(200), move || {
+                mover.rename_no_replace(&from, &to)
+            })
+        };
+        assert!(
+            finished.is_none(),
+            "lo spostamento non aspetta la CAS sulla destinazione"
+        );
+        publish.send(()).unwrap();
+        creator.join().unwrap().unwrap();
+
+        let error = moved
+            .recv()
+            .unwrap()
+            .expect_err("la destinazione ora è occupata");
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(cas.read(&from).unwrap(), b"old");
+        assert_eq!(cas.read(&to).unwrap(), b"cas");
+    }
+
+    #[test]
+    fn move_waits_for_a_cas_rewriting_its_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let cas = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let mover = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let from = root.join("note.md");
+        let to = root.join("renamed.md");
+        cas.write(&from, b"old").unwrap();
+
+        let (in_window, window) = std::sync::mpsc::channel();
+        let (publish, published) = std::sync::mpsc::channel::<()>();
+        let writer = {
+            let cas = Arc::clone(&cas);
+            let from = from.clone();
+            std::thread::spawn(move || {
+                cas.write_if_unchanged(&from, Some(b"old"), b"new")
+                    .and_then(|_| {
+                        // Il protocollo vero è dentro `write_if_unchanged`; qui
+                        // basta una seconda CAS trattenuta a metà sullo stesso
+                        // lock per tenere aperta la finestra.
+                        cas.with_lock(&from, || {
+                            in_window.send(()).unwrap();
+                            published.recv().unwrap();
+                            cas.write(&from, b"newer").map(drop)
+                        })
+                    })
+            })
+        };
+        window.recv().unwrap();
+
+        let (moved, finished) = {
+            let mover = Arc::clone(&mover);
+            let (from, to) = (from.clone(), to.clone());
+            finishes_within(std::time::Duration::from_millis(200), move || {
+                mover.rename_no_replace(&from, &to)
+            })
+        };
+        assert!(
+            finished.is_none(),
+            "lo spostamento non aspetta la CAS sulla sorgente"
+        );
+        publish.send(()).unwrap();
+        writer.join().unwrap().unwrap();
+
+        moved.recv().unwrap().unwrap();
+        assert!(
+            !cas.exists(&from),
+            "la CAS non deve ricreare la sorgente spostata"
+        );
+        assert_eq!(cas.read(&to).unwrap(), b"newer");
+    }
+
+    #[test]
+    fn crossed_moves_take_the_locks_in_one_order() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let a = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let b = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let left = root.join("left.md");
+        let right = root.join("right.md");
+        a.write(&left, b"one").unwrap();
+
+        // Un solo file rimbalza fra due nomi: ogni coppia di spostamenti
+        // contende gli stessi due lock in versi opposti.
+        let run = |storage: Arc<RootedFsStorage>, from: Utf8PathBuf, to: Utf8PathBuf| {
+            std::thread::spawn(move || {
+                for _ in 0..300 {
+                    let _ = storage.rename_no_replace(&from, &to);
+                }
+            })
+        };
+        let forth = run(Arc::clone(&a), left.clone(), right.clone());
+        let back = run(Arc::clone(&b), right.clone(), left.clone());
+        let (done, joined) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            forth.join().unwrap();
+            back.join().unwrap();
+            let _ = done.send(());
+        });
+        joined
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("due spostamenti incrociati si aspettano a vicenda");
+        assert!(a.exists(&left) != a.exists(&right));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn move_between_aliases_of_one_lock_takes_it_once() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+        let from = root.join("nota.md");
+        let to = root.join("Nota.md");
+        storage.write(&from, b"testo").unwrap();
+        // Dove il caso non conta i due compagni di lock sono lo stesso file:
+        // qui lo è un hardlink, su un filesystem che il caso lo distingue.
+        std::fs::write(root.join(".nota.md.lock"), b"").unwrap();
+        std::fs::hard_link(root.join(".nota.md.lock"), root.join(".Nota.md.lock")).unwrap();
+
+        let (_, moved) = finishes_within(std::time::Duration::from_secs(5), move || {
+            storage.rename_no_replace(&from, &to)
+        });
+        moved
+            .expect("un lock preso due volte dallo stesso processo aspetta sé stesso")
+            .unwrap();
+        assert_eq!(std::fs::read(root.join("Nota.md")).unwrap(), b"testo");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn durable_write_reports_a_directory_that_did_not_sync() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+        let path = root.join("cartella/nota.md");
+        storage.write(&path, b"prima").unwrap();
+
+        *storage.dir_sync_fault.lock().unwrap() = Some(libc::EIO);
+        let error = storage
+            .write(&path, b"dopo")
+            .expect_err("una scrittura non durevole non risponde Ok");
+        assert_eq!(error.raw_os_error(), Some(libc::EIO));
+        // Il guasto arriva quando il nome è già pubblicato: la scrittura non si
+        // ritira, ma chi chiama sa che non è definitiva e tiene la bozza.
+        assert_eq!(storage.read(&path).unwrap(), b"dopo");
+
+        // Un dato derivato non promette durabilità e non la verifica.
+        storage
+            .write_derived(&root.join("derivato.bin"), b"x")
+            .unwrap();
+        let moved = storage.rename_no_replace(&path, &root.join("cartella/spostata.md"));
+        assert_eq!(moved.unwrap_err().raw_os_error(), Some(libc::EIO));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_medium_without_directory_sync_still_accepts_writes() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+        let path = root.join("nota.md");
+        for code in [libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP, libc::ENOSYS] {
+            *storage.dir_sync_fault.lock().unwrap() = Some(code);
+            storage.write(&path, b"testo").unwrap();
+        }
+        assert_eq!(storage.read(&path).unwrap(), b"testo");
     }
 
     #[test]

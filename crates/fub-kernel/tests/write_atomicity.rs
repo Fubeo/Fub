@@ -183,6 +183,59 @@ fn raw_creation_cannot_replace_a_file_created_after_preflight() {
 }
 
 #[test]
+fn text_creation_cannot_replace_a_file_created_after_preflight() {
+    let mut ws = vault();
+    let id = DocId::new("Created.fal");
+    let prepared = ws.prepare_document_creation(&id).unwrap();
+    let model = prepared.parse("da Fub").unwrap();
+    // Un file manager, una sincronizzazione o un altro editor posano il file
+    // fra la preparazione e il commit.
+    ws.write_byte(id.as_str(), b"scritto da fuori");
+
+    let result = ws.commit_document_write(prepared, "da Fub", model, Ok(()));
+    assert!(
+        matches!(result, Err(fub_kernel::KernelError::AlreadyExists(_))),
+        "la creazione ha sostituito un file sopraggiunto",
+    );
+    assert_eq!(
+        std::fs::read(ws.root().join(id.as_str())).unwrap(),
+        b"scritto da fuori",
+    );
+}
+
+#[test]
+fn dictated_write_to_a_free_path_stays_a_creation() {
+    let mut ws = vault();
+    let id = DocId::new("nuova.fal");
+    let prepared = ws.prepare_document_write(&id, WriteBase::Dictated).unwrap();
+    let model = prepared.parse("dettato").unwrap();
+    ws.write_byte(id.as_str(), b"arrivato prima");
+
+    let result = ws.commit_document_write(prepared, "dettato", model, Ok(()));
+    assert!(matches!(
+        result,
+        Err(fub_kernel::KernelError::AlreadyExists(_))
+    ));
+    assert_eq!(
+        std::fs::read(ws.root().join(id.as_str())).unwrap(),
+        b"arrivato prima",
+    );
+
+    // Su un file che c'era già la scrittura dettata resta una sovrascrittura.
+    let prepared = ws.prepare_document_write(&id, WriteBase::Dictated).unwrap();
+    let model = prepared.parse("dettato").unwrap();
+    let pending = ws
+        .commit_document_write(prepared, "dettato", model, Ok(()))
+        .unwrap();
+    ws.finalize_document_write(pending.invoke_indexes())
+        .unwrap();
+    assert_eq!(
+        std::fs::read(ws.root().join(id.as_str())).unwrap(),
+        b"dettato",
+    );
+}
+
+#[test]
 fn opaque_bytes_change_an_entry_not_an_invented_document() {
     let mut ws = Bench::new().with_spy().mounts();
     ws.forgets_events();
