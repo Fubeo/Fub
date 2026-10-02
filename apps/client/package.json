@@ -40,6 +40,7 @@
     "katex": "0.16.47",
     "mermaid": "11.17.2",
     "pdfjs-dist": "6.3.289",
+    "perfect-freehand": "1.2.3",
     "turndown": "^7.2.4"
   },
   "devDependencies": {
