@@ -40,7 +40,7 @@ describe("il pennello pf1 (§5)", () => {
   });
 
   it("accetta gli spazi di XML fra le voci e i numeri SVG, e riscrive senza esponente", () => {
-    const brush = parseBrush("  pf1\tsize=1e1\n thinning=-.25\r\nsmoothing=+0.75  streamline=1. capEnd=0.0 ");
+    const brush = parseBrush("  pf1\tsize=1e1\n thinning=-.25\r\nsmoothing=+0.75  streamline=1.0 capEnd=0.0 ");
     expect(brush.size).toBe(10);
     expect(brush.thinning).toBe(-0.25);
     expect(brush.smoothing).toBe(0.75);
@@ -58,6 +58,9 @@ describe("il pennello pf1 (§5)", () => {
     expect(() => parseBrush("pf1 size=")).toThrow(TypeError);
     expect(() => parseBrush("pf1 size=4 size=5")).toThrow(TypeError);
     expect(() => parseBrush("pf1 size=0x10")).toThrow(TypeError);
+    expect(() => parseBrush("pf1 streamline=1.")).toThrow(TypeError);
+    expect(() => parseBrush("pf1 size=-1.e3")).toThrow(TypeError);
+    expect(parseBrush("pf1 size=.5e1 thinning=-.25").size).toBe(5);
     expect(() => parseBrush("pf1 size=Infinity")).toThrow(TypeError);
     expect(() => parseBrush("pf1 size=4px")).toThrow(TypeError);
     expect(() => parseBrush("pf1 size=1e400")).toThrow(RangeError);

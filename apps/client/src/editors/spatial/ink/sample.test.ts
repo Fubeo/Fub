@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   dequantizeSample,
+  INK_MAX_INTEGER,
   INK_MAX_SAMPLES,
   type InkSample,
   quantizeAltitude,
@@ -44,6 +45,17 @@ describe("quantizzazione dell'inchiostro (§5)", () => {
     expect(quantizeAzimuth(725)).toBe(5);
     expect(quantizeAzimuth(-90)).toBe(270);
     expect(Object.is(quantizeAzimuth(-360), 0)).toBe(true);
+  });
+
+  it("ogni intero e ogni differenza restano entro 2^53 - 1", () => {
+    // 2^46 × 100 è esatto e sta sotto 2^53; la distanza fra -2^46 e 2^46 no.
+    const edge = 2 ** 46;
+    expect(quantizeCoordinate(-edge, 100)).toBe(-edge * 100);
+    expect(edge * 200).toBeGreaterThan(INK_MAX_INTEGER);
+    expect(() => quantizeCoordinate(1e14, 100)).toThrow(RangeError);
+    expect(() => quantizeTime(2 ** 53)).toThrow(RangeError);
+    expect(() => quantizeInk([{ x: -edge, y: 0, t: 0 }, { x: edge, y: 0, t: 1 }])).toThrow(RangeError);
+    expect(quantizeInk([{ x: -edge, y: 0, t: 0 }, { x: 0, y: 0, t: 1 }]).samples[1]!.x).toBe(0);
   });
 
   it("un campione conserva i suoi canali e rifiuta un valore non finito", () => {

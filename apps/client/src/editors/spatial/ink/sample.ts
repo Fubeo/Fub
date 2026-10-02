@@ -57,9 +57,18 @@ function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
 }
 
+/// Il più grande valore di `fub:ink`, assoluto o differenza: oltre, un intero
+/// non è più esatto in un `number` (formato della scena, §5).
+export const INK_MAX_INTEGER = Number.MAX_SAFE_INTEGER;
+
+function exact(value: number, what: string): number {
+  if (!Number.isSafeInteger(value)) throw new RangeError(`campione d'inchiostro con ${what} oltre 2^53 - 1: ${value}`);
+  return value;
+}
+
 /// `floor(v × scala + 0,5)`: una coordinata di `fub:ink`.
 export function quantizeCoordinate(value: number, scale: InkScale): number {
-  return roundHalfUp(value, scale);
+  return exact(roundHalfUp(value, scale), "una coordinata");
 }
 
 /// La pressione in 0…255; un valore fuori da 0…1 si porta al bordo.
@@ -69,7 +78,7 @@ export function quantizePressure(pressure: number): number {
 
 /// I millisecondi interi.
 export function quantizeTime(ms: number): number {
-  return roundHalfUp(ms, 1);
+  return exact(roundHalfUp(ms, 1), "t");
 }
 
 /// L'altitudine in gradi interi, 0…90.
@@ -132,7 +141,15 @@ export function quantizeInk(samples: readonly InkSample[], scale: InkScale = DEF
     if ((sample.p !== undefined) !== pressure || (sample.a !== undefined) !== tilt) {
       throw new RangeError(`il campione ${i} ha canali diversi dal primo`);
     }
-    quantized[i] = quantizeSample(sample, scale);
+    const q = quantizeSample(sample, scale);
+    // `fub:ink` scrive le differenze: anche quelle devono restare esatte.
+    const previous = quantized[i - 1];
+    if (previous !== undefined) {
+      exact(q.x - previous.x, "una differenza di x");
+      exact(q.y - previous.y, "una differenza di y");
+      exact(q.t - previous.t, "una differenza di t");
+    }
+    quantized[i] = q;
   }
   return { scale, samples: quantized };
 }

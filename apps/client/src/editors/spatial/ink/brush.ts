@@ -80,7 +80,9 @@ export const PF1_DEFAULTS: Pf1Brush = {
 
 const KNOWN = new Set<string>(PF1_KEYS);
 /// Un numero SVG senza unità: segno, cifre con o senza decimali, esponente.
-const SVG_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+/// Come nelle lunghezze e nei browser, dopo il punto serve una cifra: `1.`
+/// non è un numero (formato della scena, §4).
+const SVG_NUMBER = /^[+-]?(?:\d*\.\d+|\d+)(?:[eE][+-]?\d+)?$/;
 /// Gli spazi di XML: dentro un attributo li separano tutti allo stesso modo.
 const SEPARATOR = /[ \t\n\r]+/;
 const ENTRY_KEY = /^[^ \t\n\r=]+$/;
