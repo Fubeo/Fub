@@ -141,8 +141,16 @@ describe("gli appunti", () => {
   it("tabulazioni e a capo, nei due versi", () => {
     expect(parseTsv("a\tb\nc\td\n")).toEqual([["a", "b"], ["c", "d"]]);
     expect(parseTsv("solo")).toEqual([["solo"]]);
+    expect(parseTsv(" a \t b")).toEqual([["a", "b"]]);
     const data: TableData = { rows: [["a", "b"], ["1", "2"]], aligns: [null, null] };
-    expect(rangeTsv(data, { top: 0, left: 0, bottom: 1, right: 1 })).toBe("a\tb\n1\t2");
+    expect(rangeTsv(data, { top: 0, left: 0, bottom: 1, right: 1 })).toBe("a\tb\n1\t2\n");
+  });
+
+  it("una cella multilinea di un foglio è una cella, e si scrive su una riga", () => {
+    expect(parseTsv('"prima\nseconda\tterza"\tx\r\ny\r\n')).toEqual([["prima\nseconda\tterza", "x"], ["y"]]);
+    const data: TableData = { rows: [["a", "b"], ["1", "2"]], aligns: [null, null] };
+    const pasted = pasteMatrix(data, { row: 1, col: 0 }, parseTsv('"prima\nseconda"\n'));
+    expect(serializeTable(pasted)).toBe("| a | b |\n| --- | --- |\n| prima seconda | 2 |");
   });
 });
 

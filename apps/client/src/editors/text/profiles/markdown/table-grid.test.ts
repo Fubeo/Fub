@@ -164,7 +164,7 @@ describe("la griglia", () => {
     const copy = new Event("copy", { bubbles: true, cancelable: true });
     Object.defineProperty(copy, "clipboardData", { value: copied });
     root.dispatchEvent(copy);
-    expect(copied.setData).toHaveBeenCalledWith("text/plain", "Ada\t10");
+    expect(copied.setData).toHaveBeenCalledWith("text/plain", "Ada\t10\n");
 
     grid.focus({ row: 2, col: 1 });
     const paste = new Event("paste", { bubbles: true, cancelable: true });
@@ -172,6 +172,28 @@ describe("la griglia", () => {
     root.dispatchEvent(paste);
     expect(writes[0]!.rows).toEqual([["Nome", "Voto", ""], ["Ada", "10", ""], ["Bea", "X", "Y"]]);
     expect(grid.selection).toEqual({ anchor: { row: 2, col: 1 }, focus: { row: 2, col: 2 } });
+  });
+
+  it("una cella copiata da un foglio resta una cella, e il tab di una cella torna com'era", () => {
+    const { grid, root, writes } = mount([["Nome", "Voto"], ["a\tb", "10"], ["Bea", "9"]]);
+    grid.focus({ row: 1, col: 0 });
+    const copied = { setData: vi.fn(), getData: () => "" };
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(copy, "clipboardData", { value: copied });
+    root.dispatchEvent(copy);
+    expect(copied.setData).toHaveBeenCalledWith("text/plain", '"a\tb"\n');
+
+    const paste = (text: string) => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { getData: () => text } });
+      root.dispatchEvent(event);
+    };
+    paste('"a\tb"\n');
+    expect(writes[writes.length - 1]!.rows).toEqual([["Nome", "Voto"], ["a\tb", "10"], ["Bea", "9"]]);
+    // La cella `prima⏎seconda⇥terza` del foglio dell'app, o di Excel.
+    paste('"prima\nseconda\tterza"\n');
+    expect(writes[writes.length - 1]!.rows).toEqual([["Nome", "Voto"], ["prima\nseconda\tterza", "10"], ["Bea", "9"]]);
+    expect(grid.selection).toEqual({ anchor: { row: 1, col: 0 }, focus: { row: 1, col: 0 } });
   });
 
   it("il clic sceglie la cella, Maiusc+clic il rettangolo, la lettera la colonna", () => {

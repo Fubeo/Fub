@@ -15,6 +15,8 @@
 //
 // Le pipe dentro una cella sono dati: nel testo sono `\|`, nel modello `|`.
 
+import { parseTsv as parseSheetTsv, tsvRows } from "../../../core/tsv";
+
 export type TableAlign = "left" | "center" | "right" | null;
 
 /// Una tabella come la vede la griglia: righe di testo, la prima è
@@ -378,25 +380,24 @@ export function pasteMatrix(data: TableData, at: GridPosition, matrix: readonly 
 
 // ── Appunti ──────────────────────────────────────────────────────────────────
 
-/// Le celle come le scrive un foglio di calcolo: tabulazioni e a capo.
+/// Le celle nel TSV dei fogli di calcolo ([`tsvRows`]): una cella con un tab
+/// viaggia fra virgolette e torna com'era.
 export function rangeTsv(data: TableData, range: GridRange): string {
-  const lines: string[] = [];
+  const rows: string[][] = [];
   for (let row = range.top; row <= range.bottom; row++) {
     const cells: string[] = [];
-    for (let col = range.left; col <= range.right; col++) {
-      cells.push((data.rows[row]?.[col] ?? "").replace(/[\t\r\n]+/g, " "));
-    }
-    lines.push(cells.join("\t"));
+    for (let col = range.left; col <= range.right; col++) cells.push(data.rows[row]?.[col] ?? "");
+    rows.push(cells);
   }
-  return lines.join("\n");
+  return tsvRows(rows);
 }
 
-/// Il testo incollato come matrice: una riga per a capo, una cella per
-/// tabulazione. Un testo senza tabulazioni né a capo è una cella sola.
+/// Il testo incollato come matrice, letto come il TSV dei fogli di calcolo: una
+/// cella multilinea di un foglio resta una cella, e i suoi a capo diventano
+/// spazi quando la tabella si scrive ([`escapeCell`]). Gli spazi ai bordi di
+/// una cella non contano nella sorgente, e si tolgono.
 export function parseTsv(text: string): string[][] {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
-  return lines.map((line) => line.split("\t").map((cell) => cell.trim()));
+  return parseSheetTsv(text).map((row) => row.map((cell) => cell.trim()));
 }
 
 // ── Formattazione in riga ────────────────────────────────────────────────────
