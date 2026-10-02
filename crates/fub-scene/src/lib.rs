@@ -10,6 +10,10 @@
 //! resta autorevole: ogni byte che non sta in una voce è spazio fra due voci,
 //! e la scena non ne possiede una copia.
 //!
+//! [`Ink`] e [`Brush`] sono il codec di `fub:ink` e la lettura di `fub:brush`
+//! (§5): la scena li usa per dire se un tratto si ridisegna, e chi scrive un
+//! tratto li usa per quantizzarlo.
+//!
 //! Il crate è puro. Non dipende dall'ABI di Fub né dal kernel, non fa I/O e
 //! compila per `wasm32-wasip2`: `crates/fub-abi/tests/dependency_invariant.rs`
 //! lo verifica.
@@ -18,15 +22,19 @@ use std::fmt;
 
 use serde::Serialize;
 
+mod brush;
 mod classify;
 mod diagnostics;
 mod geometry;
+pub mod ink;
 pub mod text;
 mod values;
 mod xml;
 
+pub use brush::{Brush, BrushError, PF1, PF1_KEYS};
 pub use classify::{ElementItem, ForeignItem, Item, Layer, Role, RootItem, Stroke, Tags, Tool};
 pub use diagnostics::{Code, Diagnostic, Severity};
+pub use ink::{Ink, InkError, Sample, Scale};
 pub use text::{LineEnding, Span};
 pub use xml::XmlErrorKind;
 
@@ -228,12 +236,8 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
     // Le voci di un documento enorme costerebbero più del documento: non
     // servono, perché si apre solo in Lettura.
     let items = if !truncated && !too_many {
-        let items = classify::classify_document(&doc, &map);
-        for item in &items {
-            if let Item::Foreign(block) = item {
-                diagnostics.push(Diagnostic::new(Code::S002, Some(block.span), None));
-            }
-        }
+        let (items, found) = classify::classify_document(&doc, &map);
+        diagnostics.extend(found);
         items
     } else {
         Vec::new()
