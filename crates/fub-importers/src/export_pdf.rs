@@ -3,12 +3,15 @@
 //! the report makes this limitation explicit instead of claiming a faithful
 //! print projection. The shell print path uses RenderTarget::Print separately.
 
-use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget};
+use std::collections::{BTreeMap, BTreeSet};
+
+use fub_abi::model::{Block, DocId, DocumentModel, Inline, LinkTarget};
 use fub_abi::rules::loads::text_payload;
 use fub_abi::rules::path::strip_ext;
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
-    ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget, TransferNote,
+    artifact_key, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget,
+    TransferNote,
 };
 use fub_abi::PluginError;
 
@@ -110,7 +113,7 @@ impl ExportProvider for PdfExport {
             return Ok(report);
         }
         let mut index: Vec<String> = Vec::new();
-        for doc in &docs {
+        for (doc, path) in docs.iter().zip(pdf_names(&docs)) {
             let model = match host.read_model(doc) {
                 Ok(model) => model,
                 Err(e) => {
@@ -129,7 +132,6 @@ impl ExportProvider for PdfExport {
             warn_unrenderable(&lines, doc.as_str(), &mut report);
             ensure_page_budget(std::slice::from_ref(&lines))?;
             let pdf = render_pdf(&[lines]);
-            let path = format!("{}.pdf", strip_ext(doc.as_str()));
             let h = out.open_artifact(&path, "application/pdf")?;
             for chunk in pdf.chunks(64 * 1024) {
                 out.write_artifact(h, chunk)?;
@@ -150,6 +152,39 @@ impl ExportProvider for PdfExport {
         report.log.push(static_note());
         Ok(report)
     }
+}
+
+/// Il nome del PDF di ciascun documento, uno per documento e mai lo stesso.
+///
+/// Di norma è il documento senza estensione, come lo cerca chi apre la
+/// cartella. Due documenti che differiscono soltanto per l'estensione
+/// (`Budget.md` e `Budget.markdown`) la tengono entrambi: un `Budget 1.pdf` non
+/// direbbe quale dei due è. Ciò che collide ancora prende il numero della
+/// convenzione D3 (`<nome> 1`, `<nome> 2`, …). Lo stesso nome è quello di
+/// [`artifact_key`], con cui il sink rifiuterebbe il secondo. I nomi si danno
+/// prima di leggere: non dipendono da quali documenti si lasciano leggere.
+fn pdf_names(docs: &[DocId]) -> Vec<String> {
+    let stem_key = |doc: &DocId| artifact_key(&strip_ext(doc.as_str()));
+    let mut stems: BTreeMap<String, usize> = BTreeMap::new();
+    for doc in docs {
+        *stems.entry(stem_key(doc)).or_default() += 1;
+    }
+    let mut taken = BTreeSet::new();
+    docs.iter()
+        .map(|doc| {
+            let base = match stems[&stem_key(doc)] {
+                1 => strip_ext(doc.as_str()),
+                _ => doc.to_string(),
+            };
+            (0u32..)
+                .map(|n| match n {
+                    0 => format!("{base}.pdf"),
+                    n => format!("{base} {n}.pdf"),
+                })
+                .find(|name| taken.insert(artifact_key(name)))
+                .expect("la sequenza dei candidati è infinita")
+        })
+        .collect()
 }
 
 fn static_note() -> TransferNote {

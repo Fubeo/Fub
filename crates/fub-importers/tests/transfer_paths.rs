@@ -623,3 +623,59 @@ fn pdf_prints_the_model_the_format_read_not_a_markdown_guess() {
     );
     assert!(pdf.contains("([x] fatto) Tj"));
 }
+
+/// **Ogni nota ha il suo PDF** (difetto I18).
+///
+/// `Budget.md` e `Budget.markdown` sono due note, entrambe in un formato che il
+/// provider Markdown legge: togliendo l'estensione finivano tutte e due in
+/// `Budget.pdf`, e nella cartella dell'esito restava soltanto l'ultima.
+#[test]
+fn notes_with_the_same_stem_print_to_distinct_pdfs() {
+    // Nell'ordine in cui la selezione li restituisce.
+    let notes = [
+        ("Altro.md", "PRIMA"),
+        ("Budget.markdown.md", "SECONDA"),
+        ("Budget.md", "TERZA"),
+        ("budget.markdown", "QUARTA"),
+    ];
+    let host = notes.iter().fold(MemoryHost::new(), |host, (doc, text)| {
+        with_parsed(host, doc, &format!("{text}\n"))
+    });
+    let mut sink = fub_abi::transfer::MemorySink::default();
+    let request = ExportRequest::new(
+        "importers.pdf",
+        ExportSelection::Documents(notes.iter().map(|(doc, _)| DocId::new(*doc)).collect()),
+    );
+    let report = PdfExport.export(&request, &host, &mut sink).unwrap();
+
+    // Chi collide tiene la sua estensione; ciò che collide ancora prende il
+    // numero di D3. Chi non collide resta com'era.
+    let names = [
+        "Altro.pdf",
+        "Budget.markdown.pdf",
+        "Budget.md.pdf",
+        "budget.markdown 1.pdf",
+    ];
+    let paths: Vec<&str> = report.artifacts.iter().map(|a| a.path.as_str()).collect();
+    assert_eq!(paths, [&names[..], &["index.txt"]].concat());
+    for (((_, text), name), artifact) in notes.iter().zip(names).zip(&report.artifacts) {
+        let fub_abi::transfer::ArtifactContent::Bytes(bytes) = &artifact.content else {
+            panic!("in memoria l'artefatto porta i byte");
+        };
+        let pdf = String::from_utf8_lossy(bytes);
+        assert!(
+            pdf.contains(&format!("({text}) Tj")),
+            "{name} is not the PDF of its note"
+        );
+        for (_, other) in notes.iter().filter(|(_, other)| other != text) {
+            assert!(
+                !pdf.contains(&format!("({other}) Tj")),
+                "{name} prints {other}"
+            );
+        }
+    }
+    let fub_abi::transfer::ArtifactContent::Bytes(index) = &report.artifacts[4].content else {
+        panic!("in memoria l'artefatto porta i byte");
+    };
+    assert_eq!(String::from_utf8_lossy(index), names.join("\n"));
+}

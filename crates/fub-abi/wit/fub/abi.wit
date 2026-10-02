@@ -4250,7 +4250,9 @@ interface host-transfer-write {
     use exporter.{export-artifact};
 
     /// `path` è relativo DENTRO l'esito: una risalita è `permission-denied`
-    /// qui, non un file scritto altrove.
+    /// qui, non un file scritto altrove. Un nome si apre una volta per export:
+    /// un secondo artefatto con lo stesso nome a meno di maiuscole e forma
+    /// Unicode è `already-exists`, mai un file che sostituisce il primo.
     open-artifact: func(path: string, media-type: string) -> result<artifact-handle, plugin-error>;
     /// Quante volte si vuole prima di chiudere: un PDF da un gigabyte esce a
     /// pezzi.

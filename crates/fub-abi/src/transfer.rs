@@ -87,13 +87,14 @@
 //!   PDF/HTML/Typst deve riparsare per conto proprio; l'export markdown, che è
 //!   il primo cliente, la sorgente la vuole com'è.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
 use crate::rules::folders;
+use crate::rules::path::resolution_key;
 use crate::traits::{HostApi, IndexQuery, IndexResult, ReadApi, TransferRead};
 
 /// Quanto chiede per volta chi legge una sorgente intera.
@@ -842,6 +843,10 @@ pub trait ArtifactSink: Send {
     /// `PermissionDenied` qui e non un file scritto altrove, per la stessa
     /// ragione per cui `write_document` rifiuta le risalite di un nome nato da
     /// una sorgente.
+    ///
+    /// Un nome si apre **una volta** per export: un secondo artefatto con la
+    /// stessa [`artifact_key`] è `AlreadyExists`, mai un file che sostituisce il
+    /// primo mentre il rapporto lo dà ancora per consegnato.
     fn open_artifact(
         &mut self,
         path: &str,
@@ -883,6 +888,24 @@ pub fn check_artifact_path(path: &str) -> Result<(), PluginError> {
     Ok(())
 }
 
+/// Quando due artefatti dello stesso export sono **lo stesso file**.
+///
+/// La chiave è la [`resolution_key`] e non l'uguaglianza dei byte: l'esito
+/// finisce in una cartella che può non distinguere maiuscole e forme Unicode, e
+/// lì `Budget.pdf` e `budget.pdf` sono un nome solo. Un provider che riempie la
+/// stessa cartella su ogni sistema non può contare sul fatto che quella di oggi
+/// li distingua.
+pub fn artifact_key(path: &str) -> String {
+    resolution_key(path)
+}
+
+/// Il rifiuto del secondo artefatto con la stessa [`artifact_key`].
+pub fn artifact_already_open(path: &str) -> PluginError {
+    PluginError::AlreadyExists(
+        format!("`{path}` names an artifact this export has already opened").into(),
+    )
+}
+
 fn artifact_not_open() -> PluginError {
     PluginError::BadArgs("this artifact handle is not (or is no longer) open".into())
 }
@@ -899,6 +922,8 @@ fn artifact_not_open() -> PluginError {
 pub struct MemorySink {
     open: BTreeMap<u64, (String, String, Vec<u8>)>,
     next: u64,
+    /// Le [`artifact_key`] già aperte, chiuse comprese.
+    opened: BTreeSet<String>,
     /// Il tetto sui byte versati in tutto, se c'è.
     limit: Option<usize>,
     poured: usize,
@@ -927,6 +952,9 @@ impl ArtifactSink for MemorySink {
         media_type: &str,
     ) -> Result<ArtifactHandle, PluginError> {
         check_artifact_path(path)?;
+        if !self.opened.insert(artifact_key(path)) {
+            return Err(artifact_already_open(path));
+        }
         self.next += 1;
         self.open.insert(
             self.next,
@@ -1220,5 +1248,41 @@ mod tests {
             "skipped and failed did not touch the vault: undoing them would \
              delete someone else's work"
         );
+    }
+
+    /// **Un nome si apre una volta per export** (difetto I18).
+    ///
+    /// Il secondo `Budget.pdf` non è un altro artefatto: nella cartella in cui
+    /// l'utente salverà l'esito è lo stesso file, e lo sono anche `budget.pdf`
+    /// dove le maiuscole non contano e un `Café` scritto in NFD dove non conta
+    /// la forma Unicode.
+    #[test]
+    fn the_same_artifact_name_opens_once_per_export() {
+        let mut sink = MemorySink::default();
+        let first = sink.open_artifact("Budget.pdf", "application/pdf").unwrap();
+        sink.write_artifact(first, b"prima").unwrap();
+        sink.open_artifact("Caf\u{e9}.pdf", "application/pdf")
+            .unwrap();
+        for again in ["Budget.pdf", "budget.pdf", "Cafe\u{301}.pdf"] {
+            assert!(
+                matches!(
+                    sink.open_artifact(again, "application/pdf"),
+                    Err(PluginError::AlreadyExists(_))
+                ),
+                "`{again}` opened a second artifact over one already in the export"
+            );
+        }
+        let delivered = sink.close_artifact(first).unwrap();
+        assert_eq!(delivered.content, ArtifactContent::Bytes(b"prima".to_vec()));
+        assert!(
+            matches!(
+                sink.open_artifact("Budget.pdf", "application/pdf"),
+                Err(PluginError::AlreadyExists(_))
+            ),
+            "a closed artifact keeps its name for the whole export"
+        );
+        assert!(sink
+            .open_artifact("Budget 1.pdf", "application/pdf")
+            .is_ok());
     }
 }
