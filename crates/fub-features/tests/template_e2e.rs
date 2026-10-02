@@ -5,10 +5,12 @@ use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::event::Actor;
 use fub_abi::model::{DocId, Span};
+use fub_abi::options::source;
 #[cfg(all(feature = "properties", feature = "commands"))]
 use fub_abi::session::{SelectionSet, ViewContext};
 use fub_abi::traits::{PluginManifest, ViewInstance};
 use fub_abi::ui::{UiAction, UiKind, UiNode};
+use fub_abi::OptionMap;
 #[cfg(all(feature = "properties", feature = "commands"))]
 use fub_features::{
     CoreCommands, PropertiesCommands, COMMANDS_ID, NOTES_INSERT_TEMPLATE, PROPERTIES_ID, VAULT_UNDO,
@@ -21,6 +23,7 @@ use fub_format_markdown::MarkdownProvider;
 #[cfg(all(feature = "properties", feature = "commands"))]
 use fub_kernel::MAIN_PANE;
 use fub_kernel::{FormatRegistry, Workspace};
+use fub_testkit::SampleText;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -46,6 +49,14 @@ impl Vault {
         let mut registry = FormatRegistry::new();
         registry
             .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
+        // Una prosa che non legge il frontmatter: per lei `---` è testo.
+        registry
+            .register(
+                SampleText::by_extension("txt")
+                    .with_syntax(OptionMap::new().with(source::PROSE, true))
+                    .boxed(),
+            )
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         let mut manifest = PluginManifest::core(TEMPLATE_ID, TEMPLATE_ID)
@@ -293,6 +304,48 @@ fn click_creates_from_template() {
     }
 }
 
+/// **Una nota da template è il template espanso, e nient'altro** (difetto
+/// I22).
+///
+/// La proprietà `date` lega una nota giornaliera al suo giorno, ed è di
+/// `note.daily`. `note.from_template` la scriveva in ogni nota nuova
+/// (progetti, verbali, schede), e così anche la cattura e `fub://new` che ci
+/// passano. Si vede solo con il provider delle proprietà montato, come nell'app.
+#[cfg(all(feature = "properties", feature = "commands"))]
+#[test]
+fn a_note_from_a_template_gets_no_property_the_template_does_not_have() {
+    let vault = Vault::new();
+    vault.put("templates/project.md", "# Project\nDescription here\n");
+    vault.put(
+        "templates/card.md",
+        "---\nstatus: draft\n---\n# {{title}}\n",
+    );
+    let mut ws = vault.open_with_properties();
+    for (template, name, expected) in [
+        (
+            "templates/project",
+            "my_project",
+            "# Project\nDescription here\n",
+        ),
+        (
+            "templates/card",
+            "Scheda",
+            "---\nstatus: draft\n---\n# Scheda\n",
+        ),
+    ] {
+        ws.invoke_command(
+            NOTES_FROM_TEMPLATE,
+            serde_json::json!({"template": template, "name": name}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap();
+        let doc = DocId::new(format!("{name}.md"));
+        assert_eq!(ws.read_source(&doc).unwrap(), expected);
+        assert_eq!(ws.read_model(&doc).unwrap().frontmatter.get("date"), None);
+    }
+}
+
 #[cfg(all(feature = "properties", feature = "commands"))]
 #[test]
 fn daily_uses_explicit_civil_date_folder_template_and_typed_date() {
@@ -471,6 +524,191 @@ fn merge_refuses_to_trash_a_source_with_incoming_references() {
     );
 }
 
+/// **L'unione tiene l'ordine delle sorgenti, in testa come in coda** (difetto
+/// I20), ed è il testo che il piano aveva mostrato.
+///
+/// In testa ogni corpo entrava all'offset 0 uno dopo l'altro, quindi ciascuno
+/// sopra il precedente: `[a, b, c]` diventava `c`, `b`, `a`.
+#[test]
+fn merge_keeps_the_order_of_its_sources_and_of_its_plan() {
+    for (mode, target, expected) in [
+        (
+            "prepend",
+            "Target Content",
+            "Content A\n\nContent B\n\nContent C\n\nTarget Content",
+        ),
+        (
+            "prepend",
+            "---\nt: T\n---\nTarget Content",
+            "---\nt: T\n---\nContent A\n\nContent B\n\nContent C\n\nTarget Content",
+        ),
+        (
+            "append",
+            "Target Content",
+            "Target Content\n\nContent A\n\nContent B\n\nContent C",
+        ),
+    ] {
+        let vault = Vault::new();
+        vault.put("a.md", "Content A");
+        vault.put("b.md", "Content B");
+        vault.put("c.md", "Content C");
+        vault.put("target.md", target);
+        let mut ws = vault.open();
+        let args = serde_json::json!({
+            "from": ["a.md", "b.md", "c.md"], "into": "target.md", "mode": mode, "trash": false,
+        });
+        let plan = ws
+            .invoke_command(NOTES_MERGE, args.clone(), InvokeMode::DryRun, Actor::User)
+            .unwrap();
+        let CommandEffect::Plan(plan) = plan.effect else {
+            panic!("a dry run plans: {:?}", plan.effect);
+        };
+        let [insert] = plan.edits[0].edit.edits.as_slice() else {
+            panic!("one insertion: {:?}", plan.edits);
+        };
+        let mut planned = target.to_string();
+        planned.replace_range(insert.span.start..insert.span.end, &insert.text);
+        assert_eq!(planned, expected, "{mode}: the plan");
+
+        ws.invoke_command(NOTES_MERGE, args, InvokeMode::Apply, Actor::User)
+            .unwrap();
+        assert_eq!(
+            ws.read_source(&DocId::new("target.md")).unwrap(),
+            expected,
+            "{mode}: what the merge wrote is not what its plan showed"
+        );
+    }
+}
+
+/// **In testa vuol dire in testa al contenuto**: dopo il BOM e il frontmatter
+/// della destinazione, che restano dove un lettore li cerca. Il BOM di una
+/// sorgente non entra in mezzo al testo, e una sorgente che ha soltanto il BOM è
+/// vuota. La riga vuota dopo il frontmatter resta sua, un `---` indentato
+/// dentro un valore YAML non lo chiude, e conta anche un frontmatter che il
+/// provider non sa leggere. Un frontmatter non chiuso, o in una
+/// prosa che non lo legge, è testo, e il corpo va prima.
+///
+/// L'offset 0 è prima del BOM: il corpo entrava lì, il frontmatter non era più
+/// in testa e le sue proprietà diventavano testo.
+#[test]
+fn a_prepended_merge_goes_after_the_bom_and_the_frontmatter() {
+    for (into, target, expected) in [
+        (
+            "target.md",
+            "\u{feff}---\ntitle: T\n---\nTarget Content",
+            "\u{feff}---\ntitle: T\n---\nContent A\n\nTarget Content",
+        ),
+        (
+            "target.md",
+            "---\r\ntitle: T\r\n---\r\nTarget Content",
+            "---\r\ntitle: T\r\n---\r\nContent A\n\nTarget Content",
+        ),
+        (
+            "target.md",
+            "---\ntitle: T\n---",
+            "---\ntitle: T\n---\nContent A\n\n",
+        ),
+        (
+            "target.md",
+            "\u{feff}Target Content",
+            "\u{feff}Content A\n\nTarget Content",
+        ),
+        (
+            "target.md",
+            "---\nt: T\n---\n\nTarget Content",
+            "---\nt: T\n---\n\nContent A\n\nTarget Content",
+        ),
+        (
+            "target.md",
+            "---\r\nt: T\r\n---\r\n\r\nTarget Content",
+            "---\r\nt: T\r\n---\r\n\r\nContent A\n\nTarget Content",
+        ),
+        (
+            "target.md",
+            "---\ndesc: |\n  ---\nt: T\n---\nTarget Content",
+            "---\ndesc: |\n  ---\nt: T\n---\nContent A\n\nTarget Content",
+        ),
+        (
+            "target.md",
+            "---\n[non letto\n---\nTarget Content",
+            "---\n[non letto\n---\nContent A\n\nTarget Content",
+        ),
+        (
+            "target.md",
+            "---\nnon chiuso\nTarget Content",
+            "Content A\n\n---\nnon chiuso\nTarget Content",
+        ),
+        (
+            "target.txt",
+            "\u{feff}---\ntitle: T\n---\nTarget Content",
+            "\u{feff}Content A\n\n---\ntitle: T\n---\nTarget Content",
+        ),
+    ] {
+        let vault = Vault::new();
+        vault.put("a.md", "\u{feff}Content A");
+        vault.put("vuota.md", "\u{feff}\n");
+        vault.put(into, target);
+        let mut ws = vault.open();
+        let args = serde_json::json!({
+            "from": ["a.md", "vuota.md"], "into": into, "mode": "prepend", "trash": true,
+        });
+        let plan = ws
+            .invoke_command(NOTES_MERGE, args.clone(), InvokeMode::DryRun, Actor::User)
+            .unwrap();
+        let CommandEffect::Plan(plan) = plan.effect else {
+            panic!("a dry run plans: {:?}", plan.effect);
+        };
+        let [insert] = plan.edits[0].edit.edits.as_slice() else {
+            panic!("one insertion: {:?}", plan.edits);
+        };
+        let mut planned = target.to_string();
+        planned.replace_range(insert.span.start..insert.span.end, &insert.text);
+        assert_eq!(planned, expected, "{target:?}: the plan");
+
+        ws.invoke_command(NOTES_MERGE, args, InvokeMode::Apply, Actor::User)
+            .unwrap();
+        assert_eq!(
+            ws.read_source(&DocId::new(into)).unwrap(),
+            expected,
+            "{target:?}: what the merge wrote"
+        );
+        assert!(
+            !ws.documents().contains(&DocId::new("a.md")),
+            "{target:?}: the merged source goes to the trash"
+        );
+    }
+}
+
+/// L'undo di un'unione in testa toglie i corpi nell'ordine inverso a quello in
+/// cui sono entrati, e la destinazione torna com'era.
+#[cfg(all(feature = "properties", feature = "commands"))]
+#[test]
+fn one_undo_takes_a_prepended_merge_back_out() {
+    let vault = Vault::new();
+    vault.put("a.md", "Content A");
+    vault.put("b.md", "Content B");
+    vault.put("target.md", "Target Content");
+    let mut ws = vault.open_with_properties();
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from": ["a.md", "b.md"], "into": "target.md", "mode": "prepend", "trash": false}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .unwrap();
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("one undo");
+    assert_eq!(
+        ws.read_source(&DocId::new("target.md")).unwrap(),
+        "Target Content"
+    );
+}
+
 /// Il piano di un'unione dice dove finisce il testo: se la destinazione non si
 /// legge, non si sa dov'è la fine, e un piano che inserisse all'inizio
 /// mentirebbe su ciò che l'applicazione farebbe.
@@ -490,6 +728,59 @@ fn merge_dry_run_on_an_unreadable_target_plans_nothing() {
         matches!(outcome, Err(fub_abi::PluginError::Io(_))),
         "{outcome:?}"
     );
+}
+
+/// **Un template senza `{{selection}}` non fa sparire la selezione** (difetto
+/// I21).
+///
+/// La sorgente la sostituisce con un link in ogni caso: se il template non
+/// diceva dove metterla, la nota nuova nasceva senza, e il testo non stava più
+/// da nessuna parte. Va in coda al template, dopo una riga vuota; dove il
+/// segnaposto c'è, resta dove dice lui.
+#[test]
+fn extract_keeps_the_selection_when_the_template_does_not_place_it() {
+    for (template, expected) in [
+        (
+            "# Template Header\nSome boilerplate text.\n",
+            "# Template Header\nSome boilerplate text.\n\nvery important",
+        ),
+        (
+            "# Header\r\nboilerplate",
+            "# Header\r\nboilerplate\r\n\r\nvery important",
+        ),
+        ("> {{selection}}\n— fine\n", "> very important\n— fine\n"),
+    ] {
+        let vault = Vault::new();
+        let source = "Initial source text that is very important";
+        vault.put("source.md", source);
+        vault.put("templates/simple.md", template);
+        let mut ws = vault.open();
+        let at = source.find("very important").unwrap();
+        ws.set_active_context(Some(
+            fub_abi::session::ViewContext::new("main")
+                .with_doc(Some(DocId::new("source.md")))
+                .with_selections(Some(fub_abi::session::SelectionSet::anchored(
+                    Span::new(at, source.len()),
+                    "very important",
+                ))),
+        ));
+        ws.invoke_command(
+            NOTES_EXTRACT,
+            serde_json::json!({"name": "extracted_note", "template": "templates/simple"}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap();
+        assert_eq!(
+            ws.read_source(&DocId::new("extracted_note.md")).unwrap(),
+            expected,
+            "the new note of {template:?}"
+        );
+        assert_eq!(
+            ws.read_source(&DocId::new("source.md")).unwrap(),
+            "Initial source text that is [[extracted_note]]"
+        );
+    }
 }
 
 #[test]

@@ -325,11 +325,11 @@ senza toccare il buffer. Il menu `/` offre i comandi che lo dichiarano nella
 propria spec (`surfaces`: `slash` sempre, `slash_selection` solo con del testo
 selezionato, che riempie il primo parametro di testo obbligatorio): la shell
 non ne tiene un elenco, e un plugin vi entra con la stessa dichiarazione;
-estrazione e merge pianificano riferimenti e dati
-prima di eliminare la sorgente; le statistiche contano anche lingue senza
-spazi con aggiornamenti incrementali. Di una nota in prosa contano il sorgente;
-di un formato strutturato (canvas, base) il testo del suo modello, non il JSON
-o lo YAML che lo tiene.
+estrazione e merge pianificano riferimenti e dati prima di eliminare la
+sorgente, e la selezione va in coda a un template che non la colloca; le
+statistiche contano anche lingue senza spazi con aggiornamenti incrementali.
+Di una nota in prosa contano il sorgente; di un formato strutturato (canvas,
+base) il testo del suo modello, non il JSON o lo YAML che lo tiene.
 
 ## Barra di formattazione
 

@@ -345,6 +345,42 @@ impl DocumentModel {
             frontmatter_present: false,
         }
     }
+
+    /// Dove comincia il corpo in `source`, il testo da cui il modello è stato
+    /// letto, se il documento ha un frontmatter: è dove si scrive «in testa»
+    /// senza che il frontmatter smetta di essere la prima cosa del file.
+    ///
+    /// È la riga del primo blocco del corpo, se prima di lui ci sono soltanto
+    /// spazi, così il suo rientro non si spezza; la fine di `source` se il
+    /// frontmatter è tutto il documento. Conta anche il frontmatter che il
+    /// provider non ha saputo leggere e tiene verbatim come primo blocco
+    /// ([`custom_kind::FRONTMATTER_UNPARSED`]): è ancora la testa del file.
+    ///
+    /// `Ok(None)` senza frontmatter. L'errore porta lo span del primo blocco
+    /// quando non cade dentro `source`, cioè il modello non è stato letto da lì.
+    pub fn body_start(&self, source: &str) -> Result<Option<usize>, Span> {
+        let unparsed = matches!(
+            self.body.first(),
+            Some(Block::Custom { custom_kind, .. })
+                if custom_kind == custom_kind::FRONTMATTER_UNPARSED
+        );
+        if !self.frontmatter_present && !unparsed {
+            return Ok(None);
+        }
+        let Some(first) = self.body.get(usize::from(unparsed)) else {
+            return Ok(Some(source.len()));
+        };
+        let span = first.span();
+        let head = source.get(..span.start).ok_or(span)?;
+        let row = head.rfind(['\n', '\r']).map_or(0, |at| at + 1);
+        Ok(Some(
+            if head[row..].chars().all(|c| c == ' ' || c == '\t') {
+                row
+            } else {
+                span.start
+            },
+        ))
+    }
 }
 
 /// Nodi a livello di blocco. `Custom` è l'escape hatch: callout, math,
@@ -2730,5 +2766,76 @@ mod tests {
         ] {
             round_trip("Inline", the);
         }
+    }
+
+    /// Un modello con questi blocchi, uno per span, e un frontmatter se `present`.
+    fn with_blocks(present: bool, blocks: &[(Option<&str>, usize)]) -> DocumentModel {
+        let mut model = DocumentModel::empty(DocId::new("n.md"));
+        model.frontmatter_present = present;
+        model.body = blocks
+            .iter()
+            .map(|&(kind, start)| match kind {
+                Some(kind) => Block::Custom {
+                    custom_kind: kind.to_string(),
+                    attrs: serde_json::Value::Null,
+                    blocks: Vec::new(),
+                    anchor: None,
+                    span: Span::new(start, start + 1),
+                },
+                None => Block::Paragraph {
+                    inlines: Vec::new(),
+                    anchor: None,
+                    span: Span::new(start, start + 1),
+                },
+            })
+            .collect();
+        model
+    }
+
+    /// **Il corpo comincia dopo il frontmatter, anche quando il provider non
+    /// l'ha saputo leggere**, alla riga del primo blocco se il rientro è suo.
+    #[test]
+    fn the_body_starts_after_any_frontmatter() {
+        let unparsed = Some(custom_kind::FRONTMATTER_UNPARSED);
+        let fm = "---\nt: T\n---\n";
+        let text = format!("{fm}\n    codice\n");
+        let code = text.find("codice").unwrap();
+        let row = fm.len() + 1;
+        assert_eq!(
+            with_blocks(true, &[(None, code)]).body_start(&text),
+            Ok(Some(row))
+        );
+        assert_eq!(
+            with_blocks(false, &[(unparsed, 0), (None, code)]).body_start(&text),
+            Ok(Some(row))
+        );
+        assert_eq!(with_blocks(true, &[]).body_start(fm), Ok(Some(fm.len())));
+        assert_eq!(
+            with_blocks(false, &[(unparsed, 0)]).body_start(fm),
+            Ok(Some(fm.len()))
+        );
+        // Il rientro può essere di tabulazioni, la riga finire con un CR.
+        let tabbed = format!("{fm}\r\t x");
+        assert_eq!(
+            with_blocks(true, &[(None, tabbed.len() - 1)]).body_start(&tabbed),
+            Ok(Some(row))
+        );
+        // Prima del blocco c'è altro che spazi: si entra al blocco.
+        let quoted = format!("{fm}> x");
+        assert_eq!(
+            with_blocks(true, &[(None, fm.len() + 2)]).body_start(&quoted),
+            Ok(Some(fm.len() + 2))
+        );
+        // Senza frontmatter non c'è niente da saltare, nemmeno un blocco qualunque.
+        assert_eq!(with_blocks(false, &[(None, 4)]).body_start(&text), Ok(None));
+        assert_eq!(
+            with_blocks(false, &[(Some(custom_kind::MATH), 0), (None, code)]).body_start(&text),
+            Ok(None)
+        );
+        // Un modello che non viene da quel testo.
+        assert_eq!(
+            with_blocks(true, &[(None, 99)]).body_start(fm),
+            Err(Span::new(99, 100))
+        );
     }
 }

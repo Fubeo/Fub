@@ -14,7 +14,6 @@
 
 use fub_abi::edit::WriteBase;
 use fub_abi::format::ParseContext;
-use fub_abi::model::{custom_kind, Block};
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
     ArtifactSink, ConflictPolicy, ExportProvider, ExportReport, ExportRequest, ExportTarget,
@@ -351,43 +350,12 @@ impl ExportProvider for MarkdownExport {
 /// primo carattere che non è indentazione è ciò che tiene il gesto una patch e
 /// non una seconda lettura del file. Trovato dal round-trip sul corpus della
 /// [0061](../../../docs/decisions/README.md).
+///
+/// La regola è [`fub_abi::model::DocumentModel::body_start`], la stessa con cui
+/// un'unione o una cattura in testa scrivono dopo il frontmatter.
 fn frontmatter_end(source: &str, doc_id: &str) -> Option<usize> {
-    let Ok(model) = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)) else {
-        return None;
-    };
-    let unparsed_frontmatter = !model.frontmatter_present
-        && matches!(
-            model.body.first(),
-            Some(Block::Custom { custom_kind, .. })
-                if custom_kind == custom_kind::FRONTMATTER_UNPARSED
-        );
-    if !model.frontmatter_present && !unparsed_frontmatter {
-        return None;
-    }
-    let first_body = if unparsed_frontmatter {
-        model.body.get(1)
-    } else {
-        model.body.first()
-    };
-    match first_body {
-        Some(first) => {
-            let content = first.span().start;
-            let row = source[..content]
-                .rfind(['\n', '\r'])
-                .map(|the| the + 1)
-                .unwrap_or(0);
-            Some(
-                if source[row..content].chars().all(|c| c == ' ' || c == '\t') {
-                    row
-                } else {
-                    content
-                },
-            )
-        }
-        // Il frontmatter *è* tutto il documento: la testa è tutto, il corpo è
-        // niente.
-        None => Some(source.len()),
-    }
+    let model = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)).ok()?;
+    model.body_start(source).ok().flatten()
 }
 
 #[cfg(test)]

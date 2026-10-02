@@ -347,7 +347,7 @@ fn catalog_it() -> StringCatalog {
         .with("note.extract.template.title", "Template")
         .with(
             "note.extract.template.desc",
-            "Template che avvolge la selezione nella nota nuova. Assente: la sola selezione.",
+            "Template che avvolge la selezione nella nota nuova; se non ne ha il segnaposto, la selezione va in coda. Assente: la sola selezione.",
         )
         .with("note.extract.replace.title", "Sostituisci con")
         .with(
@@ -576,7 +576,7 @@ fn catalog_en() -> StringCatalog {
         .with("note.extract.template.title", "Template")
         .with(
             "note.extract.template.desc",
-            "Template wrapping the selection in the new note. Absent: the selection alone.",
+            "Template wrapping the selection in the new note; without its placeholder, the selection goes at the end. Absent: the selection alone.",
         )
         .with("note.extract.replace.title", "Replace with")
         .with(
@@ -951,7 +951,6 @@ fn from_template(
     let ctx = context(host)?;
     let body = expand_full(&grezzo, &file_name(&id), &ctx, host)?;
     host.create_document(&id, &body)?;
-    link_daily_property(host, &id, &ctx.date);
     Ok(created(
         Text::message(
             D_FROM,
@@ -1021,6 +1020,10 @@ fn daily(
 /// ce l'ha, la si scrive via comando — mai YAML diretto, PropertiesOwner resta
 /// proprietario. Best-effort: un vault senza quella chiave o un comando che
 /// rifiuta non fa fallire la creazione della nota.
+///
+/// Soltanto per `note.daily`: una nota da template generico non ha un giorno
+/// a cui legarsi, e ricevere una proprietà che il template non ha ne
+/// cambierebbe i metadati (difetto I22).
 fn link_daily_property(host: &mut dyn HostApi, id: &DocId, date: &str) {
     let model = match host.read_model(id) {
         Ok(model) => model,
@@ -1767,37 +1770,62 @@ fn insert_template(
         .with_effect(effect))
 }
 
+/// Il frontmatter `---\n…\n---\n` in testa a `src`, dopo un eventuale BOM:
+/// l'intervallo del YAML e l'offset dove comincia il corpo, dopo la riga che lo
+/// chiude. `None` se la testa non apre un frontmatter o non lo chiude.
+///
+/// La regola è quella con cui il provider Markdown lo legge (il delimitatore
+/// `---` di comrak): chiude soltanto una riga che è esattamente `---`, non
+/// indentata, e la cerca prima seguita da CRLF, poi da LF, poi dalla fine del
+/// file. Una regola più larga chiuderebbe su un `---` dentro un blocco YAML, e
+/// le proprietà si spezzerebbero; una diversa farebbe di un testo un
+/// frontmatter.
+fn frontmatter_bounds(src: &str) -> Option<(std::ops::Range<usize>, usize)> {
+    let bom = text_policy::bom_len(src);
+    let after_open = src[bom..].strip_prefix("---")?;
+    let eol = if after_open.starts_with('\n') {
+        1
+    } else if after_open.starts_with("\r\n") {
+        2
+    } else {
+        return None;
+    };
+    let open = bom + "---".len() + eol;
+    let rest = &src[open..];
+    let close = ["\n---\r\n", "\n---\n", "\n---"]
+        .iter()
+        .find_map(|delimiter| rest.find(delimiter))?;
+    let after = open + close + "\n---".len();
+    let tail = &src[after..];
+    let body = if tail.is_empty() {
+        after
+    } else if tail.starts_with('\n') {
+        after + 1
+    } else if tail.starts_with("\r\n") {
+        after + 2
+    } else {
+        return None;
+    };
+    Some((open..open + close, body))
+}
+
 /// Divide `---\n…\n---\n` dal corpo, per un template il cui formato dichiara
 /// [`syntax::FRONTMATTER`]: il frontmatter si riconosce solo in testa
 /// (dopo un eventuale BOM), il corpo resta byte-identico. Le proprietà sono
 /// parse come una mappa YAML vera e serializzate una per una come YAML flow:
 /// liste e strutture annidate restano strutture, mai chiavi piatte inventate.
 fn split_frontmatter(src: &str) -> Result<(Vec<(String, String)>, String), PluginError> {
-    let start = text_policy::bom_len(src);
-    let rest = &src[start..];
-    let Some(after_open) = rest.strip_prefix("---") else {
+    let Some((yaml, body_start)) = frontmatter_bounds(src) else {
         return Ok((Vec::new(), src.to_string()));
     };
-    if !after_open.starts_with('\n') && !after_open.starts_with("\r\n") {
-        return Ok((Vec::new(), src.to_string()));
-    }
-    let mut cursor = 0usize;
-    let mut close = None;
-    for line in after_open.split_inclusive('\n') {
-        let next = cursor + line.len();
-        if matches!(line.trim(), "---" | "...") {
-            close = Some((cursor, next));
-            break;
-        }
-        cursor = next;
-    }
-    let Some((yaml_end, body_start)) = close else {
-        return Ok((Vec::new(), src.to_string()));
-    };
-    let yaml = after_open[..yaml_end]
+    let yaml = src[yaml]
         .trim_start_matches(['\n', '\r'])
         .trim_end_matches(['\n', '\r']);
-    let body = format!("{}{}", &src[..start], &after_open[body_start..]);
+    let body = format!(
+        "{}{}",
+        &src[..text_policy::bom_len(src)],
+        &src[body_start..]
+    );
     let parsed = if yaml.is_empty() {
         serde_json::Value::Null
     } else if !yaml_rule::within_budget(yaml) {
@@ -1937,7 +1965,10 @@ fn extract(
         Some(tpl) => {
             let grezzo = host.read_document(&DocId::new(with_extension(host, tpl)?))?;
             let ctx = context(host)?;
-            expand_full(&grezzo, &file_name(&id), &ctx, host)?.replace("{{selection}}", &selected)
+            wrap_selection(
+                expand_full(&grezzo, &file_name(&id), &ctx, host)?,
+                &selected,
+            )
         }
         None => selected.clone(),
     };
@@ -1978,6 +2009,36 @@ fn extract(
     ))
     .undoable(undo)
     .with_effect(effect))
+}
+
+/// Il corpo della nota estratta da un template: la selezione dove il template
+/// dice `{{selection}}`, altrimenti in coda al suo testo dopo una riga vuota,
+/// con i terminatori di riga del template.
+///
+/// La sorgente sostituisce la selezione con un link in ogni caso, quindi un
+/// template che non la colloca non può lasciarla fuori: il testo non starebbe
+/// più da nessuna parte (difetto I21).
+fn wrap_selection(expanded: String, selected: &str) -> String {
+    const SELECTION: &str = "{{selection}}";
+    if expanded.contains(SELECTION) {
+        return expanded.replace(SELECTION, selected);
+    }
+    if expanded.is_empty() {
+        return selected.to_string();
+    }
+    let eol = if expanded.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let gap = if expanded.ends_with(&eol.repeat(2)) {
+        String::new()
+    } else if expanded.ends_with('\n') {
+        eol.to_string()
+    } else {
+        eol.repeat(2)
+    };
+    format!("{expanded}{gap}{selected}")
 }
 
 fn compensate_extract(
@@ -2091,7 +2152,7 @@ fn merge(
     let mut bodies: Vec<(DocId, String)> = Vec::new();
     for source in &sources {
         let body = host.read_document(source)?;
-        if body.trim().is_empty() {
+        if text_policy::strip_bom(&body).trim().is_empty() {
             continue;
         }
         check_relative_assets(host, source, &into, None)?;
@@ -2129,9 +2190,14 @@ fn merge(
     if mode.is_dry_run() {
         let revision = host.document_revision(&into)?;
         let source = host.read_document(&into)?;
-        let at = snap_to_boundary(&source, if prepend { 0 } else { source.len() });
+        let (at, lead) = if prepend {
+            merge_head(host, &into, &source)?
+        } else {
+            (source.len(), "")
+        };
+        let at = snap_to_boundary(&source, at);
         let preview = if prepend {
-            format!("{}{separator}", join_bodies(&bodies, &separator))
+            format!("{lead}{}{separator}", join_bodies(&bodies, &separator))
         } else {
             format!("{separator}{}", join_bodies(&bodies, &separator))
         };
@@ -2147,7 +2213,15 @@ fn merge(
     let mut back_edits: Vec<PlannedEdit> = Vec::new();
     let mut trashed: Vec<(DocId, DocId)> = Vec::new();
     let mut made = 0usize;
-    for (source, body) in &bodies {
+    // Un edit per sorgente, perché una che fallisce non trascini le altre. In
+    // testa però ognuno entra nello stesso punto, sopra quelli già entrati: si
+    // parte dall'ultima sorgente, e il risultato è il loro ordine, quello del
+    // piano.
+    let mut queue: Vec<&(DocId, String)> = bodies.iter().collect();
+    if prepend {
+        queue.reverse();
+    }
+    for (source, body) in queue {
         match host.read_document(source) {
             Ok(latest) if latest == *body => {}
             Ok(_) => {
@@ -2172,11 +2246,23 @@ fn merge(
                 continue;
             }
         };
-        let at = snap_to_boundary(&current, if prepend { 0 } else { current.len() });
-        let text = if prepend {
-            format!("{body}{separator}")
+        let (at, lead) = if prepend {
+            match merge_head(host, &into, &current) {
+                Ok(head) => head,
+                Err(and) => {
+                    failed.push(Failure::of(source.clone(), and));
+                    continue;
+                }
+            }
         } else {
-            format!("{separator}{body}")
+            (current.len(), "")
+        };
+        let at = snap_to_boundary(&current, at);
+        let inserted = text_policy::strip_bom(body);
+        let text = if prepend {
+            format!("{lead}{inserted}{separator}")
+        } else {
+            format!("{separator}{inserted}")
         };
         let revision = match host.document_revision(&into) {
             Ok(revision) => revision,
@@ -2255,13 +2341,41 @@ fn merge(
         .partially(count))
 }
 
-/// I corpi uniti nell'ordine delle sorgenti, col separatore fra i blocchi e
-/// mai ai bordi del documento: chi chiama aggiunge il separatore dal lato
-/// giusto (testa per prepend, coda per append).
+/// Dove entra un'unione in testa: dopo il BOM e dopo il frontmatter della
+/// destinazione, che deve restare la prima cosa del file. Lo dice il modello
+/// ([`fub_abi::model::DocumentModel::body_start`]), qualunque sia la sintassi
+/// del frontmatter.
+/// Il secondo valore è il terminatore che manca quando il frontmatter chiude il
+/// file senza andare a capo.
+fn merge_head(
+    host: &dyn HostApi,
+    doc: &DocId,
+    source: &str,
+) -> Result<(usize, &'static str), PluginError> {
+    // Un modello che non viene da `source`: la destinazione è cambiata fra le
+    // due letture.
+    let start = host.read_model(doc)?.body_start(source).map_err(|_| {
+        PluginError::Conflict(Text::message(
+            E_SOURCE_CHANGED,
+            vec![Arg::text(A_DOC, doc.as_str())],
+        ))
+    })?;
+    Ok(match start {
+        None => (text_policy::bom_len(source), ""),
+        Some(at) if at == source.len() && !source.ends_with(['\n', '\r']) => {
+            (at, text_policy::line_break(source))
+        }
+        Some(at) => (at, ""),
+    })
+}
+
+/// I corpi uniti nell'ordine delle sorgenti, senza il loro BOM, col separatore
+/// fra i blocchi e mai ai bordi del documento: chi chiama aggiunge il
+/// separatore dal lato giusto (testa per prepend, coda per append).
 fn join_bodies(bodies: &[(DocId, String)], separator: &str) -> String {
     bodies
         .iter()
-        .map(|(_, b)| b.as_str())
+        .map(|(_, b)| text_policy::strip_bom(b))
         .collect::<Vec<_>>()
         .join(separator)
 }
@@ -2482,7 +2596,39 @@ mod tests {
             "{text:?}"
         );
         assert!(split_frontmatter("---\njust a scalar\n---\nbody").is_err());
-        assert_eq!(split_frontmatter("---\n---\nbody").unwrap().1, "body");
+        assert_eq!(split_frontmatter("---\n\n---\nbody").unwrap().1, "body");
+    }
+
+    /// **Il frontmatter di un template è quello che il provider legge**: chiude
+    /// soltanto una riga `---` non indentata. Un `---` dentro un blocco YAML è
+    /// del valore, e `...` o un `---` senza niente in mezzo sono testo, come
+    /// nella nota.
+    #[test]
+    fn a_template_frontmatter_closes_where_the_provider_closes_it() {
+        let src = "---\ndesc: |\n  ---\n  ...\ntitle: T\n---\nCorpo\n";
+        let (props, body) = split_frontmatter(src).unwrap();
+        assert_eq!(body, "Corpo\n");
+        assert_eq!(
+            props.iter().find(|(key, _)| key == "desc").unwrap().1,
+            "\"---\\n...\\n\""
+        );
+        assert!(props.iter().any(|(key, _)| key == "title"), "{props:?}");
+        for text in [
+            "---\ntitle: T\n...\nCorpo\n",
+            "---\n---\nCorpo\n",
+            "---\ntitle: T\n---x\nCorpo\n",
+            "---\ntitle: T\n --- \nCorpo\n",
+        ] {
+            let (props, body) = split_frontmatter(text).unwrap();
+            assert!(props.is_empty(), "{text:?}: {props:?}");
+            assert_eq!(body, text);
+        }
+        // Con terminatori misti comrak cerca prima la chiusura seguita da CRLF.
+        let mixed = "---\ntitle: T\n---\nCorpo\n---\r\nAltro\r\n";
+        assert_eq!(
+            frontmatter_bounds(mixed).unwrap().1,
+            mixed.find("Altro").unwrap()
+        );
     }
 
     #[test]

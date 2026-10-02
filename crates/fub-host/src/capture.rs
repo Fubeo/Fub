@@ -30,6 +30,7 @@ use fub_abi::model::DocId;
 use fub_abi::options::{source, syntax};
 use fub_abi::rules::folders;
 use fub_abi::rules::path_policy::{self, Naming};
+use fub_abi::rules::text_policy;
 use fub_abi::text::{Arg, Text};
 use fub_abi::PluginError;
 
@@ -497,9 +498,11 @@ impl<'a> Capture<'a> {
     }
 
     /// Dove comincia il corpo, che è dove `prepend` scrive: dopo il
-    /// frontmatter, che deve restare la prima cosa del file. Lo dice il
-    /// modello, qualunque sia la sintassi del frontmatter; letto fra due
-    /// letture con la stessa revisione, parla dello stesso testo.
+    /// frontmatter, che deve restare la prima cosa del file, anche quando il
+    /// provider non l'ha saputo leggere. Lo dice il modello
+    /// ([`fub_abi::model::DocumentModel::body_start`]), qualunque sia la
+    /// sintassi del frontmatter; letto fra due letture con la stessa revisione,
+    /// parla dello stesso testo.
     fn body_start(
         &self,
         doc: &DocId,
@@ -514,28 +517,16 @@ impl<'a> Capture<'a> {
                 vec![Arg::text("doc", doc.as_str())],
             )));
         }
-        if !model.frontmatter_present {
-            return Ok(if source.starts_with('\u{FEFF}') {
-                '\u{FEFF}'.len_utf8()
-            } else {
-                0
-            });
-        }
-        let Some(first) = model.body.first() else {
-            return Ok(source.len());
-        };
-        let content = first.span().start;
-        let head = source.get(..content).ok_or_else(|| {
-            PluginError::Internal(format!("`{doc}`: il primo blocco è fuori dal sorgente").into())
+        let start = model.body_start(source).map_err(|span| {
+            PluginError::Internal(
+                format!(
+                    "`{doc}`: il blocco in {}..{} è fuori dal sorgente",
+                    span.start, span.end
+                )
+                .into(),
+            )
         })?;
-        // La riga del primo blocco, se prima di lui ci sono soltanto spazi: il
-        // blocco catturato non spezza un rientro.
-        let row = head.rfind(['\n', '\r']).map_or(0, |at| at + 1);
-        Ok(if head[row..].chars().all(|c| c == ' ' || c == '\t') {
-            row
-        } else {
-            content
-        })
+        Ok(start.unwrap_or(text_policy::bom_len(source)))
     }
 }
 

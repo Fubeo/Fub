@@ -158,6 +158,47 @@ fn prepend_writes_after_the_frontmatter() {
     );
 }
 
+/// **Anche un frontmatter che il provider non sa leggere resta in testa.** Il
+/// provider lo tiene verbatim come primo blocco, e `frontmatter_present` è
+/// falso: la cattura scriveva all'offset 0, e i delimitatori in mezzo al testo
+/// non erano più un frontmatter.
+#[test]
+fn prepend_keeps_an_unreadable_frontmatter_on_top() {
+    let (_dir, root, host) = vault(&[("Nota.md", "---\n[non letto\n---\n\n# Nota\n")]);
+    capture::apply(
+        &host,
+        None,
+        &payload(CaptureMode::Prepend, Some("Nota.md")),
+        None,
+    )
+    .unwrap();
+    let text = read(&root, "Nota.md");
+    assert!(
+        text.starts_with("---\n[non letto\n---\n\n# Articolo: Rust/async\n"),
+        "{text:?}"
+    );
+    assert!(text.ends_with("\n\n# Nota\n"), "{text:?}");
+}
+
+/// Senza frontmatter si scrive in testa, ma dopo il BOM.
+#[test]
+fn prepend_writes_after_the_bom() {
+    let (_dir, root, host) = vault(&[("Nota.md", "\u{feff}# Nota\n")]);
+    capture::apply(
+        &host,
+        None,
+        &payload(CaptureMode::Prepend, Some("Nota.md")),
+        None,
+    )
+    .unwrap();
+    let text = read(&root, "Nota.md");
+    assert!(
+        text.starts_with("\u{feff}# Articolo: Rust/async\n"),
+        "{text:?}"
+    );
+    assert!(text.ends_with("\n\n# Nota\n"), "{text:?}");
+}
+
 #[test]
 fn a_capture_never_writes_into_a_canvas() {
     let board = r#"{"nodes":[],"edges":[]}"#;
