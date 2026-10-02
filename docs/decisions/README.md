@@ -35,3 +35,4 @@ Nuove decisioni usano il [template](template.md).
 | [0200 — L'inventario installato è distinto dal runtime e dai dati plugin](0200-inventario-componenti-installati.md) | accolta | storage | 0187 |
 | [0201 — Le superfici strutturate usano sessioni, finestre e patch coordinate](0201-superfici-strutturate-a-finestre.md) | accolta | contratto | — |
 | [0202 — Snapshot globali offline recuperabili](0202-snapshot-globali-recuperabili.md) | accolta | storage | — |
+| [0203 — Le superfici spaziali modificano sorgenti SVG con operazioni testuali](0203-superfici-spaziali.md) | proposta | frontend | — |
