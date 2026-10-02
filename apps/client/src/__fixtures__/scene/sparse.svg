@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <title>Ciclo dell'acqua</title>
+  <desc>Dal mare alle nuvole, e ritorno</desc>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>
+  <g id="l3f8a0c2d" fub:layer="Livello 1">
+    <ellipse id="o1a2b3c4d" cx="300" cy="200" rx="120" ry="60" fill="none" stroke="#0072b2" stroke-width="4"/>
+    <path id="o5e6f7g8h" fub:shape="arrow" fub:geom="420 200 700 420" d="M420 200 L700 420 M682.18 417.45 L700 420 L693.3 403.29" fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text id="o9i0j1k2l" x="720" y="460" fill="#000000" font-family="Inter, sans-serif" font-size="32">
+      <tspan x="720" dy="0">Evaporazione</tspan>
+      <tspan x="720" dy="40">&amp; condensa</tspan>
+    </text>
+    <path id="o7k2m9x4q" fub:tool="pen" fub:at="2026-10-01T09:20:31.250Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120.5 30.2 L123.01 29.83 L125.53 29.46 L128 29.09 L130.51 28.72 L133.03 28.35 L135.5 27.98 L138.01 27.61 L140.53 27.24 L143 26.87 L145.51 26.5 L148.03 26.13 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,3020,100,0 251,-37,10,8 252,-37,10,8 247,-37,10,8 251,-37,10,8 252,-37,10,8 247,-37,10,8 251,-37,10,8 252,-37,10,8 247,-37,10,8 251,-37,10,8 252,-37,10,8"/>
+    <path id="o00000001" fub:tool="highlighter" fub:at="2026-10-01T09:20:33.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1" d="M300 455 L340 455 L380 455 L420 455 L460 455 Z" fill="#f0e442" fill-opacity="0.4" fub:ink="1 s10 cxyt 3000,4550,0 400,0,16 400,0,16 400,0,16 400,0,16"/>
+    <g id="o00000010" transform="matrix(0.866 0.5 -0.5 0.866 40 -20)">
+      <rect id="o00000011" x="900" y="100" width="160" height="90" rx="12" fill="#009e73"/>
+      <circle id="o00000012" cx="1200" cy="150" r="40" fill="#cc79a7"/>
+      <line id="o00000013" x1="900" y1="250" x2="1.5in" y2="250" stroke="#000000" stroke-width="2" stroke-dasharray="8 4"/>
+      <polyline id="o00000014" points="900,300 950,280 1000,320 1050,290" fill="none" stroke="#0072b2" stroke-width="3"/>
+      <polygon id="o00000015" points="1100 300 1160 340 1080 360" fill="#d55e00" opacity="0.8"/>
+      <path id="o00000016" d="M900 400 C950 350 1000 450 1050 400 A40 40 0 0 1 1130 400 Q1160 360 1190 400 Z" fill="none" stroke="#000000" stroke-width="2"/>
+      <image id="o00000017" x="1250" y="300" width="200" height="150" preserveAspectRatio="xMidYMid slice" href="foto/mare.png"/>
+      <use href="#o1a2b3c4d" x="10"/>
+    </g>
+    <a id="o00000020" href="note/acqua.md">
+      <title>Il ciclo nella nota</title>
+      <rect id="o00000021" x="1400" y="800" width="120" height="60" fill="#56b4e9"/>
+    </a>
+  </g>
+  <g id="l9z8y7x6w" fub:layer="Appunti" fub:locked="true" display="none">
+    <path id="o00000030" fub:tool="pen" fub:at="2026-10-01T09:21:00.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1" d="M0 0 L1 1 Z" fill="#000000" fub:ink="1 s100 cxy 0,0 1"/>
+    <path id="o00000031" fub:tool="pen" fub:at="2026-10-01T09:21:01.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1" d="M100 100 L101 100.5 Z" fill="#000000" fub:ink="1 s10 cxytq 1000,1000,0,5 10,5,8,-5"/>
+    <path id="o00000032" fub:tool="pen" fub:at="2026-10-01T09:21:02.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1" d="M300 455 L340 455 L380 455 L420 455 L460 455 Z" fill="#e69f00" fub:ink="1 s100 cxyt 30000,45500,0 4000,0,16 4000,0,16 4000,0,16 4000,0,16"/>
+    <image id="o00000033" x="10" y="10" width="8" height="8" href="data:image/png;base64,iVBORw0KGgo="/>
+    <g id="o00000034">
+    </g>
+  </g>
+</svg>

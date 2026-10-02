@@ -1,0 +1,256 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": true,
+  "lineEnding": "crlf",
+  "lineBreak": "crlf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        3,
+        715
+      ],
+      "utf16": [
+        1,
+        684
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            3,
+            153
+          ],
+          "utf16": [
+            1,
+            151
+          ]
+        },
+        "close": {
+          "bytes": [
+            709,
+            715
+          ],
+          "utf16": [
+            678,
+            684
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        157,
+        193
+      ],
+      "utf16": [
+        154,
+        183
+      ],
+      "indent": "  ",
+      "text": "Città di 東京 🌧"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        197,
+        288
+      ],
+      "utf16": [
+        186,
+        277
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        292,
+        707
+      ],
+      "utf16": [
+        280,
+        677
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            292,
+            338
+          ],
+          "utf16": [
+            280,
+            324
+          ]
+        },
+        "close": {
+          "bytes": [
+            703,
+            707
+          ],
+          "utf16": [
+            673,
+            677
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello — uno",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        2
+      ],
+      "bytes": [
+        344,
+        383
+      ],
+      "utf16": [
+        329,
+        367
+      ],
+      "elements": [
+        0,
+        0
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        2,
+        0
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000001",
+      "bytes": [
+        389,
+        583
+      ],
+      "utf16": [
+        372,
+        555
+      ],
+      "indent": "    ",
+      "lines": [
+        "Perché sì 😀",
+        "𝄞 e ♪"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        2,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000002",
+      "bytes": [
+        589,
+        699
+      ],
+      "utf16": [
+        560,
+        670
+      ],
+      "indent": "    "
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Città di 東京 🌧",
+      "bytes": [
+        157,
+        193
+      ],
+      "utf16": [
+        154,
+        183
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Perché sì 😀 𝄞 e ♪",
+        "bytes": [
+          389,
+          583
+        ],
+        "utf16": [
+          372,
+          555
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello — uno"
+    ],
+    "counts": {
+      "strokes": 0,
+      "shapes": 1,
+      "texts": 1,
+      "images": 0,
+      "links": 0,
+      "foreign": 1
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 40.0,
+      "y": 80.0,
+      "width": 100.0,
+      "height": 170.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        344,
+        383
+      ],
+      "utf16": [
+        329,
+        367
+      ]
+    }
+  ]
+}

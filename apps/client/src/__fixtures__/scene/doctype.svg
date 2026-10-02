@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg [
+  <!ENTITY ns_svg "http://www.w3.org/2000/svg">
+  <!ENTITY ns_fub "https://fubeo.github.io/ns/scene/1">
+  <!ENTITY luogo "Giardino">
+]>
+<svg xmlns="&ns_svg;" xmlns:fub="&ns_fub;" fub:version="1" viewBox="0 0 100 100" width="100" height="100">
+  <title>&luogo; d'inverno</title>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="100" height="100" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <rect id="o00000001" x="10" y="10" width="20" height="20" fill="#0072b2"/>
+    <text x="10" y="60"><tspan x="10" dy="0">&luogo;</tspan></text>
+  </g>
+</svg>
