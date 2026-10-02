@@ -9,11 +9,15 @@
 //! orologio e quello del PC («Orologi»).
 //!
 //! L'inchiostro è effimero: i campioni dello stesso tratto in coda si
-//! riuniscono in un messaggio, la vista in coda vale solo l'ultima, e mentre
-//! la connessione è caduta l'inchiostro si butta. Il client non manda più di
-//! [`CLIENT_RATE`] messaggi al secondo, metà del limite dell'host, così una
-//! raffica che la rete consegna tutta insieme dopo un intoppo non lo supera; e
-//! non tiene in volo più commit di quanti l'host ne faccia aspettare.
+//! riuniscono in un messaggio, e mentre la connessione è caduta l'inchiostro
+//! si butta. Le viste partono a distanza di almeno [`VIEW_INTERVAL`]: in coda
+//! ne resta una sola, l'ultima, che parte appena l'intervallo è passato, così
+//! la posizione finale arriva sempre; dopo una ripresa il client la rimanda.
+//!
+//! Il client non manda più di [`CLIENT_RATE`] messaggi al secondo, metà del
+//! limite dell'host, così una raffica che la rete consegna tutta insieme dopo
+//! un intoppo non lo supera; e non tiene in volo più commit di quanti l'host
+//! ne faccia aspettare.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -42,7 +46,7 @@ use crate::counter::Counter;
 use crate::host::Io;
 use crate::limits::{
     Limits, CLOSE_GRACE, HEARTBEAT, HELLO_TIMEOUT, MAX_COMMIT, MAX_OPS_PER_COMMIT,
-    MAX_PENDING_BYTES, MAX_PENDING_COMMITS, RESUME_WINDOW, WRITE_TIMEOUT,
+    MAX_PENDING_BYTES, MAX_PENDING_COMMITS, RESUME_WINDOW, VIEW_INTERVAL, WRITE_TIMEOUT,
 };
 use crate::pairing::{allowed_host, PairingTarget};
 use crate::protocol::{
@@ -280,6 +284,10 @@ struct State {
     next_c: u64,
     pending: BTreeMap<Counter, Ops>,
     outgoing: VecDeque<Outgoing>,
+    /// L'ultima vista dell'applicazione: torna in coda dopo ogni ripresa.
+    view: Option<View>,
+    /// Quando è partita l'ultima vista: la prossima aspetta [`VIEW_INTERVAL`].
+    view_sent_at: Option<Instant>,
     connected: bool,
     closing: bool,
     ended: bool,
@@ -287,12 +295,17 @@ struct State {
 }
 
 impl State {
-    /// Il prossimo messaggio da mandare. Un commit parte solo se i commit più
-    /// vecchi ancora senza risposta stanno nella finestra; intanto passano
-    /// i messaggi effimeri dietro di lui.
-    fn next(&mut self, clock: &dyn Fn() -> f64) -> Option<String> {
+    /// Il prossimo messaggio da mandare in `now`. Un commit parte solo se i
+    /// commit più vecchi ancora senza risposta stanno nella finestra, e una
+    /// vista solo a [`VIEW_INTERVAL`] dalla precedente; intanto passano i
+    /// messaggi dietro di loro.
+    fn next(&mut self, clock: &dyn Fn() -> f64, now: Instant) -> Option<String> {
         let mut index = 0;
         while index < self.outgoing.len() {
+            if matches!(self.outgoing[index], Outgoing::View(_)) && self.view_due(now).is_some() {
+                index += 1;
+                continue;
+            }
             if let Outgoing::Commit(c) = self.outgoing[index] {
                 let Some(ops) = self.pending.get(&c) else {
                     // Già trattato: una risposta è arrivata prima dell'invio.
@@ -315,7 +328,10 @@ impl State {
             let entry = self.outgoing.remove(index)?;
             let message = match entry {
                 Outgoing::Ink(message) => message,
-                Outgoing::View(view) => WriterMessage::View(view),
+                Outgoing::View(view) => {
+                    self.view_sent_at = Some(now);
+                    WriterMessage::View(view)
+                }
                 Outgoing::Ping(id) => WriterMessage::Ping(Ping { id, a: clock() }),
                 Outgoing::Commit(c) => {
                     let ops = self.pending.get(&c)?.clone();
@@ -331,8 +347,41 @@ impl State {
         !self.outgoing.is_empty()
     }
 
+    /// Quando può partire la prossima vista, se in `now` deve ancora aspettare.
+    fn view_due(&self, now: Instant) -> Option<Instant> {
+        self.view_sent_at
+            .map(|at| at + VIEW_INTERVAL)
+            .filter(|due| now < *due)
+    }
+
+    /// Quando può partire la vista in coda, se ce n'è una che aspetta.
+    fn queued_view_due(&self, now: Instant) -> Option<Instant> {
+        self.outgoing
+            .iter()
+            .any(|entry| matches!(entry, Outgoing::View(_)))
+            .then(|| self.view_due(now))
+            .flatten()
+    }
+
     fn push_ephemeral(&mut self, entry: Outgoing) {
-        if !self.connected || self.closing || self.outgoing.len() >= OUTGOING_LIMIT {
+        if !self.connected || self.closing {
+            return;
+        }
+        // In coda c'è al più una vista: prende il posto della precedente, e
+        // non la ferma la coda piena, perché la posizione finale deve
+        // arrivare.
+        if let Outgoing::View(view) = entry {
+            match self
+                .outgoing
+                .iter_mut()
+                .find(|entry| matches!(entry, Outgoing::View(_)))
+            {
+                Some(slot) => *slot = Outgoing::View(view),
+                None => self.outgoing.push_back(Outgoing::View(view)),
+            }
+            return;
+        }
+        if self.outgoing.len() >= OUTGOING_LIMIT {
             return;
         }
         match entry {
@@ -348,16 +397,6 @@ impl State {
                 }
                 self.outgoing
                     .push_back(Outgoing::Ink(WriterMessage::InkPoints(points)));
-            }
-            Outgoing::View(view) => {
-                match self
-                    .outgoing
-                    .iter_mut()
-                    .find(|entry| matches!(entry, Outgoing::View(_)))
-                {
-                    Some(slot) => *slot = Outgoing::View(view),
-                    None => self.outgoing.push_back(Outgoing::View(view)),
-                }
             }
             other => self.outgoing.push_back(other),
         }
@@ -542,13 +581,15 @@ impl LiveClient {
         Ok(())
     }
 
-    /// Manda la vista. In coda vale solo l'ultima.
+    /// Manda la vista. Due viste partono ad almeno [`VIEW_INTERVAL`] l'una
+    /// dall'altra: in coda vale solo l'ultima, che parte appena l'intervallo è
+    /// passato. Dopo una ripresa l'ultima vista riparte da sé.
     pub fn view(&self, view: View) -> Result<(), InvalidMessage> {
         view.check().map_err(InvalidMessage)?;
-        self.shared
-            .state
-            .lock()
-            .push_ephemeral(Outgoing::View(view));
+        let mut state = self.shared.state.lock();
+        state.view = Some(view);
+        state.push_ephemeral(Outgoing::View(view));
+        drop(state);
         self.shared.notify.notify_one();
         Ok(())
     }
@@ -786,6 +827,10 @@ impl Driver {
             state.pending.retain(|c, _| *c > welcome.last_c);
             state.outgoing = state.pending.keys().map(|c| Outgoing::Commit(*c)).collect();
             state.connected = true;
+            // L'host non sa dove guardava lo scrittore mentre era fuori.
+            if let Some(view) = state.view {
+                state.push_ephemeral(Outgoing::View(view));
+            }
         }
         self.emit(ClientEvent::Connected {
             resumed,
@@ -916,13 +961,18 @@ impl Driver {
                 return goodbye(ws).await;
             }
             // Si manda finché il ritmo lo consente; poi si aspetta il ritmo
-            // solo se qualcosa è in coda, altrimenti una notifica, una
-            // risposta che libera la finestra dei commit o il `ping`.
+            // solo se qualcosa è in coda, il turno di una vista che aspetta,
+            // altrimenti una notifica, una risposta che libera la finestra dei
+            // commit o il `ping`.
             let now = Instant::now();
             let wait = self.rate.wait(now);
             let pacing = if wait.is_zero() {
                 let clock = self.config.clock.clone();
-                let next = self.shared.state.lock().next(clock.as_ref());
+                let (next, view_due) = {
+                    let mut state = self.shared.state.lock();
+                    let next = state.next(clock.as_ref(), now);
+                    (next, state.queued_view_due(now))
+                };
                 if let Some(text) = next {
                     self.rate.admit(now);
                     match timeout(WRITE_TIMEOUT, ws.send(Message::Text(text.into()))).await {
@@ -930,7 +980,7 @@ impl Driver {
                         _ => return Disconnect::Lost,
                     }
                 }
-                None
+                view_due
             } else {
                 self.shared.state.lock().has_queued().then_some(now + wait)
             };
@@ -1108,9 +1158,24 @@ mod tests {
         }
     }
 
+    fn view(x: f64) -> View {
+        View {
+            x,
+            y: 0.0,
+            scale: 1.0,
+            w: 1.0,
+            h: 1.0,
+        }
+    }
+
     fn drain(state: &mut State) -> Vec<WriterMessage> {
+        drain_at(state, Instant::now())
+    }
+
+    /// Tutto ciò che in `now` può partire, come lo legge l'host.
+    fn drain_at(state: &mut State, now: Instant) -> Vec<WriterMessage> {
         let clock = || 0.0;
-        std::iter::from_fn(|| state.next(&clock))
+        std::iter::from_fn(|| state.next(&clock, now))
             .map(|text| match crate::protocol::parse_writer(&text).unwrap() {
                 crate::protocol::Parsed::Message(message) => message,
                 other => panic!("{other:?}"),
@@ -1139,13 +1204,6 @@ mod tests {
     #[test]
     fn the_last_view_replaces_the_queued_one_in_its_place() {
         let mut state = connected();
-        let view = |x| View {
-            x,
-            y: 0.0,
-            scale: 1.0,
-            w: 1.0,
-            h: 1.0,
-        };
         state.push_ephemeral(Outgoing::View(view(1.0)));
         state.push_ephemeral(Outgoing::Ink(WriterMessage::InkEnd(stroke("o00000001"))));
         state.push_ephemeral(Outgoing::View(view(2.0)));
@@ -1153,6 +1211,88 @@ mod tests {
         assert!(
             matches!(sent[..], [WriterMessage::View(v), WriterMessage::InkEnd(_)] if v.x == 2.0)
         );
+    }
+
+    #[test]
+    fn views_leave_at_least_100_ms_apart_and_the_last_one_always_leaves() {
+        let mut state = connected();
+        let start = Instant::now();
+        let mut sent = Vec::new();
+        let mut record = |state: &mut State, now: Instant| {
+            for message in drain_at(state, now) {
+                match message {
+                    WriterMessage::View(view) => sent.push((now, view.x)),
+                    other => panic!("{other:?}"),
+                }
+            }
+        };
+        // Tre secondi a 60 viste al secondo, una per frame.
+        let mut now = start;
+        for i in 0..180u32 {
+            now = start + Duration::from_nanos(u64::from(i) * 1_000_000_000 / 60);
+            state.push_ephemeral(Outgoing::View(view(f64::from(i))));
+            record(&mut state, now);
+        }
+        // Finita la raffica, la vista in coda parte appena è il suo turno.
+        if let Some(due) = state.queued_view_due(now) {
+            record(&mut state, due);
+        }
+        assert!(!state.has_queued());
+
+        for pair in sent.windows(2) {
+            assert!(pair[1].0 - pair[0].0 >= VIEW_INTERVAL, "{sent:?}");
+        }
+        for (i, (at, _)) in sent.iter().enumerate() {
+            let second = sent[i..]
+                .iter()
+                .take_while(|(later, _)| *later < *at + Duration::from_secs(1))
+                .count();
+            assert!(second <= 10, "{second} views in a second: {sent:?}");
+        }
+        assert!(sent.len() >= 25, "{sent:?}");
+        assert_eq!(sent.last().map(|(_, x)| *x), Some(179.0));
+    }
+
+    #[test]
+    fn a_view_waiting_its_turn_holds_back_neither_ink_nor_commits() {
+        let mut state = connected();
+        let now = Instant::now();
+        state.push_ephemeral(Outgoing::View(view(1.0)));
+        assert!(matches!(
+            drain_at(&mut state, now)[..],
+            [WriterMessage::View(_)]
+        ));
+
+        state.push_ephemeral(Outgoing::View(view(2.0)));
+        state.push_ephemeral(Outgoing::Ink(WriterMessage::InkEnd(stroke("o00000001"))));
+        let ops = Ops::parse(r#"[{"op":"add"}]"#, 10).unwrap();
+        state.pending.insert(Counter(1), ops);
+        state.outgoing.push_back(Outgoing::Commit(Counter(1)));
+        let early = now + VIEW_INTERVAL / 2;
+        assert!(matches!(
+            drain_at(&mut state, early)[..],
+            [WriterMessage::InkEnd(_), WriterMessage::Commit(_)]
+        ));
+        assert_eq!(state.queued_view_due(early), Some(now + VIEW_INTERVAL));
+        assert!(matches!(
+            drain_at(&mut state, now + VIEW_INTERVAL)[..],
+            [WriterMessage::View(v)] if v.x == 2.0
+        ));
+        assert_eq!(state.queued_view_due(now + VIEW_INTERVAL), None);
+    }
+
+    #[test]
+    fn a_full_queue_still_takes_the_last_view() {
+        let mut state = connected();
+        for i in 0..OUTGOING_LIMIT {
+            state.push_ephemeral(Outgoing::Ink(WriterMessage::InkEnd(stroke(&format!(
+                "o{i:08}"
+            )))));
+        }
+        state.push_ephemeral(Outgoing::View(view(1.0)));
+        state.push_ephemeral(Outgoing::View(view(2.0)));
+        assert_eq!(state.outgoing.len(), OUTGOING_LIMIT + 1);
+        assert!(matches!(state.outgoing.back(), Some(Outgoing::View(v)) if v.x == 2.0));
     }
 
     #[test]

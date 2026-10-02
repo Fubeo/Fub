@@ -14,7 +14,7 @@ use crate::client::{
 use crate::clock::wall_clock_ms;
 use crate::counter::{Counter, WriterId};
 use crate::host::{EndReason, LeaveReason, LiveEvent, ShellMessage};
-use crate::limits::{Limits, MAX_COMMIT, MAX_SNAPSHOT};
+use crate::limits::{Limits, MAX_COMMIT, MAX_SNAPSHOT, VIEW_INTERVAL};
 use crate::pairing::PairingTarget;
 use crate::protocol::{Device, InkBegin, InkPoints, NackReason, Ops, Retry, Tool, View};
 use crate::token::PairingSecret;
@@ -69,6 +69,27 @@ async fn shell_commit(live: &mut Live) -> (Counter, Ops) {
     live.events
         .find(|event| match event {
             LiveEvent::Commit { c, ops, .. } => Some((c, ops)),
+            _ => None,
+        })
+        .await
+}
+
+/// Una vista che si riconosce da `x`.
+fn view_at(x: f64) -> View {
+    View {
+        x,
+        y: 0.0,
+        scale: 1.0,
+        w: 800.0,
+        h: 600.0,
+    }
+}
+
+/// La prossima vista che arriva alla shell.
+async fn shell_view(live: &mut Live) -> f64 {
+    live.events
+        .find(|event| match event {
+            LiveEvent::View(view) => Some(view.x),
             _ => None,
         })
         .await
@@ -561,4 +582,116 @@ async fn the_client_refuses_before_sending_what_the_protocol_does_not_allow() {
         Err(CommitError::TooLarge { .. })
     ));
     assert!(client.pending().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_burst_of_60_views_a_second_reaches_the_host_at_most_10_a_second() {
+    let mut live = start();
+    let (client, _events) = connect(&live).await;
+    let client = Arc::new(client);
+    let started = Instant::now();
+    // L'app manda una vista per frame per 3 secondi; l'ultima ha x = 179.
+    let app = tokio::spawn({
+        let client = client.clone();
+        async move {
+            let mut frame = tokio::time::interval(Duration::from_nanos(1_000_000_000 / 60));
+            for i in 0..180u32 {
+                frame.tick().await;
+                client.view(view_at(f64::from(i))).unwrap();
+            }
+        }
+    });
+    let mut arrived = Vec::new();
+    let quiet = started + Duration::from_secs(4);
+    loop {
+        tokio::select! {
+            event = live.events.next() => {
+                if let Some(LiveEvent::View(view)) = event {
+                    arrived.push((Instant::now(), view.x));
+                }
+            }
+            () = tokio::time::sleep_until(quiet) => break,
+        }
+    }
+    app.await.unwrap();
+
+    for pair in arrived.windows(2) {
+        assert!(pair[1].0 - pair[0].0 >= VIEW_INTERVAL, "{arrived:?}");
+    }
+    for (i, (at, _)) in arrived.iter().enumerate() {
+        let second = arrived[i..]
+            .iter()
+            .take_while(|(later, _)| *later < *at + Duration::from_secs(1))
+            .count();
+        assert!(second <= 10, "{second} views in a second: {arrived:?}");
+    }
+    assert!(arrived.len() >= 25, "{arrived:?}");
+    // La posizione finale arriva, al più 100 ms dopo l'ultima vista dell'app.
+    let (last_at, last_x) = *arrived.last().unwrap();
+    assert_eq!(last_x, 179.0);
+    assert!(last_at - started <= Duration::from_secs(3) + VIEW_INTERVAL);
+    assert!(live.host.status().writer.unwrap().connected);
+}
+
+#[tokio::test(start_paused = true)]
+async fn ink_and_commits_go_past_a_view_that_waits_its_turn() {
+    let mut live = start();
+    let (client, _events) = connect(&live).await;
+    client.view(view_at(1.0)).unwrap();
+    assert_eq!(shell_view(&mut live).await, 1.0);
+
+    let asked = Instant::now();
+    client.view(view_at(2.0)).unwrap();
+    client.ink(Ink::Cancel(stroke("o7k2m9x4q"))).unwrap();
+    let c = client.commit(ops("o1")).unwrap();
+    let mut arrivals = Vec::new();
+    while arrivals.len() < 3 {
+        let arrival = match live.events.next().await.unwrap() {
+            LiveEvent::InkCancel { .. } => "ink",
+            LiveEvent::Commit { c: got, .. } => {
+                assert_eq!(got, c);
+                "commit"
+            }
+            LiveEvent::View(view) => {
+                assert_eq!(view.x, 2.0);
+                "view"
+            }
+            _ => continue,
+        };
+        arrivals.push((arrival, asked.elapsed()));
+    }
+    // Inchiostro e commit partono subito; la vista aspetta il suo turno.
+    assert_eq!(
+        arrivals.iter().map(|(what, _)| *what).collect::<Vec<_>>(),
+        ["ink", "commit", "view"]
+    );
+    assert_eq!(arrivals[0].1, Duration::ZERO);
+    assert_eq!(arrivals[1].1, Duration::ZERO);
+    assert!(arrivals[2].1 > Duration::ZERO && arrivals[2].1 <= VIEW_INTERVAL);
+}
+
+#[tokio::test(start_paused = true)]
+async fn after_a_resume_the_last_view_reaches_the_host_again() {
+    let mut live = start();
+    let (client, mut events) = connect(&live).await;
+    client.view(view_at(1.0)).unwrap();
+    assert_eq!(shell_view(&mut live).await, 1.0);
+
+    live.net.set_down(true);
+    live.net.cut();
+    find(&mut events, |event| {
+        matches!(event, ClientEvent::Disconnected { .. }).then_some(())
+    })
+    .await;
+    // Mentre la rete manca la vista cambia: alla ripresa arriva la più
+    // recente, senza che l'app la rimandi.
+    client.view(view_at(2.0)).unwrap();
+    client.view(view_at(3.0)).unwrap();
+    live.net.set_down(false);
+    find(&mut events, |event| match event {
+        ClientEvent::Connected { resumed: true, .. } => Some(()),
+        _ => None,
+    })
+    .await;
+    assert_eq!(shell_view(&mut live).await, 3.0);
 }

@@ -189,8 +189,9 @@ Ogni messaggio ha la forma `{"v":1,"t":"<tipo>", …}`.
   `-`. Il resto della forma lo controlla la shell.
 
 Le frequenze sono regole dello scrittore: un `ink.pts` per frame e per tratto,
-`view` al cambio di vista e al più 10 volte al secondo, `ping` ogni secondo.
-L'host non le controlla una per una: conta i messaggi al secondo.
+`view` al cambio di vista e a distanza di almeno 100 ms, `ping` ogni secondo.
+L'host conta i messaggi al secondo e, delle frequenze, controlla solo quella
+delle viste, con un margine (vedi «Limiti dell'host»).
 
 ### Dall'host allo scrittore
 
@@ -336,7 +337,7 @@ snapshot oltre i 20 MiB a sessione aperta la chiude con 4008.
 | 4003 | c'è già uno scrittore, o una ripresa ha preso il posto | no |
 | 4004 | segreto scaduto, già usato o sbagliato; gettone non valido o scaduto | no, serve un nuovo QR |
 | 4005 | documento chiuso sul PC | no |
-| 4006 | troppi messaggi al secondo, o troppi commit in attesa della shell | sì, con la ripresa dopo 5 s |
+| 4006 | troppi messaggi al secondo, viste oltre il loro ritmo, o troppi commit in attesa della shell | sì, con la ripresa dopo 5 s |
 | 4007 | versione o tipo non supportati | no |
 | 4008 | documento in sola lettura o oltre i limiti | no |
 
@@ -355,6 +356,7 @@ disponibilità del PC. Stanno in
 |---|---|---|
 | byte letti prima del `hello` | 64 KiB, upgrade compreso | la connessione chiude |
 | connessioni che negoziano insieme | 8 | il socket si chiude appena accettato |
+| `view` dello scrittore | raffica di 240, poi una ogni 50 ms | 4006 |
 | commit in attesa della shell | 256 e 32 MiB | 4006 |
 | `nack` ricordati fino a `lastC` | 64 | si dimenticano i più vecchi |
 | registro dopo l'ultimo snapshot | 4 MiB | `snapshotWanted` alla shell |
@@ -367,6 +369,11 @@ disponibilità del PC. Stanno in
   operazioni che lo precedono.
 - Una shell che non legge gli eventi non fa crescere la memoria: l'inchiostro
   in eccesso si butta e `inkGap` dice quali tratti cancellare dall'overlay.
+- Le viste che un intoppo della rete trattiene arrivano tutte insieme. La
+  raffica ammessa è quanto il limite dei messaggi al secondo lascia passare,
+  così una raffica non si rifiuta perché è fatta di viste; chi ha taciuto la
+  ritrova intera dopo 12 secondi. Il ritmo è il doppio della regola: uno
+  scrittore che la rispetta non ci si avvicina.
 
 ## L'host e la shell
 
@@ -422,7 +429,7 @@ l'impronta e aspetta il `welcome`.
 | Metodo | Cosa fa |
 |---|---|
 | `ink` | manda inchiostro; mentre la connessione è caduta si butta |
-| `view` | manda la vista; in coda vale solo l'ultima |
+| `view` | manda la vista; al più una ogni 100 ms, e in coda vale solo l'ultima |
 | `commit` | numera il gesto e lo tiene finché l'host non risponde |
 | `pending` | i commit senza risposta, da riapplicare sopra ogni snapshot |
 | `clock` | l'ultima stima dello scarto fra gli orologi |
@@ -445,9 +452,10 @@ l'impronta e aspetta il `welcome`.
   risposta: l'app può salvarli come disegno separato, così nessun tratto si
   perde in silenzio.
 
-Il client non distanzia le viste: i 10 al secondo li rispetta chi chiama
-`view`. Allo stesso modo un `ink.pts` per frame dipende da quanto spesso l'app
-chiama `ink`.
+Il client distanzia le viste di almeno 100 ms. In coda resta solo l'ultima,
+che parte appena è il suo turno: così la posizione finale arriva sempre, e dopo
+una ripresa il client la rimanda. Un `ink.pts` per frame dipende invece da
+quanto spesso l'app chiama `ink`.
 
 ## Orologi
 

@@ -11,8 +11,10 @@ use crate::counter::Counter;
 use crate::host::{
     EndReason, LeaveReason, LiveEvent, LiveHost, SendError, ShellMessage, StartError,
 };
-use crate::limits::{MAX_COMMIT, MAX_INK_PTS, MAX_SNAPSHOT};
-use crate::protocol::{HostMessage, InkPoints, NackReason, WriterMessage};
+use crate::limits::{
+    MAX_COMMIT, MAX_INK_PTS, MAX_SNAPSHOT, RATE_PER_SECOND, VIEW_BURST, VIEW_INTERVAL,
+};
+use crate::protocol::{HostMessage, InkPoints, NackReason, View, WriterMessage};
 
 /// La riga di un `ink.pts` con i campioni indicati.
 fn points(count: usize) -> String {
@@ -189,6 +191,85 @@ async fn a_message_beyond_24_mib_in_several_frames_closes_with_1009() {
     let closed = raw.closed().await;
     assert_eq!((closed.code, closed.error), (Some(1009), Some(1009)));
     assert_eq!(closed.detail.as_deref(), Some("the message exceeds 24 MiB"));
+}
+
+/// Una `view` che si riconosce da `x`.
+fn view(x: f64) -> WriterMessage {
+    WriterMessage::View(View {
+        x,
+        y: 0.0,
+        scale: 1.0,
+        w: 800.0,
+        h: 600.0,
+    })
+}
+
+#[tokio::test(start_paused = true)]
+async fn views_beyond_the_burst_and_twice_the_rule_close_with_4006() {
+    let mut live = start();
+    let (mut raw, _) = join(&live.net, &live.target).await;
+    sleep(Duration::from_secs(1)).await;
+    // La raffica intera, nello stesso istante: tanti quanti il limite dei
+    // messaggi ne ammette in un secondo.
+    assert_eq!(VIEW_BURST as usize, RATE_PER_SECOND);
+    for i in 0..VIEW_BURST {
+        assert!(raw.send(&view(f64::from(i))).await);
+    }
+    // Un secondo dopo, il ritmo di una ogni 50 ms ne ha restituite venti.
+    sleep(Duration::from_secs(1)).await;
+    for i in 0..20 {
+        assert!(raw.send(&view(f64::from(i))).await);
+    }
+    assert!(raw.ping(1).await);
+    assert!(matches!(raw.recv().await, Some(HostMessage::Pong(pong)) if pong.id == 1));
+    raw.send(&view(-1.0)).await;
+    let closed = raw.closed().await;
+    assert_eq!((closed.code, closed.error), (Some(4006), Some(4006)));
+    assert_eq!(
+        closed.detail.as_deref(),
+        Some("views beyond a burst of 240 or one every 50 ms")
+    );
+    let reason = live
+        .events
+        .find(|event| match event {
+            LiveEvent::WriterDisconnected {
+                reason, resumable, ..
+            } => Some((reason, resumable)),
+            _ => None,
+        })
+        .await;
+    assert_eq!(reason, (LeaveReason::TooMuchTraffic, true));
+}
+
+#[tokio::test(start_paused = true)]
+async fn views_that_a_hiccup_delivers_together_are_not_a_flood() {
+    let mut live = start();
+    let (mut raw, _) = join(&live.net, &live.target).await;
+    sleep(Duration::from_secs(1)).await;
+    // Ventitré secondi di viste regolari consegnati in un colpo dopo un
+    // intoppo, poi dieci secondi alla regola. È la raffica più grande che il
+    // limite dei messaggi lascia passare quando le viste riprendono: 240 meno
+    // le dieci del secondo dopo. Nessuna vista è di troppo.
+    let burst = RATE_PER_SECOND as u32 - 10;
+    for i in 0..burst {
+        assert!(raw.send(&view(f64::from(i))).await);
+    }
+    for i in burst..burst + 100 {
+        sleep(VIEW_INTERVAL).await;
+        assert!(raw.send(&view(f64::from(i))).await);
+    }
+    assert!(raw.ping(1).await);
+    assert!(matches!(raw.recv().await, Some(HostMessage::Pong(pong)) if pong.id == 1));
+    let last = f64::from(burst + 99);
+    let seen = live
+        .events
+        .find(|event| match event {
+            LiveEvent::View(view) if view.x == last => Some(view.x),
+            _ => None,
+        })
+        .await;
+    assert_eq!(seen, last);
+    assert!(live.host.status().writer.unwrap().connected);
 }
 
 #[tokio::test(start_paused = true)]
