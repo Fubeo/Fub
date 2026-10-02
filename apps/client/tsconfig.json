@@ -19,5 +19,5 @@
   // `bench/` è codice come `src/`, e i suoi `.ts` girano nello stesso motore:
   // il tipo lo controlla lo stesso `tsc`. I `.mjs` del banco no, ed è la riga
   // di confine — quelli girano in Node, che qui i tipi non ce li ha apposta.
-  "include": ["src", "bench"]
+  "include": ["src", "bench", "anteprima"]
 }
