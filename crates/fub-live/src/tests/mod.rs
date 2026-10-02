@@ -4,4 +4,11 @@
 //! Ogni caso di §7, §8 e §9 di `sessione-live.md` ha la sua prova: i file
 //! seguono le sezioni della spec.
 
+mod client;
+mod host;
+mod limits;
 pub(crate) mod net;
+mod pairing;
+mod resume;
+mod security;
+mod support;
