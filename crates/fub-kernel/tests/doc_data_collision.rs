@@ -104,7 +104,7 @@ impl VaultStorage for OneSpaceStuck {
         self.inner.append(path, bytes)
     }
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
-        if from.as_str().ends_with(self.stuck) {
+        if from.ends_with(self.stuck) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "la cartella è in uso",

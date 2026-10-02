@@ -23,7 +23,7 @@ pub struct RootedFsStorage {
     dir: Dir,
     /// Guasto iniettato nel sync delle cartelle: un `fsync` che fallisce non
     /// si provoca su un filesystem di prova.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     dir_sync_fault: std::sync::Mutex<Option<i32>>,
 }
 
@@ -143,7 +143,7 @@ impl RootedFsStorage {
         let storage = Self {
             root: root.to_owned(),
             dir,
-            #[cfg(test)]
+            #[cfg(all(test, unix))]
             dir_sync_fault: std::sync::Mutex::new(None),
         };
         Ok(storage)
@@ -408,7 +408,7 @@ impl RootedFsStorage {
             let mut options = OpenOptions::new();
             options.read(true).custom_flags(libc::O_DIRECTORY);
             let opened = self.dir.open_with(rel, &options)?;
-            #[cfg(test)]
+            #[cfg(all(test, unix))]
             if let Some(code) = *self.dir_sync_fault.lock().unwrap() {
                 return dir_sync_outcome(Err(io::Error::from_raw_os_error(code)));
             }
