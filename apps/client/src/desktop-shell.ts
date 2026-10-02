@@ -769,7 +769,14 @@ async function init(): Promise<Teardown> {
         freezeDocumentSurfaces(false);
         return false;
       }
-      await flushBeforeClose();
+      // Un buffer che non è finito né sul disco né in una bozza vive soltanto
+      // in questa webview: la chiusura si rifiuta, e il testo resta aperto.
+      const unprotected = await flushBeforeClose();
+      if (unprotected.length > 0) {
+        freezeDocumentSurfaces(false);
+        notify(t("document.close_unprotected", { docs: unprotected.join(", ") }), "guasto");
+        return false;
+      }
       return true;
     } catch (error) {
       freezeDocumentSurfaces(false);

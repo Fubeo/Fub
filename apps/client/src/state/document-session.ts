@@ -526,9 +526,25 @@ export class DocumentSession implements DraftBuffer {
     return this.#state.dirty;
   }
 
-  async flushDraft(): Promise<void> {
+  /**
+   * Scrive la bozza del buffer di adesso e dice se il buffer è al sicuro: la
+   * chiusura della finestra decide su questo esito, non sulla notifica.
+   */
+  async flushDraft(): Promise<boolean> {
     this.#clearDraftTimer();
     await this.#writeDraft(this.#id);
+    return this.#bufferProtected();
+  }
+
+  /**
+   * Il buffer ha una copia persistente: è pulito, oppure una bozza del testo
+   * di adesso è stata scritta. Una sessione chiusa non ha più un buffer da
+   * proteggere.
+   */
+  #bufferProtected(): boolean {
+    if (!this.#isOpen() || !this.#state.dirty) return true;
+    const outcome = this.#draftOutcome;
+    return outcome?.generation === this.#draftGeneration && outcome.succeeded;
   }
 
   cancelDraftTimer(): void {
@@ -1046,23 +1062,38 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return rejoined;
   }
 
+  /** I documenti ancora sporchi dopo il salvataggio, con l'id che hanno adesso. */
   async flushPendingSave(): Promise<string[]> {
-    const entries = [...this.#sessions.entries()];
+    return (await this.#flushOwners()).map((session) => session.id);
+  }
+
+  /**
+   * Salva ogni sessione sporca e restituisce quelle rimaste sporche. Segue
+   * l'owner e non la chiave: una rinomina durante l'attesa sposta la stessa
+   * sessione sotto un altro id, e il suo testo resta da proteggere. Esce
+   * soltanto la sessione che nessuno possiede più.
+   */
+  async #flushOwners(): Promise<DocumentSession[]> {
+    const sessions = [...new Set(this.#sessions.values())];
     const outcomes = await Promise.all(
-      entries.map(async ([id, session]) => {
+      sessions.map(async (session) => {
         if (!session.dirty) return null;
         const dirty = await session.flush();
-        return this.#sessions.get(id) === session && dirty ? id : null;
+        return dirty && this.#owns(session) ? session : null;
       }),
     );
-    return outcomes.filter((id): id is string => id !== null);
+    return outcomes.filter((session): session is DocumentSession => session !== null);
+  }
+
+  #owns(session: DocumentSession): boolean {
+    return this.#sessions.get(session.id) === session;
   }
 
   async flush(id: string): Promise<boolean> {
     const session = this.#sessions.get(id);
     if (!session) return false;
     const dirty = await session.flush();
-    return this.#sessions.get(id) === session && dirty;
+    return this.#owns(session) && dirty;
   }
 
   async flushDraft(id: string): Promise<void> {
@@ -1071,10 +1102,20 @@ export class DocumentSessionCollection implements DraftBufferStore {
     await session.flushDraft();
   }
 
-  async flushBeforeClose(): Promise<void> {
+  /**
+   * Prima della chiusura: salva, mette in bozza ciò che non si è salvato, e
+   * restituisce i documenti il cui buffer non ha nessuna copia persistente.
+   * Una lista non vuota vieta la chiusura, perché la finestra distrutta
+   * porterebbe via l'unica copia di quel testo.
+   */
+  async flushBeforeClose(): Promise<string[]> {
     for (const session of this.#sessions.values()) session.cancelDraftTimer();
-    const pending = await this.flushPendingSave();
-    for (const id of pending) await this.#sessions.get(id)?.flushDraft();
+    const pending = await this.#flushOwners();
+    const unprotected: string[] = [];
+    for (const session of pending) {
+      if (!await session.flushDraft()) unprotected.push(session.id);
+    }
+    return unprotected;
   }
 
   /// Chiude ogni sessione: un vault nuovo non eredita buffer, bozze pendenti
@@ -1446,7 +1487,7 @@ export function flushPendingSave(): Promise<string[]> {
   return documentSessions.flushPendingSave();
 }
 
-export function flushBeforeClose(): Promise<void> {
+export function flushBeforeClose(): Promise<string[]> {
   return documentSessions.flushBeforeClose();
 }
 

@@ -181,6 +181,41 @@ describe("document-window protocol", () => {
   // La finestra a parte non ha IPC: il profilo lo decide il registro della
   // finestra principale prima di aprirla, e un documento senza superficie di
   // testo non apre niente e non lascia un prestito appeso.
+  // La rinomina sposta la sessione sotto un altro id mentre la finestra è
+  // aperta: le battute della finestra continuano ad arrivare a quella
+  // sessione, il drain risponde e il rilascio chiude la sessione giusta.
+  it("segue la sessione rinominata invece di rifiutarla", async () => {
+    const doc = `${number}-prima.md`;
+    const renamed = `${number}-dopo.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    let text = "";
+    let conflict = "";
+    children.push(attachChildBridge(request, (next) => { text = next; }, () => text,
+      (change) => { if (change.kind === "error") conflict = change.reason ?? ""; }));
+    await settle();
+
+    expect(documentSessions.rename(doc, renamed)).toMatchObject({ kind: "renamed" });
+    const edit = operationFromText(text, "abcd");
+    text = "abcd";
+    children[0].sendEdit(text, edit);
+    await handle.freeze();
+    expect(conflict).toBe("");
+    expect(documentSessions.text(renamed)).toBe("abcd");
+
+    const navigate = vi.fn();
+    setDocumentWindowNavigation({ navigate });
+    children[0].navigate({ kind: "path", path: "altra.md" });
+    await settle();
+    expect(navigate).toHaveBeenCalledWith({ kind: "path", path: "altra.md" }, renamed);
+    setDocumentWindowNavigation(null);
+
+    expect(await documentSessions.flush(renamed)).toBe(false);
+    await handle.dispose();
+    handles.pop();
+    expect(documentSessions.get(renamed)).toBeUndefined();
+  });
+
   it("porta il profilo risolto e rifiuta un documento che non è testo", async () => {
     const board = `${number}-lavagna.canvas`;
     await expect(attachRemoteSurface(board, state.vaultRoot, () => null)).rejects.toBeInstanceOf(DocumentWindowUnsupported);

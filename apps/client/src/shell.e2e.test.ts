@@ -1376,6 +1376,36 @@ describe("chiudere la finestra col ritardo che corre", () => {
     await close;
     repair();
   });
+
+  /// Se il disco rifiuta sia il documento sia la bozza, il testo vive soltanto
+  /// nella webview: la chiusura si rifiuta, lo dice, e riprova quando il disco
+  /// torna a rispondere.
+  it("senza documento né bozza sul disco la finestra resta aperta", async () => {
+    const host = await start(VAULT);
+    typeInEditor("LAVORO NON PERSISTITO");
+    const repairWrite = host.fault("writeDocument", "disco pieno");
+    const repairDraft = host.fault("saveDraft", "disco pieno");
+    const { recentNotices } = await import("./ui/notify");
+    const { t } = await import("./i18n/strings");
+
+    await host.close();
+
+    expect(host.atGate("writeDocument").length).toBeGreaterThan(0);
+    expect(host.atGate("saveDraft").length).toBeGreaterThan(0);
+    expect(
+      host.atGate("finishMainClose"),
+      "la chiusura è stata autorizzata con l'ultima battuta soltanto in memoria",
+    ).toHaveLength(0);
+    expect(textToVideo()).toContain("LAVORO NON PERSISTITO");
+    expect(recentNotices().map((notice) => notice.text)).toContain(
+      t("document.close_unprotected", { docs: "Benvenuto.md" }),
+    );
+
+    repairWrite();
+    repairDraft();
+    await host.close();
+    expect(host.atGate("finishMainClose")).toHaveLength(1);
+  });
 });
 
 describe("chiudere linguette e superfici", () => {

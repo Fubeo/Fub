@@ -10,9 +10,11 @@ import { t } from "../i18n/strings";
 import { platformSupports } from "../platform/capabilities";
 import { errorText } from "../host/errors";
 
+/// La finestra segue la **sessione**, non il path: una rinomina sposta lo
+/// stesso owner sotto un altro id, e la finestra resta sua. Il documento di
+/// adesso è sempre `owner.id` (vedi `docOf`).
 interface WindowEntry {
   label: string | null;
-  doc: string;
   vault: string;
   owner: DocumentSession;
   handle: RemoteSurfaceHandle;
@@ -29,8 +31,11 @@ let installing: Promise<void> | null = null;
 let opening = 0;
 let rootDraining = false;
 
+function docOf(entry: WindowEntry): string {
+  return entry.owner.id;
+}
 function report(entry: WindowEntry, error: unknown): void {
-  notify(t("windows.drain_failed", { doc: entry.doc, reason: errorText(error) }), "guasto");
+  notify(t("windows.drain_failed", { doc: docOf(entry), reason: errorText(error) }), "guasto");
 }
 function findWindow(label: string): WindowEntry | undefined {
   for (const entry of windows.values()) if (entry.label === label) return entry;
@@ -114,7 +119,7 @@ export async function openCurrentInNewWindow(doc: string | null = activeDoc() ??
       await handle.dispose();
       throw new Error(t("windows.error.session_gone"));
     }
-    const entry: WindowEntry = { label: null, doc, vault, owner, handle, closed: false,
+    const entry: WindowEntry = { label: null, vault, owner, handle, closed: false,
       initiatedClose: false, closing: null, destruction: null };
     windows.set(handle.surfaceId, entry);
     try {
@@ -144,16 +149,17 @@ export async function openCurrentInNewWindow(doc: string | null = activeDoc() ??
 }
 
 function sameOwner(entry: WindowEntry): boolean {
-  return state.vaultRoot === entry.vault && documentSessions.get(entry.doc) === entry.owner
+  return state.vaultRoot === entry.vault && documentSessions.get(docOf(entry)) === entry.owner
     && entry.owner.snapshot().lifecycle === "open";
 }
 
 async function saveConfirmed(entry: WindowEntry): Promise<boolean> {
   if (!sameOwner(entry)) throw new Error(t("windows.error.owner_changed"));
-  const dirty = await documentSessions.flush(entry.doc);
+  const dirty = await documentSessions.flush(docOf(entry));
   if (!sameOwner(entry)) throw new Error(t("windows.error.owner_changed_saving"));
-  if (dirty || documentSessions.isDirty(entry.doc) || documentSessions.saveState(entry.doc) === "conflitto") {
-    await documentSessions.flushDraft(entry.doc);
+  const doc = docOf(entry);
+  if (dirty || documentSessions.isDirty(doc) || documentSessions.saveState(doc) === "conflitto") {
+    await documentSessions.flushDraft(doc);
     return false;
   }
   return true;
@@ -217,18 +223,18 @@ export async function drainDocumentWindows(): Promise<boolean> {
     const saved = new Set<DocumentSession>();
     for (const entry of entries) {
       if (saved.has(entry.owner)) continue;
-      if (!await saveConfirmed(entry)) throw new Error(t("windows.error.save_unconfirmed_doc", { doc: entry.doc }));
+      if (!await saveConfirmed(entry)) throw new Error(t("windows.error.save_unconfirmed_doc", { doc: docOf(entry) }));
       saved.add(entry.owner);
     }
     // A save may complete while a different local surface edits the same document.
-    for (const entry of entries) if (!sameOwner(entry) || documentSessions.isDirty(entry.doc)) {
-      throw new Error(t("windows.error.changed_draining_doc", { doc: entry.doc }));
+    for (const entry of entries) if (!sameOwner(entry) || documentSessions.isDirty(docOf(entry))) {
+      throw new Error(t("windows.error.changed_draining_doc", { doc: docOf(entry) }));
     }
     for (const entry of entries) await nativeClose(entry);
     return true;
   } catch (error) {
     for (const entry of entries) entry.handle.thaw();
-    notify(t("windows.drain_failed", { doc: entries[0].doc, reason: errorText(error) }), "guasto");
+    notify(t("windows.drain_failed", { doc: docOf(entries[0]), reason: errorText(error) }), "guasto");
     return false;
   } finally {
     rootDraining = false;

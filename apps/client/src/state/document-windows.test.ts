@@ -145,4 +145,24 @@ describe("native document-window close barrier", () => {
       declareShell(DESKTOP_SHELL);
     }
   });
+
+  // La rinomina sposta la stessa sessione sotto un altro id: la finestra
+  // resta sua, si salva col nome nuovo e si chiude.
+  it("una rinomina non scollega la finestra dalla sua sessione", async () => {
+    const doc = state.currentDoc!;
+    const renamed = { id: doc, snapshot: () => ({ lifecycle: "open" }) };
+    fixture.sessions.get.mockImplementation((id: string) => (id === renamed.id ? renamed : undefined));
+    await openCurrentInNewWindow();
+    renamed.id = `rinominata-${serial}.md`;
+
+    const closing = closeDocumentWindowByLabel(label);
+    await nextTurn();
+    expect(freeze).toHaveBeenCalledOnce();
+    expect(fixture.sessions.flush).toHaveBeenCalledWith(renamed.id);
+    expect(fixture.api.closeDocumentWindow).toHaveBeenCalledTimes(1);
+    events.destroyed?.({ label, surface: "document" });
+    await expect(closing).resolves.toBe(true);
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(fixture.notify).not.toHaveBeenCalled();
+  });
 });

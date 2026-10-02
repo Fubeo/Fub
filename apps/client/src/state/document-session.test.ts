@@ -1246,3 +1246,106 @@ describe("il salvataggio di un file senza formato", () => {
     expect(api.resourceWrite).not.toHaveBeenCalled();
   });
 });
+
+describe("la chiusura della finestra protegge ogni buffer sporco", () => {
+  let api: DocumentSessionApi;
+
+  beforeEach(() => {
+    api = fakeApi();
+    vi.stubGlobal("setTimeout", vi.fn(() => 0));
+    vi.stubGlobal("clearTimeout", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("senza salvataggio né bozza restituisce il documento, e il buffer resta", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw new Error("disco pieno");
+    });
+    api.saveDraft = vi.fn(async () => {
+      throw new Error("disco pieno");
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Benvenuto.md");
+    acceptText(sessions, "Benvenuto.md", "LAVORO NON PERSISTITO");
+
+    await expect(sessions.flushBeforeClose()).resolves.toEqual(["Benvenuto.md"]);
+
+    expect(api.writeDocument).toHaveBeenCalled();
+    expect(api.saveDraft).toHaveBeenCalled();
+    expect(sessions.inspect("Benvenuto.md")).toMatchObject({
+      text: "LAVORO NON PERSISTITO",
+      dirty: true,
+      lifecycle: "open",
+    });
+  });
+
+  it("una bozza scritta basta a proteggere un salvataggio fallito", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw new Error("disco pieno");
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Benvenuto.md");
+    acceptText(sessions, "Benvenuto.md", "testo in bozza");
+
+    await expect(sessions.flushBeforeClose()).resolves.toEqual([]);
+    expect(api.saveDraft).toHaveBeenLastCalledWith("Benvenuto.md", "testo in bozza", "rev-1");
+  });
+
+  it("una bozza fallita prima della chiusura si riprova, e la riuscita la autorizza", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw new Error("disco pieno");
+    });
+    api.saveDraft = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("disco pieno"))
+      .mockResolvedValue(undefined);
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Benvenuto.md");
+    acceptText(sessions, "Benvenuto.md", "testo");
+
+    await expect(sessions.flushBeforeClose()).resolves.toEqual([]);
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("un buffer salvato non ha niente da proteggere", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Benvenuto.md");
+    acceptText(sessions, "Benvenuto.md", "salvato");
+
+    await expect(sessions.flushBeforeClose()).resolves.toEqual([]);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("segue la sessione rinominata mentre il flush aspetta, e ne mette in bozza il testo", async () => {
+    let release: (revision: string) => void = () => {};
+    api.writeDocument = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { release = resolve; }))
+      .mockResolvedValue("rev-3");
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("Benvenuto.md");
+    acceptText(sessions, "Benvenuto.md", "salvataggio vecchio");
+    const inFlight = sessions.flush("Benvenuto.md");
+    await Promise.resolve();
+    acceptText(sessions, "Benvenuto.md", "ULTIMA BATTUTA");
+
+    const closing = sessions.flushBeforeClose();
+    await Promise.resolve();
+    expect(sessions.rename("Benvenuto.md", "DopoFlush.md")).toMatchObject({ kind: "renamed" });
+    release("rev-2");
+    await inFlight;
+
+    await expect(closing).resolves.toEqual([]);
+    expect(api.saveDraft).toHaveBeenCalledWith("DopoFlush.md", "ULTIMA BATTUTA", "rev-1");
+    // Il salvataggio successivo va al nome nuovo, non a quello vecchio.
+    await expect(sessions.flushPendingSave()).resolves.toEqual([]);
+    expect(api.writeDocument).toHaveBeenLastCalledWith(
+      "DopoFlush.md",
+      "ULTIMA BATTUTA",
+      { kind: "descends_from", value: "rev-1" },
+    );
+  });
+});

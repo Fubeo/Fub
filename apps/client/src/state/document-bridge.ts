@@ -181,7 +181,7 @@ export async function attachRemoteSurface(
       const detachSurface = documentSessions.attachSurface(doc, {
         id: `bridge:${created.session}`,
         sync: (update) => {
-          if (authorities.get(key) !== created || state.vaultRoot !== vault || documentSessions.get(doc) !== owner) return;
+          if (authorities.get(key) !== created || state.vaultRoot !== vault || documentSessions.get(owner.id) !== owner) return;
           if (update.kind === "operation") {
             const base = created.revision++;
             created.steps.push({ base, operation: update.operation });
@@ -222,8 +222,11 @@ export async function attachRemoteSurface(
     const port = new BroadcastChannel(request.channel);
     const endpoint: Endpoint = { request, port, active: true, ready: false, lastSeq: 0, lastReply: null, frozenToken: null, drain: null };
     authority.endpoints.add(endpoint);
-    const scoped = (): boolean => endpoint.active && state.vaultRoot === vault && documentSessions.get(doc) === owner
-      && authorities.get(keyOf(vault, doc)) === authority;
+    // La finestra resta della sessione anche dopo una rinomina: la si cerca col
+    // suo id di adesso (`owner.id`), mentre `doc` resta l'identità del canale
+    // con cui la finestra è nata e con cui firma i messaggi.
+    const scoped = (): boolean => endpoint.active && state.vaultRoot === vault && documentSessions.get(owner.id) === owner
+      && authorities.get(key) === authority;
     const reply = (message: RemoteMessage): void => { if (endpoint.active) port.postMessage(message); };
     port.onmessage = (event: MessageEvent<unknown>) => {
       if (!endpoint.active || !isRemoteMessage(event.data)) return;
@@ -249,7 +252,7 @@ export async function attachRemoteSurface(
       }
       if (!endpoint.ready) return;
       if (message.kind === "navigate") {
-        navigation?.navigate(message.target, doc);
+        navigation?.navigate(message.target, owner.id);
         return;
       }
       if (message.kind === "operation") {
@@ -287,7 +290,7 @@ export async function attachRemoteSurface(
         try {
           const separator = lineSeparator(before);
           const updated = separator === "\r\n" ? applied.text.replace(/\n/g, separator) : applied.text;
-          result = documentSessions.acceptSurfaceChange(doc, request.surfaceId, { text: updated, operation });
+          result = documentSessions.acceptSurfaceChange(owner.id, request.surfaceId, { text: updated, operation });
         } finally {
           authority.applyingSurface = null;
         }
@@ -341,7 +344,7 @@ export async function attachRemoteSurface(
         disposing = (async () => {
           releaseLease();
           try {
-            await documentSessions.release(doc);
+            await documentSessions.release(owner.id);
           } catch (error) {
             releaseLease = documentSessions.retain(doc);
             throw error;
@@ -353,7 +356,7 @@ export async function attachRemoteSurface(
           authority.endpoints.delete(endpoint);
           if (authority.endpoints.size === 0) {
             authority.detach();
-            if (authorities.get(keyOf(vault, doc)) === authority) authorities.delete(keyOf(vault, doc));
+            if (authorities.get(key) === authority) authorities.delete(key);
           }
         })();
         return disposing.finally(() => { disposing = null; });

@@ -1111,6 +1111,10 @@ const IT = { // --- la scocca --------------------------------------------------
 "document.close_unhooked":
   "Fub non riesce ad ascoltare la chiusura della finestra: usa «Salva adesso» prima di chiudere, perché l'ultima battuta potrebbe non essere ancora sul disco.",
 "document.close_failed": "Chiusura annullata: {reason}. I documenti restano aperti.",
+// La chiusura si ferma perché quel testo non ha nessuna copia sul disco, né
+// il documento né una bozza: chi legge deve sapere che è ancora soltanto qui.
+"document.close_unprotected":
+  "Chiusura annullata: {docs} non si è potuto salvare né mettere in bozza, e il testo esiste soltanto in questa finestra. Riprova quando il disco risponde, oppure copialo altrove.",
 "document.unsaved_blocks":
   "{doc} non è sul disco: l'operazione si ferma qui, perché spostare il file lascerebbe indietro il testo non salvato.",
 // Dice **che non è stato scritto niente**, e non è un dettaglio tecnico: è la
@@ -2405,6 +2409,8 @@ const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the editor",
 "document.close_unhooked":
   "Fub cannot listen for the window closing: use «Save now» before you close, because the last keystroke may not be on disk yet.",
 "document.close_failed": "Close cancelled: {reason}. Documents remain open.",
+"document.close_unprotected":
+  "Close cancelled: {docs} could not be saved or kept as a draft, and the text exists only in this window. Try again when the disk responds, or copy it elsewhere.",
 "document.unsaved_blocks":
   "{doc} is not on disk: the operation stops here, because moving the file would leave the unsaved text behind.",
 "document.save_conflict":
