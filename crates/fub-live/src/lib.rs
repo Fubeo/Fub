@@ -10,5 +10,8 @@
 pub mod clock;
 pub mod counter;
 pub mod limits;
+pub mod net;
+pub mod pairing;
 pub mod protocol;
+mod tls;
 pub mod token;
