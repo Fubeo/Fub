@@ -241,6 +241,131 @@ fn a_cache_write_migrates_legacy_data_before_creating_cache() {
         .exists());
 }
 
+/// Le due strade di `cache_write`: quella diretta dell'host del kernel e quella
+/// staccata dei job, che passa dal token preparato senza custodire il
+/// workspace. Devono fare la stessa cosa, ed è ciò che le prove qui sotto
+/// chiedono a entrambe.
+#[derive(Clone, Copy, Debug)]
+enum CacheWrite {
+    Direct,
+    Detached,
+}
+
+impl CacheWrite {
+    fn write(self, ws: &mut Mounted, rel: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        match self {
+            CacheWrite::Direct => ws.with_host("prova.plugin", |host| host.cache_write(rel, bytes)),
+            CacheWrite::Detached => ws
+                .prepare_plugin_data_io("prova.plugin", rel)?
+                .write_cache(bytes),
+        }
+    }
+}
+
+/// Un vault con tutte e due le radici dei dati di `prova.plugin`: la canonica,
+/// nata da una scrittura diretta, e la legacy senza marcatore, che è ancora
+/// dato autorevole.
+fn both_roots() -> (Mounted, Utf8PathBuf) {
+    let ws = vault();
+    let root = ws.root().to_path_buf();
+    let put = |rel: &str, body: &[u8]| {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    };
+    put(".fub/plugins/prova.plugin/timers.json", b"{}");
+    put(".fub/data/plugins/prova.plugin/old.json", b"legacy");
+    put(
+        ".fub/data/plugins/prova.plugin/doc/Nota.md/x",
+        b"legacy space",
+    );
+    (ws, root)
+}
+
+/// AUDIT-DATI-04: con la radice canonica già presente, la scrittura di cache
+/// staccata posava il marcatore sui dati legacy, che da lì gli snapshot
+/// escludevano e un ripristino toglieva. Adesso entrambe le strade portano i
+/// dati nella radice canonica prima di posare il marcatore.
+#[test]
+fn a_cache_write_moves_legacy_data_even_when_the_canonical_root_exists() {
+    for path in [CacheWrite::Direct, CacheWrite::Detached] {
+        let (mut ws, root) = both_roots();
+
+        path.write(&mut ws, "index.json", b"rebuildable")
+            .unwrap_or_else(|error| panic!("{path:?}: {error:?}"));
+
+        let canonical = root.join(".fub/plugins/prova.plugin");
+        assert_eq!(
+            std::fs::read(canonical.join("old.json")).unwrap(),
+            b"legacy",
+            "{path:?}"
+        );
+        assert_eq!(
+            std::fs::read(canonical.join("doc/Nota.md/x")).unwrap(),
+            b"legacy space",
+            "{path:?}"
+        );
+        assert_eq!(
+            std::fs::read(canonical.join("timers.json")).unwrap(),
+            b"{}",
+            "{path:?}"
+        );
+        let legacy = root.join(".fub/data/plugins/prova.plugin");
+        assert!(!legacy.join("old.json").exists(), "{path:?}");
+        assert!(!legacy.join("doc/Nota.md/x").exists(), "{path:?}");
+        assert!(legacy.join(".fub-cache-root").exists(), "{path:?}");
+        ws.with_host("prova.plugin", |host| {
+            assert_eq!(
+                host.data_read("old.json").unwrap().as_deref(),
+                Some(&b"legacy"[..]),
+                "{path:?}"
+            );
+            assert_eq!(
+                host.cache_read("index.json").unwrap().as_deref(),
+                Some(&b"rebuildable"[..]),
+                "{path:?}"
+            );
+        });
+    }
+}
+
+/// Un nome preso da tutte e due le radici non si sceglie: la scrittura di
+/// cache si rifiuta, il marcatore non si posa e i due dati restano dove sono.
+#[test]
+fn a_name_in_both_roots_stops_the_cache_write_and_leaves_the_legacy_root_authoritative() {
+    for path in [CacheWrite::Direct, CacheWrite::Detached] {
+        let (mut ws, root) = both_roots();
+        std::fs::write(
+            root.join(".fub/plugins/prova.plugin/old.json"),
+            b"canonical",
+        )
+        .unwrap();
+
+        let refused = path.write(&mut ws, "index.json", b"rebuildable");
+
+        assert!(
+            matches!(refused, Err(PluginError::Io(_))),
+            "{path:?}: {refused:?}"
+        );
+        let legacy = root.join(".fub/data/plugins/prova.plugin");
+        assert!(
+            !legacy.join(".fub-cache-root").exists(),
+            "{path:?}: the marker turned legacy data into cache"
+        );
+        assert_eq!(
+            std::fs::read(legacy.join("old.json")).unwrap(),
+            b"legacy",
+            "{path:?}"
+        );
+        assert_eq!(
+            std::fs::read(root.join(".fub/plugins/prova.plugin/old.json")).unwrap(),
+            b"canonical",
+            "{path:?}"
+        );
+        assert!(!legacy.join("index.json").exists(), "{path:?}");
+    }
+}
+
 /// Un supporto che, acceso l'interruttore, non sa dire se la radice vecchia
 /// dei dati di `prova.plugin` c'è.
 struct LegacyStatFails {

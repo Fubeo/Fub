@@ -260,25 +260,15 @@ fn also_the_restore_on_a_other_path_and_a_rename() {
     );
 }
 
-/// **Sulla destinazione si guarda cosa c'è, prima di togliere** (difetto 0167).
-///
-/// La migrazione sgombera la destinazione perché una cartella già lì è lo
-/// spazio di una nota che non c'è più: il kernel rifiuta una rinomina verso un
-/// documento che esiste, quindi quel residuo la raccolta l'avrebbe tolto al
-/// prossimo giro comunque. Il ragionamento parla di **cartelle**, e di ciò che
-/// cartella non è non dice niente — ma il codice toglieva lo stesso, senza
-/// guardare e ingoiando l'esito.
+/// **Sulla destinazione non si toglie niente** (difetto 0167, AUDIT-DATI-03).
 ///
 /// Qui sulla destinazione c'è un file, che è il caso di un plugin che scrive
 /// nel proprio spazio dati un nome che per caso è il componente codificato di
 /// una nota: di quel file non si sa niente, e ciò di cui non si sa niente non
-/// si tocca. È la stessa domanda che la raccolta pone già a ogni voce che
-/// visita — «è una cartella, e il nome è il nostro `encode`?» — posta dal
-/// fratello che stava senza.
-///
-/// E il banco guarda anche **dove sono rimasti i dati**: sgomberare prima di
-/// spostare di lato è ciò che li tiene fuori da `.in-corso`, che è il posto
-/// che la prossima raccolta spazza senza appello.
+/// si cancella. Prima lo si toglieva senza guardare; poi la migrazione si
+/// rifiutava e lasciava i dati della nota sotto l'id vecchio, dove la raccolta
+/// successiva li spazzava. Adesso i dati seguono la nota, il file si sposta di
+/// lato con i suoi byte, e l'avviso dice dove.
 #[test]
 fn a_destination_that_not_and_a_folder_not_is_removes() {
     let (_g, root, mut ws) = vault();
@@ -300,28 +290,28 @@ fn a_destination_that_not_and_a_folder_not_is_removes() {
     let warnings = ws.doc_data_warnings();
     let obstacle_path = obstacle_path.as_str().replace('\\', "/");
     assert!(
-        warnings
-            .iter()
-            .any(|warning| warning.replace('\\', "/").contains(&obstacle_path)),
-        "una migrazione che non è potuta avvenire dice **cosa** l'ha fermata, \
-         e dove andarlo a guardare: {warnings:?}"
+        warnings.iter().any(|warning| warning
+            .replace('\\', "/")
+            .contains(&format!("{obstacle_path}~displaced"))),
+        "lo spostamento di lato si dice, con il posto dove andarlo a guardare: \
+         {warnings:?}"
     );
     assert_eq!(
-        read_data_item(&root, OFF, &data_item).as_deref(),
+        read_data_item(&root, OFF, &doc_data::path(&new, "annotazioni.json")).as_deref(),
         Some(&b"le mie annotazioni"[..]),
-        "i dati sono finiti in `.in-corso`, che è il posto che la prossima \
-         raccolta spazza: la migrazione fallita ne ha fatta una perdita in più"
+        "i dati della nota l'hanno seguita"
     );
-    // Questa riga non è una misura, ed è giusto dirlo: su un filesystem vero
-    // `remove_dir_all` su un file fallisce da sé, quindi il file sopravvive
-    // anche alla forma di prima. Sta qui per il supporto che non lo facesse —
-    // un doppio in memoria, un supporto di rete — dove togliere senza guardare
-    // vuol dire togliere davvero.
     assert_eq!(
-        read_data_item(&root, OFF, obstacle).as_deref(),
+        read_data_item(&root, OFF, &format!("{obstacle}~displaced")).as_deref(),
         Some(&b"non e' mio"[..]),
         "sulla destinazione c'era un file, di cui non si sa niente, e la \
          migrazione l'ha tolto"
+    );
+    ws.collect_doc_data().expect("raccolta");
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&new, "annotazioni.json")).as_deref(),
+        Some(&b"le mie annotazioni"[..]),
+        "la raccolta ha tolto i dati di una nota viva"
     );
 }
 
@@ -645,6 +635,162 @@ fn a_trash_sidecar_from_a_newer_version_collects_nothing() {
         read_data_item(&root, OFF, &rel).as_deref(),
         Some(&b"dato"[..]),
         "la raccolta ha preso un sidecar sconosciuto per un sidecar assente"
+    );
+}
+
+/// Un supporto che non lascia scrivere i sidecar del cestino: la cartella
+/// `.fub/data/trash/` in sola lettura, e il resto del vault scrivibile.
+struct SidecarsRefused(fub_kernel::storage::FsStorage);
+
+impl VaultStorage for SidecarsRefused {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.0.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        if path
+            .parent()
+            .is_some_and(|dir| dir.ends_with(".fub/data/trash"))
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "cartella dei sidecar in sola lettura",
+            ));
+        }
+        self.0.write(path, bytes)
+    }
+    fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        self.0.update(path, merge)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.0.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.0.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.0.rename_no_replace(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.0.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.0.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.0.stat(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.0.remove_empty_dir(dir)
+    }
+}
+
+fn vault_refusing_sidecars() -> (tempfile::TempDir, Utf8PathBuf, Workspace) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(Box::new(NudoProvider))
+        .expect("nessun conflitto");
+    let mut ws = Workspace::on(
+        &root,
+        registry,
+        Arc::new(SidecarsRefused(fub_kernel::storage::FsStorage)) as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    ws.reindex().expect("reindex del vault vuoto");
+    (dir, root, ws)
+}
+
+/// **Per una nota di una cartella, il sidecar è parte della cancellazione.**
+/// Il cestino è piatto: `Diario/Idea.md` ci entra come `Idea.md`, e la
+/// cartella resta scritta soltanto nel sidecar. La cestinatura proseguiva
+/// senza, con un avviso: il ripristino la rimetteva nella radice, e la
+/// raccolta — convinta che la voce venisse da `Idea.md` — toglieva i dati di
+/// `Diario/Idea.md` mentre la nota era ancora recuperabile.
+#[test]
+fn a_note_of_a_folder_is_not_trashed_without_its_sidecar() {
+    let (_g, root, mut ws) = vault_refusing_sidecars();
+    let doc = notes(&mut ws, "Diario/Idea.md", "vado nel cestino");
+    let rel = doc_data::path(&doc, "x");
+    write_data_item(&root, OFF, &rel, b"dato");
+
+    let refused = ws.delete_document(&doc);
+
+    let error = refused.expect_err("cestinata senza l'unica traccia della sua cartella");
+    assert!(
+        error.to_string().contains("sola lettura"),
+        "il rifiuto dice perché: {error}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("Diario/Idea.md"))
+            .ok()
+            .as_deref(),
+        Some("vado nel cestino"),
+        "la nota è rimasta dov'era"
+    );
+    assert!(ws.list_trash().expect("il cestino").is_empty());
+    ws.reindex().expect("riapertura");
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "i dati della nota restano"
+    );
+}
+
+/// Per una nota della radice il nome basta: senza sidecar la voce torna dove
+/// il nome dice, che è il posto giusto. La cancellazione riesce, e i suoi dati
+/// restano finché la voce sta nel cestino.
+#[test]
+fn a_note_of_the_root_is_trashed_even_without_its_sidecar() {
+    let (_g, root, mut ws) = vault_refusing_sidecars();
+    let doc = notes(&mut ws, "Idea.md", "vado nel cestino");
+    let rel = doc_data::path(&doc, "x");
+    write_data_item(&root, OFF, &rel, b"dato");
+
+    ws.delete_document(&doc).expect("cestina");
+
+    let trash = ws.list_trash().expect("il cestino");
+    assert_eq!(trash.len(), 1);
+    assert_eq!(trash[0].original, doc);
+    ws.reindex().expect("riapertura");
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..])
+    );
+}
+
+/// **Una voce senza sidecar non dice da quale cartella veniva, e la raccolta
+/// non lo indovina.** È la voce cestinata da Obsidian, o quella il cui sidecar
+/// si è perso dopo: il suo nome può essere di qualunque cartella del vault, e
+/// i dati di ogni nota che si chiamava così restano finché la voce sta nel
+/// cestino. Chi non ha niente a che fare con il cestino si raccoglie come
+/// sempre.
+#[test]
+fn a_trash_entry_without_sidecar_keeps_the_data_of_every_namesake() {
+    let (_g, root, mut ws) = vault();
+    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    std::fs::remove_file(&sidecar).expect("sidecar perso");
+    let namesake = doc_data::path(&DocId::new("Archivio/Idea.md"), "x");
+    let dead = doc_data::path(&DocId::new("Archivio/Morta.md"), "x");
+    for other in [&namesake, &dead] {
+        write_data_item(&root, OFF, other, b"altro");
+    }
+
+    ws.reindex().expect("riapertura con la voce senza sidecar");
+
+    assert_eq!(
+        read_data_item(&root, OFF, &rel).as_deref(),
+        Some(&b"dato"[..]),
+        "la raccolta ha indovinato la cartella di una nota cestinata"
+    );
+    assert!(
+        read_data_item(&root, OFF, &namesake).is_some(),
+        "nessuno sa dire quale dei due omonimi sia nel cestino"
+    );
+    assert!(
+        read_data_item(&root, OFF, &dead).is_none(),
+        "chi non ha niente a che fare con il cestino si raccoglie"
     );
 }
 

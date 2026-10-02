@@ -91,6 +91,17 @@ prodotto da uno schema futuro non blocca il recupero degli altri record. Lo
 spazio per-documento rimasto a metà di una migrazione (`*.in-progress`) è
 l'unica copia di quei dati: la raccolta degli spazi orfani non lo cancella.
 
+Se la destinazione ha già uno spazio per-documento, per esempio il residuo di
+una nota cancellata, i dati della nota rinominata la seguono comunque. Ciò che
+occupava la destinazione si sposta accanto, sotto `<nome>~displaced` (poi
+`~displaced-2` e così via), con i byte intatti, e l'avviso della rinomina dice
+dove. La raccolta non tocca quei nomi. Se uno spazio non si lascia spostare per
+un guasto del disco, una rinomina fatta da Fub si ferma prima di muovere il
+file e riporta indietro ciò che aveva già spostato. Una rinomina fatta da
+un'altra applicazione arriva a file già spostato: i dati restano sotto il nome
+vecchio e l'avviso lo segnala, ma finché restano lì la raccolta li tratta come
+lo spazio di una nota che non c'è più.
+
 `vault.archive` applica la stessa regola a un insieme di file. Verifica tutte le
 sorgenti, le revisioni e le destinazioni prima della prima mossa e pubblica un
 record durevole dell'intero batch. Dopo ogni file registra l'avanzamento. Una
@@ -204,8 +215,15 @@ una destinazione sicura. Un sidecar presente che il disco non sa leggere non
 vale come assente: l'elenco del cestino e il ripristino si fermano con l'errore
 invece di rimettere la nota nella radice.
 
+Il cestino è piatto, quindi per una nota di una cartella il sidecar è l'unico
+posto che ricorda da dove veniva. Se non si scrive, la nota torna dov'era e la
+cancellazione fallisce con l'errore. Una nota della radice si cestina lo stesso,
+perché il nome basta a riportarla.
+
 Finché una nota sta nel cestino, i suoi dati per-documento restano: la raccolta
-degli spazi orfani li conserva. Se il disco non sa dire se il cestino c'è, se
+degli spazi orfani li conserva. Una voce senza sidecar, come quelle cestinate
+da Obsidian, non dice la sua cartella: la raccolta conserva i dati di ogni nota
+con quel nome, in qualunque cartella. Se il disco non sa dire se il cestino c'è, se
 il cestino non si elenca, o se un sidecar presente non si legge o viene da una
 versione più nuova di Fub, la raccolta si ferma invece di indovinare da quale
 cartella venisse la nota. Anche l'elenco del cestino risponde con l'errore

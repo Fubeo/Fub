@@ -279,13 +279,7 @@ impl VaultStructure for KernelHost<'_> {
             .prepare_document_restore(entry, to)
             .map_err(PluginError::from)?;
         let completed = prepared.invoke().map_err(PluginError::from)?;
-        let pending = self
-            .ws
-            .commit_document_restore(completed)
-            .map_err(|failure| {
-                let (error, _) = *failure;
-                error
-            })?;
+        let pending = self.ws.commit_document_restore_or_rollback(completed)?;
         let pending = pending.invoke_indexes();
         self.ws.finish_document_restore(pending).map_err(|failure| {
             let (error, _) = *failure;

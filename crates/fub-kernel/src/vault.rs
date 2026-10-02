@@ -240,6 +240,43 @@ struct TrashStamp {
     mtime: u64,
 }
 
+/// Da dove viene una voce del cestino secondo il solo nome: quello de-timbrato,
+/// nella radice. È il degrado di ogni voce senza sidecar.
+fn origin_by_name(trashed: &DocId) -> DocId {
+    DocId::new(strip_stamp(file_name_of(trashed.as_str())))
+}
+
+/// Da quali documenti possono venire le voci del cestino, per chi ne ricava
+/// una cancellazione ([`Vault::trash_originals`]).
+#[derive(Debug, Default)]
+pub struct TrashOrigins {
+    /// I documenti di cui il sidecar dice la cartella.
+    placed: std::collections::HashSet<DocId>,
+    /// I nomi delle voci di cui nessuno sa dire la cartella: quello che hanno
+    /// e quello de-timbrato, perché anche il timbro si legge dalla forma.
+    unplaced: std::collections::HashSet<String>,
+}
+
+impl TrashOrigins {
+    /// Può darsi che questo documento sia nel cestino?
+    ///
+    /// Sì se un sidecar lo nomina, e sì se una voce senza sidecar si chiama
+    /// come lui, **in qualunque cartella**: il cestino è piatto, e una voce di
+    /// Obsidian o una che ha perso il sidecar può venire da ognuna. Tenere i
+    /// dati di un omonimo è uno spazio che resta finché la voce sta nel
+    /// cestino; indovinare la cartella era togliere quelli di una nota ancora
+    /// recuperabile.
+    pub fn may_hold(&self, doc: &DocId) -> bool {
+        self.placed.contains(doc) || self.unplaced.contains(file_name_of(doc.as_str()))
+    }
+
+    fn unplaced(&mut self, trashed: &DocId) {
+        let name = file_name_of(trashed.as_str());
+        self.unplaced.insert(strip_stamp(name));
+        self.unplaced.insert(name.to_owned());
+    }
+}
+
 /// Un file trovato dalla scansione: il path, e le due cose che il filesystem
 /// dice **senza aprirlo** (§14.2).
 ///
@@ -1155,6 +1192,24 @@ impl Vault {
         }
     }
 
+    /// Come [`write_if_unchanged`](Vault::write_if_unchanged) con «assente»
+    /// come contenuto atteso: posa i byte soltanto se al path non c'è ancora
+    /// niente. `Ok(None)` vuol dire che nel frattempo qualcuno l'ha creato, e
+    /// quel file resta intatto.
+    pub fn write_if_absent(&self, id: &DocId, source: &str) -> Result<Option<(u64, u64)>> {
+        let path = self.path_for(id)?;
+        match self
+            .storage
+            .write_if_unchanged(&path, None, source.as_bytes())
+            .map_err(|and| KernelError::Io {
+                path: path.clone(),
+                source: and,
+            })? {
+            crate::storage::ConditionalWrite::Written(stat) => Ok(Some((stat.size, stat.mtime))),
+            crate::storage::ConditionalWrite::Changed => Ok(None),
+        }
+    }
+
     /// Un id fuori dal recinto **non esiste**, e non è una tolleranza: non
     /// nomina un posto di questo vault, quindi non c'è niente che possa
     /// esistere.
@@ -1299,16 +1354,32 @@ impl Vault {
                 }
             }
         };
-        // Il sidecar col path d'origine è best-effort: se non si scrive, la
-        // voce degrada al comportamento senza sidecar (ripristino in radice),
-        // ma la cancellazione È riuscita e va detta con un Ok. Il sidecar
-        // mancante non è però silenzioso: chi ripristina tornerebbe nel posto
-        // sbagliato, ed è un guasto che l'utente ha il diritto di sapere
-        // (decisione 0052). Lo si restituisce invece di scriverlo su stderr, e
-        // `delete_document` — che ha il workspace fra le mani — lo porta nel
-        // canale e nel log (decisione 0062).
-        let sidecar_fault = self.write_trash_sidecar(&target, id).err();
-        Ok((target, sidecar_fault))
+        let Err(fault) = self.write_trash_sidecar(&target, id) else {
+            return Ok((target, None));
+        };
+        // **Il sidecar fa parte della cancellazione quando il nome non basta.**
+        // Senza sidecar la voce vale quel che dice il suo nome: una nota della
+        // radice torna al suo posto, una di `Diario/` no — la cartella era
+        // scritta soltanto lì, e la voce che resta finirebbe ripristinata nella
+        // radice, con i dati per-documento intestati a un path che nessuno
+        // ricorda più. Lì la nota torna dov'era e la cancellazione fallisce.
+        //
+        // Se nemmeno il ritorno riesce la nota è nel cestino, e lo si dice
+        // come una cancellazione riuscita col guasto accanto: la raccolta
+        // tiene i dati di ogni omonimo di una voce senza sidecar
+        // ([`Vault::trash_originals`]), e il ripristino resta possibile.
+        if origin_by_name(&target) != *id
+            && self
+                .storage
+                .rename_no_replace(&self.path_for(&target)?, &from)
+                .is_ok()
+        {
+            return Err(fault);
+        }
+        // Il guasto non è silenzioso: lo si restituisce invece di scriverlo
+        // su stderr, e `delete_document` — che ha il workspace fra le mani —
+        // lo porta nel canale e nel log.
+        Ok((target, Some(fault)))
     }
 
     /// La cartella dei sidecar del cestino.
@@ -1486,7 +1557,6 @@ impl Vault {
         let mut files = Vec::new();
         self.trash_files(dir, &mut files)?;
         for (id, stat) in files {
-            let name = file_name_of(id.as_str());
             let sidecar = self.read_trash_sidecar(&id, &stat)?;
             out.push(TrashEntry {
                 // Il sidecar sa da quale cartella veniva; senza (voce di
@@ -1495,7 +1565,7 @@ impl Vault {
                 original: sidecar
                     .as_ref()
                     .map(|s| DocId::new(s.original.clone()))
-                    .unwrap_or_else(|| DocId::new(strip_stamp(name))),
+                    .unwrap_or_else(|| origin_by_name(&id)),
                 // La data la dichiara **chi ha cestinato**, e sta nel sidecar:
                 // il `rename` con cui una nota entra nel cestino non tocca il
                 // suo mtime, quindi il disco di quell'istante non sa niente.
@@ -1531,14 +1601,18 @@ impl Vault {
     /// presente ma non compreso — rotto, o scritto da una versione più nuova —
     /// risalgono. Degrada al nome soltanto un sidecar che non c'è (una voce di
     /// Obsidian) o che parla di un altro file, cioè di una voce che non c'è più.
-    pub fn trash_originals(&self) -> Result<Vec<DocId>> {
+    ///
+    /// E «degrada» non vuol dire «indovina la radice»: la voce senza sidecar
+    /// non sa da quale cartella veniva, e la risposta è il suo **nome**, che
+    /// vale per ogni cartella ([`TrashOrigins::may_hold`]).
+    pub fn trash_originals(&self) -> Result<TrashOrigins> {
         let dir = self.root.join(TRASH_DIR);
+        let mut out = TrashOrigins::default();
         if !self.has_trash(&dir)? {
-            return Ok(Vec::new());
+            return Ok(out);
         }
         let mut files = Vec::new();
         self.trash_files(&dir, &mut files)?;
-        let mut out = Vec::with_capacity(files.len());
         for (id, stat) in files {
             let path = self.trash_sidecar_path(&id);
             let unreadable = |why: String| KernelError::Io {
@@ -1551,9 +1625,8 @@ impl Vault {
                     source,
                 }
             })?;
-            let guessed = || DocId::new(strip_stamp(file_name_of(id.as_str())));
             let Some(raw) = raw else {
-                out.push(guessed());
+                out.unplaced(&id);
                 continue;
             };
             let sidecar = serde_json::from_slice::<TrashSidecar>(&raw)
@@ -1569,9 +1642,9 @@ impl Vault {
                 mtime: stat.mtime,
             };
             if sidecar.file.is_some_and(|f| f != stamp) {
-                out.push(guessed());
+                out.unplaced(&id);
             } else {
-                out.push(DocId::new(sidecar.original));
+                out.placed.insert(DocId::new(sidecar.original));
             }
         }
         Ok(out)
@@ -1757,6 +1830,28 @@ mod tests {
         Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
             .expect("current dir is UTF-8")
             .join("vault-test")
+    }
+
+    /// Una voce senza sidecar vale per ogni cartella, sotto il nome che ha e
+    /// sotto quello de-timbrato: anche il timbro si legge dalla forma, e una
+    /// nota può chiamarsi davvero così.
+    #[test]
+    fn a_trash_entry_without_sidecar_may_come_from_any_folder() {
+        let mut origins = TrashOrigins::default();
+        origins.unplaced(&DocId::new(".trash/Idea.2026-07-24T15-30-00.md"));
+        origins.placed.insert(DocId::new("Diario/Nota.md"));
+
+        for held in [
+            "Idea.md",
+            "Diario/Idea.md",
+            "Archivio/2026/Idea.2026-07-24T15-30-00.md",
+            "Diario/Nota.md",
+        ] {
+            assert!(origins.may_hold(&DocId::new(held)), "{held}");
+        }
+        for free in ["Diario/Altro.md", "Nota.md", "Archivio/Nota.md"] {
+            assert!(!origins.may_hold(&DocId::new(free)), "{free}");
+        }
     }
 
     #[test]

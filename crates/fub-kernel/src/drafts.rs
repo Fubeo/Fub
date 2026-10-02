@@ -204,6 +204,19 @@ impl Drafts {
     /// si scrivesse da sé sarebbe un **secondo modo di essere durevoli** accanto
     /// a quello che il §15.2 ha appena finito di rendere unico — e il primo
     /// posto in cui si scoprirebbe che è meno durevole è un crash.
+    ///
+    /// # Un record che non si legge non si sovrascrive
+    ///
+    /// Al posto della bozza può esserci un file che questa versione non sa
+    /// interpretare: uno schema più recente, scritto da un Fub più nuovo sullo
+    /// stesso vault, o un record rotto. [`Drafts::read`] lo conta fra i non
+    /// letti e non lo offre, quindi chi lo sovrascrivesse cancellerebbe testo
+    /// che nessuno ha mai visto. Prima di scrivere lo si sposta sotto un
+    /// **nome di recupero** ([`Drafts::recovery_name`]), con i suoi byte
+    /// intatti: la versione che lo sa leggere lo ritrova come bozza orfana. Il
+    /// controllo e la scrittura stanno sotto lo stesso lucchetto
+    /// ([`VaultStorage::update`]), così un record che compare fra i due non
+    /// passa inosservato.
     pub(crate) fn save(
         &self,
         doc: &DocId,
@@ -219,7 +232,23 @@ impl Drafts {
             text: text.to_string(),
         };
         let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
-        self.storage.write(&self.path(doc), &bytes).map(|_| ())
+        let path = self.path(doc);
+        // Ogni giro che non scrive ha spostato un record estraneo, che non
+        // torna: il ciclo finisce quando al posto non ce n'è più nessuno.
+        loop {
+            let mut foreign = false;
+            self.storage.update(&path, &mut |current| {
+                if current.is_some_and(|old| readable(old).is_none()) {
+                    foreign = true;
+                    return Ok(None);
+                }
+                Ok(Some(bytes.clone()))
+            })?;
+            if !foreign {
+                return Ok(());
+            }
+            self.recovery_name(doc, &path)?;
+        }
     }
 
     /// Butta la bozza di un documento. Non c'era: non è un errore — chi salva
@@ -230,9 +259,23 @@ impl Drafts {
     /// «Non c'era» lo dice soltanto un `NotFound` del supporto: chiederlo a
     /// `exists` voleva dire leggere ogni errore come un'assenza, e rispondere
     /// «fatto» lasciando la bozza dov'era.
+    ///
+    /// **Si butta soltanto una bozza che questa versione sa leggere.** Un record
+    /// di schema sconosciuto o rotto non è la bozza che la shell chiede di
+    /// buttare: non gliel'abbiamo mai offerta, e la shell chiede lo scarto
+    /// dopo ogni salvataggio riuscito. Resta dov'è, al nome giusto per la
+    /// versione che lo sa leggere. Lettura e rimozione non sono una sola
+    /// operazione: un secondo Fub che riscrivesse il file in mezzo lo tiene
+    /// fuori il lock dello scrittore del vault, preso dall'host all'apertura.
     pub(crate) fn discard(&self, doc: &DocId) -> std::io::Result<()> {
         let path = self.path(doc);
         if crate::error::optional(self.storage.stat(&path))?.is_none() {
+            return Ok(());
+        }
+        let Some(bytes) = crate::error::optional(self.storage.read(&path))? else {
+            return Ok(());
+        };
+        if readable(&bytes).is_none() {
             return Ok(());
         }
         match self.storage.remove(&path) {
@@ -271,8 +314,7 @@ impl Drafts {
                 .storage
                 .read(&entry.path)
                 .ok()
-                .and_then(|bytes| serde_json::from_slice::<Draft>(&bytes).ok())
-                .filter(|d| d.v == SCHEMA_VERSION)
+                .and_then(|bytes| readable(&bytes))
                 // Il record **precisa** il nome, non lo contraddice (vedi
                 // [`Draft::doc`]): se dice un id che è lo stesso file, vale lui
                 // — è il caso della maiuscola su un supporto che non la
@@ -305,11 +347,7 @@ impl Drafts {
     /// destinazione un record che dice ancora il nome vecchio.
     pub(crate) fn get(&self, doc: &DocId) -> std::io::Result<Option<Draft>> {
         let bytes = crate::error::optional(self.storage.read(&self.path(doc)))?;
-        Ok(bytes.and_then(|bytes| {
-            serde_json::from_slice::<Draft>(&bytes)
-                .ok()
-                .filter(|d| d.v == SCHEMA_VERSION)
-        }))
+        Ok(bytes.and_then(|bytes| readable(&bytes)))
     }
 
     /// Segue una rinomina: la bozza di `from` diventa la bozza di `to`.
@@ -458,6 +496,15 @@ impl Drafts {
         }
         unreachable!("i nomi di recupero non finiscono: a ogni giro l'encode è diverso")
     }
+}
+
+/// La bozza in questi byte, se è una che questa versione sa leggere: JSON
+/// valido e lo schema di [`SCHEMA_VERSION`]. Tutto il resto è un record
+/// **estraneo**, che non si offre e non si tocca.
+fn readable(bytes: &[u8]) -> Option<Draft> {
+    serde_json::from_slice::<Draft>(bytes)
+        .ok()
+        .filter(|d| d.v == SCHEMA_VERSION)
 }
 
 /// Di quale documento è la bozza che si chiama così — e `None` se quel nome non

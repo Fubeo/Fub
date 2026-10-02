@@ -902,6 +902,53 @@ fn a_restore_the_disk_interrupts_leaves_one_copy_not_two() {
     );
 }
 
+/// Un commit di ripristino che il core rifiuta rimette il file nel cestino.
+///
+/// La mossa sul disco precede il commit, e il commit può dire di no: qui il
+/// path d'arrivo entra nell'anagrafe fra le due fasi, come farebbe una
+/// rilettura del disco. `KernelHost` e i banchi scartavano la ricevuta, e il
+/// file restava fuori dal cestino con il sidecar orfano dentro.
+#[test]
+fn a_restore_the_core_refuses_goes_back_to_the_trash() {
+    let fx = Fixture::new();
+    fx.put("Cartella/Idea.txt", "an idea");
+    let mut ws = fx.workspace();
+    let trashed = ws
+        .delete_document(&DocId::new("Cartella/Idea.txt"))
+        .unwrap();
+
+    let completed = ws
+        .prepare_document_restore(&trashed, Some(DocId::new("Altrove.txt")))
+        .unwrap()
+        .invoke()
+        .unwrap();
+    assert!(fx.exists("Altrove.txt"), "the move happened");
+    ws.reindex().unwrap();
+    match ws.commit_document_restore_or_rollback(completed) {
+        Err(PluginError::AlreadyExists(_)) => {}
+        Err(other) => panic!("the wrong refusal: {other:?}"),
+        Ok(_) => panic!("the core installs a path it already holds"),
+    }
+    assert!(!fx.exists("Altrove.txt"), "the file left the vault again");
+    assert_eq!(fx.read(trashed.as_str()), "an idea");
+    let entry = ws
+        .list_trash()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.id == trashed)
+        .expect("the trash lists it again");
+    assert_eq!(
+        entry.original,
+        DocId::new("Cartella/Idea.txt"),
+        "with its sidecar"
+    );
+    assert_eq!(
+        restore_document(&mut ws, &trashed, None).unwrap(),
+        DocId::new("Cartella/Idea.txt")
+    );
+    assert_eq!(fx.read("Cartella/Idea.txt"), "an idea");
+}
+
 /// 0002 — dal cestino torna anche ciò che nessuno parsa.
 ///
 /// `list_trash` elenca **tutti** i file apposta, allegati compresi (il cestino è

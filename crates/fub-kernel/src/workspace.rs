@@ -549,6 +549,11 @@ struct CompletedRenameSideData {
     from: DocId,
     to: DocId,
     errors: Vec<String>,
+    /// Ciò che gli spazi per-documento hanno fatto: il rollback disfa questo,
+    /// non una migrazione al contrario ([`Migration::undo`]).
+    ///
+    /// [`Migration::undo`]: crate::docdata::Migration::undo
+    doc_data: crate::docdata::Migration,
     rollback: Option<PreparedRenameSideData>,
 }
 /// Handle owned per migrare soltanto i side-data che appartengono anche agli
@@ -566,6 +571,7 @@ struct CompletedAssetRenameSideData {
     from: DocId,
     to: DocId,
     errors: Vec<String>,
+    doc_data: crate::docdata::Migration,
     rollback: Option<PreparedAssetRenameSideData>,
 }
 
@@ -890,7 +896,24 @@ impl PreparedExplicitRename {
         // li spazza. `sync_renamed_path_here` resta migrate-dopo: là il file
         // è già a `to`. Il registro `Renamed` resta dopo la mutazione del
         // file (0067).
-        let side_data = side_data.invoke();
+        //
+        // Proprio perché il file non si è ancora mosso, uno spazio che non ha
+        // potuto seguire **ferma** la rinomina invece di restare indietro: sotto
+        // l'id vecchio di una nota che ha cambiato nome, la raccolta
+        // successiva lo prenderebbe per lo spazio di una nota che non esiste
+        // più. Chi la rinomina la vede soltanto dopo non ha questa scelta, e lo
+        // dice ([`migrate_data`](crate::docdata::migrate_data)).
+        let mut side_data = side_data.invoke();
+        if let Some((path, source)) = side_data.doc_data.stranded.take() {
+            let mut rollback_errors = side_data.rollback();
+            if let Err(error) = recovery.cancel() {
+                rollback_errors.push(format!("intent di recupero non cancellato: {error}"));
+            }
+            return Err(KernelError::Io {
+                path,
+                source: with_rollback_errors(source, rollback_errors),
+            });
+        }
         if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
             let mut rollback_errors = side_data.rollback();
             if let Err(error) = recovery.cancel() {
@@ -1281,7 +1304,19 @@ impl PreparedExplicitAssetRename {
             .iter()
             .map(|rewrite| (rewrite.source().clone(), rewrite.request().clone()))
             .collect();
-        let side_data = side_data.invoke();
+        // Come per un documento: lo spazio che non ha potuto seguire ferma la
+        // rinomina finché il file non si è mosso.
+        let mut side_data = side_data.invoke();
+        if let Some((path, source)) = side_data.doc_data.stranded.take() {
+            let mut rollback_errors = side_data.rollback();
+            if let Err(error) = recovery.cancel() {
+                rollback_errors.push(format!("intent di recupero non cancellato: {error}"));
+            }
+            return Err(KernelError::Io {
+                path,
+                source: with_rollback_errors(source, rollback_errors),
+            });
+        }
         if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
             let mut rollback_errors = side_data.rollback();
             if let Err(error) = recovery.cancel() {
@@ -1563,8 +1598,8 @@ impl PreparedRenameSideData {
                 "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {error}"
             ));
         }
-        let mut errors =
-            crate::docdata::migrate_data(storage.as_ref(), &doc_data_roots, &from, &to);
+        let mut doc_data = crate::docdata::migrate(storage.as_ref(), &doc_data_roots, &from, &to);
+        let mut errors = std::mem::take(&mut doc_data.messages);
         if let Err(error) = drafts.migrate(&from, &to) {
             errors.push(format!("bozza non migrata: {error}"));
         }
@@ -1572,9 +1607,25 @@ impl PreparedRenameSideData {
             from,
             to,
             errors,
+            doc_data,
             rollback: Some(rollback),
         }
     }
+}
+
+/// Il guasto che ha fermato una rinomina, con ciò che il suo rollback non ha
+/// potuto disfare.
+fn with_rollback_errors(source: std::io::Error, rollback_errors: Vec<String>) -> std::io::Error {
+    if rollback_errors.is_empty() {
+        return source;
+    }
+    std::io::Error::new(
+        source.kind(),
+        format!(
+            "{source}; anche il rollback è fallito: {}",
+            rollback_errors.join("; ")
+        ),
+    )
 }
 
 impl CompletedRenameSideData {
@@ -1588,18 +1639,13 @@ impl CompletedRenameSideData {
             organization,
             drafts,
             storage,
-            doc_data_roots,
+            doc_data_roots: _,
         } = rollback;
         let mut errors = Vec::new();
         if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
             errors.push(format!("organizzazione non ripristinata: {error}"));
         }
-        errors.extend(crate::docdata::migrate_data(
-            storage.as_ref(),
-            &doc_data_roots,
-            &from,
-            &to,
-        ));
+        errors.extend(std::mem::take(&mut self.doc_data).undo(storage.as_ref()));
         if let Err(error) = drafts.migrate(&from, &to) {
             errors.push(format!("bozza non ripristinata: {error}"));
         }
@@ -1632,11 +1678,13 @@ impl PreparedAssetRenameSideData {
                 "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {error}"
             ));
         }
-        let errors = crate::docdata::migrate_data(storage.as_ref(), &doc_data_roots, &from, &to);
+        let mut doc_data = crate::docdata::migrate(storage.as_ref(), &doc_data_roots, &from, &to);
+        let errors = std::mem::take(&mut doc_data.messages);
         CompletedAssetRenameSideData {
             from,
             to,
             errors,
+            doc_data,
             rollback: Some(rollback),
         }
     }
@@ -1652,18 +1700,13 @@ impl CompletedAssetRenameSideData {
             to,
             organization,
             storage,
-            doc_data_roots,
+            doc_data_roots: _,
         } = rollback;
         let mut errors = Vec::new();
         if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
             errors.push(format!("organizzazione non ripristinata: {error}"));
         }
-        errors.extend(crate::docdata::migrate_data(
-            storage.as_ref(),
-            &doc_data_roots,
-            &from,
-            &to,
-        ));
+        errors.extend(std::mem::take(&mut self.doc_data).undo(storage.as_ref()));
         errors
     }
 }
@@ -3600,6 +3643,102 @@ fn plugin_root_present(
         })
 }
 
+/// Rende `cache_root` una radice di cache: prima porta in `canonical_root` ciò
+/// che vi sta ancora come dato autorevole *legacy*, poi posa il marcatore.
+///
+/// Il marcatore riclassifica **tutto** l'albero: da lì la radice è derivata,
+/// gli snapshot la escludono e un ripristino la toglie. Posarlo su dati legacy
+/// non migrati li consegnava a quella sorte, ed è ciò che il percorso staccato
+/// faceva quando la radice canonica esisteva già: la migrazione la saltava,
+/// perché la scelta della radice autorevole diceva «canonica», e il marcatore
+/// finiva sui dati vecchi. Una sola funzione per il percorso diretto e per
+/// quello staccato è ciò che impedisce alle due strade di divergere di nuovo.
+fn claim_plugin_cache_root(
+    storage: &dyn crate::storage::VaultStorage,
+    canonical_root: &Utf8Path,
+    cache_root: &Utf8Path,
+    cache_mark: &Utf8Path,
+) -> std::result::Result<(), PluginError> {
+    if plugin_root_present(storage, cache_root)? && !plugin_root_present(storage, cache_mark)? {
+        migrate_legacy_plugin_root(storage, cache_root, canonical_root).map_err(|error| {
+            PluginError::Io(
+                format!("migrazione `{cache_root}` → `{canonical_root}`: {error}").into(),
+            )
+        })?;
+    }
+    storage
+        .write_derived(cache_mark, b"cache\n")
+        .map(|_| ())
+        .map_err(|error| PluginError::Io(format!("{cache_mark}: {error}").into()))
+}
+
+/// Porta l'albero legacy dentro la radice canonica senza sovrascrivere niente.
+///
+/// Senza radice canonica è una mossa sola. Con la radice canonica già lì le
+/// voci si portano una per una, con `rename_no_replace`, e una cartella che
+/// esiste da tutte e due le parti si attraversa. Un nome preso da tutte e due
+/// le parti non si sceglie: sono due dati autorevoli, e nessuno dei due è da
+/// buttare. La migrazione allora fallisce, l'albero legacy resta autorevole
+/// con ciò che non ha potuto lasciare, e la cache non si scrive finché
+/// qualcuno non decide.
+fn migrate_legacy_plugin_root(
+    storage: &dyn crate::storage::VaultStorage,
+    legacy: &Utf8Path,
+    canonical: &Utf8Path,
+) -> std::io::Result<()> {
+    if crate::error::optional(storage.stat(canonical))?.is_none() {
+        return storage.rename_no_replace(legacy, canonical);
+    }
+    let mut taken = Vec::new();
+    merge_legacy_plugin_tree(storage, legacy, canonical, &mut taken)?;
+    match taken.first() {
+        None => Ok(()),
+        Some(first) => Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "{first} exists in both roots ({} names in all): the legacy data stays where it is",
+                taken.len()
+            ),
+        )),
+    }
+}
+
+/// Un livello della fusione di [`migrate_legacy_plugin_root`]: raccoglie in
+/// `taken` le voci legacy il cui nome la radice canonica ha già.
+///
+/// I compagni di lock e i temporanei di scrittura sono del supporto, non del
+/// plugin: non si spostano e non contano come collisione.
+fn merge_legacy_plugin_tree(
+    storage: &dyn crate::storage::VaultStorage,
+    legacy: &Utf8Path,
+    canonical: &Utf8Path,
+    taken: &mut Vec<Utf8PathBuf>,
+) -> std::io::Result<()> {
+    for entry in storage.list(legacy)? {
+        let Some(name) = entry.path.file_name() else {
+            continue;
+        };
+        if crate::storage::is_write_lock(name) || crate::storage::is_write_temporary(name) {
+            continue;
+        }
+        let target = canonical.join(name);
+        match crate::error::optional(storage.stat(&target))? {
+            None => match storage.rename_no_replace(&entry.path, &target) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    taken.push(entry.path);
+                }
+                Err(error) => return Err(error),
+            },
+            Some(stat) if stat.is_dir() && entry.stat.is_dir() => {
+                merge_legacy_plugin_tree(storage, &entry.path, &target, taken)?;
+            }
+            Some(_) => taken.push(entry.path),
+        }
+    }
+    Ok(())
+}
+
 impl PreparedPluginDataIo {
     fn authoritative_uses_canonical(&self) -> std::result::Result<bool, PluginError> {
         let present = |path| plugin_root_present(self.storage.as_ref(), path);
@@ -3670,22 +3809,12 @@ impl PreparedPluginDataIo {
     }
 
     pub fn write_cache(self, bytes: &[u8]) -> std::result::Result<(), PluginError> {
-        if !self.authoritative_uses_canonical()? {
-            self.storage
-                .rename(&self.cache_root, &self.canonical_root)
-                .map_err(|error| {
-                    PluginError::Io(
-                        format!(
-                            "migrazione `{}` → `{}`: {error}",
-                            self.cache_root, self.canonical_root
-                        )
-                        .into(),
-                    )
-                })?;
-        }
-        self.storage
-            .write_derived(&self.cache_mark, b"cache\n")
-            .map_err(|error| PluginError::Io(format!("{}: {error}", self.cache_mark).into()))?;
+        claim_plugin_cache_root(
+            self.storage.as_ref(),
+            &self.canonical_root,
+            &self.cache_root,
+            &self.cache_mark,
+        )?;
         self.storage
             .write(&self.cache_path, bytes)
             .map(|_| ())
@@ -6237,6 +6366,15 @@ impl Workspace {
                 .vault
                 .write_if_unchanged(&id, expected, source)?
                 .ok_or_else(|| KernelError::Stale(id.to_string()))?
+        } else if !existed {
+            // La preparazione ha visto il path libero, e il registro dirà
+            // `Created`, il cui inverso è cestinare. Un file posato nel frattempo
+            // da un altro programma non è nostro: la scrittura resta una
+            // creazione fino alla pubblicazione, come nella via a byte.
+            self.docs
+                .vault
+                .write_if_absent(&id, source)?
+                .ok_or_else(|| KernelError::AlreadyExists(id.to_string()))?
         } else {
             self.docs.vault.write(&id, source)?
         };
@@ -8194,11 +8332,14 @@ impl Workspace {
                 None,
             );
         }
-        // Il sidecar del cestino non si è scritto: la cancellazione è riuscita
-        // ma chi ripristina questa voce tornerà nel posto sbagliato. È la
-        // perdita di un dato autorevole (0052 la conta come `Failure`), e
-        // `delete_document` è il primo chiamante con il workspace in mano —
-        // quindi è qui che il guasto esce sia nel log che nel canale (0062).
+        // Il sidecar del cestino non si è scritto e la cancellazione è
+        // riuscita lo stesso: la nota veniva dalla radice, dove il nome basta
+        // a riportarla, oppure non è riuscita a tornare indietro. La voce
+        // perde comunque la data della cancellazione e il timbro che la
+        // distingue da un omonimo: è la perdita di un dato autorevole (0052
+        // la conta come `Failure`), e `delete_document` è il primo chiamante
+        // con il workspace in mano — quindi è qui che il guasto esce sia nel
+        // log che nel canale (0062).
         if let Some(fault) = sidecar_fault {
             tracing::warn!(target: "fub.kernel", "cestino: sidecar di {trashed} non scritto: {fault}");
             // Stringa letterale e non chiave di catalogo: è il precedente dei
@@ -13170,7 +13311,7 @@ impl Workspace {
         crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
             metas.contains_key(doc)
                 || entries.contains_key(doc)
-                || trashed.contains(doc)
+                || trashed.may_hold(doc)
                 || suspended.contains(doc)
                 || on_disk(doc)
         })
@@ -13183,8 +13324,8 @@ impl Workspace {
     /// non si legge non è un sidecar assente: l'errore risale, perché chi ne
     /// ricava una cancellazione deve potersi fermare
     /// ([`Vault::trash_originals`](crate::vault::Vault::trash_originals)).
-    fn trashed_originals(&self) -> Result<std::collections::HashSet<DocId>> {
-        Ok(self.docs.vault.trash_originals()?.into_iter().collect())
+    fn trashed_originals(&self) -> Result<crate::vault::TrashOrigins> {
+        self.docs.vault.trash_originals()
     }
 
     /// **Riconosce le rinomine che non ha visto nessuno** (§23.1), e restituisce
@@ -13263,7 +13404,7 @@ impl Workspace {
             BTreeMap::new();
         let snapshot = self.entry_store.snapshot();
         for (id, entry) in &snapshot {
-            if entry.size == 0 || self.indexes.core.entries.contains_key(id) || trashed.contains(id)
+            if entry.size == 0 || self.indexes.core.entries.contains_key(id) || trashed.may_hold(id)
             {
                 continue;
             }
@@ -13521,24 +13662,19 @@ impl Workspace {
     }
 
     /// Prima di `cache_write`: se il vecchio albero è ancora autorevole, lo
-    /// sposta in `.fub/plugins/<id>/`. Poi posa il marcatore, così un plugin
-    /// nuovo che scrive solo cache non rende quei blob visibili a `data_read`.
+    /// porta in `.fub/plugins/<id>/`. Poi posa il marcatore, così un plugin
+    /// nuovo che scrive solo cache non rende quei blob visibili a `data_read`
+    /// ([`claim_plugin_cache_root`], la stessa del percorso staccato).
     pub(crate) fn prepare_plugin_cache_write(
         &self,
         plugin: &str,
     ) -> std::result::Result<(), PluginError> {
-        if self.plugin_legacy_is_authoritative(plugin)? {
-            let from = self.plugin_cache_root(plugin);
-            let to = self.plugin_data_root(plugin);
-            self.storage().rename(&from, &to).map_err(|and| {
-                PluginError::Io(format!("migrazione `{from}` → `{to}`: {and}").into())
-            })?;
-        }
-        let mark = self.plugin_cache_mark_path(plugin);
-        self.storage()
-            .write_derived(&mark, b"cache\n")
-            .map(|_| ())
-            .map_err(|and| PluginError::Io(format!("{mark}: {and}").into()))
+        claim_plugin_cache_root(
+            self.storage().as_ref(),
+            &self.plugin_data_root(plugin),
+            &self.plugin_cache_root(plugin),
+            &self.plugin_cache_mark_path(plugin),
+        )
     }
 
     /// Freeze the storage handle and timer-cursor path without performing I/O.

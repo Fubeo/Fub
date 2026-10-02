@@ -278,6 +278,24 @@ impl Workspace {
         })
     }
 
+    /// [`commit_document_restore`](Self::commit_document_restore) per chi
+    /// possiede il workspace senza custodia (`KernelHost`, i banchi): se il core
+    /// rifiuta la mossa, il file torna nel cestino accanto al suo sidecar. Senza,
+    /// un rifiuto lasciava il file fuori dal cestino e fuori dall'anagrafe.
+    ///
+    /// L'host con la custodia fa lo stesso a guardia rilasciata. Se anche
+    /// l'annullamento fallisce, l'errore è il suo: il file è rimasto fuori.
+    pub fn commit_document_restore_or_rollback(
+        &mut self,
+        completed: CompletedDocumentRestore,
+    ) -> std::result::Result<PendingDocumentRestore, PluginError> {
+        self.commit_document_restore(completed).or_else(|failure| {
+            let (error, completed) = *failure;
+            completed.rollback().map_err(PluginError::from)?;
+            Err(error)
+        })
+    }
+
     /// Installa nel core una mossa già riconvalidata. Questa fase non consulta
     /// storage né provider: metadati e identità arrivano dalla ricevuta.
     pub fn commit_document_restore(

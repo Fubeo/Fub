@@ -274,7 +274,10 @@ Quando Fub cestina `Appunti/Nota.md`:
 
 Il sidecar conserva provenienza e timbro. Se manca o non corrisponde, il file
 resta ripristinabile con il fallback sicuro previsto; il contenuto non viene
-scartato.
+scartato. La provenienza di quella voce è soltanto il nome: la raccolta degli
+spazi per-documento conserva quelli di ogni documento che si chiama così, in
+qualunque cartella. Per una voce che il nome da solo non riporta al suo path,
+cioè una nota di una cartella, la cestinatura non avviene senza sidecar.
 
 Il comando esplicito `trash.os` (`doc` obbligatorio) tenta invece il cestino
 del sistema. Su Linux usa la directory Trash freedesktop sotto
@@ -300,6 +303,12 @@ Una versione futura viene rifiutata quando interpretarla potrebbe perdere dati.
 | sidecar del cestino | usa il fallback definito |
 | diagnostica | rigenera |
 | storage di terzi | applica la policy del plugin |
+
+Una bozza di schema futuro, o un record di bozza non interpretabile, non si
+offre al recupero e non si perde: lo scarto dopo un salvataggio la lascia al
+suo posto, e il salvataggio di una nuova bozza dello stesso documento la sposta
+prima sotto un nome di recupero (`<stelo>~recovery.<estensione>`) con i byte
+intatti.
 
 ## Scrittura
 
@@ -342,6 +351,11 @@ fuori dal vault. Le cache dichiarate ricostruibili non entrano nel manifest:
 altrimenti è storage autorevole legacy. Le letture e le scritture dei dati di
 un plugin scelgono la radice con la stessa regola: se il disco non sa dire se
 la radice o il marker ci sono, rispondono con l'errore invece di scegliere.
+La prima scrittura di cache posa il marker soltanto dopo aver portato i dati
+legacy in `.fub/plugins/<id>/`, sia dal percorso diretto sia da un job. Se la
+radice canonica esiste già, le voci passano una per una senza sostituzione.
+Un nome presente in entrambe le radici ferma la scrittura di cache: il marker
+non si posa e la radice legacy resta autorevole.
 
 Il modulo `fub_kernel::snapshot` usa un manifest schema 1, ordinato per path
 relativo normalizzato. Ogni entry registra classe, proprietario, schema quando

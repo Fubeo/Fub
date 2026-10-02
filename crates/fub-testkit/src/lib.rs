@@ -71,9 +71,7 @@ pub fn restore_document(
         .prepare_document_restore(entry, to)
         .map_err(PluginError::from)?;
     let completed = prepared.invoke().map_err(PluginError::from)?;
-    let pending = workspace
-        .commit_document_restore(completed)
-        .map_err(|failure| (*failure).0)?;
+    let pending = workspace.commit_document_restore_or_rollback(completed)?;
     let pending = pending.invoke_indexes();
     workspace
         .finish_document_restore(pending)
