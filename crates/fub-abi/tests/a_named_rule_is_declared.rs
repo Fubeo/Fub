@@ -245,21 +245,14 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/registry.rs::register",
+            "crates/fub-kernel/src/registry.rs::checked_extensions",
             (
                 Family::ContextualCase,
                 "l'identità di un'estensione nel registro è full-Unicode e non ASCII, e diverge \
                  apposta da `rules/media.rs`: qui l'estensione arriva dal **descrittore di un \
-                 provider**, che è testo di terzi, non dal nome di un file del vault.",
-            ),
-        ),
-        (
-            "crates/fub-kernel/src/registry.rs::register_source",
-            (
-                Family::ContextualCase,
-                "dichiara nella stessa mappa un formato privo di parser `DocumentModel`: \
-                 l'assenza del provider non può cambiare l'identità dell'estensione, quindi \
-                 deve piegarla esattamente come `register` prima di controllare i conflitti.",
+                 provider**, che è testo di terzi, non dal nome di un file del vault. È la sola \
+                 piega di `register` e di `register_source`: un formato privo di parser \
+                 `DocumentModel` non può avere un'altra identità né un altro conflitto.",
             ),
         ),
         (
