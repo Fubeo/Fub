@@ -23,6 +23,10 @@ documenti e byte. La stessa espressione vale per ricerca globale, viste,
 query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
 proprietario e ricompone l'AND/OR senza divergenze.
 
+Le query salvate stanno in `queries.json`, nello spazio dati di `fub.queries`.
+Un file scritto da una versione più recente di Fub non si usa e non si
+riscrive; i campi che questa versione non conosce tornano su disco come erano.
+
 La riga della barra di ricerca ha una sintassi propria, compilata in quella
 stessa espressione dalla regola `fub_abi::rules::search_syntax`. La sua gemella
 TypeScript è legata da una fixture, così la barra della shell, `fub-cli search`

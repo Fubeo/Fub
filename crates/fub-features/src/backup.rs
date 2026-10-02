@@ -2,8 +2,17 @@
 //!
 //! Non è un backup fuori dal vault: `HostApi` non scrive oltre il recinto, e
 //! `permission::EXTERNAL_FS` oggi non ha un consumatore. I byte stanno in
-//! `.fub/plugins/fub.backup/<data>/…`, che il vault non indicizza. Ripristino
-//! = `create_document` delle note che nel vault non ci sono più.
+//! `.fub/plugins/fub.backup/<data>/…` (o `<data>.1/…`, vedi sotto), che il vault
+//! non indicizza. Ripristino = `create_document` delle note che nel vault non ci
+//! sono più.
+//!
+//! Il manifest `snapshots.json` è il punto di commit. Un backup copia le note
+//! nella cartella del giorno che il manifest **non** nomina, poi riscrive il
+//! manifest perché la nomini, e solo dopo cancella la cartella vecchia: un
+//! guasto a metà copia lascia lo snapshot precedente intero, e la copia
+//! interrotta si ripulisce al backup dopo. Un manifest di uno schema più recente
+//! non si usa né si riscrive, e i campi che questa versione non conosce tornano
+//! su disco come erano.
 //!
 //! Gli snapshot ruotano: dopo ogni backup riuscito restano i più recenti
 //! [`BACKUP_KEEP_KEY`] (10 di serie, `0` li tiene tutti). Senza, crescevano
@@ -40,7 +49,9 @@ pub const BACKUP_KEEP_KEY: &str = "backup.keep";
 const KEEP_DEFAULT: f64 = 10.0;
 
 const MANIFEST: &str = "snapshots.json";
-const SCHEMA: u32 = 1;
+/// Lo schema del manifest. La 2 dà a ogni snapshot la cartella dei suoi file
+/// (`dir`); uno snapshot della 1 sta nella cartella col suo id.
+const SCHEMA: u32 = 2;
 const RUN: &str = "run";
 const RESTORE: &str = "restore";
 const ID: &str = "id";
@@ -54,6 +65,8 @@ const E_MISSING: &str = "e_missing";
 const P_BACKUP: &str = "p_backup";
 const P_RESTORE: &str = "p_restore";
 const FAILED: &str = "failed";
+const E_SCHEMA: &str = "e_schema";
+const E_DIR: &str = "e_dir";
 const S_GROUP: &str = "s_group";
 const S_KEEP: &str = "s_keep";
 const S_KEEP_DESC: &str = "s_keep_desc";
@@ -90,6 +103,15 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_BACKUP, "Salvate {n} note in «{id}»")
             .with(P_RESTORE, "Ripristinate {n} note da «{id}»")
             .with(FAILED, "Backup: {reason}")
+            .with(
+                E_SCHEMA,
+                "Gli snapshot sono di una versione più recente di Fub (schema \
+                 {found}, questa arriva al {supported}): aggiorna Fub per usarli.",
+            )
+            .with(
+                E_DIR,
+                "Lo snapshot «{id}» nomina una cartella non sua: «{dir}».",
+            )
             .with(S_GROUP, "Backup")
             .with(S_KEEP, "Snapshot da tenere")
             .with(
@@ -122,6 +144,15 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_BACKUP, "Saved {n} notes in «{id}»")
             .with(P_RESTORE, "Restored {n} notes from «{id}»")
             .with(FAILED, "Backup: {reason}")
+            .with(
+                E_SCHEMA,
+                "The snapshots come from a newer Fub (schema {found}, this one \
+                 reads up to {supported}): update Fub to use them.",
+            )
+            .with(
+                E_DIR,
+                "Snapshot «{id}» names a folder that is not its own: «{dir}».",
+            )
             .with(S_GROUP, "Backup")
             .with(S_KEEP, "Snapshots to keep")
             .with(
@@ -309,6 +340,9 @@ fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
 
 fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
     let id = today(host);
+    // Prima di tutto, anche in prova: un manifest che non si può riscrivere
+    // ferma il backup prima che scriva qualcosa.
+    let mut store = load(host)?;
     let docs = host.list_documents(None)?.items;
     let n = docs.len() as i64;
     if mode.is_dry_run() {
@@ -317,41 +351,60 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
             vec![Arg::int("n", n), Arg::text(ID, &id)],
         )));
     }
-    let previous = host.data_list(&id)?;
-    let mut written = std::collections::BTreeSet::new();
+    let current = store
+        .snapshots
+        .iter()
+        .find(|s| s.id == id)
+        .map(|s| s.dir().to_owned());
+    // La copia va nella cartella che il manifest non nomina: quella dello
+    // snapshot di oggi resta intera finché il manifest non passa alla nuova.
+    let dir = if current.as_deref() == Some(id.as_str()) {
+        staging_dir(&id)
+    } else {
+        id.clone()
+    };
+    // Ciò che c'è già lì è una copia interrotta, o la cartella che l'ultimo
+    // backup non ha finito di cancellare: nessuno snapshot la nomina.
+    remove_dir(host, &dir)?;
     for doc in &docs {
         let src = host.read_document(doc)?;
-        let path = format!("{id}/{}", doc.as_str());
-        host.data_write(&path, src.as_bytes())?;
-        written.insert(path);
+        host.data_write(&format!("{dir}/{}", doc.as_str()), src.as_bytes())?;
     }
-    // Ciò che lo snapshot di oggi aveva e questo no se ne va **dopo** la copia
-    // nuova: un backup interrotto lascia uno snapshot misto, mai più povero.
-    for path in previous.iter().filter(|path| !written.contains(*path)) {
-        host.data_remove(path)?;
-    }
-    let mut store = load(host)?;
     if let Some(existing) = store.snapshots.iter_mut().find(|s| s.id == id) {
         existing.n = docs.len() as u32;
+        existing.dir = Some(dir);
     } else {
         store.snapshots.push(Snapshot {
             id: id.clone(),
             n: docs.len() as u32,
+            dir: Some(dir),
+            rest: serde_json::Map::new(),
         });
     }
-    let dropped = rotate(&mut store, &id, keep(host));
+    let mut stale = rotate(&mut store, &id, keep(host));
+    stale.extend(current);
     persist(host, &store)?;
-    // I file degli snapshot tolti si cancellano dopo il manifest: un errore
+    // Le cartelle che il manifest non nomina più si cancellano dopo: un errore
     // lascia file orfani, mai un manifest che nomina uno snapshot sparito.
-    for old in &dropped {
-        for path in host.data_list(old)? {
-            host.data_remove(&path)?;
-        }
+    for old in &stale {
+        remove_dir(host, old)?;
     }
     Ok(CommandOutcome::notify(Text::message(
         P_BACKUP,
         vec![Arg::int("n", n), Arg::text(ID, id)],
     )))
+}
+
+/// L'altra cartella dello snapshot di un giorno, per il backup che lo rifà.
+fn staging_dir(id: &str) -> String {
+    format!("{id}.1")
+}
+
+fn remove_dir(host: &mut dyn HostApi, dir: &str) -> Result<(), PluginError> {
+    for path in host.data_list(dir)? {
+        host.data_remove(&path)?;
+    }
+    Ok(())
 }
 
 fn restore(
@@ -366,20 +419,21 @@ fn restore(
         .ok_or_else(|| PluginError::BadArgs(Text::message(E_MISSING, vec![Arg::text(ID, "")])))?
         .to_string();
     let store = load(host)?;
-    if !store.snapshots.iter().any(|s| s.id == id) {
+    let Some(snapshot) = store.snapshots.iter().find(|s| s.id == id) else {
         return Err(PluginError::BadArgs(Text::message(
             E_MISSING,
             vec![Arg::text(ID, &id)],
         )));
-    }
-    let files = host.data_list(&id)?;
+    };
+    let dir = snapshot.dir();
+    let files = host.data_list(dir)?;
     let existing: std::collections::BTreeSet<String> = host
         .list_documents(None)?
         .items
         .into_iter()
         .map(|d| d.0)
         .collect();
-    let prefix = format!("{id}/");
+    let prefix = format!("{dir}/");
     let mut from_create: Vec<(DocId, String)> = Vec::new();
     for path in &files {
         let Some(rel) = path.strip_prefix(&prefix) else {
@@ -424,8 +478,8 @@ fn keep(host: &dyn ReadApi) -> usize {
 }
 
 /// Toglie dal manifest gli snapshot oltre i `keep` più recenti per data, e
-/// torna i loro id. `fresh` è appena stato scritto e resta sempre, anche se un
-/// orologio tornato indietro gli ha dato una data più vecchia degli altri.
+/// torna le loro cartelle. `fresh` è appena stato scritto e resta sempre, anche
+/// se un orologio tornato indietro gli ha dato una data più vecchia degli altri.
 fn rotate(store: &mut Store, fresh: &str, keep: usize) -> Vec<String> {
     if keep == 0 {
         return Vec::new();
@@ -439,8 +493,14 @@ fn rotate(store: &mut Store, fresh: &str, keep: usize) -> Vec<String> {
     // Gli id sono date `YYYY-MM-DD`: l'ordine del testo è quello del tempo.
     others.sort_unstable_by(|a, b| b.cmp(a));
     let dropped: Vec<String> = others.into_iter().skip(keep - 1).collect();
+    let dirs = store
+        .snapshots
+        .iter()
+        .filter(|s| dropped.contains(&s.id))
+        .map(|s| s.dir().to_owned())
+        .collect();
     store.snapshots.retain(|s| !dropped.contains(&s.id));
-    dropped
+    dirs
 }
 
 fn today(host: &dyn ReadApi) -> String {
@@ -451,31 +511,80 @@ fn today(host: &dyn ReadApi) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// Il manifest. `rest` sono i campi che questa versione non conosce: tornano su
+/// disco come erano, perché una versione che li ha scritti senza cambiare
+/// schema ci conta.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Store {
     schema_version: u32,
     snapshots: Vec<Snapshot>,
+    #[serde(flatten)]
+    rest: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Snapshot {
     id: String,
     n: u32,
+    /// La cartella dei file: l'id o [`staging_dir`]. Assente nello schema 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dir: Option<String>,
+    #[serde(flatten)]
+    rest: serde_json::Map<String, serde_json::Value>,
 }
 
-fn load(host: &dyn ReadApi) -> Result<Store, PluginError> {
-    match host.data_read(MANIFEST)? {
-        None => Ok(Store {
-            schema_version: SCHEMA,
-            snapshots: Vec::new(),
-        }),
-        Some(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|and| PluginError::Internal(format!("snapshots.json: {and}").into())),
+impl Snapshot {
+    fn dir(&self) -> &str {
+        self.dir.as_deref().unwrap_or(&self.id)
     }
 }
 
+/// Legge il manifest, o ne dà uno vuoto se non c'è.
+///
+/// Uno schema più recente si rifiuta per ogni uso, non soltanto per scrivere:
+/// i suoi snapshot possono stare dove questa versione non guarda, e ripristinare
+/// da lì ricreerebbe note sbagliate. Una cartella che non è dello snapshot si
+/// rifiuta perché la rotazione la cancellerebbe.
+fn load(host: &dyn ReadApi) -> Result<Store, PluginError> {
+    let Some(bytes) = host.data_read(MANIFEST)? else {
+        return Ok(Store {
+            schema_version: SCHEMA,
+            snapshots: Vec::new(),
+            rest: serde_json::Map::new(),
+        });
+    };
+    let store: Store = serde_json::from_slice(&bytes)
+        .map_err(|and| PluginError::Internal(format!("{MANIFEST}: {and}").into()))?;
+    if store.schema_version > SCHEMA {
+        return Err(PluginError::Internal(Text::message(
+            E_SCHEMA,
+            vec![
+                Arg::int("found", i64::from(store.schema_version)),
+                Arg::int("supported", i64::from(SCHEMA)),
+            ],
+        )));
+    }
+    if let Some(stray) = store
+        .snapshots
+        .iter()
+        .find(|s| s.dir() != s.id && s.dir() != staging_dir(&s.id))
+    {
+        return Err(PluginError::Internal(Text::message(
+            E_DIR,
+            vec![Arg::text(ID, &stray.id), Arg::text("dir", stray.dir())],
+        )));
+    }
+    Ok(store)
+}
+
+/// Scrive il manifest nello schema di questa versione: uno della 1 vi rientra
+/// senza perdere niente.
 fn persist(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
-    let bytes = serde_json::to_vec_pretty(store)
-        .map_err(|and| PluginError::Internal(format!("snapshots.json: {and}").into()))?;
+    let store = Store {
+        schema_version: SCHEMA,
+        ..store.clone()
+    };
+    let bytes = serde_json::to_vec_pretty(&store)
+        .map_err(|and| PluginError::Internal(format!("{MANIFEST}: {and}").into()))?;
     host.data_write(MANIFEST, &bytes)
 }

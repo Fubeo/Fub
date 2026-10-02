@@ -242,6 +242,15 @@ il testo quando è UTF-8, altrimenti indica la dimensione del contenuto binario.
 `version.restore` usa sempre i byte originali, senza decodifica testuale.
 Una verifica fallita non sovrascrive il documento corrente.
 
+Una rinomina porta la storia sotto il nuovo path. Se il nuovo path aveva già
+una storia, le due si uniscono in ordine di tempo: due snapshot diversi dello
+stesso istante restano entrambi, e quello della storia preesistente slitta di
+un millisecondo. Le copie non scrivono mai su un blob che l'indice in vigore
+nomina ancora: se l'unione ci atterrerebbe, la storia unita va in una cartella
+nuova e vuota. L'indice nuovo pubblica l'unione; se una copia fallisce, il
+rename fallisce, le copie già scritte si tolgono e la storia precedente resta
+leggibile.
+
 Se l'indice manca o non è leggibile, lo store lo ricostruisce dagli snapshot e
 prova a ripubblicarlo. Un errore di scrittura del solo indice genera un avviso:
 view e comandi possono ancora ricostruire e leggere la cronologia dai dati

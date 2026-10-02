@@ -1216,10 +1216,22 @@ struct Relocation {
 /// scrivere nell'indice versioni il cui contenuto non è mai stato lì.
 ///
 /// Prima si **copia**, poi chi chiama scrive l'indice, e solo alla fine si
-/// cancella ciò che è rimasto indietro. Se una copia fallisce, l'indice non si è
-/// ancora mosso e gli originali sono tutti al loro posto; l'ordine inverso
-/// lascerebbe, al primo errore, un indice che nomina contenuti spariti — cioè
-/// il modo in cui il versioning fallisce senza sembrare rotto.
+/// cancella ciò che è rimasto indietro. L'ordine inverso lascerebbe, al primo
+/// errore, un indice che nomina contenuti spariti — cioè il modo in cui il
+/// versioning fallisce senza sembrare rotto.
+///
+/// # Le copie non scrivono mai su un contenuto che l'indice nomina
+///
+/// Copiare prima non basta, se una copia atterra su un blob che l'indice di
+/// prima nomina ancora: una fotografia slittata da T a T+1 finiva sul blob
+/// T+1 della storia che arriva, e se una copia successiva falliva il rename si
+/// fermava con l'indice di prima a nominare un contenuto ormai riscritto
+/// (AUDIT-DATI-06). Le copie si pianificano quindi tutte **prima** di toccare
+/// il disco; se anche una sola atterrerebbe su un contenuto nominato, la
+/// storia unita va in una cartella nuova ([`fresh_dir`]), dove nessun nome è
+/// di nessuno. L'indice nuovo è la pubblicazione: fino a lì le copie stanno
+/// sotto nomi che l'indice di prima non conosce, e se una fallisce quelle già
+/// scritte si tolgono.
 fn relocate(
     doc: &DocVersions,
     from: &DocId,
@@ -1246,34 +1258,50 @@ fn relocate(
     // Ordinamento stabile: a parità di istante la storia che arriva viene
     // prima, ed è quella che si tiene il suo `ts`.
     candidate.sort_by_key(|(_, v)| v.ts);
+    let indexed: HashSet<String> = candidate.iter().map(|(origin, _)| origin.clone()).collect();
 
-    // La cartella che sopravvive è quella della storia che arriva. Una sola
-    // cartella per documento non è un vezzo: `rebuild_from_store` si fida di
-    // `meta.json`, e due cartelle che dichiarano lo stesso `doc_id` si
-    // sovrascriverebbero a vicenda, con una delle due storie persa in silenzio.
-    let dir = match (doc.dir.is_empty(), existing) {
-        (true, Some(existing)) => existing.dir.clone(),
-        _ => doc.dir.clone(),
-    };
-    let mut versions: Vec<VersionRef> = Vec::with_capacity(candidate.len());
-    let mut destinations: Vec<String> = Vec::with_capacity(candidate.len());
+    // La storia unita, decisa senza toccare il disco: chi resta, con quale `ts`.
+    let mut merged: Vec<(String, VersionRef)> = Vec::with_capacity(candidate.len());
     let mut to_remove: Vec<String> = Vec::new();
-    let mut copies: Vec<(usize, Vec<u8>)> = Vec::new();
-
     for (origin, mut v) in candidate {
-        match versions.last() {
+        match merged.last() {
             // Stesso istante e stesso contenuto: è la stessa fotografia
             // arrivata da due storie, non due versioni.
-            Some(u) if u.ts == v.ts && u.hash == v.hash => {
+            Some((_, u)) if u.ts == v.ts && u.hash == v.hash => {
                 to_remove.push(origin);
                 continue;
             }
             // Stesso istante ma contenuti diversi: sono due fotografie davvero
             // distinte, e `ts` è l'identità di una versione. Slitta di un
             // millisecondo — sparire in silenzio è ciò che non deve fare.
-            Some(u) if v.ts <= u.ts => v.ts = u.ts + 1,
+            Some((_, u)) if v.ts <= u.ts => v.ts = u.ts + 1,
             _ => {}
         }
+        merged.push((origin, v));
+    }
+
+    // La cartella che sopravvive è quella della storia che arriva. Una sola
+    // cartella per documento non è un vezzo: `rebuild_from_store` si fida di
+    // `meta.json`, e due cartelle che dichiarano lo stesso `doc_id` si
+    // sovrascriverebbero a vicenda, con una delle due storie persa in silenzio.
+    let preferred = match (doc.dir.is_empty(), existing) {
+        (true, Some(existing)) => existing.dir.clone(),
+        _ => doc.dir.clone(),
+    };
+    let lands_on_indexed = merged.iter().any(|(origin, v)| {
+        let destination = blob(&preferred, &snapshot_name(v.ts, to.as_str()));
+        destination != *origin && indexed.contains(&destination)
+    });
+    let dir = if lands_on_indexed {
+        fresh_dir(to, host)?
+    } else {
+        preferred
+    };
+
+    let mut versions: Vec<VersionRef> = Vec::with_capacity(merged.len());
+    let mut destinations: Vec<String> = Vec::with_capacity(merged.len());
+    let mut copies: Vec<(usize, Vec<u8>)> = Vec::new();
+    for (origin, v) in merged {
         let destination = blob(&dir, &snapshot_name(v.ts, to.as_str()));
         let copy = if destination != origin {
             let Some(bytes) = host.data_read(&origin)? else {
@@ -1298,10 +1326,18 @@ fn relocate(
         }
     }
 
-    // Nessuna destinazione può più essere l'origine che un giro successivo deve
-    // ancora leggere: soltanto adesso, a letture finite, i blob si riscrivono.
-    for (index, bytes) in copies {
-        host.data_write(&destinations[index], &bytes)?;
+    // Soltanto adesso, a letture finite e su nomi che l'indice di prima non
+    // nomina, i blob si scrivono.
+    let mut written: Vec<String> = Vec::with_capacity(copies.len());
+    for (index, bytes) in &copies {
+        let destination = &destinations[*index];
+        if let Err(and) = host.data_write(destination, bytes) {
+            // Ciò che si è già scritto non è di nessuno: l'indice di prima non
+            // lo nomina e quello nuovo non ci sarà.
+            sweep(&written, host);
+            return Err(and);
+        }
+        written.push(destination.clone());
     }
 
     // La cartella abbandonata smette di dire di chi è **qui**, prima che
@@ -1328,6 +1364,12 @@ fn relocate(
             host.data_remove(&blob(&existing.dir, METADATA_FILE))?;
         }
     }
+    // Una cartella nuova lascia indietro anche quella della storia che
+    // arriva: la sua rivendicazione di `from` se ne va con gli avanzi, dopo
+    // l'indice.
+    if !doc.dir.is_empty() && doc.dir != dir {
+        to_remove.push(blob(&doc.dir, METADATA_FILE));
+    }
     // Un contenuto che serve ancora non si cancella, per quanto il suo vecchio
     // nome sia finito nella lista.
     to_remove.retain(|p| !destinations.contains(p));
@@ -1341,6 +1383,23 @@ fn relocate(
         },
         to_remove,
     })
+}
+
+/// Una cartella dello store in cui non c'è niente e che nessuno rivendica,
+/// nella famiglia dell'impronta di `id`.
+///
+/// È la stessa famiglia di [`Inner::dir_for`], ma chiede di più: non basta che
+/// nessuno la rivendichi, dev'essere **vuota**, perché ci si scrivono copie
+/// che non devono atterrare su niente.
+fn fresh_dir(id: &DocId, host: &dyn HostApi) -> Result<String, PluginError> {
+    let base = format!("{:016x}", fingerprint(id.as_str()));
+    for n in 1u32.. {
+        let name = format!("{base}-{n}");
+        if matches!(claim_of(&name, host)?, Claim::None) && host.data_list(&name)?.is_empty() {
+            return Ok(name);
+        }
+    }
+    unreachable!("la sequenza dei nomi è infinita")
 }
 
 /// Il nome di un blob dello store: i path dell'`HostApi` sono relativi allo
@@ -2829,6 +2888,114 @@ mod tests {
                 "il blob {expected:?} è stato sovrascritto prima di essere letto: {contents:?}"
             );
         }
+    }
+
+    /// AUDIT-DATI-06: un'unione che fallisce a metà non tocca nessun contenuto
+    /// che l'indice di prima nomina ancora.
+    ///
+    /// La fotografia di `b.md` a T slittava su T+1 e veniva scritta sul blob
+    /// T+1 di `a.md`, che la storia di `a.md` nominava ancora; poi slittavano
+    /// a catena anche le versioni di `a.md`. Un errore su una copia successiva
+    /// faceva fallire il rename lasciando l'indice di prima, ma quel blob era
+    /// già stato riscritto: `a.md` a T+1 leggeva il testo di `b.md`.
+    #[test]
+    fn a_merge_that_fails_halfway_leaves_every_indexed_content_intact() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("a zero").as_bytes(), &mut host)
+            .unwrap();
+        store
+            .snapshot(&id("b.md"), ("b zero").as_bytes(), &mut host)
+            .unwrap();
+        host.advance(1);
+        store
+            .snapshot(&id("a.md"), ("a uno").as_bytes(), &mut host)
+            .unwrap();
+        host.advance(1);
+        store
+            .snapshot(&id("a.md"), ("a due").as_bytes(), &mut host)
+            .unwrap();
+        let history = |store: &VersionStore, doc: &str, host: &MemoryHost| -> Vec<String> {
+            store
+                .list(&id(doc))
+                .iter()
+                .rev()
+                .map(|v| store.read(&id(doc), v.ts, host).unwrap())
+                .collect()
+        };
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+        let fresh = fresh_dir(&id("b.md"), &host).unwrap();
+        let t = store.list(&id("a.md")).last().unwrap().ts;
+        // Le copie dopo le prime due cedono, in qualunque delle due cartelle
+        // l'unione scelga di scriverle.
+        for later in 2..8 {
+            for folder in [&dir, &fresh] {
+                host.denies_write(&blob(folder, &snapshot_name(t + later, "b.md")));
+            }
+        }
+
+        let failed = store.rename(&id("a.md"), &id("b.md"), &mut host);
+
+        assert!(failed.is_err(), "una copia negata non è un successo");
+        assert_eq!(history(&store, "a.md", &host), ["a zero", "a uno", "a due"]);
+        assert_eq!(history(&store, "b.md", &host), ["b zero"]);
+        assert_eq!(
+            host.data_list(&fresh).unwrap(),
+            Vec::<String>::new(),
+            "le copie già scritte non restano a fare da storia a nessuno"
+        );
+        let reopened = VersionStore::open(&mut host).unwrap();
+        assert_eq!(
+            history(&reopened, "a.md", &host),
+            ["a zero", "a uno", "a due"]
+        );
+    }
+
+    /// La stessa unione, quando riesce, tiene ogni contenuto e mette la storia
+    /// che arriva per ultima: l'«attuale» è la nota appena rinominata.
+    #[test]
+    fn a_merge_into_a_fresh_folder_keeps_every_version_in_order() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), ("a zero").as_bytes(), &mut host)
+            .unwrap();
+        store
+            .snapshot(&id("b.md"), ("b zero").as_bytes(), &mut host)
+            .unwrap();
+        host.advance(1);
+        store
+            .snapshot(&id("a.md"), ("a uno").as_bytes(), &mut host)
+            .unwrap();
+        host.advance(1);
+        store
+            .snapshot(&id("a.md"), ("a due").as_bytes(), &mut host)
+            .unwrap();
+        let old_dirs: Vec<String> = ["a.md", "b.md"]
+            .iter()
+            .map(|doc| store.inner.lock().unwrap().docs[*doc].dir.clone())
+            .collect();
+
+        store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
+
+        let texts: Vec<String> = store
+            .list(&id("b.md"))
+            .iter()
+            .rev()
+            .map(|v| store.read(&id("b.md"), v.ts, &host).unwrap())
+            .collect();
+        assert_eq!(texts, ["a zero", "b zero", "a uno", "a due"]);
+        for old in &old_dirs {
+            assert_eq!(
+                host.data_list(old).unwrap(),
+                Vec::<String>::new(),
+                "{old} resta indietro"
+            );
+        }
+        let reopened = VersionStore::open(&mut host).unwrap();
+        assert!(reopened.list(&id("a.md")).is_empty());
+        assert_eq!(reopened.list(&id("b.md")).len(), 4);
     }
 
     /// Il nome di un blob porta l'estensione del documento: se il contenuto non

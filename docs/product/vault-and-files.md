@@ -370,8 +370,13 @@ dell'issue [#7](https://github.com/Fubeo/Fub/issues/7), che conserva il proprio
 fixture e manifesto indipendente. La feature `fub.backup` resta invece uno
 snapshot namespaced delle sole note nello stesso vault. Gli snapshot prendono il
 nome dal giorno, e un secondo backup nello stesso giorno sostituisce il
-precedente. Dopo ogni backup riuscito restano gli snapshot più recenti indicati da
-`backup.keep` (10 di serie; 0 li tiene tutti).
+precedente soltanto a copia finita. La copia nuova si scrive nell'altra cartella
+del giorno (`<data>.1/`), il manifest `snapshots.json` passa a lei e solo allora
+la vecchia si cancella: un guasto a metà lascia intero lo snapshot precedente.
+Dopo ogni backup riuscito restano gli snapshot più recenti indicati da
+`backup.keep` (10 di serie; 0 li tiene tutti). Un manifest scritto da una
+versione più recente di Fub non si usa e non si riscrive; i campi che questa
+versione non conosce tornano su disco come erano.
 
 ## Limiti
 

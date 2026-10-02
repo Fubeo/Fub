@@ -72,6 +72,7 @@ const E_NO_EXPR: &str = "e_no_expr";
 const E_BAD_EXPR: &str = "e_bad_expr";
 const E_MISSING: &str = "e_missing";
 const E_STORE: &str = "e_store";
+const E_SCHEMA: &str = "e_schema";
 const P_SAVE: &str = "p_save";
 const P_DELETE: &str = "p_delete";
 const P_RUN: &str = "p_run";
@@ -97,6 +98,11 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(E_BAD_EXPR, "Espressione illeggibile: {reason}")
             .with(E_MISSING, "Nessuna query «{id}».")
             .with(E_STORE, "Non ho potuto leggere le query salvate: {reason}")
+            .with(
+                E_SCHEMA,
+                "Le query salvate sono di una versione più recente di Fub (schema \
+                 {found}, questa arriva al {supported}): aggiorna Fub per usarle.",
+            )
             .with(P_SAVE, "Salvata «{name}»")
             .with(P_DELETE, "Tolta «{name}»")
             .with(P_RUN, "{n} note per «{name}»")
@@ -142,6 +148,11 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(E_BAD_EXPR, "Unreadable expression: {reason}")
             .with(E_MISSING, "No query «{id}».")
             .with(E_STORE, "Could not read saved queries: {reason}")
+            .with(
+                E_SCHEMA,
+                "The saved queries come from a newer Fub (schema {found}, this one \
+                 reads up to {supported}): update Fub to use them.",
+            )
             .with(P_SAVE, "Saved «{name}»")
             .with(P_DELETE, "Removed «{name}»")
             .with(P_RUN, "{n} notes for «{name}»")
@@ -522,6 +533,7 @@ fn save(
             id,
             name: name.clone(),
             expr,
+            rest: serde_json::Map::new(),
         });
     }
     persist(host, &store)?;
@@ -662,10 +674,15 @@ fn free_id(store: &Store, name: &str) -> String {
     base.to_string()
 }
 
+/// Lo store. `rest` sono i campi che questa versione non conosce: tornano su
+/// disco come erano, perché una versione che li ha scritti senza cambiare
+/// schema ci conta.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Store {
     schema_version: u32,
     queries: Vec<SavedQuery>,
+    #[serde(flatten)]
+    rest: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -673,6 +690,8 @@ struct SavedQuery {
     id: String,
     name: String,
     expr: QueryExpr,
+    #[serde(flatten)]
+    rest: serde_json::Map<String, serde_json::Value>,
 }
 
 /// L'espressione di una query incorporata, risolta dalla stessa semantica che
@@ -740,23 +759,44 @@ pub fn normalize_embed_expr(mut expr: QueryExpr) -> QueryExpr {
     expr
 }
 
+/// Legge lo store, o ne dà uno vuoto se non c'è.
+///
+/// Uno schema più recente si rifiuta per ogni uso, non soltanto per scrivere:
+/// le sue query possono dire cose che questa versione non sa leggere, ed
+/// eseguirle darebbe risultati sbagliati senza avvisare.
 fn load(host: &dyn ReadApi) -> Result<Store, PluginError> {
-    match host.data_read(STORE)? {
-        None => Ok(Store {
+    let Some(bytes) = host.data_read(STORE)? else {
+        return Ok(Store {
             schema_version: SCHEMA,
             queries: Vec::new(),
-        }),
-        Some(bytes) => serde_json::from_slice(&bytes).map_err(|and| {
-            PluginError::Internal(Text::message(
-                E_STORE,
-                vec![Arg::text("reason", and.to_string())],
-            ))
-        }),
+            rest: serde_json::Map::new(),
+        });
+    };
+    let store: Store = serde_json::from_slice(&bytes).map_err(|and| {
+        PluginError::Internal(Text::message(
+            E_STORE,
+            vec![Arg::text("reason", and.to_string())],
+        ))
+    })?;
+    if store.schema_version > SCHEMA {
+        return Err(PluginError::Internal(Text::message(
+            E_SCHEMA,
+            vec![
+                Arg::int("found", i64::from(store.schema_version)),
+                Arg::int("supported", i64::from(SCHEMA)),
+            ],
+        )));
     }
+    Ok(store)
 }
 
+/// Scrive lo store nello schema di questa versione.
 fn persist(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
-    let bytes = serde_json::to_vec_pretty(store)
+    let store = Store {
+        schema_version: SCHEMA,
+        ..store.clone()
+    };
+    let bytes = serde_json::to_vec_pretty(&store)
         .map_err(|and| PluginError::Internal(format!("queries.json: {and}").into()))?;
     host.data_write(STORE, &bytes)
 }
@@ -764,12 +804,88 @@ fn persist(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::traits::{DataRead, DataWrite};
+    use fub_sdk::testing::MemoryHost;
+    use serde_json::json;
+
+    fn invoke(
+        host: &mut MemoryHost,
+        command: &str,
+        args: serde_json::Value,
+    ) -> Result<CommandOutcome, PluginError> {
+        QueriesCommands.invoke(command, args, InvokeMode::Apply, host)
+    }
+
+    fn stored(host: &MemoryHost) -> serde_json::Value {
+        serde_json::from_slice(&host.data_read(STORE).unwrap().unwrap()).unwrap()
+    }
+
+    /// **Uno store di una versione più recente si rifiuta, e resta com'era.**
+    /// Si leggeva scartando ciò che non si capiva, e salvare o cancellare una
+    /// query lo riscriveva povero: le query e i campi della versione nuova
+    /// sparivano.
+    #[test]
+    fn a_store_from_a_newer_fub_is_refused_and_left_as_it_was() {
+        let mut host = MemoryHost::new();
+        let future = serde_json::to_vec(&json!({
+            "schema_version": 999,
+            "queries": [{ "id": "inbox", "name": "Inbox", "expr": { "any": [] }, "futuro": 1 }],
+            "cartelle": ["lavoro"],
+        }))
+        .unwrap();
+        host.data_write(STORE, &future).unwrap();
+
+        for result in [
+            invoke(
+                &mut host,
+                QUERIES_SAVE,
+                json!({ "name": "Nuova", "text": "rust" }),
+            ),
+            invoke(&mut host, QUERIES_DELETE, json!({ "id": "inbox" })),
+            invoke(&mut host, QUERIES_RUN, json!({ "id": "inbox" })),
+            embed_expr(&host, "inbox").map(|_| CommandOutcome::done()),
+        ] {
+            let error = result.expect_err("una versione più recente si rifiuta");
+            assert!(error.to_string().contains("999"), "{error}");
+        }
+        assert_eq!(host.data_read(STORE).unwrap().unwrap(), future);
+    }
+
+    /// I campi che questa versione non conosce, in uno store della sua
+    /// versione, tornano su disco con la scrittura successiva.
+    #[test]
+    fn unknown_fields_of_a_known_store_survive_a_save() {
+        let mut host = MemoryHost::new();
+        let known = json!({
+            "schema_version": 1,
+            "queries": [{ "id": "inbox", "name": "Inbox", "expr": { "any": [] }, "colore": "blu" }],
+            "cartelle": { "lavoro": ["inbox"] },
+        });
+        host.data_write(STORE, &serde_json::to_vec(&known).unwrap())
+            .unwrap();
+
+        invoke(
+            &mut host,
+            QUERIES_SAVE,
+            json!({ "name": "Nuova", "text": "rust" }),
+        )
+        .unwrap();
+        let written = stored(&host);
+        assert_eq!(written["schema_version"], SCHEMA);
+        assert_eq!(written["cartelle"], json!({ "lavoro": ["inbox"] }));
+        assert_eq!(written["queries"][0]["colore"], "blu");
+        assert_eq!(written["queries"].as_array().unwrap().len(), 2);
+
+        invoke(&mut host, QUERIES_DELETE, json!({ "id": "nuova" })).unwrap();
+        assert_eq!(stored(&host), known);
+    }
 
     #[test]
     fn id_slug_from_the_phrase() {
         let store = Store {
             schema_version: 1,
             queries: Vec::new(),
+            rest: Default::default(),
         };
         assert_eq!(free_id(&store, "Inbox rust"), "inbox-rust");
     }
@@ -782,7 +898,9 @@ mod tests {
                 id: "inbox".into(),
                 name: "Inbox".into(),
                 expr: QueryExpr::all(),
+                rest: Default::default(),
             }],
+            rest: Default::default(),
         };
         assert_eq!(free_id(&store, "Inbox"), "inbox-2");
     }
@@ -823,7 +941,9 @@ mod tests {
                         path: "Inbox".into(),
                         descendants: true,
                     }),
+                    rest: Default::default(),
                 }],
+                rest: Default::default(),
             },
         )
         .unwrap();
