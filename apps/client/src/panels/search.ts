@@ -1,9 +1,10 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
-import type { DocumentMatch, Span } from "../host/contract";
+import type { DocumentMatch } from "../host/contract";
 import { matchingDocuments, SearchSyntaxError, searchExpression, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { rowsToShow } from "../rules/results";
 import { $ } from "../ui/dom";
+import { highlighted } from "../ui/highlight";
 import { setTooltip } from "../ui/tooltip";
 import { refreshOn, registerPanel, unregisterPanel } from "../ui/panel-host";
 import { openDocument, reveal } from "./document";
@@ -604,30 +605,4 @@ function wireSearchListKeys(lifetime: Lifetime): void {
 function wireSearchListSelection(): void {
   const first = searchResultsEl.querySelector<HTMLButtonElement>(".search-result");
   if (first) first.tabIndex = 0;
-}
-
-/// Lo snippet con le porzioni evidenziate, come nodi DOM.
-///
-/// Due invarianti in una funzione sola:
-/// - il testo del provider entra **solo** come `textContent`/nodo di testo, mai
-///   come HTML: un provider non può iniettare markup (vedi `DocumentMatch`);
-/// - gli offset arrivano in **byte UTF-8** (è la valuta degli `Span` in tutto
-///   il modello) mentre le stringhe JS sono UTF-16: si taglia sui byte e si
-///   decodifica, invece di fingere che gli indici coincidano — con l'italiano
-///   accentato non coinciderebbero quasi mai.
-function highlighted(snippet: string, highlights: Span[]): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  const bytes = new TextEncoder().encode(snippet);
-  const decoder = new TextDecoder();
-  let pos = 0;
-  for (const h of highlights) {
-    if (h.start < pos || h.end > bytes.length || h.start >= h.end) continue;
-    frag.append(decoder.decode(bytes.subarray(pos, h.start)));
-    const mark = document.createElement("mark");
-    mark.textContent = decoder.decode(bytes.subarray(h.start, h.end));
-    frag.append(mark);
-    pos = h.end;
-  }
-  frag.append(decoder.decode(bytes.subarray(pos)));
-  return frag;
 }

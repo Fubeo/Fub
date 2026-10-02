@@ -2030,6 +2030,39 @@ describe("cerca", () => {
     await settle();
     expect(textToVideo()).toContain("pane, latte, arance");
   });
+
+  it("l'estratto del risultato taglia sui byte, e il testo del provider resta testo", async () => {
+    const host = await start(VAULT);
+    // Il finto non scrive estratti: la sua risposta passa, con uno aggiunto.
+    // «però» sta ai byte 3..8 e non 3..7, perché la `ò` ne occupa due; i tag
+    // sono testo del provider, e devono restare testo.
+    const answer = host.module.api.queryIndex;
+    vi.spyOn(host.module.api, "queryIndex").mockImplementation(async (query) => {
+      const result = await answer(query);
+      if (result.kind !== "documents") return result;
+      const items = result.value.items.map((row) => ({
+        ...row,
+        snippet: "<b>però</b> arance",
+        highlights: [{ start: 3, end: 8 }],
+      }));
+      return { ...result, value: { ...result.value, items } };
+    });
+    const field = document.querySelector<HTMLInputElement>("#search-input");
+    if (!field) throw new Error("la casella di ricerca non c'è");
+
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor(
+      "l'estratto arriva",
+      () => document.querySelector("#search-results .hit-snippet") !== null,
+    );
+
+    const snippet = document.querySelector<HTMLElement>("#search-results .hit-snippet");
+    if (!snippet) throw new Error("l'estratto non c'è");
+    expect(snippet.textContent).toBe("<b>però</b> arance");
+    expect([...snippet.children].map((e) => e.tagName)).toEqual(["MARK"]);
+    expect(snippet.children[0].textContent).toBe("però");
+  });
 });
 
 describe("ripristina", () => {
