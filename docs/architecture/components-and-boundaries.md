@@ -36,6 +36,7 @@ flowchart LR
     APP --> WASM
     CLI["fub-cli"] --> HOST
     SERVICES["fub-services"] --> ABI
+    LIVE["fub-live"]
     FRONTEND["frontend"] --> APP
 ```
 
@@ -61,6 +62,7 @@ del repository verificano le eccezioni.
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |
+| `fub-live` | sessione live di FubDraw: protocollo, abbinamento, TLS con certificato effimero, server sul PC e client dello scrittore | contratto, kernel, host, Tauri, validazione delle operazioni |
 | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |
 
 ## Dipendenze vietate
@@ -68,6 +70,7 @@ del repository verificano le eccezioni.
 - `fub-abi` → `fub-kernel`, Tauri, Wasmtime o Markdown;
 - `fub-kernel` → `fub-host`, Tauri, Wasmtime o `fub-format-markdown`;
 - `fub-host` → Tauri;
+- `fub-live` → `fub-abi`, `fub-kernel`, `fub-host` o Tauri;
 - qualunque crate diverso da `fub-wasm-host` → Wasmtime;
 - dipendenza normale → `fub-testkit`;
 - file frontend arbitrario → `@tauri-apps`;

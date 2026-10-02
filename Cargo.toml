@@ -19,6 +19,9 @@ members = [
     "crates/fub-host",
     "crates/fub-cli",
     "crates/fub-services",
+    # La sessione live (ADR 0204): protocollo, abbinamento, TLS, server e
+    # client. Non dipende da nessun altro membro; la comporrà `fub-app`.
+    "crates/fub-live",
     "crates/fub-app",
     # M5: host wasmtime per plugin di terzi. La riga era commentata da M1 e
     # `.github/scripts/membri-del-workspace.mjs` la nominava come il caso a un
@@ -151,6 +154,51 @@ ring = "0.17.14"
 base64 = "0.22.1"
 uuid = { version = "1.24.0", features = ["v4"] }
 parking_lot = "0.12.5"
+# Il confronto a tempo costante dei segreti. La versione stava nel manifest di
+# `fub-services`; con `fub-live` i crate che la usano sono due, e la versione
+# torna in un posto solo.
+subtle = "2.6.1"
+# La sessione live (ADR 0204). Queste righe le nomina `fub-live` e nessun altro:
+# `fub-host` resta senza runtime asincrono, e `fub-app` comporrà il servizio sul
+# runtime di Tauri, che è questo stesso `tokio`, già nell'albero.
+#
+# `tokio` senza feature: ognuno accende le proprie nel suo manifest, perché una
+# feature scritta in questa riga la riceverebbe ogni crate che la prende.
+tokio = { version = "1.53.1", default-features = false }
+# Solo il handshake: il TLS lo apre `fub-live` con la propria configurazione, e
+# la feature `connect` porterebbe un connettore con le radici di sistema, cioè
+# l'opposto del certificato confrontato per impronta.
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = [
+    "handshake",
+] }
+futures-util = { version = "0.3.33", default-features = false, features = [
+    "sink",
+    "std",
+] }
+# `rustls` con il solo provider `ring`, come `ureq` in `fub-host`: i default
+# accenderebbero `aws-lc-rs`, un secondo motore crittografico con un build C e
+# CMake, e il TLS 1.2, che la sessione live non parla.
+rustls = { version = "0.23.45", default-features = false, features = [
+    "std",
+    "ring",
+] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = [
+    "ring",
+] }
+# Il certificato effimero della sessione: ECDSA P-256 firmato con `ring`, e la
+# chiave azzerata quando il generatore la lascia.
+rcgen = { version = "0.14.10", default-features = false, features = [
+    "crypto",
+    "ring",
+    "zeroize",
+] }
+# Il QR dell'abbinamento, disegnato in SVG: niente `image`, che porterebbe i
+# decodificatori dei formati raster che nessuno qui apre.
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+# Gli indirizzi delle interfacce di rete, per proporre quello privato della
+# rotta predefinita.
+if-addrs = "0.15.0"
+zeroize = "1.9.0"
 # Il tempo civile (fusi e calendario) di `fub-host` e dei modelli di
 # `fub-features`: una sola versione e un solo insieme di feature per entrambi.
 jiff = { version = "0.2.35", default-features = false, features = [

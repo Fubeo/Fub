@@ -214,6 +214,16 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         1,
         Reason::AnotherSerialize,
     ),
+    (
+        // Le operazioni di un commit della sessione live: il testo JSON
+        // ricevuto dal tablet passa alla shell così com'è, e `serialize` lo
+        // scrive verbatim dentro il messaggio che lo porta. Serde, come gli
+        // altri.
+        "crates/fub-live/src/protocol/ops.rs",
+        ".serialize",
+        1,
+        Reason::AnotherSerialize,
+    ),
 ];
 
 /// L'allowlist per chiave, col rifiuto dei doppioni: due righe per lo stesso
