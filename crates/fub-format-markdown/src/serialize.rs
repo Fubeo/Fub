@@ -47,6 +47,7 @@ use fub_abi::model::{
 use fub_abi::rules::tag::scan_tags;
 use fub_abi::FormatError;
 
+use crate::destination::dest_text;
 use crate::util::longest_run;
 
 /// # Ciò che non si sa scrivere **risale**, non sparisce
@@ -243,7 +244,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
         } => {
             out.push_str(&"#".repeat((*level).clamp(1, 6) as usize));
             out.push(' ');
-            write_inlines(inlines, out)?;
+            write_inlines(inlines, true, out)?;
             out.push('\n');
             // L'ancora esplicita torna **com'era scritta**, sulla stessa riga
             // del titolo — `write_anchor` toglie il `\n` appena scritto e
@@ -259,7 +260,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             anchor,
             span: _,
         } => {
-            write_inlines(inlines, out)?;
+            write_inlines(inlines, true, out)?;
             out.push('\n');
             write_anchor(anchor, out);
         }
@@ -345,7 +346,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                     // si prenderebbe una barra rovescia che non gli serve.
                     let mut cell = String::from(" ");
                     if let Some(c) = row.cells.get(the) {
-                        write_inlines(&c.inlines, &mut cell)?;
+                        write_inlines(&c.inlines, true, &mut cell)?;
                     }
                     normalize_table_cell_breaks(&mut cell);
                     // La barra si escapa mentre si copia, a segmenti: una
@@ -590,13 +591,30 @@ fn write_custom_block(
     Ok(())
 }
 
-/// La fila più lunga di `c` dentro `s`. Serve ai recinti e al codice inline:
-/// il delimitatore deve essere più lungo di ciò che delimita.
-fn write_inlines(inlines: &[Inline], out: &mut String) -> Result<(), FormatError> {
-    for inline in inlines {
-        write_inline(inline, out)?;
+/// Gli inline in fila. `blank_after` dice che cosa segue l'ultimo: uno spazio,
+/// un a capo o niente (`true`: la fine di un paragrafo, di un titolo, di una
+/// cella) oppure un delimitatore (`false`: la chiusura di un'enfasi o di un
+/// link). Ogni inline sa così se dopo di lui viene uno spazio, e un testo che
+/// finisce con `$` lo guarda per sapere se quel dollaro aprirebbe una formula.
+fn write_inlines(
+    inlines: &[Inline],
+    blank_after: bool,
+    out: &mut String,
+) -> Result<(), FormatError> {
+    for (at, inline) in inlines.iter().enumerate() {
+        let blank_next = inlines.get(at + 1).map_or(blank_after, starts_blank);
+        write_inline(inline, blank_next, out)?;
     }
     Ok(())
+}
+
+/// Ciò che l'inline scrive comincia con uno spazio o un a capo?
+fn starts_blank(inline: &Inline) -> bool {
+    match inline {
+        Inline::Text(s) => s.starts_with(char::is_whitespace),
+        Inline::HardBreak | Inline::SoftBreak => true,
+        _ => false,
+    }
 }
 
 /// GFM non consente a un a-capo grezzo dentro una cella: il duro diventa
@@ -626,12 +644,12 @@ fn normalize_table_cell_breaks(cell: &mut String) {
 /// disponibile, ed è saltarlo in silenzio. Il ramo `Inline::Custom { .. } => {}`
 /// non era una svista da cambiare in una riga: era l'unica cosa che quella
 /// firma permettesse di scrivere.
-fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
+fn write_inline(inline: &Inline, blank_after: bool, out: &mut String) -> Result<(), FormatError> {
     match inline {
-        Inline::Text(s) => write_text(s, out),
+        Inline::Text(s) => write_text(s, blank_after, out),
         Inline::Emph(children) => {
             out.push('*');
-            write_inlines(children, out)?;
+            write_inlines(children, false, out)?;
             out.push('*');
         }
         // L'apice e il barrato si riscrivono con il loro delimitatore: sono
@@ -640,17 +658,17 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
         // e nessuno dei due è enfasi.
         Inline::Superscript(children) => {
             out.push('^');
-            write_inlines(children, out)?;
+            write_inlines(children, false, out)?;
             out.push('^');
         }
         Inline::Strikethrough(children) => {
             out.push_str("~~");
-            write_inlines(children, out)?;
+            write_inlines(children, false, out)?;
             out.push_str("~~");
         }
         Inline::Strong(children) => {
             out.push_str("**");
-            write_inlines(children, out)?;
+            write_inlines(children, false, out)?;
             out.push_str("**");
         }
         // I due a-capo si riscrivono nella forma che rileggendola torna lo
@@ -771,14 +789,15 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
 /// Ogni barra rovescia in più è un byte nel file dell'utente, quindi il criterio
 /// non è «tutta la punteggiatura ASCII» ma «questo carattere, **qui**, rileggerebbe
 /// come sintassi»: `_` solo fuori da una parola, `<` solo davanti a un nome,
-/// `~ = %` solo raddoppiati, `^` solo dove sarebbe un marcatore d'ancora, `#`
-/// solo dove [`scan_tags`] prende un tag — che non è una regola somigliante,
+/// `~ = %` solo raddoppiati, `$` solo davanti a ciò che non è spazio (anche
+/// quando è l'inline che segue, per questo `blank_after`), `^` solo dove sarebbe
+/// un marcatore d'ancora, `#` solo dove [`scan_tags`] prende un tag — che non è una regola somigliante,
 /// è **la** regola, chiamata qui perché sia la stessa da tutt'e due i lati.
 ///
 /// La `&` resta fuori di proposito: escaparla riscriverebbe come letterale
 /// un'entità che il documento aveva (`&amp;` → `\&amp;`), che è la stessa
 /// specie di danno con il segno cambiato.
-fn write_text(s: &str, out: &mut String) {
+fn write_text(s: &str, blank_after: bool, out: &mut String) {
     // L'insieme dei punti di tag, come vettore: `scan_tags` li torna in
     // ordine di sorgente, e la membership di un indice crescente su un vettore
     // ordinato è una ricerca binaria senza pagare l'hash di ogni domanda.
@@ -813,7 +832,7 @@ fn write_text(s: &str, out: &mut String) {
             }
             '<' => after.is_some_and(|d| d.is_alphanumeric() || "/!?".contains(d)),
             '~' | '=' | '%' => after == Some(c),
-            '$' => after.is_some_and(|d| !d.is_whitespace()),
+            '$' => after.map_or(!blank_after, |d| !d.is_whitespace()),
             '^' => {
                 before.is_none_or(char::is_whitespace) && after.is_some_and(char::is_alphanumeric)
             }
@@ -844,50 +863,12 @@ fn write_text(s: &str, out: &mut String) {
 ///
 /// Dentro le angolari si escapano `<`, `>` e `\`, cioè i tre soli caratteri che
 /// chiuderebbero o storcerebbero la parentesi. Le parentesi tonde **bilanciate**
-/// restano nude: sono legali così, ed è la forma che l'utente ha scritto.
+/// restano nude: sono legali così, ed è la forma che l'utente ha scritto. In
+/// entrambe le forme la `&` che aprirebbe un riferimento a entità si scrive
+/// come entità a sua volta. La grammatica sta in [`crate::destination`], che
+/// la riscrittura di un link usa senza passare da qui.
 fn write_dest(url: &str, out: &mut String) {
-    if bare_dest(url) {
-        out.push_str(url);
-        return;
-    }
-    out.push('<');
-    for c in url.chars() {
-        if matches!(c, '<' | '>' | '\\') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out.push('>');
-}
-
-/// La destinazione si può scrivere senza le parentesi angolari?
-///
-/// Il ciclo è scritto a `if` e non a `match` di proposito: un `match` qui
-/// vorrebbe il braccio muto `_ => {}` per il carattere ordinario, e
-/// `nessun_ramo_muto` (`tests/serialize_non_cancella.rs`) lo legge come una
-/// cancellazione silenziosa. Ha ragione a leggerlo così ovunque scriva, e qui
-/// non scrive — ma un presidio che deve distinguere i due casi si guarda le
-/// eccezioni invece del file, e allora conviene non avere il braccio.
-fn bare_dest(url: &str) -> bool {
-    if url.is_empty() {
-        return false;
-    }
-    let mut depth: i32 = 0;
-    for c in url.chars() {
-        if matches!(c, '<' | '>' | '\\') || c.is_whitespace() || c.is_control() {
-            return false;
-        }
-        if c == '(' {
-            depth += 1;
-        }
-        if c == ')' {
-            depth -= 1;
-            if depth < 0 {
-                return false;
-            }
-        }
-    }
-    depth == 0
+    out.push_str(&dest_text(url));
 }
 
 /// Converte la sorgente prodotta da [`write_inlines`] nella sua forma interna
@@ -947,7 +928,7 @@ fn write_link(
             out.push_str(&inner);
             if let Some(inlines) = label {
                 let mut lbl = String::new();
-                write_inlines(inlines, &mut lbl)?;
+                write_inlines(inlines, false, &mut lbl)?;
                 // Il writer generale parte dal testo decodificato. Dentro un
                 // wikilink `]` e `|` vanno quindi ricodificati anche quando nel
                 // modello non portano più la barra rovescia della sorgente.
@@ -969,7 +950,7 @@ fn write_link(
         LinkTarget::Url(url) | LinkTarget::Path(url) => {
             out.push('[');
             if let Some(inlines) = label {
-                write_inlines(inlines, out)?;
+                write_inlines(inlines, false, out)?;
             }
             out.push_str("](");
             write_dest(url, out);

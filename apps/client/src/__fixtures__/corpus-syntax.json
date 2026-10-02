@@ -4,140 +4,160 @@
     "source": "# Titolo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "heading setext",
     "source": "Titolo\n===\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "heading di ogni livello",
     "source": "# a\n\n## b\n\n### c\n\n#### d\n\n##### e\n\n###### f\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "due heading omonimi",
     "source": "## Note\n\nprima\n\n## Note\n\nseconda\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "heading con ancora esplicita",
     "source": "## Titolo ^Mio-ID\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "paragrafo",
     "source": "Un paragrafo qualunque.\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "lista non ordinata",
     "source": "- a\n- b\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "lista ordinata",
     "source": "1. a\n2. b\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "lista annidata",
     "source": "- a\n  - b\n    - c\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "code block recintato",
     "source": "```\nx\n```\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "code block con linguaggio",
     "source": "```rust\nfn main() {}\n```\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "code block indentato",
     "source": "    quattro spazi\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "code block non chiuso",
     "source": "```rs\nsenza chiusura\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "code block con dentro ciò che fuori sarebbe sintassi",
     "source": "```md\n[[Nota]] e #tag e - [ ] task e ==evidenziato==\n```\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "codice inline con dentro ciò che fuori sarebbe sintassi",
     "source": "prima `[[Nota]] #tag` dopo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "citazione",
     "source": "> citata\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "citazione annidata",
     "source": "> > due volte\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "riga orizzontale",
     "source": "***\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "tabella con sola intestazione",
     "source": "| a |\n| - |\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "tabella con allineamenti",
     "source": "| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "tabella con inline nelle celle",
@@ -151,7 +171,8 @@
         "to": 27
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "task vuota",
@@ -164,7 +185,8 @@
         "from": 3,
         "to": 4
       }
-    ]
+    ],
+    "math": []
   },
   {
     "name": "task fatta",
@@ -177,7 +199,8 @@
         "from": 3,
         "to": 4
       }
-    ]
+    ],
+    "math": []
   },
   {
     "name": "task a stato personalizzato",
@@ -190,49 +213,56 @@
         "from": 3,
         "to": 4
       }
-    ]
+    ],
+    "math": []
   },
   {
     "name": "enfasi",
     "source": "*enfasi*\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "forte",
     "source": "**forte**\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "codice inline",
     "source": "`codice`\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "enfasi dentro forte",
     "source": "**forte con *enfasi* dentro**\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "link markdown a un path",
     "source": "[etichetta](nota.md)\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "link markdown a un url",
     "source": "[etichetta](https://esempio.invalid/a)\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "wikilink",
@@ -246,7 +276,8 @@
         "to": 8
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "wikilink completo",
@@ -260,7 +291,8 @@
         "to": 29
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "wikilink al solo heading",
@@ -274,7 +306,8 @@
         "to": 12
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "wikilink al solo blocco",
@@ -288,7 +321,8 @@
         "to": 16
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "wikilink a un heading e basta",
@@ -302,7 +336,8 @@
         "to": 16
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "embed di wikilink",
@@ -316,7 +351,8 @@
         "to": 9
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "embed di un blocco",
@@ -330,7 +366,8 @@
         "to": 17
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "link con del testo attorno fuori da un paragrafo",
@@ -350,14 +387,16 @@
         "to": 65
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "embed di immagine",
     "source": "![alt](figura.png)\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "tag",
@@ -370,7 +409,8 @@
       }
     ],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "tag annidato",
@@ -383,7 +423,8 @@
       }
     ],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "tag ai confini della regola",
@@ -411,154 +452,289 @@
       }
     ],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "softbreak",
     "source": "una riga\nun'altra\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "linebreak",
     "source": "una riga  \nun'altra\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "barrato",
     "source": "~~barrato~~\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "apice",
     "source": "testo ^apice^ qui\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "link di riferimento",
     "source": "[a][rif]\n\n[rif]: nota.md\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "reference definition isolata",
     "source": "[rif]: nota.md\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "reference definition con titolo",
     "source": "[r]: nota.md \"titolo\"\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "reference definition e paragrafo misto",
     "source": "[r]: nota.md\nparagrafo residuo sulla seconda riga\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "reference definition dentro una citazione",
     "source": "> [r]: nota.md\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "reference definition adiacenti",
     "source": "[uno]: a.md\n[due]: b.md \"due\"\n\nil testo che le segue\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "callout senza titolo",
     "source": "> [!note]\n> corpo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "callout con titolo",
     "source": "> [!warning] Attenzione\n> corpo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "callout di ogni tipo",
     "source": "> [!note]\n> a\n\n> [!tip]\n> b\n\n> [!important]\n> c\n\n> [!warning]\n> d\n\n> [!caution]\n> e\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "footnote",
     "source": "una nota[^n]\n\n[^n]: il corpo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
+  },
+  {
+    "name": "definizioni di nota di una parola sola",
+    "source": "a[^1] b[^2] c[^3]\n\n[^1]: [[Nota]]\n\n[^2]: #tag\n\n[^3]: $x$\nseguito $y$\n",
+    "tag": [
+      {
+        "name": "tag",
+        "from": 41,
+        "to": 45
+      }
+    ],
+    "wikilink": [
+      {
+        "page": "Nota",
+        "embed": false,
+        "from": 25,
+        "to": 33
+      }
+    ],
+    "task": [],
+    "math": [
+      {
+        "from": 53,
+        "to": 56,
+        "tex": "x",
+        "block": false
+      },
+      {
+        "from": 65,
+        "to": 68,
+        "tex": "y",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "definizioni di nota con la regola di comrak",
+    "source": "r[^a] [^b c] [^d]\n\n[^a]:#uno\n\n[^b c]: #due\n\n$x\n[^d]: y$ #tre\n",
+    "tag": [
+      {
+        "name": "uno",
+        "from": 24,
+        "to": 28
+      },
+      {
+        "name": "tre",
+        "from": 56,
+        "to": 60
+      }
+    ],
+    "wikilink": [],
+    "task": [],
+    "math": []
+  },
+  {
+    "name": "sintassi dentro una formula",
+    "source": "x $a [[b]] c$ e ![[d]] $e ![[f]]$\n\nla $g\n[[h]] #i$ fine\n\n[[j $k]] l$\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "d",
+        "embed": true,
+        "from": 16,
+        "to": 22
+      },
+      {
+        "page": "j $k",
+        "embed": false,
+        "from": 57,
+        "to": 65
+      }
+    ],
+    "task": [],
+    "math": [
+      {
+        "from": 2,
+        "to": 13,
+        "tex": "a [[b]] c",
+        "block": false
+      },
+      {
+        "from": 23,
+        "to": 33,
+        "tex": "e ![[f]]",
+        "block": false
+      },
+      {
+        "from": 38,
+        "to": 50,
+        "tex": "g [[h]] #i",
+        "block": false
+      }
+    ]
   },
   {
     "name": "definition list",
     "source": "Termine\n\n: la definizione\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "html a blocco",
     "source": "<div>blocco</div>\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "html inline",
     "source": "un <b>grassetto</b> inline\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "commento html",
     "source": "<!-- un commento -->\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "formula in riga",
     "source": "vale $\\{x \\mid x>0\\}$ e $a*b*c\\,d$\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": [
+      {
+        "from": 5,
+        "to": 21,
+        "tex": "\\{x \\mid x>0\\}",
+        "block": false
+      },
+      {
+        "from": 24,
+        "to": 34,
+        "tex": "a*b*c\\,d",
+        "block": false
+      }
+    ]
   },
   {
     "name": "formula a display",
     "source": "prima\n\n$$\n\\sum_{i=1}^n i\n$$\n\ndopo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": [
+      {
+        "from": 7,
+        "to": 27,
+        "tex": "\n\\sum_{i=1}^n i\n",
+        "block": true
+      }
+    ]
   },
   {
     "name": "dollari che non sono formule",
     "source": "costa $5, \\$x\\$ resta testo e `$y$` è codice\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "formula che scavalcherebbe il codice",
@@ -571,49 +747,389 @@
       }
     ],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
+  },
+  {
+    "name": "una cifra dopo il dollaro non lo chiude",
+    "source": "vale $x$2, costa $5 o $y$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 22,
+        "to": 25,
+        "tex": "y",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "formula a capo nel paragrafo",
+    "source": "la somma $a +\nb$ vale\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 9,
+        "to": 16,
+        "tex": "a + b",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "formula a capo in una citazione e in una voce",
+    "source": "> cita $a\n> b$\n\n- voce $c\n  d$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 7,
+        "to": 14,
+        "tex": "a b",
+        "block": false
+      },
+      {
+        "from": 23,
+        "to": 30,
+        "tex": "c d",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "doppi dollari in mezzo al testo",
+    "source": "dopo $$x$$ qui e $$a$$ b $$c$$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 5,
+        "to": 10,
+        "tex": "x",
+        "block": false
+      },
+      {
+        "from": 17,
+        "to": 22,
+        "tex": "a",
+        "block": false
+      },
+      {
+        "from": 25,
+        "to": 30,
+        "tex": "c",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "formula a display che segue il testo",
+    "source": "testo\n$$x$$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 6,
+        "to": 11,
+        "tex": "x",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "dollari ai bordi",
+    "source": "$$$x$$$ e $ y$ e $y $ e $$ $$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 24,
+        "to": 29,
+        "tex": " ",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "backslash prima dei dollari",
+    "source": "$a\\\\$ b$ e \\$$x$$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 0,
+        "to": 8,
+        "tex": "a\\\\$ b",
+        "block": false
+      },
+      {
+        "from": 13,
+        "to": 16,
+        "tex": "x",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "il codice prima della formula e la formula prima del codice",
+    "source": "`$x` y$z$\n\na $w `b$` e $v$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 6,
+        "to": 9,
+        "tex": "z",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "formule in un titolo e in una cella",
+    "source": "# titolo $x$ #\n\n| a | b |\n|---|---|\n| $y$ | `$` $z$ |\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 9,
+        "to": 12,
+        "tex": "x",
+        "block": false
+      },
+      {
+        "from": 38,
+        "to": 41,
+        "tex": "y",
+        "block": false
+      },
+      {
+        "from": 48,
+        "to": 51,
+        "tex": "z",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "uno spazio non ascii non ferma i dollari",
+    "source": "$a $ e $ b$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 0,
+        "to": 4,
+        "tex": "a ",
+        "block": false
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "tex": " b",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "formula che attraversa un'enfasi",
+    "source": "*a $b* c$ e [t](u$) $e$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 3,
+        "to": 9,
+        "tex": "b* c",
+        "block": false
+      },
+      {
+        "from": 20,
+        "to": 23,
+        "tex": "e",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "formula a display in una citazione",
+    "source": "> $$\n> \\int f\n> $$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 2,
+        "to": 18,
+        "tex": "\n\\int f\n",
+        "block": true
+      }
+    ]
+  },
+  {
+    "name": "formula a display in una voce con casella",
+    "source": "- [ ] $$x$$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [
+      {
+        "symbol": null,
+        "from": 3,
+        "to": 4
+      }
+    ],
+    "math": [
+      {
+        "from": 6,
+        "to": 11,
+        "tex": "x",
+        "block": true
+      }
+    ]
+  },
+  {
+    "name": "una casella che non apre la voce è testo",
+    "source": "- a\n\n  [ ] $$x$$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 11,
+        "to": 16,
+        "tex": "x",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "formula a display con un id di blocco",
+    "source": "$$x$$ ^abc\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 0,
+        "to": 5,
+        "tex": "x",
+        "block": true
+      }
+    ]
+  },
+  {
+    "name": "un cancelletto dentro una formula non è un tag",
+    "source": "$a #b$ e #c\n\n$$x #y$$\n\nla $u\n#v$ fine\n",
+    "tag": [
+      {
+        "name": "c",
+        "from": 9,
+        "to": 11
+      }
+    ],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 0,
+        "to": 6,
+        "tex": "a #b",
+        "block": false
+      },
+      {
+        "from": 13,
+        "to": 21,
+        "tex": "x #y",
+        "block": true
+      },
+      {
+        "from": 26,
+        "to": 32,
+        "tex": "u #v",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "un wikilink aperto prima vince sulla formula",
+    "source": "[[a$]] b #t$\n",
+    "tag": [
+      {
+        "name": "t",
+        "from": 9,
+        "to": 11
+      }
+    ],
+    "wikilink": [
+      {
+        "page": "a$",
+        "embed": false,
+        "from": 0,
+        "to": 6
+      }
+    ],
+    "task": [],
+    "math": []
   },
   {
     "name": "frontmatter",
     "source": "---\ntitolo: X\n---\n\n# Corpo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "frontmatter con ogni specie di proprietà",
     "source": "---\ntesto: X\nnumero: 4\nvero: true\nvuota:\ndata: 2026-07-30\nquando: 2026-07-30T10:30:00+02:00\nelenco: [a, b]\nrelazione: \"[[Nota]]\"\nannidata:\n  a: 1\n---\n\nx\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "frontmatter illeggibile",
     "source": "---\n--- non una chiave\nb: 2\n---\n\nx\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "ancora di paragrafo",
     "source": "Un paragrafo ^abc123\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "ancora su riga propria",
     "source": "Un paragrafo\n\n^abc123\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "ancora che non è un'ancora",
     "source": "2^10 = 1024\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "crlf",
@@ -627,14 +1143,16 @@
         "to": 37
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "cr solo",
     "source": "# Titolo\rUn paragrafo.\r",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "cr solo su più blocchi",
@@ -660,7 +1178,8 @@
         "from": 60,
         "to": 61
       }
-    ]
+    ],
+    "math": []
   },
   {
     "name": "un cr nudo in mezzo a un file a lf",
@@ -674,7 +1193,8 @@
         "to": 24
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "terminatori misti",
@@ -688,49 +1208,56 @@
         "to": 37
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "bom",
     "source": "﻿# Titolo\n\nUn paragrafo.\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "bom e frontmatter",
     "source": "﻿---\na: 1\n---\n\n# Corpo\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "senza newline finale",
     "source": "Una riga sola senza a capo",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "solo un bom",
     "source": "﻿",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "vuoto",
     "source": "",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "solo spazi",
     "source": "   \n\n  \t\n",
     "tag": [],
     "wikilink": [],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "fuori dal bmp",
@@ -750,7 +1277,8 @@
         "to": 29
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "nfd nel contenuto",
@@ -764,7 +1292,8 @@
         "to": 23
       }
     ],
-    "task": []
+    "task": [],
+    "math": []
   },
   {
     "name": "un documento intero",
@@ -830,6 +1359,7 @@
         "from": 200,
         "to": 201
       }
-    ]
+    ],
+    "math": []
   }
 ]

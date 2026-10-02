@@ -10,7 +10,7 @@
 //! `div.math-block` quando `$$…$$` è tutto il paragrafo).
 
 use fub_abi::format::{FormatProvider, ParseContext, RenderOptions};
-use fub_abi::model::{custom_kind, Block, DocumentModel, Inline, LinkTarget};
+use fub_abi::model::{custom_kind, Block, DocId, DocumentModel, Inline, LinkTarget, Span};
 use fub_format_markdown::MarkdownProvider;
 
 fn parse_with(src: &str, ctx: &ParseContext) -> DocumentModel {
@@ -176,4 +176,49 @@ fn the_pass_returns_to_the_same_bytes() {
         assert_eq!(rewritten, source, "the rewrite changes the document");
         assert_eq!(parse(&rewritten), doc, "the pass is not stable");
     }
+}
+
+/// **Un dollaro letterale in coda al testo guarda ciò che lo segue.** Davanti a
+/// una formula, a un'enfasi o al delimitatore che chiude la sua, scritto nudo
+/// aprirebbe una formula al giro dopo; davanti a uno spazio, a un a capo o alla
+/// fine del paragrafo resta nudo, senza un byte in più.
+#[test]
+fn a_literal_dollar_before_another_inline_stays_literal() {
+    for source in [
+        "\\$$x$$\n",
+        "a \\$*b* c$\n",
+        "*a \\$* b$\n",
+        "[a \\$](u) b$\n",
+        "a $\nb$ c\n",
+        "# costa 5$\n",
+        "| costa 5$ |\n| --- |\n",
+    ] {
+        let doc = parse(source);
+        let rewritten = MarkdownProvider::new()
+            .serialize(&doc)
+            .expect("the model serializes");
+        assert_eq!(rewritten, source, "the rewrite changes the document");
+        assert_eq!(parse(&rewritten), doc, "the pass is not stable");
+    }
+}
+
+/// **Il testo che segue conta anche quando è un altro nodo.** Il parser fonde i
+/// testi vicini, un modello costruito a mano no: un `$` in coda a un testo che
+/// precede `" al chilo"` resta nudo, e quello davanti a un'enfasi no.
+#[test]
+fn a_dollar_looks_at_the_next_text_node_too() {
+    let mut doc = DocumentModel::empty(DocId::new("nota.md"));
+    doc.body = vec![Block::Paragraph {
+        inlines: vec![
+            Inline::Text("costa 5$".into()),
+            Inline::Text(" al chilo, $".into()),
+            Inline::Emph(vec![Inline::Text("b".into())]),
+        ],
+        anchor: None,
+        span: Span::new(0, 0),
+    }];
+    let rewritten = MarkdownProvider::new()
+        .serialize(&doc)
+        .expect("the model serializes");
+    assert_eq!(rewritten, "costa 5$ al chilo, \\$*b*\n");
 }

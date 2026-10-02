@@ -1,6 +1,6 @@
 import type { SyntaxNode } from "@lezer/common";
-import { markdownLanguage } from "@codemirror/lang-markdown";
 import { inlineDelimiters, scanTags, spans, wikilink, type FoundWikilink } from "../../../../rules/syntax";
+import { markdownGrammar } from "./grammar";
 import type { MarkdownRenderContext } from "./render-types";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -78,34 +78,215 @@ export function embedHtml(link: Pick<FoundWikilink, "page" | "heading" | "block"
 
 interface Piece { from: number; to: number; priority?: number; html: () => string }
 
-interface InlineMath {
-  readonly from: number;
-  readonly to: number;
-  readonly contentFrom: number;
-  readonly contentTo: number;
-}
-
 function escaped(value: string, at: number): boolean {
   let slashes = 0;
   for (let index = at - 1; index >= 0 && value[index] === "\\"; index--) slashes++;
   return slashes % 2 === 1;
 }
 
-export function scanInlineMath(value: string): InlineMath[] {
-  const found: InlineMath[] = [];
-  for (let from = 0; from < value.length; from++) {
-    if (value[from] !== "$" || value[from + 1] === "$" || escaped(value, from)) continue;
-    const contentFrom = from + 1;
-    if (contentFrom >= value.length || /\s/.test(value[contentFrom]!)) continue;
-    for (let to = contentFrom + 1; to < value.length; to++) {
-      if (value[to] !== "$" || value[to + 1] === "$" || escaped(value, to)) continue;
-      if (/\s/.test(value[to - 1]!)) continue;
-      if (value.slice(contentFrom, to).trim() === "") break;
-      found.push({ from, to: to + 1, contentFrom, contentTo: to });
-      from = to;
-      break;
+/// Una formula fra dollari: `from`/`to` coprono anche i dollari, `tex` è il
+/// sorgente come lo porta il modello del provider.
+export interface DollarMath {
+  readonly from: number;
+  readonly to: number;
+  /// `$$…$$`: in mezzo al testo resta in riga, da sola nel paragrafo è un blocco.
+  readonly display: boolean;
+  readonly tex: string;
+}
+
+interface Range { readonly from: number; readonly to: number }
+
+/// Gli spazi e le cifre di comrak sono quelli ASCII: un NBSP non è uno spazio.
+function blank(character: string | undefined): boolean {
+  return character === " " || character === "\t" || character === "\n" || character === "\v"
+    || character === "\f" || character === "\r";
+}
+
+function digit(character: string | undefined): boolean {
+  return character !== undefined && character >= "0" && character <= "9";
+}
+
+/// Dove chiude la formula aperta da `fence` dollari prima di `from`: l'indice
+/// del primo dollaro di chiusura, o -1. `$$…$$` chiude sul primo `$$`. Per
+/// `$…$`, `failed.at` ricorda il dollaro su cui una ricerca precedente si è
+/// fermata senza chiudere: ogni dollaro prima di lui l'aveva saltato, quindi
+/// chi parte prima di lui finisce lì anche lui, e la lettura resta lineare.
+function closing(value: string, from: number, fence: number, failed: { at: number }): number {
+  if (fence === 2) return value.indexOf("$$", from);
+  if (blank(value[from]) || from <= failed.at) return -1;
+  for (let at = from; ; at++) {
+    at = value.indexOf("$", at);
+    if (at < 0) {
+      failed.at = value.length;
+      return -1;
     }
+    if (value[at - 1] === "\\") continue;
+    if (blank(value[at - 1]) || digit(value[at + 1])) {
+      failed.at = at;
+      return -1;
+    }
+    return at;
   }
+}
+
+/// Il TeX che il provider legge fra i dollari. Le righe dopo la prima perdono
+/// il rientro, come nel paragrafo di comrak; in riga gli a capo diventano
+/// spazi, a display il testo resta com'è scritto.
+function texOf(content: string, display: boolean): string {
+  const lines = content.split("\n");
+  for (let index = 1; index < lines.length; index++) lines[index] = lines[index]!.replace(/^[ \t]+/, "");
+  return lines.join(display ? "\n" : " ");
+}
+
+/// **La regola delle formule fra dollari**, la stessa di `math_dollars` di
+/// comrak che il provider accende (`parse.rs`): Lettura, anteprima dal vivo e
+/// azioni leggono le formule soltanto da qui, e la famiglia `math` del corpus
+/// comune la confronta col modello del provider.
+///
+/// `value` è il testo di **un** contenitore di inline (paragrafo, titolo,
+/// cella), che una formula può attraversare da una riga all'altra. Apre un
+/// dollaro non protetto da backslash e fuori dagli intervalli `opaque`, in
+/// ordine (codice, HTML, destinazioni: lì comrak non legge dollari); tre o più
+/// dollari di fila sono testo. `$…$` non comincia con uno spazio e chiude sul
+/// primo dollaro che non segue un backslash, se non segue uno spazio e non
+/// precede una cifra (`$5 e $6` non è una formula); `$$…$$` chiude sul primo
+/// `$$`. La ricerca della chiusura non guarda `opaque`: comrak legge i dollari
+/// prima del codice. Una formula che ingoia un backtick lascia il contenitore
+/// senza formule, come `code_beats_dollars` del provider.
+export function scanDollarMath(value: string, opaque: readonly Range[] = []): DollarMath[] {
+  const found: DollarMath[] = [];
+  const failed = { at: -1 };
+  let next = 0;
+  const hidden = (at: number) => {
+    while (next < opaque.length && opaque[next]!.to <= at) next++;
+    return next < opaque.length && opaque[next]!.from <= at;
+  };
+  let at = value.indexOf("$");
+  while (at >= 0) {
+    if (escaped(value, at) || hidden(at)) {
+      at = value.indexOf("$", at + 1);
+      continue;
+    }
+    let fence = 1;
+    while (value[at + fence] === "$") fence++;
+    const close = fence > 2 ? -1 : closing(value, at + fence, fence, failed);
+    if (close < 0) {
+      at = value.indexOf("$", at + fence);
+      continue;
+    }
+    const tex = texOf(value.slice(at + fence, close), fence === 2);
+    if (tex.includes("`")) return [];
+    found.push({ from: at, to: close + fence, display: fence === 2, tex });
+    at = value.indexOf("$", close + fence);
+  }
+  return found;
+}
+
+/// I blocchi che il provider legge come un solo testo di inline: una formula
+/// sta tutta in uno di loro.
+const MATH_CONTAINERS: Record<string, true> = {
+  Paragraph: true, Task: true, TableCell: true, SetextHeading1: true, SetextHeading2: true,
+  ATXHeading1: true, ATXHeading2: true, ATXHeading3: true, ATXHeading4: true, ATXHeading5: true, ATXHeading6: true,
+};
+/// Marcatori di blocco dentro un contenitore: comrak li toglie prima di
+/// leggere gli inline, qui valgono come spazi (gli offset restano quelli).
+/// Quelli di un titolo non toccano mai un dollaro, e non servono. La casella
+/// comrak la toglie soltanto dal primo blocco della voce: negli altri
+/// paragrafi che Lezer legge come `Task` resta testo.
+function blockMark(child: SyntaxNode, container: SyntaxNode): boolean {
+  if (child.name === "QuoteMark") return true;
+  if (child.name !== "TaskMarker") return false;
+  let before = container.prevSibling;
+  while (before?.name === "ListMark") before = before.prevSibling;
+  return before === null;
+}
+
+export function isMathContainer(name: string): boolean {
+  return MATH_CONTAINERS[name] === true;
+}
+
+/// Le formule di un contenitore, in posizioni assolute, col suo testo come lo
+/// legge comrak: i marcatori di blocco diventano spazi.
+export interface ContainerMath {
+  readonly from: number;
+  readonly text: string;
+  readonly formulas: readonly DollarMath[];
+}
+
+/// Le formule del contenitore `container`, il cui testo è `text`.
+export function containerMath(text: string, container: SyntaxNode): ContainerMath {
+  const base = container.from;
+  if (!text.includes("$")) return { from: base, text, formulas: [] };
+  const opaque: Range[] = [];
+  const marks: Range[] = [];
+  const walk = (node: SyntaxNode) => {
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      const range = { from: child.from - base, to: child.to - base };
+      if (blockMark(child, container)) marks.push(range);
+      // Un URL nudo resta testo anche per comrak; quello di un link no.
+      else if (LITERAL_NODES[child.name] || child.name === "LinkTitle"
+        || (child.name === "URL" && (node.name === "Link" || node.name === "Image"))) opaque.push(range);
+      else walk(child);
+    }
+  };
+  walk(container);
+  let value = "";
+  let position = 0;
+  for (const mark of marks) {
+    value += text.slice(position, mark.from) + " ".repeat(mark.to - mark.from);
+    position = mark.to;
+  }
+  value += text.slice(position);
+  // In una cella `\|` è una pipe già prima degli inline (GFM).
+  const cell = container.name === "TableCell";
+  const formulas = scanDollarMath(value, opaque).map((formula) => ({
+    from: base + formula.from,
+    to: base + formula.to,
+    display: formula.display,
+    tex: cell ? formula.tex.replace(/\\\|/g, "|") : formula.tex,
+  }));
+  return { from: base, text: value, formulas };
+}
+
+/// Il TeX del blocco che fa un contenitore composto, fino a `to`, soltanto da
+/// una formula `$$…$$` e da spazi: `display_math` della resa del provider.
+export function mathBlock(math: ContainerMath, to = math.from + math.text.length): string | null {
+  const only = math.formulas[0];
+  if (only === undefined || !only.display || only.to > to) return null;
+  const outside = math.text.slice(0, only.from - math.from) + math.text.slice(only.to - math.from, to - math.from);
+  return /\S/.test(outside) ? null : only.tex.trim();
+}
+
+const mathCache = new WeakMap<MarkdownRenderContext, Map<string, ContainerMath>>();
+
+/// `containerMath` per la resa, calcolato una volta per contenitore.
+export function mathOf(context: MarkdownRenderContext, container: SyntaxNode): ContainerMath {
+  let byContainer = mathCache.get(context);
+  if (!byContainer) mathCache.set(context, byContainer = new Map());
+  const key = `${container.name}:${container.from}:${container.to}`;
+  let found = byContainer.get(key);
+  if (!found) {
+    found = containerMath(context.source.slice(container.from, container.to), container);
+    byContainer.set(key, found);
+  }
+  return found;
+}
+
+/// Le formule che toccano `[from, to)` sotto `node`: quelle del contenitore
+/// che lo racchiude, o di quelli che contiene.
+function formulasAround(context: MarkdownRenderContext, node: SyntaxNode, from: number, to: number): readonly DollarMath[] {
+  for (let up: SyntaxNode | null = node; up; up = up.parent) {
+    if (MATH_CONTAINERS[up.name]) return mathOf(context, up).formulas;
+  }
+  const found: DollarMath[] = [];
+  const down = (current: SyntaxNode) => {
+    for (let child = current.firstChild; child; child = child.nextSibling) {
+      if (child.to <= from || child.from >= to) continue;
+      if (MATH_CONTAINERS[child.name]) found.push(...mathOf(context, child).formulas);
+      else down(child);
+    }
+  };
+  down(node);
   return found;
 }
 
@@ -210,8 +391,15 @@ function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
 /** One source-mapped renderer for both block widgets and the reading surface. */
 export function renderInline(context: MarkdownRenderContext, from: number, to: number, node?: SyntaxNode): string {
   if (from >= to) return "";
-  const root = node ?? markdownLanguage.parser.parse(context.source).topNode;
+  const root = node ?? markdownGrammar.parser.parse(context.source).topNode;
   const pieces: Piece[] = [];
+  const formulas = formulasAround(context, root, from, to);
+  // Lezer non conosce le formule: un suo nodo che ne tocca una senza
+  // contenerla (`*a $b* c$`) non è un'enfasi per il provider, e se ne leggono
+  // i figli.
+  const crosses = (current: SyntaxNode) => formulas.some((formula) =>
+    formula.from < current.to && current.from < formula.to
+    && (formula.from < current.from || current.to < formula.to));
   const protectedRanges: Array<{ from: number; to: number }> = [];
   function protect(current: SyntaxNode): void {
     if (current.to <= from || current.from >= to) return;
@@ -224,7 +412,7 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
   function collectPieces(current: SyntaxNode): void {
     for (let child = current.firstChild; child; child = child.nextSibling) {
       if (child.to <= from || child.from >= to) continue;
-      if (child.from >= from && child.to <= to && child.to > child.from) {
+      if (child.from >= from && child.to <= to && child.to > child.from && !crosses(child)) {
         const captured = child;
         pieces.push({ from: child.from, to: child.to, html: () => renderNode(context, captured) });
       } else {
@@ -234,6 +422,13 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
   }
   collectPieces(root);
   protect(root);
+  for (const { from: start, to: end, tex } of formulas) {
+    pieces.push({
+      from: start,
+      to: end,
+      html: () => `<span class="math-inline" data-tex="${escapeHtml(tex)}"${sourceAttributes(start, end)}>${escapeHtml(tex)}</span>`,
+    });
+  }
   const free = (start: number, end: number) => protectedRanges.every((range) => end <= range.from || start >= range.to);
   const delimiters = inlineDelimiters(context.forms);
   let lineFrom = from;
@@ -252,17 +447,6 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
         to: end,
         priority: 3,
         html: () => `<sup class="footnote-inline"${sourceAttributes(start, end)}>${renderInline(context, base + note.contentFrom, base + note.contentTo, root)}</sup>`,
-      });
-    }
-    for (const math of scanInlineMath(row)) {
-      const start = base + math.from, end = base + math.to;
-      if (!free(start, end)) continue;
-      const tex = row.slice(math.contentFrom, math.contentTo);
-      pieces.push({
-        from: start,
-        to: end,
-        priority: 2,
-        html: () => `<span class="math-inline" data-tex="${escapeHtml(tex)}"${sourceAttributes(start, end)}>${escapeHtml(tex)}</span>`,
       });
     }
     for (const link of wikilink(row)) {

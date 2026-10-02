@@ -57,6 +57,11 @@ describe("MarkdownProfile", () => {
     initial.dispatch({ selection: EditorSelection.cursor(initial.state.doc.length) });
     expect(hasNode(initial.state, "StrongEmphasis")).toBe(true);
 
+    // L'editor legge una definizione di nota con la grammatica della Lettura.
+    engine.setDoc("[^1]: $x$\nseguito");
+    expect(hasNode(initial.state, "LinkReference")).toBe(false);
+    expect(hasNode(initial.state, "Paragraph")).toBe(true);
+
     const bold = initial.state
       .facet(keymap)
       .flat()

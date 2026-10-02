@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { markdown } from "@codemirror/lang-markdown";
+import { markdownGrammar } from "./grammar";
 import { activeLinesOf, computeDecorations, type LiveDeco, type LiveDecoKind } from "./livepreview";
 
 // La vivi preview si testa qui, headless: la funzione pura riceve un
@@ -8,14 +9,15 @@ import { activeLinesOf, computeDecorations, type LiveDeco, type LiveDecoKind } f
 // restituisce la lista degli intervalli. Nessun EditorView, nessun DOM —
 // il guscio ViewPlugin non ha logica da verificare.
 //
-// `base: markdownLanguage` (GFM) e non il default commonmark: barrato e
-// task list esistono solo lì, ed è la stessa base che l'editor deve montare.
+// `base: markdownGrammar` (GFM con le definizioni di nota) e non il default
+// commonmark: barrato e task list esistono solo lì, ed è la stessa base che
+// l'editor monta.
 
 function state(doc: string, selection?: { anchor: number; head?: number }) {
   return EditorState.create({
     doc,
     selection: selection,
-    extensions: [markdown({ base: markdownLanguage })],
+    extensions: [markdown({ base: markdownGrammar })],
   });
 }
 
@@ -348,6 +350,64 @@ describe("commenti, formule in riga, ID di blocco ed embed dimensionati", () => 
     const math = ofKind(decorate("x $e^{i\\pi}$ e `$no$`"), "math");
     expect(math).toEqual([{ from: 2, to: 12, kind: "math", data: "e^{i\\pi}" }]);
     expect(ofKind(decorate("x $a$", [1]), "math")).toEqual([]);
+  });
+
+  it("le formule si leggono per paragrafo, e diventano widget quelle su una riga", () => {
+    // `$a…b$` va a capo e resta sorgente; `$5` non si chiude sul `$` dopo.
+    const math = ofKind(decorate("$a\nb$ e $c$, costa $5 e\n$d$"), "math");
+    expect(math.map((d) => [d.from, d.to, d.data])).toEqual([[8, 11, "c"], [24, 27, "d"]]);
+    expect(ofKind(decorate("dopo $$x$$ qui"), "math").map((d) => [d.from, d.to, d.data])).toEqual([[5, 10, "x"]]);
+  });
+
+  it("la formula che è tutto un paragrafo del documento la mostra il blocco, quella citata no", () => {
+    expect(ofKind(decorate("$$x$$"), "math")).toEqual([]);
+    expect(ofKind(decorate("$$x$$ ^abc"), "math")).toEqual([]);
+    expect(ofKind(decorate("> $$x$$"), "math").map((d) => [d.from, d.to, d.data])).toEqual([[2, 7, "x"]]);
+    expect(ofKind(decorate("# $$x$$"), "math").map((d) => [d.from, d.to, d.data])).toEqual([[2, 7, "x"]]);
+  });
+
+  it("dentro una formula non c'è un tag, su ogni riga e in ogni forma; dentro una formula persa sì", () => {
+    // L'ultima formula si giudica dove apre: il wikilink della riga dopo non la
+    // perde, e il suo `#s` resta fuori dai tag.
+    const doc = "$a #b$ e #c\n\nla $u\n#v$ fine\n\n$$x #y$$\n\n[[a$]] b #t$\n\nla $w\n[[p]] #s$";
+    for (const active of [[], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]) {
+      const ds = decorate(doc, active);
+      expect(ofKind(ds, "tag").map((d) => [d.data, d.from, d.to]), String(active)).toEqual([["c", 9, 11], ["t", 48, 50]]);
+      expect(ofKind(ds, "math").map((d) => [d.from, d.to]), String(active)).toEqual(active.length ? [] : [[0, 6]]);
+    }
+  });
+
+  it("ciò che apre dentro una formula non è sintassi, su ogni sua riga, e la formula resta", () => {
+    const inner = ["[[b]]", "![[b]]", "==b==", "%%b%%", "<b>", "https://e.it", "<https://e.it>", "*b*", "[t](u)"];
+    for (const piece of inner) {
+      const doc = `x $a ${piece} c$ y`;
+      expect(decorate(doc).map((d) => [d.kind, d.from, d.to]), piece).toEqual([["math", 2, doc.length - 2]]);
+      expect(decorate(doc, [1]), piece).toEqual([]);
+    }
+    // Su una formula di più righe non c'è un widget, e la riga dopo è ancora
+    // la formula.
+    expect(decorate("la $w\n[[p]] ==q== %%r%% #s$")).toEqual([]);
+  });
+
+  it("un nodo che attraversa una formula non si decora, e i suoi marcatori restano", () => {
+    expect(decorate("*a $b* c$ y")).toEqual([{ from: 3, to: 9, kind: "math", data: "b* c" }]);
+    expect(decorate("[a $b](u) c$ y")).toEqual([{ from: 3, to: 12, kind: "math", data: "b](u) c" }]);
+    expect(decorate("https://e.it/$x c$ y")).toEqual([{ from: 13, to: 18, kind: "math", data: "x c" }]);
+  });
+
+  it("chi apre prima di una formula e la attraversa la perde; un evidenziato che la contiene no", () => {
+    expect(ofKind(decorate("==a $b== c$ y"), "math")).toEqual([]);
+    expect(ofKind(decorate("==a $b== c$ y"), "highlight")).toEqual([{ from: 2, to: 6, kind: "highlight" }]);
+    expect(decorate("%%a $b$ c%% y")).toEqual([{ from: 0, to: 11, kind: "hide" }]);
+    const contained = decorate("==a $b$ c== y");
+    expect(ofKind(contained, "highlight")).toEqual([{ from: 2, to: 9, kind: "highlight" }]);
+    expect(ofKind(contained, "math")).toEqual([{ from: 4, to: 7, kind: "math", data: "b" }]);
+    // Un wikilink e un'immagine non leggono la formula che racchiudono.
+    expect(ofKind(decorate("[[a $b$ c]] y"), "math")).toEqual([]);
+    expect(ofKind(decorate("![a $b$](x.png) y"), "math")).toEqual([]);
+    // Non la perde chi apre nel codice o dentro un'altra formula.
+    expect(ofKind(decorate("`==a` $b== c$ y"), "math").map((d) => d.data)).toEqual(["b== c"]);
+    expect(ofKind(decorate("$a ==b$ c $d== e$ y"), "math").map((d) => d.data)).toEqual(["a ==b", "d== e"]);
   });
 
   it("l'ID di blocco si nasconde solo dove un blocco finisce", () => {

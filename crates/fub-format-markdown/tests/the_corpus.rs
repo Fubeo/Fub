@@ -76,8 +76,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use fub_abi::format::{FormatProvider, ParseContext};
-use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget, Span};
+use fub_abi::format::{FormatProvider, ParseContext, RenderOptions};
+use fub_abi::model::{custom_kind, Block, DocumentModel, Inline, LinkTarget, Span};
 use fub_abi::options::syntax;
 use fub_format_markdown::MarkdownProvider;
 use fub_sdk::testing::conformance;
@@ -1328,6 +1328,73 @@ fn model_wikilinks(model: &DocumentModel, text: &str) -> Vec<Value> {
     out
 }
 
+/// Le formule fra dollari del modello, in ordine: dove stanno, il TeX che
+/// portano e se la resa del provider ne fa un blocco. Il blocco si chiede alla
+/// resa vera, su un modello col solo paragrafo della formula: la regola è sua,
+/// e qui non se ne scrive una copia.
+fn model_math(model: &DocumentModel, text: &str) -> Vec<Value> {
+    fn inline(nodes: &[Inline], text: &str, block: bool, out: &mut Vec<Value>) {
+        for n in nodes {
+            match n {
+                Inline::Custom {
+                    custom_kind: kind,
+                    attrs,
+                    span,
+                } if kind == custom_kind::MATH => {
+                    let (from, to) = span_in_code_unit(text, span);
+                    out.push(
+                        json!({"from": from, "to": to, "tex": attrs["source"], "block": block}),
+                    );
+                }
+                Inline::Emph(kids)
+                | Inline::Strong(kids)
+                | Inline::Superscript(kids)
+                | Inline::Strikethrough(kids) => inline(kids, text, false, out),
+                Inline::Link {
+                    label: Some(kids), ..
+                } => inline(kids, text, false, out),
+                _ => {}
+            }
+        }
+    }
+    fn walk(blocks: &[Block], model: &DocumentModel, text: &str, out: &mut Vec<Value>) {
+        for b in blocks {
+            match b {
+                Block::Paragraph { inlines, .. } => {
+                    let alone = DocumentModel {
+                        body: vec![b.clone()],
+                        ..model.clone()
+                    };
+                    let html = provider()
+                        .render_html(&alone, &RenderOptions::default())
+                        .expect("il paragrafo si rende");
+                    inline(inlines, text, html.contains("class=\"math-block\""), out);
+                }
+                Block::Heading { inlines, .. } => inline(inlines, text, false, out),
+                Block::List { items, .. } => {
+                    for item in items {
+                        walk(&item.blocks, model, text, out);
+                    }
+                }
+                Block::Quote { blocks, .. } => walk(blocks, model, text, out),
+                Block::Custom { blocks, .. } => walk(blocks, model, text, out),
+                Block::Table { head, rows, .. } => {
+                    for row in head.iter().chain(rows) {
+                        for cell in &row.cells {
+                            inline(&cell.inlines, text, false, out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&model.body, model, text, &mut out);
+    out.sort_by_key(|v| v["from"].as_u64().unwrap_or(0));
+    out
+}
+
 fn corpus_for_the_shell() -> Value {
     let mut cases = Vec::new();
     for case in corpus() {
@@ -1348,6 +1415,7 @@ fn corpus_for_the_shell() -> Value {
             "tag": tags,
             "wikilink": model_wikilinks(&model, case.source),
             "task": task,
+            "math": model_math(&model, case.source),
         }));
     }
     Value::Array(cases)
@@ -1393,19 +1461,19 @@ fn the_corpus_fixture_matches_the_model_one() {
 /// presidierebbe niente.
 ///
 /// Non conta i casi — quelli li conta `il_corpus.rs` contro il contratto — ma
-/// pretende che ognuna delle tre famiglie abbia dei portatori, e che almeno un
+/// pretende che ognuna delle famiglie abbia dei portatori, e che almeno un
 /// caso ne porti due insieme: è la forma in cui i riconoscitori si disturbano a
 /// vicenda (un `#tag` dentro un `[[wikilink]]`, una task con dentro un link), ed
 /// è dove una divergenza si nasconde.
 #[test]
-fn the_corpus_exercises_all_three_families() {
+fn the_corpus_exercises_every_family() {
     let cases = corpus_for_the_shell();
     let cases = cases.as_array().expect("array");
     let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
     let mut mixed = 0;
     for c in cases {
         let mut families = 0;
-        for f in ["tag", "wikilink", "task"] {
+        for f in ["tag", "wikilink", "task", "math"] {
             let n = c[f].as_array().map(|a| a.len()).unwrap_or(0);
             *counts.entry(f).or_default() += n;
             if n > 0 {

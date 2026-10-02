@@ -95,6 +95,13 @@ describe("testo in riga", () => {
   it("la formula in riga è premuta dentro `$…$`", () => {
     expect(stateAt("markdown.math", "vale $x|^2$ qui").active).toBe(true);
     expect(stateAt("markdown.math", "costa 5|$").active).toBe(false);
+    expect(stateAt("markdown.math", "vale $x +\ny|$ qui").active).toBe(true);
+    expect(stateAt("markdown.math", "vale $x|$2").active).toBe(false);
+    expect(stateAt("markdown.math", "dopo $$x|$$ qui").active).toBe(false);
+    expect(stateAt("markdown.math", "vale $a *b|* c$").active).toBe(true);
+    expect(stateAt("markdown.math", "vale |$x$ qui").active).toBe(false);
+    expect(stateAt("markdown.math", "vale $x$| qui").active).toBe(false);
+    expect(stateAt("markdown.math", "vale ‹$x$› qui").active).toBe(true);
   });
 
   it("dentro il codice si spengono, tranne il codice stesso", () => {

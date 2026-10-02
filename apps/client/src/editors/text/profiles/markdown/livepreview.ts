@@ -25,13 +25,21 @@ import {
   spans,
   listItem,
   wikilink,
+  type FoundWikilink,
 } from "../../../../rules/syntax";
-import { findTrailingAnchor, frontmatterRange, renderMarkdownState } from "./render";
+import { findTrailingAnchor, frontmatterRange, paragraphMathBlock, renderMarkdownState } from "./render";
 import type { MarkdownBlock, MarkdownDocument, MountMarkdown } from "./render-types";
 import { mountMarkdown } from "./mount";
 import { mountMathBlocks } from "./math";
 import { isVaultPath } from "./media";
-import { embedHtml, embedSizeOf, imageHtml, scanInlineMath } from "./render-inline";
+import {
+  containerMath,
+  embedHtml,
+  embedSizeOf,
+  imageHtml,
+  isMathContainer,
+  type DollarMath,
+} from "./render-inline";
 import { mediaKindOfId } from "../../../media/media-types";
 import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
 
@@ -123,6 +131,20 @@ const ATTR_WIKILINK = "data-fub-target";
 const ATTR_TAG = "data-fub-tag";
 const ATTR_HREF = "data-fub-href";
 
+/// I nodi in riga che l'albero decora o sottrae al livello regex, e i
+/// marcatori che si nascondono col loro nodo.
+const INLINE_SYNTAX = new Set([
+  "StrongEmphasis", "Emphasis", "Strikethrough", "InlineCode", "URL", "HTMLTag", "Comment", "Image", "Link",
+]);
+const INLINE_MARKS = new Set(["EmphasisMark", "StrikethroughMark"]);
+
+/// Senza pagina e senza punto (`[[]]`, `[[ ]]`) un wikilink non nomina niente
+/// (cfr. `names_host` nel contratto): niente hide, niente mark, niente click.
+/// `[[#Sezione]]` nomina questa nota e resta.
+function namesSomething(w: FoundWikilink): boolean {
+  return w.page.trim() !== "" || (w.heading ?? "") !== "" || (w.block ?? "").trim() !== "";
+}
+
 /// La funzione pura al centro del modulo: dallo stato (albero Lezer + testo)
 /// e dalle righe attive produce la lista ordinata degli intervalli da
 /// decorare, limitata a [from, to] (i range visibili, quando chiama il
@@ -131,7 +153,8 @@ const ATTR_HREF = "data-fub-href";
 /// Invarianti che il plugin dà per acquisiti: i replace ("hide", "hr",
 /// "checkbox") non attraversano mai un fine riga e non si sovrappongono tra
 /// loro; dentro codice (inline, fence, indentato), URL e markup HTML la
-/// sintassi Obsidian non viene riconosciuta; l'output è ordinato per `from`.
+/// sintassi Obsidian non viene riconosciuta, e dentro una formula nessuna
+/// sintassi in riga; l'output è ordinato per `from`.
 export function computeDecorations(
   state: EditorState,
   activeLines: Set<number>,
@@ -155,6 +178,36 @@ export function computeDecorations(
   // Dedupe delle decorazioni di riga: blocchi annidati (citazione dentro
   // citazione) non devono impilare due volte la stessa classe.
   const quoteRows = new Set<number>();
+
+  // Le formule fra dollari si leggono per contenitore con la regola della
+  // Lettura (`containerMath`): un `$` aperto su una riga può chiudere sulla
+  // seguente, e ogni riga che una formula tocca la conosce. Diventano widget
+  // soltanto quelle su una riga sola, perché un replace non attraversa il fine
+  // riga, e non quella che è tutto un paragrafo del documento: quella la
+  // mostra il widget di blocco.
+  const formulasByRow = new Map<number, { readonly math: DollarMath; readonly widget: boolean }[]>();
+  const lostFormulas = new Set<DollarMath>();
+  // Le formule del contenitore in cui sta l'iterazione: i contenitori non si
+  // annidano, e ogni nodo in riga sta nell'ultimo aperto.
+  let around: readonly DollarMath[] = [];
+  const collectFormulas = (container: SyntaxNode) => {
+    const text = doc.sliceString(container.from, container.to);
+    const found = containerMath(text, container);
+    around = found.formulas;
+    if (found.formulas.length === 0) return;
+    const block = container.name === "Paragraph" && container.parent?.name === "Document"
+      && paragraphMathBlock(found, text) !== null;
+    for (const math of found.formulas) {
+      const first = doc.lineAt(math.from).number;
+      const last = doc.lineAt(math.to).number;
+      const entry = { math, widget: !block && first === last };
+      for (let n = first; n <= last; n++) {
+        const list = formulasByRow.get(n);
+        if (list) list.push(entry);
+        else formulasByRow.set(n, [entry]);
+      }
+    }
+  };
 
   // Decorazione di riga per ogni riga del nodo, clampata a [from, to]:
   // due range visibili che toccano lo stesso blocco non devono duplicare.
@@ -212,6 +265,13 @@ export function computeDecorations(
     from,
     to,
     enter(node) {
+      if (isMathContainer(node.name)) collectFormulas(node.node);
+      // Ciò che sta in una formula non è sintassi, e un nodo che ne attraversa
+      // una senza contenerla il provider non lo legge: come in Lettura non si
+      // decora, e se ne visitano i figli. Un marcatore segue il suo nodo.
+      const owner = INLINE_MARKS.has(node.name) ? node.node.parent : node.node;
+      if (owner && INLINE_SYNTAX.has(owner.name) && around.some((math) =>
+        math.from < owner.to && owner.from < math.to && (math.from < owner.from || owner.to < math.to))) return;
       const heading = /^(ATX|Setext)Heading([1-6])$/.exec(node.name);
       if (heading) {
         const marks = node.node.getChildren("HeaderMark");
@@ -371,14 +431,39 @@ export function computeDecorations(
     const text = row.text;
     const rowActive = activeLines.has(n);
 
+    // Le formule si giudicano prima di ciò che la riga contiene, per posizione
+    // come in Lettura e nel provider: ciò che apre dentro una formula non è
+    // sintassi. Una formula si giudica sulla riga dove apre, e non c'è, su
+    // nessuna delle sue righe, se la attraversa un commento, un wikilink o un
+    // evidenziato aperto prima, o se la racchiude un commento o un wikilink,
+    // che non leggono il loro contenuto. Per un wikilink (`[[a$]] b$`) è ciò
+    // che fa il provider.
+    const rowSpans = spans(text, declaredInline);
+    const rowLinks = wikilink(text).filter(namesSomething);
+    const rowFormulas = formulasByRow.get(n) ?? [];
+    const inFormula = (at: number) => rowFormulas.some(({ math }) =>
+      !lostFormulas.has(math) && math.from <= at && at < math.to);
+    for (const { math } of rowFormulas) {
+      if (math.from < row.from) continue;
+      const before = (from: number, to: number, enclosing: boolean) => {
+        const start = row.from + from;
+        const end = row.from + to;
+        return start < math.from && math.from < end && (enclosing || end < math.to)
+          && isFree(start, end) && !inFormula(start);
+      };
+      if (!isFree(math.from, math.to)
+        || rowLinks.some((w) => before(w.from, w.to, true))
+        || rowSpans.some((t) => before(t.from, t.to, t.name === "fub:comments"))) lostFormulas.add(math);
+    }
+
     // I commenti prima di tutto il resto: ciò che contengono (link, tag,
     // evidenziati) non è sintassi viva. Fuori dalla riga attiva spariscono
     // interi, delimitatori compresi; sulla riga attiva restano, attenuati.
-    for (const t of spans(text, declaredInline)) {
+    for (const t of rowSpans) {
       if (t.name !== "fub:comments") continue;
       const rangeStart = row.from + t.from;
       const rangeEnd = row.from + t.to;
-      if (!isFree(rangeStart, rangeEnd)) continue;
+      if (!isFree(rangeStart, rangeEnd) || inFormula(rangeStart)) continue;
       exclusions.push({ from: rangeStart, to: rangeEnd });
       out.push(
         rowActive
@@ -389,16 +474,10 @@ export function computeDecorations(
 
     // Wikilink ed embed. Il match diventa a sua volta un'esclusione: un
     // `#heading` o un `|` dentro `[[…]]` non sono un tag né altro.
-    for (const w of wikilink(text)) {
-      // Senza pagina e senza punto (`[[]]`, `[[ ]]`) non c'è niente da
-      // nominare (cfr. `names_host` nel contratto): niente hide, niente mark,
-      // niente click. `[[#Sezione]]` nomina questa nota e resta.
-      if (w.page.trim() === "" && (w.heading ?? "") === "" && (w.block ?? "").trim() === "") {
-        continue;
-      }
+    for (const w of rowLinks) {
       const rangeStart = row.from + w.from;
       const rangeEnd = row.from + w.to;
-      if (!isFree(rangeStart, rangeEnd)) continue;
+      if (!isFree(rangeStart, rangeEnd) || inFormula(rangeStart)) continue;
       exclusions.push({ from: rangeStart, to: rangeEnd });
       const innerFrom = row.from + w.innerFrom;
       const innerA = row.from + w.innerA;
@@ -438,10 +517,10 @@ export function computeDecorations(
 
     // I tratti fra delimitatori **dichiarati** (`==evidenziato==` e chi verrà):
     // il mark resta anche sulla riga attiva, spariscono solo i marcatori.
-    for (const t of spans(text, declaredInline)) {
+    for (const t of rowSpans) {
       const rangeStart = row.from + t.from;
       const rangeEnd = row.from + t.to;
-      if (!isFree(rangeStart, rangeEnd)) continue;
+      if (!isFree(rangeStart, rangeEnd) || inFormula(rangeStart)) continue;
       const className = t.name.slice(t.name.lastIndexOf(":") + 1);
       if (className === "comments") continue;
       if (!rowActive) {
@@ -467,27 +546,21 @@ export function computeDecorations(
       }
     }
 
-    // Formule in riga: fuori dalla riga attiva il TeX diventa la formula
-    // resa, sulla riga attiva resta sorgente. La regola del riconoscimento è
-    // quella della Lettura (`scanInlineMath`), non una seconda regex.
-    if (!rowActive) {
-      for (const math of scanInlineMath(text)) {
-        const mathFrom = row.from + math.from;
-        const mathTo = row.from + math.to;
-        if (!isFree(mathFrom, mathTo)) continue;
-        exclusions.push({ from: mathFrom, to: mathTo });
-        out.push({ from: mathFrom, to: mathTo, kind: "math", data: text.slice(math.contentFrom, math.contentTo) });
-      }
+    // Formule: fuori dalla riga attiva il TeX diventa la formula resa, sulla
+    // riga attiva resta sorgente.
+    for (const { math, widget } of rowFormulas) {
+      if (widget && !rowActive && !lostFormulas.has(math)) out.push({ from: math.from, to: math.to, kind: "math", data: math.tex });
     }
 
     // Tag: mai nascosti, sempre marcati (e cliccabili) — anche sulla riga
     // attiva. La regola è quella del contratto (`scan_tags`), non una regex di
     // qua: era più stretta, e `vedi.#tag` restava senza decorazione mentre il
-    // modello lo indicizzava.
+    // modello lo indicizzava. Il provider cerca i tag soltanto nel testo, mai
+    // dentro una formula.
     for (const t of scanTags(text)) {
       const tagFrom = row.from + t.from;
       const tagA = row.from + t.to;
-      if (!isFree(tagFrom, tagA)) continue;
+      if (!isFree(tagFrom, tagA) || inFormula(tagFrom)) continue;
       out.push({ from: tagFrom, to: tagA, kind: "tag", data: t.name });
     }
 

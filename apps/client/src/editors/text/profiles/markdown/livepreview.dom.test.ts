@@ -2,7 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { markdown } from "@codemirror/lang-markdown";
+import { markdownGrammar } from "./grammar";
 import { createTextEngine } from "../../engine";
 import { livePreview } from "./livepreview";
 import { closeContextMenu } from "../../../../ui/menu";
@@ -24,7 +25,7 @@ function editor(readOnly = false) {
     onChange() {},
     onSelectionChange() {},
     extensions: () => [
-      markdown({ base: markdownLanguage }),
+      markdown({ base: markdownGrammar }),
       livePreview({ openWikilink() {}, searchTag() {} }),
       EditorState.readOnly.of(readOnly),
     ],
@@ -79,7 +80,7 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
       onChange() {},
       onSelectionChange() {},
       extensions: () => [
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownGrammar }),
         livePreview({ openWikilink() {}, searchTag() {} }),
       ],
     });
@@ -137,7 +138,7 @@ describe("wikilink in Live", () => {
       onChange() {},
       onSelectionChange() {},
       extensions: () => [
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownGrammar }),
         livePreview({ openWikilink() {}, searchTag() {} }),
       ],
     });
@@ -165,7 +166,7 @@ describe("tabelle in Live", () => {
       onChange() {},
       onSelectionChange() {},
       extensions: () => [
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownGrammar }),
         livePreview({ openWikilink() {}, searchTag() {} }),
       ],
     });
@@ -230,7 +231,7 @@ describe("un diagramma in Live", () => {
       onChange() {},
       onSelectionChange() {},
       extensions: () => [
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownGrammar }),
         livePreview({ openWikilink() {}, searchTag() {} }),
         EditorState.readOnly.of(readOnly),
       ],
@@ -286,7 +287,7 @@ describe("un'immagine in mezzo al testo, in Live", () => {
       onChange() {},
       onSelectionChange() {},
       extensions: () => [
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownGrammar }),
         livePreview({
           openWikilink() {},
           searchTag() {},

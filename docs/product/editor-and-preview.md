@@ -116,11 +116,14 @@ nella webview.
 
 ## Formule
 
-Le formule inline usano `$…$`; quelle a blocco `$$…$$`. KaTeX e il suo CSS si
-caricano soltanto quando una superficie contiene una formula. Il renderer non
-considera formule il codice, i dollari escapati o delimitatori incompleti.
-Sorgenti oltre 20.000 caratteri e formule che superano i limiti di espansione o
-dimensione mostrano un errore leggibile conservando il testo originale.
+Le formule inline usano `$…$`; quelle a blocco `$$…$$`, sole nel paragrafo.
+Lettura, anteprima dal vivo e stampa seguono la regola di `math_dollars` del
+provider: una formula va a capo nel paragrafo, un `$` prima di una cifra non
+chiude, `$$…$$` fra il testo resta in riga e il codice in riga vince. Codice,
+dollari escapati e delimitatori incompleti non sono formule; dentro una formula
+non c'è altra sintassi, né tag né wikilink. KaTeX e il suo CSS si caricano solo
+se una superficie ha una formula. Una formula oltre 20.000 caratteri o i limiti
+di espansione e dimensione mostra un errore leggibile e conserva il testo.
 
 ## Sintassi estesa e viste strutturali
 
@@ -291,18 +294,15 @@ un owner distrugge le istanze che possiede.
 
 Registratore, slide e stampa compaiono nel menu del riquadro soltanto quando la
 superficie montata li sa fare: la stampa c'è anche per il canvas, non per lo
-sheet, che non ha un provider di stampa. La stampa di una nota salva prima il buffer,
-perché la resa di stampa si legge dal disco, poi aspetta diagrammi, formule e
-immagini del vault, al massimo per `PRINT_WAIT_MS`. La carta è chiara
+sheet, che non ha un provider di stampa. La stampa di una nota salva prima il
+buffer, perché la resa di stampa si legge dal disco, poi aspetta diagrammi,
+formule e immagini del vault, al massimo per `PRINT_WAIT_MS`. La carta è chiara
 anche col tema scuro, i diagrammi usano la variante chiara del loro stile, e
-didascalie, sorgenti e bottoni di copia non si stampano. Le formule fra dollari
-le legge il provider Markdown, quindi si stampano composte come in Lettura; se
-una formula scavalcherebbe un codice in riga vince il codice, come nell'editor.
-Trascinare una nota o un allegato
-scrive un rimando nella sintassi del formato. Un punto chiesto da outline,
-backlink, ricerca o segnalibri si apre nel riquadro che mostra quel documento;
-sul canvas è la carta che lo contiene. Se la vista corrente non ci arriva, un
-avviso lo dice.
+didascalie, sorgenti e bottoni di copia non si stampano. Le formule si stampano
+composte come in Lettura. Trascinare una nota o un allegato scrive un rimando
+nella sintassi del formato. Un punto chiesto da outline, backlink, ricerca o
+segnalibri si apre nel riquadro che mostra quel documento; sul canvas è la carta
+che lo contiene. Se la vista corrente non ci arriva, un avviso lo dice.
 
 `TextEngine` è il motore testuale condiviso. Markdown e plain text sono percorsi
 utente distinti montati dal registro sullo stesso motore; `FormulaProfile`

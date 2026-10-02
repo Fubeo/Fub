@@ -9,7 +9,7 @@
 //
 // La sintassi riconosciuta è quella che la shell riconosce altrove: l'albero
 // Lezer per enfasi, codice, titoli, citazioni, link e tabelle; `listItem` per
-// le voci di lista; le regole dichiarate per `==` e `%%`; `scanInlineMath` per
+// le voci di lista; le regole dichiarate per `==` e `%%`; `containerMath` per
 // le formule in riga.
 import {
   EditorSelection,
@@ -23,7 +23,7 @@ import type { SyntaxNode } from "@lezer/common";
 import { listItem } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
 import { isStrictlyInsideCode } from "./parser";
-import { scanInlineMath } from "./render-inline";
+import { containerMath, isMathContainer } from "./render-inline";
 import {
   dedentListItem,
   deleteTableColumn,
@@ -111,14 +111,15 @@ const HIGHLIGHT_PAIR = /==(?=\S)(?:[^=\n]|=(?!=))*?\S==/g;
 const COMMENT_PAIR = /%%[^\n]*?%%/g;
 const WIKILINK_PAIR = /\[\[[^\]\n]*\]\]/g;
 
+/// Dentro una formula `$…$`, letta sul suo contenitore come fa la Lettura: può
+/// cominciare su una riga e chiudere sulla seguente.
 function insideInlineMath(state: EditorState): boolean {
   const { from, to } = state.selection.main;
-  const line = state.doc.lineAt(from);
-  if (to > line.to) return false;
-  const start = from - line.from;
-  const end = to - line.from;
-  return scanInlineMath(line.text).some((math) =>
-    from === to ? math.from < start && start < math.to : math.from <= start && end <= math.to
+  let container: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1);
+  while (container && !isMathContainer(container.name)) container = container.parent;
+  if (!container) return false;
+  return containerMath(state.sliceDoc(container.from, container.to), container).formulas.some((math) =>
+    !math.display && (from === to ? math.from < from && from < math.to : math.from <= from && to <= math.to)
   );
 }
 

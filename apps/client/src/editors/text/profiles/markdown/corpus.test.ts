@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { markdown } from "@codemirror/lang-markdown";
+import { markdownGrammar } from "./grammar";
 import { computeDecorations, type LiveDeco, type LiveDecoKind } from "./livepreview";
+import { renderMarkdown } from "./render";
 import { parseWikilinkInner } from "../../../../rules/syntax";
 import corpus from "../../../../__fixtures__/corpus-syntax.json";
 
@@ -30,6 +32,7 @@ interface CorpusCase {
   tag: { name: string; from: number; to: number }[];
   wikilink: { page: string; embed: boolean; from: number; to: number }[];
   task: { symbol: string; from: number; to: number }[];
+  math: { from: number; to: number; tex: string; block: boolean }[];
 }
 
 const cases = corpus as CorpusCase[];
@@ -72,7 +75,7 @@ const DIVERGENCES: Record<string, string> = {
 };
 
 function stateOf(doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] });
+  return EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
 }
 
 /// La passata della shell con **tutte** le righe attive: la sorgente resta
@@ -88,6 +91,22 @@ function decorateAllActive(doc: string): LiveDeco[] {
 
 function ofKind(ds: LiveDeco[], kind: LiveDecoKind): LiveDeco[] {
   return ds.filter((d) => d.kind === kind);
+}
+
+const ENTITIES: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" };
+const unescape = (value: string) => value.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => ENTITIES[entity]!);
+
+/// Le formule della Lettura: quelle in riga con le loro posizioni, i blocchi
+/// col TeX e il punto in cui comincia il paragrafo che li porta. I recinti
+/// `math` sono un'altra sintassi, e restano fuori.
+function readingMath(source: string): { inline: unknown[]; block: unknown[] } {
+  const html = renderMarkdown(source).html;
+  const inline = [...html.matchAll(/<span class="math-inline" data-tex="([^"]*)" data-md-from="(\d+)" data-md-to="(\d+)">/g)]
+    .map((match) => [Number(match[2]), Number(match[3]), unescape(match[1]!)]);
+  const block = [...html.matchAll(/<div class="math-block"(?: id="[^"]*")? data-tex="([^"]*)" data-md-from="(\d+)" data-md-to="(\d+)">/g)]
+    .filter((match) => source.slice(Number(match[2]), Number(match[3])).startsWith("$$"))
+    .map((match) => [unescape(match[1]!), Number(match[2])]);
+  return { inline, block };
 }
 
 /// Il confronto, con la divergenza dichiarata al posto dell'asserzione.
@@ -111,6 +130,7 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
     expect(count((c) => c.tag)).toBeGreaterThan(2);
     expect(count((c) => c.wikilink)).toBeGreaterThan(2);
     expect(count((c) => c.task)).toBeGreaterThan(2);
+    expect(count((c) => c.math)).toBeGreaterThan(2);
   });
 
   // **Nessun caso si salta, nemmeno quello che il modello vede vuoto.** È la
@@ -155,6 +175,36 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
         "task",
         testCase.task.map((t) => [t.from - 1, t.to + 1]),
         ofKind(inactive, "checkbox").map((d) => [d.from, d.to]),
+      );
+
+      // --- le formule fra dollari: la Lettura le legge come il modello ---
+      // In riga con posizioni e TeX; un blocco col TeX senza gli a capo di
+      // bordo, dove comincia il suo paragrafo.
+      const reading = readingMath(testCase.source);
+      compare(
+        testCase,
+        "math",
+        testCase.math.filter((m) => !m.block).map((m) => [m.from, m.to, m.tex]),
+        reading.inline,
+      );
+      compare(
+        testCase,
+        "math a blocco",
+        testCase.math.filter((m) => m.block).map((m) => [m.tex.trim(), m.from]),
+        reading.block,
+      );
+      // La vivi preview ne fa un widget fuori dalla riga attiva, se stanno su
+      // una riga sola; quella che è tutto un paragrafo del documento la mostra
+      // il widget di blocco.
+      const blocks = renderMarkdown(testCase.source).blocks.filter((b) => b.kind === "math");
+      compare(
+        testCase,
+        "math dal vivo",
+        testCase.math
+          .filter((m) => !testCase.source.slice(m.from, m.to).includes("\n"))
+          .filter((m) => !blocks.some((b) => b.from <= m.from && m.to <= b.to))
+          .map((m) => [m.from, m.to, m.tex]),
+        ofKind(inactive, "math").map((d) => [d.from, d.to, d.data]),
       );
     });
   }

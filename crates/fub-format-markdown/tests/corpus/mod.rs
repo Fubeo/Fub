@@ -177,6 +177,24 @@ pub fn corpus() -> Vec<Case> {
         case("callout con titolo", "> [!warning] Attenzione\n> corpo\n"),
         case("callout di ogni tipo", "> [!note]\n> a\n\n> [!tip]\n> b\n\n> [!important]\n> c\n\n> [!warning]\n> d\n\n> [!caution]\n> e\n"),
         case("footnote", "una nota[^n]\n\n[^n]: il corpo\n"),
+        // Una parola sola dopo `[^n]:` è anche un riferimento di link valido:
+        // la shell deve leggerla come il corpo della nota, con la riga dopo.
+        case(
+            "definizioni di nota di una parola sola",
+            "a[^1] b[^2] c[^3]\n\n[^1]: [[Nota]]\n\n[^2]: #tag\n\n[^3]: $x$\nseguito $y$\n",
+        ),
+        // L'etichetta non ha spazi e i due punti non chiedono uno spazio dopo;
+        // una definizione interrompe il paragrafo che la precede.
+        case(
+            "definizioni di nota con la regola di comrak",
+            "r[^a] [^b c] [^d]\n\n[^a]:#uno\n\n[^b c]: #due\n\n$x\n[^d]: y$ #tre\n",
+        ),
+        // Dentro una formula non c'è un wikilink né un tag, anche sulla riga
+        // dopo; un wikilink aperto prima vince sulla formula.
+        case(
+            "sintassi dentro una formula",
+            "x $a [[b]] c$ e ![[d]] $e ![[f]]$\n\nla $g\n[[h]] #i$ fine\n\n[[j $k]] l$\n",
+        ),
         case("definition list", "Termine\n\n: la definizione\n"),
         case("html a blocco", "<div>blocco</div>\n"),
         case("html inline", "un <b>grassetto</b> inline\n"),
@@ -190,6 +208,46 @@ pub fn corpus() -> Vec<Case> {
         case("formula a display", "prima\n\n$$\n\\sum_{i=1}^n i\n$$\n\ndopo\n"),
         case("dollari che non sono formule", "costa $5, \\$x\\$ resta testo e `$y$` è codice\n"),
         case("formula che scavalcherebbe il codice", "costa $5 per #spesa, usa `$HOME`\n"),
+        // La regola dei dollari è quella di comrak, e la shell la segue: la
+        // famiglia `math` del corpus della shell confronta queste formule con
+        // la sua Lettura. Una cifra dopo il dollaro non lo chiude; una formula
+        // va a capo dentro il suo paragrafo, anche citato o in una voce; un
+        // `$$…$$` in mezzo al testo resta in riga, da solo è un blocco.
+        case("una cifra dopo il dollaro non lo chiude", "vale $x$2, costa $5 o $y$\n"),
+        case("formula a capo nel paragrafo", "la somma $a +\nb$ vale\n"),
+        case(
+            "formula a capo in una citazione e in una voce",
+            "> cita $a\n> b$\n\n- voce $c\n  d$\n",
+        ),
+        case("doppi dollari in mezzo al testo", "dopo $$x$$ qui e $$a$$ b $$c$$\n"),
+        case("formula a display che segue il testo", "testo\n$$x$$\n"),
+        case("dollari ai bordi", "$$$x$$$ e $ y$ e $y $ e $$ $$\n"),
+        case("backslash prima dei dollari", "$a\\\\$ b$ e \\$$x$$\n"),
+        case(
+            "il codice prima della formula e la formula prima del codice",
+            "`$x` y$z$\n\na $w `b$` e $v$\n",
+        ),
+        case(
+            "formule in un titolo e in una cella",
+            "# titolo $x$ #\n\n| a | b |\n|---|---|\n| $y$ | `$` $z$ |\n",
+        ),
+        case("uno spazio non ascii non ferma i dollari", "$a\u{a0}$ e $\u{a0}b$\n"),
+        case("formula che attraversa un'enfasi", "*a $b* c$ e [t](u$) $e$\n"),
+        case("formula a display in una citazione", "> $$\n> \\int f\n> $$\n"),
+        case("formula a display in una voce con casella", "- [ ] $$x$$\n"),
+        case(
+            "una casella che non apre la voce è testo",
+            "- a\n\n  [ ] $$x$$\n",
+        ),
+        case("formula a display con un id di blocco", "$$x$$ ^abc\n"),
+        case(
+            "un cancelletto dentro una formula non è un tag",
+            "$a #b$ e #c\n\n$$x #y$$\n\nla $u\n#v$ fine\n",
+        ),
+        case(
+            "un wikilink aperto prima vince sulla formula",
+            "[[a$]] b #t$\n",
+        ),
         // --- frontmatter ---
         case("frontmatter", "---\ntitolo: X\n---\n\n# Corpo\n"),
         case(

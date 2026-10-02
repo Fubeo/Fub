@@ -1,4 +1,4 @@
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { syntaxTree } from "@codemirror/language";
 import { Prec, RangeSetBuilder, type Extension } from "@codemirror/state";
@@ -14,6 +14,7 @@ import { markdownEditingExtensions } from "./commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
 import { markdownPaste } from "./paste";
+import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
 
 const typography = Prec.high(EditorView.theme({
@@ -154,7 +155,7 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         frontmatter,
         markdownEditingExtensions(),
         markdownPaste,
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        markdown({ base: markdownGrammar, codeLanguages: languages }),
         previewOn ? livePreview(options.callbacks, syntaxForms) : [],
         markdownCompletions(options.completions),
       ];

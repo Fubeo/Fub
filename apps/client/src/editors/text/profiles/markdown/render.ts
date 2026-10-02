@@ -1,4 +1,3 @@
-import { markdownLanguage } from "@codemirror/lang-markdown";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
@@ -6,7 +5,16 @@ import type { SyntaxForm } from "../../../../host/contract";
 import { declaredFences } from "../../../../rules/syntax";
 import { normalizeLineBreaks } from "../../../../rules/offsets";
 import { taskChecked } from "../../../../rules/mirrored";
-import { escapeHtml, normalizeLabel, renderInline, sourceAttributes } from "./render-inline";
+import { FOOTNOTE_DEFINITION, markdownGrammar } from "./grammar";
+import {
+  escapeHtml,
+  mathBlock,
+  mathOf,
+  normalizeLabel,
+  renderInline,
+  sourceAttributes,
+  type ContainerMath,
+} from "./render-inline";
 import type {
   MarkdownBlock,
   MarkdownDocument,
@@ -126,6 +134,18 @@ function idAttr(id: string | null): string {
   return id === null || id === "" ? "" : ` id="${escapeHtml(id)}"`;
 }
 
+/// Il TeX del paragrafo fatto soltanto di una formula `$$…$$`, spazi e ID di
+/// blocco in coda a parte: la resa ne fa un blocco, come il provider. `null`
+/// per ogni altro paragrafo.
+export function paragraphMathBlock(math: ContainerMath, slice: string): string | null {
+  const anchor = findTrailingAnchor(slice);
+  return mathBlock(math, math.from + (anchor ? anchor.start : slice.length));
+}
+
+function mathBlockHtml(tex: string, from: number, to: number, id: string | null = null): string {
+  return `<div class="math-block"${idAttr(id)} data-tex="${escapeHtml(tex)}"${mdAttrs(from, to)}>${escapeHtml(tex)}</div>`;
+}
+
 function rawHtmlBlock(source: string, from: number, to: number): string {
   const raw = source.slice(from, to);
   return `<div class="block-html block-html-allowed"${mdAttrs(from, to)} data-md-raw-html="${escapeHtml(raw)}"><pre>${escapeHtml(raw)}</pre></div>`;
@@ -169,8 +189,9 @@ function collectDefinitions(source: string, tree: Tree): Collected {
 
   function visit(node: SyntaxNode, insideFootnoteDef: boolean): void {
     const name = node.name;
-    const definition = !insideFootnoteDef && (name === "Paragraph" || name === "LinkReference")
-      ? /^\[\^([^\]\r\n]+)\]:(?:[ \t]|$)/.exec(source.slice(node.from, node.to))
+    // La grammatica fa di ogni definizione di nota un paragrafo.
+    const definition = !insideFootnoteDef && name === "Paragraph"
+      ? FOOTNOTE_DEFINITION.exec(source.slice(node.from, node.to))
       : null;
     if (definition) {
       const key = normalizeLabel(definition[1]!);
@@ -232,7 +253,7 @@ function collectDefinitions(source: string, tree: Tree): Collected {
       }
     }
     const isDefPara =
-      name === "Paragraph" && /^\[\^([^\]\r\n]+)\]:(?:[ \t]|$)/.test(source.slice(node.from, node.to));
+      name === "Paragraph" && FOOTNOTE_DEFINITION.test(source.slice(node.from, node.to));
     for (let child = node.firstChild; child; child = child.nextSibling) {
       visit(child, insideFootnoteDef || isDefPara);
     }
@@ -344,9 +365,14 @@ function renderInnerBlock(
     case "LinkMark":
     case "TableDelimiter":
       return "";
+    // La casella la legge soltanto il primo blocco della voce, ed è
+    // `renderListItemNode` a toglierla. Lezer fa un `Task` di ogni paragrafo
+    // della voce che comincia con `[ ]`; per il provider gli altri sono
+    // paragrafi, e la casella resta testo.
+    case "Task":
     case "Paragraph": {
       const slice = source.slice(node.from, node.to);
-      if (/^\[\^([^\]\r\n]+)\]:(?:[ \t]|$)/.test(slice)) return renderFootnoteDefNode(node, aux);
+      if (FOOTNOTE_DEFINITION.test(slice)) return renderFootnoteDefNode(node, aux);
       const anchor = findTrailingAnchor(slice);
       let id: string | null = null;
       let to = node.to;
@@ -355,14 +381,10 @@ function renderInnerBlock(
         to = node.from + anchor.start;
         while (to > node.from && (source[to - 1] === " " || source[to - 1] === "\t")) to--;
       }
+      const tex = paragraphMathBlock(mathOf(aux.ctx, node), slice);
+      if (tex !== null) return mathBlockHtml(tex, node.from, node.to, id);
       const inner = renderParagraphSegments(node, aux, quoteMarks, node.from, to);
       return `<p${idAttr(id)}${mdAttrs(node.from, node.to)}>${inner}</p>`;
-    }
-    case "Task": {
-      const marker = node.getChild("TaskMarker");
-      let contentFrom = marker ? marker.to : node.from;
-      if (source[contentFrom] === " " || source[contentFrom] === "\t") contentFrom++;
-      return renderInline(aux.ctx, contentFrom, node.to, node);
     }
     case "BulletList":
     case "OrderedList":
@@ -378,8 +400,9 @@ function renderInnerBlock(
       return renderTableNode(node, aux);
     case "HorizontalRule":
       return `<hr${mdAttrs(node.from, node.to)}>`;
+    // Un indirizzo, anche `[^]: x`: le definizioni di nota sono paragrafi.
     case "LinkReference":
-      return /^\[\^/.test(source.slice(node.from, node.to)) ? renderFootnoteDefNode(node, aux) : "";
+      return "";
     case "HTMLBlock":
       return rawHtmlBlock(source, node.from, node.to);
     case "CommentBlock":
@@ -450,6 +473,13 @@ function renderListNode(node: SyntaxNode, aux: RenderAux): string {
   return `<${ordered ? "ol" : "ul"}${mdAttrs(node.from, node.to)}${startAttr}>${items}</${ordered ? "ol" : "ul"}>`;
 }
 
+/// Il testo di una voce con casella: per il provider è un paragrafo, e una
+/// formula `$$…$$` da sola ne fa un blocco.
+function taskContent(task: SyntaxNode, aux: RenderAux, contentFrom: number): string {
+  const tex = mathBlock(mathOf(aux.ctx, task));
+  return tex !== null ? mathBlockHtml(tex, contentFrom, task.to) : renderInline(aux.ctx, contentFrom, task.to, task);
+}
+
 function taskItemHtml(symbol: string, symbolOffset: number, inner: string, nested: string): string {
   const checked = taskChecked(symbol);
   return `<li class="task" data-task="${escapeHtml(symbol === " " ? "" : symbol)}"><input type="checkbox" data-md-task="${symbolOffset}"${checked ? " checked" : ""} disabled>${inner}${nested}</li>`;
@@ -469,7 +499,7 @@ function renderListItemNode(item: SyntaxNode, aux: RenderAux): string {
     const symbolOffset = marker ? marker.from + 1 : firstBlock.from + 1;
     let contentFrom = marker ? marker.to : firstBlock.from;
     if (source[contentFrom] === " " || source[contentFrom] === "\t") contentFrom++;
-    const inner = renderInline(aux.ctx, contentFrom, firstBlock.to, firstBlock);
+    const inner = taskContent(firstBlock, aux, contentFrom);
     let nested = "";
     for (let child = item.firstChild; child; child = child.nextSibling) {
       if (child.from === firstBlock.from || child.name === "ListMark") continue;
@@ -646,7 +676,7 @@ function renderTableCells(node: SyntaxNode, aux: RenderAux): ReadonlyMap<number,
 function renderFootnoteDefNode(node: SyntaxNode, aux: RenderAux): string {
   const source = aux.ctx.source;
   const slice = source.slice(node.from, node.to);
-  const match = /^\[\^([^\]\r\n]+)\]:(?:[ \t]|$)/.exec(slice);
+  const match = FOOTNOTE_DEFINITION.exec(slice);
   if (!match) return `<p${mdAttrs(node.from, node.to)}>${renderInline(aux.ctx, node.from, node.to, node)}</p>`;
   const key = normalizeLabel(match[1]!);
   const footnote = aux.ctx.footnotes.get(key);
@@ -758,10 +788,10 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         records.push({
           from,
           to,
-          kind: /^\[\^/.test(slice) ? "footnote-definition" : "definition",
+          kind: "definition",
           source: slice,
           id: null,
-          render: () => /^\[\^/.test(slice) ? renderFootnoteDefNode(node, aux) : "",
+          render: () => "",
         });
         return;
       case "HTMLBlock":
@@ -845,20 +875,20 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         });
         return;
       case "Paragraph": {
-        const displayMath = /^[ \t]*\$\$[ \t]*(?:\n)?([\s\S]*?)(?:\n)?[ \t]*\$\$[ \t]*$/.exec(slice);
-        const tex = displayMath?.[1]?.trim() ?? "";
-        if (tex !== "") {
+        const tex = paragraphMathBlock(mathOf(aux.ctx, node), slice);
+        if (tex !== null) {
+          const anchor = findTrailingAnchor(slice);
           records.push({
             from,
             to,
             kind: "math",
             source: slice,
-            id: null,
-            render: () => `<div class="math-block" data-tex="${escapeHtml(tex)}"${mdAttrs(from, to)}>${escapeHtml(tex)}</div>`,
+            id: anchor && anchor.start > 0 ? canonicalAnchor(anchor.raw) : null,
+            render: (resolved) => mathBlockHtml(tex, from, to, resolved),
           });
           return;
         }
-        if (/^\[\^([^\]\r\n]+)\]:(?:[ \t]|$)/.test(slice)) {
+        if (FOOTNOTE_DEFINITION.test(slice)) {
           records.push({
             from,
             to,
@@ -969,7 +999,7 @@ function isCalloutNode(node: SyntaxNode, source: string): boolean {
 
 export function renderMarkdown(source: string, forms?: readonly SyntaxForm[]): MarkdownDocument {
   const normalized = normalizeLineBreaks(source);
-  const tree = markdownLanguage.parser.parse(normalized);
+  const tree = markdownGrammar.parser.parse(normalized);
   return buildDocument(normalized, tree, forms);
 }
 
@@ -977,7 +1007,7 @@ export function renderMarkdownState(state: EditorState, forms?: readonly SyntaxF
   const source = state.doc.toString();
   let tree = syntaxTree(state);
   if (tree.length !== source.length || tree.topNode.name !== "Document") {
-    tree = markdownLanguage.parser.parse(source);
+    tree = markdownGrammar.parser.parse(source);
   }
   return buildDocument(source, tree, forms);
 }
