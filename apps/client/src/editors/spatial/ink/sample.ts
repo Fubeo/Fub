@@ -61,6 +61,73 @@ function clamp(value: number, min: number, max: number): number {
 /// non è più esatto in un `number` (formato della scena, §5).
 export const INK_MAX_INTEGER = Number.MAX_SAFE_INTEGER;
 
+/// Perché un `fub:ink` non si legge, o un tratto non si scrive, come
+/// `InkError` di `fub-scene`: il nome è il dettaglio di S004 e i due lati
+/// devono scrivere la stessa diagnostica.
+export type InkErrorKind =
+  | "missing"
+  | "too-large"
+  | "syntax"
+  | "version"
+  | "scale"
+  | "channels"
+  | "tilt"
+  | "no-samples"
+  | "too-many-samples"
+  | "arity"
+  | "integer"
+  | "overflow"
+  | "first-time"
+  | "range"
+  | "non-finite"
+  | "mixed-channels";
+
+const INK_MESSAGES: Record<InkErrorKind, string> = {
+  "missing": "il tratto non ha fub:ink",
+  "too-large": "fub:ink supera 512 KiB",
+  "syntax": "fub:ink non rispetta la grammatica",
+  "version": "versione di fub:ink sconosciuta",
+  "scale": "scala di fub:ink diversa da s10 e s100",
+  "channels": "canali di fub:ink non validi",
+  "tilt": "i canali a e z compaiono insieme",
+  "no-samples": "fub:ink senza campioni",
+  "too-many-samples": "fub:ink supera 10 000 campioni",
+  "arity": "un campione non ha un valore per canale",
+  "integer": "un valore di fub:ink non è un intero",
+  "overflow": "un valore di fub:ink supera 2^53 - 1",
+  "first-time": "il primo campione non ha t = 0",
+  "range": "un canale esce dal suo intervallo",
+  "non-finite": "un campione ha un valore non finito",
+  "mixed-channels": "un campione ha canali diversi dal primo",
+};
+
+/// Un inchiostro che non si legge o un tratto che non si scrive. È un
+/// `RangeError`: il valore esce da ciò che il formato rappresenta.
+export class InkError extends RangeError {
+  readonly kind: InkErrorKind;
+  /// Il campione dell'errore, contando da 0, per `arity`, `integer`,
+  /// `overflow`, `range`, `non-finite` e `mixed-channels`.
+  readonly sample: number | null;
+  /// La lettera del canale, per `range`.
+  readonly channel: string | null;
+
+  constructor(kind: InkErrorKind, sample: number | null = null, channel: string | null = null) {
+    super(sample === null ? INK_MESSAGES[kind] : `${INK_MESSAGES[kind]} (campione ${sample})`);
+    this.name = "InkError";
+    this.kind = kind;
+    this.sample = sample;
+    this.channel = channel;
+  }
+
+  /// Il dettaglio di S004: `fub:ink <kind>[ <campione>][ <canale>]`.
+  get detail(): string {
+    let detail = `fub:ink ${this.kind}`;
+    if (this.sample !== null) detail += ` ${this.sample}`;
+    if (this.channel !== null) detail += ` ${this.channel}`;
+    return detail;
+  }
+}
+
 function exact(value: number, what: string): number {
   if (!Number.isSafeInteger(value)) throw new RangeError(`campione d'inchiostro con ${what} oltre 2^53 - 1: ${value}`);
   return value;
@@ -121,35 +188,62 @@ export function dequantizeSample(sample: QuantizedSample, scale: InkScale): InkS
   return p === undefined ? { x, y, t, a: sample.a, z: sample.z } : { x, y, p, t, a: sample.a, z: sample.z };
 }
 
-/// Quantizza un tratto intero. I canali sono del tratto, non del campione:
-/// `p` e l'inclinazione ci sono in ogni campione o in nessuno, il primo
-/// campione ha `t = 0` e i campioni sono da 1 a `INK_MAX_SAMPLES`. Un tratto
-/// che non rispetta queste regole lancia `RangeError` invece di diventare un
-/// `fub:ink` che il formato rifiuterebbe.
+/// Quantizza un tratto intero, come `Ink::quantize` di `fub-scene`. I canali
+/// sono del tratto, non del campione: `p` e l'inclinazione ci sono in ogni
+/// campione o in nessuno, il primo campione ha `t = 0` e i campioni sono da 1
+/// a `INK_MAX_SAMPLES`. Un tratto che non rispetta queste regole, o con un
+/// valore o una differenza oltre ±(2⁵³ − 1), lancia `InkError` invece di
+/// diventare un `fub:ink` che il formato rifiuterebbe. I controlli sono quelli
+/// di Rust nello stesso ordine, così i due lati rifiutano con lo stesso errore.
 export function quantizeInk(samples: readonly InkSample[], scale: InkScale = DEFAULT_INK_SCALE): QuantizedInk {
-  if (samples.length === 0) throw new RangeError("un tratto ha almeno un campione");
-  if (samples.length > INK_MAX_SAMPLES) {
-    throw new RangeError(`un tratto ha al massimo ${INK_MAX_SAMPLES} campioni: ${samples.length}`);
-  }
-  const first = samples[0]!;
-  if (first.t !== 0) throw new RangeError(`il primo campione ha t = 0, non ${first.t}`);
+  const first = samples[0];
+  if (first === undefined) throw new InkError("no-samples");
+  if (samples.length > INK_MAX_SAMPLES) throw new InkError("too-many-samples");
+  if (first.t !== 0) throw new InkError("first-time");
   const pressure = first.p !== undefined;
   const tilt = first.a !== undefined;
   const quantized: QuantizedSample[] = new Array(samples.length);
   for (let i = 0; i < samples.length; i++) {
     const sample = samples[i]!;
     if ((sample.p !== undefined) !== pressure || (sample.a !== undefined) !== tilt) {
-      throw new RangeError(`il campione ${i} ha canali diversi dal primo`);
+      throw new InkError("mixed-channels", i);
     }
-    const q = quantizeSample(sample, scale);
-    // `fub:ink` scrive le differenze: anche quelle devono restare esatte.
-    const previous = quantized[i - 1];
-    if (previous !== undefined) {
-      exact(q.x - previous.x, "una differenza di x");
-      exact(q.y - previous.y, "una differenza di y");
-      exact(q.t - previous.t, "una differenza di t");
+    // Prima ogni valore finito, poi gli interi: l'ordine di `quantize`.
+    if (
+      !Number.isFinite(sample.x) || !Number.isFinite(sample.y) || !Number.isFinite(sample.t)
+      || (pressure && !Number.isFinite(sample.p)) || (tilt && (!Number.isFinite(sample.a) || !Number.isFinite(sample.z)))
+    ) {
+      throw new InkError("non-finite", i);
     }
-    quantized[i] = q;
+    const integer = (value: number): number => {
+      if (Math.abs(value) > INK_MAX_INTEGER) throw new InkError("overflow", i);
+      return value;
+    };
+    const x = integer(roundHalfUp(sample.x, scale));
+    const y = integer(roundHalfUp(sample.y, scale));
+    const p = sample.p === undefined ? undefined : quantizePressure(sample.p);
+    const t = integer(roundHalfUp(sample.t, 1));
+    if (sample.a === undefined) {
+      quantized[i] = p === undefined ? { x, y, t } : { x, y, p, t };
+      continue;
+    }
+    const a = quantizeAltitude(sample.a);
+    integer(roundHalfUp(sample.z, 1));
+    const z = quantizeAzimuth(sample.z);
+    quantized[i] = p === undefined ? { x, y, t, a, z } : { x, y, p, t, a, z };
+  }
+  // `fub:ink` scrive le differenze: anche quelle devono restare esatte. Rust
+  // le controlla dopo aver quantizzato tutto, in `Ink::new`.
+  for (let i = 1; i < quantized.length; i++) {
+    const sample = quantized[i]!;
+    const previous = quantized[i - 1]!;
+    if (
+      Math.abs(sample.x - previous.x) > INK_MAX_INTEGER
+      || Math.abs(sample.y - previous.y) > INK_MAX_INTEGER
+      || Math.abs(sample.t - previous.t) > INK_MAX_INTEGER
+    ) {
+      throw new InkError("overflow", i);
+    }
   }
   return { scale, samples: quantized };
 }
