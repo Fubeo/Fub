@@ -9,8 +9,9 @@
 //! Il crate non dipende da `fub-abi`, `fub-kernel`, `fub-host` né da Tauri, e
 //! la prova `dependency_invariant` di `fub-abi` lo controlla. Non tocca il
 //! documento: i commit arrivano alla shell come testo controllato solo nella
-//! forma, e la shell li valida come le operazioni locali. Lo compone
-//! `fub-app` sul runtime di Tauri, che è lo stesso `tokio`.
+//! forma, e la shell li valida come le operazioni locali. Nel disegno
+//! dell'ADR 0204 lo compone `fub-app`, sul runtime di Tauri, che è lo stesso
+//! `tokio`.
 //!
 //! # Moduli
 //!
@@ -22,8 +23,8 @@
 //! - [`net`]: l'indirizzo IPv4 privato su cui si ascolta, e i candidati con
 //!   quello della rotta predefinita per primo.
 //! - [`limits`]: i limiti del protocollo e quelli che l'host si dà da solo.
-//! - [`host`]: il listener sul PC e l'API per la shell (FD-303): avvio,
-//!   eventi, `send`, `status` con i commit in attesa, `stop`.
+//! - [`host`]: il listener sul PC e l'API per la shell: avvio, eventi,
+//!   `send`, `status` con i commit in attesa, `stop`.
 //! - [`client`]: lo scrittore in Rust dei percorsi B e C, con la ripresa e i
 //!   commit rimandati oltre `lastC`.
 //! - [`clock`]: lo scarto fra gli orologi dello scrittore e del PC.

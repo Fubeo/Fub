@@ -21,14 +21,14 @@ pub const MAX_MESSAGE: usize = 24 * MIB;
 pub const MAX_FRAME: usize = 24 * MIB;
 /// Un `ink.pts`.
 pub const MAX_INK_PTS: usize = 64 * KIB;
-/// Un `commit`, come una sola operazione in `operazioni.md` §5.
+/// Un `commit`: quanto una sola operazione della scena.
 pub const MAX_COMMIT: usize = 8 * MIB;
 /// Il testo SVG di uno snapshot: un documento più grande non apre sessioni.
 pub const MAX_SNAPSHOT: usize = 20 * MIB;
 /// Ogni altro messaggio dello scrittore (`hello`, `ink.begin`, `view`, `ping`,
 /// …): nessuno ha un campo che cresce, e 16 KiB lasciano un margine largo.
 pub const MAX_CONTROL: usize = 16 * KIB;
-/// Le operazioni di un commit, come quelle di un `batch` (`operazioni.md` §5).
+/// Le operazioni di un commit, quante quelle di un `batch` della scena.
 pub const MAX_OPS_PER_COMMIT: usize = 10_000;
 /// I messaggi al secondo di una connessione, frame di controllo compresi.
 pub const RATE_PER_SECOND: usize = 240;

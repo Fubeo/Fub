@@ -1,5 +1,5 @@
-//! L'API dell'host per la shell (FD-303): gli eventi, `send`, `status`,
-//! `stop`, e la chiusura che non lascia compiti né porte.
+//! L'API dell'host per la shell: gli eventi, `send`, `status`, `stop`, e la
+//! chiusura che non lascia compiti né porte.
 
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::atomic::Ordering;

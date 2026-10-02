@@ -1,10 +1,11 @@
 //! Le operazioni come JSON opaco.
 //!
 //! L'host non applica le operazioni: le valida e le applica la shell, con il
-//! motore di `operazioni.md`. Qui se ne controlla solo la forma — un array di
-//! oggetti, ognuno con un campo `op` stringa e uno solo — e la misura, e il
-//! testo resta quello ricevuto, senza un albero `serde_json::Value` che per un
-//! commit di 8 MiB di numeri piccoli peserebbe dieci volte tanto.
+//! motore delle operazioni della scena. Qui se ne controlla solo la forma —
+//! un array di oggetti, ognuno con un campo `op` stringa e uno solo — e la
+//! misura, e il testo resta quello ricevuto, senza un albero
+//! `serde_json::Value` che per un commit di 8 MiB di numeri piccoli
+//! peserebbe dieci volte tanto.
 
 use std::borrow::Cow;
 use std::cell::Cell;
@@ -177,8 +178,8 @@ impl<'de> Visitor<'de> for ArrayOfOps<'_> {
 /// con cui `serde_json` costruisce un `Value` (127 contenitori annidati), così
 /// chi converte non trova un testo che l'host ha accettato e lui non sa
 /// leggere. Un gruppo annidato
-/// costa due livelli (l'elemento e i suoi figli), e i 32 gruppi di
-/// `operazioni.md` §5 ci stanno con margine.
+/// costa due livelli (l'elemento e i suoi figli), e i 32 gruppi annidati che
+/// le operazioni della scena ammettono ci stanno con margine.
 const MAX_DEPTH: usize = 128;
 
 /// Un'operazione: un oggetto con un campo `op`, una sola volta, il cui valore

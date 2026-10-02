@@ -2,8 +2,8 @@
 //! stato che legge, il QR che mostra.
 //!
 //! Tutti hanno una forma JSON con i nomi in camelCase e gli `u64` come
-//! stringhe decimali, perché l'adattatore di Tauri (FD-303) li passa così come
-//! sono alla shell e ne genera le fixture del mirror TypeScript.
+//! stringhe decimali, perché l'adattatore di Tauri li passa così come sono
+//! alla shell e ne genera le fixture del mirror TypeScript.
 
 use std::borrow::Cow;
 use std::fmt;
