@@ -561,6 +561,58 @@ fn the_glue_does_not_bypass_the_mounter() {
     );
 }
 
+/// La sessione live sta **fuori dal core**: `fub-live` non vede il contratto,
+/// il kernel, il montaggio né il toolkit (ADR 0204).
+///
+/// È il servizio che parla con un tablet sulla rete locale: il tratto arriva
+/// alla shell come testo controllato nella forma, e la shell lo valida come
+/// un'operazione locale. Se il crate raggiungesse il kernel o l'host, un
+/// commit che viene dalla rete avrebbe una strada per toccare il documento
+/// senza passare dalla shell; se raggiungesse `tauri`, l'app compagna e la
+/// CLI non potrebbero prenderlo senza un webview. E `fub-host` resta senza
+/// runtime asincrono proprio perché il `tokio` della sessione sta qui.
+///
+/// La rete guarda la chiusura e non solo il manifesto: una dipendenza che
+/// porta con sé il kernel è lo stesso kernel.
+#[test]
+fn the_live_session_stays_outside_the_core() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+    let core = ["fub-abi", "fub-kernel", "fub-host"];
+    let toolkit = ["tauri", "wry", "webkit2gtk"];
+    let banned = |name: &str| {
+        core.contains(&name)
+            || toolkit.iter().any(|family| {
+                name == *family
+                    || name.starts_with(&format!("{family}-"))
+                    || name.starts_with(&format!("{family}_"))
+            })
+    };
+
+    let declared: Vec<&str> = graph
+        .direct("fub-live")
+        .into_iter()
+        .filter(|name| banned(name))
+        .collect();
+    assert!(
+        declared.is_empty(),
+        "`fub-live` dichiara {declared:?} fra le dipendenze normali.\n\
+         La sessione live non vede il contratto, il kernel, il montaggio né il\n\
+         toolkit: lo compone `fub-app`, e i commit passano dalla shell."
+    );
+    let reached: Vec<&str> = graph
+        .closure("fub-live")
+        .into_iter()
+        .filter(|name| banned(name))
+        .collect();
+    assert!(
+        reached.is_empty(),
+        "`fub-live` raggiunge {reached:?} fra le dipendenze normali, passando\n\
+         per qualcun altro. Vale la stessa ragione: la sessione live sta fuori\n\
+         dal core."
+    );
+}
+
 // ---------------------------------------------------------------------------
 // La quarta rete: il diagramma dei componenti.
 // ---------------------------------------------------------------------------
