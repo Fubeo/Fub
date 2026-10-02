@@ -123,6 +123,7 @@ flowchart LR
 - [Formato della scena, export](reference/scene-format-export.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 - [Formato delle annotazioni PDF](reference/annotation-format.md)
+- [Sessione live](reference/live-session.md)
 
 ## Vedere stato e direzione
 

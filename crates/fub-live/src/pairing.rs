@@ -13,8 +13,9 @@
 //!   43 caratteri, tutti del sottoinsieme che un URL non scappa;
 //! - `n`: il nome del PC, in UTF-8 con la codifica percentuale di RFC 3986
 //!   per ogni byte che non è un carattere non riservato. Lo scrittore lo mostra
-//!   prima di inviare qualunque dato (§3 di `sessione-live.md`), e senza `n` lo
-//!   saprebbe solo dopo il handshake. È facoltativo in lettura.
+//!   prima di inviare qualunque dato («Abbinamento» in
+//!   `docs/reference/live-session.md`), e senza `n` lo saprebbe solo dopo il
+//!   handshake. È facoltativo in lettura.
 //!
 //! Il testo intero sta sotto i 200 byte con un nome corto, cioè un QR di
 //! versione 8 o 9 con correzione M: leggibile da una fotocamera a un metro da

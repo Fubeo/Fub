@@ -1,5 +1,6 @@
-//! I messaggi del protocollo (§4 di `sessione-live.md`), i codici di chiusura
-//! (§8) e la validazione.
+//! I messaggi del protocollo, i codici di chiusura e la validazione: le
+//! sezioni «Messaggi» e «Codici di chiusura» di
+//! `docs/reference/live-session.md`.
 //!
 //! Ogni messaggio è un oggetto JSON in un frame di testo, `{"v": 1, "t": …}`.
 //! La lettura procede a strati, e ogni strato costa al più quanto il
@@ -46,7 +47,7 @@ use crate::limits::RATE_COOLDOWN;
 /// La versione del protocollo.
 pub const VERSION: u64 = 1;
 
-/// I codici di chiusura della sessione (§8), più quelli di RFC 6455 che il
+/// I codici di chiusura della sessione, più quelli di RFC 6455 che il
 /// server usa per i difetti del trasporto.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CloseCode {
@@ -126,7 +127,7 @@ impl CloseCode {
             .map(|(close, _)| *close)
     }
 
-    /// La colonna «Lo scrittore riprova?» della tabella del §8. I codici di
+    /// La colonna «Lo scrittore riprova?» di «Codici di chiusura». I codici di
     /// RFC 6455 dicono che lo scrittore ha mandato qualcosa di sbagliato:
     /// riprovare lo rimanderebbe uguale.
     pub fn retry(self) -> Retry {

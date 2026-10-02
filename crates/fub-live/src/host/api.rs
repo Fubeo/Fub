@@ -24,7 +24,7 @@ use crate::token::{Fingerprint, SessionId};
 /// La shell risponde a ogni [`LiveEvent::Commit`](super::LiveEvent::Commit)
 /// con `ack` o `nack`, nominando lo scrittore e il contatore del commit; manda
 /// `ops` per le operazioni nate sul PC e `snapshot` per i cambiamenti che non
-/// sono operazioni (§4 di `sessione-live.md`).
+/// sono operazioni («L'host e la shell» in `docs/reference/live-session.md`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "t", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ShellMessage {
@@ -345,7 +345,7 @@ pub struct WriterStatus {
     pub clock: Option<ClockEstimate>,
 }
 
-/// I contatori della sessione, per la diagnostica (§11).
+/// I contatori della sessione, per il pannello di diagnostica della shell.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Stats {

@@ -6,7 +6,8 @@
 //! la legge prende in un colpo tutto ciò che è arrivato dall'ultima lettura,
 //! con i campioni consecutivi dello stesso tratto riuniti in un evento solo e
 //! la vista sostituita dall'ultima. Così una shell che resta indietro disegna
-//! tutti i campioni in un frame, senza buchi (§6).
+//! tutti i campioni in un frame, senza buchi («Cosa non è nel crate» in
+//! `docs/reference/live-session.md`).
 //!
 //! Una shell che non legge affatto non fa crescere la memoria senza misura:
 //! oltre [`EVENT_INK_POINTS`] campioni l'inchiostro in coda si butta e resta un
