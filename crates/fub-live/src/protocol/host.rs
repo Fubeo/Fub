@@ -103,7 +103,7 @@ pub struct Ack {
     pub duplicate: bool,
 }
 
-/// I motivi di un rifiuto, quelli di `operazioni.md` §3.
+/// I motivi di un rifiuto, gli stessi del motore delle operazioni della shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NackReason {

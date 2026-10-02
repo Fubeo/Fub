@@ -1,5 +1,5 @@
 //! L'host della sessione: il listener sul PC, lo stato della sessione e
-//! l'API che la shell usa attraverso l'adattatore di Tauri (FD-303).
+//! l'API che la shell usa attraverso l'adattatore di Tauri.
 //!
 //! [`LiveHost::start`] apre il listener sull'indirizzo privato scelto, genera
 //! il certificato e il primo QR, e restituisce la coda degli eventi. La shell

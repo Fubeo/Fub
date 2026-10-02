@@ -108,7 +108,7 @@ pub struct Caps {
 }
 
 /// L'id dell'elemento che un tratto diventerà: `o` e 8 caratteri base36
-/// minuscoli, come gli id degli oggetti in `formato-scena.md` §7.
+/// minuscoli, come gli id degli oggetti di una scena.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StrokeId([u8; 9]);
 
@@ -179,7 +179,7 @@ pub struct InkBegin {
     pub fill: String,
     /// L'opacità, fra 0 e 1.
     pub fill_opacity: f64,
-    /// Il pennello, `pf1 …` (`formato-scena.md` §5).
+    /// Il pennello, `pf1 …`, come l'attributo `fub:brush` della scena.
     pub brush: String,
 }
 
@@ -555,8 +555,8 @@ pub(crate) fn parse_writer(text: &str) -> Result<Parsed, Violation> {
 
 /// Un commit. Oltre gli 8 MiB se ne legge solo il contatore; oltre le 10 000
 /// operazioni la lettura si ferma alla prima di troppo. In entrambi i casi è
-/// un'operazione oltre i limiti di `operazioni.md` §5, che l'host rifiuta con
-/// `limit` come farebbe la shell, senza chiudere la connessione.
+/// un'operazione oltre i limiti delle operazioni della scena, che l'host
+/// rifiuta con `limit` come farebbe la shell, senza chiudere la connessione.
 fn commit(text: &str) -> Result<Parsed, Violation> {
     let invalid = |detail: String| Violation::new(CloseCode::InvalidPayload, detail);
     if text.len() > MAX_COMMIT {
