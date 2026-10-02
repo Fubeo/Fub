@@ -875,40 +875,10 @@ fn decode_css_escapes(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let mut index = 0;
     while index < chars.len() {
-        if chars[index] != '\\' {
-            output.push(chars[index]);
-            index += 1;
-            continue;
-        }
-        index += 1;
-        if index >= chars.len() {
-            break;
-        }
-        let hex_start = index;
-        while index < chars.len() && index - hex_start < 6 && chars[index].is_ascii_hexdigit() {
-            index += 1;
-        }
-        if index > hex_start {
-            let mut code = 0_u32;
-            for character in &chars[hex_start..index] {
-                code = code * 16
-                    + character
-                        .to_digit(16)
-                        .expect("is_ascii_hexdigit implies to_digit succeeds");
-            }
-            if index < chars.len() && chars[index].is_whitespace() {
-                index += 1;
-            }
-            output.push(
-                char::from_u32(if code == 0 || code > 0x10ffff {
-                    0xfffd
-                } else {
-                    code
-                })
-                .expect("validated Unicode scalar value"),
-            );
-        } else if matches!(chars[index], '\n' | '\r' | '\u{000c}') {
-            index += 1;
+        if chars[index] == '\\' {
+            let (decoded, next) = css_decode_escape(&chars, index);
+            output.push_str(&decoded);
+            index = next;
         } else {
             output.push(chars[index]);
             index += 1;
@@ -2182,5 +2152,32 @@ mod pointer_tests {
                 .generation,
             "second"
         );
+    }
+}
+
+#[cfg(test)]
+mod escape_tests {
+    use super::*;
+
+    /// Un escape che non nomina un valore scalare Unicode (surrogato, zero,
+    /// oltre U+10FFFF) vale U+FFFD, come prescrive CSS Syntax, in ogni percorso
+    /// che decodifica un url: virgolettato, nudo e dentro `image-set`.
+    #[test]
+    fn escapes_outside_unicode_scalars_become_the_replacement_character() {
+        for code in ["D800", "DFFF", "0", "110000"] {
+            let cases = [
+                (format!(r#"a{{b:url("x/q\{code}")}}"#), vec!["x/q\u{fffd}"]),
+                (format!(r"a{{b:url(x/n\{code})}}"), vec!["x/n\u{fffd}"]),
+                (
+                    format!(r#"a{{b:image-set("x/s\{code}" 1x, url(x/i\{code}) 2x)}}"#),
+                    vec!["x/i\u{fffd}", "x/s\u{fffd}"],
+                ),
+            ];
+            for (css, expected) in cases {
+                let expected: std::collections::BTreeSet<String> =
+                    expected.into_iter().map(String::from).collect();
+                assert_eq!(referenced_assets(&css, None, "x/"), expected, "{css}");
+            }
+        }
     }
 }
