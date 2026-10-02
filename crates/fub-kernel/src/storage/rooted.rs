@@ -1124,10 +1124,19 @@ mod tests {
         let from = root.join("nota.md");
         let to = root.join("Nota.md");
         storage.write(&from, b"testo").unwrap();
-        // Dove il caso non conta i due compagni di lock sono lo stesso file:
-        // qui lo è un hardlink, su un filesystem che il caso lo distingue.
+        // Dove il caso non conta (APFS di default) i due compagni di lock sono
+        // già lo stesso file; dove il caso conta lo diventano con un hardlink.
         std::fs::write(root.join(".nota.md.lock"), b"").unwrap();
-        std::fs::hard_link(root.join(".nota.md.lock"), root.join(".Nota.md.lock")).unwrap();
+        if let Err(error) =
+            std::fs::hard_link(root.join(".nota.md.lock"), root.join(".Nota.md.lock"))
+        {
+            assert_eq!(error.kind(), io::ErrorKind::AlreadyExists, "{error}");
+        }
+        {
+            use std::os::unix::fs::MetadataExt;
+            let inode = |name: &str| std::fs::metadata(root.join(name)).unwrap().ino();
+            assert_eq!(inode(".nota.md.lock"), inode(".Nota.md.lock"));
+        }
 
         let (_, moved) = finishes_within(std::time::Duration::from_secs(5), move || {
             storage.rename_no_replace(&from, &to)
