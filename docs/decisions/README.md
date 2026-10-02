@@ -37,6 +37,7 @@ Nuove decisioni usano il [template](template.md).
 | [0202 — Snapshot globali offline recuperabili](0202-snapshot-globali-recuperabili.md) | accolta | storage | — |
 | [0203 — Le superfici spaziali modificano sorgenti SVG con operazioni testuali](0203-superfici-spaziali.md) | proposta | frontend | — |
 | [0204 — L'inchiostro è un componente di sistema, non di un prodotto](0204-nucleo-inchiostro.md) | proposta | frontend | 0203 |
+| [0205 — La sessione live è un servizio dell'app con un canale verso la shell](0205-sessione-live.md) | proposta | host | — |
 | [0206 — Un tema dichiara il proprio motore e, da `theme-2`, le proprie impostazioni](0206-motori-dei-temi-e-impostazioni.md) | accolta | contratto | — |
 | [0207 — La domanda sì/no passa da una porta, e chi non risponde ha detto no](0207-conferma-presentata-dalla-shell.md) | accolta | frontend | — |
 | [0208 — La finestra è lo Scrittoio, e la serie di serie è `theme-2`](0208-la-finestra-e-lo-scrittoio.md) | accolta | frontend | — |
