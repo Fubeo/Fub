@@ -202,7 +202,15 @@ fn a_space_that_cannot_follow_stops_the_rename_and_everything_goes_back() {
                 .expect("utf-8")
         })
         .collect();
-    assert!(!names.iter().any(|name| name.contains('~')), "{names:?}");
+    // Su Windows la rinomina senza sostituzione passa dai compagni di lock
+    // (`.Nuova.md~displaced.lock`), che restano accanto ai nomi toccati: il
+    // residuo da non lasciare è la cartella spostata, non il suo lock.
+    assert!(
+        !names
+            .iter()
+            .any(|name| !name.starts_with('.') && name.contains('~')),
+        "{names:?}"
+    );
 
     ws.collect_doc_data().expect("collection");
     assert_eq!(
