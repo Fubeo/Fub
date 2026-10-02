@@ -50,12 +50,6 @@ fn action(a: w_ui::ActionRef) -> Result<ui::ActionRef, PluginError> {
 fn opt_action(a: Option<w_ui::ActionRef>) -> Result<Option<ui::ActionRef>, PluginError> {
     a.map(action).transpose()
 }
-fn option(o: w_ui::UiOption) -> Result<ui::UiOption, PluginError> {
-    Ok(ui::UiOption {
-        value: o.value,
-        label: tr::from_text(o.label),
-    })
-}
 fn column(c: w_ui::TableColumn) -> ui::TableColumn {
     ui::TableColumn {
         title: tr::from_text(c.title),
@@ -519,11 +513,7 @@ fn node(n: w_ui::UiNode) -> Result<arena::UiNode, PluginError> {
             field: x.field,
             label: x.label.map(tr::from_text),
             value: x.value,
-            options: x
-                .options
-                .into_iter()
-                .map(option)
-                .collect::<Result<_, _>>()?,
+            options: x.options.into_iter().map(tr::from_ui_option).collect(),
             multiple: x.multiple,
             action: opt_action(x.action)?,
         },
@@ -531,11 +521,7 @@ fn node(n: w_ui::UiNode) -> Result<arena::UiNode, PluginError> {
             field: x.field,
             label: x.label.map(tr::from_text),
             value: x.value,
-            options: x
-                .options
-                .into_iter()
-                .map(option)
-                .collect::<Result<_, _>>()?,
+            options: x.options.into_iter().map(tr::from_ui_option).collect(),
             action: opt_action(x.action)?,
         },
         W::Slider(x) => arena::UiKind::Slider {
@@ -813,5 +799,66 @@ mod tests {
         }
         let root = (nodes.len() - 1) as u32;
         assert!(from_tree(w_ui::UiTree { nodes, root }).is_err());
+    }
+
+    /// Le scelte di `Select` e `Radio` arrivano con valore ed etichetta, nello
+    /// stesso ordine in cui il guest le ha scritte.
+    #[test]
+    fn choice_options_keep_value_and_label() {
+        let literal =
+            |value: &str| crate::contract::fub::abi::text::Text::Literal(value.to_owned());
+        let options = || {
+            vec![
+                w_ui::UiOption {
+                    value: "a".into(),
+                    label: literal("Uno"),
+                },
+                w_ui::UiOption {
+                    value: "b".into(),
+                    label: literal("Due"),
+                },
+            ]
+        };
+        let expected = vec![
+            ui::UiOption {
+                value: "a".into(),
+                label: fub_abi::text::Text::Literal("Uno".into()),
+            },
+            ui::UiOption {
+                value: "b".into(),
+                label: fub_abi::text::Text::Literal("Due".into()),
+            },
+        ];
+        let tree = |kind| w_ui::UiTree {
+            nodes: vec![w_ui::UiNode { key: None, kind }],
+            root: 0,
+        };
+
+        let select = from_tree(tree(w_ui::UiKind::Select(w_ui::UiSelect {
+            field: "scelta".into(),
+            label: None,
+            value: vec!["b".into()],
+            options: options(),
+            multiple: false,
+            action: None,
+        })))
+        .unwrap();
+        let ui::UiKind::Select { options: got, .. } = select.kind else {
+            panic!("non è una select");
+        };
+        assert_eq!(got, expected);
+
+        let radio = from_tree(tree(w_ui::UiKind::Radio(w_ui::UiRadio {
+            field: "scelta".into(),
+            label: None,
+            value: Some("a".into()),
+            options: options(),
+            action: None,
+        })))
+        .unwrap();
+        let ui::UiKind::Radio { options: got, .. } = radio.kind else {
+            panic!("non è un radio");
+        };
+        assert_eq!(got, expected);
     }
 }

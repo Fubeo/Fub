@@ -191,7 +191,7 @@ pub(crate) fn to_map(m: &fub_abi::options::OptionMap) -> w_options::OptionMap {
 // Impostazioni
 // ---------------------------------------------------------------------------
 
-fn from_ui_option(or: w_ui::UiOption) -> fub_abi::ui::UiOption {
+pub(crate) fn from_ui_option(or: w_ui::UiOption) -> fub_abi::ui::UiOption {
     fub_abi::ui::UiOption {
         value: or.value,
         label: from_text(or.label),
@@ -886,7 +886,7 @@ fn from_subject(s: w_events::Subject) -> fub_abi::event::Subject {
     }
 }
 
-fn from_doc_change(c: w_events::DocChange) -> fub_abi::event::DocChange {
+pub(crate) fn from_doc_change(c: w_events::DocChange) -> fub_abi::event::DocChange {
     match c {
         w_events::DocChange::Body => fub_abi::event::DocChange::Body,
         w_events::DocChange::Frontmatter => fub_abi::event::DocChange::Frontmatter,

@@ -50,7 +50,7 @@
 //! Rileggerlo di qua sarebbe il secondo punto di enforcement che quel verbale
 //! esiste per non avere.
 
-use fub_abi::event::{BatchId, DocChange, DocChanges, Event, Severity};
+use fub_abi::event::{BatchId, DocChanges, Event, Severity};
 use fub_abi::gate::Gate;
 use fub_abi::model::DocId;
 use fub_abi::settings::SettingScope;
@@ -257,21 +257,10 @@ fn from_progress(p: w_jobs::JobProgress) -> JobProgress {
 /// posto di un `None`.
 fn from_changes(c: w_events::DocChanges) -> DocChanges {
     DocChanges {
-        aspects: c.aspects.into_iter().map(from_aspect).collect(),
+        aspects: c.aspects.into_iter().map(tr::from_doc_change).collect(),
         properties: c.properties,
         tags_added: c.tags_added,
         tags_removed: c.tags_removed,
-    }
-}
-
-fn from_aspect(a: w_events::DocChange) -> DocChange {
-    match a {
-        w_events::DocChange::Body => DocChange::Body,
-        w_events::DocChange::Frontmatter => DocChange::Frontmatter,
-        w_events::DocChange::Tags => DocChange::Tags,
-        w_events::DocChange::Links => DocChange::Links,
-        w_events::DocChange::Outline => DocChange::Outline,
-        w_events::DocChange::Anchors => DocChange::Anchors,
     }
 }
 
@@ -317,5 +306,46 @@ fn from_gate(g: w_events::Gate) -> Gate {
         w_events::Gate::CustomRender => Gate::CustomRender,
         w_events::Gate::Job => Gate::Job,
         w_events::Gate::IndexQuery => Gate::IndexQuery,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fub_abi::event::DocChange;
+
+    /// Ogni aspetto di un `DocChanges` del guest arriva con il proprio nome, e
+    /// i nomi letti passano com'erano.
+    #[test]
+    fn every_doc_change_aspect_crosses_by_name() {
+        let changes = from_changes(w_events::DocChanges {
+            aspects: vec![
+                w_events::DocChange::Body,
+                w_events::DocChange::Frontmatter,
+                w_events::DocChange::Tags,
+                w_events::DocChange::Links,
+                w_events::DocChange::Outline,
+                w_events::DocChange::Anchors,
+            ],
+            properties: vec!["stato".into()],
+            tags_added: vec!["nuovo".into()],
+            tags_removed: vec!["vecchio".into()],
+        });
+        assert_eq!(
+            changes,
+            DocChanges {
+                aspects: vec![
+                    DocChange::Body,
+                    DocChange::Frontmatter,
+                    DocChange::Tags,
+                    DocChange::Links,
+                    DocChange::Outline,
+                    DocChange::Anchors,
+                ],
+                properties: vec!["stato".into()],
+                tags_added: vec!["nuovo".into()],
+                tags_removed: vec!["vecchio".into()],
+            }
+        );
     }
 }
