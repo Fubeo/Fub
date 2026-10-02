@@ -59,6 +59,7 @@ flowchart TD
     host --> importers
     host --> markdown
     host --> sheet
+    host --> svg
     host --> kernel
     cli --> abi
     cli --> host
@@ -107,7 +108,9 @@ proposito: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
 deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 `dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
 `fub-format-svg`, il provider del [formato della
-scena](../reference/scene-format.md).
+scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
+`draw`: l'arco `host --> svg` è una dipendenza facoltativa, fuori dal
+`default`.
 
 ## Flusso di un comando
 

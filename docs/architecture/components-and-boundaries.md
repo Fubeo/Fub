@@ -32,6 +32,7 @@ flowchart LR
     HOST --> SHEET
     HOST --> CANVAS
     HOST --> BASE
+    HOST -. "feature draw" .-> SVG
     HOST --> IMPORTERS
     WASM["fub-wasm-host"] --> ABI
     WASM --> HOST

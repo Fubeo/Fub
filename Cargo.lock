@@ -1774,6 +1774,7 @@ dependencies = [
  "fub-format-canvas",
  "fub-format-markdown",
  "fub-format-sheet",
+ "fub-format-svg",
  "fub-importers",
  "fub-kernel",
  "fub-sdk",
