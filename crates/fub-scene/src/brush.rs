@@ -122,8 +122,8 @@ impl fmt::Display for BrushError {
 impl std::error::Error for BrushError {}
 
 /// Vero se `text` è per intero un numero SVG senza unità: segno facoltativo,
-/// cifre con o senza decimali, esponente facoltativo. Come l'espressione
-/// regolare di TypeScript ammette `1.`.
+/// cifre con o senza decimali, esponente facoltativo. Come le lunghezze, e come
+/// i browser, vuole una cifra dopo il punto: `1.` non è un numero.
 fn is_number(text: &str) -> bool {
     let bytes = text.as_bytes();
     let mut i = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
@@ -137,7 +137,10 @@ fn is_number(text: &str) -> bool {
     let integer = digits(&mut i);
     let fraction = if bytes.get(i) == Some(&b'.') {
         i += 1;
-        digits(&mut i)
+        match digits(&mut i) {
+            0 => return false,
+            n => n,
+        }
     } else {
         0
     };
@@ -248,13 +251,12 @@ mod tests {
 
     #[test]
     fn numbers_follow_the_typescript_grammar() {
-        for valid in [
-            "0", "-1", "+2", "1.", ".5", "1.5", "1e3", "1E-3", "-.5e+2", "007",
-        ] {
+        for valid in ["0", "-1", "+2", ".5", "1.5", "1e3", "1E-3", "-.5e+2", "007"] {
             assert!(is_number(valid), "{valid}");
         }
         for invalid in [
-            "", ".", "+", "e3", "1e", "1e+", "0x10", "Infinity", "NaN", "1px", " 1", "1 ", "1..2",
+            "", ".", "1.", "-1.e3", "+", "e3", "1e", "1e+", "0x10", "Infinity", "NaN", "1px", " 1",
+            "1 ", "1..2",
         ] {
             assert!(!is_number(invalid), "{invalid}");
         }
