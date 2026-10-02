@@ -38,9 +38,12 @@ pub(crate) const NS_XLINK: usize = 3;
 pub(crate) const NS_XML: usize = 4;
 /// `http://www.w3.org/2000/xmlns/`, il namespace delle dichiarazioni.
 pub(crate) const NS_XMLNS: usize = 5;
+/// `http://www.w3.org/1999/xhtml`, l'HTML dentro i `foreignObject`.
+pub(crate) const NS_XHTML: usize = 6;
 
 const XML_URI: &str = "http://www.w3.org/XML/1998/namespace";
 const XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
+const XHTML_URI: &str = "http://www.w3.org/1999/xhtml";
 
 /// Quanto può annidarsi l'espansione di un'entità dentro un attributo.
 const MAX_ENTITY_DEPTH: usize = 16;
@@ -166,6 +169,7 @@ pub(crate) struct Document<'a> {
     pub elements: usize,
     /// Falso quando la lettura si è fermata dopo la testa (§11).
     pub complete: bool,
+    entities: HashMap<&'a str, Entity>,
 }
 
 /// Un nodo con i suoi byte `[start, end)`.
@@ -186,13 +190,14 @@ pub(crate) enum Kind<'a> {
         value: Cow<'a, str>,
         blank: bool,
     },
-    CData,
+    /// Una sezione CDATA, col suo contenuto.
+    CData(Cow<'a, str>),
     Comment,
     Pi,
     Decl,
     Doctype,
-    /// Un riferimento a un'entità dichiarata nel `DOCTYPE`.
-    EntityRef,
+    /// Un riferimento a un'entità dichiarata nel `DOCTYPE`, col suo nome.
+    EntityRef(&'a str),
 }
 
 /// Un elemento: nome, namespace, attributi, figli e dove finisce il suo tag
@@ -233,6 +238,8 @@ pub(crate) struct Attr<'a> {
     pub local: &'a str,
     pub ns: usize,
     pub value: Cow<'a, str>,
+    /// I byte del valore grezzo, virgolette escluse.
+    pub raw: (usize, usize),
 }
 
 /// Un'entità generale dichiarata nel sottoinsieme interno del `DOCTYPE`.
@@ -260,6 +267,16 @@ impl Document<'_> {
     /// I figli di `id`, vuoti se il nodo non è un elemento.
     pub fn children(&self, id: NodeId) -> &[NodeId] {
         self.element(id).map_or(&[], |e| e.children.as_slice())
+    }
+
+    /// Il testo di sostituzione di un'entità interna, se è testo semplice:
+    /// senza marcatura e senza altri riferimenti. Serve all'indice, che lo
+    /// legge come testo; tutto il resto non si espande.
+    pub fn plain_entity(&self, name: &str) -> Option<&str> {
+        match self.entities.get(name) {
+            Some(Entity::Internal(text)) if !text.contains(['<', '&']) => Some(text),
+            _ => None,
+        }
     }
 }
 
@@ -390,6 +407,7 @@ impl<'a> Parser<'a> {
             crate::XLINK_NS,
             XML_URI,
             XMLNS_URI,
+            XHTML_URI,
         ];
         Parser {
             source,
@@ -521,7 +539,7 @@ impl<'a> Parser<'a> {
                 None => match self.entities.get(name) {
                     Some(Entity::Internal(_) | Entity::External) => {
                         self.flush_text();
-                        self.push(Kind::EntityRef, start, end);
+                        self.push(Kind::EntityRef(name), start, end);
                     }
                     Some(Entity::Unparsed) => return fail(start, XmlErrorKind::ExternalEntity),
                     Some(Entity::Unresolved) | None => {
@@ -590,6 +608,7 @@ impl<'a> Parser<'a> {
                     local,
                     ns,
                     value,
+                    raw: raw.value,
                 },
             ));
         }
@@ -752,7 +771,8 @@ impl<'a> Parser<'a> {
         if self.stack.is_empty() {
             return fail(start, XmlErrorKind::ContentOutsideRoot);
         }
-        self.push(Kind::CData, start, end);
+        let body = &self.source[start + 9..end - 3];
+        self.push(Kind::CData(eol(body)), start, end);
         Ok(())
     }
 
@@ -893,6 +913,7 @@ impl<'a> Parser<'a> {
             doctype: self.doctype,
             elements: self.elements,
             complete,
+            entities: self.entities,
         })
     }
 }
@@ -1549,7 +1570,7 @@ mod tests {
             .iter()
             .map(|&id| match &doc.nodes[id].kind {
                 Kind::Text { value, .. } => value.to_string(),
-                Kind::EntityRef => String::from("&who;"),
+                Kind::EntityRef(name) => format!("&{name};"),
                 _ => String::from("?"),
             })
             .collect();

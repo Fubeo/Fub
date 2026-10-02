@@ -339,6 +339,12 @@ fn scheme(url: &str) -> Option<String> {
     valid.then(|| scheme.to_ascii_lowercase())
 }
 
+/// Vero se un URL usa lo schema `javascript:`, letto come lo legge il parser
+/// di URL: `" java\tscript:"` lo è.
+pub(crate) fn is_javascript(value: &str) -> bool {
+    scheme(&url_text(value)).as_deref() == Some("javascript")
+}
+
 /// Che cosa indica un `href`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Href {
@@ -705,5 +711,9 @@ mod tests {
                 bytes: 6
             }
         );
+        assert!(is_javascript("java\tscript:alert(1)"));
+        assert!(is_javascript(" JavaScript:x"));
+        assert!(!is_javascript("javascript.md"));
+        assert!(!is_javascript("note/javascript:x"));
     }
 }

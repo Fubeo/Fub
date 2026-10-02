@@ -14,6 +14,7 @@
 
 use serde::Serialize;
 
+use crate::analysis::{Context, Tally};
 use crate::brush::{Brush, BrushError};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::parse_path;
@@ -434,14 +435,27 @@ struct Frame {
     next: usize,
     elements: usize,
     pending: Option<Pending>,
+    context: Context,
 }
 
 struct Builder<'d, 'a> {
     doc: &'d Document<'a>,
     map: &'d Utf16Map<'a>,
     lines: Lines<'a>,
+    /// Falso per un documento oltre [`crate::MAX_ELEMENTS`]: le voci si
+    /// contano e si scartano, e restano solo riepilogo e diagnostica.
+    keep: bool,
     items: Vec<Item>,
     diagnostics: Vec<Diagnostic>,
+    tally: Tally,
+}
+
+/// Ciò che la classificazione trova.
+pub(crate) struct Classified {
+    pub items: Vec<Item>,
+    /// S002, S004 e S010.
+    pub diagnostics: Vec<Diagnostic>,
+    pub tally: Tally,
 }
 
 impl Builder<'_, '_> {
@@ -479,12 +493,15 @@ impl Builder<'_, '_> {
     fn flush(&mut self, pending: Option<Pending>, parent_path: Option<&[usize]>) {
         if let Some(block) = pending {
             let span = self.map.span(block.start, block.end);
-            self.items.push(Item::Foreign(ForeignItem {
-                parent_path: parent_path.map(<[usize]>::to_vec),
-                span,
-                elements: block.elements,
-                indent: self.lines.indent(block.start).to_owned(),
-            }));
+            if self.keep {
+                self.items.push(Item::Foreign(ForeignItem {
+                    parent_path: parent_path.map(<[usize]>::to_vec),
+                    span,
+                    elements: block.elements,
+                    indent: self.lines.indent(block.start).to_owned(),
+                }));
+            }
+            self.tally.foreign();
             self.diagnostics
                 .push(Diagnostic::new(Code::S002, Some(span), None));
         }
@@ -552,7 +569,14 @@ impl Builder<'_, '_> {
         }
     }
 
-    fn element_item(&mut self, id: NodeId, tag: Tag, role: Role, path: Vec<usize>) {
+    fn element_item(
+        &mut self,
+        id: NodeId,
+        tag: Tag,
+        role: Role,
+        path: Vec<usize>,
+        context: &Context,
+    ) {
         let doc = self.doc;
         let node = &doc.nodes[id];
         let element = doc.element(id).expect("una voce è un elemento");
@@ -568,6 +592,11 @@ impl Builder<'_, '_> {
         });
         let span = self.map.span(node.start, node.end);
         let stroke = (role == Role::Stroke).then(|| self.stroke(element, span));
+        self.tally
+            .element(doc, element, role, context, span, stroke.as_ref());
+        if !self.keep {
+            return;
+        }
         let item = ElementItem {
             path,
             tag: tag.name(),
@@ -603,6 +632,7 @@ impl Builder<'_, '_> {
             next: 0,
             elements: 0,
             pending: None,
+            context: Context::root(doc.element(root).expect("la radice è un elemento")),
         }];
         while let Some(frame) = stack.last_mut() {
             let children = doc.children(frame.node);
@@ -625,18 +655,24 @@ impl Builder<'_, '_> {
                     match class {
                         Some((tag, role)) => {
                             let pending = frame.pending.take();
+                            let context = frame
+                                .context
+                                .child(doc.element(child).expect("una voce è un elemento"));
                             let mut path = frame.path.clone();
                             self.flush(pending, Some(&path));
                             path.push(index);
-                            self.element_item(child, tag, role, path.clone());
                             if role.is_container() {
+                                self.element_item(child, tag, role, path.clone(), &context);
                                 stack.push(Frame {
                                     node: child,
                                     path,
                                     next: 0,
                                     elements: 0,
                                     pending: None,
+                                    context,
                                 });
+                            } else {
+                                self.element_item(child, tag, role, path, &context);
                             }
                         }
                         None => {
@@ -654,18 +690,22 @@ impl Builder<'_, '_> {
     }
 }
 
-/// Classifica un documento letto per intero e ne restituisce le voci, con la
-/// diagnostica che la classificazione trova: S002, S004 e S010.
+/// Classifica un documento letto per intero. Con `keep` falso le voci non
+/// si conservano: un documento oltre il limite di elementi ne avrebbe troppe,
+/// e serve solo il suo riepilogo.
 pub(crate) fn classify_document<'a>(
     doc: &Document<'a>,
     map: &Utf16Map<'a>,
-) -> (Vec<Item>, Vec<Diagnostic>) {
+    keep: bool,
+) -> Classified {
     let mut builder = Builder {
         doc,
         map,
         lines: Lines::new(doc.source),
+        keep,
         items: Vec::new(),
         diagnostics: Vec::new(),
+        tally: Tally::default(),
     };
     let mut pending = None;
     // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.
@@ -680,7 +720,9 @@ pub(crate) fn classify_document<'a>(
                     span: map.span(node.start, node.end),
                     tags: builder.tags(id),
                 };
-                builder.items.push(Item::Root(root));
+                if keep {
+                    builder.items.push(Item::Root(root));
+                }
                 builder.walk(id);
                 next = 1;
             }
@@ -688,5 +730,9 @@ pub(crate) fn classify_document<'a>(
         }
     }
     builder.flush(pending, None);
-    (builder.items, builder.diagnostics)
+    Classified {
+        items: builder.items,
+        diagnostics: builder.diagnostics,
+        tally: builder.tally,
+    }
 }

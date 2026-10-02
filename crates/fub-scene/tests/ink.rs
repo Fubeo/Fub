@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{at, doc, load};
+use common::{at, doc, findings, load};
 use fub_scene::ink::{INK_MAX_BYTES, INK_MAX_SAMPLES, MAX_SAFE_INTEGER};
 use fub_scene::{Brush, BrushError, Code, Ink, InkError, Role, Sample, Scale, Severity};
 
@@ -458,7 +458,7 @@ fn a_valid_stroke_is_redrawable() {
     let stroke = at(&scene, &[0]).unwrap().stroke.clone().unwrap();
     assert!(stroke.redrawable);
     assert_eq!((stroke.samples, stroke.duration), (Some(3), Some(16)));
-    assert!(scene.diagnostics.is_empty());
+    assert!(findings(&scene).is_empty());
     assert!(scene.editable());
 }
 
@@ -492,18 +492,15 @@ fn an_invalid_ink_or_brush_is_s004_and_keeps_the_stroke_editable() {
         let element = at(&scene, &[0]).unwrap();
         assert_eq!(element.role, Role::Stroke, "{attributes}");
         assert!(!element.stroke.as_ref().unwrap().redrawable);
-        let found: Vec<_> = scene
-            .diagnostics
+        let found: Vec<_> = findings(&scene)
             .iter()
             .map(|d| d.detail.as_deref().unwrap())
             .collect();
         assert_eq!(found, details, "{attributes}");
-        assert!(scene
-            .diagnostics
+        assert!(findings(&scene)
             .iter()
             .all(|d| d.code == Code::S004 && d.severity == Severity::Error));
-        assert!(scene
-            .diagnostics
+        assert!(findings(&scene)
             .iter()
             .all(|d| d.span == Some(element.span)));
         // Il documento resta modificabile.
@@ -519,8 +516,9 @@ fn unknown_channels_are_s010() {
     let stroke = at(&scene, &[0]).unwrap().stroke.clone().unwrap();
     assert!(!stroke.redrawable);
     assert_eq!((stroke.samples, stroke.duration), (Some(2), Some(4)));
-    assert_eq!(scene.diagnostics.len(), 1);
-    let diagnostic = &scene.diagnostics[0];
+    let found = findings(&scene);
+    assert_eq!(found.len(), 1);
+    let diagnostic = found[0];
     assert_eq!(
         (diagnostic.code, diagnostic.severity),
         (Code::S010, Severity::Info)
@@ -535,6 +533,6 @@ fn ink_and_brush_matter_only_on_strokes() {
         r#"<path d="M0 0" fub:ink="rotto" fub:brush="rotto"/><use fub:tool="pen" fub:ink="x"/>"#,
     );
     let scene = load(&source);
-    assert!(scene.diagnostics.iter().all(|d| d.code == Code::S002));
+    assert!(findings(&scene).iter().all(|d| d.code == Code::S002));
     assert!(at(&scene, &[0]).unwrap().stroke.is_none());
 }

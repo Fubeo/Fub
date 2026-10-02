@@ -6,7 +6,9 @@
 
 use std::collections::HashMap;
 
-use fub_scene::{read, ElementItem, ForeignItem, Item, ReadOnly, Role, Scene, Span, Tags};
+use fub_scene::{
+    read, Code, Diagnostic, ElementItem, ForeignItem, Item, ReadOnly, Role, Scene, Span, Tags,
+};
 
 /// La radice di un documento FubDraw di prova, con i tre namespace.
 pub const HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" xmlns:xlink="http://www.w3.org/1999/xlink" fub:version="1" viewBox="0 0 100 100">"#;
@@ -22,6 +24,16 @@ pub fn load(source: &str) -> Scene {
     let scene = read(source).unwrap_or_else(|e| panic!("{e}\n{source}"));
     check_lossless(source, &scene);
     scene
+}
+
+/// La diagnostica tranne S001: i documenti di prova non hanno un titolo, se
+/// il test non riguarda proprio il titolo.
+pub fn findings(scene: &Scene) -> Vec<&Diagnostic> {
+    scene
+        .diagnostics
+        .iter()
+        .filter(|d| d.code != Code::S001)
+        .collect()
 }
 
 /// Le voci modificabili.
@@ -215,6 +227,25 @@ pub fn check_lossless(source: &str, scene: &Scene) {
             count_elements(&source[*start..*end]),
             "elementi di {parent:?}"
         );
+    }
+
+    // Gli span dell'indice e della diagnostica, nelle due coordinate.
+    let index = &scene.index;
+    let excerpts = index.title.iter().chain(&index.desc).chain(&index.texts);
+    for excerpt in excerpts {
+        check_span(&excerpt.span);
+        assert!(text(source, &excerpt.span).starts_with('<'));
+    }
+    for reference in index.links.iter().chain(&index.embeds) {
+        check_span(&reference.span);
+        check_span(&reference.href);
+        let element = reference.span.bytes;
+        assert!(element[0] < reference.href.bytes[0] && reference.href.bytes[1] < element[1]);
+    }
+    for diagnostic in &scene.diagnostics {
+        if let Some(span) = &diagnostic.span {
+            check_span(span);
+        }
     }
 }
 

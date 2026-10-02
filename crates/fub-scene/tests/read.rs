@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{at, doc, foreign, load, text, utf16_prefix, HEAD};
+use common::{at, doc, findings, foreign, load, text, utf16_prefix, HEAD};
 use fub_scene::{
     read, Code, Item, LineEnding, ReadError, ReadOnly, Role, Severity, Status, XmlErrorKind,
     MAX_EDIT_BYTES, MAX_ELEMENTS,
@@ -32,7 +32,7 @@ fn fub_version_one_is_editable() {
     assert_eq!(scene.status, Status::Fubdraw);
     assert_eq!(scene.version, Some(1));
     assert!(scene.editable());
-    assert!(scene.diagnostics.is_empty());
+    assert!(findings(&scene).is_empty());
 }
 
 #[test]
@@ -57,8 +57,9 @@ fn a_future_version_is_read_only_with_s007() {
         )));
         assert_eq!(scene.status, Status::Fubdraw);
         assert_eq!(scene.read_only, [ReadOnly::FutureVersion], "{value}");
-        assert_eq!(scene.diagnostics.len(), 1);
-        let diagnostic = &scene.diagnostics[0];
+        let found = findings(&scene);
+        assert_eq!(found.len(), 1);
+        let diagnostic = found[0];
         assert_eq!(diagnostic.code, Code::S007);
         assert_eq!(diagnostic.severity, Severity::Info);
         assert_eq!(diagnostic.span, None);
@@ -75,7 +76,7 @@ fn an_invalid_version_is_read_only() {
         assert_eq!(scene.status, Status::Fubdraw, "{value:?}");
         assert_eq!(scene.read_only, [ReadOnly::InvalidVersion], "{value:?}");
         assert_eq!(scene.version, None);
-        assert!(scene.diagnostics.is_empty());
+        assert!(findings(&scene).is_empty());
     }
     let scene = load(&root(&format!(r#"xmlns:fub="{FUB}" fub:version="01""#)));
     assert_eq!(scene.version, Some(1));
@@ -351,7 +352,7 @@ fn every_foreign_block_is_an_s002() {
         assert_eq!(diagnostic.span, Some(block.span));
         assert_eq!(diagnostic.severity, Severity::Info);
     }
-    assert!(load(&doc("<rect/>")).diagnostics.is_empty());
+    assert!(findings(&load(&doc("<rect/>"))).is_empty());
 }
 
 #[test]
@@ -375,7 +376,14 @@ fn read_only_reasons_and_diagnostics_are_sorted() {
     let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
     assert_eq!(
         codes,
-        [Code::S002, Code::S003, Code::S003, Code::S007, Code::S008]
+        [
+            Code::S001,
+            Code::S002,
+            Code::S003,
+            Code::S003,
+            Code::S007,
+            Code::S008
+        ]
     );
 }
 
@@ -413,11 +421,45 @@ fn the_scene_serializes_to_the_documented_shape() {
     assert_eq!(block["kind"], "foreign");
     assert_eq!(block["parentPath"], serde_json::json!([0]));
     assert_eq!(block["elements"], serde_json::json!([0, 1]));
+    // S001 riguarda il documento intero: niente span.
     let diagnostic = &value["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "S001");
+    assert_eq!(diagnostic["severity"], "warning");
+    assert!(diagnostic.get("bytes").is_none() && diagnostic.get("utf16").is_none());
+    let diagnostic = &value["diagnostics"][1];
     assert_eq!(diagnostic["code"], "S002");
     assert_eq!(diagnostic["severity"], "info");
     assert_eq!(diagnostic["bytes"], block["bytes"]);
     assert!(diagnostic.get("detail").is_none());
+    assert_eq!(
+        value["index"],
+        serde_json::json!({
+            "title": null,
+            "desc": null,
+            "texts": [],
+            "links": [],
+            "embeds": []
+        })
+    );
+    assert_eq!(
+        value["summary"],
+        serde_json::json!({
+            "version": 1,
+            "foreign": false,
+            "truncated": false,
+            "layers": ["Uno"],
+            "counts": {
+                "strokes": 0,
+                "shapes": 0,
+                "texts": 0,
+                "images": 0,
+                "links": 0,
+                "foreign": 1
+            },
+            "ink": {"samples": 0, "duration": 0},
+            "bbox": null
+        })
+    );
 }
 
 #[test]

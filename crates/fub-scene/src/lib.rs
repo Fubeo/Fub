@@ -6,9 +6,9 @@
 //! che cosa è estraneo e dove sta, byte per byte.
 //!
 //! [`read`] restituisce una [`Scene`]: lo stato del documento, le voci in
-//! ordine di documento con i loro span e la diagnostica di §12. La sorgente
-//! resta autorevole: ogni byte che non sta in una voce è spazio fra due voci,
-//! e la scena non ne possiede una copia.
+//! ordine di documento con i loro span, ciò che ne legge l'indice (§9) e la
+//! diagnostica di §12. La sorgente resta autorevole: ogni byte che non sta in
+//! una voce è spazio fra due voci, e la scena non ne possiede una copia.
 //!
 //! [`Ink`] e [`Brush`] sono il codec di `fub:ink` e la lettura di `fub:brush`
 //! (§5): la scena li usa per dire se un tratto si ridisegna, e chi scrive un
@@ -22,6 +22,7 @@ use std::fmt;
 
 use serde::Serialize;
 
+mod analysis;
 mod brush;
 mod classify;
 mod diagnostics;
@@ -31,6 +32,9 @@ pub mod text;
 mod values;
 mod xml;
 
+pub use analysis::{
+    BBox, Counts, Excerpt, Index, InkTotals, Reference, Summary, MAX_IMAGE_BYTES, MIN_CONTRAST,
+};
 pub use brush::{Brush, BrushError, PF1, PF1_KEYS};
 pub use classify::{ElementItem, ForeignItem, Item, Layer, Role, RootItem, Stroke, Tags, Tool};
 pub use diagnostics::{Code, Diagnostic, Severity};
@@ -116,6 +120,11 @@ pub struct Scene {
     /// più di [`MAX_ELEMENTS`] elementi: un documento così si apre in sola
     /// lettura, e la superficie lo mostra intero come immagine.
     pub items: Vec<Item>,
+    /// Titolo, descrizione, testi, collegamenti e immagini del vault, di
+    /// tutto il documento: anche di ciò che è estraneo.
+    pub index: Index,
+    /// Il riepilogo di `fub.scene.summary`, anche quando le voci sono vuote.
+    pub summary: Summary,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -234,14 +243,17 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
     }
 
     // Le voci di un documento enorme costerebbero più del documento: non
-    // servono, perché si apre solo in Lettura.
-    let items = if !truncated && !too_many {
-        let (items, found) = classify::classify_document(&doc, &map);
-        diagnostics.extend(found);
-        items
+    // servono, perché si apre solo in Lettura. Si classifica comunque, per il
+    // riepilogo e la diagnostica; di un file troncato c'è solo la testa.
+    let (items, summary) = if truncated {
+        (Vec::new(), analysis::truncated_summary(status, version))
     } else {
-        Vec::new()
+        let classified = classify::classify_document(&doc, &map, !too_many);
+        diagnostics.extend(classified.diagnostics);
+        let summary = classified.tally.finish(status, version, &mut diagnostics);
+        (classified.items, summary)
     };
+    let index = analysis::index(&doc, &map, &mut diagnostics);
 
     read_only.sort();
     diagnostics::sort(&mut diagnostics);
@@ -254,6 +266,8 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
         line_break: LineEnding::line_break(source),
         truncated,
         items,
+        index,
+        summary,
         diagnostics,
     })
 }
