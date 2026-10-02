@@ -14,7 +14,10 @@
 
 use serde::Serialize;
 
+use crate::brush::{Brush, BrushError};
+use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::parse_path;
+use crate::ink::{Ink, InkError};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
     dasharray, href, keyword, length, non_negative_length, number_list, opacity, paint, points,
@@ -92,6 +95,17 @@ pub struct Layer {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Stroke {
     pub tool: Tool,
+    /// Vero se `fub:ink` e `fub:brush` si leggono e l'inchiostro non ha
+    /// canali sconosciuti: la superficie può ricalcolare `d`. Altrimenti il
+    /// tratto si sposta, si trasforma, si ricolora e si elimina, e `d` resta
+    /// com'è (S004, S010).
+    pub redrawable: bool,
+    /// I campioni di `fub:ink`, se si legge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub samples: Option<usize>,
+    /// La durata in millisecondi, se `fub:ink` si legge e ha il canale `t`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<i64>,
 }
 
 /// La radice `<svg>`: è il documento, e non si classifica.
@@ -427,6 +441,7 @@ struct Builder<'d, 'a> {
     map: &'d Utf16Map<'a>,
     lines: Lines<'a>,
     items: Vec<Item>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl Builder<'_, '_> {
@@ -463,12 +478,15 @@ impl Builder<'_, '_> {
 
     fn flush(&mut self, pending: Option<Pending>, parent_path: Option<&[usize]>) {
         if let Some(block) = pending {
+            let span = self.map.span(block.start, block.end);
             self.items.push(Item::Foreign(ForeignItem {
                 parent_path: parent_path.map(<[usize]>::to_vec),
-                span: self.map.span(block.start, block.end),
+                span,
                 elements: block.elements,
                 indent: self.lines.indent(block.start).to_owned(),
             }));
+            self.diagnostics
+                .push(Diagnostic::new(Code::S002, Some(span), None));
         }
     }
 
@@ -480,6 +498,57 @@ impl Builder<'_, '_> {
             close: element
                 .close_start
                 .map(|start| self.map.span(start, node.end)),
+        }
+    }
+
+    /// Legge inchiostro e pennello di un tratto, con S004 per ognuno che non
+    /// si legge e S010 per i canali sconosciuti.
+    fn stroke(&mut self, element: &Element<'_>, span: Span) -> Stroke {
+        let tool = match element.value(NS_FUB, "tool") {
+            Some("highlighter") => Tool::Highlighter,
+            _ => Tool::Pen,
+        };
+        let ink = element
+            .value(NS_FUB, "ink")
+            .map_or(Err(InkError::Missing), Ink::decode);
+        let brush = element
+            .value(NS_FUB, "brush")
+            .map_or(Err(BrushError::Missing), Brush::parse);
+        let mut problems = Vec::new();
+        if let Err(error) = &ink {
+            let mut detail = format!("fub:ink {}", error.kind());
+            if let Some(sample) = error.sample() {
+                detail.push_str(&format!(" {sample}"));
+            }
+            if let InkError::Range { channel, .. } = error {
+                detail.push_str(&format!(" {channel}"));
+            }
+            problems.push((Code::S004, detail));
+        }
+        if let Err(error) = &brush {
+            let mut detail = format!("fub:brush {}", error.kind());
+            if let Some(key) = error.key() {
+                detail.push_str(&format!(" {key}"));
+            }
+            problems.push((Code::S004, detail));
+        }
+        if let Ok(ink) = &ink {
+            let unknown = ink.unknown_channels();
+            if !unknown.is_empty() {
+                problems.push((Code::S010, unknown));
+            }
+        }
+        let redrawable = problems.is_empty();
+        for (code, detail) in problems {
+            self.diagnostics
+                .push(Diagnostic::new(code, Some(span), Some(detail)));
+        }
+        let ink = ink.ok();
+        Stroke {
+            tool,
+            redrawable,
+            samples: ink.as_ref().map(Ink::len),
+            duration: ink.as_ref().and_then(Ink::duration),
         }
     }
 
@@ -497,18 +566,14 @@ impl Builder<'_, '_> {
                 .value(NS_NONE, "display")
                 .is_some_and(|d| crate::values::trim(d) == "none"),
         });
-        let stroke = (role == Role::Stroke).then(|| Stroke {
-            tool: match element.value(NS_FUB, "tool") {
-                Some("highlighter") => Tool::Highlighter,
-                _ => Tool::Pen,
-            },
-        });
+        let span = self.map.span(node.start, node.end);
+        let stroke = (role == Role::Stroke).then(|| self.stroke(element, span));
         let item = ElementItem {
             path,
             tag: tag.name(),
             role,
             id: element.value(NS_NONE, "id").map(str::to_owned),
-            span: self.map.span(node.start, node.end),
+            span,
             indent: self.lines.indent(node.start).to_owned(),
             tags: role.is_container().then(|| self.tags(id)),
             layer,
@@ -589,13 +654,18 @@ impl Builder<'_, '_> {
     }
 }
 
-/// Classifica un documento letto per intero e ne restituisce le voci.
-pub(crate) fn classify_document<'a>(doc: &Document<'a>, map: &Utf16Map<'a>) -> Vec<Item> {
+/// Classifica un documento letto per intero e ne restituisce le voci, con la
+/// diagnostica che la classificazione trova: S002, S004 e S010.
+pub(crate) fn classify_document<'a>(
+    doc: &Document<'a>,
+    map: &Utf16Map<'a>,
+) -> (Vec<Item>, Vec<Diagnostic>) {
     let mut builder = Builder {
         doc,
         map,
         lines: Lines::new(doc.source),
         items: Vec::new(),
+        diagnostics: Vec::new(),
     };
     let mut pending = None;
     // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.
@@ -618,5 +688,5 @@ pub(crate) fn classify_document<'a>(doc: &Document<'a>, map: &Utf16Map<'a>) -> V
         }
     }
     builder.flush(pending, None);
-    builder.items
+    (builder.items, builder.diagnostics)
 }
