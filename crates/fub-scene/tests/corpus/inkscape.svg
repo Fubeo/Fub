@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.3.2 (091e20ef0f, 2023-11-25)"
+   sodipodi:docname="giardino.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <title
+     id="title1">Giardino</title>
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.71"
+     inkscape:cx="396.47887"
+     inkscape:cy="560.56338"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer2" />
+  <defs
+     id="defs1">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#88cc55;stop-opacity:1;"
+         offset="0"
+         id="stop1" />
+      <stop
+         style="stop-color:#336622;stop-opacity:1;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="linearGradient2"
+       x1="20"
+       y1="20"
+       x2="20"
+       y2="120"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <g
+     inkscape:label="Sfondo"
+     inkscape:groupmode="layer"
+     id="layer1"
+     sodipodi:insensitive="true">
+    <rect
+       style="fill:url(#linearGradient2);stroke:none;stroke-width:0.264583"
+       id="rect1"
+       width="170"
+       height="100"
+       x="20"
+       y="20" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="Disegno">
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.8;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       d="m 30.5,80.2 c 12.1,-8.4 25.9,-3.2 36.4,4.6 10.5,7.8 22.3,9.1 34.8,-1.9"
+       id="path1"
+       sodipodi:nodetypes="ccc" />
+    <circle
+       id="path2"
+       cx="150"
+       cy="60"
+       r="12"
+       fill="#cc3333" />
+    <path
+       sodipodi:type="star"
+       style="fill:#ffcc00;stroke:#aa8800;stroke-width:0.5"
+       id="path3"
+       inkscape:flatsided="false"
+       sodipodi:sides="5"
+       sodipodi:cx="60"
+       sodipodi:cy="150"
+       sodipodi:r1="15"
+       sodipodi:r2="6"
+       sodipodi:arg1="-1.5707963"
+       sodipodi:arg2="-0.9424778"
+       inkscape:rounded="0"
+       inkscape:randomized="0"
+       d="m 60,135 3.526712,10.145898 10.739136,0.218847 -8.559509,6.489357 3.11044,10.281153 -8.816779,-6.135255 -8.816779,6.135255 3.11044,-10.281153 -8.559509,-6.489357 10.739136,-0.218847 z"
+       inkscape:transform-center-y="-1.4" />
+    <text
+       xml:space="preserve"
+       style="font-size:10.5833px;line-height:1.25;font-family:sans-serif;stroke-width:0.264583"
+       x="30"
+       y="200"
+       id="text1"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         style="stroke-width:0.264583"
+         x="30"
+         y="200">Aiuola delle rose</tspan><tspan
+         sodipodi:role="line"
+         style="stroke-width:0.264583"
+         x="30"
+         y="213.22913"
+         id="tspan2">e dei gerani</tspan></text>
+    <g
+       id="g1"
+       transform="translate(10,5)"
+       inkscape:label="Panchina">
+      <rect
+         id="rect2"
+         width="40"
+         height="6"
+         x="120"
+         y="200"
+         rx="2"
+         ry="2"
+         fill="#8b5a2b" />
+      <ellipse
+         style="fill:#555555;stroke-width:0.264583"
+         id="path4"
+         cx="140"
+         cy="212"
+         rx="18"
+         ry="3" />
+    </g>
+    <use
+       x="0"
+       y="0"
+       xlink:href="#path2"
+       id="use1"
+       transform="translate(20,30)" />
+    <image
+       width="8"
+       height="8"
+       preserveAspectRatio="none"
+       xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+"
+       id="image1"
+       x="170"
+       y="250" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="Appunti"
+     style="display:none">
+    <text
+       xml:space="preserve"
+       style="font-size:6px;font-family:sans-serif"
+       x="20"
+       y="280"
+       id="text2"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         x="20"
+         y="280">Da potare in marzo</tspan></text>
+  </g>
+  <metadata
+     id="metadata1">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Giardino</dc:title>
+        <dc:creator>
+          <cc:Agent>
+            <dc:title>Fubeo</dc:title>
+          </cc:Agent>
+        </dc:creator>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>

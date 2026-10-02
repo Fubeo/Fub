@@ -136,6 +136,7 @@ jobs:
           rustup target add wasm32-wasip2
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
           cargo check -p fub-format-sheet --target wasm32-wasip2 --all-targets --locked
+          cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked
       - name: CAS del backend reale, con diagnostica isolata
         run: cargo test -p fub-kernel --test rooted_cas -- --nocapture
       - name: regressioni unitarie dei backend storage

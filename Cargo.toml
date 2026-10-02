@@ -14,6 +14,7 @@ members = [
     "crates/fub-format-sheet",
     "crates/fub-format-canvas",
     "crates/fub-format-base",
+    "crates/fub-scene",
     "crates/fub-importers",
     "crates/fub-features",
     "crates/fub-host",
