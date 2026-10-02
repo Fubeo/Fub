@@ -510,8 +510,12 @@ quello in cui la rete ha aggiunto meno rumore.
   l'impostazione `live.port`, l'avviso per un QR inutilizzato, la
   spiegazione del firewall e il pannello di diagnostica appartengono a chi
   compone il crate.
-- **Sul tablet.** La lettura del QR dentro l'app, un codice breve da
-  digitare e la conferma con il nome del PC spettano all'app. Lo schema
-  `fubdraw://` non si registra nel sistema, così nessuna pagina web avvia un
-  abbinamento.
+- **Sul tablet.** La lettura del QR dentro l'app e la conferma con il nome
+  del PC spettano all'app. Lo schema `fubdraw://` non si registra nel
+  sistema, così nessuna pagina web avvia un abbinamento.
+- **Codice breve.** Un codice da digitare al posto del QR non porta
+  l'impronta del certificato, e senza impronta il client non sa a chi si
+  collega. Servirà uno scambio di chiavi autenticato dal codice e legato alla
+  connessione TLS, come CPace o SPAKE2 sull'impronta, da progettare con la
+  scelta del client. Fino ad allora l'abbinamento passa solo dal QR.
 - **Ritrovamento sulla rete.** Niente mDNS: basta il QR.
