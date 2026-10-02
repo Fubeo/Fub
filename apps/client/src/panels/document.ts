@@ -26,10 +26,14 @@ import {
   selectionSetOf,
   type DocumentSurfaceRegistry,
   type EditorSurface,
+  type SourceView,
   type SurfaceLocation,
   type SurfaceMode,
+  type SurfaceOverride,
   type SurfaceReference,
+  type SurfaceRequest,
 } from "../editors/core/registry";
+import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { declaredFences } from "../rules/syntax";
@@ -94,6 +98,9 @@ import {
   panes as layoutPanes,
   rename,
   sameTab,
+  sameOverride,
+  setTabOverride,
+  tabOverride,
   activeTab,
   removeEverywhere,
   setSplitSizes,
@@ -172,6 +179,11 @@ interface Pane {
   /// Il disposer della registrazione di questo riquadro alla sessione del
   /// documento mostrato. Null finché il documento mostrato non c'è.
   disposeSurface: (() => void) | null;
+  /// La vista sorgente che la superficie del documento mostrato dichiara
+  /// (ADR 0203), risolta quando il documento si è letto: è ciò che «Apri come
+  /// sorgente» apre, e ciò contro cui si controlla una scelta già fatta.
+  /// Null senza documento, prima della lettura, o se non ce n'è una.
+  sourceView: SourceView | null;
 }
 /// Nome breve della tab + stato testuale: non solo colore (U21).
 /// View: titolo dichiarato, mai finto file.
@@ -598,25 +610,27 @@ function invalidateLoads(doc: string): void {
 // un punto solo.
 
 function registerCommands(): void {
-  // Le due modalità come comandi (§18.2): erano due bottoni nel commutatore,
-  // cioè raggiungibili col mouse e con nient'altro. Passano dalla stessa porta
-  // del click (`setMode`), che è dove sta il cablaggio — classe attiva, resa
+  // Le modalità come comandi (§18.2): erano bottoni nel commutatore, cioè
+  // raggiungibili col mouse e con nient'altro. Passano dalla stessa porta del
+  // click (`setMode`), che è dove sta il cablaggio — classe attiva, resa
   // inline, superficie di lettura, contesto pubblicato — e non da una seconda
   // via che deve restare d'accordo con la prima.
   //
-  // La terza modalità («sorgente») non è qui, e non è una dimenticanza: chi
-  // passa da Lettura a Modifica lo fa cento volte al giorno, chi guarda il
-  // sorgente nudo lo fa per capire cosa ha scritto un plugin. Dichiarare tre
-  // comandi perché le modalità sono tre vorrebbe dire tre scorciatoie da
-  // trovare per un caso che non le chiede.
-  // `Mod-e` alterna: dalla scrittura porta in Lettura, dalla Lettura torna
-  // alla modalità di scrittura da cui si era partiti.
+  // Un comando nomina un ruolo e non un id: la superficie dichiara il ruolo di
+  // ogni sua modalità (`contextMode`), e il comando raggiunge la modalità che
+  // ce l'ha — la «canvas» della tela per Live, la «read» di un profilo che
+  // chiama così la sua lettura. C'è soltanto dove porterebbe a qualcosa: una
+  // superficie con una modalità sola non ne offre nessuno (`surface-modes.ts`).
+  // Solo `Mod-e` ha un accordo: chi passa da Lettura a scrittura lo fa cento
+  // volte al giorno, chi guarda il sorgente nudo lo fa per capire cosa c'è
+  // scritto. Dalla scrittura porta in Lettura, dalla Lettura torna alla
+  // modalità di scrittura da cui si era partiti.
   registerShellCommand({
     id: "shell.mode.reading",
     title: "commands.mode.reading",
     description: "commands.mode.reading.desc",
     layer: "surface",
-    available: () => supportsMode("reading"),
+    available: () => offersReadingToggle(focusedModes()),
     run: () => void toggleReading(),
   });
   registerShellCommand({
@@ -624,16 +638,37 @@ function registerCommands(): void {
     title: "commands.mode.live",
     description: "commands.mode.live.desc",
     layer: "profile",
-    available: () => supportsMode("live_preview"),
-    run: () => void setMode("live_preview"),
+    available: () => offersContext(focusedModes(), "live_preview"),
+    run: () => void setContextMode("live_preview"),
   });
   registerShellCommand({
     id: "shell.mode.source",
     title: "commands.mode.source",
     description: "commands.mode.source.desc",
     layer: "profile",
-    available: () => supportsMode("source"),
-    run: () => void setMode("source"),
+    available: () => offersContext(focusedModes(), "source"),
+    run: () => void setContextMode("source"),
+  });
+  // La vista sorgente di una scheda (ADR 0203): lo stesso documento, sulla
+  // stessa sessione, nella superficie che la sua dichiara come sorgente — un
+  // disegno come testo SVG. Uno dei due comandi c'è soltanto quando l'altro
+  // non c'è: aprirla dove la superficie la offre e la scheda non la mostra
+  // già, tornare indietro dove la scheda la mostra.
+  registerShellCommand({
+    id: "shell.doc.source.open",
+    title: "commands.doc.source.open",
+    description: "commands.doc.source.open.desc",
+    layer: "document",
+    available: () => offeredSourceView(panes.get(layout.focus)) !== null,
+    run: () => void openSourceView(),
+  });
+  registerShellCommand({
+    id: "shell.doc.source.close",
+    title: "commands.doc.source.close",
+    description: "commands.doc.source.close.desc",
+    layer: "document",
+    available: () => tabOverride(activeTab()) !== null,
+    run: () => void closeSourceView(),
   });
   registerShellCommand({
     id: "shell.doc.save",
@@ -762,7 +797,10 @@ async function resolveDiscardingMine(doc: string | null): Promise<void> {
 /// mentre si scrive — ed è anche il primo cliente vero della regola del buffer
 /// unico: le due superfici mostrano lo stesso testo perché *è* lo stesso testo.
 /// Un riquadro nuovo e vuoto lo si ottiene chiudendo la linguetta, che è un gesto in
-/// meno di quello che servirebbe per il contrario.
+/// meno di quello che servirebbe per il contrario. Il documento ci arriva sulla
+/// sua superficie, senza la vista sorgente della scheda di partenza: il disegno
+/// da una parte e il suo testo dall'altra è proprio la disposizione per cui si
+/// divide.
 function splitPane(dir: "row" | "col"): void {
   const toSplit = layout.focus;
   const current = activeDoc(toSplit);
@@ -970,6 +1008,7 @@ export function resetDocumentsForVault(): Promise<string[]> {
       r.root.remove();
     }
     panes.clear();
+    writingModes.clear();
     treeSignature = "";
     return documentSessions.closeAll();
   });
@@ -1034,6 +1073,7 @@ function buildStructure(): void {
       r.formatBar.destroy();
       r.root.remove();
       panes.delete(id);
+      writingModes.delete(id);
     }
   }
   const onboarding = document.getElementById("onboarding");
@@ -1256,6 +1296,7 @@ function renderPane(id: string): Pane {
     loadGeneration: 0,
     tabsSignature: null,
     disposeSurface: null,
+    sourceView: null,
   };
   panes.set(id, r);
   return r;
@@ -1680,19 +1721,23 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   tab.classList.toggle("tab-pinned", target.pinned === true);
   tab.setAttribute("aria-selected", String(selected));
   tab.tabIndex = tabStop ? 0 : -1;
+  // La vista sorgente si dice a vista e al lettore di schermo: lo stesso
+  // documento in due riquadri, una volta disegnato e una volta come testo,
+  // darebbe due schede indistinguibili.
+  const source = tabOverride(target) ? t("document.tab.source_view") : null;
   const name = tab.querySelector<HTMLElement>(".tab-name")!;
-  name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "");
+  name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
   const pin = target.pinned ? iconEl("pin") : null;
   if (pin) {
     pin.classList.add("tab-pin");
     name.prepend(pin);
   }
-  setTooltip(tab, target.k === "doc" ? target.doc : described.label);
+  setTooltip(tab, (target.k === "doc" ? target.doc : described.label) + (source ? ` · ${source}` : ""));
   // Si ridipinge a ogni giro: segue gli accordi riconfigurati.
   tab.setAttribute("aria-keyshortcuts", tabShortcuts());
   tab.setAttribute(
     "aria-label",
-    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
+    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
   );
   const close = tab.parentElement!.querySelector<HTMLElement>(".tab-close")!;
   close.tabIndex = tab.tabIndex;
@@ -1851,9 +1896,15 @@ function docTitle(doc: string): string {
 /// Le due specie di tab accendono due superfici diverse dello stesso riquadro, e
 /// il ramo che le distingue sta **qui e basta**: da `render` in giù nessuno sa
 /// che esistano due specie, e chi cambia tab non deve dire quale.
+///
+/// Lo stesso documento con un'altra superficie scelta (la vista sorgente
+/// aperta o chiusa) è un cambio come un altro, e passa dalla stessa via: si
+/// smonta la superficie e se ne monta un'altra sulla stessa sessione, che
+/// tiene testo, modifiche non salvate e bozza; la lettura non torna al disco.
 async function show(r: Pane, tab: Tab | null): Promise<void> {
   const generation = ++r.loadGeneration;
-  const changed = !r.shown || !tab || !sameTab(r.shown, tab);
+  const changed = !r.shown || !tab || !sameTab(r.shown, tab)
+    || !sameOverride(tabOverride(r.shown), tabOverride(tab));
   // Una view che se ne va porta con sé il suo pannello: senza, resterebbe
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
   if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
@@ -1862,6 +1913,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (changed) {
     detachSurface(r);
     destroySurface(r);
+    r.sourceView = null;
   }
   r.shown = tab;
   r.root.classList.toggle("con-vista", tab?.k === "view");
@@ -1881,6 +1933,10 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // sessione di testo resta dei documenti di testo. Un formato del vault per
   // la stessa estensione passa invece dal descrittore, come ogni documento.
   if (!handledByVault(tab.doc) && surfaceRegistry.showsBytes(tab.doc)) {
+    // Dai byte non c'è un testo da guardare come sorgente: una scelta rimasta
+    // sulla scheda (uno stato scritto a mano, un file cambiato di natura) si
+    // scarta, e il visualizzatore si monta come sempre.
+    tab = forgetOverride(r, tab);
     const surface = surfaceRegistry.mount(
       { formatId: null, sourceKind: "bytes", documentId: tab.doc },
       { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
@@ -1912,10 +1968,23 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // montare si prende adesso, senza attese fino a `attachSurface`.
   const text = documentSessions.text(tab.doc) ?? source.text;
 
+  const request = { formatId: source.formatId, sourceKind: source.sourceKind, documentId: tab.doc };
+  // La vista sorgente si conosce da qui, e resta anche se la superficie poi
+  // non si monta: davanti a una tela rotta, aprirne il testo è la riparazione.
+  r.sourceView = surfaceRegistry.sourceView(request);
+  // Una scelta vale finché la superficie del documento la offre e il registro
+  // la risolve a quella stessa vista. Altrimenti — il profilo che la offriva
+  // non c'è più, il documento rinominato è di un'altra specie, il file di
+  // stato dice altro — si scarta e il documento si apre come senza: mai la
+  // superficie d'errore per una preferenza di vista.
+  if (tab.override && !resolvesToSourceView(request, tab.override, r.sourceView)) {
+    tab = forgetOverride(r, tab);
+  }
+
   let surface: EditorSurface;
   try {
     surface = surfaceRegistry.mount(
-      { formatId: source.formatId, sourceKind: source.sourceKind, documentId: tab.doc },
+      { ...request, ...(tab.override ? { override: tab.override } : {}) },
       {
         paneId: r.id,
         documentId: tab.doc,
@@ -1953,6 +2022,38 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   attachSurface(r, tab.doc);
   refreshNoteClasses(r, tab.doc);
   mountDocumentAttachments(r, tab.doc);
+}
+
+/// La scelta di una scheda porta davvero alla vista sorgente che la superficie
+/// del documento dichiara: confrontata **risolta**, così una scelta senza
+/// profilo vale quanto quella col profilo predefinito scritto per esteso.
+function resolvesToSourceView(
+  request: SurfaceRequest,
+  override: SurfaceOverride,
+  view: SourceView | null,
+): boolean {
+  if (!view) return false;
+  const resolved = surfaceRegistry.resolve({ ...request, override });
+  return resolved?.family === view.family && resolved.profile === view.profile;
+}
+
+/// Toglie da una scheda una scelta di superficie che non vale più, e torna la
+/// scheda che il riquadro mostra adesso. La prende come mostrata: il giro di
+/// disegno che l'annuncio del layout provoca la trova già a posto e non
+/// rimonta niente. Se il layout ha già sostituito la scheda durante la lettura
+/// (un pin, un rename), questo giro monta senza scelta e il prossimo ritrova
+/// la scheda nuova, la confronta e la pulisce lui.
+function forgetOverride(r: Pane, tab: Extract<Tab, { k: "doc" }>): Extract<Tab, { k: "doc" }> {
+  if (!tab.override) return tab;
+  const p = paneState(r.id);
+  const index = p ? p.tabs.indexOf(tab) : -1;
+  if (index >= 0) setTabOverride(r.id, index, null);
+  const current = index >= 0 ? p?.tabs[index] : undefined;
+  const next: Extract<Tab, { k: "doc" }> = current?.k === "doc" && !current.override
+    ? current
+    : { k: "doc", doc: tab.doc, ...(tab.pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
+  r.shown = next;
+  return next;
 }
 
 /// Un formato del vault gestisce il file: lo dicono le estensioni dei
@@ -2150,8 +2251,9 @@ function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
     ?? modes[0];
 }
 
-function supportsMode(id: string): boolean {
-  return panes.get(layout.focus)?.surface?.modes.some((mode) => mode.id === id) ?? false;
+/// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
+function focusedModes(): readonly SurfaceMode[] {
+  return panes.get(layout.focus)?.surface?.modes ?? [];
 }
 
 /// Toolbar per-riquadro (U23-U26): percorso contestuale + modi dichiarati
@@ -2344,6 +2446,10 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   );
   const doc = activeDoc(r.id);
   const surface = r.surface;
+  // La vista sorgente si chiede a **questo** riquadro, non a quello col fuoco
+  // come farebbe `available`: il menu si apre anche su un riquadro accanto.
+  const sourceView = offeredSourceView(r);
+  const sourceShown = tabOverride(activeTab(r.id)) !== null;
   showContextMenu(event, [
     ...entries.map((entry) => ({
       label: entry.title,
@@ -2352,6 +2458,13 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         void entry.run?.();
       },
     })),
+    ...(sourceView || sourceShown ? [{
+      label: t(sourceShown ? "commands.doc.source.close" : "commands.doc.source.open"),
+      run: () => {
+        focusPane(r.id);
+        void showSourceView(r.id, sourceShown ? null : sourceView);
+      },
+    }] : []),
     ...(doc && surface?.insertReferences ? [{
       label: t(r.disposeRecorder ? "pane.recorder.close" : "pane.recorder.open"),
       run: () => void toggleRecorder(r, doc),
@@ -2809,18 +2922,73 @@ function scheduleContext(): void {
 /// Che sia **del riquadro** e non della finestra è la parte nuova, ed è ciò che
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
-/// L'ultima modalità di scrittura di ogni riquadro, per tornare dalla Lettura.
-const writingModes = new Map<string, string>();
+/// L'ultima modalità di scrittura di ogni riquadro, per famiglia di superfici,
+/// per tornare dalla Lettura: come `PaneState.modes`, un id vale dentro la sua
+/// famiglia, e il «source» del testo non è quello della tela. Vive quanto il
+/// riquadro (`buildStructure` la toglie con lui).
+const writingModes = new Map<string, Map<string, string>>();
 
+/// `Mod-e`: dalla scrittura alla prima lettura che la superficie dichiara,
+/// dalla lettura alla scrittura di prima (`readingToggleTarget`).
 async function toggleReading(): Promise<void> {
-  const id = layout.focus;
-  const current = selectedMode(panes.get(id))?.id;
-  if (current === "reading") {
-    const back = writingModes.get(id) ?? "live_preview";
-    await setMode(supportsMode(back) ? back : "live_preview");
-    return;
+  const r = panes.get(layout.focus);
+  if (!r?.surface) return;
+  const { family, modes, defaultMode } = r.surface;
+  const target = readingToggleTarget(modes, selectedMode(r)?.id, writingModes.get(r.id)?.get(family), defaultMode);
+  if (target) await setMode(target.id);
+}
+
+/// `shell.mode.live` e `shell.mode.source`: la modalità della superficie col
+/// fuoco che ha quel ruolo, qualunque sia il suo id.
+async function setContextMode(context: PaneMode): Promise<void> {
+  const r = panes.get(layout.focus);
+  if (!r?.surface) return;
+  const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
+  if (target) await setMode(target.id);
+}
+
+/// La vista sorgente che «Apri come sorgente» aprirebbe adesso nel riquadro:
+/// la sua scheda attiva è il documento che mostra, non ne ha già scelta una,
+/// e la superficie del documento ne dichiara una che si risolve.
+function offeredSourceView(r: Pane | undefined): SourceView | null {
+  if (!r?.sourceView) return null;
+  const tab = activeTab(r.id);
+  if (tab?.k !== "doc" || tab.override || r.shown?.k !== "doc" || r.shown.doc !== tab.doc) return null;
+  return r.sourceView;
+}
+
+async function openSourceView(): Promise<void> {
+  const view = offeredSourceView(panes.get(layout.focus));
+  if (view) await showSourceView(layout.focus, view);
+}
+
+async function closeSourceView(): Promise<void> {
+  if (tabOverride(activeTab()) !== null) await showSourceView(layout.focus, null);
+}
+
+/// Mette la scheda attiva di un riquadro nella vista sorgente, o la riporta
+/// alla superficie del documento con `null`, e porta il fuoco sulla
+/// superficie nuova: quella di prima non c'è più, e il fuoco che stava dentro
+/// di lei finirebbe sul corpo della pagina, dove chi usa la tastiera o un
+/// lettore di schermo perde il punto.
+///
+/// La vista sorgente si apre per scrivere: se il riquadro ricorda una lettura
+/// per la sua famiglia (una nota lasciata in Lettura), si passa alla scrittura
+/// che il toggle sceglierebbe, invece di mostrare un'altra resa a chi ha
+/// chiesto il testo.
+async function showSourceView(id: string, view: SourceView | null): Promise<void> {
+  const p = paneState(id);
+  if (!p || p.active < 0) return;
+  setTabOverride(id, p.active, view);
+  await synchronize();
+  const r = panes.get(id);
+  if (view && r?.surface && layout.focus === id && selectedMode(r)?.contextMode === "reading") {
+    const { family, modes, defaultMode } = r.surface;
+    const writing = readingToggleTarget(modes, selectedMode(r)?.id, writingModes.get(id)?.get(family), defaultMode);
+    if (writing) await setMode(writing.id);
   }
-  await setMode("reading");
+  await publishContext();
+  if (layout.focus === id) panes.get(id)?.surface?.focus?.();
 }
 
 /// `Mod-s`: il salvataggio è automatico, ma chi lo chiede vuole saperlo fatto
@@ -2840,8 +3008,12 @@ export async function setMode(next: string): Promise<void> {
   const doc = activeDoc();
   // Nessun salvataggio per cambiare modo: la lettura si monta dal buffer
   // corrente, e il cambio è immediato anche con modifiche non salvate.
-  const previous = selectedMode(r)?.id;
-  if (mode.id === "reading" && previous && previous !== "reading") writingModes.set(layout.focus, previous);
+  const previous = selectedMode(r);
+  if (mode.contextMode === "reading" && previous && previous.contextMode !== "reading") {
+    const remembered = writingModes.get(layout.focus) ?? new Map<string, string>();
+    remembered.set(r.surface.family, previous.id);
+    writingModes.set(layout.focus, remembered);
+  }
   setPaneMode(layout.focus, r.surface.family, mode.id);
   r.root.dataset.mode = mode.id;
   r.surface.setMode(mode.id);

@@ -31,7 +31,13 @@ import {
   setMode,
   setPaneLink,
   setPinnedTab,
+  setTabOverride,
   setTabStack,
+  sameOverride,
+  tabOverride,
+  moveTabToPane,
+  reopenClosedTab,
+  goBack,
   type Layout,
   type SplitNode,
 } from "./layout";
@@ -334,6 +340,153 @@ describe("una tab che non è un documento", () => {
     openViewIn(left!, "links", l, { doc: "a.md" });
     openViewIn(left!, "links", l, { doc: "b.md" });
     expect(activeTab(right!, l)).toEqual({ k: "view", view: "links", params: { doc: "b.md" } });
+  });
+});
+
+// La superficie scelta per una linguetta (ADR 0203): un disegno guardato come
+// sorgente. È una vista e non un'identità, e ogni gesto che copia, sposta o
+// ricostruisce una linguetta la tiene o la lascia **apposta**: queste prove
+// dicono quale delle due, gesto per gesto.
+describe("la superficie scelta per una linguetta", () => {
+  const SVG = { family: "text", profile: "svg" } as const;
+
+  it("si sceglie e si toglie sostituendo la linguetta, senza cronologia", async () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    openIn("main", "b.svg", l);
+    const before = l.panes.main.tabs[1];
+    const history = structuredClone(l.panes.main.history);
+    setViewState.mockClear();
+
+    setTabOverride("main", 1, SVG, l);
+
+    expect(l.panes.main.tabs[1]).toEqual({ k: "doc", doc: "b.svg", override: SVG });
+    // Un oggetto nuovo: è così che il riquadro si accorge del cambio.
+    expect(l.panes.main.tabs[1]).not.toBe(before);
+    expect(l.panes.main.history).toEqual(history);
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
+    expect(setViewState.mock.calls.map((c) => c[0])).toEqual(["layout"]);
+
+    setTabOverride("main", 1, null, l);
+    expect(l.panes.main.tabs[1]).toEqual({ k: "doc", doc: "b.svg" });
+  });
+
+  it("scegliere quella che c'è già, o scegliere su una view, non scrive", () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    openViewIn("main", "graph", l);
+    setTabOverride("main", 0, SVG, l);
+    setViewState.mockClear();
+    setTabOverride("main", 0, { family: "text", profile: "svg" }, l);
+    setTabOverride("main", 1, SVG, l);
+    setTabOverride("main", 9, SVG, l);
+    expect(setViewState).not.toHaveBeenCalled();
+    expect(l.panes.main.tabs[1]).toEqual({ k: "view", view: "graph" });
+  });
+
+  it("non fa parte dell'identità: riaprire il documento torna sulla stessa linguetta", () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    setTabOverride("main", 0, SVG, l);
+    openIn("main", "b.md", l);
+    openIn("main", "a.svg", l);
+    expect(l.panes.main.tabs).toHaveLength(2);
+    expect(activeTab("main", l)).toEqual({ k: "doc", doc: "a.svg", override: SVG });
+  });
+
+  it("appuntare, raggruppare e rinominare la tengono, in una copia", () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    setTabOverride("main", 0, SVG, l);
+    setPinnedTab("main", 0, true, l);
+    setTabStack("main", 0, "disegni", l);
+    expect(l.panes.main.tabs[0]).toEqual({ k: "doc", doc: "a.svg", pinned: true, stack: "disegni", override: SVG });
+    rename("a.svg", "arte/a.svg", l);
+    const renamed = l.panes.main.tabs[0];
+    expect(renamed).toEqual({ k: "doc", doc: "arte/a.svg", pinned: true, stack: "disegni", override: SVG });
+    expect(tabOverride(renamed)).not.toBe(SVG);
+  });
+
+  it("spostarla in un altro riquadro, chiuderla e riaprirla la tengono", () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    const right = split("main", "row", l)!;
+    openIn("main", "b.md", l);
+    setTabOverride("main", 0, SVG, l);
+    expect(moveTabToPane("main", 0, right, l)).toBe(true);
+    expect(activeTab(right, l)).toEqual({ k: "doc", doc: "a.svg", override: SVG });
+
+    closeTab(right, l.panes[right].active, l);
+    expect(reopenClosedTab(l)).toBe(true);
+    expect(activeTab(right, l)).toEqual({ k: "doc", doc: "a.svg", override: SVG });
+  });
+
+  it("la cronologia ricorda la linguetta com'era, anche dopo averla chiusa", () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    setTabOverride("main", 0, SVG, l);
+    openIn("main", "b.md", l);
+    closeTab("main", 0, l);
+    expect(goBack("main", l)).toBe(true);
+    expect(activeTab("main", l)).toEqual({ k: "doc", doc: "a.svg", override: SVG });
+  });
+
+  // Il disegno a sinistra col suo sorgente a destra è la disposizione per cui
+  // si divide e ci si collega: la linguetta che nasce lì si apre sulla
+  // superficie del registro.
+  it("dividere e i riquadri collegati aprono senza", () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    setTabOverride("main", 0, SVG, l);
+    const right = split("main", "row", l)!;
+    openIn(right, activeDoc("main", l)!, l);
+    expect(activeTab(right, l)).toEqual({ k: "doc", doc: "a.svg" });
+
+    setPaneLink("main", "coppia", l);
+    setPaneLink(right, "coppia", l);
+    openIn("main", "c.svg", l);
+    setTabOverride("main", l.panes.main.active, SVG, l);
+    expect(activeTab(right, l)).toEqual({ k: "doc", doc: "c.svg" });
+  });
+
+  it("si rilegge, e una scelta rovinata cade da sola senza costare la linguetta", () => {
+    const l = newItem();
+    openIn("main", "a.svg", l);
+    setTabOverride("main", 0, SVG, l);
+    expect(parseLayout(JSON.parse(JSON.stringify(l)))).toEqual(l);
+
+    const withOverride = (override: unknown) =>
+      parseLayout({
+        tree: { k: "leaf", pane: "main" },
+        panes: { main: { tabs: [{ k: "doc", doc: "a.svg", pinned: true, override }], active: 0 } },
+        focus: "main",
+      })?.panes.main.tabs[0];
+    for (const broken of [null, "text", 42, [], {}, { family: "" }, { family: " " }, { family: 3 },
+      { family: "text", profile: "" }, { family: "text", profile: 7 }, { profile: "svg" }]) {
+      expect(withOverride(broken)).toEqual({ k: "doc", doc: "a.svg", pinned: true });
+    }
+    expect(withOverride({ family: " text ", profile: " svg " })).toEqual({
+      k: "doc", doc: "a.svg", pinned: true, override: SVG,
+    });
+    // Una chiave che una shell successiva aggiungesse non rovina la scelta.
+    expect(withOverride({ family: "text", future: true })).toEqual({
+      k: "doc", doc: "a.svg", pinned: true, override: { family: "text" },
+    });
+    // Una view non ne ha: la chiave si ignora.
+    expect(parseLayout({
+      tree: { k: "leaf", pane: "main" },
+      panes: { main: { tabs: [{ k: "view", view: "graph", override: SVG }], active: 0 } },
+      focus: "main",
+    })?.panes.main.tabs[0]).toEqual({ k: "view", view: "graph" });
+  });
+
+  it("due scelte sono la stessa per famiglia e profilo", () => {
+    expect(sameOverride(null, null)).toBe(true);
+    expect(sameOverride(SVG, null)).toBe(false);
+    expect(sameOverride({ family: "text" }, { family: "text" })).toBe(true);
+    // Assente non vale come la predefinita: quale sia lo sa il registro.
+    expect(sameOverride({ family: "text" }, { family: "text", profile: "plain-text" })).toBe(false);
+    expect(sameOverride(SVG, { family: "text", profile: "svg" })).toBe(true);
   });
 });
 
