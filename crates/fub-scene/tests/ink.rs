@@ -392,7 +392,7 @@ fn unknown_keys_are_kept_in_order_even_repeated() {
 #[test]
 fn brush_values_are_svg_numbers_between_xml_spaces() {
     let brush = Brush::parse(
-        "  pf1\tsize=1e1\n thinning=-.25\r\nsmoothing=+0.75  streamline=1. capEnd=0.0 ",
+        "  pf1\tsize=1e1\n thinning=-.25\r\nsmoothing=+0.75  streamline=1.0 capEnd=0.0 ",
     )
     .unwrap();
     assert_eq!(brush.size, 10.0);
@@ -418,6 +418,7 @@ fn every_malformed_brush_has_its_error() {
         ("pf1 size=", BrushError::Entry),
         ("pf1 future=", BrushError::Entry),
         ("pf1 size=4 size=5", BrushError::Repeated("size")),
+        ("pf1 streamline=1.", BrushError::Number("streamline")),
         ("pf1 sim=1 future=1 sim=1", BrushError::Repeated("sim")),
         ("pf1 size=0x10", BrushError::Number("size")),
         ("pf1 size=Infinity", BrushError::Number("size")),
