@@ -1,8 +1,14 @@
-//! La finestra dei messaggi al secondo.
+//! I ritmi che l'host fa rispettare.
 //!
-//! Una finestra scorrevole esatta: al più `limit` messaggi in ogni intervallo
-//! di un secondo, non in ogni secondo del calendario, dove 240 messaggi alla
-//! fine di un secondo e 240 all'inizio del successivo passerebbero entrambi.
+//! [`RateWindow`] è la finestra dei messaggi al secondo: una finestra
+//! scorrevole esatta, al più `limit` messaggi in ogni intervallo di un
+//! secondo, non in ogni secondo del calendario, dove 240 messaggi alla fine di
+//! un secondo e 240 all'inizio del successivo passerebbero entrambi.
+//!
+//! [`BurstPace`] è il ritmo di un tipo di messaggio con una raffica ammessa:
+//! `burst` messaggi di fila, poi uno ogni `pace`. È l'algoritmo GCRA, che
+//! tiene un istante solo invece di uno per messaggio: una raffica grande non
+//! costa memoria.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -58,6 +64,44 @@ impl RateWindow {
     }
 }
 
+/// `burst` messaggi di fila, poi uno ogni `pace`.
+///
+/// `due` è l'istante teorico in cui il ritmo sarebbe di nuovo a riposo: ogni
+/// messaggio ammesso lo sposta avanti di `pace`, e un messaggio è oltre il
+/// limite quando `due` sta più di `(burst - 1) · pace` nel futuro. Chi rispetta
+/// il ritmo non si avvicina mai al limite; chi è stato zitto ritrova tutta la
+/// raffica.
+pub(crate) struct BurstPace {
+    pace: Duration,
+    tolerance: Duration,
+    due: Option<Instant>,
+}
+
+impl BurstPace {
+    pub(crate) fn new(burst: u32, pace: Duration) -> BurstPace {
+        assert!(
+            burst > 0,
+            "una raffica di zero messaggi non ne ammette nessuno"
+        );
+        BurstPace {
+            pace,
+            tolerance: pace * (burst - 1),
+            due: None,
+        }
+    }
+
+    /// Conta un messaggio arrivato in `now`: `false` se è oltre il limite, e
+    /// allora non si conta.
+    pub(crate) fn admit(&mut self, now: Instant) -> bool {
+        let due = self.due.map_or(now, |due| due.max(now));
+        if due.saturating_duration_since(now) > self.tolerance {
+            return false;
+        }
+        self.due = Some(due + self.pace);
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,5 +139,47 @@ mod tests {
                 "{i}"
             );
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_burst_is_admitted_whole_then_the_pace_counts() {
+        let mut pace = BurstPace::new(240, Duration::from_millis(50));
+        let start = Instant::now();
+        for i in 0..240 {
+            assert!(pace.admit(start), "{i}");
+        }
+        assert!(!pace.admit(start));
+        // Un secondo dopo, il ritmo ne ha restituiti venti.
+        let later = start + Duration::from_secs(1);
+        for i in 0..20 {
+            assert!(pace.admit(later), "{i}");
+        }
+        assert!(!pace.admit(later));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_pace_is_admitted_forever_and_silence_restores_the_burst() {
+        let mut pace = BurstPace::new(3, Duration::from_millis(50));
+        let start = Instant::now();
+        // Al ritmo esatto, anche partendo dalla raffica piena, mai un rifiuto.
+        for i in 0..3 {
+            assert!(pace.admit(start), "{i}");
+        }
+        for i in 1..=1000u32 {
+            assert!(pace.admit(start + Duration::from_millis(50) * i), "{i}");
+        }
+        // Ogni 40 ms invece di 50, ogni messaggio consuma 10 ms del margine di
+        // 100: l'undicesimo dopo il primo è oltre.
+        let now = start + Duration::from_secs(60);
+        for k in 0..=10u32 {
+            assert!(pace.admit(now + Duration::from_millis(40) * k), "{k}");
+        }
+        assert!(!pace.admit(now + Duration::from_millis(440)));
+        // Dopo il silenzio torna tutta la raffica, e non di più.
+        let quiet = now + Duration::from_secs(10);
+        for i in 0..3 {
+            assert!(pace.admit(quiet), "{i}");
+        }
+        assert!(!pace.admit(quiet));
     }
 }

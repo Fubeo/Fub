@@ -3,9 +3,9 @@
 //! Prima del `welcome` la connessione costa poco e per poco: una scadenza
 //! assoluta di 5 secondi dall'accettazione copre TLS, upgrade e `hello`, e
 //! al più 64 KiB letti. Dopo, un compito solo legge e scrive: chi legge
-//! conta i messaggi al secondo e passa alla sessione, chi scrive svuota la
-//! coda della connessione e manda gli heartbeat. La prima parte che finisce
-//! decide come si chiude.
+//! conta i messaggi al secondo e le viste, e passa alla sessione; chi scrive
+//! svuota la coda della connessione e manda gli heartbeat. La prima parte che
+//! finisce decide come si chiude.
 //!
 //! Comunque finisca il compito, anche con un panic o interrotto dalla
 //! chiusura della sessione, una guardia avvisa la sessione con l'id della
@@ -36,13 +36,13 @@ use super::session::ConnId;
 use super::{Alive, Shared};
 use crate::limits::{
     CLOSE_GRACE, HEARTBEAT, HEARTBEAT_MISSES, HELLO_BUDGET, HELLO_TIMEOUT, RATE_PER_SECOND,
-    WRITE_TIMEOUT,
+    VIEW_BURST, VIEW_PACE, WRITE_TIMEOUT,
 };
 use crate::protocol::{
     parse_hello, parse_writer, truncate, ByeMessage, CloseCode, ErrorMessage, HostMessage, Parsed,
     Violation, WriterMessage,
 };
-use crate::rate::RateWindow;
+use crate::rate::{BurstPace, RateWindow};
 use crate::tls::websocket_config;
 
 /// Un trasporto: il socket TCP, o nelle prove un tubo in memoria.
@@ -395,6 +395,7 @@ async fn run(
     let (mut sink, mut stream) = ws.split();
 
     let reader = async {
+        let mut views = BurstPace::new(VIEW_BURST, VIEW_PACE);
         loop {
             let message = match stream.next().await {
                 None => return End::Lost(LeaveReason::Lost),
@@ -417,6 +418,16 @@ async fn run(
                 Message::Text(text) => match parse_writer(&text) {
                     Err(violation) => Err(violation),
                     Ok(Parsed::Message(WriterMessage::Bye)) => return End::WriterBye,
+                    // La guardia conta la vista; nel budget, passa al ramo dopo.
+                    Ok(Parsed::Message(WriterMessage::View(_))) if !views.admit(now) => {
+                        Err(Violation::new(
+                            CloseCode::TooMuchTraffic,
+                            format!(
+                                "views beyond a burst of {VIEW_BURST} or one every {} ms",
+                                VIEW_PACE.as_millis()
+                            ),
+                        ))
+                    }
                     Ok(Parsed::Message(message)) => shared.session.lock().inbound(conn, message),
                     Ok(Parsed::CommitOverLimit { c, detail }) => {
                         shared.session.lock().commit_over_limit(conn, c, detail)

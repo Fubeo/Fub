@@ -45,6 +45,8 @@ pub const PAIRING_TTL: Duration = Duration::from_secs(5 * 60);
 pub const RESUME_WINDOW: Duration = Duration::from_secs(2 * 60);
 /// L'attesa dopo una chiusura 4006 prima di riprovare.
 pub const RATE_COOLDOWN: Duration = Duration::from_secs(5);
+/// La distanza minima fra due `view` dello scrittore: al più 10 al secondo.
+pub const VIEW_INTERVAL: Duration = Duration::from_millis(100);
 
 /// I byte che una connessione può leggere prima che il suo `hello` sia
 /// accettato, richiesta di upgrade compresa. Senza, ogni socket appena aperto
@@ -77,6 +79,15 @@ pub(crate) const CLOSE_GRACE: Duration = Duration::from_secs(2);
 /// tiene per una shell che non legge. Oltre, l'inchiostro in coda si butta e
 /// resta un `inkGap`: il commit lo sostituisce.
 pub(crate) const EVENT_INK_POINTS: usize = 256 * 1024;
+/// Il ritmo delle `view` che l'host fa rispettare: una ogni 50 ms, il doppio
+/// della regola di una ogni [`VIEW_INTERVAL`]. Oltre, 4006.
+pub(crate) const VIEW_PACE: Duration = Duration::from_nanos(VIEW_INTERVAL.as_nanos() as u64 / 2);
+/// Le `view` che possono arrivare di fila prima che conti [`VIEW_PACE`]:
+/// quanti messaggi lascia passare [`RATE_PER_SECOND`]. Le viste che un intoppo
+/// della rete trattiene arrivano tutte insieme; una raffica che il limite dei
+/// messaggi ammette non si rifiuta perché è fatta di viste, e chi ha taciuto
+/// ritrova la raffica intera dopo dodici secondi.
+pub(crate) const VIEW_BURST: u32 = RATE_PER_SECOND as u32;
 
 /// I limiti come li legge lo scrittore nel `welcome`. Le durate sono in
 /// millisecondi.
