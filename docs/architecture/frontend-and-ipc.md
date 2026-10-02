@@ -151,7 +151,9 @@ il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
 linguetta, Delete la chiude. Gli aggiornamenti di stato preservano il nodo a
 fuoco; una chiusura trasferisce il focus a una linguetta vicina o al menu del
-riquadro rimasto vuoto.
+riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
+nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
+la vista porta il focus sulla superficie montata al posto della precedente.
 
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell

@@ -410,6 +410,74 @@ describe("DocumentSurfaceRegistry", () => {
     });
   });
 
+  it("names the source view the natural surface declares, only while it resolves", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const unregisterText = registry.register({
+      owner: "core.text",
+      family: "text",
+      defaultProfile: "plain-text",
+      profiles: ["svg"],
+      factory: factory("text", [], []),
+      sources: { text: "plain-text" },
+    });
+    registry.register({
+      owner: "plugin.draw",
+      family: "draw",
+      defaultProfile: "vector",
+      profiles: ["sketch", "board", "lost"],
+      factory: factory("draw", [], []),
+      formats: { "draw.vector": "vector", "draw.sketch": "sketch", "draw.board": "board", "draw.lost": "lost" },
+      sourceViews: {
+        vector: { family: "text", profile: "svg" },
+        sketch: { family: "text" },
+        lost: { family: "text", profile: "invented" },
+      },
+    });
+
+    expect(registry.sourceView({ formatId: "draw.vector", sourceKind: "text" }))
+      .toEqual({ family: "text", profile: "svg" });
+    // A tab already on the view still names it: the way back is computed from
+    // the document's own surface, not from the override that replaced it.
+    expect(registry.sourceView({
+      formatId: "draw.vector",
+      sourceKind: "text",
+      override: { family: "text", profile: "svg" },
+    })).toEqual({ family: "text", profile: "svg" });
+    // Without a profile the view takes the family's default, spelled out.
+    expect(registry.sourceView({ formatId: "draw.sketch", sourceKind: "text" }))
+      .toEqual({ family: "text", profile: "plain-text" });
+    // Opt-in: a profile without an entry offers nothing, nor does a view to a
+    // profile its family does not register, nor a document on another surface.
+    expect(registry.sourceView({ formatId: "draw.board", sourceKind: "text" })).toBeNull();
+    expect(registry.sourceView({ formatId: "draw.lost", sourceKind: "text" })).toBeNull();
+    expect(registry.sourceView({ formatId: null, sourceKind: "text" })).toBeNull();
+
+    unregisterText();
+    expect(registry.sourceView({ formatId: "draw.vector", sourceKind: "text" })).toBeNull();
+  });
+
+  it("rejects source views of unregistered profiles, without a family, or of themselves", () => {
+    const register = (sourceViews: Record<string, { family: string; profile?: string }>) => () =>
+      new DocumentSurfaceRegistry().register({
+        owner: "plugin.draw",
+        family: "draw",
+        defaultProfile: "vector",
+        profiles: ["sketch"],
+        factory: factory("draw", [], []),
+        sourceViews,
+      });
+
+    expect(register({ invented: { family: "text" } })).toThrow("source view of unregistered profile invented");
+    expect(register({ vector: { family: " " } })).toThrow("source view family of vector must not be empty");
+    expect(register({ vector: { family: "text", profile: "" } }))
+      .toThrow("source view profile of vector must not be empty");
+    expect(register({ vector: { family: "draw" } })).toThrow("profile vector names itself as its source view");
+    expect(register({ sketch: { family: "draw", profile: "sketch" } }))
+      .toThrow("profile sketch names itself as its source view");
+    // Another profile of the same family is a view, not the surface itself.
+    expect(register({ sketch: { family: "draw" } })).not.toThrow();
+  });
+
   it("accepts a family the shell does not know, bound to its own format", () => {
     const registry = new DocumentSurfaceRegistry();
     registry.register({

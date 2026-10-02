@@ -226,6 +226,21 @@ export interface SurfaceRegistration {
    * `null` when this binding does not show the requested document.
    */
   readonly selectSourceProfile?: (request: SurfaceRequest, fallback: string) => string | null;
+  /**
+   * The source view of a profile, by profile: the surface that shows the same
+   * document as the text it is stored in, which the user may open in a tab in
+   * place of this one («Apri come sorgente»). Opt-in: a profile without an
+   * entry offers none. The view names a family, not a factory, so it may be
+   * owned by someone else and registered later; the shell offers it only
+   * while it resolves (`sourceView`).
+   */
+  readonly sourceViews?: Readonly<Record<string, SurfaceOverride>>;
+}
+
+/** A source view that resolves now: a registered family and one of its profiles. */
+export interface SourceView {
+  readonly family: SurfaceFamily;
+  readonly profile: string;
 }
 
 export interface ResolvedSurface {
@@ -239,6 +254,7 @@ interface RegistrationRecord extends SurfaceRegistration {
   readonly profileSet: ReadonlySet<string>;
   readonly formats: Readonly<Record<string, string>>;
   readonly sources: Readonly<Partial<Record<SourceKind, string>>>;
+  readonly sourceViews: Readonly<Record<string, SurfaceOverride>>;
 }
 
 interface Binding {
@@ -296,6 +312,22 @@ export class DocumentSurfaceRegistry {
         required(`profile for source ${source}`, profile),
       ]),
     ) as Partial<Record<SourceKind, string>>;
+    const sourceViews = Object.fromEntries(
+      Object.entries(registration.sourceViews ?? {}).map(([profile, view]) => {
+        const own = required("source view profile", profile);
+        if (!profiles.has(own)) throw new TypeError(`source view of unregistered profile ${own}`);
+        const target: SurfaceOverride = {
+          family: required(`source view family of ${own}`, view.family),
+          ...(view.profile === undefined ? {} : { profile: required(`source view profile of ${own}`, view.profile) }),
+        };
+        // A profile is not a view of itself: the command would remount the
+        // same surface and call it something else.
+        if (target.family === family && (target.profile ?? defaultProfile) === own) {
+          throw new TypeError(`profile ${own} names itself as its source view`);
+        }
+        return [own, target];
+      }),
+    );
     for (const [binding, profile] of [
       ...Object.entries(formats).map(([key, value]) => [`format:${key}`, value] as const),
       ...Object.entries(sources).map(([key, value]) => [`source:${key}`, value] as const),
@@ -331,6 +363,7 @@ export class DocumentSurfaceRegistry {
       formats,
       sources,
       selectSourceProfile: registration.selectSourceProfile,
+      sourceViews,
     };
     this.#families.set(family, record);
     for (const [format, profile] of Object.entries(formats)) {
@@ -365,6 +398,24 @@ export class DocumentSurfaceRegistry {
     if (source && profile !== null) return this.#resolved(source.registration, profile);
     const error = this.#families.get("error");
     return error ? this.#resolved(error, error.defaultProfile) : null;
+  }
+
+  /**
+   * The source view the document's own surface declares, with its profile
+   * spelled out, or `null` when it declares none or the view does not resolve
+   * now (its family unregistered, its profile unknown there). The request's
+   * override is ignored: the view belongs to the surface the document gets
+   * without one, so a tab already showing it can still name the way back.
+   */
+  sourceView(request: SurfaceRequest): SourceView | null {
+    const natural = this.resolve({ ...request, override: undefined });
+    const registration = natural ? this.#families.get(natural.family) : undefined;
+    const view = natural && registration ? registration.sourceViews[natural.profile] : undefined;
+    if (!view) return null;
+    const target = this.#families.get(view.family);
+    const profile = view.profile ?? target?.defaultProfile;
+    if (!target || profile === undefined || !target.profileSet.has(profile)) return null;
+    return { family: target.family, profile };
   }
 
   /**
