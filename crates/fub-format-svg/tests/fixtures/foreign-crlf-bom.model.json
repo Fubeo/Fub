@@ -1,0 +1,168 @@
+{
+  "id": "disegni/foreign-crlf-bom.svg",
+  "frontmatter": {},
+  "body": [
+    {
+      "kind": "custom",
+      "custom_kind": "fub.scene.summary",
+      "attrs": {
+        "version": null,
+        "foreign": true,
+        "truncated": false,
+        "layers": [],
+        "counts": {
+          "strokes": 0,
+          "shapes": 0,
+          "texts": 0,
+          "images": 1,
+          "links": 1,
+          "foreign": 3
+        },
+        "ink": {
+          "samples": 0,
+          "duration": 0
+        },
+        "bbox": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 50.0,
+          "height": 40.0
+        }
+      },
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Mappa del quartiere"
+            }
+          ],
+          "anchor": "mappa-del-quartiere",
+          "span": {
+            "start": 413,
+            "end": 447
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "quartiere/parco.md"
+                },
+                "label": [
+                  {
+                    "kind": "text",
+                    "value": "Parco giochi 𝄞"
+                  }
+                ],
+                "embed": false,
+                "span": {
+                  "start": 523,
+                  "end": 775
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 523,
+            "end": 775
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "foto/mappa.png"
+                },
+                "label": null,
+                "embed": true,
+                "span": {
+                  "start": 781,
+                  "end": 864
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 781,
+            "end": 864
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Scrivi al comune"
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 912,
+            "end": 956
+          }
+        }
+      ],
+      "anchor": null,
+      "span": {
+        "start": 3,
+        "end": 1064
+      }
+    }
+  ],
+  "outline": [
+    {
+      "level": 1,
+      "text": "Mappa del quartiere",
+      "slug": "mappa-del-quartiere",
+      "span": {
+        "start": 413,
+        "end": 447
+      },
+      "explicit_anchor": null
+    }
+  ],
+  "links": [
+    {
+      "target": {
+        "kind": "path",
+        "value": "quartiere/parco.md"
+      },
+      "embed": false,
+      "span": {
+        "start": 523,
+        "end": 775
+      },
+      "context": "Parco giochi 𝄞"
+    },
+    {
+      "target": {
+        "kind": "path",
+        "value": "foto/mappa.png"
+      },
+      "embed": true,
+      "span": {
+        "start": 781,
+        "end": 864
+      },
+      "context": null
+    }
+  ],
+  "tags": [],
+  "anchors": [],
+  "text": "Mappa del quartiere\nParco giochi 𝄞\nScrivi al comune",
+  "frontmatter_present": false
+}

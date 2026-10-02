@@ -37,6 +37,7 @@ flowchart TD
     sheet["fub-format-sheet"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
+    svg["fub-format-svg"]
     scene["fub-scene"]
     importers["fub-importers"]
     cli["fub-cli"]
@@ -71,6 +72,8 @@ flowchart TD
     markdown --> abi
     markdown --> sdk
     sheet --> abi
+    svg --> abi
+    svg --> scene
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -91,6 +94,7 @@ flowchart TD
     wasmhost -.-> testkit
     importers -.-> markdown
     importers -.-> sdk
+    svg -.-> sdk
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
@@ -98,10 +102,12 @@ Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
 `fub-wasm-host` dipende dall'host per montare bundle, ma l'host non dipende da
 Wasmtime.
 
-`fub-scene`, il lettore delle scene di FubDraw, non ha frecce di proposito:
-non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché deve
-poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
-`dependency_invariant.rs` e la compilazione per quel bersaglio nella CI.
+`fub-scene`, il lettore delle scene di FubDraw, non ha frecce in uscita di
+proposito: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
+deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
+`dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
+`fub-format-svg`, il provider del [formato della
+scena](../reference/scene-format.md).
 
 ## Flusso di un comando
 

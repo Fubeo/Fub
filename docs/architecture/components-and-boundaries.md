@@ -19,6 +19,9 @@ flowchart LR
     CANVAS["fub-format-canvas"] --> ABI
     CANVAS --> MARKDOWN
     BASE["fub-format-base"] --> ABI
+    SCENE["fub-scene"]
+    SVG["fub-format-svg"] --> ABI
+    SVG --> SCENE
     IMPORTERS["fub-importers"] --> ABI
     FEATURES["fub-features"] --> ABI
     FEATURES -. "feature base" .-> BASE
@@ -56,6 +59,8 @@ del repository verificano le eccezioni.
 | `fub-format-sheet` | workbook persistito, valutatore, sessioni derivate, provider grid e route di valutazione | host, storage, Tauri, Wasmtime |
 | `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
+| `fub-scene` | lettura dei disegni di FubDraw secondo il [formato della scena](../reference/scene-format.md): classificazione, inchiostro, indice e diagnostica | `fub-abi`, host, qualunque I/O |
+| `fub-format-svg` | il formato `svg`: modello per l'indice, segnaposto HTML, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
@@ -68,6 +73,7 @@ del repository verificano le eccezioni.
 - `fub-abi` → `fub-kernel`, Tauri, Wasmtime o Markdown;
 - `fub-kernel` → `fub-host`, Tauri, Wasmtime o `fub-format-markdown`;
 - `fub-host` → Tauri;
+- `fub-scene` → qualunque crate del workspace;
 - qualunque crate diverso da `fub-wasm-host` → Wasmtime;
 - dipendenza normale → `fub-testkit`;
 - file frontend arbitrario → `@tauri-apps`;
@@ -146,6 +152,7 @@ indipendenti.
 | Markdown | `crates/fub-format-markdown/src/` |
 | foglio | `crates/fub-format-sheet/src/` |
 | lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
+| disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/` |
 | feature | `crates/fub-features/src/` |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |

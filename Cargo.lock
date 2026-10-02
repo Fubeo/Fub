@@ -1752,6 +1752,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-format-svg"
+version = "0.1.0"
+dependencies = [
+ "fub-abi",
+ "fub-scene",
+ "fub-sdk",
+ "serde_json",
+]
+
+[[package]]
 name = "fub-host"
 version = "0.1.0"
 dependencies = [
