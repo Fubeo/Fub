@@ -1,3 +1,5 @@
+import { JsonNumber, parseJson, stringifyJson, type JsonPath } from "./json";
+
 export interface GridRow {
   id: string;
   height?: number;
@@ -60,7 +62,7 @@ export interface GridSelection {
 const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
 
 function record(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value instanceof JsonNumber) {
     throw new TypeError(`${label} non è un oggetto`);
   }
   return value as Record<string, unknown>;
@@ -191,7 +193,7 @@ export function parseWorkbook(source: string): GridWorkbook {
   if (new TextEncoder().encode(source).length > MAX_SOURCE_BYTES) {
     throw new RangeError("workbook oltre il limite di 16 MiB");
   }
-  const root = record(JSON.parse(source), "workbook");
+  const root = record(parseJson(source, isProperties), "workbook");
   exactKeys(root, ["version", "properties", "sheets"], "workbook");
   if (root.version !== 1) throw new RangeError(`versione workbook non supportata: ${String(root.version)}`);
   const sheets = array(root.sheets, "sheets").map((entry, index): GridSheet => {
@@ -226,8 +228,16 @@ export function parseWorkbook(source: string): GridWorkbook {
   };
 }
 
+/// Le proprietà del workbook e di ogni foglio: JSON arbitrario che il foglio
+/// non interpreta, e i cui numeri restano come erano scritti ([`JsonNumber`]).
+function isProperties(path: JsonPath): boolean {
+  return path.length === 1
+    ? path[0] === "properties"
+    : path.length === 3 && path[0] === "sheets" && path[2] === "properties";
+}
+
 export function serializeWorkbook(workbook: GridWorkbook): string {
-  return `${JSON.stringify(workbook, null, 2)}\n`;
+  return `${stringifyJson(workbook)}\n`;
 }
 
 export function cellAt(sheet: GridSheet, position: GridPosition): GridCell | undefined {

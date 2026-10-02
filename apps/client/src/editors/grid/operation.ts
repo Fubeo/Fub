@@ -3,6 +3,7 @@ import {
   operationFromText,
   type TextOperation,
 } from "../core/text-operation";
+import { parseTsv, tsvRows } from "../core/tsv";
 import {
   cellAt,
   coordinateAt,
@@ -148,12 +149,6 @@ export function inputPatch(
   return snapshotsEqual(before, after) ? null : { coordinate, before, after };
 }
 
-export function parseTsv(source: string): string[][] {
-  const rows = source.replace(/\r\n?/g, "\n").split("\n");
-  if (rows[rows.length - 1] === "") rows.pop();
-  return rows.map((row) => row.split("\t"));
-}
-
 export function pastePatches(
   sheet: GridSheet,
   start: GridPosition,
@@ -174,15 +169,26 @@ export function pastePatches(
   return patches;
 }
 
-export function selectionTsv(sheet: GridSheet, selection: GridSelection): string {
+function selectionInputs(sheet: GridSheet, selection: GridSelection): string[][] {
   const range = normalizedSelection(selection);
-  const rows: string[] = [];
+  const rows: string[][] = [];
   for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
     const values: string[] = [];
     for (let column = range.columnStart; column <= range.columnEnd; column += 1) {
       values.push(cellAt(sheet, { row, column })?.input ?? "");
     }
-    rows.push(values.join("\t"));
+    rows.push(values);
   }
-  return rows.join("\n");
+  return rows;
+}
+
+/// La selezione per la clipboard, nel TSV dei fogli ([`tsvRows`]).
+export function selectionTsv(sheet: GridSheet, selection: GridSelection): string {
+  return tsvRows(selectionInputs(sheet, selection));
+}
+
+/// La selezione come testo da leggere, per il contesto dei comandi: tab fra le
+/// celle, a capo fra le righe, e gli input così come sono.
+export function selectionText(sheet: GridSheet, selection: GridSelection): string {
+  return selectionInputs(sheet, selection).map((row) => row.join("\t")).join("\n");
 }

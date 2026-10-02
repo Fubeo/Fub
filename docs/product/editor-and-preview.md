@@ -404,15 +404,16 @@ lettura la griglia si seleziona e si copia, ma non si scrive.
 
 Il formato persistente della griglia è un documento JSON testuale versionato.
 Conserva input, ordine, dimensioni, stile, proprietà e identità stabili di
-sheet, righe e colonne. L'indirizzo A1 dipende invece dall'ordine corrente:
-riordinare una riga sposta l'indirizzo senza cambiare l'identità della cella.
+sheet, righe e colonne; le proprietà, JSON libero, tengono i numeri come erano
+scritti anche oltre la precisione di JavaScript. L'indirizzo A1 segue l'ordine
+corrente: riordinare una riga sposta l'indirizzo, non l'identità della cella.
 
 La superficie mostra intestazioni, celle e selezione rettangolare in una
 viewport virtualizzata. Supporta tastiera, editor in-cell, formula bar,
-copia/incolla TSV e undo/redo del workbook. Invio conferma la cella, Esc
-annulla la modifica e uscire dalla cella (o dalla formula bar) la conferma;
-una modifica peer strutturata conserva la bozza locale, mentre una
-riscrittura completa autorevole la annulla.
+copia/incolla TSV (celle multilinea fra virgolette, come in Excel) e undo/redo
+del workbook. Invio conferma la cella, Esc annulla la modifica e uscire dalla
+cella (o dalla formula bar) la conferma; una modifica peer strutturata conserva
+la bozza locale, mentre una riscrittura completa autorevole la annulla.
 
 Tab e Maiusc+Tab percorrono le celle visibili; raggiunti i due estremi,
 lasciano la griglia e proseguono verso gli altri controlli della shell.
@@ -422,7 +423,9 @@ salvati nel file: il valutatore Rust li ricostruisce dai dati autorevoli. Se il
 valutatore non è disponibile, anche perché il bundle `fub.sheet` è disabilitato,
 la griglia resta modificabile e mostra gli input grezzi. Nessuna battuta
 attraversa IPC; la valutazione parte dopo il commit e una risposta stantia non
-sostituisce lo stato corrente.
+sostituisce lo stato corrente. Il commit arriva alla `DocumentSession` all'invio
+e sopravvive a una linguetta chiusa prima della risposta; i byte del provider
+lo correggono a coda vuota, e un rifiuto lascia il fallback con il commit.
 
 Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
 `DocumentModel`. Il protocollo Grid v1 è promosso in ABI/WIT e mirror

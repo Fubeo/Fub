@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
+import { applyOperation } from "../core/text-operation";
 import { parseWorkbook } from "./model";
-import { commitGridPatches, inputPatch } from "./operation";
+import { commitGridPatches, inputPatch, isGridOperation, type GridCellPatch } from "./operation";
 import type { GridWindow } from "../../host/contract";
 import { GridEngine, type GridChange, type GridHost } from "./engine";
 
@@ -17,6 +18,12 @@ function workbook(rows = 100, columns = 50): string {
       cells: [{ row: "r0", column: "c0", input: "1" }],
     }],
   });
+}
+
+/** Le patch di un commit: soltanto le conferme del provider ne sono senza. */
+function patchesOf(change: GridChange): readonly GridCellPatch[] {
+  if (!isGridOperation(change.operation)) throw new Error("un commit senza patch di celle");
+  return change.operation.patches;
 }
 
 function mounted(
@@ -129,6 +136,53 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/** Lascia finire ogni promessa in volo: un giro di macrotask viene dopo tutte. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** Conferma la cella attiva come se l'utente ci avesse scritto `text` e Invio. */
+function typeInActiveCell(host: HTMLElement, viewport: HTMLElement, text: string): void {
+  viewport.dispatchEvent(new KeyboardEvent("keydown", { key: text, bubbles: true }));
+  host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+}
+
+/**
+ * Un provider che tiene il **suo** sorgente, compatto, e risponde a ogni
+ * commit col diff minimo da quello: come il nativo, che riscrive il workbook
+ * coi suoi byte. Le risposte restano in attesa finché il test non le libera.
+ */
+function bytewiseProvider(source: string) {
+  const grid = protocolHost(source);
+  let held = source;
+  const answers: Array<() => void> = [];
+  Object.assign(grid, {
+    applyGrid: async (_surface: string, _instance: string, request: { patches: Array<{ after: string }> }) => {
+      grid.calls.push("apply");
+      await new Promise<void>((resolve) => answers.push(resolve));
+      // Sul testo e non attraverso `JSON.parse`: il nativo conserva ciò che
+      // non tocca, interi oltre la precisione di `Number` compresi.
+      const next = held.replace(/"input":"[^"]*"/, `"input":${JSON.stringify(request.patches[0]!.after)}`);
+      let from = 0;
+      while (from < held.length && held[from] === next[from]) from += 1;
+      let tail = 0;
+      while (tail < held.length - from && held[held.length - 1 - tail] === next[next.length - 1 - tail]) tail += 1;
+      const bytes = (text: string) => new TextEncoder().encode(text).length;
+      const edit = {
+        from: bytes(held.slice(0, from)),
+        to: bytes(held.slice(0, held.length - tail)),
+        deleted: held.slice(from, held.length - tail),
+        inserted: next.slice(from, next.length - tail),
+      };
+      held = next;
+      return { revision: `rev-${answers.length + 2}`, edit, invalidation: { kind: "cells", cells: [] } };
+    },
+  });
+  return { grid, answers, held: () => held };
+}
+
 describe("GridEngine", () => {
   it("virtualizza entro una finestra limitata e pubblica la semantica grid", () => {
     const { engine, host, viewport } = mounted();
@@ -186,8 +240,7 @@ describe("GridEngine", () => {
     host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(changes).toHaveLength(1);
-    expect(changes[0].operation.kind).toBe("grid");
-    expect(changes[0].operation.patches).toHaveLength(1);
+    expect(patchesOf(changes[0])).toHaveLength(1);
     expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.[0].input).toBe("X");
     engine.destroy();
   });
@@ -202,7 +255,7 @@ describe("GridEngine", () => {
     Object.defineProperty(paste, "clipboardData", { value: clipboard });
     viewport.dispatchEvent(paste);
     expect(changes).toHaveLength(1);
-    expect(changes[0].operation.patches).toHaveLength(4);
+    expect(patchesOf(changes[0])).toHaveLength(4);
 
     const peerWorkbook = parseWorkbook(engine.getDoc());
     const peerPatch = inputPatch(peerWorkbook.sheets[0], { row: 2, column: 2 }, "peer")!;
@@ -242,9 +295,13 @@ describe("GridEngine", () => {
     await Promise.resolve();
     expect(grid.calls.filter((call) => call === "window").length).toBeGreaterThan(windowsBeforeTyping);
     expect(grid.calls.filter((call) => call === "apply")).toHaveLength(1);
-    expect(changes).toHaveLength(1);
-    expect(changes[0].text).toContain('"X"');
-    expect(engine.getDoc()).toContain('"X"');
+    // Il commit arriva alla sessione all'invio, scritto qui; la conferma del
+    // provider lo riscrive coi suoi byte, e la seconda modifica parte dalla prima.
+    expect(changes).toHaveLength(2);
+    expect(parseWorkbook(changes[0].text).sheets[0].cells?.[0].input).toBe("X");
+    expect(changes[1].text).toBe(source.replace('"1"', '"X"'));
+    expect(applyOperation(changes[0].text, changes[1].operation)).toBe(changes[1].text);
+    expect(engine.getDoc()).toBe(changes[1].text);
     engine.destroy();
   });
 
@@ -417,7 +474,43 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
-  it("dice l'intervallo scelto col testo di una copia, fino a un tetto", () => {
+  it("copia e incolla una cella multilinea al suo posto senza toccare le vicine", () => {
+    const multiline = "prima\nseconda\tterza";
+    const source = JSON.stringify({
+      version: 1,
+      sheets: [{
+        id: "main",
+        name: "Main",
+        rows: [{ id: "r0", hidden: false }, { id: "r1", hidden: false }],
+        columns: [{ id: "c0", hidden: false }, { id: "c1", hidden: false }],
+        cells: [
+          { row: "r0", column: "c0", input: multiline },
+          { row: "r0", column: "c1", input: "B1" },
+          { row: "r1", column: "c0", input: "A2" },
+          { row: "r1", column: "c1", input: "B2" },
+        ],
+      }],
+    });
+    const { engine, viewport, changes } = mounted(undefined, source);
+    let copied = "";
+    const clipboard = {
+      getData: () => copied,
+      setData: (_type: string, text: string) => { copied = text; },
+    };
+    for (const type of ["copy", "paste"]) {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: clipboard });
+      viewport.dispatchEvent(event);
+    }
+
+    expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.map((cell) => cell.input)).toEqual([multiline, "B1", "A2", "B2"]);
+    expect(changes).toHaveLength(0);
+    expect(copied).toBe('"prima\nseconda\tterza"\n');
+    expect(engine.selectedText()).toEqual({ primary: multiline, secondary: [] });
+    engine.destroy();
+  });
+
+  it("dice l'intervallo scelto come testo da leggere, fino a un tetto", () => {
     const { engine, viewport } = mounted();
     expect(engine.selectedText()).toEqual({ primary: "1", secondary: [] });
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true }));
@@ -762,6 +855,150 @@ describe("GridEngine", () => {
     expect(current.engine.getDoc()).toBe(fresh);
     expect(current.host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("v1");
     current.engine.destroy();
+  });
+
+  it("consegna il commit alla sessione all'invio, anche se la linguetta si chiude prima della risposta", async () => {
+    const source = workbook();
+    const { grid, answers } = bytewiseProvider(source);
+    const { engine, host, viewport, changes } = mounted(grid, source);
+    await settle();
+
+    typeInActiveCell(host, viewport, "X");
+
+    // Prima di ogni risposta: la sessione ha già il commit, e diventa sporca.
+    expect(changes).toHaveLength(1);
+    expect(parseWorkbook(changes[0].text).sheets[0].cells?.[0].input).toBe("X");
+    await settle();
+    expect(grid.calls.filter((call) => call === "apply")).toHaveLength(1);
+    engine.destroy();
+    answers.forEach((answer) => answer());
+    await settle();
+    // Dopo il teardown niente: il riquadro può già mostrare un altro documento.
+    expect(changes).toHaveLength(1);
+  });
+
+  it("applica le risposte accodate al sorgente del provider e corregge una volta sola", async () => {
+    const source = workbook();
+    const { grid, answers, held } = bytewiseProvider(source);
+    const { engine, host, viewport, changes } = mounted(grid, source);
+    await settle();
+
+    typeInActiveCell(host, viewport, "2");
+    typeInActiveCell(host, viewport, "3");
+    expect(changes.map((change) => parseWorkbook(change.text).sheets[0].cells?.[0].input)).toEqual(["2", "3"]);
+    await settle();
+    answers.shift()!();
+    await settle();
+    // La prima conferma non contiene ancora il secondo commit: non si corregge.
+    expect(changes).toHaveLength(2);
+    answers.shift()!();
+    await settle();
+
+    expect(changes).toHaveLength(3);
+    expect(changes[2].text).toBe(held());
+    expect(applyOperation(changes[1].text, changes[2].operation)).toBe(changes[2].text);
+    expect(engine.getDoc()).toBe(held());
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("v1");
+    engine.destroy();
+  });
+
+  it("ricarica il provider soltanto dopo l'apply in volo", async () => {
+    const source = workbook();
+    const { grid, answers } = bytewiseProvider(source);
+    const { engine, host, viewport, changes } = mounted(grid, source);
+    await settle();
+    typeInActiveCell(host, viewport, "X");
+    await settle();
+
+    const peer = parseWorkbook(changes[0].text);
+    const patch = inputPatch(peer.sheets[0], { row: 1, column: 1 }, "peer")!;
+    const synced = commitGridPatches(peer, changes[0].text, [patch])!;
+    engine.syncDoc({ text: synced.source, operation: synced.operation });
+    await settle();
+    // L'apply in volo cambierebbe il sorgente del provider sotto la ricarica.
+    expect(grid.calls.filter((call) => call === "reload")).toHaveLength(0);
+    answers.shift()!();
+    await settle();
+
+    expect(grid.calls.filter((call) => call === "reload")).toHaveLength(1);
+    expect(changes).toHaveLength(1);
+    expect(engine.getDoc()).toBe(synced.source);
+    engine.destroy();
+  });
+
+  it("una modifica di cella non arrotonda le proprietà, in fallback e con commit accodati", async () => {
+    const big = "9007199254740993";
+    const source = workbook().replace('{"version":1,', `{"version":1,"properties":{"numero":${big}},`);
+    expect(source).toContain(big);
+
+    const fallback = mounted(undefined, source);
+    typeInActiveCell(fallback.host, fallback.viewport, "2");
+    expect(fallback.changes).toHaveLength(1);
+    expect(fallback.changes[0].text).toContain(big);
+    fallback.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect(fallback.changes[1].origin).toBe("undo");
+    expect(fallback.changes[1].text).toContain(big);
+    expect(parseWorkbook(fallback.changes[1].text).sheets[0].cells?.[0].input).toBe("1");
+    fallback.engine.destroy();
+
+    const { grid, answers } = bytewiseProvider(source);
+    const { engine, host, viewport, changes } = mounted(grid, source);
+    await settle();
+    typeInActiveCell(host, viewport, "2");
+    typeInActiveCell(host, viewport, "3");
+    await settle();
+    answers.shift()!();
+    await settle();
+    answers.shift()!();
+    await settle();
+    expect(changes.length).toBeGreaterThanOrEqual(2);
+    for (const change of changes) expect(change.text).toContain(big);
+    expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.[0].input).toBe("3");
+    engine.destroy();
+  });
+
+  it("un provider che rifiuta il commit lascia il fallback col commit dentro", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    Object.assign(grid, { applyGrid: async () => { throw new Error("provider caduto"); } });
+    const { engine, host, viewport, changes } = mounted(grid, source);
+    await settle();
+
+    typeInActiveCell(host, viewport, "X");
+    await settle();
+
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("fallback");
+    expect(changes).toHaveLength(1);
+    expect(engine.getDoc()).toBe(changes[0].text);
+    expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.[0].input).toBe("X");
+    engine.destroy();
+  });
+
+  it("riapre il provider se un commit in fallback cambia il testo mentre si apriva", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    const opened: string[] = [];
+    const openGrid = grid.openGrid;
+    let release: (() => void) | undefined;
+    Object.assign(grid, {
+      openGrid: async (surface: string, text: string, revision: string) => {
+        opened.push(text);
+        if (opened.length === 1) await new Promise<void>((resolve) => { release = resolve; });
+        return openGrid(surface, text, revision);
+      },
+    });
+    const { engine, host, viewport, changes } = mounted(grid, source);
+    await settle();
+
+    typeInActiveCell(host, viewport, "X");
+    expect(changes).toHaveLength(1);
+    release?.();
+    await settle();
+
+    expect(opened).toEqual([source, changes[0].text]);
+    expect(grid.activeInstances.size).toBe(1);
+    expect(engine.getDoc()).toBe(changes[0].text);
+    engine.destroy();
   });
 
   it("ignora il rifiuto di un apply stantio senza abbattere il provider nuovo", async () => {

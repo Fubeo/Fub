@@ -8,7 +8,7 @@ import type {
   GridWindowRequest,
   SheetCellValue,
 } from "../../host/contract";
-import type { EditorChangeOrigin, TextOperation } from "../core/text-operation";
+import { operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import type { Theme } from "../../theme/theme";
 import { t, onLanguage } from "../../i18n/strings";
 import { createTextEngine, type TextEngine } from "../text/engine";
@@ -32,6 +32,7 @@ import {
   inverseGridPatches,
   isGridOperation,
   pastePatches,
+  selectionText,
   selectionTsv,
   type GridCellPatch,
   type GridOperation,
@@ -66,7 +67,12 @@ export interface GridHost {
 
 export interface GridChange {
   readonly text: string;
-  readonly operation: GridOperation;
+  /**
+   * Una conferma del provider che riscrive i byte di un commit già pubblicato
+   * non ha patch di celle da dare: porta un'operazione di solo testo, e chi la
+   * riceve rilegge il sorgente.
+   */
+  readonly operation: GridOperation | TextOperation;
   readonly origin: EditorChangeOrigin;
 }
 
@@ -201,19 +207,6 @@ function safeSourceBoundary(bytes: Uint8Array, at: number): boolean {
     && !(at > 0 && at < bytes.length && bytes[at - 1] === 0x0d && bytes[at] === 0x0a);
 }
 
-function utf16Offset(source: string, rawByteOffset: number): number {
-  const bytes = new TextEncoder().encode(source);
-  const offset = byteOffset(rawByteOffset);
-  if (offset > bytes.length || !safeSourceBoundary(bytes, offset)) {
-    throw new Error("grid source diff splits UTF-8 or CRLF");
-  }
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes.slice(0, offset)).length;
-  } catch {
-    throw new Error("grid source diff splits UTF-8 or CRLF");
-  }
-}
-
 function applySourceEdit(source: string, edit: GridCommit["edit"]): string {
   if (typeof edit.deleted !== "string" || typeof edit.inserted !== "string") {
     throw new Error("grid source diff has invalid text");
@@ -243,22 +236,6 @@ function applySourceEdit(source: string, edit: GridCommit["edit"]): string {
   } catch {
     throw new Error("grid source diff has invalid UTF-8");
   }
-}
-
-function operationFromCommit(source: string, commit: GridCommit, patches: readonly GridCellPatch[]): GridOperation {
-  const after = applySourceEdit(source, commit.edit);
-  const edit = {
-    from: utf16Offset(source, commit.edit.from),
-    to: utf16Offset(source, commit.edit.to),
-    deleted: commit.edit.deleted,
-    inserted: commit.edit.inserted,
-  };
-  const operation: TextOperation = {
-    beforeLength: source.length,
-    afterLength: after.length,
-    edits: [edit],
-  };
-  return { ...operation, kind: "grid", patches };
 }
 
 function rowFromProtocol(row: { id: string; index: number; height: number | null; hidden: boolean }) {
@@ -428,6 +405,12 @@ export class GridEngine {
   #readOnly = false;
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
+  /// Il sorgente come lo tiene il provider, dopo l'ultima risposta: il diff di
+  /// un commit accodato parte da qui, non dal testo ottimistico.
+  #confirmedSource = "";
+  /// Quanti commit sono partiti verso il provider: la risposta dell'ultimo è
+  /// l'unica che può correggere il testo pubblicato.
+  #providerTickets = 0;
   #protocolGeneration = 0;
   #undo: GridCellPatch[][] = [];
   #redo: GridCellPatch[][] = [];
@@ -549,7 +532,7 @@ export class GridEngine {
     if (this.#provider) {
       this.#source = source;
       this.#sourceWorkbook = null;
-      void this.#reloadProtocol(source);
+      this.#reloadProtocol(source);
       return;
     }
     const stable = this.#activeCoordinate();
@@ -601,13 +584,13 @@ export class GridEngine {
     if (!this.#destroyed) this.#viewport.focus();
   }
 
-  /** The selected range as the text a copy would give (TSV), or `null` past the cap. */
+  /** Il testo della selezione da leggere ([`selectionText`]), o `null` oltre il tetto. */
   selectedText(): { primary: string; secondary: string[] } | null {
     if (this.#destroyed || !this.#workbook) return null;
     const range = normalizedSelection(this.#selection);
     const cells = (range.rowEnd - range.rowStart + 1) * (range.columnEnd - range.columnStart + 1);
     if (cells > SELECTED_TEXT_CELLS) return null;
-    return { primary: selectionTsv(this.#sheet(), this.#selection), secondary: [] };
+    return { primary: selectionText(this.#sheet(), this.#selection), secondary: [] };
   }
 
   setReadOnly(readOnly: boolean): void {
@@ -1107,10 +1090,16 @@ export class GridEngine {
       this.#redo = [];
     }
     this.#render();
+    // La sessione riceve il commit **all'invio**, col sorgente scritto qui.
+    // Aspettare la risposta del provider lasciava pulito il documento per
+    // tutto il viaggio: chi chiudeva la linguetta in quell'intervallo non
+    // salvava né metteva in bozza niente, e il teardown buttava la risposta.
+    this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
     if (this.#provider && this.#instance && this.#surface && this.#options.grid) {
       const instance = this.#instance;
       const surface = this.#surface;
       const generation = this.#protocolGeneration;
+      const ticket = ++this.#providerTickets;
       const queuedPatches = patches.map((patch) => ({
         coordinate: { ...patch.coordinate },
         before: patch.before
@@ -1120,12 +1109,7 @@ export class GridEngine {
           ? { input: patch.after.input, style: patch.after.style ? { ...patch.after.style } : undefined }
           : null,
       }));
-      this.#providerCommitTail = this.#providerCommitTail
-        .catch(() => {})
-        .then(() => this.#applyProvider(beforeSource, queuedPatches, origin, generation, instance, surface))
-        .catch(() => {});
-    } else {
-      this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
+      this.#enqueueProtocol(() => this.#applyProvider(queuedPatches, origin, generation, instance, surface, ticket));
     }
     return true;
   }
@@ -1243,7 +1227,18 @@ export class GridEngine {
         openedSurface = null;
         return;
       }
+      // Un commit in fallback durante l'apertura ha cambiato il testo, e il
+      // provider ha aperto quello di prima: i suoi diff partirebbero da lì, e
+      // la prima conferma toglierebbe quel commit. Si riapre col testo di ora.
+      if (this.#source !== source) {
+        await host.closeGrid(surface.id, session.instance).catch(() => {});
+        opened = null;
+        openedSurface = null;
+        if (generation === this.#protocolGeneration && !this.#destroyed) void this.#openProtocol(this.#source);
+        return;
+      }
       this.#revision = session.revision;
+      this.#confirmedSource = source;
       this.#instance = session.instance;
       this.#surface = surface.id;
       this.#session = session;
@@ -1387,19 +1382,29 @@ export class GridEngine {
     return load;
   }
 
-  async #reloadProtocol(source: string): Promise<void> {
+  #reloadProtocol(source: string): void {
     const host = this.#options.grid;
     const instance = this.#instance;
     const surface = this.#surface;
     if (!host || !instance || !surface || !this.#revision) return;
     const generation = ++this.#protocolGeneration;
+    // In coda come i commit: un `apply` ancora in volo cambierebbe il
+    // sorgente del provider sotto la ricarica, e i commit che seguono la
+    // ricarica devono partire da ciò che lei ha lasciato.
+    this.#enqueueProtocol(() => this.#reloadNow(host, source, generation, instance, surface));
+  }
+
+  async #reloadNow(host: GridHost, source: string, generation: number, instance: string, surface: string): Promise<void> {
+    if (!this.#protocolIsCurrent(generation, instance, surface)) return;
     try {
       const session = await host.reloadGrid(surface, instance, source, this.#revision);
       validateGridSession(session);
       if (session.instance !== instance) throw new Error("grid reload changed its instance");
-      const windows = await this.#readWindows(surface, session);
       if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       this.#revision = session.revision;
+      this.#confirmedSource = source;
+      const windows = await this.#readWindows(surface, session);
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       this.#session = session;
       this.#values = valuesFromWindows(windows);
       this.#workbook = workbookFromWindows(
@@ -1422,7 +1427,8 @@ export class GridEngine {
       this.#session = null;
       await host.closeGrid(surface, instance).catch(() => {});
       if (this.#destroyed) return;
-      this.#sourceWorkbook = parseWorkbook(source);
+      // Il testo della sessione, con i commit pubblicati dopo la ricarica.
+      this.#sourceWorkbook = parseWorkbook(this.#source);
       this.#workbook = this.#sourceWorkbook;
       this.#values.clear();
       this.#selection = this.#clampedSelection(this.#selection);
@@ -1434,13 +1440,23 @@ export class GridEngine {
     }
   }
 
+  /// Le richieste che cambiano il sorgente del provider, una dopo l'altra:
+  /// ognuna parte dallo stato lasciato dalla precedente, ed è ciò che rende
+  /// [`#confirmedSource`] la base giusta del diff successivo.
+  #enqueueProtocol(step: () => Promise<void>): void {
+    this.#providerCommitTail = this.#providerCommitTail
+      .catch(() => {})
+      .then(step)
+      .catch(() => {});
+  }
+
   async #applyProvider(
-    beforeSource: string,
     patches: readonly GridCellPatch[],
     origin: EditorChangeOrigin,
     generation: number,
     instance: string,
     surface: string,
+    ticket: number,
   ): Promise<void> {
     const host = this.#options.grid;
     if (!host || !this.#protocolIsCurrent(generation, instance, surface)) return;
@@ -1452,21 +1468,24 @@ export class GridEngine {
         after: patch.after?.input ?? "",
       })),
     };
-    let committedSource: string | null = null;
     try {
       const commit = await host.applyGrid(surface, instance, request);
       if (!this.#protocolIsCurrent(generation, instance, surface)) return;
-      const source = applySourceEdit(beforeSource, commit.edit);
-      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
+      // Il diff parte dal sorgente del provider, non da quello ottimistico che
+      // la sessione ha già: con un altro commit in coda i due possono
+      // differire, e applicarlo alla base sbagliata pubblicava quella.
+      const confirmed = applySourceEdit(this.#confirmedSource, commit.edit);
+      this.#confirmedSource = confirmed;
       this.#revision = commit.revision;
       this.#session = this.#session ? { ...this.#session, revision: commit.revision } : null;
-      this.#source = source;
-      committedSource = source;
-      this.#options.onChange({
-        text: source,
-        operation: operationFromCommit(beforeSource, commit, patches),
-        origin,
-      });
+      // Il testo ottimistico si corregge soltanto quando non resta niente in
+      // coda: prima, la conferma non contiene ancora i commit che seguono.
+      if (ticket === this.#providerTickets && confirmed !== this.#source) {
+        const published = this.#source;
+        this.#source = confirmed;
+        this.#sourceWorkbook = null;
+        this.#options.onChange({ text: confirmed, operation: operationFromText(published, confirmed), origin });
+      }
       await this.#readInvalidation(commit.invalidation, generation, instance, surface);
     } catch {
       if (!this.#protocolIsCurrent(generation, instance, surface)) return;
@@ -1476,7 +1495,8 @@ export class GridEngine {
       this.#session = null;
       await host.closeGrid(surface, instance).catch(() => {});
       if (this.#destroyed) return;
-      this.#source = committedSource ?? beforeSource;
+      // Il fallback riparte dal testo che la sessione ha già, commit
+      // compreso: tornare a quello di prima lo toglieva dalla vista.
       this.#sourceWorkbook = parseWorkbook(this.#source);
       this.#values.clear();
       this.#workbook = this.#sourceWorkbook;
