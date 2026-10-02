@@ -1434,6 +1434,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  caso porta un significato, che si legge prima di piegarlo.",
             ),
         ),
+        (
+            "crates/fub-scene/src/analysis.rs::active_content",
+            (
+                Family::AsciiCase,
+                "riconosce i gestori di evento `on*` senza badare al caso, per l'avviso S005: \
+                 in XML `ONCLICK` non è `onclick`, ma lo stesso SVG incollato in una pagina HTML \
+                 passa dal tokenizer, che abbassa in ASCII i nomi di attributo. L'avviso sbaglia \
+                 dal lato largo apposta, perché il file non resta sempre dove è nato.",
+            ),
+        ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------
         (
             "crates/fub-cli/src/capture.rs::uri",

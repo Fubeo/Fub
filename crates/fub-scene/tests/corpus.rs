@@ -91,7 +91,18 @@ fn the_icon_is_entirely_editable() {
         describe(&scene),
         ["root", "[0] rect", "[1] path", "[2] circle"]
     );
-    assert!(scene.diagnostics.is_empty());
+    // Non ha un titolo: l'icona di un'estensione non ne ha bisogno, un
+    // disegno sì.
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    assert_eq!(codes, [Code::S001]);
+    // Il rettangolo arrotondato contiene il resto.
+    let summary = &scene.summary;
+    assert_eq!(summary.counts.shapes, 3);
+    let bbox = summary.bbox.unwrap();
+    assert_eq!(
+        [bbox.x, bbox.y, bbox.width, bbox.height],
+        [14.0, 14.0, 100.0, 100.0]
+    );
 }
 
 #[test]
@@ -195,4 +206,46 @@ fn mermaid_diagrams_are_mostly_foreign_and_whole() {
     }
     expected.extend(["[] foreign [10, 11]", "[11] group", "[] foreign [12, 39]"].map(String::from));
     assert_eq!(describe(&load(SEQUENCE)), expected);
+}
+
+/// I testi dell'indice di un file.
+fn texts(scene: &Scene) -> Vec<&str> {
+    scene.index.texts.iter().map(|t| t.text.as_str()).collect()
+}
+
+#[test]
+fn the_index_reads_foreign_files_too() {
+    // Ciò che FubDraw non modifica si cerca lo stesso.
+    let scene = load(CHROMIUM);
+    let index = &scene.index;
+    assert_eq!(index.title.as_ref().unwrap().text, "Pianta del giardino");
+    assert_eq!(
+        index.desc.as_ref().unwrap().text,
+        "Aiuole & sentieri, disegnati a mano"
+    );
+    // Lo spazio indivisibile resta: non è uno spazio XML.
+    assert_eq!(
+        texts(&scene),
+        ["Giardini <pubblici> \u{a0}— “guida”", "Riga uno Riga due"]
+    );
+    // Le righe di Inkscape sono `tspan` con `sodipodi:role="line"`.
+    let scene = load(INKSCAPE);
+    assert_eq!(scene.index.title.as_ref().unwrap().text, "Giardino");
+    assert_eq!(
+        texts(&scene),
+        ["Aiuola delle rose e dei gerani", "Da potare in marzo"]
+    );
+    // Illustrator: il riferimento a carattere è risolto, il titolo manca.
+    let scene = load(ILLUSTRATOR);
+    assert!(scene.index.title.is_none());
+    assert_eq!(texts(&scene), ["Etichetta — prova"]);
+    assert!(scene.diagnostics.iter().any(|d| d.code == Code::S001));
+    // Le etichette del diagramma di flusso sono XHTML, non `text`; quelle
+    // del diagramma di sequenza sì: i partecipanti due volte, poi i messaggi.
+    assert!(load(FLOWCHART).index.texts.is_empty());
+    let scene = load(SEQUENCE);
+    let found = texts(&scene);
+    assert_eq!(found.len(), 18);
+    assert_eq!(found[0], "Provider");
+    assert_eq!(found[17], "payload IPC");
 }

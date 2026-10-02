@@ -24,7 +24,8 @@ pub enum Code {
     S007,
     /// `<!DOCTYPE>` presente: sola lettura.
     S008,
-    /// Contrasto sotto 3:1 con la carta.
+    /// Un tratto a penna contrasta con la carta meno di 3:1; l'evidenziatore
+    /// no, perché è fatto per stare sotto il testo.
     S009,
     /// Canali d'inchiostro sconosciuti.
     S010,
@@ -60,7 +61,7 @@ impl Code {
             Code::S006 => "immagine incorporata oltre 5 MiB",
             Code::S007 => "versione del formato più recente di quella supportata: sola lettura",
             Code::S008 => "il documento ha un DOCTYPE: sola lettura",
-            Code::S009 => "contrasto con la carta sotto 3:1",
+            Code::S009 => "il tratto contrasta con la carta meno di 3:1",
             Code::S010 => "canali d'inchiostro sconosciuti: il tratto non si ridisegna",
         }
     }
