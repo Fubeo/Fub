@@ -50,6 +50,7 @@ import { notify } from "./notify";
 import { t } from "../i18n/strings";
 import { iconEl } from "./icons";
 import { setTooltip } from "./tooltip";
+import { tabIndexForKey } from "./tab-keys";
 import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
 import { primaryView, setPrimaryViews } from "./primary-views";
 
@@ -704,7 +705,7 @@ function buildInspector(): void {
 
     tab.addEventListener("click", () => activateTab(i, false));
     tab.addEventListener("keydown", (e) => {
-      const next = moveInspectorTab(i, e.key, tabs.length);
+      const next = tabIndexForKey(i, e.key, tabs.length);
       if (next === null) return;
       e.preventDefault();
       activateTab(next, true);
@@ -772,15 +773,6 @@ function buildInspector(): void {
     const idx = panels.findIndex((p) => p.dataset.viewId === saved);
     if (idx >= 0 && idx !== active) activateTab(idx, false);
   });
-}
-
-function moveInspectorTab(current: number, key: string, count: number): number | null {
-  if (count < 1) return null;
-  if (key === "ArrowLeft") return (current - 1 + count) % count;
-  if (key === "ArrowRight") return (current + 1) % count;
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return null;
 }
 
 /// Attacca l'invito a ridisegnare che arriva da un provider (§2.5).

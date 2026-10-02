@@ -1449,6 +1449,38 @@ describe("chiudere linguette e superfici", () => {
     );
   });
 
+  it("le frecce fra le linguette chiudono il giro, vanno agli estremi e lasciano stare gli altri tasti", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+    expect(tabs()).toHaveLength(3);
+    const press = (key: string): boolean => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const focused = () => tabs().indexOf(document.activeElement as HTMLButtonElement);
+
+    tabs()[0]!.focus();
+    expect(press("ArrowLeft")).toBe(true);
+    expect(focused()).toBe(2);
+    press("ArrowRight");
+    expect(focused()).toBe(0);
+    press("End");
+    expect(focused()).toBe(2);
+    press("Home");
+    expect(focused()).toBe(0);
+    press("ArrowRight");
+    expect(focused()).toBe(1);
+    // Il riquadro resta una fermata sola del Tab: la segue la linguetta col fuoco.
+    expect(tabs().map((tab) => tab.tabIndex)).toEqual([-1, 0, -1]);
+    expect(press("ArrowDown")).toBe(false);
+    expect(focused()).toBe(1);
+  });
+
   it("chiude una linguetta senza chiudere le altre", async () => {
     const host = await start(VAULT);
     const folder = document.querySelector<HTMLElement>("#file-list .tree-row.folder");

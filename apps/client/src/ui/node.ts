@@ -47,6 +47,7 @@ import { t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
+import { tabIndexForKey } from "./tab-keys";
 import { iconEl } from "./icons";
 import type { Lifetime } from "./lifetime";
 
@@ -1654,22 +1655,13 @@ function arrowsBetweenTabs(bar: HTMLElement, group: HTMLElement): void {
   if (bar.dataset.frecce === "sì") return;
   bar.dataset.frecce = "sì";
   bar.addEventListener("keydown", (e) => {
-    const step =
-      e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : e.key === "Home" ? 0 : e.key === "End" ? 0 : null;
-    if (step === null) return;
     const buttons = Array.from(
       bar.querySelectorAll<HTMLElement>(":scope > .ui-tab-button"),
     );
-    if (buttons.length === 0) return;
-    const active = Number(group.dataset.active ?? "0");
-    const next =
-      e.key === "Home"
-        ? 0
-        : e.key === "End"
-          ? buttons.length - 1
-          : // Il giro si chiude: dall'ultima si torna alla prima. È ciò che
-            // fa un tab widget nativo, e chi ci arriva col tasto se lo aspetta.
-            (active + step + buttons.length) % buttons.length;
+    // Il giro si chiude: dall'ultima si torna alla prima. È ciò che fa un tab
+    // widget nativo, e chi ci arriva col tasto se lo aspetta.
+    const next = tabIndexForKey(Number(group.dataset.active ?? "0"), e.key, buttons.length);
+    if (next === null) return;
     e.preventDefault();
     buttons[next]?.click();
     buttons[next]?.focus();

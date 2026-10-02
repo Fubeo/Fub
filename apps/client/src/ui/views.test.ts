@@ -237,6 +237,12 @@ describe("l'inspector a tab", () => {
     expect(document.activeElement).toBe(tabs[1]);
     tabs[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
     expect(document.activeElement).toBe(tabs[0]);
+    // Un tasto che non è di una barra orizzontale non sposta e non si consuma.
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    tabs[0]!.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(tabs[0]);
+    expect(panels.map((panel) => panel.hidden)).toEqual([false, true]);
   });
 
   it("la scheda di una view nata chiusa ne mostra il contenuto", async () => {

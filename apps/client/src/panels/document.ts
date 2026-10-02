@@ -115,6 +115,7 @@ import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
+import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
 import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
@@ -1278,15 +1279,6 @@ function focusPaneTab(r: Pane, index: number): void {
   tabs[index]?.focus();
 }
 
-function movePaneTab(current: number, key: string, count: number): number | null {
-  if (count < 1) return null;
-  if (key === "ArrowLeft") return (current - 1 + count) % count;
-  if (key === "ArrowRight") return (current + 1) % count;
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return null;
-}
-
 /// Disegna la striscia delle tab di un riquadro.
 function drawTab(r: Pane, tabs: Tab[], active: number): void {
   // Solo l'identità modifica la struttura: dirty, lingua e selezione
@@ -1470,7 +1462,7 @@ function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
       remove();
       return;
     }
-    const next = movePaneTab(index, event.key, r.tabsShell.querySelectorAll(".tab").length);
+    const next = tabIndexForKey(index, event.key, r.tabsShell.querySelectorAll(".tab").length);
     if (next !== null) {
       event.preventDefault();
       focusPaneTab(r, next);
