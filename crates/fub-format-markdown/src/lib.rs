@@ -4,6 +4,7 @@
 //! È l'unico crate di M1 che sa che il markdown esiste — il kernel lo vede solo
 //! come `dyn FormatProvider`.
 
+mod destination;
 mod edits;
 mod offsets;
 mod parse;

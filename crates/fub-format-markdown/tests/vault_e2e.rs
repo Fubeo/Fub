@@ -418,6 +418,41 @@ fn markdown_links_are_edges_and_survive_a_rename() {
         .any(|r| r.source == DocId::new("fonte.md")));
 }
 
+/// La destinazione riscritta deve rileggersi come il nome nuovo: il
+/// percent-encoding del kernel copre gli spazi, non ciò che il parser
+/// decodifica da sé. `R&amp;D.md` scritto nudo tornava `R&D.md`, cioè un
+/// link verso una nota che non esiste e un backlink perso.
+#[test]
+fn a_rewritten_destination_reads_back_as_the_new_name() {
+    let (_scratch, mut ws) = open_scratch();
+    let source = DocId::new("fonte.md");
+    ws.write_document(
+        &source,
+        "Un [nudo](Nota%20B.md) e un [angolare](<Nota B.md>).\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+
+    let renamed = DocId::new("R&amp;D.md");
+    ws.rename_document(&DocId::new("Nota B.md"), &renamed)
+        .unwrap();
+    let text = ws.read_source(&source).unwrap();
+    assert_eq!(
+        text,
+        "Un [nudo](R&amp;amp;D.md) e un [angolare](<R&amp;amp;D.md>).\n"
+    );
+    let sources: Vec<String> = ws
+        .backlinks(&renamed)
+        .iter()
+        .map(|r| r.source.to_string())
+        .collect();
+    assert_eq!(
+        sources.iter().filter(|s| *s == "fonte.md").count(),
+        2,
+        "i link riscritti non raggiungono più la nota: {sources:?}"
+    );
+}
+
 /// Il riferimento **incorporato** alla markdown (`![alt](path)`) è un arco come
 /// gli altri — e prima della decisione 0003 non esisteva affatto: comrak lo dava come
 /// `Image`, il provider ne teneva l'inline e **non** lo metteva in `links`,
@@ -459,6 +494,37 @@ fn an_embedded_reference_is_an_edge_too() {
     assert!(
         text.contains("![remota](https://esempio.test/x.png)"),
         "un url non è un arco: {text}"
+    );
+}
+
+/// In una cella un alias si scrive `[[Nota B\|alias]]`, e una `\|` non sposta
+/// i link che la seguono. Il parser contava le posizioni dopo una `\|` su un
+/// byte in meno e la riscrittura leggeva `Nota B\` come bersaglio: la rinomina
+/// rifiutava la nota, e con lei l'operazione intera.
+#[test]
+fn a_rename_reaches_the_links_of_a_table_after_an_escaped_pipe() {
+    let (_scratch, mut ws) = open_scratch();
+    let source = DocId::new("fonte.md");
+    ws.write_document(
+        &source,
+        concat!(
+            "| nota | note |\n",
+            "|---|---|\n",
+            "| [[Nota B\\|alias]] | a\\|b [[Nota B]] e [md](<Nota B.md>) |\n",
+        ),
+        WriteBase::Dictated,
+    )
+    .unwrap();
+
+    ws.rename_document(&DocId::new("Nota B.md"), &DocId::new("Nota C.md"))
+        .unwrap();
+    assert_eq!(
+        ws.read_source(&source).unwrap(),
+        concat!(
+            "| nota | note |\n",
+            "|---|---|\n",
+            "| [[Nota C\\|alias]] | a\\|b [[Nota C]] e [md](<Nota%20C.md>) |\n",
+        )
     );
 }
 

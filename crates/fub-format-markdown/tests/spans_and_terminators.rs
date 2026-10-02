@@ -170,6 +170,74 @@ fn a_wikilinks_span_slices_the_wikilink() {
     }
 }
 
+/// Una `\|` in una cella non sposta quello che le viene dopo.
+///
+/// comrak legge gli inline di una cella dopo averne tolto la barra di ogni
+/// `\|`, e ne contava le posizioni su quel testo: ogni barra tolta spostava
+/// di un byte a sinistra tutto ciò che seguiva. Lo span di `[[w]]` affettava
+/// ` [[w]`, che la rinomina rifiuta, e il `#tag` non era un tag perché la sua
+/// fetta non era più quella del sorgente.
+#[test]
+fn an_escaped_pipe_in_a_cell_does_not_shift_what_follows_it() {
+    let cases: [(&str, &[&str], &[&str]); 12] = [
+        ("| a |\n|---|\n| a\\|b [[w]] |\n", &["[[w]]"], &[]),
+        ("| a |\n|---|\n| [[n\\|alias]] |\n", &["[[n\\|alias]]"], &[]),
+        (
+            "| a |\n|---|\n| x\\|y\\|z [l](u.md) ![[i.png]] |\n",
+            &["[l](u.md)", "![[i.png]]"],
+            &[],
+        ),
+        ("| a\\|b [[w]] |\n|---|\n", &["[[w]]"], &[]),
+        ("> | a |\n> |---|\n> | a\\|b [[w]] |\n", &["[[w]]"], &[]),
+        ("- | a |\n  |---|\n  | a\\|b [[w]] |\n", &["[[w]]"], &[]),
+        ("| a\\\\\\|b [[w]] |\n|---|\n", &["[[w]]"], &[]),
+        ("| a |\n|---|\n| é\\|b [[w]] |\r\n", &["[[w]]"], &[]),
+        ("| a | b |\n|---|---|\n| x\\|y | [[w]] |\n", &["[[w]]"], &[]),
+        (
+            "| a |\n|---|\n| a\\|b #tag e #altro |\n",
+            &[],
+            &["#tag", "#altro"],
+        ),
+        ("| a |\n|---|\n| a\\|[[w]] |\n", &["[[w]]"], &[]),
+        ("| a |\n|---|\n| #tag\\|*b* |\n", &[], &["#tag"]),
+    ];
+    for (source, links, tags) in cases {
+        let doc = parse(source);
+        let found: Vec<&str> = doc
+            .links
+            .iter()
+            .map(|link| slice(source, link.span))
+            .collect();
+        assert_eq!(found, links, "{source:?}: link");
+        let found: Vec<&str> = doc.tags.iter().map(|tag| slice(source, tag.span)).collect();
+        assert_eq!(found, tags, "{source:?}: tag");
+    }
+
+    let source = "| a | b |\n|---|---|\n| $x \\| y$ e \\| $w$ | $z$ |\n";
+    let doc = parse(source);
+    let Some(Block::Table { rows, .. }) = doc.body.first() else {
+        panic!("non è una tabella: {:?}", doc.body);
+    };
+    let formulas: Vec<&str> = rows
+        .iter()
+        .flat_map(|row| &row.cells)
+        .flat_map(|cell| &cell.inlines)
+        .filter_map(|inline| match inline {
+            Inline::Custom {
+                custom_kind, span, ..
+            } if custom_kind == "math" => Some(slice(source, *span)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(formulas, ["$x \\| y$", "$w$", "$z$"]);
+    let cells: Vec<&str> = rows
+        .iter()
+        .flat_map(|row| &row.cells)
+        .map(|cell| slice(source, cell.span))
+        .collect();
+    assert_eq!(cells, [" $x \\| y$ e \\| $w$ ", " $z$ "]);
+}
+
 #[test]
 fn a_crlf_rows_span_does_not_carry_the_carriage_return() {
     // Il `\r` è terminatore, non contenuto: uno span che se lo prendesse dentro

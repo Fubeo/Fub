@@ -172,6 +172,55 @@ fn code_beats_dollars<'a>(
     }
 }
 
+/// Gli inline di una cella tornano sui byte del sorgente.
+///
+/// comrak toglie la barra di ogni `\|` prima di leggere gli inline di una cella
+/// (`unescape_pipes`), e i loro sourcepos contano i byte di quel testo, non del
+/// sorgente: ogni barra tolta spostava di un byte a sinistra tutto ciò che la
+/// seguiva. In `| a\|b [[w]] |` lo span del link affettava ` [[w]`, che la
+/// rinomina rifiuta, e un `#tag` non era più un tag perché la sua fetta non era
+/// quella del testo.
+///
+/// Le colonne si correggono nel sistema di comrak, dove una cella conta un byte
+/// per colonna dal suo inizio. La `j`-esima `|` sciolta è finita in `columns[j]`:
+/// un inizio esce dopo quelle che lo precedono, e cade sulla barra se comincia
+/// proprio sulla `|`; una fine, inclusiva, comprende anche la sua.
+fn escaped_pipes_in_cells<'a>(root: &'a AstNode<'a>, source: &str, offsets: &Offsets<'_>) {
+    for cell in root.descendants() {
+        if !matches!(cell.data.borrow().value, NodeValue::TableCell) {
+            continue;
+        }
+        let sp = cell.data.borrow().sourcepos;
+        let span = sourcepos_span(sp, offsets);
+        let Some(text) = source.get(span.start..span.end) else {
+            continue;
+        };
+        // La stessa lettura di `unescape_pipes`: una barra apre un escape
+        // soltanto se non è a sua volta escapata.
+        let mut columns = Vec::new();
+        let mut backslash = false;
+        for (at, byte) in text.bytes().enumerate() {
+            if backslash && byte == b'|' {
+                columns.push(sp.start.column + at - (columns.len() + 1));
+            }
+            backslash = !backslash && byte == b'\\';
+        }
+        if columns.is_empty() {
+            continue;
+        }
+        for node in cell.descendants().skip(1) {
+            let mut at = node.data.borrow().sourcepos;
+            if at.start.line == sp.start.line {
+                at.start.column += columns.partition_point(|&column| column < at.start.column);
+            }
+            if at.end.line == sp.start.line {
+                at.end.column += columns.partition_point(|&column| column <= at.end.column);
+            }
+            node.data.borrow_mut().sourcepos = at;
+        }
+    }
+}
+
 /// Un blocco si riconosce nell'altro albero dalla posizione e dal tipo.
 type BlockKey = (Sourcepos, std::mem::Discriminant<NodeValue>);
 
@@ -217,6 +266,7 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
             "annidamento del documento oltre {MAX_DEPTH} livelli"
         )));
     }
+    escaped_pipes_in_cells(root, source, &offsets);
 
     // comrak consuma le reference definitions durante il parsing senza lasciare
     // un nodo nell'AST (§4: senza il recupero, `[a][rif]` + `[rif]: nota.md`
@@ -1450,11 +1500,11 @@ fn push_text_features(
         Vec::new()
     };
     if embeds.is_empty() {
-        // `sourcepos` di comrak può troncare la fetta su costrutti che ha già
-        // decodificato: in una cella `a \| b`, per esempio, la fine inclusiva
-        // conta i byte del testo `a | b` e la fetta sorgente termina prima di
-        // `b`. Senza feature da localizzare, il testo del parser è l'unica
-        // proiezione completa e ha già sciolto escape ed entità correttamente.
+        // `sourcepos` di comrak può troncare la fetta: una tabulazione nel
+        // testo, per esempio, sposta le colonne che conta, e la fetta di `T`,
+        // tab, `termine` finisce due byte prima. Senza feature da localizzare,
+        // il testo del parser è l'unica proiezione completa e ha già sciolto
+        // escape ed entità correttamente.
         let full_slice = slice == decoded || decode_segment(source, slice, base) == decoded;
         if full_slice {
             push_plain_or_tags(source, slice, base, ctx, acc, out);
