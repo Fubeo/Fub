@@ -1372,6 +1372,68 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  la regola fabbrica un nome pubblico, non normalizza un nome del vault.",
             ),
         ),
+        // -- CasoAscii: la scena SVG (grammatiche XML, URL e CSS) -------------
+        (
+            "crates/fub-scene/src/lib.rs::read",
+            (
+                Family::AsciiCase,
+                "confronta la codifica della dichiarazione XML con `utf-8`: per XML 1.0 \
+                 (§4.3.3) il nome di una codifica è ASCII e si legge senza badare al caso. Non è \
+                 il nome di un file del vault ma una parola del prologo, e decide se un altro \
+                 lettore vedrebbe altri caratteri: il documento si apre in sola lettura.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/xml.rs::pi",
+            (
+                Family::AsciiCase,
+                "rifiuta un'istruzione di elaborazione col bersaglio `xml` in qualunque caso: XML \
+                 1.0 (§2.6) riserva lettera per lettera `(('X'|'x') ('M'|'m') ('L'|'l'))`, ed è la \
+                 grammatica a dire che la piegatura è ASCII. Diverge da `read` perché qui decide \
+                 se il documento è ben formato, non come si apre.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::scheme",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema di un `href` dopo aver verificato che sia ASCII: per la RFC \
+                 3986 gli schemi sono ASCII e senza caso, e il parser di URL del browser li \
+                 abbassa così. Diverge da `validate_source_url` perché qui lo schema non valida \
+                 un canale: classifica un riferimento di un SVG (vault, `data:`, rete, \
+                 `javascript:`) come lo leggerà la webview.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::data_uri",
+            (
+                Family::AsciiCase,
+                "abbassa il tipo MIME di un `data:` e riconosce `;base64` in qualunque caso: tipi \
+                 e parametri sono token ASCII senza caso (RFC 2045 e RFC 2397). Diverge da \
+                 `scheme` perché legge l'interno dell'URL con un'altra grammatica, e da lì decide \
+                 se un'immagine incorporata è un raster e quanto pesa decodificata.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/classify.rs::has_url",
+            (
+                Family::AsciiCase,
+                "cerca `url(` in ogni caso dentro un valore di attributo: i nomi di funzione CSS \
+                 sono ASCII e senza caso, e `URL(#a)` riferisce come `url(#a)`. Non stabilisce \
+                 un'identità ma una paura: un riferimento rende estraneo l'elemento, e la rete \
+                 sbaglia apposta dal lato largo, su ogni finestra di quattro byte.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/geometry.rs::parse_path",
+            (
+                Family::AsciiCase,
+                "porta in maiuscolo la lettera di un comando di `d` dopo averne letto il caso: \
+                 nella grammatica dei path SVG la minuscola è il comando relativo e la maiuscola \
+                 l'assoluto, e le lettere sono ASCII. Diverge da ogni altra riga perché qui il \
+                 caso porta un significato, che si legge prima di piegarlo.",
+            ),
+        ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------
         (
             "crates/fub-cli/src/capture.rs::uri",
