@@ -13,7 +13,7 @@ use fub_abi::traits::{
 use fub_abi::transfer::SourceHandle;
 use fub_abi::PluginError;
 
-use crate::workspace::{collect_data_files, fenced_doc_id, Workspace};
+use crate::workspace::{fenced_doc_id, Workspace};
 
 /// L'host del percorso di **lettura** (`Workspace::render_view`, l'export):
 /// presta `&Workspace`, non `&mut`.
@@ -117,20 +117,9 @@ impl DataRead for ReadHost<'_> {
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-        let canonical = self.ws.plugin_data_root(self.plugin);
-        let (root, dir) = if self.ws.plugin_authoritative_uses_canonical(self.plugin)? {
-            (canonical, self.ws.plugin_data_path(self.plugin, prefix)?)
-        } else {
-            (
-                self.ws.plugin_cache_root(self.plugin),
-                self.ws.plugin_cache_path(self.plugin, prefix)?,
-            )
-        };
-        let mut out = Vec::new();
-        collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out)
-            .map_err(|source| crate::KernelError::Io { path: dir, source })?;
-        out.sort_unstable();
-        Ok(out)
+        self.ws
+            .prepare_plugin_data_io(self.plugin, prefix)?
+            .list_authoritative()
     }
 
     fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {

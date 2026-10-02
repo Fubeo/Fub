@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::error::PluginError;
+use fub_abi::traits::DataRead;
 use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
 use fub_kernel::{data_root, FormatRegistry, MachineSettings, Workspace};
 use fub_testkit::{Bench, Mounted};
@@ -448,6 +449,22 @@ fn a_legacy_root_that_cannot_be_stat_is_not_taken_for_cache() {
             "elencato dalla radice sbagliata"
         );
         assert!(host.cache_write("index.json", b"rebuildable").is_err());
+        // Un prefisso fuori dallo spazio si rifiuta prima di chiedere al
+        // supporto, come fa già il percorso staccato del `JobHost`.
+        assert!(matches!(
+            host.data_list(".."),
+            Err(PluginError::PermissionDenied(_))
+        ));
+    });
+    ws.with_read_host("prova.plugin", |host| {
+        assert!(
+            host.data_list("").is_err(),
+            "elencato dalla radice sbagliata"
+        );
+        assert!(matches!(
+            host.data_list(".."),
+            Err(PluginError::PermissionDenied(_))
+        ));
     });
     let io = |rel| ws.prepare_plugin_data_io("prova.plugin", rel).unwrap();
     assert!(io("old.json").read_authoritative().is_err());
@@ -541,6 +558,77 @@ fn an_old_plugin_data_root_remains_readable_without_migration() {
         !root.join(".fub/plugins/prova.plugin").exists(),
         "the fallback must not create a second canonical tree"
     );
+}
+
+/// Ciò che ogni porta deve rispondere elencando lo spazio della prova: tre
+/// blob in ordine, il sottoalbero, il vuoto per un prefisso che non c'è e un
+/// rifiuto per ogni prefisso che uscirebbe dallo spazio.
+fn lists_the_test_space(host: &dyn DataRead, port: &str) {
+    assert_eq!(
+        host.data_list("").unwrap(),
+        vec!["doc/a.md", "doc/b.md", "index.json"],
+        "{port}"
+    );
+    assert_eq!(
+        host.data_list("doc").unwrap(),
+        vec!["doc/a.md", "doc/b.md"],
+        "{port}"
+    );
+    assert!(
+        host.data_list("never-existing").unwrap().is_empty(),
+        "{port}"
+    );
+    for prefix in [
+        "..",
+        "../outside",
+        "/etc",
+        "doc/../..",
+        "back\\slash",
+        "./doc",
+    ] {
+        let result = host.data_list(prefix);
+        assert!(
+            matches!(result, Err(PluginError::PermissionDenied(_))),
+            "{port}: `{prefix}` doveva essere rifiutato, invece: {result:?}"
+        );
+    }
+}
+
+/// **L'host di lettura e quello completo elencano allo stesso modo**, sulla
+/// radice canonica come su quella vecchia: passano dallo stesso token del
+/// workspace, e radice scelta, ordine e recinto non divergono fra un render e
+/// un comando.
+#[test]
+fn the_reading_host_and_the_full_host_list_the_same_way() {
+    let mut ws = vault();
+    ws.with_host("prova.plugin", |host| {
+        host.data_write("index.json", b"{}").unwrap();
+        host.data_write("doc/b.md", b"second").unwrap();
+        host.data_write("doc/a.md", b"first").unwrap();
+    });
+    ws.with_host("prova.plugin", |host| {
+        lists_the_test_space(&*host, "host completo, radice canonica")
+    });
+    ws.with_read_host("prova.plugin", |host| {
+        lists_the_test_space(host, "host di lettura, radice canonica")
+    });
+
+    let mut ws = vault();
+    let legacy = data_root(ws.root()).join("plugins/prova.plugin");
+    std::fs::create_dir_all(legacy.join("doc")).unwrap();
+    for (rel, bytes) in [
+        ("index.json", "{}"),
+        ("doc/b.md", "second"),
+        ("doc/a.md", "first"),
+    ] {
+        std::fs::write(legacy.join(rel), bytes).unwrap();
+    }
+    ws.with_host("prova.plugin", |host| {
+        lists_the_test_space(&*host, "host completo, radice vecchia")
+    });
+    ws.with_read_host("prova.plugin", |host| {
+        lists_the_test_space(host, "host di lettura, radice vecchia")
+    });
 }
 
 #[test]
