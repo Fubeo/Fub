@@ -1,5 +1,6 @@
-//! I limiti del protocollo (§8 di `sessione-live.md`) e quelli che l'host si
-//! dà da solo per non crescere senza misura.
+//! I limiti del protocollo e quelli che l'host si dà da solo per non crescere
+//! senza misura: le sezioni «Limiti del protocollo» e «Limiti dell'host» di
+//! `docs/reference/live-session.md`.
 //!
 //! I primi sono il contratto: lo scrittore li riceve nel `welcome` e li
 //! rispetta. I secondi non escono dal processo, e ognuno dice quale risorsa

@@ -1,4 +1,4 @@
-//! La ripresa (§7): il gettone che ruota, la connessione sostituita, la
+//! La ripresa: il gettone che ruota, la connessione sostituita, la
 //! finestra di 2 minuti, `lastC` e i commit rimandati.
 
 use std::time::Duration;

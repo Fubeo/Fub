@@ -1,5 +1,6 @@
-//! Le contromisure di §9 che stanno nel crate: l'impronta, il segreto, le
-//! richieste ammesse, i limiti contro l'esaurimento delle risorse.
+//! Le contromisure del «Modello di sicurezza» che stanno nel crate:
+//! l'impronta, il segreto, le richieste ammesse, i limiti contro
+//! l'esaurimento delle risorse.
 
 use std::net::Ipv4Addr;
 use std::time::Duration;

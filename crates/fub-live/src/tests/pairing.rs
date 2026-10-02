@@ -1,5 +1,5 @@
-//! L'abbinamento (§3): il segreto monouso, l'ordine dei controlli, il QR
-//! nuovo.
+//! L'abbinamento e l'ingresso: il segreto monouso, l'ordine dei controlli,
+//! il QR nuovo.
 
 use std::time::Duration;
 

@@ -1,4 +1,5 @@
-//! Lo scarto fra l'orologio dello scrittore e quello del PC (§11).
+//! Lo scarto fra l'orologio dello scrittore e quello del PC («Orologi» in
+//! `docs/reference/live-session.md`).
 //!
 //! Il metodo è quello del prototipo: fra i campioni recenti vale quello con il
 //! ritardo di andata e ritorno minimo, perché è quello in cui la rete ha

@@ -81,7 +81,8 @@ struct Binding {
     caps: Caps,
     token: ResumeToken,
     /// Il gettone usato per l'ultima ripresa, valido finché la nuova
-    /// connessione non manda il primo messaggio (§7).
+    /// connessione non manda il primo messaggio («Ripresa» in
+    /// `docs/reference/live-session.md`).
     previous: Option<ResumeToken>,
     connection: Option<Connection>,
     disconnected_at: Option<Instant>,
@@ -265,8 +266,8 @@ impl Session {
                 "the live session is ending",
             ));
         }
-        // L'ordine dei controlli è quello di §3: versione (già letta con il
-        // `hello`), sessione, scrittore presente, segreto.
+        // L'ordine dei controlli è quello di «Ingresso»: versione (già letta
+        // con il `hello`), sessione, scrittore presente, segreto.
         if !SessionId::parse(&hello.session).is_some_and(|id| id.matches(&self.id)) {
             return Err(Violation::new(CloseCode::UnknownSession, "unknown session"));
         }
@@ -740,7 +741,8 @@ impl Session {
                     });
                 }
                 // Un documento oltre i 20 MiB, o il cui messaggio con gli
-                // escape supera il WebSocket, è in sola lettura (§8).
+                // escape supera il WebSocket, è in sola lettura («Limiti del
+                // protocollo»).
                 let message = (text.len() <= MAX_SNAPSHOT).then(|| encode_snapshot(seq, &text));
                 let Some(message) = message.filter(|message| message.len() <= MAX_MESSAGE) else {
                     self.end(EndReason::ReadOnly);

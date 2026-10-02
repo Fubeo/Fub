@@ -2,10 +2,11 @@
 //!
 //! Si collega con il contenuto del QR e, prima di mandare qualunque byte
 //! dell'applicazione, verifica che il certificato dell'host abbia l'impronta
-//! del QR (§2). Tiene i commit finché l'host non risponde; dopo una caduta
-//! riprende con il gettone entro 2 minuti, scarta i commit fino a `lastC` e
-//! rimanda gli altri in ordine (§7). Con `ping` e `pong` stima lo scarto fra
-//! il proprio orologio e quello del PC (§11).
+//! del QR («Certificato e TLS» in `docs/reference/live-session.md`). Tiene i
+//! commit finché l'host non risponde; dopo una caduta riprende con il gettone
+//! entro 2 minuti, scarta i commit fino a `lastC` e rimanda gli altri in
+//! ordine («Ripresa»). Con `ping` e `pong` stima lo scarto fra il proprio
+//! orologio e quello del PC («Orologi»).
 //!
 //! L'inchiostro è effimero: i campioni dello stesso tratto in coda si
 //! riuniscono in un messaggio, la vista in coda vale solo l'ultima, e mentre
@@ -244,7 +245,8 @@ pub enum ClientEvent {
         retry: Retry,
     },
     /// La sessione è finita: i commit senza risposta restano
-    /// all'applicazione, che può salvarli come disegno separato (§7).
+    /// all'applicazione, che può salvarli come disegno separato («Il client
+    /// in Rust» in `docs/reference/live-session.md`).
     Ended {
         /// Perché.
         cause: EndCause,

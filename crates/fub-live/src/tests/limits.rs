@@ -1,4 +1,5 @@
-//! I limiti e i codici di chiusura (§8): ogni riga delle due tabelle.
+//! I limiti e i codici di chiusura: ogni riga delle tabelle «Limiti del
+//! protocollo» e «Codici di chiusura».
 
 use std::time::Duration;
 
