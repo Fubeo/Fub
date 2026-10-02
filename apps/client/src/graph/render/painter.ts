@@ -7,7 +7,7 @@
 // Ogni funzione che riceve un `ctx` lo tratta come nullable: in happy-dom
 // `getContext("2d")` è null, e i test del motore devono poter costruire il
 // pittore senza che nulla lanci. La logica disegnabile sta nelle funzioni
-// pure di `camera.ts`/`atlas.ts`; qui c'è solo l'assemblaggio per frame.
+// pure di `spatial/camera.ts` e `atlas.ts`; qui c'è solo l'assemblaggio per frame.
 //
 // Il tema (bug 2-3): i colori si rileggono a ogni cambio di `data-theme` su
 // `documentElement`, via MutationObserver. Prima erano letti una volta al
@@ -19,7 +19,7 @@ import type { GraphicsConfig, Structure, Tier } from "../sim/types";
 import { fnv1a } from "../sim/types";
 import type { Wobble } from "../sim/wobble";
 import { deformationOf } from "../sim/wobble";
-import type { Camera } from "./camera";
+import type { Camera } from "../../spatial/camera";
 import type { Atlas, Tints, TintRole } from "./atlas";
 import { generateAtlas, readTints, drawNode, RADIUS_BUCKETS } from "./atlas";
 
