@@ -122,11 +122,22 @@ fn raw_script_style_iframe_are_refused_without_isolation() {
             fub_services::site_isolation::preflight_commit(&data, &body(html)).expect_err(html);
         assert_eq!(refused.status, 422, "{html}");
     }
-    fub_services::site_isolation::preflight_commit(
-        &data,
-        &body("<h1>Hi</h1><p><a href=\"/s/blog/about.html\">about</a></p>"),
-    )
-    .expect("a static page needs no isolation");
+    // La seconda pagina è la forma che il proiettore del client dà a callout,
+    // note a piè di pagina, evidenziato, formule a blocco e diagrammi
+    // (`fub-host/src/publish/projection.rs`):
+    // se il servizio smettesse di accettarne un tag, ogni nota che li usa
+    // chiederebbe l'isolamento.
+    for html in [
+        "<h1>Hi</h1><p><a href=\"/s/blog/about.html\">about</a></p>",
+        "<blockquote class=\"callout\" data-callout=\"note\"><p class=\"callout-title\"><strong>T</strong></p><p>c</p>\n</blockquote>\n\
+         <p>x<sup class=\"footnote-ref\"><a href=\"#fn-1\">1</a></sup><sup class=\"footnote-inline\">y</sup> <span class=\"inline-highlight\">z</span></p>\n\
+         <div class=\"block-footnote-definition\" id=\"fn-1\"><p><sup class=\"footnote-label\">1</sup> n</p>\n</div>\n\
+         <div class=\"math-block\">$$\na&lt;b\n$$</div>\n\
+         <pre class=\"diagram\" data-engine=\"mermaid\"><code>A--&gt;B</code></pre>\n",
+    ] {
+        fub_services::site_isolation::preflight_commit(&data, &body(html))
+            .expect("a static page needs no isolation");
+    }
 }
 
 #[test]

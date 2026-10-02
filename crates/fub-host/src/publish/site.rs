@@ -1079,7 +1079,7 @@ pub fn collect_export(
             .expect("selected page has a route");
         let links = resolve_links(host, model)?;
         let html = super::projection::page(model, site_id, &page_paths, &approved_assets, &links)
-            .map_err(|reason| fub_abi::PluginError::BadArgs(reason.into()))?;
+            .map_err(|refusal| fub_abi::PluginError::BadArgs(refusal.to_string().into()))?;
         entries.push(ManifestPage {
             path: path.clone(),
             doc_id: Some(model.id.0.clone()),
