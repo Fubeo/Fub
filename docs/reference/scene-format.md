@@ -5,13 +5,11 @@
 > **Fonti autorevoli:** `crates/fub-scene/`, `crates/fub-format-svg/` e le
 > fixture generate in `apps/client/src/__fixtures__/scene/`.
 
-Questa pagina definisce come Fub legge e scrive i disegni: file SVG validi,
-leggibili da qualunque visualizzatore, con pochi attributi in più nel
-namespace `fub`. È il contratto comune del lettore Rust (`fub-scene`), del
-provider `svg` (`fub-format-svg`) e della superficie della shell, in
-TypeScript. Il perché delle scelte di fondo sta nell'[ADR
-0203](../decisions/0203-superfici-spaziali.md); i `§` dei commenti nel codice
-sono le sezioni di questa pagina.
+Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore,
+con pochi attributi in più nel namespace `fub`. È il contratto comune di
+`fub-scene`, del provider `svg` e della superficie TypeScript della shell; il
+perché sta nell'[ADR 0203](../decisions/0203-superfici-spaziali.md), e i `§`
+dei commenti nel codice sono le sezioni di questa pagina.
 
 ## 1. Principi
 
@@ -323,8 +321,7 @@ dalla geometria.
 
 - Oggetti: `o` seguito da 8 caratteri base36 casuali. Livelli: `l` seguito da
   8 caratteri. Carta: `fub-paper`.
-- Un id è unico nel documento; se il caso ne genera uno già usato, se ne
-  genera un altro.
+- Un id è unico nel documento: un id casuale già usato si rigenera.
 - Un id esistente non cambia mai. La superficie aggiunge un id solo agli
   elementi che crea o modifica.
 - Un documento con id duplicati si apre in sola lettura, con l'errore S003.
@@ -402,10 +399,12 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
 | titolo, descrizione e testi | campo `text`, per la ricerca |
 
 L'indice legge il documento intero, contenuto estraneo compreso: un disegno di
-Inkscape o un diagramma di Mermaid si cercano per i loro testi. In un `text`
-ogni figlio elemento è una riga, quindi i `tspan` di un carattere ciascuno,
-come li scrive Illustrator, escono separati da spazi. Gli spazi XML di titolo,
-descrizione e testi si riducono a uno.
+Inkscape o un diagramma di sequenza di Mermaid si cercano per i loro testi.
+Sono testi solo gli elementi `text` di SVG: le etichette XHTML dentro
+`foreignObject`, come quelle dei diagrammi di flusso di Mermaid, non entrano
+nell'indice. In un `text` ogni figlio elemento è una riga, quindi i `tspan` di
+un carattere ciascuno, come li scrive Illustrator, escono separati da spazi.
+Gli spazi XML di titolo, descrizione e testi si riducono a uno.
 
 Il blocco `fub.scene.summary` porta in `attrs`:
 
@@ -416,7 +415,10 @@ Il blocco `fub.scene.summary` porta in `attrs`:
 - `bbox`: il rettangolo degli elementi modificabili visibili, in coordinate
   della radice dopo ogni `transform`, senza la carta né lo spessore del tratto;
   i tracciati contano per i punti estremi delle curve, i testi per i punti
-  d'ancoraggio; i valori si arrotondano al centesimo (§7).
+  d'ancoraggio; i valori si arrotondano al centesimo (§7);
+- `sections`: il titolo, se non è vuoto. È la sola sezione nominata del
+  disegno, ed è il disegno intero: `![[disegno#Titolo]]` lo incorpora tutto, e
+  un altro nome non è una sezione.
 
 Chi non conosce il blocco legge i suoi figli: titolo, descrizione e testi.
 
@@ -445,7 +447,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
   documento e una `figcaption` che contiene il titolo; mai un `<img>` né un
   URL di risorsa: l'immagine la mette la shell con la risoluzione dei media.
   Senza titolo la didascalia è il nome del file, perché è il nome accessibile
-  della figura; così anche per l'embed di una sezione, che un disegno non ha.
+  della figura.
 - **`serialize`** genera un documento nuovo con radice, titolo, carta e
   «Livello 1», in forma canonica, con righe LF e a capo finale. Il titolo è il
   primo heading di livello 1 del modello, oppure il nome del file, su una riga
@@ -505,14 +507,12 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | S009 | info | contrasto fra un tratto e la carta sotto 3:1; non vale per l'evidenziatore |
 | S010 | info | canali d'inchiostro sconosciuti |
 
-- **S001:** vale anche per un titolo vuoto e per un file troncato, di cui si
-  legge solo la testa.
+- **S001:** vale anche per un titolo vuoto e per un file troncato.
 - **S002:** uno per blocco estraneo, con il suo span. La dichiarazione
   `<?xml?>` e il resto del prologo formano un blocco.
 - **S003:** confronta l'attributo `id` senza prefisso di tutti gli elementi,
   in qualunque namespace, estranei compresi.
-- **S004, S010:** S010 compare solo se l'inchiostro è valido; un inchiostro non
-  valido ha già S004.
+- **S010:** solo per un inchiostro valido; uno non valido ha già S004.
 - **S005:** ogni `script`, SVG o XHTML; ogni attributo `on*`, senza badare a
   maiuscole e minuscole; ogni `href` con schema `javascript:`, anche quando lo
   imposta un `set` o un `animate`.

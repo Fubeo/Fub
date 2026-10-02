@@ -12,6 +12,7 @@
 
 use std::iter::Peekable;
 
+use fub_abi::custom::SECTIONS_ATTR;
 use fub_abi::format::ParseContext;
 use fub_abi::model::{
     Block, DocId, DocumentModel, Heading, HeadingSlugs, Inline, Link, LinkTarget, Span,
@@ -124,8 +125,19 @@ fn model_of(scene: &Scene, source: &str, id: DocId) -> Result<DocumentModel, For
         blocks.push(block_of(node, &mut model, &mut slugs));
     }
 
-    let attrs = serde_json::to_value(&scene.summary)
+    let mut attrs = serde_json::to_value(&scene.summary)
         .map_err(|error| FormatError::Parse(format!("riepilogo della scena: {error}")))?;
+    // Un disegno ha una sezione sola, il titolo, ed è il disegno intero:
+    // `![[disegno#Titolo]]` lo incorpora tutto, e un altro nome non è una
+    // sezione del disegno. Senza la dichiarazione il kernel cercherebbe i
+    // blocchi che cominciano dal titolo in poi, e il riepilogo, che contiene
+    // tutto, comincia prima: l'embed sarebbe vuoto.
+    attrs[SECTIONS_ATTR] = model
+        .outline
+        .iter()
+        .filter(|heading| !heading.text.is_empty())
+        .map(|heading| serde_json::Value::String(heading.text.clone()))
+        .collect();
     let bom = if source.starts_with('\u{feff}') {
         '\u{feff}'.len_utf8()
     } else {

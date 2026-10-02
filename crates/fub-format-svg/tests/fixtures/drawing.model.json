@@ -29,7 +29,10 @@
           "y": 30.0,
           "width": 1140.0,
           "height": 810.0
-        }
+        },
+        "sections": [
+          "Ciclo dell'acqua"
+        ]
       },
       "blocks": [
         {

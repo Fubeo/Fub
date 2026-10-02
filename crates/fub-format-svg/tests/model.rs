@@ -85,6 +85,29 @@ fn the_whole_document_is_the_summary() {
     assert!(model.tags.is_empty() && model.anchors.is_empty());
 }
 
+/// Un disegno ha una sezione sola, il titolo, che è il disegno intero: il
+/// kernel la sceglie per `![[disegno#Titolo]]` senza cercare blocchi dopo il
+/// titolo, e un altro nome non è una sezione.
+#[test]
+fn the_title_is_the_only_section() {
+    let sections = |source: &str| {
+        let model = parse(source);
+        let Block::Custom { attrs, .. } = &model.body[0] else {
+            panic!("{:?}", model.body)
+        };
+        attrs[fub_abi::custom::SECTIONS_ATTR].clone()
+    };
+    assert_eq!(
+        sections(&doc(
+            "<title> Ciclo\n dell'acqua </title><g fub:layer=\"A\"/>"
+        )),
+        serde_json::json!(["Ciclo dell'acqua"])
+    );
+    // Senza titolo, o con un titolo vuoto, nessuna sezione.
+    assert_eq!(sections(&doc("<desc>Solo</desc>")), serde_json::json!([]));
+    assert_eq!(sections(&doc("<title> </title>")), serde_json::json!([]));
+}
+
 #[test]
 fn a_leading_bom_stays_out_of_the_summary() {
     let source = format!("\u{feff}{}", doc("<title>Con BOM</title>"));
