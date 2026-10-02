@@ -98,6 +98,11 @@ Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
 `fub-wasm-host` dipende dall'host per montare bundle, ma l'host non dipende da
 Wasmtime.
 
+`fub-scene`, il lettore delle scene di FubDraw, non ha frecce di proposito:
+non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché deve
+poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
+`dependency_invariant.rs` e la compilazione per quel bersaglio nella CI.
+
 ## Flusso di un comando
 
 ```mermaid
