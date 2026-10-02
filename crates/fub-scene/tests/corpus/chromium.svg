@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="disegno" viewBox="0 0 400 300" width="400" height="300">
+  <title>Pianta del giardino</title>
+  <desc>Aiuole &amp; sentieri, disegnati a mano</desc>
+  <defs>
+    <linearGradient id="prato" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#9c6"/>
+      <stop offset="1" stop-color="#693"/>
+    </linearGradient>
+    <symbol id="albero" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="#363"/></symbol>
+  </defs>
+  <style>.sentiero { stroke-dasharray: 4 2; }</style>
+  <rect x="0" y="0" width="400" height="300" fill="url(#prato)"/>
+  <g transform="translate(20 20)" fill="none" stroke="#654" stroke-width="3">
+    <path class="sentiero" d="M0 120 C80 60 160 180 360 100"/>
+    <polyline points="0,0 40,40 80,0"/>
+  </g>
+  <use href="#albero" x="300" y="30" width="40" height="40"/>
+  <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#albero" x="320" y="200" width="30" height="30"/>
+  <a href="https://example.org/giardini" target="_blank"><text x="20" y="280" font-size="14">Giardini &lt;pubblici&gt;  — “guida”</text></a>
+  <text x="200" y="40" text-anchor="middle" xml:space="preserve"><tspan x="200" dy="0">Riga uno</tspan><tspan x="200" dy="1.2em">Riga   due</tspan></text>
+  <foreignObject x="250" y="240" width="140" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="font: 12px sans-serif">Nota <b>importante</b></div></foreignObject>
+  <image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" x="10" y="10" width="8" height="8"/>
+  <ellipse cx="120" cy="220" rx="40" ry="20" fill="#c96" data-aiuola="rose" aria-label="Aiuola delle rose"/>
+  <!-- commento conservato -->
+<circle cx="60" cy="60" r="12" fill="#e33" xmlns:meta="https://example.org/ns/meta" meta:origine="dom"/></svg>

@@ -37,6 +37,7 @@ flowchart TD
     sheet["fub-format-sheet"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
+    scene["fub-scene"]
     importers["fub-importers"]
     cli["fub-cli"]
     services["fub-services"]
