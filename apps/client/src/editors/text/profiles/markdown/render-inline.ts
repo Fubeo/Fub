@@ -1,5 +1,5 @@
 import type { SyntaxNode } from "@lezer/common";
-import { inlineDelimiters, scanTags, spans, wikilink, type FoundWikilink } from "../../../../rules/syntax";
+import { inlineDelimiters, scanTags, textSpans, wikilink, type FoundWikilink } from "../../../../rules/syntax";
 import { markdownGrammar } from "./grammar";
 import type { MarkdownRenderContext } from "./render-types";
 
@@ -152,8 +152,10 @@ function texOf(content: string, display: boolean): string {
 /// precede una cifra (`$5 e $6` non è una formula); `$$…$$` chiude sul primo
 /// `$$`. La ricerca della chiusura non guarda `opaque`: comrak legge i dollari
 /// prima del codice. Una formula che ingoia un backtick lascia il contenitore
-/// senza formule, come `code_beats_dollars` del provider.
-export function scanDollarMath(value: string, opaque: readonly Range[] = []): DollarMath[] {
+/// senza formule, come `code_beats_dollars` del provider. Fra un wikilink e una
+/// formula vince chi apre prima: un dollaro dentro uno dei `wikilinks` che
+/// apre dopo l'ultima formula (`[[a$]] b$`) non apre niente.
+export function scanDollarMath(value: string, opaque: readonly Range[] = [], wikilinks: readonly Range[] = []): DollarMath[] {
   const found: DollarMath[] = [];
   const failed = { at: -1 };
   let next = 0;
@@ -161,9 +163,11 @@ export function scanDollarMath(value: string, opaque: readonly Range[] = []): Do
     while (next < opaque.length && opaque[next]!.to <= at) next++;
     return next < opaque.length && opaque[next]!.from <= at;
   };
+  let after = 0;
+  const linked = (at: number) => wikilinks.some((link) => after <= link.from && link.from < at && at < link.to);
   let at = value.indexOf("$");
   while (at >= 0) {
-    if (escaped(value, at) || hidden(at)) {
+    if (escaped(value, at) || hidden(at) || linked(at)) {
       at = value.indexOf("$", at + 1);
       continue;
     }
@@ -177,7 +181,8 @@ export function scanDollarMath(value: string, opaque: readonly Range[] = []): Do
     const tex = texOf(value.slice(at + fence, close), fence === 2);
     if (tex.includes("`")) return [];
     found.push({ from: at, to: close + fence, display: fence === 2, tex });
-    at = value.indexOf("$", close + fence);
+    after = close + fence;
+    at = value.indexOf("$", after);
   }
   return found;
 }
@@ -239,7 +244,8 @@ export function containerMath(text: string, container: SyntaxNode): ContainerMat
   value += text.slice(position);
   // In una cella `\|` è una pipe già prima degli inline (GFM).
   const cell = container.name === "TableCell";
-  const formulas = scanDollarMath(value, opaque).map((formula) => ({
+  const links = wikilink(value).filter((link) => opaque.every((range) => link.to <= range.from || range.to <= link.from));
+  const formulas = scanDollarMath(value, opaque, links).map((formula) => ({
     from: base + formula.from,
     to: base + formula.to,
     display: formula.display,
@@ -290,6 +296,79 @@ function formulasAround(context: MarkdownRenderContext, node: SyntaxNode, from: 
   return found;
 }
 
+/// Un nodo che tocca una formula senza contenerla: per il provider vince la
+/// formula, e il nodo non c'è.
+function crossesFormula(formulas: readonly Range[], node: Range): boolean {
+  return formulas.some((formula) => formula.from < node.to && node.from < formula.to
+    && (formula.from < node.from || node.to < formula.to));
+}
+
+/// Un inline che il modello del provider ha come nodo, e che spezza quindi il
+/// testo in cui cade. `content` è ciò che vi resta testo, il contenuto di
+/// un'enfasi o l'etichetta di un link; manca se non c'è.
+export interface NativeInline extends Range {
+  readonly content?: Range;
+}
+
+const NATIVE_MARKS: Record<string, string> = {
+  Emphasis: "EmphasisMark", StrongEmphasis: "EmphasisMark", Strikethrough: "StrikethroughMark",
+  Subscript: "SubscriptMark", Superscript: "SuperscriptMark",
+};
+const NATIVE_ATOMS: Record<string, true> = {
+  InlineCode: true, Autolink: true, HTMLTag: true, Comment: true, ProcessingInstruction: true, HardBreak: true,
+};
+/// Un rimando a una nota come lo legge comrak: anche senza definizione il
+/// provider lo stacca dal testo che lo circonda.
+export const FOOTNOTE_REFERENCE = /^\[\^[^\] \t\r\n]+\]$/;
+
+/// Gli inline nativi sotto `node` che toccano [from, to), annidati compresi.
+/// `link` dice se un link o un'immagine lo è anche per il provider: senza
+/// destinazione `[x]` è testo, e se ne leggono i figli. Escape, entità e URL
+/// nudi sono testo; un nodo che attraversa una formula pure.
+export function nativeInlines(
+  node: SyntaxNode,
+  from: number,
+  to: number,
+  link: (node: SyntaxNode) => NativeInline | null,
+  formulas: readonly Range[],
+): NativeInline[] {
+  const found: NativeInline[] = [];
+  const walk = (current: SyntaxNode) => {
+    for (let child = current.firstChild; child; child = child.nextSibling) {
+      if (child.to <= from || child.from >= to) continue;
+      let native: NativeInline | null = null;
+      if (!crossesFormula(formulas, child)) {
+        const marks = NATIVE_MARKS[child.name] ? child.getChildren(NATIVE_MARKS[child.name]!) : [];
+        if (marks.length >= 2) {
+          native = { from: child.from, to: child.to, content: { from: marks[0]!.to, to: marks[marks.length - 1]!.from } };
+        } else if (NATIVE_ATOMS[child.name]) native = { from: child.from, to: child.to };
+        else if (child.name === "Link" || child.name === "Image") native = link(child);
+      }
+      if (native) found.push(native);
+      if (!native || native.content) walk(child);
+    }
+  };
+  walk(node);
+  return found;
+}
+
+/// Ciò che di un inline nativo non è testo: tutto, o soltanto i marcatori
+/// attorno al suo contenuto.
+export function nativeCuts(natives: readonly NativeInline[]): Range[] {
+  return natives.flatMap((native) => native.content
+    ? [{ from: native.from, to: native.content.from }, { from: native.content.to, to: native.to }]
+    : [native]);
+}
+
+/// Una nota in riga c'è se apre e chiude nello stesso testo del modello: nessun
+/// inline nativo la attraversa, e il suo `[` non apre un link. Ciò che contiene
+/// è suo, e il provider lo legge come etichetta.
+export function footnoteStands(note: Range, natives: readonly NativeInline[]): boolean {
+  return natives.every((native) => native.to <= note.from || note.to <= native.from
+    || (native.content !== undefined && native.content.from <= note.from && note.to <= native.content.to)
+    || (note.from <= native.from && native.to <= note.to && native.from !== note.from + 1));
+}
+
 interface InlineFootnote {
   readonly from: number;
   readonly to: number;
@@ -297,7 +376,7 @@ interface InlineFootnote {
   readonly contentTo: number;
 }
 
-function scanInlineFootnotes(value: string): InlineFootnote[] {
+export function scanInlineFootnotes(value: string): InlineFootnote[] {
   const found: InlineFootnote[] = [];
   for (let from = 0; from + 3 < value.length; from++) {
     if (value[from] !== "^" || value[from + 1] !== "[" || escaped(value, from)) continue;
@@ -315,6 +394,42 @@ function scanInlineFootnotes(value: string): InlineFootnote[] {
     }
   }
   return found;
+}
+
+/// Dove porta un link o un'immagine: la destinazione scritta o quella della
+/// sua definizione. Senza nessuna delle due `[x]` è testo, anche per comrak.
+function linkTarget(
+  context: MarkdownRenderContext,
+  node: SyntaxNode,
+): { labelFrom: number; labelTo: number; href: string; caption: string | undefined } | null {
+  const source = context.source;
+  const marks = node.getChildren("LinkMark");
+  const opener = marks[0];
+  const closer = marks.find((mark) => source[mark.from] === "]");
+  if (!opener || !closer) return null;
+  const label = source.slice(opener.to, closer.from);
+  const url = node.getChild("URL");
+  const title = node.getChild("LinkTitle");
+  const reference = node.getChild("LinkLabel");
+  const definition = context.references.get(normalizeLabel(reference
+    ? source.slice(reference.from + 1, reference.to - 1) || label : label));
+  let href = url ? source.slice(url.from, url.to) : definition?.href;
+  if (href === undefined) return null;
+  if (href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
+  const caption = title ? source.slice(title.from + 1, title.to - 1) : definition?.title;
+  return { labelFrom: opener.to, labelTo: closer.from, href, caption };
+}
+
+/// Il nodo nativo di un link della Lettura: un rimando a una nota sempre, un
+/// link o un'immagine se portano da qualche parte.
+function linkNative(context: MarkdownRenderContext, node: SyntaxNode): NativeInline | null {
+  if (node.name === "Link" && FOOTNOTE_REFERENCE.test(context.source.slice(node.from, node.to))) {
+    return { from: node.from, to: node.to };
+  }
+  const target = linkTarget(context, node);
+  if (!target) return null;
+  if (node.name === "Image") return { from: node.from, to: node.to };
+  return { from: node.from, to: node.to, content: { from: target.labelFrom, to: target.labelTo } };
 }
 
 function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
@@ -362,22 +477,10 @@ function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
         return `<sup${attrs}><a class="footnote-ref" id="fnref-${note.number}-${occurrence}" href="#fn-${note.number}" data-md-anchor="fn-${note.number}">${note.number}</a></sup>`;
       }
     }
-    const marks = node.getChildren("LinkMark");
-    const opener = marks[0];
-    const closer = marks.find((mark) => source[mark.from] === "]");
-    if (!opener || !closer) return text(context, node.from, node.to);
-    const labelFrom = opener.to;
-    const labelTo = closer.from;
+    const target = linkTarget(context, node);
+    if (!target) return text(context, node.from, node.to);
+    const { labelFrom, labelTo, href, caption } = target;
     const label = source.slice(labelFrom, labelTo);
-    const url = node.getChild("URL");
-    const title = node.getChild("LinkTitle");
-    const reference = node.getChild("LinkLabel");
-    const definition = context.references.get(normalizeLabel(reference
-      ? source.slice(reference.from + 1, reference.to - 1) || label : label));
-    let href = url ? source.slice(url.from, url.to) : definition?.href;
-    if (href === undefined) return text(context, node.from, node.to);
-    if (href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
-    const caption = title ? source.slice(title.from + 1, title.to - 1) : definition?.title;
     const titleAttr = caption === undefined ? "" : ` title="${attribute(caption)}"`;
     if (node.name === "Image") return imageHtml(label, href, caption, attrs);
     const internal = href !== "" && !href.startsWith("#") && !/^[a-z][\w+.-]*:/i.test(href);
@@ -389,17 +492,11 @@ function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
 }
 
 /** One source-mapped renderer for both block widgets and the reading surface. */
-export function renderInline(context: MarkdownRenderContext, from: number, to: number, node?: SyntaxNode): string {
+export function renderInline(context: MarkdownRenderContext, from: number, to: number, node?: SyntaxNode, plain = false): string {
   if (from >= to) return "";
   const root = node ?? markdownGrammar.parser.parse(context.source).topNode;
   const pieces: Piece[] = [];
   const formulas = formulasAround(context, root, from, to);
-  // Lezer non conosce le formule: un suo nodo che ne tocca una senza
-  // contenerla (`*a $b* c$`) non è un'enfasi per il provider, e se ne leggono
-  // i figli.
-  const crosses = (current: SyntaxNode) => formulas.some((formula) =>
-    formula.from < current.to && current.from < formula.to
-    && (formula.from < current.from || current.to < formula.to));
   const protectedRanges: Array<{ from: number; to: number }> = [];
   function protect(current: SyntaxNode): void {
     if (current.to <= from || current.from >= to) return;
@@ -409,10 +506,13 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
     }
     for (let child = current.firstChild; child; child = child.nextSibling) protect(child);
   }
+  // Lezer non conosce le formule: un suo nodo che ne tocca una senza
+  // contenerla (`*a $b* c$`) non è un'enfasi per il provider, e se ne leggono
+  // i figli.
   function collectPieces(current: SyntaxNode): void {
     for (let child = current.firstChild; child; child = child.nextSibling) {
       if (child.to <= from || child.from >= to) continue;
-      if (child.from >= from && child.to <= to && child.to > child.from && !crosses(child)) {
+      if (child.from >= from && child.to <= to && child.to > child.from && !crossesFormula(formulas, child)) {
         const captured = child;
         pieces.push({ from: child.from, to: child.to, html: () => renderNode(context, captured) });
       } else {
@@ -430,18 +530,28 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
     });
   }
   const free = (start: number, end: number) => protectedRanges.every((range) => end <= range.from || start >= range.to);
+  const inFormula = (at: number) => formulas.some((formula) => formula.from <= at && at < formula.to);
   const delimiters = inlineDelimiters(context.forms);
-  let lineFrom = from;
+  // Gli inline che il modello del provider ha come nodi: una nota in riga non
+  // li attraversa, e un evidenziato o un commento sta tutto in un testo fra due
+  // di loro.
+  const natives = plain ? [] : [...nativeInlines(root, from, to, (link) => linkNative(context, link), formulas), ...formulas];
+  const cuts = nativeCuts(natives);
+  // Il contenuto di un evidenziato (`plain`) è per il provider il testo di un
+  // nodo suo, dove nessun'altra regola entra.
+  let lineFrom = plain ? to : from;
   while (lineFrom < to) {
     const newline = context.source.indexOf("\n", lineFrom);
     const lineTo = newline < 0 ? to : Math.min(to, newline);
     const row = context.source.slice(lineFrom, lineTo);
     const base = lineFrom;
+    const rowCuts = cuts.filter((cut) => cut.from < lineTo && lineFrom < cut.to)
+      .map((cut) => ({ from: cut.from - base, to: cut.to - base }));
     const wikiRanges: Array<{ from: number; to: number }> = [];
     for (const note of scanInlineFootnotes(row)) {
       const start = base + note.from, end = base + note.to;
-      if (protectedRanges.some((range) => start >= range.from && start < range.to
-        || end > range.from && end <= range.to)) continue;
+      if (!footnoteStands({ from: start, to: end }, natives)) continue;
+      rowCuts.push(note);
       pieces.push({
         from: start,
         to: end,
@@ -451,7 +561,10 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
     }
     for (const link of wikilink(row)) {
       const start = base + link.from, end = base + link.to;
-      if ((!link.page && !link.heading && !link.block) || !free(start, end)) continue;
+      if (!free(start, end) || inFormula(start)) continue;
+      // Anche un wikilink che non nomina niente è un nodo del provider.
+      rowCuts.push(link);
+      if (!link.page && !link.heading && !link.block) continue;
       wikiRanges.push({ from: start, to: end });
       pieces.push({ from: start, to: end, priority: 1, html: () => {
         if (link.embed) return embedHtml(link, sourceAttributes(start, end));
@@ -465,22 +578,20 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
         return `<a class="wikilink" href="#"${data}${sourceAttributes(start, end)}><span${sourceAttributes(visibleFrom, visibleFrom + label.length)}>${escapeHtml(label)}</span></a>`;
       }});
     }
-    for (const span of spans(row, delimiters)) {
+    for (const tag of scanTags(row)) {
+      const start = base + tag.from, end = base + tag.to;
+      if (!free(start, end) || wikiRanges.some((range) => start < range.to && end > range.from)) continue;
+      rowCuts.push(tag);
+      pieces.push({ from: start, to: end, html: () => `<span class="tag" data-tag="${escapeHtml(tag.name)}"${sourceAttributes(start, end)}>${escapeHtml(context.source.slice(start, end))}</span>` });
+    }
+    for (const span of textSpans(row, rowCuts, delimiters)) {
       const start = base + span.from, end = base + span.to;
-      if (!free(start, end)) continue;
-      // Un commento resta nel file e non nella resa (`fub:comments`), e con
-      // lui ciò che contiene: link e tag dentro un commento non si vedono.
+      // Un commento resta nel file e non nella resa (`fub:comments`).
       if (span.name === "fub:comments") {
         pieces.push({ from: start, to: end, priority: 4, html: () => "" });
         continue;
       }
-      if (wikiRanges.some((range) => start < range.to && end > range.from)) continue;
-      pieces.push({ from: start, to: end, html: () => `<mark class="inline-highlight"${sourceAttributes(start, end)}>${renderInline(context, base + span.contentFrom, base + span.contentTo, root)}</mark>` });
-    }
-    for (const tag of scanTags(row)) {
-      const start = base + tag.from, end = base + tag.to;
-      if (!free(start, end) || wikiRanges.some((range) => start < range.to && end > range.from)) continue;
-      pieces.push({ from: start, to: end, html: () => `<span class="tag" data-tag="${escapeHtml(tag.name)}"${sourceAttributes(start, end)}>${escapeHtml(context.source.slice(start, end))}</span>` });
+      pieces.push({ from: start, to: end, html: () => `<mark class="inline-highlight"${sourceAttributes(start, end)}>${renderInline(context, base + span.contentFrom, base + span.contentTo, root, true)}</mark>` });
     }
     lineFrom = lineTo + 1;
   }

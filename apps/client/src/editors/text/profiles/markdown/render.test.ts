@@ -135,11 +135,98 @@ describe("contenuto Markdown reso", () => {
     expect(root.querySelector("code")?.textContent).toBe("^[code]");
   });
 
-  it("nasconde un commento e ciò che contiene, senza toccare il resto della riga", () => {
-    const root = content("Prima %%segreto [[Altra]] #tag ==no==%% dopo ==sì==");
+  it("nasconde un commento senza toccare il resto della riga", () => {
+    const root = content("Prima %%segreto%% dopo ==sì==");
     expect(root.textContent).toBe("Prima  dopo sì");
-    expect(root.querySelector(".wikilink, .tag")).toBeNull();
     expect(root.querySelector("mark")?.textContent).toBe("sì");
+  });
+
+  it("evidenziato e commento stanno in un testo del modello, come nel provider", () => {
+    // Un wikilink o un tag spezzano il testo, e un evidenziato si legge prima
+    // di un commento: di questo commento non resta niente.
+    const root = content("Prima %%segreto [[Altra]] #tag ==no==%% dopo ==sì==");
+    expect(root.textContent).toBe("Prima %%segreto Altra #tag no%% dopo sì");
+    expect(root.querySelector(".wikilink")?.textContent).toBe("Altra");
+    expect(root.querySelector(".tag")?.textContent).toBe("#tag");
+    expect(Array.from(root.querySelectorAll("mark"), (mark) => mark.textContent)).toEqual(["no", "sì"]);
+  });
+
+  it("evidenziato, commento e nota in riga non attraversano un inline del provider", () => {
+    // Il primo paragrafo, scritto in chiaro: `=(…)=` un evidenziato, `^(…)` una
+    // nota in riga, `*…*` un'enfasi, `[…]` un link, `[[…]]` un wikilink e
+    // `$…$` una formula. Un commento sparisce.
+    const write = (node: Node): string => {
+      if (!(node instanceof HTMLElement)) return node.textContent ?? "";
+      const inner = Array.from(node.childNodes, write).join("");
+      if (node.matches("mark")) return `=(${inner})=`;
+      if (node.matches("sup.footnote-inline")) return `^(${inner})`;
+      if (node.matches("em")) return `*${inner}*`;
+      if (node.matches("strong")) return `**${inner}**`;
+      if (node.matches(".math-inline")) return `$${node.dataset.tex}$`;
+      if (node.matches("a.wikilink")) return `[[${inner}]]`;
+      if (node.matches("a")) return `[${inner}]`;
+      return inner;
+    };
+    // Ogni esito è quello dell'anteprima del provider con le regole di
+    // `fub.blocks` innestate.
+    for (const [source, expected] of [
+      ["==a *b* c== z", "==a *b* c== z"],
+      ["*a ==b* c== z", "*a ==b* c== z"],
+      ["==a *b== c* z", "==a *b== c* z"],
+      ["**a ==b c** d== z", "**a ==b c** d== z"],
+      ["==a $b$ c== z", "==a $b$ c== z"],
+      ["==a #b c== z", "==a #b c== z"],
+      ["==a [l](u) c== z", "==a [l] c== z"],
+      ["==a <b>x</b> c== z", "==a <b>x</b> c== z"],
+      ["==a [^1] c== z\n\n[^1]: n", "==a [1] c== z"],
+      ["==a [^no] c== z", "==a [^no] c== z"],
+      ["%%a *b* c%% z", "%%a *b* c%% z"],
+      ["*a %%b* c%% z", "*a %%b* c%% z"],
+      ["%%a *b%% c* z", "%%a *b%% c* z"],
+      ["%%a [[b]] c%% z", "%%a [[b]] c%% z"],
+      ["[[a %%b]] c%% z", "[[a %%b]] c%% z"],
+      ["%%a [[b%% c]] z", "%%a [[b%% c]] z"],
+      ["%%a $b$ c%% z", "%%a $b$ c%% z"],
+      ["%%a #b c%% z", "%%a #b c%% z"],
+      ["^[a $b] c$ z", "^[a $b] c$ z"],
+      ["^[a](u) z", "^[a] z"],
+      ["==a ^[b== c] z", "==a ^(b== c) z"],
+      ["^[a ==b] c== z", "^(a ==b) c== z"],
+      ["%%a ^[b%% c] z", "%%a ^(b%% c) z"],
+      ["^[a %%b] c%% z", "^(a %%b) c%% z"],
+      // Escape, entità e URL nudi sono testo; ciò che sta in un'enfasi o in
+      // un link ha il suo testo.
+      ["==a \\* c== z", "=(a * c)= z"],
+      ["==a &amp; c== z", "=(a & c)= z"],
+      ["==a https://e.it c== z", "=(a https://e.it c)= z"],
+      ["*a ==b== c* z", "*a =(b)= c* z"],
+      ["[==a==](u) z", "[=(a)=] z"],
+      ["*a* ^[b] z", "*a* ^(b) z"],
+      // Ogni regola cerca in ogni testo, e l'evidenziato viene prima.
+      ["==a *b* c== d== z", "==a *b* c=( d)= z"],
+      ["==a\nb== c== z", "==a\nb=( c)= z"],
+      ["==a %%b%% c== z", "=(a %%b%% c)= z"],
+      ["%%a ==b== c%% z", "%%a =(b)= c%% z"],
+      ["==a %%b== c%% z", "=(a %%b)= c%% z"],
+      // Il dollaro che un wikilink ha preso non apre una formula.
+      ["[[a$]] ==b$ c== z", "[[a$]] =(b$ c)= z"],
+      // Anche dentro un'enfasi un inline spezza il testo, e un nodo che
+      // attraversa una formula non c'è. Una nota che sta nel testo di
+      // un'enfasi regge; una il cui `[` apre un link no.
+      ["*a ==b `c` d== e* z", "*a ==b c d== e* z"],
+      ["==a *b== $c* d$ z", "=(a *b)= $c* d$ z"],
+      ["*a ^[b] c* z", "*a ^(b) c* z"],
+      ["*a ==b ^[c] d== e* z", "*a ==b ^(c) d== e* z"],
+      ["^[a] z\n\n[a]: u", "^[a] z"],
+      // Anche un wikilink che non nomina niente è un nodo del provider.
+      ["==a [[ ]] b== z", "==a [[ ]] b== z"],
+      // Senza destinazione `[b]` è testo; una nota attraversata da una formula
+      // non c'è, e i suoi delimitatori sono testo.
+      ["==a [b] c== z", "=(a [b] c)= z"],
+      ["==a ^[b== $c] d$ z", "=(a ^[b)= $c] d$ z"],
+    ] as const) {
+      expect(write(content(source).querySelector("p")!), source).toBe(expected);
+    }
   });
 
   it("legge la dimensione di un embed e mostra il bersaglio, non il numero", () => {

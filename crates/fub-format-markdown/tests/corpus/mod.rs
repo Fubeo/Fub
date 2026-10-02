@@ -248,6 +248,18 @@ pub fn corpus() -> Vec<Case> {
             "un wikilink aperto prima vince sulla formula",
             "[[a$]] b #t$\n",
         ),
+        // Il dollaro che un wikilink ha preso non apre niente: la formula che
+        // viene dopo c'è. Il wikilink che apre dentro una formula non c'è.
+        case(
+            "il dollaro di un wikilink non apre una formula",
+            "[[a$]] b$c$ e $d [[e$ f $g$ h]] i [[j]]$k$\n",
+        ),
+        // Un commento o un evidenziato non contengono un tag né un wikilink:
+        // i delimitatori restano testo, e il tag e il wikilink ci sono.
+        case(
+            "commenti ed evidenziati attorno a tag e wikilink",
+            "%%a #uno c%% e %%d [[due]] f%%\n\n==g #tre h== ==i [[quattro]]==\n",
+        ),
         // --- frontmatter ---
         case("frontmatter", "---\ntitolo: X\n---\n\n# Corpo\n"),
         case(

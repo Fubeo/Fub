@@ -151,6 +151,48 @@ export function spans(row: string, declared = inlineDelimiters()): SyntaxSpan[] 
   return out;
 }
 
+/// I tratti di una riga come li trova il kernel (`split_inlines`): una regola
+/// cerca soltanto dentro un testo del modello, mai attraverso un inline del
+/// provider, e ciò che trova spezza il testo per le regole che vengono dopo,
+/// nell'ordine di dichiarazione, che è quello in cui si applicano.
+/// `cuts` sono i tratti della riga che non sono testo, in offset della riga.
+export function textSpans(
+  row: string,
+  cuts: readonly { from: number; to: number }[],
+  declared = inlineDelimiters(),
+): SyntaxSpan[] {
+  let texts: { from: number; to: number }[] = [];
+  let at = 0;
+  for (const cut of [...cuts].sort((a, b) => a.from - b.from)) {
+    if (at < cut.from) texts.push({ from: at, to: cut.from });
+    at = Math.max(at, cut.to);
+  }
+  if (at < row.length) texts.push({ from: at, to: row.length });
+  const out: SyntaxSpan[] = [];
+  for (const d of declared) {
+    const left: { from: number; to: number }[] = [];
+    for (const text of texts) {
+      let from = text.from;
+      for (const found of spans(row.slice(text.from, text.to), [d])) {
+        const span = {
+          name: found.name,
+          from: text.from + found.from,
+          to: text.from + found.to,
+          contentFrom: text.from + found.contentFrom,
+          contentTo: text.from + found.contentTo,
+        };
+        out.push(span);
+        left.push({ from, to: span.from });
+        from = span.to;
+      }
+      left.push({ from, to: text.to });
+    }
+    texts = left;
+  }
+  out.sort((a, b) => a.from - b.from || a.to - b.to);
+  return out;
+}
+
 // ── I wikilink ───────────────────────────────────────────────────────────────
 
 /// L'interno di un wikilink: `Page#Heading^block|Alias`.

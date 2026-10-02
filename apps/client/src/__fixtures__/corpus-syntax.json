@@ -1084,6 +1084,84 @@
     "math": []
   },
   {
+    "name": "il dollaro di un wikilink non apre una formula",
+    "source": "[[a$]] b$c$ e $d [[e$ f $g$ h]] i [[j]]$k$\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "a$",
+        "embed": false,
+        "from": 0,
+        "to": 6
+      },
+      {
+        "page": "j",
+        "embed": false,
+        "from": 34,
+        "to": 39
+      }
+    ],
+    "task": [],
+    "math": [
+      {
+        "from": 8,
+        "to": 11,
+        "tex": "c",
+        "block": false
+      },
+      {
+        "from": 14,
+        "to": 21,
+        "tex": "d [[e",
+        "block": false
+      },
+      {
+        "from": 24,
+        "to": 27,
+        "tex": "g",
+        "block": false
+      },
+      {
+        "from": 39,
+        "to": 42,
+        "tex": "k",
+        "block": false
+      }
+    ]
+  },
+  {
+    "name": "commenti ed evidenziati attorno a tag e wikilink",
+    "source": "%%a #uno c%% e %%d [[due]] f%%\n\n==g #tre h== ==i [[quattro]]==\n",
+    "tag": [
+      {
+        "name": "uno",
+        "from": 4,
+        "to": 8
+      },
+      {
+        "name": "tre",
+        "from": 36,
+        "to": 40
+      }
+    ],
+    "wikilink": [
+      {
+        "page": "due",
+        "embed": false,
+        "from": 19,
+        "to": 26
+      },
+      {
+        "page": "quattro",
+        "embed": false,
+        "from": 49,
+        "to": 60
+      }
+    ],
+    "task": [],
+    "math": []
+  },
+  {
     "name": "frontmatter",
     "source": "---\ntitolo: X\n---\n\n# Corpo\n",
     "tag": [],

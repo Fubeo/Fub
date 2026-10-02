@@ -335,15 +335,18 @@ describe("il markup letterale non è sintassi Obsidian", () => {
 });
 
 describe("commenti, formule in riga, ID di blocco ed embed dimensionati", () => {
-  it("un commento sparisce intero fuori dalla riga attiva e con lui ciò che contiene", () => {
+  it("un commento sparisce intero fuori dalla riga attiva, e su quella attiva resta attenuato", () => {
+    const doc = "a %%segreto qui%% b";
+    expect(decorate(doc)).toEqual([{ from: 2, to: 17, kind: "hide" }]);
+    expect(decorate(doc, [1])).toEqual([{ from: 2, to: 17, kind: "highlight", data: "comment" }]);
+  });
+
+  it("un commento non contiene un wikilink o un tag: come nel provider, non c'è", () => {
     const doc = "a %%[[Nota]] #tag%% b";
-    const hidden = ofKind(decorate(doc), "hide");
-    expect(hidden).toContainEqual({ from: 2, to: 19, kind: "hide" });
-    expect(ofKind(decorate(doc), "wikilink")).toEqual([]);
-    expect(ofKind(decorate(doc), "tag")).toEqual([]);
-    const active = decorate(doc, [1]);
-    expect(ofKind(active, "hide")).toEqual([]);
-    expect(ofKind(active, "highlight")).toContainEqual({ from: 2, to: 19, kind: "highlight", data: "comment" });
+    expect(ofKind(decorate(doc), "hide").map((d) => [d.from, d.to])).toEqual([[4, 6], [10, 12]]);
+    expect(ofKind(decorate(doc), "wikilink").map((d) => [d.from, d.to])).toEqual([[6, 10]]);
+    expect(ofKind(decorate(doc), "tag").map((d) => [d.from, d.to])).toEqual([[13, 17]]);
+    expect(ofKind(decorate(doc, [1]), "highlight")).toEqual([]);
   });
 
   it("una formula in riga diventa widget fuori dalla riga attiva, non dentro il codice", () => {
@@ -395,19 +398,101 @@ describe("commenti, formule in riga, ID di blocco ed embed dimensionati", () => 
     expect(decorate("https://e.it/$x c$ y")).toEqual([{ from: 13, to: 18, kind: "math", data: "x c" }]);
   });
 
-  it("chi apre prima di una formula e la attraversa la perde; un evidenziato che la contiene no", () => {
-    expect(ofKind(decorate("==a $b== c$ y"), "math")).toEqual([]);
-    expect(ofKind(decorate("==a $b== c$ y"), "highlight")).toEqual([{ from: 2, to: 6, kind: "highlight" }]);
-    expect(decorate("%%a $b$ c%% y")).toEqual([{ from: 0, to: 11, kind: "hide" }]);
-    const contained = decorate("==a $b$ c== y");
-    expect(ofKind(contained, "highlight")).toEqual([{ from: 2, to: 9, kind: "highlight" }]);
-    expect(ofKind(contained, "math")).toEqual([{ from: 4, to: 7, kind: "math", data: "b" }]);
+  it("un wikilink aperto prima vince sulla formula; un evidenziato o un commento non la attraversano", () => {
+    // Come nel provider: evidenziato e commento stanno in un testo del
+    // modello, e la formula non lo è.
+    expect(decorate("==a $b== c$ y")).toEqual([{ from: 4, to: 11, kind: "math", data: "b== c" }]);
+    expect(decorate("%%a $b$ c%% y")).toEqual([{ from: 4, to: 7, kind: "math", data: "b" }]);
+    expect(decorate("==a $b$ c== y")).toEqual([{ from: 4, to: 7, kind: "math", data: "b" }]);
+    expect(decorate("$a ==b$ c $d== e$ y").map((d) => [d.kind, d.data])).toEqual([["math", "a ==b"], ["math", "d== e"]]);
     // Un wikilink e un'immagine non leggono la formula che racchiudono.
     expect(ofKind(decorate("[[a $b$ c]] y"), "math")).toEqual([]);
     expect(ofKind(decorate("![a $b$](x.png) y"), "math")).toEqual([]);
-    // Non la perde chi apre nel codice o dentro un'altra formula.
-    expect(ofKind(decorate("`==a` $b== c$ y"), "math").map((d) => d.data)).toEqual(["b== c"]);
-    expect(ofKind(decorate("$a ==b$ c $d== e$ y"), "math").map((d) => d.data)).toEqual(["a ==b", "d== e"]);
+    // Il dollaro che un wikilink ha preso non apre: la formula dopo c'è, e
+    // l'enfasi non attraversa più nessuna formula.
+    expect(ofKind(decorate("[[a$]] b$c$ y"), "math").map((d) => [d.from, d.to, d.data])).toEqual([[8, 11, "c"]]);
+    expect(ofKind(decorate("[[a$]] *b$ c* y"), "em").map((d) => [d.from, d.to])).toEqual([[8, 12]]);
+    expect(ofKind(decorate("[[a$]] ==b$ c== y"), "highlight").map((d) => [d.from, d.to])).toEqual([[9, 13]]);
+    // Non vince il wikilink che apre nel codice o dentro una formula.
+    expect(ofKind(decorate("`[[a` $b]] c$ y"), "math").map((d) => d.data)).toEqual(["b]] c"]);
+    expect(ofKind(decorate("$a [[b$ c]] d$ y"), "math").map((d) => d.data)).toEqual(["a [[b"]);
+  });
+
+  it("evidenziato e commento non attraversano un inline del provider, come in Lettura", () => {
+    // Il primo paragrafo fuori dalla riga attiva, scritto in chiaro: ciò che si
+    // nasconde sparisce, `=(…)=` un evidenziato, `*…*` un'enfasi, `[…]` un
+    // link, `[[…]]` un wikilink e `$…$` una formula. Sono i casi della Lettura
+    // (`render.test.ts`), con l'esito del provider; qui escape, entità, rimandi
+    // e note in riga restano sorgente.
+    const wrap: Partial<Record<LiveDecoKind, [string, string]>> = {
+      em: ["*", "*"], strong: ["**", "**"], highlight: ["=(", ")="], wikilink: ["[[", "]]"], link: ["[", "]"],
+    };
+    const written = (source: string) => {
+      const hidden = new Set<number>();
+      const before = Array.from({ length: source.length + 1 }, () => "");
+      for (const d of decorate(source)) {
+        const marks = wrap[d.kind];
+        if (d.kind === "hide" || d.kind === "math") for (let at = d.from; at < d.to; at++) hidden.add(at);
+        if (d.kind === "math") before[d.from] += `$${d.data}$`;
+        if (marks) {
+          before[d.from] += marks[0];
+          before[d.to] = marks[1] + before[d.to];
+        }
+      }
+      let out = "";
+      for (let at = 0; at <= source.length; at++) out += before[at] + (hidden.has(at) ? "" : source.charAt(at));
+      return out.split("\n\n")[0];
+    };
+    for (const [source, expected] of [
+      ["==a *b* c== z", "==a *b* c== z"],
+      ["*a ==b* c== z", "*a ==b* c== z"],
+      ["==a *b== c* z", "==a *b== c* z"],
+      ["**a ==b c** d== z", "**a ==b c** d== z"],
+      ["==a $b$ c== z", "==a $b$ c== z"],
+      ["==a #b c== z", "==a #b c== z"],
+      ["==a [l](u) c== z", "==a [l] c== z"],
+      ["==a <b>x</b> c== z", "==a <b>x</b> c== z"],
+      ["==a [^1] c== z\n\n[^1]: n", "==a [^1] c== z"],
+      ["==a [^no] c== z", "==a [^no] c== z"],
+      ["%%a *b* c%% z", "%%a *b* c%% z"],
+      ["*a %%b* c%% z", "*a %%b* c%% z"],
+      ["%%a *b%% c* z", "%%a *b%% c* z"],
+      ["%%a [[b]] c%% z", "%%a [[b]] c%% z"],
+      ["[[a %%b]] c%% z", "[[a %%b]] c%% z"],
+      ["%%a [[b%% c]] z", "%%a [[b%% c]] z"],
+      ["%%a $b$ c%% z", "%%a $b$ c%% z"],
+      ["%%a #b c%% z", "%%a #b c%% z"],
+      ["^[a $b] c$ z", "^[a $b] c$ z"],
+      ["^[a](u) z", "^[a] z"],
+      ["==a ^[b== c] z", "==a ^[b== c] z"],
+      ["^[a ==b] c== z", "^[a ==b] c== z"],
+      ["%%a ^[b%% c] z", "%%a ^[b%% c] z"],
+      ["^[a %%b] c%% z", "^[a %%b] c%% z"],
+      ["==a \\* c== z", "=(a \\* c)= z"],
+      ["==a https://e.it c== z", "=(a https://e.it c)= z"],
+      ["*a ==b== c* z", "*a =(b)= c* z"],
+      ["[==a==](u) z", "[=(a)=] z"],
+      ["==a *b* c== d== z", "==a *b* c=( d)= z"],
+      ["==a\nb== c== z", "==a\nb=( c)= z"],
+      ["==a %%b%% c== z", "=(a %%b%% c)= z"],
+      ["%%a ==b== c%% z", "%%a =(b)= c%% z"],
+      ["==a %%b== c%% z", "=(a %%b)= c%% z"],
+      ["[[a$]] ==b$ c== z", "[[a$]] =(b$ c)= z"],
+      ["*a ==b `c` d== e* z", "*a ==b c d== e* z"],
+      ["==a *b== $c* d$ z", "=(a *b)= $c* d$ z"],
+      ["*a ^[b] c* z", "*a ^[b] c* z"],
+      ["*a ==b ^[c] d== e* z", "*a ==b ^[c] d== e* z"],
+      ["==a [[ ]] b== z", "==a [[ ]] b== z"],
+      ["==a [b] c== z", "=(a [b] c)= z"],
+      ["==a ^[b== $c] d$ z", "=(a ^[b)= $c] d$ z"],
+      // Il testo alternativo di un'immagine non è un testo del modello.
+      ["![==b==](https://e.it/x.png) z", "![==b==](https://e.it/x.png) z"],
+    ] as const) {
+      expect(written(source), source).toBe(expected);
+    }
+    // La nota in riga che regge spezza il testo, e il suo contenuto è un testo
+    // a sé, dove la Lettura conserva la formattazione.
+    expect(written("==a ^[b] c== z ^[d ==e== f]")).toBe("==a ^[b] c== z ^[d =(e)= f]");
   });
 
   it("l'ID di blocco si nasconde solo dove un blocco finisce", () => {

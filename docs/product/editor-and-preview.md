@@ -133,10 +133,10 @@ e inline. Nelle immagini Markdown il suffisso dell'alt `|larghezza` o
 `|larghezzaxaltezza` imposta dimensioni numeriche senza entrare nel testo
 alternativo.
 
-I commenti `%%…%%` su una riga restano nel file e nel modello, con i
-delimitatori, ma non compaiono nella resa: in Lettura spariscono insieme a
-link, tag ed evidenziati che contengono, in Live restano visibili e attenuati
-solo sulla riga del cursore.
+I commenti `%%…%%` restano nel file e nel modello, non nella resa; in Live si
+vedono attenuati sulla riga del cursore. Come nel provider, evidenziati e
+commenti non contengono né attraversano link, wikilink, tag, codice, enfasi,
+formule o note in riga, e una nota in riga attraversata si perde.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`

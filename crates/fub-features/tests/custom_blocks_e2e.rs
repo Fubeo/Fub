@@ -751,3 +751,59 @@ fn a_rule_inline_enters_in_the_label_of_a_link() {
         out.html
     );
 }
+
+/// Una regola in riga cerca soltanto dentro un testo del modello: non contiene
+/// e non attraversa un inline del provider, e ciò che trova non è più testo per
+/// la regola che viene dopo. La Lettura e l'anteprima dal vivo della shell
+/// leggono evidenziati e commenti con questa regola (`textSpans`).
+#[test]
+fn an_inline_rule_does_not_cross_an_inline_of_the_provider() {
+    let v = Vault::new();
+    let cases = [
+        // Un'enfasi, un tag, una nota in riga, un wikilink spezzano il testo.
+        ("==a *b* c== z", "==a <em>b</em> c== z"),
+        (
+            "==a #b c== z",
+            "==a <span class=\"tag\" data-tag=\"b\">#b</span> c== z",
+        ),
+        (
+            "==a ^[b== c] z",
+            "==a <sup class=\"footnote-inline\" data-label=\"b== c\">b== c</sup> z",
+        ),
+        (
+            "%%a #b c%% z",
+            "%%a <span class=\"tag\" data-tag=\"b\">#b</span> c%% z",
+        ),
+        (
+            "%%a [[b]] c%% z",
+            "%%a <a class=\"wikilink\" data-wikilink-page=\"b\" href=\"#\">b</a> c%% z",
+        ),
+        // In ogni pezzo di testo la regola cerca di nuovo.
+        (
+            "==a *b* c== d== z",
+            "==a <em>b</em> c<span class=\"inline-highlight\"> d</span> z",
+        ),
+        // L'evidenziato viene prima del commento, e ciò che prende non è più
+        // testo per lui.
+        (
+            "%%a ==b== c%% z",
+            "%%a <span class=\"inline-highlight\">b</span> c%% z",
+        ),
+        (
+            "==a %%b%% c== z",
+            "<span class=\"inline-highlight\">a %%b%% c</span> z",
+        ),
+    ];
+    for (index, (source, _)) in cases.iter().enumerate() {
+        v.put(&format!("r{index}.md"), &format!("{source}\n"));
+    }
+    let ws = v.open();
+    for (index, (source, expected)) in cases.iter().enumerate() {
+        let out = preview(&ws, &format!("r{index}.md"));
+        assert!(
+            out.html.contains(&format!(">{expected}</p>")),
+            "{source}: {}",
+            out.html
+        );
+    }
+}

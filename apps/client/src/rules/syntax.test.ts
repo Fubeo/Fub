@@ -6,6 +6,7 @@ import {
   declaredFences,
   tagInProgress,
   spans,
+  textSpans,
   listItem,
   wikilink,
 } from "./syntax";
@@ -61,6 +62,30 @@ describe("i tratti fra delimitatori", () => {
 
   it("un delimitatore non chiuso non aggancia niente", () => {
     expect(t("==aperto e basta")).toEqual([]);
+  });
+});
+
+describe("i tratti dentro un testo del modello", () => {
+  const t = (row: string, cuts: { from: number; to: number }[]) =>
+    textSpans(row, cuts).map((x) => [x.name.slice(4), x.from, x.to, x.contentFrom, x.contentTo]);
+
+  it("non attraversano un tratto che non è testo, e si cercano in ognuno", () => {
+    // `==a *b* c== d== z`: l'enfasi spezza il testo, e nell'ultimo pezzo
+    // `== d==` è un evidenziato.
+    expect(t("==a *b* c== d== z", [{ from: 4, to: 7 }])).toEqual([["highlight", 9, 15, 11, 13]]);
+    // I tagli si possono sovrapporre e uscire dalla riga.
+    expect(t("x ==a== y", [{ from: -3, to: 1 }, { from: 0, to: 2 }, { from: 8, to: 20 }])).toEqual([
+      ["highlight", 2, 7, 4, 5],
+    ]);
+    expect(t("==a==", [{ from: 0, to: 9 }])).toEqual([]);
+    // Un taglio dentro un altro non riapre il testo che quello copre.
+    expect(t("==a== ==b== ==c==", [{ from: 0, to: 11 }, { from: 2, to: 3 }])).toEqual([["highlight", 12, 17, 14, 15]]);
+  });
+
+  it("l'evidenziato si cerca prima del commento, e ciò che trova non è più testo", () => {
+    expect(t("%%a ==b== c%% z", [])).toEqual([["highlight", 4, 9, 6, 7]]);
+    expect(t("==a %%b%% c== z", [])).toEqual([["highlight", 0, 13, 2, 11]]);
+    expect(t("==a %%b== c %%d%%", [])).toEqual([["highlight", 0, 9, 2, 7], ["comments", 12, 17, 14, 15]]);
   });
 });
 
