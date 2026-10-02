@@ -40,6 +40,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sectionName } from "./cargo-lines.mjs";
 import { crateDelWorkspace } from "./workspace-members.mjs";
 
 // Dependencies that may repeat with a hand-written version, each with the
@@ -53,18 +54,6 @@ const EXCEPTIONS = new Map([
 // *suffix*, so `[target.'cfg(windows)'.dependencies]` and
 // `[target.…​.dev-dependencies]` are included without listing them.
 const DEPENDENCY_SUFFIXES = ["dependencies", "dev-dependencies", "build-dependencies"];
-
-/**
- * The table name of a `[…]` line, or `null` if the line is not one.
- *
- * `[[example]]` is also a table line: it is not a dependency section, but
- * **closes** the previous one, and treating it as an ordinary line would make
- * examples be read as dependencies.
- */
-function sectionName(line) {
-  const m = line.match(/^\[\[?([^\]]+)\]\]?\s*$/);
-  return m === null ? m : m[1].trim();
-}
 
 /** True if the table `name` is a dependency table of this crate. */
 function isDependencySection(name) {

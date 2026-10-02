@@ -44,6 +44,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sectionName } from "./cargo-lines.mjs";
 import { crateDelWorkspace } from "./workspace-members.mjs";
 
 // Le forme che non costano un link in più a nessuno: `rlib` è ciò che un altro
@@ -57,12 +58,6 @@ const GRATIS = new Set(["rlib", "lib", "proc-macro"]);
 const CONSUMATORI = new Map([
   // ["crates/x/Cargo.toml#cdylib", "chi apre l'artefatto, e come"],
 ]);
-
-/** Il nome della tabella di una riga `[…]`, o `null` se la riga non lo è. */
-function nomeSezione(riga) {
-  const m = riga.match(/^\[\[?([^\]]+)\]\]?\s*$/);
-  return m === null ? m : m[1].trim();
-}
 
 /**
  * I `crate-type` dichiarati da un `Cargo.toml`: una voce per sezione che ne
@@ -81,7 +76,7 @@ function crateTypeDi(file) {
   const righe = fs.readFileSync(file, "utf8").split("\n");
 
   for (let i = 0; i < righe.length; i++) {
-    const nome = nomeSezione(righe[i].trim());
+    const nome = sectionName(righe[i].trim());
     if (nome !== null) {
       sezione = nome;
       continue;

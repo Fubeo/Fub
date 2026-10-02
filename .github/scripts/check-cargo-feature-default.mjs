@@ -44,6 +44,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sectionName } from "./cargo-lines.mjs";
 import { crateDelWorkspace } from "./workspace-members.mjs";
 
 // Feature che possono restare fuori dal `default`, ognuna con il **comando di
@@ -53,12 +54,6 @@ import { crateDelWorkspace } from "./workspace-members.mjs";
 const FUORI_DAL_DEFAULT = new Map([
   // ["crates/x/Cargo.toml#feature", "chi la compila, e in quale passo di CI"],
 ]);
-
-/** Il nome della tabella di una riga `[…]`, o `null` se la riga non lo è. */
-function nomeSezione(riga) {
-  const m = riga.match(/^\[\[?([^\]]+)\]\]?\s*$/);
-  return m === null ? m : m[1].trim();
-}
 
 /**
  * Le feature dichiarate da un `Cargo.toml`: `nome -> [cosa accende]`.
@@ -76,7 +71,7 @@ function featureDi(file) {
   const righe = fs.readFileSync(file, "utf8").split("\n");
 
   for (let i = 0; i < righe.length; i++) {
-    const sezione = nomeSezione(righe[i].trim());
+    const sezione = sectionName(righe[i].trim());
     if (sezione !== null) {
       dentro = sezione === "features";
       continue;
