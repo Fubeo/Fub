@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `tags`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "tags")]
 //! **Il banco del filtro dei tag**: conta le allocazioni, non i millisecondi
 //! (§17.1, [decisione 0113](../../../docs/decisions/0196-test-e-artefatti-generati.md)).
 //!

@@ -56,6 +56,7 @@ jobs:
       - name: le feature ufficiali si spengono
         run: |
           cargo build -p fub-features --no-default-features
+          cargo check -p fub-features --no-default-features --all-targets
           cargo build -p fub-features --no-default-features --features outline
           cargo build -p fub-host --no-default-features --features outline,notify-watcher
       - name: ogni feature ufficiale compila da sola

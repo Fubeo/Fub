@@ -1,3 +1,7 @@
+// Il banco di questa feature vive con lei: senza la cargo feature `commands`
+// (§16.3) il modulo non è compilato, e un test che lo nomina non avrebbe un
+// soggetto.
+#![cfg(feature = "commands")]
 //! **Gli accordi dei comandi ufficiali, in una fixture che legge la shell.**
 //!
 //! I comandi di questa app stanno in due registri che si incontrano solo dentro
