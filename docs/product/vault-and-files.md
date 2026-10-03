@@ -135,8 +135,7 @@ altrimenti nella radice; un path esplicito conserva la propria cartella. Un nome
 occupato è un errore e mai una sovrascrittura, e prima di scrivere il nome passa
 la regola dei nomi nuovi. Il file lo scrive il provider dei disegni, con il nome
 per titolo e «Livello 1». La prova a vuoto fa gli stessi controlli e non scrive;
-l'annullamento manda il disegno nel cestino. *(proposta del 3 ottobre 2026, da
-rivedere)*
+l'annullamento manda il disegno nel cestino.
 
 ## Albero dei file
 

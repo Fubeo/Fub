@@ -115,7 +115,7 @@ scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
 PNG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati, e il
 comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
 provider: per questo anche `features --> svg` è un arco facoltativo, come
-`features --> base` per le basi. *(proposta del 3 ottobre 2026, da rivedere)*
+`features --> base` per le basi.
 
 ## Flusso di un comando
 
