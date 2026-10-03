@@ -12,6 +12,9 @@
 //   prima, scritta come un `matrix()` solo, e tolta se è l'identità. Lo
 //   spostamento nella scena si arrotonda a due decimali come la geometria: in
 //   un livello senza trasformazioni il file riceve numeri puliti.
+// - **Ridimensionare** e collocare con numeri cambiano solo `transform`, allo
+//   stesso modo: il riquadro della selezione va nel riquadro chiesto con una
+//   scala e una traslazione nella scena, e il contorno scala con l'oggetto.
 // - **Eliminare** toglie gli oggetti dall'ultimo al primo, così il percorso
 //   di un oggetto senza id resta valido fino al suo turno.
 // - **La pagina** si allarga a passi di 256 unità per lato quando un oggetto
@@ -142,6 +145,50 @@ export function moveOps(units: readonly Unit[], dx: number, dy: number, ids: New
       ops.push({ op: "ident", path: unit.path, tag: unit.tag, id });
     }
     ops.push({ op: "set", id, attrs: { transform: transformValue(m) } });
+    keys.push(id);
+  }
+  return { ops, keys };
+}
+
+/// La matrice di `unit` dopo `m`, una trasformazione della scena, nelle
+/// coordinate del genitore; `null` se il genitore schiaccia il piano.
+export function transformedMatrix(unit: Unit, m: Matrix): Matrix | null {
+  const inverse = invert(unit.parent);
+  if (inverse === null) return null;
+  return compose(inverse, compose(m, unit.matrix));
+}
+
+/// La scala e la traslazione della scena che portano il riquadro `from` in
+/// `to`. Un lato che misura zero non scala: resta com'è, e si sposta soltanto.
+export function boxMatrix(from: Bounds, to: Bounds): Matrix {
+  const width = from.max[0] - from.min[0];
+  const height = from.max[1] - from.min[1];
+  const sx = width > 0 ? (to.max[0] - to.min[0]) / width : 1;
+  const sy = height > 0 ? (to.max[1] - to.min[1]) / height : 1;
+  return [sx, 0, 0, sy, to.min[0] - sx * from.min[0], to.min[1] - sy * from.min[1]];
+}
+
+/// Il riquadro `bounds` portato da `m`, una scala e una traslazione.
+export function mappedBounds(bounds: Bounds, m: Matrix): Bounds {
+  const [x1, y1] = apply(m, bounds.min);
+  const [x2, y2] = apply(m, bounds.max);
+  return { min: [Math.min(x1, x2), Math.min(y1, y2)], max: [Math.max(x1, x2), Math.max(y1, y2)] };
+}
+
+/// Le operazioni che applicano `m`, una trasformazione della scena, a
+/// `units`; le chiavi come per lo spostamento.
+export function transformOps(units: readonly Unit[], m: Matrix, ids: NewIds): Moved {
+  const ops: Op[] = [];
+  const keys: string[] = [];
+  for (const unit of units) {
+    const next = transformedMatrix(unit, m);
+    if (next === null) continue;
+    let id = unit.id;
+    if (id === null) {
+      id = ids.next("object");
+      ops.push({ op: "ident", path: unit.path, tag: unit.tag, id });
+    }
+    ops.push({ op: "set", id, attrs: { transform: transformValue(next) } });
     keys.push(id);
   }
   return { ops, keys };

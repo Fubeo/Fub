@@ -8,6 +8,10 @@
 // `reading`). In Lettura il documento intero è un `<img>` da un blob, e niente
 // del file entra nel DOM vivo.
 //
+// La Lettura dice anche a parole che cosa c'è: la descrizione del disegno
+// accanto all'immagine, e l'elenco degli oggetti in albero, chiuso finché non
+// lo si apre e costruito soltanto allora (`describe.ts`).
+//
 // In Disegno il documento può non essere modificabile, e la modalità del
 // riquadro non cambia per questo (`docs/product/drawing.md`):
 // - un SVG estraneo è l'immagine inerte del documento intero, con «Modifica»,
@@ -19,11 +23,13 @@
 //   mostra «Apri come sorgente».
 
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { identifier } from "../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import type { EditorRange, EditorSelections, EditorSurface, SelectedText, SurfaceMountContext } from "../core/registry";
 import type { EditorChange } from "../core/text-operation";
 import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
+import { countObjects, describe, keyOf, outline, type OutlineNode } from "./describe";
 import { VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
@@ -80,13 +86,20 @@ function unreadableText(error: ReadError): string {
   return t("vector.unreadable", { reason, command: t("commands.doc.source.open") });
 }
 
-/// La chiave con cui l'editor sceglie un oggetto: l'id, o `@` e il percorso.
-function keyOf(item: ElementItem): string {
-  return item.id ?? `@${item.path.join(".")}`;
-}
-
 function fileName(id: string): string {
   return id.split("/").pop() || id;
+}
+
+/// Gli oggetti in elenchi annidati, come l'albero dell'editor.
+function objectList(nodes: readonly OutlineNode[]): HTMLUListElement {
+  const list = document.createElement("ul");
+  for (const node of nodes) {
+    const item = document.createElement("li");
+    item.textContent = describe(node);
+    if (node.children.length > 0) item.append(objectList(node.children));
+    list.append(item);
+  }
+  return list;
 }
 
 export function mountVectorSurface(context: SurfaceMountContext, options: VectorSurfaceOptions): EditorSurface {
@@ -107,6 +120,17 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   drawHost.className = "vector-draw";
   const readHost = document.createElement("div");
   readHost.className = "vector-read";
+  // Sotto l'immagine, il disegno a parole.
+  const about = document.createElement("div");
+  about.className = "vector-about";
+  const aboutDesc = document.createElement("p");
+  aboutDesc.className = "vector-about-desc";
+  aboutDesc.id = identifier("vector-desc");
+  const aboutObjects = document.createElement("details");
+  aboutObjects.className = "vector-about-objects";
+  const aboutSummary = document.createElement("summary");
+  aboutObjects.append(aboutSummary);
+  about.append(aboutDesc, aboutObjects);
   root.append(notice, drawHost, readHost);
   context.parent.append(root);
 
@@ -123,6 +147,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let shownText: string | null = null;
   /// I byte del testo, per le selezioni: si ricavano una volta per testo.
   let encoded: { readonly text: string; readonly bytes: Uint8Array } | null = null;
+  /// Il testo di cui l'elenco degli oggetti è disegnato.
+  let listedText: string | null = null;
 
   // --- L'editor -------------------------------------------------------------
 
@@ -169,19 +195,47 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   /// Il nome del disegno: il titolo del documento, figlio della radice, o il
   /// nome del file.
-  const drawingName = (): string => {
-    const engine = opened !== null && opened.kind !== "unreadable" ? opened.engine : null;
-    for (const item of engine?.scene() ?? []) {
-      if (item.kind === "element" && item.role === "title" && item.path.length === 1 && item.text?.trim()) return item.text.trim();
+  const shownEngine = (): SceneEngine | null => (opened !== null && opened.kind !== "unreadable" ? opened.engine : null);
+
+  /// Il `title` o la `desc` del disegno, figli della radice; `null` se non
+  /// ci sono o sono vuoti.
+  const rootText = (role: "title" | "desc"): string | null => {
+    for (const item of shownEngine()?.scene() ?? []) {
+      if (item.kind === "element" && item.role === role && item.path.length === 1 && item.text?.trim()) return item.text.trim();
     }
-    return fileName(context.documentId);
+    return null;
   };
+
+  const drawingName = (): string => rootText("title") ?? fileName(context.documentId);
+
+  /// La descrizione e il conteggio sotto l'immagine; l'elenco si costruisce
+  /// quando lo si apre, e ogni volta che il testo cambia mentre è aperto.
+  const showAbout = (): void => {
+    const nodes = outline(shownEngine()?.scene() ?? []);
+    const desc = rootText("desc");
+    aboutDesc.textContent = desc ?? "";
+    aboutDesc.hidden = desc === null;
+    if (desc === null) view?.stage.removeAttribute("aria-describedby");
+    else view?.stage.setAttribute("aria-describedby", aboutDesc.id);
+    aboutSummary.textContent = t("vector.read.objects", { count: countObjects(nodes) });
+    aboutObjects.hidden = nodes.length === 0;
+    if (!aboutObjects.open) {
+      aboutObjects.querySelector("ul")?.remove();
+      listedText = null;
+    } else if (listedText !== text) {
+      listedText = text;
+      aboutObjects.querySelector("ul")?.remove();
+      aboutObjects.append(objectList(nodes));
+    }
+  };
+  life.listen(aboutObjects, "toggle", () => showAbout());
 
   const showImage = (): void => {
     const label = t("vector.read.label", { name: drawingName() });
     if (shownText === text && view !== null) {
       view.stage.setAttribute("aria-label", label);
       view.image.alt = label;
+      showAbout();
       return;
     }
     const blob = new Blob([text], { type: "image/svg+xml" });
@@ -194,7 +248,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     if (view === null) {
       // La carta è bianca anche dove il disegno non ne ha una.
       view = mountZoomView(url, { label, size, backdrop: "light", vector: true, info }, life);
-      readHost.append(view.element);
+      readHost.append(view.element, about);
     } else {
       view.replace(url, size);
       view.info(info);
@@ -202,6 +256,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       view.image.alt = label;
     }
     if (previous !== null) URL.revokeObjectURL(previous);
+    showAbout();
   };
 
   // --- Lo stato a vista -----------------------------------------------------
