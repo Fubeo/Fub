@@ -3,11 +3,12 @@
 // operazioni attese, annulla e ripeti le disfano, e chi non vede sente che
 // cosa è successo.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions } from "./editor";
+import { MERGE_MS } from "./history";
 import { LAYER } from "./test-support";
 
 const SOURCE = doc(
@@ -68,6 +69,7 @@ beforeEach(() => {
 afterEach(() => {
   owner.close();
   host.remove();
+  vi.restoreAllMocks();
 });
 
 describe("la barra e il foglio", () => {
@@ -183,14 +185,22 @@ describe("gli strumenti", () => {
     expect(changes).toEqual([]);
   });
 
-  it("le frecce spostano la selezione di 1, con Maiusc di 10, un passo per volta", () => {
+  it("le frecce spostano la selezione di 1, con Maiusc di 10, e i colpi di fila si annullano insieme", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
     mount();
     editor.select(["o1a2b3c4d"]);
     key("ArrowRight");
     key("ArrowDown", { shiftKey: true });
     expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 1 10)"');
+    now.mockReturnValue(MERGE_MS + 1);
+    key("ArrowRight");
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 2 10)"');
+
     editor.undo();
-    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 1 0)"');
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 1 10)"');
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(spoken()).toBe("Annullato: Spostamento.");
   });
 
   it("Canc elimina la selezione", () => {

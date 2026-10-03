@@ -157,6 +157,40 @@ interface Exact {
 
 const EXACT = new WeakMap<Undo, Exact>();
 
+/// Un undo solo per due operazioni applicate una dopo l'altra, come la pila
+/// le fonde (§7): annulla tutte e due con l'inversa di `first`, e il suo redo
+/// le ripete con l'operazione in avanti di `second`. Vale se le due sono
+/// `set` sulle stesse chiavi degli stessi elementi, anche in due `batch` con
+/// lo stesso ordine, e se `second` è stata applicata subito dopo `first` e
+/// sullo stesso motore: l'undo resta esatto. Altrimenti `null`.
+export function mergeUndo(first: Undo, second: Undo): Undo | null {
+  const a = EXACT.get(first);
+  const b = EXACT.get(second);
+  if (a === undefined || b === undefined || a.engine !== b.engine || a.after !== b.before) return null;
+  if (!sameSets(first.forward, second.forward)) return null;
+  const merged = new Undo(first.inverse, second.forward, [...new Set([...first.touched, ...second.touched])]);
+  EXACT.set(merged, { engine: a.engine, entries: [...a.entries, ...b.entries], before: a.before, after: b.after });
+  return merged;
+}
+
+/// Vero se `a` e `b` cambiano le stesse chiavi degli stessi elementi: due
+/// `set`, o due `batch` di `set` nello stesso ordine. Allora l'inversa di `a`
+/// rimette anche tutto ciò che `b` ha cambiato.
+function sameSets(a: Op, b: Op): boolean {
+  if (a.op === "set" && b.op === "set") {
+    const keys = Object.keys(a.attrs);
+    return (
+      a.id === b.id &&
+      keys.length === Object.keys(b.attrs).length &&
+      keys.every((key) => Object.prototype.hasOwnProperty.call(b.attrs, key))
+    );
+  }
+  if (a.op === "batch" && b.op === "batch") {
+    return a.ops.length === b.ops.length && a.ops.every((op, i) => sameSets(op, b.ops[i]!));
+  }
+  return false;
+}
+
 /// Un rifiuto dentro il motore: risale fino ad `apply`, che disfa tutto.
 class Rejection extends Error {
   /// Gli indici nei `batch`, dal più esterno.
