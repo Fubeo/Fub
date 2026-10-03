@@ -994,7 +994,7 @@ function touchLiveEndReason(reason: LiveEndReason): void {
 
 function touchLiveNackReason(reason: LiveNackReason): void {
   switch (reason) {
-    case "missing-target": case "missing-parent": case "missing-anchor": case "duplicate-id":
+    case "missing-target": case "missing-parent": case "missing-anchor": case "duplicate-id": case "in-use":
     case "invalid-elem": case "locked": case "foreign": case "cycle": case "limit": case "read-only":
       return;
     default: return assertNever(reason);
@@ -1491,7 +1491,7 @@ describe("mirror TS↔Rust", () => {
     for (const reason of appFixture.EndReason as LiveEndReason[]) touchLiveEndReason(reason);
     expect(appFixture.EndReason).toHaveLength(4);
     for (const reason of appFixture.NackReason as LiveNackReason[]) touchLiveNackReason(reason);
-    expect(appFixture.NackReason).toHaveLength(10);
+    expect(appFixture.NackReason).toHaveLength(11);
   });
 
   it("la richiesta e lo stato della sessione live portano i contatori come stringhe", () => {

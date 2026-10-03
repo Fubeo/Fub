@@ -117,6 +117,9 @@ pub enum NackReason {
     MissingAnchor,
     /// `add` con un id già presente e un elemento diverso.
     DuplicateId,
+    /// L'elemento ha ancora chi lo usa: una risorsa, o l'originale di una
+    /// ripetizione con delle copie.
+    InUse,
     /// Elemento fuori dal formato.
     InvalidElem,
     /// Livello bloccato, o la carta.

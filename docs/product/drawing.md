@@ -86,12 +86,9 @@ dei livelli sopra, col livello da cui vale ciascuno e dove si sceglie.
 
 Lo Standard aggiunge:
 
-- il **Lazo** (`Q`), dopo la Selezione, e la **«Selezione avanzata»**: i
-  simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
-- la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del
-  disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
-- **«Presenta»** (`F5`), dopo «Tavole»: le tavole a schermo intero, una alla
-  volta, col laser e l'inchiostro ([Disegni, presentare](drawing-present.md));
+- il **Lazo** (`Q`), dopo la Selezione, e la **«Selezione avanzata»**: i simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
+- la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
+- **«Presenta»** (`F5`), dopo «Tavole»: le tavole a schermo intero, una alla volta, col laser e l'inchiostro ([Disegni, presentare](drawing-present.md));
 - il **Contagocce** (`I`), dopo la Tavola, e nelle «Proprietà» i **colori del
   documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
 - la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
@@ -433,7 +430,8 @@ Due riquadri possono mostrare lo stesso disegno, anche uno come disegno e uno
 come testo. Ogni gesto arriva agli altri riquadri senza ricaricare, e una
 modifica fatta nel testo si vede subito nel disegno. Ogni riquadro annulla
 soltanto i suoi gesti; un testo arrivato da fuori, da un altro riquadro o dal
-disco, ricostruisce il disegno senza svuotarne la cronologia.
+disco, ricostruisce il disegno senza svuotarne la cronologia. Anche un tablet
+può scrivere sul disegno aperto: [Disegni, sessione live](drawing-live.md).
 
 ## Il file su disco
 

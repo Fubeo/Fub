@@ -91,6 +91,7 @@ import { exportDialog } from "./tools/export-dialog";
 import { featuresFor } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
+import { noteSceneChange, offerStage } from "./live/registry";
 
 type VectorMode = "draw" | "read";
 
@@ -429,12 +430,15 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       onChange: (change) => {
         text = change.text;
         opened = { kind: "scene", engine: mounted.engine };
+        noteSceneChange(change.text, change.op);
         options.onChange(change);
         paint();
       },
       onSelectionChange: () => options.onSelectionChange(),
     });
     mounted.setReadOnly(readOnly);
+    // Il foglio per la sessione live, finché l'editor c'è.
+    owner.add(offerStage(context.documentId, { root, stage: mounted.stage, visible: () => !drawHost.hidden }));
     editorLife = owner;
     editor = mounted;
     return mounted;

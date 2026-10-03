@@ -122,6 +122,8 @@ import {
 import { createNote, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
+import { registerLiveCommands } from "../editors/spatial/live/commands";
+import { VECTOR_PROFILE } from "../editors/spatial/modes";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
 import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
@@ -974,6 +976,15 @@ function registerCommands(): void {
     description: "commands.doc.conflict.theirs.desc",
     layer: "document",
     run: () => void resolveDiscardingMine(activeDoc()),
+  });
+  // La sessione live di un disegno (ADR 0205): i comandi pesano poco, la
+  // sessione arriva quando si avvia.
+  registerLiveCommands({
+    focusedDoc: () => activeDoc(),
+    focusedDrawing: () => {
+      const pane = panes.get(layout.focus);
+      return pane?.surface?.profile === VECTOR_PROFILE && pane.shown?.k === "doc" ? pane.shown.doc : null;
+    },
   });
 }
 

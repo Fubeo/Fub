@@ -127,13 +127,16 @@ import type { SymbolLibraryPort } from "./symbol-libraries";
 import type { TouchPolicy } from "../../../ink/input/roles";
 import type { ContainerNode, DocumentModel } from "../scene/model";
 import type { SceneEngine } from "../scene/engine";
-import type { Op } from "../scene/ops";
+import { ROOT, type Op } from "../scene/ops";
+import { IDENTITY, type Matrix } from "../scene/matrix";
+import type { SceneOverlay } from "../painter/overlay";
+import type { Camera } from "../../../spatial/camera";
+import type { View } from "../view";
 import type { DrawKey } from "../strings";
 import type { Page } from "../painter/paint";
 import { NewIds, type Destination } from "./edit";
 import type { SectionId } from "./properties";
 import type { Grid } from "./grid";
-import type { View } from "../view";
 import { SceneIndex } from "./hit";
 import type { Suggested } from "./suggestions";
 import { exportBox, type ExportScene } from "./export-plan";
@@ -190,6 +193,27 @@ export interface DrawChange {
   /// Le modifiche sul testo a LF di prima.
   readonly operation: TextOperation;
   readonly origin: "input" | "undo" | "redo";
+  /// L'operazione applicata, per chi la rimanda altrove (la sessione live).
+  /// Annulla e ripeti possono darne una forma che vale solo nel motore; un
+  /// salto nella cronologia, che ne rifà più d'una insieme, non ne ha una
+  /// sola: `null`, e chi la rimanda manda il testo.
+  readonly op: Op | null;
+}
+
+/// Il foglio dell'editor per chi ci disegna sopra da fuori: la sessione live
+/// ci mostra l'inchiostro del tablet e, quando segue, ne muove la camera.
+export interface DrawStage {
+  readonly overlay: SceneOverlay;
+  /// La trasformazione del livello `id` (`#root` per la radice), o `null`
+  /// se nel disegno non c'è.
+  layerMatrix(id: string): Matrix | null;
+  readonly camera: View;
+  /// Mette la camera `camera`, con la vista diritta: chi la manda guarda
+  /// il disegno senza girarlo.
+  setCamera(camera: Camera): void;
+  /// La misura del foglio in pixel CSS.
+  readonly width: number;
+  readonly height: number;
 }
 
 /// I collegamenti del disegno verso il vault, da chi monta l'editor: chi
@@ -339,6 +363,7 @@ export interface DrawEditor {
   readonly selection: readonly string[];
   readonly canUndo: boolean;
   readonly canRedo: boolean;
+  readonly stage: DrawStage;
   /// Il documento ricostruito dal testo autorevole (operazioni sulla scena,
   /// §7): la cronologia resta, la selezione tiene gli oggetti che ci sono
   /// ancora. Il motore ha un modello: un documento in sola lettura non si
@@ -452,6 +477,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     reveal, adopt, makeEditable, setReadOnly, setLevel, setTool, setColor, setWidth, cancelGesture, setSymmetry, dropBezier, undoable, redoable,
     finishText, visibleBoundsOf, closeTracing, closeCrop, dispose
   } = ctx;
+  const stage: DrawStage = {
+    get overlay() {
+      return ctx.overlay;
+    },
+    layerMatrix: (id) => (id === ROOT ? IDENTITY : (ctx.currentIndex().layers.find((layer) => layer.id === id)?.matrix ?? null)),
+    get camera() {
+      return ctx.camera;
+    },
+    setCamera(next) {
+      if (ctx.disposed) return;
+      ctx.placed = true;
+      ctx.setCamera({ scale: next.scale, angle: 0, tx: next.tx, ty: next.ty });
+    },
+    get width() {
+      return ctx.surface.clientWidth;
+    },
+    get height() {
+      return ctx.surface.clientHeight;
+    },
+  };
   return {
     element: root,
     get engine() {
@@ -481,6 +526,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     get canRedo() {
       return redoable();
     },
+    stage,
     get grid() {
       return ctx.grid;
     },

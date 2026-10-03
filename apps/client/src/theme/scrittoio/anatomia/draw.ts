@@ -62,7 +62,7 @@ export const DRAW: PartAnatomy = {
       states: [S("rest")],
       hooks: [
         "vector-notice", "vector-about", "vector-about-desc", "vector-about-objects", "vector-about-links",
-        "vector-about-links-title", "vector-about-link",
+        "vector-about-links-title", "vector-about-link", "live-bar", "live-state", "live-follow",
       ],
     },
     {

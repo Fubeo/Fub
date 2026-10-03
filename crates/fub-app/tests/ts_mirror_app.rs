@@ -634,6 +634,7 @@ fn live_samples() -> serde_json::Map<String, Value> {
             NackReason::MissingParent,
             NackReason::MissingAnchor,
             NackReason::DuplicateId,
+            NackReason::InUse,
             NackReason::InvalidElem,
             NackReason::Locked,
             NackReason::Foreign,

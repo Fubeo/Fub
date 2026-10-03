@@ -776,6 +776,9 @@
     "vector-about-links",
     "vector-about-links-title",
     "vector-about-link",
+    "live-bar",
+    "live-state",
+    "live-follow",
     "pdf-notice-messages",
     "pdf-pages",
     "pdf-page-input",
@@ -2956,7 +2959,10 @@
         "vector-about-objects",
         "vector-about-links",
         "vector-about-links-title",
-        "vector-about-link"
+        "vector-about-link",
+        "live-bar",
+        "live-state",
+        "live-follow"
       ],
       "states": [
         "rest"
@@ -5050,7 +5056,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1024,
+    "hooks": 1027,
     "state_names": 7,
     "assigned_states": 608,
     "components": 179,

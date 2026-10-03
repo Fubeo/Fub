@@ -90,9 +90,9 @@ export function installOperations(ctx: EditorContext): void {
   } = ctx;
   // --- Operazioni -----------------------------------------------------------
 
-  const emit = (applied: Pick<Applied, "text" | "operation" | "duplicate">, origin: DrawChange["origin"]): void => {
+  const emit = (applied: Pick<Applied, "text" | "operation" | "duplicate">, origin: DrawChange["origin"], op: Op | null): void => {
     if (applied.duplicate) return;
-    options.onChange?.({ text: applied.text, operation: applied.operation, origin });
+    options.onChange?.({ text: applied.text, operation: applied.operation, origin, op });
   };
 
   /// Il gesto `op` con ciò che il foglio porta in coda.
@@ -119,7 +119,7 @@ export function installOperations(ctx: EditorContext): void {
       clearPreviews();
       return t(REASONS[outcome.reason]);
     }
-    emit(outcome, "input");
+    emit(outcome, "input", outcome.undo.forward);
     return outcome;
   };
   ctx.attempt = attempt;
@@ -177,7 +177,7 @@ export function installOperations(ctx: EditorContext): void {
       return;
     }
     landed(step.outcome.touched);
-    emit(step.outcome, origin);
+    emit(step.outcome, origin, step.outcome.undo.forward);
     announce(t(origin === "undo" ? "draw.undone" : "draw.redone", { action }));
   };
 
@@ -213,7 +213,7 @@ export function installOperations(ctx: EditorContext): void {
       // La selezione segue l'ultimo passo, quello accanto al punto d'arrivo:
       // come un annulla o un ripeti, che ne sono il salto più corto.
       landed(undos[undos.length - 1]!.touched);
-      emit({ ...jump.replayed, duplicate: false }, jump.direction);
+      emit({ ...jump.replayed, duplicate: false }, jump.direction, null);
       const back = jump.direction === "undo";
       said.push(plural(undos.length, back ? "draw.history.back.one" : "draw.history.forward.one", back ? "draw.history.back.other" : "draw.history.forward.other", { where: whereNow(mark) }));
     } else {
@@ -634,7 +634,7 @@ export function installOperations(ctx: EditorContext): void {
     }
     history.record(label, outcome);
     refresh();
-    emit(outcome, "input");
+    emit(outcome, "input", outcome.undo.forward);
     return true;
   }
 
