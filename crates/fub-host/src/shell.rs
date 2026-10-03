@@ -87,6 +87,13 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // trova chi li cerca.
     ("shell.doc.source.open", None),
     ("shell.doc.source.close", None),
+    // La sessione live di un disegno (ADR 0204): avviarla col QR, riaprirne
+    // il pannello, terminarla. **Senza accordo**: si avvia una volta per
+    // lezione o riunione, e terminarla con un tasto premuto per sbaglio
+    // staccherebbe il tablet a metà di un tratto.
+    ("shell.live.start", None),
+    ("shell.live.show", None),
+    ("shell.live.stop", None),
     ("shell.pane.split.right", Some("Mod-\\")),
     // **Senza accordo**: `Mod-Shift-\` dentro l'editor è
     // `cursorMatchingBracket`, e lo split non partiva mai mentre si scriveva.

@@ -267,6 +267,9 @@
     "vector-about",
     "vector-about-desc",
     "vector-about-objects",
+    "live-bar",
+    "live-state",
+    "live-follow",
     "markdown-preview",
     "markdown-rendered",
     "markdown-code-copy",
@@ -1052,7 +1055,10 @@
         "vector-notice",
         "vector-about",
         "vector-about-desc",
-        "vector-about-objects"
+        "vector-about-objects",
+        "live-bar",
+        "live-state",
+        "live-follow"
       ],
       "states": [
         "rest"
@@ -1862,7 +1868,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 426,
+    "hooks": 429,
     "state_names": 7,
     "assigned_states": 154,
     "components": 48,

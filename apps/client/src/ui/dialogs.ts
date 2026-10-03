@@ -25,9 +25,10 @@ export interface Frame {
 
 let dialogCount = 0;
 
-/// Apre la forma comune delle domande: `onDismiss` quando l'utente la chiude
-/// con Esc o col clic fuori. Per i moduli che fanno domande loro, come le
-/// proprietà di un disegno.
+/// La cornice di ogni dialogo della shell: la `.modale` col titolo, il fuoco
+/// intrappolato, Esc e il clic fuori che chiudono e chiamano `onDismiss`. La
+/// usano i moduli che fanno domande loro, come le proprietà di un disegno, e
+/// chi ha un pannello suo, come la sessione live.
 export function openFrame(title: string, onDismiss: () => void): Frame {
   const life = openLifetime();
   const overlay = document.createElement("div");
