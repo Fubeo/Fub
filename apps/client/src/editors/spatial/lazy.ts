@@ -1,6 +1,6 @@
-// La superficie del disegno caricata quando serve. Il codice dell'editor e
-// della scena è grande quanto la shell, e chi non apre un disegno non deve
-// scaricarlo: la shell monta subito questo involucro, che ha gli stessi modi e
+// Le superfici del disegno e delle annotazioni caricate quando servono. Il
+// codice dell'editor e della scena è grande quanto la shell, e chi non apre un
+// disegno non deve scaricarlo: la shell monta subito questo involucro, che ha gli stessi modi e
 // lo stesso contratto, e la superficie vera arriva con un `import()`.
 //
 // Finché non arriva l'involucro tiene ciò che la shell gli dice — il testo, la
@@ -13,10 +13,13 @@ import { errorText } from "../../host/errors";
 import { t } from "../../i18n/strings";
 import { notify } from "../../ui/notify";
 import type { EditorSelections, EditorSurface, SelectedText, SurfaceLocation, SurfaceMountContext } from "../core/registry";
-import { VECTOR_MODES, VECTOR_PROFILE } from "./modes";
+import type { SurfaceMode } from "../core/registry";
+import { PDF_MODES, PDF_PROFILE, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
+import type { PdfSurfaceOptions } from "./pdf/surface";
 import type { VectorSurfaceOptions } from "./surface";
 
 type SurfaceModule = typeof import("./surface");
+type PdfSurfaceModule = typeof import("./pdf/surface");
 
 /// Il nome con cui la shell chiama il documento negli avvisi: il file senza
 /// estensione.
@@ -30,6 +33,31 @@ export function mountVectorSurfaceLazily(
   context: SurfaceMountContext,
   options: VectorSurfaceOptions,
   load: () => Promise<SurfaceModule> = () => import("./surface"),
+): EditorSurface {
+  return lazily(context, VECTOR_PROFILE, VECTOR_MODES, async () => {
+    const module = await load();
+    return () => module.mountVectorSurface(context, options);
+  });
+}
+
+export function mountPdfSurfaceLazily(
+  context: SurfaceMountContext,
+  options: PdfSurfaceOptions,
+  load: () => Promise<PdfSurfaceModule> = () => import("./pdf/surface"),
+): EditorSurface {
+  return lazily(context, PDF_PROFILE, PDF_MODES, async () => {
+    const module = await load();
+    return () => module.mountPdfSurface(context, options);
+  });
+}
+
+/// L'involucro di una superficie del profilo `profile`: `load` dà la
+/// funzione che la monta.
+function lazily(
+  context: SurfaceMountContext,
+  profile: string,
+  modes: readonly SurfaceMode[],
+  load: () => Promise<() => EditorSurface>,
 ): EditorSurface {
   const pending = document.createElement("div");
   pending.className = "vector-pending";
@@ -52,11 +80,11 @@ export function mountVectorSurfaceLazily(
   let readOnly = false;
   let reveal: SurfaceLocation | null = null;
 
-  const settle = (module: SurfaceModule): void => {
+  const settle = (mount: () => EditorSurface): void => {
     if (destroyed) return;
     const focused = pending.contains(document.activeElement);
     pending.remove();
-    const mounted = module.mountVectorSurface(context, options);
+    const mounted = mount();
     surface = mounted;
     if (text !== null) mounted.buffer?.setDoc(text);
     if (mode !== "draw") mounted.setMode(mode);
@@ -82,13 +110,13 @@ export function mountVectorSurfaceLazily(
 
   return {
     family: "canvas",
-    profile: VECTOR_PROFILE,
+    profile,
     surfaceId: context.paneId,
-    modes: VECTOR_MODES,
+    modes,
     defaultMode: "draw",
     setMode(next) {
       if (surface !== null) return surface.setMode(next);
-      if (!VECTOR_MODES.some((known) => known.id === next)) throw new RangeError(`surface mode ${next} is not supported`);
+      if (!modes.some((known) => known.id === next)) throw new RangeError(`surface mode ${next} is not supported`);
       mode = next;
     },
     buffer: {

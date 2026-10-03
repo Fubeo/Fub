@@ -123,9 +123,9 @@ fn prose_normalized(source: &str) -> String {
 
 /// **Perché quel punto di codice può nominare `serialize`.**
 ///
-/// Sono due, e nessuna delle due è «sto modificando un documento». Se la ragione
+/// Sono tre, e nessuna delle tre è «sto modificando un documento». Se la ragione
 /// che ti serve non è qui dentro, la risposta quasi sempre non è aggiungerne una
-/// terza: è che quella modifica va fatta con
+/// quarta: è che quella modifica va fatta con
 /// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
 #[derive(Debug)]
 enum Reason {
@@ -144,6 +144,14 @@ enum Reason {
     /// `FormatProvider::serialize`, ma ciò che quel metodo fa. E da lì un file
     /// non si riscrive comunque — un provider non ha un `HostApi` fra le mani.
     TheFormatThatImplementsIt,
+    /// **Un documento che non c'era.** È la generazione che il doc del modulo
+    /// prevede: il testo di `serialize` va soltanto a
+    /// [`create_document`](fub_abi::traits::VaultStructure::create_document), che
+    /// rifiuta un path occupato con `AlreadyExists`, quindi da qui un file che
+    /// esiste non si riscrive nemmeno volendo. Una riga con questa ragione dice
+    /// anche dove finisce il testo: se finisse in `write_document`, la ragione
+    /// sarebbe falsa.
+    ANewDocument,
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +221,23 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         "u64_string::serialize",
         1,
         Reason::AnotherSerialize,
+    ),
+    (
+        // «Annota il PDF»: le annotazioni vuote del provider `fubann`, scritte
+        // con `create_document` soltanto dopo aver visto che non ci sono. Se ci
+        // sono, il comando le apre e non le serializza.
+        "crates/fub-features/src/draw/annotate.rs",
+        ".serialize",
+        1,
+        Reason::ANewDocument,
+    ),
+    (
+        // «Nuovo disegno»: il documento vuoto del provider dei disegni, scritto
+        // con `create_document` e mai sopra un file che c'è.
+        "crates/fub-features/src/draw/create.rs",
+        ".serialize",
+        1,
+        Reason::ANewDocument,
     ),
 ];
 
@@ -482,9 +507,10 @@ fn serialize_is_not_the_way_to_rewrite_an_existing_document() {
          If you are **generating a new document** (a template, \"create\"\n\
          notes) or if it is a `serialize` unrelated to documents (serde),\n\
          then the line should be added here — with its reason in the\n\
-         `Reason` enum, which today has two and neither covers generation.\n\
-         Adding a third is the decision to make, and it is why this file\n\
-         exists.",
+         `Reason` enum. Generation is `ANewDocument`, and only when the\n\
+         text goes to `create_document`, which refuses a taken path; a\n\
+         reason the enum does not have is the decision to make, and it is\n\
+         why this file exists.",
         list(&new)
     );
 

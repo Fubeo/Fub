@@ -83,12 +83,13 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     let mut docs = open.read().unwrap().documents();
     docs.sort();
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
-    // Con la feature `draw` c'è anche il formato delle scene (ADR 0203), e la
-    // shell riconosce da qui le note di cartella `.svg`.
-    #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
+    // Con la feature `draw` ci sono anche i formati delle scene e delle
+    // annotazioni dei PDF (ADR 0203), e la shell riconosce da qui le note di
+    // cartella `.svg`. L'anagrafe le dà in ordine alfabetico.
     let mut extensions = vec!["base", "canvas", "fubsheet", "markdown", "md"];
     #[cfg(feature = "draw")]
-    extensions.push("svg");
+    extensions.extend(["fubann", "svg"]);
+    extensions.sort_unstable();
     assert_eq!(
         info.extensions, extensions,
         "i provider dichiarano le estensioni, non la UI"
@@ -111,36 +112,39 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // renderebbe questo test una tautologia dell'altro.
     let mut plugins: Vec<&str> = info.plugins.iter().map(|p| p.id.as_str()).collect();
     plugins.sort();
-    assert_eq!(
-        plugins,
-        vec![
-            "fub.backlinks",
-            "fub.backup",
-            "fub.base",
-            "fub.blocks",
-            "fub.commands",
-            "fub.core",
-            "fub.dashboard",
-            "fub.formatting",
-            "fub.graph",
-            "fub.importers",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.outline",
-            "fub.properties",
-            "fub.publish",
-            "fub.queries",
-            "fub.search",
-            "fub.serie",
-            "fub.sheet",
-            "fub.stats",
-            "fub.sync",
-            "fub.tags",
-            "fub.template",
-            "fub.trash",
-            "fub.versioning",
-        ]
-    );
+    #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
+    let mut expected = vec![
+        "fub.backlinks",
+        "fub.backup",
+        "fub.base",
+        "fub.blocks",
+        "fub.commands",
+        "fub.core",
+        "fub.dashboard",
+        "fub.formatting",
+        "fub.graph",
+        "fub.importers",
+        "fub.maintenance",
+        "fub.markdown",
+        "fub.outline",
+        "fub.properties",
+        "fub.publish",
+        "fub.queries",
+        "fub.search",
+        "fub.serie",
+        "fub.sheet",
+        "fub.stats",
+        "fub.sync",
+        "fub.tags",
+        "fub.template",
+        "fub.trash",
+        "fub.versioning",
+    ];
+    // Con la feature `draw` c'è anche l'export dei disegni in PNG e PDF.
+    #[cfg(feature = "draw")]
+    expected.push("fub.draw");
+    expected.sort();
+    assert_eq!(plugins, expected);
 
     // E hanno registrato davvero: nessuna si è persa in un conflitto di nomi,
     // che è l'errore che il montaggio riporta su stderr e tira dritto.

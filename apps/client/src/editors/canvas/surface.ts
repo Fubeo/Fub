@@ -6,7 +6,9 @@
 // lettura come fallback quando la vista non è disponibile. Profilo `vector`:
 // i disegni di FubDraw (`editors/spatial/surface.ts`), per il formato `svg`
 // che il kernel monta con la feature `draw`; senza quel formato il profilo
-// non riceve documenti.
+// non riceve documenti. Profilo `pdf`: le annotazioni di un PDF
+// (`editors/spatial/pdf/surface.ts`), per il formato `fubann` della stessa
+// feature.
 
 import type {
   EditorSurface,
@@ -15,8 +17,9 @@ import type {
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
 import { t } from "../../i18n/strings";
 import type { EditorChange, TextOperation } from "../core/text-operation";
-import { mountVectorSurfaceLazily } from "../spatial/lazy";
-import { VECTOR_PROFILE } from "../spatial/modes";
+import { mountPdfSurfaceLazily, mountVectorSurfaceLazily } from "../spatial/lazy";
+import { PDF_PROFILE, VECTOR_PROFILE } from "../spatial/modes";
+import type { PdfPorts } from "../spatial/pdf/surface";
 
 export const CANVAS_OWNER = "fub.shell.canvas";
 export const CANVAS_FAMILY = "canvas" as const;
@@ -24,6 +27,7 @@ export const CANVAS_PROFILE = "canvas";
 export const CANVAS_SOURCE_PROFILE = "source";
 export const CANVAS_FORMAT = "canvas";
 export const SVG_FORMAT = "svg";
+export const FUBANN_FORMAT = "fubann";
 
 export interface CanvasSurfaceCallbacks {
   /** A drawing's change is a plain text operation; a board's is a `CanvasOperation`. */
@@ -36,6 +40,8 @@ export interface CanvasSurfaceCallbacks {
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
+  /** Where annotations read their PDF: without it the pages are blank. */
+  readonly pdf?: PdfPorts;
 }
 
 /** Signature precisa del mount per Main: factory + modes + fallback. */
@@ -43,31 +49,41 @@ export interface CanvasMountSignature {
   readonly owner: typeof CANVAS_OWNER;
   readonly family: typeof CANVAS_FAMILY;
   readonly defaultProfile: typeof CANVAS_PROFILE;
-  readonly profiles: readonly [typeof CANVAS_PROFILE, typeof CANVAS_SOURCE_PROFILE, typeof VECTOR_PROFILE];
-  readonly formats: { readonly [CANVAS_FORMAT]: typeof CANVAS_PROFILE; readonly [SVG_FORMAT]: typeof VECTOR_PROFILE };
+  readonly profiles: readonly [typeof CANVAS_PROFILE, typeof CANVAS_SOURCE_PROFILE, typeof VECTOR_PROFILE, typeof PDF_PROFILE];
+  readonly formats: {
+    readonly [CANVAS_FORMAT]: typeof CANVAS_PROFILE;
+    readonly [SVG_FORMAT]: typeof VECTOR_PROFILE;
+    readonly [FUBANN_FORMAT]: typeof PDF_PROFILE;
+  };
   readonly modes: readonly [
     { id: "canvas"; presentation: "surface"; contextMode: "live_preview" },
     { id: "source"; presentation: "surface"; contextMode: "source" },
     { id: "draw"; presentation: "surface"; contextMode: "live_preview" },
     { id: "read"; presentation: "rendered"; contextMode: "reading" },
   ];
-  /** «Apri come sorgente»: a drawing is also SVG text, with its preview beside. */
-  readonly sourceViews: { readonly [VECTOR_PROFILE]: { readonly family: "text"; readonly profile: "svg" } };
+  /** «Apri come sorgente»: a drawing, and annotations, are also SVG text, with the preview beside. */
+  readonly sourceViews: {
+    readonly [VECTOR_PROFILE]: { readonly family: "text"; readonly profile: "svg" };
+    readonly [PDF_PROFILE]: { readonly family: "text"; readonly profile: "svg" };
+  };
 }
 
 export const CANVAS_MOUNT: CanvasMountSignature = {
   owner: CANVAS_OWNER,
   family: CANVAS_FAMILY,
   defaultProfile: CANVAS_PROFILE,
-  profiles: [CANVAS_PROFILE, CANVAS_SOURCE_PROFILE, VECTOR_PROFILE],
-  formats: { [CANVAS_FORMAT]: CANVAS_PROFILE, [SVG_FORMAT]: VECTOR_PROFILE },
+  profiles: [CANVAS_PROFILE, CANVAS_SOURCE_PROFILE, VECTOR_PROFILE, PDF_PROFILE],
+  formats: { [CANVAS_FORMAT]: CANVAS_PROFILE, [SVG_FORMAT]: VECTOR_PROFILE, [FUBANN_FORMAT]: PDF_PROFILE },
   modes: [
     { id: "canvas", presentation: "surface", contextMode: "live_preview" },
     { id: "source", presentation: "surface", contextMode: "source" },
     { id: "draw", presentation: "surface", contextMode: "live_preview" },
     { id: "read", presentation: "rendered", contextMode: "reading" },
   ],
-  sourceViews: { [VECTOR_PROFILE]: { family: "text", profile: "svg" } },
+  sourceViews: {
+    [VECTOR_PROFILE]: { family: "text", profile: "svg" },
+    [PDF_PROFILE]: { family: "text", profile: "svg" },
+  },
 };
 
 /** Crea la superficie canvas per un profilo; la registrazione resta a Main. */
@@ -76,7 +92,7 @@ export function mountCanvasSurface(
   context: SurfaceMountContext,
   callbacks: CanvasSurfaceCallbacks,
 ): EditorSurface {
-  if (profile !== CANVAS_PROFILE && profile !== CANVAS_SOURCE_PROFILE && profile !== VECTOR_PROFILE) {
+  if (profile !== CANVAS_PROFILE && profile !== CANVAS_SOURCE_PROFILE && profile !== VECTOR_PROFILE && profile !== PDF_PROFILE) {
     throw new Error(`canvas surface profile ${profile} is not registered`);
   }
   context.parent.replaceChildren();
@@ -84,6 +100,13 @@ export function mountCanvasSurface(
     return mountVectorSurfaceLazily(context, {
       onChange: (change) => callbacks.onChange(context.paneId, change),
       onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
+    });
+  }
+  if (profile === PDF_PROFILE) {
+    return mountPdfSurfaceLazily(context, {
+      onChange: (change) => callbacks.onChange(context.paneId, change),
+      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
+      pdf: callbacks.pdf,
     });
   }
   const host = document.createElement("div");

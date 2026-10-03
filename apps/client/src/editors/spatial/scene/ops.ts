@@ -4,11 +4,12 @@
 // sezioni.
 //
 // Le forme pubbliche sono quelle della tabella di §2, le stesse sulla rete e
-// nell'undo. Tre inverse hanno una forma in più, che scrive soltanto il
+// nell'undo. Quattro inverse hanno una forma in più, che scrive soltanto il
 // motore: `add` con `slot` rimette esattamente ciò che un `remove` ha tolto,
 // anche un elemento estraneo; `move` con `slot` riporta un elemento al punto
-// esatto da cui è partito; `page` con `previous` rimette i valori di prima,
-// anche assenti. Non arrivano mai dalla rete: `parseWireOp` le rifiuta.
+// esatto da cui è partito; `page` e `anchor` con `previous` rimettono i
+// valori di prima, anche assenti. Non arrivano mai dalla rete: `parseWireOp`
+// le rifiuta.
 
 import { utf8Length } from "./text";
 import type { Elem } from "./serialize";
@@ -140,6 +141,25 @@ export interface AdoptOp {
   readonly undo?: boolean;
 }
 
+/// I valori di `fub:digest` e `fub:pages` sulla radice prima di un
+/// `anchor`, così come erano scritti: `null` è un attributo assente. Lo scrive
+/// solo il motore, nell'inversa.
+export interface AnchorPrevious {
+  readonly digest: string | null;
+  readonly pages: string | null;
+}
+
+/// Lega le annotazioni di un PDF alla versione che si annota: l'impronta
+/// (`sha256:` e 64 cifre minuscole) e il numero di pagine sulla radice
+/// (`docs/reference/annotation-format.md`). Quello che manca resta com'è, ma
+/// almeno uno c'è.
+export interface AnchorOp {
+  readonly op: "anchor";
+  readonly digest?: string;
+  readonly pages?: number;
+  readonly previous?: AnchorPrevious;
+}
+
 export interface BatchOp {
   readonly op: "batch";
   readonly ops: readonly Op[];
@@ -159,6 +179,7 @@ export type Op =
   | PageOp
   | MetaOp
   | AdoptOp
+  | AnchorOp
   | BatchOp;
 
 /// Perché un'operazione viene rifiutata (§3).
@@ -174,7 +195,7 @@ export type Reason =
   | "limit"
   | "read-only";
 
-const OP_NAMES: ReadonlySet<string> = new Set(["add", "remove", "set", "text", "move", "ident", "page", "meta", "adopt", "batch"]);
+const OP_NAMES: ReadonlySet<string> = new Set(["add", "remove", "set", "text", "move", "ident", "page", "meta", "adopt", "anchor", "batch"]);
 
 /// Un'operazione arrivata dalla rete, già letta dal JSON: la stessa, se ha
 /// una forma pubblica e sta nei limiti, oppure il motivo del rifiuto. La

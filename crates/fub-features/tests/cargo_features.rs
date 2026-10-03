@@ -117,7 +117,21 @@ fn every_row_of_the_inventory_has_the_its_cargo_feature() {
     }
 }
 
-/// Ogni cargo feature è accesa di default.
+/// Le cargo feature che stanno fuori da `default` **di proposito**: il nome, se
+/// questa build l'ha accesa, e perché è fuori.
+///
+/// È l'unico elenco del genere, e il perché è obbligatorio: senza, una
+/// feature fuori dal default è una dimenticanza che non si distingue da una
+/// scelta.
+const OUT_OF_DEFAULT: &[(&str, bool, &str)] = &[(
+    "draw",
+    cfg!(feature = "draw"),
+    "l'export dei disegni va con il formato dei disegni, che in `fub-host` sta \
+     dietro la feature `draw`, fuori dal default fino a che FubDraw non entra \
+     nell'app",
+)];
+
+/// Ogni cargo feature è accesa di default, tranne quelle dichiarate qui sopra.
 ///
 /// Il default **è** l'applicazione che spediamo: una feature ufficiale fuori da
 /// `default` sarebbe una feature che l'utente non ha, e la si sarebbe spenta
@@ -126,10 +140,23 @@ fn every_row_of_the_inventory_has_the_its_cargo_feature() {
 #[test]
 fn every_cargo_feature_and_on_of_default() {
     let (declared, default) = declared();
+    let out: BTreeSet<String> = OUT_OF_DEFAULT
+        .iter()
+        .map(|(name, _, why)| {
+            assert!(!why.is_empty());
+            assert!(declared.contains(*name), "«{name}» non è una cargo feature");
+            assert!(
+                !default.contains(*name),
+                "«{name}» è dichiarata fuori ed è in `default`"
+            );
+            name.to_string()
+        })
+        .collect();
     assert_eq!(
-        declared, default,
+        declared.difference(&out).cloned().collect::<BTreeSet<_>>(),
+        default,
         "le cargo feature dichiarate e quelle in `default` non coincidono: \
-         l'app che spediamo le ha tutte"
+         l'app che spediamo le ha tutte, tranne quelle in `OUT_OF_DEFAULT`"
     );
 }
 
@@ -140,7 +167,8 @@ fn every_cargo_feature_and_on_of_default() {
 /// test resterebbe verde — l'inventario sarebbe più corto, non incoerente. Il
 /// `cfg` in testa è l'unico posto di questo file in cui i dieci nomi sono
 /// scritti, e serve a dire *quando* la domanda ha senso: in una build parziale
-/// l'inventario è più corto di proposito.
+/// l'inventario è più corto di proposito. Le feature fuori dal default non ci
+/// sono: contano se la build le ha accese, e lo dice `OUT_OF_DEFAULT`.
 #[test]
 #[cfg(all(
     feature = "search",
@@ -156,8 +184,14 @@ fn every_cargo_feature_and_on_of_default() {
 ))]
 fn with_all_the_feature_the_two_lists_coincide() {
     let (declared, _) = declared();
+    // Una feature fuori dal default c'è nell'inventario solo se questa build
+    // l'ha accesa.
+    let expected: BTreeSet<String> = declared
+        .into_iter()
+        .filter(|name| OUT_OF_DEFAULT.iter().all(|(out, on, _)| out != name || *on))
+        .collect();
     assert_eq!(
-        declared,
+        expected,
         in_the_inventory(),
         "una cargo feature senza riga nell'inventario è un bundle che il \
          `Cargo.toml` promette e che non si monta"

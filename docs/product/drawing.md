@@ -17,6 +17,9 @@ pesa su chi non ne apre. Se non arriva, il riquadro lo dice, e «Apri come
 sorgente» mostra comunque il testo
 (`apps/client/src/editors/spatial/lazy.ts`).
 
+Le annotazioni di un PDF usano lo stesso editor, con le pagine del PDF sotto:
+le descrive [Annotazioni dei PDF](pdf-annotations.md).
+
 Il file resta un SVG che qualunque browser o editor apre. I dati che servono a
 Fub stanno in pochi attributi del namespace `fub`; la forma esatta è nel
 [formato della scena](../reference/scene-format.md), le modifiche che il

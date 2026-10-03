@@ -70,7 +70,10 @@ deterministica fra omonimi; il secondo solo per path relativo al documento.
 Fra omonimi vince il più vicino alla radice, poi l'ordine dei path; fra
 formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il nome
 nudo porta prima al formato che dichiara un sorgente di prosa
-(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Heading e blocchi condividono slug e ancore
+(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un
+path che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina
+quel file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
+Heading e blocchi condividono slug e ancore
 canoniche; un punto rinominato apre la nota senza inventare una destinazione.
 Completamento e cambio rapido propongono nomi per pertinenza senza riordinare
 nella shell, e la rinomina riscrive soltanto i wikilink che nominavano la nota,

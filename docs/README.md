@@ -33,6 +33,7 @@ flowchart LR
 - [Vault e file](product/vault-and-files.md)
 - [Editor e anteprima](product/editor-and-preview.md)
 - [Disegni](product/drawing.md)
+- [Annotazioni dei PDF](product/pdf-annotations.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
 - [Budget prestazionale](product/performance-budget.md)
@@ -65,6 +66,7 @@ flowchart LR
 - [Permessi e sicurezza](reference/permissions-and-security.md)
 - [Formato della scena](reference/scene-format.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
+- [Formato delle annotazioni PDF](reference/annotation-format.md)
 
 ## Vedere stato e direzione
 

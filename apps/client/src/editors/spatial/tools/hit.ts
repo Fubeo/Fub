@@ -197,13 +197,19 @@ export class SceneIndexer {
 
   constructor(private readonly builder: PaintBuilder) {}
 
-  /// L'indice di `model`, che il `PaintBuilder` ha appena disegnato.
-  index(model: DocumentModel): SceneIndex {
+  /// L'indice di `model`, che il `PaintBuilder` ha appena disegnato. Con
+  /// `scope` gli oggetti sono solo quelli dei contenitori che elenca, figli
+  /// della radice trattati come livelli: i gruppi della pagina che si annota.
+  index(model: DocumentModel, scope?: readonly ContainerNode[]): SceneIndex {
     const units: Unit[] = [];
     const layers: LayerInfo[] = [];
     const root = model.root;
     const rootStyle = styleOf(INITIAL, this.builder.headInfo(root).attrs);
     childLoop(root, (child, index) => {
+      if (scope !== undefined) {
+        if (child.kind === "container" && scope.includes(child)) this.layer(child, index, false, rootStyle, units, layers);
+        return;
+      }
       if (child.kind === "leaf") {
         if (child.details === null) return;
         const role = child.details.role;
@@ -216,19 +222,33 @@ export class SceneIndexer {
         this.unit(child, [index], null, IDENTITY, rootStyle, units);
         return;
       }
-      const head = this.builder.headInfo(child);
-      const matrix = compose(IDENTITY, transformOf(head.attrs));
       const layer = child.details!.layer!;
-      const info: LayerInfo = { id: child.facts.id, path: [index], locked: layer.locked, hidden: layer.hidden || head.hidden, matrix };
-      layers.push(info);
-      if (info.locked || info.hidden) return;
-      const style = styleOf(rootStyle, head.attrs);
-      childLoop(child, (grandchild, inner) => {
-        if (grandchild.kind === "leaf" && (grandchild.details === null || grandchild.details.role === "title" || grandchild.details.role === "desc")) return;
-        this.unit(grandchild, [index, inner], info.id, matrix, style, units);
-      });
+      this.layer(child, index, layer.locked, rootStyle, units, layers, layer.hidden);
     });
     return new SceneIndex(units, layers);
+  }
+
+  /// Un livello, o un contenitore trattato come tale: i suoi figli sono
+  /// oggetti, se non è bloccato o nascosto.
+  private layer(
+    child: ContainerNode,
+    index: number,
+    locked: boolean,
+    rootStyle: Style,
+    units: Unit[],
+    layers: LayerInfo[],
+    hidden = false,
+  ): void {
+    const head = this.builder.headInfo(child);
+    const matrix = compose(IDENTITY, transformOf(head.attrs));
+    const info: LayerInfo = { id: child.facts.id, path: [index], locked, hidden: hidden || head.hidden, matrix };
+    layers.push(info);
+    if (info.locked || info.hidden) return;
+    const style = styleOf(rootStyle, head.attrs);
+    childLoop(child, (grandchild, inner) => {
+      if (grandchild.kind === "leaf" && (grandchild.details === null || grandchild.details.role === "title" || grandchild.details.role === "desc")) return;
+      this.unit(grandchild, [index, inner], info.id, matrix, style, units);
+    });
   }
 
   /// Aggiunge a `out` l'oggetto `node`, se si vede.
