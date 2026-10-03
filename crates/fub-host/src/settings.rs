@@ -241,6 +241,9 @@ pub const SYNC_PAUSED: &str = "sync.paused";
 pub const SYNC_EXCLUDE: &str = "sync.exclude";
 /// Endpoint locale di pubblicazione; credenziali e segreti restano fuori dai settings.
 pub const PUBLISH_SERVER_URL: &str = "publish.server_url";
+/// La porta della sessione live (ADR 0204): 0 sceglie una porta libera a ogni
+/// sessione, un altro numero la fissa per le reti con regole del firewall.
+pub const LIVE_PORT: &str = "live.port";
 
 /// Le impostazioni del bundle di core.
 ///
@@ -324,6 +327,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(log_verbose_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
+    settings.extend(live_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -754,6 +758,31 @@ fn service_settings() -> Vec<SettingSpec> {
     ]
 }
 
+/// La sessione live: di macchina, perché la porta è una regola del firewall di
+/// questo PC e non di un vault.
+fn live_settings() -> Vec<SettingSpec> {
+    vec![SettingSpec::new(
+        LIVE_PORT,
+        Text::key(C_LIVE_PORT),
+        SettingKind::Number {
+            default: 0.0,
+            min: Some(0.0),
+            max: Some(f64::from(u16::MAX)),
+        },
+    )
+    .describing(Text::key(C_LIVE_PORT_DESC))
+    .grouped(Text::key(C_GROUP_LIVE))
+    .for_machine()]
+}
+
+/// La porta di [`LIVE_PORT`] da un valore della macchina: 0, cioè una porta
+/// libera, se la chiave manca o il valore non è un intero da 0 a 65535.
+pub fn live_port(value: Option<f64>) -> u16 {
+    value
+        .filter(|port| port.fract() == 0.0 && (0.0..=f64::from(u16::MAX)).contains(port))
+        .map_or(0, |port| port as u16)
+}
+
 /// La memoria di ciò che si è cercato e aperto come [`SettingSpec`] (§21.7).
 ///
 /// **Non** `program_writable`, e qui la ragione non è la reversibilità: è la
@@ -950,6 +979,9 @@ const C_SYNC_EXCLUDE_DESC: &str = "core.sync.exclude.desc";
 const C_GROUP_PUBLISH: &str = "core.group.publish";
 const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
 const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
+const C_GROUP_LIVE: &str = "core.group.live";
+const C_LIVE_PORT: &str = "core.live.port";
+const C_LIVE_PORT_DESC: &str = "core.live.port.desc";
 
 /// L'etichetta italiana di un gradino del log. È prosa e non il nome tecnico:
 /// «info» dice poco a chi non sviluppa, «Info, avvisi ed errori» dice cosa
@@ -1060,6 +1092,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "Un template vale solo per una cattura che crea una nota.")
         .with("host.capture.moved", "«{doc}» è cambiata durante la cattura: riprova.")
         .with("host.capture.source", "Fonte: {url}")
+        .with("host.live.offline", "Il PC non è su una rete locale: nessuna interfaccia attiva ha un indirizzo IPv4 privato.")
+        .with("host.live.interfaces", "Le interfacce di rete non si leggono: {why}")
+        .with("host.live.address", "{address} non è l'indirizzo privato di un'interfaccia attiva.")
+        .with("host.live.bind", "Il PC non riesce ad aspettare il tablet su {address}: {why}")
+        .with("host.live.busy", "«{document}» ha già una sessione live.")
+        .with("host.live.unknown", "Questa finestra non ha la sessione live {session}.")
+        .with("host.live.document", "Il percorso o il titolo del disegno sono troppo lunghi per la sessione live.")
+        .with("host.live.too_large", "Il disegno è troppo grande per la sessione live: il tablet non lo può modificare.")
+        .with("host.live.ended", "La sessione live è finita.")
+        .with("host.live.writer_connected", "Il tablet è collegato: un QR nuovo si chiede quando esce.")
+        .with("host.live.refused", "La sessione live ha rifiutato il messaggio: {why}")
+        .with("host.live.internal", "La sessione live non si è potuta preparare: {why}")
         .with("host.snapshot.create.title", "Snapshot completo del vault")
         .with("host.snapshot.create.desc", "Chiude il vault, ne copia ogni voce autorevole in una cartella esterna nuova e lo riapre.")
         .with("host.snapshot.apply.title", "Ripristina uno snapshot completo")
@@ -1249,6 +1293,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_PUBLISH_SERVER_URL_DESC,
             "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
         )
+        .with(C_GROUP_LIVE, "Sessione live")
+        .with(C_LIVE_PORT, "Porta della sessione live")
+        .with(
+            C_LIVE_PORT_DESC,
+            "La porta su cui il PC aspetta il tablet. 0 sceglie una porta libera a ogni sessione; un numero fisso serve alle reti con regole del firewall.",
+        )
         .with(C_GROUP_DIAGNOSTICS, "Diagnostica")
         .with(C_LOG_LEVEL, "Livello del log")
         .with(
@@ -1312,6 +1362,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "A template only applies to a capture that creates a note.")
         .with("host.capture.moved", "“{doc}” changed during the capture: try again.")
         .with("host.capture.source", "Source: {url}")
+        .with("host.live.offline", "The PC is not on a local network: no active interface has a private IPv4 address.")
+        .with("host.live.interfaces", "The network interfaces cannot be read: {why}")
+        .with("host.live.address", "{address} is not the private address of an active interface.")
+        .with("host.live.bind", "The PC cannot wait for the tablet on {address}: {why}")
+        .with("host.live.busy", "“{document}” already has a live session.")
+        .with("host.live.unknown", "This window has no live session {session}.")
+        .with("host.live.document", "The drawing's path or title is too long for the live session.")
+        .with("host.live.too_large", "The drawing is too large for the live session: the tablet cannot edit it.")
+        .with("host.live.ended", "The live session has ended.")
+        .with("host.live.writer_connected", "The tablet is connected: ask for a new QR code once it leaves.")
+        .with("host.live.refused", "The live session refused the message: {why}")
+        .with("host.live.internal", "The live session could not be prepared: {why}")
         .with("host.snapshot.create.title", "Full vault snapshot")
         .with("host.snapshot.create.desc", "Closes the vault, copies every authoritative entry into a new external folder and reopens it.")
         .with("host.snapshot.apply.title", "Restore a full snapshot")
@@ -1494,6 +1556,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
+        .with(C_GROUP_LIVE, "Live session")
+        .with(C_LIVE_PORT, "Live session port")
+        .with(
+            C_LIVE_PORT_DESC,
+            "The port on which the PC waits for the tablet. 0 picks a free port for each session; a fixed number suits networks with firewall rules.",
         )
         .with(C_GROUP_DIAGNOSTICS, "Diagnostics")
         .with(C_LOG_LEVEL, "Log level")
@@ -1757,6 +1825,30 @@ mod tests {
     fn a_vault_without_keys_not_asks_nothing() {
         assert!(keys_to_watch(&BTreeMap::new(), &BTreeMap::new()).is_empty());
         assert!(keys_to_watch(&BTreeMap::new(), &map(&[("keys.a", "Mod-a")])).is_empty());
+    }
+
+    #[test]
+    fn the_live_port_is_a_machine_number_and_reads_back_as_a_port() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == LIVE_PORT)
+            .expect("il core dichiara la porta della sessione live");
+        // La porta è una regola del firewall di questo PC, non di un vault.
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        let SettingKind::Number { default, min, max } = spec.kind else {
+            panic!("la porta è un numero");
+        };
+        assert_eq!((default, min, max), (0.0, Some(0.0), Some(65535.0)));
+
+        assert_eq!(live_port(None), 0);
+        assert_eq!(live_port(Some(0.0)), 0);
+        assert_eq!(live_port(Some(4000.0)), 4000);
+        assert_eq!(live_port(Some(65535.0)), 65535);
+        // Un valore che non è una porta vale «una porta libera», non un
+        // troncamento a una porta che nessuno ha scelto.
+        for invalid in [-1.0, 65536.0, 4000.5, f64::NAN, f64::INFINITY] {
+            assert_eq!(live_port(Some(invalid)), 0, "{invalid}");
+        }
     }
 
     #[test]

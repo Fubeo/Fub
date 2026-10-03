@@ -207,8 +207,8 @@
       "version": "2.1.0",
       "enabled": true,
       "consent": "granted",
-      "runtime_known": true,
-      "revoked": false
+      "revoked": false,
+      "runtime_known": true
     }
   ],
   "VaultEntry": [
@@ -369,5 +369,419 @@
       "detail": "nothing to back up",
       "restart_required": false
     }
+  ],
+  "LiveStart": [
+    {
+      "document": {
+        "id": "disegni/schizzo.svg",
+        "title": "Schizzo"
+      },
+      "snapshot": {
+        "seq": "0",
+        "text": "<svg/>"
+      },
+      "address": "192.168.1.20"
+    },
+    {
+      "document": {
+        "id": "disegni/schizzo.svg",
+        "title": "Schizzo"
+      },
+      "snapshot": {
+        "seq": "0",
+        "text": "<svg/>"
+      }
+    }
+  ],
+  "LiveStarted": [
+    {
+      "session": {
+        "session": "AAAAAAAAAAA",
+        "addr": "192.168.1.20:52114",
+        "fingerprint": "A9Zt0Ig1wco_EozOrNHzGslBYwlrIPRFroQoW8CDLXI",
+        "hostName": "Studio"
+      },
+      "pairing": {
+        "payload": "fubdraw://live?v=1",
+        "qrSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+        "expiresInMs": 300000
+      },
+      "addresses": [
+        {
+          "addr": "192.168.1.20",
+          "interface": "wlan0",
+          "defaultRoute": true
+        },
+        {
+          "addr": "10.0.0.5",
+          "interface": "wlan0",
+          "defaultRoute": false
+        }
+      ]
+    }
+  ],
+  "SessionInfo": [
+    {
+      "session": "AAAAAAAAAAA",
+      "addr": "192.168.1.20:52114",
+      "fingerprint": "A9Zt0Ig1wco_EozOrNHzGslBYwlrIPRFroQoW8CDLXI",
+      "hostName": "Studio"
+    },
+    {
+      "session": "AAAAAAAAAAA",
+      "addr": "192.168.1.20:52114",
+      "fingerprint": "A9Zt0Ig1wco_EozOrNHzGslBYwlrIPRFroQoW8CDLXI",
+      "hostName": null
+    }
+  ],
+  "Pairing": [
+    {
+      "payload": "fubdraw://live?v=1",
+      "qrSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+      "expiresInMs": 300000
+    }
+  ],
+  "LiveAddress": [
+    {
+      "addr": "192.168.1.20",
+      "interface": "wlan0",
+      "defaultRoute": true
+    }
+  ],
+  "LiveEvent": [
+    {
+      "t": "writerConnected",
+      "writer": "1",
+      "device": {
+        "name": "Tablet",
+        "kind": "tablet"
+      },
+      "caps": {
+        "pressure": true,
+        "tilt": false,
+        "coalesced": true,
+        "predicted": false
+      },
+      "resumed": false
+    },
+    {
+      "t": "writerDisconnected",
+      "writer": "1",
+      "reason": "lost",
+      "resumable": true
+    },
+    {
+      "t": "writerReleased",
+      "writer": "1",
+      "reason": "resumeExpired"
+    },
+    {
+      "t": "inkBegin",
+      "s": "o7k2m9x4q",
+      "layer": "l1a2b3c4d",
+      "tool": "pen",
+      "fill": "#0072b2",
+      "fillOpacity": 1.0,
+      "brush": "pf1 size=4"
+    },
+    {
+      "t": "inkPoints",
+      "s": "o7k2m9x4q",
+      "pts": [
+        [
+          10.0,
+          20.0,
+          0.5,
+          1000.0
+        ],
+        [
+          11.5,
+          21.25,
+          0.55,
+          1008.0
+        ]
+      ]
+    },
+    {
+      "t": "inkEnd",
+      "s": "o7k2m9x4q"
+    },
+    {
+      "t": "inkCancel",
+      "s": "o7k2m9x4q"
+    },
+    {
+      "t": "inkGap",
+      "strokes": [
+        "o7k2m9x4q"
+      ]
+    },
+    {
+      "t": "view",
+      "x": -40.0,
+      "y": 12.5,
+      "scale": 1.5,
+      "w": 1280.0,
+      "h": 800.0
+    },
+    {
+      "t": "commit",
+      "writer": "1",
+      "c": "4",
+      "ops": [
+        {
+          "op": "add",
+          "parent": "l1a2b3c4d"
+        }
+      ]
+    },
+    {
+      "t": "clock",
+      "offsetMs": -12.5,
+      "rttMs": 8.0
+    },
+    {
+      "t": "pairingExpired"
+    },
+    {
+      "t": "snapshotWanted"
+    },
+    {
+      "t": "ended",
+      "reason": "readOnly"
+    }
+  ],
+  "LeaveReason": [
+    "lost",
+    "heartbeat",
+    "writerBye",
+    "sessionEnded",
+    "congested",
+    "tooMuchTraffic",
+    {
+      "violation": {
+        "code": 4002
+      }
+    }
+  ],
+  "ReleaseReason": [
+    "resumeExpired",
+    "pairingRenewed"
+  ],
+  "EndReason": [
+    "hostClosing",
+    "terminated",
+    "documentClosed",
+    "readOnly"
+  ],
+  "LiveStatus": [
+    {
+      "ended": false,
+      "seq": "9",
+      "pairingExpiresInMs": null,
+      "writer": {
+        "writer": "1",
+        "device": {
+          "name": "Tablet",
+          "kind": "tablet"
+        },
+        "caps": {
+          "pressure": true,
+          "tilt": false,
+          "coalesced": true,
+          "predicted": false
+        },
+        "connected": true,
+        "resumeExpiresInMs": null,
+        "lastC": "3",
+        "clock": {
+          "offsetMs": -12.5,
+          "rttMs": 8.0
+        }
+      },
+      "pending": [
+        {
+          "writer": "1",
+          "c": "4",
+          "ops": [
+            {
+              "op": "add",
+              "parent": "l1a2b3c4d"
+            }
+          ]
+        }
+      ],
+      "stats": {
+        "accepted": "3",
+        "refused": "0",
+        "admitted": "2",
+        "rejected": "1",
+        "commits": "4",
+        "answered": "3"
+      }
+    },
+    {
+      "ended": false,
+      "seq": "0",
+      "pairingExpiresInMs": 300000,
+      "writer": null,
+      "pending": [],
+      "stats": {
+        "accepted": "0",
+        "refused": "0",
+        "admitted": "0",
+        "rejected": "0",
+        "commits": "0",
+        "answered": "0"
+      }
+    }
+  ],
+  "WriterStatus": [
+    {
+      "writer": "1",
+      "device": {
+        "name": "Tablet",
+        "kind": "tablet"
+      },
+      "caps": {
+        "pressure": true,
+        "tilt": false,
+        "coalesced": true,
+        "predicted": false
+      },
+      "connected": true,
+      "resumeExpiresInMs": null,
+      "lastC": "3",
+      "clock": {
+        "offsetMs": -12.5,
+        "rttMs": 8.0
+      }
+    },
+    {
+      "writer": "1",
+      "device": {
+        "name": "Tablet",
+        "kind": "tablet"
+      },
+      "caps": {
+        "pressure": true,
+        "tilt": false,
+        "coalesced": true,
+        "predicted": false
+      },
+      "connected": false,
+      "resumeExpiresInMs": 120000,
+      "lastC": "3",
+      "clock": null
+    }
+  ],
+  "ClockEstimate": [
+    {
+      "offsetMs": -12.5,
+      "rttMs": 8.0
+    },
+    {
+      "offsetMs": 0.0,
+      "rttMs": null
+    }
+  ],
+  "PendingCommit": [
+    {
+      "writer": "1",
+      "c": "4",
+      "ops": [
+        {
+          "op": "add",
+          "parent": "l1a2b3c4d"
+        }
+      ]
+    }
+  ],
+  "Stats": [
+    {
+      "accepted": "3",
+      "refused": "0",
+      "admitted": "2",
+      "rejected": "1",
+      "commits": "4",
+      "answered": "3"
+    }
+  ],
+  "StopReport": [
+    {
+      "pending": [
+        {
+          "writer": "1",
+          "c": "4",
+          "ops": [
+            {
+              "op": "add",
+              "parent": "l1a2b3c4d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "pending": []
+    }
+  ],
+  "ShellMessage": [
+    {
+      "t": "ack",
+      "writer": "1",
+      "c": "4",
+      "seq": "9",
+      "echo": [
+        {
+          "op": "add",
+          "parent": "l1a2b3c4d"
+        }
+      ],
+      "duplicate": false
+    },
+    {
+      "t": "nack",
+      "writer": "1",
+      "c": "5",
+      "reason": "missing-parent",
+      "detail": "the parent does not exist",
+      "index": 0
+    },
+    {
+      "t": "nack",
+      "writer": "1",
+      "c": "6",
+      "reason": "limit",
+      "detail": "",
+      "index": null
+    },
+    {
+      "t": "ops",
+      "seq": "10",
+      "ops": [
+        {
+          "op": "add",
+          "parent": "l1a2b3c4d"
+        }
+      ]
+    },
+    {
+      "t": "snapshot",
+      "seq": "11",
+      "text": "<svg/>"
+    }
+  ],
+  "NackReason": [
+    "missing-target",
+    "missing-parent",
+    "missing-anchor",
+    "duplicate-id",
+    "invalid-elem",
+    "locked",
+    "foreign",
+    "cycle",
+    "limit",
+    "read-only"
   ]
 }

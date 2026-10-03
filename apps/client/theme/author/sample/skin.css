@@ -2105,6 +2105,36 @@ progress::-moz-progress-bar {
   font-size: var(--text-sm);
 }
 
+/* La sessione live. La riga dell'indicatore ha il fondo della barra
+   dell'editor. Il pallino dice lo stato col colore, e il testo accanto lo
+   ripete: verde col tablet collegato, ambra mentre aspetta la ripresa,
+   spento altrimenti. «Segui il tablet» acceso ha il fondo di un comando
+   scelto. */
+.live-bar {
+  gap: 0 var(--space-3);
+  padding: 0 var(--space-2);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.live-state,
+.live-follow {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+.live-state::before {
+  background: var(--muted);
+}
+.live-bar[data-phase="connected"] .live-state::before {
+  background: var(--success);
+}
+.live-bar[data-phase="away"] .live-state::before {
+  background: var(--warning);
+}
+.live-follow[aria-pressed="true"] {
+  background: var(--bg-active);
+  box-shadow: var(--shadow-sm);
+}
+
 /* ── skin/base.css ──────────────────────────────────────────────────────── */
 
 /* Le viste Base consumano ruoli del tema; layout e dimensioni stanno nella struttura. */

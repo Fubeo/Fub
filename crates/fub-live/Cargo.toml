@@ -1,0 +1,43 @@
+[package]
+name = "fub-live"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Fub's live drawing session: protocol types, pairing, TLS with a pinned ephemeral certificate, the WebSocket server on the PC and the client for the tablet. No dependency on the kernel, the host or tauri."
+
+[dependencies]
+# Le feature che il servizio usa davvero: un runtime da far girare (`rt`), il
+# socket (`net`), le scadenze (`time`), i segnali fra task (`sync`), `select!`
+# (`macros`) e la chiusura ordinata del flusso TLS (`io-util`).
+tokio = { workspace = true, features = [
+    "rt",
+    "net",
+    "time",
+    "sync",
+    "macros",
+    "io-util",
+] }
+tokio-tungstenite = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls = { workspace = true }
+rcgen = { workspace = true }
+qrcode = { workspace = true }
+futures-util = { workspace = true }
+if-addrs = { workspace = true }
+ring = { workspace = true }
+subtle = { workspace = true }
+zeroize = { workspace = true }
+base64 = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+# `raw_value`: le operazioni di un commit restano il testo ricevuto, controllato
+# nella forma, invece di un albero `Value` che per numeri piccoli pesa dieci
+# volte il JSON.
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Il tempo in pausa (`test-util`) rende deterministiche le prove dei 5 secondi
+# del `hello`, dei 10 dell'heartbeat e dei 2 minuti della ripresa.
+tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }

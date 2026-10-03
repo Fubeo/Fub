@@ -29,6 +29,7 @@ import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, ReadError, type ReadOnly } from "./scene/read";
 import { createDrawEditor, type DrawEditor } from "./tools/editor";
+import { noteSceneChange, offerStage } from "./live/registry";
 
 type VectorMode = "draw" | "read";
 
@@ -132,12 +133,15 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       onChange: (change) => {
         text = change.text;
         opened = { kind: "scene", engine: mounted.engine };
+        noteSceneChange(change.text, change.op);
         options.onChange(change);
         paint();
       },
       onSelectionChange: () => options.onSelectionChange(),
     });
     mounted.setReadOnly(readOnly);
+    // Il foglio per la sessione live, finché l'editor c'è.
+    owner.add(offerStage(context.documentId, { root, stage: mounted.stage, visible: () => !drawHost.hidden }));
     editorLife = owner;
     editor = mounted;
     return mounted;
