@@ -7,7 +7,9 @@
 //! che una rinomina riscrive byte per byte. Un `.svgz` resta di specie
 //! sconosciuta, e un SVG rotto non ferma gli altri. Il Markdown accanto non
 //! cambia. Il formato è nel [formato della
-//! scena](../../../docs/reference/scene-format.md), §9.
+//! scena](../../../docs/reference/scene-format.md), §9. Con la stessa feature
+//! un disegno si esporta in PNG e in PDF (`fub.draw`), col titolo che il
+//! formato gli dà.
 //!
 //! In fondo c'è il micro-bench che confronta l'indicizzazione di 500 disegni
 //! con quella di 500 note della stessa dimensione: si esegue a mano, in
@@ -26,6 +28,7 @@ use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
     EntryKind, Excerpts, IndexQuery, IndexResult, LinkDirection, Page, PropertySelect,
 };
+use fub_abi::transfer::{ExportRequest, ExportSelection, NoteLevel};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
 
 /// Un disegno di FubDraw: titolo, descrizione, due testi, un collegamento
@@ -615,6 +618,65 @@ fn markdown_does_not_notice_the_drawings() {
     let b = kinds(&without.workspace);
     for (path, kind) in &b {
         assert_eq!(a.get(path), Some(kind), "{path}");
+    }
+}
+
+/// L'export dei disegni sul montaggio di produzione: i due formati ci sono,
+/// il disegno esce accanto a sé col titolo del suo `<title>`, la nota della
+/// selezione si salta e l'immagine del vault resta fuori, detta nel log.
+#[test]
+fn a_drawing_exports_to_png_and_pdf_with_its_title() {
+    let (_dir, root) = vault();
+    let (mounted, _) = mount(&root);
+    let ws = &mounted.workspace;
+    let targets: Vec<String> = ws.export_targets().into_iter().map(|t| t.id).collect();
+    for target in ["draw.png", "draw.pdf"] {
+        assert!(targets.iter().any(|t| t == target), "{targets:?}");
+    }
+
+    for (target, path, magic) in [
+        ("draw.png", "disegni/acqua.png", &b"\x89PNG\r\n\x1a\n"[..]),
+        ("draw.pdf", "disegni/acqua.pdf", b"%PDF-1.7\n"),
+    ] {
+        let request = ExportRequest::new(
+            target,
+            ExportSelection::Documents(vec![id("note/Pioggia.md"), id("disegni/acqua.svg")]),
+        );
+        let report = ws.export(&request).unwrap();
+        assert_eq!(report.artifacts.len(), 1, "{:?}", report.log);
+        assert_eq!(report.artifacts[0].path, path);
+        let bytes = report.artifacts[0].as_bytes().unwrap();
+        assert!(bytes.starts_with(magic), "{target}");
+        // Il titolo viene dal modello del formato `svg`: nel PNG come testo
+        // `iTXt`, nel PDF come stringa letterale.
+        let title: &[u8] = if target == "draw.png" {
+            b"Title\0\0\0\0\0Ciclo dell'acqua"
+        } else {
+            b"/Title (Ciclo dell'acqua)"
+        };
+        assert!(bytes.windows(title.len()).any(|w| w == title), "{target}");
+
+        let log: Vec<_> = report
+            .log
+            .iter()
+            .map(|note| (note.level, note.message.as_str(), note.entry.as_deref()))
+            .collect();
+        assert_eq!(
+            log,
+            [
+                (
+                    NoteLevel::Info,
+                    "1 selected document is not a drawing and was skipped",
+                    None
+                ),
+                (
+                    NoteLevel::Warning,
+                    "1 image reference points outside the drawing and was not exported: foto/mare.png",
+                    Some("disegni/acqua.svg")
+                ),
+            ],
+            "{target}"
+        );
     }
 }
 
