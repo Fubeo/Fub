@@ -102,27 +102,24 @@ collegato a un proiettore. Il protocollo, la sicurezza e i limiti sono in
 «Avvia la sessione live», nella palette, c'è solo nell'app desktop e su un
 disegno di FubDraw che si modifica. In un browser le porte `live_*` non ci
 sono e il comando non compare; nella shell mobile nemmeno, perché lì il
-dispositivo è semmai lo scrittore *(proposta del 3 ottobre 2026, da
-rivedere)*. Il codice della sessione arriva con un `import()` al primo avvio.
+dispositivo è semmai lo scrittore. Il codice della sessione arriva con un
+`import()` al primo avvio.
 
 ### Il pannello e l'indicatore
 
 Il pannello mostra il QR da inquadrare col tablet e quanto vale ancora; il QR
 porta il segreto dell'abbinamento e si mostra solo lì. Si chiude da sé quando
-il tablet entra *(proposta del 3 ottobre 2026, da rivedere)*, e «Mostra la
-sessione live» lo riapre.
+il tablet entra, e «Mostra la sessione live» lo riapre.
 
 - **Firewall.** Su Windows, prima del primo QR, una conferma spiega la
-  richiesta del firewall che segue. Si mostra una volta per vault
-  *(proposta del 3 ottobre 2026, da rivedere)*.
+  richiesta del firewall che segue. Si mostra una volta per vault.
 - **QR inutilizzato.** Dopo 60 secondi senza un tablet il pannello dice che
   una rete che isola i dispositivi blocca il collegamento, e propone
   l'hotspot del PC.
-- **QR scaduto.** Non si rinnova da sé: «Nuovo codice» ne chiede uno
-  *(proposta del 3 ottobre 2026, da rivedere)*.
+- **QR scaduto.** Non si rinnova da sé: «Nuovo codice» ne chiede uno.
 - **Rete.** Con più interfacce il pannello lascia scegliere l'indirizzo. La
   scelta riapre la sessione con un QR nuovo, e solo finché nessun tablet è
-  abbinato *(proposta del 3 ottobre 2026, da rivedere)*.
+  abbinato.
 - **Diagnostica.** Chiusa finché non la si apre: latenza mediana e al 95°
   percentile, andata e ritorno, tratti persi, gesti applicati e rifiutati,
   indirizzo e interfaccia, dispositivo e capacità della penna.
@@ -132,13 +129,11 @@ disegno, anche in Lettura. Dice chi scrive e la latenza mediana, o quanto
 resta a un tablet caduto per tornare, e apre il pannello. Accanto c'è «Segui
 il tablet»: la vista del PC insegue quella del tablet, e salta senza
 animazione col moto ridotto. Chi muove la vista sul PC la riprende, e il
-seguito si spegne; la scelta resta nel vault *(proposta del 3 ottobre 2026,
-da rivedere)*.
+seguito si spegne; la scelta resta nel vault.
 
 La latenza va dal campione sul tablet al fotogramma del PC che lo mostra,
 con lo scarto fra gli orologi stimato dalla sessione. Contano le ultime 512
-misure, e una misura sotto zero vale zero *(proposta del 3 ottobre 2026, da
-rivedere)*.
+misure, e una misura sotto zero vale zero.
 
 ### L'inchiostro e i commit
 
@@ -146,8 +141,8 @@ L'inchiostro arriva prima del commit e si disegna sull'overlay del foglio, un
 disegno per fotogramma. Si costruisce come lo scriverà il commit: campioni nel
 livello, quantizzati come `fub:ink`, contorno di `pf1` con lo stesso pennello.
 L'overlay tiene al più 256 Ki campioni; oltre, i tratti più vecchi si
-buttano *(proposta del 3 ottobre 2026, da rivedere)*. Un tratto finito si
-toglie se il suo commit non arriva entro 3 secondi, e si conta perso.
+buttano. Un tratto finito si toglie se il suo commit non arriva entro 3
+secondi, e si conta perso.
 
 Il commit passa dal motore delle operazioni, lo stesso dei gesti locali, e poi
 dalla sessione del documento come la modifica di un riquadro. Le superfici lo
@@ -159,33 +154,29 @@ con gli stessi tratti.
 - **`ack`.** Porta l'eco canonica, cioè gli elementi come stanno nel
   documento, col `d` che il motore calcola. Un commit che non cambia il
   testo, un duplicato o un commit vuoto, risponde `duplicate` al `seq` di
-  adesso *(proposta del 3 ottobre 2026, da rivedere)*.
+  adesso.
 - **`nack`.** Porta il motivo del motore, l'indice dell'operazione e il suo
-  dettaglio, che è in italiano *(proposta del 3 ottobre 2026, da
-  rivedere)*.
+  dettaglio, che è in italiano.
 - **Nessun riquadro.** Un disegno mostrato come sorgente o in una linguetta
   dietro riceve i commit lo stesso: il motore lavora sul testo, senza
   painter.
 - **Testo che non si modifica.** Se il testo smette di essere un disegno, per
   esempio durante una modifica nel sorgente, la sessione resta e i commit
-  ricevono `nack` con `read-only` finché il testo torna leggibile
-  *(proposta del 3 ottobre 2026, da rivedere)*.
+  ricevono `nack` con `read-only` finché il testo torna leggibile.
 
 Un gesto fatto sul PC arriva allo scrittore come `ops`, con l'eco canonica.
 Ogni altro cambio del documento, come una modifica nel sorgente o una
 ricarica dal disco, arriva come `snapshot` del testo intero, al più uno ogni
-300 millisecondi *(proposta del 3 ottobre 2026, da rivedere)*. Un commit che
-arriva prima applica il testo nuovo e manda lo `snapshot` prima della sua
-risposta.
+300 millisecondi. Un commit che arriva prima applica il testo nuovo e manda
+lo `snapshot` prima della sua risposta.
 
 ### La fine
 
 «Termina la sessione live», nella palette e nel pannello, risponde ai commit
 in attesa e chiude con `terminated`. I commit arrivati mentre la sessione si
-chiudeva entrano nel disegno senza risposta *(proposta del 3 ottobre 2026, da
-rivedere)*. Chiudere il documento chiude la sessione con `documentClosed`.
-Una fine che arriva dall'host, come la chiusura dell'app, si annuncia; quella
-chiesta dal comando no *(proposta del 3 ottobre 2026, da rivedere)*.
+chiudeva entrano nel disegno senza risposta. Chiudere il documento chiude la
+sessione con `documentClosed`. Una fine che arriva dall'host, come la
+chiusura dell'app, si annuncia; quella chiesta dal comando no.
 
 ## Il file su disco
 
