@@ -8,8 +8,10 @@ export interface Pacchetto {
   readonly codice: string;
   readonly titolo: string;
   readonly stato: Stato;
-  /// La PR in bozza su Fubeo/Fub, se c'è.
+  /// La PR in bozza, se c'è: su Fubeo/Fub, se `repo` non dice altro.
   readonly pr?: number;
+  /// Il repository della PR quando non è Fub.
+  readonly repo?: "FubDraw";
   /// Dove si vede, o che cosa manca, in una riga.
   readonly nota: string;
 }
@@ -105,8 +107,10 @@ export const PACCHETTI: readonly Pacchetto[] = [
   {
     codice: "FD-405",
     titolo: "Plugin WASM versione 0",
-    stato: "corso",
-    nota: "Nel repo di FubDraw: il primo plugin di Fub che legge le scene.",
+    stato: "revisione",
+    pr: 38,
+    repo: "FubDraw",
+    nota: "Il primo plugin di Fub che legge le scene: galleria dei disegni, ispezione e lint.",
   },
   {
     codice: "FD-204",

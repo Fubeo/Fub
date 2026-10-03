@@ -1121,11 +1121,12 @@ function mostraStato(): void {
       const testa = el("div", "voce-testa");
       testa.append(el("span", "codice", p.codice), el("span", "titolo", p.titolo));
       if (p.pr !== undefined) {
-        const link = el("a", "pr", `#${p.pr}`);
-        link.href = `https://github.com/Fubeo/Fub/pull/${p.pr}`;
+        const repo = p.repo ?? "Fub";
+        const link = el("a", "pr", p.repo === undefined ? `#${p.pr}` : `${repo}#${p.pr}`);
+        link.href = `https://github.com/Fubeo/${repo}/pull/${p.pr}`;
         link.target = "_blank";
         link.rel = "noopener";
-        link.title = `Fubeo/Fub#${p.pr}`;
+        link.title = `Fubeo/${repo}#${p.pr}`;
         testa.append(link);
       }
       voce.append(testa, el("p", "nota", p.nota));
