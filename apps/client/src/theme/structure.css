@@ -1066,6 +1066,11 @@ html, body, #app {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  /* Uno strato del compositore ciascuno: l'inchiostro in corso cambia
+     l'overlay a ogni campione, e senza strati propri il browser ridipinge
+     con lui le tessere della scena sotto, migliaia di tracciati a fotogramma
+     dove la composizione è software. */
+  will-change: transform;
 }
 .spatial-overlay {
   width: 100%;
