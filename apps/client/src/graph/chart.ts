@@ -29,8 +29,8 @@ import { DT, DT_MAX, baseTier, calculateTier, step, type EngineState } from "./s
 import { IMPACTS, IMPACT_STRIDE, impactCount } from "./sim/forces";
 import { createWobble, kick, stepWobble, type Wobble } from "./sim/wobble";
 import { shake, shockwave, slosh } from "./sim/play";
-import type { WorldBound, Camera, CameraState, Viewport } from "./render/camera";
-import { createCameraState, fitWithOverhang } from "./render/camera";
+import type { WorldBound, Camera, CameraState, Viewport } from "../spatial/camera";
+import { createCameraState, fitWithOverhang } from "../spatial/camera";
 import type { Painter, DrawState, MagnetMark } from "./render/painter";
 import { RIPPLE_STRIDE, createPainter } from "./render/painter";
 import type { Interaction, InteractionOptions } from "./interaction";

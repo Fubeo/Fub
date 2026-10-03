@@ -166,7 +166,7 @@ describe("canale del moto ridotto", () => {
     const fake = installMedia(true);
     try {
       const motion = await import("./reduced-motion");
-      const { createCameraState } = await import("../graph/render/camera");
+      const { createCameraState } = await import("../spatial/camera");
       const { pulseOpacity } = await import("../graph/render/painter");
       const camera = createCameraState(motion.reducedMotion());
       camera.zoom(2, 400, 300);
