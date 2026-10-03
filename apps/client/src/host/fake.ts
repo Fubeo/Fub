@@ -71,6 +71,15 @@ import type {
   VaultInfo,
   ViewSpec,
   KnownVault,
+  LiveAddress,
+  LiveEvent,
+  LiveLeaveReason,
+  LivePairing,
+  LivePendingCommit,
+  LiveStarted,
+  LiveStats,
+  LiveStatus,
+  LiveWriterStatus,
 } from "./contract";
 import type { SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
@@ -157,6 +166,17 @@ export interface Options {
   resources?: Record<string, FakeResource>;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  /// La rete della macchina per la sessione live. Senza, le porte `live*` non
+  /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
+  /// l'app rifiuta con `unserved`.
+  live?: LiveNetwork;
+}
+
+/// Gli indirizzi privati delle interfacce attive, quello della rotta
+/// predefinita per primo, e il nome che il tablet mostra.
+export interface LiveNetwork {
+  addresses: LiveAddress[];
+  hostName?: string | null;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -214,6 +234,55 @@ export interface FakeHost {
   /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
   /// router — e un evento consegnato a nessuno non fallisce da sé.
   emit(event: KernelEvent): boolean;
+  /// Manda alla shell un gruppo di eventi di una sessione live, come farebbe
+  /// l'host quando lo scrittore entra, scrive o esce.
+  ///
+  /// Lo stato della sessione li segue come nell'host vero: lo scrittore che
+  /// entra consuma il QR, un `commit` resta in `liveStatus` finché la shell non
+  /// risponde. Una sequenza che l'host non produrrebbe **lancia**: un commit
+  /// senza scrittore, un `ended` con lo scrittore ancora collegato, un evento
+  /// dopo la fine. Un banco che la scrivesse proverebbe una shell per una rete
+  /// che non esiste.
+  liveEmit(session: string, events: LiveEvent[]): void;
+}
+
+/// Una sessione live del finto: ciò che l'host vero tiene, senza la rete.
+interface LiveSession {
+  document: string;
+  /// `ip:porta`, e il nome del PC che il QR porta.
+  addr: string;
+  hostName: string | null;
+  onEvents: (events: LiveEvent[]) => void;
+  ended: boolean;
+  seq: bigint;
+  pairing: LivePairing | null;
+  writer: LiveBinding | null;
+  /// In ordine di scrittore e di contatore, come nell'host.
+  pending: LivePendingCommit[];
+  stats: Record<keyof LiveStats, bigint>;
+}
+
+/// Lo scrittore abbinato, collegato o in attesa della ripresa.
+interface LiveBinding extends Omit<LiveWriterStatus, "lastC"> {
+  /// L'ultimo commit trattato già detto: non torna indietro.
+  lastC: bigint;
+  maxReceived: bigint;
+}
+
+/// La grafia unica di un contatore: un `u64` in decimale, senza zeri davanti.
+const LIVE_COUNTER = /^(0|[1-9][0-9]{0,19})$/;
+/// Quanto vale un QR nuovo e quanto aspetta la ripresa, in millisecondi. Nel
+/// finto il tempo non passa: la scadenza la manda il banco con un evento.
+const LIVE_PAIRING_MS = 5 * 60 * 1000;
+const LIVE_RESUME_MS = 2 * 60 * 1000;
+
+/// La porta e l'impronta del certificato di ogni sessione del finto.
+const LIVE_PORT = 52143;
+const LIVE_FINGERPRINT = "fake-fingerprint-of-the-session-certificate";
+
+/// Lo scrittore uscito per questi motivi può riprendere, se la sessione vive.
+function resumableLeave(reason: LiveLeaveReason): boolean {
+  return reason === "lost" || reason === "heartbeat" || reason === "congested" || reason === "tooMuchTraffic";
 }
 
 /// Un path di link letto dalla cartella di `from`, come `resolve_against` in
@@ -257,6 +326,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const windowCloseRequested = new Set<(event: DocumentWindowEvent) => void>();
   const windowClosed = new Set<(event: DocumentWindowEvent) => void>();
   let nextDocumentWindow = 0;
+  /// Le sessioni live, per id. Una finita resta finché la shell non la ferma,
+  /// come nel registro dell'app.
+  const liveSessions = new Map<string, LiveSession>();
+  let nextLive = 0;
+  let nextPairing = 0;
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
@@ -368,6 +442,185 @@ export function createFakeHost(options: Options = {}): FakeHost {
   }
   const unavailable = <T>(name: string, args: unknown[]): Promise<T> =>
     gate(name, args, Promise.reject(new Error(`host fake: ${name} requires a configured native service`)));
+
+  // --- la sessione live -----------------------------------------------------
+  //
+  // Gli errori hanno il tipo di quelli dell'app; il testo, che lì è nella
+  // lingua di chi guarda, qui è in inglese. I limiti di misura (messaggi,
+  // snapshot, dettagli dei `nack`) restano dell'host: li provano i test di
+  // `fub-live`, e il finto non li simula.
+
+  function liveSession(session: string): LiveSession {
+    const live = liveSessions.get(session);
+    if (live) return live;
+    throw { kind: "not_found", message: `no live session ${JSON.stringify(session)} in this window` } satisfies PluginError;
+  }
+
+  /// Un contatore nella sua grafia unica, o un errore della shell: l'app
+  /// rifiuterebbe gli argomenti prima di leggerli.
+  function liveCounter(value: string, what: string): bigint {
+    if (LIVE_COUNTER.test(value) && BigInt(value) <= 0xffff_ffff_ffff_ffffn) return BigInt(value);
+    throw new Error(`host fake: ${what} ${JSON.stringify(value)} is not a counter`);
+  }
+
+  /// Un QR nuovo, con un segreto nuovo.
+  function livePairing(session: string, live: Pick<LiveSession, "addr" | "hostName">): LivePairing {
+    nextPairing += 1;
+    const name = live.hostName === null ? "" : `&n=${encodeURIComponent(live.hostName)}`;
+    return {
+      payload: `fubdraw://live?h=${live.addr}&s=${session}&k=secret${String(nextPairing).padStart(16, "0")}&f=${LIVE_FINGERPRINT}${name}`,
+      qrSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29"><path d="M4 4h7v7H4z"/></svg>',
+      expiresInMs: LIVE_PAIRING_MS,
+    };
+  }
+
+  /// Ciò che attraversa il canale o la risposta: una copia, come dopo il JSON.
+  function liveCopy<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+
+  function liveStatusOf(live: LiveSession): LiveStatus {
+    const binding = live.writer;
+    let writer: LiveWriterStatus | null = null;
+    if (binding) {
+      // L'ultimo commit trattato: prima del primo ancora in attesa, o l'ultimo
+      // ricevuto, e mai sotto quello già detto.
+      const waiting = live.pending.find((commit) => commit.writer === binding.writer);
+      const treated = waiting ? BigInt(waiting.c) - 1n : binding.maxReceived;
+      if (treated > binding.lastC) binding.lastC = treated;
+      const { maxReceived: _, lastC, ...rest } = binding;
+      writer = { ...rest, lastC: String(lastC) };
+    }
+    return liveCopy({
+      ended: live.ended,
+      seq: String(live.seq),
+      pairingExpiresInMs: live.pairing?.expiresInMs ?? null,
+      writer,
+      pending: live.pending,
+      stats: {
+        accepted: String(live.stats.accepted),
+        refused: String(live.stats.refused),
+        admitted: String(live.stats.admitted),
+        rejected: String(live.stats.rejected),
+        commits: String(live.stats.commits),
+        answered: String(live.stats.answered),
+      },
+    });
+  }
+
+  /// Un evento dell'host applicato allo stato della sessione, o un errore se
+  /// l'host non lo produrrebbe in questo stato.
+  function liveApply(session: string, live: LiveSession, event: LiveEvent): void {
+    const impossible = (why: string) =>
+      new Error(`host fake: the live session ${JSON.stringify(session)} does not emit ${event.t} ${why}`);
+    if (live.ended) throw impossible("after it ended");
+    const binding = live.writer;
+    const connected = (writer: string) => binding?.connected === true && binding.writer === writer;
+    switch (event.t) {
+      case "writerConnected":
+        liveCounter(event.writer, "writer");
+        if (event.resumed) {
+          if (!binding || binding.writer !== event.writer || binding.connected) {
+            throw impossible("without that writer waiting to resume");
+          }
+          Object.assign(binding, {
+            device: { ...event.device },
+            caps: { ...event.caps },
+            connected: true,
+            resumeExpiresInMs: null,
+          });
+        } else {
+          // Il segreto del QR è monouso, e un secondo scrittore riceve 4003
+          // anche mentre il primo è fuori ma può riprendere.
+          if (binding) throw impossible("while another writer is paired");
+          if (!live.pairing) throw impossible("without a valid pairing");
+          live.pairing = null;
+          live.writer = {
+            writer: event.writer,
+            device: { ...event.device },
+            caps: { ...event.caps },
+            connected: true,
+            resumeExpiresInMs: null,
+            clock: null,
+            lastC: 0n,
+            maxReceived: 0n,
+          };
+        }
+        live.stats.accepted += 1n;
+        live.stats.admitted += 1n;
+        return;
+      case "writerDisconnected":
+        if (!connected(event.writer)) throw impossible("without that writer connected");
+        if (event.resumable !== resumableLeave(event.reason)) {
+          throw impossible(`with resumable ${event.resumable} for ${JSON.stringify(event.reason)}`);
+        }
+        if (event.resumable) {
+          Object.assign(binding!, { connected: false, resumeExpiresInMs: LIVE_RESUME_MS });
+        } else {
+          live.writer = null;
+        }
+        return;
+      case "writerReleased":
+        // `pairingRenewed` lo manda `livePairing` con `renew`, non il banco.
+        if (event.reason !== "resumeExpired") throw impossible(`for ${event.reason}: livePairing emits it`);
+        if (!binding || binding.writer !== event.writer || binding.connected) {
+          throw impossible("without that writer waiting to resume");
+        }
+        live.writer = null;
+        return;
+      case "inkBegin":
+      case "inkPoints":
+      case "inkEnd":
+      case "inkCancel":
+      case "view":
+        if (!binding?.connected) throw impossible("without a connected writer");
+        return;
+      case "inkGap":
+        // L'inchiostro cade nella coda verso la shell, anche dopo che lo
+        // scrittore è uscito.
+        return;
+      case "commit": {
+        if (!connected(event.writer)) throw impossible("without that writer connected");
+        const c = liveCounter(event.c, "c");
+        // Un commit rimandato dopo una ripresa non torna alla shell: o
+        // aspetta già la risposta, o l'host rimanda quella data.
+        if (c === 0n || c <= binding!.maxReceived) throw impossible(`for c ${event.c}, already received`);
+        binding!.maxReceived = c;
+        live.pending.push(liveCopy({ writer: event.writer, c: event.c, ops: event.ops }));
+        live.pending.sort((a, b) => {
+          const writer = BigInt(a.writer) - BigInt(b.writer);
+          const commit = writer === 0n ? BigInt(a.c) - BigInt(b.c) : writer;
+          return commit < 0n ? -1 : commit > 0n ? 1 : 0;
+        });
+        live.stats.commits += 1n;
+        return;
+      }
+      case "clock":
+        if (!binding) throw impossible("without a paired writer");
+        binding.clock = { offsetMs: event.offsetMs, rttMs: event.rttMs };
+        return;
+      case "pairingExpired":
+        if (!live.pairing) throw impossible("without a valid pairing");
+        live.pairing = null;
+        return;
+      case "snapshotWanted":
+        return;
+      case "ended":
+        // L'host chiude prima la connessione dello scrittore, con
+        // `sessionEnded`, e solo dopo il canale.
+        if (binding?.connected) throw impossible("while the writer is connected");
+        live.ended = true;
+        live.pairing = null;
+        return;
+    }
+    const unknown: never = event;
+    throw new Error(`host fake: unknown live event ${JSON.stringify(unknown)}`);
+  }
+
+  function liveEmit(session: string, live: LiveSession, events: LiveEvent[]): void {
+    for (const event of events) liveApply(session, live, event);
+    live.onEvents(liveCopy(events));
+  }
 
 
   function installed(id: string): InstalledPluginInfo {
@@ -1056,6 +1309,120 @@ export function createFakeHost(options: Options = {}): FakeHost {
         windowClosed.add(handler);
         return Promise.resolve(() => { windowClosed.delete(handler); });
       },
+      // Il registro tiene la richiesta e non il canale: gli eventi li manda
+      // il banco con `liveEmit`.
+      liveStart: (request, onEvents) =>
+        installedOperation("liveStart", [request], (): LiveStarted => {
+          const network = options.live;
+          if (!network) throw new Error("host fake: liveStart requires a configured native service");
+          liveCounter(request.snapshot.seq, "snapshot.seq");
+          const document = request.document.id;
+          if ([...liveSessions.values()].some((live) => live.document === document)) {
+            throw {
+              kind: "already_exists",
+              message: `document ${JSON.stringify(document)} already has a live session`,
+            } satisfies PluginError;
+          }
+          const chosen = request.address === undefined
+            ? network.addresses[0]
+            : network.addresses.find((address) => address.addr === request.address);
+          if (!chosen) {
+            throw (request.address === undefined
+              ? {
+                  kind: "unserved",
+                  message: "the PC is not on a local network: no active interface has a private IPv4 address",
+                }
+              : {
+                  kind: "not_found",
+                  message: `${request.address} is not a private address of an active interface`,
+                }) satisfies PluginError;
+          }
+          const session = `live-${String(++nextLive).padStart(6, "0")}`;
+          const addr = `${chosen.addr}:${LIVE_PORT}`;
+          const hostName = network.hostName ?? null;
+          const pairing = livePairing(session, { addr, hostName });
+          liveSessions.set(session, {
+            document,
+            addr,
+            hostName,
+            onEvents,
+            ended: false,
+            seq: BigInt(request.snapshot.seq),
+            pairing,
+            writer: null,
+            pending: [],
+            stats: { accepted: 0n, refused: 0n, admitted: 0n, rejected: 0n, commits: 0n, answered: 0n },
+          });
+          return liveCopy({
+            session: { session, addr, fingerprint: LIVE_FINGERPRINT, hostName },
+            pairing,
+            addresses: network.addresses,
+          });
+        }),
+      livePairing: (session, renew) =>
+        installedOperation("livePairing", [session, renew], () => {
+          const live = liveSession(session);
+          if (!renew) return live.pairing && liveCopy(live.pairing);
+          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.writer?.connected) {
+            throw { kind: "already_exists", message: "a writer is connected to the session" } satisfies PluginError;
+          }
+          live.pairing = livePairing(session, live);
+          // Lo scrittore che aspettava la ripresa la perde.
+          const released = live.writer;
+          live.writer = null;
+          if (released) live.onEvents([{ t: "writerReleased", writer: released.writer, reason: "pairingRenewed" }]);
+          return liveCopy(live.pairing);
+        }),
+      liveSend: (session, message) =>
+        installedOperation("liveSend", [session, message], () => {
+          const live = liveSession(session);
+          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          const regression = (seq: string): PluginError => ({
+            kind: "conflict",
+            message: `seq ${seq} is behind the session seq ${live.seq}`,
+          });
+          if (message.t === "ack" || message.t === "nack") {
+            liveCounter(message.writer, "writer");
+            liveCounter(message.c, "c");
+            const at = live.pending.findIndex((commit) => commit.writer === message.writer && commit.c === message.c);
+            if (at < 0) {
+              throw {
+                kind: "not_found",
+                message: `commit ${message.c} of writer ${message.writer} is not awaiting an answer`,
+              } satisfies PluginError;
+            }
+            // Un `ack` di un duplicato non porta operazioni nuove: il suo
+            // `seq` non conta.
+            if (message.t === "ack" && !message.duplicate) {
+              const seq = liveCounter(message.seq, "seq");
+              if (seq < live.seq) throw regression(message.seq);
+              live.seq = seq;
+            }
+            live.pending.splice(at, 1);
+            live.stats.answered += 1n;
+            return;
+          }
+          const seq = liveCounter(message.seq, "seq");
+          if (seq < live.seq) throw regression(message.seq);
+          live.seq = seq;
+        }),
+      liveStatus: (session) => installedOperation("liveStatus", [session], () => liveStatusOf(liveSession(session))),
+      liveStop: (session, reason) =>
+        installedOperation("liveStop", [session, reason], () => {
+          const live = liveSession(session);
+          liveSessions.delete(session);
+          // Una sessione già finita da sé non manda una seconda fine.
+          if (!live.ended) {
+            const closing: LiveEvent[] = [];
+            if (live.writer?.connected) {
+              closing.push({ t: "writerDisconnected", writer: live.writer.writer, reason: "sessionEnded", resumable: false });
+            }
+            closing.push({ t: "ended", reason });
+            liveEmit(session, live, closing);
+          }
+          return liveCopy({ pending: live.pending });
+        }),
     },
     nativeMobileBridge: () => {
       throw new Error("host fake: mobile native bridge unavailable");
@@ -1164,6 +1531,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
       };
     },
     emit,
+    liveEmit: (session, events) => {
+      const live = liveSessions.get(session);
+      if (!live) throw new Error(`host fake: no live session ${JSON.stringify(session)}`);
+      liveEmit(session, live, events);
+    },
   };
 }
 

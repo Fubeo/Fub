@@ -34,9 +34,9 @@ flowchart LR
     WASM --> HOST
     APP["fub-app"] --> HOST
     APP --> WASM
+    APP --> LIVE["fub-live"]
     CLI["fub-cli"] --> HOST
     SERVICES["fub-services"] --> ABI
-    LIVE["fub-live"]
     FRONTEND["frontend"] --> APP
 ```
 
@@ -50,7 +50,7 @@ del repository verificano le eccezioni.
 | `fub-abi` | tipi, trait, errori, regole, WIT | storage, runtime, Markdown, UI desktop |
 | `fub-kernel` | workspace, path, indici, eventi, policy | Tauri, Wasmtime, parsing Markdown |
 | `fub-host` | sessioni, mount, job, watcher, configurazione | comandi Tauri e DOM |
-| `fub-app` | stato Tauri, comandi IPC, adattamento eventi | regole di business |
+| `fub-app` | stato Tauri, comandi IPC, adattamento eventi, registro delle sessioni live con la finestra che le possiede | regole di business, protocollo della sessione live |
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
