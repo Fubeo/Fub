@@ -3,14 +3,9 @@ import { describe, expect, it } from "vitest";
 import { load } from "../src/editors/spatial/scene/test-support";
 import { CORPUS } from "./corpus";
 import { generateSpatialFixture, SPATIAL_FIXTURE_KINDS, textDigest, type SpatialFixtureKind } from "./spatial-fixture";
-
-/// Ciò che il banco misura: se una di queste righe cambia, cambia il disegno
-/// che `spatial-scale.mjs` apre, e i numeri di prima non si confrontano più.
-const ORACLES: Readonly<Record<SpatialFixtureKind, { objects: number; layers: number; samples: number; bytes: number; digest: string }>> = {
-  sparse: { objects: 200, layers: 1, samples: 2_200, bytes: 219_305, digest: "5ab90522" },
-  dense: { objects: 5_000, layers: 4, samples: 39_672, bytes: 5_071_951, digest: "46eb084a" },
-  ink: { objects: 2_000, layers: 1, samples: 200_000, bytes: 14_810_234, digest: "2bf69ff0" },
-};
+// Ciò che `spatial-scale.mjs` si aspetta di aprire: se il generatore cambia,
+// i numeri di prima non si confrontano più, e questo test lo dice.
+import { SPATIAL_ORACLES as ORACLES } from "./spatial-oracles.mjs";
 
 describe("le fixture del disegno", () => {
   it.each(SPATIAL_FIXTURE_KINDS)("%s è sempre la stessa", (kind) => {
