@@ -241,11 +241,11 @@ così com'è.
   registrano.
 - **Fusione:** due voci consecutive con lo stesso nome, fatte di `set` sulle
   stesse chiavi degli stessi elementi, o di due `batch` di quei `set` nello
-  stesso ordine, a meno di 500 ms l'una dall'altra, diventano una voce sola:
-  resta la prima inversa e l'ultima operazione in avanti, e l'undo resta
-  esatto. Così una serie di piccoli spostamenti, o tre colori provati di
-  fila, si annullano in un passo. Le voci rimesse da annulla e ripeti non si
-  fondono.
+  stesso ordine, a meno di 500 ms l'una dall'altra e senza altri cambiamenti
+  in mezzo, diventano una voce sola: resta la prima inversa e l'ultima
+  operazione in avanti, e l'undo resta esatto. Così una serie di piccoli
+  spostamenti, o tre colori provati di fila, si annullano in un passo. Dopo
+  un annulla o un ripeti la voce in cima non si fonde più.
 - **Selezione:** dopo annulla o ripeti, la selezione sono gli oggetti che il
   passo ha toccato e che ci sono ancora.
 - **Undo esatto:** se l'undo arriva sulla scena lasciata dall'operazione,
