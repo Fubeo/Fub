@@ -79,6 +79,14 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // (`selectSelectionMatches`) e vinceva sempre; `Mod-e` alterna già.
     ("shell.mode.live", None),
     ("shell.mode.source", None),
+    // Apre la linguetta attiva nella vista sorgente che la sua superficie
+    // dichiara (un disegno come testo SVG, ADR 0203), e ne torna. **Senza
+    // accordo**: il gesto serve a capire cosa c'è scritto sotto una resa, non
+    // si ripete mentre si lavora, e i comandi esistono soltanto dove una
+    // superficie offre la vista; nella palette e nel menu del riquadro li
+    // trova chi li cerca.
+    ("shell.doc.source.open", None),
+    ("shell.doc.source.close", None),
     ("shell.pane.split.right", Some("Mod-\\")),
     // **Senza accordo**: `Mod-Shift-\` dentro l'editor è
     // `cursorMatchingBracket`, e lo split non partiva mai mentre si scriveva.

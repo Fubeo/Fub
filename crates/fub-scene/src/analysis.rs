@@ -16,7 +16,8 @@ use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::{parse_path, rect_path, BoundsBuilder, Matrix};
 use crate::text::{Span, Utf16Map};
 use crate::values::{
-    href, is_javascript, length, opacity, paint, points, transform, trim, Href, Paint, Rgb,
+    href, is_javascript, length, opacity, paint, points, transform, trim, url_text, Href, Paint,
+    Rgb,
 };
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XHTML, NS_XLINK};
 use crate::Status;
@@ -24,7 +25,7 @@ use crate::Status;
 /// Quanti byte decodificati può avere un'immagine incorporata (§11).
 pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
-/// Il contrasto minimo fra un tratto e la carta (§12, DEC-13).
+/// Il contrasto minimo fra un tratto e la carta (§12).
 pub const MIN_CONTRAST: f64 = 3.0;
 
 /// Un testo della scena e l'elemento da cui viene.
@@ -49,6 +50,12 @@ pub struct Reference {
     /// Il valore grezzo dell'attributo, virgolette escluse: è ciò che si
     /// riscrive quando la destinazione cambia nome.
     pub href: Span,
+    /// Il valore grezzo di un `xlink:href` che `href` nasconde sullo stesso
+    /// elemento, quando porta lo stesso URL. Un lettore SVG 1.1 legge quello,
+    /// quindi chi rinomina la destinazione riscrive tutti e due. Non si
+    /// serializza: la superficie non riscrive collegamenti.
+    #[serde(skip)]
+    pub shadowed: Option<Span>,
 }
 
 /// Ciò che l'indice legge di una scena (§9).
@@ -269,7 +276,7 @@ impl Tally {
         version: Option<u32>,
         diagnostics: &mut Vec<Diagnostic>,
     ) -> Summary {
-        // Senza carta il disegno sta sul bianco della superficie (DEC-13).
+        // Senza carta il disegno sta sul bianco della superficie (§12).
         if let Some(paper) = self.paper.unwrap_or(Some(WHITE)) {
             for (span, (rgb, alpha)) in self.pens {
                 let ratio = contrast(over(rgb, alpha, paper), paper);
@@ -514,6 +521,21 @@ fn href_attr<'e, 'a>(element: &'e Element<'a>) -> Option<&'e crate::xml::Attr<'a
         .or_else(|| element.attr(NS_XLINK, "href"))
 }
 
+/// L'`xlink:href` che l'`href` scelto da [`href_attr`] nasconde, se dice lo
+/// stesso URL. Con due URL diversi quello nascosto non è un riferimento del
+/// documento, e chi rinomina non lo tocca.
+fn shadowed_xlink<'e, 'a>(
+    element: &'e Element<'a>,
+    href: &crate::xml::Attr<'a>,
+) -> Option<&'e crate::xml::Attr<'a>> {
+    if href.ns != NS_NONE {
+        return None;
+    }
+    element
+        .attr(NS_XLINK, "href")
+        .filter(|xlink| url_text(&xlink.value) == url_text(&href.value))
+}
+
 /// Il contenuto attivo di un elemento (S005): il nome del motivo per ognuno.
 fn active_content(element: &Element<'_>) -> Vec<String> {
     let mut found = Vec::new();
@@ -608,10 +630,13 @@ pub(crate) fn index(
                 let Some(attr) = href_attr(element) else {
                     continue;
                 };
+                let shadowed =
+                    shadowed_xlink(element, attr).map(|xlink| map.span(xlink.raw.0, xlink.raw.1));
                 let reference = |path: String| Reference {
                     path,
                     span: span(id),
                     href: map.span(attr.raw.0, attr.raw.1),
+                    shadowed,
                 };
                 match (element.local, href(&attr.value)) {
                     ("a", Href::Vault(path)) => index.links.push(reference(path)),
@@ -644,7 +669,8 @@ mod tests {
     fn contrast_follows_wcag() {
         assert_eq!(contrast(WHITE, [0, 0, 0]), 21.0);
         assert_eq!(contrast(WHITE, WHITE), 1.0);
-        // La tavolozza di DEC-13 sulla carta bianca: tre colori sotto 3:1.
+        // La tavolozza Okabe–Ito di FubDraw sulla carta bianca: tre colori
+        // sotto 3:1.
         let ratio = |rgb: u32| contrast(hex(rgb), WHITE);
         for below in [0xf0e442, 0xe69f00, 0x56b4e9] {
             assert!(ratio(below) < MIN_CONTRAST, "{below:06x}");

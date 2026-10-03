@@ -14,3 +14,8 @@
 # e `crlf-bom.svg` esiste per avere BOM e CRLF: la normalizzazione qui sopra
 # ne farebbe un altro file, e il test fallirebbe a ogni checkout.
 apps/client/src/__fixtures__/scene/*.svg -text
+
+# Le fixture del modello delle scene (`fub-format-svg`): stessa ragione, e
+# `foreign-crlf-bom.svg` esiste per provare che la riscrittura dei
+# collegamenti lascia identici BOM e CRLF.
+crates/fub-format-svg/tests/fixtures/*.svg -text
