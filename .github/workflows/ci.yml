@@ -275,6 +275,18 @@ jobs:
           path: apps/client/bench/.output/graph-scale.json
           if-no-files-found: error
           include-hidden-files: true
+      - name: la scala del disegno resta nei limiti strutturali
+        id: spatial_scale
+        run: npm run bench:spatial-scale
+        working-directory: apps/client
+      - name: referto della scala del disegno
+        if: ${{ !cancelled() && (steps.spatial_scale.outcome == 'success' || steps.spatial_scale.outcome == 'failure') }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: scala-disegno-${{ github.sha }}
+          path: apps/client/bench/.output/spatial-scale.json
+          if-no-files-found: error
+          include-hidden-files: true
       - name: le scene restano uguali alle baseline del runner
         id: bench_verify
         run: npm run bench:verify

@@ -287,6 +287,46 @@ export const SCENE = [
   },
 
   // -------------------------------------------------------------------------
+  // Il disegno: `Risorse/Ciclo dell'acqua.svg`, con la feature `draw` accesa.
+  // -------------------------------------------------------------------------
+  {
+    id: "draw",
+    title: "Il disegno: la barra, il foglio e gli oggetti",
+    query: "",
+    prepare: async (page) => {
+      await openDrawing(page, DRAWING);
+    },
+  },
+  {
+    id: "draw-objects",
+    title: "Il disegno con l'albero degli oggetti e un oggetto scelto",
+    query: "",
+    prepare: async (page) => {
+      await openDrawing(page, DRAWING);
+      await page.click('.pane.focus .draw-button[aria-controls^="draw-objects"]');
+      await page.waitForSelector('.pane.focus .draw-objects:not([hidden]) [role="treeitem"]');
+      // `Home` sul foglio sceglie il primo oggetto: la maniglia sull'overlay
+      // e la riga scelta nell'albero sono la stessa selezione.
+      await page.focus(".pane.focus .draw-surface");
+      await page.keyboard.press("Home");
+      await page.waitForSelector('.pane.focus .draw-objects [role="treeitem"][aria-selected="true"]');
+    },
+  },
+  {
+    id: "draw-read",
+    title: "Il disegno in Lettura: l'immagine e la descrizione",
+    query: "",
+    prepare: async (page) => {
+      await openDrawing(page, DRAWING);
+      await page.click('.pane.focus .pane-toolbar button[data-mode="read"]');
+      await page.waitForFunction(() => {
+        const image = document.querySelector(".pane.focus .vector-read img");
+        return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+      });
+    },
+  },
+
+  // -------------------------------------------------------------------------
   // I tre cataloghi (`bench/catalog.html`).
   // -------------------------------------------------------------------------
   {
@@ -341,6 +381,21 @@ async function openNote(page, path) {
       false,
     name,
   );
+}
+
+/// Il disegno del vault fisso.
+const DRAWING = "Risorse/Ciclo dell'acqua.svg";
+
+/// Apre un disegno dall'albero e aspetta che il painter abbia dipinto l'ultimo
+/// oggetto: prima, la foto mostrerebbe un foglio a metà.
+async function openDrawing(page, path) {
+  await openFolder(page, path.slice(0, path.lastIndexOf("/")));
+  await page.click(`#file-list .tree-row[data-path="${path}"]`);
+  await page.waitForSelector(".pane.focus .draw-editor");
+  await page.waitForFunction(() => {
+    const painted = document.querySelectorAll(".pane.focus .spatial-painter [data-scene-id]");
+    return painted.length > 0 && painted[painted.length - 1].getAttribute("data-scene-id") === "o5t1y7u3i";
+  });
 }
 
 /// Apre una cartella dell'albero, se non è già aperta. Il `data-path` della

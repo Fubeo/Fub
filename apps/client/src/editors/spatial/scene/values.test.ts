@@ -18,6 +18,7 @@ import {
   paint,
   points,
   preserveAspectRatio,
+  scanNumber,
   transform,
 } from "./values";
 
@@ -35,6 +36,30 @@ describe("i valori degli attributi (values.rs)", () => {
     expect(number("1e39")).toBeNull();
     expect(number("1 2")).toBeNull();
     expect(number("0x10")).toBeNull();
+  });
+
+  it("la lettura veloce delle cifre dà il valore di Number, bit per bit", () => {
+    // Un generatore fisso: gli stessi casi a ogni giro.
+    let seed = 0x5ca1e;
+    const random = (n: number) => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed % n;
+    };
+    const digits = (n: number) => Array.from({ length: n }, () => String(random(10))).join("");
+    const cases = ["0", "-0", "+0", "-0.0", ".5", "-.5", "+.25", "0.1", "0.3", "123456789012345", "1234567890123456",
+      "0.000000000000001", "999999999999999.9", "9007199254740993", "-1e-7", "2.5E3", "1e", "7e+", "1.5em"];
+    for (let n = 0; n < 4000; n++) {
+      const whole = digits(random(10));
+      const fraction = random(3) === 0 ? "" : `.${digits(1 + random(16))}`;
+      if (whole === "" && fraction === "") continue;
+      cases.push(`${["", "-", "+"][random(3)]}${whole}${fraction}${random(8) === 0 ? `e${random(2) ? "-" : ""}${random(30)}` : ""}`);
+    }
+    for (const text of cases) {
+      const scanned = scanNumber(`${text},`, 0);
+      expect(scanned).not.toBeNull();
+      const [value, end] = scanned!;
+      expect(Object.is(value, Number(text.slice(0, end))), text).toBe(true);
+    }
   });
 
   it("le lunghezze convertono solo le unità assolute", () => {

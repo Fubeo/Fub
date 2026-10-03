@@ -382,17 +382,22 @@ async function inspectKeyboard(page) {
       };
       document.addEventListener("click", window.__a11yKeyboardListener, true);
     });
-    // Un composito (la griglia: una sola fermata del Tab, il discendente
-    // attivo avanza dentro con `aria-activedescendant`) trattiene il fuoco
-    // mentre il Tab interno avanza. Senza questa distinzione ogni Tab interno
+    // Un composito trattiene il fuoco mentre il Tab interno avanza: la
+    // griglia, una sola fermata del Tab col discendente attivo che avanza in
+    // `aria-activedescendant`, e il foglio del disegno (`role="application"`),
+    // dove il Tab con una selezione passa all'oggetto dopo e lo annuncia in
+    // una regione live. Senza questa distinzione ogni Tab interno
     // sembrerebbe un ordine sbagliato; con un'eccezione per scena si
-    // nasconderebbe invece una trappola vera. Rilevato l'avanzamento interno,
-    // si salta in fondo al composito (Ctrl+End, il gesto che la griglia
-    // dichiara) e si esce con un Tab: si verifica l'uscita senza attraversare
-    // le celle una alla volta. Se non avanza né il fuoco né il discendente,
-    // resta il rilievo di prima.
+    // nasconderebbe invece una trappola vera. Rilevato l'avanzamento interno
+    // (il discendente cambia, o per l'applicazione cambia ciò che le regioni
+    // live dicono), si salta in fondo al composito col gesto che dichiara
+    // (Ctrl+End la griglia, Fine il foglio) e si esce con un Tab: si verifica
+    // l'uscita senza attraversare gli elementi uno alla volta. Se non avanza
+    // né il fuoco né il composito, resta il rilievo di prima.
+    const COMPOSITE_END = { grid: "Control+End", application: "End" };
     let previousProbe = null;
     let previousDescendant = null;
+    let previousLive = null;
     const readActual = () => page.evaluate(() => {
         const el = document.activeElement;
         if (!(el instanceof HTMLElement)) return null;
@@ -423,18 +428,35 @@ async function inspectKeyboard(page) {
             getComputedStyle(frameShell, "::before"),
             getComputedStyle(frameShell, "::after"),
           );
-        const indicator =
-          (el.matches(":focus-visible") && hasIndicator(style, pseudo, after)) ||
-          (el.tagName === "IFRAME" && shellIndicator);
         const descendantId = el.getAttribute("aria-activedescendant");
         const descendant = descendantId ? document.getElementById(descendantId) : null;
+        // Con `aria-activedescendant` il fuoco resta sul composito e l'anello
+        // si dipinge sulla riga attiva, dove l'occhio lo cerca.
+        const descendantIndicator =
+          el.matches(":focus-visible") &&
+          descendant !== null &&
+          hasIndicator(
+            getComputedStyle(descendant),
+            getComputedStyle(descendant, "::before"),
+            getComputedStyle(descendant, "::after"),
+          );
+        const indicator =
+          (el.matches(":focus-visible") && hasIndicator(style, pseudo, after)) ||
+          descendantIndicator ||
+          (el.tagName === "IFRAME" && shellIndicator);
+        const role = el.getAttribute("role");
+        const live = [...document.querySelectorAll('[aria-live]:not([aria-live="off"]), [role="status"], [role="log"], [role="alert"]')]
+          .map((region) => region.textContent ?? "")
+          .join("\u0000");
         return {
           probe: el.dataset.a11yProbe ?? null,
           indicator,
           descendant: descendant
             ? `${descendantId}:${descendant.getAttribute("aria-rowindex")}:${descendant.getAttribute("aria-colindex")}`
             : null,
-          composite: el.getAttribute("role") === "grid" && descendant !== null,
+          composite: (role === "grid" && descendant !== null) || role === "application",
+          role,
+          live,
         };
       });
     let candidates = await refreshProbes();
@@ -454,9 +476,9 @@ async function inspectKeyboard(page) {
         actual?.composite &&
         actual.probe !== expected.probe &&
         actual.probe === previousProbe &&
-        actual.descendant !== previousDescendant
+        (actual.role === "application" ? actual.live !== previousLive : actual.descendant !== previousDescendant)
       ) {
-        await page.keyboard.press("Control+End");
+        await page.keyboard.press(COMPOSITE_END[actual.role]);
         await page.keyboard.press("Tab");
         await refreshProbes();
         actual = await readActual();
@@ -525,6 +547,7 @@ async function inspectKeyboard(page) {
       }
       previousProbe = focused.probe;
       previousDescendant = focused.descendant;
+      previousLive = focused.live;
       index = Number(focused.probe) + 1;
     }
   } finally {

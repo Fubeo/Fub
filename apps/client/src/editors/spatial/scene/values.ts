@@ -36,6 +36,9 @@ export function trim(value: string): string {
   return value.slice(start, end);
 }
 
+/// Le potenze di dieci esatte in un `f64` che servono a `scanNumber`.
+const POWERS_OF_TEN = [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15];
+
 /// Legge un numero SVG al carattere `i` di `text`: segno facoltativo, cifre
 /// con o senza decimali, esponente facoltativo. Restituisce il valore e
 /// l'indice dopo il numero.
@@ -46,27 +49,52 @@ export function trim(value: string): string {
 export function scanNumber(text: string, i: number): [number, number] | null {
   const start = i;
   let c = text.charCodeAt(i);
-  if (c === 0x2b || c === 0x2d) i++;
+  const negative = c === 0x2d;
+  if (negative || c === 0x2b) i++;
+  // Le cifre lette, intere e decimali, come un intero, e quante sono dopo il
+  // punto.
+  let digits = 0;
+  let mantissa = 0;
+  let scale = 0;
   const from = i;
-  while (isDigit(text.charCodeAt(i))) i++;
+  for (c = text.charCodeAt(i); isDigit(c); c = text.charCodeAt(++i)) {
+    mantissa = mantissa * 10 + (c - 0x30);
+    digits++;
+  }
   const integer = i > from;
-  if (text.charCodeAt(i) === 0x2e) {
+  if (c === 0x2e) {
     let j = i + 1;
     const fraction = j;
-    while (isDigit(text.charCodeAt(j))) j++;
+    for (c = text.charCodeAt(j); isDigit(c); c = text.charCodeAt(++j)) {
+      mantissa = mantissa * 10 + (c - 0x30);
+      digits++;
+    }
     if (j === fraction) return null;
+    scale = j - fraction;
     i = j;
   } else if (!integer) {
     return null;
   }
-  c = text.charCodeAt(i);
+  let exponent = false;
   if (c === 0x65 || c === 0x45) {
     let j = i + 1;
     const sign = text.charCodeAt(j);
     if (sign === 0x2b || sign === 0x2d) j++;
-    const exponent = j;
+    const first = j;
     while (isDigit(text.charCodeAt(j))) j++;
-    if (j > exponent) i = j;
+    if (j > first) {
+      i = j;
+      exponent = true;
+    }
+  }
+  // Con al più 15 cifre e senza esponente, cifre e potenza di dieci sono
+  // interi esatti in un `f64`, e una sola divisione IEEE dà il valore
+  // arrotondato correttamente: lo stesso di `Number` e di
+  // `str::parse::<f64>` di Rust, senza ritagliare la stringa. Il segno si
+  // applica dopo, esatto anche per `-0`.
+  if (!exponent && digits <= 15) {
+    const magnitude = scale === 0 ? mantissa : mantissa / POWERS_OF_TEN[scale]!;
+    return [negative ? -magnitude : magnitude, i];
   }
   // La grammatica è già controllata: `Number` arrotonda correttamente come
   // `str::parse::<f64>` di Rust.

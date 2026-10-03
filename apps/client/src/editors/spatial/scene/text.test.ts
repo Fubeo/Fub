@@ -5,7 +5,7 @@
 // controllano su entrambe.
 
 import { describe, expect, it } from "vitest";
-import { bomUnits, lineBreakOf, lineEndingOf, SourceText, utf8Length } from "./text";
+import { bomUnits, lineBreakOf, lineEndingOf, SourceText, utf8Delta, utf8Length } from "./text";
 
 /// Il testo che vede la shell: `\r\n` e `\r` diventano `\n`.
 function normalized(source: string): string {
@@ -68,5 +68,29 @@ describe("le coordinate della sorgente (text.rs)", () => {
     expect(bomUnits(source)).toBe(1);
     expect(lines.byteOf(bomUnits(source))).toBe(3);
     expect(bomUnits("<svg/>")).toBe(0);
+  });
+});
+
+describe("utf8Delta", () => {
+  it("vale la differenza delle lunghezze UTF-8 intere", () => {
+    const cases: Array<readonly [string, string]> = [
+      ["", ""],
+      ["abc", "abc"],
+      ["abc", "abXc"],
+      ["café", "cafe"],
+      ["🙂", "🙃"],
+      ["x🙂y", "x🙂🙂y"],
+      // Le coppie surrogate non si spezzano: l'alta resta con la sua bassa.
+      ["a\ud83d\ude42", "a\ud83d"],
+      ["\ud83d\ude42b", "\ude42b"],
+      ["\ud83d\ude42", "\ud83d\ude43"],
+      ["\ud83d\ud83d\ude42", "\ud83d\ude42"],
+      ["\ude42\ude42", "\ud83d\ude42"],
+      [`${"a".repeat(1_000)}é${"b".repeat(1_000)}`, `${"a".repeat(1_000)}✓✓${"b".repeat(1_000)}`],
+    ];
+    for (const [before, after] of cases) {
+      expect(utf8Delta(before, after)).toBe(utf8Length(after) - utf8Length(before));
+      expect(utf8Delta(after, before)).toBe(utf8Length(before) - utf8Length(after));
+    }
   });
 });

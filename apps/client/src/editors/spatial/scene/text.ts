@@ -12,6 +12,8 @@
 // posizioni dei caratteri non ASCII e dei `\r\n`, così un file ASCII con LF
 // non costa memoria in più e una traduzione è una ricerca binaria.
 
+import { commonPrefixLength, commonSuffixLength } from "../../core/text-operation";
+
 /// Il BOM UTF-8 come carattere.
 export const BOM = "﻿";
 
@@ -49,6 +51,25 @@ export function utf8Length(text: string): number {
     }
   }
   return bytes;
+}
+
+/// Di quanti byte UTF-8 cambia `before` diventando `after`. Si misura solo
+/// ciò che sta fra il prefisso e il suffisso comuni, che si trovano con un
+/// confronto nativo: il conto costa quanto la modifica, non quanto il file.
+/// I bordi non tagliano una coppia surrogata, così ogni parte vale da sola
+/// quanto vale nel testo intero.
+export function utf8Delta(before: string, after: string): number {
+  if (before === after) return 0;
+  const minimum = Math.min(before.length, after.length);
+  let prefix = commonPrefixLength(before, after, minimum);
+  let suffix = commonSuffixLength(before, after, minimum - prefix);
+  if (prefix > 0 && isHigh(before.charCodeAt(prefix - 1))) prefix--;
+  if (suffix > 0 && isLow(before.charCodeAt(before.length - suffix))) suffix--;
+  return utf8Length(after.slice(prefix, after.length - suffix)) - utf8Length(before.slice(prefix, before.length - suffix));
+}
+
+function isHigh(c: number): boolean {
+  return c >= 0xd800 && c <= 0xdbff;
 }
 
 function isLow(c: number): boolean {

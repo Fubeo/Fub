@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   applyOperation,
+  commonPrefixLength,
+  commonSuffixLength,
   invertOperation,
   operationFromText,
+  operationYields,
   rebaseStaleChange,
   transformPair,
   tryApplyOperation,
@@ -142,5 +145,91 @@ describe("transformPair", () => {
     const left = operation("abcd", [{ from: 1, to: 3, deleted: "bc", inserted: "" }]);
     expect(transformPair(left, operation("abc", []))).toBeNull();
     expect(transformPair(left, operation("abcd", [{ from: 2, to: 4, deleted: "cd", inserted: "x" }]))).toBeNull();
+  });
+});
+
+describe("commonPrefixLength e commonSuffixLength", () => {
+  const naivePrefix = (a: string, b: string, limit: number): number => {
+    let n = 0;
+    while (n < limit && a.charCodeAt(n) === b.charCodeAt(n)) n += 1;
+    return n;
+  };
+  const naiveSuffix = (a: string, b: string, limit: number): number => {
+    let n = 0;
+    while (n < limit && a.charCodeAt(a.length - 1 - n) === b.charCodeAt(b.length - 1 - n)) n += 1;
+    return n;
+  };
+  /// Mulberry32, perché i casi si ripetano uguali.
+  const random = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+      t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+      return ((t ^ (t >>> 14)) >>> 0) / 0x1_0000_0000;
+    };
+  };
+
+  it("trovano la prima differenza ai bordi delle fette confrontate", () => {
+    // Le fette raddoppiano da 256 unità e la ricerca scende a 64: la
+    // differenza cade prima, sopra e dopo ogni bordo.
+    const base = "a".repeat(5_000);
+    for (const at of [0, 1, 63, 64, 65, 255, 256, 257, 767, 768, 769, 1_791, 1_792, 4_999]) {
+      const changed = `${base.slice(0, at)}b${base.slice(at + 1)}`;
+      expect(commonPrefixLength(base, changed, base.length)).toBe(at);
+      expect(commonSuffixLength(base, changed, base.length)).toBe(base.length - 1 - at);
+    }
+    expect(commonPrefixLength(base, base, base.length)).toBe(base.length);
+    expect(commonPrefixLength(base, base, 1_000)).toBe(1_000);
+    expect(commonSuffixLength(base, `${base}x`, base.length)).toBe(0);
+    expect(commonPrefixLength("", "", 0)).toBe(0);
+  });
+
+  it("danno quello che dà il confronto unità per unità", () => {
+    const next = random(0x7e57);
+    const alphabet = ["a", "b", "\n", "é", "✓", "🙂"];
+    const word = (length: number): string => {
+      let out = "";
+      while (out.length < length) out += alphabet[Math.floor(next() * alphabet.length)];
+      return out;
+    };
+    for (let i = 0; i < 300; i++) {
+      const shared = word(Math.floor(next() * 3_000));
+      const tail = word(Math.floor(next() * 3_000));
+      const a = `${shared}${word(Math.floor(next() * 40))}${tail}`;
+      const b = `${shared}${word(Math.floor(next() * 40))}${tail}`;
+      const minimum = Math.min(a.length, b.length);
+      const prefix = commonPrefixLength(a, b, minimum);
+      expect(prefix).toBe(naivePrefix(a, b, minimum));
+      expect(commonSuffixLength(a, b, minimum - prefix)).toBe(naiveSuffix(a, b, minimum - prefix));
+      const patch = operationFromText(a, b);
+      expect(applyOperation(a, patch)).toBe(b);
+    }
+  });
+});
+
+describe("operationYields", () => {
+  it("risponde come applicare e confrontare, senza costruire il testo", () => {
+    const before = "uno due tre";
+    const patch = operation(before, [
+      { from: 0, to: 3, deleted: "uno", inserted: "1" },
+      { from: 8, to: 8, deleted: "", inserted: "e " },
+    ]);
+    const cases: Array<readonly [string, TextOperation, string]> = [
+      [before, patch, applyOperation(before, patch)],
+      [before, patch, "1 due e trE"],
+      [before, patch, "1 due e tre!"],
+      ["uno due trE", patch, "1 due e trE"],
+      ["UNO due tre", patch, "1 due e tre"],
+      ["uno due tre!", patch, "1 due e tre!"],
+      [before, { ...patch, afterLength: patch.afterLength + 1 }, "1 due e tre"],
+      [before, operation(before, []), before],
+      [before, operation(before, []), "uno due trE"],
+    ];
+    for (const [from, op, to] of cases) {
+      const applied = tryApplyOperation(from, op);
+      expect(operationYields(from, op, to)).toBe(applied.kind === "applied" && applied.text === to);
+    }
   });
 });

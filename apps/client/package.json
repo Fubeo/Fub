@@ -15,6 +15,7 @@
     "bench": "vite --config vite.bench.config.ts",
     "bench:verify": "node bench/photos.mjs",
     "bench:graph-scale": "node bench/graph-scale.mjs",
+    "bench:spatial-scale": "node bench/spatial-scale.mjs",
     "bench:update": "node bench/photos.mjs --update",
     "bench:a11y": "node bench/a11y.mjs",
     "theme:generate": "node theme/generate.mjs",
