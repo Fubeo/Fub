@@ -26,13 +26,22 @@ export const STATI: Readonly<Record<Stato, string>> = {
 
 export const PACCHETTI: readonly Pacchetto[] = [
   {
+    codice: "FD-205",
+    titolo: "Strumenti del livello Essenziale",
+    stato: "qui",
+    pr: 110,
+    nota:
+      "L'editor del foglio: selezione, penna, gomma, rettangolo, ellisse, linea e freccia, otto colori con la loro forma, " +
+      "tre spessori, annulla e ripeti per gesto, tastiera e annunci, e il campo «Che cosa hai disegnato?».",
+  },
+  {
     codice: "FD-204",
     titolo: "Painter e strati inerti",
     stato: "qui",
     pr: 108,
     nota:
       "Il foglio lo disegna il painter dalla scena del motore: gli oggetti modificabili negli strati vivi, " +
-      "il resto in immagini inerti, il tratto in corso sullo strato sopra la scena.",
+      "il resto in immagini inerti; il tratto in corso, le forme e gli spostamenti come anteprime sopra la scena.",
   },
   {
     codice: "FD-203",
@@ -47,7 +56,7 @@ export const PACCHETTI: readonly Pacchetto[] = [
     stato: "qui",
     pr: 107,
     nota:
-      "Il foglio è un file .svg: ogni tratto è un add, Svuota un batch di remove, annulla e ripeti l'undo esatto del motore. " +
+      "Il foglio è un file .svg: ogni gesto è un'operazione, o un batch, e annulla e ripeti l'undo esatto del motore. " +
       "Il pannello del file mostra le righe che cambiano.",
   },
   {
@@ -135,10 +144,10 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Il primo plugin di Fub che legge le scene: galleria dei disegni, ispezione e lint.",
   },
   {
-    codice: "FD-205",
-    titolo: "Strumenti del livello Essenziale",
-    stato: "prossimo",
-    nota: "Gomma, forme, selezione e il campo «Che cosa hai disegnato?».",
+    codice: "FD-501",
+    titolo: "Provider fubann",
+    stato: "corso",
+    nota: "Il formato delle annotazioni sui PDF: il collegamento al PDF annotato e il testo delle note, cercabile nel vault.",
   },
   {
     codice: "FD-206b",

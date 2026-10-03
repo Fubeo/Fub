@@ -101,121 +101,32 @@
       }
       .tavolo {
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-rows: minmax(0, 1fr) auto;
         min-width: 0;
         min-height: 0;
       }
-      .strumenti {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: stretch;
-        gap: var(--space-2) var(--space-4);
-        padding: var(--space-2) var(--space-4);
-        border-bottom: 1px solid var(--border);
-        background: var(--bg-panel);
+      /* L'editor vero: barra, foglio e annunci li monta `createDrawEditor`. */
+      .editore {
+        min-width: 0;
+        min-height: 0;
       }
-      .gruppo-strumenti {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: stretch;
-        gap: var(--space-1);
-      }
-      .gruppo-strumenti + .gruppo-strumenti {
-        border-left: 1px solid var(--border);
-        padding-left: var(--space-4);
-      }
-      .strumenti button {
-        min-width: 44px;
-        min-height: 44px;
-        padding: var(--space-1) var(--space-2);
-        font-size: var(--text-sm);
-      }
-      .scelta {
-        display: inline-flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 2px;
-        border: 2px solid transparent;
-      }
-      .scelta .nome {
-        font-size: var(--text-xs);
-        color: var(--muted);
-      }
-      /* Lo stato scelto non è affidato al solo colore: bordo pieno, nome in
-         grassetto e sottolineato. */
-      .scelta[aria-pressed="true"] {
-        border-color: var(--text);
-        background: var(--bg-active);
-      }
-      .scelta[aria-pressed="true"] .nome {
-        color: var(--text);
-        font-weight: var(--weight-bold);
-        text-decoration: underline;
-        text-underline-offset: 2px;
-      }
-      .campione {
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        box-shadow: 0 0 0 1px var(--border);
-      }
-      .spessore .punto {
-        display: block;
-        border-radius: 50%;
-        background: var(--colore-scelto, var(--text));
-        box-shadow: 0 0 0 1px var(--border);
-      }
-      .spessore {
-        min-width: 60px;
-      }
-      .spessore .punto-riquadro {
-        height: 22px;
-        display: flex;
-        align-items: center;
-      }
-      #zoom-livello {
-        font-family: var(--font-mono);
-        min-width: 64px;
-      }
-
-      /* Il foglio. `touch-action` e `user-select` li chiede la pipeline della
-         penna: senza, il browser si prende il dito per scorrere. */
-      .foglio {
-        position: relative;
-        overflow: hidden;
-        background: #ffffff;
-        touch-action: none;
-        user-select: none;
-        -webkit-user-select: none;
-        cursor: crosshair;
-        outline: none;
-      }
-      .foglio:focus-visible {
-        box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
-      }
-      /* Il bordo della pagina: la scena e il tratto in corso li monta il
-         painter, con le loro regole. */
-      .foglio > svg {
-        position: absolute;
-        inset: 0;
-        width: 100%;
+      .editore .draw-editor {
         height: 100%;
-        display: block;
-        pointer-events: none;
       }
+      /* L'invito sta sul foglio vuoto, sulla carta: i suoi colori sono quelli
+         della carta, bianca in entrambi i temi. */
       .invito {
         position: absolute;
         inset: 0;
-        display: none;
+        display: grid;
         place-content: center;
         text-align: center;
         pointer-events: none;
         color: #5b5b5b;
         padding: var(--space-6);
       }
-      .foglio.vuoto .invito {
-        display: grid;
+      .invito[hidden] {
+        display: none;
       }
       .invito strong {
         display: block;
@@ -223,13 +134,24 @@
         color: #1f1f1f;
         margin-bottom: var(--space-2);
       }
-      .aiuto {
-        margin: 0;
+      .piede {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2) var(--space-4);
         padding: var(--space-2) var(--space-4);
         border-top: 1px solid var(--border);
+        background: var(--bg-panel);
+      }
+      .piede button {
+        flex: none;
+        min-height: 44px;
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--border);
+      }
+      .aiuto {
+        margin: 0;
         color: var(--muted);
         font-size: var(--text-xs);
-        background: var(--bg-panel);
       }
       .aiuto kbd {
         font-family: var(--font-mono);
@@ -295,6 +217,11 @@
       }
       #ispettore summary {
         cursor: pointer;
+      }
+      #ispettore .quale {
+        margin: 0 0 var(--space-2);
+        color: var(--muted);
+        font-size: var(--text-sm);
       }
       #ispettore .vuoto {
         margin: 0;
@@ -457,7 +384,7 @@
           grid-template-columns: minmax(0, 1fr);
         }
         .tavolo {
-          grid-template-rows: auto 70vh auto;
+          grid-template-rows: 70vh auto;
         }
         .lato {
           border-left: none;
@@ -489,36 +416,20 @@
       </header>
       <div class="corpo">
         <section class="tavolo" aria-label="Foglio da disegno">
-          <div class="strumenti" role="toolbar" aria-label="Strumenti">
-            <div id="colori" class="gruppo-strumenti" role="group" aria-label="Colore"></div>
-            <div id="spessori" class="gruppo-strumenti" role="group" aria-label="Spessore"></div>
-            <div class="gruppo-strumenti" role="group" aria-label="Modifica">
-              <button id="annulla" type="button" title="Annulla (Ctrl+Z)">Annulla</button>
-              <button id="ripeti" type="button" title="Ripeti (Ctrl+Maiusc+Z)">Ripeti</button>
-              <button id="svuota" type="button" title="Toglie tutti i tratti; Annulla li riporta">Svuota</button>
-            </div>
-            <div class="gruppo-strumenti" role="group" aria-label="Vista">
-              <button id="zoom-meno" type="button" title="Riduci (−)" aria-label="Riduci">−</button>
-              <button id="zoom-livello" type="button" title="Torna al 100% (0)" aria-label="Livello di zoom; torna al 100%">100%</button>
-              <button id="zoom-piu" type="button" title="Ingrandisci (+)" aria-label="Ingrandisci">+</button>
-              <button id="adatta" type="button" title="Adatta alla finestra (Maiusc+1)">Adatta</button>
-            </div>
+          <div id="editore" class="editore"></div>
+          <div class="piede">
+            <button id="svuota" type="button" title="Toglie tutti gli oggetti in un gesto solo; Annulla li riporta">Svuota</button>
+            <p class="aiuto">
+              Strumenti: <kbd>V</kbd> selezione · <kbd>P</kbd> penna · <kbd>E</kbd> gomma · <kbd>R</kbd> rettangolo ·
+              <kbd>O</kbd> ellisse · <kbd>L</kbd> linea · <kbd>A</kbd> freccia; <kbd>Maiusc</kbd> fa quadrati, cerchi e
+              angoli a 15°. <kbd>Ctrl</kbd>+<kbd>Z</kbd> annulla · <kbd>Ctrl</kbd>+<kbd>Maiusc</kbd>+<kbd>Z</kbd> ripeti ·
+              <kbd>Ctrl</kbd>+<kbd>A</kbd> tutto · <kbd>Canc</kbd> elimina · frecce: sposta (con <kbd>Maiusc</kbd> di 10) ·
+              <kbd>Esc</kbd> interrompe. Rotella: scorri · <kbd>Ctrl</kbd>+rotella o pizzico: zoom · tasto centrale o
+              due dita: sposta il foglio · <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> zoom · <kbd>Maiusc</kbd>+<kbd>1</kbd>
+              adatta. Con una penna il dito sposta il foglio e il palmo non disegna; la pagina si allarga a passi di 256
+              quando ci disegni fuori.
+            </p>
           </div>
-          <div id="foglio" class="foglio vuoto" role="application" aria-roledescription="foglio da disegno" aria-label="Foglio: disegna con la penna, il mouse o il dito" tabindex="0">
-            <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g></g></svg>
-            <div class="invito">
-              <div>
-                <strong>Disegna qui</strong>
-                con la penna, il mouse o il dito
-              </div>
-            </div>
-          </div>
-          <p class="aiuto">
-            Rotella: scorri · <kbd>Ctrl</kbd>+rotella o pizzico: zoom · tasto centrale o due dita: sposta ·
-            <kbd>Ctrl</kbd>+<kbd>Z</kbd> annulla · <kbd>Ctrl</kbd>+<kbd>Maiusc</kbd>+<kbd>Z</kbd> ripeti ·
-            con una penna il dito sposta il foglio e il palmo non disegna · il tratteggio è il bordo della pagina del
-            file, che si allarga a passi di 256 quando ci disegni fuori
-          </p>
         </section>
         <aside class="lato" aria-label="Dettagli">
           <section aria-labelledby="titolo-file">
@@ -536,15 +447,15 @@
             </div>
           </section>
           <section>
-            <h2>Ultimo tratto</h2>
+            <h2>L’oggetto</h2>
             <div id="ispettore"></div>
           </section>
           <section>
             <h2>Stato del lavoro</h2>
             <p class="onesto">
-              Penna, pennello, camera, scena e motore delle operazioni sono il codice vero dei pacchetti: il foglio è il
-              file qui sopra. Il modo in cui il foglio disegna i tratti è provvisorio fino al painter di FD-204; con
-              FD-206b il disegno si apre nella shell.
+              L’editor a sinistra è quello vero di FD-205, col codice di tutti i pacchetti sotto: il foglio è il file
+              qui sopra, e ogni gesto un’operazione del motore. Provvisori sono solo il salvataggio nel browser e questa
+              colonna: con FD-206b il disegno si apre nella shell, come una nota.
             </p>
             <div id="stato"></div>
           </section>
