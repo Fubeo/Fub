@@ -54,6 +54,7 @@ import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 // Solo nel ramo d'anteprima: i disegni di FubDraw nel vault, e la feature
 // `draw` che li apre come disegni.
 import { DISEGNI } from "../anteprima/disegni";
+import { tabletFinto } from "../anteprima/tablet-finto";
 import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
@@ -879,6 +880,12 @@ const options: Options = {
   grid: GRID,
   // La feature `draw` accesa: un `.svg` del vault si apre come disegno.
   draw: true,
+  // Solo nel ramo d'anteprima: una rete locale per la sessione live, così
+  // «Avvia la sessione live» compare e il tablet finto si collega.
+  live: {
+    addresses: [{ addr: "192.168.1.20", interface: "wlan0", defaultRoute: true }],
+    hostName: "PC dell'anteprima",
+  },
 };
 
 const host = createFakeHost(options);
@@ -914,6 +921,8 @@ globalThis.window.bench = {
 };
 
 const behind = host.module.api;
+/// Solo nel ramo d'anteprima: i tablet finti delle sessioni live aperte.
+const tablets = new Map<string, { stop(): void }>();
 
 export const api: typeof host.module.api = {
   ...behind,
@@ -936,6 +945,19 @@ export const api: typeof host.module.api = {
   },
   listBundles: () => Promise.resolve(BUNDLE),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
+  // Solo nel ramo d'anteprima: ogni sessione ha il suo tablet finto.
+  liveStart: async (request, onEvents) => {
+    const started = await behind.liveStart(request, onEvents);
+    const session = started.session.session;
+    tablets.get(session)?.stop();
+    tablets.set(session, tabletFinto(host.liveEmit, session, request));
+    return started;
+  },
+  liveStop: (session, reason) => {
+    tablets.get(session)?.stop();
+    tablets.delete(session);
+    return behind.liveStop(session, reason);
+  },
 };
 
 export const onKernelEvent = host.module.onKernelEvent;
