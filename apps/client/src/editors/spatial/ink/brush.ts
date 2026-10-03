@@ -13,6 +13,11 @@
 // funzione con quelle opzioni. Le chiavi sconosciute si conservano, nell'ordine,
 // e non cambiano il disegno.
 //
+// L'errore è quello di `fub-scene` (`brush.rs`), perché il suo nome è il
+// dettaglio di S004 e i due lati devono scrivere la stessa diagnostica: prima
+// le voci nell'ordine in cui stanno, poi le chiavi note nell'ordine di
+// `PF1_KEYS`, ognuna con il suo numero e subito dopo il suo intervallo.
+
 // Scrittura. Le chiavi note nell'ordine della specifica, tutte, poi le
 // sconosciute. I numeri si scrivono con `formatShortest`, senza arrotondare:
 // `d` si calcola dal pennello, e il pennello riletto dal file deve essere lo
@@ -61,6 +66,8 @@ export const PF1_KEYS = [
 ] as const;
 
 export type Pf1Key = (typeof PF1_KEYS)[number];
+type FlagKey = "capStart" | "capEnd" | "sim";
+type NumberKey = Exclude<Pf1Key, "size" | FlagKey>;
 
 /// I valori di una chiave che manca: quelli di `getStroke` di perfect-freehand
 /// 1.2.3 quando l'opzione non c'è (dal sorgente, non dal README, che per
@@ -77,6 +84,38 @@ export const PF1_DEFAULTS: Pf1Brush = {
   sim: true,
   unknown: [],
 };
+
+/// Perché un `fub:brush` non si legge, come `BrushError` di `fub-scene`:
+/// `missing` è il tratto senza `fub:brush`, che si accorge chi legge la scena.
+export type BrushErrorKind = "missing" | "algorithm" | "entry" | "repeated" | "number" | "range";
+
+const BRUSH_MESSAGES: Record<BrushErrorKind, (key: string) => string> = {
+  missing: () => "il tratto non ha fub:brush",
+  algorithm: () => "fub:brush non comincia con pf1",
+  entry: () => "fub:brush ha una voce senza chiave=valore",
+  repeated: (key) => `fub:brush ripete ${key}`,
+  number: (key) => `${key} di fub:brush non è un numero`,
+  range: (key) => `${key} di fub:brush è fuori dall'intervallo`,
+};
+
+/// Un `fub:brush` che non si legge: il tratto non si ridisegna (S004).
+export class BrushError extends Error {
+  readonly kind: BrushErrorKind;
+  /// La chiave di `repeated`, `number` e `range`.
+  readonly key: Pf1Key | null;
+
+  constructor(kind: BrushErrorKind, key: Pf1Key | null = null) {
+    super(BRUSH_MESSAGES[kind](key ?? ""));
+    this.name = "BrushError";
+    this.kind = kind;
+    this.key = key;
+  }
+
+  /// Il dettaglio di S004: `fub:brush <kind>[ <chiave>]`.
+  get detail(): string {
+    return this.key === null ? `fub:brush ${this.kind}` : `fub:brush ${this.kind} ${this.key}`;
+  }
+}
 
 const KNOWN = new Set<string>(PF1_KEYS);
 /// Un numero SVG senza unità: segno, cifre con o senza decimali, esponente.
@@ -126,64 +165,73 @@ export function checkBrush(brush: Pf1Brush): void {
 
 function numberOf(key: Pf1Key, text: string): number {
   // `Number` accetterebbe anche `0x10`, `Infinity` e lo spazio vuoto: la
-  // grammatica la decide la specifica, non il motore.
-  if (!SVG_NUMBER.test(text)) throw new TypeError(`fub:brush: ${key} non è un numero: ${JSON.stringify(text)}`);
+  // grammatica la decide la specifica, non il motore. Un numero nella
+  // grammatica che non sta in un double (`1e400`) non è un numero lo stesso.
+  if (!SVG_NUMBER.test(text)) throw new BrushError("number", key);
   const value = Number(text);
-  if (!Number.isFinite(value)) throw new RangeError(`fub:brush: ${key} non è finito: ${text}`);
+  if (!Number.isFinite(value)) throw new BrushError("number", key);
+  return value;
+}
+
+function within(key: Pf1Key, value: number, min: number, max: number): number {
+  if (!(value >= min && value <= max)) throw new BrushError("range", key);
   return value;
 }
 
 function flagOf(key: Pf1Key, text: string): boolean {
   const value = numberOf(key, text);
-  if (value !== 0 && value !== 1) throw new RangeError(`fub:brush: ${key} vale 0 o 1, non ${text}`);
+  if (value !== 0 && value !== 1) throw new BrushError("range", key);
   return value === 1;
 }
 
-/// Legge un `fub:brush`. Lancia `TypeError` sulla grammatica e `RangeError`
-/// sugli intervalli: in tutti e due i casi il tratto non si ridisegna (S004).
+/// Legge un `fub:brush`. Lancia `BrushError`, con lo stesso errore che
+/// `fub-scene` scrive nel dettaglio di S004: il tratto non si ridisegna.
 export function parseBrush(text: string): Pf1Brush {
   const tokens = text.split(SEPARATOR).filter((token) => token !== "");
-  if (tokens[0] !== PF1) throw new TypeError("fub:brush non comincia con pf1");
+  if (tokens[0] !== PF1) throw new BrushError("algorithm");
   const known = new Map<Pf1Key, string>();
   const unknown: BrushEntry[] = [];
   for (let i = 1; i < tokens.length; i++) {
     const token = tokens[i]!;
     const equals = token.indexOf("=");
-    if (equals <= 0 || equals === token.length - 1) {
-      throw new TypeError(`fub:brush: voce senza chiave=valore: ${JSON.stringify(token)}`);
-    }
+    if (equals <= 0 || equals === token.length - 1) throw new BrushError("entry");
     const key = token.slice(0, equals);
     const value = token.slice(equals + 1);
     if (KNOWN.has(key)) {
       const name = key as Pf1Key;
-      if (known.has(name)) throw new TypeError(`fub:brush: ${key} ripetuta`);
+      if (known.has(name)) throw new BrushError("repeated", name);
       known.set(name, value);
     } else {
       unknown.push([key, value]);
     }
   }
-  const read = (key: Pf1Key, fallback: number): number => {
+  const read = (key: NumberKey, min: number, max: number): number => {
     const value = known.get(key);
-    return value === undefined ? fallback : numberOf(key, value);
+    return value === undefined ? PF1_DEFAULTS[key] : within(key, numberOf(key, value), min, max);
   };
-  const readFlag = (key: Pf1Key, fallback: boolean): boolean => {
+  const readFlag = (key: FlagKey): boolean => {
     const value = known.get(key);
-    return value === undefined ? fallback : flagOf(key, value);
+    return value === undefined ? PF1_DEFAULTS[key] : flagOf(key, value);
   };
-  const brush: Pf1Brush = {
-    size: read("size", PF1_DEFAULTS.size),
-    thinning: read("thinning", PF1_DEFAULTS.thinning),
-    smoothing: read("smoothing", PF1_DEFAULTS.smoothing),
-    streamline: read("streamline", PF1_DEFAULTS.streamline),
-    taperStart: read("taperStart", PF1_DEFAULTS.taperStart),
-    taperEnd: read("taperEnd", PF1_DEFAULTS.taperEnd),
-    capStart: readFlag("capStart", PF1_DEFAULTS.capStart),
-    capEnd: readFlag("capEnd", PF1_DEFAULTS.capEnd),
-    sim: readFlag("sim", PF1_DEFAULTS.sim),
+  // `size` vuole un numero maggiore di 0, non solo almeno 0: l'intervallo
+  // aperto si controlla a parte, come in `brush.rs`.
+  const sizeText = known.get("size");
+  const size = sizeText === undefined ? PF1_DEFAULTS.size : numberOf("size", sizeText);
+  if (!(size > 0)) throw new BrushError("range", "size");
+  // L'ordine dei campi è l'ordine dei controlli: il primo errore è quello di
+  // Rust.
+  return {
+    size,
+    thinning: read("thinning", -1, 1),
+    smoothing: read("smoothing", 0, 1),
+    streamline: read("streamline", 0, 1),
+    taperStart: read("taperStart", 0, Number.MAX_VALUE),
+    taperEnd: read("taperEnd", 0, Number.MAX_VALUE),
+    capStart: readFlag("capStart"),
+    capEnd: readFlag("capEnd"),
+    sim: readFlag("sim"),
     unknown,
   };
-  checkBrush(brush);
-  return brush;
 }
 
 /// Scrive un `fub:brush` canonico. Lancia `RangeError` su un pennello fuori
