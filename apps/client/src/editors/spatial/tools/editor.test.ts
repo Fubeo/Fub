@@ -11,6 +11,7 @@ import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions } from "./editor";
 import { MERGE_MS } from "./history";
+import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { LAYER } from "./test-support";
 
 const SOURCE = doc(
@@ -589,6 +590,190 @@ describe("l'albero degli oggetti", () => {
     dialog().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     tree().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
+  });
+});
+
+describe("le immagini incollate", () => {
+  const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const MIB = 1024 * 1024;
+
+  /// Un codec finto: ogni immagine misura `width` × `height` pixel, e la sua
+  /// ricodifica pesa quanto dice `full` per il tipo, meno se rimpicciolita.
+  function codec(width: number, height: number, full: Partial<Record<EncodeType, number>> = {}, readable = true): ImageCodec & { calls: string[]; closed: number } {
+    const fake = {
+      calls: [] as string[],
+      closed: 0,
+      async decode(): Promise<Decoded | null> {
+        if (!readable) return null;
+        return {
+          width,
+          height,
+          opaque: () => true,
+          async encode(type: EncodeType, scale: number) {
+            fake.calls.push(`${type} ${scale}`);
+            const size = full[type];
+            return size === undefined ? null : new Uint8Array(Math.round(size * scale * scale)).fill(7);
+          },
+          close() {
+            fake.closed++;
+          },
+        };
+      },
+    };
+    return fake;
+  }
+
+  const file = (bytes: Uint8Array<ArrayBuffer>, name = "shot.png", type = "image/png"): File => new File([bytes], name, { type });
+
+  function paste(files: readonly File[], target: HTMLElement = surface()): ClipboardEvent {
+    const data = new DataTransfer();
+    for (const one of files) data.items.add(one);
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  /// Un rilascio sul foglio: happy-dom non ha `DragEvent`.
+  function drop(files: readonly File[], x: number, y: number): MouseEvent {
+    const data = new DataTransfer();
+    for (const one of files) data.items.add(one);
+    const event = new MouseEvent("drop", { bubbles: true, cancelable: true, clientX: x, clientY: y });
+    Object.defineProperty(event, "dataTransfer", { value: data });
+    surface().dispatchEvent(event);
+    return event;
+  }
+
+  /// Aspetta che l'immagine finisca di entrare.
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  const images = (): string[] => editor.engine.text.match(/<image [^>]*\/>/g) ?? [];
+  const imageLine = (): string => images()[0] ?? "";
+  const base64 = (bytes: Uint8Array): string => btoa(String.fromCharCode(...bytes));
+
+  it("uno screenshot incollato entra nel file com'è, scelto, con la selezione come strumento", async () => {
+    mount(SOURCE, { imageCodec: codec(200, 100) });
+    size(1000, 500);
+    editor.setTool("pen");
+    expect(paste([file(PNG)]).defaultPrevented).toBe(true);
+    await settle();
+    const [id] = editor.selection;
+    expect(imageLine()).toBe(`<image id="${id}" x="400" y="200" width="200" height="100" href="data:image/png;base64,${base64(PNG)}"/>`);
+    expect(editor.tool).toBe("select");
+    expect(spoken()).toBe("Immagine aggiunta. Strumento: Selezione. Il disegno ha 2 oggetti.");
+    // Un gesto solo, che annulla toglie intero.
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(imageLine()).toBe("");
+  });
+
+  it("va dove è il cursore, e due immagini insieme sono un gesto, una sopra l'altra", async () => {
+    mount(SOURCE, { imageCodec: codec(100, 50) });
+    size(1000, 500);
+    // Con la selezione già in mano, lo strumento non cambia e non si dice.
+    editor.setTool("select");
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
+    paste([file(PNG), file(PNG, "due.png")]);
+    await settle();
+    expect(images().map((line) => line.match(/ x="[^"]*" y="[^"]*"/)![0])).toEqual([' x="250" y="275"', ' x="274" y="299"']);
+    expect(editor.selection).toHaveLength(2);
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("2 immagini aggiunte. Il disegno ha 3 oggetti.");
+  });
+
+  it("oltre i 5 MiB propone di ridurla: una foto diventa JPEG, con la stessa misura sul foglio", async () => {
+    const fake = codec(4000, 3000, { "image/jpeg": 3 * MIB });
+    mount(SOURCE, { imageCodec: fake });
+    size(1000, 500);
+    const big = new Uint8Array(6 * MIB);
+    big.set(PNG);
+    paste([file(big)]);
+    await settle();
+    expect(dialog().querySelector("h2")!.textContent).toBe("Immagine troppo pesante");
+    expect(dialog().querySelector("p")!.textContent).toBe(
+      "L’immagine pesa 6 MiB, e in un disegno un’immagine può pesare al più 5 MiB. Ridurla? Avrà meno pixel, ma la stessa misura sul foglio.",
+    );
+    expect(dialog().getAttribute("aria-describedby")).toBe(dialog().querySelector("p")!.id);
+    expect(document.activeElement?.textContent).toBe("Riduci");
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    await submit();
+    await settle();
+    expect(fake.calls).toEqual(["image/jpeg 1"]);
+    expect(imageLine()).toMatch(/^<image id="[^"]+" x="233.33" y="50" width="533.33" height="400" href="data:image\/jpeg;base64,BwcH/);
+    expect(changes).toHaveLength(1);
+    expect(fake.closed).toBe(1);
+  });
+
+  it("annullare la riduzione non aggiunge niente", async () => {
+    mount(SOURCE, { imageCodec: codec(4000, 3000, { "image/jpeg": 3 * MIB }) });
+    const big = new Uint8Array(6 * MIB);
+    big.set(PNG);
+    paste([file(big)]);
+    await settle();
+    [...dialog().querySelectorAll("button")].find((button) => button.textContent === "Annulla")!.click();
+    await settle();
+    expect(changes).toEqual([]);
+    expect(imageLine()).toBe("");
+  });
+
+  it("un JPEG girato dall'EXIF si ricodifica diritto, e un BMP diventa PNG", async () => {
+    const exif = Uint8Array.from([
+      0xff, 0xd8, 0xff, 0xe1, 0, 34, 0x45, 0x78, 0x69, 0x66, 0, 0, 0x49, 0x49, 42, 0, 8, 0, 0, 0,
+      1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xda, 0, 2,
+    ]);
+    const fake = codec(30, 40, { "image/jpeg": 500, "image/png": 900 });
+    mount(SOURCE, { imageCodec: fake });
+    paste([file(exif, "foto.jpg", "image/jpeg")]);
+    await settle();
+    expect(fake.calls).toEqual(["image/jpeg 1"]);
+    expect(imageLine()).toContain('width="30" height="40" href="data:image/jpeg;base64,');
+    paste([file(Uint8Array.from([0x42, 0x4d, 0, 0]), "vecchia.bmp", "image/bmp")]);
+    await settle();
+    expect(fake.calls).toEqual(["image/jpeg 1", "image/png 1"]);
+    expect(editor.engine.text).toContain('href="data:image/png;base64,');
+  });
+
+  it("un file lasciato sul foglio va dove cade; uno che non è un'immagine lo si dice", async () => {
+    mount(SOURCE, { imageCodec: codec(200, 100) });
+    size(1000, 500);
+    expect(drop([file(PNG)], 150, 120).defaultPrevented).toBe(true);
+    await settle();
+    expect(imageLine()).toMatch(/ x="50" y="70" width="200" height="100" /);
+    const note = drop([file(Uint8Array.from([65]), "nota.txt", "text/plain")], 10, 10);
+    expect(note.defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere.");
+  });
+
+  it("un'immagine che non si legge, un documento in sola lettura e il titolo non scrivono", async () => {
+    mount(SOURCE, { imageCodec: codec(10, 10, {}, false) });
+    paste([file(PNG)]);
+    await settle();
+    expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere.");
+    editor.setReadOnly(true);
+    paste([file(PNG)]);
+    await settle();
+    editor.setReadOnly(false);
+    // Nel campo del titolo un incolla resta del campo.
+    const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
+    expect(paste([file(PNG)], title).defaultPrevented).toBe(false);
+    // Un incolla di solo testo non è un'immagine.
+    const words = new DataTransfer();
+    words.setData("text/plain", "ciao");
+    const plain = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: words });
+    surface().dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(false);
+    await settle();
+    expect(changes).toEqual([]);
+  });
+
+  it("un disegno al limite non riceve un'altra immagine", async () => {
+    const full = doc(`<desc>${"a".repeat(20 * MIB - 1000)}</desc>${LAYER}</g>`);
+    mount(full, { imageCodec: codec(10, 10) });
+    paste([file(PNG)]);
+    await settle();
+    expect(spoken()).toBe("Il disegno è vicino al limite di 20 MiB: un’altra immagine non ci sta.");
+    expect(changes).toEqual([]);
   });
 });
 
