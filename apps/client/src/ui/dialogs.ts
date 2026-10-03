@@ -15,7 +15,7 @@ import { trapFocus } from "./a11y";
 import { openLifetime } from "./lifetime";
 import { enterSurface, exitSurface } from "./motion";
 
-interface Frame {
+export interface Frame {
   readonly overlay: HTMLElement;
   readonly box: HTMLElement;
   close(): void;
@@ -23,7 +23,9 @@ interface Frame {
 
 let dialogCount = 0;
 
-function openFrame(title: string, onDismiss: () => void): Frame {
+/// La cornice di un dialogo: per chi ne compone uno suo, come la nota delle
+/// annotazioni, con lo stesso fuoco e la stessa pelle.
+export function openFrame(title: string, onDismiss: () => void): Frame {
   const life = openLifetime();
   const overlay = document.createElement("div");
   overlay.className = "modale shell-dialog";
@@ -61,7 +63,7 @@ function openFrame(title: string, onDismiss: () => void): Frame {
   return { overlay, box, close };
 }
 
-function actions(okLabel: string, onCancel: () => void): HTMLElement {
+export function actions(okLabel: string, onCancel: () => void): HTMLElement {
   const row = document.createElement("div");
   row.className = "palette-actions";
   const ok = document.createElement("button");

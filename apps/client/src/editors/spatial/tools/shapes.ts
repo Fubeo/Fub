@@ -1,5 +1,6 @@
-// Le forme dell'Essenziale: rettangolo, ellisse, linea e freccia, da due
-// punti di un trascinamento (formato della scena, §4 e §6).
+// Le forme: rettangolo, ellisse, linea e freccia, da due punti di un
+// trascinamento (formato della scena, §4 e §6), e la copertura delle
+// annotazioni, un rettangolo opaco senza contorno.
 //
 // Gli elementi sono quelli che l'operazione `add` scrive: geometria con al
 // più due decimali, contorno del colore scelto, nessun riempimento. La
@@ -11,7 +12,7 @@ import { formatNumber } from "../number";
 import type { Point } from "../scene/matrix";
 import { pathData, type Elem } from "../scene/serialize";
 
-export type ShapeTool = "rect" | "ellipse" | "line" | "arrow";
+export type ShapeTool = "rect" | "ellipse" | "line" | "arrow" | "cover";
 
 export interface ShapeStyle {
   /// `#rrggbb`.
@@ -40,7 +41,7 @@ function text(value: number): string {
 export function constrainEnd(tool: ShapeTool, from: Point, to: Point): Point {
   const dx = to[0] - from[0];
   const dy = to[1] - from[1];
-  if (tool === "rect" || tool === "ellipse") {
+  if (tool === "rect" || tool === "ellipse" || tool === "cover") {
     const side = Math.max(Math.abs(dx), Math.abs(dy));
     return [from[0] + (dx < 0 ? -side : side), from[1] + (dy < 0 ? -side : side)];
   }
@@ -71,7 +72,8 @@ export function arrowPath(x1: number, y1: number, x2: number, y2: number, stroke
 /// L'elemento di una forma trascinata da `from` a `to`, nelle coordinate del
 /// livello che la riceve. `null` se è più piccola di `minimum` (un tocco, non
 /// un trascinamento) o se, arrotondata, non si disegnerebbe: SVG non disegna
-/// un rettangolo o un'ellisse con un lato nullo.
+/// un rettangolo o un'ellisse con un lato nullo. La copertura è riempita del
+/// colore e opaca: nasconde alla vista, e non toglie niente dal PDF.
 export function shapeElem(
   tool: ShapeTool,
   id: string,
@@ -81,16 +83,19 @@ export function shapeElem(
   minimum: number,
 ): Elem | null {
   const stroke = { stroke: style.color, "stroke-width": text(style.width) };
-  if (tool === "rect" || tool === "ellipse") {
+  if (tool === "rect" || tool === "ellipse" || tool === "cover") {
     const x1 = round(Math.min(from[0], to[0]));
     const y1 = round(Math.min(from[1], to[1]));
     const x2 = round(Math.max(from[0], to[0]));
     const y2 = round(Math.max(from[1], to[1]));
     if (Math.max(x2 - x1, y2 - y1) < minimum) return null;
-    if (tool === "rect") {
+    if (tool === "rect" || tool === "cover") {
       const width = round(x2 - x1);
       const height = round(y2 - y1);
       if (width <= 0 || height <= 0) return null;
+      if (tool === "cover") {
+        return { tag: "rect", attrs: { id, x: text(x1), y: text(y1), width: text(width), height: text(height), fill: style.color } };
+      }
       return {
         tag: "rect",
         attrs: { id, x: text(x1), y: text(y1), width: text(width), height: text(height), fill: "none", ...stroke },

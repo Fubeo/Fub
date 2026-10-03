@@ -89,13 +89,26 @@ export function addOp(to: Destination, elem: Elem): AddOp {
   return { op: "add", parent: to.parent, pos: { last: true }, elem };
 }
 
-/// L'elemento di un tratto a penna (formato della scena, §5). Il `d` non si
-/// scrive: il motore lo calcola da `fub:ink` e `fub:brush`.
-export function strokeElem(id: string, color: string, brush: Pf1Brush, ink: QuantizedInk, at: string | null): Elem {
-  const attrs: Record<string, string> = { id, "fub:tool": "pen" };
+/// L'opacità del riempimento di un tratto d'evidenziatore, quella
+/// dell'esempio del formato delle annotazioni.
+export const HIGHLIGHTER_OPACITY = "0.4";
+
+/// L'elemento di un tratto a penna o d'evidenziatore (formato della scena,
+/// §5). Il `d` non si scrive: il motore lo calcola da `fub:ink` e
+/// `fub:brush`. L'evidenziatore è trasparente, così il testo sotto si legge.
+export function strokeElem(
+  id: string,
+  color: string,
+  brush: Pf1Brush,
+  ink: QuantizedInk,
+  at: string | null,
+  tool: "pen" | "highlighter" = "pen",
+): Elem {
+  const attrs: Record<string, string> = { id, "fub:tool": tool };
   if (at !== null) attrs["fub:at"] = at;
   attrs["fub:brush"] = formatBrush(brush);
   attrs.fill = color;
+  if (tool === "highlighter") attrs["fill-opacity"] = HIGHLIGHTER_OPACITY;
   attrs["fub:ink"] = encodeInk(inkFromQuantized(ink));
   return { tag: "path", attrs };
 }

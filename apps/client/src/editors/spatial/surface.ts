@@ -39,12 +39,12 @@ export interface VectorSurfaceOptions {
 
 /// Come si apre un testo: una scena da modificare (anche estranea), un
 /// documento da guardare soltanto, o un file che non è una scena.
-type Opened =
+export type Opened =
   | { readonly kind: "scene"; readonly engine: SceneEngine }
   | { readonly kind: "inert"; readonly engine: SceneEngine }
   | { readonly kind: "unreadable"; readonly error: ReadError };
 
-function open(text: string): Opened {
+export function open(text: string): Opened {
   try {
     const engine = SceneEngine.open(text);
     return engine.model === null ? { kind: "inert", engine } : { kind: "scene", engine };
@@ -66,14 +66,14 @@ const READ_ONLY: Readonly<Record<ReadOnly, Key>> = {
 
 /// Perché il documento si guarda soltanto, a parole: il primo motivo, che la
 /// scena elenca in un ordine fisso.
-function readOnlyText(reason: ReadOnly): string {
+export function readOnlyText(reason: ReadOnly): string {
   const numbers = new Intl.NumberFormat(resolvedLanguage());
   if (reason === "too-large") return t(READ_ONLY[reason], { limit: `${numbers.format(MAX_EDIT_BYTES / (1024 * 1024))} MiB` });
   if (reason === "too-many-elements") return t(READ_ONLY[reason], { limit: numbers.format(MAX_ELEMENTS) });
   return t(READ_ONLY[reason]);
 }
 
-function unreadableText(error: ReadError): string {
+export function unreadableText(error: ReadError): string {
   const reason = error.kind === "malformed"
     ? t("vector.unreadable.malformed", { offset: new Intl.NumberFormat(resolvedLanguage()).format(error.offset) })
     : t("vector.unreadable.not_svg");
@@ -81,11 +81,11 @@ function unreadableText(error: ReadError): string {
 }
 
 /// La chiave con cui l'editor sceglie un oggetto: l'id, o `@` e il percorso.
-function keyOf(item: ElementItem): string {
+export function keyOf(item: ElementItem): string {
   return item.id ?? `@${item.path.join(".")}`;
 }
 
-function fileName(id: string): string {
+export function fileName(id: string): string {
   return id.split("/").pop() || id;
 }
 

@@ -33,6 +33,7 @@ flowchart LR
 - [Vault e file](product/vault-and-files.md)
 - [Editor e anteprima](product/editor-and-preview.md)
 - [Disegni](product/drawing.md)
+- [Annotazioni dei PDF](product/pdf-annotations.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
 - [Budget prestazionale](product/performance-budget.md)

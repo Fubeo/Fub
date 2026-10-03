@@ -24,7 +24,8 @@ import type { TextOperation } from "../../core/text-operation";
 import { isContainer } from "./analysis";
 import { classifyChild, describe, type Details, type Item } from "./classify";
 import { sceneOperation } from "./diff";
-import { isNewId } from "./ids";
+import { isNewId, pageId } from "./ids";
+import { positive } from "./annotations";
 import {
   buildDocument,
   buildFragment,
@@ -60,6 +61,7 @@ import {
   type BatchOp,
   type MetaOp,
   type Op,
+  type AnchorPrevious,
   type PagePrevious,
   type PathTarget,
   type Reason,
@@ -181,7 +183,7 @@ function elemGuard<T>(write: () => T): T {
   }
 }
 
-const OP_NAMES: ReadonlySet<unknown> = new Set(["add", "remove", "set", "text", "move", "ident", "page", "meta", "adopt", "batch"]);
+const OP_NAMES: ReadonlySet<unknown> = new Set(["add", "remove", "set", "text", "move", "ident", "page", "meta", "adopt", "anchor", "batch"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -520,6 +522,8 @@ export class SceneEngine {
         return this.ident(op);
       case "page":
         return this.page(op);
+      case "anchor":
+        return this.anchor(op);
       default:
         return this.meta(op);
     }
@@ -926,6 +930,14 @@ export class SceneEngine {
   // Validazione.
   // -------------------------------------------------------------------------
 
+  /// Il numero di un gruppo di pagina: un `g` figlio della radice con
+  /// `fub:page` (`annotation-format.md`, §3); `null` per ogni altro elemento.
+  private pageNumber(node: ElementPart): number | null {
+    if (node.parent !== this.t.model.root || node.facts.uri !== SVG_NS || node.facts.local !== "g") return null;
+    const { fragment, element } = this.reread(node);
+    return positive(element.attrs.find((a) => fragment.doc.namespaces[a.ns] === FUB_NS && a.local === "page")?.value);
+  }
+
   /// Controlla `elem` e ne fa la forma da scrivere: id nuovi, valori nei
   /// limiti, inchiostro e pennello dei tratti, `d` dei tratti ricalcolato
   /// (§4). Il resto lo giudica la classificazione, sull'elemento scritto.
@@ -950,12 +962,15 @@ export class SceneEngine {
       if (get(FUB_NS, "role") === "paper") reject("invalid-elem", "la carta nasce solo col documento");
       const layer = tag === "g" && get(FUB_NS, "layer") !== undefined;
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
+      // Il gruppo di una pagina annotata ha l'id dal numero.
+      const page = tag === "g" && top && underRoot ? positive(get(FUB_NS, "page")) : null;
       const id = get("", "id");
       if (id === undefined) {
         if (tag !== "title" && tag !== "desc" && tag !== "tspan") reject("invalid-elem", `${tag} senza id`);
       } else {
-        if (!isNewId(id, layer ? "layer" : "object")) {
-          reject("invalid-elem", `id non valido per un ${layer ? "livello" : "oggetto"}: ${JSON.stringify(id)}`);
+        if (page !== null ? id !== pageId(page) : !isNewId(id, layer ? "layer" : "object")) {
+          const what = layer ? "un livello" : page !== null ? "la pagina" : "un oggetto";
+          reject("invalid-elem", `id non valido per ${what}: ${JSON.stringify(id)}`);
         }
         if (ids.has(id) || (!top && this.t.has(id))) reject("duplicate-id", `id già usato: ${id}`);
         ids.add(id);
@@ -1300,8 +1315,9 @@ export class SceneEngine {
     this.guard(node, true);
     const old = node.facts.id;
     if (id !== null) {
+      const page = this.pageNumber(node);
       const kind = roleOf(node) === "layer" ? "layer" : "object";
-      if (!isNewId(id, kind)) reject("invalid-elem", `id non valido: ${JSON.stringify(id)}`);
+      if (page !== null ? id !== pageId(page) : !isNewId(id, kind)) reject("invalid-elem", `id non valido: ${JSON.stringify(id)}`);
       if (this.t.has(id)) reject("duplicate-id", `id già usato: ${id}`);
     }
     // Si tocca solo l'attributo, nel testo del tag: gli altri restano come
@@ -1447,6 +1463,77 @@ export class SceneEngine {
       this.place(to, node);
     }
     return inverse;
+  }
+
+  /// Impronta e numero di pagine sulla radice di un `.fubann`. Si tocca solo
+  /// il valore di ciascuno, o lo si aggiunge in coda al tag: il resto della
+  /// radice resta com'è scritto, come in `adopt`. Uno dei due può mancare, e
+  /// allora resta com'è; mancano tutti e due, è un rifiuto. L'inversa rimette
+  /// i valori di prima così come erano, anche fuori grammatica.
+  private anchor(op: Record<string, unknown>): Op {
+    if (this.t.status !== "fubdraw") reject("invalid-elem", "il documento non è di FubDraw");
+    const root = this.t.model.root;
+    const { fragment, element, scope } = this.reread(root);
+    const prefix = scope.attributePrefix(FUB_NS);
+    if (prefix === null) reject("invalid-elem", "la radice non dichiara il namespace di FubDraw");
+    const written = (local: string): Attr | undefined =>
+      element.attrs.find((a) => fragment.doc.namespaces[a.ns] === FUB_NS && a.local === local);
+    const previous: AnchorPrevious = {
+      digest: written("digest")?.value ?? null,
+      pages: written("pages")?.value ?? null,
+    };
+    // `undefined`: il valore resta com'è.
+    let values: { digest?: string | null; pages?: string | null };
+    if (op.previous !== undefined) {
+      const given = op.previous;
+      if (!isRecord(given) || (given.digest !== null && typeof given.digest !== "string") || (given.pages !== null && typeof given.pages !== "string")) {
+        reject("invalid-elem", "anchor non valido");
+      }
+      values = { digest: given.digest as string | null, pages: given.pages as string | null };
+    } else {
+      const { digest, pages } = op;
+      if (digest === undefined && pages === undefined) reject("invalid-elem", "anchor senza impronta né pagine");
+      if (digest !== undefined && (typeof digest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(digest))) {
+        reject("invalid-elem", "l'impronta non è sha256: e 64 cifre minuscole");
+      }
+      if (pages !== undefined && (typeof pages !== "number" || !Number.isSafeInteger(pages) || pages < 1 || pages > 0xffff_ffff)) {
+        reject("invalid-elem", "il numero di pagine non è un intero positivo");
+      }
+      values = {};
+      if (digest !== undefined) values.digest = digest as string;
+      if (pages !== undefined) values.pages = String(pages);
+    }
+    for (const [local, v] of Object.entries(values)) if (typeof v === "string") this.checkValue("svg", FUB_NS, local, v);
+    // Le modifiche dalla fine del tag, così gli indici di prima valgono; gli
+    // attributi nuovi vanno dopo l'ultimo, l'impronta prima delle pagine.
+    const edits: Array<{ from: number; to: number; text: string }> = [];
+    const last = element.attrs[element.attrs.length - 1];
+    const end = last === undefined ? 1 + element.name.length : last.raw[1] + 1 - element.start;
+    let added = "";
+    for (const local of ["digest", "pages"] as const) {
+      const v = values[local];
+      if (v === undefined) continue;
+      const attr = written(local);
+      if (attr !== undefined) {
+        if (v === null) {
+          const [from, to] = attributeSpan(fragment.doc, element, attr);
+          edits.push({ from, to, text: "" });
+        } else {
+          // Fra apici singoli anche l'apice si scrive come riferimento.
+          const quote = fragment.doc.source.text[attr.raw[0] - 1];
+          const text = quote === "'" ? escapeAttribute(v).replace(/'/g, "&#39;") : escapeAttribute(v);
+          edits.push({ from: attr.raw[0] - element.start, to: attr.raw[1] - element.start, text });
+        }
+      } else if (v !== null) {
+        added += ` ${prefix}:${local}="${escapeAttribute(v)}"`;
+      }
+    }
+    if (added !== "") edits.push({ from: end, to: end, text: added });
+    edits.sort((a, b) => b.from - a.from || b.to - a.to);
+    let head = root.head;
+    for (const { from, to, text } of edits) head = head.slice(0, from) + text + head.slice(to);
+    if (head !== root.head) this.setHead(root, head, root.tail);
+    return { op: "anchor", previous };
   }
 
   private adopt(op: Record<string, unknown>): Op {

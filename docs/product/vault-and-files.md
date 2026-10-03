@@ -138,6 +138,18 @@ per titolo e «Livello 1». La prova a vuoto fa gli stessi controlli e non scriv
 l'annullamento manda il disegno nel cestino. *(proposta del 3 ottobre 2026, da
 rivedere)*
 
+«Annota il PDF» (`pdf.annotate`, con la feature `draw`) apre le annotazioni di
+un PDF del vault: il file `X.pdf.fubann` accanto a `X.pdf`, con il nome intero
+del PDF più `.fubann`, perché è il nome a legarle al PDF. Se il file c'è, il
+comando lo apre e basta, senza scrivere e senza annullamento. Se non c'è, lo
+scrive il provider delle annotazioni (radice, titolo e `fub:annotates`) e lo
+apre; l'annullamento lo manda nel cestino. Il nome passa la regola dei nomi
+nuovi prima di scrivere, un nome preso da un altro file è un errore, e un nome
+che non finisce con `.pdf` o un PDF che non c'è non si annotano. Il PDF non si
+scrive mai. Impronta e numero di pagine li scrive l'editor col primo gesto,
+come racconta [Annotazioni dei PDF](pdf-annotations.md). *(proposta del 3
+ottobre 2026, da rivedere)*
+
 ## Albero dei file
 
 L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene

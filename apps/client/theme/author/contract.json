@@ -255,6 +255,13 @@
     "draw-surface",
     "draw-page",
     "vector-notice",
+    "pdf-notice-messages",
+    "pdf-pages",
+    "pdf-page-input",
+    "pdf-list",
+    "pdf-list-page",
+    "pdf-list-body",
+    "pdf-list-marks",
     "markdown-preview",
     "markdown-rendered",
     "markdown-code-copy",
@@ -1030,6 +1037,23 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "pdf-surface",
+      "hooks": [
+        "pdf-notice-messages",
+        "pdf-pages",
+        "pdf-page-input",
+        "pdf-list",
+        "pdf-list-page",
+        "pdf-list-body",
+        "pdf-list-marks"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected"
       ]
     },
     {
@@ -1834,10 +1858,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 412,
+    "hooks": 419,
     "state_names": 7,
-    "assigned_states": 154,
-    "components": 48,
+    "assigned_states": 157,
+    "components": 49,
     "unassigned_hooks": 0
   }
 }

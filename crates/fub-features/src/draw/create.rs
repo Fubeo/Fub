@@ -256,7 +256,8 @@ pub(super) fn in_english(catalog: StringCatalog) -> StringCatalog {
         )
 }
 
-/// Il comando del bundle: [`DRAWING_CREATE`] e nient'altro.
+/// I comandi del bundle: [`DRAWING_CREATE`] e
+/// [`PDF_ANNOTATE`](super::PDF_ANNOTATE), che vive nel modulo `annotate`.
 pub struct DrawCommands;
 
 impl DrawCommands {
@@ -281,7 +282,7 @@ impl DrawCommands {
 
 impl CommandProvider for DrawCommands {
     fn commands(&self) -> Vec<CommandSpec> {
-        vec![DrawCommands::spec()]
+        vec![DrawCommands::spec(), super::annotate::spec()]
     }
 
     fn invoke(
@@ -291,6 +292,9 @@ impl CommandProvider for DrawCommands {
         mode: InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
+        if command == super::PDF_ANNOTATE {
+            return super::annotate::invoke(args, mode, host);
+        }
         if command != DRAWING_CREATE {
             return Err(PluginError::UnknownCommand(command.to_string().into()));
         }
@@ -509,7 +513,7 @@ mod tests {
     #[test]
     fn the_spec_reaches_one_document_and_asks_nothing() {
         let specs = DrawCommands.commands();
-        assert_eq!(specs.len(), 1);
+        assert_eq!(specs.len(), 2, "«Nuovo disegno» e «Annota il PDF»");
         let spec = &specs[0];
         assert_eq!(spec.id, DRAWING_CREATE);
         assert!(spec.params.iter().all(|param| !param.required));

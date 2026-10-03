@@ -519,7 +519,7 @@ export function collapse(text: string): string {
 /// Il paragrafo di un `text`: ogni figlio elemento è una riga, e i dati di
 /// carattere fra due figli ne sono un'altra. Le righe si uniscono con uno
 /// spazio.
-function paragraph(doc: XmlDocument, id: NodeId): string {
+export function paragraph(doc: XmlDocument, id: NodeId): string {
   const lines: string[] = [];
   let run: string[] = [];
   for (const child of doc.children(id)) {

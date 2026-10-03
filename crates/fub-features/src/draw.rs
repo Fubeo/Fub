@@ -1,8 +1,10 @@
 //! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno
 //! e l'export in PNG e in PDF.
 //!
-//! Il comando, «Nuovo disegno», è nel modulo [`create`]: un disegno nasce vuoto
-//! dal provider del formato, con un nome libero, e si apre.
+//! Il comando «Nuovo disegno» è nel modulo [`create`]: un disegno nasce vuoto
+//! dal provider del formato, con un nome libero, e si apre. Il comando «Annota
+//! il PDF» è nel modulo [`annotate`]: apre le annotazioni di un PDF, il file
+//! `.pdf.fubann` accanto, e le fa nascere dal provider `fubann` se non ci sono.
 //!
 //! L'export sono due [`ExportProvider`], uno per formato, che leggono il disegno nello stesso
 //! modo: i byte del documento passano da `usvg`, che ne fa un albero, e da lì
@@ -66,8 +68,10 @@ use fub_format_svg::FORMAT_ID;
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{self, fontdb, ImageHrefResolver, ImageKind, Node, Tree};
 
+mod annotate;
 mod create;
 
+pub use annotate::PDF_ANNOTATE;
 pub use create::{DrawCommands, DRAWING_CREATE};
 
 /// Id del componente.
@@ -105,7 +109,7 @@ const E_WRITE: &str = "e_write";
 /// export.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
-        create::in_italian(StringCatalog::new("it"))
+        annotate::in_italian(create::in_italian(StringCatalog::new("it")))
             .with(E_TARGET, "«{target}» non è una destinazione dei disegni.")
             .with(E_NO_DRAWINGS, "Nella selezione non c'è nessun disegno.")
             .with(
@@ -117,7 +121,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Non ho esportato nessun disegno: «{doc}» non è riuscito ({reason}).",
             )
             .with(E_WRITE, "Non ho scritto «{path}»: {reason}"),
-        create::in_english(StringCatalog::new("en"))
+        annotate::in_english(create::in_english(StringCatalog::new("en")))
             .with(E_TARGET, "«{target}» is not a drawing export destination.")
             .with(E_NO_DRAWINGS, "The selection contains no drawings.")
             .with(

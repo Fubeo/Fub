@@ -65,6 +65,23 @@ assente: il file si legge lo stesso.
 Un file oltre 20 MiB porta all'indice solo la testa (formato della scena,
 §11): gli attributi della radice ci sono, pagine e note no.
 
+**Il legame con il PDF.** L'editor non scrive niente quando apre le
+annotazioni: legge il PDF, ne calcola impronta e numero di pagine e li
+confronta con la radice. Tutto *(proposta del 3 ottobre 2026, da rivedere)*:
+
+- **non ancora scritti**, cioè impronta assente e `fub:pages` assente o
+  uguale: li scrive il primo gesto che modifica il file, nella stessa
+  operazione e nello stesso passo di annulla;
+- **stessa versione**, cioè la stessa impronta: niente da scrivere, e un
+  `fub:pages` assente o diverso si corregge col primo gesto;
+- **PDF cambiato**, cioè un'altra impronta, o pagine diverse senza impronta:
+  le annotazioni restano dove sono e niente si scrive da sé. Un avviso lo
+  dice, e «Conferma questa versione» scrive impronta e pagine nuove in un
+  passo di annulla suo. Le annotazioni non si spostano mai da sole;
+- **PDF assente o illeggibile**, o un `fub:annotates` che non nomina un PDF
+  del vault: le pagine sono bianche, le annotazioni si modificano e la radice
+  non cambia.
+
 ## 3. Pagine
 
 Una pagina annotata è un `g` **figlio della radice** con `fub:page="k"`:
@@ -94,6 +111,29 @@ Le regole di lettura, tutte *(proposta del 3 ottobre 2026, da rivedere)*:
   ha le sue coordinate;
 - gli elementi fuori dalle pagine si leggono e si indicizzano come in un
   disegno.
+
+Le regole di scrittura dell'editor, tutte *(proposta del 3 ottobre 2026, da
+rivedere)*:
+
+- il gruppo di una pagina nasce con il primo oggetto disegnato sulla pagina,
+  nello stesso passo di annulla, con `id` `p` e il numero su almeno quattro
+  cifre (`p0003`), `fub:page` e `fub:page-size` con la misura della pagina;
+- nasce dopo il gruppo della pagina precedente più vicina, o in testa dopo
+  titolo e descrizione: l'ordine del file segue quello delle pagine. Un gruppo
+  precedente senza `id` riceve il suo;
+- un oggetto nuovo va nell'ultimo gruppo della pagina, e un gruppo senza `id`
+  riceve quello della pagina. Se l'`id` della pagina è già di un altro
+  elemento, la pagina non riceve oggetti e l'editor lo dice;
+- la misura e le coordinate sono quelle della pagina come si mostra, con la
+  rotazione del PDF già applicata e scala 1. Senza PDF vale la misura scritta
+  nel gruppo, poi quella del primo gruppo che ne ha una, poi A4
+  (595,28 × 841,89 punti);
+- si sfogliano le pagine del PDF, più ogni pagina annotata oltre l'ultima;
+  senza PDF quelle di `fub:pages`, o fino alla pagina annotata più alta;
+- l'evidenziatore è un tratto della penna (formato della scena, §5) con
+  `fub:tool="highlighter"`, `fill-opacity="0.4"` e il pennello quattro volte
+  più largo; la copertura è un `rect` con `fill` opaco e senza bordo; la nota
+  è il `text` del §4, con il corpo in `fub:note` e un'etichetta di una riga.
 
 ## 4. Note
 
@@ -179,8 +219,8 @@ un'estensione in più. Le annotazioni si nominano per intero,
   nome: `Bando.pdf.fubann` annota `Bando.pdf` nella stessa cartella, scritto
   relativo e con gli escape di un `href`; un nome che non finisce in
   `.pdf.fubann` dà annotazioni senza `fub:annotates`. Impronta, numero di
-  pagine e gruppi li scrive chi apre il PDF. Il documento si rilegge prima di
-  uscire. *(Proposta del 3 ottobre 2026, da rivedere.)*
+  pagine e gruppi li scrive l'editor col primo gesto (§2 e §3). Il documento
+  si rilegge prima di uscire. *(Proposta del 3 ottobre 2026, da rivedere.)*
 - **`rewrite_links`** riscrive i riferimenti come in un disegno (formato della
   scena, §9) e, quando il PDF cambia nome, i soli byte del valore di
   `fub:annotates`, virgolette escluse: le annotazioni seguono il PDF.

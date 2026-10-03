@@ -1,7 +1,8 @@
 // Gli id che FubDraw dà agli elementi che crea (formato della scena, §7).
 //
 // Un oggetto ha `o` seguito da 8 caratteri base36 casuali, un livello `l`
-// seguito da 8, la carta `fub-paper`. Il caso viene da `crypto.getRandomValues`
+// seguito da 8, la carta `fub-paper`, il gruppo di una pagina annotata `p` e
+// il suo numero. Il caso viene da `crypto.getRandomValues`
 // e ogni carattere è uniforme: un byte vale solo sotto 252, il più grande
 // multiplo di 36 che sta in un byte, così nessuna cifra esce più spesso delle
 // altre. Un id già usato nel documento si scarta e se ne genera un altro.
@@ -11,6 +12,13 @@
 
 /// L'id della carta (§2).
 export const PAPER_ID = "fub-paper";
+
+/// L'id del gruppo di una pagina annotata: `p` e il numero su almeno quattro
+/// cifre, `p0003` (`annotation-format.md`, §3). Non è casuale, perché una
+/// pagina ha un gruppo solo. *(Proposta del 3 ottobre 2026, da rivedere.)*
+export function pageId(page: number): string {
+  return `p${String(page).padStart(4, "0")}`;
+}
 
 /// Che cosa riceve l'id: un oggetto qualunque o un livello.
 export type IdKind = "object" | "layer";
