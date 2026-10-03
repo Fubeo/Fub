@@ -18,6 +18,8 @@ use fub_abi::rules::path::{relative_ref, resolve_against, split_fragment};
 use fub_abi::{FormatError, TextEdit};
 use fub_scene::{Reference, SVG_NS};
 
+use crate::escape;
+
 /// Le patch che portano ogni riferimento chiesto alla destinazione nuova.
 ///
 /// Una richiesta nomina l'elemento con lo span che il modello gli ha dato, e
@@ -132,7 +134,7 @@ fn attribute_value(target: &str, quote: char) -> Result<String, FormatError> {
             (!target.starts_with('/')).then(|| format!("./{target}")),
         ];
         for url in candidates.into_iter().flatten() {
-            let value = escape_attribute(&url, quote);
+            let value = escape::attribute(&url, quote);
             if read_back(&value, quote).as_deref() == Some(url.as_str()) {
                 return Ok(value);
             }
@@ -154,39 +156,9 @@ fn read_back(value: &str, quote: char) -> Option<String> {
     }
 }
 
-/// Un valore d'attributo con gli escape di §7: `&amp;`, `&lt;`, `&gt;`,
-/// `&quot;`, e `&#9;`, `&#10;`, `&#13;` per tabulazioni e a capo, che il parser
-/// altrimenti trasformerebbe in spazi. Fra apici singoli anche `&apos;`.
-fn escape_attribute(value: &str, quote: char) -> String {
-    let mut out = String::with_capacity(value.len());
-    for c in value.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' if quote == '\'' => out.push_str("&apos;"),
-            '\t' => out.push_str("&#9;"),
-            '\n' => out.push_str("&#10;"),
-            '\r' => out.push_str("&#13;"),
-            c => out.push(c),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn an_attribute_is_escaped_for_its_quotes() {
-        assert_eq!(
-            escape_attribute("a&b<c>\"d'e\tf\ng\rh", '"'),
-            "a&amp;b&lt;c&gt;&quot;d'e&#9;f&#10;g&#13;h"
-        );
-        assert_eq!(escape_attribute("l'acqua", '\''), "l&apos;acqua");
-    }
 
     #[test]
     fn a_name_that_looks_like_a_scheme_takes_a_dot_slash() {

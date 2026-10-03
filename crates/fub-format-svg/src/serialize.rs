@@ -5,9 +5,10 @@
 //! una scena non ne porta la geometria. Del modello si usa solo il titolo.
 
 use fub_abi::model::DocumentModel;
-use fub_abi::FormatError;
+use fub_abi::{Fnv1a, FormatError};
 use fub_scene::{FUB_NS, SUPPORTED_VERSION, SVG_NS};
 
+use crate::escape;
 use crate::render::title_of;
 
 /// Le dimensioni della pagina di un disegno nuovo, in unità utente.
@@ -52,7 +53,7 @@ pub(crate) fn new_document(model: &DocumentModel) -> Result<String, FormatError>
         version = SUPPORTED_VERSION,
         w = WIDTH,
         h = HEIGHT,
-        title = escape_text(&title),
+        title = escape::text(&title),
         layer = layer,
         name = FIRST_LAYER,
     );
@@ -91,35 +92,17 @@ fn xml_char(c: char) -> bool {
         || c >= '\u{10000}'
 }
 
-/// Il testo di un `title` (§7, punto 5): solo `&amp;`, `&lt;` e `&gt;`.
-fn escape_text(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            c => out.push(c),
-        }
-    }
-    out
-}
-
 /// L'id del primo livello: `l` e 8 caratteri base36 (§7).
 ///
 /// Il contratto vuole id casuali perché due disegni non si somiglino; un
 /// provider però è una funzione pura e non ha un generatore. L'id viene quindi
-/// dal nome del documento, con FNV-1a a 64 bit: due disegni diversi hanno
-/// livelli diversi, e lo stesso nome dà sempre lo stesso file. L'unicità che
-/// conta, quella nel documento, è garantita: il livello è l'unico id oltre
-/// alla carta.
+/// dal nome del documento, con l'impronta FNV-1a a 64 bit del contratto,
+/// [`Fnv1a`]: due disegni diversi hanno livelli diversi, e lo stesso nome dà
+/// sempre lo stesso file. L'unicità che conta, quella nel documento, è
+/// garantita: il livello è l'unico id oltre alla carta.
 fn layer_id(doc: &str) -> String {
     const BASE36: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in doc.bytes() {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
+    let mut hash = Fnv1a::hash(doc.as_bytes());
     let mut digits = [b'0'; 8];
     for digit in digits.iter_mut().rev() {
         *digit = BASE36[(hash % 36) as usize];
@@ -154,6 +137,5 @@ mod tests {
         assert_eq!(plain("  Ciclo\n\tdell'acqua  "), "Ciclo dell'acqua");
         assert_eq!(plain("a\u{1}b \u{fffe} c"), "ab c");
         assert_eq!(plain(" \n "), "");
-        assert_eq!(escape_text("a < b & c > d"), "a &lt; b &amp; c &gt; d");
     }
 }

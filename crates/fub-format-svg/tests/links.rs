@@ -134,7 +134,7 @@ fn a_foreign_file_keeps_every_other_byte() {
     assert_eq!(
         after,
         FOREIGN
-            .replace("'quartiere/parco.md'", "'quartiere/l&apos;parco.md'")
+            .replace("'quartiere/parco.md'", "'quartiere/l&#39;parco.md'")
             .replace(r#""foto/mappa.png""#, r#""foto/mappa vecchia.png""#)
     );
     assert_eq!(

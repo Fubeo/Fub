@@ -24,6 +24,7 @@
 //! Il provider non modifica i documenti: le operazioni sul disegno le applica
 //! la superficie della shell, come patch testuali sulla sorgente.
 
+mod escape;
 mod links;
 mod parse;
 mod render;
