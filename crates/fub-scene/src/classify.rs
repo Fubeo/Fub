@@ -122,7 +122,7 @@ pub struct RootItem {
 #[serde(rename_all = "camelCase")]
 pub struct ElementItem {
     /// Gli indici dei figli elemento dalla radice, come il bersaglio di
-    /// `operazioni.md` §2. La radice è `[]`.
+    /// un'operazione della shell. La radice è `[]`.
     pub path: Vec<usize>,
     pub tag: &'static str,
     pub role: Role,

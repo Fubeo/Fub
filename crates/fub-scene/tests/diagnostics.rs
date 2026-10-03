@@ -220,7 +220,7 @@ fn stroke(tool: &str, attributes: &str) -> String {
 
 #[test]
 fn s009_a_pen_stroke_that_fades_into_the_paper() {
-    // I tre colori di DEC-13 sotto 3:1 sulla carta bianca, il nero quasi
+    // I tre colori di Okabe–Ito sotto 3:1 sulla carta bianca, il nero quasi
     // trasparente, un'opacità di gruppo, un colore ereditato dal livello e
     // un tratto nero sulla carta nera.
     for (paper, body, detail) in [
