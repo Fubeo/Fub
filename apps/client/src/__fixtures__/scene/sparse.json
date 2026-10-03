@@ -1,0 +1,886 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        4017
+      ],
+      "utf16": [
+        0,
+        4017
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            154
+          ],
+          "utf16": [
+            0,
+            154
+          ]
+        },
+        "close": {
+          "bytes": [
+            4011,
+            4017
+          ],
+          "utf16": [
+            4011,
+            4017
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        157,
+        188
+      ],
+      "utf16": [
+        157,
+        188
+      ],
+      "indent": "  ",
+      "text": "Ciclo dell'acqua"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "desc",
+      "role": "desc",
+      "id": null,
+      "bytes": [
+        191,
+        235
+      ],
+      "utf16": [
+        191,
+        235
+      ],
+      "indent": "  ",
+      "text": "Dal mare alle nuvole, e ritorno"
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        238,
+        331
+      ],
+      "utf16": [
+        238,
+        331
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l3f8a0c2d",
+      "bytes": [
+        334,
+        2932
+      ],
+      "utf16": [
+        334,
+        2932
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            334,
+            374
+          ],
+          "utf16": [
+            334,
+            374
+          ]
+        },
+        "close": {
+          "bytes": [
+            2928,
+            2932
+          ],
+          "utf16": [
+            2928,
+            2932
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "ellipse",
+      "role": "ellipse",
+      "id": "o1a2b3c4d",
+      "bytes": [
+        379,
+        485
+      ],
+      "utf16": [
+        379,
+        485
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "path",
+      "role": "arrow",
+      "id": "o5e6f7g8h",
+      "bytes": [
+        490,
+        710
+      ],
+      "utf16": [
+        490,
+        710
+      ],
+      "indent": "    ",
+      "arrow": [
+        420.0,
+        200.0,
+        700.0,
+        420.0
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o9i0j1k2l",
+      "bytes": [
+        715,
+        927
+      ],
+      "utf16": [
+        715,
+        927
+      ],
+      "indent": "    ",
+      "lines": [
+        "Evaporazione",
+        "& condensa"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o7k2m9x4q",
+      "bytes": [
+        932,
+        1480
+      ],
+      "utf16": [
+        932,
+        1480
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": true,
+        "samples": 12,
+        "duration": 88
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000001",
+      "bytes": [
+        1485,
+        1833
+      ],
+      "utf16": [
+        1485,
+        1833
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "highlighter",
+        "redrawable": true,
+        "samples": 5,
+        "duration": 64
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000010",
+      "bytes": [
+        1838,
+        2746
+      ],
+      "utf16": [
+        1838,
+        2746
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            1838,
+            1904
+          ],
+          "utf16": [
+            1838,
+            1904
+          ]
+        },
+        "close": {
+          "bytes": [
+            2742,
+            2746
+          ],
+          "utf16": [
+            2742,
+            2746
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000011",
+      "bytes": [
+        1911,
+        1996
+      ],
+      "utf16": [
+        1911,
+        1996
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        1
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000012",
+      "bytes": [
+        2003,
+        2068
+      ],
+      "utf16": [
+        2003,
+        2068
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        2
+      ],
+      "tag": "line",
+      "role": "line",
+      "id": "o00000013",
+      "bytes": [
+        2075,
+        2192
+      ],
+      "utf16": [
+        2075,
+        2192
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        3
+      ],
+      "tag": "polyline",
+      "role": "polyline",
+      "id": "o00000014",
+      "bytes": [
+        2199,
+        2314
+      ],
+      "utf16": [
+        2199,
+        2314
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        4
+      ],
+      "tag": "polygon",
+      "role": "polygon",
+      "id": "o00000015",
+      "bytes": [
+        2321,
+        2411
+      ],
+      "utf16": [
+        2321,
+        2411
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        5
+      ],
+      "tag": "path",
+      "role": "path",
+      "id": "o00000016",
+      "bytes": [
+        2418,
+        2569
+      ],
+      "utf16": [
+        2418,
+        2569
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        6
+      ],
+      "tag": "image",
+      "role": "image",
+      "id": "o00000017",
+      "bytes": [
+        2576,
+        2699
+      ],
+      "utf16": [
+        2576,
+        2699
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        3,
+        5
+      ],
+      "bytes": [
+        2706,
+        2737
+      ],
+      "utf16": [
+        2706,
+        2737
+      ],
+      "elements": [
+        7,
+        8
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6
+      ],
+      "tag": "a",
+      "role": "link",
+      "id": "o00000020",
+      "bytes": [
+        2751,
+        2925
+      ],
+      "utf16": [
+        2751,
+        2925
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2751,
+            2790
+          ],
+          "utf16": [
+            2751,
+            2790
+          ]
+        },
+        "close": {
+          "bytes": [
+            2921,
+            2925
+          ],
+          "utf16": [
+            2921,
+            2925
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6,
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        2797,
+        2831
+      ],
+      "utf16": [
+        2797,
+        2831
+      ],
+      "indent": "      ",
+      "text": "Il ciclo nella nota"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000021",
+      "bytes": [
+        2838,
+        2916
+      ],
+      "utf16": [
+        2838,
+        2916
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l9z8y7x6w",
+      "bytes": [
+        2935,
+        4010
+      ],
+      "utf16": [
+        2935,
+        4010
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2935,
+            3006
+          ],
+          "utf16": [
+            2935,
+            3006
+          ]
+        },
+        "close": {
+          "bytes": [
+            4006,
+            4010
+          ],
+          "utf16": [
+            4006,
+            4010
+          ]
+        }
+      },
+      "layer": {
+        "name": "Appunti",
+        "locked": true,
+        "hidden": true
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        0
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000030",
+      "bytes": [
+        3011,
+        3255
+      ],
+      "utf16": [
+        3011,
+        3255
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        1
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000031",
+      "bytes": [
+        3260,
+        3533
+      ],
+      "utf16": [
+        3260,
+        3533
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": false,
+        "samples": 2,
+        "duration": 8
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        2
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000032",
+      "bytes": [
+        3538,
+        3866
+      ],
+      "utf16": [
+        3538,
+        3866
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": true,
+        "samples": 5,
+        "duration": 64
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        3
+      ],
+      "tag": "image",
+      "role": "image",
+      "id": "o00000033",
+      "bytes": [
+        3871,
+        3971
+      ],
+      "utf16": [
+        3871,
+        3971
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        4
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000034",
+      "bytes": [
+        3976,
+        4003
+      ],
+      "utf16": [
+        3976,
+        4003
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            3976,
+            3994
+          ],
+          "utf16": [
+            3976,
+            3994
+          ]
+        },
+        "close": {
+          "bytes": [
+            3999,
+            4003
+          ],
+          "utf16": [
+            3999,
+            4003
+          ]
+        }
+      }
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Ciclo dell'acqua",
+      "bytes": [
+        157,
+        188
+      ],
+      "utf16": [
+        157,
+        188
+      ]
+    },
+    "desc": {
+      "text": "Dal mare alle nuvole, e ritorno",
+      "bytes": [
+        191,
+        235
+      ],
+      "utf16": [
+        191,
+        235
+      ]
+    },
+    "texts": [
+      {
+        "text": "Evaporazione & condensa",
+        "bytes": [
+          715,
+          927
+        ],
+        "utf16": [
+          715,
+          927
+        ]
+      }
+    ],
+    "links": [
+      {
+        "path": "note/acqua.md",
+        "bytes": [
+          2751,
+          2925
+        ],
+        "utf16": [
+          2751,
+          2925
+        ],
+        "href": {
+          "bytes": [
+            2775,
+            2788
+          ],
+          "utf16": [
+            2775,
+            2788
+          ]
+        }
+      }
+    ],
+    "embeds": [
+      {
+        "path": "foto/mare.png",
+        "bytes": [
+          2576,
+          2699
+        ],
+        "utf16": [
+          2576,
+          2699
+        ],
+        "href": {
+          "bytes": [
+            2683,
+            2696
+          ],
+          "utf16": [
+            2683,
+            2696
+          ]
+        }
+      }
+    ]
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1",
+      "Appunti"
+    ],
+    "counts": {
+      "strokes": 5,
+      "shapes": 9,
+      "texts": 1,
+      "images": 2,
+      "links": 1,
+      "foreign": 1
+    },
+    "ink": {
+      "samples": 24,
+      "duration": 224
+    },
+    "bbox": {
+      "x": 39.7,
+      "y": 26.13,
+      "width": 1480.3,
+      "height": 1068.57
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        2706,
+        2737
+      ],
+      "utf16": [
+        2706,
+        2737
+      ]
+    },
+    {
+      "code": "S004",
+      "severity": "error",
+      "bytes": [
+        3011,
+        3255
+      ],
+      "utf16": [
+        3011,
+        3255
+      ],
+      "detail": "fub:ink arity 1"
+    },
+    {
+      "code": "S009",
+      "severity": "info",
+      "bytes": [
+        3538,
+        3866
+      ],
+      "utf16": [
+        3538,
+        3866
+      ],
+      "detail": "2.25"
+    },
+    {
+      "code": "S010",
+      "severity": "info",
+      "bytes": [
+        3260,
+        3533
+      ],
+      "utf16": [
+        3260,
+        3533
+      ],
+      "detail": "q"
+    }
+  ]
+}

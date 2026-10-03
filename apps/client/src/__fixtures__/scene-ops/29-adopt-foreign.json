@@ -1,0 +1,18 @@
+{
+  "name": "adopt-foreign",
+  "description": "«Modifica» su un SVG estraneo",
+  "input": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<!-- Created with Inkscape (http://www.inkscape.org/) -->\n\n<svg\n   width=\"200\"\n   height=\"100\"\n   viewBox=\"0 0 200 100\"\n   version=\"1.1\"\n   xmlns=\"http://www.w3.org/2000/svg\"\n   xmlns:svg=\"http://www.w3.org/2000/svg\">\n  <rect x=\"10\" y=\"10\" width=\"50\" height=\"50\" style=\"fill:#ff0000\"/>\n</svg>\n",
+  "ops": [
+    {
+      "op": "adopt"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<!-- Created with Inkscape (http://www.inkscape.org/) -->\n\n<svg\n   width=\"200\"\n   height=\"100\"\n   viewBox=\"0 0 200 100\"\n   version=\"1.1\"\n   xmlns=\"http://www.w3.org/2000/svg\"\n   xmlns:svg=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\">\n  <rect x=\"10\" y=\"10\" width=\"50\" height=\"50\" style=\"fill:#ff0000\"/>\n</svg>\n",
+    "inverse": {
+      "op": "adopt",
+      "undo": true
+    }
+  }
+}

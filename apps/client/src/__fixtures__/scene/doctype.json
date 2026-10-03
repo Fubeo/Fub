@@ -1,0 +1,286 @@
+{
+  "status": "fubdraw",
+  "readOnly": [
+    "doctype"
+  ],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "foreign",
+      "parentPath": null,
+      "bytes": [
+        0,
+        190
+      ],
+      "utf16": [
+        0,
+        190
+      ],
+      "elements": [
+        0,
+        0
+      ],
+      "indent": ""
+    },
+    {
+      "kind": "root",
+      "bytes": [
+        191,
+        630
+      ],
+      "utf16": [
+        191,
+        630
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            191,
+            297
+          ],
+          "utf16": [
+            191,
+            297
+          ]
+        },
+        "close": {
+          "bytes": [
+            624,
+            630
+          ],
+          "utf16": [
+            624,
+            630
+          ]
+        }
+      }
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [],
+      "bytes": [
+        300,
+        332
+      ],
+      "utf16": [
+        300,
+        332
+      ],
+      "elements": [
+        0,
+        1
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        335,
+        426
+      ],
+      "utf16": [
+        335,
+        426
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        429,
+        623
+      ],
+      "utf16": [
+        429,
+        623
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            429,
+            469
+          ],
+          "utf16": [
+            429,
+            469
+          ]
+        },
+        "close": {
+          "bytes": [
+            619,
+            623
+          ],
+          "utf16": [
+            619,
+            623
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        2,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000001",
+      "bytes": [
+        474,
+        548
+      ],
+      "utf16": [
+        474,
+        548
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        2
+      ],
+      "bytes": [
+        553,
+        616
+      ],
+      "utf16": [
+        553,
+        616
+      ],
+      "elements": [
+        1,
+        2
+      ],
+      "indent": "    "
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Giardino d'inverno",
+      "bytes": [
+        300,
+        332
+      ],
+      "utf16": [
+        300,
+        332
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Giardino",
+        "bytes": [
+          553,
+          616
+        ],
+        "utf16": [
+          553,
+          616
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "counts": {
+      "strokes": 0,
+      "shapes": 1,
+      "texts": 0,
+      "images": 0,
+      "links": 0,
+      "foreign": 3
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 10.0,
+      "y": 10.0,
+      "width": 20.0,
+      "height": 20.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        0,
+        190
+      ],
+      "utf16": [
+        0,
+        190
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        300,
+        332
+      ],
+      "utf16": [
+        300,
+        332
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        553,
+        616
+      ],
+      "utf16": [
+        553,
+        616
+      ]
+    },
+    {
+      "code": "S008",
+      "severity": "info",
+      "bytes": [
+        39,
+        190
+      ],
+      "utf16": [
+        39,
+        190
+      ]
+    }
+  ]
+}

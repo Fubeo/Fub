@@ -9,3 +9,8 @@
 #
 # `text=auto` lascia stare i binari: git li riconosce e non li tocca.
 * text=auto eol=lf
+
+# Le fixture della scena (`fub-scene`, test `mirror`) sono byte da confrontare,
+# e `crlf-bom.svg` esiste per avere BOM e CRLF: la normalizzazione qui sopra
+# ne farebbe un altro file, e il test fallirebbe a ogni checkout.
+apps/client/src/__fixtures__/scene/*.svg -text

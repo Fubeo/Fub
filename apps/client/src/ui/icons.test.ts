@@ -67,7 +67,9 @@ describe("il costrutto delle icone", () => {
 
   it("nessun SVG chrome è dichiarato fuori da icons.ts", () => {
     const offenders = Object.entries(sources)
-      .filter(([path]) => path !== "./icons.ts" && !path.endsWith("/ui/icons.ts") && !/\.test\./.test(path))
+      // I test e i loro aiuti (`test-support.ts`) non sono chrome: scrivono
+      // documenti di prova, come le fixture della scena di FubDraw.
+      .filter(([path]) => path !== "./icons.ts" && !path.endsWith("/ui/icons.ts") && !/\.test\.|\/test-support\.ts$/.test(path))
       .filter(([, text]) => /<svg\b/i.test(text))
       .map(([path]) => path);
     expect(offenders, `SVG fuori dal modulo icone: ${offenders.join(", ")}`).toEqual([]);
