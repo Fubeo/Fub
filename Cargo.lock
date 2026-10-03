@@ -1791,6 +1791,7 @@ dependencies = [
  "fub-abi",
  "fub-format-base",
  "fub-format-markdown",
+ "fub-format-svg",
  "fub-kernel",
  "fub-sdk",
  "fub-testkit",

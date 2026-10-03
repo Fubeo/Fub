@@ -1,6 +1,10 @@
-//! I disegni fuori da Fub: l'export in PNG e in PDF (bundle `fub.draw`).
+//! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno
+//! e l'export in PNG e in PDF.
 //!
-//! Due [`ExportProvider`], uno per formato, che leggono il disegno nello stesso
+//! Il comando, «Nuovo disegno», è nel modulo [`create`]: un disegno nasce vuoto
+//! dal provider del formato, con un nome libero, e si apre.
+//!
+//! L'export sono due [`ExportProvider`], uno per formato, che leggono il disegno nello stesso
 //! modo: i byte del documento passano da `usvg`, che ne fa un albero, e da lì
 //! `resvg` rasterizza il PNG e `svg2pdf` scrive il PDF vettoriale. Un disegno
 //! è un documento del formato `svg`; gli altri documenti della selezione si
@@ -58,8 +62,13 @@ use fub_abi::transfer::{
     artifact_key, ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest,
     ExportTarget, TransferNote,
 };
+use fub_format_svg::FORMAT_ID;
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{self, fontdb, ImageHrefResolver, ImageKind, Node, Tree};
+
+mod create;
+
+pub use create::{DrawCommands, DRAWING_CREATE};
 
 /// Id del componente.
 pub const DRAW_ID: &str = "fub.draw";
@@ -67,11 +76,6 @@ pub const DRAW_ID: &str = "fub.draw";
 pub const DRAW_PNG: &str = "draw.png";
 /// La destinazione PDF: un file vettoriale per disegno.
 pub const DRAW_PDF: &str = "draw.pdf";
-
-/// L'id del formato dei disegni, quello che `fub-format-svg` dichiara. Scritto
-/// qui e non importato: questo crate non dipende dai formati, e la coincidenza
-/// la prova il test end-to-end di `fub-host` con il formato vero.
-const SVG_FORMAT: &str = "svg";
 
 /// L'opzione del PNG: quanti pixel per pixel CSS del disegno.
 const SCALE: &str = "scale";
@@ -96,11 +100,12 @@ const E_SCALE: &str = "e_scale";
 const E_NONE_EXPORTED: &str = "e_none_exported";
 const E_WRITE: &str = "e_write";
 
-/// Le stringhe del componente: i soli errori, perché le note del log sono
-/// testo semplice come quelle degli altri export.
+/// Le stringhe del componente: quelle del comando, e dell'export i soli
+/// errori, perché le note del log sono testo semplice come quelle degli altri
+/// export.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
-        StringCatalog::new("it")
+        create::in_italian(StringCatalog::new("it"))
             .with(E_TARGET, "«{target}» non è una destinazione dei disegni.")
             .with(E_NO_DRAWINGS, "Nella selezione non c'è nessun disegno.")
             .with(
@@ -112,7 +117,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Non ho esportato nessun disegno: «{doc}» non è riuscito ({reason}).",
             )
             .with(E_WRITE, "Non ho scritto «{path}»: {reason}"),
-        StringCatalog::new("en")
+        create::in_english(StringCatalog::new("en"))
             .with(E_TARGET, "«{target}» is not a drawing export destination.")
             .with(E_NO_DRAWINGS, "The selection contains no drawings.")
             .with(
@@ -299,7 +304,7 @@ fn export_drawings(
 /// disegno nemmeno qui.
 fn is_drawing(host: &dyn ReadApi, doc: &DocId) -> bool {
     host.format_of(doc)
-        .is_some_and(|format| format.descriptor.id == SVG_FORMAT)
+        .is_some_and(|format| format.descriptor.id == FORMAT_ID)
 }
 
 /// Il nome dell'artefatto di ciascun disegno: il path del documento con

@@ -43,7 +43,8 @@
 //!   azione dell'editor, offerto in
 //!   [`CommandSurface::Toolbar`](fub_abi::command::CommandSurface::Toolbar);
 //!   la modifica la esegue la superficie che scrive.
-//! - `draw` — l'export dei disegni in PNG e in PDF come due
+//! - `draw` — i disegni: il comando «Nuovo disegno», che ne scrive uno vuoto
+//!   con il provider del formato e lo apre, e l'export in PNG e in PDF come due
 //!   [`ExportProvider`](fub_abi::transfer::ExportProvider), con `resvg` e
 //!   `svg2pdf`: nessuna risorsa oltre al documento, i soli caratteri di Fub.
 //!   Fuori dal `default`, dietro la cargo feature `draw`.
@@ -118,7 +119,7 @@ pub use commands::{
 #[cfg(feature = "dashboard")]
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "draw")]
-pub use draw::{PdfExport, PngExport, DRAW_ID, DRAW_PDF, DRAW_PNG};
+pub use draw::{DrawCommands, PdfExport, PngExport, DRAWING_CREATE, DRAW_ID, DRAW_PDF, DRAW_PNG};
 #[cfg(feature = "formatting")]
 pub use formatting::{FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]

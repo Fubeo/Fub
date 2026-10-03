@@ -72,20 +72,25 @@ base = ["dep:fub-format-base", "properties"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
-# L'export dei disegni in PNG e in PDF. È l'unica feature **fuori** dal default,
-# ed è una scelta e non una dimenticanza: porta un rasterizzatore, un
-# convertitore PDF e i caratteri di Fub incorporati nel binario, e li porta
-# solo con il formato dei disegni, che sta dietro la feature `draw` di
-# `fub-host`. Chi compila senza disegni non paga niente di tutto questo; la
-# regola è presidiata da `.github/scripts/check-cargo-feature-default.mjs` e da
+# I disegni: il comando che ne fa nascere uno e l'export in PNG e in PDF. È
+# l'unica feature **fuori** dal default, ed è una scelta e non una
+# dimenticanza: porta un rasterizzatore, un convertitore PDF e i caratteri di
+# Fub incorporati nel binario, e li porta solo con il formato dei disegni, che
+# sta dietro la feature `draw` di `fub-host`. Chi compila senza disegni non
+# paga niente di tutto questo; la regola è presidiata da
+# `.github/scripts/check-cargo-feature-default.mjs` e da
 # `tests/cargo_features.rs`.
-draw = ["dep:resvg", "dep:svg2pdf", "dep:png", "dep:image"]
+draw = ["dep:fub-format-svg", "dep:resvg", "dep:svg2pdf", "dep:png", "dep:image"]
 
 [dependencies]
 camino.workspace = true
 fub-abi = { workspace = true }
 serde = { workspace = true }
 fub-format-base = { workspace = true, optional = true }
+# Dietro `draw`: un disegno nuovo lo scrive `serialize` del provider dei
+# disegni, e l'id del formato è il suo. Come `fub-format-base` per `base`, il
+# formato è una libreria del contratto e non porta il kernel.
+fub-format-svg = { workspace = true, optional = true }
 serde_json = { workspace = true }
 # Dietro `properties`: stessa crate/versione del provider markdown, usata solo
 # per riscrivere la mappa del frontmatter (mai `FormatProvider::serialize`).
