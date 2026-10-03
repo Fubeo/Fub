@@ -47,6 +47,7 @@ import {
   tagName,
   tidy,
   type ContainerNode,
+  type DocumentModel,
   type ElementPart,
   type Fragment,
   type Part,
@@ -417,6 +418,22 @@ export class SceneEngine {
   /// `null` per un documento in sola lettura.
   get status(): Status | null {
     return this.tree === null ? null : this.tree.status;
+  }
+
+  /// L'albero del documento, per chi lo disegna (`painter/`): si legge e
+  /// non si modifica. Un nodo che un'operazione non tocca resta lo stesso
+  /// oggetto, e su questo il painter misura che cosa ridisegnare. `null` per
+  /// un documento in sola lettura, che la superficie mostra intero come
+  /// immagine inerte.
+  get model(): DocumentModel | null {
+    return this.tree === null ? null : this.tree.model;
+  }
+
+  /// L'elemento che porta `id`, o l'unità estranea che lo contiene: il
+  /// painter ci risolve i riferimenti di un blocco estraneo verso il resto
+  /// del documento.
+  holder(id: string): ElementPart | null {
+    return this.tree === null ? null : this.tree.holder(id);
   }
 
   /// Le voci della scena corrente, le stesse che il lettore ricava dal testo.

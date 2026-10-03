@@ -170,8 +170,10 @@ function attributesAllowed(element: ElementNode, tag: Tag): boolean {
   });
 }
 
-/// Il giudizio su un attributo SVG senza namespace.
-function svgAttribute(tag: Tag, name: string, value: string): boolean {
+/// Il giudizio su un attributo SVG senza namespace. Il painter lo usa per
+/// gli attributi della radice, che non si classifica: ne porta sugli strati
+/// vivi solo quelli che varrebbero su un `g`.
+export function svgAttribute(tag: Tag, name: string, value: string): boolean {
   switch (name) {
     case "id":
       return value !== "";
