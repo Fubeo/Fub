@@ -376,7 +376,7 @@ function shapeOf(leaf: LeafNode, scope: NamespaceScope): PaintShape | null {
 
 /// Il tag di un contenitore, letto: attributi dipinti, `xml:space`,
 /// `display="none"`.
-interface HeadInfo {
+export interface HeadInfo {
   readonly head: string;
   readonly tail: string | null;
   readonly attrs: readonly PaintAttr[];
@@ -646,11 +646,33 @@ export class PaintBuilder {
     let shape = this.shapes.get(leaf);
     if (shape === undefined) {
       const scope = this.scopeInfo(leaf.parent!);
-      shape = this.byText?.get(scope.signature)?.get(leaf.raw) ?? shapeOf(leaf, scope.scope);
+      shape = this.takeByText(scope.signature, leaf.raw) ?? shapeOf(leaf, scope.scope);
       if (shape !== null && !this.shapeText.has(shape)) this.shapeText.set(shape, { signature: scope.signature, raw: leaf.raw });
       this.shapes.set(leaf, shape);
     }
     return shape;
+  }
+
+  /// La forma della scena precedente con lo stesso scope e lo stesso testo,
+  /// tolta dall'indice: due elementi identici di un modello nuovo non
+  /// prendono la stessa forma, così ogni forma della scena è di un elemento
+  /// solo, e gli strumenti la ritrovano con `paintsOf`.
+  private takeByText(signature: string, raw: string): PaintShape | undefined {
+    const bucket = this.byText?.get(signature);
+    const shape = bucket?.get(raw);
+    if (shape !== undefined) bucket!.delete(raw);
+    return shape;
+  }
+
+  /// Ciò che l'ultima scena disegna per `node`: la sua forma, o i gruppi di
+  /// un contenitore, uno per ogni strato vivo che attraversa. Vuoto per un
+  /// elemento che non disegna, o che l'ultima scena non contiene.
+  paintsOf(node: ElementPart): readonly PaintNode[] {
+    if (node.kind === "leaf") {
+      const shape = this.shapes.get(node);
+      return shape === undefined || shape === null ? [] : [shape];
+    }
+    return this.groups.get(node) ?? [];
   }
 
   /// Una chiave che cambia quando cambia il testo di `node`: il numero di

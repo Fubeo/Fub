@@ -1,0 +1,62 @@
+// Il registro degli strumenti (piano §6, regola 1): ogni strumento dichiara
+// id, livello minimo, gruppo, icona, etichetta, scorciatoia e descrizione per
+// lo screen reader, e i livelli filtrano. Qui ci sono gli strumenti
+// dell'Essenziale; Standard ed Esperto si aggiungono alla stessa lista.
+//
+// Le scorciatoie sono una lettera senza modificatori, quelle che chi disegna
+// conosce già da altri programmi, e valgono solo col fuoco sulla superficie.
+
+import type { Key } from "../../../i18n/strings";
+
+/// I livelli di DEC-13, in ordine.
+export type Level = "essential" | "standard" | "expert";
+
+const LEVEL_ORDER: readonly Level[] = ["essential", "standard", "expert"];
+
+export type ToolId = "select" | "pen" | "eraser" | "rect" | "ellipse" | "line" | "arrow";
+
+/// Come la barra raggruppa gli strumenti: scegliere, scrivere, forme.
+export type ToolGroup = "pick" | "ink" | "shape";
+
+export interface ToolSpec {
+  readonly id: ToolId;
+  readonly level: Level;
+  readonly group: ToolGroup;
+  /// Il nome di un'icona registrata (`ui/icons.ts`).
+  readonly icon: string;
+  readonly label: Key;
+  readonly description: Key;
+  /// Il tasto, minuscolo, come lo dà `KeyboardEvent.key`.
+  readonly shortcut: string;
+}
+
+export const TOOLS: readonly ToolSpec[] = [
+  { id: "select", level: "essential", group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
+  { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
+  { id: "eraser", level: "essential", group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },
+  { id: "rect", level: "essential", group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r" },
+  { id: "ellipse", level: "essential", group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
+  { id: "line", level: "essential", group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
+  { id: "arrow", level: "essential", group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "a" },
+];
+
+/// Lo strumento con cui si apre un disegno: la penna, perché un disegno si
+/// apre per disegnare.
+export const DEFAULT_TOOL: ToolId = "pen";
+
+/// Gli strumenti di un livello: i suoi e quelli dei livelli sotto.
+export function toolsFor(level: Level): readonly ToolSpec[] {
+  const rank = LEVEL_ORDER.indexOf(level);
+  return TOOLS.filter((tool) => LEVEL_ORDER.indexOf(tool.level) <= rank);
+}
+
+export function toolSpec(id: ToolId): ToolSpec {
+  return TOOLS.find((tool) => tool.id === id)!;
+}
+
+/// Lo strumento di un tasto premuto senza modificatori, fra quelli di
+/// `tools`.
+export function toolForKey(tools: readonly ToolSpec[], key: string): ToolSpec | null {
+  const lower = key.toLowerCase();
+  return tools.find((tool) => tool.shortcut === lower) ?? null;
+}

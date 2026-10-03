@@ -1099,6 +1099,164 @@ html, body, #app {
 .spatial-image-slot {
   display: none;
 }
+/* FubDraw: l'editor del disegno. La barra in cima va a capo invece di
+   scorrere, così su un telefono ogni strumento resta a portata di dito; il
+   foglio prende il resto, e i gesti sopra sono suoi: niente scorrimento,
+   zoom o selezione del browser sotto la penna. Ogni bersaglio misura almeno
+   44 px per lato. */
+.draw-editor {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.draw-header,
+.draw-toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.draw-toolbar {
+  flex: 0 1 auto;
+}
+.draw-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.draw-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.draw-zoom-level {
+  min-width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+/* La forma distingue i campioni anche a chi non distingue i colori. La
+   cornice è la stessa forma, due pixel più grande, nel colore del testo: un
+   filo che segue anche le punte della stella. Il colore vero resta, anche
+   coi colori forzati. */
+.draw-swatch-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  forced-color-adjust: none;
+}
+.draw-swatch {
+  display: block;
+  width: 20px;
+  height: 20px;
+  forced-color-adjust: none;
+}
+.draw-swatch-frame[data-shape="circle"],
+.draw-swatch-frame[data-shape="circle"] > .draw-swatch {
+  clip-path: circle(50%);
+}
+.draw-swatch-frame[data-shape="square"],
+.draw-swatch-frame[data-shape="square"] > .draw-swatch {
+  clip-path: inset(6%);
+}
+.draw-swatch-frame[data-shape="triangle"],
+.draw-swatch-frame[data-shape="triangle"] > .draw-swatch {
+  clip-path: polygon(50% 2%, 98% 94%, 2% 94%);
+}
+.draw-swatch-frame[data-shape="diamond"],
+.draw-swatch-frame[data-shape="diamond"] > .draw-swatch {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.draw-swatch-frame[data-shape="pentagon"],
+.draw-swatch-frame[data-shape="pentagon"] > .draw-swatch {
+  clip-path: polygon(50% 0, 100% 38%, 81% 98%, 19% 98%, 0 38%);
+}
+.draw-swatch-frame[data-shape="hexagon"],
+.draw-swatch-frame[data-shape="hexagon"] > .draw-swatch {
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%);
+}
+.draw-swatch-frame[data-shape="star"],
+.draw-swatch-frame[data-shape="star"] > .draw-swatch {
+  clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 81% 98%, 50% 76%, 19% 98%, 30% 60%, 0 38%, 38% 36%);
+}
+.draw-swatch-frame[data-shape="cross"],
+.draw-swatch-frame[data-shape="cross"] > .draw-swatch {
+  clip-path: polygon(34% 0, 66% 0, 66% 34%, 100% 34%, 100% 66%, 66% 66%, 66% 100%, 34% 100%, 34% 66%, 0 66%, 0 34%, 34% 34%);
+}
+.draw-width-bar {
+  display: block;
+  width: 24px;
+  min-height: 1px;
+}
+.draw-title {
+  display: flex;
+  flex: 1 1 16rem;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.draw-title-label {
+  flex: none;
+}
+.draw-title-input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: crosshair;
+}
+/* Il foglio occupa tutta la larghezza: l'anello del fuoco sta dentro, o lo
+   taglierebbe il riquadro che lo contiene. */
+.draw-surface:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-surface[data-tool="select"],
+.draw-editor[data-readonly] .draw-surface {
+  cursor: default;
+}
+.draw-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+  forced-color-adjust: none;
+}
+.draw-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+@media (forced-colors: active) {
+  .draw-width-bar,
+  .draw-swatch-frame {
+    background: CanvasText;
+  }
+  .draw-surface:focus-visible {
+    outline-offset: -2px !important;
+  }
+}
 .base-search { min-width: 8rem; flex: 1; }
 .base-status { min-width: 0; overflow-wrap: anywhere; }
 .base-body { flex: 1; min-height: 0; overflow: auto; padding: 0.75rem; }

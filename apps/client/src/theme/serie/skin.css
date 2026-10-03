@@ -2013,6 +2013,85 @@ progress::-moz-progress-bar {
   text-anchor: middle;
 }
 
+/* ── skin/draw.css ──────────────────────────────────────────────────────── */
+
+/* L'editor del disegno (FubDraw): la barra e il foglio. La geometria e i
+   bersagli da 44 px sono della struttura; qui il colore, il ritmo e lo stato.
+
+   Il campione di colore ha un filo nel colore del testo, che lo stacca dalla
+   barra in tutti e due i temi: il nero al buio, il giallo alla luce. La carta
+   è bianca in ogni tema, perché è il fondo su cui il disegno si legge fuori
+   dall'editor; il tavolo attorno segue il tema. */
+.draw-header {
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-2);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.draw-toolbar {
+  gap: var(--space-2) var(--space-5);
+}
+.draw-group {
+  gap: var(--space-1);
+}
+.draw-button {
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+.draw-button:hover:not(:disabled) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.draw-button[aria-checked="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.draw-button:disabled {
+  opacity: 0.4;
+}
+.draw-zoom-level {
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+.draw-swatch-frame {
+  background: var(--text);
+}
+.draw-swatch {
+  background: var(--swatch);
+}
+.draw-width-bar {
+  height: var(--draw-width);
+  border-radius: var(--radius-pill);
+  background: var(--text);
+}
+.draw-title {
+  gap: var(--space-1) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-title-input {
+  padding: 0 var(--space-3);
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.draw-surface {
+  background: var(--bg);
+}
+.draw-surface[data-unbounded],
+.draw-page {
+  background: #ffffff;
+}
+.draw-page {
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow-sm);
+}
+
 /* ── skin/base.css ──────────────────────────────────────────────────────── */
 
 /* Le viste Base consumano ruoli del tema; layout e dimensioni stanno nella struttura. */
