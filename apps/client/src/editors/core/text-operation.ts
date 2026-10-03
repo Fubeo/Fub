@@ -102,6 +102,29 @@ export function tryApplyOperation(
   }
 }
 
+/**
+ * Whether `operation` turns `before` into `after`: the answer of applying it
+ * and comparing the result, without building the result. Kept stretches,
+ * preimages and insertions are compared as slices, natively, so checking an
+ * edit of a large document costs a memory compare and no copy of it.
+ */
+export function operationYields(before: string, operation: TextOperation, after: string): boolean {
+  if (operationShapeError(operation)) return false;
+  if (before.length !== operation.beforeLength || after.length !== operation.afterLength) return false;
+  let cursor = 0;
+  let at = 0;
+  for (const edit of operation.edits) {
+    const kept = edit.from - cursor;
+    if (before.slice(cursor, edit.from) !== after.slice(at, at + kept)) return false;
+    at += kept;
+    if (before.slice(edit.from, edit.to) !== edit.deleted) return false;
+    if (after.slice(at, at + edit.inserted.length) !== edit.inserted) return false;
+    at += edit.inserted.length;
+    cursor = edit.to;
+  }
+  return before.slice(cursor) === after.slice(at);
+}
+
 /** The inverse action, expressed in the document produced by `operation`. */
 export function invertOperation(operation: TextOperation): TextOperation {
   const shapeError = operationShapeError(operation);
@@ -125,20 +148,73 @@ export function invertOperation(operation: TextOperation): TextOperation {
   };
 }
 
+/** Below this many units the search for the first difference goes unit by unit. */
+const SCAN_UNITS = 64;
+/** The first slice compared natively; each next one is twice as long. */
+const FIRST_SLICE = 256;
+
+/**
+ * How many leading UTF-16 units `a` and `b` share, at most `limit`.
+ *
+ * Slices of doubling length are compared with `===`, which the engine does as
+ * a memory compare, and a binary search narrows the first slice that differs:
+ * a full-text synchronization of a 15 MB document costs a few milliseconds
+ * instead of a loop over every unit.
+ */
+export function commonPrefixLength(a: string, b: string, limit: number): number {
+  let from = 0;
+  let step = FIRST_SLICE;
+  while (from < limit) {
+    const to = Math.min(limit, from + step);
+    if (a.slice(from, to) !== b.slice(from, to)) {
+      // The difference is in [low, high).
+      let low = from;
+      let high = to;
+      while (high - low > SCAN_UNITS) {
+        const middle = (low + high) >>> 1;
+        if (a.slice(low, middle) === b.slice(low, middle)) low = middle;
+        else high = middle;
+      }
+      while (low < high && a.charCodeAt(low) === b.charCodeAt(low)) low += 1;
+      return low;
+    }
+    from = to;
+    step *= 2;
+  }
+  return limit;
+}
+
+/** How many trailing UTF-16 units `a` and `b` share, at most `limit`. */
+export function commonSuffixLength(a: string, b: string, limit: number): number {
+  const tailA = (from: number, to: number): string => a.slice(a.length - to, a.length - from);
+  const tailB = (from: number, to: number): string => b.slice(b.length - to, b.length - from);
+  let from = 0;
+  let step = FIRST_SLICE;
+  while (from < limit) {
+    const to = Math.min(limit, from + step);
+    if (tailA(from, to) !== tailB(from, to)) {
+      let low = from;
+      let high = to;
+      while (high - low > SCAN_UNITS) {
+        const middle = (low + high) >>> 1;
+        if (tailA(low, middle) === tailB(low, middle)) low = middle;
+        else high = middle;
+      }
+      while (low < high && a.charCodeAt(a.length - 1 - low) === b.charCodeAt(b.length - 1 - low)) low += 1;
+      return low;
+    }
+    from = to;
+    step *= 2;
+  }
+  return limit;
+}
+
 /** A single prefix/suffix patch for a full-text synchronization. */
 export function operationFromText(before: string, after: string): TextOperation {
   if (before === after) return { beforeLength: before.length, afterLength: before.length, edits: [] };
-  let prefix = 0;
   const minimum = Math.min(before.length, after.length);
-  while (prefix < minimum && before[prefix] === after[prefix]) prefix += 1;
-
-  let suffix = 0;
-  while (
-    suffix < minimum - prefix &&
-    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-  ) {
-    suffix += 1;
-  }
+  const prefix = commonPrefixLength(before, after, minimum);
+  const suffix = commonSuffixLength(before, after, minimum - prefix);
 
   const edit: TextEdit = {
     from: prefix,
