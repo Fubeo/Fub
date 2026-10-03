@@ -146,6 +146,21 @@ export interface SurfacePoint {
 }
 
 /**
+ * An export the document offers as one of its own gestures: a target the host
+ * registers (`ExportTarget.id`) and the options it runs with. The words are
+ * functions because the language can change while the surface is mounted.
+ */
+export interface SurfaceExport {
+  readonly target: string;
+  /** What the menu and the chooser call it. */
+  label(): string;
+  /** What comes out, in one line. */
+  detail(): string;
+  /** The target's options, in the language of now: a file name suffix, say. */
+  options?(): Record<string, unknown>;
+}
+
+/**
  * A mounted shell-owned surface. No DOM or CodeMirror value crosses its
  * boundary. Past the first five members everything is a capability: the shell
  * offers a gesture where the mounted surface declares it, and never asks which
@@ -195,6 +210,12 @@ export interface EditorSurface {
    * has no provider, or nothing to print, does not declare it.
    */
   readonly printable?: boolean;
+  /**
+   * The exports this document offers, in the order the chooser lists them.
+   * The core runs one on the saved document and hands the file to the
+   * activity panel, from which the user saves it where they choose.
+   */
+  readonly exports?: readonly SurfaceExport[];
   /**
    * The writing gestures this surface runs on its own text — bold, heading 2,
    * a table row — by the stable id the formatting bar and the

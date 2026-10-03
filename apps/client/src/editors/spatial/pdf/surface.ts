@@ -29,7 +29,7 @@ import type { EditorRange, EditorSelections, EditorSurface, SelectedText, Surfac
 import type { EditorChange } from "../../core/text-operation";
 import type { PdfEngine, PdfEngineLoader } from "../../media/pdf-view";
 import { readAllResource, type ResourceTransport } from "../../media/resource-port";
-import { PDF_MODES, PDF_PROFILE } from "../modes";
+import { PDF_EXPORTS, PDF_MODES, PDF_PROFILE } from "../modes";
 import type { ElementItem } from "../scene/classify";
 import type { SceneEngine } from "../scene/engine";
 import { elementChildren, type DocumentModel } from "../scene/model";
@@ -595,6 +595,7 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     surfaceId: context.paneId,
     modes: PDF_MODES,
     defaultMode: "draw",
+    exports: PDF_EXPORTS,
     setMode(nextMode) {
       if (nextMode !== "draw" && nextMode !== "read") throw new RangeError(`surface mode ${nextMode} is not supported`);
       if (nextMode === mode) return;

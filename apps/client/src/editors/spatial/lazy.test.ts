@@ -65,6 +65,9 @@ describe("prima che il codice arrivi", () => {
     const lazy = mount();
     expect(lazy.modes.map((mode) => mode.id)).toEqual(["draw", "read"]);
     expect(lazy.defaultMode).toBe("draw");
+    // Gli export del profilo ci sono già: il menu del riquadro non aspetta il
+    // codice del disegno.
+    expect(lazy.exports?.map((offered) => offered.target)).toEqual(["draw.png", "draw.pdf"]);
     lazy.buffer!.setDoc(SOURCE);
     const pending = parent.querySelector<HTMLElement>(".vector-pending")!;
     expect(pending.getAttribute("aria-busy")).toBe("true");

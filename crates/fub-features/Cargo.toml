@@ -79,8 +79,20 @@ formatting = []
 # sta dietro la feature `draw` di `fub-host`. Chi compila senza disegni non
 # paga niente di tutto questo; la regola è presidiata da
 # `.github/scripts/check-cargo-feature-default.mjs` e da
-# `tests/cargo_features.rs`.
-draw = ["dep:fub-format-svg", "dep:resvg", "dep:svg2pdf", "dep:png", "dep:image"]
+# `tests/cargo_features.rs`. Con i disegni viene l'export delle annotazioni dei
+# PDF, che porta un lettore e scrittore di PDF e un rasterizzatore di PDF.
+draw = [
+    "dep:fub-format-svg",
+    "dep:fub-scene",
+    "dep:resvg",
+    "dep:svg2pdf",
+    "dep:png",
+    "dep:image",
+    "dep:lopdf",
+    "dep:hayro",
+    "dep:flate2",
+    "dep:sha2",
+]
 
 [dependencies]
 camino.workspace = true
@@ -117,6 +129,25 @@ png = { version = "0.18.1", optional = true }
 # un'immagine WebP incorporata in un disegno uscirebbe nel PNG e mancherebbe
 # nel PDF. Il decoder è lo stesso `image-webp` che `resvg` porta già.
 image = { version = "0.25.10", default-features = false, features = ["webp"], optional = true }
+# Dietro `draw`, per l'export delle annotazioni dei PDF. Le annotazioni le legge
+# il lettore del formato, lo stesso del provider `fubann`.
+fub-scene = { workspace = true, optional = true }
+# Il lettore e lo scrittore dei PDF delle annotazioni: il PDF annotato è
+# l'originale con un aggiornamento in coda, il PDF redatto un file nuovo con le
+# sole pagine. Senza i default, che sono l'orologio di `chrono` e il
+# parallelismo di `rayon`: le date non si scrivono, e un PDF si legge in un
+# thread solo.
+lopdf = { version = "0.45.0", default-features = false, optional = true }
+# Il rasterizzatore delle pagine del PDF redatto. La 0.5 perché le successive
+# chiedono un compilatore più nuovo di quello del workspace. I caratteri
+# standard del PDF (`embed-fonts`, di serie) sono sostituti con licenza
+# permissiva incorporati nel binario: una pagina che li usa senza incorporarli
+# esce col testo.
+hayro = { version = "0.5.0", optional = true }
+# L'immagine di una pagina redatta, compressa come un PNG dentro il PDF.
+flate2 = { workspace = true, optional = true }
+# L'impronta del PDF, per dire se è cambiato da quando è stato annotato.
+sha2 = { version = "0.10.9", optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.

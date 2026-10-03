@@ -12,6 +12,12 @@
 //! è un documento del formato `svg`; gli altri documenti della selezione si
 //! saltano, e il log dice quanti.
 //!
+//! Le annotazioni di un PDF hanno due export loro, nel modulo [`annotated`]:
+//! il PDF annotato, cioè l'originale con le annotazioni sopra, e il PDF
+//! redatto, dove ciò che le coperture nascondono non c'è più. Il disegno di
+//! ogni pagina passa dalle stesse opzioni di `usvg` e dagli stessi caratteri
+//! dei disegni.
+//!
 //! # Niente oltre al documento
 //!
 //! Un SVG può nominare altre risorse: un'immagine per path (`foto/mare.png`),
@@ -69,9 +75,11 @@ use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{self, fontdb, ImageHrefResolver, ImageKind, Node, Tree};
 
 mod annotate;
+mod annotated;
 mod create;
 
 pub use annotate::PDF_ANNOTATE;
+pub use annotated::{AnnotatedPdfExport, RedactedPdfExport, DRAW_ANNOTATED_PDF, DRAW_REDACTED_PDF};
 pub use create::{DrawCommands, DRAWING_CREATE};
 
 /// Id del componente.
@@ -109,7 +117,7 @@ const E_WRITE: &str = "e_write";
 /// export.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
-        annotate::in_italian(create::in_italian(StringCatalog::new("it")))
+        annotated::in_italian(annotate::in_italian(create::in_italian(StringCatalog::new("it"))))
             .with(E_TARGET, "«{target}» non è una destinazione dei disegni.")
             .with(E_NO_DRAWINGS, "Nella selezione non c'è nessun disegno.")
             .with(
@@ -121,7 +129,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Non ho esportato nessun disegno: «{doc}» non è riuscito ({reason}).",
             )
             .with(E_WRITE, "Non ho scritto «{path}»: {reason}"),
-        annotate::in_english(create::in_english(StringCatalog::new("en")))
+        annotated::in_english(annotate::in_english(create::in_english(StringCatalog::new("en"))))
             .with(E_TARGET, "«{target}» is not a drawing export destination.")
             .with(E_NO_DRAWINGS, "The selection contains no drawings.")
             .with(
@@ -136,9 +144,15 @@ pub fn catalog() -> Vec<StringCatalog> {
     ]
 }
 
-/// I provider del bundle, uno per formato.
+/// I provider del bundle: uno per formato dei disegni, e i due PDF delle
+/// annotazioni.
 pub fn exports() -> Vec<Box<dyn ExportProvider>> {
-    vec![Box::new(PngExport), Box::new(PdfExport)]
+    vec![
+        Box::new(PngExport),
+        Box::new(PdfExport),
+        Box::new(AnnotatedPdfExport),
+        Box::new(RedactedPdfExport),
+    ]
 }
 
 /// L'export in PNG: un'immagine per disegno, con lo sfondo trasparente come
@@ -365,54 +379,62 @@ impl Drawing {
     /// Le note di un disegno esportato: ciò che è rimasto fuori e i caratteri
     /// che i caratteri di Fub non hanno.
     fn notes(&self, report: &mut ExportReport) {
-        let about = self.doc.to_string();
-        let mut push = |message: String| {
-            report
-                .log
-                .push(TransferNote::warning(message).about(about.clone()))
-        };
-        if !self.refused.external.is_empty() {
-            let count = self.refused.external.len();
-            let listed: Vec<&str> = self
-                .refused
-                .external
-                .iter()
-                .take(LISTED)
-                .map(String::as_str)
-                .collect();
-            let rest = count.saturating_sub(LISTED);
-            push(format!(
-                "{count} image {} outside the drawing and {} not exported: {}{}",
-                if count == 1 {
-                    "reference points"
-                } else {
-                    "references point"
-                },
-                if count == 1 { "was" } else { "were" },
-                listed.join(", "),
-                if rest > 0 {
-                    format!(" and {rest} more")
-                } else {
-                    String::new()
-                },
-            ));
-        }
-        if self.refused.embedded > 0 {
+        let embedded = (self.refused.embedded > 0).then(|| {
             let count = self.refused.embedded;
-            push(format!(
+            format!(
                 "{count} embedded {} not PNG, JPEG, GIF or WebP and {} not exported",
                 if count == 1 { "image is" } else { "images are" },
                 if count == 1 { "was" } else { "were" },
-            ));
-        }
-        let missing = missing_glyphs(&self.tree);
-        if !missing.is_empty() {
-            let chars: String = missing.iter().collect();
-            push(format!(
-                "characters outside Fub's fonts are drawn as a placeholder box: {chars}"
-            ));
+            )
+        });
+        let notes = [
+            external_note(&self.refused.external, "the drawing"),
+            embedded,
+            glyphs_note(&missing_glyphs(&self.tree)),
+        ];
+        for message in notes.into_iter().flatten() {
+            report
+                .log
+                .push(TransferNote::warning(message).about(self.doc.to_string()));
         }
     }
+}
+
+/// La nota dei riferimenti esterni rimasti fuori, i primi per nome; `within`
+/// è il documento da cui puntano fuori (`the drawing`).
+fn external_note(external: &BTreeSet<String>, within: &str) -> Option<String> {
+    if external.is_empty() {
+        return None;
+    }
+    let count = external.len();
+    let listed: Vec<&str> = external.iter().take(LISTED).map(String::as_str).collect();
+    let rest = count.saturating_sub(LISTED);
+    Some(format!(
+        "{count} image {} outside {within} and {} not exported: {}{}",
+        if count == 1 {
+            "reference points"
+        } else {
+            "references point"
+        },
+        if count == 1 { "was" } else { "were" },
+        listed.join(", "),
+        if rest > 0 {
+            format!(" and {rest} more")
+        } else {
+            String::new()
+        },
+    ))
+}
+
+/// La nota dei caratteri che i caratteri di Fub non hanno.
+fn glyphs_note(missing: &BTreeSet<char>) -> Option<String> {
+    if missing.is_empty() {
+        return None;
+    }
+    let chars: String = missing.iter().collect();
+    Some(format!(
+        "characters outside Fub's fonts are drawn as a placeholder box: {chars}"
+    ))
 }
 
 /// Il titolo del disegno, per i metadati del file: il titolo che il formato
@@ -917,7 +939,7 @@ mod pdf {
             },
         ];
         objects.extend(drawing);
-        Ok(file(&objects))
+        Ok(file(&objects, "/Info 5 0 R /Root 1 0 R"))
     }
 
     fn name(key: &str) -> Vec<u8> {
@@ -1312,8 +1334,9 @@ mod pdf {
     }
 
     /// Il file: intestazione, oggetti in ordine di numero, tabella dei
-    /// riferimenti incrociati e trailer, senza date e senza `/ID`.
-    pub(super) fn file(objects: &[Object]) -> Vec<u8> {
+    /// riferimenti incrociati e trailer, senza date e senza `/ID`. `trailer`
+    /// sono le voci del trailer oltre a `/Size`, già scritte.
+    pub(super) fn file(objects: &[Object], trailer: &str) -> Vec<u8> {
         let mut out = b"%PDF-1.7\n%\x80\x80\x80\x80\n".to_vec();
         let mut offsets = BTreeMap::new();
         for object in objects {
@@ -1343,10 +1366,7 @@ mod pdf {
             }
         }
         out.extend(
-            format!(
-                "trailer\n<</Info 5 0 R /Root 1 0 R /Size {size}>>\nstartxref\n{xref}\n%%EOF\n"
-            )
-            .into_bytes(),
+            format!("trailer\n<<{trailer} /Size {size}>>\nstartxref\n{xref}\n%%EOF\n").into_bytes(),
         );
         out
     }
@@ -1471,7 +1491,7 @@ mod tests {
         let b = pdf::canonical(pdf::parse(CHUNK_B).unwrap(), 7, 6).unwrap();
         assert_eq!(a, b);
 
-        let file = pdf::file(&a);
+        let file = pdf::file(&a, "/Info 5 0 R /Root 1 0 R");
         let xref = file.windows(5).position(|w| w == b"xref\n").unwrap();
         let (body, tail) = file.split_at(xref);
         // In ampiezza dalla radice, con le chiavi in ordine; l'oggetto 9 non

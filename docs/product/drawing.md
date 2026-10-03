@@ -88,6 +88,18 @@ La scelta è della linguetta. Resta salvata con il layout dopo un riavvio, e non
 passa alle altre linguette: un altro disegno aperto nello stesso riquadro si
 apre come disegno.
 
+## Esportare
+
+«Esporta…», nella palette e nel menu del riquadro, fa del disegno un PNG o un
+PDF. Il PNG è al doppio della misura del disegno; il PDF è vettoriale, con il
+testo che si seleziona. Il file si chiama come il disegno, `acqua.png` o
+`acqua.pdf`, e ne porta il titolo. Prima dell'export le modifiche in coda si
+salvano. Il file compare nel centro attività, che si apre da sé, e «Salva…»
+chiede dove metterlo.
+
+Entrano soltanto le immagini dentro il disegno: un'immagine che il disegno
+prende da un altro file del vault, o da un indirizzo, resta fuori.
+
 ## Più riquadri sullo stesso disegno
 
 Due riquadri possono mostrare lo stesso disegno, anche uno come disegno e uno

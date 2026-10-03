@@ -87,13 +87,24 @@ const ANNOTATE: CommandSpec = {
   surfaces: [],
 };
 
+/// La spec di `export.run` come la dichiarano i trasferimenti del kernel.
+const EXPORT_RUN: CommandSpec = {
+  id: "export.run",
+  title: "Export documents",
+  description: "",
+  keybinding: null,
+  params: [{ name: "request_json", title: "ExportRequest JSON", description: "", kind: { kind: "text" }, required: true }] as never,
+  scope: { writes: false, reach: "session", reversible: true },
+  surfaces: [],
+};
+
 async function start(draw = true): Promise<FakeHost> {
   vi.resetModules();
   const host = createFakeHost({
     file: { "Benvenuto.md": "# Benvenuto\n" },
     resources: { [PDF]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" } },
     draw,
-    commands: draw ? [ANNOTATE] : [],
+    commands: draw ? [ANNOTATE, EXPORT_RUN] : [],
   });
   box.host = host;
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml);
@@ -218,5 +229,36 @@ describe("«Annota» dal visore del PDF", () => {
     await open(PDF);
     await waitFor("il visore si monta", () => focusedPane().querySelector(".media-pdf-toolbar") !== null);
     expect(annotateButton()).toBeNull();
+  });
+});
+
+describe("«Esporta…» sulle annotazioni", () => {
+  it("offre il PDF annotato e quello redatto, col nome del file nella lingua di chi esporta", async () => {
+    const host = await start();
+    const { t } = await import("./i18n/strings");
+    await open(PDF);
+    await waitFor("il visore offre «Annota»", () => annotateButton() !== null);
+    annotateButton()!.click();
+    await waitFor("le annotazioni si aprono", () => focusedPane().querySelector(".pdf-surface .draw-editor") !== null);
+    await waitFor("il PDF è letto", () => focusedPane().querySelector(".pdf-page-count")?.textContent === "di 2");
+    const { allCommands } = await import("./ui/commands");
+    const entry = allCommands().find((candidate) => candidate.id === "shell.doc.export");
+    expect(entry).toBeDefined();
+    void entry!.run?.();
+    const choices = () => [...document.querySelectorAll<HTMLElement>(".shell-dialog [role=option]")];
+    await waitFor("si sceglie il formato", () => choices().length === 2);
+    expect(choices().map((choice) => choice.querySelector(".palette-title")!.textContent)).toEqual([
+      t("pdf.export.annotated"),
+      t("pdf.export.redacted"),
+    ]);
+    choices()[1]!.click();
+    await waitFor("l'export è chiesto", () => host.atGate("invokeCommand").length === 2);
+    const [, call] = host.atGate("invokeCommand");
+    expect(call!.args[0]).toBe("export.run");
+    expect(JSON.parse(String((call!.args[1] as { request_json: string }).request_json))).toEqual({
+      target: "draw.redacted-pdf",
+      selection: { kind: "documents", value: [NOTES] },
+      options: { suffix: "redatto" },
+    });
   });
 });

@@ -142,6 +142,8 @@ describe("il PDF che il file nomina", () => {
   it("senza `fub:annotates` vale il nome, e un indirizzo esterno non nomina niente del vault", () => {
     expect(pdfOf("bandi/Bando.PDF.fubann", { kind: "absent" })).toBe("bandi/Bando.PDF");
     expect(pdfOf("bandi/note.fubann", { kind: "absent" })).toBeNull();
+    expect(pdfOf("bandi/.pdf.fubann", { kind: "absent" })).toBeNull();
+    expect(pdfOf(".PDF.fubann", { kind: "absent" })).toBeNull();
     expect(pdfOf("bandi/Bando.pdf.fubann", { kind: "other" })).toBeNull();
   });
 

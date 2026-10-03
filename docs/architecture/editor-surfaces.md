@@ -112,6 +112,10 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `mountPresentation` monta la resa da presentare come slide;
 - `printable` dichiara una resa di stampa del provider del formato
   (`IndexQuery::RenderPrint`);
+- `exports` dichiara gli export registrati che valgono per il documento: il
+  disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
+  Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,
+  salva ciò che è in attesa, chiede `export.run` e apre il centro attività;
 - `selections()` dà le selezioni del testo in offset byte UTF-8 del buffer; il
   disegno dà gli intervalli degli elementi degli oggetti scelti;
   `selectedText()` è di chi sceglie elementi che non sono intervalli del

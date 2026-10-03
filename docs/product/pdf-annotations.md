@@ -65,7 +65,8 @@ Ogni strumento ha un tasto, che vale col fuoco sul foglio:
   della pagina.
 
 La copertura non toglie niente dal PDF: il contenuto sotto resta nel file e si
-copia, si cerca e si stampa. Non è una redazione, e non si chiama così.
+copia, si cerca e si stampa. Non è una redazione, e non si chiama così: toglie
+il contenuto soltanto il [PDF redatto](#esportare).
 
 Con la tastiera, Invio sul foglio aggiunge un oggetto dello strumento al
 centro della vista, dentro la pagina, e lo lascia scelto: le frecce lo
@@ -101,6 +102,38 @@ All'apertura l'editor confronta e non scrive niente.
 
 Un elemento fuori dalle pagine, scritto a mano o da un altro programma, non si
 vede sul foglio: un avviso li conta, e la sorgente li mostra.
+
+## Esportare
+
+«Esporta…», nella palette e nel menu del riquadro, fa uno di due file. Nessuno
+dei due tocca il PDF del vault.
+
+- **PDF annotato**: l'originale, identico byte per byte, con un aggiornamento
+  in coda. Le annotazioni stanno in un livello che porta il titolo delle
+  annotazioni, o il nome del file, e che i lettori di PDF sanno nascondere; le
+  note diventano note del PDF, con l'etichetta e il corpo. Sotto una copertura
+  il contenuto c'è ancora.
+- **PDF redatto**: un file nuovo con le sole pagine. Una pagina con almeno una
+  copertura diventa un'immagine a 200 punti per pollice, con le annotazioni e
+  i commenti del PDF disegnati dentro: il contenuto sotto le coperture non c'è
+  più, e il testo di quella pagina non si seleziona né si cerca. Le altre
+  pagine si copiano come sono, con le annotazioni sopra. Del documento restano
+  le pagine e nient'altro: niente segnalibri, allegati, script, moduli,
+  struttura per l'accessibilità o metadati.
+
+Il file si chiama come il PDF, con una parola fra parentesi nella lingua
+dell'interfaccia: «Bando (annotato).pdf», «Bando (redatto).pdf». Prima
+dell'export le modifiche in coda si salvano. Il file compare nel centro
+attività, che si apre da sé, e «Salva…» chiede dove metterlo.
+
+Se il PDF è cambiato da quando è stato annotato, il PDF annotato esce lo
+stesso, mentre il PDF redatto no: una copertura potrebbe non stare più su ciò
+che nasconde. Prima si controllano le annotazioni e si conferma la versione.
+Un PDF che manca, che non si legge o che chiede una password non si esporta, e
+il messaggio dice perché.
+
+Il formato dei due file è nel [formato delle
+annotazioni](../reference/annotation-format.md#9-export).
 
 ## Apri come sorgente
 
