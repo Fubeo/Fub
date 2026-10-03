@@ -144,3 +144,44 @@ loro elementi. Un rimando a un punto del file, per esempio da un risultato di
 ricerca, sceglie l'oggetto che lo contiene e lo porta in vista; un punto fuori
 dagli oggetti, come il titolo, lo dice con un avviso. In Lettura non c'è
 selezione.
+
+## Prestazioni
+
+Il banco [`spatial-scale.mjs`](../../apps/client/bench/spatial-scale.mjs)
+apre nell'app vera tre disegni generati sempre uguali: 200 oggetti, 5 000
+oggetti su quattro strati in 5 MB, 2 000 tratti di penna da 100 campioni con
+la pressione. Su questi misura cinque budget:
+
+| Budget | Misura | Limite |
+|---|---|---:|
+| Inchiostro | p95 dal movimento della penna alla fine del fotogramma che lo mostra | 16 ms |
+| Tratto | p95 dal rilascio della penna alla fine del fotogramma che mostra il tratto | 50 ms |
+| Apertura | mediana dal clic alla fine del fotogramma con l'ultimo oggetto, 5 MB | 500 ms |
+| Navigazione | p95 dell'intervallo fra fotogrammi in pan, zoom e trascinamento, 5 000 oggetti | 20 ms |
+| Memoria | memoria JavaScript della scena aperta rispetto al peso del file | 3× |
+
+Durante la navigazione nessun task deve superare i 50 ms. La memoria del DOM
+del painter si riporta a parte, come `pageRatio`, perché dipende dal painter e
+non dalla scena. Il tratto fra due dispositivi, dal tablet al PC, non si
+misura qui: servono il tablet vero e la sua rete.
+
+Il banco fallisce sempre su un controllo strutturale:
+
+- una fixture con un digest diverso;
+- un oggetto non dipinto;
+- l'inchiostro che non compare sull'overlay;
+- una navigazione che non muove la vista;
+- un timer, un observer, un ascoltatore o un URL `blob:` dell'editor rimasto
+  aperto dopo la chiusura del disegno.
+
+I budget di tempo e di memoria fanno fallire il banco soltanto con
+`--enforce`; la CI li registra nel referto `scala-disegno` senza applicarli.
+
+Una misura locale, su Linux x64 con un AMD Ryzen 7 7730U, Node 22 e Chromium
+`149.0.7827.55` in una vista 1280 × 800:
+
+| Inchiostro | Tratto | Apertura | Navigazione | Memoria |
+|---:|---:|---:|---:|---:|
+| 2,2 ms | 43,1 ms | 425,8 ms | 16,8 ms | 2,42× (pagina 5,11×) |
+
+È l'osservazione di quella macchina, non una promessa per ogni ambiente.

@@ -86,7 +86,7 @@ import {
   type OutAttr,
   type OutElement,
 } from "./serialize";
-import { lineBreakOf, newline, normalizeEol, SourceText, utf8Length } from "./text";
+import { lineBreakOf, newline, normalizeEol, SourceText, utf8Delta, utf8Length } from "./text";
 import { Tree, type Entry, type HeadState } from "./tree";
 import { length as svgLength, number as svgNumber } from "./values";
 import {
@@ -379,6 +379,8 @@ export class SceneEngine {
   private readonly eol: string;
   private raw: string;
   private lf: string;
+  /// I byte UTF-8 di `raw`, aggiornati con la sola modifica a ogni commit.
+  private bytes: number;
   /// Perché il documento è in sola lettura; vuoto se si può modificare.
   readonly readOnly: readonly ReadOnly[];
   /// La scena corrente: cambia a ogni operazione applicata, e torna quella
@@ -393,6 +395,7 @@ export class SceneEngine {
   private constructor(source: string) {
     const opened = openSource(source);
     this.raw = source;
+    this.bytes = opened.doc.source.byteLength;
     this.lf = normalizeEol(source);
     this.eol = newline(lineBreakOf(source));
     this.readOnly = opened.readOnly;
@@ -502,7 +505,8 @@ export class SceneEngine {
     let operation: TextOperation = { beforeLength: this.lf.length, afterLength: this.lf.length, edits: [] };
     if (entries.length > 0) {
       const raw = materialize(tree.model);
-      if (target === null && (utf8Length(raw) > MAX_EDIT_BYTES || tree.elements > MAX_ELEMENTS)) {
+      const bytes = this.bytes + utf8Delta(this.raw, raw);
+      if (target === null && (bytes > MAX_EDIT_BYTES || tree.elements > MAX_ELEMENTS)) {
         const mark = tree.mark();
         tree.undo(entries);
         tree.take(mark);
@@ -515,6 +519,7 @@ export class SceneEngine {
       const lf = normalizeEol(raw);
       operation = sceneOperation(this.lf, lf);
       this.raw = raw;
+      this.bytes = bytes;
       this.lf = lf;
       this.items = null;
       this.state = target ?? ++this.counter;

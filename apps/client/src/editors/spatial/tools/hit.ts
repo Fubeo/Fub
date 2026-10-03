@@ -46,7 +46,11 @@ export interface LayerInfo {
 
 /// Un pezzo di un oggetto che si disegna da solo: una forma.
 interface Part {
-  readonly segments: readonly Segment[];
+  /// I segmenti della forma, ricavati a ogni richiesta. Tenuti per ogni
+  /// forma costerebbero più del testo del disegno, decine di oggetti per un
+  /// tratto; servono soltanto per i riquadri, che si ricordano, e per le forme
+  /// vicine al puntatore, che si appiattiscono una volta.
+  readonly segments: () => readonly Segment[];
   /// Dalle coordinate della forma a quelle della scena.
   readonly matrix: Matrix;
   /// Dalle coordinate della forma a quelle dell'oggetto.
@@ -70,10 +74,9 @@ interface Flat {
   readonly radius: number;
 }
 
-/// Ciò che di una forma non cambia finché non cambia la forma: i segmenti, e
-/// il riquadro nella scena dell'ultima matrice.
+/// Ciò che di una forma non cambia finché non cambia la forma: il riquadro
+/// locale, e quello nella scena dell'ultima matrice.
 interface ShapeCache {
-  segments: readonly Segment[] | null;
   scene: { readonly matrix: Matrix; readonly bounds: Bounds | null } | null;
   local: Bounds | null | undefined;
 }
@@ -117,7 +120,7 @@ export class Unit {
     if (this.frameBounds === undefined) {
       const out = new BoundsBuilder();
       for (const part of this.parts) {
-        const local = part.frameMatrix === IDENTITY && part.cache !== null ? localBounds(part) : transformedBounds(part.segments, part.frameMatrix);
+        const local = part.frameMatrix === IDENTITY && part.cache !== null ? localBounds(part) : transformedBounds(part.segments(), part.frameMatrix);
         if (local !== null) includeInflated(out, local, part.radius * scaleOf(part.frameMatrix));
       }
       this.frameBounds = out.finish();
@@ -288,18 +291,19 @@ export class SceneIndexer {
 
   private part(leaf: LeafNode, shape: PaintShape, matrix: Matrix, frame: Matrix, style: Style): Part {
     let cache = this.cache.get(shape) ?? null;
-    let segments: readonly Segment[];
+    let segments: () => readonly Segment[];
     if (shape.tag === "text") {
       // Il riquadro di un testo dipende dallo stile ereditato: non si ricorda.
-      segments = textSegments(shape, style);
+      // Sono pochi rettangoli, uno per riga.
+      const lines = textSegments(shape, style);
+      segments = () => lines;
       cache = null;
     } else {
       if (cache === null) {
-        cache = { segments: null, scene: null, local: undefined };
+        cache = { scene: null, local: undefined };
         this.cache.set(shape, cache);
       }
-      cache.segments ??= shapeSegments(shape.tag, shape.attrs);
-      segments = cache.segments;
+      segments = () => shapeSegments(shape.tag, shape.attrs);
     }
     const tag = leaf.details!.tag;
     // Una linea non ha area; un testo e un'immagine si toccano nel loro
@@ -313,7 +317,7 @@ export class SceneIndexer {
   private sceneBounds(part: Part): Bounds | null {
     const cache = part.cache;
     if (cache !== null && cache.scene !== null && sameMatrix(cache.scene.matrix, part.matrix)) return cache.scene.bounds;
-    const bounds = transformedBounds(part.segments, part.matrix);
+    const bounds = transformedBounds(part.segments(), part.matrix);
     if (cache !== null) cache.scene = { matrix: part.matrix, bounds };
     return bounds;
   }
@@ -488,7 +492,7 @@ function transformedBounds(segments: readonly Segment[], m: Matrix): Bounds | nu
 
 function localBounds(part: Part): Bounds | null {
   const cache = part.cache!;
-  if (cache.local === undefined) cache.local = transformedBounds(part.segments, IDENTITY);
+  if (cache.local === undefined) cache.local = transformedBounds(part.segments(), IDENTITY);
   return cache.local;
 }
 
@@ -523,7 +527,7 @@ function flatten(part: Part): Flat {
     if (points.length >= 2) runs.push({ points: Float64Array.from(points), closed });
     points = [];
   };
-  for (const segment of part.segments) {
+  for (const segment of part.segments()) {
     switch (segment.kind) {
       case "move":
         finish(false);
@@ -716,7 +720,7 @@ function segmentDistance(ax: number, ay: number, bx: number, by: number, cx: num
 function partBounds(part: Part): Bounds | null {
   const cache = part.cache;
   if (cache !== null && cache.scene !== null && sameMatrix(cache.scene.matrix, part.matrix)) return cache.scene.bounds;
-  return transformedBounds(part.segments, part.matrix);
+  return transformedBounds(part.segments(), part.matrix);
 }
 
 function partHits(part: Part, p: Point, tolerance: number): boolean {

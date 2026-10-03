@@ -20,7 +20,7 @@
 // Il diff ha un tetto: oltre `MAX_SCRIPT` righe di differenza il mezzo resta
 // una patch sola, che è sempre giusta.
 
-import { operationFromText, tryApplyOperation, type TextEdit, type TextOperation } from "../../core/text-operation";
+import { operationFromText, operationYields, type TextEdit, type TextOperation } from "../../core/text-operation";
 
 /// Quante righe tolte o aggiunte cerca al massimo il diff, oltre le quali il
 /// mezzo diventa una patch sola.
@@ -201,6 +201,5 @@ export function sceneOperation(before: string, after: string, max: number = MAX_
     if (edit !== null) edits.push(edit);
   }
   const operation: TextOperation = { beforeLength: before.length, afterLength: after.length, edits };
-  const check = tryApplyOperation(before, operation);
-  return check.kind === "applied" && check.text === after ? operation : whole;
+  return operationYields(before, operation, after) ? operation : whole;
 }
