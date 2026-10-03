@@ -330,6 +330,16 @@ export function mountActivity(lifetime: Lifetime): void {
   redraw();
 }
 
+/// Apre il centro attività senza prendergli il fuoco: chi ha appena chiesto un
+/// export ci vede il lavoro che gira e poi il file da salvare, e intanto resta
+/// dove stava. Senza il pannello (una shell che non lo monta) non fa niente.
+export function showActivity(): void {
+  if (open || !document.getElementById("activity-panel")) return;
+  open = true;
+  void request();
+  redraw();
+}
+
 function closeActivity(): void {
   open = false;
   redraw();

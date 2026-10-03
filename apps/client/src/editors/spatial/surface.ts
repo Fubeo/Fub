@@ -24,7 +24,7 @@ import type { EditorRange, EditorSelections, EditorSurface, SelectedText, Surfac
 import type { EditorChange } from "../core/text-operation";
 import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
-import { VECTOR_MODES, VECTOR_PROFILE } from "./modes";
+import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, ReadError, type ReadOnly } from "./scene/read";
@@ -277,6 +277,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     surfaceId: context.paneId,
     modes: VECTOR_MODES,
     defaultMode: "draw",
+    exports: VECTOR_EXPORTS,
     setMode(next) {
       if (next !== "draw" && next !== "read") throw new RangeError(`surface mode ${next} is not supported`);
       if (next === mode) return;

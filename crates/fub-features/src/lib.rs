@@ -122,7 +122,8 @@ pub use commands::{
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "draw")]
 pub use draw::{
-    DrawCommands, PdfExport, PngExport, DRAWING_CREATE, DRAW_ID, DRAW_PDF, DRAW_PNG, PDF_ANNOTATE,
+    AnnotatedPdfExport, DrawCommands, PdfExport, PngExport, RedactedPdfExport, DRAWING_CREATE,
+    DRAW_ANNOTATED_PDF, DRAW_ID, DRAW_PDF, DRAW_PNG, DRAW_REDACTED_PDF, PDF_ANNOTATE,
 };
 #[cfg(feature = "formatting")]
 pub use formatting::{FormattingCommands, FORMATTING_ID};

@@ -27,6 +27,7 @@ import {
   type DocumentSurfaceRegistry,
   type EditorSurface,
   type SourceView,
+  type SurfaceExport,
   type SurfaceLocation,
   type SurfaceMode,
   type SurfaceOverride,
@@ -124,6 +125,8 @@ import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
+import { showActivity } from "./activity";
+import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
 import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 
@@ -683,6 +686,17 @@ function registerCommands(): void {
     layer: "document",
     available: () => tabOverride(activeTab()) !== null,
     run: () => void closeSourceView(),
+  });
+  // Gli export che la superficie del documento dichiara (`exports`): con uno
+  // solo il comando lo esegue, con più d'uno chiede quale. Nel menu del
+  // riquadro sono una voce ciascuno.
+  registerShellCommand({
+    id: "shell.doc.export",
+    title: "commands.doc.export",
+    description: "commands.doc.export.desc",
+    layer: "document",
+    available: () => offeredExports(panes.get(layout.focus)).length > 0,
+    run: () => void chooseExport(layout.focus),
   });
   registerShellCommand({
     id: "shell.doc.save",
@@ -2485,6 +2499,13 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
     }] : []),
     ...(doc && surface?.mountPresentation ? [{ label: t("pane.slides"), run: () => presentSlides(r, doc) }] : []),
     ...(doc && surface?.printable ? [{ label: t("pane.print"), run: () => void presentPrint(r, doc) }] : []),
+    ...offeredExports(r).map((offered) => ({
+      label: t("pane.export", { what: offered.label() }),
+      run: () => {
+        focusPane(r.id);
+        if (r.shown?.k === "doc") void runExport(r.shown.doc, offered);
+      },
+    })),
   ]);
 }
 
@@ -2978,6 +2999,58 @@ async function openSourceView(): Promise<void> {
 
 async function closeSourceView(): Promise<void> {
   if (tabOverride(activeTab()) !== null) await showSourceView(layout.focus, null);
+}
+
+/// Gli export che il riquadro offre adesso: quelli che la sua superficie
+/// dichiara, finché mostra un documento e il registro ha il comando che li
+/// esegue.
+function offeredExports(r: Pane | undefined): readonly SurfaceExport[] {
+  const offered = r?.surface?.exports ?? [];
+  if (offered.length === 0 || r?.shown?.k !== "doc") return [];
+  return state.commandSpecs.some((spec) => spec.id === EXPORT_COMMAND) ? offered : [];
+}
+
+/// «Esporta…»: l'export che la superficie offre, o quello che si sceglie fra
+/// i suoi.
+async function chooseExport(paneId: string): Promise<void> {
+  const r = panes.get(paneId);
+  const offered = offeredExports(r);
+  if (r?.shown?.k !== "doc" || offered.length === 0) return;
+  const doc = r.shown.doc;
+  const chosen = offered.length === 1
+    ? offered[0]!
+    : await pickFromList({
+      title: t("document.export.title", { doc: docTitle(doc) }),
+      placeholder: t("document.export.placeholder"),
+      items: offered.map((item) => ({ label: item.label(), detail: item.detail(), value: item })),
+    });
+  if (chosen) await runExport(doc, chosen);
+}
+
+/// Esporta `doc`. L'host legge il documento dal vault, quindi prima si svuota
+/// la coda di salvataggio: un export del testo di prima, con le ultime
+/// modifiche sullo schermo, sarebbe un file che dice il falso. Il file arriva
+/// al centro attività, che si apre senza prendere il fuoco e da cui lo si
+/// salva dove si sceglie.
+async function runExport(doc: string, chosen: SurfaceExport): Promise<void> {
+  const unsaved = await flushPendingSave();
+  if (unsaved.includes(doc)) {
+    notify(t("document.export.unsaved", { doc: docTitle(doc) }), "guasto");
+    return;
+  }
+  const request = {
+    target: chosen.target,
+    selection: { kind: "documents", value: [doc] },
+    options: chosen.options?.() ?? {},
+  };
+  try {
+    await api.invokeCommand(EXPORT_COMMAND, { request_json: JSON.stringify(request) }, "apply");
+  } catch (error) {
+    notify(t("document.export.failed", { reason: errorText(error) }), "guasto");
+    return;
+  }
+  notify(t("document.export.started", { doc: docTitle(doc), what: chosen.label() }), "info");
+  showActivity();
 }
 
 /// Mette la scheda attiva di un riquadro nella vista sorgente, o la riporta

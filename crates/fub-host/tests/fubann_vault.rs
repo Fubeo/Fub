@@ -7,7 +7,9 @@
 //! rinomina del PDF riscrive byte per byte. Il PDF resta un allegato, e le
 //! note che lo nominano continuano a raggiungere lui e non le sue
 //! annotazioni. Il formato è nel [formato delle
-//! annotazioni](../../../docs/reference/annotation-format.md).
+//! annotazioni](../../../docs/reference/annotation-format.md). Con la
+//! stessa feature le annotazioni si esportano nel PDF annotato e nel PDF
+//! redatto (`fub.draw`).
 
 #![cfg(feature = "draw")]
 
@@ -19,6 +21,7 @@ use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
     EntryKind, Excerpts, IndexQuery, IndexResult, LinkDirection, Page, PropertySelect,
 };
+use fub_abi::transfer::{ExportRequest, ExportSelection, NoteLevel};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
 
 /// Le annotazioni di `atti/Bando di gara.pdf`: una nota a pagina 1, un
@@ -382,5 +385,138 @@ fn markdown_does_not_notice_the_annotations() {
     assert_eq!(
         search(&with.workspace, "commissione"),
         search(&without.workspace, "commissione")
+    );
+}
+
+/// Un PDF di una pagina 612 × 792 con `text` scritto in Helvetica, scritto a
+/// mano con la sua tabella dei riferimenti: il flusso della pagina non è
+/// compresso, e il testo si cerca nei byte.
+fn one_page_pdf(text: &str) -> Vec<u8> {
+    let content = format!("BT /F1 24 Tf 72 700 Td ({text}) Tj ET");
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".to_owned(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+    ];
+    let mut out = b"%PDF-1.4\n".to_vec();
+    let mut offsets = Vec::new();
+    for (index, object) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend(format!("{} 0 obj\n{object}\nendobj\n", index + 1).bytes());
+    }
+    let xref = out.len();
+    let size = objects.len() + 1;
+    out.extend(format!("xref\n0 {size}\n0000000000 65535 f \n").bytes());
+    for offset in offsets {
+        out.extend(format!("{offset:010} 00000 n \n").bytes());
+    }
+    out.extend(
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").bytes(),
+    );
+    out
+}
+
+/// L'export delle annotazioni sul montaggio di produzione: i due formati ci
+/// sono, il PDF annotato è l'originale con un aggiornamento in fondo, il PDF
+/// redatto non ha più il testo coperto, il suffisso del nome è un'opzione e
+/// il documento della selezione che non è un `.fubann` si salta.
+#[test]
+fn the_annotations_export_to_an_annotated_and_a_redacted_pdf() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let pdf = one_page_pdf("RISERVATO");
+    write(&root, "atti/Bando.pdf", &pdf);
+    write(
+        &root,
+        "atti/Bando.pdf.fubann",
+        concat!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\">\n",
+            "  <title>Revisione</title>\n",
+            "  <g id=\"p0001\" fub:page=\"1\" fub:page-size=\"612 792\">\n",
+            "    <rect id=\"o1a2b3c4d\" x=\"60\" y=\"60\" width=\"220\" height=\"50\" fill=\"#000000\"/>\n",
+            "  </g>\n",
+            "</svg>\n",
+        ),
+    );
+    write(&root, "Riunione.md", "# Riunione\n");
+    let mounted = mount(&root);
+    let ws = &mounted.workspace;
+    let targets: Vec<String> = ws.export_targets().into_iter().map(|t| t.id).collect();
+    for target in ["draw.annotated-pdf", "draw.redacted-pdf"] {
+        assert!(targets.iter().any(|t| t == target), "{targets:?}");
+    }
+
+    let export = |target: &str, options: serde_json::Value| {
+        let request = ExportRequest::new(
+            target,
+            ExportSelection::Documents(vec![id("Riunione.md"), id("atti/Bando.pdf.fubann")]),
+        )
+        .with_options(options);
+        let report = ws.export(&request).unwrap();
+        assert_eq!(report.artifacts.len(), 1, "{:?}", report.log);
+        let log: Vec<_> = report
+            .log
+            .iter()
+            .map(|note| (note.level, note.message.clone(), note.entry.clone()))
+            .collect();
+        let artifact = &report.artifacts[0];
+        (
+            artifact.path.clone(),
+            artifact.as_bytes().unwrap().to_vec(),
+            log,
+        )
+    };
+    let skipped = (
+        NoteLevel::Info,
+        "1 selected document is not a PDF's annotations and was skipped".to_owned(),
+        None,
+    );
+    let about = Some("atti/Bando.pdf.fubann".to_owned());
+    let contains = |bytes: &[u8], what: &[u8]| bytes.windows(what.len()).any(|w| w == what);
+
+    // Il PDF annotato: i byte dell'originale e poi l'aggiornamento, con lo
+    // strato che prende il nome dal titolo delle annotazioni.
+    let (path, bytes, log) = export("draw.annotated-pdf", serde_json::Value::Null);
+    assert_eq!(path, "atti/Bando (annotated).pdf");
+    assert!(bytes.starts_with(&pdf));
+    assert!(contains(&bytes[pdf.len()..], b"(Revisione)"));
+    assert_eq!(
+        log,
+        [
+            skipped.clone(),
+            (
+                NoteLevel::Warning,
+                "Page 1 has covers: in the annotated PDF the content under them is still there, and only the redacted PDF removes it".to_owned(),
+                about.clone(),
+            ),
+        ]
+    );
+
+    // Il PDF redatto, col suffisso che il client sceglie nella sua lingua:
+    // la pagina coperta è diventata un'immagine e il testo non c'è più.
+    let (path, bytes, log) = export(
+        "draw.redacted-pdf",
+        serde_json::json!({ "suffix": "redatto" }),
+    );
+    assert_eq!(path, "atti/Bando (redatto).pdf");
+    assert!(bytes.starts_with(b"%PDF-"));
+    assert!(!contains(&bytes, b"RISERVATO"));
+    assert_eq!(
+        log,
+        [
+            skipped,
+            (
+                NoteLevel::Info,
+                "Page 1 became an image at 200 dpi: the content under the covers is gone, and the text there can no longer be selected or searched".to_owned(),
+                about.clone(),
+            ),
+            (
+                NoteLevel::Info,
+                "only the pages were kept: bookmarks, attachments, scripts, form data, the accessibility structure and the metadata of the PDF were left out".to_owned(),
+                about,
+            ),
+        ]
     );
 }

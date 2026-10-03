@@ -13,8 +13,8 @@ import { errorText } from "../../host/errors";
 import { t } from "../../i18n/strings";
 import { notify } from "../../ui/notify";
 import type { EditorSelections, EditorSurface, SelectedText, SurfaceLocation, SurfaceMountContext } from "../core/registry";
-import type { SurfaceMode } from "../core/registry";
-import { PDF_MODES, PDF_PROFILE, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
+import type { SurfaceExport, SurfaceMode } from "../core/registry";
+import { PDF_EXPORTS, PDF_MODES, PDF_PROFILE, VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import type { PdfSurfaceOptions } from "./pdf/surface";
 import type { VectorSurfaceOptions } from "./surface";
 
@@ -34,7 +34,7 @@ export function mountVectorSurfaceLazily(
   options: VectorSurfaceOptions,
   load: () => Promise<SurfaceModule> = () => import("./surface"),
 ): EditorSurface {
-  return lazily(context, VECTOR_PROFILE, VECTOR_MODES, async () => {
+  return lazily(context, VECTOR_PROFILE, VECTOR_MODES, VECTOR_EXPORTS, async () => {
     const module = await load();
     return () => module.mountVectorSurface(context, options);
   });
@@ -45,18 +45,20 @@ export function mountPdfSurfaceLazily(
   options: PdfSurfaceOptions,
   load: () => Promise<PdfSurfaceModule> = () => import("./pdf/surface"),
 ): EditorSurface {
-  return lazily(context, PDF_PROFILE, PDF_MODES, async () => {
+  return lazily(context, PDF_PROFILE, PDF_MODES, PDF_EXPORTS, async () => {
     const module = await load();
     return () => module.mountPdfSurface(context, options);
   });
 }
 
 /// L'involucro di una superficie del profilo `profile`: `load` dà la
-/// funzione che la monta.
+/// funzione che la monta. I modi e gli export sono quelli del profilo, e ci
+/// sono già prima che la superficie arrivi.
 function lazily(
   context: SurfaceMountContext,
   profile: string,
   modes: readonly SurfaceMode[],
+  exports: readonly SurfaceExport[],
   load: () => Promise<() => EditorSurface>,
 ): EditorSurface {
   const pending = document.createElement("div");
@@ -114,6 +116,7 @@ function lazily(
     surfaceId: context.paneId,
     modes,
     defaultMode: "draw",
+    exports,
     setMode(next) {
       if (surface !== null) return surface.setMode(next);
       if (!modes.some((known) => known.id === next)) throw new RangeError(`surface mode ${next} is not supported`);

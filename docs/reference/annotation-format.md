@@ -65,7 +65,7 @@ Un file oltre 20 MiB porta all'indice solo la testa (formato della scena,
 
 **Il legame con il PDF.** L'editor non scrive niente quando apre le
 annotazioni: legge il PDF, ne calcola impronta e numero di pagine e li
-confronta con la radice. I casi sono tre:
+confronta con la radice. I casi sono quattro:
 
 - **non ancora scritti**, cioè impronta assente e `fub:pages` assente o
   uguale: li scrive il primo gesto che modifica il file, nella stessa
@@ -94,7 +94,8 @@ Un gruppo per pagina annotata, con dentro gli elementi modificabili del
 formato della scena (§4): l'evidenziatore (`fub:tool="highlighter"` o un
 rettangolo con opacità), la penna, le forme, le note (§4) e la **copertura**,
 un rettangolo opaco. La copertura non è una redazione: il contenuto sotto
-resta nel PDF, e solo l'export rasterizzato delle pagine coinvolte lo elimina.
+resta nel PDF, e solo il PDF redatto, che fa delle pagine coinvolte delle
+immagini, lo elimina (§9).
 
 Le regole di lettura:
 
@@ -250,3 +251,66 @@ lettore della versione 1 legge come impronta assente.
 Pagina 1 ha un tratto d'evidenziatore e una nota con il testo «Importo da
 rivedere» e un corpo di due righe; pagina 3 una copertura e una nota senza
 testo disegnato.
+
+## 9. Export
+
+Con la feature `draw` le annotazioni si esportano con due destinazioni del
+bundle `fub.draw` (`crates/fub-features/src/draw/annotated.rs`):
+`draw.annotated-pdf`, il **PDF annotato**, e `draw.redacted-pdf`, il **PDF
+redatto**. Un export prende i documenti `fubann` della selezione, salta gli
+altri e dà un file per documento, che chi esporta salva dove sceglie. Il PDF
+del vault non si scrive mai.
+
+**Il PDF e la sua versione.** Il PDF è quello che trova l'editor (§2): il
+valore di `fub:annotates` senza frammento, o il nome del file senza
+`.fubann`. Impronta e pagine si confrontano come nell'editor, e il PDF è
+cambiato negli stessi casi. Il PDF annotato di un PDF cambiato esce con un
+avviso; il PDF redatto non esce, perché una copertura potrebbe non stare più
+su ciò che nasconde, e l'errore chiede di confermare prima la versione. Un PDF
+che manca, che non si legge, senza pagine o che chiede una password per
+aprirsi non si esporta.
+
+**Le pagine.** Ogni gruppo di pagina (§3) si disegna sulla pagina del PDF con
+lo stesso numero, nella geometria con cui l'editor la mostra: l'intersezione
+di `CropBox` e `MediaBox`, la rotazione e `UserUnit`, con i casi limite di
+pdf.js. Il disegno segue le regole dell'export dei disegni (formato della
+scena, §9): niente oltre al documento, e i caratteri di Fub. Le pagine
+annotate oltre l'ultima del PDF, gli elementi fuori dalle pagine e le note che
+non mostrano niente non si esportano, e il log dell'export lo dice; dice anche
+quando la misura scritta in `fub:page-size` non è quella della pagina.
+
+**Le note** (§4) diventano note del PDF (`/Text`), con il corpo in
+`/Contents`, sul riquadro del testo disegnato o, per una nota senza testo, con
+un'icona nel punto della nota.
+
+**Il PDF annotato** comincia con i byte del PDF, identici, e le annotazioni
+sono un aggiornamento incrementale in coda. Il disegno di ogni pagina è un
+Form XObject dentro `/Artifact`, e disegno e note stanno in un gruppo di
+contenuto facoltativo che porta il titolo delle annotazioni, o il nome del
+file: i lettori lo mostrano fra i livelli. Ciò che il PDF ha resta com'è,
+comprese firme, moduli e metadati. Un PDF la cui tabella dei riferimenti non
+si legge non regge un aggiornamento, e si riscrive intero.
+
+**Il PDF redatto** è un file nuovo con le sole pagine, nel loro ordine, e i
+livelli con la loro configurazione e la lingua del documento. Una pagina con
+almeno una **copertura** diventa un'immagine opaca, di serie a 200 punti per
+pollice (opzione `dpi`, da 72 a 600), entro 16 384 pixel per lato e
+33 554 432 pixel in tutto: la pagina come la mostra l'editor, coi livelli
+spenti che restano spenti, e sopra le annotazioni. Una copertura è un `rect`
+visibile, o un `use` che ne richiama uno, con un riempimento opaco a opacità
+piena. Gli altri segni opachi, un tratto di penna o un'immagine, nascondono
+soltanto alla vista: una pagina che ha solo quelli si copia, e il log lo dice.
+Le altre pagine si copiano con il contenuto e le annotazioni sopra. Su ogni
+pagina le annotazioni del PDF (commenti, timbri, campi dei moduli) si
+disegnano dentro la pagina col loro aspetto e smettono di essere annotazioni;
+restano annotazioni soltanto le note e, sulle pagine copiate, i collegamenti
+verso un indirizzo o un'altra pagina. Del documento non restano segnalibri,
+allegati, script e azioni, moduli, struttura per l'accessibilità, metadati e
+miniature. Le stesse annotazioni sullo stesso PDF danno sempre gli stessi
+byte.
+
+**Il nome** è quello del PDF senza estensione, con una parola fra parentesi:
+`Bando (annotated).pdf`, `Bando (redacted).pdf`, o `Bando (annotated) 2.pdf`
+se due documenti della selezione darebbero lo stesso nome. L'opzione `suffix`
+cambia la parola, al più 40 caratteri e senza `/ \ : * ? " < > |` né
+caratteri di controllo: la shell la manda nella lingua dell'interfaccia.
