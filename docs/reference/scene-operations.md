@@ -19,8 +19,8 @@ del motore sono le sezioni di questa pagina; quelli del formato si citano come
 ## 1. Dove vive
 
 - **Applicazione:** il motore è TypeScript, in
-  `apps/client/src/editors/spatial/scene/`. Lo stesso codice gira nella
-  superficie del PC, nell'app compagna e nel client web.
+  `apps/client/src/editors/spatial/scene/`. Lo usa la superficie della shell,
+  e lo stesso codice servirà al client che scrive dal tablet.
 - **Rust:** `fub-scene` non applica operazioni. Legge i testi dei vettori di
   prova (§9) e verifica che si analizzino senza errori.
 - **Un motore in Rust** nascerà solo con un consumatore Rust delle operazioni.
@@ -233,21 +233,30 @@ così com'è.
 
 ## 7. Undo e redo
 
-- **Pila:** ogni superficie ha la propria. Una voce contiene etichetta,
-  operazioni in avanti, inverse, selezione prima e dopo.
+- **Pila:** ogni superficie ha la propria, e ricorda gli ultimi 1000 passi.
+  Una voce è un gesto: il suo nome, per gli annunci, e il suo undo, cioè
+  l'inversa e l'operazione in avanti che il redo ripete.
 - **Un gesto, una voce:** un tratto è un `add`; un trascinamento diventa un
   solo `set` di `transform` alla fine del gesto. Gli stati intermedi non si
   registrano.
-- **Fusione:** due `set` consecutivi sugli stessi id e sulle stesse chiavi,
-  entro 500 ms e nello stesso gesto, diventano una voce sola: resta la prima
-  inversa e l'ultima operazione in avanti.
+- **Fusione:** due voci consecutive con lo stesso nome, fatte di `set` sulle
+  stesse chiavi degli stessi elementi, o di due `batch` di quei `set` nello
+  stesso ordine, a meno di 500 ms l'una dall'altra, diventano una voce sola:
+  resta la prima inversa e l'ultima operazione in avanti, e l'undo resta
+  esatto. Così una serie di piccoli spostamenti, o tre colori provati di
+  fila, si annullano in un passo. Le voci rimesse da annulla e ripeti non si
+  fondono.
+- **Selezione:** dopo annulla o ripeti, la selezione sono gli oggetti che il
+  passo ha toccato e che ci sono ancora.
 - **Undo esatto:** se l'undo arriva sulla scena lasciata dall'operazione,
   rimette i nodi di prima e il file torna identico byte per byte, anche dove
   l'inversa riscriverebbe in forma canonica (un `<g/>` riaperto, per esempio).
   Altrimenti si applica l'inversa.
 - **Undo impossibile:** se l'inversa è rifiutata, perché il bersaglio è
-  cambiato altrove, la voce si scarta e la superficie dice: «Non posso
-  annullare: l'oggetto è cambiato altrove».
+  cambiato altrove, la voce si scarta e la superficie annuncia, col nome del
+  gesto, che non si può annullare perché il disegno è cambiato nel
+  frattempo. Le altre voci restano, perché toccano altri oggetti e valgono
+  ancora.
 - **Cambiamenti remoti:** quelli che arrivano da un'altra superficie o dalla
   sessione live non entrano nella pila locale
   ([ADR 0190](../decisions/0190-sessioni-documento-e-undo.md)).
