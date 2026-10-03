@@ -402,6 +402,18 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("apply_grid", Why::Grid),
     ("reload_grid", Why::Grid),
     ("close_grid", Why::Grid),
+    // --- la sessione live (0204): un servizio dell'app, con il suo canale ---
+    //
+    // Listener, TLS e scrittore vivono nel processo dell'app, sul runtime di
+    // Tauri, e la sessione appartiene alla finestra che l'ha aperta: nessun
+    // registro di vault la conosce, e un comando del registro non potrebbe
+    // passarle il canale degli eventi, che è il settimo ponte. Le risposte ai
+    // commit sono della shell, che è l'autorità sul disegno.
+    ("live_start", Why::AppSurface),
+    ("live_pairing", Why::AppSurface),
+    ("live_send", Why::AppSurface),
+    ("live_status", Why::AppSurface),
+    ("live_stop", Why::AppSurface),
     // --- le capacità dell'elenco chiuso, affacciate sull'IPC ----------------
     (
         "read_document",

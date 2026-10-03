@@ -50,6 +50,14 @@ fub-kernel = { workspace = true }
 # `features = [...]` above does now.
 fub-host = { workspace = true, features = ["official-features"] }
 fub-wasm-host = { workspace = true }
+# La sessione live (ADR 0204): l'app la compone sul runtime di Tauri, che è lo
+# stesso `tokio`, e la affaccia alla shell con i comandi `live_*`. `rt` serve a
+# chiudere le sessioni tutte insieme, `sync` a contare le chiusure in corso e
+# `time` a dare loro una scadenza quando l'app esce.
+fub-live = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+# Il nome del PC che il tablet mostra prima di collegarsi.
+gethostname = "1.1.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }
@@ -68,6 +76,10 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 # stessa versione che Tauri e wry già portano.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+
+[dev-dependencies]
+# Le prove del registro delle sessioni live, con il tempo in pausa.
+tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
