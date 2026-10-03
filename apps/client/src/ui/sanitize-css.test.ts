@@ -5,6 +5,7 @@ import {
   missingThemeRoles,
   sanitizeThemeCss,
   sanitizeUserCss,
+  themeAssetReferences,
   themeCssViolations,
   unknownThemeHooks,
   type ThemeCssPolicy,
@@ -80,6 +81,26 @@ describe("sanitizeThemeCss", () => {
       "missing-role",
     ]);
 
+    // Riga e colonna sono quelle del testo, anche con gli a capo di Windows:
+    // la posizione viene dall'offset del parser, non da un conteggio a parte.
+    const where = first.map(({ code, line, column }) => `${code}@${line}:${column}`);
+    expect(where).toEqual([
+      "at-import@2:7",
+      "remote-url@2:15",
+      "at-namespace@3:7",
+      "asset-namespace@3:22",
+      "selector-hook@5:17",
+      "selector-id@5:26",
+      "selector-token@5:33",
+      "structural-property@6:9",
+      "structural-property@7:9",
+      "asset-namespace@8:21",
+      "missing-role@10:5",
+    ]);
+    expect(
+      themeCssViolations(css.replace(/\n/g, "\r\n"), POLICY).map(({ code, line, column }) => `${code}@${line}:${column}`),
+    ).toEqual(where);
+
     expect(() => sanitizeThemeCss(css, POLICY)).toThrow(ThemeCssError);
     try {
       sanitizeThemeCss(css, POLICY);
@@ -93,6 +114,22 @@ describe("sanitizeThemeCss", () => {
       expect((error as Error).message).toContain("asset ../fuori.svg fuori da theme://acme.paper/");
       expect((error as Error).message).toContain("ruolo --bg mancante");
     }
+  });
+
+  it("con il BOM in testa le posizioni restano sul testo intero", () => {
+    // Un foglio salvato con il BOM: le posizioni del parser cominciano dopo,
+    // quelle che `materializeAssets` ritaglia contano anche il BOM.
+    const css = `.a { background: url("theme://acme.paper/uno.png"); }\n:root { --text: #000; --bg: url(theme://acme.paper/due.png); }\n`;
+    const plain = themeAssetReferences(css);
+    const bom = themeAssetReferences(`\uFEFF${css}`);
+    expect(plain.map(({ value }) => value)).toEqual(["theme://acme.paper/uno.png", "theme://acme.paper/due.png"]);
+    expect(bom.map(({ value, start, end }) => [value, start - 1, end - 1])).toEqual(plain.map(({ value, start, end }) => [value, start, end]));
+    for (const { value, start, end } of bom) expect(`\uFEFF${css}`.slice(start, end)).toBe(value);
+
+    const at = (text: string) => themeCssViolations(text, POLICY).map(({ code, line, column }) => `${code}@${line}:${column}`);
+    expect(at("@import url(x.css);\n:root { --text: #000; --bg: #fff; }")).toEqual(["at-import@1:1", "asset-namespace@1:9"]);
+    expect(at("\uFEFF@import url(x.css);\n:root { --text: #000; --bg: #fff; }")).toEqual(["at-import@1:2", "asset-namespace@1:10"]);
+    expect(at("\uFEFF:root { --text: red;")).toEqual(at(":root { --text: red;").map((where) => where.replace(/@1:(\d+)$/, (_, c) => `@1:${Number(c) + 1}`)));
   });
 });
 describe("image-set URL guarding", () => {
