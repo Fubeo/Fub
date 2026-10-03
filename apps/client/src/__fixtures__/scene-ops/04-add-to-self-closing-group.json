@@ -1,0 +1,34 @@
+{
+  "name": "add-to-self-closing-group",
+  "description": "genitore <g/> riscritto in forma aperta",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <g id=\"o6f7g8h9i\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "add",
+      "parent": "o6f7g8h9i",
+      "pos": {
+        "last": true
+      },
+      "elem": {
+        "tag": "rect",
+        "attrs": {
+          "id": "o7g8h9i0j",
+          "x": "10",
+          "y": "20",
+          "width": "30",
+          "height": "40",
+          "fill": "#000000"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <g id=\"o6f7g8h9i\">\n      <rect id=\"o7g8h9i0j\" x=\"10\" y=\"20\" width=\"30\" height=\"40\" fill=\"#000000\"/>\n    </g>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "remove",
+      "target": "o7g8h9i0j"
+    },
+    "inverseText": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <g id=\"o6f7g8h9i\">\n    </g>\n  </g>\n</svg>\n"
+  }
+}
