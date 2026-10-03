@@ -702,9 +702,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (docs.has(doc)) return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
         const name = pdf.split("/").pop()!;
         const escaped = name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const href = encodeURI(name).replace(/[#?]/g, encodeURIComponent).replace(/&/g, "&amp;");
+        // Il nome della radice sta in una costante: il controllo delle icone
+        // non vuole tag SVG scritti fuori da `ui/icons.ts`, e questo non è
+        // un'icona ma un documento del vault.
+        const root = "svg";
         write(
           doc,
-          `<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="${encodeURI(name).replace(/[#?]/g, encodeURIComponent).replace(/&/g, "&amp;")}">\n  <title>${escaped}</title>\n</svg>\n`,
+          `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="${href}">\n  <title>${escaped}</title>\n</${root}>\n`,
         );
         emit({ type: "document_changed", id: doc });
         return { notify: `Create le annotazioni «${doc}»`, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };

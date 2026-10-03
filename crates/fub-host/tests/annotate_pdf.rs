@@ -109,14 +109,22 @@ fn the_first_time_they_are_born_the_second_they_open_and_the_pdf_stays() {
     };
     assert_eq!(custom_kind, ANNOTATIONS_KIND);
     // Il riferimento come è scritto, percent-encoded e relativo alla cartella.
-    assert_eq!(attrs["annotates"], json!("Bando%20di%20gara.pdf"), "{attrs}");
+    assert_eq!(
+        attrs["annotates"],
+        json!("Bando%20di%20gara.pdf"),
+        "{attrs}"
+    );
 
     // La seconda volta si aprono soltanto: niente da annunciare né da annullare.
     let again = run(&host, BANDO, InvokeMode::Apply).unwrap();
     assert_eq!(opened(&again), doc);
     assert!(again.notify.is_none() && again.undo.is_none());
 
-    assert_eq!(bytes(&root, BANDO).as_deref(), Some(PDF), "il PDF non cambia");
+    assert_eq!(
+        bytes(&root, BANDO).as_deref(),
+        Some(PDF),
+        "il PDF non cambia"
+    );
 }
 
 #[test]
@@ -131,7 +139,10 @@ fn undoing_the_birth_sends_the_annotations_to_the_trash_and_keeps_the_pdf() {
         host.invoke_user_command(None, &command, args, InvokeMode::Apply)
             .unwrap();
     }
-    assert!(bytes(&root, NOTE).is_none(), "le annotazioni sono nel cestino");
+    assert!(
+        bytes(&root, NOTE).is_none(),
+        "le annotazioni sono nel cestino"
+    );
     assert_eq!(bytes(&root, BANDO).as_deref(), Some(PDF));
     // E rinascono.
     assert_eq!(

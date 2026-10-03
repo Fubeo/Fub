@@ -24,8 +24,7 @@ use fub_scene::{read_annotations, Annotations};
 use serde_json::Value;
 
 fn fixtures() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../apps/client/src/__fixtures__/annotations")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/client/src/__fixtures__/annotations")
 }
 
 const REGENERATE: &str =

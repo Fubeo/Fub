@@ -460,8 +460,21 @@ mod tests {
     fn every_message_has_both_languages() {
         let catalogs = super::super::catalog();
         for key in [
-            T_TITLE, T_DESC, T_PDF, T_PDF_DESC, P_CREATE, P_OPEN, D_CREATE, U_CREATE, E_NO_FORMAT,
-            E_NOT_PDF, E_NO_PDF, E_TAKEN, E_NAME, E_NAME_TOO_LONG, E_SERIALIZE,
+            T_TITLE,
+            T_DESC,
+            T_PDF,
+            T_PDF_DESC,
+            P_CREATE,
+            P_OPEN,
+            D_CREATE,
+            U_CREATE,
+            E_NO_FORMAT,
+            E_NOT_PDF,
+            E_NO_PDF,
+            E_TAKEN,
+            E_NAME,
+            E_NAME_TOO_LONG,
+            E_SERIALIZE,
         ] {
             for catalog in &catalogs {
                 assert!(

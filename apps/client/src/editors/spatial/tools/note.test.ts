@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { SceneEngine } from "../scene/engine";
-import { elementChildren, type LeafNode } from "../scene/model";
+import { elementChildren, type ContainerNode, type LeafNode } from "../scene/model";
 import { doc } from "../scene/test-support";
 import { noteElem, noteLabel, promptNote, readNote } from "./note";
 
@@ -44,7 +44,7 @@ describe("l'elemento", () => {
     const elem = noteElem("o5p6q7r8s", [10, 20], "#000000", { body: "Riga uno\r\nRiga due", label: "Etichetta" });
     expect(engine.apply({ op: "add", parent: "p0001", pos: { last: true }, elem }).outcome).toBe("applied");
     expect(engine.text).toContain('fub:note="Riga uno&#10;Riga due"');
-    const page = elementChildren(engine.model!.root)[0]!;
+    const page = elementChildren(engine.model!.root)[0] as ContainerNode;
     const leaf = elementChildren(page)[0] as LeafNode;
     expect(readNote(leaf)).toEqual({ body: "Riga uno\nRiga due", label: "Etichetta" });
   });
