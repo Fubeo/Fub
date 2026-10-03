@@ -89,6 +89,29 @@ spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
 si anima: ogni inquadratura è subito quella nuova, quindi non c'è moto da
 ridurre.
 
+## Immagini
+
+Un'immagine incollata con `Ctrl+V` o `⌘V`, o un file lasciato sul foglio,
+entra nel disegno come `<image>` con i byte nell'attributo `href`, in un data
+URI: il file resta uno solo, e si apre uguale su un altro computer. Entrano
+PNG, JPEG, GIF e WebP così come sono; un altro formato che il browser sa
+leggere diventa PNG, e un JPEG girato dall'EXIF si ricodifica diritto, perché
+non tutti i programmi che leggono un SVG seguono l'EXIF. Un SVG non entra come
+immagine.
+
+L'immagine va dove sono il puntatore o il cursore, se sono nella vista, e
+altrimenti al centro della vista. Ogni pixel misura un'unità, finché
+l'immagine non supera i quattro quinti della vista: allora si rimpicciolisce
+fino a starci. Più immagini insieme si dispongono a scala, sono un passo solo
+di annulla, e restano scelte con lo strumento selezione.
+
+Un'immagine pesa al più 5 MiB, e quelle incollate insieme se li dividono.
+Oltre, la finestra propone di ridurle: una foto senza trasparenza diventa
+JPEG, una con la trasparenza resta PNG e perde pixel, e sul foglio la misura
+resta la stessa. Una GIF ridotta perde l'animazione. Un disegno vicino al
+limite oltre il quale si aprirebbe in sola lettura riceve soltanto le immagini
+che ci stanno.
+
 ## Documenti che non si modificano subito
 
 La modalità del riquadro non cambia con il documento: è il disegno a dire

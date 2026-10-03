@@ -27,6 +27,9 @@
 //   stessa selezione del foglio; i nomi vengono da `describe.ts`.
 // - **Moto ridotto per costruzione.** La camera non si anima mai: ogni
 //   inquadratura è immediata, quindi non c'è moto da ridurre.
+// - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
+//   entra nel file come data URI (`images.ts`): il disegno resta un file
+//   solo. Oltre il peso massimo l'editor propone di ridurla.
 //
 // La superficie che lo monta nella shell (FD-206) gli passa il motore del
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
@@ -49,7 +52,9 @@ import type { TouchPolicy } from "../pen/roles";
 import { BoundsBuilder, type Bounds } from "../scene/geometry";
 import { apply, compose, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren } from "../scene/model";
-import { SVG_NS } from "../scene/read";
+import { MAX_IMAGE_BYTES } from "../scene/analysis";
+import { MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
+import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
 import type { Item } from "../scene/classify";
 import type { Op, Reason } from "../scene/ops";
@@ -75,6 +80,23 @@ import {
 } from "./edit";
 import { elemBounds, SceneIndex, SceneIndexer, type Unit } from "./hit";
 import { History, type Replay } from "./history";
+import {
+  browserCodec,
+  budgetFor,
+  carriesFiles,
+  dataUri,
+  imageElem,
+  imageFiles,
+  jpegOrientation,
+  limitsFor,
+  MIN_ROOM,
+  placeImage,
+  reduce,
+  sniffRaster,
+  type Decoded,
+  type Encoded,
+  type ImageCodec,
+} from "./images";
 import { createObjectTree, type TreeEntry } from "./objects";
 import { DEFAULT_COLOR, DEFAULT_WIDTH, PALETTE, swatchOf, WIDTHS } from "./palette";
 import { DEFAULT_TOOL, toolForKey, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
@@ -96,6 +118,9 @@ export interface DrawEditorOptions {
   readonly images?: PainterOptions["images"];
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
+  /// Chi legge e ricodifica le immagini incollate: quello del browser, se
+  /// non è dato; `null` le rifiuta.
+  readonly imageCodec?: ImageCodec | null;
   readonly onChange?: (change: DrawChange) => void;
   /// La selezione è cambiata: altri oggetti, o gli stessi con chiavi nuove.
   readonly onSelectionChange?: () => void;
@@ -198,6 +223,9 @@ const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
 
 /// Le frecce come si leggono nell'elenco dei tasti.
 const ARROW_KEYS = "←↑→↓";
+
+/// Lo scarto fra due immagini incollate insieme, in pixel: si vedono tutte.
+const PASTE_STEP_PX = 24;
 
 const INK_KEY = "pen";
 
@@ -344,8 +372,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Gli id dei tratti da tastiera: negativi, così non incontrano mai quelli
   /// della pipeline, che crescono da zero.
   let keyStrokes = 0;
-  /// Una finestra dell'editor è aperta: un secondo Invio non ne apre un'altra.
+  /// Una finestra dell'editor è aperta, o un'immagine sta entrando: un
+  /// secondo Invio non ne apre un'altra.
   let asking = false;
+  /// Quante volte l'editor ha caricato un altro documento: un'immagine letta
+  /// per il documento di prima non entra in quello nuovo.
+  let loads = 0;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -1819,6 +1851,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       rows: [
         ["Mod-z", t("draw.undo")],
         ["Mod-Shift-z Mod-y", t("draw.redo")],
+        ["Mod-v", t("draw.keys.paste")],
         ["?", t("draw.keys")],
       ],
     },
@@ -1835,6 +1868,203 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       asking = false;
     }
   }
+
+  // --- Le immagini incollate --------------------------------------------------
+
+  const codec = options.imageCodec === undefined ? browserCodec() : options.imageCodec;
+
+  /// Un peso come si legge: KiB sotto il MiB, MiB sopra.
+  const sizeText = (bytes: number): string =>
+    bytes < 1024 * 1024 ? `${numberText(bytes / 1024)} KiB` : `${numberText(bytes / (1024 * 1024))} MiB`;
+
+  /// Ciò che si vede del foglio, nella scena.
+  const viewBounds = (): Bounds => {
+    const a = screenToWorld(camera, { x: 0, y: 0 });
+    const b = screenToWorld(camera, { x: surface.clientWidth, y: surface.clientHeight });
+    return { min: [a.x, a.y], max: [b.x, b.y] };
+  };
+
+  /// Un'immagine pronta: i byte del file e le misure dell'originale, che
+  /// decidono quanto è grande sul foglio anche dopo una riduzione.
+  interface Picture {
+    readonly decoded: Decoded;
+    encoded: Encoded;
+  }
+
+  /// I byte di `file` come entrano nel disegno: così come sono se sono PNG,
+  /// JPEG diritto, WebP o GIF; altrimenti ricodificati. `null` se non è
+  /// un'immagine che il browser sa leggere.
+  const pictureOf = async (file: File, decoder: ImageCodec): Promise<Picture | null> => {
+    let bytes: Uint8Array;
+    let decoded: Decoded | null;
+    try {
+      bytes = new Uint8Array(await file.arrayBuffer());
+      decoded = await decoder.decode(file);
+    } catch {
+      return null;
+    }
+    if (decoded === null) return null;
+    let type = sniffRaster(bytes);
+    if (type === "image/jpeg" && jpegOrientation(bytes) !== 1) type = null;
+    if (type !== null) return { decoded, encoded: { type, bytes } };
+    // Un JPEG girato resta JPEG, diritto; il resto diventa PNG, che non perde.
+    const as = sniffRaster(bytes) === "image/jpeg" ? "image/jpeg" : "image/png";
+    const encoded = await decoded.encode(as, 1);
+    if (encoded === null) {
+      decoded.close();
+      return null;
+    }
+    return { decoded, encoded: { type: as, bytes: encoded } };
+  };
+
+  /// Chiede se ridurre le immagini oltre il loro peso massimo.
+  const askReduce = (pictures: readonly Picture[], limits: readonly number[], room: boolean): Promise<boolean> => {
+    const over = pictures.filter((picture, i) => picture.encoded.bytes.length > limits[i]!);
+    const total = pictures.reduce((sum, picture) => sum + picture.encoded.bytes.length, 0);
+    const budget = limits.reduce((sum, limit) => sum + limit, 0);
+    let message: string;
+    if (room) message = t("draw.image.room", { limit: sizeText(budget), size: sizeText(total) });
+    else if (pictures.length === 1) message = t("draw.image.large", { size: sizeText(total), limit: sizeText(limits[0]!) });
+    else message = t("draw.image.shared", { size: sizeText(total), limit: sizeText(budget) });
+    return promptForm({
+      title: plural(over.length, "draw.image.heavy.one", "draw.image.heavy.other"),
+      message,
+      fields: [],
+      okLabel: t("draw.image.reduce"),
+    }).then((answer) => answer !== null);
+  };
+
+  /// `files` sul foglio, in un gesto solo: al cursore se si vede, o al
+  /// centro della vista, scelti, con lo strumento della selezione.
+  async function addImages(files: readonly File[], at: Point | null): Promise<void> {
+    if (asking || disposed || files.length === 0) return;
+    if (!editable()) return;
+    if (codec === null) {
+      announce(t("draw.image.unreadable"));
+      return;
+    }
+    asking = true;
+    cancelGesture();
+    const loaded = loads;
+    const pictures: Picture[] = [];
+    try {
+      for (const file of files) {
+        const picture = await pictureOf(file, codec);
+        if (picture !== null) pictures.push(picture);
+      }
+      const gone = (): boolean => disposed || loads !== loaded || !editable();
+      if (gone()) return;
+      if (pictures.length === 0) {
+        announce(t("draw.image.unreadable"));
+        return;
+      }
+      const docBytes = utf8Length(engine.text);
+      const budget = budgetFor(docBytes, pictures.length);
+      if (budget < MIN_ROOM) {
+        announce(t("draw.image.full", { limit: sizeText(MAX_EDIT_BYTES) }));
+        return;
+      }
+      const limits = limitsFor(pictures.map((picture) => picture.encoded.bytes.length), budget);
+      if (pictures.some((picture, i) => picture.encoded.bytes.length > limits[i]!)) {
+        if (!(await askReduce(pictures, limits, budget < MAX_IMAGE_BYTES))) return;
+        if (gone()) return;
+        announce(t("draw.image.reducing"));
+        for (const [i, picture] of pictures.entries()) {
+          if (picture.encoded.bytes.length <= limits[i]!) continue;
+          const reduced = await reduce(picture.decoded, limits[i]!);
+          if (reduced === null) {
+            announce(t("draw.image.failed"));
+            return;
+          }
+          picture.encoded = reduced;
+        }
+        if (gone()) return;
+      }
+      placeImages(pictures, at);
+    } finally {
+      for (const picture of pictures) picture.decoded.close();
+      asking = false;
+    }
+  }
+
+  /// Le immagini nel livello che riceve, una sopra l'altra con uno scarto.
+  const placeImages = (pictures: readonly Picture[], at: Point | null): void => {
+    const ids = newIds();
+    const to = target(ids);
+    if (to === null) return;
+    const view = viewBounds();
+    const inView = at !== null && at[0] >= view.min[0] && at[0] <= view.max[0] && at[1] >= view.min[1] && at[1] <= view.max[1];
+    const base: Point = inView ? at : [(view.min[0] + view.max[0]) / 2, (view.min[1] + view.max[1]) / 2];
+    const step = PASTE_STEP_PX / camera.scale;
+    // La scala del livello: una unità della scena vale `1 / k` unità sue.
+    const k = Math.sqrt(Math.abs(to.matrix[0] * to.matrix[3] - to.matrix[1] * to.matrix[2]));
+    const ops: Op[] = [...to.prelude];
+    const keys: string[] = [];
+    const bounds = new BoundsBuilder();
+    let hrefBytes = 0;
+    pictures.forEach((picture, i) => {
+      const box = placeImage(picture.decoded.width, picture.decoded.height, view, [base[0] + i * step, base[1] + i * step]);
+      const [cx, cy] = apply(to.inverse, [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2]);
+      const w = (box.max[0] - box.min[0]) / k;
+      const h = (box.max[1] - box.min[1]) / k;
+      const id = ids.next("object");
+      const elem = imageElem(id, dataUri(picture.encoded.type, picture.encoded.bytes), { min: [cx - w / 2, cy - h / 2], max: [cx + w / 2, cy + h / 2] });
+      ops.push(addOp(to, elem));
+      keys.push(id);
+      hrefBytes += utf8Length(elem.attrs.href!);
+      const extent = elemBounds(elem, to.matrix);
+      if (extent !== null) {
+        bounds.include(extent.min);
+        bounds.include(extent.max);
+      }
+    });
+    const page = pageFor(scene.root.page, bounds.finish());
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    // Il documento è cambiato mentre si decideva: deve restare modificabile.
+    if (utf8Length(engine.text) + hrefBytes > MAX_EDIT_BYTES) {
+      announce(t("draw.image.full", { limit: sizeText(MAX_EDIT_BYTES) }));
+      return;
+    }
+    if (commit("draw.action.image", asGesture(ops)) === null) return;
+    const switched = tool !== "select" && tools.some((spec) => spec.id === "select");
+    if (switched) {
+      tool = "select";
+      syncControls();
+    }
+    select(keys);
+    const added = plural(keys.length, "draw.added.image.one", "draw.added.image.other");
+    const now = switched ? ` ${t("draw.announce.tool", { tool: t(toolSpec("select").label) })}` : "";
+    announce(`${added}${now} ${objects()}`);
+  };
+
+  // Un incolla che porta immagini non va oltre; uno di solo testo, o in un
+  // campo, segue la sua strada.
+  life.listen(root, "paste", (event) => {
+    const origin = event.target;
+    if (origin instanceof Element && origin.closest("input, textarea, [contenteditable=true]")) return;
+    const files = imageFiles(event.clipboardData);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void addImages(files, cursor);
+  });
+  life.listen(surface, "dragover", (event) => {
+    if (!editable() || !carriesFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer!.dropEffect = "copy";
+  });
+  life.listen(surface, "drop", (event) => {
+    if (!carriesFiles(event.dataTransfer)) return;
+    // Un file lasciato qui non apre una pagina al posto della shell.
+    event.preventDefault();
+    if (!editable()) return;
+    const files = imageFiles(event.dataTransfer);
+    if (files.length === 0) {
+      announce(t("draw.image.unreadable"));
+      return;
+    }
+    const world = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+    void addImages(files, [world.x, world.y]);
+  });
 
   const onShift = (event: KeyboardEvent): void => {
     if (event.key !== "Shift") return;
@@ -1965,6 +2195,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
       cancelGesture();
       engine = next;
+      loads++;
       history.clear();
       selection = [];
       cursor = null;

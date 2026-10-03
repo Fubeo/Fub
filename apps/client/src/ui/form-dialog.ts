@@ -24,13 +24,18 @@ export interface FormField {
 
 export interface FormOptions {
   readonly title: string;
+  /// Una frase sopra i campi, che la finestra annuncia come sua descrizione.
+  readonly message?: string;
   readonly fields: readonly FormField[];
   readonly okLabel?: string;
 }
 
+let messageCount = 0;
+
 /// Più campi in una domanda: `null` se l'utente ha annullato, i valori per
 /// `id` se ha confermato. Un numero che non si legge, o sotto il minimo, non
 /// conferma: il campo lo dice nella lingua del browser, e il fuoco ci va.
+/// Senza campi è una domanda sì o no, col fuoco sulla conferma.
 export function promptForm(options: FormOptions): Promise<Readonly<Record<string, string>> | null> {
   return new Promise((resolve) => {
     let settled = false;
@@ -43,6 +48,13 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
     const frame = openFrame(options.title, () => settle(null));
     const form = document.createElement("form");
     form.className = "palette-form";
+    if (options.message !== undefined) {
+      const message = document.createElement("p");
+      message.id = `form-dialog-message-${++messageCount}`;
+      message.textContent = options.message;
+      frame.overlay.setAttribute("aria-describedby", message.id);
+      form.append(message);
+    }
     const controls: Array<readonly [FormField, HTMLInputElement | HTMLTextAreaElement]> = [];
     for (const field of options.fields) {
       const label = document.createElement("label");
@@ -73,7 +85,8 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
       form.append(label);
       controls.push([field, control]);
     }
-    form.append(actions(options.okLabel ?? t("app.ok"), () => settle(null)));
+    const row = actions(options.okLabel ?? t("app.ok"), () => settle(null));
+    form.append(row);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       if (!form.checkValidity()) {
@@ -84,7 +97,8 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
     });
     frame.box.append(form);
     const first = controls.find(([, control]) => !control.disabled)?.[1];
-    first?.focus();
+    if (first === undefined) row.querySelector<HTMLButtonElement>("button.primary")?.focus();
+    else first.focus();
     if (first instanceof HTMLInputElement) first.select();
   });
 }

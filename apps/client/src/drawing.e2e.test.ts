@@ -378,3 +378,33 @@ describe("«Apri come sorgente» su un disegno", () => {
     expect(focusedPane().querySelector(".vector-surface")).not.toBeNull();
   });
 });
+
+describe("uno screenshot incollato", () => {
+  it("si annota, e il file su disco resta uno, con l'immagine dentro", async () => {
+    // happy-dom non decodifica immagini: il browser dice soltanto le misure.
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 120, height: 80, close() {} }));
+    try {
+      const host = await start();
+      await open("casa.svg");
+      const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+      const data = new DataTransfer();
+      data.items.add(new File([png], "schermata.png", { type: "image/png" }));
+      const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data });
+      focusedPane().querySelector<HTMLElement>(".draw-surface")!.dispatchEvent(paste);
+      expect(paste.defaultPrevented).toBe(true);
+      await waitFor("l'immagine arriva al disco", () => written(host, "casa.svg").length === 1);
+      const [pasted] = written(host, "casa.svg");
+      expect(pasted).toMatch(/<image id="[^"]+" x="[^"]+" y="[^"]+" width="120" height="80" href="data:image\/png;base64,iVBORw0KGgoAAAAN"\/>/);
+      // Sopra l'immagine si disegna: il rettangolo viene dopo.
+      drawRect();
+      await waitFor("l'annotazione arriva al disco", () => written(host, "casa.svg").length === 2);
+      const annotated = last(written(host, "casa.svg"))!;
+      expect(annotated.indexOf("<image ")).toBeGreaterThan(-1);
+      expect(annotated.lastIndexOf("<rect ")).toBeGreaterThan(annotated.indexOf("<image "));
+      // Nessun allegato accanto: l'immagine è nel file.
+      expect(host.atGate("resourceWrite")).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
