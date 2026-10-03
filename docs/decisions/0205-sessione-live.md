@@ -41,16 +41,21 @@ I vincoli che contano:
    `fub-host` o Tauri, e `dependency_invariant` lo verifica. Lo stesso crate fa
    da client per i percorsi che girano in Rust.
 2. Lo compone `fub-app` sul runtime di Tauri; `fub-host` resta senza runtime.
-   La sessione appartiene alla `DocumentSession` della shell, con owner e
-   teardown come chiede la [0193](0193-ownership-lifecycle-e-teardown.md):
-   `live_stop`, la chiusura del documento, la chiusura dell'app o il
-   ricaricamento della finestra principale la chiudono, e il listener si chiude
-   con lei.
+   Nell'app la sessione appartiene alla finestra che l'ha aperta, e le altre
+   finestre non la vedono; nella shell appartiene alla `DocumentSession`, con
+   owner e teardown come chiede la
+   [0193](0193-ownership-lifecycle-e-teardown.md). La chiudono `live_stop`,
+   che la shell chiama anche quando il documento si chiude, il ricaricamento o
+   la distruzione della finestra, un canale che non consegna più e l'uscita
+   dall'app, che aspetta al più 3 secondi il `bye` allo scrittore. Il listener
+   si chiude con lei.
 3. Fra shell e host:
-   - quattro comandi, `live_start`, `live_stop`, `live_status` e `live_send`,
-     con tipi in specchio generato da `ts_mirror_app`, voce in `lean_ipc.rs`,
-     permesso in `allow-shell` e implementazione nel fake host. `live_send`
-     porta `ack`, `nack`, `ops`, `snapshot` e `bye`;
+   - cinque comandi, `live_start`, `live_pairing`, `live_send`, `live_status`
+     e `live_stop`, con tipi in specchio generato da `ts_mirror_app`, voce in
+     `lean_ipc.rs`, permesso in `allow-shell` e implementazione nel fake host.
+     `live_pairing` mostra di nuovo il QR o ne chiede uno nuovo; `live_send`
+     porta `ack`, `nack`, `ops` e `snapshot`, e il `bye` allo scrittore lo
+     manda `live_stop`. Gli errori sono chiavi del catalogo del core;
    - un `tauri::ipc::Channel` per sessione, passato a `live_start`: è il
      settimo ponte. Porta l'arrivo e l'uscita dello scrittore, l'inchiostro in
      corso, la vista, i commit e i campioni di latenza. L'host inoltra ogni
@@ -106,7 +111,7 @@ I vincoli che contano:
 
 ### Negative
 
-- un ponte e quattro comandi in più nella lista chiusa dell'IPC;
+- un ponte e cinque comandi in più nella lista chiusa dell'IPC;
 - un server in ascolto nel processo dell'app, finché la sessione è aperta;
 - dipendenze nuove per WebSocket, TLS, certificati e QR, tutte da far passare
   da `cargo deny`;
@@ -147,6 +152,8 @@ Internet e porta fuori dalla rete locale i disegni, spesso di minori.
 - segreto riusato o scaduto, gettone di ripresa scaduto, impronta diversa e
   secondo scrittore rifiutati;
 - dopo `live_stop` la porta è libera e nessun task resta vivo;
+- un'altra finestra non vede la sessione, e il ricaricamento, la distruzione
+  della finestra e l'uscita dall'app la chiudono;
 - un commit non confermato sopravvive alla perdita del canale e torna da
   `live_status`;
 - `lean_ipc`, mirror generati e fake host aggiornati;
