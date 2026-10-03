@@ -12,9 +12,9 @@
 // Il cablaggio è quello di `shell.e2e.test.ts` — `main.ts` sulla scocca vera,
 // contro l'host finto — con una cosa in più: una famiglia finta, «draw», che
 // chiama «draw» e «read» le sue due modalità e dichiara come vista sorgente il
-// profilo `svg` della famiglia `text`. Nessuna superficie della shell dichiara
-// ancora una vista sorgente, e la famiglia finta è il modo di provarla senza
-// inventarne una vera.
+// profilo `svg` della famiglia `text`. La famiglia finta prova il meccanismo
+// da solo, senza dipendere da come il disegno vero si monta: quello lo prova
+// `drawing.e2e.test.ts`.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "./host/fake";
 import type { EditorSurface, SurfaceRegistration } from "./editors/core/registry";

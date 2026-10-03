@@ -523,9 +523,12 @@ describe("DocumentSurfaceRegistry", () => {
     expect(registry.resolve({ formatId: "markdown", sourceKind: "text", documentId: "strano.svg" }))
       .toMatchObject({ profile: "markdown" });
     // Con la feature `draw` dell'host un `.svg` è un documento del formato
-    // `svg`, che nessuna famiglia rivendica: si apre come prima, testo col
-    // profilo `svg`, e mai sulla superficie d'errore.
+    // `svg`: è un disegno, e il suo testo è la vista sorgente.
     expect(registry.resolve({ formatId: "svg", sourceKind: "text", documentId: "arte/logo.svg" }))
+      .toMatchObject({ owner: "fub.shell.canvas", family: "canvas", profile: "vector" });
+    expect(registry.sourceView({ formatId: "svg", sourceKind: "text", documentId: "arte/logo.svg" }))
+      .toEqual({ family: "text", profile: "svg" });
+    expect(registry.resolve({ formatId: "svg", sourceKind: "text", documentId: "arte/logo.svg", override: { family: "text", profile: "svg" } }))
       .toMatchObject({ owner: "fub.shell.text", family: "text", profile: "svg" });
   });
 

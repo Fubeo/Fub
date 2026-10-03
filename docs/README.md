@@ -32,6 +32,7 @@ flowchart LR
 - [Panoramica](product/overview.md)
 - [Vault e file](product/vault-and-files.md)
 - [Editor e anteprima](product/editor-and-preview.md)
+- [Disegni](product/drawing.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
 - [Budget prestazionale](product/performance-budget.md)
