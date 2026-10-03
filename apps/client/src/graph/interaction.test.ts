@@ -9,7 +9,7 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { Structure } from "./sim/types";
-import { createCameraState } from "./render/camera";
+import { createCameraState } from "../spatial/camera";
 import { updateDrag, createInteraction, nodeAt, initialDragState, type InteractionActions, type DragResult, type DragState } from "./interaction";
 
 /// Tre nodi: a(0,0) b(100,0) c(-50,60), raggio 8, archi a→b, b→c.

@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
+import { elementChildren, type ContainerNode } from "../scene/model";
 import { doc } from "../scene/test-support";
 import { IMAGE_PLACEHOLDER, PaintBuilder, wholeDocumentLayer, type PaintScene } from "./paint";
 import { createSvgPainter, type ScenePainter } from "./svg-dom";
@@ -164,6 +165,63 @@ describe("il documento vivo", () => {
     expect(lives[1]!.closed).toBe(false);
     painter.dispose();
     expect(lives[1]!.closed).toBe(true);
+  });
+});
+
+describe("l'anteprima degli strumenti", () => {
+  it("cambia il transform e sbiadisce senza ricreare i nodi, e sopravvive a una scena nuova", async () => {
+    const engine = SceneEngine.open(doc(
+      `${LAYER}<rect id="a" width="4" height="4" transform="matrix(2 0 0 2 0 0)"/><rect id="b" width="4" height="4"/>`
+        + '<g id="g"><rect id="c" width="1" height="1"/></g></g>',
+    ));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const node = (id: string): SVGElement => host.querySelector(`[data-scene-id="${id}"]`)!;
+    const a = node("a");
+    const [paintA] = builder.paintsOf(engine.holder("a")!);
+    const [paintB] = builder.paintsOf(engine.holder("b")!);
+    const groups = builder.paintsOf(engine.holder("g")!);
+    expect(groups).toHaveLength(1);
+    painter.setDraft({
+      transforms: new Map([[paintA!, "matrix(2 0 0 2 5 0)"], [paintB!, "matrix(1 0 0 1 0 3)"], [groups[0]!, "matrix(1 0 0 1 9 9)"]]),
+      faded: new Set([paintB!]),
+    });
+    expect(node("a")).toBe(a);
+    expect(a.getAttribute("transform")).toBe("matrix(2 0 0 2 5 0)");
+    expect(node("b").getAttribute("transform")).toBe("matrix(1 0 0 1 0 3)");
+    expect(node("b").style.opacity).toBe("0.25");
+    expect(node("g").getAttribute("transform")).toBe("matrix(1 0 0 1 9 9)");
+    // Una scena nuova che cambia un altro nodo: l'anteprima resta, anche sul
+    // gruppo che la scena nuova ridisegna.
+    expect(engine.apply({ op: "set", id: "c", attrs: { fill: "#00ff00" } }).outcome).toBe("applied");
+    painter.update(sceneOf(engine, builder));
+    expect(a.getAttribute("transform")).toBe("matrix(2 0 0 2 5 0)");
+    expect(node("b").style.opacity).toBe("0.25");
+    expect(node("g").getAttribute("transform")).toBe("matrix(1 0 0 1 9 9)");
+    // Tolta, ogni nodo torna a ciò che la scena dipinge.
+    painter.setDraft(null);
+    expect(a.getAttribute("transform")).toBe("matrix(2 0 0 2 0 0)");
+    expect(node("b").hasAttribute("transform")).toBe(false);
+    expect(node("b").style.opacity).toBe("");
+    expect(node("g").hasAttribute("transform")).toBe(false);
+    expect(node("a")).toBe(a);
+  });
+
+  it("dà a due elementi identici di un motore riaperto due forme diverse", () => {
+    const body = `${LAYER}<rect width="4" height="4"/><rect width="4" height="4"/></g>`;
+    const builder = new PaintBuilder();
+    builder.build(SceneEngine.open(doc(body)));
+    const engine = SceneEngine.open(doc(body));
+    builder.build(engine);
+    const [layer] = elementChildren(engine.model!.root);
+    const [first, second] = elementChildren(layer as ContainerNode);
+    const [paintFirst] = builder.paintsOf(first!);
+    const [paintSecond] = builder.paintsOf(second!);
+    expect(paintFirst).toBeDefined();
+    expect(paintSecond).toBeDefined();
+    expect(paintFirst).not.toBe(paintSecond);
   });
 });
 

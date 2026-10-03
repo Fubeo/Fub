@@ -10,9 +10,8 @@ import {
   createMotionState,
   fit,
   fitWithOverhang,
+  GRAPH_SCALE_LIMITS,
   INERTIA_MS,
-  MAX_SCALE,
-  MIN_SCALE,
   worldToScreen,
   stepCamera,
   screenToWorld,
@@ -38,13 +37,35 @@ describe("camera", () => {
     expect(m.y).toBeCloseTo(first.y, 10);
   });
 
-  it("zoomAtPoint clampata ai limiti [MIN_SCALE, MAX_SCALE]", () => {
+  it("zoomAtPoint clampata ai limiti del grafo", () => {
+    const { min, max } = GRAPH_SCALE_LIMITS;
+    expect([min, max]).toEqual([0.05, 8]);
     const c = { scale: 2, tx: 0, ty: 0 };
-    expect(zoomAtPoint(c, 1e9, { x: 10, y: 10 }).scale).toBe(MAX_SCALE);
-    expect(zoomAtPoint(c, 1e-9, { x: 10, y: 10 }).scale).toBe(MIN_SCALE);
+    expect(zoomAtPoint(c, 1e9, { x: 10, y: 10 }).scale).toBe(max);
+    expect(zoomAtPoint(c, 1e-9, { x: 10, y: 10 }).scale).toBe(min);
     // anche con scala già al limite, il punto sotto il cursore resta fermo
-    const blocked = zoomAtPoint({ scale: MAX_SCALE, tx: 5, ty: 5 }, 5, { x: 30, y: 40 });
-    expect(screenToWorld(blocked, { x: 30, y: 40 })).toEqual({ x: (30 - 5) / MAX_SCALE, y: (40 - 5) / MAX_SCALE });
+    const blocked = zoomAtPoint({ scale: max, tx: 5, ty: 5 }, 5, { x: 30, y: 40 });
+    expect(screenToWorld(blocked, { x: 30, y: 40 })).toEqual({ x: (30 - 5) / max, y: (40 - 5) / max });
+  });
+
+  it("i limiti scelti da chi usa la camera sostituiscono quelli del grafo", () => {
+    const limits = { min: 0.1, max: 32 };
+    const v = { w: 800, h: 600 };
+    const dot = { minX: 5, minY: 5, maxX: 5, maxY: 5 };
+    const wide = { minX: 0, minY: 0, maxX: 1e9, maxY: 1e9 };
+    const c = { scale: 2, tx: 0, ty: 0 };
+    expect(zoomAtPoint(c, 1e9, { x: 10, y: 10 }, limits).scale).toBe(32);
+    expect(zoomAtPoint(c, 1e-9, { x: 10, y: 10 }, limits).scale).toBe(0.1);
+    expect(fit(dot, v, 0.08, 0, limits).scale).toBe(32);
+    expect(fit(wide, v, 0.08, 0, limits).scale).toBe(0.1);
+    expect(fitWithOverhang(dot, v, () => 0, 0.08, limits).scale).toBe(32);
+    const cs = createCameraState(true, undefined, limits);
+    cs.zoom(1e9, 400, 300);
+    expect(cs.state().scale).toBe(32);
+    cs.centerOn(0, 0, 1e-9, v);
+    expect(cs.state().scale).toBe(0.1);
+    cs.fit(dot, v);
+    expect(cs.step(16).scale).toBe(32);
   });
 
   it("fit contiene i bound nel viewport con margine", () => {
@@ -73,7 +94,7 @@ describe("camera", () => {
   it("fit con bound degenere (un solo nodo) non produce Infinity", () => {
     const c = fit({ minX: 5, minY: 5, maxX: 5, maxY: 5 }, { w: 800, h: 600 });
     expect(Number.isFinite(c.scale)).toBe(true);
-    expect(c.scale).toBe(MAX_SCALE);
+    expect(c.scale).toBe(GRAPH_SCALE_LIMITS.max);
   });
 
   it("fit con riserva lascia libero a destra il posto delle etichette", () => {

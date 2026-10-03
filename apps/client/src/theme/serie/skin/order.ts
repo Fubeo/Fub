@@ -43,6 +43,7 @@ export const ORDER = [
   "panes",
   "preview",
   "canvas",
+  "draw",
   "base",
   "context-menu",
   "graph",

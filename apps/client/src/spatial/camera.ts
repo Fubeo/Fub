@@ -10,6 +10,9 @@
 // Il perché dell'inseguimento: rotella e tasti producono salti di scala, e un
 // salto istantaneo disorienta; inseguire il bersaglio a costante di tempo
 // 90 ms rende lo zoom morbido senza mai restare indietro in modo percepibile.
+//
+// Vive in `spatial/`, fuori dal grafo: non sa nulla di nodi e archi, e chi la
+// usa sceglie i suoi limiti di scala.
 
 export interface Point {
   x: number;
@@ -36,9 +39,15 @@ export interface Viewport {
 
 /// La scala è clampata qui, una volta sola: nessun chiamante deve ricordarsi
 /// di controllare i limiti (erano un bug del codice di prima, che zoommava
-/// fino a perdere il grafo).
-export const MIN_SCALE = 0.05;
-export const MAX_SCALE = 8;
+/// fino a perdere il grafo). I limiti li sceglie chi usa la camera e li passa
+/// a ogni funzione che clampa.
+export interface ScaleLimits {
+  readonly min: number;
+  readonly max: number;
+}
+
+/// I limiti del grafo: il default di ogni funzione che clampa.
+export const GRAPH_SCALE_LIMITS: ScaleLimits = { min: 0.05, max: 8 };
 
 /// Costante di tempo dell'inseguimento esponenziale, in millisecondi.
 const TIME_CONSTANT = 90;
@@ -63,9 +72,14 @@ export function screenToWorld(c: Camera, p: Point): Point {
 /// dov'è nel mondo prima dello zoom e si sceglie la traslazione che lo rimette
 /// lì dopo. Il clamp della scala non rompe l'invarianza — il punto mondo non
 /// dipende dalla scala nuova — rende solo il fattore effettivo più piccolo.
-export function zoomAtPoint(c: Camera, factor: number, screenPoint: Point): Camera {
+export function zoomAtPoint(
+  c: Camera,
+  factor: number,
+  screenPoint: Point,
+  limits: ScaleLimits = GRAPH_SCALE_LIMITS,
+): Camera {
   const m = screenToWorld(c, screenPoint);
-  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, c.scale * factor));
+  const scale = Math.min(limits.max, Math.max(limits.min, c.scale * factor));
   return { scale, tx: screenPoint.x - m.x * scale, ty: screenPoint.y - m.y * scale };
 }
 
@@ -77,13 +91,19 @@ export function zoomAtPoint(c: Camera, factor: number, screenPoint: Point): Came
 /// `reserve` sono px di schermo tenuti liberi a destra dei bound, dentro il
 /// margine: il posto delle etichette. Non mangia mai più di metà della
 /// larghezza utile, e il rettangolo centrato è quello con la riserva.
-export function fit(b: WorldBound, v: Viewport, pad = 0.08, reserve = 0): Camera {
+export function fit(
+  b: WorldBound,
+  v: Viewport,
+  pad = 0.08,
+  reserve = 0,
+  limits: ScaleLimits = GRAPH_SCALE_LIMITS,
+): Camera {
   const bw = Math.max(1e-6, b.maxX - b.minX);
   const bh = Math.max(1e-6, b.maxY - b.minY);
   const kept = Math.min(Math.max(0, reserve), (v.w * (1 - 2 * pad)) / 2);
   // Con una riserva la larghezza utile è positiva, quindi `1 - 2·pad` lo è.
   const w = kept > 0 ? v.w - kept / (1 - 2 * pad) : v.w;
-  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.min(w / bw, v.h / bh) * (1 - 2 * pad)));
+  const scale = Math.min(limits.max, Math.max(limits.min, Math.min(w / bw, v.h / bh) * (1 - 2 * pad)));
   return {
     scale,
     tx: (v.w - bw * scale - kept) / 2 - b.minX * scale,
@@ -101,14 +121,15 @@ export function fitWithOverhang(
   v: Viewport,
   overhang: (scale: number, b: WorldBound) => number,
   pad = 0.08,
+  limits: ScaleLimits = GRAPH_SCALE_LIMITS,
 ): Camera {
-  let c = fit(b, v, pad);
+  let c = fit(b, v, pad, 0, limits);
   let reserve = 0;
   for (let round = 0; round < 4; round++) {
     const next = overhang(c.scale, b);
     if (!(next > reserve + 0.5)) break;
     reserve = next;
-    c = fit(b, v, pad, reserve);
+    c = fit(b, v, pad, reserve, limits);
   }
   return c;
 }
@@ -186,10 +207,11 @@ export interface CameraState {
 }
 
 /// `overhang`, se c'è, è lo sporto delle etichette che `fit` lascia libero
-/// (vedi `fitWithOverhang`).
+/// (vedi `fitWithOverhang`). `limits` vale per zoom, `centerOn` e fit.
 export function createCameraState(
   reducedMotion = false,
   overhang?: (scale: number, b: WorldBound) => number,
+  limits: ScaleLimits = GRAPH_SCALE_LIMITS,
 ): CameraState {
   let st = createMotionState();
   let reduced = reducedMotion;
@@ -216,7 +238,7 @@ export function createCameraState(
       // la sequenza non perde zoom a metà inseguimento. La corrente non si
       // tocca: la muove solo `step`, che la insegue morbida.
       const base: Camera = { scale: st.targetScale, tx: st.targetTx, ty: st.targetTy };
-      const z = zoomAtPoint(base, factor, { x, y });
+      const z = zoomAtPoint(base, factor, { x, y }, limits);
       st = { ...st, targetScale: z.scale, targetTx: z.tx, targetTy: z.ty };
       if (reduced) arrive();
     },
@@ -242,12 +264,12 @@ export function createCameraState(
       // Come per zoom: si sposta il bersaglio; la corrente lo insegue con
       // `step`. Salti istantanei della corrente riservati al fit iniziale
       // (`set` con `jump`).
-      const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+      const s = Math.min(limits.max, Math.max(limits.min, scale));
       st = { ...st, targetScale: s, targetTx: v.w / 2 - worldX * s, targetTy: v.h / 2 - worldY * s };
       if (reduced) arrive();
     },
     fit(b, v) {
-      const f = overhang ? fitWithOverhang(b, v, overhang) : fit(b, v);
+      const f = overhang ? fitWithOverhang(b, v, overhang, undefined, limits) : fit(b, v, undefined, undefined, limits);
       st = { ...st, targetScale: f.scale, targetTx: f.tx, targetTy: f.ty };
     },
     step(dt) {
