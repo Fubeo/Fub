@@ -209,7 +209,8 @@ delle viste, con un margine (vedi «Limiti dell'host»).
 
 - `doc` ha `id` e `title`: al più 1024 caratteri leggibili, l'id non vuoto.
 - `text` è il testo SVG completo, al più 20 MiB.
-- `reason` di `nack` è uno dei motivi del motore delle operazioni, in
+- `reason` di `nack` è uno dei motivi del motore delle operazioni
+  ([Operazioni sulla scena](scene-operations.md#3-esiti-e-precondizioni)), in
   kebab-case: `missing-target`, `missing-parent`, `missing-anchor`,
   `duplicate-id`, `invalid-elem`, `locked`, `foreign`, `cycle`, `limit`,
   `read-only`. `detail` sta in 64 KiB; `index` è l'operazione rifiutata.
