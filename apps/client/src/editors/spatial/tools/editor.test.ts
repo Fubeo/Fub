@@ -3,13 +3,14 @@
 // operazioni attese, annulla e ripeti le disfano, e chi non vede sente che
 // cosa è successo.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { decodeInk } from "../ink/codec";
 import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions } from "./editor";
+import { MERGE_MS } from "./history";
 import { LAYER } from "./test-support";
 
 const SOURCE = doc(
@@ -91,6 +92,7 @@ afterEach(() => {
   host.remove();
   // Le finestre chiuse escono con un'animazione, che happy-dom non finisce.
   for (const modal of document.querySelectorAll(".modale")) modal.remove();
+  vi.restoreAllMocks();
 });
 
 describe("la barra e il foglio", () => {
@@ -206,14 +208,22 @@ describe("gli strumenti", () => {
     expect(changes).toEqual([]);
   });
 
-  it("le frecce spostano la selezione di 1, con Maiusc di 10, un passo per volta", () => {
+  it("le frecce spostano la selezione di 1, con Maiusc di 10, e i colpi di fila si annullano insieme", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
     mount();
     editor.select(["o1a2b3c4d"]);
     key("ArrowRight");
     key("ArrowDown", { shiftKey: true });
     expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 1 10)"');
+    now.mockReturnValue(MERGE_MS + 1);
+    key("ArrowRight");
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 2 10)"');
+
     editor.undo();
-    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 1 0)"');
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 1 10)"');
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(spoken()).toBe("Annullato: Spostamento.");
   });
 
   it("Canc elimina la selezione", () => {
@@ -402,6 +412,7 @@ describe("da tastiera", () => {
   });
 
   it("Ctrl e le frecce ridimensionano la selezione, ferma in alto a sinistra", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
     mount(BOXES);
     editor.select(["oa1a1a1a1"]);
     key("ArrowRight", { ctrlKey: true, shiftKey: true });
@@ -411,8 +422,10 @@ describe("da tastiera", () => {
     expect(editor.engine.text).toContain('transform="matrix(1.5 0 0 0.9 -5 1)"');
     expect(spoken()).toBe("Misure: 30 × 9.");
     expect(editor.selection).toEqual(["oa1a1a1a1"]);
+    // I due colpi di fila sono un passo solo.
     editor.undo();
     expect(spoken()).toBe("Annullato: Ridimensionamento.");
+    expect(editor.engine.text).toBe(BOXES);
   });
 
   it("una linea dritta non si ridimensiona sul lato che misura zero", () => {
