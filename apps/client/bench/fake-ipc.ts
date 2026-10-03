@@ -55,6 +55,19 @@ import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
 } from "./graph-fixture";
+import type { SpatialFixture } from "./spatial-fixture";
+
+type DrawBenchMetadata = Readonly<{
+  fixtures: readonly Readonly<{
+    kind: SpatialFixture["kind"];
+    path: string;
+    objects: number;
+    layers: number;
+    samples: number;
+    bytes: number;
+    digest: string;
+  }>[];
+}>;
 
 type GraphBenchMetadata = Readonly<{
   fixture: Readonly<{
@@ -115,6 +128,32 @@ globalThis.__fubGraphBench = Object.freeze({
         digest: GRAPH_FIXTURE.digest,
       })
     : null,
+});
+
+// I disegni di `spatial-scale.mjs`: `?drawFixtures=sparse,dense,ink` li mette
+// nel vault in `Banco/`, generati qui dal motore della scena. L'import è
+// dinamico perché senza il parametro il banco non carica il motore prima che
+// un disegno si apra, come l'app.
+const drawFixturesParam = params.get("drawFixtures");
+let DRAW_FIXTURES: readonly SpatialFixture[] = [];
+if (drawFixturesParam !== null) {
+  const kinds = drawFixturesParam.split(",");
+  if (kinds.some((kind) => kind === "") || new Set(kinds).size !== kinds.length) {
+    throw new RangeError("drawFixtures must list distinct fixture kinds, comma separated");
+  }
+  const { generateSpatialFixture } = await import("./spatial-fixture");
+  DRAW_FIXTURES = kinds.map((kind) => generateSpatialFixture(kind as SpatialFixture["kind"]));
+}
+
+/// Dove sta nel vault la fixture `kind`.
+const drawFixturePath = (kind: SpatialFixture["kind"]): string => `Banco/${kind}.svg`;
+
+globalThis.__fubDrawBench = Object.freeze({
+  fixtures: Object.freeze(
+    DRAW_FIXTURES.map(({ kind, objects, layers, samples, bytes, digest }) =>
+      Object.freeze({ kind, path: drawFixturePath(kind), objects, layers, samples, bytes, digest }),
+    ),
+  ),
 });
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
@@ -823,7 +862,10 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: CORPUS,
+  file: {
+    ...CORPUS,
+    ...Object.fromEntries(DRAW_FIXTURES.map((fixture) => [drawFixturePath(fixture.kind), fixture.text])),
+  },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
@@ -831,6 +873,8 @@ const options: Options = {
   settings: SETTINGS,
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
+  // La feature `draw` accesa: un `.svg` del vault si apre come disegno.
+  draw: true,
 };
 
 const host = createFakeHost(options);
@@ -845,6 +889,7 @@ const host = createFakeHost(options);
 /// codice che non condivide il grafo dei moduli con la pagina.
 declare global {
   var __fubGraphBench: GraphBenchMetadata;
+  var __fubDrawBench: DrawBenchMetadata;
   interface Window {
     bench: {
       emit: typeof host.emit;
