@@ -31,6 +31,22 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Ogni tratto del foglio passa dalla pipeline vera: penna, mouse e dito, palmo ignorato, campioni quantizzati e contorno pf1.",
   },
   {
+    codice: "FD-202",
+    titolo: "Motore delle operazioni",
+    stato: "qui",
+    pr: 107,
+    nota:
+      "Il foglio è un file .svg: ogni tratto è un add, Svuota un batch di remove, annulla e ripeti l'undo esatto del motore. " +
+      "Il pannello del file mostra le righe che cambiano.",
+  },
+  {
+    codice: "FD-201",
+    titolo: "La scena in TypeScript",
+    stato: "qui",
+    pr: 106,
+    nota: "Ogni tratto del foglio è riletto dal testo del file, con il codec di fub:ink e il pennello.",
+  },
+  {
     codice: "FD-101",
     titolo: "Camera condivisa",
     stato: "qui",
@@ -66,22 +82,31 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Proposta: si accoglie dopo le misure sul tablet.",
   },
   {
-    codice: "FD-201–202",
-    titolo: "Scena e operazioni in TypeScript",
-    stato: "corso",
-    nota: "Quando arriva, il foglio mostra il file .svg che scriverebbe.",
-  },
-  {
     codice: "FD-106–107",
     titolo: "Il formato svg nel kernel",
-    stato: "corso",
-    nota: "I disegni diventano file del vault.",
+    stato: "revisione",
+    pr: 105,
+    nota: "I disegni diventano file del vault: indicizzati, cercabili, incorporabili nelle note.",
   },
   {
     codice: "FD-302",
-    titolo: "Server della sessione live",
+    titolo: "fub-live, protocollo e server",
+    stato: "revisione",
+    pr: 103,
+    nota: "Il server della sessione live: il tablet come penna del PC.",
+  },
+  {
+    codice: "FD-303",
+    titolo: "Adattatore Tauri della sessione live",
+    stato: "revisione",
+    pr: 104,
+    nota: "Il canale fra fub-live e la shell.",
+  },
+  {
+    codice: "FD-405",
+    titolo: "Plugin WASM versione 0",
     stato: "corso",
-    nota: "Il tablet come penna del PC.",
+    nota: "Nel repo di FubDraw: il primo plugin di Fub che legge le scene.",
   },
   {
     codice: "FD-204",

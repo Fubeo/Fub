@@ -2,10 +2,15 @@
 //
 // Monta su un foglio vero il codice dei pacchetti man mano che arriva: la
 // pipeline della penna e il pennello pf1 (FD-203), la camera condivisa
-// (FD-101). Ciò che ancora non c'è — il painter di FD-204, gli strumenti di
-// FD-205, la superficie registrata nella shell di FD-206b — qui è una cucitura
-// provvisoria, scritta per sparire: un `<g>` di `<path>` per i tratti conclusi
-// e un canvas per il tratto in corso.
+// (FD-101), la scena e il motore delle operazioni (FD-201, FD-202). Il
+// disegno è un file .svg tenuto da un `SceneEngine`: ogni tratto è
+// un'operazione `add`, annulla e ripeti sono l'undo del motore, e il pannello
+// del file mostra il testo che si salverebbe, con le righe appena cambiate.
+//
+// Ciò che ancora non c'è — il painter di FD-204, gli strumenti di FD-205, la
+// superficie registrata nella shell di FD-206b — qui è una cucitura
+// provvisoria, scritta per sparire: un `<g>` coi `<path>` letti dal file e un
+// canvas per il tratto in corso.
 //
 // Come il catalogo del banco, qui non gira `main.ts`: i quattro strati del
 // tema si montano con lo stesso caricatore della shell, e la carta è bianca in
@@ -18,6 +23,7 @@ import skin from "../src/theme/serie/skin.css?raw";
 import fonts from "../src/theme/serie/fonts.css?raw";
 import { mount } from "../src/theme/loader";
 import { openLifetime } from "../src/ui/lifetime";
+import type { TextOperation } from "../src/editors/core/text-operation";
 import {
   attachPenInput,
   type CancelReason,
@@ -25,6 +31,7 @@ import {
   type InkPointerType,
 } from "../src/editors/spatial/pen/pen-input";
 import { PF1_DEFAULTS, brushForInput, formatBrush, parseBrush, type Pf1Brush } from "../src/editors/spatial/ink/brush";
+import { decodeInk, encodeInk, inkFromQuantized, inkToQuantized } from "../src/editors/spatial/ink/codec";
 import { pf1, pf1Outline, type OutlinePoint } from "../src/editors/spatial/ink/pf1";
 import {
   INK_MAX_SAMPLES,
@@ -33,6 +40,11 @@ import {
   type QuantizedInk,
   type QuantizedSample,
 } from "../src/editors/spatial/ink/sample";
+import type { ElementItem } from "../src/editors/spatial/scene/classify";
+import { SceneEngine, type Applied, type Outcome, type Undo } from "../src/editors/spatial/scene/engine";
+import { createId } from "../src/editors/spatial/scene/ids";
+import type { AddOp, Op } from "../src/editors/spatial/scene/ops";
+import { FUB_NS, SUPPORTED_VERSION, SVG_NS } from "../src/editors/spatial/scene/read";
 import { fit, screenToWorld, zoomAtPoint, type Camera, type Point, type ScaleLimits } from "../src/spatial/camera";
 import { ORDINE_STATI, PACCHETTI, STATI } from "./stato";
 
@@ -61,6 +73,20 @@ const SPESSORI = [
 /// I limiti della camera della superficie (FD-205).
 const LIMITI: ScaleLimits = { min: 0.1, max: 32 };
 
+/// Il disegno della pagina: il nome del file e la pagina di un disegno nuovo,
+/// come li scrive `serialize` del provider svg (§2).
+const NOME_FILE = "Prova.svg";
+const TITOLO = "Prova";
+const PAGINA = { w: 1600, h: 1000 };
+const PRIMO_LIVELLO = "Livello 1";
+
+/// Il passo con cui la pagina si allarga quando un tratto ne esce (§2).
+const PASSO_PAGINA = 256;
+
+/// Oltre questa lunghezza un valore del pannello del file si accorcia, se non
+/// si chiedono i valori interi.
+const VALORE_CORTO = 56;
+
 const DISPOSITIVI: Readonly<Record<InkPointerType, string>> = { pen: "Penna", mouse: "Mouse", touch: "Dito" };
 
 const MOTIVI: Readonly<Record<CancelReason, string>> = {
@@ -76,7 +102,7 @@ const MOTIVI: Readonly<Record<CancelReason, string>> = {
 
 const CHIAVE_LUCE = "fubdraw-anteprima:luce";
 const CHIAVE_DISEGNO = "fubdraw-anteprima:disegno";
-const SVG = "http://www.w3.org/2000/svg";
+const CHIAVE_INTERI = "fubdraw-anteprima:valori-interi";
 
 // ---------------------------------------------------------------------------
 // Utilità
@@ -113,6 +139,12 @@ function byId<T extends HTMLElement>(id: string): T {
   return n as T;
 }
 
+const numeri = new Intl.NumberFormat("it-IT");
+
+function messaggio(errore: unknown): string {
+  return errore instanceof Error ? errore.message : String(errore);
+}
+
 // ---------------------------------------------------------------------------
 // Tema
 
@@ -144,6 +176,168 @@ vita.listen(bottoneLuce, "click", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Il documento: un file .svg nel motore delle operazioni
+
+/// Un disegno nuovo, byte per byte come quello di `serialize` (§2, §3): la
+/// radice, il titolo, la carta e «Livello 1» vuoto in forma aperta.
+function documentoNuovo(): string {
+  const livello = createId("layer", () => false);
+  return [
+    `<svg xmlns="${SVG_NS}" xmlns:fub="${FUB_NS}" fub:version="${SUPPORTED_VERSION}" ` +
+      `viewBox="0 0 ${PAGINA.w} ${PAGINA.h}" width="${PAGINA.w}" height="${PAGINA.h}">`,
+    `  <title>${TITOLO}</title>`,
+    `  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="${PAGINA.w}" height="${PAGINA.h}" fill="#ffffff"/>`,
+    `  <g id="${livello}" fub:layer="${PRIMO_LIVELLO}">`,
+    "  </g>",
+    "</svg>",
+    "",
+  ].join("\n");
+}
+
+/// Ciò che di un tratto il file non conserva: si sa solo di quelli disegnati
+/// in questo browser.
+interface Origine {
+  readonly dispositivo: InkPointerType;
+  readonly diviso: boolean;
+}
+
+/// Un tratto com'è scritto nel file: gli attributi letti dal suo testo e il
+/// `<path>` che il foglio disegna.
+interface Tratto {
+  readonly id: string;
+  readonly colore: string;
+  readonly brush: Pf1Brush;
+  readonly ink: QuantizedInk;
+  readonly d: string;
+  readonly at: string | null;
+  readonly elemento: SVGPathElement;
+}
+
+/// Un passo della cronologia: l'undo del motore e il nome per gli annunci.
+interface Azione {
+  readonly nome: string;
+  readonly undo: Undo;
+}
+
+/// Il riquadro di un tratto, in unità della scena.
+interface Riquadro {
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+}
+
+let motore: SceneEngine = SceneEngine.open(documentoNuovo());
+/// I tratti della scena, in ordine di documento.
+let tratti: Tratto[] = [];
+/// Ogni tratto letto dal file in questa pagina, per id: un tratto tolto e
+/// rimesso dall'undo non si rilegge.
+const letti = new Map<string, Tratto>();
+const origini = new Map<string, Origine>();
+const daAnnullare: Azione[] = [];
+const daRipetere: Azione[] = [];
+/// L'ultima modifica del testo e il suo nome, per il pannello del file.
+let ultima: { readonly nome: string; readonly operazione: TextOperation } | null = null;
+
+/// Le voci della scena che sono tratti a penna.
+function vociTratto(): ElementItem[] {
+  return motore.scene().filter((v): v is ElementItem => v.kind === "element" && v.stroke !== undefined && v.id !== null);
+}
+
+/// L'id del primo livello, dove vanno i tratti nuovi.
+function livelloDi(m: SceneEngine): string | null {
+  for (const v of m.scene()) if (v.kind === "element" && v.layer !== undefined && v.id !== null) return v.id;
+  return null;
+}
+
+/// Il `viewBox` della radice, letto dal suo tag d'apertura.
+function viewBox(): readonly [number, number, number, number] {
+  const radice = motore.scene().find((v) => v.kind === "root");
+  const tag = radice ? motore.text.slice(radice.tags.open.utf16[0], radice.tags.open.utf16[1]) : "";
+  const valori = /\sviewBox\s*=\s*"([^"]*)"/.exec(tag)?.[1]?.trim().split(/[\s,]+/).map(Number) ?? [];
+  if (valori.length !== 4 || valori.some((n) => !Number.isFinite(n))) return [0, 0, PAGINA.w, PAGINA.h];
+  return valori as unknown as readonly [number, number, number, number];
+}
+
+/// La pagina che contiene anche `r`: ogni lato si allarga a passi di 256
+/// unità finché il riquadro non ci sta; `null` se ci sta già. La pagina non si
+/// restringe mai da sola (§2).
+function paginaPer(r: Riquadro): string | null {
+  const [x, y, w, h] = viewBox();
+  const passi = (fuori: number): number => (fuori > 0 ? Math.ceil(fuori / PASSO_PAGINA) * PASSO_PAGINA : 0);
+  const sinistra = passi(x - r.minX);
+  const sopra = passi(y - r.minY);
+  const destra = passi(r.maxX - (x + w));
+  const sotto = passi(r.maxY - (y + h));
+  if (sinistra + sopra + destra + sotto === 0) return null;
+  const n = (v: number): string => String(Number(v.toFixed(3)));
+  return `${n(x - sinistra)} ${n(y - sopra)} ${n(w + sinistra + destra)} ${n(h + sopra + sotto)}`;
+}
+
+/// Il riquadro del contorno di un tratto: le curve passano per i punti medi
+/// fra i vertici, quindi stanno dentro il riquadro dei vertici.
+function riquadroDi(ink: QuantizedInk, brush: Pf1Brush): Riquadro | null {
+  const contorno = pf1Outline(ink, brush);
+  if (contorno.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of contorno) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function unisci(a: Riquadro | null, b: Riquadro | null): Riquadro | null {
+  if (!a || !b) return a ?? b;
+  return { minX: Math.min(a.minX, b.minX), minY: Math.min(a.minY, b.minY), maxX: Math.max(a.maxX, b.maxX), maxY: Math.max(a.maxY, b.maxY) };
+}
+
+/// L'operazione che aggiunge un tratto in cima al livello. Il `d` non si
+/// manda: il motore lo calcola da `fub:ink` e `fub:brush` con `pf1`.
+function aggiuntaTratto(livello: string, id: string, colore: string, brush: Pf1Brush, ink: QuantizedInk, at: string | null): AddOp {
+  const attrs: Record<string, string> = { id, "fub:tool": "pen" };
+  if (at !== null) attrs["fub:at"] = at;
+  attrs["fub:brush"] = formatBrush(brush);
+  attrs.fill = colore;
+  attrs["fub:ink"] = encodeInk(inkFromQuantized(ink));
+  return { op: "add", parent: livello, pos: { last: true }, elem: { tag: "path", attrs } };
+}
+
+function idNuovo(): string {
+  const presi = new Set<string>();
+  for (const v of motore.scene()) if (v.kind === "element" && v.id !== null) presi.add(v.id);
+  return createId("object", (id) => presi.has(id));
+}
+
+const lettore = new DOMParser();
+
+/// Rilegge un tratto dal testo del file, come farà chi lo apre: il colore, il
+/// pennello, l'inchiostro e il `d` che il motore ha scritto.
+function leggiTratto(voce: ElementItem): Tratto | null {
+  const sorgente = motore.text.slice(voce.utf16[0], voce.utf16[1]);
+  const doc = lettore.parseFromString(`<svg xmlns="${SVG_NS}" xmlns:fub="${FUB_NS}">${sorgente}</svg>`, "image/svg+xml");
+  const path = doc.documentElement.firstElementChild;
+  if (!path || path.namespaceURI !== SVG_NS || path.localName !== "path") return null;
+  try {
+    const brush = parseBrush(path.getAttributeNS(FUB_NS, "brush") ?? "");
+    const ink = inkToQuantized(decodeInk(path.getAttributeNS(FUB_NS, "ink") ?? ""));
+    const colore = path.getAttribute("fill") ?? "#000000";
+    const d = path.getAttribute("d") ?? pf1(ink, brush);
+    const elemento = document.createElementNS(SVG_NS, "path");
+    elemento.setAttribute("d", d);
+    elemento.setAttribute("fill", colore);
+    return { id: voce.id!, colore, brush, ink, d, at: path.getAttributeNS(FUB_NS, "at"), elemento };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Il foglio
 
 const foglio = byId<HTMLDivElement>("foglio");
@@ -153,32 +347,20 @@ const sovrapposizione = byId<HTMLCanvasElement>("in-corso");
 const pennello2d = sovrapposizione.getContext("2d")!;
 const annunci = byId<HTMLElement>("annunci");
 
+/// Il bordo della pagina del file, tratteggiato: la carta è bianca come il
+/// foglio intorno, e senza bordo non si vedrebbe allargarsi.
+const bordoPagina = document.createElementNS(SVG_NS, "rect");
+bordoPagina.setAttribute("class", "bordo-pagina");
+bordoPagina.setAttribute("fill", "none");
+bordoPagina.setAttribute("stroke", "#8a8a8a");
+bordoPagina.setAttribute("stroke-dasharray", "6 4");
+bordoPagina.setAttribute("vector-effect", "non-scaling-stroke");
+
 function annuncia(testo: string): void {
   // Lo stesso testo due volte di fila si annuncia comunque: si svuota prima.
   annunci.textContent = "";
   window.requestAnimationFrame(() => (annunci.textContent = testo));
 }
-
-/// Un tratto concluso, com'è nel documento: colore, pennello, inchiostro
-/// quantizzato e il `d` che `pf1` ne ricava.
-interface Tratto {
-  readonly colore: string;
-  readonly brush: Pf1Brush;
-  readonly ink: QuantizedInk;
-  readonly d: string;
-  readonly dispositivo: InkPointerType;
-  readonly inclinazione: boolean;
-  readonly diviso: boolean;
-  readonly elemento: SVGPathElement;
-}
-
-type Azione =
-  | { readonly tipo: "aggiungi"; readonly tratto: Tratto }
-  | { readonly tipo: "svuota"; readonly tratti: readonly Tratto[] };
-
-const tratti: Tratto[] = [];
-const daAnnullare: Azione[] = [];
-const daRipetere: Azione[] = [];
 
 let colore: string = COLORI[0].valore;
 let spessore: number = SPESSORI[1].valore;
@@ -188,6 +370,29 @@ let spessore: number = SPESSORI[1].valore;
 /// dispositivo, con `brushForInput`.
 function pennelloBase(): Pf1Brush {
   return { ...PF1_DEFAULTS, size: spessore, sim: false };
+}
+
+/// Porta il foglio alla scena del motore: i tratti nell'ordine del file, letti
+/// dal testo la prima volta che compaiono, e il bordo della pagina.
+function allinea(): void {
+  const ora: Tratto[] = [];
+  for (const voce of vociTratto()) {
+    let t = letti.get(voce.id!);
+    if (!t) {
+      const nuovo = leggiTratto(voce);
+      if (!nuovo) continue;
+      letti.set(nuovo.id, nuovo);
+      t = nuovo;
+    }
+    ora.push(t);
+  }
+  tratti = ora;
+  const [x, y, w, h] = viewBox();
+  bordoPagina.setAttribute("x", String(x));
+  bordoPagina.setAttribute("y", String(y));
+  bordoPagina.setAttribute("width", String(w));
+  bordoPagina.setAttribute("height", String(h));
+  mondo.replaceChildren(bordoPagina, ...tratti.map((t) => t.elemento));
 }
 
 // --- Camera -----------------------------------------------------------------
@@ -295,92 +500,81 @@ function disegnaInCorso(): void {
   riempiContorno(pennello2d, contorno);
 }
 
-// --- Tratti conclusi ----------------------------------------------------------
+// --- Operazioni, annulla e ripeti ---------------------------------------------
 
-function elementoDi(d: string, fill: string): SVGPathElement {
-  const path = document.createElementNS(SVG, "path");
-  path.setAttribute("d", d);
-  path.setAttribute("fill", fill);
-  return path;
-}
-
-function aggiungi(t: Tratto): void {
-  tratti.push(t);
-  mondo.append(t.elemento);
-}
-
-function togli(t: Tratto): void {
-  const i = tratti.lastIndexOf(t);
-  if (i >= 0) tratti.splice(i, 1);
-  t.elemento.remove();
-}
-
-function applica(a: Azione, avanti: boolean): void {
-  if (a.tipo === "aggiungi") {
-    if (avanti) aggiungi(a.tratto);
-    else togli(a.tratto);
-  } else if (avanti) {
-    for (const t of a.tratti) togli(t);
-  } else {
-    for (const t of a.tratti) aggiungi(t);
+/// Applica `op` al documento. Un rifiuto si annuncia e non lascia traccia: il
+/// motore applica tutto o niente.
+function esegui(nome: string, op: Op): Applied | null {
+  const esito = motore.apply(op);
+  if (esito.outcome === "rejected") {
+    annuncia(`${nome}: il motore ha rifiutato l'operazione (${esito.reason}, ${esito.detail}).`);
+    return null;
   }
+  daAnnullare.push({ nome, undo: esito.undo });
+  daRipetere.length = 0;
+  ultima = { nome, operazione: esito.operation };
+  cambiato();
+  return esito;
 }
 
-function esegui(a: Azione): void {
-  applica(a, true);
-  daAnnullare.push(a);
-  daRipetere.length = 0;
+/// Annulla o ripete il passo in cima a `da`, e mette in `a` quello che lo
+/// disfa. Se il motore lo rifiuta la cronologia non vale più: si svuota.
+function torna(da: Azione[], a: Azione[], verbo: string): void {
+  const azione = da.pop();
+  if (!azione) return;
+  const esito: Outcome = motore.undo(azione.undo);
+  if (esito.outcome === "rejected") {
+    daAnnullare.length = 0;
+    daRipetere.length = 0;
+    cambiato();
+    annuncia(`${verbo} non riuscito: ${esito.reason}. La cronologia è stata azzerata.`);
+    return;
+  }
+  a.push({ nome: azione.nome, undo: esito.undo });
+  ultima = { nome: `${verbo} «${azione.nome}»`, operazione: esito.operation };
   cambiato();
+  annuncia(`${verbo} «${azione.nome}».`);
 }
 
 function annulla(): void {
-  const a = daAnnullare.pop();
-  if (!a) return;
-  applica(a, false);
-  daRipetere.push(a);
-  cambiato();
-  annuncia(a.tipo === "aggiungi" ? "Tratto annullato." : "Foglio ripristinato.");
+  torna(daAnnullare, daRipetere, "Annulla");
 }
 
 function ripeti(): void {
-  const a = daRipetere.pop();
-  if (!a) return;
-  applica(a, true);
-  daAnnullare.push(a);
-  cambiato();
-  annuncia(a.tipo === "aggiungi" ? "Tratto ripetuto." : "Foglio svuotato.");
+  torna(daRipetere, daAnnullare, "Ripeti");
 }
 
+/// Toglie tutti i tratti con un `batch` di `remove`: una sola voce della
+/// cronologia, e la pagina resta com'è.
 function svuota(): void {
   if (tratti.length === 0) return;
-  esegui({ tipo: "svuota", tratti: [...tratti] });
-  annuncia("Foglio svuotato. Ctrl+Z lo ripristina.");
+  const ops: Op[] = tratti.map((t) => ({ op: "remove", target: t.id }));
+  if (esegui("Svuota", { op: "batch", label: "Svuota", ops })) annuncia("Foglio svuotato. Ctrl+Z lo ripristina.");
 }
 
 function concludi(s: FinishedStroke, corrente: InCorso): void {
-  let ink: QuantizedInk;
-  let d: string;
-  try {
-    ink = quantizeInk(s.samples);
-    d = pf1(ink, corrente.brush);
-  } catch (errore) {
-    annuncia(`Tratto scartato: ${errore instanceof Error ? errore.message : String(errore)}`);
+  const livello = livelloDi(motore);
+  if (livello === null) {
+    annuncia("Tratto scartato: il disegno non ha un livello.");
     return;
   }
-  if (d === "") return;
-  esegui({
-    tipo: "aggiungi",
-    tratto: {
-      colore: corrente.colore,
-      brush: corrente.brush,
-      ink,
-      d,
-      dispositivo: s.pointerType,
-      inclinazione: s.tilt,
-      diviso: s.split,
-      elemento: elementoDi(d, corrente.colore),
-    },
-  });
+  let ink: QuantizedInk;
+  let riquadro: Riquadro | null;
+  try {
+    ink = quantizeInk(s.samples);
+    riquadro = riquadroDi(ink, corrente.brush);
+  } catch (errore) {
+    annuncia(`Tratto scartato: ${messaggio(errore)}`);
+    return;
+  }
+  if (!riquadro) return;
+  const id = idNuovo();
+  const at = new Date(performance.timeOrigin + s.timeStamp).toISOString();
+  const ops: Op[] = [aggiuntaTratto(livello, id, corrente.colore, corrente.brush, ink, at)];
+  const pagina = paginaPer(riquadro);
+  if (pagina !== null) ops.push({ op: "page", viewBox: pagina });
+  origini.set(id, { dispositivo: s.pointerType, diviso: s.split });
+  esegui(pagina === null ? "Tratto" : "Tratto e pagina", ops.length === 1 ? ops[0]! : { op: "batch", label: "Tratto", ops });
 }
 
 // --- La penna -----------------------------------------------------------------
@@ -592,6 +786,171 @@ vita.listen(window, "keydown", (e) => {
 });
 
 // ---------------------------------------------------------------------------
+// Il pannello del file
+
+const fileMisure = byId<HTMLElement>("file-misure");
+const fileModifica = byId<HTMLElement>("file-modifica");
+const fileTesto = byId<HTMLElement>("file-testo");
+const fileInteri = byId<HTMLInputElement>("file-interi");
+let indirizzoFile: string | null = null;
+
+fileInteri.checked = leggi(CHIAVE_INTERI) === "1";
+vita.listen(fileInteri, "change", () => {
+  scrivi(CHIAVE_INTERI, fileInteri.checked ? "1" : null);
+  mostraFile(false);
+});
+
+/// Un URL blob del testo corrente; il precedente si revoca.
+function urlDelFile(): string {
+  if (indirizzoFile !== null) URL.revokeObjectURL(indirizzoFile);
+  indirizzoFile = URL.createObjectURL(new Blob([motore.text], { type: "image/svg+xml" }));
+  return indirizzoFile;
+}
+
+vita.add(() => {
+  if (indirizzoFile !== null) URL.revokeObjectURL(indirizzoFile);
+});
+vita.listen(byId("file-scarica"), "click", () => {
+  const a = el("a");
+  a.href = urlDelFile();
+  a.download = NOME_FILE;
+  a.click();
+});
+vita.listen(byId("file-apri"), "click", () => {
+  window.open(urlDelFile(), "_blank", "noopener");
+});
+
+/// Le righe del testo a LF toccate da ciò che `op` ha inserito, contate da 0.
+/// Una riga solo tolta non c'è più: la conta il riassunto.
+function righeToccate(op: TextOperation, testo: string): Set<number> {
+  const inizi = [0];
+  for (let i = testo.indexOf("\n"); i >= 0; i = testo.indexOf("\n", i + 1)) inizi.push(i + 1);
+  const rigaDi = (offset: number): number => {
+    let basso = 0;
+    let alto = inizi.length - 1;
+    while (basso < alto) {
+      const mezzo = (basso + alto + 1) >> 1;
+      if (inizi[mezzo]! <= offset) basso = mezzo;
+      else alto = mezzo - 1;
+    }
+    return basso;
+  };
+  const righe = new Set<number>();
+  let scarto = 0;
+  for (const e of op.edits) {
+    const da = e.from + scarto;
+    scarto += e.inserted.length - (e.to - e.from);
+    // Un `add` inserisce «a capo e riga»: l'a capo in testa appartiene alla
+    // riga di prima, che non cambia.
+    const testa = e.inserted.length - e.inserted.replace(/^\n+/, "").length;
+    const coda = e.inserted.length - e.inserted.replace(/\n+$/, "").length;
+    if (testa + coda >= e.inserted.length) continue;
+    const prima = rigaDi(da + testa);
+    const ultimaRiga = rigaDi(da + e.inserted.length - coda - 1);
+    for (let r = prima; r <= ultimaRiga; r++) righe.add(r);
+  }
+  return righe;
+}
+
+function riassunto(op: TextOperation): string {
+  let inseriti = 0;
+  let tolti = 0;
+  let righePiu = 0;
+  let righeMeno = 0;
+  for (const e of op.edits) {
+    inseriti += e.inserted.length;
+    tolti += e.deleted.length;
+    righePiu += e.inserted.split("\n").length - 1;
+    righeMeno += e.deleted.split("\n").length - 1;
+  }
+  const n = op.edits.length;
+  const parti = [`${n} ${n === 1 ? "modifica" : "modifiche"} al testo`, `+${numeri.format(inseriti)} −${numeri.format(tolti)} caratteri`];
+  const righe = righePiu - righeMeno;
+  if (righe !== 0) parti.push(`${righe > 0 ? "+" : "−"}${Math.abs(righe)} ${Math.abs(righe) === 1 ? "riga" : "righe"}`);
+  return parti.join(", ");
+}
+
+/// Una riga del file, coi tag, i nomi e i valori colorati. I valori lunghi si
+/// accorciano, se non si chiedono interi.
+function rigaColorata(riga: string, interi: boolean): DocumentFragment {
+  const pezzi = document.createDocumentFragment();
+  const segni = /(<\/?|\/?>)|([A-Za-z_][\w:.-]*)(=)("[^"]*"|'[^']*')/g;
+  let da = 0;
+  let nomeTag = false;
+  for (let m = segni.exec(riga); m !== null; m = segni.exec(riga)) {
+    if (m.index > da) {
+      const prima = riga.slice(da, m.index);
+      if (nomeTag) {
+        const nome = /^[^\s/>]+/.exec(prima)?.[0] ?? "";
+        pezzi.append(el("span", "x-tag", nome), prima.slice(nome.length));
+      } else {
+        pezzi.append(prima);
+      }
+    }
+    nomeTag = m[1]?.startsWith("<") ?? false;
+    if (m[1] !== undefined) {
+      pezzi.append(el("span", "x-segno", m[1]));
+    } else {
+      const valore = m[4]!;
+      pezzi.append(el("span", "x-nome", m[2]!), m[3]!);
+      if (interi || valore.length <= VALORE_CORTO) {
+        pezzi.append(el("span", "x-valore", valore));
+      } else {
+        pezzi.append(el("span", "x-valore", `${valore.slice(0, VALORE_CORTO - 8)}…${valore.slice(-1)}`));
+        pezzi.append(el("span", "x-corto", ` ${numeri.format(valore.length - 2)} car.`));
+      }
+    }
+    da = m.index + m[0].length;
+  }
+  if (da < riga.length) {
+    const resto = riga.slice(da);
+    if (nomeTag) {
+      const nome = /^[^\s/>]+/.exec(resto)?.[0] ?? "";
+      pezzi.append(el("span", "x-tag", nome), resto.slice(nome.length));
+    } else {
+      pezzi.append(resto);
+    }
+  }
+  return pezzi;
+}
+
+/// Ridisegna il pannello: misure, ultima modifica e testo. Con `segui` la
+/// prima riga toccata si porta in vista.
+function mostraFile(segui: boolean): void {
+  const testo = motore.normalized;
+  const byte = new TextEncoder().encode(motore.text).length;
+  const [x, y, w, h] = viewBox();
+  const origine = x === 0 && y === 0 ? "" : ` da ${x}, ${y}`;
+  const quanti = `${tratti.length} ${tratti.length === 1 ? "tratto" : "tratti"}`;
+  fileMisure.textContent = `${numeri.format(byte)} byte · ${quanti} · pagina ${w} × ${h}${origine}`;
+  fileModifica.textContent = ultima
+    ? `${ultima.nome}: ${riassunto(ultima.operazione)}. Il resto del file non cambia.`
+    : "Disegna un tratto: diventa un’operazione add del motore, e qui compare la riga che aggiunge.";
+
+  const toccate = ultima ? righeToccate(ultima.operazione, testo) : new Set<number>();
+  const righe = testo.endsWith("\n") ? testo.slice(0, -1).split("\n") : testo.split("\n");
+  const lista = el("ol", "righe");
+  let prima: HTMLElement | null = null;
+  for (let i = 0; i < righe.length; i++) {
+    const voce = el("li", toccate.has(i) ? "riga toccata" : "riga");
+    voce.append(el("span", "numero", String(i + 1)));
+    const corpo = el("span", "codice");
+    corpo.append(rigaColorata(righe[i]!, fileInteri.checked));
+    voce.append(corpo);
+    if (toccate.has(i) && prima === null) prima = voce;
+    lista.append(voce);
+  }
+  fileTesto.replaceChildren(lista);
+  if (segui && prima !== null) {
+    const sopra = prima.offsetTop;
+    const sotto = sopra + prima.offsetHeight;
+    if (sopra < fileTesto.scrollTop || sotto > fileTesto.scrollTop + fileTesto.clientHeight) {
+      fileTesto.scrollTop = Math.max(0, sopra - fileTesto.clientHeight / 3);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Ispettore dell'ultimo tratto
 
 const ispettore = byId<HTMLElement>("ispettore");
@@ -610,21 +969,25 @@ function aggiornaIspettore(): void {
   ispettore.replaceChildren();
   const t = tratti[tratti.length - 1];
   if (!t) {
-    ispettore.append(el("p", "vuoto", "Disegna qualcosa: qui compaiono i dati del tratto che il file conserverebbe."));
+    ispettore.append(el("p", "vuoto", "Disegna qualcosa: qui compaiono i dati del tratto, letti dal file."));
     return;
   }
   const lista = el("dl");
   const campioni = t.ink.samples;
+  const origine = origini.get(t.id);
   const pressione = campioni[0]?.p !== undefined;
-  riga(lista, "Dispositivo", DISPOSITIVI[t.dispositivo]);
-  riga(lista, "Campioni", `${campioni.length}${t.diviso ? ", diviso al limite" : ""}`);
+  const inclinazione = campioni[0]?.a !== undefined;
+  riga(lista, "id", codice(t.id));
+  riga(lista, "Dispositivo", origine ? DISPOSITIVI[origine.dispositivo] : "non scritto nel file");
+  riga(lista, "Campioni", `${campioni.length}${origine?.diviso ? ", diviso al limite" : ""}`);
   riga(lista, "Durata", `${campioni[campioni.length - 1]?.t ?? 0} ms`);
   riga(lista, "Pressione", pressione ? "dalla penna, 0…255" : "simulata dalla velocità (sim=1)");
-  riga(lista, "Inclinazione", t.inclinazione ? "sì, altitudine e azimut" : "no");
+  riga(lista, "Inclinazione", inclinazione ? "sì, altitudine e azimut" : "no");
+  riga(lista, "fub:at", t.at === null ? "assente" : codice(t.at));
   riga(lista, "fub:brush", codice(formatBrush(t.brush)));
   riga(lista, "fub:ink", codice(`scala s${t.ink.scale}, ${campioni.length} campioni interi`));
   const d = el("details");
-  d.append(el("summary", undefined, `${t.d.length} caratteri`), el("pre", undefined, t.d));
+  d.append(el("summary", undefined, `${numeri.format(t.d.length)} caratteri, ricalcolati dal motore`), el("pre", undefined, t.d));
   riga(lista, "d", d);
   ispettore.append(lista);
 }
@@ -632,7 +995,15 @@ function aggiornaIspettore(): void {
 // ---------------------------------------------------------------------------
 // Salvataggio nel browser: il disegno sopravvive a un ricaricamento
 
+/// Il file e ciò che il file non conserva dei tratti disegnati qui.
 interface Salvato {
+  readonly v: 2;
+  readonly svg: string;
+  readonly origini: Readonly<Record<string, Origine>>;
+}
+
+/// Il formato di prima del motore: i tratti uno per uno.
+interface SalvatoV1 {
   readonly v: 1;
   readonly tratti: readonly {
     readonly colore: string;
@@ -646,63 +1017,91 @@ interface Salvato {
 }
 
 function salva(): void {
-  if (tratti.length === 0) {
+  if (tratti.length === 0 && daAnnullare.length === 0) {
     scrivi(CHIAVE_DISEGNO, null);
     return;
   }
-  const dati: Salvato = {
-    v: 1,
-    tratti: tratti.map((t) => ({
-      colore: t.colore,
-      brush: formatBrush(t.brush),
-      dispositivo: t.dispositivo,
-      inclinazione: t.inclinazione,
-      diviso: t.diviso,
-      scala: t.ink.scale,
-      campioni: t.ink.samples,
-    })),
-  };
+  const conservate: Record<string, Origine> = {};
+  for (const t of tratti) {
+    const o = origini.get(t.id);
+    if (o) conservate[t.id] = o;
+  }
+  const dati: Salvato = { v: 2, svg: motore.text, origini: conservate };
   scrivi(CHIAVE_DISEGNO, JSON.stringify(dati));
 }
 
-/// Rilegge il disegno salvato: il pennello passa da `parseBrush` e `d` si
-/// ricalcola dagli interi, come farà chi apre il file.
-function ripristina(): number {
-  const testo = leggi(CHIAVE_DISEGNO);
-  if (!testo) return 0;
-  let dati: Partial<Salvato> | null;
+function origineValida(o: unknown): o is Origine {
+  if (o === null || typeof o !== "object") return false;
+  const { dispositivo, diviso } = o as Record<string, unknown>;
+  return typeof dispositivo === "string" && dispositivo in DISPOSITIVI && typeof diviso === "boolean";
+}
+
+/// Riapre il file salvato. Un file che il motore non apre come disegno
+/// modificabile con un livello si scarta: la pagina riparte da un foglio
+/// nuovo.
+function riapri(dati: Partial<Salvato>): boolean {
+  if (typeof dati.svg !== "string") return false;
+  let m: SceneEngine;
   try {
-    dati = JSON.parse(testo) as Partial<Salvato> | null;
+    m = SceneEngine.open(dati.svg);
   } catch {
-    return 0;
+    return false;
   }
-  const elenco: Salvato["tratti"] | undefined = dati?.v === 1 ? dati.tratti : undefined;
-  if (!Array.isArray(elenco)) return 0;
-  let letti = 0;
-  for (const s of elenco as Salvato["tratti"]) {
+  if (m.status !== "fubdraw" || livelloDi(m) === null) return false;
+  motore = m;
+  for (const [id, o] of Object.entries(dati.origini ?? {})) if (origineValida(o)) origini.set(id, o);
+  return true;
+}
+
+/// Porta nel file i tratti salvati col formato di prima: un `batch` di
+/// `add`, fuori dalla cronologia. Il pennello passa da `parseBrush` e il `d`
+/// lo ricalcola il motore.
+function migra(dati: Partial<SalvatoV1>): boolean {
+  if (!Array.isArray(dati.tratti)) return false;
+  const livello = livelloDi(motore);
+  if (livello === null) return false;
+  const ops: Op[] = [];
+  const presi = new Set<string>();
+  let tutto: Riquadro | null = null;
+  for (const s of dati.tratti as SalvatoV1["tratti"]) {
     try {
       if (s.scala !== 10 && s.scala !== 100) continue;
       if (!COLORI.some((c) => c.valore === s.colore)) continue;
       const brush = parseBrush(s.brush);
       const ink: QuantizedInk = { scale: s.scala, samples: s.campioni };
-      const d = pf1(ink, brush);
-      if (d === "") continue;
-      aggiungi({
-        colore: s.colore,
-        brush,
-        ink,
-        d,
-        dispositivo: DISPOSITIVI[s.dispositivo] ? s.dispositivo : "mouse",
-        inclinazione: s.inclinazione === true,
-        diviso: s.diviso === true,
-        elemento: elementoDi(d, s.colore),
-      });
-      letti++;
+      const riquadro = riquadroDi(ink, brush);
+      if (!riquadro) continue;
+      const id = createId("object", (x) => presi.has(x) || x === livello);
+      presi.add(id);
+      ops.push(aggiuntaTratto(livello, id, s.colore, brush, ink, null));
+      tutto = unisci(tutto, riquadro);
+      if (s.dispositivo in DISPOSITIVI) origini.set(id, { dispositivo: s.dispositivo, diviso: s.diviso === true });
     } catch {
       // Un tratto illeggibile si salta: gli altri restano.
     }
   }
-  return letti;
+  if (ops.length === 0) return false;
+  const pagina = tutto ? paginaPer(tutto) : null;
+  if (pagina !== null) ops.push({ op: "page", viewBox: pagina });
+  return motore.apply({ op: "batch", label: "Tratti salvati", ops }).outcome === "applied";
+}
+
+function ripristina(): number {
+  const testo = leggi(CHIAVE_DISEGNO);
+  if (!testo) return 0;
+  let dati: Record<string, unknown> | null;
+  try {
+    dati = JSON.parse(testo) as Record<string, unknown> | null;
+  } catch {
+    return 0;
+  }
+  const riuscito = dati?.v === 2 ? riapri(dati as Partial<Salvato>) : dati?.v === 1 ? migra(dati as Partial<SalvatoV1>) : false;
+  if (!riuscito) {
+    motore = SceneEngine.open(documentoNuovo());
+    origini.clear();
+    return 0;
+  }
+  return vociTratto().length;
 }
 
 // ---------------------------------------------------------------------------
@@ -757,11 +1156,13 @@ async function mostraVersione(): Promise<void> {
 // Avvio
 
 function cambiato(): void {
+  allinea();
   bottoneAnnulla.disabled = daAnnullare.length === 0;
   bottoneRipeti.disabled = daRipetere.length === 0;
   bottoneSvuota.disabled = tratti.length === 0;
   foglio.classList.toggle("vuoto", tratti.length === 0);
   aggiornaIspettore();
+  mostraFile(true);
   salva();
 }
 

@@ -96,7 +96,7 @@
       /* Corpo: il tavolo col foglio e, a destra, l'ispettore e lo stato */
       .corpo {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 360px;
+        grid-template-columns: minmax(0, 1fr) 420px;
         min-height: 0;
       }
       .tavolo {
@@ -302,6 +302,104 @@
         color: var(--muted);
         font-size: var(--text-sm);
       }
+      /* Il pannello del file: il testo che si salverebbe, a righe numerate,
+         con le righe toccate dall'ultima modifica segnate da una barra e da
+         uno sfondo, non dal solo colore. */
+      .file-testa {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--space-1) var(--space-3);
+        margin-bottom: var(--space-2);
+      }
+      .file-nome {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-bold);
+      }
+      .file-misure {
+        font-size: var(--text-xs);
+        color: var(--muted);
+      }
+      .file-modifica {
+        margin: 0 0 var(--space-2);
+        font-size: var(--text-sm);
+      }
+      .file-testo {
+        position: relative;
+        max-height: 24rem;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xs);
+        background: var(--bg-input);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        line-height: var(--leading-normal);
+      }
+      .file-testo:focus-visible {
+        outline: var(--focus-ring-width) solid var(--focus-ring);
+        outline-offset: var(--focus-ring-offset);
+      }
+      .file-testo ol {
+        list-style: none;
+        margin: 0;
+        padding: var(--space-1) 0;
+      }
+      .file-testo .riga {
+        display: grid;
+        grid-template-columns: 3ch minmax(0, 1fr);
+        gap: var(--space-2);
+        padding: 0 var(--space-2) 0 var(--space-1);
+        border-left: 3px solid transparent;
+      }
+      .file-testo .riga.toccata {
+        border-left-color: var(--success);
+        background: var(--success-wash);
+      }
+      .file-testo .numero {
+        color: var(--muted);
+        text-align: right;
+        user-select: none;
+      }
+      .file-testo .codice {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        min-width: 0;
+      }
+      .x-segno,
+      .x-tag {
+        color: var(--syn-keyword);
+      }
+      .x-nome {
+        color: var(--syn-name);
+      }
+      .x-valore {
+        color: var(--syn-string);
+      }
+      .x-corto {
+        color: var(--muted);
+        font-style: italic;
+      }
+      .file-azioni {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        margin-top: var(--space-2);
+        font-size: var(--text-sm);
+      }
+      .file-azioni label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 44px;
+        margin-right: auto;
+      }
+      .file-azioni button {
+        min-height: 44px;
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--border);
+      }
       #stato h3 {
         margin: var(--space-4) 0 var(--space-2);
         font-size: var(--text-sm);
@@ -420,10 +518,25 @@
           <p class="aiuto">
             Rotella: scorri · <kbd>Ctrl</kbd>+rotella o pizzico: zoom · tasto centrale o due dita: sposta ·
             <kbd>Ctrl</kbd>+<kbd>Z</kbd> annulla · <kbd>Ctrl</kbd>+<kbd>Maiusc</kbd>+<kbd>Z</kbd> ripeti ·
-            con una penna il dito sposta il foglio e il palmo non disegna
+            con una penna il dito sposta il foglio e il palmo non disegna · il tratteggio è il bordo della pagina del
+            file, che si allarga a passi di 256 quando ci disegni fuori
           </p>
         </section>
         <aside class="lato" aria-label="Dettagli">
+          <section aria-labelledby="titolo-file">
+            <h2 id="titolo-file">Il file .svg</h2>
+            <div class="file-testa">
+              <span class="file-nome">Prova.svg</span>
+              <span id="file-misure" class="file-misure"></span>
+            </div>
+            <p id="file-modifica" class="file-modifica"></p>
+            <div id="file-testo" class="file-testo" role="region" aria-label="Il testo del file Prova.svg" tabindex="0"></div>
+            <div class="file-azioni">
+              <label><input id="file-interi" type="checkbox" /> Valori lunghi per intero</label>
+              <button id="file-apri" type="button" title="Il file in una scheda nuova, come lo mostra il browser">Apri come immagine</button>
+              <button id="file-scarica" type="button">Scarica</button>
+            </div>
+          </section>
           <section>
             <h2>Ultimo tratto</h2>
             <div id="ispettore"></div>
@@ -431,8 +544,9 @@
           <section>
             <h2>Stato del lavoro</h2>
             <p class="onesto">
-              Penna, pennello e camera sono il codice vero dei pacchetti. Il modo in cui il foglio disegna i tratti è
-              provvisorio fino al painter di FD-204; con FD-206b il disegno si apre nella shell.
+              Penna, pennello, camera, scena e motore delle operazioni sono il codice vero dei pacchetti: il foglio è il
+              file qui sopra. Il modo in cui il foglio disegna i tratti è provvisorio fino al painter di FD-204; con
+              FD-206b il disegno si apre nella shell.
             </p>
             <div id="stato"></div>
           </section>
