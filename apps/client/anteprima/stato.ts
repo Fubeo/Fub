@@ -26,6 +26,15 @@ export const STATI: Readonly<Record<Stato, string>> = {
 
 export const PACCHETTI: readonly Pacchetto[] = [
   {
+    codice: "FD-204",
+    titolo: "Painter e strati inerti",
+    stato: "qui",
+    pr: 108,
+    nota:
+      "Il foglio lo disegna il painter dalla scena del motore: gli oggetti modificabili negli strati vivi, " +
+      "il resto in immagini inerti, il tratto in corso sullo strato sopra la scena.",
+  },
+  {
     codice: "FD-203",
     titolo: "Penna e pennello pf1",
     stato: "qui",
@@ -105,18 +114,25 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Il canale fra fub-live e la shell.",
   },
   {
+    codice: "FD-208",
+    titolo: "Disegni incorporati nelle note",
+    stato: "revisione",
+    pr: 109,
+    nota: "In Lettura, ![[disegno]] è un'immagine del vault col nome del disegno come testo alternativo.",
+  },
+  {
+    codice: "FD-403",
+    titolo: "Comandi di export",
+    stato: "corso",
+    nota: "Esportare un disegno, per chi lo apre fuori da Fub.",
+  },
+  {
     codice: "FD-405",
     titolo: "Plugin WASM versione 0",
     stato: "revisione",
     pr: 38,
     repo: "FubDraw",
     nota: "Il primo plugin di Fub che legge le scene: galleria dei disegni, ispezione e lint.",
-  },
-  {
-    codice: "FD-204",
-    titolo: "Painter e strati inerti",
-    stato: "prossimo",
-    nota: "Prende il posto della cucitura provvisoria di questa pagina.",
   },
   {
     codice: "FD-205",

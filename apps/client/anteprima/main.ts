@@ -2,15 +2,16 @@
 //
 // Monta su un foglio vero il codice dei pacchetti man mano che arriva: la
 // pipeline della penna e il pennello pf1 (FD-203), la camera condivisa
-// (FD-101), la scena e il motore delle operazioni (FD-201, FD-202). Il
-// disegno è un file .svg tenuto da un `SceneEngine`: ogni tratto è
-// un'operazione `add`, annulla e ripeti sono l'undo del motore, e il pannello
-// del file mostra il testo che si salverebbe, con le righe appena cambiate.
+// (FD-101), la scena e il motore delle operazioni (FD-201, FD-202), il
+// painter (FD-204). Il disegno è un file .svg tenuto da un `SceneEngine`:
+// ogni tratto è un'operazione `add`, annulla e ripeti sono l'undo del motore,
+// e il pannello del file mostra il testo che si salverebbe, con le righe
+// appena cambiate. Il foglio lo disegna il painter dalla scena del motore, e
+// il tratto in corso sta sullo strato sopra la scena.
 //
-// Ciò che ancora non c'è — il painter di FD-204, gli strumenti di FD-205, la
-// superficie registrata nella shell di FD-206b — qui è una cucitura
-// provvisoria, scritta per sparire: un `<g>` coi `<path>` letti dal file e un
-// canvas per il tratto in corso.
+// Ciò che ancora non c'è — gli strumenti di FD-205, la superficie registrata
+// nella shell di FD-206b — qui è una cucitura provvisoria, scritta per
+// sparire: i gesti della pagina e il bordo tratteggiato della pagina.
 //
 // Come il catalogo del banco, qui non gira `main.ts`: i quattro strati del
 // tema si montano con lo stesso caricatore della shell, e la carta è bianca in
@@ -32,7 +33,7 @@ import {
 } from "../src/editors/spatial/pen/pen-input";
 import { PF1_DEFAULTS, brushForInput, formatBrush, parseBrush, type Pf1Brush } from "../src/editors/spatial/ink/brush";
 import { decodeInk, encodeInk, inkFromQuantized, inkToQuantized } from "../src/editors/spatial/ink/codec";
-import { pf1, pf1Outline, type OutlinePoint } from "../src/editors/spatial/ink/pf1";
+import { pf1, pf1Outline } from "../src/editors/spatial/ink/pf1";
 import {
   INK_MAX_SAMPLES,
   quantizeInk,
@@ -43,8 +44,12 @@ import {
 import type { ElementItem } from "../src/editors/spatial/scene/classify";
 import { SceneEngine, type Applied, type Outcome, type Undo } from "../src/editors/spatial/scene/engine";
 import { createId } from "../src/editors/spatial/scene/ids";
+import { IDENTITY } from "../src/editors/spatial/scene/matrix";
 import type { AddOp, Op } from "../src/editors/spatial/scene/ops";
 import { FUB_NS, SUPPORTED_VERSION, SVG_NS } from "../src/editors/spatial/scene/read";
+import { createOverlay, type InkPreview } from "../src/editors/spatial/painter/overlay";
+import { PaintBuilder } from "../src/editors/spatial/painter/paint";
+import { createSvgPainter } from "../src/editors/spatial/painter/svg-dom";
 import { fit, screenToWorld, zoomAtPoint, type Camera, type Point, type ScaleLimits } from "../src/spatial/camera";
 import { ORDINE_STATI, PACCHETTI, STATI } from "./stato";
 
@@ -201,8 +206,8 @@ interface Origine {
   readonly diviso: boolean;
 }
 
-/// Un tratto com'è scritto nel file: gli attributi letti dal suo testo e il
-/// `<path>` che il foglio disegna.
+/// Un tratto com'è scritto nel file: gli attributi letti dal suo testo, per
+/// l'ispettore.
 interface Tratto {
   readonly id: string;
   readonly colore: string;
@@ -210,7 +215,6 @@ interface Tratto {
   readonly ink: QuantizedInk;
   readonly d: string;
   readonly at: string | null;
-  readonly elemento: SVGPathElement;
 }
 
 /// Un passo della cronologia: l'undo del motore e il nome per gli annunci.
@@ -328,10 +332,7 @@ function leggiTratto(voce: ElementItem): Tratto | null {
     const ink = inkToQuantized(decodeInk(path.getAttributeNS(FUB_NS, "ink") ?? ""));
     const colore = path.getAttribute("fill") ?? "#000000";
     const d = path.getAttribute("d") ?? pf1(ink, brush);
-    const elemento = document.createElementNS(SVG_NS, "path");
-    elemento.setAttribute("d", d);
-    elemento.setAttribute("fill", colore);
-    return { id: voce.id!, colore, brush, ink, d, at: path.getAttributeNS(FUB_NS, "at"), elemento };
+    return { id: voce.id!, colore, brush, ink, d, at: path.getAttributeNS(FUB_NS, "at") };
   } catch {
     return null;
   }
@@ -343,9 +344,14 @@ function leggiTratto(voce: ElementItem): Tratto | null {
 const foglio = byId<HTMLDivElement>("foglio");
 const disegno = foglio.querySelector("svg")!;
 const mondo = disegno.querySelector("g")!;
-const sovrapposizione = byId<HTMLCanvasElement>("in-corso");
-const pennello2d = sovrapposizione.getContext("2d")!;
 const annunci = byId<HTMLElement>("annunci");
+
+/// La scena la disegna il painter; sopra la carta restano il bordo della
+/// pagina e l'invito, poi lo strato del tratto in corso.
+const painter = createSvgPainter(foglio, vita);
+const costruttore = new PaintBuilder();
+foglio.append(disegno, foglio.querySelector(".invito")!);
+const sopra = createOverlay(foglio, vita);
 
 /// Il bordo della pagina del file, tratteggiato: la carta è bianca come il
 /// foglio intorno, e senza bordo non si vedrebbe allargarsi.
@@ -372,9 +378,11 @@ function pennelloBase(): Pf1Brush {
   return { ...PF1_DEFAULTS, size: spessore, sim: false };
 }
 
-/// Porta il foglio alla scena del motore: i tratti nell'ordine del file, letti
-/// dal testo la prima volta che compaiono, e il bordo della pagina.
+/// Porta il foglio alla scena del motore: la scena al painter, i tratti
+/// nell'ordine del file per l'ispettore, letti dal testo la prima volta che
+/// compaiono, e il bordo della pagina.
 function allinea(): void {
+  painter.update(costruttore.build(motore));
   const ora: Tratto[] = [];
   for (const voce of vociTratto()) {
     let t = letti.get(voce.id!);
@@ -392,7 +400,7 @@ function allinea(): void {
   bordoPagina.setAttribute("y", String(y));
   bordoPagina.setAttribute("width", String(w));
   bordoPagina.setAttribute("height", String(h));
-  mondo.replaceChildren(bordoPagina, ...tratti.map((t) => t.elemento));
+  mondo.replaceChildren(bordoPagina);
 }
 
 // --- Camera -----------------------------------------------------------------
@@ -403,8 +411,9 @@ const livelloZoom = byId<HTMLButtonElement>("zoom-livello");
 function impostaCamera(c: Camera): void {
   camera = c;
   mondo.setAttribute("transform", `matrix(${c.scale} 0 0 ${c.scale} ${c.tx} ${c.ty})`);
+  painter.setView(c);
+  sopra.setView(c);
   livelloZoom.textContent = `${Math.round(c.scale * 100)}%`;
-  disegnaInCorso();
 }
 
 function puntoLocale(clientX: number, clientY: number): Point {
@@ -423,22 +432,16 @@ function adatta(): void {
     impostaCamera({ scale: 1, tx: 0, ty: 0 });
     return;
   }
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const t of tratti) {
-    const b = t.elemento.getBBox();
-    minX = Math.min(minX, b.x);
-    minY = Math.min(minY, b.y);
-    maxX = Math.max(maxX, b.x + b.width);
-    maxY = Math.max(maxY, b.y + b.height);
+  const r = tratti.reduce<Riquadro | null>((acc, t) => unisci(acc, riquadroDi(t.ink, t.brush)), null);
+  if (!r) {
+    impostaCamera({ scale: 1, tx: 0, ty: 0 });
+    return;
   }
   const v = { w: foglio.clientWidth, h: foglio.clientHeight };
-  impostaCamera(fit({ minX, minY, maxX, maxY }, v, 0.08, 0, { min: LIMITI.min, max: 1 }));
+  impostaCamera(fit(r, v, 0.08, 0, { min: LIMITI.min, max: 1 }));
 }
 
-// --- Tratto in corso (cucitura provvisoria di FD-204) -----------------------
+// --- Tratto in corso ----------------------------------------------------------
 
 interface InCorso {
   readonly id: number;
@@ -449,55 +452,28 @@ interface InCorso {
 }
 
 let inCorso: InCorso | null = null;
-let densita = 1;
 
-function dimensiona(): void {
-  densita = window.devicePixelRatio || 1;
-  sovrapposizione.width = Math.max(1, Math.round(foglio.clientWidth * densita));
-  sovrapposizione.height = Math.max(1, Math.round(foglio.clientHeight * densita));
-  disegnaInCorso();
-}
-
-/// Il contorno chiuso con le stesse curve di `outlinePath`: dal punto medio
-/// fra l'ultimo e il primo vertice, una quadratica per vertice fino al punto
-/// medio successivo. Così il tratto in corso e quello concluso hanno la
-/// stessa forma, e alla fine non «scatta».
-function riempiContorno(ctx: CanvasRenderingContext2D, punti: readonly OutlinePoint[]): void {
-  const n = punti.length;
-  if (n < 3) return;
-  const ultimo = punti[n - 1]!;
-  const primo = punti[0]!;
-  ctx.beginPath();
-  ctx.moveTo((ultimo[0] + primo[0]) / 2, (ultimo[1] + primo[1]) / 2);
-  for (let i = 0; i < n; i++) {
-    const p = punti[i]!;
-    const q = punti[i + 1 === n ? 0 : i + 1]!;
-    ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
-  }
-  ctx.closePath();
-  ctx.fill();
-}
-
-/// Ridisegna il tratto in corso, con la predizione in coda. Si chiama dentro
-/// il gestore dell'evento, mai al fotogramma dopo (FD-203).
+/// Porta il tratto in corso, con la predizione in coda, sullo strato sopra la
+/// scena. Si disegna dentro il gestore dell'evento, mai al fotogramma dopo
+/// (FD-203): da qui il `flush`.
 function disegnaInCorso(): void {
-  pennello2d.setTransform(1, 0, 0, 1, 0, 0);
-  pennello2d.clearRect(0, 0, sovrapposizione.width, sovrapposizione.height);
+  sopra.setInk("penna", anteprimaInCorso());
+  sopra.flush();
+}
+
+function anteprimaInCorso(): InkPreview | null {
   const t = inCorso;
-  if (!t || t.campioni.length === 0) return;
+  if (!t || t.campioni.length === 0) return null;
   const campioni = t.campioni.length + t.predetti.length <= INK_MAX_SAMPLES
     ? [...t.campioni, ...t.predetti]
     : t.campioni;
-  let contorno: OutlinePoint[];
   try {
-    contorno = pf1Outline(quantizeInk(campioni), t.brush, { last: false });
+    const outline = pf1Outline(quantizeInk(campioni), t.brush, { last: false });
+    // Il livello dei tratti nuovi non ha trasformazioni.
+    return { outline, matrix: IDENTITY, color: t.colore, opacity: 1 };
   } catch {
-    return;
+    return null;
   }
-  const s = camera.scale * densita;
-  pennello2d.setTransform(s, 0, 0, s, camera.tx * densita, camera.ty * densita);
-  pennello2d.fillStyle = t.colore;
-  riempiContorno(pennello2d, contorno);
 }
 
 // --- Operazioni, annulla e ripeti ---------------------------------------------
@@ -605,8 +581,10 @@ const penna = attachPenInput(
     onEnd(s) {
       const corrente = inCorso;
       inCorso = null;
-      disegnaInCorso();
+      // Prima il tratto nella scena, poi via quello in corso: nello stesso
+      // gestore, quindi a schermo non c'è un fotogramma senza nessuno dei due.
       if (corrente?.id === s.id) concludi(s, corrente);
+      disegnaInCorso();
     },
     onCancel(id, motivo) {
       if (inCorso?.id !== id) return;
@@ -1173,10 +1151,6 @@ void mostraVersione();
 const ripristinati = ripristina();
 cambiato();
 
-const osservatore = new ResizeObserver(() => dimensiona());
-osservatore.observe(foglio);
-vita.add(() => osservatore.disconnect());
 vita.add(() => penna.destroy());
-dimensiona();
 if (ripristinati > 0) adatta();
 else impostaCamera(camera);
