@@ -477,3 +477,108 @@ describe("le tabelle della superficie Markdown", () => {
     ed.destroy();
   });
 });
+
+describe("i disegni incorporati nella Lettura", () => {
+  const ACQUA = "disegni/acqua.svg";
+  const FLUSSO = "diagrammi/flusso.svg";
+  const NOTE = [
+    "![[acqua.svg]]",
+    "![](../disegni/acqua.svg)",
+    "![[acqua]]",
+    "![La mappa](../disegni/acqua.svg)",
+    "![[flusso.svg]]",
+  ].join("\n\n");
+
+  /// L'host come lo vede la shell: il kernel risolve e indicizza, i byte del
+  /// disegno passano soltanto da un lease, servito come `image/svg+xml`.
+  function drawingHost(title: () => string) {
+    const opened: string[] = [];
+    const closed: string[] = [];
+    let handles = 0;
+    vi.spyOn(api, "queryIndex").mockImplementation(async (query) => {
+      switch (query.kind) {
+        case "resolve": {
+          const written = query.target.kind === "wiki" ? query.target.value.page
+            : query.target.kind === "path" ? query.target.value : "";
+          const doc = { "acqua.svg": ACQUA, "../disegni/acqua.svg": ACQUA, "flusso.svg": FLUSSO }[written];
+          return { kind: "resolved", value: doc ? { doc } : null };
+        }
+        case "outline":
+          return {
+            kind: "outline",
+            value: query.doc === ACQUA
+              ? [{ level: 1, text: title(), slug: "titolo", span: { start: 0, end: 0 }, explicit_anchor: null }]
+              : [],
+          };
+        case "documents":
+          return {
+            kind: "documents",
+            value: { items: JSON.stringify(query.matching).includes(FLUSSO) ? [{ doc: FLUSSO }] : [], offset: 0, total: 1 },
+          };
+        case "render_embed":
+          if (query.page !== "acqua") throw new Error(`embed inatteso: ${query.page}`);
+          return {
+            kind: "render_embed",
+            value: {
+              doc_id: ACQUA,
+              html: `<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="${ACQUA}"><figcaption>${title()}</figcaption></figure>`,
+              parts: [],
+            },
+          };
+        default:
+          throw new Error(`domanda inattesa: ${query.kind}`);
+      }
+    });
+    vi.spyOn(api, "resourceOpen").mockImplementation(async (id) => {
+      opened.push(id);
+      return { handle: String(++handles), id, len: 64, mime: "image/svg+xml", kind: "image", revision: `r${handles}` };
+    });
+    vi.spyOn(api, "resourceClose").mockImplementation(async (handle) => {
+      closed.push(handle);
+    });
+    vi.spyOn(api, "assetUrl").mockImplementation((handle) => `fub-asset://localhost/${handle}`);
+    const read = vi.spyOn(api, "resourceReadChunk");
+    return { opened, closed, read };
+  }
+
+  it("si vedono come immagini col nome del disegno e si rinnovano alla resa successiva", async () => {
+    let title = "Ciclo dell'acqua";
+    const host = drawingHost(() => title);
+    const { ed, reading } = editor();
+    try {
+      ed.setMode("reading");
+      ed.buffer.setDoc(NOTE);
+      const images = () => Array.from(reading().querySelectorAll<HTMLImageElement>("img"));
+      await vi.waitFor(() => expect(images().filter((img) => img.getAttribute("src")?.startsWith("fub-asset:"))).toHaveLength(5));
+
+      const [wiki, inline, bare, written, untitled] = images();
+      expect(wiki!.closest<HTMLElement>(".embed")?.dataset.embedPage).toBe("acqua.svg");
+      expect(bare!.closest<HTMLElement>(".embed")?.dataset.embedPage).toBe("acqua");
+      expect(untitled!.closest<HTMLElement>(".embed")?.dataset.embedPage).toBe("flusso.svg");
+      expect(images().map((img) => img.alt)).toEqual([title, title, title, "La mappa", "flusso"]);
+      expect(images().map((img) => img.dataset.vaultId)).toEqual([ACQUA, ACQUA, ACQUA, ACQUA, FLUSSO]);
+      expect(new Set(images().map((img) => img.getAttribute("src"))).size).toBe(5);
+      expect(inline!.hasAttribute("data-vault-src")).toBe(true);
+      expect(written!.hasAttribute("data-vault-src")).toBe(true);
+      // Il disegno resta un'immagine: né il suo markup né il segnaposto della
+      // scena entrano nella nota, e la shell non ne legge mai i byte.
+      expect(reading().querySelector("svg, script, figure, foreignObject")).toBeNull();
+      expect(host.read).not.toHaveBeenCalled();
+      expect(host.opened.sort()).toEqual([FLUSSO, ACQUA, ACQUA, ACQUA, ACQUA]);
+      const first = images().map((img) => img.getAttribute("src"));
+
+      // Il disegno cambia; la resa successiva lo rilegge con lease nuovi e
+      // chiude i vecchi.
+      title = "Il ciclo dell'acqua";
+      ed.buffer.setDoc(`${NOTE}\n`);
+      expect(host.closed.sort()).toEqual(["1", "2", "3", "4", "5"]);
+      await vi.waitFor(() => expect(images().map((img) => img.alt)).toEqual([title, title, title, "La mappa", "flusso"]));
+      await vi.waitFor(() => expect(images().every((img) => img.getAttribute("src")?.startsWith("fub-asset:"))).toBe(true));
+      for (const src of images().map((img) => img.getAttribute("src"))) expect(first).not.toContain(src);
+    } finally {
+      ed.destroy();
+      vi.restoreAllMocks();
+    }
+    expect(host.closed).toHaveLength(10);
+  });
+});
