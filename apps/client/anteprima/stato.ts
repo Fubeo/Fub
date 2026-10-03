@@ -26,6 +26,15 @@ export const STATI: Readonly<Record<Stato, string>> = {
 
 export const PACCHETTI: readonly Pacchetto[] = [
   {
+    codice: "FD-209b",
+    titolo: "Immagini incollate",
+    stato: "qui",
+    pr: 116,
+    nota:
+      "Copia uno screenshot e premi Ctrl+V sul foglio, o trascina un'immagine dal disco: entra dove è il puntatore, scelta, pronta da annotare, e resta dentro il file. " +
+      "Oltre 5 MiB una finestra propone di ridurla.",
+  },
+  {
     codice: "FD-207",
     titolo: "Accessibilità della superficie",
     stato: "qui",
@@ -172,11 +181,11 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Il formato delle annotazioni sui PDF: il collegamento al PDF annotato e il testo delle note, cercabile nel vault.",
   },
   {
-    codice: "FD-209",
-    titolo: "«Nuovo disegno» e immagini incollate",
-    stato: "corso",
+    codice: "FD-209a",
+    titolo: "«Nuovo disegno»",
+    stato: "revisione",
     pr: 114,
-    nota: "«Nuovo disegno» dalla palette è fatto, in revisione; lo screenshot incollato da annotare è in corso.",
+    nota: "Il comando della palette che crea un disegno vuoto nel vault e lo apre.",
   },
   {
     codice: "FD-502",
@@ -193,7 +202,7 @@ export const PACCHETTI: readonly Pacchetto[] = [
   {
     codice: "FD-210",
     titolo: "Banco del disegno",
-    stato: "prossimo",
+    stato: "corso",
     nota: "Prestazioni, fotografie e accessibilità della superficie misurate nella CI.",
   },
   {
