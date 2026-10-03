@@ -4,19 +4,22 @@
 //! Le entità vengono da [`fub_abi::html::escape`], la tabella di cui il repo
 //! tiene una copia sola: qui si sceglie soltanto *quali* caratteri escapare,
 //! perché una scena ne escapa meno di quanti ne escapi HTML. Nel testo bastano
-//! `&`, `<` e `>`; in un attributo anche `"` e, se è lui a delimitare il
-//! valore, l'apice. Le entità numeriche di tabulazione e a capo non sono nella
-//! tabella perché HTML non ne ha bisogno: è il parser XML che normalizza in
-//! spazi quei caratteri dentro un attributo.
+//! `&`, `<` e `>`, più il ritorno a capo; in un attributo anche `"` e, se è
+//! lui a delimitare il valore, l'apice. Le entità numeriche di tabulazione e a
+//! capo non sono nella tabella perché HTML non ne ha bisogno: è il parser XML
+//! che normalizza quei caratteri, in spazi dentro un attributo e il ritorno a
+//! capo in un a capo anche nel testo.
 
 use fub_abi::html;
 
-/// Il testo di `tspan`, `title` e `desc`: solo `&`, `<` e `>`.
+/// Il testo di `tspan`, `title` e `desc`: `&`, `<` e `>`, e il ritorno a
+/// capo con la sua entità numerica, che il parser trasformerebbe in un a capo.
 pub(crate) fn text(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for c in value.chars() {
         match c {
             '&' | '<' | '>' => push_entity(&mut out, c),
+            '\r' => out.push_str("&#13;"),
             c => out.push(c),
         }
     }
@@ -54,6 +57,7 @@ mod tests {
     fn a_text_escapes_only_what_opens_markup() {
         assert_eq!(text("a < b & c > d"), "a &lt; b &amp; c &gt; d");
         assert_eq!(text("l'acqua \"blu\""), "l'acqua \"blu\"");
+        assert_eq!(text("a\r\nb\tc"), "a&#13;\nb\tc");
     }
 
     #[test]

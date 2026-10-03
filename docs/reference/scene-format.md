@@ -359,7 +359,8 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
 5. **Escape:** negli attributi `&amp;`, `&lt;`, `&gt;`, `&quot;`, più `&#9;`,
    `&#10;` e `&#13;` per tabulazioni e a capo, che altrimenti il parser
    trasformerebbe in spazi; fra apici singoli anche `&#39;`. Nel testo di
-   `tspan`, `title` e `desc` solo `&amp;`, `&lt;` e `&gt;`.
+   `tspan`, `title` e `desc` `&amp;`, `&lt;` e `&gt;`, più `&#13;`, che il
+   parser trasformerebbe in un a capo.
 6. **Inserimento:** un elemento nuovo va sulla riga dopo il fratello che lo
    precede, oppure come prima riga dentro il genitore. Il rientro è quello del
    fratello, oppure quello del genitore più due spazi.
