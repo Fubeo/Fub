@@ -1,0 +1,293 @@
+{
+  "id": "disegni/drawing.svg",
+  "frontmatter": {},
+  "body": [
+    {
+      "kind": "custom",
+      "custom_kind": "fub.scene.summary",
+      "attrs": {
+        "version": 1,
+        "foreign": false,
+        "truncated": false,
+        "layers": [
+          "Livello 1"
+        ],
+        "counts": {
+          "strokes": 1,
+          "shapes": 2,
+          "texts": 2,
+          "images": 1,
+          "links": 3,
+          "foreign": 1
+        },
+        "ink": {
+          "samples": 3,
+          "duration": 16
+        },
+        "bbox": {
+          "x": 100.0,
+          "y": 30.0,
+          "width": 1140.0,
+          "height": 810.0
+        },
+        "sections": [
+          "Ciclo dell'acqua"
+        ]
+      },
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Ciclo dell'acqua"
+            }
+          ],
+          "anchor": "ciclo-dellacqua",
+          "span": {
+            "start": 157,
+            "end": 188
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Dal mare alle nuvole & ritorno"
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 191,
+            "end": 238
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Evaporazione e condensa"
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 493,
+            "end": 701
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "../note/Nuvole.md#Cumuli"
+                },
+                "label": [
+                  {
+                    "kind": "text",
+                    "value": "Le nuvole"
+                  }
+                ],
+                "embed": false,
+                "span": {
+                  "start": 706,
+                  "end": 933
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 706,
+            "end": 933
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "/Glossario.md"
+                },
+                "label": [
+                  {
+                    "kind": "link",
+                    "value": {
+                      "target": {
+                        "kind": "path",
+                        "value": "foto/mare.png"
+                      },
+                      "label": null,
+                      "embed": true,
+                      "span": {
+                        "start": 984,
+                        "end": 1105
+                      }
+                    }
+                  }
+                ],
+                "embed": false,
+                "span": {
+                  "start": 938,
+                  "end": 1114
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 938,
+            "end": 1114
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "Sale & pepe.md"
+                },
+                "label": null,
+                "embed": false,
+                "span": {
+                  "start": 1119,
+                  "end": 1254
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 1119,
+            "end": 1254
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Vedi la pioggia e il mare"
+            },
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "Pioggia.md"
+                },
+                "label": null,
+                "embed": false,
+                "span": {
+                  "start": 1594,
+                  "end": 1629
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 1567,
+            "end": 1646
+          }
+        }
+      ],
+      "anchor": null,
+      "span": {
+        "start": 0,
+        "end": 1654
+      }
+    }
+  ],
+  "outline": [
+    {
+      "level": 1,
+      "text": "Ciclo dell'acqua",
+      "slug": "ciclo-dellacqua",
+      "span": {
+        "start": 157,
+        "end": 188
+      },
+      "explicit_anchor": null
+    }
+  ],
+  "links": [
+    {
+      "target": {
+        "kind": "path",
+        "value": "../note/Nuvole.md#Cumuli"
+      },
+      "embed": false,
+      "span": {
+        "start": 706,
+        "end": 933
+      },
+      "context": "Le nuvole"
+    },
+    {
+      "target": {
+        "kind": "path",
+        "value": "/Glossario.md"
+      },
+      "embed": false,
+      "span": {
+        "start": 938,
+        "end": 1114
+      },
+      "context": null
+    },
+    {
+      "target": {
+        "kind": "path",
+        "value": "foto/mare.png"
+      },
+      "embed": true,
+      "span": {
+        "start": 984,
+        "end": 1105
+      },
+      "context": null
+    },
+    {
+      "target": {
+        "kind": "path",
+        "value": "Sale & pepe.md"
+      },
+      "embed": false,
+      "span": {
+        "start": 1119,
+        "end": 1254
+      },
+      "context": null
+    },
+    {
+      "target": {
+        "kind": "path",
+        "value": "Pioggia.md"
+      },
+      "embed": false,
+      "span": {
+        "start": 1594,
+        "end": 1629
+      },
+      "context": "Vedi la pioggia e il mare"
+    }
+  ],
+  "tags": [],
+  "anchors": [],
+  "text": "Ciclo dell'acqua\nDal mare alle nuvole & ritorno\nEvaporazione e condensa\nLe nuvole\nVedi la pioggia e il mare",
+  "frontmatter_present": false
+}

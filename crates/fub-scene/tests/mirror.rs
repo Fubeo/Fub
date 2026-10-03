@@ -1,4 +1,4 @@
-//! Le fixture della scena per la superficie TypeScript (FD-201): SVG generati
+//! Le fixture della scena per la superficie TypeScript: SVG generati
 //! qui, ognuno con ciò che Rust ne legge, perché i due lettori classifichino
 //! allo stesso modo.
 //!
@@ -794,8 +794,8 @@ fn fnv1a(text: &str) -> String {
     format!("{hash:08x}")
 }
 
-/// La tavolozza di DEC-13, nell'ordine: nero, Blu, Vermiglio, Verde, Porpora,
-/// Giallo, Arancione, Azzurro.
+/// La tavolozza Okabe–Ito di FubDraw, nell'ordine: nero, Blu, Vermiglio,
+/// Verde, Porpora, Giallo, Arancione, Azzurro.
 const PALETTE: [&str; 8] = [
     "#000000", "#0072b2", "#d55e00", "#009e73", "#cc79a7", "#f0e442", "#e69f00", "#56b4e9",
 ];

@@ -47,13 +47,22 @@ L'override dell'utente è della scheda: `Tab.override` in
 monta la superficie della scheda attiva. È opt-in della superficie: una
 registrazione dichiara in `sourceViews`, per profilo, la vista sorgente del
 documento, cioè famiglia e profilo che mostrano lo stesso documento come testo.
-Le famiglie della shell non ne dichiarano nessuna;
-[ADR 0203](../decisions/0203-superfici-spaziali.md) la prevede per il profilo
-`vector` della tela, verso `{ family: "text", profile: "svg" }`. Il registro
+La dichiara il profilo `vector` della tela, i disegni dell'
+[ADR 0203](../decisions/0203-superfici-spaziali.md), verso
+`{ family: "text", profile: "svg" }`; le altre famiglie della shell non ne
+dichiarano. Il registro
 rifiuta una vista di un profilo non registrato, senza famiglia o uguale al
 profilo stesso; `sourceView(request)` la risolve dalla superficie naturale del
 documento, con il profilo esplicito, e restituisce `null` finché la famiglia
 indicata non è registrata o non ha quel profilo.
+
+Il montaggio resta sincrono anche quando il codice della superficie arriva
+dopo. Il disegno monta subito un involucro con i modi e il contratto della
+superficie vera (`apps/client/src/editors/spatial/lazy.ts`): finché
+`import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
+rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un
+`reveal` in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è
+quello della shell. Un caricamento fallito lascia il testo alla sessione.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -102,7 +111,8 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `mountPresentation` monta la resa da presentare come slide;
 - `printable` dichiara una resa di stampa del provider del formato
   (`IndexQuery::RenderPrint`);
-- `selections()` dà le selezioni del testo in offset byte UTF-8 del buffer;
+- `selections()` dà le selezioni del testo in offset byte UTF-8 del buffer; il
+  disegno dà gli intervalli degli elementi degli oggetti scelti;
   `selectedText()` è di chi sceglie elementi che non sono intervalli del
   sorgente, come le carte della tela o l'intervallo del foglio, e ne dà soltanto
   il testo. `selectionSetOf` in `editors/core/registry.ts` decide una volta per
@@ -282,7 +292,9 @@ nomina le modalità di un formato: è la classe di vista che un provider può
 conoscere, cioè il documento com'è salvato (`source`), una resa in cui si
 scrive (`live_preview`) o una resa da leggere senza cursore (`reading`). La tela
 e il foglio proiettano la loro vista principale su `live_preview`, il sorgente
-JSON della tela su `source`, visori e superficie d'errore su `reading`.
+JSON della tela su `source`, visori e superficie d'errore su `reading`. Il
+disegno proietta Disegno (`draw`) su `live_preview` e Lettura (`read`) su
+`reading`.
 
 Gli id valgono dentro la famiglia della superficie: il layout ricorda una
 modalità per famiglia in ogni riquadro (`PaneState.modes`), e il `source` del
@@ -423,6 +435,7 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/core/registry.ts`
 - `apps/client/src/editors/core/surface-modes.ts`
 - `apps/client/src/editors/core/bootstrap.ts`
+- `apps/client/src/editors/spatial/lazy.ts`
 - `apps/client/src/state/layout.ts`
 - `apps/client/src/editors/grid/engine.ts`
 - `apps/client/src/editors/core/text-operation.ts`

@@ -1248,6 +1248,42 @@ html, body, #app {
   overflow: visible;
   pointer-events: none;
 }
+/* La superficie del disegno nella shell: una riga d'avviso in cima, quando il
+   documento la chiede, e sotto l'editor o l'immagine del documento intero,
+   che prendono il resto. L'avviso va a capo invece di scorrere: il suo
+   pulsante resta un bersaglio da 44 px anche su un telefono. Finché il
+   codice dell'editor non arriva, il riquadro è il segnaposto che lo aspetta. */
+.vector-pending,
+.vector-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.vector-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.vector-notice-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.vector-notice-action {
+  min-height: 44px;
+}
+.vector-draw,
+.vector-read {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
 @media (forced-colors: active) {
   .draw-width-bar,
   .draw-swatch-frame {

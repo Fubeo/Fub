@@ -155,6 +155,10 @@ export interface Options {
   /// I file binari del vault: path → byte. Compaiono nell'albero come gli
   /// altri, e le porte risorsa li servono davvero, a fette.
   resources?: Record<string, FakeResource>;
+  /// La feature `draw` del kernel: accesa, un `.svg` ha il formato `svg` e si
+  /// apre come disegno. Spenta come nel kernel di default: un `.svg` resta un
+  /// file senza formato, testo con l'anteprima accanto.
+  draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
 }
@@ -323,6 +327,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".canvas")) return "canvas";
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
+    if (options.draw === true && id.toLowerCase().endsWith(".svg")) return "svg";
     return null;
   }
 
@@ -727,7 +732,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
+        const extensions = ["md", "markdown", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg"] : [])];
+        const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id) => {

@@ -125,6 +125,35 @@ fn links_point_into_the_vault() {
 }
 
 #[test]
+fn an_xlink_href_with_the_same_url_is_shadowed_by_href() {
+    let source = doc(concat!(
+        // Lo stesso URL scritto due volte, come fa chi esporta per SVG 1.1:
+        // quel lettore legge `xlink:href`, e una rinomina li riscrive insieme.
+        r#"<a href="nota.md" xlink:href=" nota.md&#10;"/>"#,
+        r#"<image xlink:href="foto.png" href="foto.png" width="1" height="1"/>"#,
+        // Un URL diverso è nascosto e basta: non è un riferimento.
+        r#"<a href="vince.md" xlink:href="perde.md"/>"#,
+        // Solo `xlink:href`: è lui il riferimento, e non nasconde niente.
+        r#"<a xlink:href="solo.md"/>"#,
+    ));
+    let scene = load(&source);
+    let shadowed = |reference: &fub_scene::Reference| {
+        reference
+            .shadowed
+            .map(|span| text(&source, &span).to_owned())
+    };
+    let links: Vec<_> = scene.index.links.iter().map(shadowed).collect();
+    assert_eq!(links, [Some(" nota.md&#10;".to_owned()), None, None]);
+    assert_eq!(
+        shadowed(&scene.index.embeds[0]).as_deref(),
+        Some("foto.png")
+    );
+    // Nella scena serializzata non c'è: la superficie non riscrive link.
+    let json = serde_json::to_value(&scene.index.links[0]).unwrap();
+    assert!(json.get("shadowed").is_none(), "{json}");
+}
+
+#[test]
 fn vault_images_are_embeds_and_data_images_are_only_counted() {
     let source = doc(concat!(
         r#"<image href="foto/mare.png" width="10" height="10"/>"#,

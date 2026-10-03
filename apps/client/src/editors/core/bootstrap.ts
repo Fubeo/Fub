@@ -265,6 +265,7 @@ export function createDocumentSurfaceRegistry(
     defaultProfile: CANVAS_MOUNT.defaultProfile,
     profiles: CANVAS_MOUNT.profiles,
     formats: CANVAS_MOUNT.formats,
+    sourceViews: CANVAS_MOUNT.sourceViews,
     factory: {
       mount(profile, context) {
         return mountCanvasSurface(profile, context, {

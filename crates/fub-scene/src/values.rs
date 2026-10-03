@@ -321,7 +321,7 @@ fn skip_separator_free(bytes: &[u8], i: &mut usize) {
 
 /// Un `href` letto come lo legge il parser di URL: senza spazi e controlli
 /// intorno, senza tabulazioni e a capo dentro.
-fn url_text(value: &str) -> String {
+pub(crate) fn url_text(value: &str) -> String {
     value
         .trim_matches(|c: char| c <= ' ')
         .chars()

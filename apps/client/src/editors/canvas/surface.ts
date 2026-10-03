@@ -3,7 +3,10 @@
 // resta di Main; qui solo la factory e i modes.
 //
 // Profilo `canvas`: tela interattiva. Profilo `source`: JSON grezzo in sola
-// lettura come fallback quando la vista non è disponibile.
+// lettura come fallback quando la vista non è disponibile. Profilo `vector`:
+// i disegni di FubDraw (`editors/spatial/surface.ts`), per il formato `svg`
+// che il kernel monta con la feature `draw`; senza quel formato il profilo
+// non riceve documenti.
 
 import type {
   EditorSurface,
@@ -11,16 +14,20 @@ import type {
 } from "../core/registry";
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
 import { t } from "../../i18n/strings";
-import type { TextOperation } from "../core/text-operation";
+import type { EditorChange, TextOperation } from "../core/text-operation";
+import { mountVectorSurfaceLazily } from "../spatial/lazy";
+import { VECTOR_PROFILE } from "../spatial/modes";
 
 export const CANVAS_OWNER = "fub.shell.canvas";
 export const CANVAS_FAMILY = "canvas" as const;
 export const CANVAS_PROFILE = "canvas";
 export const CANVAS_SOURCE_PROFILE = "source";
 export const CANVAS_FORMAT = "canvas";
+export const SVG_FORMAT = "svg";
 
 export interface CanvasSurfaceCallbacks {
-  readonly onChange: (paneId: string, change: CanvasChange) => void;
+  /** A drawing's change is a plain text operation; a board's is a `CanvasOperation`. */
+  readonly onChange: (paneId: string, change: CanvasChange | EditorChange) => void;
   readonly onSelectionChange: (paneId: string) => void;
   readonly onOpenWikilink?: CanvasEngineOptions["onOpenWikilink"];
   readonly onOpenPath?: CanvasEngineOptions["onOpenPath"];
@@ -36,24 +43,31 @@ export interface CanvasMountSignature {
   readonly owner: typeof CANVAS_OWNER;
   readonly family: typeof CANVAS_FAMILY;
   readonly defaultProfile: typeof CANVAS_PROFILE;
-  readonly profiles: readonly [typeof CANVAS_PROFILE, typeof CANVAS_SOURCE_PROFILE];
-  readonly formats: Record<typeof CANVAS_FORMAT, typeof CANVAS_PROFILE>;
+  readonly profiles: readonly [typeof CANVAS_PROFILE, typeof CANVAS_SOURCE_PROFILE, typeof VECTOR_PROFILE];
+  readonly formats: { readonly [CANVAS_FORMAT]: typeof CANVAS_PROFILE; readonly [SVG_FORMAT]: typeof VECTOR_PROFILE };
   readonly modes: readonly [
     { id: "canvas"; presentation: "surface"; contextMode: "live_preview" },
     { id: "source"; presentation: "surface"; contextMode: "source" },
+    { id: "draw"; presentation: "surface"; contextMode: "live_preview" },
+    { id: "read"; presentation: "rendered"; contextMode: "reading" },
   ];
+  /** «Apri come sorgente»: a drawing is also SVG text, with its preview beside. */
+  readonly sourceViews: { readonly [VECTOR_PROFILE]: { readonly family: "text"; readonly profile: "svg" } };
 }
 
 export const CANVAS_MOUNT: CanvasMountSignature = {
   owner: CANVAS_OWNER,
   family: CANVAS_FAMILY,
   defaultProfile: CANVAS_PROFILE,
-  profiles: [CANVAS_PROFILE, CANVAS_SOURCE_PROFILE],
-  formats: { canvas: CANVAS_PROFILE },
+  profiles: [CANVAS_PROFILE, CANVAS_SOURCE_PROFILE, VECTOR_PROFILE],
+  formats: { [CANVAS_FORMAT]: CANVAS_PROFILE, [SVG_FORMAT]: VECTOR_PROFILE },
   modes: [
     { id: "canvas", presentation: "surface", contextMode: "live_preview" },
     { id: "source", presentation: "surface", contextMode: "source" },
+    { id: "draw", presentation: "surface", contextMode: "live_preview" },
+    { id: "read", presentation: "rendered", contextMode: "reading" },
   ],
+  sourceViews: { [VECTOR_PROFILE]: { family: "text", profile: "svg" } },
 };
 
 /** Crea la superficie canvas per un profilo; la registrazione resta a Main. */
@@ -62,10 +76,16 @@ export function mountCanvasSurface(
   context: SurfaceMountContext,
   callbacks: CanvasSurfaceCallbacks,
 ): EditorSurface {
-  if (profile !== CANVAS_PROFILE && profile !== CANVAS_SOURCE_PROFILE) {
+  if (profile !== CANVAS_PROFILE && profile !== CANVAS_SOURCE_PROFILE && profile !== VECTOR_PROFILE) {
     throw new Error(`canvas surface profile ${profile} is not registered`);
   }
   context.parent.replaceChildren();
+  if (profile === VECTOR_PROFILE) {
+    return mountVectorSurfaceLazily(context, {
+      onChange: (change) => callbacks.onChange(context.paneId, change),
+      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
+    });
+  }
   const host = document.createElement("div");
   host.className = "canvas-surface-host";
   const source = document.createElement("pre");

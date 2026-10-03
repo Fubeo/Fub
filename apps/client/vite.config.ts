@@ -74,6 +74,10 @@ export default defineConfig({
           // resta in cache quando cambia la shell, e non gonfia il chunk
           // condiviso dalle tre finestre.
           if (/\/node_modules\/@replit\/codemirror-vim(-core)?\//.test(id)) return "editor-vim";
+          // L'indice dei linguaggi dei blocchi di codice è una libreria a sé:
+          // una tabella di import differiti, che cambia con le sue versioni e
+          // non con la shell.
+          if (/\/node_modules\/@codemirror\/language-data\//.test(id)) return "editor-languages";
           if (/\/node_modules\/@lezer\/(common|lr|highlight)\//.test(id)) return "parser-runtime";
           if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
             return "markdown-grammar";
