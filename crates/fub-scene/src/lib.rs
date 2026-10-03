@@ -1,9 +1,9 @@
 //! Lettura delle scene FubDraw: SVG testuali con pochi attributi `fub:*`.
 //!
-//! Il contratto è `docs/spec/formato-scena.md` del repository di FubDraw. Questo
-//! crate lo legge e non scrive niente: le operazioni le applica la shell
-//! (DEC-08), e qui si decide soltanto che cosa della sorgente è modificabile,
-//! che cosa è estraneo e dove sta, byte per byte.
+//! Il contratto è il formato della scena, `docs/reference/scene-format.md`, e
+//! i § citati qui sono i suoi. Questo crate lo legge e non scrive niente: le
+//! operazioni le applica la shell, e qui si decide soltanto che cosa della
+//! sorgente è modificabile, che cosa è estraneo e dove sta, byte per byte.
 //!
 //! [`read`] restituisce una [`Scene`]: lo stato del documento, le voci in
 //! ordine di documento con i loro span, ciò che ne legge l'indice (§9) e la
@@ -72,7 +72,7 @@ pub enum Status {
     /// La radice ha `fub:version`.
     Fubdraw,
     /// Un SVG senza `fub:version`: la superficie lo mostra inerte e lo adotta
-    /// con «Modifica» (DEC-04).
+    /// con «Modifica».
     Foreign,
 }
 

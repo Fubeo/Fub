@@ -24,7 +24,7 @@ use crate::Status;
 /// Quanti byte decodificati può avere un'immagine incorporata (§11).
 pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
-/// Il contrasto minimo fra un tratto e la carta (§12, DEC-13).
+/// Il contrasto minimo fra un tratto e la carta (§12).
 pub const MIN_CONTRAST: f64 = 3.0;
 
 /// Un testo della scena e l'elemento da cui viene.
@@ -269,7 +269,7 @@ impl Tally {
         version: Option<u32>,
         diagnostics: &mut Vec<Diagnostic>,
     ) -> Summary {
-        // Senza carta il disegno sta sul bianco della superficie (DEC-13).
+        // Senza carta il disegno sta sul bianco della superficie.
         if let Some(paper) = self.paper.unwrap_or(Some(WHITE)) {
             for (span, (rgb, alpha)) in self.pens {
                 let ratio = contrast(over(rgb, alpha, paper), paper);
@@ -644,7 +644,7 @@ mod tests {
     fn contrast_follows_wcag() {
         assert_eq!(contrast(WHITE, [0, 0, 0]), 21.0);
         assert_eq!(contrast(WHITE, WHITE), 1.0);
-        // La tavolozza di DEC-13 sulla carta bianca: tre colori sotto 3:1.
+        // La tavolozza di Okabe–Ito sulla carta bianca: tre colori sotto 3:1.
         let ratio = |rgb: u32| contrast(hex(rgb), WHITE);
         for below in [0xf0e442, 0xe69f00, 0x56b4e9] {
             assert!(ratio(below) < MIN_CONTRAST, "{below:06x}");
