@@ -1,6 +1,6 @@
 // La lettura di una scena: dal testo del file alla `Scene` che descrive che
 // cosa è modificabile, che cosa è estraneo e dove sta, byte per byte e unità
-// per unità (formato della scena; DEC-05, DEC-08).
+// per unità (formato della scena, §4 e §8).
 //
 // È `read` di `fub-scene` (`lib.rs`), e la scena che restituisce è la stessa
 // di Rust anche nella forma JSON: chiavi in camelCase, span appiattiti accanto
@@ -29,7 +29,7 @@ export const MAX_EDIT_BYTES = 20 * 1024 * 1024;
 export const MAX_ELEMENTS = 50_000;
 
 /// Che documento è: con `fub:version` sulla radice, o un SVG qualunque che
-/// la superficie mostra inerte e adotta con «Modifica» (DEC-04).
+/// la superficie mostra inerte e adotta con «Modifica» (§2).
 export type Status = "fubdraw" | "foreign";
 
 /// Perché un documento si apre in sola lettura, nell'ordine in cui la scena
