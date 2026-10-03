@@ -136,7 +136,6 @@ fn summary_of(scene: &Scene) -> Result<Value, FormatError> {
 /// Le pagine hanno ciascuna le sue coordinate, tutte con l'origine in alto a
 /// sinistra: un rettangolo che le unisse non direbbe dove sta niente. I
 /// livelli non ci sono, perché i gruppi della radice sono pagine.
-/// *(Proposta del 3 ottobre 2026, da rivedere.)*
 fn annotations_summary_of(annotations: &Annotations) -> Result<Value, FormatError> {
     let mut attrs = summary_of(&annotations.scene)?;
     if let Some(object) = attrs.as_object_mut() {
@@ -288,7 +287,6 @@ fn model_of(
         .join("\n");
     // Il contesto del backlink del PDF annotato: il testo delle annotazioni
     // senza il titolo, che chi mostra il backlink nomina già.
-    // *(Proposta del 3 ottobre 2026, da rivedere.)*
     let annotations = texts
         .iter()
         .filter(|(title, _)| !title)

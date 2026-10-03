@@ -10,8 +10,7 @@ pagina SVG per ogni pagina annotata. Il formato estende il [formato della
 scena](scene-format.md): lettura, elementi, inchiostro, contenuto estraneo,
 limiti e diagnostica sono quelli di un disegno, e questa pagina dice solo ciò
 che cambia. I `§` dei commenti nel codice che parlano di annotazioni sono le
-sezioni di questa pagina. Le regole segnate *(proposta del 3 ottobre 2026, da
-rivedere)* attendono una revisione.
+sezioni di questa pagina.
 
 ## 1. Principi
 
@@ -59,7 +58,6 @@ assente: il file si legge lo stesso.
 - **`fub:digest`** ha il prefisso in minuscolo e le cifre in minuscolo o in
   maiuscolo; il modello lo porta tutto in minuscolo, così due impronte uguali
   sono la stessa stringa. Gli spazi ai bordi lo rendono non valido.
-  *(Proposta del 3 ottobre 2026, da rivedere.)*
 - **`fub:pages`** non ammette spazi, segni né lo zero, e deve stare in 32 bit.
 
 Un file oltre 20 MiB porta all'indice solo la testa (formato della scena,
@@ -67,7 +65,7 @@ Un file oltre 20 MiB porta all'indice solo la testa (formato della scena,
 
 **Il legame con il PDF.** L'editor non scrive niente quando apre le
 annotazioni: legge il PDF, ne calcola impronta e numero di pagine e li
-confronta con la radice. Tutto *(proposta del 3 ottobre 2026, da rivedere)*:
+confronta con la radice. I casi sono tre:
 
 - **non ancora scritti**, cioè impronta assente e `fub:pages` assente o
   uguale: li scrive il primo gesto che modifica il file, nella stessa
@@ -98,7 +96,7 @@ rettangolo con opacità), la penna, le forme, le note (§4) e la **copertura**,
 un rettangolo opaco. La copertura non è una redazione: il contenuto sotto
 resta nel PDF, e solo l'export rasterizzato delle pagine coinvolte lo elimina.
 
-Le regole di lettura, tutte *(proposta del 3 ottobre 2026, da rivedere)*:
+Le regole di lettura:
 
 - un `g` annidato non è una pagina, anche con `fub:page`;
 - un `fub:page` fuori grammatica lascia un gruppo qualunque, e i suoi elementi
@@ -112,8 +110,7 @@ Le regole di lettura, tutte *(proposta del 3 ottobre 2026, da rivedere)*:
 - gli elementi fuori dalle pagine si leggono e si indicizzano come in un
   disegno.
 
-Le regole di scrittura dell'editor, tutte *(proposta del 3 ottobre 2026, da
-rivedere)*:
+Le regole di scrittura dell'editor:
 
 - il gruppo di una pagina nasce con il primo oggetto disegnato sulla pagina,
   nello stesso passo di annulla, con `id` `p` e il numero su almeno quattro
@@ -148,10 +145,8 @@ contenuto del `text` è il testo disegnato sulla pagina, e può mancare: un
 - **Nota o testo:** un corpo fatto solo di spazi non fa una nota, e il `text`
   è un testo qualunque. Un `text` dentro un altro `text` non si disegna, e non
   è una nota. `fub:note` su un elemento che non è un `text` non conta.
-  *(Proposta del 3 ottobre 2026, da rivedere.)*
 - **Corpo per l'indice:** ogni riga con gli spazi XML ridotti a uno e senza
-  spazi ai bordi, le righe vuote tolte. *(Proposta del 3 ottobre 2026, da
-  rivedere.)*
+  spazi ai bordi, le righe vuote tolte.
 
 ## 5. Modello per l'indice
 
@@ -170,7 +165,6 @@ contenuto del `text` è il testo disegnato sulla pagina, e può mancare: un
 - **PDF annotato:** un paragrafo con il solo collegamento, senza etichetta. Il
   contesto del backlink è il testo delle annotazioni senza il titolo, fino a
   220 caratteri: il pannello dei backlink del PDF mostra cosa dicono.
-  *(Proposta del 3 ottobre 2026, da rivedere.)*
 - **Pagina:** `attrs` porta `page`, il numero, e `size`, `[w, h]` o `null`.
 - **Nota:** `attrs` è vuoto, e i figli sono due paragrafi nell'ordine della
   sorgente: il corpo, con le righe separate da un a capo e lo span del valore
@@ -194,7 +188,7 @@ Il nome pagina di `Bando.pdf.fubann` è `Bando.pdf`, ma `[[Bando.pdf]]` e un
 link a percorso verso `Bando.pdf` nominano il PDF: per il kernel una chiave che finisce con
 l'estensione di un allegato noto nomina quel file, e non un documento che ha
 un'estensione in più. Le annotazioni si nominano per intero,
-`[[Bando.pdf.fubann]]`. *(Proposta del 3 ottobre 2026, da rivedere.)*
+`[[Bando.pdf.fubann]]`.
 
 ## 6. Anteprima, documento nuovo e riferimenti
 
@@ -208,7 +202,6 @@ un'estensione in più. Le annotazioni si nominano per intero,
   `fub-annotations-text` per testo e un `li` `fub-annotations-note` per nota,
   con il testo disegnato e poi il corpo (`fub-annotations-body`). Evidenziatore,
   tratti, forme e coperture non si elencano: li conta il riepilogo.
-  *(Proposta del 3 ottobre 2026, da rivedere.)*
 - Ogni riferimento è un collegamento interno `a.internal-path` con
   `data-path`, anche un'immagine: mai un `<img>` né un URL di risorsa. Ogni
   blocco porta `data-fub-source-start` e `data-fub-source-end`. La sola parola
@@ -220,7 +213,7 @@ un'estensione in più. Le annotazioni si nominano per intero,
   relativo e con gli escape di un `href`; un nome che non finisce in
   `.pdf.fubann` dà annotazioni senza `fub:annotates`. Impronta, numero di
   pagine e gruppi li scrive l'editor col primo gesto (§2 e §3). Il documento
-  si rilegge prima di uscire. *(Proposta del 3 ottobre 2026, da rivedere.)*
+  si rilegge prima di uscire.
 - **`rewrite_links`** riscrive i riferimenti come in un disegno (formato della
   scena, §9) e, quando il PDF cambia nome, i soli byte del valore di
   `fub:annotates`, virgolette escluse: le annotazioni seguono il PDF.
@@ -234,8 +227,7 @@ annotazioni si spostano insieme.
 
 Valgono le regole del formato della scena (§10). Una nuova versione può
 aggiungere algoritmi d'impronta con un prefisso diverso da `sha256:`, che un
-lettore della versione 1 legge come impronta assente. *(Proposta del 3
-ottobre 2026, da rivedere.)*
+lettore della versione 1 legge come impronta assente.
 
 ## 8. Esempio completo
 

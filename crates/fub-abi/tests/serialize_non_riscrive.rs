@@ -223,6 +223,15 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         Reason::AnotherSerialize,
     ),
     (
+        // «Annota il PDF»: le annotazioni vuote del provider `fubann`, scritte
+        // con `create_document` soltanto dopo aver visto che non ci sono. Se ci
+        // sono, il comando le apre e non le serializza.
+        "crates/fub-features/src/draw/annotate.rs",
+        ".serialize",
+        1,
+        Reason::ANewDocument,
+    ),
+    (
         // «Nuovo disegno»: il documento vuoto del provider dei disegni, scritto
         // con `create_document` e mai sopra un file che c'è.
         "crates/fub-features/src/draw/create.rs",

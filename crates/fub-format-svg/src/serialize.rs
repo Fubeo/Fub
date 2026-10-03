@@ -75,8 +75,7 @@ pub(crate) fn new_document(model: &DocumentModel) -> Result<String, FormatError>
 /// finisce in `.pdf.fubann` dà annotazioni senza `fub:annotates`. Impronta,
 /// numero di pagine e gruppi di pagina li scrive chi apre il PDF, che li
 /// conosce: il provider ha solo il modello. Niente `viewBox` né carta, perché
-/// ogni pagina ha le sue coordinate. *(Proposta del 3 ottobre 2026, da
-/// rivedere.)*
+/// ogni pagina ha le sue coordinate.
 ///
 /// Si rilegge prima di restituirlo, come un disegno nuovo: deve essere
 /// modificabile, con quel titolo, e il PDF annotato deve risolversi nel

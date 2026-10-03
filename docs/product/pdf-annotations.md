@@ -29,7 +29,7 @@ i [Disegni](drawing.md). Il formato del file è nel
   annotazioni. Proietta su `reading`, e `Mod-E` passa dall'una all'altra.
 
 Le due modalità hanno gli id di quelle del disegno, così il riquadro le
-ricorda allo stesso modo. *(proposta del 3 ottobre 2026, da rivedere)*
+ricorda allo stesso modo.
 
 ## Le pagine
 
@@ -41,7 +41,7 @@ Ogni cambio di pagina si annuncia: «Pagina 3 di 12».
 La pagina del PDF è il fondo, e non si sceglie né si modifica. Si disegna
 intera a circa quattro milioni di pixel; quando lo zoom si ferma, la parte che
 si vede si ridisegna alla risoluzione dello zoom, fino a sedici milioni di
-pixel. *(proposta del 3 ottobre 2026, da rivedere)*
+pixel.
 
 Si sfogliano tutte le pagine del PDF, annotate o no, più ogni pagina annotata
 oltre l'ultima. Una pagina riceve il suo gruppo nel file solo col primo
@@ -71,7 +71,7 @@ Con la tastiera, Invio sul foglio aggiunge un oggetto dello strumento al
 centro della vista, dentro la pagina, e lo lascia scelto: le frecce lo
 spostano. Evidenziatore e copertura ricordano ciascuno il proprio colore,
 separato da quello di penna, note e forme; nota e copertura non hanno
-spessore. *(proposta del 3 ottobre 2026, da rivedere)*
+spessore.
 
 ## La Lettura
 
@@ -101,8 +101,6 @@ All'apertura l'editor confronta e non scrive niente.
 
 Un elemento fuori dalle pagine, scritto a mano o da un altro programma, non si
 vede sul foglio: un avviso li conta, e la sorgente li mostra.
-
-*(proposta del 3 ottobre 2026, da rivedere)*
 
 ## Apri come sorgente
 

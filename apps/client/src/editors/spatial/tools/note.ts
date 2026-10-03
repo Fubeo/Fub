@@ -5,7 +5,7 @@
 // Il corpo si scrive in un dialogo, con l'etichetta accanto: l'etichetta è
 // ciò che si vede sulla pagina, e se resta vuota è la prima riga del corpo,
 // accorciata. Così una nota ha sempre un testo visibile, e nessuna nota si
-// riconosce solo dal colore. *(Proposta del 3 ottobre 2026, da rivedere.)*
+// riconosce solo dal colore.
 
 import { t } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";

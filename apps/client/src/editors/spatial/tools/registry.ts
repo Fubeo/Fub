@@ -62,7 +62,6 @@ export const TOOLS: readonly ToolSpec[] = [
 export const DEFAULT_TOOL: ToolId = "pen";
 
 /// Lo strumento con cui si apre un profilo: un PDF si apre per evidenziare.
-/// *(Proposta del 3 ottobre 2026, da rivedere.)*
 export function defaultTool(profile: ToolProfile): ToolId {
   return profile === "pdf" ? "highlighter" : DEFAULT_TOOL;
 }

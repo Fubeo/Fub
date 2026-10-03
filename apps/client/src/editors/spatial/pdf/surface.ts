@@ -19,8 +19,7 @@
 // - il PDF non c'è, o non si legge: pagine bianche della misura scritta nei
 //   gruppi, e si annota lo stesso, senza scrivere il legame.
 //
-// *(Proposta del 3 ottobre 2026, da rivedere: il formato diceva che il legame
-// si scrive all'apertura; qui aprire non scrive mai.)*
+// Aprire non scrive mai: il legame lo scrive un gesto.
 
 import { errorText, isErrorKind } from "../../../host/errors";
 import { onLanguage, plural, t } from "../../../i18n/strings";
@@ -330,7 +329,7 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     const mounted = createDrawEditor(drawHost, engine, owner, {
       profile: "pdf",
       // Le note e le forme sono del livello Standard: chi annota un PDF le
-      // ha subito. *(Proposta del 3 ottobre 2026, da rivedere.)*
+      // ha subito.
       level: "standard",
       sheet,
       onChange: (change) => {

@@ -23,7 +23,7 @@
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
 // un'altra superficie arriva con `setEngine`, e annulla e ripeti restano.
 //
-// Le annotazioni di un PDF (FD-502) montano lo stesso editor con un **foglio**
+// Le annotazioni di un PDF montano lo stesso editor con un **foglio**
 // (`DrawSheet`): una pagina alla volta, col PDF sotto, e solo i gruppi di
 // quella pagina si disegnano e si toccano. Il foglio dice dove nasce un
 // oggetto — nel gruppo della pagina, che nasce col primo — e che cosa ogni
@@ -360,7 +360,7 @@ function straight(samples: readonly InkSample[]): InkSample[] {
 
 /// Il colore di ogni famiglia di strumenti: la penna con le forme e le
 /// note, l'evidenziatore, la copertura. Cambiare quello dell'evidenziatore
-/// non cambia la penna. *(Proposta del 3 ottobre 2026, da rivedere.)*
+/// non cambia la penna.
 type ColorFamily = "ink" | "highlight" | "cover";
 
 function colorFamily(id: ToolId): ColorFamily {
@@ -1320,8 +1320,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Invio sul foglio: lo strumento aggiunge un oggetto al centro della
   /// vista, che resta scelto; con la selezione, Invio su una nota la cambia.
-  /// *(Proposta del 3 ottobre 2026, da rivedere: la mappa completa della
-  /// tastiera del disegno è di FD-207.)*
   const keyboardAdd = (): boolean => {
     if (sheet === undefined || !editable()) return false;
     const [cx, cy] = viewCenter();

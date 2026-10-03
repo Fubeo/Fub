@@ -149,7 +149,7 @@ export interface AnchorPrevious {
 /// Lega le annotazioni di un PDF alla versione che si annota: l'impronta
 /// (`sha256:` e 64 cifre minuscole) e il numero di pagine sulla radice
 /// (`docs/reference/annotation-format.md`). Quello che manca resta com'è, ma
-/// almeno uno c'è. *(Proposta del 3 ottobre 2026, da rivedere.)*
+/// almeno uno c'è.
 export interface AnchorOp {
   readonly op: "anchor";
   readonly digest?: string;

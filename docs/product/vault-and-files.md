@@ -135,8 +135,7 @@ altrimenti nella radice; un path esplicito conserva la propria cartella. Un nome
 occupato è un errore e mai una sovrascrittura, e prima di scrivere il nome passa
 la regola dei nomi nuovi. Il file lo scrive il provider dei disegni, con il nome
 per titolo e «Livello 1». La prova a vuoto fa gli stessi controlli e non scrive;
-l'annullamento manda il disegno nel cestino. *(proposta del 3 ottobre 2026, da
-rivedere)*
+l'annullamento manda il disegno nel cestino.
 
 «Annota il PDF» (`pdf.annotate`, con la feature `draw`) apre le annotazioni di
 un PDF del vault: il file `X.pdf.fubann` accanto a `X.pdf`, con il nome intero
@@ -147,8 +146,7 @@ apre; l'annullamento lo manda nel cestino. Il nome passa la regola dei nomi
 nuovi prima di scrivere, un nome preso da un altro file è un errore, e un nome
 che non finisce con `.pdf` o un PDF che non c'è non si annotano. Il PDF non si
 scrive mai. Impronta e numero di pagine li scrive l'editor col primo gesto,
-come racconta [Annotazioni dei PDF](pdf-annotations.md). *(proposta del 3
-ottobre 2026, da rivedere)*
+come racconta [Annotazioni dei PDF](pdf-annotations.md).
 
 ## Albero dei file
 

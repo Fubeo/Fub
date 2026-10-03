@@ -15,7 +15,7 @@ export const PAPER_ID = "fub-paper";
 
 /// L'id del gruppo di una pagina annotata: `p` e il numero su almeno quattro
 /// cifre, `p0003` (`annotation-format.md`, §3). Non è casuale, perché una
-/// pagina ha un gruppo solo. *(Proposta del 3 ottobre 2026, da rivedere.)*
+/// pagina ha un gruppo solo.
 export function pageId(page: number): string {
   return `p${String(page).padStart(4, "0")}`;
 }

@@ -29,6 +29,7 @@ use fub_abi::command::{
 };
 use fub_abi::error::PluginError;
 use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::rules::media;
 use fub_abi::rules::path_policy::{self, NameFault, Naming, MAX_SEGMENT_BYTES};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::HostApi;
@@ -218,12 +219,10 @@ fn pdf(given: Option<&str>, host: &dyn HostApi) -> Result<DocId, PluginError> {
     // forma dei nomi del vault.
     let written = path_policy::from_outside(given.unwrap_or_default());
     let pdf = DocId::new(written);
-    let name = pdf.as_str().rsplit('/').next().unwrap_or_default();
-    let named = name.len() > PDF.len()
-        && name
-            .get(name.len() - PDF.len()..)
-            .is_some_and(|ext| ext.eq_ignore_ascii_case(PDF));
-    if !named {
+    // Un PDF è ciò che il vault chiama così: la regola che dà il tipo di
+    // contenuto a un allegato, senza badare al caso (`Bando.PDF`) e con un nome
+    // prima del punto. Una seconda grafia della stessa domanda divergerebbe.
+    if media::mime_of(&pdf) != Some("application/pdf") {
         return Err(PluginError::BadArgs(one(E_NOT_PDF, &pdf)));
     }
     match host.document_revision(&pdf) {
@@ -425,8 +424,14 @@ mod tests {
             message(&error),
             "«Appunti.md» non è un PDF: si annotano i file `.pdf`."
         );
-        let error = run(&mut host, json!({ "pdf": ".pdf" }), InvokeMode::Apply).unwrap_err();
-        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        // Un nome che è soltanto estensione non è un PDF, nemmeno in una cartella.
+        for bare in [".pdf", "Archivio/.pdf"] {
+            let error = run(&mut host, json!({ "pdf": bare }), InvokeMode::Apply).unwrap_err();
+            assert!(
+                matches!(error, PluginError::BadArgs(_)),
+                "{bare}: {error:?}"
+            );
+        }
         let error = run(&mut host, json!({ "pdf": "Altro.pdf" }), InvokeMode::Apply).unwrap_err();
         assert!(matches!(error, PluginError::NotFound(_)), "{error:?}");
         assert_eq!(message(&error), "Il PDF «Altro.pdf» non c'è nel vault.");

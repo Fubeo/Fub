@@ -12,7 +12,7 @@
 //!
 //! L'HTML non ha parole, tranne l'etichetta `p. k` dei titoli di pagina: il
 //! provider non conosce la lingua di chi legge, e classi e `data-*` dicono il
-//! resto. *(Proposta del 3 ottobre 2026, da rivedere.)*
+//! resto.
 
 use std::fmt::Write as _;
 
