@@ -32,6 +32,9 @@ export interface DocumentSurface {
   /// Il dato autorevole da applicare. Sincrono: la sessione non aspetta
   /// niente da chi lo riceve.
   sync(update: DocumentSurfaceUpdate): void;
+  /// La sessione si è chiusa per sempre e la superficie è già staccata: per
+  /// chi vive oltre un riquadro, come una sessione live.
+  closed?(): void;
 }
 
 /// Ciò che la sessione diffonde alle superfici: o l'operazione tipizzata
@@ -629,7 +632,7 @@ export class DocumentSession implements DraftBuffer {
       }
       throw error;
     }
-    this.#surfaces.clear();
+    this.#detachSurfaces();
     return true;
   }
 
@@ -670,8 +673,20 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#closeState(force)) return false;
     // La chiusura è definitiva: nessuna superficie deve restare sottoscritta
     // a una sessione che non esiste più.
-    this.#surfaces.clear();
+    this.#detachSurfaces();
     return true;
+  }
+
+  #detachSurfaces(): void {
+    const surfaces = [...this.#surfaces.values()];
+    this.#surfaces.clear();
+    for (const surface of surfaces) {
+      try {
+        surface.closed?.();
+      } catch (error) {
+        console.error(error);
+      }
+    }
   }
 
   #closeState(force = false): boolean {

@@ -114,6 +114,8 @@ import { $ } from "../ui/dom";
 import { showContextMenu } from "../ui/menu";
 import { confirm } from "../host/dialog";
 import { allCommands, ariaBinding, displayBinding, registerShellCommand } from "../ui/commands";
+import { registerLiveCommands } from "../editors/spatial/live/commands";
+import { VECTOR_PROFILE } from "../editors/spatial/modes";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "../state/slash";
@@ -750,6 +752,15 @@ function registerCommands(): void {
     description: "commands.doc.conflict.theirs.desc",
     layer: "document",
     run: () => void resolveDiscardingMine(activeDoc()),
+  });
+  // La sessione live di un disegno (ADR 0204): i comandi pesano poco, la
+  // sessione arriva quando si avvia.
+  registerLiveCommands({
+    focusedDoc: () => activeDoc(),
+    focusedDrawing: () => {
+      const pane = panes.get(layout.focus);
+      return pane?.surface?.profile === VECTOR_PROFILE && pane.shown?.k === "doc" ? pane.shown.doc : null;
+    },
   });
 }
 

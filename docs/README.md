@@ -65,6 +65,7 @@ flowchart LR
 - [Permessi e sicurezza](reference/permissions-and-security.md)
 - [Formato della scena](reference/scene-format.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
+- [Sessione live](reference/live-session.md)
 
 ## Vedere stato e direzione
 

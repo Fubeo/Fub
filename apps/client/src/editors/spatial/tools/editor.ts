@@ -36,13 +36,13 @@ import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
 import { attachPenInput, type FinishedStroke, type InkPointerType, type StrokeStart } from "../pen/pen-input";
 import type { TouchPolicy } from "../pen/roles";
 import { BoundsBuilder, type Bounds } from "../scene/geometry";
-import { apply, compose, type Matrix, type Point } from "../scene/matrix";
+import { apply, compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren } from "../scene/model";
 import { SVG_NS } from "../scene/read";
 import type { Applied, SceneEngine } from "../scene/engine";
-import type { Op, Reason } from "../scene/ops";
+import { ROOT, type Op, type Reason } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { createOverlay, type OverlayHandle } from "../painter/overlay";
+import { createOverlay, type OverlayHandle, type SceneOverlay } from "../painter/overlay";
 import { PaintBuilder, type PaintNode, type PaintScene } from "../painter/paint";
 import { createSvgPainter, type PainterOptions } from "../painter/svg-dom";
 import {
@@ -73,6 +73,23 @@ export interface DrawChange {
   /// Le modifiche sul testo a LF di prima.
   readonly operation: TextOperation;
   readonly origin: "input" | "undo" | "redo";
+  /// L'operazione applicata, per chi la rimanda altrove (la sessione live).
+  /// Annulla e ripeti possono darne una forma che vale solo nel motore.
+  readonly op: Op;
+}
+
+/// Il foglio dell'editor per chi ci disegna sopra da fuori: la sessione live
+/// ci mostra l'inchiostro del tablet e, quando segue, ne muove la camera.
+export interface DrawStage {
+  readonly overlay: SceneOverlay;
+  /// La trasformazione del livello `id` (`#root` per la radice), o `null`
+  /// se nel disegno non c'è.
+  layerMatrix(id: string): Matrix | null;
+  readonly camera: Camera;
+  setCamera(camera: Camera): void;
+  /// La misura del foglio in pixel CSS.
+  readonly width: number;
+  readonly height: number;
 }
 
 export interface DrawEditorOptions {
@@ -97,6 +114,7 @@ export interface DrawEditor {
   readonly selection: readonly string[];
   readonly canUndo: boolean;
   readonly canRedo: boolean;
+  readonly stage: DrawStage;
   /// Il documento ricostruito dal testo autorevole (operazioni sulla scena,
   /// §7): la cronologia resta, la selezione tiene gli oggetti che ci sono
   /// ancora. Il motore ha un modello: un documento in sola lettura non si
@@ -665,7 +683,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const emit = (applied: Applied, origin: DrawChange["origin"]): void => {
     if (applied.duplicate) return;
-    options.onChange?.({ text: applied.text, operation: applied.operation, origin });
+    options.onChange?.({ text: applied.text, operation: applied.operation, origin, op: applied.undo.forward });
   };
 
   /// Applica il gesto `op` e lo mette nella cronologia col nome `label`.
@@ -1367,6 +1385,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   setCamera(camera);
   refresh();
 
+  const stage: DrawStage = {
+    overlay,
+    layerMatrix: (id) => (id === ROOT ? IDENTITY : (currentIndex().layers.find((layer) => layer.id === id)?.matrix ?? null)),
+    get camera() {
+      return camera;
+    },
+    setCamera(next) {
+      if (disposed) return;
+      placed = true;
+      setCamera(next);
+    },
+    get width() {
+      return surface.clientWidth;
+    },
+    get height() {
+      return surface.clientHeight;
+    },
+  };
+
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
@@ -1398,6 +1435,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     get canRedo() {
       return history.canRedo;
     },
+    stage,
     setEngine(next) {
       if (disposed) return;
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
