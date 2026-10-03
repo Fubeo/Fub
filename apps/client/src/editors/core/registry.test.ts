@@ -522,6 +522,11 @@ describe("DocumentSurfaceRegistry", () => {
     // Un formato vince sulla classificazione della shell.
     expect(registry.resolve({ formatId: "markdown", sourceKind: "text", documentId: "strano.svg" }))
       .toMatchObject({ profile: "markdown" });
+    // Con la feature `draw` dell'host un `.svg` è un documento del formato
+    // `svg`, che nessuna famiglia rivendica: si apre come prima, testo col
+    // profilo `svg`, e mai sulla superficie d'errore.
+    expect(registry.resolve({ formatId: "svg", sourceKind: "text", documentId: "arte/logo.svg" }))
+      .toMatchObject({ owner: "fub.shell.text", family: "text", profile: "svg" });
   });
 
   it("lets the source owner decline a document, which then falls to the error surface", () => {
