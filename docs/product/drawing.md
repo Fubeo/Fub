@@ -37,7 +37,10 @@ altra famiglia.
 
 In Lettura il file non entra mai nel DOM della shell: è un `<img>` da un blob,
 che non esegue script e non carica risorse. Se il disegno ha un titolo,
-l'immagine si chiama col titolo; altrimenti col nome del file.
+l'immagine si chiama col titolo; altrimenti col nome del file. Sotto
+l'immagine ci sono la descrizione del disegno, che l'immagine annuncia come
+sua, e «Oggetti del disegno», l'elenco degli oggetti in albero: chiuso finché
+non lo si apre, e costruito soltanto allora.
 
 ## Disegnare
 
@@ -48,10 +51,43 @@ Okabe–Ito, ognuno con una forma nel suo campione, così non si distinguono sol
 dal colore; gli spessori sono tre. Il campo «Che cosa hai disegnato?» scrive il
 titolo del disegno.
 
-La barra è un solo punto di tabulazione e si percorre con le frecce. Sul
-foglio valgono annulla e ripeti, seleziona tutto, elimina, `Esc` e le frecce
-per spostare. Tasto centrale, due dita e rotella muovono la vista. Ogni gesto
-si annuncia a chi usa un lettore di schermo.
+La barra è un solo punto di tabulazione e si percorre con le frecce. Tasto
+centrale, due dita e rotella muovono la vista. Ogni gesto si annuncia a chi
+usa un lettore di schermo.
+
+## Da tastiera
+
+Ogni strumento funziona senza puntatore. Sul foglio le frecce muovono un
+cursore, 10 pixel per volta, 50 con `Maiusc` e 1 con `Ctrl` o `⌘`; `Spazio`
+preme e, di nuovo, rilascia, e `Invio` rilascia anche lui. In mezzo il cursore
+traccia: un rettangolo, un tratto a penna, la gomma su ciò che attraversa, un
+trascinamento con la selezione. `Esc` annulla il gesto. Il cursore dice dove
+si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu».
+
+Con una selezione le frecce la spostano di 1, 10 con `Maiusc`, e con `Ctrl` o
+`⌘` la ridimensionano dall'angolo in alto a sinistra. `Tab` e `Maiusc+Tab`
+passano all'oggetto dopo e a quello prima, e lo dicono col nome e la
+posizione; oltre l'ultimo il fuoco esce dal foglio, che non lo trattiene mai.
+`Home` e `Fine` scelgono il primo e l'ultimo oggetto. `Invio` apre posizione e
+misure della selezione, da scrivere coi numeri; senza selezione apre le
+proprietà del disegno: titolo, descrizione e misure della pagina. `?` elenca
+tutti i tasti.
+
+Ridimensionare scrive un `transform`: anche lo spessore del contorno segue la
+scala, e il riquadro che si chiede è quello che l'oggetto occupa.
+
+«Oggetti», nella barra, apre accanto al foglio l'albero degli oggetti: i
+livelli e i loro oggetti, con la stessa selezione del foglio. Le frecce
+scelgono la riga a cui arrivano, `Ctrl` o `⌘` le fanno soltanto arrivare,
+`Spazio` aggiunge o toglie, `Invio` apre le proprietà, `Canc` elimina ed `Esc`
+torna al foglio. Un oggetto di un livello bloccato o nascosto c'è, in corsivo,
+ma non si sceglie. Oltre 500 righe l'albero disegna soltanto quelle che si
+vedono.
+
+La scelta non si legge mai dal solo colore: lo strumento, il colore e lo
+spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
+si anima: ogni inquadratura è subito quella nuova, quindi non c'è moto da
+ridurre.
 
 ## Documenti che non si modificano subito
 

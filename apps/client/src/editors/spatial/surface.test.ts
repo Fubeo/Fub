@@ -296,6 +296,42 @@ describe("la Lettura", () => {
     surface.setMode!("read");
     expect(parent.querySelector<HTMLImageElement>(".vector-read img")!.alt).toBe("Il disegno «casa.svg»");
   });
+
+  it("dice a parole che cosa c'è: la descrizione, e gli oggetti quando li si apre", () => {
+    const { surface } = mount(SOURCE.replace("<title>Casa</title>", "<title>Casa</title><desc>La pianta\ndel piano terra</desc>"));
+    surface.setMode!("read");
+    const desc = parent.querySelector<HTMLElement>(".vector-about-desc")!;
+    expect(desc.hidden).toBe(false);
+    expect(desc.textContent).toBe("La pianta\ndel piano terra");
+    expect(parent.querySelector(".vector-read [aria-describedby]")!.getAttribute("aria-describedby")).toBe(desc.id);
+    const details = parent.querySelector<HTMLDetailsElement>(".vector-about-objects")!;
+    expect(details.querySelector("summary")!.textContent).toBe("Oggetti del disegno (1)");
+    // Chiuso, l'elenco non c'è: un disegno grande non lo paga finché nessuno
+    // lo apre.
+    expect(details.querySelector("ul")).toBeNull();
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+    const items = (): string[] => [...details.querySelectorAll("li")].map((item) => item.firstChild?.textContent ?? "");
+    expect(items()).toEqual(["Livello «Livello 1»", "Rettangolo"]);
+    expect(details.querySelector("li > ul > li")!.textContent).toBe("Rettangolo");
+    // Aperto, segue il testo.
+    surface.buffer!.syncDoc(SOURCE.replace("</g>", '<ellipse id="o5e6f7a8b" cx="5" cy="5" rx="2" ry="2"/></g>'));
+    expect(items()).toEqual(["Livello «Livello 1»", "Rettangolo", "Ellisse"]);
+    expect(details.querySelector("summary")!.textContent).toBe("Oggetti del disegno (2)");
+  });
+
+  it("senza descrizione né oggetti non aggiunge niente all'immagine", () => {
+    const { surface } = mount(doc(""));
+    surface.setMode!("read");
+    expect(parent.querySelector<HTMLElement>(".vector-about-desc")!.hidden).toBe(true);
+    expect(parent.querySelector<HTMLElement>(".vector-about-objects")!.hidden).toBe(true);
+    expect(parent.querySelector(".vector-read [aria-describedby]")).toBeNull();
+  });
+
+  it("anche un documento che si guarda soltanto ha i suoi oggetti a parole", () => {
+    mount(DOCTYPE);
+    expect(parent.querySelector(".vector-about-objects summary")!.textContent).toBe("Oggetti del disegno (1)");
+  });
 });
 
 describe("le selezioni e `reveal`", () => {

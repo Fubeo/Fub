@@ -168,6 +168,37 @@
   color: var(--muted);
 }
 
+/* L'elenco dei tasti di un editor: una tabella per gruppo, che scorre dentro
+   la finestra. */
+.modale .keys-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-height: 60vh;
+  overflow: auto;
+}
+.modale .keys-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.modale .keys-table caption {
+  padding-bottom: var(--space-2);
+  font-weight: var(--weight-bold);
+  text-align: start;
+}
+.modale .keys-table th,
+.modale .keys-table td {
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  border-top: 1px solid var(--border);
+  text-align: start;
+  vertical-align: baseline;
+}
+.modale .keys-table th {
+  font-weight: normal;
+  white-space: nowrap;
+}
+
 .modale .palette-summary {
   color: var(--accent-soft);
 }

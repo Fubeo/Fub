@@ -332,7 +332,10 @@ La tastiera è ordinata per contesto: il popup di completamento e le keymap
 CodeMirror precedono il layer della superficie; poi vengono profilo, documento,
 riquadro e globale. La shell monta un solo listener globale e lo rimuove al
 rimontaggio. Le callback di superficie diventano comandi nella stessa pipeline,
-non un secondo sistema di tasti.
+non un secondo sistema di tasti. Il foglio del disegno tiene per sé i tasti
+di un gesto, cioè frecce, `Spazio`, `Invio`, `?` e `Tab` con una selezione, e
+li consuma; gli accordi che non usa, come `Mod-E`, arrivano alla shell
+(`apps/client/src/editors/spatial/tools/editor.ts`).
 
 ### Workbook e vertical slice della griglia
 

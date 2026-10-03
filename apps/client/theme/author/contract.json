@@ -254,7 +254,19 @@
     "draw-title-input",
     "draw-surface",
     "draw-page",
+    "draw-cursor",
+    "draw-objects",
+    "draw-objects-header",
+    "draw-objects-title",
+    "draw-objects-count",
+    "draw-objects-empty",
+    "draw-objects-tree",
+    "draw-object",
+    "draw-object-mark",
     "vector-notice",
+    "vector-about",
+    "vector-about-desc",
+    "vector-about-objects",
     "markdown-preview",
     "markdown-rendered",
     "markdown-code-copy",
@@ -378,6 +390,8 @@
     "palette-plan",
     "palette-actions",
     "palette-error",
+    "keys-list",
+    "keys-table",
     "media-surface",
     "media-image",
     "zoom-view",
@@ -1012,7 +1026,16 @@
         "draw-title",
         "draw-title-input",
         "draw-surface",
-        "draw-page"
+        "draw-page",
+        "draw-cursor",
+        "draw-objects",
+        "draw-objects-header",
+        "draw-objects-title",
+        "draw-objects-count",
+        "draw-objects-empty",
+        "draw-objects-tree",
+        "draw-object",
+        "draw-object-mark"
       ],
       "states": [
         "rest",
@@ -1026,7 +1049,10 @@
     {
       "name": "vector-surface",
       "hooks": [
-        "vector-notice"
+        "vector-notice",
+        "vector-about",
+        "vector-about-desc",
+        "vector-about-objects"
       ],
       "states": [
         "rest"
@@ -1188,7 +1214,9 @@
         "palette-summary",
         "palette-plan",
         "palette-actions",
-        "palette-error"
+        "palette-error",
+        "keys-list",
+        "keys-table"
       ],
       "states": [
         "rest",
@@ -1834,7 +1862,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 412,
+    "hooks": 426,
     "state_names": 7,
     "assigned_states": 154,
     "components": 48,

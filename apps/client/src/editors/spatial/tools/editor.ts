@@ -16,8 +16,17 @@
 // - **Lo stesso dato.** Selezione e gomma toccano gli oggetti con l'indice di
 //   `hit.ts`, costruito sugli stessi nodi che il painter disegna.
 // - **Annunci.** Una regione live dice creazione, eliminazione, selezione,
-//   cambio di strumento e ciò che non si è potuto fare (piano §7). L'albero
-//   degli oggetti e la mappa completa della tastiera sono di FD-207.
+//   cambio di strumento e ciò che non si è potuto fare (piano §7).
+// - **Tutto da tastiera.** Ogni strumento ha la sua lettera, e funziona anche
+//   senza puntatore: le frecce muovono un cursore sul foglio e Spazio preme e
+//   rilascia, coi gesti della stessa pipeline. Con una selezione le frecce la
+//   spostano, con Ctrl o ⌘ la ridimensionano, Tab passa all'oggetto dopo e
+//   Invio apre le proprietà con i numeri; senza selezione Tab esce dal
+//   foglio, che non trattiene mai il fuoco. «?» elenca i tasti.
+// - **L'albero degli oggetti** è il disegno come elenco (`objects.ts`), con la
+//   stessa selezione del foglio; i nomi vengono da `describe.ts`.
+// - **Moto ridotto per costruzione.** La camera non si anima mai: ogni
+//   inquadratura è immediata, quindi non c'è moto da ridurre.
 //
 // La superficie che lo monta nella shell (FD-206) gli passa il motore del
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
@@ -25,20 +34,24 @@
 
 import { onLanguage, plural, resolvedLanguage, t, type Key } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
+import { promptForm, showKeys, type FormField, type KeyGroup } from "../../../ui/form-dialog";
 import { icon, iconEl, registerIcon } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { fit as fitBounds, screenToWorld, zoomAtPoint, type Camera, type ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
+import { countObjects, describe, outline, type OutlineNode } from "../describe";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
-import { attachPenInput, type FinishedStroke, type InkPointerType, type StrokeStart } from "../pen/pen-input";
+import { formatNumber } from "../number";
+import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInputOptions, type StrokeStart } from "../pen/pen-input";
 import type { TouchPolicy } from "../pen/roles";
 import { BoundsBuilder, type Bounds } from "../scene/geometry";
 import { apply, compose, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren } from "../scene/model";
 import { SVG_NS } from "../scene/read";
 import type { Applied, SceneEngine } from "../scene/engine";
+import type { Item } from "../scene/classify";
 import type { Op, Reason } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { createOverlay, type OverlayHandle } from "../painter/overlay";
@@ -46,6 +59,7 @@ import { PaintBuilder, type PaintNode, type PaintScene } from "../painter/paint"
 import { createSvgPainter, type PainterOptions } from "../painter/svg-dom";
 import {
   addOp,
+  boxMatrix,
   destination,
   gesture as asGesture,
   moveOps,
@@ -55,12 +69,14 @@ import {
   removeOps,
   roundDelta,
   strokeElem,
+  transformOps,
   transformValue,
   type Destination,
 } from "./edit";
 import { elemBounds, SceneIndex, SceneIndexer, type Unit } from "./hit";
 import { History, type Replay } from "./history";
-import { DEFAULT_COLOR, DEFAULT_WIDTH, PALETTE, WIDTHS } from "./palette";
+import { createObjectTree, type TreeEntry } from "./objects";
+import { DEFAULT_COLOR, DEFAULT_WIDTH, PALETTE, swatchOf, WIDTHS } from "./palette";
 import { DEFAULT_TOOL, toolForKey, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
 import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
 
@@ -149,9 +165,39 @@ const FRAME_PX = 4;
 const ZOOM_STEP = 1.25;
 const FIT_PAD = 0.08;
 
-/// Di quanto le frecce spostano la selezione, in unità della scena.
+/// Di quanto le frecce spostano o ridimensionano la selezione, in unità
+/// della scena.
 const NUDGE = 1;
 const NUDGE_SHIFT = 10;
+
+/// La misura più piccola a cui le frecce riducono un lato della selezione.
+const MIN_SIZE = 1;
+
+/// Di quanto le frecce muovono il cursore del foglio, in pixel: con Maiusc a
+/// passi lunghi, con Ctrl o ⌘ a passi corti.
+const CURSOR_PX = 10;
+const CURSOR_PX_SHIFT = 50;
+const CURSOR_PX_FINE = 1;
+
+/// Un campione ogni tanti pixel quando il cursore traccia, a un intervallo
+/// da mouse: il tratto da tastiera è fitto come uno col puntatore.
+const CURSOR_SAMPLE_PX = 4;
+const CURSOR_SAMPLE_MS = 16;
+
+/// Quanto il cursore resta lontano dal bordo del foglio, in pixel: oltre, la
+/// vista lo segue.
+const CURSOR_MARGIN_PX = 24;
+
+/// Le frecce, come direzione.
+const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+
+/// Le frecce come si leggono nell'elenco dei tasti.
+const ARROW_KEYS = "←↑→↓";
 
 const INK_KEY = "pen";
 
@@ -289,6 +335,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let locked = false;
   /// La selezione dell'ultima notifica, per non ripeterla.
   let noticed = "";
+  /// Il cursore del foglio, nella scena: dove disegna la tastiera. `null`
+  /// finché nessuno l'ha mosso.
+  let cursor: Point | null = null;
+  /// Il gesto che la tastiera tiene premuto: i campioni dati finora, l'ultimo
+  /// punto e il suo tempo.
+  let pressed: { readonly start: StrokeStart; readonly samples: InkSample[]; at: Point; time: number } | null = null;
+  /// Gli id dei tratti da tastiera: negativi, così non incontrano mai quelli
+  /// della pipeline, che crescono da zero.
+  let keyStrokes = 0;
+  /// Una finestra dell'editor è aperta: un secondo Invio non ne apre un'altra.
+  let asking = false;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -308,9 +365,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   live.className = "sr-only";
   live.setAttribute("role", "status");
   live.setAttribute("aria-live", "polite");
+  // Che cosa fanno i tasti sul foglio, letto quando ci arriva il fuoco.
+  const surfaceHint = document.createElement("span");
+  surfaceHint.className = "sr-only";
+  surfaceHint.id = identifier("draw-surface-hint");
+  surface.setAttribute("aria-describedby", surfaceHint.id);
   relabels.push(() => {
     toolbar.setAttribute("aria-label", t("draw.toolbar"));
     surface.setAttribute("aria-label", t("draw.surface"));
+    surfaceHint.textContent = t("draw.surface.hint");
   });
 
   const group = (label: Key, radio: boolean): HTMLElement => {
@@ -396,6 +459,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   redoButton.setAttribute("aria-keyshortcuts", "Control+Shift+Z Control+Y");
   const deleteButton = button(editGroup, "draw-button", () => t("draw.delete"), "trash", () => deleteSelection());
   deleteButton.setAttribute("aria-keyshortcuts", "Delete");
+  const propertiesButton = button(editGroup, "draw-button", () => t("draw.properties"), "properties", () => void properties());
+  propertiesButton.setAttribute("aria-keyshortcuts", "Enter");
+  propertiesButton.setAttribute("aria-haspopup", "dialog");
+
+  // L'albero degli oggetti, chiuso finché qualcuno non lo apre.
+  const tree = createObjectTree(life, {
+    onSelect(keys) {
+      cancelGesture();
+      select(keys);
+      const unit = keys.length === 1 ? currentIndex().get(keys[0]!) : null;
+      if (unit !== null) frameBounds(unit.bounds);
+    },
+    onActivate: () => void properties(),
+    onDelete: () => deleteSelection(),
+    onLeave: () => surface.focus({ preventScroll: true }),
+  });
+  tree.element.hidden = true;
+  relabels.push(() => tree.relabel());
 
   const viewGroup = group("draw.view", false);
   button(viewGroup, "draw-button", () => t("draw.zoom_out"), "draw-zoom-out", () => zoomBy(1 / ZOOM_STEP));
@@ -405,6 +486,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   button(viewGroup, "draw-button", () => t("draw.zoom_in"), "draw-zoom-in", () => zoomBy(ZOOM_STEP));
   const fitButton = button(viewGroup, "draw-button", () => t("draw.fit"), "draw-fit", () => fit());
   fitButton.setAttribute("aria-keyshortcuts", "Shift+1");
+  const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
+  objectsButton.setAttribute("aria-expanded", "false");
+  objectsButton.setAttribute("aria-controls", tree.element.id);
+  const keysButton = button(viewGroup, "draw-button", () => t("draw.keys"), "keyboard", () => void keys());
+  keysButton.setAttribute("aria-keyshortcuts", "?");
+  keysButton.setAttribute("aria-haspopup", "dialog");
 
   const titleField = document.createElement("label");
   titleField.className = "draw-title";
@@ -421,8 +508,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     titleInput.placeholder = t("draw.title.placeholder");
   });
 
+  // Il foglio e, accanto, l'albero degli oggetti.
+  const body = document.createElement("div");
+  body.className = "draw-body";
+  body.append(surface, tree.element);
   header.append(toolbar, titleField);
-  root.append(header, surface, live);
+  root.append(header, body, surfaceHint, live);
   host.append(root);
 
   // La carta, il painter, poi l'anteprima delle forme, poi lo strato sopra:
@@ -443,6 +534,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   preview.append(previewCamera);
   surface.append(preview);
   const overlay = createOverlay(surface, life);
+  // Il cursore del foglio: si vede quando lo muove la tastiera.
+  const cursorMark = document.createElement("div");
+  cursorMark.className = "draw-cursor";
+  cursorMark.setAttribute("aria-hidden", "true");
+  cursorMark.hidden = true;
+  surface.append(cursorMark);
 
   const builder = new PaintBuilder();
   const indexer = new SceneIndexer(builder);
@@ -498,6 +595,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     paper.style.height = `${scale * page.height}px`;
   };
 
+  /// Il cursore del foglio sullo schermo; pieno mentre la tastiera preme.
+  const showCursor = (): void => {
+    cursorMark.toggleAttribute("data-pressed", pressed !== null);
+    if (cursor === null) return;
+    const { scale, tx, ty } = camera;
+    cursorMark.style.transform = `translate(${tx + scale * cursor[0]}px, ${ty + scale * cursor[1]}px)`;
+  };
+
   const setCamera = (next: Camera): void => {
     camera = next;
     painter.setView(next);
@@ -505,9 +610,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     previewCamera.setAttribute("transform", `matrix(${next.scale} 0 0 ${next.scale} ${next.tx} ${next.ty})`);
     showPage();
     showZoom();
+    showCursor();
   };
+  /// Il formato delle coordinate dette a voce, nella lingua di adesso.
+  let coordinates: Intl.NumberFormat | null = null;
+  const numberText = (value: number): string =>
+    (coordinates ??= new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 1 })).format(Math.round(value * 10) / 10 || 0);
   relabels.push(() => {
     percent = null;
+    coordinates = null;
     showZoom(true);
   });
 
@@ -590,6 +701,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const keys = selection.join("\n");
     if (keys !== noticed) {
       noticed = keys;
+      syncTree();
       options.onSelectionChange?.();
     }
   };
@@ -612,16 +724,102 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     overlay.flush();
   };
 
+  // --- L'albero degli oggetti ----------------------------------------------
+
+  /// Il disegno in albero, ricalcolato quando cambia la scena, e i suoi nodi
+  /// per chiave.
+  let outlined: { readonly items: readonly Item[]; readonly nodes: OutlineNode[]; readonly byKey: Map<string, OutlineNode> } | null = null;
+  const outlineNow = (): NonNullable<typeof outlined> => {
+    const items = engine.scene();
+    if (outlined?.items !== items) {
+      const nodes = outline(items);
+      const byKey = new Map<string, OutlineNode>();
+      const walkNodes = (list: readonly OutlineNode[]): void => {
+        for (const node of list) {
+          byKey.set(node.key, node);
+          walkNodes(node.children);
+        }
+      };
+      walkNodes(nodes);
+      outlined = { items, nodes, byKey };
+    }
+    return outlined;
+  };
+
+  /// Il nome del colore di un oggetto, se è uno della tavolozza: il
+  /// contorno, o il riempimento se non ne ha.
+  const colorOf = (unit: Unit | undefined): string | null => {
+    const attrs = new Map(unit?.paints[0]?.attrs ?? []);
+    const stroke = attrs.get("stroke");
+    const value = stroke !== undefined && stroke !== "none" ? stroke : attrs.get("fill");
+    const swatch = value === undefined ? null : swatchOf(value);
+    return swatch === null ? null : t(swatch.label);
+  };
+
+  const describeNode = (node: OutlineNode, unit: Unit | undefined): string => describe(node, { parts: true, color: colorOf(unit) });
+
+  /// Il nome a parole di un oggetto che si sceglie.
+  const labelOf = (unit: Unit): string => {
+    const node = outlineNow().byKey.get(unit.key);
+    return node === undefined ? unit.tag : describeNode(node, unit);
+  };
+
+  const entriesOf = (nodes: readonly OutlineNode[], index: SceneIndex): TreeEntry[] =>
+    nodes.map((node) => {
+      const unit = index.get(node.key) ?? undefined;
+      const layer = node.item.role === "layer";
+      return {
+        key: node.key,
+        layer,
+        selectable: unit !== undefined,
+        children: layer ? entriesOf(node.children, index) : [],
+        label: () => describeNode(node, unit),
+      };
+    });
+
+  /// Le voci dell'albero per l'indice di adesso, e la selezione mostrata.
+  let treeShown: { readonly index: SceneIndex; readonly entries: TreeEntry[]; readonly count: number; keys: string } | null = null;
+
+  /// Porta l'albero, se è aperto, alla scena e alla selezione di adesso.
+  function syncTree(): void {
+    if (tree.element.hidden) return;
+    const index = currentIndex();
+    const keys = selection.join("\n");
+    if (treeShown?.index !== index) {
+      const nodes = outlineNow().nodes;
+      treeShown = { index, entries: entriesOf(nodes, index), count: countObjects(nodes), keys: "" };
+    } else if (treeShown.keys === keys) {
+      return;
+    }
+    treeShown.keys = keys;
+    tree.update(treeShown.entries, selection, treeShown.count);
+  }
+
+  /// Apre o chiude l'albero; aperto, il fuoco ci va.
+  function showObjects(open: boolean): void {
+    tree.element.hidden = !open;
+    objectsButton.setAttribute("aria-expanded", String(open));
+    if (open) {
+      treeShown = null;
+      syncTree();
+      tree.focus();
+    } else if (tree.element.contains(document.activeElement)) {
+      surface.focus({ preventScroll: true });
+    }
+  }
+
   // --- Stato dei controlli --------------------------------------------------
 
-  const currentTitle = (): string => {
+  /// Il `title` o la `desc` del disegno: i figli della radice con quel ruolo.
+  const rootText = (role: "title" | "desc"): string => {
     const model = engine.model;
     if (model === null) return "";
     for (const child of elementChildren(model.root)) {
-      if (child.kind === "leaf" && child.details?.role === "title") return child.details.text ?? "";
+      if (child.kind === "leaf" && child.details?.role === role) return child.details.text ?? "";
     }
     return "";
   };
+  const currentTitle = (): string => rootText("title");
 
   const syncControls = (): void => {
     const canEdit = editable();
@@ -642,6 +840,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     undoButton.disabled = !canEdit || !history.canUndo;
     redoButton.disabled = !canEdit || !history.canRedo;
     deleteButton.disabled = !canEdit || selection.length === 0;
+    propertiesButton.disabled = !canEdit;
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
     roving(null);
@@ -657,6 +856,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     selection = inOrder(selection);
     syncControls();
     showHandles();
+    syncTree();
   };
 
   // --- Operazioni -----------------------------------------------------------
@@ -832,7 +1032,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   function cancelGesture(): void {
-    if (current !== null) pen.cancel();
+    if (pressed !== null) cancelPress();
+    else if (current !== null) pen.cancel();
   }
 
   // --- La pipeline della penna ------------------------------------------------
@@ -1054,108 +1255,236 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const readModifiers = (event: PointerEvent): void => {
     shift = event.shiftKey;
   };
+  /// Il puntatore porta con sé il cursore del foglio, che si nasconde: la
+  /// tastiera ripartirà da lì.
+  const followPointer = (event: PointerEvent): void => {
+    if (pressed !== null) return;
+    const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+    cursor = [point.x, point.y];
+    cursorMark.hidden = true;
+  };
   life.listen(
     surface,
     "pointerdown",
     (event) => {
       readModifiers(event);
+      // Il puntatore prende il posto della tastiera: il suo gesto finisce.
+      cancelPress();
+      followPointer(event);
       // Dopo un tratto le scorciatoie valgono: il fuoco va al foglio.
       if (document.activeElement !== surface) surface.focus({ preventScroll: true });
     },
     { capture: true },
   );
-  life.listen(surface, "pointermove", readModifiers, { capture: true });
-
-  const pen = attachPenInput(
+  life.listen(
     surface,
-    {
-      toScene: (clientX, clientY) => screenToWorld(camera, localPoint(clientX, clientY)),
-      onStart(start) {
-        // Un gesto lungo che la pipeline divide al limite dei campioni
-        // continua nel tratto nuovo; il tratto a penna si scrive a pezzi.
-        if (start.continued && current !== null && current.kind !== "ink" && current.kind !== "refused") {
-          current.stroke = start.id;
-          return;
-        }
-        current = begin(start);
-      },
-      onSamples(id, samples) {
-        const g = current;
-        if (g === null || g.stroke !== id || samples.length === 0) return;
-        switch (g.kind) {
-          case "ink":
-            for (const sample of samples) {
-              g.scene.push(sample);
-              g.local.push(toLocal(sample, g.to.inverse));
-            }
-            drawInk(g);
-            break;
-          case "shape":
-            g.from ??= toPoint(samples[0]!);
-            g.end = toPoint(samples[samples.length - 1]!);
-            drawShape(g);
-            break;
-          case "select":
-            if (g.from === null) selectStart(g, toPoint(samples[0]!));
-            g.end = toPoint(samples[samples.length - 1]!);
-            selectUpdate(g);
-            break;
-          case "erase":
-            for (const sample of samples) eraseAlong(g, toPoint(sample));
-            showErased(g);
-            break;
-          case "refused":
-            break;
-        }
-      },
-      onPredicted(id, samples) {
-        const g = current;
-        if (g === null || g.stroke !== id || g.kind !== "ink") return;
-        g.predicted = samples.map((sample) => toLocal(sample, g.to.inverse));
-        drawInk(g);
-      },
-      onEnd(stroke) {
-        const g = current;
-        if (g === null || g.stroke !== stroke.id) return;
-        if (stroke.split && g.kind !== "ink") return;
-        switch (g.kind) {
-          case "ink":
-            current = null;
-            // Prima il tratto nella scena, poi via quello in corso: nello
-            // stesso gestore, quindi a schermo non c'è un fotogramma senza
-            // nessuno dei due.
-            finishInk(g, stroke);
-            overlay.setInk(INK_KEY, null);
-            overlay.flush();
-            return;
-          case "shape":
-            current = null;
-            finishShape(g);
-            showShape(null, g.to.matrix);
-            return;
-          case "select":
-            selectEnd(g);
-            return;
-          case "erase":
-            current = null;
-            finishErase(g);
-            return;
-          case "refused":
-            current = null;
-            return;
-        }
-      },
-      onCancel(id) {
-        const g = current;
-        if (g === null || g.stroke !== id) return;
-        current = null;
-        if (g.kind === "select" && g.mode === "marquee") select(g.base);
-        clearPreviews();
-      },
-      ...(options.touch === undefined ? {} : { touch: options.touch }),
+    "pointermove",
+    (event) => {
+      readModifiers(event);
+      followPointer(event);
     },
-    life,
+    { capture: true },
   );
+
+  // I gestori della pipeline, che riceve anche il cursore del foglio.
+  const handlers: PenInputOptions = {
+    toScene: (clientX, clientY) => screenToWorld(camera, localPoint(clientX, clientY)),
+    onStart(start) {
+      // Un gesto lungo che la pipeline divide al limite dei campioni
+      // continua nel tratto nuovo; il tratto a penna si scrive a pezzi.
+      if (start.continued && current !== null && current.kind !== "ink" && current.kind !== "refused") {
+        current.stroke = start.id;
+        return;
+      }
+      current = begin(start);
+    },
+    onSamples(id, samples) {
+      const g = current;
+      if (g === null || g.stroke !== id || samples.length === 0) return;
+      switch (g.kind) {
+        case "ink":
+          for (const sample of samples) {
+            g.scene.push(sample);
+            g.local.push(toLocal(sample, g.to.inverse));
+          }
+          drawInk(g);
+          break;
+        case "shape":
+          g.from ??= toPoint(samples[0]!);
+          g.end = toPoint(samples[samples.length - 1]!);
+          drawShape(g);
+          break;
+        case "select":
+          if (g.from === null) selectStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          selectUpdate(g);
+          break;
+        case "erase":
+          for (const sample of samples) eraseAlong(g, toPoint(sample));
+          showErased(g);
+          break;
+        case "refused":
+          break;
+      }
+    },
+    onPredicted(id, samples) {
+      const g = current;
+      if (g === null || g.stroke !== id || g.kind !== "ink") return;
+      g.predicted = samples.map((sample) => toLocal(sample, g.to.inverse));
+      drawInk(g);
+    },
+    onEnd(stroke) {
+      const g = current;
+      if (g === null || g.stroke !== stroke.id) return;
+      if (stroke.split && g.kind !== "ink") return;
+      switch (g.kind) {
+        case "ink":
+          current = null;
+          // Prima il tratto nella scena, poi via quello in corso: nello
+          // stesso gestore, quindi a schermo non c'è un fotogramma senza
+          // nessuno dei due.
+          finishInk(g, stroke);
+          overlay.setInk(INK_KEY, null);
+          overlay.flush();
+          return;
+        case "shape":
+          current = null;
+          finishShape(g);
+          showShape(null, g.to.matrix);
+          return;
+        case "select":
+          selectEnd(g);
+          return;
+        case "erase":
+          current = null;
+          finishErase(g);
+          return;
+        case "refused":
+          current = null;
+          return;
+      }
+    },
+    onCancel(id) {
+      const g = current;
+      if (g === null || g.stroke !== id) return;
+      current = null;
+      if (g.kind === "select" && g.mode === "marquee") select(g.base);
+      clearPreviews();
+    },
+    ...(options.touch === undefined ? {} : { touch: options.touch }),
+  };
+  const pen = attachPenInput(surface, handlers, life);
+
+  // --- Il cursore del foglio ----------------------------------------------------
+  //
+  // La tastiera disegna con gli stessi gesti del puntatore: Spazio preme e,
+  // di nuovo, rilascia, e in mezzo le frecce portano il cursore. I campioni
+  // vanno ai gestori della pipeline come quelli di un mouse, così ogni
+  // strumento funziona da tastiera senza un secondo codice.
+
+  /// Il cursore dov'è, o al centro di ciò che si vede.
+  const cursorPoint = (): Point => {
+    if (cursor === null) {
+      const center = screenToWorld(camera, { x: surface.clientWidth / 2, y: surface.clientHeight / 2 });
+      cursor = [center.x, center.y];
+    }
+    return cursor;
+  };
+
+  /// La vista segue il cursore quando arriva al bordo.
+  const keepInView = (p: Point): void => {
+    const w = surface.clientWidth;
+    const h = surface.clientHeight;
+    if (w === 0 || h === 0) return;
+    const margin = Math.min(CURSOR_MARGIN_PX, w / 4, h / 4);
+    const x = camera.tx + camera.scale * p[0];
+    const y = camera.ty + camera.scale * p[1];
+    const dx = x < margin ? margin - x : x > w - margin ? w - margin - x : 0;
+    const dy = y < margin ? margin - y : y > h - margin ? h - margin - y : 0;
+    if (dx === 0 && dy === 0) return;
+    placed = true;
+    setCamera({ ...camera, tx: camera.tx + dx, ty: camera.ty + dy });
+  };
+
+  /// Dove è il cursore, e che cosa c'è sotto.
+  const announceCursor = (): void => {
+    const p = cursorPoint();
+    const at = t("draw.cursor.at", { x: numberText(p[0]), y: numberText(p[1]) });
+    const hit = pressed === null ? currentIndex().at(p, HIT_PX.mouse / camera.scale) : null;
+    announce(hit === null ? at : `${at}: ${labelOf(hit)}`);
+  };
+
+  /// Il gesto da tastiera arriva a `p`, con un campione ogni
+  /// [`CURSOR_SAMPLE_PX`] pixel. Al limite dei campioni si rilascia.
+  const trace = (p: Point): void => {
+    const g = pressed;
+    if (g === null) return;
+    const [x0, y0] = g.at;
+    const steps = Math.max(1, Math.ceil((Math.hypot(p[0] - x0, p[1] - y0) * camera.scale) / CURSOR_SAMPLE_PX));
+    const samples: InkSample[] = [];
+    for (let i = 1; i <= steps && g.samples.length + samples.length < INK_MAX_SAMPLES; i++) {
+      g.time += CURSOR_SAMPLE_MS;
+      samples.push({ x: x0 + ((p[0] - x0) * i) / steps, y: y0 + ((p[1] - y0) * i) / steps, t: g.time });
+    }
+    g.at = p;
+    g.samples.push(...samples);
+    if (samples.length > 0) handlers.onSamples(g.start.id, samples);
+    if (g.samples.length >= INK_MAX_SAMPLES) release();
+  };
+
+  /// Muove il cursore di (`dx`, `dy`) pixel dello schermo.
+  const moveCursor = (dx: number, dy: number): void => {
+    const [x, y] = cursorPoint();
+    const next: Point = [x + dx / camera.scale, y + dy / camera.scale];
+    cursor = next;
+    cursorMark.hidden = false;
+    keepInView(next);
+    showCursor();
+    trace(next);
+    announceCursor();
+  };
+
+  /// Spazio: il gesto comincia dove è il cursore.
+  const press = (timeStamp: number): void => {
+    if (pressed !== null || !editable()) return;
+    cancelGesture();
+    const at = cursorPoint();
+    const start: StrokeStart = { id: --keyStrokes, pointerType: "mouse", pressure: false, timeStamp, continued: false };
+    const first: InkSample = { x: at[0], y: at[1], t: 0 };
+    pressed = { start, samples: [first], at, time: 0 };
+    cursorMark.hidden = false;
+    showCursor();
+    handlers.onStart(start);
+    handlers.onSamples(start.id, [first]);
+    announce(t("draw.cursor.down"));
+  };
+
+  /// Spazio di nuovo, o Invio: il gesto finisce e scrive. Se non dice niente
+  /// lui, si dice che il cursore è su.
+  function release(): void {
+    const g = pressed;
+    if (g === null) return;
+    pressed = null;
+    showCursor();
+    const before = live.textContent;
+    handlers.onEnd({ ...g.start, samples: g.samples, tilt: false, split: false });
+    if (live.textContent === before) announce(t("draw.cursor.up"));
+  }
+
+  /// Il gesto da tastiera non scrive niente.
+  function cancelPress(): void {
+    const g = pressed;
+    if (g === null) return;
+    pressed = null;
+    showCursor();
+    handlers.onCancel(g.start.id, "api");
+  }
+
+  // Il fuoco che lascia il foglio porta via il gesto e il cursore.
+  life.listen(surface, "blur", () => {
+    cancelPress();
+    cursorMark.hidden = true;
+  });
 
   // --- Navigazione: tasto centrale, dita, rotella ------------------------------
 
@@ -1290,14 +1619,222 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (titleInput.value.trim() === currentTitle()) titleInput.value = currentTitle();
   });
 
-  const nudge = (event: KeyboardEvent): boolean => {
-    const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
-    const delta: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    const move = delta[event.key];
-    if (move === undefined || selection.length === 0 || !editable()) return false;
-    moveSelection(selectedUnits(), move[0], move[1]);
+  /// Il riquadro di `units` nella scena, contorno compreso.
+  const boundsOf = (units: readonly Unit[]): Bounds | null => {
+    let bounds: Bounds | null = null;
+    for (const unit of units) bounds = union(bounds, unit.bounds);
+    return bounds;
+  };
+
+  /// Porta il riquadro `from` della selezione in `to`, e la tiene scelta: la
+  /// pagina cresce se serve, come per ogni oggetto che ne esce.
+  const placeSelection = (units: readonly Unit[], from: Bounds, to: Bounds): boolean => {
+    // Il riquadro va da `from` a `to` scalando sugli assi: ogni oggetto, il
+    // suo contorno compreso, finisce dentro `to`.
+    const moved = transformOps(units, boxMatrix(from, to), newIds());
+    const ops: Op[] = [...moved.ops];
+    const page = pageFor(scene.root.page, to);
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    if (commit("draw.action.resize", asGesture(ops)) === null) return false;
+    selection = inOrder(moved.keys);
+    syncControls();
+    showHandles();
     return true;
   };
+
+  /// Ctrl o ⌘ e le frecce: la selezione cresce o cala di (`dw`, `dh`),
+  /// ferma nell'angolo in alto a sinistra. Un lato che misura zero, come
+  /// quello di una linea dritta, resta zero.
+  const resizeSelection = (dw: number, dh: number): void => {
+    const units = selectedUnits();
+    const from = boundsOf(units);
+    if (from === null) return;
+    const w = from.max[0] - from.min[0];
+    const h = from.max[1] - from.min[1];
+    const width = w > 0 ? Math.max(Math.min(w, MIN_SIZE), w + dw) : w;
+    const height = h > 0 ? Math.max(Math.min(h, MIN_SIZE), h + dh) : h;
+    if (width === w && height === h) return;
+    const to: Bounds = { min: from.min, max: [from.min[0] + width, from.min[1] + height] };
+    if (placeSelection(units, from, to)) announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+  };
+
+  /// Le frecce sul foglio. Con una selezione la spostano, e con Ctrl o ⌘ la
+  /// ridimensionano; senza, o mentre la tastiera preme, muovono il cursore.
+  const arrows = (event: KeyboardEvent): boolean => {
+    const direction = ARROWS[event.key];
+    if (direction === undefined) return false;
+    const [x, y] = direction;
+    const fine = event.ctrlKey || event.metaKey;
+    if (pressed === null && selection.length > 0 && editable()) {
+      const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
+      if (fine) resizeSelection(x * step, y * step);
+      else moveSelection(selectedUnits(), x * step, y * step);
+      return true;
+    }
+    const px = fine ? CURSOR_PX_FINE : event.shiftKey ? CURSOR_PX_SHIFT : CURSOR_PX;
+    moveCursor(x * px, y * px);
+    return true;
+  };
+
+  /// Sceglie l'oggetto `at` in ordine di documento, lo porta in vista e lo
+  /// dice. `false` se non c'è.
+  const visit = (at: number): boolean => {
+    const units = currentIndex().units;
+    const unit = units[at];
+    if (unit === undefined) return false;
+    cancelGesture();
+    select([unit.key]);
+    frameBounds(unit.bounds);
+    announce(t("draw.walk", { object: labelOf(unit), index: at + 1, count: units.length }));
+    return true;
+  };
+
+  /// Tab con una selezione: l'oggetto dopo l'ultimo scelto, o con Maiusc
+  /// quello prima del primo. Oltre le estremità il Tab esce dal foglio.
+  const walk = (step: 1 | -1): boolean => {
+    if (selection.length === 0 || pressed !== null) return false;
+    const anchor = step > 0 ? selection[selection.length - 1] : selection[0];
+    const at = currentIndex().units.findIndex((unit) => unit.key === anchor);
+    return at >= 0 && visit(at + step);
+  };
+
+  /// Invio: posizione e misure della selezione, o le proprietà del disegno.
+  /// Il fuoco torna dov'era, come da ogni finestra.
+  async function properties(): Promise<void> {
+    if (asking || !editable()) return;
+    asking = true;
+    cancelGesture();
+    try {
+      if (selection.length > 0) await placeDialog();
+      else await documentDialog();
+    } finally {
+      asking = false;
+    }
+  }
+
+  const PLACES = 2;
+
+  const placeDialog = async (): Promise<void> => {
+    const before = boundsOf(selectedUnits());
+    if (before === null) return;
+    const w = before.max[0] - before.min[0];
+    const h = before.max[1] - before.min[1];
+    const shown = [before.min[0], before.min[1], w, h].map((value) => formatNumber(value, PLACES));
+    const answer = await promptForm({
+      title: t("draw.properties.selection"),
+      fields: [
+        { id: "x", label: "X", value: shown[0]!, kind: "number" },
+        { id: "y", label: "Y", value: shown[1]!, kind: "number" },
+        // Un lato più corto di un centesimo non ha una misura da scrivere.
+        { id: "w", label: t("draw.field.width"), value: shown[2]!, kind: "number", min: 0.01, disabled: w < 0.01 },
+        { id: "h", label: t("draw.field.height"), value: shown[3]!, kind: "number", min: 0.01, disabled: h < 0.01 },
+      ],
+    });
+    if (answer === null || disposed || !editable()) return;
+    // Mentre la finestra era aperta il disegno può essere cambiato: valgono
+    // gli oggetti scelti adesso, e i campi non toccati restano esatti.
+    const units = selectedUnits();
+    const from = boundsOf(units);
+    if (from === null) return;
+    const exact = [from.min[0], from.min[1], from.max[0] - from.min[0], from.max[1] - from.min[1]];
+    const value = (id: string, at: number): number => (answer[id] === undefined || answer[id] === shown[at] ? exact[at]! : Number(answer[id]));
+    const [x, y, width, height] = [value("x", 0), value("y", 1), value("w", 2), value("h", 3)];
+    if (width === exact[2] && height === exact[3]) {
+      moveSelection(units, x - from.min[0], y - from.min[1]);
+      return;
+    }
+    if (placeSelection(units, from, { min: [x, y], max: [x + width, y + height] })) {
+      announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+    }
+  };
+
+  const documentDialog = async (): Promise<void> => {
+    const title = rootText("title");
+    const desc = rootText("desc");
+    const page = scene.root.page;
+    const fields: FormField[] = [
+      { id: "title", label: t("draw.field.title"), value: title, kind: "text" },
+      { id: "desc", label: t("draw.field.desc"), value: desc, kind: "multiline" },
+    ];
+    const size = page === null ? null : [formatNumber(page.width, PLACES), formatNumber(page.height, PLACES)];
+    if (size !== null) {
+      fields.push(
+        { id: "w", label: t("draw.field.page_width"), value: size[0]!, kind: "number", min: 1 },
+        { id: "h", label: t("draw.field.page_height"), value: size[1]!, kind: "number", min: 1 },
+      );
+    }
+    const answer = await promptForm({ title: t("draw.properties.document"), fields });
+    if (answer === null || disposed || !editable()) return;
+    const ops: Op[] = [];
+    const meta: { title?: string | null; desc?: string | null } = {};
+    const nextTitle = (answer.title ?? "").trim();
+    const nextDesc = (answer.desc ?? "").trim();
+    if (nextTitle !== title.trim()) meta.title = nextTitle === "" ? null : nextTitle;
+    if (nextDesc !== desc.trim()) meta.desc = nextDesc === "" ? null : nextDesc;
+    if (Object.keys(meta).length > 0) ops.push({ op: "meta", ...meta });
+    const now = scene.root.page;
+    if (now !== null && size !== null && (answer.w !== size[0] || answer.h !== size[1])) {
+      const width = answer.w === size[0] ? now.width : Number(answer.w);
+      const height = answer.h === size[1] ? now.height : Number(answer.h);
+      ops.push({ op: "page", viewBox: [now.x, now.y, width, height].map((v) => formatNumber(v, PLACES)).join(" ") });
+    }
+    commit("draw.properties.document", asGesture(ops));
+  };
+
+  /// L'elenco dei tasti, nei gruppi in cui si usano.
+  const keyGroups = (): KeyGroup[] => [
+    { title: t("draw.keys.tools"), rows: tools.map((spec) => [spec.shortcut, t(spec.label)] as const) },
+    {
+      title: t("draw.keys.cursor"),
+      rows: [
+        [ARROW_KEYS, t("draw.keys.cursor.move")],
+        ["Space Enter", t("draw.keys.cursor.press")],
+        ["Escape", t("draw.keys.cancel")],
+      ],
+    },
+    {
+      title: t("draw.objects"),
+      rows: [
+        [ARROW_KEYS, t("draw.keys.nudge")],
+        [`Mod-${ARROW_KEYS}`, t("draw.keys.resize")],
+        ["Tab Shift-Tab", t("draw.keys.walk")],
+        ["Home End", t("draw.keys.ends")],
+        ["Enter", t("draw.properties")],
+        ["Delete", t("draw.delete")],
+        ["Mod-a", t("draw.keys.all")],
+        ["Escape", t("draw.keys.deselect")],
+      ],
+    },
+    {
+      title: t("draw.view"),
+      rows: [
+        ["+", t("draw.zoom_in")],
+        ["-", t("draw.zoom_out")],
+        ["0", t("draw.keys.actual")],
+        ["Shift-1", t("draw.fit")],
+      ],
+    },
+    {
+      title: t("draw.edit"),
+      rows: [
+        ["Mod-z", t("draw.undo")],
+        ["Mod-Shift-z Mod-y", t("draw.redo")],
+        ["?", t("draw.keys")],
+      ],
+    },
+  ];
+
+  /// «?»: l'elenco dei tasti.
+  async function keys(): Promise<void> {
+    if (asking) return;
+    asking = true;
+    cancelGesture();
+    try {
+      await showKeys(t("draw.keys"), keyGroups());
+    } finally {
+      asking = false;
+    }
+  }
 
   const onShift = (event: KeyboardEvent): void => {
     if (event.key !== "Shift") return;
@@ -1309,6 +1846,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keydown", (event) => {
     onShift(event);
     if (event.defaultPrevented || event.target === titleInput) return;
+    const onSurface = event.target === surface;
+    if (onSurface && !event.altKey && arrows(event)) {
+      event.preventDefault();
+      return;
+    }
     const mod = event.ctrlKey || event.metaKey;
     if (mod) {
       if (event.altKey) return;
@@ -1328,7 +1870,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     if (event.altKey) return;
-    if (event.key === "Delete" || event.key === "Backspace") {
+    if (onSurface && event.key === "Tab") {
+      if (!walk(event.shiftKey ? -1 : 1)) return;
+    } else if (onSurface && (event.key === "Home" || event.key === "End")) {
+      if (pressed !== null || !visit(event.key === "Home" ? 0 : currentIndex().units.length - 1)) return;
+    } else if (onSurface && event.key === " ") {
+      if (event.repeat) {
+        // Tenuto giù: un tasto, un passo.
+      } else if (pressed === null) press(event.timeStamp);
+      else release();
+    } else if (onSurface && event.key === "Enter") {
+      if (pressed !== null) release();
+      else void properties();
+    } else if (event.key === "?") {
+      void keys();
+    } else if (event.key === "Delete" || event.key === "Backspace") {
       if (selection.length === 0) return;
       deleteSelection();
     } else if (event.key === "Escape") {
@@ -1345,8 +1901,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       zoomBy(1 / ZOOM_STEP);
     } else if (event.key === "0") {
       zoomBy(1 / camera.scale);
-    } else if (event.target === surface && nudge(event)) {
-      // Spostato.
     } else {
       const spec: ToolSpec | null = event.shiftKey ? null : toolForKey(tools, event.key);
       if (spec === null || !editable()) return;
@@ -1413,6 +1967,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       engine = next;
       history.clear();
       selection = [];
+      cursor = null;
+      cursorMark.hidden = true;
       refresh();
       placed = false;
       fit();

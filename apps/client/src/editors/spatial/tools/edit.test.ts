@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
-import { destination, gesture, moveOps, NewIds, pageFor, removeOps, roundDelta, transformValue } from "./edit";
+import { boxMatrix, destination, gesture, mappedBounds, moveOps, NewIds, pageFor, removeOps, roundDelta, transformOps, transformValue } from "./edit";
 import { LAYER, open } from "./test-support";
 
 const ids = (taken: readonly string[] = []): NewIds => new NewIds((id) => taken.includes(id));
@@ -119,6 +119,49 @@ describe("spostare", () => {
     expect(roundDelta(-0.004) + 0).toBe(0);
     expect(transformValue([1, 0, 0, 1, 0, 0])).toBeNull();
     expect(transformValue([1, 0, 0, 1, 0.00001, 0])).toBeNull();
+  });
+});
+
+describe("ridimensionare e collocare", () => {
+  const SOURCE = doc(
+    `${LAYER}<rect id="o1a2b3c4d" x="0" y="0" width="10" height="10"/><rect id="o2b3c4d5e" x="20" y="10" width="10" height="10"/></g>`
+      + '<g id="l2" fub:layer="Doppio" transform="translate(5 5) scale(2)"><rect id="o9i0j1k2l" x="0" y="0" width="5" height="5" transform="rotate(90)"/></g>',
+  );
+
+  it("porta un riquadro in un altro con una scala e una traslazione", () => {
+    const m = boxMatrix({ min: [0, 0], max: [10, 20] }, { min: [5, 5], max: [25, 15] });
+    expect(m).toEqual([2, 0, 0, 0.5, 5, 5]);
+    expect(mappedBounds({ min: [0, 0], max: [10, 20] }, m)).toEqual({ min: [5, 5], max: [25, 15] });
+    // Un lato che misura zero si sposta e basta.
+    expect(boxMatrix({ min: [0, 3], max: [10, 3] }, { min: [0, 4], max: [20, 9] })).toEqual([2, 0, 0, 1, 0, 1]);
+  });
+
+  it("mette la selezione nel riquadro chiesto, anche dentro un livello trasformato", () => {
+    const opened = open(SOURCE);
+    for (const key of ["o1a2b3c4d", "o9i0j1k2l"]) {
+      const unit = opened.reindex().get(key)!;
+      const target = { min: [100, 50], max: [140, 60] } as const;
+      const moved = transformOps([unit], boxMatrix(unit.bounds!, target), ids());
+      expect(moved.keys).toEqual([key]);
+      expect(opened.engine.apply(gesture(moved.ops)!).outcome).toBe("applied");
+      const after = opened.reindex().get(key)!.bounds!;
+      expect(after.min[0]).toBeCloseTo(100, 3);
+      expect(after.min[1]).toBeCloseTo(50, 3);
+      expect(after.max[0]).toBeCloseTo(140, 3);
+      expect(after.max[1]).toBeCloseTo(60, 3);
+    }
+  });
+
+  it("scala più oggetti insieme, attorno all'angolo del loro riquadro", () => {
+    const opened = open(SOURCE);
+    const units = [opened.index.get("o1a2b3c4d")!, opened.index.get("o2b3c4d5e")!];
+    const moved = transformOps(units, boxMatrix({ min: [0, 0], max: [30, 20] }, { min: [0, 0], max: [60, 20] }), ids());
+    expect(moved.ops).toEqual([
+      { op: "set", id: "o1a2b3c4d", attrs: { transform: "matrix(2 0 0 1 0 0)" } },
+      { op: "set", id: "o2b3c4d5e", attrs: { transform: "matrix(2 0 0 1 0 0)" } },
+    ]);
+    expect(opened.engine.apply(gesture(moved.ops)!).outcome).toBe("applied");
+    expect(opened.reindex().get("o2b3c4d5e")!.bounds).toEqual({ min: [40, 10], max: [60, 20] });
   });
 });
 

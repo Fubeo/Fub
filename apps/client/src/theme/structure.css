@@ -1111,6 +1111,7 @@ html, body, #app {
   height: 100%;
   min-width: 0;
   min-height: 0;
+  container-type: inline-size;
 }
 .draw-header,
 .draw-toolbar {
@@ -1248,6 +1249,114 @@ html, body, #app {
   overflow: visible;
   pointer-events: none;
 }
+/* Il cursore del foglio, che la tastiera muove: un punto senza misura, e il
+   segno attorno lo disegna la pelle. */
+.draw-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.draw-cursor::before,
+.draw-cursor::after {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+.draw-cursor::before {
+  top: -12px;
+  left: -12px;
+  width: 24px;
+  height: 24px;
+}
+.draw-cursor::after {
+  top: -3px;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+}
+/* Il foglio e, accanto, l'albero degli oggetti; su un riquadro stretto
+   l'albero va sotto. Una riga dell'albero misura almeno 44 px: è un bersaglio
+   come gli altri, e l'albero virtualizzato conta su quell'altezza. */
+.draw-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+/* Il lato del bordo segue la disposizione, che è della struttura; il colore
+   e il tratto sono della pelle. */
+.draw-objects {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 min(20rem, 40%);
+  min-width: 0;
+  min-height: 0;
+  border-width: 0;
+  border-inline-start-width: 1px;
+}
+.draw-objects-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.draw-objects-title {
+  margin: 0;
+}
+.draw-objects-empty {
+  margin: 0;
+}
+.draw-objects-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-objects-tree {
+  position: relative;
+}
+.draw-object {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  cursor: default;
+}
+.draw-objects-tree[data-virtual] > .draw-object {
+  position: absolute;
+  right: 0;
+  left: 0;
+}
+.draw-object[aria-level="2"] {
+  padding-inline-start: 1.75em;
+}
+.draw-object-mark {
+  flex: none;
+  width: 1.75em;
+  text-align: center;
+}
+.draw-object-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@container (max-width: 36rem) {
+  .draw-body {
+    flex-direction: column;
+  }
+  .draw-objects {
+    flex: 0 0 40%;
+    border-inline-start-width: 0;
+    border-block-start-width: 1px;
+  }
+}
 /* La superficie del disegno nella shell: una riga d'avviso in cima, quando il
    documento la chiede, e sotto l'editor o l'immagine del documento intero,
    che prendono il resto. L'avviso va a capo invece di scorrere: il suo
@@ -1284,10 +1393,40 @@ html, body, #app {
   min-width: 0;
   min-height: 0;
 }
+/* In Lettura, sotto l'immagine, il disegno a parole: la descrizione e
+   l'elenco degli oggetti, che scorre da sé e non toglie all'immagine più di
+   un terzo del riquadro. */
+.vector-about {
+  flex: none;
+  max-height: 33%;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.vector-about-desc {
+  margin: 0;
+  white-space: pre-line;
+}
+.vector-about-objects > summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  cursor: pointer;
+}
+.vector-about-objects ul {
+  margin: 0;
+  padding-inline-start: 1.5em;
+}
 @media (forced-colors: active) {
   .draw-width-bar,
   .draw-swatch-frame {
     background: CanvasText;
+  }
+  .draw-cursor::before,
+  .draw-cursor::after {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .draw-cursor[data-pressed]::after {
+    background: Highlight;
   }
   .draw-surface:focus-visible {
     outline-offset: -2px !important;
