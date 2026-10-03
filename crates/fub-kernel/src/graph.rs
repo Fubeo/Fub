@@ -1037,8 +1037,7 @@ fn stem_of(path: &str) -> &str {
 /// nome, perché `2` non è un tipo; il documento che porta l'estensione per
 /// intero (`[[acqua.svg]]` con `acqua.svg`) si raggiunge come prima, dal suo
 /// nome di file. La risoluzione di una chiave guarda al più le voci di prima,
-/// quindi i `watchers` restano giusti. *(Proposta del 3 ottobre 2026, da
-/// rivedere.)*
+/// quindi i `watchers` restano giusti.
 fn names_an_attachment(key: &str) -> bool {
     mime_of(&DocId::new(key)).is_some()
 }
