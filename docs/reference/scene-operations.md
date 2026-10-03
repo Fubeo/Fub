@@ -266,9 +266,10 @@ così com'è.
 - **`remove`:** vince sui `set` successivi, che sono rifiutati con
   `missing-target`.
 - **Commit già applicati:** alla ripresa il PC dichiara l'ultimo commit
-  applicato, `lastC`, e il client rispedisce solo quelli successivi. Come rete
-  di sicurezza, un `add` con un id già presente ed elemento canonicamente
-  identico si applica senza modifiche ed è segnato `duplicate`.
+  applicato, `lastC`, e il client rispedisce solo quelli successivi
+  ([Sessione live](live-session.md#ripresa)). Come rete di sicurezza, un
+  `add` con un id già presente ed elemento canonicamente identico si applica
+  senza modifiche ed è segnato `duplicate`.
 - **Eco:** il PC rimanda ai client le operazioni applicate con gli elementi in
   forma canonica, compreso il `d` calcolato. Il client sostituisce per id la
   propria versione ottimistica.
