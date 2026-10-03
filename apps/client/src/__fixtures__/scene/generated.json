@@ -1,0 +1,79 @@
+{
+  "dense": {
+    "seed": 539365378,
+    "bytes": 4572015,
+    "fnv1a": "0f64f632",
+    "items": 42458,
+    "diagnostics": {
+      "S002": 3105
+    },
+    "summary": {
+      "version": 1,
+      "foreign": false,
+      "truncated": false,
+      "layers": [
+        "Livello 1",
+        "Livello 2",
+        "Livello 3",
+        "Livello 4",
+        "Livello 5",
+        "Livello 6",
+        "Livello 7",
+        "Livello 8"
+      ],
+      "counts": {
+        "strokes": 0,
+        "shapes": 32204,
+        "texts": 3579,
+        "images": 0,
+        "links": 0,
+        "foreign": 3105
+      },
+      "ink": {
+        "samples": 0,
+        "duration": 0
+      },
+      "bbox": {
+        "x": -344.6,
+        "y": -590.64,
+        "width": 3041.77,
+        "height": 2720.77
+      }
+    }
+  },
+  "ink": {
+    "seed": 539365379,
+    "bytes": 1053776,
+    "fnv1a": "7c5691da",
+    "items": 44,
+    "diagnostics": {
+      "S009": 17
+    },
+    "summary": {
+      "version": 1,
+      "foreign": false,
+      "truncated": false,
+      "layers": [
+        "Livello 1"
+      ],
+      "counts": {
+        "strokes": 40,
+        "shapes": 0,
+        "texts": 0,
+        "images": 0,
+        "links": 0,
+        "foreign": 0
+      },
+      "ink": {
+        "samples": 36131,
+        "duration": 308967
+      },
+      "bbox": {
+        "x": 9.3,
+        "y": 38.3,
+        "width": 1568.18,
+        "height": 945.5
+      }
+    }
+  }
+}

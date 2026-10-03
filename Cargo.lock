@@ -1813,6 +1813,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-scene"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "fub-sdk"
 version = "0.1.0"
 dependencies = [
