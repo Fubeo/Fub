@@ -1,5 +1,7 @@
-// La `TextOperation` di un'operazione sulla scena (`operazioni.md` §6): le
-// modifiche fra il testo di prima e quello di dopo, tutti e due a LF.
+// La `TextOperation` di un'operazione sulla scena: le modifiche fra il testo
+// di prima e quello di dopo, tutti e due a LF. Le regole sono in
+// `docs/reference/scene-operations.md`, e i `§` dei commenti sono le sue
+// sezioni.
 //
 // Il motore cambia l'albero della sorgente, e il testo nuovo è l'albero
 // scritto; qui si trova che cosa è cambiato. Prima le righe comuni in testa e

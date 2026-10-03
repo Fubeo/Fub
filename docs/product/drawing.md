@@ -19,8 +19,9 @@ sorgente» mostra comunque il testo
 
 Il file resta un SVG che qualunque browser o editor apre. I dati che servono a
 Fub stanno in pochi attributi del namespace `fub`; la forma esatta è nel
-[formato della scena](../reference/scene-format.md), il perché nell'
-[ADR 0203](../decisions/0203-superfici-spaziali.md).
+[formato della scena](../reference/scene-format.md), le modifiche che il
+disegno ci scrive nelle [operazioni sulla scena](../reference/scene-operations.md),
+il perché nell'[ADR 0203](../decisions/0203-superfici-spaziali.md).
 
 ## Modalità
 
