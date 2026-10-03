@@ -15,6 +15,10 @@
 # ne farebbe un altro file, e il test fallirebbe a ogni checkout.
 apps/client/src/__fixtures__/scene/*.svg -text
 
+# Le fixture delle annotazioni dei PDF (`fub-format-svg`): gli span del loro
+# modello sono byte, come quelli dei disegni qui sotto.
+crates/fub-format-svg/tests/fixtures/*.fubann -text
+
 # Le fixture del modello delle scene (`fub-format-svg`): stessa ragione, e
 # `foreign-crlf-bom.svg` esiste per provare che la riscrittura dei
 # collegamenti lascia identici BOM e CRLF.
