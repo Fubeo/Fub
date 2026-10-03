@@ -218,8 +218,12 @@ export const PACCHETTI: readonly Pacchetto[] = [
   {
     codice: "FD-503",
     titolo: "Export del PDF annotato",
-    stato: "corso",
-    nota: "Un PDF nuovo con le annotazioni; l'originale non si scrive mai.",
+    stato: "revisione",
+    pr: 121,
+    nota:
+      "Il PDF annotato (l'originale identico, con le annotazioni in un livello) e il PDF redatto (le pagine con una copertura " +
+      "diventano immagini, e sotto non resta niente), con «Esporta…» nella palette e nel menu del riquadro; anche il disegno " +
+      "si esporta così in PNG e PDF. Non si vede in questa pagina: il file lo scrive l'host Rust, che l'anteprima non ha.",
   },
 ];
 
