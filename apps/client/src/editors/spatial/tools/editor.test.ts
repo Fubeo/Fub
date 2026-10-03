@@ -412,6 +412,7 @@ describe("da tastiera", () => {
   });
 
   it("Ctrl e le frecce ridimensionano la selezione, ferma in alto a sinistra", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
     mount(BOXES);
     editor.select(["oa1a1a1a1"]);
     key("ArrowRight", { ctrlKey: true, shiftKey: true });
@@ -421,8 +422,10 @@ describe("da tastiera", () => {
     expect(editor.engine.text).toContain('transform="matrix(1.5 0 0 0.9 -5 1)"');
     expect(spoken()).toBe("Misure: 30 × 9.");
     expect(editor.selection).toEqual(["oa1a1a1a1"]);
+    // I due colpi di fila sono un passo solo.
     editor.undo();
     expect(spoken()).toBe("Annullato: Ridimensionamento.");
+    expect(editor.engine.text).toBe(BOXES);
   });
 
   it("una linea dritta non si ridimensiona sul lato che misura zero", () => {
