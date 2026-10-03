@@ -2834,6 +2834,12 @@ progress::-moz-progress-bar {
   gap: var(--space-4);
 }
 
+/* La domanda di un modulo, sopra i campi: il testo pieno, perché è ciò che
+   si chiede. */
+.modale .palette-form > p {
+  margin: 0;
+}
+
 .modale .palette-form label {
   display: flex;
   flex-direction: column;
