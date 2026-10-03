@@ -1,4 +1,4 @@
-// L'editor del livello Essenziale (piano §6): una barra e il foglio, nessun
+// L'editor del livello Essenziale: una barra e il foglio, nessun
 // pannello. Tiene insieme ciò che i pacchetti precedenti hanno costruito — il
 // motore delle operazioni, il painter e lo strato sopra, la pipeline della
 // penna, la camera condivisa — e ci mette sopra gli strumenti.
@@ -16,10 +16,11 @@
 // - **Lo stesso dato.** Selezione e gomma toccano gli oggetti con l'indice di
 //   `hit.ts`, costruito sugli stessi nodi che il painter disegna.
 // - **Annunci.** Una regione live dice creazione, eliminazione, selezione,
-//   cambio di strumento e ciò che non si è potuto fare (piano §7). L'albero
-//   degli oggetti e la mappa completa della tastiera sono di FD-207.
+//   cambio di strumento e ciò che non si è potuto fare. L'albero degli
+//   oggetti e la mappa completa della tastiera verranno con l'accessibilità
+//   della superficie.
 //
-// La superficie che lo monta nella shell (FD-206) gli passa il motore del
+// La superficie che lo monta nella shell gli passa il motore del
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
 // un'altra superficie arriva con `setEngine`, e annulla e ripeti restano.
 
@@ -65,7 +66,7 @@ import { DEFAULT_TOOL, toolForKey, toolsFor, toolSpec, type Level, type ToolId, 
 import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
-/// `EditorChange` (`operazioni.md` §6).
+/// `EditorChange` (operazioni sulla scena, §6).
 export interface DrawChange {
   /// Il testo grezzo di dopo, coi terminatori del file.
   readonly text: string;
@@ -94,8 +95,9 @@ export interface DrawEditor {
   readonly selection: readonly string[];
   readonly canUndo: boolean;
   readonly canRedo: boolean;
-  /// Il documento ricostruito dal testo autorevole (DEC-08): la cronologia
-  /// resta, la selezione tiene gli oggetti che ci sono ancora.
+  /// Il documento ricostruito dal testo autorevole (operazioni sulla scena,
+  /// §7): la cronologia resta, la selezione tiene gli oggetti che ci sono
+  /// ancora.
   setEngine(engine: SceneEngine): void;
   setTool(id: ToolId): void;
   setColor(color: string): void;
@@ -110,7 +112,7 @@ export interface DrawEditor {
   dispose(): void;
 }
 
-/// I limiti della camera del disegno (FD-205).
+/// I limiti della camera del disegno.
 export const DRAW_SCALE_LIMITS: ScaleLimits = { min: 0.1, max: 32 };
 
 /// Quanto lontano dal tratto un tocco prende ancora l'oggetto, in pixel: il
