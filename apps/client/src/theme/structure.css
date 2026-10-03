@@ -1284,9 +1284,64 @@ html, body, #app {
   min-width: 0;
   min-height: 0;
 }
+/* La sessione live: l'indicatore è una riga fra l'avviso e l'editor, con lo
+   stato che prende lo spazio e «Segui il tablet» accanto; tutti e due sono
+   bersagli da 44 px e vanno a capo su un telefono. Il pallino dello stato
+   è un tondo davanti al testo, che lo ripete a parole. Nel pannello il QR
+   sta al centro a pixel interi, e la diagnostica è una tabella a due
+   colonne. */
+.live-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.live-state,
+.live-follow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.live-state {
+  flex: 1 1 12rem;
+  min-width: 0;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.live-follow {
+  flex: none;
+}
+.live-state::before {
+  content: "";
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-inline-end: 0.5rem;
+  border-radius: 50%;
+}
+.live-qr {
+  display: flex;
+  justify-content: center;
+}
+.live-qr img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.live-diagnostics dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0 0;
+}
+.live-diagnostics dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 @media (forced-colors: active) {
   .draw-width-bar,
-  .draw-swatch-frame {
+  .draw-swatch-frame,
+  .live-state::before {
     background: CanvasText;
   }
   .draw-surface:focus-visible {

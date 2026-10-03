@@ -108,6 +108,10 @@ I tipi usano i nomi in camelCase e il tipo in `t`; i contatori del protocollo
 sono `u64` e viaggiano come stringhe. La shell li ha in `contract.ts` con il
 prefisso `Live`, e il fake host simula la sessione con `liveEmit`.
 
+I comandi li serve solo l'app: in un browser `api.liveSupported()` è falso e
+la shell non offre la sessione. Il fake host li serve se riceve una rete con
+`live`. Il lato del PC è in [Disegni](../product/drawing.md#sessione-live).
+
 | Errore | Quando |
 |---|---|
 | `not_found` | sessione sconosciuta o di un'altra finestra, risposta a un commit che non è in attesa, indirizzo non disponibile |

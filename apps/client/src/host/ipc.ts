@@ -6,7 +6,7 @@
 // importare `@tauri-apps` (§1.3), e il test `no-tauri-outside-host.test.ts`
 // lo verifica leggendo i sorgenti: un `import` di troppo altrove è rosso, non
 // una svista che si scopre il giorno del port su PWA o mobile.
-import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
@@ -456,6 +456,10 @@ export const api = {
   //
   // La sessione è della finestra che l'ha aperta: un'altra non la vede, e una
   // pagina che si ricarica la chiude.
+  //
+  // Le porte le serve solo l'app: in un browser `liveSupported` è falso, e la
+  // shell non offre la sessione.
+  liveSupported: (): boolean => isTauri(),
   liveStart: (request: LiveStart, onEvents: (events: LiveEvent[]) => void) =>
     invoke<LiveStarted>("live_start", { request, events: new Channel<LiveEvent[]>(onEvents) }),
   // Il QR in corso, `null` se il segreto è già usato o scaduto; con `renew`

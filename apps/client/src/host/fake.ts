@@ -1315,6 +1315,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         windowClosed.add(handler);
         return Promise.resolve(() => { windowClosed.delete(handler); });
       },
+      liveSupported: () => options.live !== undefined,
       // Il registro tiene la richiesta e non il canale: gli eventi li manda
       // il banco con `liveEmit`.
       liveStart: (request, onEvents) =>

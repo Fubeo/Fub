@@ -255,6 +255,9 @@
     "draw-surface",
     "draw-page",
     "vector-notice",
+    "live-bar",
+    "live-state",
+    "live-follow",
     "markdown-preview",
     "markdown-rendered",
     "markdown-code-copy",
@@ -1026,7 +1029,10 @@
     {
       "name": "vector-surface",
       "hooks": [
-        "vector-notice"
+        "vector-notice",
+        "live-bar",
+        "live-state",
+        "live-follow"
       ],
       "states": [
         "rest"
@@ -1834,7 +1840,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 412,
+    "hooks": 415,
     "state_names": 7,
     "assigned_states": 154,
     "components": 48,

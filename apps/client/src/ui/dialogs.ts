@@ -15,7 +15,7 @@ import { trapFocus } from "./a11y";
 import { openLifetime } from "./lifetime";
 import { enterSurface, exitSurface } from "./motion";
 
-interface Frame {
+export interface Frame {
   readonly overlay: HTMLElement;
   readonly box: HTMLElement;
   close(): void;
@@ -23,7 +23,10 @@ interface Frame {
 
 let dialogCount = 0;
 
-function openFrame(title: string, onDismiss: () => void): Frame {
+/// La cornice di ogni dialogo della shell: la `.modale` col titolo, il fuoco
+/// intrappolato, Esc e il clic fuori che chiudono e chiamano `onDismiss`.
+/// Chi ha un pannello suo (la sessione live) ci mette il contenuto.
+export function openFrame(title: string, onDismiss: () => void): Frame {
   const life = openLifetime();
   const overlay = document.createElement("div");
   overlay.className = "modale shell-dialog";

@@ -529,11 +529,12 @@ quello in cui la rete ha aggiunto meno rumore.
   ed eco canonica. Il crate controlla solo forma e misura.
 - **Inchiostro sul PC.** L'overlay, la sua sostituzione con l'elemento vero,
   la cancellazione di un tratto il cui commit non arriva e il recupero quando
-  la shell resta indietro spettano alla shell.
+  la shell resta indietro sono della shell, in
+  [Disegni](../product/drawing.md#sessione-live).
 - **Composizione nell'app.** I comandi Tauri, il canale verso la shell e
   l'impostazione `live.port` sono in `fub-app` ([Nell'app](#nellapp)).
   L'avviso per un QR inutilizzato, la spiegazione del firewall e il pannello
-  di diagnostica spettano alla shell.
+  di diagnostica sono della shell, nella stessa pagina.
 - **Sul tablet.** La lettura del QR dentro l'app e la conferma con il nome
   del PC spettano all'app. Lo schema `fubdraw://` non si registra nel
   sistema, così nessuna pagina web avvia un abbinamento.
