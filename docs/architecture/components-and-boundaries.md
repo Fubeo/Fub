@@ -153,7 +153,7 @@ indipendenti.
 | Markdown | `crates/fub-format-markdown/src/` |
 | foglio | `crates/fub-format-sheet/src/` |
 | lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
-| disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/` |
+| disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/`, `crates/fub-features/src/draw.rs` |
 | feature | `crates/fub-features/src/` |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |

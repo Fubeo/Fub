@@ -110,7 +110,8 @@ deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 `fub-format-svg`, il provider del [formato della
 scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
 `draw`: l'arco `host --> svg` è una dipendenza facoltativa, fuori dal
-`default`.
+`default`. La stessa feature accende in `fub-features` l'export dei disegni in
+PNG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati.
 
 ## Flusso di un comando
 
