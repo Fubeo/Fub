@@ -448,7 +448,8 @@ descrizione e riepilogo, con `truncated: true` (§11).
   documento e una `figcaption` che contiene il titolo; mai un `<img>` né un
   URL di risorsa: l'immagine la mette la shell con la risoluzione dei media.
   Senza titolo la didascalia è il nome del file, perché è il nome accessibile
-  della figura.
+  della figura. Lo stesso nome è il testo alternativo dell'immagine che la
+  shell mette in una nota quando il link non ne scrive uno.
 - **`serialize`** genera un documento nuovo con radice, titolo, carta e
   «Livello 1», in forma canonica, con righe LF e a capo finale. Il titolo è il
   primo heading di livello 1 del modello, oppure il nome del file, su una riga

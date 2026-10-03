@@ -24,6 +24,7 @@ vi.mock("mermaid", () => ({
   },
 }));
 import { mountMarkdown, mountRenderedDocument, sourceElementAt } from "./mount";
+import { api } from "../../../../host/ipc";
 import { registerCustomRenderer } from "../../../../ui/custom";
 import { closeLightbox } from "../../../../ui/lightbox";
 import { setReducedMotionPreference } from "../../../../theme/reduced-motion";
@@ -38,6 +39,26 @@ function deferred() {
   let resolve!: (content: EmbedContent) => void;
   const promise = new Promise<EmbedContent>((done) => { resolve = done; });
   return { promise, resolve };
+}
+
+const ACQUA = "disegni/acqua.svg";
+const SCENE = `<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="${ACQUA}">`
+  + "<figcaption>Ciclo dell&#39;acqua</figcaption></figure>";
+/// `![[acqua]]` torna dal kernel come il segnaposto della scena; i lease sono
+/// quelli dell'IPC, numerati come li numera l'host.
+function drawingLeases() {
+  const opened: string[] = [];
+  const closed: string[] = [];
+  vi.spyOn(api, "resourceOpen").mockImplementation(async (id) => {
+    opened.push(id);
+    return { handle: String(opened.length), id, len: 1, mime: "image/svg+xml", kind: "image", revision: "r1" };
+  });
+  vi.spyOn(api, "resourceClose").mockImplementation(async (handle) => {
+    closed.push(handle);
+  });
+  vi.spyOn(api, "assetUrl").mockImplementation((handle) => `fub-asset://localhost/${handle}`);
+  query.renderEmbed.mockResolvedValue({ doc_id: ACQUA, html: SCENE, parts: [] });
+  return { opened, closed };
 }
 
 beforeEach(() => {
@@ -154,6 +175,73 @@ describe("montaggio Markdown condiviso", () => {
     expect(root.querySelectorAll("p")).toHaveLength(1);
     expect(root.textContent).toBe("Ritaglio");
     expect(query.renderEmbed).toHaveBeenCalledWith("Nota.md", "Sezione", null);
+  });
+
+  it("`![[disegno]]` diventa l'immagine del disegno, non il segnaposto della sua scena", async () => {
+    const leases = drawingLeases();
+    const root = mount('<p><span class="embed" data-embed-page="acqua">acqua</span></p>'
+      + '<p><span class="embed" data-embed-page="acqua" data-embed-size="120">acqua</span></p>');
+    await vi.waitFor(() => expect(root.querySelectorAll(".embed-media img")).toHaveLength(2));
+    const [bare, sized] = Array.from(root.querySelectorAll<HTMLImageElement>(".embed-media img"));
+    expect(bare!.alt).toBe("Ciclo dell'acqua");
+    expect(bare!.getAttribute("src")).toBe("fub-asset://localhost/1");
+    expect(bare!.dataset.vaultId).toBe(ACQUA);
+    expect(sized!.getAttribute("width")).toBe("120");
+    expect(root.querySelector("figure, figcaption, .embed-loaded")).toBeNull();
+    // Una sola resa chiesta per i due embed, un lease per ogni immagine.
+    expect(query.renderEmbed).toHaveBeenCalledOnce();
+    expect(leases.opened).toEqual([ACQUA, ACQUA]);
+    for (const dispose of disposers.splice(0)) dispose();
+    expect(leases.closed.sort()).toEqual(["1", "2"]);
+  });
+
+  it("dentro una nota trasclusa il disegno si vede, e il ciclo resta interrotto", async () => {
+    const leases = drawingLeases();
+    query.renderEmbed.mockImplementation(async (page: string) => page === "Altra"
+      ? {
+        doc_id: "Altra.md",
+        html: '<p>Prima</p><div class="embed" data-embed-page="acqua">acqua</div>'
+          + '<div class="embed" data-embed-page="Nota">Nota</div>',
+        parts: [],
+      }
+      : page === "Nota"
+        ? { doc_id: "Nota.md", html: '<div class="embed" data-embed-page="Nota">Nota</div>', parts: [] }
+        : { doc_id: ACQUA, html: SCENE, parts: [] });
+    const root = mount('<div class="embed" data-embed-page="Altra">Altra</div><div class="embed" data-embed-page="Nota">Nota</div>');
+    await vi.waitFor(() => expect(root.querySelector(".embed-loaded .embed-media img")).not.toBeNull());
+    await vi.waitFor(() => expect(root.querySelectorAll(".embed-cycle")).toHaveLength(2));
+    expect(root.querySelector<HTMLImageElement>(".embed-loaded .embed-media img")!.alt).toBe("Ciclo dell'acqua");
+    expect(leases.opened).toEqual([ACQUA]);
+  });
+
+  it("un segnaposto ostile non porta niente nella nota: l'alt è soltanto testo", async () => {
+    drawingLeases();
+    query.renderEmbed.mockResolvedValue({
+      doc_id: ACQUA,
+      html: `<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="${ACQUA}">`
+        + '<figcaption><img src="x" onerror="globalThis.__ostile = 1">Ciclo<script>globalThis.__ostile = 2</script>'
+        + '<svg><script>globalThis.__ostile = 3</script></svg></figcaption></figure>',
+      parts: [],
+    });
+    const root = mount('<span class="embed" data-embed-page="acqua">acqua</span>');
+    await vi.waitFor(() => expect(root.querySelector(".embed-media img")).not.toBeNull());
+    expect(root.querySelector<HTMLImageElement>(".embed-media img")!.alt).toBe("Ciclo");
+    expect(root.querySelectorAll("img")).toHaveLength(1);
+    expect(root.querySelector("script, svg, figure, [onerror]")).toBeNull();
+    expect((globalThis as { __ostile?: number }).__ostile).toBeUndefined();
+  });
+
+  it("vale la specie del media solo per il segnaposto di una scena del documento stesso", async () => {
+    const leases = drawingLeases();
+    query.renderEmbed.mockImplementation(async (page: string) => page === "Altra"
+      ? { doc_id: "Altra.md", html: SCENE, parts: [] }
+      : { doc_id: "disegni/altro.svg", html: SCENE, parts: [] });
+    const root = mount('<div class="embed" data-embed-page="Altra"></div><div class="embed" data-embed-page="altro"></div>');
+    await vi.waitFor(() => expect(root.querySelectorAll(".embed-loaded")).toHaveLength(2));
+    expect(root.querySelector(".embed-media")).toBeNull();
+    expect(leases.opened).toEqual([]);
+    // Il segnaposto passa dal cancello come ogni resa: resta la didascalia.
+    expect(root.querySelector("figure")?.hasAttribute("data-embed-doc")).toBe(true);
   });
 
   it("dà a ogni renderer custom la nota in cui sta la parte, anche trasclusa, senza toccarne il payload", async () => {
