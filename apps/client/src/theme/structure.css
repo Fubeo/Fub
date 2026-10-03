@@ -1056,6 +1056,49 @@ html, body, #app {
   gap: 0.5rem;
   padding: 0.5rem;
 }
+/* FubDraw: gli strati del painter e quello sopra, nell'ordine del documento.
+   Uno strato vivo non eredita niente dalla pagina, come un SVG aperto da
+   solo: il testo del disegno parte dai valori iniziali, non dal carattere
+   della shell. */
+.spatial-painter,
+.spatial-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.spatial-overlay {
+  width: 100%;
+  height: 100%;
+}
+.spatial-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: initial;
+  font: initial;
+  letter-spacing: initial;
+  word-spacing: initial;
+  text-transform: initial;
+  white-space: initial;
+  direction: ltr;
+  writing-mode: initial;
+}
+.spatial-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  max-height: none;
+  transform-origin: 0 0;
+  user-select: none;
+}
+.spatial-image-slot {
+  display: none;
+}
 .base-search { min-width: 8rem; flex: 1; }
 .base-status { min-width: 0; overflow-wrap: anywhere; }
 .base-body { flex: 1; min-height: 0; overflow: auto; padding: 0.75rem; }

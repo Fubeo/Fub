@@ -58,6 +58,11 @@ export class Tree {
     return node !== undefined && node.facts.id === id ? node : null;
   }
 
+  /// L'elemento che porta `id`, o l'unità che lo contiene.
+  holder(id: string): ElementPart | null {
+    return this.ids.get(id) ?? null;
+  }
+
   /// Vero se `id` è già usato, anche dentro un'unità.
   has(id: string): boolean {
     return this.ids.has(id);
