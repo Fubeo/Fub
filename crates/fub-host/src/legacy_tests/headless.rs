@@ -83,12 +83,13 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     let mut docs = open.read().unwrap().documents();
     docs.sort();
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
-    // Con la feature `draw` c'è anche il formato delle scene (ADR 0203), e la
-    // shell riconosce da qui le note di cartella `.svg`.
-    #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
+    // Con la feature `draw` ci sono anche i formati delle scene e delle
+    // annotazioni dei PDF (ADR 0203), e la shell riconosce da qui le note di
+    // cartella `.svg`. L'anagrafe le dà in ordine alfabetico.
     let mut extensions = vec!["base", "canvas", "fubsheet", "markdown", "md"];
     #[cfg(feature = "draw")]
-    extensions.push("svg");
+    extensions.extend(["fubann", "svg"]);
+    extensions.sort_unstable();
     assert_eq!(
         info.extensions, extensions,
         "i provider dichiarano le estensioni, non la UI"

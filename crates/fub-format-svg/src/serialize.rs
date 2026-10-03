@@ -1,14 +1,18 @@
-//! Un disegno nuovo: radice, titolo, carta e «Livello 1» (§2, §9).
+//! I documenti nuovi: un disegno con radice, titolo, carta e «Livello 1»
+//! (§2, §9), e le annotazioni di un PDF con radice e titolo.
 //!
-//! È generazione, non round-trip, come vuole il contratto: un disegno che
+//! È generazione, non round-trip, come vuole il contratto: un documento che
 //! esiste lo modifica la superficie con patch sulla sorgente, e il modello di
-//! una scena non ne porta la geometria. Del modello si usa solo il titolo.
+//! una scena non ne porta la geometria. Del modello si usano solo il titolo e
+//! il nome del documento.
 
-use fub_abi::model::DocumentModel;
+use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::rules::path::{relative_ref, resolve_against};
 use fub_abi::{Fnv1a, FormatError};
 use fub_scene::{FUB_NS, SUPPORTED_VERSION, SVG_NS};
 
 use crate::escape;
+use crate::links::attribute_value;
 use crate::render::title_of;
 
 /// Le dimensioni della pagina di un disegno nuovo, in unità utente.
@@ -25,17 +29,7 @@ const FIRST_LAYER: &str = "Livello 1";
 /// documento che `fub-scene` non legge come scena FubDraw modificabile, con
 /// quel titolo e quel livello, è un errore e non un file scritto.
 pub(crate) fn new_document(model: &DocumentModel) -> Result<String, FormatError> {
-    let title = title_of(&model.body)
-        .or_else(|| {
-            model
-                .outline
-                .iter()
-                .find(|heading| heading.level == 1)
-                .map(|heading| heading.text.clone())
-        })
-        .map(|title| plain(&title))
-        .filter(|title| !title.is_empty())
-        .unwrap_or_else(|| plain(model.id.page_name()));
+    let title = title(model);
     let layer = layer_id(model.id.as_str());
     let source = format!(
         concat!(
@@ -71,6 +65,95 @@ pub(crate) fn new_document(model: &DocumentModel) -> Result<String, FormatError>
         )));
     }
     Ok(source)
+}
+
+/// Le annotazioni nuove di un PDF, in forma canonica e con righe LF: la
+/// radice con `fub:annotates` e il titolo, e nient'altro.
+///
+/// Il PDF annotato viene dal nome: `Bando.pdf.fubann` annota `Bando.pdf`
+/// nella stessa cartella, come lo cerca chi apre il PDF. Un nome che non
+/// finisce in `.pdf.fubann` dà annotazioni senza `fub:annotates`. Impronta,
+/// numero di pagine e gruppi di pagina li scrive chi apre il PDF, che li
+/// conosce: il provider ha solo il modello. Niente `viewBox` né carta, perché
+/// ogni pagina ha le sue coordinate.
+///
+/// Si rilegge prima di restituirlo, come un disegno nuovo: deve essere
+/// modificabile, con quel titolo, e il PDF annotato deve risolversi nel
+/// documento accanto.
+pub(crate) fn new_annotations(model: &DocumentModel) -> Result<String, FormatError> {
+    let title = title(model);
+    let pdf = annotated_of(&model.id);
+    let annotates = match &pdf {
+        Some(pdf) => format!(
+            " fub:annotates=\"{}\"",
+            attribute_value(&relative_ref(&model.id, pdf), '"')?
+        ),
+        None => String::new(),
+    };
+    let source = format!(
+        concat!(
+            "<svg xmlns=\"{svg}\" xmlns:fub=\"{fub}\" fub:version=\"{version}\"{annotates}>\n",
+            "  <title>{title}</title>\n",
+            "</svg>\n",
+        ),
+        svg = SVG_NS,
+        fub = FUB_NS,
+        version = SUPPORTED_VERSION,
+        annotates = annotates,
+        title = escape::text(&title),
+    );
+
+    let annotations = fub_scene::read_annotations(&source).map_err(|error| {
+        FormatError::Serialize(format!("le annotazioni nuove non si leggono: {error}"))
+    })?;
+    let read_title = annotations
+        .scene
+        .index
+        .title
+        .as_ref()
+        .map(|t| t.text.as_str());
+    let read_pdf = annotations
+        .annotates
+        .as_ref()
+        .and_then(|annotated| resolve_against(&model.id, &annotated.path));
+    if !annotations.scene.editable()
+        || read_title != Some(title.as_str()).filter(|t| !t.is_empty())
+        || read_pdf.as_deref() != pdf.as_ref().map(DocId::as_str)
+    {
+        return Err(FormatError::Serialize(format!(
+            "le annotazioni nuove «{title}» non si rileggono come sono state scritte"
+        )));
+    }
+    Ok(source)
+}
+
+/// Il titolo di un documento nuovo: il primo heading di livello 1 del
+/// modello, o della sua `outline`; senza, il nome del file.
+fn title(model: &DocumentModel) -> String {
+    title_of(&model.body)
+        .or_else(|| {
+            model
+                .outline
+                .iter()
+                .find(|heading| heading.level == 1)
+                .map(|heading| heading.text.clone())
+        })
+        .map(|title| plain(&title))
+        .filter(|title| !title.is_empty())
+        .unwrap_or_else(|| plain(model.id.page_name()))
+}
+
+/// Il PDF che le annotazioni `id` annotano per nome: `id` senza `.fubann`, se
+/// quel che resta è un `.pdf`. Le estensioni si confrontano senza badare alle
+/// maiuscole, come le confronta il vault.
+fn annotated_of(id: &DocId) -> Option<DocId> {
+    let id = id.as_str();
+    let cut = id.len().checked_sub(".fubann".len())?;
+    let (pdf, extension) = (id.get(..cut)?, id.get(cut..)?);
+    let name = pdf.rsplit('/').next().unwrap_or(pdf);
+    let stem = name.len().checked_sub(".pdf".len())?;
+    let named_pdf = stem > 0 && name.get(stem..)?.eq_ignore_ascii_case(".pdf");
+    (extension.eq_ignore_ascii_case(".fubann") && named_pdf).then(|| DocId::new(pdf))
 }
 
 /// Il titolo come lo legge l'indice: una riga sola, con gli spazi XML ridotti
@@ -130,6 +213,28 @@ mod tests {
         }
         assert_ne!(layer_id("a.svg"), layer_id("b.svg"));
         assert_eq!(layer_id("a.svg"), layer_id("a.svg"));
+    }
+
+    #[test]
+    fn the_annotated_pdf_comes_from_the_name() {
+        let pdf = |id: &str| annotated_of(&DocId::new(id)).map(|pdf| pdf.as_str().to_owned());
+        assert_eq!(pdf("Bando.pdf.fubann").as_deref(), Some("Bando.pdf"));
+        assert_eq!(
+            pdf("atti/Bando.PDF.FubAnn").as_deref(),
+            Some("atti/Bando.PDF")
+        );
+        assert_eq!(pdf("atti/è.pdf.fubann").as_deref(), Some("atti/è.pdf"));
+        for other in [
+            "Bando.fubann",
+            "Bando.png.fubann",
+            ".pdf.fubann",
+            "atti/.pdf.fubann",
+            "Bando.pdf",
+            "fubann",
+            "",
+        ] {
+            assert_eq!(pdf(other), None, "{other}");
+        }
     }
 
     #[test]

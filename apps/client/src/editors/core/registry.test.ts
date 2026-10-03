@@ -459,6 +459,10 @@ describe("DocumentSurfaceRegistry", () => {
     // profilo `svg`, e mai sulla superficie d'errore.
     expect(registry.resolve({ formatId: "svg", sourceKind: "text", documentId: "arte/logo.svg" }))
       .toMatchObject({ owner: "fub.shell.text", family: "text", profile: "svg" });
+    // Lo stesso per le annotazioni di un PDF, formato `fubann`: finché
+    // nessuna famiglia le rivendica sono testo semplice.
+    expect(registry.resolve({ formatId: "fubann", sourceKind: "text", documentId: "bandi/Bando.pdf.fubann" }))
+      .toMatchObject({ owner: "fub.shell.text", family: "text", profile: "plain-text" });
   });
 
   it("lets the source owner decline a document, which then falls to the error surface", () => {
