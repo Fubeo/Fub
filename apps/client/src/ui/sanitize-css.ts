@@ -306,15 +306,43 @@ function indexAt(source: string, line: number, column: number): number {
   return Math.min(source.length, index + Math.max(0, column - 1));
 }
 
-function nodeIndex(source: string, node: ChildNode | Root): number {
-  const start = node.source?.start;
-  return start ? indexAt(source, start.line, start.column) : 0;
+/** Dove comincia un nodo nella sorgente: l'offset che il parser ha già
+ * contato. Ricavarlo da riga e colonna voleva dire rileggere il testo
+ * dall'inizio per ogni nodo, un costo quadratico che la pelle di serie
+ * (cinquemila righe) pagava a ogni montaggio del tema. PostCSS conta dopo il
+ * BOM, che toglie: qui l'indice torna sul testo intero, quello che
+ * `materializeAssets` ritaglia. */
+function nodeIndex(node: ChildNode | Root): number {
+  const start = node.source?.start?.offset;
+  if (start === undefined) return 0;
+  return start + (node.source?.input.hasBOM ? 1 : 0);
+}
+
+/** Gli inizi di riga dell'ultima sorgente misurata. Le violazioni si
+ * collocano tutte nella stessa sorgente: le righe si contano una volta, e la
+ * riga di un indice si trova per bisezione invece di ritagliare il testo fino
+ * a lì per ogni violazione. */
+let measured: { readonly source: string; readonly starts: readonly number[] } | null = null;
+
+function lineStarts(source: string): readonly number[] {
+  if (measured?.source === source) return measured.starts;
+  const starts = [0];
+  for (let at = source.indexOf("\n"); at >= 0; at = source.indexOf("\n", at + 1)) starts.push(at + 1);
+  measured = { source, starts };
+  return starts;
 }
 
 function location(source: string, index: number): Pick<ThemeCssViolation, "line" | "column"> {
-  const before = source.slice(0, Math.max(0, Math.min(index, source.length)));
-  const lines = before.split("\n");
-  return { line: lines.length, column: (lines[lines.length - 1]?.length ?? 0) + 1 };
+  const at = Math.max(0, Math.min(index, source.length));
+  const starts = lineStarts(source);
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (starts[middle]! <= at) low = middle;
+    else high = middle - 1;
+  }
+  return { line: low + 1, column: at - starts[low]! + 1 };
 }
 
 function violation(
@@ -334,7 +362,9 @@ function syntaxViolation(source: string, error: unknown): IndexedViolation {
   const value = error as { line?: number; column?: number; reason?: string; message?: string };
   const line = Math.max(1, value.line ?? 1);
   const column = Math.max(1, value.column ?? 1);
-  const index = indexAt(source, line, column);
+  // Anche qui PostCSS conta senza il BOM, che sta tutto sulla prima riga.
+  const bom = line === 1 && /^[\uFEFF\uFFFE]/.test(source) ? 1 : 0;
+  const index = indexAt(source, line, column) + bom;
   return violation(source, index, "syntax-error", value.reason ?? value.message ?? "CSS non valido");
 }
 
@@ -494,7 +524,7 @@ function selectorViolations(
       if (parent.type === "atrule" && /keyframes$/i.test(decodeCssEscapes(parent.name))) return;
       parent = parent.parent as ChildNode | Root | undefined;
     }
-    const start = nodeIndex(source, rule);
+    const start = nodeIndex(rule);
     const tokens = selectorTokens(rule.selector);
     for (const hook of tokens.hooks) {
       if (!allowed.has(hook.text)) {
@@ -781,7 +811,7 @@ function declarationViolations(source: string, root: Root, skin: boolean): Index
   root.walkDecls((decl: Declaration) => {
     const decodedProperty = decodeCssEscapes(decl.prop);
     const property = decodedProperty.toLowerCase();
-    const index = nodeIndex(source, decl);
+    const index = nodeIndex(decl);
     if (decl.prop !== decodedProperty && !decl.prop.toLowerCase().startsWith("--")) {
       out.push(violation(source, index, "disallowed-property", `proprietà ${decl.prop} usa escape CSS`));
       return;
@@ -823,7 +853,7 @@ function atRuleViolations(source: string, root: Root, kind: "sheet" | "skin"): I
   const allowed = ALLOWED_AT_RULES[kind];
   root.walkAtRules((rule: AtRule) => {
     const name = decodeCssEscapes(rule.name).toLowerCase();
-    const index = nodeIndex(source, rule);
+    const index = nodeIndex(rule);
     if (name === "import") {
       out.push(violation(source, index, "at-import", "@import vietato"));
     } else if (name === "namespace") {
@@ -878,14 +908,14 @@ function scanUrls(input: string): IndexedUrl[] {
   return out;
 }
 
-function valueStart(source: string, node: Declaration | AtRule, value: string): number {
-  const start = nodeIndex(source, node);
+function valueStart(node: Declaration | AtRule, value: string): number {
+  const start = nodeIndex(node);
   const rendered = node.toString();
   const relative = rendered.indexOf(value);
   return relative < 0 ? start : start + relative;
 }
 
-function allUrls(source: string, root: Root): IndexedUrl[] {
+function allUrls(root: Root): IndexedUrl[] {
   const out: IndexedUrl[] = [];
   const add = (value: string, start: number): void => {
     for (const url of scanUrls(value)) {
@@ -897,8 +927,8 @@ function allUrls(source: string, root: Root): IndexedUrl[] {
       });
     }
   };
-  root.walkDecls((decl: Declaration) => add(decl.value, valueStart(source, decl, decl.value)));
-  root.walkAtRules((rule: AtRule) => add(rule.params, valueStart(source, rule, rule.params)));
+  root.walkDecls((decl: Declaration) => add(decl.value, valueStart(decl, decl.value)));
+  root.walkAtRules((rule: AtRule) => add(rule.params, valueStart(rule, rule.params)));
   return out.sort((a, b) => a.index - b.index);
 }
 
@@ -906,7 +936,7 @@ function allUrls(source: string, root: Root): IndexedUrl[] {
 
 function urlViolations(source: string, root: Root, assetNamespace: string): IndexedViolation[] {
   const out: IndexedViolation[] = [];
-  for (const { index, value } of allUrls(source, root)) {
+  for (const { index, value } of allUrls(root)) {
     if (value.startsWith("#")) continue;
     if (/^(?:https?:|data:|blob:|file:|javascript:|\/\/)/i.test(value)) {
       out.push(violation(source, index, "remote-url", `URL remoto ${value} vietato`));
@@ -931,7 +961,7 @@ function declaredRoles(root: Root): Set<string> {
 /** The exact source ranges used by both sanitization and theme materialization. */
 export function themeAssetReferences(css: string): ThemeAssetReference[] {
   try {
-    return allUrls(css, parse(css));
+    return allUrls(parse(css));
   } catch {
     return [];
   }
@@ -987,9 +1017,9 @@ export function themeCssViolations(css: string, policy: ThemeCssPolicy): ThemeCs
   ];
   if (snippet) {
     root.walkAtRules((rule) => {
-      violations.push(violation(css, nodeIndex(css, rule), "at-rule", "user CSS cannot declare at-rules"));
+      violations.push(violation(css, nodeIndex(rule), "at-rule", "user CSS cannot declare at-rules"));
     });
-    for (const url of allUrls(css, root)) {
+    for (const url of allUrls(root)) {
       violations.push(violation(css, url.index, "remote-url", "user CSS cannot reference URLs"));
     }
     const allowed = new Set(policy.allowedHooks);
@@ -997,7 +1027,7 @@ export function themeCssViolations(css: string, policy: ThemeCssPolicy): ThemeCs
       for (const selector of rule.selector.split(",")) {
         const classes = selector.trim().match(/^\.([a-z][a-z0-9-]*)(?:\s*\.([a-z][a-z0-9-]*))?$/);
         if (!classes || !classes.slice(1).filter(Boolean).every((name) => allowed.has(name!))) {
-          violations.push(violation(css, nodeIndex(css, rule), "selector-token",
+          violations.push(violation(css, nodeIndex(rule), "selector-token",
             `user CSS selector ${selector.trim()} is outside the class hook allowlist`));
         }
       }

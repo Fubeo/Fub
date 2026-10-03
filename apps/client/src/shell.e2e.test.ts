@@ -2358,9 +2358,24 @@ describe("la palette flussa prima di un comando che scrive", () => {
     surfaces: [],
   };
 
+  /// Scrive nell'editor e invia il form della palette senza che un timer
+  /// possa scadere in mezzo: fra la battuta e l'invio passano solo microtask,
+  /// e il form chiama `execute` in modo sincrono. Il buffer è quindi sporco
+  /// quando il comando parte anche su un runner lento, e il salvataggio
+  /// automatico, che è un timer, arriva solo dopo. Restituisce le chiamate al
+  /// host a partire dall'invio.
+  async function submitDirty(host: FakeHost): Promise<FakeHost["calls"]> {
+    const form = document.querySelector<HTMLFormElement>(".palette-form")!;
+    typeInEditor("testo non ancora salvato");
+    await microtasks();
+    const mark = host.calls.length;
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await settle();
+    return host.calls.slice(mark);
+  }
+
   it("un buffer sporco si salva prima che note.create parta", async () => {
     const host = await start(VAULT, [], undefined, null, [specNoteCreate]);
-    typeInEditor("testo non ancora salvato");
 
     // La palette si apre con la scorciatoia di default, come da un browser.
     document.dispatchEvent(
@@ -2378,19 +2393,17 @@ describe("la palette flussa prima di un comando che scrive", () => {
     // Il comando ha un parametro facoltativo: la palette mostra il form.
     const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
     field.value = "Appunti.md";
-    const form = document.querySelector<HTMLFormElement>(".palette-form")!;
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await settle();
+    const calls = await submitDirty(host);
 
-    const flush = host.calls.findIndex((c) => c.gate === "writeDocument");
-    const invoked = host.calls.findIndex(
+    const flush = calls.findIndex((c) => c.gate === "writeDocument");
+    const invoked = calls.findIndex(
       (c) => c.gate === "invokeCommand" && c.args[0] === "note.create",
     );
     expect(invoked, "note.create non è arrivato al kernel").toBeGreaterThan(-1);
     expect(flush, "il buffer sporco non è stato salvato affatto").toBeGreaterThan(-1);
-    // **Il momento che conta.** Senza il flush, `writeDocument` non c'è (il
-    // debounce di 400 ms non è scaduto) e il comando parte col testo solo in
-    // RAM: `flush` sarebbe -1 e questa riga rossa.
+    // **Il momento che conta.** Senza il flush il comando parte col testo solo
+    // in RAM, e il primo `writeDocument` è quello del salvataggio automatico,
+    // dopo il comando o mai: questa riga sarebbe rossa.
     expect(flush, "il comando è partito prima del flush").toBeLessThan(invoked);
   });
 
@@ -2399,7 +2412,7 @@ describe("la palette flussa prima di un comando che scrive", () => {
     // dichiarato, quindi `read_only` per default. Un comando che non scrive
     // non deve pagare il giro del flush — e il banco lo prova col buffer
     // sporco: se la palette flussasse comunque, `writeDocument` avrebbe una
-    // chiamata.
+    // chiamata prima del comando.
     const specSearchOpen: CommandSpec = {
       id: "search.open",
       title: "Cerca nel vault",
@@ -2410,7 +2423,6 @@ describe("la palette flussa prima di un comando che scrive", () => {
       surfaces: [],
     };
     const host = await start(VAULT, [], undefined, null, [specSearchOpen]);
-    typeInEditor("testo non ancora salvato");
 
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
@@ -2424,13 +2436,16 @@ describe("la palette flussa prima di un comando che scrive", () => {
 
     const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
     field.value = "rust";
-    const form = document.querySelector<HTMLFormElement>(".palette-form")!;
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await settle();
+    const calls = await submitDirty(host);
 
-    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
+    const invoked = calls.findIndex(
+      (c) => c.gate === "invokeCommand" && c.args[0] === "search.open",
+    );
+    expect(invoked, "search.open non è arrivato al kernel").toBeGreaterThan(-1);
+    // Dopo il comando il salvataggio automatico può arrivare, su un runner
+    // lento: è il debounce che fa il suo lavoro, non la palette che flussa.
     expect(
-      host.atGate("writeDocument"),
+      calls.slice(0, invoked).filter((c) => c.gate === "writeDocument"),
       "un comando di sola lettura non deve salvare i buffer",
     ).toHaveLength(0);
   });
