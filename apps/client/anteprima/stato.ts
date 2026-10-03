@@ -26,6 +26,16 @@ export const STATI: Readonly<Record<Stato, string>> = {
 
 export const PACCHETTI: readonly Pacchetto[] = [
   {
+    codice: "FD-207",
+    titolo: "Accessibilità della superficie",
+    stato: "qui",
+    pr: 115,
+    nota:
+      "Clicca sul foglio, poi lascia il mouse: le frecce muovono il cursore, Spazio preme e rilascia, e ogni strumento disegna da tastiera. " +
+      "Con una selezione le frecce la spostano, Ctrl+frecce la ridimensionano, Tab passa all'oggetto dopo e Invio apre le misure. " +
+      "«Oggetti» apre l'albero, «?» l'elenco dei tasti; nella shell la Lettura (Ctrl+E) dice la descrizione e gli oggetti.",
+  },
+  {
     codice: "FD-205",
     titolo: "Strumenti del livello Essenziale",
     stato: "qui",
@@ -162,16 +172,11 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Il formato delle annotazioni sui PDF: il collegamento al PDF annotato e il testo delle note, cercabile nel vault.",
   },
   {
-    codice: "FD-207",
-    titolo: "Accessibilità della superficie",
-    stato: "corso",
-    nota: "L'albero degli oggetti, la tastiera completa con le proprietà numeriche, la descrizione del disegno.",
-  },
-  {
     codice: "FD-209",
     titolo: "«Nuovo disegno» e immagini incollate",
     stato: "corso",
-    nota: "Un disegno nuovo dalla palette, e uno screenshot incollato da annotare.",
+    pr: 114,
+    nota: "«Nuovo disegno» dalla palette è fatto, in revisione; lo screenshot incollato da annotare è in corso.",
   },
   {
     codice: "FD-502",
@@ -182,7 +187,7 @@ export const PACCHETTI: readonly Pacchetto[] = [
   {
     codice: "FD-304",
     titolo: "La sessione live nella shell",
-    stato: "prossimo",
+    stato: "corso",
     nota: "Il tablet come penna del PC: l'inchiostro effimero, il QR, «Segui il tablet».",
   },
   {
