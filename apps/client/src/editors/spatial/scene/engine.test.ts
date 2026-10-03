@@ -1,7 +1,8 @@
 // Il motore delle operazioni oltre i vettori di `vectors.test.ts`: la forma
 // della rete, i rifiuti uno per uno, i limiti, l'undo che non è esatto, i
 // rientri di un `move`, `adopt`, `page` e `anchor` nei casi di bordo, gli id
-// dei gruppi di pagina. I testi attesi sono scritti a mano.
+// dei gruppi di pagina. I testi attesi sono scritti a mano, e i `§` sono le
+// sezioni di `docs/reference/scene-operations.md`.
 
 import { describe, expect, it } from "vitest";
 import { tryApplyOperation } from "../../core/text-operation";

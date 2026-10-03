@@ -1,4 +1,4 @@
-// La tavolozza e gli spessori del livello Essenziale (DEC-13).
+// La tavolozza e gli spessori del livello Essenziale.
 //
 // Gli otto colori sono quelli di Okabe–Ito, leggibili con le forme comuni di
 // daltonismo. Ogni campione ha un nome e una forma oltre al colore, così due

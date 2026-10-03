@@ -1,6 +1,7 @@
-// Il motore delle operazioni sulla scena (`operazioni.md`): applica le
-// operazioni, ne calcola l'inversa e consegna la `TextOperation` per la
-// `DocumentSession`.
+// Il motore delle operazioni sulla scena: applica le operazioni, ne calcola
+// l'inversa e consegna la `TextOperation` per la `DocumentSession`. Il
+// contratto è in `docs/reference/scene-operations.md`, e i `§` dei commenti
+// sono le sue sezioni.
 //
 // Il motore tiene la sorgente come albero di pezzi di testo (`model.ts`) e
 // cambia solo i pezzi che un'operazione tocca: il resto del file, terminatori
@@ -505,7 +506,8 @@ export class SceneEngine {
     }
     if (op.op === "batch") return this.batch(op);
     if (op.op === "adopt") return this.adopt(op);
-    // Un SVG estraneo resta com'è finché «Modifica» non lo adotta (DEC-04).
+    // Un SVG estraneo resta com'è finché «Modifica» non lo adotta (formato
+    // della scena, §2).
     if (this.t.status === "foreign") reject("foreign", "il documento non è di FubDraw: si modifica dopo «Modifica»");
     switch (op.op) {
       case "add":
