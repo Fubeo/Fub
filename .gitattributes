@@ -19,6 +19,10 @@ apps/client/src/__fixtures__/scene/*.svg -text
 # modello sono byte, come quelli dei disegni qui sotto.
 crates/fub-format-svg/tests/fixtures/*.fubann -text
 
+# Le stesse annotazioni lette dal client (`spatial/scene/annotations.ts`):
+# `crlf-bom.fubann` esiste per avere BOM e CRLF.
+apps/client/src/__fixtures__/annotations/*.fubann -text
+
 # Le fixture del modello delle scene (`fub-format-svg`): stessa ragione, e
 # `foreign-crlf-bom.svg` esiste per provare che la riscrittura dei
 # collegamenti lascia identici BOM e CRLF.
