@@ -51,6 +51,9 @@ import type {
   ViewSpec,
 } from "../src/host/contract";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
+// Solo nel ramo d'anteprima: i disegni di FubDraw nel vault, e la feature
+// `draw` che li apre come disegni.
+import { DISEGNI } from "../anteprima/disegni";
 import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
@@ -823,7 +826,8 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: CORPUS,
+  file: { ...CORPUS, ...DISEGNI },
+  draw: true,
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,

@@ -74,6 +74,16 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Zoom al cursore e adatta alla finestra, con i limiti 0,1…32 della superficie.",
   },
   {
+    codice: "FD-206b",
+    titolo: "La superficie del disegno nella shell",
+    stato: "shell",
+    pr: 113,
+    nota:
+      "Nella shell (/index.html): apri Disegni/Casa.svg dall'esplora e disegna; Ctrl+E passa alla Lettura. " +
+      "Logo esterno.svg si guarda come immagine, e «Modifica» lo adotta; Rotto.svg dice perché non si legge. " +
+      "«Apri come sorgente», dalla palette (Ctrl+Maiusc+P), mostra il testo sulla stessa sessione.",
+  },
+  {
     codice: "FD-206a",
     titolo: "Modalità per ruolo e vista sorgente",
     stato: "shell",
@@ -132,8 +142,9 @@ export const PACCHETTI: readonly Pacchetto[] = [
   {
     codice: "FD-403",
     titolo: "Comandi di export",
-    stato: "corso",
-    nota: "Esportare un disegno, per chi lo apre fuori da Fub.",
+    stato: "revisione",
+    pr: 111,
+    nota: "Esportare un disegno in PNG e PDF, per chi lo apre fuori da Fub.",
   },
   {
     codice: "FD-405",
@@ -146,14 +157,45 @@ export const PACCHETTI: readonly Pacchetto[] = [
   {
     codice: "FD-501",
     titolo: "Provider fubann",
-    stato: "corso",
+    stato: "revisione",
+    pr: 112,
     nota: "Il formato delle annotazioni sui PDF: il collegamento al PDF annotato e il testo delle note, cercabile nel vault.",
   },
   {
-    codice: "FD-206b",
-    titolo: "La superficie nella shell",
+    codice: "FD-207",
+    titolo: "Accessibilità della superficie",
+    stato: "corso",
+    nota: "L'albero degli oggetti, la tastiera completa con le proprietà numeriche, la descrizione del disegno.",
+  },
+  {
+    codice: "FD-209",
+    titolo: "«Nuovo disegno» e immagini incollate",
+    stato: "corso",
+    nota: "Un disegno nuovo dalla palette, e uno screenshot incollato da annotare.",
+  },
+  {
+    codice: "FD-502",
+    titolo: "Profilo pdf",
+    stato: "corso",
+    nota: "Annotare un PDF del vault: le pagine come sfondo, e il PDF resta com'è.",
+  },
+  {
+    codice: "FD-304",
+    titolo: "La sessione live nella shell",
     stato: "prossimo",
-    nota: "Da lì il disegno si apre nella shell, come una nota.",
+    nota: "Il tablet come penna del PC: l'inchiostro effimero, il QR, «Segui il tablet».",
+  },
+  {
+    codice: "FD-210",
+    titolo: "Banco del disegno",
+    stato: "prossimo",
+    nota: "Prestazioni, fotografie e accessibilità della superficie misurate nella CI.",
+  },
+  {
+    codice: "FD-503",
+    titolo: "Export del PDF annotato",
+    stato: "prossimo",
+    nota: "Un PDF nuovo con le annotazioni; l'originale non si scrive mai.",
   },
 ];
 
