@@ -71,6 +71,7 @@ flowchart TD
     features --> abi
     features --> base
     features --> svg
+    features --> scene
     markdown --> abi
     markdown --> sdk
     sheet --> abi
@@ -115,7 +116,9 @@ scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
 PNG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati, e il
 comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
 provider: per questo anche `features --> svg` è un arco facoltativo, come
-`features --> base` per le basi.
+`features --> base` per le basi. Con la stessa feature `fub-features` legge
+con `fub-scene` le annotazioni dei PDF, per esportarle nel PDF annotato e nel
+PDF redatto: anche `features --> scene` è facoltativo.
 
 ## Flusso di un comando
 
