@@ -465,6 +465,12 @@ const KEY_NAMES: Record<string, string> = {
   " ": "Space",
 };
 
+/// Il nome che si legge di un tasto di `KeyboardEvent.key`, da solo: `←`,
+/// `Esc`, `Enter`, `P`.
+export function keyName(key: string): string {
+  return KEY_NAMES[key.toLowerCase()] ?? (key.length === 1 ? key.toUpperCase() : key);
+}
+
 export function displayBinding(
   binding: string | null | undefined,
   platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
@@ -480,7 +486,7 @@ export function displayBinding(
       if (chord.mod) parts.push(mac ? "⌘" : "Ctrl");
       if (chord.alt) parts.push(mac ? "⌥" : "Alt");
       if (chord.shift) parts.push(mac ? "⇧" : "Shift");
-      parts.push(KEY_NAMES[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key));
+      parts.push(keyName(chord.key));
       return parts.join(mac ? "" : "+");
     })
     .join(" ");

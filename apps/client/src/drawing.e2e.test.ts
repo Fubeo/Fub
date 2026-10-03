@@ -9,6 +9,7 @@
 // vera, contro l'host finto — con il registro vero e nessuna famiglia finta.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "./host/fake";
+import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
 
 vi.setConfig({ testTimeout: 20_000 });
@@ -247,6 +248,28 @@ describe("un .svg è un disegno", () => {
     undo();
     await waitFor("l'annulla arriva al disco", () => last(written(host, "casa.svg")) === HOUSE);
     expect(host.atGate("resourceWrite")).toEqual([]);
+  });
+
+  it("si disegna da sola tastiera, e le scorciatoie della shell restano", async () => {
+    const host = await start();
+    await open("casa.svg");
+    const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
+    sheet.focus();
+    const press = (key: string, init: KeyboardEventInit = {}): void => {
+      (document.activeElement ?? sheet).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ...init }));
+    };
+    press("r");
+    press(" ");
+    press("ArrowRight", { shiftKey: true });
+    press("ArrowDown", { shiftKey: true });
+    press(" ");
+    await waitFor("il rettangolo da tastiera arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]!.match(/<rect /g)).toHaveLength(2);
+    expect(document.activeElement).toBe(sheet);
+    expect(formatIssues(checkAccessibility(focusedPane()))).toBe("");
+    pressModE();
+    await settle();
+    expect(paneMode()).toBe("read");
   });
 
   it("Mod-e porta alla Lettura, il documento intero come immagine, e torna", async () => {
