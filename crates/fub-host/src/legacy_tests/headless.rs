@@ -111,36 +111,39 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // renderebbe questo test una tautologia dell'altro.
     let mut plugins: Vec<&str> = info.plugins.iter().map(|p| p.id.as_str()).collect();
     plugins.sort();
-    assert_eq!(
-        plugins,
-        vec![
-            "fub.backlinks",
-            "fub.backup",
-            "fub.base",
-            "fub.blocks",
-            "fub.commands",
-            "fub.core",
-            "fub.dashboard",
-            "fub.formatting",
-            "fub.graph",
-            "fub.importers",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.outline",
-            "fub.properties",
-            "fub.publish",
-            "fub.queries",
-            "fub.search",
-            "fub.serie",
-            "fub.sheet",
-            "fub.stats",
-            "fub.sync",
-            "fub.tags",
-            "fub.template",
-            "fub.trash",
-            "fub.versioning",
-        ]
-    );
+    #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
+    let mut expected = vec![
+        "fub.backlinks",
+        "fub.backup",
+        "fub.base",
+        "fub.blocks",
+        "fub.commands",
+        "fub.core",
+        "fub.dashboard",
+        "fub.formatting",
+        "fub.graph",
+        "fub.importers",
+        "fub.maintenance",
+        "fub.markdown",
+        "fub.outline",
+        "fub.properties",
+        "fub.publish",
+        "fub.queries",
+        "fub.search",
+        "fub.serie",
+        "fub.sheet",
+        "fub.stats",
+        "fub.sync",
+        "fub.tags",
+        "fub.template",
+        "fub.trash",
+        "fub.versioning",
+    ];
+    // Con la feature `draw` c'è anche l'export dei disegni in PNG e PDF.
+    #[cfg(feature = "draw")]
+    expected.push("fub.draw");
+    expected.sort();
+    assert_eq!(plugins, expected);
 
     // E hanno registrato davvero: nessuna si è persa in un conflitto di nomi,
     // che è l'errore che il montaggio riporta su stderr e tira dritto.
