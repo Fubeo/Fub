@@ -1,5 +1,5 @@
-// Il modello del motore delle operazioni (`operazioni.md`): la sorgente come
-// albero di pezzi di testo, allineato alla classificazione di §4.
+// Il modello del motore delle operazioni: la sorgente come albero di pezzi di
+// testo, allineato alla classificazione del formato della scena (§4).
 //
 // Un contenitore modificabile (la radice, un livello, un gruppo, un
 // collegamento) è il suo tag d'apertura, i suoi pezzi e il suo tag di

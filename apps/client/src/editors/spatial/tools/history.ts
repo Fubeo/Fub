@@ -1,8 +1,8 @@
-// Annulla e ripeti di una superficie (piano §5, «Undo»): una pila di undo
-// del motore, uno per gesto. Una sincronizzazione da un'altra superficie non
-// entra nella pila, e la pila resta quando la scena si ricostruisce dal testo
-// autorevole (DEC-08): il motore nuovo applica l'inversa, che fallisce in
-// modo esplicito se il bersaglio non c'è più.
+// Annulla e ripeti di una superficie (operazioni sulla scena, §7): una pila
+// di undo del motore, uno per gesto. Una sincronizzazione da un'altra
+// superficie non entra nella pila, e la pila resta quando la scena si
+// ricostruisce dal testo autorevole: il motore nuovo applica l'inversa, che
+// fallisce in modo esplicito se il bersaglio non c'è più.
 //
 // Un passo che non si annulla, o non si ripete, esce dalla pila da solo: gli
 // altri restano, perché toccano altri oggetti e valgono ancora. Chi chiama lo

@@ -1,17 +1,17 @@
-// Le operazioni che gli strumenti scrivono (`operazioni.md` §2): un gesto
-// diventa un'operazione sola, o un `batch` quando gli servono più passi, così
-// annulla e ripeti lo disfano intero.
+// Le operazioni che gli strumenti scrivono (operazioni sulla scena, §2): un
+// gesto diventa un'operazione sola, o un `batch` quando gli servono più passi,
+// così annulla e ripeti lo disfano intero.
 //
 // - **Dove si scrive.** Un oggetto nuovo va in cima al livello visibile e
 //   sbloccato più in alto, coi punti portati nelle sue coordinate. Un
 //   documento senza livelli scrive alla radice; un livello senza id ne
 //   riceve uno con `ident` nello stesso `batch`. Se ogni livello è bloccato o
 //   nascosto non si scrive.
-// - **Spostare** cambia solo `transform` (DEC-07): la matrice nuova è la
-//   traslazione nelle coordinate del genitore composta con quella di prima,
-//   scritta come un `matrix()` solo, e tolta se è l'identità. Lo spostamento
-//   nella scena si arrotonda a due decimali come la geometria: in un livello
-//   senza trasformazioni il file riceve numeri puliti.
+// - **Spostare** cambia solo `transform`, mai la geometria: la matrice nuova
+//   è la traslazione nelle coordinate del genitore composta con quella di
+//   prima, scritta come un `matrix()` solo, e tolta se è l'identità. Lo
+//   spostamento nella scena si arrotonda a due decimali come la geometria: in
+//   un livello senza trasformazioni il file riceve numeri puliti.
 // - **Ridimensionare** e collocare con numeri cambiano solo `transform`, allo
 //   stesso modo: il riquadro della selezione va nel riquadro chiesto con una
 //   scala e una traslazione nella scena, e il contorno scala con l'oggetto.

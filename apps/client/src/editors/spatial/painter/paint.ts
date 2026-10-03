@@ -202,9 +202,9 @@ export interface ImageFrame {
 
 /// Gli attributi senza namespace che un elemento modificabile può portare e
 /// che si dipingono: `id` e `href` no, il primo resta della scena e il
-/// secondo è di `ImageSource`. È la lista di §4, ripetuta: se la
-/// classificazione ammettesse un nome nuovo, il painter non lo copierebbe
-/// finché non è scritto anche qui.
+/// secondo è di `ImageSource`. È la lista del formato della scena (§4),
+/// ripetuta: se la classificazione ammettesse un nome nuovo, il painter non
+/// lo copierebbe finché non è scritto anche qui.
 export const PAINTED_ATTRIBUTES: ReadonlySet<string> = new Set([
   "fill",
   "fill-opacity",
