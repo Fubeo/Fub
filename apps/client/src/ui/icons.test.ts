@@ -68,6 +68,9 @@ describe("il costrutto delle icone", () => {
   it("nessun SVG chrome è dichiarato fuori da icons.ts", () => {
     const offenders = Object.entries(sources)
       .filter(([path]) => path !== "./icons.ts" && !path.endsWith("/ui/icons.ts") && !/\.test\./.test(path))
+      // L'host finto risponde con il QR che l'host vero disegna per la
+      // sessione live: un dato della porta, non chrome della shell.
+      .filter(([path]) => !path.endsWith("/host/fake.ts"))
       .filter(([, text]) => /<svg\b/i.test(text))
       .map(([path]) => path);
     expect(offenders, `SVG fuori dal modulo icone: ${offenders.join(", ")}`).toEqual([]);

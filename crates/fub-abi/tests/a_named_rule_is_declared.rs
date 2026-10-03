@@ -430,6 +430,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
         (
+            "crates/fub-app/src/live.rs::pc_name",
+            (
+                Family::AsciiCase,
+                "toglie dal nome di rete del PC il suffisso `.local` che macOS aggiunge, prima di \
+                 metterlo nel QR della sessione live: i nomi DNS sono insensibili al caso solo \
+                 nell'ASCII (RFC 4343), e `.local` è un'etichetta ASCII. Non confronta nomi fra \
+                 loro: decide solo se togliere un suffisso.",
+            ),
+        ),
+        (
             "crates/fub-features/src/formats.rs::new_note_extension",
             (
                 Family::AsciiCase,

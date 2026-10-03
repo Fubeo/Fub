@@ -20,7 +20,7 @@ members = [
     "crates/fub-cli",
     "crates/fub-services",
     # La sessione live (ADR 0204): protocollo, abbinamento, TLS, server e
-    # client. Non dipende da nessun altro membro; la comporrà `fub-app`.
+    # client. Non dipende da nessun altro membro; lo compone `fub-app`.
     "crates/fub-live",
     "crates/fub-app",
     # M5: host wasmtime per plugin di terzi. La riga era commentata da M1 e
@@ -158,9 +158,9 @@ parking_lot = "0.12.5"
 # `fub-services`; con `fub-live` i crate che la usano sono due, e la versione
 # torna in un posto solo.
 subtle = "2.6.1"
-# La sessione live (ADR 0204). Queste righe le nomina `fub-live` e nessun altro:
-# `fub-host` resta senza runtime asincrono, e `fub-app` comporrà il servizio sul
-# runtime di Tauri, che è questo stesso `tokio`, già nell'albero.
+# La sessione live (ADR 0204). Queste righe le nomina `fub-live`, e `tokio` anche
+# `fub-app`, che compone il servizio sul runtime di Tauri: è questo stesso
+# `tokio`, già nell'albero. `fub-host` resta senza runtime asincrono.
 #
 # `tokio` senza feature: ognuno accende le proprie nel suo manifest, perché una
 # feature scritta in questa riga la riceverebbe ogni crate che la prende.
@@ -214,6 +214,7 @@ jiff = { version = "0.2.35", default-features = false, features = [
 fub-features = { path = "crates/fub-features", version = "0.1.0", default-features = false }
 fub-host = { path = "crates/fub-host", version = "0.1.0" }
 fub-wasm-host = { path = "crates/fub-wasm-host", version = "0.1.0" }
+fub-live = { path = "crates/fub-live", version = "0.1.0" }
 
 # Il profilo di chi lavora. Ogni chiave qui dentro è una decisione, e accanto
 # c'è chi la paga: `.github/scripts/check-profilo-dev.mjs` pretende che siano

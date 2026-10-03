@@ -6,7 +6,8 @@
 > **Fonti autorevoli:** `crates/fub-live/src/protocol/`,
 > `crates/fub-live/src/limits.rs`, `crates/fub-live/src/pairing.rs`,
 > `crates/fub-live/src/tls.rs`, `crates/fub-live/src/host/`,
-> `crates/fub-live/src/client.rs` e le prove in `crates/fub-live/src/tests/`.
+> `crates/fub-live/src/client.rs` e le prove in `crates/fub-live/src/tests/`;
+> per la composizione nell'app, `crates/fub-app/src/live.rs`.
 
 La sessione live permette a un tablet di scrivere su un disegno aperto sul PC:
 il PC mostra il tratto mentre viene tracciato e lo rende durevole quando il
@@ -18,7 +19,7 @@ gesto finisce. Le ragioni delle scelte stanno nell'ADR 0204.
 |---|---|---|
 | host | Fub sul PC, con il disegno aperto | `LiveHost`: listener, abbinamento, scrittore, commit in attesa |
 | scrittore | il tablet | `LiveClient`, il client in Rust dei percorsi B e C |
-| shell | chi compone il crate sul PC | fuori: applica le operazioni, disegna l'inchiostro, risponde |
+| shell | la shell di Fub sul PC, con i comandi di `fub-app` | fuori: applica le operazioni, disegna l'inchiostro, risponde |
 
 La sessione ha un solo scrittore e nessun osservatore. Espone un solo
 documento.
@@ -420,6 +421,29 @@ I tipi verso la shell hanno una forma JSON con i nomi in camelCase, il tipo in
 `ShellMessage` si legge stretto come i messaggi dello scrittore: i campi del
 tipo e nessun altro, ognuno una volta.
 
+## Nell'app
+
+`fub-app` compone la sessione sul runtime di Tauri, che è lo stesso `tokio`. I
+cinque comandi `live_*`, il canale degli eventi e gli errori sono nel
+[Contratto IPC](ipc-contract.md#sessione-live); il codice è in
+[`live.rs`](../../crates/fub-app/src/live.rs).
+
+- Una sessione appartiene alla finestra che l'ha avviata: per le altre il suo
+  id è `not_found`.
+- Un documento ha al più una sessione, anche finita da sé: una sessione in
+  sola lettura resta finché la shell non chiama `live_stop`, che restituisce i
+  commit senza risposta.
+- L'app chiude da sé una sessione, con `HostClosing`, quando la pagina della
+  finestra si ricarica, quando la finestra è distrutta e quando il canale non
+  consegna più. All'uscita aspetta al più 3 secondi che tutte le sessioni,
+  comprese quelle già in chiusura, abbiano mandato `bye` allo scrittore.
+- La porta è l'impostazione di macchina `live.port`, letta a ogni
+  `live_start`: con 0, il valore predefinito, il sistema sceglie una porta
+  libera; una porta fissa serve a una regola del firewall. Un valore fuori da
+  0–65535 vale 0.
+- Il nome del PC nel QR è il suo nome di rete, senza il `.local` di macOS e al
+  più di 64 caratteri; se non resta un nome valido, il QR non ne porta.
+
 ## Il client in Rust
 
 `LiveClient::connect` riceve il QR letto e la configurazione: dispositivo,
@@ -506,10 +530,10 @@ quello in cui la rete ha aggiunto meno rumore.
 - **Inchiostro sul PC.** L'overlay, la sua sostituzione con l'elemento vero,
   la cancellazione di un tratto il cui commit non arriva e il recupero quando
   la shell resta indietro spettano alla shell.
-- **Composizione nell'app.** I comandi Tauri, il canale verso la shell,
-  l'impostazione `live.port`, l'avviso per un QR inutilizzato, la
-  spiegazione del firewall e il pannello di diagnostica appartengono a chi
-  compone il crate.
+- **Composizione nell'app.** I comandi Tauri, il canale verso la shell e
+  l'impostazione `live.port` sono in `fub-app` ([Nell'app](#nellapp)).
+  L'avviso per un QR inutilizzato, la spiegazione del firewall e il pannello
+  di diagnostica spettano alla shell.
 - **Sul tablet.** La lettura del QR dentro l'app e la conferma con il nome
   del PC spettano all'app. Lo schema `fubdraw://` non si registra nel
   sistema, così nessuna pagina web avvia un abbinamento.

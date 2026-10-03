@@ -72,8 +72,10 @@ pub struct Welcome {
     pub last_c: Counter,
 }
 
-/// Il documento intero, in SVG.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Il documento intero, in SVG. La shell lo manda all'avvio della sessione
+/// attraverso l'IPC, quindi si legge anche: con i soli due campi.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Snapshot {
     /// Il contatore del documento a cui il testo corrisponde.
     pub seq: Counter,
