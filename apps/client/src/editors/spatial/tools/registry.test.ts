@@ -1,8 +1,9 @@
-// Il registro degli strumenti: che cosa offre l'Essenziale, e con quali tasti.
+// Il registro degli strumenti: che cosa offre ogni livello di ogni profilo, e
+// con quali tasti.
 
 import { describe, expect, it } from "vitest";
 import { icon } from "../../../ui/icons";
-import { DEFAULT_TOOL, TOOLS, toolForKey, toolsFor, toolSpec } from "./registry";
+import { DEFAULT_TOOL, defaultTool, TOOLS, toolForKey, toolsFor, toolSpec } from "./registry";
 
 describe("il registro degli strumenti", () => {
   it("dà all'Essenziale i sette strumenti, nell'ordine della barra", () => {
@@ -10,6 +11,17 @@ describe("il registro degli strumenti", () => {
     // Un livello sopra vede anche quelli sotto.
     expect(toolsFor("expert").length).toBeGreaterThanOrEqual(toolsFor("essential").length);
     expect(DEFAULT_TOOL).toBe("pen");
+  });
+
+  it("dà alle annotazioni di un PDF penna, evidenziatore e gomma all'Essenziale, e note, forme e copertura allo Standard", () => {
+    expect(toolsFor("essential", "pdf").map((tool) => tool.id)).toEqual(["select", "pen", "highlighter", "eraser"]);
+    expect(toolsFor("standard", "pdf").map((tool) => tool.id)).toEqual([
+      "select", "pen", "highlighter", "eraser", "note", "rect", "ellipse", "line", "arrow", "cover",
+    ]);
+    // Il disegno non cambia: evidenziatore, note e copertura sono del PDF.
+    expect(toolsFor("expert", "vector").map((tool) => tool.id)).toEqual(["select", "pen", "eraser", "rect", "ellipse", "line", "arrow"]);
+    expect(defaultTool("vector")).toBe("pen");
+    expect(defaultTool("pdf")).toBe("highlighter");
   });
 
   it("dà a ogni strumento un tasto suo, una lettera minuscola", () => {

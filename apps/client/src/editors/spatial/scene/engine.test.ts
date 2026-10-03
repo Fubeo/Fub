@@ -1,7 +1,7 @@
 // Il motore delle operazioni oltre i vettori di `vectors.test.ts`: la forma
 // della rete, i rifiuti uno per uno, i limiti, l'undo che non è esatto, i
-// rientri di un `move`, `adopt` e `page` nei casi di bordo. I testi attesi
-// sono scritti a mano.
+// rientri di un `move`, `adopt`, `page` e `anchor` nei casi di bordo, gli id
+// dei gruppi di pagina. I testi attesi sono scritti a mano.
 
 import { describe, expect, it } from "vitest";
 import { tryApplyOperation } from "../../core/text-operation";
@@ -72,6 +72,7 @@ describe("parseWireOp", () => {
       { op: "add", slot, gap: "\n    ", raw: "<rect/>" },
       { op: "move", target: "o1a2b3c4d", slot, gap: "\n    " },
       { op: "page", viewBox: "0 0 10 10", previous: { root: {}, paper: null } },
+      { op: "anchor", previous: { digest: null, pages: null } },
     ];
     for (const op of engineOnly) {
       expect(parseWireOp(op)).toMatchObject({ reason: "invalid-elem" });
@@ -412,6 +413,88 @@ describe("page", () => {
       viewBox: "0 0 1600 1000",
       previous: { root: { viewBox: "0 0 1600 1000", width: "1600", height: "1000" }, paper: null },
     });
+  });
+});
+
+describe("anchor", () => {
+  const HEX = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+  const OTHER = "0".repeat(64);
+  const ANNOTATIONS = `<svg ${NS} fub:version="1" fub:annotates="Bando.pdf"`;
+  const P1 = '  <g id="p0001" fub:page="1" fub:page-size="595 842">';
+
+  it("riscrive solo i valori, anche fra apici singoli, e l'inversa rimette quelli di prima", () => {
+    const source = lf(`${ANNOTATIONS} fub:pages='3' data-x="1" fub:digest='SHA256:${HEX}'>`, P1, END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "anchor", digest: `sha256:${OTHER}`, pages: 12 });
+    expect(out.text).toBe(lf(`${ANNOTATIONS} fub:pages='12' data-x="1" fub:digest='sha256:${OTHER}'>`, P1, END_G, END));
+    expect(out.inverse).toEqual({ op: "anchor", previous: { digest: `SHA256:${HEX}`, pages: "3" } });
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(source);
+  });
+
+  it("l'inversa toglie ciò che non c'era, col suo spazio", () => {
+    const source = lf(`${ANNOTATIONS}>`, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "anchor", digest: `sha256:${HEX}`, pages: 1 });
+    expect(out.text).toBe(lf(`${ANNOTATIONS} fub:digest="sha256:${HEX}" fub:pages="1">`, END));
+    expect(apply(engine, out.inverse).text).toBe(source);
+  });
+
+  it("scrive solo la parte che riceve, e l'inversa rimette l'altra com'era", () => {
+    const source = lf(`${ANNOTATIONS} fub:pages="3">`, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "anchor", digest: `sha256:${HEX}` });
+    expect(out.text).toBe(lf(`${ANNOTATIONS} fub:pages="3" fub:digest="sha256:${HEX}">`, END));
+    expect(out.inverse).toEqual({ op: "anchor", previous: { digest: null, pages: "3" } });
+    expect(apply(engine, out.inverse).text).toBe(source);
+    const pages = apply(SceneEngine.open(lf(`${ANNOTATIONS} fub:digest='SHA256:${HEX}'>`, END)), { op: "anchor", pages: 7 });
+    expect(pages.text).toBe(lf(`${ANNOTATIONS} fub:digest='SHA256:${HEX}' fub:pages="7">`, END));
+  });
+
+  it("rifiuta un'impronta o un numero di pagine fuori grammatica, e un documento estraneo", () => {
+    const source = lf(`${ANNOTATIONS}>`, END);
+    for (const [digest, pages] of [
+      [`sha256:${HEX.toUpperCase()}`, 1],
+      [`sha256:${HEX}0`, 1],
+      [`sha1:${HEX}`, 1],
+      [`sha256:${HEX}`, 0],
+      [`sha256:${HEX}`, 1.5],
+      [`sha256:${HEX}`, 2 ** 32],
+      [`sha256:${HEX}`, "3"],
+    ]) {
+      rejects(source, { op: "anchor", digest, pages }, "invalid-elem");
+    }
+    rejects(source, { op: "anchor" }, "invalid-elem");
+    rejects(source, { op: "anchor", digest: null, pages: 1 }, "invalid-elem");
+    rejects(lf('<svg xmlns="http://www.w3.org/2000/svg">', END), { op: "anchor", digest: `sha256:${HEX}`, pages: 1 }, "foreign");
+  });
+});
+
+describe("i gruppi di pagina", () => {
+  const ANNOTATIONS = `<svg ${NS} fub:version="1" fub:annotates="Bando.pdf">`;
+  const page = (id: string, n: string): unknown => ({
+    op: "add",
+    parent: "#root",
+    pos: { last: true },
+    elem: { tag: "g", attrs: { id, "fub:page": n, "fub:page-size": "595 842" } },
+  });
+
+  it("hanno l'id dal numero, su almeno quattro cifre", () => {
+    const engine = SceneEngine.open(lf(ANNOTATIONS, END));
+    apply(engine, page("p0003", "3") as Op);
+    const out = apply(engine, page("p12345", "12345") as Op);
+    expect(out.text).toBe(
+      lf(ANNOTATIONS, '  <g id="p0003" fub:page="3" fub:page-size="595 842">', END_G, '  <g id="p12345" fub:page="12345" fub:page-size="595 842">', END_G, END),
+    );
+    for (const [id, n] of [["p3", "3"], ["p0004", "3"], ["o1a2b3c4d", "3"], ["p0000", "0"]]) {
+      rejects(lf(ANNOTATIONS, END), page(id!, n!), "invalid-elem");
+    }
+  });
+
+  it("ident dà a un gruppo di pagina l'id del suo numero", () => {
+    const source = lf(ANNOTATIONS, '  <g fub:page="2"/>', END);
+    rejects(source, { op: "ident", path: [0], tag: "g", id: "o1a2b3c4d" }, "invalid-elem");
+    const out = apply(SceneEngine.open(source), { op: "ident", path: [0], tag: "g", id: "p0002" });
+    expect(out.text).toBe(lf(ANNOTATIONS, '  <g id="p0002" fub:page="2"/>', END));
   });
 });
 

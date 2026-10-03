@@ -70,3 +70,14 @@ describe("le forme", () => {
     expect(constrainEnd("arrow", [5, 5], [5, 5])).toEqual([5, 5]);
   });
 });
+
+describe("la copertura", () => {
+  it("è un rettangolo pieno del colore, senza contorno, come il rettangolo per verso e misura", () => {
+    expect(shapeElem("cover", "o1a2b3c4d", [272, 340], [72.004, 300], { color: "#000000", width: 4 }, 4)).toEqual({
+      tag: "rect",
+      attrs: { id: "o1a2b3c4d", x: "72", y: "300", width: "200", height: "40", fill: "#000000" },
+    });
+    expect(shapeElem("cover", "c", [10, 10], [12, 13], STYLE, 4)).toBeNull();
+    expect(constrainEnd("cover", [0, 0], [30, -10])).toEqual([30, -30]);
+  });
+});

@@ -15,7 +15,22 @@
 # ne farebbe un altro file, e il test fallirebbe a ogni checkout.
 apps/client/src/__fixtures__/scene/*.svg -text
 
+# Le fixture delle annotazioni dei PDF (`fub-format-svg`): gli span del loro
+# modello sono byte, come quelli dei disegni qui sotto.
+crates/fub-format-svg/tests/fixtures/*.fubann -text
+
+# Le stesse annotazioni lette dal client (`spatial/scene/annotations.ts`):
+# `crlf-bom.fubann` esiste per avere BOM e CRLF.
+apps/client/src/__fixtures__/annotations/*.fubann -text
+
 # Le fixture del modello delle scene (`fub-format-svg`): stessa ragione, e
 # `foreign-crlf-bom.svg` esiste per provare che la riscrittura dei
 # collegamenti lascia identici BOM e CRLF.
 crates/fub-format-svg/tests/fixtures/*.svg -text
+
+# L'export dei disegni (`fub-features`, feature `draw`): i caratteri entrano
+# nel binario con `include_bytes!`, e le baseline del PNG e del PDF sono byte
+# da confrontare. `text=auto` li riconoscerebbe già come binari; scriverlo
+# toglie il dubbio a un PDF che per caso non avesse un byte nullo.
+crates/fub-features/fonts/*.ttf -text
+crates/fub-features/tests/baselines/draw/* -text

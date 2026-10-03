@@ -62,3 +62,9 @@ export function swatchOf(color: string): Swatch | null {
   const lower = color.toLowerCase();
   return PALETTE.find((swatch) => swatch.color === lower) ?? null;
 }
+
+/// Il colore di partenza dell'evidenziatore, Giallo come nell'esempio del
+/// formato, e della copertura, Nero: ognuno dei due ha il suo, che non
+/// cambia quello della penna.
+export const HIGHLIGHT_COLOR = "#f0e442";
+export const COVER_COLOR = "#000000";

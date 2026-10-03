@@ -491,7 +491,7 @@ fn collapse(text: &str) -> String {
 /// Il paragrafo di un `text`: ogni figlio elemento è una riga, come i
 /// `tspan` di FubDraw e di Inkscape, e i dati di carattere fra due figli ne
 /// sono un'altra. Le righe si uniscono con uno spazio.
-fn paragraph(doc: &Document<'_>, id: NodeId) -> String {
+pub(crate) fn paragraph(doc: &Document<'_>, id: NodeId) -> String {
     let mut lines = Vec::new();
     let mut run = String::new();
     for &child in doc.children(id) {

@@ -458,6 +458,20 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       },
       assetUrl: api.assetUrl,
       copyText: writeClipboardText,
+      // Il comando del kernel, come dalla palette: crea le annotazioni accanto
+      // al PDF, o apre quelle che ci sono.
+      annotate: {
+        available: () => state.commandSpecs.some((spec) => spec.id === "pdf.annotate"),
+        run: async (pdf) => {
+          try {
+            const outcome = await api.invokeCommand("pdf.annotate", { pdf }, "apply");
+            if (outcome.notify) notify(outcome.notify, outcome.partial ? "guasto" : "info");
+            await applyIntent(outcome.effect);
+          } catch (error) {
+            notify(errorText(error), "guasto");
+          }
+        },
+      },
     },
   });
   panesEl = $("#panes");

@@ -530,6 +530,14 @@ describe("DocumentSurfaceRegistry", () => {
       .toEqual({ family: "text", profile: "svg" });
     expect(registry.resolve({ formatId: "svg", sourceKind: "text", documentId: "arte/logo.svg", override: { family: "text", profile: "svg" } }))
       .toMatchObject({ owner: "fub.shell.text", family: "text", profile: "svg" });
+    // Lo stesso per le annotazioni di un PDF, formato `fubann`: sono il
+    // profilo `pdf` della tela, e il loro testo è SVG.
+    const annotations = { formatId: "fubann", sourceKind: "text", documentId: "bandi/Bando.pdf.fubann" } as const;
+    expect(registry.resolve(annotations))
+      .toMatchObject({ owner: "fub.shell.canvas", family: "canvas", profile: "pdf" });
+    expect(registry.sourceView(annotations)).toEqual({ family: "text", profile: "svg" });
+    expect(registry.resolve({ ...annotations, override: { family: "text", profile: "svg" } }))
+      .toMatchObject({ owner: "fub.shell.text", family: "text", profile: "svg" });
   });
 
   it("lets the source owner decline a document, which then falls to the error surface", () => {

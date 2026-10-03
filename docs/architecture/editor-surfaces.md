@@ -47,18 +47,19 @@ L'override dell'utente è della scheda: `Tab.override` in
 monta la superficie della scheda attiva. È opt-in della superficie: una
 registrazione dichiara in `sourceViews`, per profilo, la vista sorgente del
 documento, cioè famiglia e profilo che mostrano lo stesso documento come testo.
-La dichiara il profilo `vector` della tela, i disegni dell'
-[ADR 0203](../decisions/0203-superfici-spaziali.md), verso
-`{ family: "text", profile: "svg" }`; le altre famiglie della shell non ne
-dichiarano. Il registro
+La dichiarano i profili `vector` e `pdf` della tela, i disegni dell'
+[ADR 0203](../decisions/0203-superfici-spaziali.md) e le annotazioni dei PDF,
+verso `{ family: "text", profile: "svg" }`; le altre famiglie della shell non
+ne dichiarano. Il registro
 rifiuta una vista di un profilo non registrato, senza famiglia o uguale al
 profilo stesso; `sourceView(request)` la risolve dalla superficie naturale del
 documento, con il profilo esplicito, e restituisce `null` finché la famiglia
 indicata non è registrata o non ha quel profilo.
 
 Il montaggio resta sincrono anche quando il codice della superficie arriva
-dopo. Il disegno monta subito un involucro con i modi e il contratto della
-superficie vera (`apps/client/src/editors/spatial/lazy.ts`): finché
+dopo. Il disegno, e così le annotazioni, monta subito un involucro con i modi
+e il contratto della superficie vera
+(`apps/client/src/editors/spatial/lazy.ts`): finché
 `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un
 `reveal` in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è
@@ -294,7 +295,8 @@ scrive (`live_preview`) o una resa da leggere senza cursore (`reading`). La tela
 e il foglio proiettano la loro vista principale su `live_preview`, il sorgente
 JSON della tela su `source`, visori e superficie d'errore su `reading`. Il
 disegno proietta Disegno (`draw`) su `live_preview` e Lettura (`read`) su
-`reading`.
+`reading`; le annotazioni di un PDF fanno lo stesso con Annota, che ha l'id
+`draw`, e Lettura.
 
 Gli id valgono dentro la famiglia della superficie: il layout ricorda una
 modalità per famiglia in ogni riquadro (`PaneState.modes`), e il `source` del

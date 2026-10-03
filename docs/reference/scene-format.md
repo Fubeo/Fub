@@ -7,9 +7,9 @@
 
 Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore,
 con pochi attributi in più nel namespace `fub`. È il contratto comune di
-`fub-scene`, del provider `svg` e della superficie TypeScript della shell; il
-perché sta nell'[ADR 0203](../decisions/0203-superfici-spaziali.md), e i `§`
-dei commenti nel codice sono le sezioni di questa pagina.
+`fub-scene`, del provider `svg`, della superficie TypeScript della shell e
+delle [annotazioni PDF](annotation-format.md); il perché sta nell'[ADR
+0203](../decisions/0203-superfici-spaziali.md), e i `§` dei commenti sui disegni sono le sezioni di questa pagina.
 
 ## 1. Principi
 
@@ -466,6 +466,9 @@ descrizione e riepilogo, con `truncated: true` (§11).
   disegno, con il frammento, già escapato per stare fra virgolette doppie. Un
   `image` si scrive come un `a`, e l'etichetta non conta. Wikilink e URL non si
   scrivono in un disegno; un percorso fuori dal vault è un errore.
+- **Export** in PNG e PDF (`fub.draw`, feature `draw`): il documento, le
+  immagini raster in data URI e i caratteri di Fub incorporati, mai quelli di
+  sistema; ogni altro riferimento resta fuori e il log dell'export lo elenca.
 
 ## 10. Versioni e compatibilità
 
