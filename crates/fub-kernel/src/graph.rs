@@ -56,6 +56,7 @@ use std::sync::Arc;
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget};
 use fub_abi::traits::{BacklinkRef, LinkDirection, NeighborRef};
 
+use fub_abi::rules::media::mime_of;
 use fub_abi::rules::path::{exact_key, resolution_key, resolve_against, strip_ext};
 
 /// **Ciò che un thread riporta di un documento** quando la fase 2 gira a pezzi:
@@ -642,8 +643,14 @@ impl LinkGraph {
                 return Some(id);
             }
         }
-        if let Some(id) = self.pick(&self.name_index, key, exact, |id| exact_key(id.page_name())) {
-            return Some(id);
+        // Il nome pagina è il nome senza estensione, e una chiave che finisce
+        // con l'estensione di un allegato non lo è (`names_an_attachment`).
+        if !names_an_attachment(key) {
+            if let Some(id) =
+                self.pick(&self.name_index, key, exact, |id| exact_key(id.page_name()))
+            {
+                return Some(id);
+            }
         }
         // Un nome con la sua estensione nomina un file: `[[board.canvas]]` è
         // `board.canvas`, e non `board.md` che gli sta accanto. È come Obsidian
@@ -735,7 +742,12 @@ impl LinkGraph {
         // nomi con un punto interno — `note/v1.2.md` è indicizzato come
         // `note/v1.2`, e `[t](note/v1.2)` lo raggiunge qui: `strip_ext` taglia
         // `v1.2` in `v1`, il blocco sopra guarda la chiave sbagliata, e questo
-        // `pick` trova quella giusta.
+        // `pick` trova quella giusta. Una chiave che finisce con l'estensione
+        // di un allegato non è un path senza estensione
+        // (`names_an_attachment`).
+        if names_an_attachment(key) {
+            return None;
+        }
         self.pick(&self.path_index, key, exact, |id| {
             exact_key(&strip_ext(id.as_str()))
         })
@@ -1011,6 +1023,24 @@ fn stem_of(path: &str) -> &str {
         Some((stem, ext)) if !ext.contains('/') => stem,
         _ => path,
     }
+}
+
+/// La chiave finisce con l'estensione di un allegato, cioè di un tipo della
+/// [tabella dei MIME](fub_abi::rules::media): nomina un file di quel tipo, e
+/// non si legge come un nome o un path senza estensione.
+///
+/// Senza questa regola `[[Bando.pdf]]` e `[t](Bando.pdf)` nominerebbero
+/// `Bando.pdf.fubann`, le annotazioni del PDF, o una `Bando.pdf.md` che ne
+/// parla: il loro nome pagina è `Bando.pdf`, e il grafo, che conosce solo i
+/// documenti, li preferirebbe al PDF accanto. Così il grafo risponde di no e
+/// il PDF lo trova chi risolve gli allegati. Il punto di `v1.2` resta nel
+/// nome, perché `2` non è un tipo; il documento che porta l'estensione per
+/// intero (`[[acqua.svg]]` con `acqua.svg`) si raggiunge come prima, dal suo
+/// nome di file. La risoluzione di una chiave guarda al più le voci di prima,
+/// quindi i `watchers` restano giusti. *(Proposta del 3 ottobre 2026, da
+/// rivedere.)*
+fn names_an_attachment(key: &str) -> bool {
+    mime_of(&DocId::new(key)).is_some()
 }
 
 /// Il nome del file, con la sua estensione.
@@ -1459,6 +1489,60 @@ mod tests {
         let link = doc_with_paths("a.md", &["note/v1.2"]);
         let graph = LinkGraph::build([&target, &link]);
         assert_eq!(sources(&graph, "note/v1.2.md"), ["a.md"]);
+    }
+
+    #[test]
+    fn a_name_with_the_extension_of_an_attachment_names_the_attachment() {
+        // `atti/Bando.pdf.fubann` annota `atti/Bando.pdf`, e il suo nome
+        // pagina è `Bando.pdf`. Un link al PDF, wikilink o path, non è un
+        // link alle annotazioni: il grafo risponde di no, e il PDF, che non è
+        // un documento, lo trova chi risolve gli allegati. Lo stesso per una
+        // nota che porta il nome del PDF più `.md`.
+        let annotations = doc_with_paths("atti/Bando.pdf.fubann", &["Bando.pdf"]);
+        let about = DocumentModel::empty(DocId::new("Foto.png.md"));
+        let wiki = doc_with_links("a.md", &["Bando.pdf", "Foto.png", "Bando.pdf.fubann"]);
+        let path = doc_with_paths("b.md", &["atti/Bando.pdf", "atti/Bando.pdf.fubann"]);
+        let graph = LinkGraph::build([&annotations, &about, &wiki, &path]);
+
+        assert_eq!(graph.resolve_wiki("Bando.pdf"), None);
+        assert_eq!(graph.resolve_wiki("Foto.png"), None);
+        assert_eq!(
+            graph.resolve_path(&DocId::new("b.md"), "atti/Bando.pdf"),
+            None
+        );
+        // Le annotazioni non puntano a sé stesse.
+        assert!(graph
+            .outgoing(&DocId::new("atti/Bando.pdf.fubann"))
+            .is_empty());
+        // Col nome intero si raggiungono, come ogni documento.
+        assert_eq!(
+            graph.resolve_wiki("Bando.pdf.fubann"),
+            Some(DocId::new("atti/Bando.pdf.fubann"))
+        );
+        assert_eq!(sources(&graph, "atti/Bando.pdf.fubann"), ["a.md", "b.md"]);
+        assert!(sources(&graph, "Foto.png.md").is_empty());
+        // Un'estensione che non è un tipo resta parte del nome, e un
+        // documento con l'estensione di un tipo si raggiunge dal suo nome di
+        // file.
+        let dotted = DocumentModel::empty(DocId::new("v1.2.md"));
+        let drawing = DocumentModel::empty(DocId::new("disegni/acqua.svg"));
+        let graph = LinkGraph::build([&dotted, &drawing]);
+        assert_eq!(graph.resolve_wiki("v1.2"), Some(DocId::new("v1.2.md")));
+        assert_eq!(
+            graph.resolve_wiki("acqua.svg"),
+            Some(DocId::new("disegni/acqua.svg"))
+        );
+    }
+
+    #[test]
+    fn annotations_that_come_and_go_never_take_the_link_to_their_pdf() {
+        let wiki = doc_with_links("a.md", &["Bando.pdf"]);
+        let mut graph = LinkGraph::build([&wiki]);
+        graph.upsert(&doc_with_paths("Bando.pdf.fubann", &["Bando.pdf"]));
+        assert!(graph.outgoing(&DocId::new("a.md")).is_empty());
+        assert!(sources(&graph, "Bando.pdf.fubann").is_empty());
+        graph.remove(&DocId::new("Bando.pdf.fubann"));
+        assert!(graph.outgoing(&DocId::new("a.md")).is_empty());
     }
 
     #[test]

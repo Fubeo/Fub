@@ -7,9 +7,9 @@
 
 Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore,
 con pochi attributi in più nel namespace `fub`. È il contratto comune di
-`fub-scene`, del provider `svg` e della superficie TypeScript della shell; il
-perché sta nell'[ADR 0203](../decisions/0203-superfici-spaziali.md), e i `§`
-dei commenti nel codice sono le sezioni di questa pagina.
+`fub-scene`, del provider `svg`, della superficie TypeScript della shell e
+delle [annotazioni PDF](annotation-format.md); il perché sta nell'[ADR
+0203](../decisions/0203-superfici-spaziali.md), e i `§` dei commenti sui disegni sono le sezioni di questa pagina.
 
 ## 1. Principi
 

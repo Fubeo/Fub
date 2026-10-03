@@ -6,6 +6,11 @@
 //! documento. Un `.svgz` resta di specie sconosciuta nei due casi: è
 //! compresso, e nessuna tabella gli dà un MIME. Il Markdown non cambia.
 //!
+//! Lo stesso vale per le annotazioni di un PDF, `<nome>.pdf.fubann`: spenta,
+//! il file è di specie sconosciuta come ogni estensione senza formato né
+//! MIME; accesa, il provider `fubann` lo rivendica e il PDF accanto prende un
+//! backlink.
+//!
 //! Lo stesso file si compila nei due giri della CI: `cargo test --workspace`
 //! prova il ramo spento, `cargo test -p fub-host --features draw` quello acceso.
 
@@ -20,6 +25,14 @@ const DRAWING: &str = concat!(
     r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 100 100" width="100" height="100">"#,
     "\n  <title>Schizzo</title>\n",
     r#"  <a href="nota.md"><text x="1" y="2">vai alla nota</text></a>"#,
+    "\n</svg>\n",
+);
+
+/// Le annotazioni di `Bando.pdf`: una nota sulla prima pagina.
+const ANNOTATIONS: &str = concat!(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="Bando.pdf" fub:pages="2">"#,
+    "\n  <title>Revisione</title>\n",
+    r#"  <g fub:page="1"><text x="10" y="20" fub:note="Il corpo della nota">vista</text></g>"#,
     "\n</svg>\n",
 );
 
@@ -50,6 +63,18 @@ fn kind_of(ws: &fub_kernel::Workspace, id: &str) -> EntryKind {
         .find(|entry| entry.id.as_str() == id)
         .unwrap_or_else(|| panic!("{id} non è nell'anagrafe"))
         .kind
+}
+
+/// Chi punta a `target`, anche se è un allegato: la domanda del pannello dei
+/// backlink.
+fn referrers(ws: &fub_kernel::Workspace, target: &str) -> Vec<DocId> {
+    let Ok(IndexResult::Backlinks(found)) = ws.query_index(IndexQuery::Backlinks {
+        target: DocId::new(target),
+        page: None,
+    }) else {
+        panic!("i backlink rispondono")
+    };
+    found.items.into_iter().map(|link| link.source).collect()
 }
 
 #[test]
@@ -93,4 +118,38 @@ fn an_svg_is_a_document_only_with_the_draw_feature() {
 
     // Il sorgente è quello del disco in tutti e due i casi.
     assert_eq!(ws.read_source(&drawing).unwrap(), DRAWING);
+}
+
+#[test]
+fn annotations_are_a_document_only_with_the_draw_feature() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    std::fs::write(root.join("Bando.pdf"), b"%PDF-1.7\n").unwrap();
+    std::fs::write(root.join("Bando.pdf.fubann"), ANNOTATIONS).unwrap();
+    let mounted = mounted(&root);
+    let ws = &mounted.workspace;
+    let annotations = DocId::new("Bando.pdf.fubann");
+
+    assert_eq!(kind_of(ws, "Bando.pdf"), EntryKind::Asset);
+
+    #[cfg(not(feature = "draw"))]
+    {
+        assert_eq!(kind_of(ws, "Bando.pdf.fubann"), EntryKind::Unknown);
+        assert_eq!(ws.format_of(&annotations), None);
+        assert!(!ws.extensions().iter().any(|ext| ext == "fubann"));
+        assert!(!ws.documents().contains(&annotations));
+        assert!(referrers(ws, "Bando.pdf").is_empty());
+    }
+
+    #[cfg(feature = "draw")]
+    {
+        assert_eq!(kind_of(ws, "Bando.pdf.fubann"), EntryKind::Document);
+        let format = ws.format_of(&annotations).expect("il formato fubann");
+        assert_eq!(format.descriptor.id, fub_format_svg::ANNOTATIONS_FORMAT_ID);
+        assert!(ws.extensions().iter().any(|ext| ext == "fubann"));
+        assert!(ws.documents().contains(&annotations));
+        assert_eq!(referrers(ws, "Bando.pdf"), [DocId::new("Bando.pdf.fubann")]);
+    }
+
+    assert_eq!(ws.read_source(&annotations).unwrap(), ANNOTATIONS);
 }

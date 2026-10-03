@@ -97,6 +97,9 @@ specifica del formato può restare `Custom`: un disegno di FubDraw, per esempio,
 è un blocco `fub.scene.summary` che contiene titolo, descrizione e testi come
 heading e paragrafi comuni, così ricerca, backlink e grafo lo leggono senza
 conoscere il formato ([formato della scena](../reference/scene-format.md), §9).
+Le annotazioni di un PDF aggiungono blocchi custom per pagine e note, e il PDF
+annotato è un collegamento come gli altri ([formato delle
+annotazioni](../reference/annotation-format.md), §5).
 
 ## Identità interne
 
