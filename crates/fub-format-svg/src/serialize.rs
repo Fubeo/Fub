@@ -145,8 +145,12 @@ fn title(model: &DocumentModel) -> String {
 
 /// Il PDF che le annotazioni `id` annotano per nome: `id` senza `.fubann`, se
 /// quel che resta è un `.pdf`. Le estensioni si confrontano senza badare alle
-/// maiuscole, come le confronta il vault.
-fn annotated_of(id: &DocId) -> Option<DocId> {
+/// maiuscole, e un nome che è solo `.pdf` non è un PDF: come per il vault
+/// (`rules::media`).
+///
+/// È il PDF che un documento nuovo scrive in `fub:annotates`, e quello che vale
+/// quando `fub:annotates` manca.
+pub fn annotated_of(id: &DocId) -> Option<DocId> {
     let id = id.as_str();
     let cut = id.len().checked_sub(".fubann".len())?;
     let (pdf, extension) = (id.get(..cut)?, id.get(cut..)?);

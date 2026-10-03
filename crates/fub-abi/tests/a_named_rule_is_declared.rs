@@ -1460,11 +1460,12 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             "crates/fub-format-svg/src/serialize.rs::annotated_of",
             (
                 Family::AsciiCase,
-                "riconosce `.fubann` e `.pdf` in fondo al nome di un documento nuovo senza badare \
-                 al caso ASCII, come il vault confronta le estensioni (`rules::media`): \
+                "riconosce `.fubann` e `.pdf` in fondo al nome di un documento senza badare al \
+                 caso ASCII, come il vault confronta le estensioni (`rules::media`): \
                  `Bando.PDF.FubAnn` annota `Bando.PDF`. Diverge da `kind_of` perché qui non dà la \
-                 specie di un file ma ne deduce un altro, il PDF che le annotazioni nominano in \
-                 `fub:annotates`, e il resto del nome resta com'è.",
+                 specie di un file ma ne deduce un altro, il PDF che un documento nuovo nomina in \
+                 `fub:annotates` e che l'export cerca quando `fub:annotates` manca, e il resto del \
+                 nome resta com'è.",
             ),
         ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------

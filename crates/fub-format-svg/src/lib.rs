@@ -56,6 +56,7 @@ use fub_abi::model::DocumentModel;
 use fub_abi::{FormatError, FormatProvider, TextEdit};
 
 pub use parse::{ANNOTATIONS_KIND, NOTE_KIND, PAGE_KIND, PAGE_SECTION, SUMMARY_KIND};
+pub use serialize::annotated_of;
 
 /// L'id del formato: è anche il profilo con cui la shell sceglie la superficie.
 pub const FORMAT_ID: &str = "svg";

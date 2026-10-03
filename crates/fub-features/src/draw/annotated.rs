@@ -44,7 +44,7 @@ use fub_abi::transfer::{
     artifact_key, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget,
     TransferNote,
 };
-use fub_format_svg::ANNOTATIONS_FORMAT_ID;
+use fub_format_svg::{annotated_of, ANNOTATIONS_FORMAT_ID};
 use fub_scene::Annotations;
 use lopdf::{Document, LoadOptions, ObjectId};
 use resvg::usvg::Tree;
@@ -422,19 +422,10 @@ fn artifact_names(docs: &[DocId], suffix: &str) -> Vec<String> {
         .collect()
 }
 
-/// Il path delle annotazioni senza l'estensione del formato e, se c'è, senza
-/// quella del PDF: `Bando.pdf.fubann` → `Bando`. Un nome che resterebbe
-/// vuoto tiene la sua.
+/// Il path delle annotazioni senza l'estensione del formato e, se il nome è
+/// quello di un PDF, senza quella del PDF: `Bando.pdf.fubann` → `Bando`.
 fn stem(doc: &DocId) -> String {
-    let base = strip_ext(doc.as_str());
-    let cut = base.len().saturating_sub(".pdf".len());
-    let name_starts = base.rfind('/').map_or(0, |slash| slash + 1);
-    match base.get(cut..) {
-        Some(tail) if tail.eq_ignore_ascii_case(".pdf") && cut > name_starts => {
-            base[..cut].to_string()
-        }
-        _ => base,
-    }
+    strip_ext(annotated_of(doc).as_ref().unwrap_or(doc).as_str())
 }
 
 /// Il PDF che le annotazioni `doc` nominano, come l'editor lo trova: con
@@ -447,14 +438,7 @@ fn pdf_of(doc: &DocId, annotates: &Annotates) -> Option<DocId> {
     let id = without_fragment(doc.as_str());
     let url = match annotates {
         Annotates::Other => return None,
-        Annotates::Absent => {
-            const NAMED: &str = ".pdf.fubann";
-            let cut = id.len().checked_sub(NAMED.len())?;
-            let tail = id.get(cut..)?;
-            return tail
-                .eq_ignore_ascii_case(NAMED)
-                .then(|| DocId::new(&id[..id.len() - ".fubann".len()]));
-        }
+        Annotates::Absent => return annotated_of(&DocId::new(id)),
         Annotates::Vault(url) => url,
     };
     let path = decode_component(without_fragment(url))?;
@@ -846,11 +830,21 @@ impl Pages {
     }
 }
 
+/// «page» o «pages», per `count` pagine.
 fn pages_word(count: usize) -> &'static str {
     if count == 1 {
         "page"
     } else {
         "pages"
+    }
+}
+
+/// [`pages_word`] in testa a una nota.
+fn pages_word_first(count: usize) -> &'static str {
+    if count == 1 {
+        "Page"
+    } else {
+        "Pages"
     }
 }
 
@@ -910,7 +904,7 @@ fn annotated(
     if !pages.covered.is_empty() {
         notes.push(Note::warning(format!(
             "{} {} {} covers: in the annotated PDF the content under them is still there, and only the redacted PDF removes it",
-            capitalized(pages_word(pages.covered.len())),
+            pages_word_first(pages.covered.len()),
             ranges(&pages.covered),
             if pages.covered.len() == 1 { "has" } else { "have" },
         )));
@@ -1002,7 +996,7 @@ fn redacted(
     } else {
         notes.push(Note::info(format!(
             "{} {} became {} at {} dpi: the content under the covers is gone, and the text there can no longer be selected or searched",
-            capitalized(pages_word(rasterized.len())),
+            pages_word_first(rasterized.len()),
             ranges(&rasterized),
             if rasterized.len() == 1 { "an image" } else { "images" },
             dpi.round(),
@@ -1011,7 +1005,7 @@ fn redacted(
     if !lowered.is_empty() {
         notes.push(Note::warning(format!(
             "{} {} {} too large for {} dpi and became {} at a lower resolution",
-            capitalized(pages_word(lowered.len())),
+            pages_word_first(lowered.len()),
             ranges(&lowered),
             if lowered.len() == 1 { "is" } else { "are" },
             dpi.round(),
@@ -1032,7 +1026,7 @@ fn redacted(
     if !uncovered.is_empty() {
         notes.push(Note::warning(format!(
             "{} {} {} opaque marks that are not covers: they hide what is under them only on screen, and that content is still in the PDF",
-            capitalized(pages_word(uncovered.len())),
+            pages_word_first(uncovered.len()),
             ranges(&uncovered),
             if uncovered.len() == 1 { "has" } else { "have" },
         )));
@@ -1067,14 +1061,6 @@ fn redacted(
 fn page_at(list: &[ObjectId], number: u32) -> Option<ObjectId> {
     let index = usize::try_from(number).ok()?.checked_sub(1)?;
     list.get(index).copied()
-}
-
-fn capitalized(word: &str) -> String {
-    let mut chars = word.chars();
-    chars
-        .next()
-        .map(|first| first.to_uppercase().chain(chars).collect())
-        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -1119,8 +1105,9 @@ mod tests {
         assert_eq!(found(&vault("..")).as_deref(), Some("Gare"));
         assert_eq!(found(&vault("#solo")), Some("Gare/2026".to_string()));
 
-        let other = DocId::new("Note.fubann");
-        assert_eq!(pdf_of(&other, &Annotates::Absent), None);
+        for other in ["Note.fubann", "Archivio/.pdf.fubann"] {
+            assert_eq!(pdf_of(&DocId::new(other), &Annotates::Absent), None);
+        }
         let upper = DocId::new("BANDO.PDF.FUBANN");
         assert_eq!(
             pdf_of(&upper, &Annotates::Absent)

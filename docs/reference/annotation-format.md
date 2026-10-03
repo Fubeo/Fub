@@ -262,13 +262,13 @@ altri e dà un file per documento, che chi esporta salva dove sceglie. Il PDF
 del vault non si scrive mai.
 
 **Il PDF e la sua versione.** Il PDF è quello che trova l'editor (§2): il
-valore di `fub:annotates` senza frammento, o il nome del file senza
-`.fubann`. Impronta e pagine si confrontano come nell'editor, e il PDF è
-cambiato negli stessi casi. Il PDF annotato di un PDF cambiato esce con un
-avviso; il PDF redatto non esce, perché una copertura potrebbe non stare più
-su ciò che nasconde, e l'errore chiede di confermare prima la versione. Un PDF
-che manca, che non si legge, senza pagine o che chiede una password per
-aprirsi non si esporta.
+valore di `fub:annotates` senza frammento o, senza `fub:annotates`, il nome
+del file senza `.fubann`, se quel che resta è il nome di un PDF. Impronta e
+pagine si confrontano come nell'editor, e il PDF è cambiato negli stessi
+casi. Il PDF annotato di un PDF cambiato esce con un avviso; il PDF redatto
+non esce, perché una copertura potrebbe non stare più su ciò che nasconde, e
+l'errore chiede di confermare prima la versione. Un PDF che manca, che non si
+legge, senza pagine o che chiede una password per aprirsi non si esporta.
 
 **Le pagine.** Ogni gruppo di pagina (§3) si disegna sulla pagina del PDF con
 lo stesso numero, nella geometria con cui l'editor la mostra: l'intersezione

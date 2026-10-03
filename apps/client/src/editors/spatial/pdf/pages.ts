@@ -188,11 +188,16 @@ export function rootFacts(model: DocumentModel): RootFacts {
 
 /// Il PDF che le annotazioni `docId` nominano, come id del vault; `null` se
 /// non ne nominano uno. Senza `fub:annotates` vale il nome: `X.pdf.fubann`
-/// annota `X.pdf` nella stessa cartella.
+/// annota `X.pdf` nella stessa cartella, ma un nome che è solo `.pdf` non è
+/// un PDF, come per il vault.
 export function pdfOf(docId: string, annotates: RootFacts["annotates"]): string | null {
   const id = withoutFragment(docId);
   if (annotates.kind === "other") return null;
-  if (annotates.kind === "absent") return id.toLowerCase().endsWith(".pdf.fubann") ? id.slice(0, -".fubann".length) : null;
+  if (annotates.kind === "absent") {
+    const pdf = id.slice(0, -".fubann".length);
+    const name = pdf.slice(pdf.lastIndexOf("/") + 1);
+    return id.toLowerCase().endsWith(".pdf.fubann") && name.length > ".pdf".length ? pdf : null;
+  }
   let path = withoutFragment(annotates.url);
   try {
     path = decodeURIComponent(path);
