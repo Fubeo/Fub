@@ -4,11 +4,12 @@
 // sezioni.
 //
 // Le forme pubbliche sono quelle della tabella di §2, le stesse sulla rete e
-// nell'undo. Tre inverse hanno una forma in più, che scrive soltanto il
+// nell'undo. Quattro inverse hanno una forma in più, che scrive soltanto il
 // motore: `add` con `slot` rimette esattamente ciò che un `remove` ha tolto,
 // anche un elemento estraneo; `move` con `slot` riporta un elemento al punto
-// esatto da cui è partito; `page` con `previous` rimette i valori di prima,
-// anche assenti. Non arrivano mai dalla rete: `parseWireOp` le rifiuta.
+// esatto da cui è partito; `page` e `anchor` con `previous` rimettono i
+// valori di prima, anche assenti. Non arrivano mai dalla rete: `parseWireOp`
+// le rifiuta.
 
 import { utf8Length } from "./text";
 import type { Elem } from "./serialize";
