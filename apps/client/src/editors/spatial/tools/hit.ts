@@ -1,0 +1,737 @@
+// Gli oggetti che gli strumenti toccano: l'indice con cui la selezione
+// sceglie, la gomma cancella e lo spostamento sposta.
+//
+// Un **oggetto** è ciò che al livello Essenziale si sceglie intero (piano §6,
+// regola 2): un figlio di un livello, o un figlio della radice fuori da ogni
+// livello, che non sia la carta, il titolo o la descrizione. Un gruppo o un
+// collegamento si sceglie con tutto ciò che contiene. Gli oggetti di un
+// livello bloccato o nascosto non si toccano, e nemmeno quelli nascosti con
+// `display="none"`. Un blocco estraneo non è un oggetto: si vede come
+// immagine e resta com'è.
+//
+// La geometria è quella che il painter disegna: gli attributi dipinti della
+// stessa `PaintScene` (`PaintBuilder.shape` e `headInfo`), con le
+// trasformazioni di livelli e gruppi composte. I tracciati si appiattiscono
+// solo per gli oggetti vicini al puntatore, con un errore di 0,05 unità
+// della scena, e un tratto a penna si tocca dentro il suo contorno pieno
+// come lo riempie il browser, con la regola non zero. Un testo si tocca nel
+// riquadro stimato delle sue righe: la misura vera dipende dai caratteri.
+
+import type { Role } from "../scene/analysis";
+import { BoundsBuilder, fmin, parsePath, rectPath, remEuclid, type Bounds, type Segment } from "../scene/geometry";
+import { apply, compose, IDENTITY, toRadians, type Matrix, type Point } from "../scene/matrix";
+import { tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import type { Target } from "../scene/ops";
+import type { Elem } from "../scene/serialize";
+import { length, points as parsePoints, transform as parseTransform } from "../scene/values";
+import type { PaintAttr, PaintBuilder, PaintNode, PaintShape } from "../painter/paint";
+
+/// L'errore massimo dell'appiattimento, in unità della scena.
+export const FLATNESS = 0.05;
+
+/// Il limite di pezzi per una curva: oltre, una curva enorme costerebbe più
+/// di quanto il puntatore possa distinguere.
+const MAX_STEPS = 256;
+
+/// Un livello del documento, per chi deve scegliere dove scrivere.
+export interface LayerInfo {
+  readonly id: string | null;
+  readonly path: readonly number[];
+  readonly locked: boolean;
+  readonly hidden: boolean;
+  /// Dalle coordinate del livello a quelle della scena.
+  readonly matrix: Matrix;
+}
+
+/// Un pezzo di un oggetto che si disegna da solo: una forma.
+interface Part {
+  readonly segments: readonly Segment[];
+  /// Dalle coordinate della forma a quelle della scena.
+  readonly matrix: Matrix;
+  /// Dalle coordinate della forma a quelle dell'oggetto.
+  readonly frameMatrix: Matrix;
+  readonly fill: boolean;
+  /// Metà dello spessore del contorno, in unità della forma; 0 senza contorno.
+  readonly radius: number;
+  readonly cache: ShapeCache | null;
+  flat: Flat | null;
+}
+
+/// Un sottotracciato appiattito, in coordinate della scena: `x, y` a coppie.
+interface Run {
+  readonly points: Float64Array;
+  readonly closed: boolean;
+}
+
+interface Flat {
+  readonly runs: readonly Run[];
+  /// Metà dello spessore del contorno nella scena.
+  readonly radius: number;
+}
+
+/// Ciò che di una forma non cambia finché non cambia la forma: i segmenti, e
+/// il riquadro nella scena dell'ultima matrice.
+interface ShapeCache {
+  segments: readonly Segment[] | null;
+  scene: { readonly matrix: Matrix; readonly bounds: Bounds | null } | null;
+  local: Bounds | null | undefined;
+}
+
+/// Un oggetto della scena.
+export class Unit {
+  private frameBounds: Bounds | null | undefined = undefined;
+
+  constructor(
+    /// L'id, o il percorso per un oggetto che non ne ha: la chiave della
+    /// selezione.
+    readonly key: string,
+    readonly target: Target,
+    readonly id: string | null,
+    readonly path: readonly number[],
+    readonly tag: string,
+    readonly role: Role,
+    /// L'id del livello che lo contiene; `null` alla radice o per un livello
+    /// senza id.
+    readonly layer: string | null,
+    /// Dalle coordinate del genitore a quelle della scena.
+    readonly parent: Matrix,
+    /// Il suo `transform`, letto; l'identità se non ce l'ha.
+    readonly transform: Matrix,
+    /// Ciò che il painter disegna per lui.
+    readonly paints: readonly PaintNode[],
+    /// Il riquadro nella scena, contorno compreso; `null` se non disegna
+    /// niente.
+    readonly bounds: Bounds | null,
+    private readonly parts: readonly Part[],
+  ) {}
+
+  /// Dalle coordinate dell'oggetto a quelle della scena.
+  get matrix(): Matrix {
+    return compose(this.parent, this.transform);
+  }
+
+  /// Il riquadro nelle coordinate dell'oggetto, contorno compreso: con
+  /// `matrix` dà la cornice della selezione, che ruota con l'oggetto.
+  frame(): Bounds | null {
+    if (this.frameBounds === undefined) {
+      const out = new BoundsBuilder();
+      for (const part of this.parts) {
+        const local = part.frameMatrix === IDENTITY && part.cache !== null ? localBounds(part) : transformedBounds(part.segments, part.frameMatrix);
+        if (local !== null) includeInflated(out, local, part.radius * scaleOf(part.frameMatrix));
+      }
+      this.frameBounds = out.finish();
+    }
+    return this.frameBounds;
+  }
+
+  /// Vero se il punto `p` della scena tocca l'oggetto, con una tolleranza
+  /// `tolerance` in unità della scena.
+  hits(p: Point, tolerance: number): boolean {
+    if (!near(this.bounds, p, p, tolerance)) return false;
+    return this.parts.some((part) => partHits(part, p, tolerance));
+  }
+
+  /// Vero se il segmento da `a` a `b` tocca l'oggetto: il passaggio della
+  /// gomma fra due campioni.
+  touches(a: Point, b: Point, tolerance: number): boolean {
+    if (!near(this.bounds, a, b, tolerance)) return false;
+    return this.parts.some((part) => partTouches(part, a, b, tolerance));
+  }
+}
+
+/// L'indice degli oggetti di una scena, in ordine di documento: l'ultimo è
+/// quello che si vede sopra.
+export class SceneIndex {
+  private readonly byKey: Map<string, Unit>;
+
+  constructor(
+    readonly units: readonly Unit[],
+    readonly layers: readonly LayerInfo[],
+  ) {
+    this.byKey = new Map(units.map((unit) => [unit.key, unit]));
+  }
+
+  get(key: string): Unit | null {
+    return this.byKey.get(key) ?? null;
+  }
+
+  /// L'oggetto più in alto sotto `p`.
+  at(p: Point, tolerance: number): Unit | null {
+    for (let i = this.units.length - 1; i >= 0; i--) {
+      const unit = this.units[i]!;
+      if (unit.hits(p, tolerance)) return unit;
+    }
+    return null;
+  }
+
+  /// Gli oggetti che il segmento da `a` a `b` tocca, in ordine di documento.
+  along(a: Point, b: Point, tolerance: number): Unit[] {
+    return this.units.filter((unit) => unit.touches(a, b, tolerance));
+  }
+
+  /// Gli oggetti che stanno interi dentro `area`, un rettangolo della scena.
+  within(area: Bounds): Unit[] {
+    return this.units.filter((unit) => unit.bounds !== null
+      && unit.bounds.min[0] >= area.min[0] && unit.bounds.max[0] <= area.max[0]
+      && unit.bounds.min[1] >= area.min[1] && unit.bounds.max[1] <= area.max[1]);
+  }
+}
+
+/// Lo stile che un contenitore trasmette ai figli, per quanto serve a
+/// toccarli.
+interface Style {
+  readonly fill: boolean;
+  readonly stroke: boolean;
+  readonly strokeWidth: number;
+  readonly fontSize: number;
+  readonly anchor: string;
+}
+
+const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, anchor: "start" };
+
+/// Costruisce gli indici di un documento, ricordando la geometria delle
+/// forme che non cambiano fra una scena e l'altra.
+export class SceneIndexer {
+  private cache = new WeakMap<PaintShape, ShapeCache>();
+
+  constructor(private readonly builder: PaintBuilder) {}
+
+  /// L'indice di `model`, che il `PaintBuilder` ha appena disegnato.
+  index(model: DocumentModel): SceneIndex {
+    const units: Unit[] = [];
+    const layers: LayerInfo[] = [];
+    const root = model.root;
+    const rootStyle = styleOf(INITIAL, this.builder.headInfo(root).attrs);
+    childLoop(root, (child, index) => {
+      if (child.kind === "leaf") {
+        if (child.details === null) return;
+        const role = child.details.role;
+        if (role === "paper" || role === "title" || role === "desc") return;
+        this.unit(child, [index], null, IDENTITY, rootStyle, units);
+        return;
+      }
+      const role = child.details!.role;
+      if (role !== "layer") {
+        this.unit(child, [index], null, IDENTITY, rootStyle, units);
+        return;
+      }
+      const head = this.builder.headInfo(child);
+      const matrix = compose(IDENTITY, transformOf(head.attrs));
+      const layer = child.details!.layer!;
+      const info: LayerInfo = { id: child.facts.id, path: [index], locked: layer.locked, hidden: layer.hidden || head.hidden, matrix };
+      layers.push(info);
+      if (info.locked || info.hidden) return;
+      const style = styleOf(rootStyle, head.attrs);
+      childLoop(child, (grandchild, inner) => {
+        if (grandchild.kind === "leaf" && (grandchild.details === null || grandchild.details.role === "title" || grandchild.details.role === "desc")) return;
+        this.unit(grandchild, [index, inner], info.id, matrix, style, units);
+      });
+    });
+    return new SceneIndex(units, layers);
+  }
+
+  /// Aggiunge a `out` l'oggetto `node`, se si vede.
+  private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, out: Unit[]): void {
+    const attrs = this.attrsOf(node);
+    if (attrs === null || hidden(attrs)) return;
+    const own = transformOf(attrs);
+    const matrix = compose(parent, own);
+    const parts: Part[] = [];
+    this.collect(node, matrix, IDENTITY, styleOf(style, attrs), parts);
+    const scene = new BoundsBuilder();
+    for (const part of parts) {
+      const bounds = this.sceneBounds(part);
+      if (bounds !== null) includeInflated(scene, bounds, part.radius * scaleOf(part.matrix));
+    }
+    const id = node.facts.id;
+    const tag = tagName(node);
+    out.push(new Unit(
+      id ?? `@${path.join(".")}`,
+      id ?? { path, tag },
+      id,
+      path,
+      tag,
+      node.details!.role,
+      layer,
+      parent,
+      own,
+      this.builder.paintsOf(node),
+      scene.finish(),
+      parts,
+    ));
+  }
+
+  /// Gli attributi dipinti di un elemento; `null` se non disegna.
+  private attrsOf(node: ElementPart): readonly PaintAttr[] | null {
+    if (node.kind === "container") return this.builder.headInfo(node).attrs;
+    const shape = this.builder.shape(node);
+    return shape === null ? null : shape.attrs;
+  }
+
+  /// Le forme di `node` e dei suoi discendenti visibili. `matrix` porta le
+  /// coordinate di `node` nella scena, `frame` in quelle dell'oggetto.
+  private collect(node: ElementPart, matrix: Matrix, frame: Matrix, style: Style, out: Part[]): void {
+    if (node.kind === "leaf") {
+      const shape = this.builder.shape(node)!;
+      out.push(this.part(node, shape, matrix, frame, style));
+      return;
+    }
+    childLoop(node, (child) => {
+      if (child.kind === "leaf" && child.details === null) return;
+      const childAttrs = this.attrsOf(child);
+      if (childAttrs === null || hidden(childAttrs)) return;
+      const own = transformOf(childAttrs);
+      this.collect(child, compose(matrix, own), compose(frame, own), styleOf(style, childAttrs), out);
+    });
+  }
+
+  private part(leaf: LeafNode, shape: PaintShape, matrix: Matrix, frame: Matrix, style: Style): Part {
+    let cache = this.cache.get(shape) ?? null;
+    let segments: readonly Segment[];
+    if (shape.tag === "text") {
+      // Il riquadro di un testo dipende dallo stile ereditato: non si ricorda.
+      segments = textSegments(shape, style);
+      cache = null;
+    } else {
+      if (cache === null) {
+        cache = { segments: null, scene: null, local: undefined };
+        this.cache.set(shape, cache);
+      }
+      cache.segments ??= shapeSegments(shape.tag, shape.attrs);
+      segments = cache.segments;
+    }
+    const tag = leaf.details!.tag;
+    // Una linea non ha area; un testo e un'immagine si toccano nel loro
+    // riquadro.
+    const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
+    const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
+    return { segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null };
+  }
+
+  /// Il riquadro geometrico di una forma nella scena, ricordato per matrice.
+  private sceneBounds(part: Part): Bounds | null {
+    const cache = part.cache;
+    if (cache !== null && cache.scene !== null && sameMatrix(cache.scene.matrix, part.matrix)) return cache.scene.bounds;
+    const bounds = transformedBounds(part.segments, part.matrix);
+    if (cache !== null) cache.scene = { matrix: part.matrix, bounds };
+    return bounds;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lettura degli attributi dipinti.
+// ---------------------------------------------------------------------------
+
+function childLoop(container: ContainerNode, visit: (child: ElementPart, index: number) => void): void {
+  let index = 0;
+  for (const part of container.parts) {
+    if (typeof part === "string" || part.kind === "other") continue;
+    visit(part, index++);
+  }
+}
+
+function attr(attrs: readonly PaintAttr[], name: string): string | undefined {
+  for (const [key, value] of attrs) if (key === name) return value;
+  return undefined;
+}
+
+function hidden(attrs: readonly PaintAttr[]): boolean {
+  return attr(attrs, "display")?.trim() === "none";
+}
+
+function transformOf(attrs: readonly PaintAttr[]): Matrix {
+  const value = attr(attrs, "transform");
+  return value === undefined ? IDENTITY : parseTransform(value) ?? IDENTITY;
+}
+
+function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
+  const fill = attr(attrs, "fill");
+  const stroke = attr(attrs, "stroke");
+  const width = attr(attrs, "stroke-width");
+  const size = attr(attrs, "font-size");
+  const anchor = attr(attrs, "text-anchor");
+  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined) return parent;
+  return {
+    fill: fill === undefined ? parent.fill : fill.trim() !== "none",
+    stroke: stroke === undefined ? parent.stroke : stroke.trim() !== "none",
+    strokeWidth: width === undefined ? parent.strokeWidth : Math.max(0, length(width) ?? parent.strokeWidth),
+    fontSize: size === undefined ? parent.fontSize : Math.max(0, length(size) ?? parent.fontSize),
+    anchor: anchor === undefined ? parent.anchor : anchor.trim(),
+  };
+}
+
+function len(attrs: readonly PaintAttr[], name: string): number | null {
+  const value = attr(attrs, name);
+  return value === undefined ? null : length(value);
+}
+
+/// I raggi di un'ellisse o degli angoli di un rettangolo: in SVG 2 un raggio
+/// assente vale l'altro.
+function radii(attrs: readonly PaintAttr[]): Point {
+  const rx = len(attrs, "rx");
+  const ry = len(attrs, "ry");
+  return [rx ?? ry ?? 0, ry ?? rx ?? 0];
+}
+
+/// Un'ellisse come quattro archi, che il riquadro e l'appiattimento sanno
+/// trattare esattamente.
+function ellipsePath(cx: number, cy: number, rx: number, ry: number): Segment[] {
+  if (!(rx > 0) || !(ry > 0)) return [];
+  const arc = (to: Point): Segment => ({ kind: "arc", radii: [rx, ry], rotation: 0, large: false, sweep: true, to });
+  return [
+    { kind: "move", to: [cx + rx, cy] },
+    arc([cx, cy + ry]),
+    arc([cx - rx, cy]),
+    arc([cx, cy - ry]),
+    arc([cx + rx, cy]),
+    { kind: "close" },
+  ];
+}
+
+/// I segmenti di una forma nelle sue coordinate.
+function shapeSegments(tag: string, attrs: readonly PaintAttr[]): readonly Segment[] {
+  const at = (name: string): number => len(attrs, name) ?? 0;
+  switch (tag) {
+    case "path": {
+      const d = attr(attrs, "d");
+      return d === undefined ? [] : parsePath(d) ?? [];
+    }
+    case "rect": {
+      const [w, h] = [at("width"), at("height")];
+      // SVG non disegna un rettangolo con un lato nullo.
+      if (!(w > 0) || !(h > 0)) return [];
+      const [rx, ry] = radii(attrs);
+      return rectPath(at("x"), at("y"), w, h, rx, ry);
+    }
+    case "image": {
+      const [w, h] = [at("width"), at("height")];
+      if (!(w > 0) || !(h > 0)) return [];
+      return rectPath(at("x"), at("y"), w, h, 0, 0);
+    }
+    case "ellipse": {
+      const [rx, ry] = radii(attrs);
+      return ellipsePath(at("cx"), at("cy"), rx, ry);
+    }
+    case "circle":
+      return ellipsePath(at("cx"), at("cy"), at("r"), at("r"));
+    case "line":
+      return [{ kind: "move", to: [at("x1"), at("y1")] }, { kind: "line", to: [at("x2"), at("y2")] }];
+    case "polyline":
+    case "polygon": {
+      const value = attr(attrs, "points");
+      const list = value === undefined ? null : parsePoints(value);
+      if (list === null || list.length === 0) return [];
+      const segments: Segment[] = list.map((p, i) => ({ kind: i === 0 ? "move" : "line", to: p }) as Segment);
+      if (tag === "polygon") segments.push({ kind: "close" });
+      return segments;
+    }
+    default:
+      return [];
+  }
+}
+
+/// Le righe di un testo come rettangoli: l'altezza va da 0,8 em sopra la
+/// linea di base a 0,25 em sotto, la larghezza è 0,6 em per carattere.
+function textSegments(shape: PaintShape, style: Style): Segment[] {
+  const attrs = shape.attrs;
+  const x = len(attrs, "x") ?? 0;
+  let y = len(attrs, "y") ?? 0;
+  const segments: Segment[] = [];
+  for (const run of shape.runs ?? []) {
+    if (run.kind !== "span") continue;
+    const size = len(run.attrs, "font-size") ?? style.fontSize;
+    y += len(run.attrs, "dy") ?? 0;
+    const lineX = len(run.attrs, "x") ?? x;
+    const chars = [...run.text.replace(/\s+/g, " ").trim()].length;
+    if (chars === 0) continue;
+    const width = 0.6 * size * chars;
+    const anchor = attr(run.attrs, "text-anchor")?.trim() ?? style.anchor;
+    const left = anchor === "middle" ? lineX - width / 2 : anchor === "end" ? lineX - width : lineX;
+    segments.push(...rectPath(left, y - 0.8 * size, width, 1.05 * size, 0, 0));
+  }
+  return segments;
+}
+
+/// Il riquadro nella scena di una forma che uno strumento sta per scrivere,
+/// contorno compreso: la stessa geometria con cui poi la si tocca. `matrix`
+/// porta le coordinate del livello nella scena.
+export function elemBounds(elem: Elem, matrix: Matrix): Bounds | null {
+  const attrs: PaintAttr[] = Object.entries(elem.attrs);
+  const style = styleOf(INITIAL, attrs);
+  const bounds = transformedBounds(shapeSegments(elem.tag, attrs), matrix);
+  if (bounds === null) return null;
+  const out = new BoundsBuilder();
+  includeInflated(out, bounds, style.stroke ? (style.strokeWidth / 2) * scaleOf(matrix) : 0);
+  return out.finish();
+}
+
+// ---------------------------------------------------------------------------
+// Riquadri.
+// ---------------------------------------------------------------------------
+
+function sameMatrix(a: Matrix, b: Matrix): boolean {
+  return a === b || (a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3] && a[4] === b[4] && a[5] === b[5]);
+}
+
+/// Il fattore medio con cui `m` cambia le lunghezze: esatto per una
+/// similitudine, una stima per una scala diversa sui due assi.
+function scaleOf(m: Matrix): number {
+  return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+}
+
+function transformedBounds(segments: readonly Segment[], m: Matrix): Bounds | null {
+  const out = new BoundsBuilder();
+  out.path(segments, m);
+  return out.finish();
+}
+
+function localBounds(part: Part): Bounds | null {
+  const cache = part.cache!;
+  if (cache.local === undefined) cache.local = transformedBounds(part.segments, IDENTITY);
+  return cache.local;
+}
+
+function includeInflated(out: BoundsBuilder, bounds: Bounds, by: number): void {
+  out.include([bounds.min[0] - by, bounds.min[1] - by]);
+  out.include([bounds.max[0] + by, bounds.max[1] + by]);
+}
+
+/// Vero se il segmento da `a` a `b`, allargato di `tolerance`, incontra
+/// `bounds`.
+function near(bounds: Bounds | null, a: Point, b: Point, tolerance: number): boolean {
+  if (bounds === null) return false;
+  return Math.max(a[0], b[0]) + tolerance >= bounds.min[0] && Math.min(a[0], b[0]) - tolerance <= bounds.max[0]
+    && Math.max(a[1], b[1]) + tolerance >= bounds.min[1] && Math.min(a[1], b[1]) - tolerance <= bounds.max[1];
+}
+
+// ---------------------------------------------------------------------------
+// Appiattimento.
+// ---------------------------------------------------------------------------
+
+function flatten(part: Part): Flat {
+  if (part.flat !== null) return part.flat;
+  const m = part.matrix;
+  const runs: Run[] = [];
+  let points: number[] = [];
+  let current: Point = [0, 0];
+  let start: Point = [0, 0];
+  const push = (p: Point): void => {
+    points.push(p[0], p[1]);
+  };
+  const finish = (closed: boolean): void => {
+    if (points.length >= 2) runs.push({ points: Float64Array.from(points), closed });
+    points = [];
+  };
+  for (const segment of part.segments) {
+    switch (segment.kind) {
+      case "move":
+        finish(false);
+        current = segment.to;
+        start = segment.to;
+        push(apply(m, current));
+        break;
+      case "line":
+        if (points.length === 0) push(apply(m, current));
+        push(apply(m, segment.to));
+        current = segment.to;
+        break;
+      case "quad": {
+        if (points.length === 0) push(apply(m, current));
+        const p0 = apply(m, current);
+        const p1 = apply(m, segment.control);
+        const p2 = apply(m, segment.to);
+        const dd = Math.hypot(p0[0] - 2 * p1[0] + p2[0], p0[1] - 2 * p1[1] + p2[1]);
+        const n = steps(Math.sqrt((0.25 * dd) / FLATNESS));
+        for (let i = 1; i <= n; i++) {
+          const t = i / n;
+          const u = 1 - t;
+          push([u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]]);
+        }
+        current = segment.to;
+        break;
+      }
+      case "cubic": {
+        if (points.length === 0) push(apply(m, current));
+        const p0 = apply(m, current);
+        const p1 = apply(m, segment.c1);
+        const p2 = apply(m, segment.c2);
+        const p3 = apply(m, segment.to);
+        const dd = Math.max(
+          Math.hypot(p0[0] - 2 * p1[0] + p2[0], p0[1] - 2 * p1[1] + p2[1]),
+          Math.hypot(p1[0] - 2 * p2[0] + p3[0], p1[1] - 2 * p2[1] + p3[1]),
+        );
+        const n = steps(Math.sqrt((0.75 * dd) / FLATNESS));
+        for (let i = 1; i <= n; i++) {
+          const t = i / n;
+          const u = 1 - t;
+          const a = u * u * u;
+          const b = 3 * u * u * t;
+          const c = 3 * u * t * t;
+          const d = t * t * t;
+          push([a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]]);
+        }
+        current = segment.to;
+        break;
+      }
+      case "arc":
+        if (points.length === 0) push(apply(m, current));
+        for (const p of arcPoints(current, segment.radii, segment.rotation, segment.large, segment.sweep, segment.to, m)) push(p);
+        current = segment.to;
+        break;
+      case "close":
+        if (points.length === 0) push(apply(m, current));
+        finish(true);
+        current = start;
+        break;
+    }
+  }
+  finish(false);
+  part.flat = { runs, radius: part.radius * scaleOf(m) };
+  return part.flat;
+}
+
+function steps(estimate: number): number {
+  return Number.isFinite(estimate) ? Math.min(MAX_STEPS, Math.max(1, Math.ceil(estimate))) : 1;
+}
+
+/// I punti di un arco ellittico dopo `from`, fino a `to` compreso, portati
+/// nella scena da `m`: la conversione al centro delle note di SVG (F.6.5).
+function arcPoints(from: Point, radii: Point, rotation: number, large: boolean, sweep: boolean, to: Point, m: Matrix): Point[] {
+  if (from[0] === to[0] && from[1] === to[1]) return [];
+  let rx = Math.abs(radii[0]);
+  let ry = Math.abs(radii[1]);
+  if (rx === 0 || ry === 0) return [apply(m, to)];
+  const radians = toRadians(rotation);
+  const sin = Math.sin(radians);
+  const cos = Math.cos(radians);
+  const dx = (from[0] - to[0]) / 2;
+  const dy = (from[1] - to[1]) / 2;
+  const x1 = cos * dx + sin * dy;
+  const y1 = -sin * dx + cos * dy;
+  const lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
+  if (lambda > 1) {
+    rx *= Math.sqrt(lambda);
+    ry *= Math.sqrt(lambda);
+  }
+  const numerator = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
+  const denominator = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+  let coefficient = Math.sqrt(Math.max(numerator / denominator, 0));
+  if (large === sweep) coefficient = -coefficient;
+  const cx1 = (coefficient * rx * y1) / ry;
+  const cy1 = (-coefficient * ry * x1) / rx;
+  const cx = cos * cx1 - sin * cy1 + (from[0] + to[0]) / 2;
+  const cy = sin * cx1 + cos * cy1 + (from[1] + to[1]) / 2;
+  const theta1 = Math.atan2((y1 - cy1) / ry, (x1 - cx1) / rx);
+  const theta2 = Math.atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx);
+  let delta = remEuclid(theta2 - theta1, 2 * Math.PI);
+  if (!sweep && delta > 0) delta -= 2 * Math.PI;
+  // Il passo angolare che tiene la corda entro `FLATNESS` dall'arco, sul
+  // raggio più grande nella scena.
+  const radius = Math.max(rx, ry) * Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]));
+  const angle = radius > FLATNESS ? 2 * Math.acos(fmin(1, 1 - FLATNESS / radius)) : Math.PI / 2;
+  const n = steps(Math.abs(delta) / angle);
+  const out: Point[] = [];
+  for (let i = 1; i < n; i++) {
+    const theta = theta1 + (delta * i) / n;
+    const ex = rx * Math.cos(theta);
+    const ey = ry * Math.sin(theta);
+    out.push(apply(m, [cx + cos * ex - sin * ey, cy + sin * ex + cos * ey]));
+  }
+  out.push(apply(m, to));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Prove di contatto.
+// ---------------------------------------------------------------------------
+
+/// Il numero di avvolgimento di `p` rispetto a tutti i sottotracciati, chiusi
+/// come li chiude il riempimento.
+function winding(flat: Flat, p: Point): number {
+  let total = 0;
+  const [px, py] = p;
+  for (const run of flat.runs) {
+    const pts = run.points;
+    const n = pts.length / 2;
+    for (let i = 0; i < n; i++) {
+      const ax = pts[2 * i]!;
+      const ay = pts[2 * i + 1]!;
+      const j = i + 1 === n ? 0 : i + 1;
+      const bx = pts[2 * j]!;
+      const by = pts[2 * j + 1]!;
+      if (ay <= py) {
+        if (by > py && (bx - ax) * (py - ay) - (px - ax) * (by - ay) > 0) total++;
+      } else if (by <= py && (bx - ax) * (py - ay) - (px - ax) * (by - ay) < 0) {
+        total--;
+      }
+    }
+  }
+  return total;
+}
+
+/// Ogni lato dei sottotracciati: quelli chiusi anche dall'ultimo punto al
+/// primo, e quelli aperti di un riempimento.
+function forEachEdge(flat: Flat, fill: boolean, visit: (ax: number, ay: number, bx: number, by: number) => boolean): boolean {
+  for (const run of flat.runs) {
+    const pts = run.points;
+    const n = pts.length / 2;
+    if (n === 1 && visit(pts[0]!, pts[1]!, pts[0]!, pts[1]!)) return true;
+    for (let i = 0; i + 1 < n; i++) {
+      if (visit(pts[2 * i]!, pts[2 * i + 1]!, pts[2 * i + 2]!, pts[2 * i + 3]!)) return true;
+    }
+    if (n > 2 && (run.closed || fill) && visit(pts[2 * n - 2]!, pts[2 * n - 1]!, pts[0]!, pts[1]!)) return true;
+  }
+  return false;
+}
+
+function pointSegmentDistance(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  let t = lengthSquared === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / lengthSquared;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+function cross(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+
+/// La distanza fra i segmenti `ab` e `cd`: zero se si incrociano.
+function segmentDistance(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): number {
+  const d1 = cross(ax, ay, bx, by, cx, cy);
+  const d2 = cross(ax, ay, bx, by, dx, dy);
+  const d3 = cross(cx, cy, dx, dy, ax, ay);
+  const d4 = cross(cx, cy, dx, dy, bx, by);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
+  return Math.min(
+    pointSegmentDistance(ax, ay, cx, cy, dx, dy),
+    pointSegmentDistance(bx, by, cx, cy, dx, dy),
+    pointSegmentDistance(cx, cy, ax, ay, bx, by),
+    pointSegmentDistance(dx, dy, ax, ay, bx, by),
+  );
+}
+
+function partBounds(part: Part): Bounds | null {
+  const cache = part.cache;
+  if (cache !== null && cache.scene !== null && sameMatrix(cache.scene.matrix, part.matrix)) return cache.scene.bounds;
+  return transformedBounds(part.segments, part.matrix);
+}
+
+function partHits(part: Part, p: Point, tolerance: number): boolean {
+  const radius = part.radius * scaleOf(part.matrix);
+  if (!near(partBounds(part), p, p, tolerance + radius)) return false;
+  const flat = flatten(part);
+  if (part.fill && winding(flat, p) !== 0) return true;
+  const reach = flat.radius + tolerance;
+  return forEachEdge(flat, part.fill, (ax, ay, bx, by) => pointSegmentDistance(p[0], p[1], ax, ay, bx, by) <= reach);
+}
+
+function partTouches(part: Part, a: Point, b: Point, tolerance: number): boolean {
+  const radius = part.radius * scaleOf(part.matrix);
+  if (!near(partBounds(part), a, b, tolerance + radius)) return false;
+  const flat = flatten(part);
+  if (part.fill && (winding(flat, a) !== 0 || winding(flat, b) !== 0)) return true;
+  const reach = flat.radius + tolerance;
+  return forEachEdge(flat, part.fill, (cx, cy, dx, dy) => segmentDistance(a[0], a[1], b[0], b[1], cx, cy, dx, dy) <= reach);
+}

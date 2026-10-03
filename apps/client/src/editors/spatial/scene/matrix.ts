@@ -54,3 +54,13 @@ export function apply(m: Matrix, [x, y]: Point): Point {
   const [a, b, c, d, e, f] = m;
   return [a * x + c * y + e, b * x + d * y + f];
 }
+
+/// L'inversa di `m`, o `null` se `m` schiaccia il piano su una retta o su un
+/// punto. Non ha un corrispondente in `fub-scene`: serve agli strumenti, che
+/// portano i punti dello schermo dentro un livello o un gruppo.
+export function invert(m: Matrix): Matrix | null {
+  const [a, b, c, d, e, f] = m;
+  const det = a * d - b * c;
+  if (det === 0 || !Number.isFinite(det)) return null;
+  return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+}

@@ -242,6 +242,18 @@
     "canvas-edge-line",
     "canvas-edge-arrow",
     "canvas-edge-label",
+    "draw-header",
+    "draw-toolbar",
+    "draw-group",
+    "draw-button",
+    "draw-zoom-level",
+    "draw-swatch-frame",
+    "draw-swatch",
+    "draw-width-bar",
+    "draw-title",
+    "draw-title-input",
+    "draw-surface",
+    "draw-page",
     "markdown-preview",
     "markdown-rendered",
     "markdown-code-copy",
@@ -975,6 +987,31 @@
         "canvas-edge-arrow",
         "canvas-edge-label",
         "selected"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "draw-editor",
+      "hooks": [
+        "draw-header",
+        "draw-toolbar",
+        "draw-group",
+        "draw-button",
+        "draw-zoom-level",
+        "draw-swatch-frame",
+        "draw-swatch",
+        "draw-width-bar",
+        "draw-title",
+        "draw-title-input",
+        "draw-surface",
+        "draw-page"
       ],
       "states": [
         "rest",
@@ -1787,10 +1824,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 399,
+    "hooks": 411,
     "state_names": 7,
-    "assigned_states": 147,
-    "components": 46,
+    "assigned_states": 153,
+    "components": 47,
     "unassigned_hooks": 0
   }
 }
