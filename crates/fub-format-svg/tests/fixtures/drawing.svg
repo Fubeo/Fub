@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <title>Ciclo dell'acqua</title>
+  <desc>Dal mare alle nuvole &amp; ritorno</desc>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>
+  <g id="l3f8a0c2d" fub:layer="Livello 1">
+    <ellipse id="o1a2b3c4d" cx="300" cy="200" rx="120" ry="60" fill="none" stroke="#0072b2" stroke-width="4"/>
+    <text id="o9i0j1k2l" x="720" y="460" fill="#000000" font-family="Inter, sans-serif" font-size="32">
+      <tspan x="720" dy="0">Evaporazione</tspan>
+      <tspan x="720" dy="40">e condensa</tspan>
+    </text>
+    <a id="o2b3c4d5e" href="../note/Nuvole.md#Cumuli">
+      <text id="o3c4d5e6f" x="100" y="700" fill="#000000" font-family="Inter, sans-serif" font-size="24">
+        <tspan x="100" dy="0">Le nuvole</tspan>
+      </text>
+    </a>
+    <a id="o4d5e6f7g" href="/Glossario.md">
+      <image id="o5e6f7g8h" x="900" y="100" width="200" height="150" preserveAspectRatio="xMidYMid meet" href="foto/mare.png"/>
+    </a>
+    <a id="o6f7g8h9i" href="Sale &amp; pepe.md">
+      <ellipse id="o7g8h9i0j" cx="1200" cy="800" rx="40" ry="40" fill="#d55e00"/>
+    </a>
+    <path id="o7k2m9x4q" fub:tool="pen" fub:at="2026-10-01T09:20:31.250Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120.5 30.2 Q121 30.1 121.4 30 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8"/>
+  </g>
+  <text x="100" y="950">Vedi <a href="Pioggia.md">la pioggia</a> e il mare</text>
+</svg>

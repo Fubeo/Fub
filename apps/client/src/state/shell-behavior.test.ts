@@ -27,9 +27,10 @@ import {
   closeTab,
   cycleTab,
   reopenClosedTab,
+  setTabOverride,
   type Layout,
 } from "./layout";
-import { parseBookmarkStore, parseBookmarkTarget } from "./bookmarks";
+import { parseBookmarkStore, parseBookmarkTarget, saveTabsAsBookmark } from "./bookmarks";
 import { parseShellGeometry } from "./shell-geometry";
 import { applyWorkspace, getWorkspace, parseWorkspaceStore, renameInWorkspaces, saveWorkspace } from "./workspaces";
 vi.mock("../host/query", () => ({ existingDocuments: async () => new Set<string>() }));
@@ -211,6 +212,20 @@ describe("i segnalibri eterogenei", () => {
     expect(parseBookmarkTarget({ k: "nave" })).toBeNull();
   });
 
+  // Un segnalibro ricorda identità: la superficie scelta per una linguetta
+  // resta della linguetta, e si toglie salvando, non alla rilettura.
+  it("salvare le tab come segnalibro non porta via la superficie scelta", () => {
+    const l = layoutWith("a.svg", "b.md");
+    setTabOverride("main", 0, { family: "text", profile: "svg" }, l);
+    setPinnedTab("main", 0, true, l);
+    const saved = saveTabsAsBookmark("Disegni", [...l.panes.main.tabs]);
+    expect(saved?.target).toEqual({
+      k: "tabs",
+      tabs: [{ k: "doc", doc: "a.svg", pinned: true }, { k: "doc", doc: "b.md" }],
+    });
+    expect(l.panes.main.tabs[0]).toHaveProperty("override");
+  });
+
   it("l’ignoto si conserva per le versioni future, il futuro non si riscrive", () => {
     const store = parseBookmarkStore({ v: 1, bookmarks: [], groups: [], domani: { x: 1 } });
     expect(store).toMatchObject({ v: 1 });
@@ -235,6 +250,17 @@ describe("i segnalibri eterogenei", () => {
 });
 
 describe("i workspace nominati", () => {
+  // Un workspace è l'assetto com'era, viste comprese: la linguetta del
+  // disegno guardato come sorgente torna così.
+  it("salva e rilegge la superficie scelta per una linguetta", () => {
+    const live = layoutWith("a.svg");
+    setTabOverride("main", 0, { family: "text", profile: "svg" }, live);
+    const saved = saveWorkspace("Sorgenti", live, [], null)!;
+    expect(getWorkspace(saved.id)!.layout.panes.main.tabs[0]).toEqual({
+      k: "doc", doc: "a.svg", override: { family: "text", profile: "svg" },
+    });
+  });
+
   it("salva l’assetto reale e lo rilegge identico", () => {
     const live = layoutWith("a.md", "b.md");
     const saved = saveWorkspace(" Sera ", live, ["P"], null, {

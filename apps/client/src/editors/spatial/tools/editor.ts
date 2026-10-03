@@ -82,6 +82,8 @@ export interface DrawEditorOptions {
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
   readonly onChange?: (change: DrawChange) => void;
+  /// La selezione è cambiata: altri oggetti, o gli stessi con chiavi nuove.
+  readonly onSelectionChange?: () => void;
 }
 
 export interface DrawEditor {
@@ -97,8 +99,22 @@ export interface DrawEditor {
   readonly canRedo: boolean;
   /// Il documento ricostruito dal testo autorevole (operazioni sulla scena,
   /// §7): la cronologia resta, la selezione tiene gli oggetti che ci sono
-  /// ancora.
+  /// ancora. Il motore ha un modello: un documento in sola lettura non si
+  /// monta nell'editor.
   setEngine(engine: SceneEngine): void;
+  /// Un altro documento al posto di questo, come `setDoc` delle superfici:
+  /// cronologia e selezione si azzerano, e il foglio si inquadra.
+  load(engine: SceneEngine): void;
+  /// Toglie o ridà la scrittura, per chi monta l'editor: la barra si spegne
+  /// e i gesti non scrivono, ma il disegno si guarda.
+  setReadOnly(readOnly: boolean): void;
+  /// Sceglie l'oggetto il cui testo contiene il byte `offset` del file, e lo
+  /// porta in vista. `false` se nessun oggetto lo contiene.
+  reveal(offset: number): boolean;
+  /// «Modifica» su un SVG estraneo: l'operazione `adopt`, un passo
+  /// di annulla. `false` se il documento non è estraneo o la scrittura è
+  /// tolta.
+  adopt(): boolean;
   setTool(id: ToolId): void;
   setColor(color: string): void;
   setWidth(width: number): void;
@@ -271,6 +287,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let current: Gesture | null = null;
   let shift = false;
   let disposed = false;
+  /// La scrittura tolta da chi monta l'editor.
+  let locked = false;
+  /// La selezione dell'ultima notifica, per non ripeterla.
+  let noticed = "";
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -432,7 +452,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let index: SceneIndex | null = null;
   const EMPTY = new SceneIndex([], []);
 
-  const editable = (): boolean => engine.status === "fubdraw" && engine.model !== null;
+  const editable = (): boolean => !locked && engine.status === "fubdraw" && engine.model !== null;
 
   const currentIndex = (): SceneIndex => {
     if (index === null) index = engine.model === null ? EMPTY : indexer.index(engine.model);
@@ -569,6 +589,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       handles.push({ kind: "lasso", points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] });
     }
     overlay.setHandles(handles);
+    const keys = selection.join("\n");
+    if (keys !== noticed) {
+      noticed = keys;
+      options.onSelectionChange?.();
+    }
   };
 
   const showShape = (elem: Elem | null, matrix: Matrix): void => {
@@ -721,6 +746,71 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     selection = inOrder(keys);
     syncControls();
     showHandles();
+  }
+
+  /// Porta `bounds` in vista: resta dov'è se si vede già intero, va al
+  /// centro se ci sta allo zoom di adesso, altrimenti si inquadra.
+  const frameBounds = (bounds: Bounds | null): void => {
+    const view = { w: surface.clientWidth, h: surface.clientHeight };
+    if (bounds === null || view.w === 0 || view.h === 0) return;
+    placed = true;
+    const { scale, tx, ty } = camera;
+    const left = tx + scale * bounds.min[0];
+    const top = ty + scale * bounds.min[1];
+    const right = tx + scale * bounds.max[0];
+    const bottom = ty + scale * bounds.max[1];
+    if (left >= 0 && top >= 0 && right <= view.w && bottom <= view.h) return;
+    const usable = 1 - 2 * FIT_PAD;
+    if (right - left <= view.w * usable && bottom - top <= view.h * usable) {
+      const cx = (bounds.min[0] + bounds.max[0]) / 2;
+      const cy = (bounds.min[1] + bounds.max[1]) / 2;
+      setCamera({ scale, tx: view.w / 2 - scale * cx, ty: view.h / 2 - scale * cy });
+      return;
+    }
+    const world = { minX: bounds.min[0], minY: bounds.min[1], maxX: bounds.max[0], maxY: bounds.max[1] };
+    setCamera(fitBounds(world, view, FIT_PAD, 0, DRAW_SCALE_LIMITS));
+  };
+
+  function reveal(offset: number): boolean {
+    if (engine.model === null) return false;
+    const index = currentIndex();
+    // L'oggetto è il più esterno fra quelli che contengono il byte e che si
+    // scelgono interi: un livello non lo è, un figlio di un gruppo nemmeno.
+    // La scena è in ordine di documento: chi contiene viene prima.
+    let found: Unit | null = null;
+    for (const item of engine.scene()) {
+      if (item.kind !== "element" || offset < item.bytes[0] || offset >= item.bytes[1]) continue;
+      found = index.get(item.id ?? `@${item.path.join(".")}`) ?? null;
+      if (found !== null) break;
+    }
+    if (found === null) return false;
+    cancelGesture();
+    select([found.key]);
+    frameBounds(found.bounds);
+    announceSelection();
+    return true;
+  }
+
+  function adopt(): boolean {
+    if (locked || engine.status !== "foreign" || engine.model === null) return false;
+    cancelGesture();
+    const outcome = engine.apply({ op: "adopt" });
+    if (outcome.outcome === "rejected") {
+      announce(t("draw.rejected", { reason: t(REASONS[outcome.reason]) }));
+      return false;
+    }
+    history.record("draw.action.adopt", outcome);
+    refresh();
+    emit(outcome, "input");
+    announce(t("draw.adopted"));
+    return true;
+  }
+
+  function setReadOnly(readOnly: boolean): void {
+    if (readOnly === locked) return;
+    locked = readOnly;
+    if (locked) cancelGesture();
+    syncControls();
   }
 
   // --- Strumenti --------------------------------------------------------------
@@ -1310,6 +1400,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     setEngine(next) {
       if (disposed) return;
+      if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
       // Chi sposta o cancella guarda oggetti che il testo nuovo può non
       // avere più: il gesto si annulla. Tratto e forma si scrivono alla fine,
       // sul livello che c'è allora.
@@ -1317,6 +1408,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       engine = next;
       refresh();
     },
+    load(next) {
+      if (disposed) return;
+      if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
+      cancelGesture();
+      engine = next;
+      history.clear();
+      selection = [];
+      refresh();
+      placed = false;
+      fit();
+    },
+    setReadOnly,
+    reveal,
+    adopt,
     setTool,
     setColor,
     setWidth,

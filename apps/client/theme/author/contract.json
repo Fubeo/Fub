@@ -254,6 +254,7 @@
     "draw-title-input",
     "draw-surface",
     "draw-page",
+    "vector-notice",
     "markdown-preview",
     "markdown-rendered",
     "markdown-code-copy",
@@ -1020,6 +1021,15 @@
         "focused",
         "disabled",
         "selected"
+      ]
+    },
+    {
+      "name": "vector-surface",
+      "hooks": [
+        "vector-notice"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -1824,10 +1834,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 411,
+    "hooks": 412,
     "state_names": 7,
-    "assigned_states": 153,
-    "components": 47,
+    "assigned_states": 154,
+    "components": 48,
     "unassigned_hooks": 0
   }
 }

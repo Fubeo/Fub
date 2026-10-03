@@ -298,6 +298,125 @@ describe("un documento che non si modifica", () => {
   });
 });
 
+describe("per chi lo monta", () => {
+  const FOREIGN = doc(`${LAYER}<rect id="o1a2b3c4d" width="5" height="5"/></g>`).replace(' fub:version="1"', "");
+  const camera = (): string | null => host.querySelector(".draw-preview g")!.getAttribute("transform");
+
+  /// Dà al foglio una misura, che happy-dom non calcola.
+  function size(width: number, height: number): void {
+    Object.defineProperty(surface(), "clientWidth", { configurable: true, value: width });
+    Object.defineProperty(surface(), "clientHeight", { configurable: true, value: height });
+  }
+
+  it("«Modifica» adotta un SVG estraneo in un passo che si annulla", () => {
+    mount(FOREIGN);
+    expect(host.querySelector(".draw-editor")!.hasAttribute("data-readonly")).toBe(true);
+    expect(editor.adopt()).toBe(true);
+    expect(editor.engine.status).toBe("fubdraw");
+    expect(changes.map((change) => change.origin)).toEqual(["input"]);
+    expect(changes[0]!.text).toContain('fub:version="1"');
+    expect(spoken()).toBe("Ora il disegno si modifica.");
+    expect(host.querySelector(".draw-editor")!.hasAttribute("data-readonly")).toBe(false);
+    expect(editor.adopt()).toBe(false);
+    editor.undo();
+    expect(editor.engine.status).toBe("foreign");
+    expect(editor.engine.text).toBe(FOREIGN);
+    expect(spoken()).toBe("Annullato: Disegno reso modificabile.");
+  });
+
+  it("non adotta con la scrittura tolta", () => {
+    mount(FOREIGN);
+    editor.setReadOnly(true);
+    expect(editor.adopt()).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("con la scrittura tolta si guarda soltanto, e ridata torna a scrivere", () => {
+    mount();
+    editor.setReadOnly(true);
+    expect(host.querySelector(".draw-editor")!.hasAttribute("data-readonly")).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>(".draw-tool")!.disabled).toBe(true);
+    editor.setTool("rect");
+    drag([[10, 10], [50, 40]]);
+    key("a", { ctrlKey: true });
+    key("Delete");
+    expect(changes).toEqual([]);
+    editor.setReadOnly(false);
+    expect(host.querySelector(".draw-editor")!.hasAttribute("data-readonly")).toBe(false);
+    drag([[10, 10], [50, 40]]);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("un documento nuovo azzera cronologia e selezione", () => {
+    mount();
+    editor.select(["o1a2b3c4d"]);
+    key("Delete");
+    expect(editor.canUndo).toBe(true);
+    const next = doc(`${LAYER}<ellipse id="o5e6f7a8b" cx="20" cy="20" rx="5" ry="5"/></g>`);
+    editor.load(SceneEngine.open(next));
+    expect(editor.engine.text).toBe(next);
+    expect(editor.canUndo).toBe(false);
+    expect(editor.canRedo).toBe(false);
+    expect(editor.selection).toEqual([]);
+  });
+
+  it("un documento in sola lettura non entra nell'editor", () => {
+    mount();
+    const inert = SceneEngine.open(`<!DOCTYPE svg>${SOURCE}`);
+    expect(inert.model).toBeNull();
+    expect(() => editor.setEngine(inert)).toThrow();
+    expect(() => editor.load(inert)).toThrow();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("dice quando la selezione cambia, una volta per cambiamento", () => {
+    let calls = 0;
+    mount(SOURCE, { onSelectionChange: () => calls++ });
+    editor.select(["o1a2b3c4d"]);
+    editor.select(["o1a2b3c4d"]);
+    expect(calls).toBe(1);
+    key("Escape");
+    expect(calls).toBe(2);
+  });
+
+  it("`reveal` sceglie l'oggetto che contiene il byte, e niente fuori dagli oggetti", () => {
+    mount();
+    const rect = new TextEncoder().encode(SOURCE.slice(0, SOURCE.indexOf("<rect"))).length;
+    expect(editor.reveal(rect + 4)).toBe(true);
+    expect(editor.selection).toEqual(["o1a2b3c4d"]);
+    expect(spoken()).toBe("1 oggetto scelto.");
+    editor.select([]);
+    expect(editor.reveal(SOURCE.indexOf("<title>") + 2)).toBe(false);
+    expect(editor.reveal(SOURCE.indexOf('<g id="l1"') + 2)).toBe(false);
+    expect(editor.selection).toEqual([]);
+  });
+
+  it("`reveal` di un oggetto senza id lo sceglie per percorso", () => {
+    const source = doc(`${LAYER}<rect width="5" height="5"/><rect x="10" width="5" height="5"/></g>`);
+    mount(source);
+    expect(editor.reveal(source.lastIndexOf("<rect") + 1)).toBe(true);
+    expect(editor.selection).toEqual(["@0.1"]);
+  });
+
+  it("`reveal` lascia ferma la vista se l'oggetto si vede, se no lo porta al centro o lo inquadra", () => {
+    const source = doc(
+      `${LAYER}<rect id="oa1a1a1a1" x="60" y="60" width="20" height="20" fill="#000000"/>` +
+        `<rect id="ob2b2b2b2" x="60" y="150" width="20" height="20" fill="#000000"/>` +
+        `<rect id="oc3c3c3c3" x="0" y="400" width="1000" height="200" fill="#000000"/></g>`,
+    );
+    mount(source);
+    size(200, 100);
+    const before = camera();
+    expect(editor.reveal(source.indexOf("oa1a1a1a1"))).toBe(true);
+    expect(camera()).toBe(before);
+    expect(editor.reveal(source.indexOf("ob2b2b2b2"))).toBe(true);
+    expect(camera()).toBe("matrix(1 0 0 1 30 -110)");
+    expect(editor.reveal(source.indexOf("oc3c3c3c3"))).toBe(true);
+    const [scale] = camera()!.slice("matrix(".length).split(" ").map(Number);
+    expect(scale).toBeLessThan(1);
+  });
+});
+
 describe("la fine", () => {
   it("toglie l'editor dalla pagina e smette di ascoltare", () => {
     mount();

@@ -4,14 +4,15 @@
 > forma, esiti, validazione, limiti, `TextOperation`, undo e concorrenza nella
 > sessione live.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/` (`ops.ts`,
-> `engine.ts`, `diff.ts`) e i vettori scritti a mano in
-> `apps/client/src/__fixtures__/scene-ops/`.
+> `engine.ts`, `diff.ts`), la pila di undo in
+> `apps/client/src/editors/spatial/tools/history.ts` e i vettori scritti a
+> mano in `apps/client/src/__fixtures__/scene-ops/`.
 
 La superficie spaziale cambia un disegno soltanto con operazioni. Le usano tre
 consumatori: l'undo di ogni superficie, la `TextOperation` che la superficie
 consegna alla `DocumentSession` e la sessione live, con i commit dal tablet e
-l'eco dal PC. Gli elementi sono quelli del formato della scena, che
-`fub-scene` legge; il perché sta
+l'eco dal PC. Gli elementi sono quelli del
+[formato della scena](scene-format.md); il perché sta
 nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). I `§` dei commenti
 del motore sono le sezioni di questa pagina; quelli del formato si citano come
 «formato della scena, §N».

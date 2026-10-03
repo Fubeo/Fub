@@ -140,7 +140,8 @@ Aree importanti:
 ### Bundle e dipendenze
 
 La [configurazione Vite](../../apps/client/vite.config.ts) separa i runtime
-riusabili e mantiene grafo, Mermaid e linguaggi opzionali su richiesta.
+riusabili e mantiene grafo, Mermaid, linguaggi opzionali e l'editor dei
+disegni su richiesta.
 Ogni chunk, cioè un blocco JavaScript emesso dalla build, ha un limite di
 500.000 byte minificati, prima della compressione di trasporto.
 Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non

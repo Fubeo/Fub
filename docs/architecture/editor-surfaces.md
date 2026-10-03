@@ -42,6 +42,53 @@ superficie implicita: la risoluzione continua lungo formato, specie e fallback.
 Il test del registro rende questa regola un gate, insieme a collisioni,
 unregister e teardown delle istanze.
 
+L'override dell'utente è della scheda: `Tab.override` in
+`apps/client/src/state/layout.ts`, che il pannello passa al registro quando
+monta la superficie della scheda attiva. È opt-in della superficie: una
+registrazione dichiara in `sourceViews`, per profilo, la vista sorgente del
+documento, cioè famiglia e profilo che mostrano lo stesso documento come testo.
+La dichiara il profilo `vector` della tela, i disegni dell'
+[ADR 0203](../decisions/0203-superfici-spaziali.md), verso
+`{ family: "text", profile: "svg" }`; le altre famiglie della shell non ne
+dichiarano. Il registro
+rifiuta una vista di un profilo non registrato, senza famiglia o uguale al
+profilo stesso; `sourceView(request)` la risolve dalla superficie naturale del
+documento, con il profilo esplicito, e restituisce `null` finché la famiglia
+indicata non è registrata o non ha quel profilo.
+
+Il montaggio resta sincrono anche quando il codice della superficie arriva
+dopo. Il disegno monta subito un involucro con i modi e il contratto della
+superficie vera (`apps/client/src/editors/spatial/lazy.ts`): finché
+`import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
+rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un
+`reveal` in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è
+quello della shell. Un caricamento fallito lascia il testo alla sessione.
+
+I comandi `shell.doc.source.open` («Apri come sorgente») e
+`shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
+scelta sulla scheda attiva; sono disponibili uno alla volta, nella palette e
+nel menu del riquadro, senza accordo. Il cambio passa dalla via del cambio di
+scheda: il riquadro stacca e distrugge la superficie e ne monta un'altra sulla
+stessa `DocumentSession`, che restituisce testo e descrittore senza leggere il
+disco. Testo sporco, coda di salvataggio e bozza restano; la cronologia locale
+della superficie smontata si perde come a ogni cambio di scheda, quella degli
+altri riquadri no. Il fuoco va sulla superficie nuova. Se il riquadro ricorda
+una lettura per la famiglia della vista, l'apertura passa alla scrittura che
+sceglierebbe `Mod-E`, perché chi chiede il sorgente vuole il testo.
+
+Una scelta vale finché la superficie naturale dichiara quella vista e il
+registro risolve la scelta proprio a lei. Altrimenti (il profilo non la offre
+più, una rinomina ha cambiato specie al documento, il file di stato è scritto a
+mano, il documento si mostra dai byte) il riquadro la toglie dalla scheda e
+monta la superficie naturale, mai quella d'errore. La scelta non fa parte
+dell'identità della scheda (`sameTab`): segue pin, pila, rinomina, spostamento
+fra riquadri, cronologia, riapertura delle schede chiuse e workspace salvati.
+Non passa alla scheda nata da una divisione né ai riquadri collegati, dove
+disegno e sorgente affiancati sono il caso d'uso, e nemmeno ai segnalibri, che
+ricordano identità. Il parser del layout scarta una scelta malformata e tiene
+la scheda, come fa con le modalità per famiglia. La finestra documento a parte
+monta il profilo naturale e ignora la scelta.
+
 La famiglia è un nome aperto, posseduto da un owner alla volta. Il proprietario
 della specie `bytes` decide con `selectSourceProfile` quali file senza formato
 sa mostrare, e `null` vuol dire «non questo»: la tabella dei media della shell
@@ -64,7 +111,8 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `mountPresentation` monta la resa da presentare come slide;
 - `printable` dichiara una resa di stampa del provider del formato
   (`IndexQuery::RenderPrint`);
-- `selections()` dà le selezioni del testo in offset byte UTF-8 del buffer;
+- `selections()` dà le selezioni del testo in offset byte UTF-8 del buffer; il
+  disegno dà gli intervalli degli elementi degli oggetti scelti;
   `selectedText()` è di chi sceglie elementi che non sono intervalli del
   sorgente, come le carte della tela o l'intervallo del foglio, e ne dà soltanto
   il testo. `selectionSetOf` in `editors/core/registry.ts` decide una volta per
@@ -244,7 +292,9 @@ nomina le modalità di un formato: è la classe di vista che un provider può
 conoscere, cioè il documento com'è salvato (`source`), una resa in cui si
 scrive (`live_preview`) o una resa da leggere senza cursore (`reading`). La tela
 e il foglio proiettano la loro vista principale su `live_preview`, il sorgente
-JSON della tela su `source`, visori e superficie d'errore su `reading`.
+JSON della tela su `source`, visori e superficie d'errore su `reading`. Il
+disegno proietta Disegno (`draw`) su `live_preview` e Lettura (`read`) su
+`reading`.
 
 Gli id valgono dentro la famiglia della superficie: il layout ricorda una
 modalità per famiglia in ogni riquadro (`PaneState.modes`), e il `source` del
@@ -252,9 +302,22 @@ testo non decide come si apre una tela. Una famiglia senza voce si apre nella
 `defaultMode` della superficie, o nella prima dichiarata; un id che la
 superficie non supporta ripiega allo stesso modo, senza sovrascrivere la voce
 persistita. `editor.default-mode` e la vecchia `mode` di un riquadro nominano
-modalità del testo. Il toggle `Mod-E` sceglie soltanto fra le modalità che la
-superficie dichiara; quando manca una coppia edit/render non mostra un controllo
-falso. La command palette usa la stessa proiezione e non conosce nomi di profilo.
+modalità del testo.
+
+I comandi `shell.mode.reading` (`Mod-E`), `shell.mode.live` e
+`shell.mode.source` cercano la modalità per `contextMode`, non per id
+(`apps/client/src/editors/core/surface-modes.ts`): Live sulla tela porta alla
+modalità `canvas`, e `Mod-E` trova la lettura di un profilo che la chiama
+`read`. Fra più modalità con lo stesso ruolo resta quella corrente, altrimenti
+vale la prima dichiarata. Un comando è disponibile soltanto dove cambierebbe
+qualcosa: una superficie con una sola modalità non ne espone nessuno, e il
+toggle chiede una lettura e almeno una scrittura. La disponibilità dipende
+dalla superficie e non dalla modalità corrente, così un accordo assegnato
+dall'utente non ricade sull'editor a seconda della modalità. Dalla lettura il
+toggle torna all'ultima scrittura del riquadro per quella famiglia, se la
+superficie la dichiara; altrimenti alla `defaultMode` se è di scrittura, poi
+alla prima scrittura dichiarata. La command palette usa la stessa proiezione e
+non conosce nomi di profilo.
 
 La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
@@ -370,7 +433,10 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/text/profiles/formula.ts`
 - `apps/client/src/editors/text/profiles/markdown/surface.ts`
 - `apps/client/src/editors/core/registry.ts`
+- `apps/client/src/editors/core/surface-modes.ts`
 - `apps/client/src/editors/core/bootstrap.ts`
+- `apps/client/src/editors/spatial/lazy.ts`
+- `apps/client/src/state/layout.ts`
 - `apps/client/src/editors/grid/engine.ts`
 - `apps/client/src/editors/core/text-operation.ts`
 - `apps/client/src/state/document-session.ts`
