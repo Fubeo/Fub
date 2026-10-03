@@ -1,13 +1,14 @@
 // Gli oggetti che gli strumenti toccano: l'indice con cui la selezione
 // sceglie, la gomma cancella e lo spostamento sposta.
 //
-// Un **oggetto** è ciò che al livello Essenziale si sceglie intero (piano §6,
-// regola 2): un figlio di un livello, o un figlio della radice fuori da ogni
-// livello, che non sia la carta, il titolo o la descrizione. Un gruppo o un
-// collegamento si sceglie con tutto ciò che contiene. Gli oggetti di un
-// livello bloccato o nascosto non si toccano, e nemmeno quelli nascosti con
-// `display="none"`. Un blocco estraneo non è un oggetto: si vede come
-// immagine e resta com'è.
+// Un **oggetto** è ciò che al livello Essenziale si sceglie intero: un figlio
+// di un livello, o un figlio della radice fuori da ogni livello, che non sia
+// la carta, il titolo o la descrizione. Un oggetto fatto a un livello più
+// ricco resta intatto anche qui, dove al massimo si sposta o si elimina
+// intero. Un gruppo o un collegamento si sceglie con tutto ciò che contiene.
+// Gli oggetti di un livello bloccato o nascosto non si toccano, e nemmeno
+// quelli nascosti con `display="none"`. Un blocco estraneo non è un oggetto:
+// si vede come immagine e resta com'è.
 //
 // La geometria è quella che il painter disegna: gli attributi dipinti della
 // stessa `PaintScene` (`PaintBuilder.shape` e `headInfo`), con le

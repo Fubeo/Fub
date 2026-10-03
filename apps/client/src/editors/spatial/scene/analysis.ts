@@ -33,7 +33,7 @@ import {
 /// Quanti byte decodificati può avere un'immagine incorporata (§11).
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-/// Il contrasto minimo fra un tratto e la carta (§12, DEC-13).
+/// Il contrasto minimo fra un tratto e la carta (§12).
 export const MIN_CONTRAST = 3;
 
 /// Che cosa rappresenta un elemento modificabile (§4).
@@ -348,7 +348,7 @@ export class Tally {
   /// Chiude il conteggio: il riepilogo, più S009 per ogni tratto a penna
   /// che contrasta poco con la carta.
   finish(foreign: boolean, version: number | null, diagnostics: Diagnostic[]): Summary {
-    // Senza carta il disegno sta sul bianco della superficie (DEC-13).
+    // Senza carta il disegno sta sul bianco della superficie (§12).
     const paper = this.paper === undefined ? WHITE : this.paper;
     if (paper !== null) {
       for (const [span, [rgb, alpha]] of this.pens) {

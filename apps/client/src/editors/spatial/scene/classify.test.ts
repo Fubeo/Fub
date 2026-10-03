@@ -1,4 +1,4 @@
-// La regola di classificazione di `formato-scena.md` §4, una regola alla
+// La regola di classificazione del formato della scena (§4), una regola alla
 // volta, nei due versi: che cosa resta modificabile e che cosa diventa
 // estraneo. Sono i casi di `crates/fub-scene/tests/classify.rs`, uno per uno,
 // letti da questo lettore invece che da quello di Rust.

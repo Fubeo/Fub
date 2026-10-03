@@ -14,7 +14,7 @@
 // WebView2, WKWebView), mentre quello di Rust è uno; rifiuta i `DOCTYPE` con
 // sottoinsieme interno, che Rust legge e apre in sola lettura (§8); e
 // costruirebbe un documento con i nodi della sorgente, che non deve esistere
-// fuori da questo modulo (DEC-05). Qui la sorgente resta una stringa: nessun
+// fuori da questo modulo (§8). Qui la sorgente resta una stringa: nessun
 // nodo, nessun URL, nessuno stile prende vita.
 //
 // Le posizioni dei nodi sono indici UTF-16 grezzi della stringa. Gli errori

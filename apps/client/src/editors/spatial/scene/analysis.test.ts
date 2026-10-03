@@ -29,7 +29,8 @@ describe("i conti dell'analisi (src/analysis.rs)", () => {
   it("il contrasto segue WCAG", () => {
     expect(contrast(WHITE, [0, 0, 0])).toBe(21);
     expect(contrast(WHITE, WHITE)).toBe(1);
-    // La tavolozza di DEC-13 sulla carta bianca: tre colori sotto 3:1.
+    // La tavolozza Okabe–Ito di FubDraw sulla carta bianca: tre colori sotto
+    // 3:1.
     const ratio = (rgb: number): number => contrast(hex(rgb), WHITE);
     for (const below of [0xf0e442, 0xe69f00, 0x56b4e9]) {
       expect(ratio(below) < MIN_CONTRAST, below.toString(16)).toBe(true);

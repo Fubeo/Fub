@@ -1,7 +1,8 @@
 // I vettori di prova delle operazioni (`__fixtures__/scene-ops/`): oracoli
 // scritti a mano, non generati dal motore che verificano. Ogni vettore dà il
 // testo di partenza, le operazioni e l'esito atteso dell'ultima; il test
-// controlla l'esito e le invarianti di §6:
+// controlla l'esito e le invarianti di §6 di
+// `docs/reference/scene-operations.md`, la pagina dei `§` qui sotto:
 //
 // 1. la `TextOperation` porta il testo di prima, a LF, in quello di dopo;
 // 2. il testo di dopo, riletto, dà la scena che il motore ha in memoria;

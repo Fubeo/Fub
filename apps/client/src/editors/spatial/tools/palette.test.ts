@@ -1,5 +1,5 @@
-// La tavolozza dell'Essenziale (DEC-13): otto colori di Okabe–Ito, ognuno
-// con la sua forma, e tre spessori.
+// La tavolozza dell'Essenziale: otto colori di Okabe–Ito, ognuno con la sua
+// forma, e tre spessori.
 
 import { describe, expect, it } from "vitest";
 import { contrast } from "../scene/analysis";

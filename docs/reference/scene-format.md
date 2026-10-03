@@ -8,8 +8,11 @@
 Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore,
 con pochi attributi in più nel namespace `fub`. È il contratto comune di
 `fub-scene`, del provider `svg` e della superficie TypeScript della shell; il
-perché sta nell'[ADR 0203](../decisions/0203-superfici-spaziali.md), e i `§`
-dei commenti nel codice sono le sezioni di questa pagina.
+perché sta nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). Come la
+superficie cambia un disegno sta nelle
+[operazioni sulla scena](scene-operations.md). I `§` dei commenti nel codice
+sono le sezioni di questa pagina, tranne nel motore delle operazioni, che cita
+quelle dell'altra.
 
 ## 1. Principi
 

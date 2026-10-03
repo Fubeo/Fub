@@ -1,14 +1,15 @@
-// Il registro degli strumenti (piano §6, regola 1): ogni strumento dichiara
-// id, livello minimo, gruppo, icona, etichetta, scorciatoia e descrizione per
-// lo screen reader, e i livelli filtrano. Qui ci sono gli strumenti
-// dell'Essenziale; Standard ed Esperto si aggiungono alla stessa lista.
+// Il registro degli strumenti, uno solo per tutti i livelli: ogni strumento
+// dichiara id, livello minimo, gruppo, icona, etichetta, scorciatoia e
+// descrizione per lo screen reader, e i livelli filtrano. Qui ci sono gli
+// strumenti dell'Essenziale; Standard ed Esperto si aggiungono alla stessa
+// lista.
 //
 // Le scorciatoie sono una lettera senza modificatori, quelle che chi disegna
 // conosce già da altri programmi, e valgono solo col fuoco sulla superficie.
 
 import type { Key } from "../../../i18n/strings";
 
-/// I livelli di DEC-13, in ordine.
+/// I livelli dell'interfaccia, dal più semplice al più ricco.
 export type Level = "essential" | "standard" | "expert";
 
 const LEVEL_ORDER: readonly Level[] = ["essential", "standard", "expert"];

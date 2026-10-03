@@ -64,8 +64,9 @@ export interface RootItem extends Span {
 /// Un elemento modificabile.
 export interface ElementItem extends Span {
   readonly kind: "element";
-  /// Gli indici dei figli elemento dalla radice, come il bersaglio di
-  /// `operazioni.md` §2. La radice è `[]`.
+  /// Gli indici dei figli elemento dalla radice: è il modo in cui le
+  /// operazioni della superficie indicano il loro bersaglio. La radice è
+  /// `[]`.
   readonly path: readonly number[];
   readonly tag: string;
   readonly role: Role;
