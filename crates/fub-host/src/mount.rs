@@ -269,11 +269,17 @@ pub(crate) fn mount_with_formats(
     let (providers, resources) = prepared_formats.into_parts();
     let mut format_resources = Some(resources);
     let mut formats = FormatRegistry::new();
-    for provider in [
+    #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
+    let mut builtin = vec![
         MarkdownProvider::boxed(),
         fub_format_canvas::CanvasProvider::boxed(),
         fub_format_base::BaseProvider::boxed(),
-    ] {
+    ];
+    // Le scene di FubDraw (ADR 0203). Senza la feature un `.svg` resta un
+    // allegato, e la shell lo apre come testo col profilo `svg`.
+    #[cfg(feature = "draw")]
+    builtin.push(fub_format_svg::SvgProvider::boxed());
+    for provider in builtin {
         if let Err(error) = formats.register(provider) {
             return Err(mount_error_with_resource_disposal(
                 format!("format provider conflict: {error}"),
