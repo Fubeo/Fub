@@ -17,19 +17,19 @@ Markdown. Un file `.svg` si apre come testo in **Sorgente**, **Diviso**
 (predefinita, con l'anteprima accanto o sotto) e **Anteprima**. L'anteprima si
 ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta
 lascia l'ultima buona, attenuata, sotto il motivo con riga e colonna. I
-documenti `.fubsheet` usano invece la modalità **foglio** della
-famiglia Grid; se il provider Grid non è servito, la stessa superficie resta
-navigabile e mostra gli input grezzi senza un secondo valutatore formule.
-Il commutatore nella barra di ciascun riquadro legge la dichiarazione della
-propria superficie; con una sola modalità non mostra un selettore. Il riquadro
-ricorda la modalità scelta per ogni famiglia di superfici: una nota in Sorgente
-non fa aprire la tela seguente come JSON, e la tela non cambia la modalità in
-cui si riapre la nota.
-Le scorciatoie seguono il riquadro attivo. La modalità delle note in una
-finestra nuova viene da `editor.default-mode`; un riquadro diviso eredita
-quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano, si spostano con le frecce
-e tornano a parti uguali con un doppio clic; le proporzioni restano nel layout
-finché la fila non cambia.
+documenti `.fubsheet` usano invece la modalità **foglio** della famiglia Grid;
+se il provider Grid non è servito, la stessa superficie resta navigabile e
+mostra gli input grezzi senza un secondo valutatore formule. Il commutatore
+nella barra di ciascun riquadro legge la dichiarazione della propria superficie;
+con una sola modalità non mostra un selettore né offre i comandi di modalità,
+che trovano la modalità per ruolo (Live, sulla tela, riporta alle carte). Il
+riquadro ricorda la modalità scelta per ogni famiglia di superfici: una nota in
+Sorgente non fa aprire la tela seguente come JSON, e la tela non cambia la
+modalità in cui si riapre la nota. Le scorciatoie seguono il riquadro attivo. La
+modalità delle note in una finestra nuova viene da `editor.default-mode`; un
+riquadro diviso eredita quelle del riquadro da cui nasce. I divisori fra
+riquadri si trascinano, si spostano con le frecce e tornano a parti uguali con
+un doppio clic; le proporzioni restano nel layout finché la fila non cambia.
 
 Il tema di serie è quieto: neutri caldi, una carta antracite al buio e avorio
 in luce (mai il nero o il bianco puri), e un accento salvia desaturato per

@@ -36,6 +36,7 @@
 // vive invece il layout anonimo della finestra corrente, nello stato di vista
 // della macchina. La stessa regola di tab, split e focus vale per entrambi.
 import { MAIN_PANE } from "../host/contract";
+import type { SurfaceOverride } from "../editors/core/registry";
 import { emit, readState, writeState } from "./store";
 
 /// Cosa tiene una linguetta.
@@ -54,8 +55,11 @@ import { emit, readState, writeState } from "./store";
 /// guardando, e `docAttivo()` resta la stessa domanda di prima con la stessa
 /// risposta: un path, o niente.
 export type Tab =
-  /// Un documento del vault, per path.
-  | { k: "doc"; doc: string; pinned?: boolean; stack?: string }
+  /// Un documento del vault, per path. `override` è la superficie che
+  /// l'utente ha scelto per **questa** linguetta al posto di quella che il
+  /// registro darebbe al documento — la vista sorgente di un disegno — e non
+  /// fa parte dell'identità: è come la si guarda, non cosa è aperto.
+  | { k: "doc"; doc: string; pinned?: boolean; stack?: string; override?: SurfaceOverride }
   /// Una view **dichiarata** dal backend, per id di `ViewSpec` (§3.3). Il
   /// riquadro non sa cosa disegni: la monta `ui/views.ts` come le altre.
   /// `params` sono gli argomenti dell'istanza (`CommandEffect::OpenView`),
@@ -396,11 +400,64 @@ function propagateToLinked(source: string, tab: Tab, l: Layout): void {
 /// l'unico posto in cui le due specie si confrontano fra loro. Pin e stack
 /// non fanno parte dell'identità: una nota appuntata resta quella nota. Nemmeno
 /// gli argomenti di una view: l'istanza di un riquadro è una, e riaprirla con
-/// altri argomenti la riporta su quelli.
+/// altri argomenti la riporta su quelli. Nemmeno la superficie scelta per la
+/// linguetta: riaprire un disegno guardato come sorgente porta su quella
+/// linguetta così com'è, invece di aprirne una seconda sullo stesso documento.
 export function sameTab(a: Tab, b: Tab): boolean {
   if (a.k === "doc" && b.k === "doc") return a.doc === b.doc;
   if (a.k === "view" && b.k === "view") return a.view === b.view;
   return false;
+}
+
+/// La superficie scelta per una linguetta, o `null` per quella del registro.
+export function tabOverride(tab: Tab | null | undefined): SurfaceOverride | null {
+  return tab?.k === "doc" && tab.override ? tab.override : null;
+}
+
+/// Due scelte di superficie sono la stessa: stessa famiglia, stesso profilo
+/// (assente vale come assente, non come la predefinita: chi la risolve è il
+/// registro, non il layout).
+export function sameOverride(a: SurfaceOverride | null, b: SurfaceOverride | null): boolean {
+  if (!a || !b) return a === b;
+  return a.family === b.family && (a.profile ?? null) === (b.profile ?? null);
+}
+
+/// La scelta di superficie da ricopiare quando una linguetta di documento si
+/// ricostruisce (pin, gruppo, rename): una copia, così due linguette non
+/// condividono lo stesso oggetto.
+function docOverride(tab: { override?: SurfaceOverride }): { override?: SurfaceOverride } {
+  const o = tab.override;
+  return o ? { override: { family: o.family, ...(o.profile === undefined ? {} : { profile: o.profile }) } } : {};
+}
+
+/// Sceglie la superficie di una linguetta di documento, o la riporta a quella
+/// del registro con `null`.
+///
+/// La linguetta si **sostituisce** e non si modifica: il riquadro confronta
+/// ciò che mostra con ciò che il layout dice, e un oggetto nuovo è il modo in
+/// cui un cambio di superficie si vede da fuori. Niente cronologia — non si è
+/// andati da nessuna parte, è lo stesso documento guardato altrimenti — e
+/// niente riquadri collegati: il collegamento segue le aperture, e un disegno
+/// a sinistra col suo sorgente a destra è proprio la disposizione per cui ci
+/// si collega.
+export function setTabOverride(
+  id: string,
+  index: number,
+  override: SurfaceOverride | null,
+  l: Layout = layout,
+): void {
+  const p = l.panes[id];
+  if (!p || index < 0 || index >= p.tabs.length) return;
+  const tab = p.tabs[index]!;
+  if (tab.k !== "doc" || sameOverride(tabOverride(tab), override)) return;
+  p.tabs[index] = {
+    k: "doc",
+    doc: tab.doc,
+    ...(tab.pinned ? { pinned: true } : {}),
+    ...(tab.stack ? { stack: tab.stack } : {}),
+    ...(override ? docOverride({ override }) : {}),
+  };
+  changed();
 }
 
 /// Ordina una tab dentro il suo riquadro: la toglie da dove sta e la rimette
@@ -447,7 +504,7 @@ export function setPinnedTab(id: string, index: number, pinned: boolean, l: Layo
   const tab = p.tabs[index]!;
   if ((tab.pinned === true) === pinned) return;
   p.tabs[index] = tab.k === "doc"
-    ? { k: "doc", doc: tab.doc, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) }
+    ? { k: "doc", doc: tab.doc, ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}), ...docOverride(tab) }
     : { k: "view", view: tab.view, ...viewParams(tab), ...(pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
   // Le appuntate stanno a sinistra: appuntare porta la tab in coda alle
   // appuntate, spuntarla la porta subito dopo di loro.
@@ -469,6 +526,7 @@ export function setTabStack(id: string, index: number, stack: string | null, l: 
     ...base,
     ...(tab.pinned ? { pinned: true } : {}),
     ...(next ? { stack: next } : {}),
+    ...(tab.k === "doc" ? docOverride(tab) : {}),
   } as Tab;
   changed();
 }
@@ -646,8 +704,11 @@ export function goForward(id: string, l: Layout = layout): boolean {
 
 /// Il documento è stato rinominato: l'identità è il path (0043), quindi le tab
 /// che lo mostravano seguono. Vale in **tutti** i riquadri, non solo in quello
-/// col fuoco: un rename non guarda chi sta guardando. Pin, stack e cronologia
-/// seguono l'identità: una tab appuntata rinominata resta appuntata.
+/// col fuoco: un rename non guarda chi sta guardando. Pin, stack, superficie
+/// scelta e cronologia seguono l'identità: una tab appuntata rinominata resta
+/// appuntata. Una superficie che il nome nuovo non regge più (un `.svg`
+/// diventato `.txt`) la scarta il riquadro quando la mostra, non il rename:
+/// è il registro a sapere cosa offre un'estensione.
 export function rename(from: string, a: string, l: Layout = layout): void {
   if (renameInLayout(from, a, l)) changed();
 }
@@ -661,7 +722,7 @@ export function renameInLayout(from: string, a: string, l: Layout): boolean {
   const renamed = (t: Tab): Tab => {
     if (t.k !== "doc" || t.doc !== from) return t;
     wasTouched = true;
-    return { k: "doc", doc: a, ...(t.pinned ? { pinned: true } : {}), ...(t.stack ? { stack: t.stack } : {}) };
+    return { k: "doc", doc: a, ...(t.pinned ? { pinned: true } : {}), ...(t.stack ? { stack: t.stack } : {}), ...docOverride(t) };
   };
   for (const id of panes(l)) {
     const p = l.panes[id];
@@ -991,11 +1052,18 @@ function parseHistory(v: unknown): PaneHistory | null {
 
 /// Una tab, nella forma nuova o in quella di prima.
 ///
-/// Severa come tutto il resto di questo parser, e con due clemenze: una
+/// Severa come tutto il resto di questo parser, e con tre clemenze: una
 /// **stringa** è un documento, che è ciò che c'era scritto fino a ieri; un
 /// oggetto senza pin/stack è una tab non appuntata fuori dai gruppi, che è
 /// ciò che c'era scritto prima del pin. Pin e stack rotti — non booleani,
 /// non stringhe — valgono come file rovinato, non come «non appuntata».
+///
+/// La terza è la superficie scelta, che si legge come le modalità
+/// (`parseModes`) e non come il pin: una che non regge la forma cade da sola,
+/// e la linguetta resta, con la superficie del registro. È una preferenza di
+/// vista con un ritorno sicuro, e costare il layout intero — tutte le
+/// linguette di tutti i riquadri — per una preferenza sarebbe il prezzo
+/// sbagliato.
 function parseTab(v: unknown): Tab | null {
   if (typeof v === "string") return v ? { k: "doc", doc: v } : null;
   if (!v || typeof v !== "object") return null;
@@ -1015,7 +1083,9 @@ function parseTab(v: unknown): Tab | null {
       : null;
   if (!stack) return null;
   if (o.k === "doc") {
-    return typeof o.doc === "string" && o.doc ? { k: "doc", doc: o.doc, ...pinned, ...stack } : null;
+    return typeof o.doc === "string" && o.doc
+      ? { k: "doc", doc: o.doc, ...pinned, ...stack, ...parseOverride(o.override) }
+      : null;
   }
   if (o.k === "view") {
     return typeof o.view === "string" && o.view
@@ -1023,6 +1093,20 @@ function parseTab(v: unknown): Tab | null {
       : null;
   }
   return null;
+}
+
+/// La superficie scelta per una linguetta di documento, o niente: una famiglia
+/// non vuota e, se c'è, un profilo non vuoto. Una chiave in più si ignora —
+/// una shell successiva può aggiungerne — e qualunque altra forma vale come
+/// assente. Se la scelta sia ancora valida (la famiglia registrata, il
+/// documento che la offre) lo decide il riquadro quando la mostra.
+function parseOverride(v: unknown): { override?: SurfaceOverride } {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const o = v as Record<string, unknown>;
+  if (typeof o.family !== "string" || o.family.trim() === "") return {};
+  if (o.profile === undefined) return { override: { family: o.family.trim() } };
+  if (typeof o.profile !== "string" || o.profile.trim() === "") return {};
+  return { override: { family: o.family.trim(), profile: o.profile.trim() } };
 }
 
 /// Gli argomenti di una view, da ricopiare quando la linguetta si ricostruisce.
