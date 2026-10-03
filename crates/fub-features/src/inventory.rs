@@ -526,7 +526,8 @@ static OFFICIALS: &[OfficialFeature] = &[
         requires: &[],
         wiring: HostWiring::None,
     },
-    // Ultima, e non per caso: non registra né pannelli né comandi, quindi la sua
+    // Ultima, e non per caso: non registra pannelli, e il suo solo comando,
+    // «Nuovo disegno», si aggiunge in coda a quelli che c'erano, quindi la sua
     // posizione non sposta niente sotto gli occhi di chi usa l'app.
     #[cfg(feature = "draw")]
     OfficialFeature {
@@ -534,7 +535,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         name: "Drawings",
         catalog: draw::catalog,
         view: None,
-        commands: None,
+        commands: Some(|| Box::new(draw::DrawCommands)),
         index: None,
         syntax: None,
         renderers: None,

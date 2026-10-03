@@ -126,6 +126,17 @@ diventa `Report v1.2.md`. Se nessun formato installato serve l'estensione
 scelta, i comandi che creano note rispondono con un errore e non scrivono un
 file che il vault non saprebbe aprire.
 
+«Nuovo disegno» (`drawing.create`, con la feature `draw`) fa nascere un disegno
+vuoto e lo apre. Senza nome si chiama «Disegno», o «Disegno 1», «Disegno 2», …
+nella lingua di chi lo crea, con le cifre della convenzione dei nomi liberi. Un
+nome senza estensione riceve `.svg`, e uno con l'estensione di un altro formato
+non è un disegno. Un nome semplice nasce nella cartella `folder`, se è data,
+altrimenti nella radice; un path esplicito conserva la propria cartella. Un nome
+occupato è un errore e mai una sovrascrittura, e prima di scrivere il nome passa
+la regola dei nomi nuovi. Il file lo scrive il provider dei disegni, con il nome
+per titolo e «Livello 1». La prova a vuoto fa gli stessi controlli e non scrive;
+l'annullamento manda il disegno nel cestino.
+
 ## Albero dei file
 
 L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene

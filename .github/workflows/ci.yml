@@ -150,7 +150,7 @@ jobs:
       - run: cargo test --workspace --no-fail-fast
       - name: le scene di FubDraw, con la feature `draw` dell'host (FUORI_DAL_DEFAULT)
         run: cargo test -p fub-host --features draw --no-fail-fast
-      - name: l'export dei disegni, con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
+      - name: «Nuovo disegno» e l'export dei disegni, con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
         run: cargo test -p fub-features --features draw --no-fail-fast
 
   docs:
