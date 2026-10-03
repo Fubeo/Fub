@@ -1,20 +1,29 @@
 // Annulla e ripeti: una pila per gesto sopra il motore, che sopravvive a
-// una modifica arrivata da fuori e perde solo il passo che non vale più.
+// una modifica arrivata da fuori, perde solo il passo che non vale più e
+// fonde i ritocchi di fila.
 
 import { describe, expect, it } from "vitest";
 import type { Applied, Outcome } from "../scene/engine";
 import type { Op } from "../scene/ops";
 import { doc } from "../scene/test-support";
-import { History } from "./history";
+import { History, HISTORY_LIMIT, MERGE_MS } from "./history";
 import { LAYER, open } from "./test-support";
 
 const SOURCE = doc(`${LAYER}<rect id="o1a2b3c4d" width="10" height="10"/></g>`);
 
 const add = (id: string): Op => ({ op: "add", parent: "l1", pos: { last: true }, elem: { tag: "rect", attrs: { id, width: "5", height: "5" } } });
 
+const move = (id: string, x: number): Op => ({ op: "set", id, attrs: { transform: `matrix(1 0 0 1 ${x} 0)` } });
+
 const applied = (outcome: Outcome): Applied => {
   if (outcome.outcome !== "applied") throw new Error(`rifiutata: ${outcome.detail}`);
   return outcome;
+};
+
+/// Un orologio che avanza solo quando lo dice il test.
+const clock = (): { now: () => number; tick: (ms: number) => void } => {
+  let time = 0;
+  return { now: () => time, tick: (ms) => (time += ms) };
 };
 
 describe("la cronologia", () => {
@@ -95,5 +104,97 @@ describe("la cronologia", () => {
     const second = open(first.engine.text);
     expect(history.undo(second.engine)?.outcome.outcome).toBe("applied");
     expect(second.engine.text).toBe(SOURCE);
+  });
+});
+
+describe("la fusione dei passi", () => {
+  it("fonde i ritocchi di fila in un passo che si annulla esatto", () => {
+    const { engine } = open(SOURCE);
+    const time = clock();
+    const history = new History(HISTORY_LIMIT, time.now);
+    for (const x of [1, 2, 3]) {
+      history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", x))));
+      time.tick(MERGE_MS);
+    }
+    const moved = engine.text;
+
+    expect(history.undo(engine)?.outcome.outcome).toBe("applied");
+    expect(engine.text).toBe(SOURCE);
+    expect(history.canUndo).toBe(false);
+    history.redo(engine);
+    expect(engine.text).toBe(moved);
+  });
+
+  it("non fonde passi più lontani dell'intervallo", () => {
+    const { engine } = open(SOURCE);
+    const time = clock();
+    const history = new History(HISTORY_LIMIT, time.now);
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 1))));
+    const one = engine.text;
+    time.tick(MERGE_MS + 1);
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 2))));
+
+    history.undo(engine);
+    expect(engine.text).toBe(one);
+  });
+
+  it("non fonde gesti diversi, né chiavi o oggetti diversi", () => {
+    const { engine } = open(doc(`${LAYER}<rect id="o1a2b3c4d" width="10" height="10"/><rect id="o5e6f7g8h" width="5" height="5"/></g>`));
+    const time = clock();
+    const history = new History(HISTORY_LIMIT, time.now);
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 1))));
+    history.record("draw.action.title", applied(engine.apply(move("o1a2b3c4d", 2))));
+    history.record("draw.action.title", applied(engine.apply({ op: "set", id: "o1a2b3c4d", attrs: { fill: "#ff0000" } })));
+    history.record("draw.action.title", applied(engine.apply({ op: "set", id: "o5e6f7g8h", attrs: { fill: "#ff0000" } })));
+
+    let steps = 0;
+    while (history.undo(engine) !== null) steps++;
+    expect(steps).toBe(4);
+  });
+
+  it("dopo un ripeti, il ritocco dopo apre un passo nuovo", () => {
+    const { engine } = open(SOURCE);
+    const history = new History(HISTORY_LIMIT, clock().now);
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 1))));
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 2))));
+    history.undo(engine);
+    expect(engine.text).toBe(SOURCE);
+    history.redo(engine);
+    const two = engine.text;
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 3))));
+
+    history.undo(engine);
+    expect(engine.text).toBe(two);
+  });
+
+  it("dopo un annulla, il ritocco dopo apre un passo nuovo anche se la scena è tornata quella di prima", () => {
+    const { engine } = open(doc(`${LAYER}<rect id="o1a2b3c4d" width="10" height="10"/><rect id="o5e6f7g8h" width="5" height="5"/></g>`));
+    const history = new History(HISTORY_LIMIT, clock().now);
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 1))));
+    const one = engine.text;
+    history.record("draw.action.move", applied(engine.apply(move("o5e6f7g8h", 1))));
+    history.undo(engine);
+    expect(engine.text).toBe(one);
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 2))));
+
+    history.undo(engine);
+    expect(engine.text).toBe(one);
+  });
+
+  it("non fonde un passo con una modifica arrivata da fuori in mezzo", () => {
+    const { engine } = open(SOURCE);
+    const time = clock();
+    const history = new History(HISTORY_LIMIT, time.now);
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 1))));
+    // Da un'altra superficie qualcuno colora il rettangolo.
+    applied(engine.apply({ op: "set", id: "o1a2b3c4d", attrs: { fill: "#00ff00" } }));
+    history.record("draw.action.move", applied(engine.apply(move("o1a2b3c4d", 2))));
+
+    history.undo(engine);
+    expect(engine.text).toContain('fill="#00ff00"');
+    expect(engine.text).toContain("matrix(1 0 0 1 1 0)");
+    history.undo(engine);
+    expect(engine.text).not.toContain("transform");
+    expect(engine.text).toContain('fill="#00ff00"');
   });
 });
