@@ -28,8 +28,8 @@
 // nell'ultima cifra binaria. I due decimali assorbono quella differenza salvo
 // che un valore cada a meno di un miliardesimo da un mezzo centesimo, cioè
 // quasi mai; quando capita, un vertice si sposta di un centesimo e la forma
-// non cambia. Per questo `d` lo ricalcola sempre chi possiede il documento
-// (DEC-06), e nessuno confronta `d` calcolati da motori diversi.
+// non cambia. Per questo `d` lo ricalcola sempre chi possiede il documento,
+// e nessuno confronta `d` calcolati da motori diversi.
 
 import { getStroke, type StrokeOptions } from "perfect-freehand";
 import { formatScaled, roundHalfUp } from "../number";
