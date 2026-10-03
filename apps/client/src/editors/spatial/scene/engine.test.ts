@@ -1,14 +1,15 @@
 // Il motore delle operazioni oltre i vettori di `vectors.test.ts`: la forma
 // della rete, i rifiuti uno per uno, i limiti, l'undo che non è esatto, i
 // rientri di un `move`, `adopt`, `page` e `anchor` nei casi di bordo, gli id
-// dei gruppi di pagina. I testi attesi sono scritti a mano.
+// dei gruppi di pagina. I testi attesi sono scritti a mano, e i `§` sono le
+// sezioni di `docs/reference/scene-operations.md`.
 
 import { describe, expect, it } from "vitest";
 import { tryApplyOperation } from "../../core/text-operation";
 import { parseBrush } from "../ink/brush";
 import { decodeInk, inkToQuantized } from "../ink/codec";
 import { pf1 } from "../ink/pf1";
-import { SceneEngine, type Applied, type Outcome } from "./engine";
+import { mergeUndo, SceneEngine, type Applied, type Outcome } from "./engine";
 import { MAX_BATCH, MAX_NESTING, MAX_OP_BYTES, MAX_VALUE_BYTES, parseWireOp, type Op, type Reason } from "./ops";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene } from "./read";
 import type { Elem } from "./serialize";
@@ -319,6 +320,64 @@ describe("l'undo", () => {
     };
     rejects(BASE, nested, "missing-target");
     expect(SceneEngine.open(BASE).apply(nested)).toMatchObject({ index: 1 });
+  });
+});
+
+describe("la fusione di due undo", () => {
+  const E1_BLACK = '    <ellipse id="o1a2b3c4d" cx="300" cy="200" rx="120" ry="60" fill="#000000" stroke="#0072b2" stroke-width="4"/>';
+  const R3_GREY = '    <rect id="o3c4d5e6f" x="800" y="100" width="200" height="120" fill="#111111"/>';
+  const fill = (id: string, value: string): Op => ({ op: "set", id, attrs: { fill: value } });
+
+  it("due set sulle stesse chiavi diventano un passo solo, esatto", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#111111"));
+    const second = apply(engine, fill("o1a2b3c4d", "#000000"));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(merged.inverse).toEqual(first.undo.inverse);
+    expect(merged.forward).toEqual(second.undo.forward);
+    const undone = applied(engine.undo(merged));
+    expect(undone.text).toBe(BASE);
+    expect(applied(engine.undo(undone.undo)).text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+
+  it("vale per due batch con gli stessi set nello stesso ordine", () => {
+    const engine = SceneEngine.open(BASE);
+    const both = (value: string): Op => ({ op: "batch", ops: [fill("o1a2b3c4d", value), fill("o3c4d5e6f", value)] });
+    const first = apply(engine, both("#222222"));
+    const second = apply(engine, both("#111111"));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(applied(engine.undo(merged)).text).toBe(BASE);
+  });
+
+  it("dopo un cambiamento altrui passa dall'inversa della prima", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#222222"));
+    const second = apply(engine, fill("o1a2b3c4d", "#000000"));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    apply(engine, fill("o3c4d5e6f", "#111111"));
+    expect(applied(engine.undo(merged)).text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3_GREY, END_G, END));
+  });
+
+  it("non fonde chiavi o elementi diversi", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#222222"));
+    const stroke = apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { stroke: "#000000" } });
+    expect(mergeUndo(first.undo, stroke.undo)).toBeNull();
+    const other = apply(engine, fill("o3c4d5e6f", "#111111"));
+    expect(mergeUndo(stroke.undo, other.undo)).toBeNull();
+    const both = apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#000000", stroke: "#000000" } });
+    expect(mergeUndo(other.undo, both.undo)).toBeNull();
+  });
+
+  it("non fonde operazioni che non sono una subito dopo l'altra", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#222222"));
+    apply(engine, fill("o3c4d5e6f", "#111111"));
+    const second = apply(engine, fill("o1a2b3c4d", "#000000"));
+    expect(mergeUndo(first.undo, second.undo)).toBeNull();
+    // Né operazioni di due motori diversi.
+    const other = SceneEngine.open(BASE);
+    expect(mergeUndo(apply(other, fill("o1a2b3c4d", "#222222")).undo, second.undo)).toBeNull();
   });
 });
 

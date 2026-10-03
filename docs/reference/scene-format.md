@@ -7,9 +7,11 @@
 
 Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore,
 con pochi attributi in più nel namespace `fub`. È il contratto comune di
-`fub-scene`, del provider `svg`, della superficie TypeScript della shell e
-delle [annotazioni PDF](annotation-format.md); il perché sta nell'[ADR
-0203](../decisions/0203-superfici-spaziali.md), e i `§` dei commenti sui disegni sono le sezioni di questa pagina.
+`fub-scene`, del provider `svg`, della superficie della shell e delle
+[annotazioni PDF](annotation-format.md); le modifiche sono le
+[operazioni sulla scena](scene-operations.md), il perché è
+nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). I `§` dei commenti
+sono le sezioni di questa pagina, fuori dal motore delle operazioni.
 
 ## 1. Principi
 
@@ -159,8 +161,7 @@ attributi e valori rientrano in questa sezione, e se nessun valore contiene
 `url(`.
 
 - Per `g` e `a` la regola vale per ogni figlio separatamente: un livello con
-  un figlio estraneo resta un livello modificabile che contiene un blocco
-  estraneo.
+  un figlio estraneo resta un livello modificabile con un blocco estraneo.
 - Per gli altri elementi l'elemento è un'unità con i suoi figli. Un `text` è
   modificabile solo se tutti i suoi figli sono `tspan` ammessi.
 - `title` e `desc` sono figli ammessi di qualunque elemento modificabile.
@@ -238,11 +239,10 @@ int      = ["-"] 1*DIGIT
   registra un campione che lo supera; chi legge un valore più grande produce
   S004. `t` può ripetersi o tornare indietro: non entra nel contorno.
 - **Inchiostro non valido:** un `fub:ink` che non rispetta la grammatica o i
-  limiti produce S004, e così un `path` con `fub:tool="pen"` o
-  `"highlighter"` a cui manca `fub:ink` o `fub:brush`. Il tratto resta un
-  elemento modificabile ma non si ridisegna: si sposta, si trasforma, si
-  ricolora e si elimina, e `d` si usa così com'è. Il documento resta
-  modificabile.
+  limiti produce S004, e così un `path` con `fub:tool="pen"` o `"highlighter"`
+  a cui manca `fub:ink` o `fub:brush`. Il tratto resta un elemento
+  modificabile ma non si ridisegna: si sposta, si trasforma, si ricolora e si
+  elimina, e `d` si usa così com'è. Il documento resta modificabile.
 - **Limiti:** al massimo 10 000 campioni e 512 KiB per `fub:ink`. Chi scrive
   divide il tratto al primo dei due limiti; l'ultimo campione del primo tratto
   è il primo del secondo. `d` non ha un limite proprio: lo limita la

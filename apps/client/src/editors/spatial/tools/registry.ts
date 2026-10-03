@@ -1,20 +1,21 @@
-// Il registro degli strumenti (piano §6, regola 1): ogni strumento dichiara
-// id, livello minimo, gruppo, icona, etichetta, scorciatoia e descrizione per
-// lo screen reader, e i livelli filtrano. Qui ci sono gli strumenti
-// dell'Essenziale e dello Standard; l'Esperto si aggiunge alla stessa lista.
+// Il registro degli strumenti, uno solo per tutti i livelli: ogni strumento
+// dichiara id, livello minimo, gruppo, icona, etichetta, scorciatoia e
+// descrizione per lo screen reader, e i livelli filtrano. Qui ci sono gli
+// strumenti dell'Essenziale e dello Standard; l'Esperto si aggiunge alla
+// stessa lista.
 //
-// Il livello minimo dipende dal profilo (piano §6, regola 4): un disegno
-// (`vector`) ha all'Essenziale la penna, la gomma e le forme; le annotazioni
-// di un PDF (`pdf`) hanno all'Essenziale penna, evidenziatore e gomma, e allo
-// Standard le note, le forme e la copertura. Uno strumento senza livello per
-// un profilo non c'è.
+// Il livello minimo dipende dal profilo, perché profili e livelli sono
+// indipendenti: un disegno (`vector`) ha all'Essenziale la penna, la gomma e
+// le forme; le annotazioni di un PDF (`pdf`) hanno all'Essenziale penna,
+// evidenziatore e gomma, e allo Standard le note, le forme e la copertura.
+// Uno strumento senza livello per un profilo non c'è.
 //
 // Le scorciatoie sono una lettera senza modificatori, quelle che chi disegna
 // conosce già da altri programmi, e valgono solo col fuoco sulla superficie.
 
 import type { Key } from "../../../i18n/strings";
 
-/// I livelli di DEC-13, in ordine.
+/// I livelli dell'interfaccia, dal più semplice al più ricco.
 export type Level = "essential" | "standard" | "expert";
 
 const LEVEL_ORDER: readonly Level[] = ["essential", "standard", "expert"];

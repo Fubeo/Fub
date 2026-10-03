@@ -189,9 +189,9 @@ describe("la diagnostica (§12)", () => {
   });
 
   it("S009: un tratto di penna che sparisce nella carta", () => {
-    // I tre colori di DEC-13 sotto 3:1 sulla carta bianca, il nero quasi
-    // trasparente, un'opacità di gruppo, un colore ereditato dal livello e
-    // un tratto nero sulla carta nera.
+    // I tre colori chiari della tavolozza sotto 3:1 sulla carta bianca, il
+    // nero quasi trasparente, un'opacità di gruppo, un colore ereditato dal
+    // livello e un tratto nero sulla carta nera.
     const fading: Array<[string, string, string]> = [
       ["#ffffff", stroke("pen", 'fill="#f0e442"'), "1.32"],
       ["#ffffff", stroke("pen", 'fill="#e69f00"'), "2.25"],

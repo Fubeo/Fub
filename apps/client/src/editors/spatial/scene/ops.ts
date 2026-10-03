@@ -1,12 +1,15 @@
-// Le operazioni sulla scena (`operazioni.md` §2): la forma, i motivi di
-// rifiuto e i limiti. Il motore che le applica è in `engine.ts`.
+// Le operazioni sulla scena: la forma, i motivi di rifiuto e i limiti. Il
+// motore che le applica è in `engine.ts`. Il contratto è in
+// `docs/reference/scene-operations.md`, e i `§` dei commenti sono le sue
+// sezioni.
 //
 // Le forme pubbliche sono quelle della tabella di §2, le stesse sulla rete e
-// nell'undo. Due inverse hanno una forma in più, che scrive soltanto il
+// nell'undo. Quattro inverse hanno una forma in più, che scrive soltanto il
 // motore: `add` con `slot` rimette esattamente ciò che un `remove` ha tolto,
-// anche un elemento estraneo, e `move` con `slot` riporta un elemento al
-// punto esatto da cui è partito. Non arrivano mai dalla rete:
-// `parseWireOp` le rifiuta.
+// anche un elemento estraneo; `move` con `slot` riporta un elemento al punto
+// esatto da cui è partito; `page` e `anchor` con `previous` rimettono i
+// valori di prima, anche assenti. Non arrivano mai dalla rete: `parseWireOp`
+// le rifiuta.
 
 import { utf8Length } from "./text";
 import type { Elem } from "./serialize";

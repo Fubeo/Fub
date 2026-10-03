@@ -32,7 +32,7 @@ import {
   type XmlDocument,
 } from "./xml";
 
-/// Un elemento come lo descrive un'operazione (`operazioni.md` §2). Gli
+/// Un elemento come lo descrive un'operazione della superficie. Gli
 /// attributi con namespace si scrivono col prefisso convenzionale: `fub:` è
 /// il namespace di FubDraw e `xlink:` quello di XLink in qualunque documento;
 /// ogni altro prefisso è quello dichiarato nel documento.

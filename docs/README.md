@@ -65,6 +65,7 @@ flowchart LR
 - [Contratto IPC](reference/ipc-contract.md)
 - [Permessi e sicurezza](reference/permissions-and-security.md)
 - [Formato della scena](reference/scene-format.md)
+- [Operazioni sulla scena](reference/scene-operations.md)
 - [Formato delle annotazioni PDF](reference/annotation-format.md)
 
 ## Vedere stato e direzione
