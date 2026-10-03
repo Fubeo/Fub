@@ -17,6 +17,10 @@
 //   l'URL a chi monta il painter, con una vita sua che si chiude quando
 //   l'elemento esce dalla scena. Un'immagine che non si risolve, e ogni URL
 //   remoto, mostrano il segnaposto.
+// - **Anteprima degli strumenti:** mentre si trascina una selezione o si
+//   passa la gomma, `setDraft` cambia il `transform` dei nodi vivi o li
+//   sbiadisce, senza ricrearli e senza toccare la scena; l'operazione scritta
+//   alla fine porta la scena nuova.
 //
 // Tutto ciò che il painter apre (timer, osservatori, lease) appartiene alla
 // sua vita, e la vita di chi lo monta la chiude.
@@ -56,9 +60,27 @@ export interface PainterOptions {
   readonly settleMs?: number;
 }
 
+/// Ciò che uno strumento mostra prima di scriverlo, sui nodi della scena
+/// corrente: non cambia la scena, e la scena dopo non lo cancella.
+export interface PainterDraft {
+  /// Il `transform` da mostrare al posto di quello dipinto; `null` lo toglie.
+  /// È il valore che l'operazione scriverà, così l'anteprima è il risultato.
+  readonly transforms?: ReadonlyMap<PaintNode, string | null>;
+  /// I nodi che la gomma sta per togliere: si vedono sbiaditi.
+  readonly faded?: ReadonlySet<PaintNode>;
+}
+
+/// L'opacità di un nodo sbiadito dalla gomma.
+export const FADED_OPACITY = "0.25";
+
 export interface ScenePainter {
   /// Disegna `scene` al posto della scena precedente.
   update(scene: PaintScene): void;
+  /// Mostra `draft` sopra la scena, al posto del precedente; `null` lo
+  /// toglie. Vale finché non lo si cambia, anche dopo un `update`: un gruppo
+  /// si ritrova dal suo contenitore, una forma che la scena nuova non
+  /// contiene più resta senza anteprima.
+  setDraft(draft: PainterDraft | null): void;
   /// Sposta la camera.
   setView(view: PainterView): void;
   /// Ridisegna subito gli strati immagine che ne hanno bisogno, senza
@@ -288,6 +310,77 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     return records;
   }
 
+  // --- anteprima degli strumenti -------------------------------------------------
+
+  let draft: PainterDraft | null = null;
+  /// I nodi che mostrano l'anteprima, da riportare alla scena.
+  let drafted: NodeRecord[] = [];
+  /// I nodi del DOM per nodo della scena, e quelli dei gruppi per
+  /// contenitore: ricostruiti solo quando servono.
+  let byPaint: { readonly paints: Map<PaintNode, NodeRecord[]>; readonly keys: Map<object, NodeRecord[]> } | null = null;
+
+  const indexRecords = (): NonNullable<typeof byPaint> => {
+    if (byPaint !== null) return byPaint;
+    const index = { paints: new Map<PaintNode, NodeRecord[]>(), keys: new Map<object, NodeRecord[]>() };
+    const add = (record: NodeRecord): void => {
+      push(index.paints, record.paint, record);
+      if (record.paint.kind === "group") push(index.keys, record.paint.key, record);
+      for (const child of record.children) add(child);
+    };
+    for (const layer of layers) if (layer.kind === "live") for (const record of layer.children) add(record);
+    byPaint = index;
+    return index;
+  };
+
+  /// I nodi del DOM di `paint`. Un gruppo si ritrova anche dal suo
+  /// contenitore: un figlio cambiato da un'altra superficie fa un gruppo
+  /// nuovo, e l'anteprima non deve sparire a metà di un trascinamento.
+  const recordsOf = (paint: PaintNode): readonly NodeRecord[] => {
+    const index = indexRecords();
+    const same = index.paints.get(paint);
+    if (same !== undefined) return same;
+    return paint.kind === "group" ? index.keys.get(paint.key) ?? [] : [];
+  };
+
+  /// Riporta un nodo a ciò che la sua scena dipinge.
+  const restore = (record: NodeRecord): void => {
+    const painted = record.paint.attrs.find(([name]) => name === "transform");
+    if (painted === undefined) record.el.removeAttribute("transform");
+    else if (record.el.getAttribute("transform") !== painted[1]) record.el.setAttribute("transform", painted[1]);
+    record.el.style.removeProperty("opacity");
+  };
+
+  const clearDraft = (): void => {
+    for (const record of drafted) restore(record);
+    drafted = [];
+  };
+
+  const applyDraft = (): void => {
+    if (draft === null) return;
+    const touched = new Set<NodeRecord>();
+    for (const [paint, transform] of draft.transforms ?? []) {
+      for (const record of recordsOf(paint)) {
+        if (transform === null) record.el.removeAttribute("transform");
+        else record.el.setAttribute("transform", transform);
+        touched.add(record);
+      }
+    }
+    for (const paint of draft.faded ?? []) {
+      for (const record of recordsOf(paint)) {
+        record.el.style.setProperty("opacity", FADED_OPACITY);
+        touched.add(record);
+      }
+    }
+    drafted = [...touched];
+  };
+
+  const setDraft = (next: PainterDraft | null): void => {
+    if (disposed) return;
+    clearDraft();
+    draft = next;
+    applyDraft();
+  };
+
   // --- strati vivi ------------------------------------------------------------
 
   const cameraTransform = (): string => `matrix(${view.scale} 0 0 ${view.scale} ${view.tx} ${view.ty})`;
@@ -454,6 +547,10 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const update = (scene: PaintScene): void => {
     if (disposed) return;
+    // L'anteprima esce prima della riconciliazione, che confronta il DOM
+    // con la scena di prima, e rientra sui nodi nuovi.
+    clearDraft();
+    byPaint = null;
     const rootAttrs = scene.root.attrs;
     const lives = layers.filter((r): r is LiveRecord => r.kind === "live");
     const images = layers.filter((r): r is ImageRecord => r.kind === "image");
@@ -500,6 +597,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     for (const record of layers) if (!used.has(record)) disposeLayer(record);
     layers = out as LayerRecord[];
     place(root, layers.map((record) => record.el));
+    applyDraft();
   };
 
   // --- vista ----------------------------------------------------------------------
@@ -539,6 +637,9 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
+    draft = null;
+    drafted = [];
+    byPaint = null;
     for (const record of layers) disposeLayer(record);
     layers = [];
     root.remove();
@@ -546,7 +647,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
   owner.add(dispose);
 
-  return { update, setView, settle, dispose };
+  return { update, setDraft, setView, settle, dispose };
 }
 
 function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
