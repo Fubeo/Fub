@@ -79,6 +79,26 @@ import type {
   Organization,
   PluginError,
   PluginErrorKind,
+  LiveAddress,
+  LiveCaps,
+  LiveClock,
+  LiveDevice,
+  LiveEndReason,
+  LiveEvent,
+  LiveLeaveReason,
+  LiveNackReason,
+  LivePairing,
+  LivePendingCommit,
+  LiveReleaseReason,
+  LiveSessionInfo,
+  LiveShellMessage,
+  LiveStart,
+  LiveStarted,
+  LiveStats,
+  LiveStatus,
+  LiveStopReport,
+  LiveView,
+  LiveWriterStatus,
 } from "./contract";
 import type {
   ConfigFileKind, ConfigReport, ConfigStatus, DemoClosed, DemoOpened, DiagnosticSummary,
@@ -847,6 +867,24 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   }),
   ConfigReport: keysOf<ConfigReport>({ kind: true, path: true, status: true }),
   RecoverOutcome: keysOf<RecoverOutcome>({ backup: true, detail: true, restart_required: true }),
+  // La sessione live: le chiavi sono i nomi dei tipi di `fub_live::host`,
+  // che di qua portano il prefisso `Live`.
+  LiveStarted: keysOf<LiveStarted>({ session: true, pairing: true, addresses: true }),
+  SessionInfo: keysOf<LiveSessionInfo>({ session: true, addr: true, fingerprint: true, hostName: true }),
+  Pairing: keysOf<LivePairing>({ payload: true, qrSvg: true, expiresInMs: true }),
+  LiveAddress: keysOf<LiveAddress>({ addr: true, interface: true, defaultRoute: true }),
+  LiveStatus: keysOf<LiveStatus>({
+    ended: true, seq: true, pairingExpiresInMs: true, writer: true, pending: true, stats: true,
+  }),
+  WriterStatus: keysOf<LiveWriterStatus>({
+    writer: true, device: true, caps: true, connected: true, resumeExpiresInMs: true, lastC: true, clock: true,
+  }),
+  ClockEstimate: keysOf<LiveClock>({ offsetMs: true, rttMs: true }),
+  PendingCommit: keysOf<LivePendingCommit>({ writer: true, c: true, ops: true }),
+  Stats: keysOf<LiveStats>({
+    accepted: true, refused: true, admitted: true, rejected: true, commits: true, answered: true,
+  }),
+  StopReport: keysOf<LiveStopReport>({ pending: true }),
 };
 const APP_OPTIONAL_KEYS = {
   InstalledPluginInfo: {
@@ -861,7 +899,172 @@ const APP_OPTIONAL_KEYS = {
       "installation", "version", "enabled", "consent", "runtime_known", "revoked",
     ],
   },
+  // Senza indirizzo la sessione ascolta su quello della rotta predefinita.
+  LiveStart: {
+    all: keysOf<Required<LiveStart>>({ document: true, snapshot: true, address: true }),
+    required: ["document", "snapshot"],
+  },
 };
+
+// --- la sessione live (ADR 0204) ---------------------------------------------
+//
+// Gli eventi e i messaggi sono unioni con il tag `t`, e i motivi stringhe; ogni
+// variante ha esattamente le chiavi del suo ramo TS, e ogni contatore `u64` è
+// una stringa nella grafia unica del protocollo.
+
+type LiveEventOf<T extends LiveEvent["t"]> = Extract<LiveEvent, { t: T }>;
+type LiveMessageOf<T extends LiveShellMessage["t"]> = Extract<LiveShellMessage, { t: T }>;
+
+const LIVE_EVENT_KEYS: { [T in LiveEvent["t"]]: string[] } = {
+  writerConnected: keysOf<LiveEventOf<"writerConnected">>({
+    t: true, writer: true, device: true, caps: true, resumed: true,
+  }),
+  writerDisconnected: keysOf<LiveEventOf<"writerDisconnected">>({
+    t: true, writer: true, reason: true, resumable: true,
+  }),
+  writerReleased: keysOf<LiveEventOf<"writerReleased">>({ t: true, writer: true, reason: true }),
+  inkBegin: keysOf<LiveEventOf<"inkBegin">>({
+    t: true, s: true, layer: true, tool: true, fill: true, fillOpacity: true, brush: true,
+  }),
+  inkPoints: keysOf<LiveEventOf<"inkPoints">>({ t: true, s: true, pts: true }),
+  inkEnd: keysOf<LiveEventOf<"inkEnd">>({ t: true, s: true }),
+  inkCancel: keysOf<LiveEventOf<"inkCancel">>({ t: true, s: true }),
+  inkGap: keysOf<LiveEventOf<"inkGap">>({ t: true, strokes: true }),
+  view: keysOf<LiveEventOf<"view">>({ t: true, x: true, y: true, scale: true, w: true, h: true }),
+  commit: keysOf<LiveEventOf<"commit">>({ t: true, writer: true, c: true, ops: true }),
+  clock: keysOf<LiveEventOf<"clock">>({ t: true, offsetMs: true, rttMs: true }),
+  pairingExpired: keysOf<LiveEventOf<"pairingExpired">>({ t: true }),
+  snapshotWanted: keysOf<LiveEventOf<"snapshotWanted">>({ t: true }),
+  ended: keysOf<LiveEventOf<"ended">>({ t: true, reason: true }),
+};
+
+const LIVE_MESSAGE_KEYS: { [T in LiveShellMessage["t"]]: string[] } = {
+  ack: keysOf<LiveMessageOf<"ack">>({ t: true, writer: true, c: true, seq: true, echo: true, duplicate: true }),
+  nack: keysOf<LiveMessageOf<"nack">>({ t: true, writer: true, c: true, reason: true, detail: true, index: true }),
+  ops: keysOf<LiveMessageOf<"ops">>({ t: true, seq: true, ops: true }),
+  snapshot: keysOf<LiveMessageOf<"snapshot">>({ t: true, seq: true, text: true }),
+};
+
+const LIVE_DEVICE_KEYS = keysOf<LiveDevice>({ name: true, kind: true });
+const LIVE_CAPS_KEYS = keysOf<LiveCaps>({ pressure: true, tilt: true, coalesced: true, predicted: true });
+// Il ramo `view` è la vista con il tag davanti.
+const LIVE_VIEW_KEYS = keysOf<LiveView>({ x: true, y: true, scale: true, w: true, h: true });
+
+function expectKeys(value: object, keys: string[]): void {
+  expect(Object.keys(value).sort()).toEqual([...keys].sort());
+}
+
+function expectCounter(value: unknown): void {
+  expect(value).toBeTypeOf("string");
+  expect(value).toMatch(/^(0|[1-9][0-9]*)$/);
+}
+
+function expectOps(ops: unknown[]): void {
+  for (const op of ops) expect((op as { op: unknown }).op).toBeTypeOf("string");
+}
+
+function touchLiveLeaveReason(reason: LiveLeaveReason): string {
+  if (typeof reason === "object") {
+    expectKeys(reason, ["violation"]);
+    expectKeys(reason.violation, ["code"]);
+    expect(Number.isInteger(reason.violation.code)).toBe(true);
+    return "violation";
+  }
+  switch (reason) {
+    case "lost": case "heartbeat": case "writerBye": case "sessionEnded":
+    case "congested": case "tooMuchTraffic":
+      return reason;
+    default: return assertNever(reason);
+  }
+}
+
+function touchLiveReleaseReason(reason: LiveReleaseReason): void {
+  switch (reason) {
+    case "resumeExpired": case "pairingRenewed": return;
+    default: return assertNever(reason);
+  }
+}
+
+function touchLiveEndReason(reason: LiveEndReason): void {
+  switch (reason) {
+    case "hostClosing": case "terminated": case "documentClosed": case "readOnly": return;
+    default: return assertNever(reason);
+  }
+}
+
+function touchLiveNackReason(reason: LiveNackReason): void {
+  switch (reason) {
+    case "missing-target": case "missing-parent": case "missing-anchor": case "duplicate-id":
+    case "invalid-elem": case "locked": case "foreign": case "cycle": case "limit": case "read-only":
+      return;
+    default: return assertNever(reason);
+  }
+}
+
+function touchLiveEvent(event: LiveEvent): void {
+  expectKeys(event, LIVE_EVENT_KEYS[event.t] ?? []);
+  switch (event.t) {
+    case "writerConnected":
+      expectCounter(event.writer);
+      expectKeys(event.device, LIVE_DEVICE_KEYS);
+      expectKeys(event.caps, LIVE_CAPS_KEYS);
+      return;
+    case "writerDisconnected":
+      expectCounter(event.writer);
+      touchLiveLeaveReason(event.reason);
+      return;
+    case "writerReleased":
+      expectCounter(event.writer);
+      touchLiveReleaseReason(event.reason);
+      return;
+    case "inkBegin":
+      expect(["pen", "highlighter"]).toContain(event.tool);
+      return;
+    case "inkPoints":
+      for (const point of event.pts) expect(point).toHaveLength(4);
+      return;
+    case "inkEnd": case "inkCancel": case "inkGap": case "clock":
+    case "pairingExpired": case "snapshotWanted":
+      return;
+    case "view":
+      expect(LIVE_EVENT_KEYS.view).toEqual(["t", ...LIVE_VIEW_KEYS].sort());
+      return;
+    case "commit":
+      expectCounter(event.writer);
+      expectCounter(event.c);
+      expectOps(event.ops);
+      return;
+    case "ended":
+      touchLiveEndReason(event.reason);
+      return;
+    default: return assertNever(event);
+  }
+}
+
+function touchLiveShellMessage(message: LiveShellMessage): void {
+  expectKeys(message, LIVE_MESSAGE_KEYS[message.t] ?? []);
+  switch (message.t) {
+    case "ack":
+      expectCounter(message.writer);
+      expectCounter(message.c);
+      expectCounter(message.seq);
+      expectOps(message.echo);
+      return;
+    case "nack":
+      expectCounter(message.writer);
+      expectCounter(message.c);
+      touchLiveNackReason(message.reason);
+      return;
+    case "ops":
+      expectCounter(message.seq);
+      expectOps(message.ops);
+      return;
+    case "snapshot":
+      expectCounter(message.seq);
+      return;
+    default: return assertNever(message);
+  }
+}
 
 function touchConfigFileKind(kind: ConfigFileKind): void {
   switch (kind) {
@@ -939,7 +1142,10 @@ describe("mirror TS↔Rust", () => {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
-    for (const type of ["ConfigFileKind", "ConfigStatus", "RecoverAction"]) {
+    for (const type of [
+      "ConfigFileKind", "ConfigStatus", "RecoverAction",
+      "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
+    ]) {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
@@ -1266,6 +1472,59 @@ describe("mirror TS↔Rust", () => {
       (l) => l.utc_offset_minutes % 60 !== 0,
     );
     expect(split, "manca il campione col fuso non a ore intere").toBeTruthy();
+  });
+
+  it("ogni evento e ogni messaggio della sessione live sono del mirror, in tutte e due le direzioni", () => {
+    const events = appFixture.LiveEvent as LiveEvent[];
+    for (const event of events) touchLiveEvent(event);
+    expect([...new Set(events.map((event) => event.t))].sort()).toEqual(Object.keys(LIVE_EVENT_KEYS).sort());
+
+    const messages = appFixture.ShellMessage as LiveShellMessage[];
+    for (const message of messages) touchLiveShellMessage(message);
+    expect([...new Set(messages.map((message) => message.t))].sort()).toEqual(Object.keys(LIVE_MESSAGE_KEYS).sort());
+
+    // I motivi: ogni stringa che Rust sa dire, e solo quelle.
+    const leaves = (appFixture.LeaveReason as LiveLeaveReason[]).map(touchLiveLeaveReason);
+    expect(new Set(leaves).size).toBe(7);
+    for (const reason of appFixture.ReleaseReason as LiveReleaseReason[]) touchLiveReleaseReason(reason);
+    expect(appFixture.ReleaseReason).toHaveLength(2);
+    for (const reason of appFixture.EndReason as LiveEndReason[]) touchLiveEndReason(reason);
+    expect(appFixture.EndReason).toHaveLength(4);
+    for (const reason of appFixture.NackReason as LiveNackReason[]) touchLiveNackReason(reason);
+    expect(appFixture.NackReason).toHaveLength(10);
+  });
+
+  it("la richiesta e lo stato della sessione live portano i contatori come stringhe", () => {
+    for (const start of appFixture.LiveStart as LiveStart[]) {
+      expectKeys(start.document, ["id", "title"]);
+      expectKeys(start.snapshot, ["seq", "text"]);
+      expectCounter(start.snapshot.seq);
+    }
+    for (const started of appFixture.LiveStarted as LiveStarted[]) {
+      expectKeys(started.session, APP_RECORD_KEYS.SessionInfo!);
+      expectKeys(started.pairing, APP_RECORD_KEYS.Pairing!);
+      for (const address of started.addresses) expectKeys(address, APP_RECORD_KEYS.LiveAddress!);
+    }
+    const statuses = appFixture.LiveStatus as LiveStatus[];
+    for (const status of statuses) {
+      expectCounter(status.seq);
+      for (const value of Object.values(status.stats)) expectCounter(value);
+      for (const commit of status.pending) {
+        expectCounter(commit.writer);
+        expectCounter(commit.c);
+      }
+      if (status.writer) {
+        expectKeys(status.writer, APP_RECORD_KEYS.WriterStatus!);
+        expectCounter(status.writer.writer);
+        expectCounter(status.writer.lastC);
+      }
+    }
+    // Senza scrittore il campo c'è, e vale `null`.
+    expect(statuses.some((status) => status.writer === null), "manca lo stato senza scrittore").toBe(true);
+    for (const writer of appFixture.WriterStatus as LiveWriterStatus[]) {
+      expectKeys(writer.device, LIVE_DEVICE_KEYS);
+      expectKeys(writer.caps, LIVE_CAPS_KEYS);
+    }
   });
 
   it("gli u64 identità/impronta attraversano l'IPC come stringhe", () => {

@@ -26,6 +26,7 @@ test usano un fake.
 | impostazioni | schema, valori e scrittura |
 | tema | manifest e artefatti della skin |
 | eventi | ascolto del canale tipizzato |
+| sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
@@ -78,6 +79,45 @@ battuta attraversa IPC: la shell pubblica una sola operazione al commit.
 Provider nativo e proxy WASM devono osservare la stessa famiglia/versione,
 limiti, fallback ed errori.
 
+
+## Sessione live
+
+Un tablet scrive su un disegno aperto in una finestra. Il protocollo e la
+composizione nell'app sono in [Sessione live](live-session.md); qui c'è il
+confine con la shell.
+
+| Comando | Cosa fa |
+|---|---|
+| `live_start` | avvia la sessione di un documento e apre il suo canale di eventi |
+| `live_pairing` | il QR in corso, o con `renew` uno nuovo |
+| `live_send` | manda allo scrittore `ack`, `nack`, `ops` o `snapshot` |
+| `live_status` | stato, scrittore, commit in attesa e contatori |
+| `live_stop` | chiude con un motivo e restituisce i commit senza risposta |
+
+`live_start` riceve il documento, lo snapshot iniziale e, se la shell lo
+sceglie, un indirizzo. Restituisce la sessione, il primo QR e gli indirizzi
+privati delle interfacce attive, quello della rotta predefinita per primo.
+Senza indirizzo la sessione ascolta su quello della rotta predefinita.
+
+Gli eventi arrivano su un `Channel` di Tauri che la shell passa a
+`live_start`: ogni messaggio è un gruppo di eventi, nell'ordine della
+sessione, e dopo `ended` il canale si chiude. Il canale non è autorevole:
+i commit senza risposta tornano da `live_status` e da `live_stop`.
+
+I tipi usano i nomi in camelCase e il tipo in `t`; i contatori del protocollo
+sono `u64` e viaggiano come stringhe. La shell li ha in `contract.ts` con il
+prefisso `Live`, e il fake host simula la sessione con `liveEmit`.
+
+| Errore | Quando |
+|---|---|
+| `not_found` | sessione sconosciuta o di un'altra finestra, risposta a un commit che non è in attesa, indirizzo non disponibile |
+| `already_exists` | il documento ha già una sessione, QR nuovo con lo scrittore collegato |
+| `cancelled` | messaggio o QR nuovo dopo la fine della sessione |
+| `conflict` | un `seq` che torna indietro |
+| `bad_args` | documento o snapshot iniziale non validi, messaggio oltre i limiti, snapshot oltre 20 MiB |
+| `unserved` | nessuna interfaccia attiva ha un indirizzo IPv4 privato |
+| `io` | interfacce di rete illeggibili, porta occupata |
+| `internal` | certificato, generatore casuale o QR non disponibili |
 
 ## Tipi principali
 
