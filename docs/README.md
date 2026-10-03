@@ -62,6 +62,7 @@ flowchart LR
 - [Layout su disco](reference/on-disk-layout.md)
 - [Contratto IPC](reference/ipc-contract.md)
 - [Permessi e sicurezza](reference/permissions-and-security.md)
+- [Formato della scena](reference/scene-format.md)
 
 ## Vedere stato e direzione
 
