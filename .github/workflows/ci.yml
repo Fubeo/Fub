@@ -111,6 +111,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: clippy con la feature `draw` dell'host (FUORI_DAL_DEFAULT)
         run: cargo clippy -p fub-host --features draw --all-targets -- -D warnings
+      - name: clippy con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
+        run: cargo clippy -p fub-features --features draw --all-targets -- -D warnings
       - name: Il ramo Windows del kernel, compilato da qui
         run: cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
 
@@ -148,6 +150,8 @@ jobs:
       - run: cargo test --workspace --no-fail-fast
       - name: le scene di FubDraw, con la feature `draw` dell'host (FUORI_DAL_DEFAULT)
         run: cargo test -p fub-host --features draw --no-fail-fast
+      - name: «Nuovo disegno» e l'export dei disegni, con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
+        run: cargo test -p fub-features --features draw --no-fail-fast
 
   docs:
     name: documentazione canonica

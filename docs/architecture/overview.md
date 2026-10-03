@@ -70,6 +70,7 @@ flowchart TD
     importers --> abi
     features --> abi
     features --> base
+    features --> svg
     markdown --> abi
     markdown --> sdk
     sheet --> abi
@@ -110,7 +111,11 @@ deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 `fub-format-svg`, il provider del [formato della
 scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
 `draw`: l'arco `host --> svg` è una dipendenza facoltativa, fuori dal
-`default`.
+`default`. La stessa feature accende in `fub-features` l'export dei disegni in
+PNG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati, e il
+comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
+provider: per questo anche `features --> svg` è un arco facoltativo, come
+`features --> base` per le basi. *(proposta del 3 ottobre 2026, da rivedere)*
 
 ## Flusso di un comando
 

@@ -588,6 +588,13 @@ fn register_feature(
             }
         }
     }
+    if let Some(build) = feature.exports {
+        for provider in build() {
+            if let Err(error) = registrar.register_export_provider(provider) {
+                failures.push(format!("export provider not registered: {error}"));
+            }
+        }
+    }
     if let Some(build) = feature.view {
         failures.extend(register_view(registrar, build()));
     }

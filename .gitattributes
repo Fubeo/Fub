@@ -23,3 +23,10 @@ crates/fub-format-svg/tests/fixtures/*.fubann -text
 # `foreign-crlf-bom.svg` esiste per provare che la riscrittura dei
 # collegamenti lascia identici BOM e CRLF.
 crates/fub-format-svg/tests/fixtures/*.svg -text
+
+# L'export dei disegni (`fub-features`, feature `draw`): i caratteri entrano
+# nel binario con `include_bytes!`, e le baseline del PNG e del PDF sono byte
+# da confrontare. `text=auto` li riconoscerebbe già come binari; scriverlo
+# toglie il dubbio a un PDF che per caso non avesse un byte nullo.
+crates/fub-features/fonts/*.ttf -text
+crates/fub-features/tests/baselines/draw/* -text
