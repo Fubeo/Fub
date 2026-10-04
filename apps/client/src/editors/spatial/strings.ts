@@ -314,7 +314,12 @@ const IT = {
   "draw.link.nested": "Non collegato: fra gli oggetti scelti c’è già un collegamento, e un collegamento non ne contiene un altro. Toglilo prima, o sceglilo da solo per cambiarlo.",
   "draw.link.open.none": "Scegli un collegamento per aprire la sua nota.",
   "draw.keys.link": "Collega a una nota, o cambia il collegamento scelto",
-  "draw.keys.link.open": "Apre la nota del collegamento scelto"
+  "draw.keys.link.open": "Apre la nota del collegamento scelto",
+  "draw.level.essential": "Essenziale",
+  "draw.level.standard": "Standard",
+  "draw.level.expert": "Esperto",
+  "draw.keys.from_level": "{group} · dal livello {level}",
+  "draw.keys.more": "Il livello di adesso è «{level}». I tasti qui sotto valgono da un livello più alto, che si sceglie nelle Impostazioni, nel gruppo «Disegni»."
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -625,7 +630,12 @@ const EN: Record<DrawKey, string> = {
   "draw.link.nested": "Not linked: a selected object already is a link, and a link cannot hold another. Remove it first, or select it alone to change it.",
   "draw.link.open.none": "Select a link to open its note.",
   "draw.keys.link": "Link to a note, or change the selected link",
-  "draw.keys.link.open": "Open the note of the selected link"
+  "draw.keys.link.open": "Open the note of the selected link",
+  "draw.level.essential": "Essential",
+  "draw.level.standard": "Standard",
+  "draw.level.expert": "Expert",
+  "draw.keys.from_level": "{group} · from the {level} level",
+  "draw.keys.more": "The current level is “{level}”. The keys below work from a higher level, chosen in Settings, in the “Drawings” group."
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

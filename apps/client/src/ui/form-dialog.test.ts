@@ -132,4 +132,51 @@ describe("showKeys", () => {
     (document.activeElement as HTMLButtonElement).click();
     await closed;
   });
+
+  it("«Mostra tutto» aggiunge in fondo i tasti tenuti da parte, con la loro frase, e li toglie", async () => {
+    const closed = showKeys("Tasti del disegno", [{ title: "Strumenti", rows: [["v", "Seleziona"]] }], {
+      groups: [
+        { title: "Strumenti · dal livello Standard", rows: [["h", "Evidenziatore"]] },
+        { title: "Griglia · dal livello Standard", rows: [["#", "Mostra la griglia"]] },
+      ],
+      note: "I tasti qui sotto valgono da un livello più alto.",
+    });
+    const toggle = dialog().querySelector<HTMLButtonElement>(".keys-show-all")!;
+    const extra = dialog().querySelector<HTMLElement>(".keys-more")!;
+    expect(toggle.textContent).toBe("Mostra tutto");
+    expect(toggle.getAttribute("aria-controls")).toBe(extra.id);
+    expect(extra.closest(".keys-list"), "scorre con gli altri").not.toBeNull();
+    const buttons = [...dialog().querySelectorAll(".palette-actions button")].map((button) => button.textContent);
+    expect(buttons, "prima di Chiudi").toEqual(["Mostra tutto", "Chiudi"]);
+    expect(document.activeElement?.textContent, "il fuoco resta su Chiudi").toBe("Chiudi");
+    expect(extra.hidden).toBe(true);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+
+    toggle.click();
+    expect(extra.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(extra.querySelector(".keys-note")!.textContent).toBe("I tasti qui sotto valgono da un livello più alto.");
+    const captions = [...dialog().querySelectorAll("caption")].map((caption) => caption.textContent);
+    expect(captions).toEqual(["Strumenti", "Strumenti · dal livello Standard", "Griglia · dal livello Standard"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+
+    toggle.click();
+    expect(extra.hidden).toBe(true);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    dialog().querySelector<HTMLButtonElement>(".primary")!.click();
+    await closed;
+  });
+
+  it("senza niente da aggiungere, nessun interruttore", async () => {
+    const closed = showKeys("Tasti del disegno", [{ title: "Strumenti", rows: [["v", "Seleziona"]] }], {
+      groups: [],
+      note: "Niente sopra.",
+    });
+    expect(dialog().querySelector(".keys-show-all")).toBeNull();
+    expect(dialog().querySelector(".keys-more")).toBeNull();
+    expect(dialog().textContent).not.toContain("Niente sopra.");
+    dialog().querySelector<HTMLButtonElement>(".primary")!.click();
+    await closed;
+  });
 });

@@ -219,6 +219,26 @@
   font-weight: normal;
   white-space: nowrap;
 }
+/* I tasti tenuti da parte, che «Mostra tutto» aggiunge in fondo con la frase
+   che dice perché non valgono adesso. L'interruttore sta a sinistra, lontano
+   da «Chiudi», e premuto si vede anche senza colore: bordo e fondo. */
+.modale .keys-more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.modale .keys-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .palette-actions .keys-show-all {
+  margin-inline-end: auto;
+}
+.modale .palette-actions .keys-show-all[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
 
 .modale .palette-summary {
   color: var(--accent-soft);

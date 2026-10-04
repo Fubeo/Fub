@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { icon } from "../../../ui/icons";
-import { DEFAULT_TOOL, reaches, TOOLS, toolForKey, toolsFor, toolSpec } from "./registry";
+import { DEFAULT_TOOL, isLevel, levelsAbove, reaches, TOOLS, toolForKey, toolsFor, toolSpec } from "./registry";
 
 describe("il registro degli strumenti", () => {
   it("dà all'Essenziale i sette strumenti, nell'ordine della barra", () => {
@@ -20,6 +20,14 @@ describe("il registro degli strumenti", () => {
     expect(reaches("standard", "standard")).toBe(true);
     expect(reaches("standard", "expert")).toBe(false);
     expect(reaches("essential", "standard")).toBe(false);
+  });
+
+  it("riconosce i nomi dei livelli, e sa quali stanno sopra", () => {
+    expect(["essential", "standard", "expert"].every(isLevel)).toBe(true);
+    for (const other of ["Standard", "", "beginner", 1, null, undefined]) expect(isLevel(other)).toBe(false);
+    expect(levelsAbove("essential")).toEqual(["standard", "expert"]);
+    expect(levelsAbove("standard")).toEqual(["expert"]);
+    expect(levelsAbove("expert")).toEqual([]);
   });
 
   it("dà a ogni strumento un tasto suo, una lettera minuscola", () => {

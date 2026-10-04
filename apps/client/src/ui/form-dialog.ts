@@ -4,6 +4,7 @@
 // disegno: il loro codice arriva con lui, e non pesa sulla shell.
 
 import { t } from "../i18n/strings";
+import { identifier } from "./a11y";
 import { displayBinding, keyName, modifierName, parseChords } from "./commands";
 import { actions, openFrame } from "./dialogs";
 
@@ -206,9 +207,43 @@ function keysOf(binding: string): HTMLElement[] {
   });
 }
 
+/// I gruppi che l'elenco dei tasti tiene da parte, e la frase che dice
+/// perché: si aggiungono in fondo con «Mostra tutto».
+export interface MoreKeys {
+  readonly groups: readonly KeyGroup[];
+  readonly note: string;
+}
+
+/// Un gruppo di tasti come tabella, con le righe intestate dai tasti.
+function keysTable(group: KeyGroup): HTMLTableElement {
+  const table = document.createElement("table");
+  table.className = "keys-table";
+  const caption = document.createElement("caption");
+  caption.textContent = group.title;
+  const body = document.createElement("tbody");
+  for (const [keys, action] of group.rows) {
+    const row = document.createElement("tr");
+    const head = document.createElement("th");
+    head.scope = "row";
+    const parts = keysOf(keys);
+    parts.forEach((kbd, index) => {
+      if (index > 0) head.append(` ${t("keys.or")} `);
+      head.append(kbd);
+    });
+    const cell = document.createElement("td");
+    cell.textContent = action;
+    row.append(head, cell);
+    body.append(row);
+  }
+  table.append(caption, body);
+  return table;
+}
+
 /// L'elenco dei tasti, una tabella per gruppo. Si chiude con Esc o con
-/// «Chiudi», e il fuoco torna dov'era, come da ogni modale.
-export function showKeys(title: string, groups: readonly KeyGroup[]): Promise<void> {
+/// «Chiudi», e il fuoco torna dov'era, come da ogni modale. Con `more`,
+/// l'interruttore «Mostra tutto» aggiunge in fondo la sua frase e i suoi
+/// gruppi, e premuto di nuovo li toglie.
+export function showKeys(title: string, groups: readonly KeyGroup[], more?: MoreKeys): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (): void => {
@@ -224,31 +259,33 @@ export function showKeys(title: string, groups: readonly KeyGroup[]): Promise<vo
     list.tabIndex = 0;
     list.setAttribute("role", "region");
     list.setAttribute("aria-label", title);
-    for (const group of groups) {
-      const table = document.createElement("table");
-      table.className = "keys-table";
-      const caption = document.createElement("caption");
-      caption.textContent = group.title;
-      const body = document.createElement("tbody");
-      for (const [keys, action] of group.rows) {
-        const row = document.createElement("tr");
-        const head = document.createElement("th");
-        head.scope = "row";
-        const parts = keysOf(keys);
-        parts.forEach((kbd, index) => {
-          if (index > 0) head.append(` ${t("keys.or")} `);
-          head.append(kbd);
-        });
-        const cell = document.createElement("td");
-        cell.textContent = action;
-        row.append(head, cell);
-        body.append(row);
-      }
-      table.append(caption, body);
-      list.append(table);
-    }
+    list.append(...groups.map(keysTable));
     const row = document.createElement("div");
     row.className = "palette-actions";
+    if (more !== undefined && more.groups.length > 0) {
+      const extra = document.createElement("div");
+      extra.className = "keys-more";
+      extra.id = identifier("keys-more");
+      extra.hidden = true;
+      const note = document.createElement("p");
+      note.className = "keys-note";
+      note.textContent = more.note;
+      extra.append(note, ...more.groups.map(keysTable));
+      list.append(extra);
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "keys-show-all";
+      toggle.textContent = t("keys.show_all");
+      toggle.setAttribute("aria-pressed", "false");
+      toggle.setAttribute("aria-controls", extra.id);
+      toggle.addEventListener("click", () => {
+        extra.hidden = !extra.hidden;
+        toggle.setAttribute("aria-pressed", String(!extra.hidden));
+        // Ciò che si aggiunge sta in fondo all'elenco: lo si porta a vista.
+        if (!extra.hidden) extra.scrollIntoView?.({ block: "nearest" });
+      });
+      row.append(toggle);
+    }
     const close = document.createElement("button");
     close.type = "button";
     close.className = "primary";
