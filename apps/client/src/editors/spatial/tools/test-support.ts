@@ -4,7 +4,7 @@
 import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
 import type { Bounds } from "../scene/geometry";
-import { SceneIndexer, type SceneIndex } from "./hit";
+import { SceneIndexer, type SceneIndex, type Unit } from "./hit";
 
 export const LAYER = '<g id="l1" fub:layer="Livello 1">';
 
@@ -15,6 +15,8 @@ export interface Opened {
   reindex(): SceneIndex;
   /// Il riquadro di tutto il disegno di adesso.
   extent(): Bounds | null;
+  /// I collegamenti che si vedono adesso, a ogni profondità.
+  links(): Unit[];
 }
 
 export function open(source: string): Opened {
@@ -29,5 +31,9 @@ export function open(source: string): Opened {
     builder.build(engine);
     return indexer.extent(engine.model!);
   };
-  return { engine, index: reindex(), reindex, extent };
+  const links = (): Unit[] => {
+    builder.build(engine);
+    return indexer.links(engine.model!);
+  };
+  return { engine, index: reindex(), reindex, extent, links };
 }

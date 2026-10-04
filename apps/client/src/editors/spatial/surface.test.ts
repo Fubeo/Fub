@@ -7,7 +7,8 @@ import type { EditorSurface } from "../core/registry";
 import type { EditorChange } from "../core/text-operation";
 import { doc, HEAD } from "./scene/test-support";
 import { VECTOR_MODES } from "./modes";
-import { mountVectorSurface } from "./surface";
+import { clearHistory, recentNotices } from "../../ui/notify";
+import { linkHref, mountVectorSurface, type VectorSurfaceOptions } from "./surface";
 import { LAYER } from "./tools/test-support";
 
 const SOURCE = doc(
@@ -21,12 +22,16 @@ const MOUSE = { pointerId: 1, pointerType: "mouse" } as const;
 let parent: HTMLElement;
 let mounted: { surface: EditorSurface; changes: EditorChange[]; selections: { count: number }; parent: HTMLElement }[];
 
-function mount(text: string | null = SOURCE, at: HTMLElement = parent): { surface: EditorSurface; changes: EditorChange[]; selections: { count: number } } {
+function mount(
+  text: string | null = SOURCE,
+  at: HTMLElement = parent,
+  shell: Pick<VectorSurfaceOptions, "onOpenPath" | "onPickLink"> = {},
+): { surface: EditorSurface; changes: EditorChange[]; selections: { count: number } } {
   const changes: EditorChange[] = [];
   const selections = { count: 0 };
   const surface = mountVectorSurface(
     { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
-    { onChange: (change) => changes.push(change), onSelectionChange: () => selections.count++ },
+    { onChange: (change) => changes.push(change), onSelectionChange: () => selections.count++, ...shell },
   );
   if (text !== null) surface.buffer!.setDoc(text);
   const entry = { surface, changes, selections, parent: at };
@@ -331,6 +336,81 @@ describe("la Lettura", () => {
   it("anche un documento che si guarda soltanto ha i suoi oggetti a parole", () => {
     mount(DOCTYPE);
     expect(parent.querySelector(".vector-about-objects summary")!.textContent).toBe("Oggetti del disegno (1)");
+  });
+});
+
+describe("i collegamenti", () => {
+  const NOTE = "../Note/Ciclo%20dell'acqua.md";
+  const LINKED = doc(
+    `<title>Casa</title>${LAYER}<a id="ol1l1l1l1" href="${NOTE}"><rect id="o1a2b3c4d" x="60" y="60" width="20" height="20"/></a>` +
+      `<g id="og1g1g1g1"><a id="ol2l2l2l2" href="pianta.svg"><rect x="0" y="0" width="5" height="5"/></a><a href="${NOTE}"><rect x="10" y="0" width="5" height="5"/></a></g>` +
+      '<a id="ol3l3l3l3" href="https://example.org"><rect x="20" y="0" width="5" height="5"/></a></g>',
+  );
+  /// Aspetta che la shell riceva la richiesta.
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("portano a una nota con un href relativo al disegno, scritto come lo scrive il kernel", () => {
+    expect(linkHref("disegni/casa.svg", "Note/Ciclo dell'acqua.md")).toBe(NOTE);
+    expect(linkHref("disegni/casa.svg", "disegni/pianta.svg")).toBe("pianta.svg");
+    expect(linkHref("disegni/casa.svg", "disegni/sotto/nota.md")).toBe("sotto/nota.md");
+    expect(linkHref("casa.svg", "Perché è così.md")).toBe("Perché%20è%20così.md");
+    expect(linkHref("casa.svg", "100% vero?.md")).toBe("100%25%20vero%3F.md");
+    // Un primo segmento che si leggerebbe come uno schema prende `./`.
+    expect(linkHref("casa.svg", "nota:1.md")).toBe("./nota:1.md");
+    expect(linkHref("disegni/casa.svg", "disegni/nota:1.md")).toBe("./nota:1.md");
+    expect(linkHref("disegni/casa.svg", "altro/nota:1.md")).toBe("../altro/nota:1.md");
+  });
+
+  it("in Lettura sono una riga di pulsanti, una nota ciascuno, che la shell apre", async () => {
+    const opened: string[] = [];
+    const { surface } = mount(LINKED, parent, { onOpenPath: async (path) => void opened.push(path) });
+    surface.setMode!("read");
+    const nav = parent.querySelector<HTMLElement>(".vector-about-links")!;
+    expect(nav.hidden).toBe(false);
+    expect(document.getElementById(nav.getAttribute("aria-labelledby")!)!.textContent).toBe("Collegamenti");
+    // Anche quelli dentro un gruppo; un indirizzo del web non è una nota.
+    const buttons = [...nav.querySelectorAll<HTMLButtonElement>("li > button")];
+    expect(buttons.map((control) => [control.textContent, control.title])).toEqual([
+      ["Ciclo dell'acqua", "Apri «Ciclo dell'acqua»"],
+      ["pianta", "Apri «pianta»"],
+    ]);
+    buttons[1]!.click();
+    await settle();
+    expect(opened).toEqual(["pianta.svg"]);
+    // L'elenco degli oggetti dice dove portano.
+    const details = parent.querySelector<HTMLDetailsElement>(".vector-about-objects")!;
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+    expect(details.querySelector("li > ul > li")!.firstChild!.textContent).toBe("Collegamento a «Ciclo dell'acqua»");
+    // Senza collegamenti, la riga non c'è.
+    surface.buffer!.syncDoc(SOURCE);
+    expect(nav.hidden).toBe(true);
+  });
+
+  it("una nota che non si apre lo dice", async () => {
+    clearHistory();
+    const { surface } = mount(LINKED, parent, { onOpenPath: () => Promise.reject(new Error("non c'è")) });
+    surface.setMode!("read");
+    parent.querySelector<HTMLButtonElement>(".vector-about-link")!.click();
+    await settle();
+    expect(recentNotices().map((notice) => notice.text)).toContain("Non riesco ad aprire «Ciclo dell'acqua»: non c'è");
+  });
+
+  it("nel Disegno i segni e Alt+Invio aprono la nota con la shell", async () => {
+    const opened: string[] = [];
+    mount(LINKED, parent, { onOpenPath: async (path) => void opened.push(path), onPickLink: async () => null });
+    const marks = [...parent.querySelectorAll<HTMLButtonElement>(".draw-link-layer .draw-link-mark")];
+    expect(marks.map((mark) => mark.getAttribute("aria-label"))).toEqual(["Apri «Ciclo dell'acqua»", "Apri «pianta»", "Apri «Ciclo dell'acqua»"]);
+    marks[0]!.click();
+    await settle();
+    expect(opened).toEqual([NOTE]);
+  });
+
+  it("senza una shell che le apre, niente segni né riga", () => {
+    const { surface } = mount(LINKED);
+    expect(parent.querySelector<HTMLElement>(".draw-link-layer")!.hidden).toBe(true);
+    surface.setMode!("read");
+    expect(parent.querySelector<HTMLElement>(".vector-about-links")!.hidden).toBe(true);
   });
 });
 

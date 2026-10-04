@@ -33,6 +33,8 @@ export interface CanvasSurfaceCallbacks {
   readonly onOpenPath?: CanvasEngineOptions["onOpenPath"];
   readonly onCreateNote?: CanvasEngineOptions["onCreateNote"];
   readonly onPickFile?: CanvasEngineOptions["onPickFile"];
+  /** The vault document a drawing's link goes to, chosen by the user: `from` is the drawing, `current` the `href` of the link being changed. */
+  readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
@@ -81,9 +83,17 @@ export function mountCanvasSurface(
   }
   context.parent.replaceChildren();
   if (profile === VECTOR_PROFILE) {
+    // I collegamenti di un disegno sono percorsi relativi al disegno: la shell
+    // li risolve da lì, come quelli di una nota.
+    const openPath = callbacks.onOpenPath;
+    const pickLink = callbacks.onPickDrawingLink;
     return mountVectorSurfaceLazily(context, {
       onChange: (change) => callbacks.onChange(context.paneId, change),
       onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
+      onOpenPath: openPath === undefined ? undefined : async (path) => {
+        await openPath(path, context.documentId);
+      },
+      onPickLink: pickLink === undefined ? undefined : (current) => pickLink(context.documentId, current),
     });
   }
   const host = document.createElement("div");

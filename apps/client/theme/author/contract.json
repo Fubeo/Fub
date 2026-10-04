@@ -268,10 +268,15 @@
     "draw-objects-tree",
     "draw-object",
     "draw-object-mark",
+    "draw-link-layer",
+    "draw-link-mark",
     "vector-notice",
     "vector-about",
     "vector-about-desc",
     "vector-about-objects",
+    "vector-about-links",
+    "vector-about-links-title",
+    "vector-about-link",
     "markdown-preview",
     "markdown-rendered",
     "markdown-code-copy",
@@ -1047,7 +1052,9 @@
         "draw-objects-empty",
         "draw-objects-tree",
         "draw-object",
-        "draw-object-mark"
+        "draw-object-mark",
+        "draw-link-layer",
+        "draw-link-mark"
       ],
       "states": [
         "rest",
@@ -1064,7 +1071,10 @@
         "vector-notice",
         "vector-about",
         "vector-about-desc",
-        "vector-about-objects"
+        "vector-about-objects",
+        "vector-about-links",
+        "vector-about-links-title",
+        "vector-about-link"
       ],
       "states": [
         "rest"
@@ -1876,7 +1886,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 433,
+    "hooks": 438,
     "state_names": 7,
     "assigned_states": 154,
     "components": 48,

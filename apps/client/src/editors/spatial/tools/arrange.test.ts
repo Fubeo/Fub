@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { doc, HEAD } from "../scene/test-support";
 import type { Op } from "../scene/ops";
-import { alignOps, boundsOf, distributeOps, duplicateOps, elemOf, groupOps, nodeOf, orderOps, ungroupOps, type Arranged } from "./arrange";
+import { alignOps, boundsOf, distributeOps, duplicateOps, elemOf, groupOps, isLink, linkOps, linkTarget, nodeOf, orderOps, relinkOps, ungroupOps, unlinkOps, type Arranged } from "./arrange";
 import { gesture, NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { LAYER, open, type Opened } from "./test-support";
@@ -256,6 +256,86 @@ describe("separare", () => {
     const index = applied(opened, arranged);
     expect(keys(index)).toEqual(["oaaaaaaaa", "oxxxxxxxx", "obbbbbbbb", "occcccccc"]);
     expect(new Set(arranged.keys)).toEqual(new Set(keys(index)));
+  });
+});
+
+describe("collegare a una nota", () => {
+  it("mette gli oggetti in un collegamento nuovo, al posto del più alto", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", 0)}${RECT("oxxxxxxxx", 20)}${RECT("obbbbbbbb", 40)}</g>`));
+    const arranged = linkOps(opened.engine.model!, units(opened, "oaaaaaaaa", "obbbbbbbb"), "Note/Ciclo%20dell'acqua.md", ids(opened));
+    if (arranged === null || arranged === "nested") throw new Error("rifiutato");
+    const [link] = arranged.keys;
+    const index = applied(opened, arranged);
+    expect(keys(index)).toEqual(["oxxxxxxxx", link]);
+    expect(isLink(index.get(link!)!)).toBe(true);
+    expect(index.get(link!)!.bounds).toEqual({ min: [0, 0], max: [50, 10] });
+    expect(opened.engine.text).toMatch(new RegExp(`<a id="${link}" href="Note/Ciclo%20dell'acqua.md">\\s*<rect id="oaaaaaaaa"[^>]*/>\\s*<rect id="obbbbbbbb"[^>]*/>\\s*</a>`));
+    expect(linkTarget(nodeOf(opened.engine.model!, index.get(link!)!))).toBe("Note/Ciclo%20dell'acqua.md");
+  });
+
+  it("non mette un collegamento dentro un altro", () => {
+    const opened = open(doc(`${LAYER}<a id="ollllllll" href="a.md">${RECT("oaaaaaaaa", 0)}</a><g id="ogggggggg"><a href="b.md">${RECT("obbbbbbbb", 20)}</a></g>${RECT("occcccccc", 40)}</g>`));
+    const model = opened.engine.model!;
+    expect(linkOps(model, units(opened, "ollllllll", "occcccccc"), "c.md", ids(opened))).toBe("nested");
+    expect(linkOps(model, units(opened, "ogggggggg"), "c.md", ids(opened))).toBe("nested");
+    expect(linkOps(model, units(opened, "occcccccc"), "c.md", ids(opened))).not.toBe("nested");
+  });
+
+  it("cambia la nota di un collegamento, e un xlink:href accanto con lei", () => {
+    const opened = open(doc(`${LAYER}<a id="ollllllll" href="a.md">${RECT("oaaaaaaaa", 0)}</a></g>`));
+    const arranged = relinkOps(opened.engine.model!, opened.index.units[0]!, "b.md", ids(opened));
+    expect(arranged.ops).toEqual([{ op: "set", id: "ollllllll", attrs: { href: "b.md" } }]);
+    applied(opened, arranged);
+    expect(opened.engine.text).toContain('<a id="ollllllll" href="b.md">');
+    expect(relinkOps(opened.engine.model!, opened.reindex().units[0]!, "b.md", ids(opened)).ops).toEqual([]);
+
+    const both = open(doc(`${LAYER}<a id="ollllllll" href="a.md" xlink:href="a.md">${RECT("oaaaaaaaa", 0)}</a></g>`));
+    applied(both, relinkOps(both.engine.model!, both.index.units[0]!, "b.md", ids(both)));
+    expect(both.engine.text).toContain('<a id="ollllllll" href="b.md" xlink:href="b.md">');
+
+    const old = open(doc(`${LAYER}<a xlink:href="a.md">${RECT("oaaaaaaaa", 0)}</a></g>`));
+    const named = relinkOps(old.engine.model!, old.index.units[0]!, "b.md", ids(old));
+    applied(old, named);
+    expect(old.engine.text).toContain(`<a id="${named.keys[0]}" xlink:href="b.md">`);
+    expect(linkTarget(nodeOf(old.engine.model!, old.reindex().units[0]!))).toBe("b.md");
+
+    const bare = open(doc(`${LAYER}<a id="ollllllll">${RECT("oaaaaaaaa", 0)}</a></g>`));
+    expect(linkTarget(nodeOf(bare.engine.model!, bare.index.units[0]!))).toBeNull();
+    applied(bare, relinkOps(bare.engine.model!, bare.index.units[0]!, "b.md", ids(bare)));
+    expect(bare.engine.text).toContain('<a id="ollllllll" href="b.md">');
+  });
+
+  it("legge la nota come SVG 2: href prima di xlink:href, e solo un percorso del vault", () => {
+    const opened = open(doc(
+      `${LAYER}<a id="o11111111" xlink:href="vecchia.md" href=" /Note/nuova.md ">${RECT("oaaaaaaaa", 0)}</a>`
+        + `<a id="o22222222" href="https://example.org">${RECT("obbbbbbbb", 20)}</a></g>`,
+    ));
+    const model = opened.engine.model!;
+    expect(linkTarget(nodeOf(model, opened.index.get("o11111111")!))).toBe("/Note/nuova.md");
+    expect(opened.index.get("o22222222")).toBeNull();
+  });
+
+  it("toglie il collegamento e lascia gli oggetti dov'erano, con ciò che ereditavano", () => {
+    const opened = open(doc(`${LAYER}${RECT("oxxxxxxxx", 90)}<a id="ollllllll" href="a.md" transform="translate(10 0)" fill="#0072b2"><title>Vedi</title>${RECT("oaaaaaaaa", 0)}${RECT("obbbbbbbb", 20)}</a></g>`));
+    const arranged = unlinkOps(opened.engine.model!, opened.index.units, ids(opened));
+    if (arranged === "foreign") throw new Error("estraneo");
+    const index = applied(opened, arranged);
+    expect(keys(index)).toEqual(["oxxxxxxxx", "oaaaaaaaa", "obbbbbbbb"]);
+    expect(new Set(arranged.keys)).toEqual(new Set(keys(index)));
+    expect(opened.engine.text).not.toContain("<a");
+    expect(opened.engine.text).not.toContain("Vedi");
+    expect(opened.engine.text).toContain('<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="#0072b2" transform="matrix(1 0 0 1 10 0)"/>');
+  });
+
+  it("toglie solo i collegamenti, e separa solo i gruppi", () => {
+    const opened = open(doc(`${LAYER}<a id="ollllllll" href="a.md">${RECT("oaaaaaaaa", 0)}</a><g id="ogggggggg">${RECT("obbbbbbbb", 20)}</g></g>`));
+    const unlinked = unlinkOps(opened.engine.model!, opened.index.units, ids(opened));
+    if (unlinked === "foreign") throw new Error("estraneo");
+    expect(keys(applied(opened, unlinked))).toEqual(["oaaaaaaaa", "ogggggggg"]);
+    const again = open(doc(`${LAYER}<a id="ollllllll" href="a.md">${RECT("oaaaaaaaa", 0)}</a><g id="ogggggggg">${RECT("obbbbbbbb", 20)}</g></g>`));
+    const ungrouped = ungroupOps(again.engine.model!, again.index.units, ids(again));
+    if (ungrouped === "foreign") throw new Error("estraneo");
+    expect(keys(applied(again, ungrouped))).toEqual(["ollllllll", "obbbbbbbb"]);
   });
 });
 

@@ -137,6 +137,8 @@ export interface PickOptions<T> {
   readonly items: readonly PickItem<T>[];
   /// Quante voci esistono oltre a quelle elencate, da dire in fondo.
   readonly more?: number;
+  /// Il valore scelto finora: se è fra le voci, l'elenco parte da lui.
+  readonly current?: T;
 }
 
 /// Una scelta in un elenco filtrabile: `null` se l'utente ha annullato.
@@ -169,7 +171,7 @@ export function pickFromList<T>(options: PickOptions<T>): Promise<T | null> {
     more.hidden = !options.more;
     if (options.more) more.textContent = t("dialog.more", { n: options.more });
     let visible: PickItem<T>[] = [];
-    let selected = 0;
+    let selected = Math.max(0, options.items.findIndex((item) => options.current !== undefined && item.value === options.current));
     const render = (): void => {
       const query = input.value.trim().toLocaleLowerCase();
       visible = options.items.filter((item) =>

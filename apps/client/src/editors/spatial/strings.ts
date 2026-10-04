@@ -113,6 +113,7 @@ const IT = {
   "draw.kind.text": "Testo",
   "draw.kind.image": "Immagine",
   "draw.describe.named": "{kind} «{name}»",
+  "draw.describe.link": "{link} a «{note}»",
   "draw.describe.parts.one": "{count} oggetto",
   "draw.describe.parts.other": "{count} oggetti",
   "draw.state.locked": "bloccato",
@@ -296,7 +297,24 @@ const IT = {
   "draw.keys.text.write": "Con lo strumento Testo: scrive dov’è il cursore, o cambia il testo che c’è",
   "draw.keys.text.edit": "Modifica il testo scelto",
   "draw.keys.text.newline": "Va a capo, mentre si scrive",
-  "draw.keys.text.finish": "Conclude il testo, mentre si scrive"
+  "draw.keys.text.finish": "Conclude il testo, mentre si scrive",
+  "draw.link": "Collega a una nota…",
+  "draw.link.change": "Cambia il collegamento…",
+  "draw.link.open": "Apri «{note}»",
+  "draw.unlink": "Togli il collegamento",
+  "draw.action.link": "Collegamento",
+  "draw.action.relink": "Cambio del collegamento",
+  "draw.action.unlink": "Rimozione del collegamento",
+  "draw.linked": "Collegato a «{note}».",
+  "draw.relinked": "Ora il collegamento porta a «{note}».",
+  "draw.unlinked.one": "{count} collegamento tolto.",
+  "draw.unlinked.other": "{count} collegamenti tolti.",
+  "draw.unlink.none": "Fra gli oggetti scelti non c’è un collegamento.",
+  "draw.unlink.foreign": "Non tolto: il collegamento ha parti di un altro programma, che non seguirebbero la sua posizione o il suo stile.",
+  "draw.link.nested": "Non collegato: fra gli oggetti scelti c’è già un collegamento, e un collegamento non ne contiene un altro. Toglilo prima, o sceglilo da solo per cambiarlo.",
+  "draw.link.open.none": "Scegli un collegamento per aprire la sua nota.",
+  "draw.keys.link": "Collega a una nota, o cambia il collegamento scelto",
+  "draw.keys.link.open": "Apre la nota del collegamento scelto"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -406,6 +424,7 @@ const EN: Record<DrawKey, string> = {
   "draw.kind.text": "Text",
   "draw.kind.image": "Image",
   "draw.describe.named": "{kind} “{name}”",
+  "draw.describe.link": "{link} to “{note}”",
   "draw.describe.parts.one": "{count} object",
   "draw.describe.parts.other": "{count} objects",
   "draw.state.locked": "locked",
@@ -589,7 +608,24 @@ const EN: Record<DrawKey, string> = {
   "draw.keys.text.write": "With the Text tool: write where the cursor is, or change the text there",
   "draw.keys.text.edit": "Edit the selected text",
   "draw.keys.text.newline": "Start a new line, while writing",
-  "draw.keys.text.finish": "Finish the text, while writing"
+  "draw.keys.text.finish": "Finish the text, while writing",
+  "draw.link": "Link to a note…",
+  "draw.link.change": "Change link…",
+  "draw.link.open": "Open “{note}”",
+  "draw.unlink": "Remove link",
+  "draw.action.link": "Link",
+  "draw.action.relink": "Link change",
+  "draw.action.unlink": "Link removal",
+  "draw.linked": "Linked to “{note}”.",
+  "draw.relinked": "The link now goes to “{note}”.",
+  "draw.unlinked.one": "{count} link removed.",
+  "draw.unlinked.other": "{count} links removed.",
+  "draw.unlink.none": "None of the selected objects is a link.",
+  "draw.unlink.foreign": "Not removed: the link has parts from another program that would not follow its position or style.",
+  "draw.link.nested": "Not linked: a selected object already is a link, and a link cannot hold another. Remove it first, or select it alone to change it.",
+  "draw.link.open.none": "Select a link to open its note.",
+  "draw.keys.link": "Link to a note, or change the selected link",
+  "draw.keys.link.open": "Open the note of the selected link"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

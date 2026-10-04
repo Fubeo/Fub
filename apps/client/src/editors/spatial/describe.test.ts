@@ -2,7 +2,7 @@
 // nome di ciascuno.
 
 import { describe as group, expect, it } from "vitest";
-import { countObjects, describe, keyOf, outline, type OutlineNode } from "./describe";
+import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type OutlineNode } from "./describe";
 import { readScene } from "./scene/read";
 import { doc, ink } from "./scene/test-support";
 
@@ -63,6 +63,39 @@ group("l'albero degli oggetti", () => {
     const node = outline(readScene(doc(`<text><tspan>${long}</tspan></text>`)).items)[0]!;
     expect(node.name!.endsWith("…")).toBe(true);
     expect(Array.from(node.name!)).toHaveLength(60);
+  });
+
+  it("dice dove porta un collegamento, col nome della nota", () => {
+    const source = doc(
+      '<g id="l1" fub:layer="Disegno">'
+        + '<a id="a1" href="Note/Ciclo%20dell%E2%80%99acqua.md#Pioggia"><rect width="1" height="1"/></a>'
+        + '<a id="a2" xlink:href="/Mappe/Nuvole.svg"><title>Vedi</title><rect width="1" height="1"/><circle r="1"/></a>'
+        + '<a id="a3"><rect width="1" height="1"/></a>'
+        + "</g>",
+    );
+    const scene = readScene(source);
+    const [layer] = outline(scene.items, sceneTargets(scene));
+    expect(layer!.children.map((node) => node.target)).toEqual(["Note/Ciclo%20dell%E2%80%99acqua.md#Pioggia", "/Mappe/Nuvole.svg", null]);
+    expect(labels(layer!.children)).toEqual([
+      "Collegamento a «Ciclo dell’acqua», 1 oggetto",
+      "  Rettangolo",
+      "Collegamento «Vedi» a «Nuvole», 2 oggetti",
+      "  Rettangolo",
+      "  Cerchio",
+      "Collegamento, 1 oggetto",
+      "  Rettangolo",
+    ]);
+    // Senza chi dice dove portano, un collegamento è un collegamento.
+    expect(outline(scene.items)[0]!.children[0]!.target).toBeNull();
+  });
+
+  it("nomina la nota come il vault nomina una pagina", () => {
+    expect(linkName("Ciclo.md")).toBe("Ciclo");
+    expect(linkName("../a/b/Diario%202026.md")).toBe("Diario 2026");
+    expect(linkName("Bando.pdf.fubann")).toBe("Bando.pdf");
+    expect(linkName(".nascosta")).toBe(".nascosta");
+    expect(linkName("rotto%E2.md")).toBe("rotto%E2");
+    expect(linkName("cartella/")).toBe("cartella/");
   });
 
   it("chiama tratto ogni tratto a penna", () => {

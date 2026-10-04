@@ -216,6 +216,10 @@ interface Style {
   readonly color: string | null;
 }
 
+/// Chi riceve gli oggetti di un documento: il nodo, il suo percorso, il
+/// livello, la matrice e lo stile del genitore.
+type Visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style) => void;
+
 const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, anchor: "start", family: null, weight: null, color: null };
 
 /// Costruisce gli indici di un documento, ricordando la geometria delle
@@ -229,8 +233,31 @@ export class SceneIndexer {
   index(model: DocumentModel): SceneIndex {
     const units: Unit[] = [];
     const layers: LayerInfo[] = [];
-    this.walk(model, false, units, layers);
+    this.walk(model, (layer) => !layer.locked && !layer.hidden, layers, (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style, units));
     return new SceneIndex(units, layers);
+  }
+
+  /// I collegamenti di `model` che si vedono, a ogni profondità: anche
+  /// quelli dentro un gruppo, e quelli dei livelli bloccati che l'indice non
+  /// tocca, perché un collegamento si apre anche lì. La chiave di uno dentro
+  /// un gruppo non è una chiave della selezione.
+  links(model: DocumentModel): Unit[] {
+    const units: Unit[] = [];
+    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style): void => {
+      if (node.details === null) return;
+      if (node.details.role === "link") {
+        this.unit(node, path, layer, parent, style, units);
+        return;
+      }
+      if (node.kind !== "container") return;
+      const attrs = this.attrsOf(node);
+      if (attrs === null || hidden(attrs)) return;
+      const matrix = compose(parent, transformOf(attrs));
+      const inner = styleOf(style, attrs);
+      childLoop(node, (child, index) => visit(child, [...path, index], layer, matrix, inner));
+    };
+    this.walk(model, (layer) => !layer.hidden, [], visit);
+    return units;
   }
 
   /// Il riquadro di tutto ciò che `model` disegna, contorno compreso: anche
@@ -238,7 +265,7 @@ export class SceneIndexer {
   /// che restano nel disegno. `null` se non disegna niente.
   extent(model: DocumentModel): Bounds | null {
     const units: Unit[] = [];
-    this.walk(model, true, units, []);
+    this.walk(model, () => true, [], (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style, units));
     const out = new BoundsBuilder();
     for (const unit of units) {
       if (unit.bounds === null) continue;
@@ -248,9 +275,9 @@ export class SceneIndexer {
     return out.finish();
   }
 
-  /// Gli oggetti e i livelli di `model`; con `all` anche gli oggetti dei
-  /// livelli bloccati o nascosti.
-  private walk(model: DocumentModel, all: boolean, units: Unit[], layers: LayerInfo[]): void {
+  /// I livelli di `model` in `layers`, e i suoi oggetti a `visit`: degli
+  /// oggetti nei livelli, solo quelli dei livelli che `enters` accetta.
+  private walk(model: DocumentModel, enters: (layer: LayerInfo) => boolean, layers: LayerInfo[], visit: Visit): void {
     const root = model.root;
     const rootStyle = styleOf(INITIAL, this.builder.headInfo(root).attrs);
     childLoop(root, (child, index) => {
@@ -258,12 +285,12 @@ export class SceneIndexer {
         if (child.details === null) return;
         const role = child.details.role;
         if (role === "paper" || role === "title" || role === "desc") return;
-        this.unit(child, [index], null, IDENTITY, rootStyle, units);
+        visit(child, [index], null, IDENTITY, rootStyle);
         return;
       }
       const role = child.details!.role;
       if (role !== "layer") {
-        this.unit(child, [index], null, IDENTITY, rootStyle, units);
+        visit(child, [index], null, IDENTITY, rootStyle);
         return;
       }
       const head = this.builder.headInfo(child);
@@ -271,11 +298,11 @@ export class SceneIndexer {
       const layer = child.details!.layer!;
       const info: LayerInfo = { id: child.facts.id, path: [index], name: layer.name, locked: layer.locked, hidden: layer.hidden || head.hidden, matrix };
       layers.push(info);
-      if (!all && (info.locked || info.hidden)) return;
+      if (!enters(info)) return;
       const style = styleOf(rootStyle, head.attrs);
       childLoop(child, (grandchild, inner) => {
         if (grandchild.kind === "leaf" && (grandchild.details === null || grandchild.details.role === "title" || grandchild.details.role === "desc")) return;
-        this.unit(grandchild, [index, inner], info.id, matrix, style, units);
+        visit(grandchild, [index, inner], info.id, matrix, style);
       });
     });
   }

@@ -56,6 +56,35 @@ export function resolutionKey(s: string): string {
   return s.trim().normalize("NFC").toLowerCase();
 }
 
+/// I caratteri ASCII che restano nudi in un riferimento: il set «path» di RFC
+/// 3986 meno le parentesi tonde. Il non-ASCII resta com'è, leggibile.
+const PATH_SAFE = /^[A-Za-z0-9\-._~/:@!$&+,;='*]$/;
+
+/// Il riferimento relativo con cui `from` punta `to`, due `DocId`: dalla
+/// cartella di `from`, coi `../` che servono, e coi caratteri che un path non
+/// può tenere nudi scritti come `%XX`.
+///
+/// Gemella di `fub_abi::rules::path::relative_ref`: è il testo che il kernel
+/// scrive quando riscrive un link dopo un rename, e la shell scrive lo stesso
+/// quando un link nasce, o il primo rename lo riscriverebbe in un diff che
+/// nessuno ha chiesto.
+export function relativeRef(from: string, to: string): string {
+  const cut = from.lastIndexOf("/");
+  const fromDir = from.slice(0, Math.max(cut, 0)).split("/").filter((part) => part !== "");
+  const toParts = to.split("/").filter((part) => part !== "");
+  let common = 0;
+  // L'ultimo segmento di `to` è il file: non conta come cartella in comune
+  // nemmeno se si chiama come una.
+  while (common < fromDir.length && common < toParts.length - 1 && fromDir[common] === toParts[common]) common++;
+  const path = `${"../".repeat(fromDir.length - common)}${toParts.slice(common).join("/")}`;
+  let out = "";
+  for (const char of path) {
+    const code = char.codePointAt(0)!;
+    out += code > 0x7f || PATH_SAFE.test(char) ? char : `%${code.toString(16).toUpperCase().padStart(2, "0")}`;
+  }
+  return out;
+}
+
 // --- la politica dei nomi (§15.5) -------------------------------------------
 
 /// Quale domanda si sta ponendo su un nome. Gemella di

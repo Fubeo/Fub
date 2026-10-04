@@ -41,7 +41,7 @@ use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
 use fub_abi::rules::keys;
-use fub_abi::rules::path::resolution_key;
+use fub_abi::rules::path::{relative_ref, resolution_key};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
 use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
@@ -93,6 +93,40 @@ fn resolution_key_cases() -> Vec<Value> {
     ]
     .into_iter()
     .map(|s| json!({"s": s, "out": resolution_key(s)}))
+    .collect()
+}
+
+/// Il riferimento relativo con cui un documento ne punta un altro: quello che il
+/// kernel scrive quando riscrive un link dopo un rename, e che la shell scrive
+/// quando un disegno si collega a una nota. Due copie che dissentono scrivono
+/// due testi per lo stesso link, e il primo rename li riallinea in un diff che
+/// nessuno ha chiesto.
+///
+/// I casi ostili: la cartella in comune che si ferma prima del file (un file
+/// che si chiama come la cartella del sorgente), i `../`, il non-ASCII che resta
+/// leggibile, lo spazio, le parentesi, `%`, `?` e `#` che si codificano, la
+/// punteggiatura del set «path» che resta nuda, e i due punti, che restano nudi
+/// anche quando il primo segmento sembra uno schema.
+fn relative_ref_cases() -> Vec<Value> {
+    [
+        ("note.md", "altra.md"),
+        ("a/b/disegno.svg", "a/b/nota.md"),
+        ("a/b/disegno.svg", "a/c/nota.md"),
+        ("a/b/disegno.svg", "nota.md"),
+        ("disegno.svg", "a/b/nota.md"),
+        ("a/disegno.svg", "a"),
+        ("a/b/disegno.svg", "a/b"),
+        ("Città/disegno.svg", "Città/Perché è così.md"),
+        ("x.svg", "note (2).md"),
+        ("x.svg", "100% vero?.md"),
+        ("x.svg", "c#.md"),
+        ("x.svg", "nota:1.md"),
+        ("x.svg", "it's!$&+,;=@*~.md"),
+        ("x.svg", "tab\tquote\"<>.md"),
+        ("x.svg", "colori 🎨.md"),
+    ]
+    .into_iter()
+    .map(|(from, to)| json!({"from": from, "to": to, "out": relative_ref(&DocId::new(from), &DocId::new(to))}))
     .collect()
 }
 
@@ -744,6 +778,7 @@ fn expected() -> Value {
         "name_fault": name_fault_cases(),
         "normalized_name": normalized_name_cases(),
         "resolution_key": resolution_key_cases(),
+        "relative_ref": relative_ref_cases(),
         "task_checked": task_checked_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),

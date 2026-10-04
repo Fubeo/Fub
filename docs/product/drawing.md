@@ -40,8 +40,9 @@ In Lettura il file non entra mai nel DOM della shell: è un `<img>` da un blob,
 che non esegue script e non carica risorse. Se il disegno ha un titolo,
 l'immagine si chiama col titolo; altrimenti col nome del file. Sotto
 l'immagine ci sono la descrizione del disegno, che l'immagine annuncia come
-sua, e «Oggetti del disegno», l'elenco degli oggetti in albero: chiuso finché
-non lo si apre, e costruito soltanto allora.
+sua, i collegamenti del disegno, uno per pulsante (vedi «Collegamenti»), e
+«Oggetti del disegno», l'elenco degli oggetti in albero: chiuso finché non lo
+si apre, e costruito soltanto allora.
 
 ## Disegnare
 
@@ -244,6 +245,55 @@ Cambiare un testo che c'è riscrive solo le sue righe, e il resto resta come
 l'ha scritto chi l'ha fatto, anche in un altro programma: una riga nuova
 copia la precedente e ne prende l'interlinea. Si cambia sul posto un testo di
 righe semplici, un `tspan` per riga, che non sta in un gruppo.
+
+## Collegamenti
+
+Un collegamento del disegno è un `a` attorno ad alcuni oggetti, con un `href`
+verso un documento del vault: una nota, un altro disegno, un PDF. Gli altri
+programmi lo seguono come un link, e in Fub backlink e grafo contano i
+collegamenti dei disegni come quelli delle note.
+
+Dal livello Standard, nella barra «Disponi»:
+
+- **Collega a una nota…** (`Ctrl+K`) chiede il documento in un elenco dei
+  file del vault, da filtrare per nome o percorso, e mette gli oggetti scelti
+  in un collegamento nuovo, al posto del più alto. La selezione passa al
+  collegamento. Un collegamento non ne contiene un altro: se fra gli oggetti
+  scelti ce n'è già uno il pulsante è spento, e `Ctrl+K` dice perché.
+- Con un collegamento scelto da solo lo stesso pulsante è **Cambia il
+  collegamento…**: l'elenco parte dal documento a cui porta adesso, e la
+  scelta riscrive soltanto l'`href`, insieme a un `xlink:href` accanto.
+- **Togli il collegamento** (`Ctrl+Maiusc+K`) porta gli oggetti al posto del
+  collegamento, dove si vedevano e con lo stile che ne ereditavano, e la
+  selezione passa a loro. Come per Separa, un collegamento con parti che
+  FubDraw non sa scrivere si toglie solo se non ha niente da portare loro.
+
+Ognuno è un passo di annulla. L'`href` è relativo alla cartella del disegno e
+si scrive come lo scrive Fub quando un documento cambia nome: le lettere
+accentate restano, gli spazi e gli altri caratteri che un URL non ammette
+diventano codici `%`, per esempio `../Note/Perché%20piove.md`, e un nome il
+cui primo segmento sembra uno schema (`nota:1.md`) prende `./` davanti.
+Quando il documento cambia nome o cartella, Fub riscrive il collegamento del
+disegno come quelli delle note
+([formato della scena](../reference/scene-format.md), §9).
+
+A ogni livello, ogni collegamento che si vede ha un segno sopra l'angolo in
+alto a destra, anche dentro un gruppo o in un livello bloccato. Con la
+Selezione, o in un disegno che non si modifica, un tocco sul segno apre il
+documento; con gli altri strumenti il segno si vede soltanto, e il foglio
+resta di chi disegna. `Alt+Invio` apre il documento del collegamento scelto
+da solo, e nella barra «Disponi» lo fa «Apri», col suo nome. L'albero degli
+oggetti dice dove porta un collegamento: «Collegamento a «Ciclo dell'acqua»,
+2 oggetti».
+
+In Lettura l'immagine non si tocca: sotto la descrizione la riga
+«Collegamenti» ha un pulsante per ogni documento a cui il disegno porta, col
+suo nome. Un indirizzo del web non porta nel vault, e non ha segno né
+pulsante. Un documento che non si apre, per esempio perché non c'è più, lo
+dice con un avviso.
+
+Chi monta l'editor sceglie e apre i documenti con `links`; senza, il disegno
+non ha segni né «Collega a una nota…», e un collegamento si toglie lo stesso.
 
 ## Da tastiera
 

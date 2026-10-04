@@ -5,13 +5,16 @@
 // ricava dal testo: lo stesso per l'editor e per un documento che si guarda
 // soltanto, e nessun secondo calcolo. Un nome dice che cosa è l'oggetto e,
 // quando lo sa, come si chiama: il `title` di un gruppo, le parole di un
-// testo, il nome di un livello. Lo stato di un livello è una parola, non un
-// colore. Il colore di un oggetto lo aggiunge chi lo conosce: l'editor, che
-// ha il painter.
+// testo, il nome di un livello. Un collegamento dice anche dove porta, col
+// nome della nota. Lo stato di un livello è una parola, non un colore. Il
+// colore di un oggetto lo aggiunge chi lo conosce: l'editor, che ha il
+// painter.
 
+import { pageName } from "../../rules/mirrored";
 import { plural, t, type DrawKey } from "./strings";
 import type { Role } from "./scene/analysis";
 import type { ElementItem, Item } from "./scene/classify";
+import type { Scene } from "./scene/read";
 
 /// Quanti caratteri di un testo entrano nel nome di un oggetto.
 const NAME_CHARS = 60;
@@ -24,7 +27,35 @@ export interface OutlineNode {
   /// Il nome proprio: il `title` dell'oggetto, il testo, il nome del livello;
   /// `null` se non ne ha.
   readonly name: string | null;
+  /// Dove porta un collegamento: il percorso del vault com'è scritto nel suo
+  /// `href`. `null` per ogni altro oggetto, e per un collegamento che non
+  /// porta nel vault.
+  readonly target: string | null;
   readonly children: readonly OutlineNode[];
+}
+
+/// Dove porta il collegamento `item`, come [`OutlineNode.target`].
+export type LinkTargets = (item: ElementItem) => string | null;
+
+/// Dove portano i collegamenti di una scena letta, dall'indice: un
+/// riferimento e il suo elemento cominciano allo stesso byte.
+export function sceneTargets(scene: Scene): LinkTargets {
+  const byStart = new Map(scene.index.links.map((link) => [link.bytes[0], link.path]));
+  return (item) => byStart.get(item.bytes[0]) ?? null;
+}
+
+/// Il nome della nota a cui porta `target`, un percorso del vault com'è
+/// scritto: il nome della pagina, senza cartelle, estensione e frammento, e
+/// coi caratteri che il percorso codifica.
+export function linkName(target: string): string {
+  const path = target.split("#")[0]!;
+  let decoded = path;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    // Una codifica rotta resta com'è scritta.
+  }
+  return nameOf(pageName(decoded)) ?? nameOf(decoded) ?? target;
 }
 
 /// La chiave con cui l'editor sceglie un oggetto.
@@ -66,13 +97,15 @@ interface Building {
   readonly item: ElementItem;
   readonly key: string;
   name: string | null;
+  readonly target: string | null;
   readonly children: Building[];
 }
 
 /// Gli oggetti di `items` in albero: i figli della radice in cima, e sotto
 /// ciascun contenitore i suoi. Titolo, descrizione e carta non sono oggetti:
-/// il `title` di un contenitore ne diventa il nome.
-export function outline(items: readonly Item[]): OutlineNode[] {
+/// il `title` di un contenitore ne diventa il nome. `targets` dice dove
+/// portano i collegamenti.
+export function outline(items: readonly Item[], targets: LinkTargets = () => null): OutlineNode[] {
   const top: Building[] = [];
   const byPath = new Map<string, Building>();
   for (const item of items) {
@@ -83,7 +116,7 @@ export function outline(items: readonly Item[]): OutlineNode[] {
       if (item.role === "title" && parent !== null && parent !== undefined && parent.name === null) parent.name = nameOf(item.text ?? "");
       continue;
     }
-    const node: Building = { item, key: keyOf(item), name: null, children: [] };
+    const node: Building = { item, key: keyOf(item), name: null, target: item.role === "link" ? targets(item) : null, children: [] };
     if (item.role === "layer") node.name = nameOf(item.layer?.name ?? "");
     else if (item.role === "text") node.name = nameOf((item.lines ?? []).join(" "));
     byPath.set(item.path.join("."), node);
@@ -100,12 +133,13 @@ export interface DescribeOptions {
 }
 
 /// Il nome di un oggetto a parole: «Rettangolo», «Testo «Cucina»», «Livello
-/// «Sfondo», bloccato».
+/// «Sfondo», bloccato», «Collegamento a «Pioggia»».
 export function describe(node: OutlineNode, options: DescribeOptions = {}): string {
   const item = node.item;
   const role = item.role as keyof typeof KINDS;
   const kind = t(item.role === "stroke" && item.stroke?.tool === "highlighter" ? "draw.kind.highlighter" : KINDS[role]);
-  const parts = [node.name === null ? kind : t("draw.describe.named", { kind, name: node.name })];
+  const named = node.name === null ? kind : t("draw.describe.named", { kind, name: node.name });
+  const parts = [node.target === null ? named : t("draw.describe.link", { link: named, note: linkName(node.target) })];
   if (item.layer?.locked) parts.push(t("draw.state.locked"));
   if (item.layer?.hidden) parts.push(t("draw.state.hidden"));
   if (options.color) parts.push(options.color);

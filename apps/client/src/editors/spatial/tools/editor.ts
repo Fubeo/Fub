@@ -61,6 +61,12 @@
 //   (`text.ts`). Lo stesso campo cambia un testo che c'è: col tocco dello
 //   strumento, col doppio tocco della selezione, o con F2. Il testo si scrive
 //   quando il campo si chiude, in un passo di annulla solo.
+// - **Collegamenti.** Dal livello Standard Ctrl+K collega gli oggetti scelti
+//   a una nota del vault, che sceglie chi monta l'editor, o porta a un'altra
+//   nota il collegamento scelto; Ctrl+Maiusc+K lo toglie (`arrange.ts`). A
+//   ogni livello un segno sull'angolo di ogni collegamento ne apre la nota,
+//   con lo strumento Selezione o quando il disegno non si scrive, e Alt+Invio
+//   apre quella del collegamento scelto.
 //
 // La superficie che lo monta nella shell gli passa il motore del
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
@@ -75,7 +81,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import { fit as fitBounds, screenToWorld, zoomAtPoint, type Camera, type ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
-import { countObjects, describe, keyOf, outline, type OutlineNode } from "../describe";
+import { countObjects, describe, keyOf, linkName, outline, type OutlineNode } from "../describe";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
@@ -116,7 +122,27 @@ import {
   transformValue,
   type Destination,
 } from "./edit";
-import { alignOps, distributeOps, duplicateOps, groupOps, isGroup, nodeOf, orderOps, Plan, ungroupOps, type Arranged, type Axis, type Edge, type Order } from "./arrange";
+import {
+  alignOps,
+  distributeOps,
+  duplicateOps,
+  groupOps,
+  holdsLinks,
+  isGroup,
+  isLink,
+  linkOps,
+  linkTarget,
+  nodeOf,
+  orderOps,
+  Plan,
+  relinkOps,
+  ungroupOps,
+  unlinkOps,
+  type Arranged,
+  type Axis,
+  type Edge,
+  type Order,
+} from "./arrange";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -194,6 +220,19 @@ export interface DrawChange {
   readonly origin: "input" | "undo" | "redo";
 }
 
+/// I collegamenti del disegno verso il vault, da chi monta l'editor: chi
+/// sceglie la nota e chi la apre. Senza, l'editor non crea collegamenti e non
+/// li apre, ma li nomina nell'albero e li toglie.
+export interface DrawLinks {
+  /// Chiede la nota a cui portare un collegamento; `current` è l'`href` di
+  /// quello che si cambia, `null` per uno nuovo. Torna l'`href` da scrivere,
+  /// relativo al disegno, o `null` se chi disegna rinuncia.
+  choose(current: string | null): Promise<string | null>;
+  /// Apre la nota a cui porta `href`, com'è scritto nel disegno. Se non ci
+  /// riesce, lo dice chi la apre.
+  open(href: string): void;
+}
+
 export interface DrawEditorOptions {
   /// Il livello degli strumenti (default `essential`); cambia con
   /// `setLevel`.
@@ -208,6 +247,7 @@ export interface DrawEditorOptions {
   readonly grid?: Grid;
   /// Chi disegna ha cambiato la griglia, dal menu o coi tasti.
   readonly onGridChange?: (grid: Grid) => void;
+  readonly links?: DrawLinks;
   readonly onChange?: (change: DrawChange) => void;
   /// La selezione è cambiata: altri oggetti, o gli stessi con chiavi nuove.
   readonly onSelectionChange?: () => void;
@@ -379,12 +419,23 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-page-grid": ["M3 3h18v18H3z", "M9 3v18", "M15 3v18", "M3 9h18", "M3 15h18"],
   "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
   "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
+  "draw-link": ["M9.5 14.5l5-5", "M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5"],
+  "draw-unlink": ["M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5", "M4 8h2.5", "M8 4v2.5", "M20 16h-2.5", "M16 20v-2.5"],
+  "draw-open-link": ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
 /// shell vive, come quelle di serie.
 function ensureIcons(): void {
   for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+}
+
+/// Un collegamento che si vede, col suo segno sul foglio.
+interface LinkMark {
+  readonly unit: Unit;
+  /// Dove porta, com'è scritto.
+  readonly target: string;
+  readonly element: HTMLButtonElement;
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
@@ -851,14 +902,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   arrangeBar.setAttribute("role", "toolbar");
   arrangeBar.hidden = true;
   relabels.push(() => arrangeBar.setAttribute("aria-label", t("draw.arrange")));
-  /// Un pulsante della barra: il nome, e nel suggerimento la scorciatoia.
-  const arrangeButton = (label: DrawKey, iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
-    const control = button(arrangeBar, "draw-button", () => (binding === null ? t(label) : `${t(label)} (${displayBinding(binding)})`), iconName, run);
-    if (binding !== null) {
-      // Un tasto senza modificatori, come F2, si scrive com'è.
-      control.setAttribute("aria-keyshortcuts", ariaBinding(binding) || binding);
-      relabels.push(() => control.setAttribute("aria-label", t(label)));
-    }
+  /// Il nome di un pulsante della barra, e nel suggerimento la scorciatoia.
+  const nameArrange = (control: HTMLButtonElement, text: string, binding: string | null): void => {
+    control.setAttribute("aria-label", text);
+    control.title = binding === null ? text : `${text} (${displayBinding(binding)})`;
+  };
+  /// Un pulsante della barra; il nome è una chiave, o una funzione per quelli
+  /// che cambiano nome con la selezione.
+  const arrangeButton = (label: DrawKey | (() => string), iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
+    const text = typeof label === "function" ? label : () => t(label);
+    const control = button(arrangeBar, "draw-button", text, iconName, run);
+    // Un tasto senza modificatori, come F2, si scrive com'è.
+    if (binding !== null) control.setAttribute("aria-keyshortcuts", ariaBinding(binding) || binding);
+    relabels.push(() => nameArrange(control, text(), binding));
     return control;
   };
   // Un testo scelto da solo si cambia sul posto.
@@ -866,6 +922,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   arrangeButton("draw.duplicate", "draw-duplicate", "Mod-d", () => duplicateSelection());
   const groupButton = arrangeButton("draw.group", "draw-group", "Mod-g", () => groupSelection());
   const ungroupButton = arrangeButton("draw.ungroup", "draw-ungroup", "Mod-Shift-g", () => ungroupSelection());
+  // Il collegamento scelto da solo: dove porta, e il suo nome. Il pulsante
+  // che collega lo cambia, e quello che apre lo nomina.
+  let shownLink: { readonly target: string | null } | null = null;
+  const linkText = (): string => t(shownLink === null ? "draw.link" : "draw.link.change");
+  const openLinkText = (): string => {
+    const target = shownLink?.target ?? null;
+    return t("draw.link.open", { note: target === null ? "" : linkName(target) });
+  };
+  const linkButton = arrangeButton(linkText, "draw-link", "Mod-k", () => void linkSelection());
+  linkButton.setAttribute("aria-haspopup", "dialog");
+  const openLinkButton = arrangeButton(openLinkText, "draw-open-link", "Alt-Enter", () => openSelectedLink());
+  const unlinkButton = arrangeButton("draw.unlink", "draw-unlink", "Mod-Shift-k", () => unlinkSelection());
   const orderButton = arrangeButton("draw.order", "draw-order", null, () => openMenu(orderButton, orderItems()));
   const intoButton = arrangeButton("draw.into_layer", "draw-into-layer", null, () => openMenu(intoButton, intoItems()));
   const alignButton = arrangeButton("draw.align", "draw-align", null, () => openMenu(alignButton, alignItems()));
@@ -905,10 +973,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   });
   ensureTextFont();
 
+  // I segni dei collegamenti: uno sull'angolo in alto a destra di ogni
+  // collegamento che si vede, sopra il foglio e fuori dalla sua pipeline. Il
+  // tocco apre la nota con lo strumento Selezione, o quando il disegno non si
+  // scrive; con gli altri strumenti il foglio è di chi disegna, e il segno si
+  // vede soltanto. Dalla tastiera si apre con Alt+Invio.
+  const linkLayer = document.createElement("div");
+  linkLayer.className = "draw-link-layer";
+  linkLayer.hidden = options.links === undefined;
+
   // Il foglio con la sua barra e, accanto, l'albero degli oggetti.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, textLayer, arrangeBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, tree.element);
@@ -1032,6 +1109,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showZoom();
     showCursor();
     placeText();
+    showLinks();
   };
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.
   let coordinates: Intl.NumberFormat | null = null;
@@ -1120,6 +1198,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       handles.push({ kind: "lasso", points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] });
     }
     overlay.setHandles(handles);
+    showLinks(delta);
     const keys = selection.join("\n");
     if (keys !== noticed) {
       noticed = keys;
@@ -1128,6 +1207,69 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       options.onSelectionChange?.();
     }
   };
+
+  // --- I segni dei collegamenti ---------------------------------------------
+
+  /// I collegamenti che si vedono, ognuno col suo segno: si ricostruiscono
+  /// quando cambia la scena.
+  let marks: LinkMark[] | null = null;
+
+  const labelMarks = (): void => {
+    for (const { target, element } of marks ?? []) {
+      const text = t("draw.link.open", { note: linkName(target) });
+      element.setAttribute("aria-label", text);
+      element.title = text;
+    }
+  };
+  relabels.push(labelMarks);
+
+  /// I segni sullo schermo. Durante uno spostamento seguono gli oggetti
+  /// scelti, di `delta` nella scena, e i collegamenti che contengono.
+  function showLinks(delta: readonly [number, number] | null = null): void {
+    if (options.links === undefined) return;
+    if (marks === null) {
+      const model = engine.model;
+      const list: LinkMark[] = [];
+      for (const unit of model === null ? [] : indexer.links(model)) {
+        const target = linkTarget(nodeOf(model!, unit));
+        if (target === null || unit.bounds === null) continue;
+        const element = document.createElement("button");
+        element.type = "button";
+        element.className = "draw-link-mark";
+        element.tabIndex = -1;
+        element.dataset.mark = String(list.length);
+        const svg = iconEl("draw-link");
+        if (svg !== null) element.append(svg);
+        list.push({ unit, target, element });
+      }
+      marks = list;
+      linkLayer.replaceChildren(...list.map((mark) => mark.element));
+      labelMarks();
+    }
+    const moving = delta === null ? [] : selectedUnits().map((unit) => unit.path);
+    const { scale, tx, ty } = camera;
+    for (const { unit, element } of marks) {
+      const moved = delta !== null && moving.some((path) => path.every((at, i) => unit.path[i] === at));
+      const bounds = (moved ? translated(unit.bounds, delta[0], delta[1]) : unit.bounds)!;
+      element.style.transform = `translate(${tx + scale * bounds.max[0]}px, ${ty + scale * bounds.min[1]}px)`;
+    }
+  }
+
+  /// Apre la nota a cui porta `target`: il gesto in corso si annulla, e un
+  /// testo che si scrive si chiude.
+  const openLink = (target: string): void => {
+    const links = options.links;
+    if (links === undefined) return;
+    finishText();
+    cancelGesture();
+    links.open(target);
+  };
+
+  life.listen(linkLayer, "click", (event) => {
+    const element = event.target instanceof Element ? event.target.closest(".draw-link-mark") : null;
+    const mark = element instanceof HTMLElement ? marks?.[Number(element.dataset.mark)] : undefined;
+    if (mark !== undefined) openLink(mark.target);
+  });
 
   const showShape = (elem: Elem | null, matrix: Matrix): void => {
     previewLayer.replaceChildren();
@@ -1155,7 +1297,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const outlineNow = (): NonNullable<typeof outlined> => {
     const items = engine.scene();
     if (outlined?.items !== items) {
-      const nodes = outline(items);
+      const model = engine.model;
+      const nodes = outline(items, (item) => (model === null ? null : linkTarget(nodeOf(model, item))));
       const byKey = new Map<string, OutlineNode>();
       const walkNodes = (list: readonly OutlineNode[]): void => {
         for (const node of list) {
@@ -1346,6 +1489,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     textButton.hidden = units.length !== 1 || units[0]!.look === null;
     groupButton.disabled = units.length < 2;
     ungroupButton.disabled = !units.some(isGroup);
+    // Un collegamento non ne contiene un altro: attorno a uno che c'è non se
+    // ne crea un secondo, ma quello scelto da solo si cambia.
+    const single = units.length === 1 && isLink(units[0]!) ? units[0]! : null;
+    shownLink = single === null ? null : { target: linkTarget(nodeOf(engine.model!, single)) };
+    linkButton.hidden = options.links === undefined;
+    linkButton.disabled = shownLink === null && units.length > 0 && holdsLinks(engine.model!, units);
+    nameArrange(linkButton, linkText(), "Mod-k");
+    openLinkButton.hidden = options.links === undefined || (shownLink?.target ?? null) === null;
+    nameArrange(openLinkButton, openLinkText(), "Alt-Enter");
+    unlinkButton.hidden = !units.some(isLink);
     // Con un livello solo, che ha già tutto, non c'è dove spostare.
     const layers = currentIndex().layers;
     intoButton.hidden = layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
@@ -1363,6 +1516,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const now = style();
     root.toggleAttribute("data-readonly", !canEdit);
     surface.dataset.tool = tool;
+    linkLayer.toggleAttribute("data-active", tool === "select" || !canEdit);
     for (const [id, control] of toolButtons) {
       control.hidden = !tools.some((spec) => spec.id === id);
       control.setAttribute("aria-checked", String(id === tool));
@@ -1410,6 +1564,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     painter.update(scene);
     showPage();
     index = null;
+    marks = null;
     selection = inOrder(selection);
     // Il livello scelto si ritrova anche se ha cambiato posto o chiave.
     if (chosen !== null) {
@@ -2755,6 +2910,86 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange("draw.action.ungroup", arranged)) announce(plural(groups, "draw.ungrouped.one", "draw.ungrouped.other"));
   }
 
+  /// Il collegamento scelto da solo, se c'è.
+  const lonelyLink = (units: readonly Unit[]): Unit | null => (units.length === 1 && isLink(units[0]!) ? units[0]! : null);
+
+  /// Ctrl+K, o «Collega a una nota…»: collega gli oggetti scelti a una nota
+  /// che sceglie chi monta l'editor, o porta a un'altra nota il collegamento
+  /// scelto da solo. Il collegamento nuovo è un passo di annulla, e la
+  /// selezione passa a lui.
+  async function linkSelection(): Promise<void> {
+    const links = options.links;
+    if (links === undefined || asking) return;
+    const units = arranging();
+    if (units === null) return;
+    const single = lonelyLink(units);
+    if (single === null && holdsLinks(engine.model!, units)) {
+      announce(t("draw.link.nested"));
+      return;
+    }
+    const current = single === null ? null : linkTarget(nodeOf(engine.model!, single));
+    const opened = loads;
+    asking = true;
+    let href: string | null;
+    try {
+      href = await links.choose(current);
+    } catch {
+      // Chi sceglie dice da sé perché non ha potuto.
+      href = null;
+    } finally {
+      asking = false;
+    }
+    if (href === null || disposed || loads !== opened) return;
+    // Mentre si sceglieva il disegno può essere cambiato: valgono gli oggetti
+    // scelti adesso.
+    const now = arranging();
+    if (now === null) return;
+    const again = lonelyLink(now);
+    if (again !== null) {
+      if (arrange("draw.action.relink", relinkOps(engine.model!, again, href, newIds()))) announce(t("draw.relinked", { note: linkName(href) }));
+      return;
+    }
+    const arranged = linkOps(engine.model!, now, href, newIds());
+    if (arranged === "nested") {
+      announce(t("draw.link.nested"));
+      return;
+    }
+    if (arranged === null) {
+      announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
+      return;
+    }
+    if (arrange("draw.action.link", arranged)) announce(t("draw.linked", { note: linkName(href) }));
+  }
+
+  /// Ctrl+Maiusc+K, o «Togli il collegamento»: gli oggetti dei collegamenti
+  /// scelti restano dov'erano, e la selezione passa a loro.
+  function unlinkSelection(): void {
+    const units = arranging();
+    if (units === null) return;
+    const count = units.filter(isLink).length;
+    if (count === 0) {
+      announce(t("draw.unlink.none"));
+      return;
+    }
+    const arranged = unlinkOps(engine.model!, units, newIds());
+    if (arranged === "foreign") {
+      announce(t("draw.unlink.foreign"));
+      return;
+    }
+    if (arrange("draw.action.unlink", arranged)) announce(plural(count, "draw.unlinked.one", "draw.unlinked.other"));
+  }
+
+  /// Alt+Invio, o «Apri»: la nota del collegamento scelto da solo, a ogni
+  /// livello e anche quando il disegno non si scrive. `false` se non ce n'è
+  /// uno che porta nel vault.
+  function openSelectedLink(): boolean {
+    const single = lonelyLink(selectedUnits());
+    const target = single === null || engine.model === null ? null : linkTarget(nodeOf(engine.model, single));
+    if (options.links === undefined || target === null) return false;
+    openLink(target);
+    return true;
+  }
+
   /// Il riquadro a cui si allinea la selezione: la pagina per un oggetto
   /// solo, il riquadro della selezione per più d'uno. `null` per un oggetto
   /// solo in un disegno senza pagina.
@@ -3265,6 +3500,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ["Mod-d", t("draw.duplicate")],
               ["Mod-g", t("draw.group")],
               ["Mod-Shift-g", t("draw.ungroup")],
+              ...(options.links === undefined ? [] : [["Mod-k", t("draw.keys.link")] as const]),
+              ["Mod-Shift-k", t("draw.unlink")],
               ["Mod-Shift-] Shift-PageUp", t("draw.order.front")],
               ["Mod-] PageUp", t("draw.order.forward")],
               ["Mod-[ PageDown", t("draw.order.backward")],
@@ -3325,6 +3562,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["Tab Shift-Tab", t("draw.keys.walk")],
         ["Home End", t("draw.keys.ends")],
         ["Enter", t("draw.properties")],
+        ...(options.links === undefined ? [] : [["Alt-Enter", t("draw.keys.link.open")] as const]),
         ["Delete", t("draw.delete")],
         ["Mod-a", t("draw.keys.all")],
         ["Escape", t("draw.keys.deselect")],
@@ -3624,6 +3862,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (arranges && key === "g") {
         if (event.shiftKey) ungroupSelection();
         else groupSelection();
+      } else if (arranges && key === "k" && (event.shiftKey || options.links !== undefined)) {
+        if (event.shiftKey) unlinkSelection();
+        else void linkSelection();
       } else if (arranges && bracket !== 0) {
         if (bracket > 0) orderSelection(event.shiftKey ? "front" : "forward");
         else orderSelection(event.shiftKey ? "back" : "backward");
@@ -3634,7 +3875,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     if (event.altKey) {
-      if (event.key !== "F10" || event.shiftKey || !focusArrange()) return;
+      if (onSurface && event.key === "Enter" && !event.shiftKey && options.links !== undefined) {
+        if (pressed !== null) return;
+        if (!openSelectedLink()) announce(t("draw.link.open.none"));
+      } else if (event.key !== "F10" || event.shiftKey || !focusArrange()) {
+        return;
+      }
       event.preventDefault();
       return;
     }
