@@ -1142,6 +1142,21 @@ html, body, #app {
   min-width: 64px;
   font-variant-numeric: tabular-nums;
 }
+/* Il pulsante dei livelli mostra il nome del livello corrente: largo quanto
+   il nome, fino a un tetto, e coi puntini oltre. Lo stato resta intero. */
+.draw-layer-button {
+  max-width: 14rem;
+}
+.draw-layer-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-layer-state {
+  flex: none;
+  white-space: nowrap;
+}
 /* La forma distingue i campioni anche a chi non distingue i colori. La
    cornice è la stessa forma, due pixel più grande, nel colore del testo: un
    filo che segue anche le punte della stella. Il colore vero resta, anche

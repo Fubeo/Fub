@@ -69,7 +69,7 @@ const OPACITY_PLACES = 4;
 export type Arranged = Moved;
 
 /// Le operazioni di un comando: gli `ident` in testa, poi il resto.
-class Plan {
+export class Plan {
   private readonly idents: Op[] = [];
   readonly ops: Op[] = [];
   /// Gli id dati in questo comando, per percorso.

@@ -113,6 +113,43 @@ si riscrive. Una parte che FubDraw non sa scrivere, come un `<use>` di un
 altro programma, non si copia, e un gruppo che la contiene si separa solo se
 non ha niente da portarle.
 
+## Livelli
+
+Un livello del disegno è un gruppo figlio della radice con `fub:layer`, che
+ne porta il nome. Dal livello Standard la barra ha il pulsante «Livelli»: mostra
+il livello in cui si disegna, quello corrente, col suo nome e, a parole, il suo
+stato, «bloccato» o «nascosto». Il suo menu elenca i livelli dalla cima, e
+sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
+
+- **Nuovo livello** ne crea uno vuoto sopra quello corrente, che diventa lui,
+  col primo nome libero fra «Livello 2», «Livello 3» e così via;
+- **Rinomina…** chiede il nome, che non resta vuoto né fatto di soli spazi e
+  ha al più 80 caratteri;
+- **Nascondi** e **Mostra** scrivono e tolgono `display="none"`, che lo
+  nasconde anche negli altri programmi; **Blocca** e **Sblocca** scrivono e
+  tolgono `fub:locked="true"`. Gli oggetti di un livello nascosto o bloccato
+  non si scelgono e non si cancellano, ed escono dalla selezione;
+- **Sposta su** e **Sposta giù** lo portano sopra il livello che ha sopra, o
+  sotto quello che ha sotto; ciò che sta alla radice fra i due resta dov'era;
+- **Elimina** lo toglie con ciò che contiene, e diventa corrente il livello
+  sotto, o quello sopra. L'unico livello e uno bloccato non si eliminano, e la
+  voce spenta dice perché.
+
+Penna, evidenziatore, forme e immagini incollate vanno nel livello corrente.
+Se è nascosto o bloccato il gesto non scrive, e un annuncio dice perché e che
+cosa fare. Scegliere oggetti che stanno tutti in un livello rende corrente quel
+livello, e l'albero degli oggetti dice qual è: «Livello «Note», corrente».
+
+Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in
+cima a un altro livello, nell'ordine in cui stavano e con la trasformazione
+che li lascia dove si vedevano. Il menu spegne il livello che li ha già tutti e
+quelli nascosti o bloccati; il pulsante non c'è quando il disegno ha un livello
+solo che ha già tutto.
+
+Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
+che ha toccato, se c'è ancora. All'Essenziale il pulsante non c'è, e il disegno va nel
+livello più alto che si vede e non è bloccato.
+
 ## Da tastiera
 
 Ogni strumento funziona senza puntatore. Sul foglio le frecce muovono un

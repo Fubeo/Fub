@@ -38,6 +38,8 @@ const MAX_STEPS = 256;
 export interface LayerInfo {
   readonly id: string | null;
   readonly path: readonly number[];
+  /// Il nome scritto in `fub:layer`.
+  readonly name: string;
   readonly locked: boolean;
   readonly hidden: boolean;
   /// Dalle coordinate del livello a quelle della scena.
@@ -219,7 +221,7 @@ export class SceneIndexer {
       const head = this.builder.headInfo(child);
       const matrix = compose(IDENTITY, transformOf(head.attrs));
       const layer = child.details!.layer!;
-      const info: LayerInfo = { id: child.facts.id, path: [index], locked: layer.locked, hidden: layer.hidden || head.hidden, matrix };
+      const info: LayerInfo = { id: child.facts.id, path: [index], name: layer.name, locked: layer.locked, hidden: layer.hidden || head.hidden, matrix };
       layers.push(info);
       if (info.locked || info.hidden) return;
       const style = styleOf(rootStyle, head.attrs);

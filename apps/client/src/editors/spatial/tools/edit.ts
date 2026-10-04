@@ -3,10 +3,11 @@
 // così annulla e ripeti lo disfano intero.
 //
 // - **Dove si scrive.** Un oggetto nuovo va in cima al livello visibile e
-//   sbloccato più in alto, coi punti portati nelle sue coordinate. Un
-//   documento senza livelli scrive alla radice; un livello senza id ne
-//   riceve uno con `ident` nello stesso `batch`. Se ogni livello è bloccato o
-//   nascosto non si scrive.
+//   sbloccato più in alto, o dal livello Standard in cima al livello
+//   corrente, coi punti portati nelle sue coordinate. Un documento senza
+//   livelli scrive alla radice; un livello senza id ne riceve uno con `ident`
+//   nello stesso `batch`. Se ogni livello è bloccato o nascosto non si
+//   scrive.
 // - **Spostare** cambia solo `transform`, mai la geometria: la matrice nuova
 //   è la traslazione nelle coordinate del genitore composta con quella di
 //   prima, scritta come un `matrix()` solo, e tolta se è l'identità. Lo
@@ -32,7 +33,7 @@ import { apply, compose, IDENTITY, invert, translate, type Matrix } from "../sce
 import { ROOT, type AddOp, type Op } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
 import type { Page } from "../painter/paint";
-import type { SceneIndex, Unit } from "./hit";
+import type { LayerInfo, SceneIndex, Unit } from "./hit";
 import { HIGHLIGHTER_OPACITY } from "./palette";
 
 /// Il passo con cui la pagina si allarga.
@@ -74,13 +75,20 @@ export function destination(index: SceneIndex, ids: NewIds): Destination | null 
   for (let i = index.layers.length - 1; i >= 0; i--) {
     const layer = index.layers[i]!;
     if (layer.locked || layer.hidden) continue;
-    const inverse = invert(layer.matrix);
-    if (inverse === null) continue;
-    if (layer.id !== null) return { parent: layer.id, matrix: layer.matrix, inverse, prelude: [] };
-    const id = ids.next("layer");
-    return { parent: id, matrix: layer.matrix, inverse, prelude: [{ op: "ident", path: layer.path, tag: "g", id }] };
+    const to = destinationIn(layer, ids);
+    if (to !== null) return to;
   }
   return null;
+}
+
+/// Il livello `layer` come destinazione, che si veda o no; `null` se lo
+/// schiaccia una trasformazione che non si inverte.
+export function destinationIn(layer: LayerInfo, ids: NewIds): Destination | null {
+  const inverse = invert(layer.matrix);
+  if (inverse === null) return null;
+  if (layer.id !== null) return { parent: layer.id, matrix: layer.matrix, inverse, prelude: [] };
+  const id = ids.next("layer");
+  return { parent: id, matrix: layer.matrix, inverse, prelude: [{ op: "ident", path: layer.path, tag: "g", id }] };
 }
 
 /// Un'operazione per un gesto: quella sola, o un `batch` di tutte.
