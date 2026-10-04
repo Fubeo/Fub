@@ -126,7 +126,7 @@ describe("la barra e il foglio", () => {
 
   it("danno alla barra un solo punto di tabulazione, e le frecce la percorrono", () => {
     mount();
-    const buttons = [...host.querySelectorAll<HTMLButtonElement>('[role="toolbar"] button')];
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('.draw-toolbar[role="toolbar"] button')];
     expect(buttons.filter((control) => control.tabIndex === 0)).toHaveLength(1);
     buttons[0]!.focus();
     key("ArrowRight", {}, buttons[0]!);
@@ -385,6 +385,235 @@ describe("il livello Standard", () => {
     expect(editor.color).toBe("#000000");
     editor.setLevel("standard");
     expect(host.querySelector<HTMLButtonElement>('.draw-color:has([data-shape="ring"])')!.hidden).toBe(false);
+  });
+});
+
+describe("disporre, dal livello Standard", () => {
+  /// Tre rettangoli pieni senza contorno: i loro riquadri sono quelli scritti.
+  const ROW = doc(
+    `<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="10" fill="#0072b2"/>` +
+      `<rect id="ob2b2b2b2" x="40" y="40" width="10" height="10" fill="#000000"/>` +
+      `<rect id="oc3c3c3c3" x="80" y="20" width="10" height="20" fill="#d55e00"/></g>`,
+  );
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const named = (label: string): HTMLButtonElement => bar().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+  /// Gli id dei rettangoli, nell'ordine del file.
+  const order = (): string[] => [...editor.engine.text.matchAll(/<rect id="(o[a-z0-9]{8})"/g)].map((match) => match[1]!);
+  /// Il menu aperto per ultimo, voce per voce: il nome, e se è spenta.
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  };
+  const item = (label: string): HTMLButtonElement => menu().find((entry) => entry.querySelector(".menu-label")!.textContent === label)!;
+
+  afterEach(() => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("la barra della selezione c'è dal livello Standard, con qualcosa di scelto; Alt+F10 ci va ed Esc torna al foglio", () => {
+    mount(ROW);
+    editor.select([A]);
+    expect(bar().hidden).toBe(true);
+    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
+
+    editor.setLevel("standard");
+    expect(bar().hidden).toBe(false);
+    expect(bar().getAttribute("role")).toBe("toolbar");
+    expect(bar().getAttribute("aria-label")).toBe("Disponi");
+    expect([...bar().querySelectorAll("button")].map((control) => control.getAttribute("aria-label"))).toEqual([
+      "Duplica",
+      "Raggruppa",
+      "Separa",
+      "Ordine",
+      "Allinea e distribuisci",
+    ]);
+    expect(named("Duplica").title).toBe("Duplica (Ctrl+D)");
+    expect(named("Duplica").getAttribute("aria-keyshortcuts")).toBe("Control+D");
+    expect(named("Ordine").getAttribute("aria-haspopup")).toBe("menu");
+    // Un oggetto solo non si raggruppa, e non è un gruppo da separare.
+    expect(named("Raggruppa").disabled).toBe(true);
+    expect(named("Separa").disabled).toBe(true);
+    const hint = document.getElementById(surface().getAttribute("aria-describedby")!);
+    expect(hint?.textContent).toContain("Alt+F10");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    surface().focus();
+    expect(key("F10", { altKey: true }).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(named("Duplica"));
+    key("ArrowRight", {}, named("Duplica"));
+    expect(document.activeElement).toBe(named("Ordine"));
+    key("Escape", {}, named("Ordine"));
+    expect(document.activeElement).toBe(surface());
+    expect(editor.selection).toEqual([A]);
+
+    editor.select([]);
+    expect(bar().hidden).toBe(true);
+    expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
+    editor.select([A]);
+    editor.setLevel("essential");
+    expect(bar().hidden).toBe(true);
+    expect(hint?.textContent).not.toContain("Alt+F10");
+    expect(changes).toEqual([]);
+  });
+
+  it("Ctrl+D copia sopra l'originale, un passo più in là, e la selezione passa alla copia", () => {
+    mount(ROW, { level: "standard" });
+    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(false);
+    editor.select([A]);
+    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(true);
+    const [copy] = editor.selection;
+    expect(copy).toMatch(/^o[a-z0-9]{8}$/);
+    expect(order()).toEqual([A, copy, B, C]);
+    expect(editor.engine.text).toContain(`<rect id="${copy}" x="10" y="10" width="20" height="10" fill="#0072b2" transform="matrix(1 0 0 1 24 24)"/>`);
+    expect(spoken()).toBe("1 oggetto duplicato. Il disegno ha 4 oggetti.");
+    // Un secondo Ctrl+D prosegue la fila, dalla copia.
+    named("Duplica").click();
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 48 48)"/>');
+    key("z", { ctrlKey: true });
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(ROW);
+    expect(spoken()).toBe("Annullato: Duplicazione.");
+  });
+
+  it("Ctrl+G raggruppa al posto del più alto, e Ctrl+Maiusc+G separa", () => {
+    mount(ROW, { level: "standard" });
+    editor.select([A, C]);
+    expect(named("Raggruppa").disabled).toBe(false);
+    key("g", { ctrlKey: true });
+    const [group] = editor.selection;
+    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${B}"[^>]*/>\\s*<g id="${group}">\\s*<rect id="${A}"[^>]*/>\\s*<rect id="${C}"[^>]*/>\\s*</g>`));
+    expect(spoken()).toBe("Gruppo di 2 oggetti.");
+    expect(named("Raggruppa").disabled).toBe(true);
+    expect(named("Separa").disabled).toBe(false);
+
+    key("G", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).not.toContain(`id="${group}"`);
+    expect(editor.engine.text).not.toContain("transform");
+    expect(order()).toEqual([B, A, C]);
+    expect(editor.selection).toEqual([A, C]);
+    expect(spoken()).toBe("1 gruppo separato.");
+    key("z", { ctrlKey: true });
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(ROW);
+  });
+
+  it("l'ordine: Ctrl+] e Ctrl+[ di un posto, con Maiusc agli estremi, anche su una tastiera italiana e con PagSu e PagGiù", () => {
+    mount(ROW, { level: "standard" });
+    editor.select([A]);
+    key("]", { ctrlKey: true, code: "BracketRight" });
+    expect(order()).toEqual([B, A, C]);
+    expect(spoken()).toBe("Un posto più avanti.");
+    // La tastiera italiana ha «+» dove quella americana ha «]».
+    key("+", { ctrlKey: true, code: "BracketRight" });
+    expect(order()).toEqual([B, C, A]);
+    key("PageDown");
+    expect(order()).toEqual([B, A, C]);
+    key("PageDown", { shiftKey: true });
+    expect(order()).toEqual([A, B, C]);
+    expect(spoken()).toBe("In secondo piano.");
+    key("{", { ctrlKey: true, shiftKey: true, code: "BracketLeft" });
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    key("PageUp", { shiftKey: true });
+    expect(order()).toEqual([B, C, A]);
+    // Ogni passo si annulla da sé.
+    key("z", { ctrlKey: true });
+    expect(order()).toEqual([A, B, C]);
+    expect(spoken()).toBe("Annullato: Cambio d’ordine.");
+    expect(editor.selection).toEqual([A]);
+  });
+
+  it("il menu dell'ordine spegne le voci che non cambierebbero niente, e dice le scorciatoie", () => {
+    mount(ROW, { level: "standard" });
+    editor.select([C]);
+    named("Ordine").click();
+    expect(named("Ordine").getAttribute("aria-expanded")).toBe("true");
+    expect(menu().map((entry) => [entry.querySelector(".menu-label")!.textContent, entry.querySelector(".menu-hint")!.textContent, entry.getAttribute("aria-disabled")])).toEqual([
+      ["Porta in primo piano", "Ctrl+Shift+]", "true"],
+      ["Porta avanti", "Ctrl+]", "true"],
+      ["Porta indietro", "Ctrl+[", null],
+      ["Porta in secondo piano", "Ctrl+Shift+[", null],
+    ]);
+    item("Porta in secondo piano").click();
+    expect(order()).toEqual([C, A, B]);
+    expect(named("Ordine").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("allinea al riquadro della selezione, o alla pagina un oggetto solo, e distribuisce lo spazio", () => {
+    mount(ROW, { level: "standard" });
+    editor.select([A, B, C]);
+    named("Allinea e distribuisci").click();
+    expect(menu().map((entry) => entry.querySelector(".menu-label")!.textContent)).toEqual([
+      "Allinea a sinistra",
+      "Allinea al centro",
+      "Allinea a destra",
+      "Allinea in alto",
+      "Allinea in mezzo",
+      "Allinea in basso",
+      "Distribuisci orizzontalmente",
+      "Distribuisci verticalmente",
+    ]);
+    item("Distribuisci orizzontalmente").click();
+    // Fra 30 e 80 restano 40 unità, dopo il quadrato largo 10: 20 per parte.
+    expect(editor.engine.text).toContain(`<rect id="${B}" x="40" y="40" width="10" height="10" fill="#000000" transform="matrix(1 0 0 1 10 0)"/>`);
+    expect(spoken()).toBe("3 oggetti distribuiti.");
+
+    named("Allinea e distribuisci").click();
+    item("Allinea a sinistra").click();
+    expect(editor.engine.text).toContain(`<rect id="${B}" x="40" y="40" width="10" height="10" fill="#000000" transform="matrix(1 0 0 1 -30 0)"/>`);
+    expect(editor.engine.text).toContain(`<rect id="${C}" x="80" y="20" width="10" height="20" fill="#d55e00" transform="matrix(1 0 0 1 -70 0)"/>`);
+    expect(spoken()).toBe("3 oggetti allineati.");
+
+    editor.select([A]);
+    named("Allinea e distribuisci").click();
+    expect(item("Distribuisci orizzontalmente").getAttribute("aria-disabled")).toBe("true");
+    expect(item("Distribuisci orizzontalmente").querySelector(".menu-description")!.textContent).toBe("Servono almeno tre oggetti.");
+    item("Allinea a destra, rispetto alla pagina").click();
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="10" y="10" width="20" height="10" fill="#0072b2" transform="matrix(1 0 0 1 70 0)"/>`);
+  });
+
+  it("un pulsante che si spegne passa il fuoco a quello che prende il Tab", () => {
+    mount(doc(`${LAYER}<g id="og1g1g1g1">${"<rect id=\"oa1a1a1a1\" x=\"0\" y=\"0\" width=\"5\" height=\"5\"/>"}<rect id="ob2b2b2b2" x="10" y="0" width="5" height="5"/></g></g>`), { level: "standard" });
+    editor.select(["og1g1g1g1"]);
+    surface().focus();
+    key("F10", { altKey: true });
+    key("ArrowRight", {}, named("Duplica"));
+    expect(document.activeElement).toBe(named("Separa"));
+    named("Separa").click();
+    expect(editor.selection).toEqual([A, B]);
+    expect(spoken()).toBe("1 gruppo separato.");
+    expect(named("Separa").disabled).toBe(true);
+    expect(document.activeElement).toBe(named("Duplica"));
+  });
+
+  it("un gruppo che porta una trasformazione su parti estranee non si separa, e lo dice", () => {
+    const source = doc(`${LAYER}<g id="og1g1g1g1" transform="translate(5 0)"><rect id="oa1a1a1a1" x="0" y="0" width="5" height="5"/><use href="#oa1a1a1a1"/></g></g>`);
+    mount(source, { level: "standard" });
+    editor.select(["og1g1g1g1"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(spoken()).toContain("Non separato");
+    key("d", { ctrlKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(spoken()).toContain("Non duplicato");
+  });
+
+  it("«?» elenca anche i tasti per disporre", () => {
+    mount(ROW, { level: "standard" });
+    key("?", { shiftKey: true });
+    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Disponi");
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect(rows).toContainEqual(["Ctrl+D", "Duplica"]);
+    expect(rows).toContainEqual(["Ctrl+Shift+G", "Separa"]);
+    expect(rows).toContainEqual(["Ctrl+] o PgUp", "Porta avanti"]);
+    expect(rows).toContainEqual(["Ctrl+Shift+[ o Shift+PgDn", "Porta in secondo piano"]);
+    expect(rows).toContainEqual(["Alt+F10", "Va alla barra della selezione"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
   });
 });
 

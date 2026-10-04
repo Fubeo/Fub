@@ -466,9 +466,10 @@ const KEY_NAMES: Record<string, string> = {
 };
 
 /// Il nome che si legge di un tasto di `KeyboardEvent.key`, da solo: `←`,
-/// `Esc`, `Enter`, `P`.
+/// `Esc`, `Enter`, `P`. Un tasto funzione si legge come è stampato, `F10`,
+/// anche quando l'accordo lo scrive minuscolo.
 export function keyName(key: string): string {
-  return KEY_NAMES[key.toLowerCase()] ?? (key.length === 1 ? key.toUpperCase() : key);
+  return KEY_NAMES[key.toLowerCase()] ?? (key.length === 1 || /^f\d{1,2}$/i.test(key) ? key.toUpperCase() : key);
 }
 
 export function displayBinding(

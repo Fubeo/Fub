@@ -1,0 +1,497 @@
+// Disporre gli oggetti scelti (livello Standard): duplicare, cambiare ordine,
+// raggruppare e separare, allineare e distribuire. Ogni comando diventa un
+// `batch` solo, così annulla e ripeti lo disfano intero.
+//
+// - **Gli id prima di tutto.** Un oggetto o un livello senza id, che il
+//   comando deve nominare, lo riceve con `ident` in testa al `batch`: i
+//   percorsi valgono finché niente si sposta, e dopo si nomina per id.
+// - **Spostare, non riscrivere.** Ordine, gruppi e separazione muovono gli
+//   elementi con `move`, che li porta com'erano scritti; solo ciò che cambia
+//   davvero passa da `set`.
+// - **Ciò che si vede resta.** Raggruppare oggetti di livelli diversi ne
+//   compensa le trasformazioni; separare un gruppo porta la sua
+//   trasformazione e lo stile che i figli ereditavano su ciascun figlio, e
+//   moltiplica la sua opacità nella loro. Un gruppo con parti estranee si
+//   separa solo se non ha niente da portare, perché un elemento estraneo non
+//   cambia.
+// - **La copia è un oggetto nuovo.** Un duplicato ha id nuovi in tutto il
+//   sottoalbero, e sta sopra gli originali del suo livello, spostato di un
+//   passo; un oggetto con parti estranee non si duplica, perché
+//   un'operazione non le sa scrivere.
+// - **Allineare e distribuire** spostano soltanto, sui riquadri che si vedono,
+//   contorno compreso; gli spostamenti si arrotondano come quelli a mano.
+
+import type { Bounds } from "../scene/geometry";
+import type { IdKind } from "../scene/ids";
+import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
+import { declarationsOf, elementChildren, parseFragment, pathOf, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { ROOT, type Op, type Pos, type Target } from "../scene/ops";
+import type { Elem, NamespaceScope } from "../scene/serialize";
+import { opacity as parseOpacity, transform as parseTransform } from "../scene/values";
+import { FUB_NS, NS_SVG, SVG_NS, XLINK_NS, XML_URI, type ElementNode, type XmlDocument } from "../scene/xml";
+import { formatNumber } from "../number";
+import { moveOps, movedMatrix, roundDelta, transformValue, type Moved, type NewIds } from "./edit";
+import type { SceneIndex, Unit } from "./hit";
+
+/// Dove va la selezione nell'ordine del suo livello.
+export type Order = "front" | "forward" | "backward" | "back";
+
+/// A che cosa si allinea la selezione: un bordo o il centro, su un asse.
+export type Edge = "left" | "center" | "right" | "top" | "middle" | "bottom";
+
+export type Axis = "x" | "y";
+
+/// Gli attributi che i figli ereditano da un gruppo e che, separandolo, si
+/// portano su ciascuno che non li ha già.
+const INHERITED: readonly string[] = [
+  "fill",
+  "fill-opacity",
+  "stroke",
+  "stroke-width",
+  "stroke-opacity",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-dasharray",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "text-anchor",
+];
+
+/// I tag che hanno testo e non figli.
+const TEXT_TAGS: ReadonlySet<string> = new Set(["title", "desc", "tspan"]);
+
+/// I decimali dell'opacità che separare un gruppo moltiplica.
+const OPACITY_PLACES = 4;
+
+/// Un comando pronto: le operazioni, in un `batch`, e le chiavi della
+/// selezione dopo.
+export type Arranged = Moved;
+
+/// Le operazioni di un comando: gli `ident` in testa, poi il resto.
+class Plan {
+  private readonly idents: Op[] = [];
+  readonly ops: Op[] = [];
+  /// Gli id dati in questo comando, per percorso.
+  private readonly named = new Map<string, string>();
+
+  constructor(
+    readonly model: DocumentModel,
+    readonly ids: NewIds,
+  ) {}
+
+  /// L'id di `node`, un elemento modificabile: il suo, o uno nuovo con
+  /// `ident`.
+  idOf(node: ElementPart, kind: IdKind = "object"): string {
+    if (node.facts.id !== null) return node.facts.id;
+    const path = pathOf(node);
+    const key = path.join(".");
+    let id = this.named.get(key);
+    if (id === undefined) {
+      id = this.ids.next(kind);
+      this.named.set(key, id);
+      this.idents.push({ op: "ident", path, tag: tagName(node), id });
+    }
+    return id;
+  }
+
+  /// Il genitore di `node` come lo nomina un'operazione: `#root`, o l'id del
+  /// livello o del gruppo.
+  parentOf(node: ElementPart): string {
+    const parent = node.parent!;
+    if (parent === this.model.root) return ROOT;
+    return this.idOf(parent, parent.parent === this.model.root && parent.details?.role === "layer" ? "layer" : "object");
+  }
+
+  finish(keys: readonly string[]): Arranged {
+    return { ops: this.ops.length === 0 ? [] : [...this.idents, ...this.ops], keys };
+  }
+}
+
+/// Il nodo del modello di `unit`.
+export function nodeOf(model: DocumentModel, unit: Unit): ElementPart {
+  let node: ElementPart = model.root;
+  for (const at of unit.path) node = elementChildren(node as ContainerNode)[at]!;
+  return node;
+}
+
+/// Il percorso del genitore di un oggetto, come chiave.
+const parentKey = (unit: Unit): string => unit.path.slice(0, -1).join(".");
+
+function sameMatrix(a: Matrix, b: Matrix): boolean {
+  return a.every((v, i) => v === b[i]);
+}
+
+// ---------------------------------------------------------------------------
+// Leggere un elemento.
+// ---------------------------------------------------------------------------
+
+/// Il tag d'apertura di `node` letto da solo, nello scope del genitore.
+function readHead(node: ElementPart): { readonly doc: XmlDocument; readonly element: ElementNode } | null {
+  const raw = node.kind === "leaf" ? node.raw : node.tail === null ? node.head : `${node.head}</${node.facts.name}>`;
+  const fragment = parseFragment(raw, scopeOf(node.parent!));
+  if (fragment === null) return null;
+  return { doc: fragment.doc, element: fragment.doc.element(fragment.id)! };
+}
+
+/// Il nome di un attributo come lo scrive un'operazione; `null` se non ha un
+/// prefisso con cui scriverlo. Le dichiarazioni di namespace non sono
+/// attributi.
+function attributeKey(doc: XmlDocument, element: ElementNode, at: number, scope: NamespaceScope): string | null | undefined {
+  const attr = element.attrs[at]!;
+  if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) return undefined;
+  const uri = doc.namespaces[attr.ns] ?? "";
+  if (uri === "") return attr.local;
+  if (uri === FUB_NS) return `fub:${attr.local}`;
+  if (uri === XLINK_NS) return `xlink:${attr.local}`;
+  if (uri === XML_URI) return `xml:${attr.local}`;
+  const prefix = scope.attributePrefix(uri);
+  return prefix === null ? null : `${prefix}:${attr.local}`;
+}
+
+function attributesOf(doc: XmlDocument, element: ElementNode, scope: NamespaceScope): Record<string, string> | null {
+  const attrs: Record<string, string> = {};
+  for (let at = 0; at < element.attrs.length; at++) {
+    const key = attributeKey(doc, element, at, scope);
+    if (key === undefined) continue;
+    if (key === null) return null;
+    attrs[key] = element.attrs[at]!.value;
+  }
+  return attrs;
+}
+
+/// Gli attributi senza namespace di `node`, come li legge un parser.
+function plainAttributes(node: ElementPart): Map<string, string> {
+  const read = readHead(node);
+  const out = new Map<string, string>();
+  if (read === null) return out;
+  for (const attr of read.element.attrs) if ((read.doc.namespaces[attr.ns] ?? "") === "" && !attr.name.startsWith("xmlns")) out.set(attr.local, attr.value);
+  return out;
+}
+
+/// Un elemento letto, come lo scrive un'operazione.
+function xmlElem(doc: XmlDocument, element: ElementNode, outer: NamespaceScope): Elem | null {
+  if (element.ns !== NS_SVG) return null;
+  const scope = outer.declare(declarationsOf(element));
+  const attrs = attributesOf(doc, element, scope);
+  if (attrs === null) return null;
+  const children: Elem[] = [];
+  let text = "";
+  for (const id of element.children) {
+    const child = doc.nodes[id]!;
+    if (child.kind === "element") {
+      const elem = xmlElem(doc, child, scope);
+      if (elem === null) return null;
+      children.push(elem);
+    } else if (child.kind === "text") {
+      text += child.value;
+    }
+  }
+  if (TEXT_TAGS.has(element.local)) return { tag: element.local, attrs, text };
+  return children.length === 0 ? { tag: element.local, attrs } : { tag: element.local, attrs, children };
+}
+
+/// `node` come lo scrive un'operazione, coi figli; `null` se contiene parti
+/// estranee, o nomi che un'operazione non sa scrivere. I commenti dentro un
+/// gruppo non passano.
+export function elemOf(node: ElementPart): Elem | null {
+  return elemIn(node, scopeOf(node.parent!));
+}
+
+function elemIn(node: ElementPart, scope: NamespaceScope): Elem | null {
+  if (node.details === null || node.facts.uri !== SVG_NS) return null;
+  const read = readHead(node);
+  if (read === null) return null;
+  if (node.kind === "leaf") return xmlElem(read.doc, read.element, scope);
+  const inner = scope.declare(node.declarations);
+  const attrs = attributesOf(read.doc, read.element, inner);
+  if (attrs === null) return null;
+  const children: Elem[] = [];
+  for (const child of elementChildren(node)) {
+    const elem = elemIn(child, inner);
+    if (elem === null) return null;
+    children.push(elem);
+  }
+  return { tag: node.facts.local, attrs, children };
+}
+
+/// `elem` con id nuovi, che il motore chiede a ogni elemento aggiunto: solo
+/// titoli, descrizioni e righe di testo possono restare senza.
+function renamed(elem: Elem, ids: NewIds): Elem {
+  const attrs = { ...elem.attrs };
+  if (attrs.id !== undefined || !TEXT_TAGS.has(elem.tag)) attrs.id = ids.next("object");
+  const out: { tag: string; attrs: Record<string, string>; children?: Elem[]; text?: string | null } = { tag: elem.tag, attrs };
+  if (elem.children !== undefined) out.children = elem.children.map((child) => renamed(child, ids));
+  if (elem.text !== undefined) out.text = elem.text;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Duplicare.
+// ---------------------------------------------------------------------------
+
+/// Le copie di `units`, spostate di (`dx`, `dy`) nella scena: per ogni
+/// livello, subito sopra l'originale più in alto, nell'ordine degli
+/// originali. `null` se un oggetto ha parti che non si copiano.
+export function duplicateOps(model: DocumentModel, units: readonly Unit[], dx: number, dy: number, ids: NewIds): Arranged | null {
+  const plan = new Plan(model, ids);
+  const byParent = new Map<string, Unit[]>();
+  for (const unit of units) {
+    const list = byParent.get(parentKey(unit));
+    if (list === undefined) byParent.set(parentKey(unit), [unit]);
+    else list.push(unit);
+  }
+  const keys: string[] = [];
+  for (const list of byParent.values()) {
+    const top = nodeOf(model, list[list.length - 1]!);
+    const parent = plan.parentOf(top);
+    let after = plan.idOf(top);
+    for (const unit of list) {
+      const elem = elemOf(nodeOf(model, unit));
+      if (elem === null) return null;
+      const copy = renamed(elem, ids);
+      const moved = movedMatrix(unit, dx, dy) ?? unit.transform;
+      const value = transformValue(moved);
+      const attrs = copy.attrs as Record<string, string>;
+      if (value === null) delete attrs.transform;
+      else attrs.transform = value;
+      plan.ops.push({ op: "add", parent, pos: { after }, elem: copy });
+      after = attrs.id!;
+      keys.push(after);
+    }
+  }
+  return plan.finish(keys);
+}
+
+// ---------------------------------------------------------------------------
+// Ordine.
+// ---------------------------------------------------------------------------
+
+/// Il nuovo ordine di `keys`, dal basso in alto, con `chosen` spostati.
+function reorder(keys: readonly string[], chosen: ReadonlySet<string>, order: Order): string[] {
+  const out = [...keys];
+  switch (order) {
+    case "front":
+      return [...keys.filter((key) => !chosen.has(key)), ...keys.filter((key) => chosen.has(key))];
+    case "back":
+      return [...keys.filter((key) => chosen.has(key)), ...keys.filter((key) => !chosen.has(key))];
+    case "forward":
+      // Dall'alto: un blocco di oggetti scelti sale insieme di un posto.
+      for (let i = out.length - 2; i >= 0; i--) {
+        if (chosen.has(out[i]!) && !chosen.has(out[i + 1]!)) [out[i], out[i + 1]] = [out[i + 1]!, out[i]!];
+      }
+      return out;
+    case "backward":
+      for (let i = 1; i < out.length; i++) {
+        if (chosen.has(out[i]!) && !chosen.has(out[i - 1]!)) [out[i - 1], out[i]] = [out[i]!, out[i - 1]!];
+      }
+      return out;
+  }
+}
+
+/// Le operazioni che portano `units` più su o più giù fra gli oggetti del
+/// loro livello: ciascuno resta nel suo. Nessuna operazione se l'ordine non
+/// cambia.
+export function orderOps(model: DocumentModel, index: SceneIndex, units: readonly Unit[], order: Order, ids: NewIds): Arranged {
+  const plan = new Plan(model, ids);
+  const chosen = new Set(units.map((unit) => unit.key));
+  const parents = new Set(units.map(parentKey));
+  for (const parent of parents) {
+    const siblings = index.units.filter((unit) => parentKey(unit) === parent);
+    const byKey = new Map(siblings.map((unit) => [unit.key, unit]));
+    const before = siblings.map((unit) => unit.key);
+    const after = reorder(before, chosen, order);
+    // Si sposta solo chi non sta già subito sopra quello che deve avere
+    // sotto: alla fine ogni oggetto scelto sta sopra il suo vicino nuovo.
+    const now = [...before];
+    after.forEach((key, at) => {
+      if (!chosen.has(key)) return;
+      const below = at > 0 ? after[at - 1]! : null;
+      const from = now.indexOf(key);
+      const place = below === null ? 0 : now.indexOf(below) + 1;
+      if (from === place) return;
+      now.splice(from, 1);
+      now.splice(below === null ? 0 : now.indexOf(below) + 1, 0, key);
+      const node = nodeOf(model, byKey.get(key)!);
+      const pos: Pos = below === null ? { first: true } : { after: plan.idOf(nodeOf(model, byKey.get(below)!)) };
+      plan.ops.push({ op: "move", target: plan.idOf(node), parent: plan.parentOf(node), pos });
+    });
+  }
+  if (plan.ops.length === 0) return { ops: [], keys: units.map((unit) => unit.key) };
+  // Ogni oggetto scelto riceve un id, anche se resta fermo: chi gli passa
+  // accanto cambia il suo percorso.
+  return plan.finish(units.map((unit) => plan.idOf(nodeOf(model, unit))));
+}
+
+// ---------------------------------------------------------------------------
+// Gruppi.
+// ---------------------------------------------------------------------------
+
+/// Un gruppo nuovo con `units`, al posto del più alto e nel suo livello, con
+/// gli oggetti nell'ordine di prima. Un oggetto di un altro livello vi entra
+/// con la trasformazione che lo lascia dov'era. `null` se il livello del più
+/// alto schiaccia il piano.
+export function groupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | null {
+  const top = units[units.length - 1];
+  if (top === undefined) return null;
+  const inverse = invert(top.parent);
+  if (inverse === null) return null;
+  const plan = new Plan(model, ids);
+  const topNode = nodeOf(model, top);
+  const parent = plan.parentOf(topNode);
+  const after = plan.idOf(topNode);
+  const group = ids.next("object");
+  plan.ops.push({ op: "add", parent, pos: { after }, elem: { tag: "g", attrs: { id: group }, children: [] } });
+  for (const unit of units) {
+    const id = plan.idOf(nodeOf(model, unit));
+    if (!sameMatrix(unit.parent, top.parent)) {
+      plan.ops.push({ op: "set", id, attrs: { transform: transformValue(compose(inverse, unit.matrix)) } });
+    }
+    plan.ops.push({ op: "move", target: id, parent: group, pos: { last: true } });
+  }
+  return plan.finish([group]);
+}
+
+/// Vero se `unit` è un gruppo che si separa: un `g` che non è un livello.
+export function isGroup(unit: Unit): boolean {
+  return unit.tag === "g" && unit.role === "group";
+}
+
+/// Separa i gruppi fra `units`: i figli prendono il posto del gruppo, in
+/// ordine, con la sua trasformazione e lo stile che ne ereditavano; titolo e
+/// descrizione del gruppo se ne vanno con lui. La selezione dopo sono i
+/// figli e gli altri oggetti scelti. `"foreign"` se un gruppo ha parti
+/// estranee e qualcosa da portare su di loro.
+export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | "foreign" {
+  const plan = new Plan(model, ids);
+  const kept: Unit[] = [];
+  const freed: string[] = [];
+  // Dall'ultimo gruppo al primo, e in ogni gruppo dall'ultimo figlio al
+  // primo: così il percorso di una parte estranea senza id vale ancora
+  // quando tocca a lei.
+  for (const unit of [...units].reverse()) {
+    if (!isGroup(unit)) {
+      kept.push(unit);
+      continue;
+    }
+    const node = nodeOf(model, unit) as ContainerNode;
+    const group = plan.idOf(node);
+    const parent = plan.parentOf(node);
+    const own = plainAttributes(node);
+    const matrix = parseTransform(own.get("transform") ?? "") ?? IDENTITY;
+    const moves = !sameMatrix(matrix, IDENTITY);
+    const inherited = INHERITED.filter((name) => own.has(name));
+    const alpha = parseOpacity(own.get("opacity") ?? "");
+    const fades = alpha !== null && alpha < 1;
+    const carries = moves || inherited.length > 0 || fades;
+    const children = elementChildren(node).filter((child) => !(child.facts.uri === SVG_NS && (child.facts.local === "title" || child.facts.local === "desc")));
+    if (carries && children.some((child) => child.details === null)) return "foreign";
+    for (const child of [...children].reverse()) {
+      let target: Target;
+      if (child.details === null) {
+        target = child.facts.id ?? { path: pathOf(child), tag: tagName(child) };
+      } else {
+        const id = plan.idOf(child);
+        target = id;
+        freed.push(id);
+        if (carries) {
+          const theirs = plainAttributes(child);
+          const change: Record<string, string | null> = {};
+          if (moves) change.transform = transformValue(compose(matrix, parseTransform(theirs.get("transform") ?? "") ?? IDENTITY));
+          for (const name of inherited) if (!theirs.has(name)) change[name] = own.get(name)!;
+          if (fades) change.opacity = formatNumber((parseOpacity(theirs.get("opacity") ?? "") ?? 1) * alpha, OPACITY_PLACES);
+          if (Object.keys(change).length > 0) plan.ops.push({ op: "set", id, attrs: change });
+        }
+      }
+      plan.ops.push({ op: "move", target, parent, pos: { after: group } });
+    }
+    plan.ops.push({ op: "remove", target: group });
+  }
+  if (plan.ops.length === 0) return { ops: [], keys: units.map((unit) => unit.key) };
+  // Un oggetto rimasto scelto riceve un id: i figli portati fuori cambiano il
+  // suo percorso.
+  const named = kept.map((unit) => plan.idOf(nodeOf(model, unit)));
+  return plan.finish([...named, ...freed]);
+}
+
+// ---------------------------------------------------------------------------
+// Allineare e distribuire.
+// ---------------------------------------------------------------------------
+
+/// Unisce gli spostamenti di più oggetti, ognuno col suo.
+function moves(list: ReadonlyArray<readonly [Unit, number, number]>, ids: NewIds): Arranged {
+  const ops: Op[] = [];
+  const keys: string[] = [];
+  for (const [unit, dx, dy] of list) {
+    const x = roundDelta(dx);
+    const y = roundDelta(dy);
+    if (x === 0 && y === 0) {
+      keys.push(unit.key);
+      continue;
+    }
+    const moved = moveOps([unit], x, y, ids);
+    ops.push(...moved.ops);
+    keys.push(...(moved.keys.length > 0 ? moved.keys : [unit.key]));
+  }
+  return { ops, keys };
+}
+
+/// Il riquadro che contiene `units`; `null` se nessuno disegna.
+export function boundsOf(units: readonly Unit[]): Bounds | null {
+  let out: Bounds | null = null;
+  for (const unit of units) {
+    const b = unit.bounds;
+    if (b === null) continue;
+    out = out === null ? b : { min: [Math.min(out.min[0], b.min[0]), Math.min(out.min[1], b.min[1])], max: [Math.max(out.max[0], b.max[0]), Math.max(out.max[1], b.max[1])] };
+  }
+  return out;
+}
+
+/// Allinea `units` al bordo o al centro `edge` di `reference`.
+export function alignOps(units: readonly Unit[], edge: Edge, reference: Bounds, ids: NewIds): Arranged {
+  const list = units.map((unit): readonly [Unit, number, number] => {
+    const b = unit.bounds;
+    if (b === null) return [unit, 0, 0];
+    switch (edge) {
+      case "left":
+        return [unit, reference.min[0] - b.min[0], 0];
+      case "center":
+        return [unit, (reference.min[0] + reference.max[0] - b.min[0] - b.max[0]) / 2, 0];
+      case "right":
+        return [unit, reference.max[0] - b.max[0], 0];
+      case "top":
+        return [unit, 0, reference.min[1] - b.min[1]];
+      case "middle":
+        return [unit, 0, (reference.min[1] + reference.max[1] - b.min[1] - b.max[1]) / 2];
+      case "bottom":
+        return [unit, 0, reference.max[1] - b.max[1]];
+    }
+  });
+  return moves(list, ids);
+}
+
+/// Distribuisce `units` lungo `axis` con lo stesso spazio fra uno e
+/// l'altro: il primo e l'ultimo restano dove sono. Servono almeno tre
+/// oggetti che disegnano.
+export function distributeOps(units: readonly Unit[], axis: Axis, ids: NewIds): Arranged {
+  const a = axis === "x" ? 0 : 1;
+  const drawn = units.filter((unit) => unit.bounds !== null);
+  if (drawn.length < 3) return { ops: [], keys: units.map((unit) => unit.key) };
+  const sorted = [...drawn].sort((p, q) => p.bounds!.min[a] - q.bounds!.min[a] || p.bounds!.max[a] - q.bounds!.max[a]);
+  const first = sorted[0]!.bounds!;
+  const last = sorted[sorted.length - 1]!.bounds!;
+  const inner = sorted.slice(1, -1);
+  const sizes = inner.reduce((sum, unit) => sum + unit.bounds!.max[a] - unit.bounds!.min[a], 0);
+  const gap = (last.min[a] - first.max[a] - sizes) / (sorted.length - 1);
+  let at = first.max[a] + gap;
+  const shifts = new Map<Unit, number>();
+  for (const unit of inner) {
+    shifts.set(unit, at - unit.bounds!.min[a]);
+    at += unit.bounds!.max[a] - unit.bounds!.min[a] + gap;
+  }
+  const list = units.map((unit): readonly [Unit, number, number] => {
+    const shift = shifts.get(unit) ?? 0;
+    return axis === "x" ? [unit, shift, 0] : [unit, 0, shift];
+  });
+  return moves(list, ids);
+}

@@ -81,6 +81,38 @@ Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore riprende la penna, e un colore a piacere
 torna al colore di partenza.
 
+## Disporre
+
+Dal livello Standard, finché c'è qualcosa di scelto, in cima al foglio
+galleggia la barra «Disponi»: compare senza spostare il foglio, `Alt+F10` ci
+porta il fuoco ed `Esc` lo riporta al foglio. Ogni comando è un passo di
+annulla, e la selezione segue ciò che ha fatto.
+
+- **Duplica** (`Ctrl+D`) mette le copie sopra gli originali, 24 pixel più in
+  basso a destra, con id nuovi; la selezione passa alle copie, e un secondo
+  `Ctrl+D` prosegue la fila.
+- **Raggruppa** (`Ctrl+G`) mette due o più oggetti in un gruppo nuovo, al
+  posto del più alto; un oggetto di un livello trasformato vi entra con la
+  trasformazione che lo lascia dov'era. **Separa** (`Ctrl+Maiusc+G`) porta i
+  figli al posto del gruppo, ciascuno con la trasformazione del gruppo, con lo
+  stile che ne ereditava e con l'opacità moltiplicata dalla sua. Il titolo e
+  la descrizione del gruppo se ne vanno con lui.
+- **Ordine** porta in primo piano (`Ctrl+Maiusc+]`), avanti di un posto
+  (`Ctrl+]`), indietro di un posto (`Ctrl+[`) o in secondo piano
+  (`Ctrl+Maiusc+[`), nel livello di ciascun oggetto. Sul foglio fanno lo
+  stesso `PagSu` e `PagGiù`, con `Maiusc` agli estremi. Le parentesi valgono
+  per posizione: su una tastiera italiana sono `è` e `+`. Il menu spegne la
+  voce che non cambierebbe niente.
+- **Allinea e distribuisci** allinea i bordi o i centri della selezione al
+  suo riquadro, o alla pagina se l'oggetto è uno solo; distribuire lascia
+  fermi il primo e l'ultimo e mette spazi uguali fra tre o più oggetti.
+
+Ordine, gruppi e separazione spostano gli elementi del file come sono
+scritti; solo ciò che cambia davvero, come la trasformazione di un figlio,
+si riscrive. Una parte che FubDraw non sa scrivere, come un `<use>` di un
+altro programma, non si copia, e un gruppo che la contiene si separa solo se
+non ha niente da portarle.
+
 ## Da tastiera
 
 Ogni strumento funziona senza puntatore. Sul foglio le frecce muovono un

@@ -35,6 +35,11 @@
 //   stessa selezione del foglio; i nomi vengono da `describe.ts`.
 // - **Moto ridotto per costruzione.** La camera non si anima mai: ogni
 //   inquadratura è immediata, quindi non c'è moto da ridurre.
+// - **Disporre.** Dal livello Standard, con una selezione, una barra in cima
+//   al foglio duplica, raggruppa e separa, cambia l'ordine e allinea
+//   (`arrange.ts`); Alt+F10 ci porta il fuoco, Esc lo riporta al foglio.
+//   Ogni comando è un passo di annulla, e la selezione segue ciò che ha
+//   fatto: le copie, il gruppo, i figli.
 // - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
 //   entra nel file come data URI (`images.ts`): il disegno resta un file
 //   solo. Oltre il peso massimo l'editor propone di ridurla.
@@ -45,9 +50,11 @@
 
 import { onLanguage, plural, resolvedLanguage, t, type Key } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
+import { ariaBinding, displayBinding } from "../../../ui/commands";
 import { promptForm, showKeys, type FormField, type KeyGroup } from "../../../ui/form-dialog";
 import { icon, iconEl, registerIcon } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import { fit as fitBounds, screenToWorld, zoomAtPoint, type Camera, type ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
 import { countObjects, describe, outline, type OutlineNode } from "../describe";
@@ -87,6 +94,7 @@ import {
   transformValue,
   type Destination,
 } from "./edit";
+import { alignOps, distributeOps, duplicateOps, groupOps, isGroup, orderOps, ungroupOps, type Arranged, type Axis, type Edge, type Order } from "./arrange";
 import { elemBounds, SceneIndex, SceneIndexer, type Unit } from "./hit";
 import { History, type Replay } from "./history";
 import {
@@ -256,8 +264,9 @@ const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
 /// Le frecce come si leggono nell'elenco dei tasti.
 const ARROW_KEYS = "←↑→↓";
 
-/// Lo scarto fra due immagini incollate insieme, in pixel: si vedono tutte.
-const PASTE_STEP_PX = 24;
+/// Lo scarto di una copia dal suo originale, e fra due immagini incollate
+/// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
+const COPY_STEP_PX = 24;
 
 const INK_KEY = "pen";
 
@@ -277,6 +286,11 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-zoom-in": ["M12 5v14", "M5 12h14"],
   "draw-zoom-out": ["M5 12h14"],
   "draw-fit": ["M4 9V4h5", "M15 4h5v5", "M20 15v5h-5", "M9 20H4v-5"],
+  "draw-duplicate": ["M9 9h11v11H9z", "M15 9V4H4v11h5"],
+  "draw-group": ["M3 7V3h4", "M17 3h4v4", "M21 17v4h-4", "M7 21H3v-4", "M7 7h6v6H7z", "M11 11h6v6h-6z"],
+  "draw-ungroup": ["M3 3h8v8H3z", "M13 13h8v8h-8z"],
+  "draw-order": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
+  "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -447,10 +461,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   surfaceHint.className = "sr-only";
   surfaceHint.id = identifier("draw-surface-hint");
   surface.setAttribute("aria-describedby", surfaceHint.id);
+  /// Il suggerimento del foglio dice anche come si arriva ai comandi della
+  /// selezione, dal livello che li ha.
+  const showSurfaceHint = (): void => {
+    surfaceHint.textContent = t(reaches(level, "standard") ? "draw.surface.hint.arrange" : "draw.surface.hint");
+  };
   relabels.push(() => {
     toolbar.setAttribute("aria-label", t("draw.toolbar"));
     surface.setAttribute("aria-label", t("draw.surface"));
-    surfaceHint.textContent = t("draw.surface.hint");
+    showSurfaceHint();
   });
 
   const group = (label: Key, radio: boolean): HTMLElement => {
@@ -609,10 +628,47 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     titleInput.placeholder = t("draw.title.placeholder");
   });
 
-  // Il foglio e, accanto, l'albero degli oggetti.
+  // I comandi della selezione, dal livello Standard: una barra che galleggia
+  // in cima al foglio finché c'è qualcosa di scelto, così sceglie non sposta
+  // niente. Ordine e allineamento sono due menu: la barra resta corta anche
+  // su un telefono.
+  const arrangeBar = document.createElement("div");
+  arrangeBar.className = "draw-arrange";
+  arrangeBar.setAttribute("role", "toolbar");
+  arrangeBar.hidden = true;
+  relabels.push(() => arrangeBar.setAttribute("aria-label", t("draw.arrange")));
+  /// Un pulsante della barra: il nome, e nel suggerimento la scorciatoia.
+  const arrangeButton = (label: Key, iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
+    const control = button(arrangeBar, "draw-button", () => (binding === null ? t(label) : `${t(label)} (${displayBinding(binding)})`), iconName, run);
+    if (binding !== null) {
+      control.setAttribute("aria-keyshortcuts", ariaBinding(binding));
+      relabels.push(() => control.setAttribute("aria-label", t(label)));
+    }
+    return control;
+  };
+  arrangeButton("draw.duplicate", "draw-duplicate", "Mod-d", () => duplicateSelection());
+  const groupButton = arrangeButton("draw.group", "draw-group", "Mod-g", () => groupSelection());
+  const ungroupButton = arrangeButton("draw.ungroup", "draw-ungroup", "Mod-Shift-g", () => ungroupSelection());
+  const orderButton = arrangeButton("draw.order", "draw-order", null, () => openArrangeMenu(orderButton, orderItems()));
+  const alignButton = arrangeButton("draw.align", "draw-align", null, () => openArrangeMenu(alignButton, alignItems()));
+  for (const control of [orderButton, alignButton]) {
+    control.setAttribute("aria-haspopup", "menu");
+    control.setAttribute("aria-expanded", "false");
+  }
+  // Esc nella barra torna al foglio, con la selezione com'era.
+  life.listen(arrangeBar, "keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    surface.focus({ preventScroll: true });
+  });
+
+  // Il foglio con la sua barra e, accanto, l'albero degli oggetti.
+  const stage = document.createElement("div");
+  stage.className = "draw-stage";
+  stage.append(surface, arrangeBar);
   const body = document.createElement("div");
   body.className = "draw-body";
-  body.append(surface, tree.element);
+  body.append(stage, tree.element);
   header.append(toolbar, titleField);
   root.append(header, body, surfaceHint, live);
   host.append(root);
@@ -932,6 +988,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     customButton.title = label;
   };
 
+  /// La barra della selezione: c'è dal livello Standard, con qualcosa di
+  /// scelto e il disegno che si scrive. Un pulsante che non serve si spegne;
+  /// se aveva il fuoco, il fuoco passa a quello che prende il Tab, o al
+  /// foglio quando la barra se ne va.
+  const syncArrange = (): void => {
+    const focused = arrangeBar.contains(document.activeElement);
+    const units = reaches(level, "standard") && editable() && selection.length > 0 ? selectedUnits() : [];
+    arrangeBar.hidden = units.length === 0;
+    groupButton.disabled = units.length < 2;
+    ungroupButton.disabled = !units.some(isGroup);
+    arrangeFocus.sync(null);
+    if (!focused) return;
+    const active = document.activeElement;
+    if (!arrangeBar.hidden && active instanceof HTMLButtonElement && arrangeBar.contains(active) && !active.disabled) return;
+    const next = arrangeBar.hidden ? null : arrangeFocus.current();
+    if (next !== null) next.focus();
+    else surface.focus({ preventScroll: true });
+  };
+
   const syncControls = (): void => {
     const canEdit = editable();
     const now = style();
@@ -967,7 +1042,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     propertiesButton.disabled = !canEdit;
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
-    roving(null);
+    toolbarFocus.sync(null);
+    syncArrange();
   };
 
   /// Porta la superficie alla scena del motore.
@@ -1151,6 +1227,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (swatchOf(styles.pen.color) === null) styles.pen.color = DEFAULT_COLOR;
       if (swatchOf(styles.highlighter.color) === null) styles.highlighter.color = HIGHLIGHTER_COLOR;
     }
+    showSurfaceHint();
     syncControls();
   }
 
@@ -1746,40 +1823,45 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Tastiera --------------------------------------------------------------
 
-  /// I controlli della barra raggiungibili adesso: uno solo prende il Tab,
-  /// le frecce passano agli altri.
-  let rovingCurrent: HTMLButtonElement | null = null;
-  const focusable = (): HTMLButtonElement[] =>
-    [...toolbar.querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled && !control.hidden);
-
-  function roving(target: HTMLButtonElement | null): void {
-    const controls = focusable();
-    const keep = target ?? rovingCurrent;
-    rovingCurrent = keep !== null && controls.includes(keep) ? keep : controls[0] ?? null;
-    for (const control of toolbar.querySelectorAll<HTMLButtonElement>("button")) control.tabIndex = control === rovingCurrent ? 0 : -1;
-  }
-
-  life.listen(toolbar, "keydown", (event) => {
-    const controls = focusable();
-    const at = controls.indexOf(document.activeElement as HTMLButtonElement);
-    if (at < 0) return;
-    let next: number | null = null;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (at + 1) % controls.length;
-    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (at - 1 + controls.length) % controls.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = controls.length - 1;
-    if (next === null) return;
-    event.preventDefault();
-    roving(controls[next]!);
-    controls[next]!.focus();
-  });
-  life.listen(toolbar, "focusin", (event) => {
-    if (event.target instanceof HTMLButtonElement) roving(event.target);
-  });
-  // Il puntatore non prende il fuoco: resta al foglio, con le scorciatoie.
-  life.listen(toolbar, "mousedown", (event) => {
-    if ((event.target as Element | null)?.closest("button")) event.preventDefault();
-  });
+  /// Una barra di pulsanti col roving tabindex: uno solo prende il Tab, le
+  /// frecce, Inizio e Fine passano agli altri, e il puntatore non prende il
+  /// fuoco, che resta al foglio con le scorciatoie. Dà la funzione che porta
+  /// il Tab su `target`, o lo tiene dov'è se c'è ancora; e il pulsante che lo
+  /// tiene.
+  const rove = (bar: HTMLElement): { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null } => {
+    let current: HTMLButtonElement | null = null;
+    const focusable = (): HTMLButtonElement[] =>
+      [...bar.querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled && !control.hidden);
+    const sync = (target: HTMLButtonElement | null): void => {
+      const controls = focusable();
+      const keep = target ?? current;
+      current = keep !== null && controls.includes(keep) ? keep : controls[0] ?? null;
+      for (const control of bar.querySelectorAll<HTMLButtonElement>("button")) control.tabIndex = control === current ? 0 : -1;
+    };
+    life.listen(bar, "keydown", (event) => {
+      const controls = focusable();
+      const at = controls.indexOf(document.activeElement as HTMLButtonElement);
+      if (at < 0) return;
+      let next: number | null = null;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (at + 1) % controls.length;
+      else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (at - 1 + controls.length) % controls.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = controls.length - 1;
+      if (next === null) return;
+      event.preventDefault();
+      sync(controls[next]!);
+      controls[next]!.focus();
+    });
+    life.listen(bar, "focusin", (event) => {
+      if (event.target instanceof HTMLButtonElement) sync(event.target);
+    });
+    life.listen(bar, "mousedown", (event) => {
+      if ((event.target as Element | null)?.closest("button")) event.preventDefault();
+    });
+    return { sync, current: () => current };
+  };
+  const toolbarFocus = rove(toolbar);
+  const arrangeFocus = rove(arrangeBar);
 
   life.listen(titleInput, "change", () => {
     const value = titleInput.value.trim();
@@ -1838,6 +1920,188 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (width === w && height === h) return;
     const to: Bounds = { min: from.min, max: [from.min[0] + width, from.min[1] + height] };
     if (placeSelection(units, from, to)) announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+  };
+
+  // --- Disporre ----------------------------------------------------------------
+
+  /// Gli oggetti su cui lavora un comando di disposizione: quelli scelti, dal
+  /// livello Standard e col disegno che si scrive. `null`, e lo si dice, se
+  /// non c'è niente di scelto.
+  const arranging = (): Unit[] | null => {
+    if (!reaches(level, "standard") || !editable()) return null;
+    const units = selectedUnits();
+    if (units.length === 0) {
+      announce(t("draw.selected.none"));
+      return null;
+    }
+    cancelGesture();
+    return units;
+  };
+
+  /// Scrive `arranged` col nome `label`, e la selezione diventa la sua; la
+  /// pagina cresce se `extent` ne esce. `false` se non c'era niente da
+  /// cambiare, e lo si dice, o se il motore ha rifiutato.
+  const arrange = (label: Key, arranged: Arranged, extent: Bounds | null = null): boolean => {
+    if (arranged.ops.length === 0) {
+      announce(t("draw.unchanged"));
+      return false;
+    }
+    const ops: Op[] = [...arranged.ops];
+    const page = pageFor(scene.root.page, extent);
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    // La selezione è già quella di dopo quando l'editor si rinfresca: la
+    // barra non sparisce per un istante, e il fuoco che ci sta resta.
+    const before = selection;
+    selection = [...arranged.keys];
+    if (commit(label, asGesture(ops)) === null) {
+      select(before);
+      return false;
+    }
+    select(arranged.keys);
+    return true;
+  };
+
+  /// Copia gli oggetti scelti un passo più in basso a destra, sopra gli
+  /// originali; la selezione passa alle copie, così un secondo Ctrl+D
+  /// prosegue la fila.
+  function duplicateSelection(): void {
+    const units = arranging();
+    if (units === null) return;
+    const step = roundDelta(COPY_STEP_PX / camera.scale);
+    const arranged = duplicateOps(engine.model!, units, step, step, newIds());
+    if (arranged === null) {
+      announce(t("draw.duplicate.foreign"));
+      return;
+    }
+    if (!arrange("draw.action.duplicate", arranged, translated(boundsOf(units), step, step))) return;
+    announce(`${plural(units.length, "draw.duplicated.one", "draw.duplicated.other")} ${objects()}`);
+  }
+
+  function orderSelection(order: Order): void {
+    const units = arranging();
+    if (units === null) return;
+    if (arrange("draw.action.order", orderOps(engine.model!, currentIndex(), units, order, newIds()))) announce(t(ORDERED[order]));
+  }
+
+  function groupSelection(): void {
+    const units = arranging();
+    if (units === null) return;
+    if (units.length < 2) {
+      announce(t("draw.group.few"));
+      return;
+    }
+    const arranged = groupOps(engine.model!, units, newIds());
+    if (arranged === null) {
+      announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
+      return;
+    }
+    if (arrange("draw.action.group", arranged)) announce(t("draw.grouped", { count: units.length }));
+  }
+
+  function ungroupSelection(): void {
+    const units = arranging();
+    if (units === null) return;
+    const groups = units.filter(isGroup).length;
+    if (groups === 0) {
+      announce(t("draw.ungroup.none"));
+      return;
+    }
+    const arranged = ungroupOps(engine.model!, units, newIds());
+    if (arranged === "foreign") {
+      announce(t("draw.ungroup.foreign"));
+      return;
+    }
+    if (arrange("draw.action.ungroup", arranged)) announce(plural(groups, "draw.ungrouped.one", "draw.ungrouped.other"));
+  }
+
+  /// Il riquadro a cui si allinea la selezione: la pagina per un oggetto
+  /// solo, il riquadro della selezione per più d'uno. `null` per un oggetto
+  /// solo in un disegno senza pagina.
+  const alignReference = (units: readonly Unit[]): Bounds | null => {
+    if (units.length > 1) return boundsOf(units);
+    const page = scene.root.page;
+    return page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
+  };
+
+  function alignSelection(edge: Edge): void {
+    const units = arranging();
+    if (units === null) return;
+    const reference = alignReference(units);
+    if (reference === null) return;
+    if (arrange("draw.action.align", alignOps(units, edge, reference, newIds()))) {
+      announce(plural(units.length, "draw.aligned.one", "draw.aligned.other"));
+    }
+  }
+
+  /// Gli oggetti scelti che disegnano qualcosa: quelli che si distribuiscono.
+  const drawn = (units: readonly Unit[]): number => units.filter((unit) => unit.bounds !== null).length;
+
+  function distributeSelection(axis: Axis): void {
+    const units = arranging();
+    if (units === null) return;
+    const count = drawn(units);
+    if (count < 3) {
+      announce(t("draw.distribute.few"));
+      return;
+    }
+    if (arrange("draw.action.distribute", distributeOps(units, axis, newIds()))) announce(t("draw.distributed", { count }));
+  }
+
+  /// Apre il menu di un pulsante della barra, sotto il pulsante.
+  const openArrangeMenu = (trigger: HTMLButtonElement, items: MenuItem[]): void => {
+    const box = trigger.getBoundingClientRect();
+    trigger.setAttribute("aria-expanded", "true");
+    showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+      onClose: () => trigger.setAttribute("aria-expanded", "false"),
+    });
+  };
+
+  /// Le voci dell'ordine: spenta quella che non cambierebbe niente.
+  const orderItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const model = engine.model;
+    const index = currentIndex();
+    return ORDERS.map(({ order, label, binding }) => ({
+      label: t(label),
+      hint: displayBinding(binding),
+      disabled: model === null || units.length === 0 || orderOps(model, index, units, order, newIds()).ops.length === 0,
+      run: () => orderSelection(order),
+    }));
+  };
+
+  /// Le voci dell'allineamento e della distribuzione. Per un oggetto solo il
+  /// riferimento è la pagina, e il nome lo dice; distribuire chiede almeno
+  /// tre oggetti, e la voce spenta dice perché.
+  const alignItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const single = units.length === 1;
+    const usable = units.length > 0 && alignReference(units) !== null;
+    const items: MenuItem[] = EDGES.map(({ edge, label }) => ({
+      label: single ? t("draw.align.to_page", { action: t(label) }) : t(label),
+      disabled: !usable,
+      run: () => alignSelection(edge),
+    }));
+    const few = drawn(units) < 3;
+    for (const { axis, label } of AXES) {
+      items.push({
+        label: t(label),
+        separator: axis === "x",
+        disabled: few,
+        ...(few ? { description: t("draw.distribute.few") } : {}),
+        run: () => distributeSelection(axis),
+      });
+    }
+    return items;
+  };
+
+  /// Alt+F10: il fuoco va alla barra della selezione, se c'è.
+  const focusArrange = (): boolean => {
+    if (arrangeBar.hidden) return false;
+    arrangeFocus.sync(null);
+    const target = arrangeFocus.current();
+    if (target === null) return false;
+    target.focus();
+    return true;
   };
 
   /// Le frecce sul foglio. Con una selezione la spostano, e con Ctrl o ⌘ la
@@ -1963,6 +2227,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     commit("draw.properties.document", asGesture(ops));
   };
 
+  /// I tasti dei comandi della selezione, dal livello Standard.
+  const arrangeKeys = (): KeyGroup[] =>
+    reaches(level, "standard")
+      ? [
+          {
+            title: t("draw.arrange"),
+            rows: [
+              ["Mod-d", t("draw.duplicate")],
+              ["Mod-g", t("draw.group")],
+              ["Mod-Shift-g", t("draw.ungroup")],
+              ["Mod-Shift-] Shift-PageUp", t("draw.order.front")],
+              ["Mod-] PageUp", t("draw.order.forward")],
+              ["Mod-[ PageDown", t("draw.order.backward")],
+              ["Mod-Shift-[ Shift-PageDown", t("draw.order.back")],
+              ["Alt-F10", t("draw.keys.arrange")],
+            ],
+          },
+        ]
+      : [];
+
   /// L'elenco dei tasti, nei gruppi in cui si usano.
   const keyGroups = (): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: tools.map((spec) => [spec.shortcut, t(spec.label)] as const) },
@@ -1987,6 +2271,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["Escape", t("draw.keys.deselect")],
       ],
     },
+    ...arrangeKeys(),
     {
       title: t("draw.view"),
       rows: [
@@ -2145,7 +2430,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const view = viewBounds();
     const inView = at !== null && at[0] >= view.min[0] && at[0] <= view.max[0] && at[1] >= view.min[1] && at[1] <= view.max[1];
     const base: Point = inView ? at : [(view.min[0] + view.max[0]) / 2, (view.min[1] + view.max[1]) / 2];
-    const step = PASTE_STEP_PX / camera.scale;
+    const step = COPY_STEP_PX / camera.scale;
     // La scala del livello: una unità della scena vale `1 / k` unità sue.
     const k = Math.sqrt(Math.abs(to.matrix[0] * to.matrix[3] - to.matrix[1] * to.matrix[2]));
     const ops: Op[] = [...to.prelude];
@@ -2232,9 +2517,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const mod = event.ctrlKey || event.metaKey;
+    // I comandi della selezione prendono i loro tasti solo quando c'è una
+    // selezione: senza, Ctrl+D e gli altri restano a chi li aveva.
+    const arranges = reaches(level, "standard") && selection.length > 0 && editable();
     if (mod) {
       if (event.altKey) return;
       const key = event.key.toLowerCase();
+      // Le parentesi quadre per posizione, dove le ha una tastiera americana:
+      // su quella italiana sono «è» e «+», che si premono senza AltGr.
+      const bracket = event.code === "BracketRight" || key === "]" || key === "}" ? 1 : event.code === "BracketLeft" || key === "[" || key === "{" ? -1 : 0;
       if (key === "z") {
         if (event.shiftKey) redo();
         else undo();
@@ -2243,15 +2534,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (key === "a" && !event.shiftKey) {
         select(currentIndex().units.map((unit) => unit.key));
         announceSelection();
+      } else if (arranges && key === "d" && !event.shiftKey) {
+        duplicateSelection();
+      } else if (arranges && key === "g") {
+        if (event.shiftKey) ungroupSelection();
+        else groupSelection();
+      } else if (arranges && bracket !== 0) {
+        if (bracket > 0) orderSelection(event.shiftKey ? "front" : "forward");
+        else orderSelection(event.shiftKey ? "back" : "backward");
       } else {
         return;
       }
       event.preventDefault();
       return;
     }
-    if (event.altKey) return;
+    if (event.altKey) {
+      if (event.key !== "F10" || event.shiftKey || !focusArrange()) return;
+      event.preventDefault();
+      return;
+    }
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
+    } else if (onSurface && arranges && (event.key === "PageUp" || event.key === "PageDown")) {
+      if (pressed !== null) return;
+      if (event.key === "PageUp") orderSelection(event.shiftKey ? "front" : "forward");
+      else orderSelection(event.shiftKey ? "back" : "backward");
     } else if (onSurface && (event.key === "Home" || event.key === "End")) {
       if (pressed !== null || !visit(event.key === "Home" ? 0 : currentIndex().units.length - 1)) return;
     } else if (onSurface && event.key === " ") {
@@ -2389,6 +2696,38 @@ const REASONS: Readonly<Record<Reason, Key>> = {
   limit: "draw.reason.limit",
   "read-only": "draw.reason.read_only",
 };
+
+/// Le voci dell'ordine, dalla cima al fondo, con le loro scorciatoie.
+const ORDERS: ReadonlyArray<{ readonly order: Order; readonly label: Key; readonly binding: string }> = [
+  { order: "front", label: "draw.order.front", binding: "Mod-Shift-]" },
+  { order: "forward", label: "draw.order.forward", binding: "Mod-]" },
+  { order: "backward", label: "draw.order.backward", binding: "Mod-[" },
+  { order: "back", label: "draw.order.back", binding: "Mod-Shift-[" },
+];
+
+/// Che cosa si annuncia dopo un cambio d'ordine.
+const ORDERED: Readonly<Record<Order, Key>> = {
+  front: "draw.ordered.front",
+  forward: "draw.ordered.forward",
+  backward: "draw.ordered.backward",
+  back: "draw.ordered.back",
+};
+
+/// Le voci dell'allineamento: prima i bordi e il centro in orizzontale, poi
+/// in verticale.
+const EDGES: ReadonlyArray<{ readonly edge: Edge; readonly label: Key }> = [
+  { edge: "left", label: "draw.align.left" },
+  { edge: "center", label: "draw.align.center" },
+  { edge: "right", label: "draw.align.right" },
+  { edge: "top", label: "draw.align.top" },
+  { edge: "middle", label: "draw.align.middle" },
+  { edge: "bottom", label: "draw.align.bottom" },
+];
+
+const AXES: ReadonlyArray<{ readonly axis: Axis; readonly label: Key }> = [
+  { axis: "x", label: "draw.distribute.x" },
+  { axis: "y", label: "draw.distribute.y" },
+];
 
 /// Che cosa si annuncia quando una forma entra nel disegno.
 const ADDED: Readonly<Record<ShapeTool, Key>> = {
