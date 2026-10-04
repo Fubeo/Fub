@@ -2436,6 +2436,54 @@ describe("trasformare con i numeri, dal livello Esperto", () => {
   });
 });
 
+describe("applicare la trasformazione, dal livello Esperto", () => {
+  const A = "oa1a1a1a1";
+  const T = "ot1t1t1t1";
+  const R = "or1r1r1r1";
+  const SHAPES = doc(
+    `${LAYER}<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="translate(5 5) scale(2)"/>`
+      + `<text id="${T}" x="0" y="40" transform="rotate(30)"><tspan x="0" dy="0">Ciao</tspan></text>`
+      + `<rect id="${R}" x="0" y="60" width="10" height="10" fill="#000000"/></g>`,
+  );
+
+  const applyButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Applica trasformazione"]')!;
+
+  it("c'è solo all'Esperto, e porta la trasformazione nella geometria in un passo che si annulla", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select([A]);
+    expect(applyButton().hidden).toBe(true);
+    // Sotto l'Esperto il comando non scrive, anche chiesto.
+    applyButton().click();
+    expect(changes).toEqual([]);
+    editor.setLevel("expert");
+    expect(applyButton().hidden).toBe(false);
+    expect(applyButton().hasAttribute("aria-keyshortcuts")).toBe(false);
+    applyButton().click();
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="5" y="5" width="40" height="20" fill="#000000"/>`);
+    expect(spoken()).toBe("Trasformazione applicata a 1 oggetto.");
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Applicazione della trasformazione.");
+  });
+
+  it("dice quanti oggetti conservano una trasformazione, e quando non c'è niente da applicare", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A, T]);
+    applyButton().click();
+    expect(spoken()).toBe("Trasformazione applicata a 1 oggetto. 1 oggetto conserva una trasformazione che la sua forma non sa scrivere.");
+    expect(editor.selection).toEqual([A, T]);
+    editor.select([T]);
+    applyButton().click();
+    expect(spoken()).toBe("È già così: niente da cambiare. 1 oggetto conserva una trasformazione che la sua forma non sa scrivere.");
+    editor.select([R]);
+    applyButton().click();
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(changes).toHaveLength(1);
+  });
+});
+
 describe("le immagini incollate", () => {
   const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
   const MIB = 1024 * 1024;

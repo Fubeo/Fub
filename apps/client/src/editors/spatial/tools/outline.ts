@@ -95,7 +95,7 @@ export interface Outline {
 
 /// Ciò che i figli di `node` ereditano, coi valori di `node` sopra quelli
 /// che `node` eredita.
-type Inherited = ReadonlyMap<string, string>;
+export type Inherited = ReadonlyMap<string, string>;
 
 const INITIAL: Inherited = new Map([
   ["stroke", "none"],
@@ -106,7 +106,7 @@ const INITIAL: Inherited = new Map([
 ]);
 
 /// Gli attributi del contorno che `node` passa ai figli.
-function passed(node: ElementPart, from: Inherited): Inherited {
+export function passed(node: ElementPart, from: Inherited): Inherited {
   const own = plainAttributes(node);
   const out = new Map(from);
   for (const name of INITIAL.keys()) {
@@ -117,7 +117,7 @@ function passed(node: ElementPart, from: Inherited): Inherited {
 }
 
 /// Ciò che eredita `node`, dalla radice in giù.
-function inheritedBy(node: ElementPart): Inherited {
+export function inheritedBy(node: ElementPart): Inherited {
   const chain: ElementPart[] = [];
   for (let at = node.parent; at !== null; at = at.parent) chain.push(at);
   let out = INITIAL;

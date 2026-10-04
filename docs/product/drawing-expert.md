@@ -125,3 +125,53 @@ zero, scale al cento per cento. Le regole stanno in
   deformarlo, scritta, non parte, e lo si dice.
 - **È un passo solo**, «Trasformazione», e la pagina si allarga se gli
   oggetti ne escono.
+
+## Applica trasformazione
+
+«Applica trasformazione», nella barra della selezione, porta la `transform`
+degli oggetti scelti nella loro geometria: punti, estremi, angoli e raggi si
+riscrivono dove si vedono, e la `transform` si toglie. Serve per leggere e
+cambiare negli attributi le coordinate vere, o per dare il disegno a un
+programma che tratta male le trasformazioni. Le regole stanno in
+`apps/client/src/editors/spatial/tools/apply.ts`.
+
+- **Ciò che si vede resta.** Ogni forma prende della trasformazione ciò che
+  sa scrivere e tiene il resto come `transform`; lo spostamento va sempre
+  nella geometria.
+- **Percorsi, linee, spezzate, poligoni e frecce prendono tutto.** Un arco
+  cambia raggi, rotazione e verso; uno che va da un capo all'altro della sua
+  ellisse, come le due metà di un cerchio, si scrive coi raggi appena più
+  piccoli, così il centro resta nel mezzo degli estremi scritti con due
+  decimali. La punta di una freccia si ridisegna con la sua regola.
+- **Rettangoli ed ellissi prendono la scala lungo gli assi**, e i quarti di
+  giro e i ribaltamenti, che li lasciano dritti; un cerchio prende anche le
+  rotazioni, e la scala uguale nei due versi. Ciò che li storcerebbe, come un
+  rettangolo girato di 30°, resta nella `transform`. I raggi degli angoli di
+  un rettangolo scalano con lui.
+- **Con un tratteggio** un rettangolo, un'ellisse o un cerchio tengono quarti
+  di giro e ribaltamenti: il tratteggio comincerebbe da un altro punto, e
+  andrebbe nell'altro verso.
+- **Un'immagine** prende la scala lungo gli assi; se tiene le proporzioni
+  (`preserveAspectRatio` diverso da `none`), solo quella uguale nei due
+  versi. Rotazioni e ribaltamenti restano.
+- **Un tratto a penna** prende rotazioni, ribaltamenti e una scala uguale nei
+  due versi, o niente: l'inchiostro si riscrive, la direzione della penna
+  gira con lui, il pennello scala e il tratto si ridisegna. Un tratto che la
+  trasformazione deformerebbe, o il cui inchiostro riscritto sarebbe troppo
+  lungo, la tiene.
+- **Un testo tiene la sua**: le sue righe non si riscrivono.
+- **Il contorno scala con l'oggetto**, spessore e tratteggio, della radice
+  del fattore dell'area: una scala di due raddoppia lo spessore. Un contorno
+  che viene dal gruppo si scrive sull'oggetto, già scalato; su un'immagine o
+  un testo, che non hanno contorno, niente.
+- **Un gruppo o un collegamento passano la loro trasformazione** alle parti,
+  e la tolgono, se tutte la sanno prendere; se no la tengono, e le parti
+  applicano solo la loro. Le parti di un altro programma fermano il
+  passaggio.
+- **Niente che il file non sappia scrivere.** Un oggetto che, scritto,
+  uscirebbe dai numeri del formato, si deformerebbe o perderebbe il
+  contorno, tiene la sua trasformazione com'è; così un percorso con una forma
+  che questa versione non conosce.
+- **È un passo solo**, «Applicazione della trasformazione», e la selezione
+  resta quella. Si dice quanti oggetti cambiano e quanti conservano una
+  trasformazione; se non c'è niente da applicare, lo si dice.
