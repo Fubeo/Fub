@@ -2097,6 +2097,17 @@ progress::-moz-progress-bar {
     var(--shadow-sm);
 }
 
+/* La barra della selezione galleggia sul disegno: il fondo della barra in
+   cima, un filo e un'ombra che la staccano da ciò che copre. */
+.draw-arrange {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
 /* La superficie nella shell: l'avviso è informazione, non allarme. Dice com'è
    il documento (estraneo, in sola lettura, illeggibile) col fondo e il filo
    dell'informazione, e il testo resta nel colore del testo. */

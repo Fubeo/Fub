@@ -571,6 +571,8 @@ describe("una scorciatoia come si preme", () => {
     expect(displayBinding("Mod-Shift-f", "other")).toBe("Ctrl+Shift+F");
     expect(displayBinding("Mod-Shift-f", "mac")).toBe("⌘⇧F");
     expect(displayBinding("Mod-k d", "other")).toBe("Ctrl+K D");
+    expect(displayBinding("Alt-F10", "other")).toBe("Alt+F10");
+    expect(displayBinding("Shift-F2", "mac")).toBe("⇧F2");
     expect(displayBinding("Mod-o || Mod-k o", "other")).toBe("Ctrl+O");
     expect(displayBinding(null, "other")).toBe("");
     // Ciò che non si sa leggere resta scritto, non sparisce.

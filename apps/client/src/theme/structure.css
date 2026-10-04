@@ -1287,6 +1287,28 @@ html, body, #app {
   width: 6px;
   height: 6px;
 }
+/* Il foglio e la sua barra: la barra della selezione galleggia in cima al
+   foglio, al centro, così quando compare il foglio non si sposta. Va a capo
+   invece di uscire da un foglio stretto. */
+.draw-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.draw-arrange {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+  transform: translateX(-50%);
+}
 /* Il foglio e, accanto, l'albero degli oggetti; su un riquadro stretto
    l'albero va sotto. Una riga dell'albero misura almeno 44 px: è un bersaglio
    come gli altri, e l'albero virtualizzato conta su quell'altezza. */
