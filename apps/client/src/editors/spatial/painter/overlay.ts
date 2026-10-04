@@ -1,5 +1,6 @@
-// Lo strato sopra la scena: l'inchiostro mentre si scrive e le maniglie
-// della selezione, su un canvas 2D grande quanto la vista.
+// Lo strato sopra la scena: l'inchiostro mentre si scrive, le maniglie
+// della selezione e i nodi del tracciato che si modifica, su un canvas 2D
+// grande quanto la vista.
 //
 // Non entra mai nel documento: è ciò che la superficie mostra fra un
 // evento e l'operazione che lo registrerà. L'inchiostro in corso si riempie
@@ -11,6 +12,8 @@
 //
 // I ridisegni si raccolgono in un fotogramma; `flush` disegna subito.
 
+import { arcToCubics } from "../scene/curves";
+import type { Segment } from "../scene/geometry";
 import type { Matrix, Point } from "../scene/matrix";
 import type { OutlinePoint } from "../ink/pf1";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -36,7 +39,19 @@ export type OverlayHandle =
   /// Un punto da trascinare, di misura fissa sullo schermo.
   | { readonly kind: "grip"; readonly x: number; readonly y: number }
   /// Il contorno di una selezione a mano libera, tratteggiato.
-  | { readonly kind: "lasso"; readonly points: readonly Point[] };
+  | { readonly kind: "lasso"; readonly points: readonly Point[] }
+  /// Il contorno di un tracciato di cui si modificano i nodi: i segmenti
+  /// nelle coordinate del tracciato, portati nella scena da `matrix`.
+  | { readonly kind: "outline"; readonly segments: readonly Segment[]; readonly matrix: Matrix }
+  /// Un nodo di un tracciato, di misura fissa sullo schermo: la forma dice
+  /// il tipo, e un nodo scelto è pieno.
+  | { readonly kind: "node"; readonly x: number; readonly y: number; readonly shape: NodeShape; readonly selected: boolean }
+  /// La maniglia di un nodo: un punto, legato al nodo da una linea.
+  | { readonly kind: "control"; readonly x: number; readonly y: number; readonly node: Point };
+
+/// La forma di un nodo: un rombo per lo spigolo, un quadrato per il nodo
+/// liscio, un cerchio per quello simmetrico.
+export type NodeShape = "diamond" | "square" | "circle";
 
 export interface SceneOverlay {
   setView(view: PainterView): void;
@@ -50,6 +65,12 @@ export interface SceneOverlay {
 
 /// Il lato di una maniglia, in pixel CSS.
 const GRIP = 8;
+
+/// La misura di un nodo, in pixel CSS: il lato del quadrato, e il diametro
+/// del cerchio; il rombo è largo quanto la sua diagonale. Il punto di una
+/// maniglia è più piccolo, perché non si confonda con un nodo.
+const NODE = 9;
+const CONTROL = 6;
 
 /// Monta lo strato dentro `host`, sopra ciò che c'è.
 export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay {
@@ -127,6 +148,65 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.fill("nonzero");
   };
 
+  /// Il contorno di un tracciato, nella scena: gli archi come le cubiche
+  /// che li approssimano, che `matrix` porta come porta l'arco.
+  const traceOutline = (ctx: CanvasRenderingContext2D, segments: readonly Segment[], matrix: Matrix): void => {
+    const [a, b, c, d, e, f] = matrix;
+    const at = ([x, y]: Point): Point => screen(a * x + c * y + e, b * x + d * y + f);
+    let current: Point = [0, 0];
+    let start: Point = [0, 0];
+    ctx.beginPath();
+    for (const segment of segments) {
+      switch (segment.kind) {
+        case "move":
+          ctx.moveTo(...at(segment.to));
+          start = segment.to;
+          break;
+        case "line":
+          ctx.lineTo(...at(segment.to));
+          break;
+        case "quad":
+          ctx.quadraticCurveTo(...at(segment.control), ...at(segment.to));
+          break;
+        case "cubic":
+          ctx.bezierCurveTo(...at(segment.c1), ...at(segment.c2), ...at(segment.to));
+          break;
+        case "arc":
+          for (const piece of arcToCubics(current, segment)) {
+            if (piece.kind === "cubic") ctx.bezierCurveTo(...at(piece.c1), ...at(piece.c2), ...at(piece.to));
+            else ctx.lineTo(...at(piece.to));
+          }
+          break;
+        case "close":
+          ctx.closePath();
+          current = start;
+          continue;
+      }
+      current = segment.to;
+    }
+    ctx.stroke();
+  };
+
+  /// Un nodo in `x`, `y` sullo schermo.
+  const drawNode = (ctx: CanvasRenderingContext2D, x: number, y: number, shape: NodeShape): void => {
+    ctx.beginPath();
+    if (shape === "circle") {
+      ctx.arc(x, y, NODE / 2, 0, 2 * Math.PI);
+    } else if (shape === "diamond") {
+      const r = (NODE + 2) / 2;
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r, y);
+      ctx.lineTo(x, y + r);
+      ctx.lineTo(x - r, y);
+      ctx.closePath();
+    } else {
+      // Sul mezzo pixel, perché il bordo di un pixel resti netto.
+      ctx.rect(Math.round(x - NODE / 2) + 0.5, Math.round(y - NODE / 2) + 0.5, NODE - 1, NODE - 1);
+    }
+    ctx.fill();
+    ctx.stroke();
+  };
+
   const drawHandles = (ctx: CanvasRenderingContext2D): void => {
     if (handles.length === 0) return;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -156,18 +236,42 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         });
         ctx.closePath();
         ctx.stroke();
+      } else if (handle.kind === "outline") {
+        ctx.setLineDash([]);
+        traceOutline(ctx, handle.segments, handle.matrix);
+      } else if (handle.kind === "control") {
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(...screen(handle.node[0], handle.node[1]));
+        ctx.lineTo(...screen(handle.x, handle.y));
+        ctx.stroke();
       }
     }
     ctx.setLineDash([]);
-    ctx.fillStyle = paper();
+    const fill = paper();
+    ctx.fillStyle = fill;
     for (const handle of handles) {
-      if (handle.kind !== "grip") continue;
+      if (handle.kind === "grip") {
+        const [px, py] = screen(handle.x, handle.y);
+        // Sul mezzo pixel, perché il bordo di un pixel resti netto.
+        const x = Math.round(px - GRIP / 2) + 0.5;
+        const y = Math.round(py - GRIP / 2) + 0.5;
+        ctx.fillRect(x, y, GRIP, GRIP);
+        ctx.strokeRect(x, y, GRIP, GRIP);
+      } else if (handle.kind === "control") {
+        const [px, py] = screen(handle.x, handle.y);
+        ctx.beginPath();
+        ctx.arc(px, py, CONTROL / 2, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    // I nodi sopra le maniglie, e quelli scelti pieni del colore della linea.
+    for (const handle of handles) {
+      if (handle.kind !== "node") continue;
       const [px, py] = screen(handle.x, handle.y);
-      // Sul mezzo pixel, perché il bordo di un pixel resti netto.
-      const x = Math.round(px - GRIP / 2) + 0.5;
-      const y = Math.round(py - GRIP / 2) + 0.5;
-      ctx.fillRect(x, y, GRIP, GRIP);
-      ctx.strokeRect(x, y, GRIP, GRIP);
+      ctx.fillStyle = handle.selected ? line : fill;
+      drawNode(ctx, px, py, handle.shape);
     }
   };
 

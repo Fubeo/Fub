@@ -22,6 +22,13 @@ describe("il registro degli strumenti", () => {
     expect(reaches("essential", "standard")).toBe(false);
   });
 
+  it("aggiunge all'Esperto i nodi, accanto alla selezione, col tasto di Inkscape", () => {
+    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "nodes", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
+    expect(toolSpec("nodes")).toMatchObject({ level: "expert", group: "pick", shortcut: "n" });
+    expect(toolForKey(toolsFor("standard"), "n")).toBeNull();
+    expect(toolForKey(toolsFor("expert"), "N")?.id).toBe("nodes");
+  });
+
   it("riconosce i nomi dei livelli, e sa quali stanno sopra", () => {
     expect(["essential", "standard", "expert"].every(isLevel)).toBe(true);
     for (const other of ["Standard", "", "beginner", 1, null, undefined]) expect(isLevel(other)).toBe(false);

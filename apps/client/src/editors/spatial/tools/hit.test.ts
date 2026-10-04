@@ -125,6 +125,23 @@ describe("toccare un oggetto", () => {
     expect(index.at([5, 5], 0)).toBeNull();
   });
 
+  it("sa quale forma di un gruppo sta sotto il punto, e con quale matrice si disegna", () => {
+    const { index } = open(doc(
+      `${LAYER}<g id="g" transform="translate(50 0)"><rect id="a" x="0" y="0" width="10" height="10"/>`
+        + '<path id="b" transform="scale(2)" d="M2 2 L8 2"/></g></g>',
+    ));
+    const group = index.get("g")!;
+    expect(group.shapes().map(({ leaf, matrix }) => [leaf.facts.id, matrix])).toEqual([
+      ["a", [1, 0, 0, 1, 50, 0]],
+      ["b", [2, 0, 0, 2, 50, 0]],
+    ]);
+    // La più in alto vince; dove nessuna disegna, niente.
+    expect(group.shapeAt([58, 4], 0.5)?.facts.id).toBe("b");
+    expect(group.shapeAt([55, 8], 0)?.facts.id).toBe("a");
+    expect(group.shapeAt([65, 15], 0.5)).toBeNull();
+    expect(group.shapeAt([200, 200], 0.5)).toBeNull();
+  });
+
   it("sceglie quello che si vede sopra", () => {
     const { index } = open(doc(`${LAYER}<rect id="sotto" x="0" y="0" width="50" height="50"/><rect id="sopra" x="25" y="25" width="50" height="50"/></g>`));
     expect(index.at([30, 30], 0)?.key).toBe("sopra");
