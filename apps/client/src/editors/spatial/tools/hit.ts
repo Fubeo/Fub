@@ -490,8 +490,9 @@ function ellipsePath(cx: number, cy: number, rx: number, ry: number): Segment[] 
   ];
 }
 
-/// I segmenti di una forma nelle sue coordinate.
-function shapeSegments(tag: string, attrs: readonly PaintAttr[]): readonly Segment[] {
+/// I segmenti di una forma nelle sue coordinate: il tracciato con cui SVG 2
+/// la definisce, dallo stesso punto e nello stesso verso.
+export function shapeSegments(tag: string, attrs: readonly PaintAttr[]): readonly Segment[] {
   const at = (name: string): number => len(attrs, name) ?? 0;
   switch (tag) {
     case "path": {

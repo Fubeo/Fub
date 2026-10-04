@@ -106,6 +106,12 @@ export class Plan {
     return this.idOf(parent, parent.parent === this.model.root && parent.details?.role === "layer" ? "layer" : "object");
   }
 
+  /// La chiave di `node` dopo il comando: il suo id, anche quello che gli
+  /// dà il comando, o `key` se resta senza.
+  keyOf(node: ElementPart, key: string): string {
+    return node.facts.id ?? this.named.get(pathOf(node).join(".")) ?? key;
+  }
+
   finish(keys: readonly string[]): Arranged {
     return { ops: this.ops.length === 0 ? [] : [...this.idents, ...this.ops], keys };
   }
@@ -170,6 +176,14 @@ export function plainAttributes(node: ElementPart): Map<string, string> {
   const out = new Map<string, string>();
   if (read === null) return out;
   for (const attr of read.element.attrs) if ((read.doc.namespaces[attr.ns] ?? "") === "" && !attr.name.startsWith("xmlns")) out.set(attr.local, attr.value);
+  return out;
+}
+
+/// Gli attributi `fub:` di `node`, per nome locale.
+export function fubAttributes(node: ElementPart): Map<string, string> {
+  const read = readHead(node);
+  const out = new Map<string, string>();
+  for (const attr of read?.element.attrs ?? []) if (read!.doc.namespaces[attr.ns] === FUB_NS) out.set(attr.local, attr.value);
   return out;
 }
 

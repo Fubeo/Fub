@@ -175,3 +175,28 @@ programma che tratta male le trasformazioni. Le regole stanno in
 - **È un passo solo**, «Applicazione della trasformazione», e la selezione
   resta quella. Si dice quanti oggetti cambiano e quanti conservano una
   trasformazione; se non c'è niente da applicare, lo si dice.
+
+## Oggetto in tracciato
+
+«Oggetto in tracciato», nella barra della selezione, fa degli oggetti scelti
+dei tracciati (`path`), che si leggono e si cambiano punto per punto. Le
+regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
+
+- **Ciò che si vede resta.** Rettangoli, ellissi, cerchi, linee, spezzate e
+  poligoni diventano il tracciato con cui SVG 2 li definisce, dallo stesso
+  punto e nello stesso verso: anche un tratteggio comincia dove cominciava.
+  Gli angoli arrotondati di un rettangolo e le ellissi diventano archi.
+- **Una freccia** perde la sua geometria (`fub:shape` e `fub:geom`), e **un
+  tratto a penna** l'inchiostro, il pennello, lo strumento e l'ora: resta il
+  `d` che si vedeva. Il tratto diventa una figura piena, che la penna non
+  ridisegna più.
+- **L'oggetto resta lui**: stesso id, stesso posto fra gli altri, stessi
+  colori, contorno, trasformazione, titolo e attributi di altri programmi.
+- **Un gruppo o un collegamento** passano il comando alle parti. Un blocco
+  estraneo dentro un gruppo resta com'è, come ovunque.
+- **Testi e immagini non hanno un tracciato**, e nemmeno una forma vuota, come
+  un rettangolo largo zero: restano come sono, e il comando lo dice. Resta
+  com'è anche un oggetto con l'attributo di un altro programma il cui
+  prefisso è dichiarato sull'oggetto stesso, perché un'operazione non sa
+  dichiararlo di nuovo.
+- **È un passo solo**, «Oggetto in tracciato», e la selezione resta quella.

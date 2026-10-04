@@ -2484,6 +2484,54 @@ describe("applicare la trasformazione, dal livello Esperto", () => {
   });
 });
 
+describe("l'oggetto in tracciato, dal livello Esperto", () => {
+  const A = "oa2a2a2a2";
+  const T = "ot2t2t2t2";
+  const P = "op2p2p2p2";
+  const SHAPES = doc(
+    `${LAYER}<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000"/>`
+      + `<text id="${T}" x="0" y="40"><tspan x="0" dy="0">Ciao</tspan></text>`
+      + `<path id="${P}" d="M0 60 L10 70" fill="none" stroke="#000000" stroke-width="1"/></g>`,
+  );
+
+  const pathButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Oggetto in tracciato"]')!;
+
+  it("c'è solo all'Esperto, e fa degli oggetti tracciati in un passo che si annulla", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select([A]);
+    expect(pathButton().hidden).toBe(true);
+    // Sotto l'Esperto il comando non scrive, anche chiesto.
+    pathButton().click();
+    expect(changes).toEqual([]);
+    editor.setLevel("expert");
+    expect(pathButton().hidden).toBe(false);
+    expect(pathButton().hasAttribute("aria-keyshortcuts")).toBe(false);
+    pathButton().click();
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L0 10 Z" fill="#000000"/>`);
+    expect(spoken()).toBe("1 oggetto è diventato un tracciato.");
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Oggetto in tracciato.");
+  });
+
+  it("dice quanti oggetti restano come sono, e quando non c'è niente da fare", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A, T]);
+    pathButton().click();
+    expect(spoken()).toBe("1 oggetto è diventato un tracciato. 1 oggetto resta com'è: testi, immagini e forme vuote non diventano tracciati.");
+    expect(editor.selection).toEqual([A, T]);
+    editor.select([T]);
+    pathButton().click();
+    expect(spoken()).toBe("È già così: niente da cambiare. 1 oggetto resta com'è: testi, immagini e forme vuote non diventano tracciati.");
+    editor.select([P]);
+    pathButton().click();
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(changes).toHaveLength(1);
+  });
+});
+
 describe("le immagini incollate", () => {
   const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
   const MIB = 1024 * 1024;
