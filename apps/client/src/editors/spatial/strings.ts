@@ -399,7 +399,13 @@ const IT = {
   "draw.transform.unwritable": "Un oggetto diventerebbe troppo piccolo per scriverne la trasformazione: niente è cambiato.",
   "draw.transformed.one": "{count} oggetto trasformato.",
   "draw.transformed.other": "{count} oggetti trasformati.",
-  "draw.action.transform": "Trasformazione"
+  "draw.action.transform": "Trasformazione",
+  "draw.apply_transform": "Applica trasformazione",
+  "draw.applied.one": "Trasformazione applicata a {count} oggetto.",
+  "draw.applied.other": "Trasformazione applicata a {count} oggetti.",
+  "draw.applied.kept.one": "{count} oggetto conserva una trasformazione che la sua forma non sa scrivere.",
+  "draw.applied.kept.other": "{count} oggetti conservano una trasformazione che la loro forma non sa scrivere.",
+  "draw.action.apply_transform": "Applicazione della trasformazione"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -795,7 +801,13 @@ const EN: Record<DrawKey, string> = {
   "draw.transform.unwritable": "An object would become too small to write its transform: nothing changed.",
   "draw.transformed.one": "{count} object transformed.",
   "draw.transformed.other": "{count} objects transformed.",
-  "draw.action.transform": "Transform"
+  "draw.action.transform": "Transform",
+  "draw.apply_transform": "Apply transform",
+  "draw.applied.one": "Transform applied to {count} object.",
+  "draw.applied.other": "Transform applied to {count} objects.",
+  "draw.applied.kept.one": "{count} object keeps a transform its shape cannot express.",
+  "draw.applied.kept.other": "{count} objects keep a transform their shape cannot express.",
+  "draw.action.apply_transform": "Apply transform"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

@@ -310,7 +310,9 @@ non ha segni né «Collega a una nota…», e un collegamento si toglie lo stess
 ## Il livello Esperto
 
 L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e da cambiare uno
-per uno, e ha una pagina sua: [Disegni, livello Esperto](drawing-expert.md).
+per uno, il contorno, le trasformazioni scritte in numeri e «Applica
+trasformazione», e ha una pagina sua: [Disegni, livello
+Esperto](drawing-expert.md).
 
 ## Da tastiera
 
