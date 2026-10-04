@@ -135,13 +135,15 @@ fn the_editor_level_is_a_vault_setting_only_with_the_draw_feature() {
             ws.setting(fub_features::DRAW_LEVEL_KEY).unwrap(),
             level("standard")
         );
+        ws.set_setting(fub_features::DRAW_LEVEL_KEY, level("expert"))
+            .expect("l'Esperto è un livello");
         // Un livello che l'editor non ha non si scrive, e resta quello di prima.
         assert!(ws
-            .set_setting(fub_features::DRAW_LEVEL_KEY, level("expert"))
+            .set_setting(fub_features::DRAW_LEVEL_KEY, level("master"))
             .is_err());
         assert_eq!(
             ws.setting(fub_features::DRAW_LEVEL_KEY).unwrap(),
-            level("standard")
+            level("expert")
         );
         let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
         assert!(written.contains("\"draw.level\""), "{written}");

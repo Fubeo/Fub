@@ -84,7 +84,7 @@ pub const DRAW_PDF: &str = "draw.pdf";
 /// L'impostazione del livello dell'editor: quali strumenti offre.
 pub const DRAW_LEVEL_KEY: &str = "draw.level";
 /// I valori del livello, dal più semplice: il primo è quello di serie.
-pub const DRAW_LEVELS: [&str; 2] = ["essential", "standard"];
+pub const DRAW_LEVELS: [&str; 3] = ["essential", "standard", "expert"];
 
 /// L'opzione del PNG: quanti pixel per pixel CSS del disegno.
 const SCALE: &str = "scale";
@@ -113,6 +113,7 @@ const S_LEVEL: &str = "s_level";
 const S_LEVEL_DESC: &str = "s_level_desc";
 const S_ESSENTIAL: &str = "s_essential";
 const S_STANDARD: &str = "s_standard";
+const S_EXPERT: &str = "s_expert";
 
 /// Lo schema delle impostazioni dei disegni: il livello dell'editor.
 ///
@@ -126,7 +127,7 @@ const S_STANDARD: &str = "s_standard";
 /// offre. La griglia invece qui non c'è: è uno stato della vista, e lo ricorda
 /// la macchina, senza riscrivere il file del vault a ogni `#`.
 pub fn settings() -> Vec<SettingSpec> {
-    let [essential, standard] = DRAW_LEVELS;
+    let [essential, standard, expert] = DRAW_LEVELS;
     vec![SettingSpec::new(
         DRAW_LEVEL_KEY,
         Text::key(S_LEVEL),
@@ -135,6 +136,7 @@ pub fn settings() -> Vec<SettingSpec> {
             options: vec![
                 UiOption::new(essential, Text::key(S_ESSENTIAL)),
                 UiOption::new(standard, Text::key(S_STANDARD)),
+                UiOption::new(expert, Text::key(S_EXPERT)),
             ],
         },
     )
@@ -166,11 +168,14 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Quali strumenti offre l'editor dei disegni. Essenziale ne ha sette, \
                  ciascuno con un tasto, adatti anche ai bambini; Standard aggiunge \
                  l'evidenziatore, altri colori, il testo, i livelli del disegno, la \
-                 griglia, i collegamenti alle note e la barra «Disponi». Cambiare \
-                 livello non modifica i disegni, e vale subito anche per quelli aperti.",
+                 griglia, i collegamenti alle note e la barra «Disponi»; Esperto \
+                 aggiunge gli attributi di ogni oggetto, da leggere e da cambiare uno \
+                 per uno. Cambiare livello non modifica i disegni, e vale subito anche \
+                 per quelli aperti.",
             )
             .with(S_ESSENTIAL, "Essenziale")
-            .with(S_STANDARD, "Standard"),
+            .with(S_STANDARD, "Standard")
+            .with(S_EXPERT, "Esperto"),
         create::in_english(StringCatalog::new("en"))
             .with(E_TARGET, "«{target}» is not a drawing export destination.")
             .with(E_NO_DRAWINGS, "The selection contains no drawings.")
@@ -190,11 +195,13 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Which tools the drawing editor offers. Essential has seven, each \
                  with its own key, suited to children too; Standard adds the \
                  highlighter, more colors, text, drawing layers, the grid, links to \
-                 notes and the Arrange bar. Changing the level does not modify \
-                 drawings, and takes effect at once, open ones included.",
+                 notes and the Arrange bar; Expert adds the attributes of each \
+                 object, to read and change one by one. Changing the level does not \
+                 modify drawings, and takes effect at once, open ones included.",
             )
             .with(S_ESSENTIAL, "Essential")
-            .with(S_STANDARD, "Standard"),
+            .with(S_STANDARD, "Standard")
+            .with(S_EXPERT, "Expert"),
     ]
 }
 
