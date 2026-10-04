@@ -13,8 +13,9 @@ export interface FormField {
   readonly label: string;
   readonly value: string;
   /// `number` è un campo numerico; `multiline` un testo su più righe, dove
-  /// Invio va a capo.
-  readonly kind: "text" | "multiline" | "number";
+  /// Invio va a capo; `color` un codice di colore, `#rrggbb` o `#rgb`, con
+  /// accanto il selettore del sistema che lo scrive.
+  readonly kind: "text" | "multiline" | "number" | "color";
   /// Il minimo di un numero.
   readonly min?: number;
   /// Un campo che si legge e non si cambia: un lato che misura zero non ha
@@ -62,6 +63,7 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
       name.className = "palette-label";
       name.textContent = field.label;
       let control: HTMLInputElement | HTMLTextAreaElement;
+      let picker: HTMLInputElement | null = null;
       if (field.kind === "multiline") {
         control = document.createElement("textarea");
         control.rows = 4;
@@ -73,6 +75,13 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
           input.step = "any";
           input.required = true;
           if (field.min !== undefined) input.min = String(field.min);
+        } else if (field.kind === "color") {
+          input.type = "text";
+          input.required = true;
+          input.pattern = COLOR_PATTERN;
+          input.spellcheck = false;
+          input.autocomplete = "off";
+          picker = colorPicker(input, field.value);
         } else {
           input.type = "text";
         }
@@ -81,7 +90,21 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
       control.name = field.id;
       control.value = field.value;
       control.disabled = field.disabled === true;
-      label.append(name, control);
+      if (picker === null) {
+        label.append(name, control);
+      } else {
+        picker.disabled = control.disabled;
+        const row = document.createElement("span");
+        row.className = "palette-color-row";
+        row.append(control, picker);
+        // Che cosa si scrive, sotto il campo e detto con lui.
+        const help = document.createElement("span");
+        help.className = "palette-help";
+        help.id = `form-dialog-help-${++messageCount}`;
+        help.textContent = t("form.color.hint");
+        control.setAttribute("aria-describedby", help.id);
+        label.append(name, row, help);
+      }
       form.append(label);
       controls.push([field, control]);
     }
@@ -89,6 +112,7 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
     form.append(row);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
+      for (const [field, control] of controls) if (field.kind === "color") explainColor(control);
       if (!form.checkValidity()) {
         form.reportValidity();
         return;
@@ -101,6 +125,48 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
     else first.focus();
     if (first instanceof HTMLInputElement) first.select();
   });
+}
+
+/// Un codice di colore come lo accetta un campo `color`: tre o sei cifre
+/// esadecimali, col `#` o senza.
+const COLOR_PATTERN = "#?(?:[0-9a-fA-F]{3}){1,2}";
+const COLOR_CODE = new RegExp(`^${COLOR_PATTERN}$`);
+
+/// Il codice `#rrggbb` minuscolo di `value`, se è un codice che il campo
+/// accetta.
+function sixDigits(value: string): string | null {
+  const text = value.trim();
+  if (!COLOR_CODE.test(text)) return null;
+  const hex = text.replace("#", "").toLowerCase();
+  return `#${hex.length === 3 ? [...hex].map((digit) => digit + digit).join("") : hex}`;
+}
+
+/// Il selettore del sistema accanto al campo `input`: l'uno scrive
+/// nell'altro. Il campo resta la via principale, perché il selettore si usa
+/// male da tastiera e con uno screen reader in più di un sistema.
+function colorPicker(input: HTMLInputElement, value: string): HTMLInputElement {
+  const picker = document.createElement("input");
+  picker.type = "color";
+  picker.className = "palette-color";
+  picker.value = sixDigits(value) ?? "#000000";
+  picker.setAttribute("aria-label", t("form.color.picker"));
+  picker.addEventListener("input", () => {
+    input.value = picker.value;
+    explainColor(input);
+  });
+  input.addEventListener("input", () => {
+    explainColor(input);
+    const code = sixDigits(input.value);
+    if (code !== null) picker.value = code;
+  });
+  return picker;
+}
+
+/// Un codice che non va si spiega con la frase del campo, non con quella
+/// generica del browser. Si rifà a ogni battuta e prima di confermare, così
+/// non resta indietro rispetto al valore.
+function explainColor(control: HTMLInputElement | HTMLTextAreaElement): void {
+  control.setCustomValidity(control.validity.patternMismatch ? t("form.color.invalid") : "");
 }
 
 /// Un gruppo dell'elenco dei tasti: il titolo, e per ogni riga i tasti, nella

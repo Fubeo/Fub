@@ -1,8 +1,7 @@
 // Il registro degli strumenti, uno solo per tutti i livelli: ogni strumento
 // dichiara id, livello minimo, gruppo, icona, etichetta, scorciatoia e
-// descrizione per lo screen reader, e i livelli filtrano. Qui ci sono gli
-// strumenti dell'Essenziale; Standard ed Esperto si aggiungono alla stessa
-// lista.
+// descrizione per lo screen reader, e i livelli filtrano: la barra e i tasti
+// di un livello sono i suoi strumenti e quelli dei livelli sotto.
 //
 // Le scorciatoie sono una lettera senza modificatori, quelle che chi disegna
 // conosce già da altri programmi, e valgono solo col fuoco sulla superficie.
@@ -14,7 +13,7 @@ export type Level = "essential" | "standard" | "expert";
 
 const LEVEL_ORDER: readonly Level[] = ["essential", "standard", "expert"];
 
-export type ToolId = "select" | "pen" | "eraser" | "rect" | "ellipse" | "line" | "arrow";
+export type ToolId = "select" | "pen" | "highlighter" | "eraser" | "rect" | "ellipse" | "line" | "arrow";
 
 /// Come la barra raggruppa gli strumenti: scegliere, scrivere, forme.
 export type ToolGroup = "pick" | "ink" | "shape";
@@ -34,6 +33,7 @@ export interface ToolSpec {
 export const TOOLS: readonly ToolSpec[] = [
   { id: "select", level: "essential", group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
   { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
+  { id: "highlighter", level: "standard", group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
   { id: "eraser", level: "essential", group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },
   { id: "rect", level: "essential", group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r" },
   { id: "ellipse", level: "essential", group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
@@ -45,10 +45,14 @@ export const TOOLS: readonly ToolSpec[] = [
 /// apre per disegnare.
 export const DEFAULT_TOOL: ToolId = "pen";
 
+/// Vero se ciò che chiede il livello `minimum` c'è al livello `level`.
+export function reaches(level: Level, minimum: Level): boolean {
+  return LEVEL_ORDER.indexOf(minimum) <= LEVEL_ORDER.indexOf(level);
+}
+
 /// Gli strumenti di un livello: i suoi e quelli dei livelli sotto.
 export function toolsFor(level: Level): readonly ToolSpec[] {
-  const rank = LEVEL_ORDER.indexOf(level);
-  return TOOLS.filter((tool) => LEVEL_ORDER.indexOf(tool.level) <= rank);
+  return TOOLS.filter((tool) => reaches(level, tool.level));
 }
 
 export function toolSpec(id: ToolId): ToolSpec {

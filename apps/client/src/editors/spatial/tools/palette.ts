@@ -1,4 +1,6 @@
-// La tavolozza e gli spessori del livello Essenziale.
+// La tavolozza e gli spessori del livello Essenziale, e ciò che il livello
+// Standard ci aggiunge: gli spessori dell'evidenziatore e i colori scelti a
+// piacere.
 //
 // Gli otto colori sono quelli di Okabe–Ito, leggibili con le forme comuni di
 // daltonismo. Ogni campione ha un nome e una forma oltre al colore, così due
@@ -9,10 +11,15 @@
 // legge poco. Il campione nella barra ha sempre un filo nel colore del testo,
 // che lo stacca dal fondo in entrambi i temi, nero compreso.
 //
+// Un colore personalizzato si scrive come quelli della tavolozza, `#rrggbb`
+// minuscolo, e si dice col suo codice: un nome inventato direbbe meno.
+//
 // I valori sono quelli che le operazioni scrivono nel file: colori `#rrggbb`
 // minuscoli e spessori in unità della scena.
 
 import type { Key } from "../../../i18n/strings";
+import { contrast, WHITE } from "../scene/analysis";
+import { paint } from "../scene/values";
 
 /// La forma di un campione.
 export type SwatchShape = "circle" | "square" | "triangle" | "diamond" | "pentagon" | "hexagon" | "star" | "cross";
@@ -52,13 +59,44 @@ export const WIDTHS: readonly Width[] = [
   { id: "thick", value: 8, label: "draw.width.thick" },
 ];
 
+/// Gli spessori dell'evidenziatore, con gli stessi nomi: un segno che copre
+/// una riga di testo, da una sottile a una da titolo.
+export const HIGHLIGHTER_WIDTHS: readonly Width[] = [
+  { id: "thin", value: 8, label: "draw.width.thin" },
+  { id: "medium", value: 16, label: "draw.width.medium" },
+  { id: "thick", value: 24, label: "draw.width.thick" },
+];
+
 /// Il colore e lo spessore di partenza: Nero e Medio, quelli dell'esempio del
 /// formato.
 export const DEFAULT_COLOR = "#000000";
 export const DEFAULT_WIDTH = 4;
 
+/// L'evidenziatore parte giallo e medio; la sua opacità è quella del formato.
+export const HIGHLIGHTER_COLOR = "#f0e442";
+export const HIGHLIGHTER_WIDTH = 16;
+export const HIGHLIGHTER_OPACITY = "0.4";
+
 /// Il campione di un colore scritto nel file, se è della tavolozza.
 export function swatchOf(color: string): Swatch | null {
   const lower = color.toLowerCase();
   return PALETTE.find((swatch) => swatch.color === lower) ?? null;
+}
+
+/// Il colore scritto da chi lo sceglie, come lo scrive il file: `#rrggbb`
+/// minuscolo. Vale un codice di tre o sei cifre, anche senza `#`, o un nome
+/// di colore CSS; `null` per tutto il resto, `none` compreso.
+export function customColor(input: string): string | null {
+  const text = input.trim();
+  if (text === "") return null;
+  const value = paint(/^[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/.test(text) ? `#${text}` : text);
+  if (value === null || value === "none") return null;
+  return `#${value.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/// Vero se `color`, `#rrggbb`, sta sotto il contrasto 3:1 sulla carta
+/// bianca, come i colori chiari della tavolozza.
+export function isLight(color: string): boolean {
+  const value = paint(color);
+  return value !== null && value !== "none" && contrast(value, WHITE) < 3;
 }

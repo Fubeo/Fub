@@ -56,6 +56,31 @@ La barra è un solo punto di tabulazione e si percorre con le frecce. Tasto
 centrale, due dita e rotella muovono la vista. Ogni gesto si annuncia a chi
 usa un lettore di schermo.
 
+## Il livello Standard
+
+L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, e lo
+Standard, che aggiunge strumenti alla stessa barra. Il livello filtra soltanto
+ciò che si offre: un disegno si apre uguale a ogni livello, e cambiare livello
+non lo modifica. Cambia dal vivo, senza riaprire il disegno e senza perdere la
+selezione o la cronologia; chi monta l'editor lo sceglie con `level` e
+`setLevel` (`apps/client/src/editors/spatial/tools/editor.ts`).
+
+Lo Standard aggiunge:
+
+- l'**evidenziatore** (`H`), dopo la penna: un tratto largo, di spessore
+  costante e con le punte piatte, che lascia vedere ciò che copre. Si scrive
+  come un tratto a penna, con `fub:tool="highlighter"` e
+  `fill-opacity="0.4"`. Parte giallo e ha colore e spessori suoi, 8, 16 e 24
+  unità, e la penna ritrova i propri quando la si riprende;
+- **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
+  tre cifre o senza `#`, oppure il selettore del sistema accanto. Il colore
+  scelto resta come campione in più, un anello che ha per nome il suo codice;
+  se sulla carta bianca sta sotto il contrasto 3:1, il nome lo dice.
+
+Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
+chi aveva in mano l'evidenziatore riprende la penna, e un colore a piacere
+torna al colore di partenza.
+
 ## Da tastiera
 
 Ogni strumento funziona senza puntatore. Sul foglio le frecce muovono un
