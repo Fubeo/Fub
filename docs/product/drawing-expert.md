@@ -65,3 +65,34 @@ in `apps/client/src/editors/spatial/tools/inspector.ts`.
 Un documento in sola lettura si legge tutto e non si scrive. Scendendo
 dall'Esperto il pannello si chiude e «Attributi» sparisce dalla barra.
 
+
+## Contorno
+
+«Contorno», nella barra della selezione, cambia il contorno degli oggetti
+scelti. Le scelte sono di tre gruppi:
+
+- il tratteggio: continuo, tratteggiato, punteggiato, tratto e punto;
+- gli estremi: piatti, arrotondati, quadrati;
+- gli angoli: vivi, arrotondati, smussati.
+
+Le regole stanno in `apps/client/src/editors/spatial/tools/outline.ts`.
+
+- **Un contorno è di una forma**: rettangoli, ellissi, cerchi, linee,
+  spezzate, poligoni, percorsi e frecce, con un `stroke` che si vede. Un
+  gruppo o un collegamento passano la scelta alle forme che contengono. Un
+  tratto a penna è tutto riempimento, e un testo o un'immagine non hanno
+  contorno; se fra gli oggetti scelti non c'è un contorno, il menu lo dice.
+- **Il menu segna ciò che i contorni scelti hanno tutti**, e niente dove sono
+  diversi. Un tratteggio che non è del menu, scritto da un altro programma o
+  dagli attributi, c'è come «Su misura», segnato e spento, col suo valore.
+- **Il tratteggio si misura in spessori**, così è uguale su un contorno
+  sottile e su uno grosso: trattini di quattro spessori e spazi di tre, punti
+  di uno spessore ogni tre. Un estremo arrotondato o quadrato allunga ogni
+  trattino di mezzo spessore per parte, e il tratteggio lo toglie: i punti
+  diventano tondi o quadrati, e la misura che si vede resta. Per la stessa
+  ragione cambiare gli estremi riscrive un tratteggio del menu; uno su misura
+  resta com'è.
+- **Il file resta corto**: un valore che l'oggetto prenderebbe comunque, dal
+  gruppo che lo contiene o da SVG, si toglie invece di scriversi.
+- **Ogni scelta è un passo**, che si annulla col suo nome: «Tratteggio»,
+  «Estremi del contorno» o «Angoli del contorno».

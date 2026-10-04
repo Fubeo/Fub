@@ -2223,6 +2223,113 @@ describe("gli attributi, dal livello Esperto", () => {
   });
 });
 
+describe("il contorno, dal livello Esperto", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  const RECT_A = `<rect id="${A}" x="10" y="10" width="20" height="10" fill="none" stroke="#000000" stroke-width="2"/>`;
+  const LINE_B = `<line id="${B}" x1="0" y1="50" x2="50" y2="50" stroke="#0072b2" stroke-width="4" stroke-linecap="round"/>`;
+  const FILLED_C = `<rect id="${C}" x="60" y="60" width="10" height="10" fill="#000000"/>`;
+  const SHAPES = doc(`${LAYER}${RECT_A}${LINE_B}${FILLED_C}</g>`);
+
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const outline = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Contorno"]')!;
+  /// Le voci del menu aperto per ultimo, scelte comprese.
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
+  const closeMenus = (): void => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  };
+
+  afterEach(closeMenus);
+
+  it("c'è solo all'Esperto, nella barra della selezione, e il menu segna il contorno che gli oggetti scelti hanno tutti", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select([A]);
+    expect(bar().hidden).toBe(false);
+    expect(outline().hidden).toBe(true);
+    editor.setLevel("expert");
+    expect(outline().hidden).toBe(false);
+    expect(outline().getAttribute("aria-haspopup")).toBe("menu");
+    outline().click();
+    expect(outline().getAttribute("aria-expanded")).toBe("true");
+    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("role"), entry.getAttribute("aria-checked")])).toEqual([
+      ["Continuo", "menuitemradio", "true"],
+      ["Tratteggiato", "menuitemradio", "false"],
+      ["Punteggiato", "menuitemradio", "false"],
+      ["Tratto e punto", "menuitemradio", "false"],
+      ["Estremi piatti", "menuitemradio", "true"],
+      ["Estremi arrotondati", "menuitemradio", "false"],
+      ["Estremi quadrati", "menuitemradio", "false"],
+      ["Angoli vivi", "menuitemradio", "true"],
+      ["Angoli arrotondati", "menuitemradio", "false"],
+      ["Angoli smussati", "menuitemradio", "false"],
+    ]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    closeMenus();
+    // Estremi diversi: nessuno è segnato. Il rettangolo pieno non ha contorno
+    // e non conta.
+    editor.select([A, B, C]);
+    outline().click();
+    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Continuo", "Angoli vivi"]);
+    closeMenus();
+    editor.setLevel("standard");
+    expect(outline().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("una scelta cambia ogni contorno scelto, col suo spessore e i suoi estremi, in un passo che si annulla", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A, B, C]);
+    outline().click();
+    item("Tratteggiato").click();
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="10" y="10" width="20" height="10" fill="none" stroke="#000000" stroke-width="2" stroke-dasharray="8 6"/>`);
+    // Con gli estremi arrotondati il trattino si accorcia di uno spessore, e
+    // si vede lungo uguale.
+    expect(editor.engine.text).toContain(`stroke-width="4" stroke-linecap="round" stroke-dasharray="12 16"/>`);
+    expect(editor.engine.text).toContain(FILLED_C);
+    expect(spoken()).toBe("Tratteggiato: 2 contorni.");
+    expect(editor.selection).toEqual([A, B, C]);
+    expect(changes).toHaveLength(1);
+
+    outline().click();
+    expect(item("Tratteggiato").getAttribute("aria-checked")).toBe("true");
+    item("Angoli arrotondati").click();
+    expect(editor.engine.text).toContain('stroke-linejoin="round"');
+    expect(changes).toHaveLength(2);
+
+    key("z", { ctrlKey: true });
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(SHAPES);
+  });
+
+  it("senza contorni fra gli oggetti scelti le voci sono spente, e dicono perché", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([C]);
+    outline().click();
+    expect(menu().every((entry) => entry.getAttribute("aria-disabled") === "true")).toBe(true);
+    expect(item("Continuo").querySelector(".menu-description")!.textContent).toBe("Nessun oggetto scelto ha un contorno.");
+  });
+
+  it("un tratteggio su misura c'è, segnato e spento, col suo valore; gli estremi lo lasciano com'è", () => {
+    const custom = doc(`${LAYER}<rect id="${A}" x="10" y="10" width="20" height="10" fill="none" stroke="#000000" stroke-width="2" stroke-dasharray="5,1 2"/></g>`);
+    mount(custom, { level: "expert" });
+    editor.select([A]);
+    outline().click();
+    const own = item("Su misura: 5 1 2");
+    expect(own.getAttribute("aria-checked")).toBe("true");
+    expect(own.getAttribute("aria-disabled")).toBe("true");
+    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Su misura: 5 1 2", "Estremi piatti", "Angoli vivi"]);
+    item("Estremi quadrati").click();
+    expect(editor.engine.text).toContain('stroke-linecap="square" stroke-dasharray="5,1 2"');
+    expect(spoken()).toBe("Estremi quadrati: un contorno.");
+  });
+});
+
 describe("le immagini incollate", () => {
   const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
   const MIB = 1024 * 1024;

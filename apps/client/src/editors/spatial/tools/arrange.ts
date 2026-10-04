@@ -29,7 +29,7 @@ import type { IdKind } from "../scene/ids";
 import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
 import { declarationsOf, elementChildren, parseFragment, pathOf, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { ROOT, type Op, type Pos, type Target } from "../scene/ops";
-import type { Elem, NamespaceScope } from "../scene/serialize";
+import { NamespaceScope, type Elem } from "../scene/serialize";
 import { href as parseHref, opacity as parseOpacity, transform as parseTransform } from "../scene/values";
 import { FUB_NS, NS_SVG, SVG_NS, XLINK_NS, XML_URI, type ElementNode, type XmlDocument } from "../scene/xml";
 import { formatNumber } from "../number";
@@ -129,10 +129,11 @@ function sameMatrix(a: Matrix, b: Matrix): boolean {
 // Leggere un elemento.
 // ---------------------------------------------------------------------------
 
-/// Il tag d'apertura di `node` letto da solo, nello scope del genitore.
+/// Il tag d'apertura di `node` letto da solo, nello scope del genitore; la
+/// radice non ne ha.
 export function readHead(node: ElementPart): { readonly doc: XmlDocument; readonly element: ElementNode } | null {
   const raw = node.kind === "leaf" ? node.raw : node.tail === null ? node.head : `${node.head}</${node.facts.name}>`;
-  const fragment = parseFragment(raw, scopeOf(node.parent!));
+  const fragment = parseFragment(raw, node.parent === null ? NamespaceScope.EMPTY : scopeOf(node.parent));
   if (fragment === null) return null;
   return { doc: fragment.doc, element: fragment.doc.element(fragment.id)! };
 }
@@ -164,7 +165,7 @@ function attributesOf(doc: XmlDocument, element: ElementNode, scope: NamespaceSc
 }
 
 /// Gli attributi senza namespace di `node`, come li legge un parser.
-function plainAttributes(node: ElementPart): Map<string, string> {
+export function plainAttributes(node: ElementPart): Map<string, string> {
   const read = readHead(node);
   const out = new Map<string, string>();
   if (read === null) return out;
