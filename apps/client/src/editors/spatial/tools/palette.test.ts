@@ -1,9 +1,21 @@
 // La tavolozza dell'Essenziale: otto colori di Okabe–Ito, ognuno con la sua
-// forma, e tre spessori.
+// forma, e tre spessori; poi gli spessori dell'evidenziatore e i colori a
+// piacere dello Standard.
 
 import { describe, expect, it } from "vitest";
 import { contrast } from "../scene/analysis";
-import { DEFAULT_COLOR, DEFAULT_WIDTH, PALETTE, WIDTHS } from "./palette";
+import {
+  customColor,
+  DEFAULT_COLOR,
+  DEFAULT_WIDTH,
+  HIGHLIGHTER_COLOR,
+  HIGHLIGHTER_WIDTH,
+  HIGHLIGHTER_WIDTHS,
+  isLight,
+  PALETTE,
+  swatchOf,
+  WIDTHS,
+} from "./palette";
 
 const rgb = (hex: string): readonly [number, number, number] => [
   parseInt(hex.slice(1, 3), 16),
@@ -36,5 +48,32 @@ describe("la tavolozza", () => {
     expect(DEFAULT_COLOR).toBe("#000000");
     expect(WIDTHS.map((width) => width.value)).toEqual([2, 4, 8]);
     expect(DEFAULT_WIDTH).toBe(4);
+  });
+
+  it("dà all'evidenziatore il giallo della tavolozza e spessori suoi, coi nomi della penna", () => {
+    expect(swatchOf(HIGHLIGHTER_COLOR)?.id).toBe("yellow");
+    expect(HIGHLIGHTER_WIDTHS.map((width) => width.value)).toEqual([8, 16, 24]);
+    expect(HIGHLIGHTER_WIDTHS.map((width) => width.label)).toEqual(WIDTHS.map((width) => width.label));
+    expect(HIGHLIGHTER_WIDTH).toBe(16);
+  });
+});
+
+describe("i colori a piacere", () => {
+  it("si scrivono come quelli della tavolozza, da un codice o da un nome CSS", () => {
+    expect(customColor("#3A7BD5")).toBe("#3a7bd5");
+    expect(customColor(" 3a7bd5 ")).toBe("#3a7bd5");
+    expect(customColor("#abc")).toBe("#aabbcc");
+    expect(customColor("abc")).toBe("#aabbcc");
+    expect(customColor("teal")).toBe("#008080");
+  });
+
+  it("non valgono `none`, un codice monco o un nome sconosciuto", () => {
+    for (const input of ["", "none", "#12345", "1234", "rosso", "rgb(1, 2, 3)", "#ggg", "Teal"]) expect(customColor(input), input).toBeNull();
+  });
+
+  it("si dicono chiari sotto 3:1 sulla carta bianca, come la tavolozza", () => {
+    for (const swatch of PALETTE) expect(isLight(swatch.color), swatch.id).toBe(swatch.light);
+    expect(isLight("#eeeeee")).toBe(true);
+    expect(isLight("#3a7bd5")).toBe(false);
   });
 });

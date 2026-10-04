@@ -1192,6 +1192,15 @@ html, body, #app {
 .draw-swatch-frame[data-shape="cross"] > .draw-swatch {
   clip-path: polygon(34% 0, 66% 0, 66% 34%, 100% 34%, 100% 66%, 66% 66%, 66% 100%, 34% 100%, 34% 66%, 0 66%, 0 34%, 34% 34%);
 }
+/* Il colore a piacere: un anello, che il centro distingue da ogni forma
+   della tavolozza. */
+.draw-swatch-frame[data-shape="ring"],
+.draw-swatch-frame[data-shape="ring"] > .draw-swatch {
+  clip-path: circle(50%);
+}
+.draw-swatch-frame[data-shape="ring"] > .draw-swatch {
+  mask: radial-gradient(circle, transparent 0 34%, #000000 35%);
+}
 .draw-width-bar {
   display: block;
   width: 24px;

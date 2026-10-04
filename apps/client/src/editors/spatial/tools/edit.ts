@@ -25,6 +25,7 @@ import { formatNumber } from "../number";
 import { formatBrush, type Pf1Brush } from "../ink/brush";
 import { encodeInk, inkFromQuantized } from "../ink/codec";
 import type { QuantizedInk } from "../ink/sample";
+import type { Tool } from "../scene/analysis";
 import type { Bounds } from "../scene/geometry";
 import { createId, type IdKind } from "../scene/ids";
 import { apply, compose, IDENTITY, invert, translate, type Matrix } from "../scene/matrix";
@@ -32,6 +33,7 @@ import { ROOT, type AddOp, type Op } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
 import type { Page } from "../painter/paint";
 import type { SceneIndex, Unit } from "./hit";
+import { HIGHLIGHTER_OPACITY } from "./palette";
 
 /// Il passo con cui la pagina si allarga.
 export const PAGE_STEP = 256;
@@ -92,13 +94,16 @@ export function addOp(to: Destination, elem: Elem): AddOp {
   return { op: "add", parent: to.parent, pos: { last: true }, elem };
 }
 
-/// L'elemento di un tratto a penna (formato della scena, §5). Il `d` non si
-/// scrive: il motore lo calcola da `fub:ink` e `fub:brush`.
-export function strokeElem(id: string, color: string, brush: Pf1Brush, ink: QuantizedInk, at: string | null): Elem {
-  const attrs: Record<string, string> = { id, "fub:tool": "pen" };
+/// L'elemento di un tratto a mano libera (formato della scena, §5): della
+/// penna, o dell'evidenziatore, che si vede attraverso con l'opacità del
+/// formato. Il `d` non si scrive: il motore lo calcola da `fub:ink` e
+/// `fub:brush`.
+export function strokeElem(id: string, color: string, brush: Pf1Brush, ink: QuantizedInk, at: string | null, tool: Tool = "pen"): Elem {
+  const attrs: Record<string, string> = { id, "fub:tool": tool };
   if (at !== null) attrs["fub:at"] = at;
   attrs["fub:brush"] = formatBrush(brush);
   attrs.fill = color;
+  if (tool === "highlighter") attrs["fill-opacity"] = HIGHLIGHTER_OPACITY;
   attrs["fub:ink"] = encodeInk(inkFromQuantized(ink));
   return { tag: "path", attrs };
 }

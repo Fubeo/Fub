@@ -101,7 +101,8 @@ describe("la barra e il foglio", () => {
     mount();
     const toolbar = host.querySelector('[role="toolbar"]')!;
     expect(toolbar.getAttribute("aria-label")).toBe("Strumenti di disegno");
-    const groups = [...toolbar.querySelectorAll(".draw-group")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
+    // Ciò che il livello Standard aggiunge c'è, nascosto.
+    const groups = [...toolbar.querySelectorAll(".draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
     expect(groups).toEqual([
       ["radiogroup", "Strumento"],
       ["radiogroup", "Colore"],
@@ -109,13 +110,13 @@ describe("la barra e il foglio", () => {
       ["group", "Modifica"],
       ["group", "Vista"],
     ]);
-    const tools = [...toolbar.querySelectorAll<HTMLButtonElement>(".draw-tool")];
+    const tools = [...toolbar.querySelectorAll<HTMLButtonElement>(".draw-tool:not([hidden])")];
     expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Penna", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
     expect(tools.map((control) => control.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false", "false", "false", "false"]);
     expect(tools[3]!.title).toBe("Rettangolo (R)");
     expect(tools[3]!.getAttribute("aria-keyshortcuts")).toBe("R");
     expect(document.getElementById(tools[3]!.getAttribute("aria-describedby")!)?.textContent).toContain("Maiusc");
-    expect(toolbar.querySelectorAll('.draw-color[role="radio"]')).toHaveLength(8);
+    expect(toolbar.querySelectorAll('.draw-color[role="radio"]:not([hidden])')).toHaveLength(8);
     expect(toolbar.querySelectorAll('.draw-width[role="radio"]')).toHaveLength(3);
     expect(host.querySelector<HTMLInputElement>(".draw-title-input")!.value).toBe("Prova");
     expect(host.querySelector(".draw-title-label")!.textContent).toBe("Che cosa hai disegnato?");
@@ -244,6 +245,146 @@ describe("gli strumenti", () => {
     expect(editor.tool).toBe("rect");
     key("v");
     expect(editor.tool).toBe("select");
+  });
+});
+
+describe("il livello Standard", () => {
+  /// I nomi dei pulsanti che si vedono in un gruppo della barra.
+  const shown = (selector: string): string[] =>
+    [...host.querySelectorAll<HTMLButtonElement>(`[role="toolbar"] ${selector}:not([hidden])`)]
+      .filter((control) => control.closest("[hidden]") === null)
+      .map((control) => control.getAttribute("aria-label") ?? "");
+  const more = (): HTMLButtonElement => [...host.querySelectorAll<HTMLButtonElement>('[role="toolbar"] button')].find((control) => control.getAttribute("aria-label") === "Altro colore…")!;
+  const widths = (): string[] =>
+    [...host.querySelectorAll<HTMLElement>(".draw-width")].map((control) => `${control.querySelector<HTMLElement>(".draw-width-bar")!.style.getPropertyValue("--draw-width")}${control.getAttribute("aria-checked") === "true" ? "*" : ""}`);
+
+  it("aggiunge l'evidenziatore dopo la penna e «Altro colore…», e il livello cambia dal vivo", () => {
+    mount();
+    expect(shown(".draw-tool")).not.toContain("Evidenziatore");
+    expect(shown("button")).not.toContain("Altro colore…");
+    key("h");
+    expect(editor.tool).toBe("pen");
+
+    editor.select(["o1a2b3c4d"]);
+    editor.setLevel("standard");
+    expect(editor.level).toBe("standard");
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(shown("button")).toContain("Altro colore…");
+    const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
+    expect(highlighter.title).toBe("Evidenziatore (H)");
+    expect(document.getElementById(highlighter.getAttribute("aria-describedby")!)?.textContent).toContain("spessore costante");
+    // Il documento, la selezione e la cronologia restano.
+    expect(changes).toEqual([]);
+    expect(editor.selection).toEqual(["o1a2b3c4d"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    key("h");
+    expect(editor.tool).toBe("highlighter");
+    // Tornati all'Essenziale, l'evidenziatore non c'è più: si riparte dalla penna.
+    editor.setLevel("essential");
+    expect(editor.tool).toBe("pen");
+    expect(shown(".draw-tool")).not.toContain("Evidenziatore");
+    expect(changes).toEqual([]);
+  });
+
+  it("l'evidenziatore scrive un tratto giallo, largo e trasparente, che si annulla col suo nome", () => {
+    mount(SOURCE, { level: "standard" });
+    editor.setTool("highlighter");
+    expect(editor.color).toBe("#f0e442");
+    expect(editor.width).toBe(16);
+    drag([[10, 10], [14, 12], [20, 15], [28, 16], [36, 16]], { pressure: 0.9 });
+    expect(editor.engine.text).toMatch(
+      /<path id="o[a-z0-9]{8}" fub:tool="highlighter" fub:at="[^"]+Z" fub:brush="pf1 size=16 thinning=0 [^"]*capStart=0 capEnd=0 sim=0" d="M[^"]+" fill="#f0e442" fill-opacity="0.4" fub:ink="1 [^"]+"\/>/,
+    );
+    expect(spoken()).toBe("Evidenziatura aggiunta. Il disegno ha 2 oggetti.");
+    // Ha un nome suo anche nel giro degli oggetti e nel loro albero.
+    key("End");
+    expect(spoken()).toBe("Evidenziatura, Giallo, 2 di 2.");
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(spoken()).toBe("Annullato: Evidenziatura.");
+  });
+
+  it("l'evidenziatore ha colore e spessori suoi, e la penna ritrova i propri", () => {
+    mount(SOURCE, { level: "standard" });
+    expect(widths()).toEqual(["2px", "4px*", "8px"]);
+    editor.setColor("#d55e00");
+    editor.setTool("highlighter");
+    expect(widths()).toEqual(["8px", "16px*", "24px"]);
+    host.querySelectorAll<HTMLButtonElement>(".draw-width")[2]!.click();
+    expect(editor.width).toBe(24);
+    // Uno spessore della penna non è dell'evidenziatore.
+    editor.setWidth(4);
+    expect(editor.width).toBe(24);
+    editor.setColor("#56b4e9");
+    editor.setTool("pen");
+    expect([editor.color, editor.width]).toEqual(["#d55e00", 4]);
+    editor.setTool("highlighter");
+    expect([editor.color, editor.width]).toEqual(["#56b4e9", 24]);
+  });
+
+  it("«Altro colore…» chiede un codice, e il colore resta come campione accanto alla tavolozza", async () => {
+    mount(SOURCE, { level: "standard" });
+    more().click();
+    expect(dialog().querySelector(".modal-title, h2")?.textContent).toBe("Colore personalizzato");
+    const code = field("color") as HTMLInputElement;
+    expect(code.value).toBe("#000000");
+    const picker = dialog().querySelector<HTMLInputElement>('input[type="color"]')!;
+    expect(picker.getAttribute("aria-label")).toBe("Selettore dei colori");
+    code.value = "3A7BD5";
+    code.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(picker.value).toBe("#3a7bd5");
+    await submit();
+
+    expect(editor.color).toBe("#3a7bd5");
+    expect(spoken()).toBe("Colore: Personalizzato #3a7bd5.");
+    const custom = host.querySelector<HTMLButtonElement>('.draw-color:has([data-shape="ring"])')!;
+    expect(custom.hidden).toBe(false);
+    expect(custom.getAttribute("aria-label")).toBe("Personalizzato #3a7bd5");
+    expect(custom.getAttribute("aria-checked")).toBe("true");
+    expect(host.querySelectorAll('.draw-color[aria-checked="true"]')).toHaveLength(1);
+
+    // Un altro colore della tavolozza, e il campione resta lì per tornarci.
+    editor.setColor("#000000");
+    expect(custom.getAttribute("aria-checked")).toBe("false");
+    custom.click();
+    expect(editor.color).toBe("#3a7bd5");
+    editor.setTool("rect");
+    drag([[10, 10], [50, 40]]);
+    expect(editor.engine.text).toContain('stroke="#3a7bd5"');
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("un codice della tavolozza sceglie il suo campione, uno chiaro lo dice, e uno sbagliato non conferma", async () => {
+    mount(SOURCE, { level: "standard" });
+    more().click();
+    (field("color") as HTMLInputElement).value = "#0072B2";
+    await submit();
+    expect(editor.color).toBe("#0072b2");
+    expect(spoken()).toBe("Colore: Blu.");
+    expect(host.querySelector<HTMLButtonElement>('.draw-color:has([data-shape="ring"])')!.hidden).toBe(true);
+
+    more().click();
+    const code = field("color") as HTMLInputElement;
+    code.value = "rosso";
+    expect(code.checkValidity()).toBe(false);
+    code.value = "#eee";
+    await submit();
+    expect(editor.color).toBe("#eeeeee");
+    expect(spoken()).toBe("Colore: Personalizzato #eeeeee, chiaro: sulla carta bianca si legge poco.");
+  });
+
+  it("sotto lo Standard il colore a piacere non c'è: si torna al nero", () => {
+    mount(SOURCE, { level: "standard" });
+    editor.setColor("#3a7bd5");
+    editor.setLevel("essential");
+    expect(editor.color).toBe("#000000");
+    expect(host.querySelector<HTMLButtonElement>('.draw-color:has([data-shape="ring"])')!.hidden).toBe(true);
+    // All'Essenziale un colore fuori dalla tavolozza non si sceglie.
+    editor.setColor("#3a7bd5");
+    expect(editor.color).toBe("#000000");
+    editor.setLevel("standard");
+    expect(host.querySelector<HTMLButtonElement>('.draw-color:has([data-shape="ring"])')!.hidden).toBe(false);
   });
 });
 

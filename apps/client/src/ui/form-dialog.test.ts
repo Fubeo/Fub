@@ -48,6 +48,33 @@ describe("promptForm", () => {
     escape();
   });
 
+  it("un colore ha il codice e, accanto, il selettore del sistema, che si scrivono l'un l'altro", async () => {
+    const answer = promptForm({ title: "Colore", fields: [{ id: "c", label: "Codice", value: "#0072b2", kind: "color" }] });
+    const code = field("c") as HTMLInputElement;
+    const picker = dialog().querySelector<HTMLInputElement>('input[type="color"]')!;
+    expect(code.type).toBe("text");
+    expect(code.closest("label")!.querySelector(".palette-label")!.textContent).toBe("Codice");
+    expect(picker.value).toBe("#0072b2");
+    expect(picker.getAttribute("aria-label")).toBe("Selettore dei colori");
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    // Il codice corto vale; uno che non è un codice no, e il selettore resta.
+    code.value = "f0A";
+    code.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(picker.value).toBe("#ff00aa");
+    expect(code.checkValidity()).toBe(true);
+    code.value = "#12345";
+    code.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(code.checkValidity()).toBe(false);
+    expect(code.validationMessage).toBe("Scrivi un codice di tre o sei cifre esadecimali, come #0072b2.");
+    expect(picker.value).toBe("#ff00aa");
+    expect(document.getElementById(code.getAttribute("aria-describedby")!)!.textContent).toBe("Un codice come #0072b2");
+    picker.value = "#112233";
+    picker.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(code.value).toBe("#112233");
+    dialog().querySelector("form")!.requestSubmit();
+    expect(await answer).toEqual({ c: "#112233" });
+  });
+
   it("conferma coi valori per id, e annulla con null", async () => {
     let answer = ask();
     field("x").value = "12.5";

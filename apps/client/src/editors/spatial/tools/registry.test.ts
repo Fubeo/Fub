@@ -1,8 +1,8 @@
-// Il registro degli strumenti: che cosa offre l'Essenziale, e con quali tasti.
+// Il registro degli strumenti: che cosa offre ogni livello, e con quali tasti.
 
 import { describe, expect, it } from "vitest";
 import { icon } from "../../../ui/icons";
-import { DEFAULT_TOOL, TOOLS, toolForKey, toolsFor, toolSpec } from "./registry";
+import { DEFAULT_TOOL, reaches, TOOLS, toolForKey, toolsFor, toolSpec } from "./registry";
 
 describe("il registro degli strumenti", () => {
   it("dà all'Essenziale i sette strumenti, nell'ordine della barra", () => {
@@ -10,6 +10,15 @@ describe("il registro degli strumenti", () => {
     // Un livello sopra vede anche quelli sotto.
     expect(toolsFor("expert").length).toBeGreaterThanOrEqual(toolsFor("essential").length);
     expect(DEFAULT_TOOL).toBe("pen");
+  });
+
+  it("aggiunge allo Standard l'evidenziatore, dopo la penna", () => {
+    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow"]);
+    expect(toolSpec("highlighter").shortcut).toBe("h");
+    expect(reaches("standard", "essential")).toBe(true);
+    expect(reaches("standard", "standard")).toBe(true);
+    expect(reaches("standard", "expert")).toBe(false);
+    expect(reaches("essential", "standard")).toBe(false);
   });
 
   it("dà a ogni strumento un tasto suo, una lettera minuscola", () => {

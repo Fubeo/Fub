@@ -1,10 +1,18 @@
-// L'editor del livello Essenziale: una barra e il foglio, nessun
-// pannello. Tiene insieme ciò che i pacchetti precedenti hanno costruito — il
-// motore delle operazioni, il painter e lo strato sopra, la pipeline della
-// penna, la camera condivisa — e ci mette sopra gli strumenti.
+// L'editor del disegno: una barra e il foglio. Tiene insieme ciò che i
+// pacchetti precedenti hanno costruito — il motore delle operazioni, il
+// painter e lo strato sopra, la pipeline della penna, la camera condivisa — e
+// ci mette sopra gli strumenti.
 //
 // Le regole:
 //
+// - **Il livello filtra.** La barra e i tasti sono quelli del livello
+//   (`registry.ts`), che cambia dal vivo: ciò che sale compare, ciò che scende
+//   sparisce, e il documento resta com'è. L'Essenziale è una barra sola,
+//   senza pannelli.
+// - **Ogni segno il suo inchiostro.** La penna e le forme condividono colore
+//   e spessore; l'evidenziatore ha i suoi, giallo e largo, e li ritrova quando
+//   lo si riprende. Dal livello Standard un colore si sceglie anche a piacere,
+//   e resta come campione in più accanto alla tavolozza.
 // - **Un gesto, un'operazione.** Ogni strumento lavora sull'anteprima finché
 //   il puntatore è giù e scrive una volta sola quando si alza: il tratto
 //   sullo strato sopra, la forma su un livello di anteprima con gli stessi
@@ -56,6 +64,7 @@ import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
+import type { Tool } from "../scene/analysis";
 import type { Item } from "../scene/classify";
 import type { Op, Reason } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
@@ -98,8 +107,21 @@ import {
   type ImageCodec,
 } from "./images";
 import { createObjectTree, type TreeEntry } from "./objects";
-import { DEFAULT_COLOR, DEFAULT_WIDTH, PALETTE, swatchOf, WIDTHS } from "./palette";
-import { DEFAULT_TOOL, toolForKey, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
+import {
+  customColor,
+  DEFAULT_COLOR,
+  DEFAULT_WIDTH,
+  HIGHLIGHTER_COLOR,
+  HIGHLIGHTER_OPACITY,
+  HIGHLIGHTER_WIDTH,
+  HIGHLIGHTER_WIDTHS,
+  isLight,
+  PALETTE,
+  swatchOf,
+  WIDTHS,
+  type Width,
+} from "./palette";
+import { DEFAULT_TOOL, reaches, toolForKey, TOOLS, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
 import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -113,7 +135,8 @@ export interface DrawChange {
 }
 
 export interface DrawEditorOptions {
-  /// Il livello degli strumenti (default `essential`).
+  /// Il livello degli strumenti (default `essential`); cambia con
+  /// `setLevel`.
   readonly level?: Level;
   readonly images?: PainterOptions["images"];
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
@@ -129,7 +152,9 @@ export interface DrawEditorOptions {
 export interface DrawEditor {
   readonly element: HTMLElement;
   readonly engine: SceneEngine;
+  readonly level: Level;
   readonly tool: ToolId;
+  /// Il colore e lo spessore dello strumento di adesso.
   readonly color: string;
   readonly width: number;
   /// Le chiavi degli oggetti selezionati in ordine di documento: l'id, o
@@ -155,7 +180,13 @@ export interface DrawEditor {
   /// di annulla. `false` se il documento non è estraneo o la scrittura è
   /// tolta.
   adopt(): boolean;
+  /// Un altro livello, dal vivo: la barra e i tasti cambiano, il documento
+  /// e la cronologia restano. Uno strumento che il livello non ha più torna
+  /// alla penna, e un colore personalizzato al nero.
+  setLevel(level: Level): void;
   setTool(id: ToolId): void;
+  /// Il colore dello strumento di adesso: uno della tavolozza o, dal livello
+  /// Standard, uno a piacere, come lo legge `customColor`.
   setColor(color: string): void;
   setWidth(width: number): void;
   select(keys: readonly string[]): void;
@@ -239,6 +270,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-ellipse": ["M3 12a9 6.5 0 1 0 18 0a9 6.5 0 1 0-18 0"],
   "draw-line": ["M5 19L19 5"],
   "draw-arrow": ["M5 19L19 5", "M10 5h9v9"],
+  "draw-highlighter": ["M13.5 3.5l7 7-7 7-7-7z", "M6.5 10.5L3 18l3 3 7.5-3.5", "M15 21h6"],
+  "draw-color-more": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M12 8v8", "M8 12h8"],
   "draw-undo": ["M9 14L4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11"],
   "draw-redo": ["M15 14l5-5-5-5", "M20 9H9.5a5.5 5.5 0 0 0 0 11H13"],
   "draw-zoom-in": ["M12 5v14", "M5 12h14"],
@@ -264,6 +297,7 @@ interface GestureBase {
 
 interface InkGesture extends GestureBase {
   readonly kind: "ink";
+  readonly tool: Tool;
   readonly color: string;
   readonly brush: Pf1Brush;
   readonly to: Destination;
@@ -343,13 +377,23 @@ function matrixText(m: Matrix): string {
 export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner: Lifetime, options: DrawEditorOptions = {}): DrawEditor {
   ensureIcons();
   const life = openLifetime();
-  const tools = toolsFor(options.level ?? "essential");
+  let level: Level = options.level ?? "essential";
+  let tools = toolsFor(level);
   const relabels: Array<() => void> = [];
 
   let engine = initial;
-  let tool: ToolId = tools.some((spec) => spec.id === DEFAULT_TOOL) ? DEFAULT_TOOL : tools[0]!.id;
-  let color = DEFAULT_COLOR;
-  let width = DEFAULT_WIDTH;
+  let tool: ToolId = DEFAULT_TOOL;
+  /// Il colore e lo spessore di chi scrive: la penna e le forme li
+  /// condividono, l'evidenziatore ha i suoi.
+  const styles: Record<Tool, { color: string; width: number }> = {
+    pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH },
+    highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH },
+  };
+  const style = (): { color: string; width: number } => styles[tool === "highlighter" ? "highlighter" : "pen"];
+  /// Gli spessori che la barra offre allo strumento di adesso.
+  const widthsNow = (): readonly Width[] => (tool === "highlighter" ? HIGHLIGHTER_WIDTHS : WIDTHS);
+  /// L'ultimo colore scelto a piacere: un campione in più nella barra.
+  let custom: string | null = null;
   let selection: string[] = [];
   let camera: Camera = { scale: 1, tx: 0, ty: 0 };
   /// Il formato della percentuale di zoom, nella lingua di adesso.
@@ -437,9 +481,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return control;
   };
 
+  // Ogni strumento del registro ha il suo pulsante; quelli sopra il livello
+  // restano nascosti finché il livello non sale.
   const toolButtons = new Map<ToolId, HTMLButtonElement>();
   const toolGroup = group("draw.tools", true);
-  for (const spec of tools) {
+  for (const spec of TOOLS) {
     const shortcut = spec.shortcut.toUpperCase();
     const control = button(toolGroup, "draw-button draw-tool", () => `${t(spec.label)} (${shortcut})`, spec.icon, () => setTool(spec.id));
     control.setAttribute("role", "radio");
@@ -472,18 +518,40 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     control.append(frame);
     colorButtons.set(swatch.color, control);
   }
+  // Il colore a piacere: il suo campione, nella stessa scelta della
+  // tavolozza, e dopo il pulsante che lo chiede. Il campione ha una forma
+  // sua, l'anello, e il nome dice il codice.
+  const customLabel = (): string =>
+    custom === null ? t("draw.color.dialog") : t(isLight(custom) ? "draw.color.custom.light" : "draw.color.custom", { code: custom });
+  const customButton = button(colorGroup, "draw-button draw-color", customLabel, null, () => {
+    if (custom !== null) setColor(custom);
+  });
+  customButton.setAttribute("role", "radio");
+  const customFrame = document.createElement("span");
+  customFrame.className = "draw-swatch-frame";
+  customFrame.dataset.shape = "ring";
+  const customChip = document.createElement("span");
+  customChip.className = "draw-swatch";
+  customFrame.append(customChip);
+  customButton.append(customFrame);
+  const moreGroup = document.createElement("div");
+  moreGroup.className = "draw-group";
+  toolbar.append(moreGroup);
+  const moreButton = button(moreGroup, "draw-button", () => t("draw.color.more"), "draw-color-more", () => void chooseColor());
+  moreButton.setAttribute("aria-haspopup", "dialog");
 
-  const widthButtons = new Map<number, HTMLButtonElement>();
+  // Gli spessori, per posizione: Sottile, Medio, Spesso valgono per la penna
+  // e le forme quelli della tavolozza, per l'evidenziatore i suoi.
+  const widthButtons: Array<{ readonly control: HTMLButtonElement; readonly bar: HTMLElement }> = [];
   const widthGroup = group("draw.widths", true);
-  for (const option of WIDTHS) {
-    const control = button(widthGroup, "draw-button draw-width", () => t(option.label), null, () => setWidth(option.value));
+  WIDTHS.forEach((option, at) => {
+    const control = button(widthGroup, "draw-button draw-width", () => t(option.label), null, () => setWidth(widthsNow()[at]!.value));
     control.setAttribute("role", "radio");
     const bar = document.createElement("span");
     bar.className = "draw-width-bar";
-    bar.style.setProperty("--draw-width", `${option.value}px`);
     control.append(bar);
-    widthButtons.set(option.value, control);
-  }
+    widthButtons.push({ control, bar });
+  });
 
   const editGroup = group("draw.edit", false);
   const undoButton = button(editGroup, "draw-button", () => t("draw.undo"), "draw-undo", () => undo());
@@ -854,22 +922,45 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
   const currentTitle = (): string => rootText("title");
 
+  /// Il campione del colore a piacere: il colore, il nome, e se si vede.
+  const showCustom = (): void => {
+    customButton.hidden = custom === null || !reaches(level, "standard");
+    if (custom === null) return;
+    customChip.style.setProperty("--swatch", custom);
+    const label = customLabel();
+    customButton.setAttribute("aria-label", label);
+    customButton.title = label;
+  };
+
   const syncControls = (): void => {
     const canEdit = editable();
+    const now = style();
     root.toggleAttribute("data-readonly", !canEdit);
     surface.dataset.tool = tool;
     for (const [id, control] of toolButtons) {
+      control.hidden = !tools.some((spec) => spec.id === id);
       control.setAttribute("aria-checked", String(id === tool));
       control.disabled = !canEdit;
     }
     for (const [value, control] of colorButtons) {
-      control.setAttribute("aria-checked", String(value === color));
+      control.setAttribute("aria-checked", String(value === now.color));
       control.disabled = !canEdit;
     }
-    for (const [value, control] of widthButtons) {
-      control.setAttribute("aria-checked", String(value === width));
+    showCustom();
+    customButton.setAttribute("aria-checked", String(custom !== null && now.color === custom));
+    customButton.disabled = !canEdit;
+    // Il gruppo intero, non solo il pulsante: un gruppo vuoto nella barra
+    // occuperebbe comunque il suo spazio.
+    moreGroup.hidden = !reaches(level, "standard");
+    moreButton.hidden = moreGroup.hidden;
+    moreButton.disabled = !canEdit;
+    const widths = widthsNow();
+    widthButtons.forEach(({ control, bar }, at) => {
+      const value = widths[at]!.value;
+      bar.style.setProperty("--draw-width", `${value}px`);
+      control.setAttribute("aria-checked", String(value === now.width));
       control.disabled = !canEdit;
-    }
+    });
     undoButton.disabled = !canEdit || !history.canUndo;
     redoButton.disabled = !canEdit || !history.canRedo;
     deleteButton.disabled = !canEdit || selection.length === 0;
@@ -1046,6 +1137,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Strumenti --------------------------------------------------------------
 
+  function setLevel(next: Level): void {
+    if (next === level) return;
+    level = next;
+    tools = toolsFor(level);
+    if (!tools.some((spec) => spec.id === tool)) {
+      cancelGesture();
+      tool = DEFAULT_TOOL;
+    }
+    // Sotto lo Standard la barra non ha un campione per un colore a piacere:
+    // chi lo usava riparte dai colori di partenza, che la barra mostra.
+    if (!reaches(level, "standard")) {
+      if (swatchOf(styles.pen.color) === null) styles.pen.color = DEFAULT_COLOR;
+      if (swatchOf(styles.highlighter.color) === null) styles.highlighter.color = HIGHLIGHTER_COLOR;
+    }
+    syncControls();
+  }
+
   function setTool(id: ToolId): void {
     if (!tools.some((spec) => spec.id === id)) return;
     if (id !== tool) cancelGesture();
@@ -1055,13 +1163,42 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   function setColor(value: string): void {
-    color = value;
+    const code = customColor(value);
+    if (code === null) return;
+    if (swatchOf(code) === null) {
+      if (!reaches(level, "standard")) return;
+      custom = code;
+    }
+    style().color = code;
     syncControls();
   }
 
   function setWidth(value: number): void {
-    width = value;
+    if (!widthsNow().some((option) => option.value === value)) return;
+    style().width = value;
     syncControls();
+  }
+
+  /// «Altro colore…»: il codice, o il selettore del sistema. Un colore della
+  /// tavolozza sceglie il suo campione.
+  async function chooseColor(): Promise<void> {
+    if (asking || !editable() || !reaches(level, "standard")) return;
+    asking = true;
+    cancelGesture();
+    try {
+      const answer = await promptForm({
+        title: t("draw.color.dialog"),
+        fields: [{ id: "color", label: t("draw.color.code"), value: style().color, kind: "color" }],
+      });
+      if (answer === null || disposed) return;
+      const code = customColor(answer.color ?? "");
+      if (code === null) return;
+      setColor(code);
+      const swatch = swatchOf(code);
+      announce(t("draw.announce.color", { color: swatch === null ? customLabel() : t(swatch.label) }));
+    } finally {
+      asking = false;
+    }
   }
 
   function cancelGesture(): void {
@@ -1082,15 +1219,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const base = { stroke: start.id, pointer: start.pointerType };
     if (!editable()) return { ...base, kind: "refused" };
     switch (tool) {
-      case "pen": {
+      case "pen":
+      case "highlighter": {
         const ids = newIds();
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
-        let brush = brushForInput({ ...PF1_DEFAULTS, size: width, sim: false }, start.pressure);
+        const { color, width } = style();
+        // L'evidenziatore ha lo spessore costante e le punte piatte, come un
+        // pennarello a scalpello: la pressione non lo cambia.
+        let brush = tool === "highlighter"
+          ? { ...PF1_DEFAULTS, size: width, thinning: 0, capStart: false, capEnd: false, sim: false }
+          : brushForInput({ ...PF1_DEFAULTS, size: width, sim: false }, start.pressure);
         // Il seguito di un tratto chiuso al limite non si assottiglia alla
         // giunzione.
         if (start.continued) brush = { ...brush, taperStart: 0 };
-        return { ...base, kind: "ink", color, brush, to, ids, scene: [], local: [], predicted: [] };
+        return { ...base, kind: "ink", tool, color, brush, to, ids, scene: [], local: [], predicted: [] };
       }
       case "rect":
       case "ellipse":
@@ -1099,6 +1242,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         const ids = newIds();
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
+        const { color, width } = style();
         return { ...base, kind: "shape", tool, color, width, to, ids, from: null, end: null };
       }
       case "eraser":
@@ -1118,7 +1262,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         outline = [];
       }
     }
-    overlay.setInk(INK_KEY, outline.length === 0 ? null : { outline, matrix: g.to.matrix, color: g.color, opacity: 1 });
+    const opacity = g.tool === "highlighter" ? Number(HIGHLIGHTER_OPACITY) : 1;
+    overlay.setInk(INK_KEY, outline.length === 0 ? null : { outline, matrix: g.to.matrix, color: g.color, opacity });
     overlay.flush();
   };
 
@@ -1247,10 +1392,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     for (const point of outline) bounds.include(apply(to.matrix, point));
     const id = g.ids.next("object");
     const at = new Date(performance.timeOrigin + stroke.timeStamp).toISOString();
-    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, g.color, brush, ink, at))];
+    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, g.color, brush, ink, at, g.tool))];
     const page = pageFor(scene.root.page, bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });
-    if (commit("draw.action.stroke", asGesture(ops)) !== null) announce(`${t("draw.added.stroke")} ${objects()}`);
+    const marker = g.tool === "highlighter";
+    if (commit(marker ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) !== null) {
+      announce(`${t(marker ? "draw.added.highlight" : "draw.added.stroke")} ${objects()}`);
+    }
   };
 
   const finishShape = (g: ShapeGesture): void => {
@@ -1601,7 +1749,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// I controlli della barra raggiungibili adesso: uno solo prende il Tab,
   /// le frecce passano agli altri.
   let rovingCurrent: HTMLButtonElement | null = null;
-  const focusable = (): HTMLButtonElement[] => [...toolbar.querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled);
+  const focusable = (): HTMLButtonElement[] =>
+    [...toolbar.querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled && !control.hidden);
 
   function roving(target: HTMLButtonElement | null): void {
     const controls = focusable();
@@ -2163,14 +2312,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     get engine() {
       return engine;
     },
+    get level() {
+      return level;
+    },
     get tool() {
       return tool;
     },
     get color() {
-      return color;
+      return style().color;
     },
     get width() {
-      return width;
+      return style().width;
     },
     get selection() {
       return selection;
@@ -2208,6 +2360,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setReadOnly,
     reveal,
     adopt,
+    setLevel,
     setTool,
     setColor,
     setWidth,
