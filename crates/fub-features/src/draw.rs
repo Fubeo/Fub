@@ -1,8 +1,11 @@
-//! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno
-//! e l'export in PNG e in PDF.
+//! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno,
+//! l'export in PNG e in PDF, e il livello dell'editor.
 //!
 //! Il comando, «Nuovo disegno», è nel modulo [`create`]: un disegno nasce vuoto
 //! dal provider del formato, con un nome libero, e si apre.
+//!
+//! Il livello è un'impostazione del vault, [`DRAW_LEVEL_KEY`]: l'editor la
+//! legge, e la segue dal vivo, per sapere quali strumenti offrire.
 //!
 //! L'export sono due [`ExportProvider`], uno per formato, che leggono il disegno nello stesso
 //! modo: i byte del documento passano da `usvg`, che ne fa un albero, e da lì
@@ -56,12 +59,14 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use fub_abi::error::PluginError;
 use fub_abi::model::{Block, DocId, Inline};
 use fub_abi::rules::path::strip_ext;
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
     artifact_key, ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest,
     ExportTarget, TransferNote,
 };
+use fub_abi::ui::UiOption;
 use fub_format_svg::FORMAT_ID;
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{self, fontdb, ImageHrefResolver, ImageKind, Node, Tree};
@@ -76,6 +81,10 @@ pub const DRAW_ID: &str = "fub.draw";
 pub const DRAW_PNG: &str = "draw.png";
 /// La destinazione PDF: un file vettoriale per disegno.
 pub const DRAW_PDF: &str = "draw.pdf";
+/// L'impostazione del livello dell'editor: quali strumenti offre.
+pub const DRAW_LEVEL_KEY: &str = "draw.level";
+/// I valori del livello, dal più semplice: il primo è quello di serie.
+pub const DRAW_LEVELS: [&str; 2] = ["essential", "standard"];
 
 /// L'opzione del PNG: quanti pixel per pixel CSS del disegno.
 const SCALE: &str = "scale";
@@ -99,10 +108,43 @@ const E_NO_DRAWINGS: &str = "e_no_drawings";
 const E_SCALE: &str = "e_scale";
 const E_NONE_EXPORTED: &str = "e_none_exported";
 const E_WRITE: &str = "e_write";
+const S_GROUP: &str = "s_group";
+const S_LEVEL: &str = "s_level";
+const S_LEVEL_DESC: &str = "s_level_desc";
+const S_ESSENTIAL: &str = "s_essential";
+const S_STANDARD: &str = "s_standard";
 
-/// Le stringhe del componente: quelle del comando, e dell'export i soli
-/// errori, perché le note del log sono testo semplice come quelle degli altri
-/// export.
+/// Lo schema delle impostazioni dei disegni: il livello dell'editor.
+///
+/// Del **vault**, perché il livello lo sceglie chi prepara il vault: chi
+/// insegna e lo lascia all'Essenziale per una classe lo lascia su ogni
+/// macchina che apre quel vault. **Non** `program_writable`, per la stessa
+/// ragione: un componente che alzasse il livello da sé metterebbe davanti a chi
+/// disegna strumenti che nessuno ha scelto di dargli.
+///
+/// Cambiare livello non tocca i disegni: filtra soltanto ciò che l'editor
+/// offre. La griglia invece qui non c'è: è uno stato della vista, e lo ricorda
+/// la macchina, senza riscrivere il file del vault a ogni `#`.
+pub fn settings() -> Vec<SettingSpec> {
+    let [essential, standard] = DRAW_LEVELS;
+    vec![SettingSpec::new(
+        DRAW_LEVEL_KEY,
+        Text::key(S_LEVEL),
+        SettingKind::Choice {
+            default: essential.into(),
+            options: vec![
+                UiOption::new(essential, Text::key(S_ESSENTIAL)),
+                UiOption::new(standard, Text::key(S_STANDARD)),
+            ],
+        },
+    )
+    .describing(Text::key(S_LEVEL_DESC))
+    .grouped(Text::key(S_GROUP))]
+}
+
+/// Le stringhe del componente: quelle del comando, dell'impostazione, e
+/// dell'export i soli errori, perché le note del log sono testo semplice come
+/// quelle degli altri export.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
         create::in_italian(StringCatalog::new("it"))
@@ -116,7 +158,19 @@ pub fn catalog() -> Vec<StringCatalog> {
                 E_NONE_EXPORTED,
                 "Non ho esportato nessun disegno: «{doc}» non è riuscito ({reason}).",
             )
-            .with(E_WRITE, "Non ho scritto «{path}»: {reason}"),
+            .with(E_WRITE, "Non ho scritto «{path}»: {reason}")
+            .with(S_GROUP, "Disegni")
+            .with(S_LEVEL, "Livello d'interfaccia")
+            .with(
+                S_LEVEL_DESC,
+                "Quali strumenti offre l'editor dei disegni. Essenziale ne ha sette, \
+                 ciascuno con un tasto, adatti anche ai bambini; Standard aggiunge \
+                 l'evidenziatore, altri colori, il testo, i livelli del disegno, la \
+                 griglia, i collegamenti alle note e la barra «Disponi». Cambiare \
+                 livello non modifica i disegni, e vale subito anche per quelli aperti.",
+            )
+            .with(S_ESSENTIAL, "Essenziale")
+            .with(S_STANDARD, "Standard"),
         create::in_english(StringCatalog::new("en"))
             .with(E_TARGET, "«{target}» is not a drawing export destination.")
             .with(E_NO_DRAWINGS, "The selection contains no drawings.")
@@ -128,7 +182,19 @@ pub fn catalog() -> Vec<StringCatalog> {
                 E_NONE_EXPORTED,
                 "No drawing was exported: «{doc}» failed ({reason}).",
             )
-            .with(E_WRITE, "Could not write «{path}»: {reason}"),
+            .with(E_WRITE, "Could not write «{path}»: {reason}")
+            .with(S_GROUP, "Drawings")
+            .with(S_LEVEL, "Interface level")
+            .with(
+                S_LEVEL_DESC,
+                "Which tools the drawing editor offers. Essential has seven, each \
+                 with its own key, suited to children too; Standard adds the \
+                 highlighter, more colors, text, drawing layers, the grid, links to \
+                 notes and the Arrange bar. Changing the level does not modify \
+                 drawings, and takes effect at once, open ones included.",
+            )
+            .with(S_ESSENTIAL, "Essential")
+            .with(S_STANDARD, "Standard"),
     ]
 }
 
