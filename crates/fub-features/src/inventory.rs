@@ -540,7 +540,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         syntax: None,
         renderers: None,
         exports: Some(draw::exports),
-        settings: None,
+        settings: Some(draw::settings),
         provides: &[],
         requires: &[],
         wiring: HostWiring::None,

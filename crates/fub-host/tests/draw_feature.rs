@@ -6,6 +6,9 @@
 //! documento. Un `.svgz` resta di specie sconosciuta nei due casi: è
 //! compresso, e nessuna tabella gli dà un MIME. Il Markdown non cambia.
 //!
+//! Accesa, il vault ha anche l'impostazione del livello dell'editor; spenta,
+//! la chiave non c'è.
+//!
 //! Lo stesso file si compila nei due giri della CI: `cargo test --workspace`
 //! prova il ramo spento, `cargo test -p fub-host --features draw` quello acceso.
 
@@ -13,6 +16,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
+use fub_abi::settings::SettingValue;
 use fub_abi::traits::{EntryKind, IndexQuery, IndexResult, Page};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
 
@@ -93,4 +97,59 @@ fn an_svg_is_a_document_only_with_the_draw_feature() {
 
     // Il sorgente è quello del disco in tutti e due i casi.
     assert_eq!(ws.read_source(&drawing).unwrap(), DRAWING);
+}
+
+#[test]
+fn the_editor_level_is_a_vault_setting_only_with_the_draw_feature() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    std::fs::write(root.join("schizzo.svg"), DRAWING).unwrap();
+    let mut mounted = mounted(&root);
+    let ws = &mut mounted.workspace;
+    let level = |name: &str| SettingValue::Text(name.into());
+
+    #[cfg(not(feature = "draw"))]
+    {
+        assert!(ws.setting("draw.level").is_err());
+        assert!(ws.set_setting("draw.level", level("standard")).is_err());
+    }
+
+    #[cfg(feature = "draw")]
+    {
+        let Ok(IndexResult::Settings(entries)) = ws.query_index(IndexQuery::Settings {
+            plugin: Some(fub_features::DRAW_ID.into()),
+        }) else {
+            panic!("le impostazioni dei disegni rispondono")
+        };
+        let entry = entries
+            .iter()
+            .find(|entry| entry.spec.key == fub_features::DRAW_LEVEL_KEY)
+            .expect("il livello è fra le impostazioni dei disegni");
+        assert_eq!(entry.spec.scope, fub_abi::settings::SettingScope::Vault);
+        assert!(!entry.spec.program_writable);
+        assert_eq!(entry.value, level("essential"));
+
+        ws.set_setting(fub_features::DRAW_LEVEL_KEY, level("standard"))
+            .expect("lo Standard è un livello");
+        assert_eq!(
+            ws.setting(fub_features::DRAW_LEVEL_KEY).unwrap(),
+            level("standard")
+        );
+        // Un livello che l'editor non ha non si scrive, e resta quello di prima.
+        assert!(ws
+            .set_setting(fub_features::DRAW_LEVEL_KEY, level("expert"))
+            .is_err());
+        assert_eq!(
+            ws.setting(fub_features::DRAW_LEVEL_KEY).unwrap(),
+            level("standard")
+        );
+        let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
+        assert!(written.contains("\"draw.level\""), "{written}");
+    }
+
+    // Il livello filtra ciò che l'editor offre: il disegno non cambia.
+    assert_eq!(
+        std::fs::read_to_string(root.join("schizzo.svg")).unwrap(),
+        DRAWING
+    );
 }
