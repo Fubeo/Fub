@@ -369,7 +369,25 @@ const IT = {
   "draw.keys.attributes.toggle": "Mostra o nasconde gli attributi dell’oggetto scelto",
   "draw.keys.attributes.apply": "Applica il valore scritto",
   "draw.keys.attributes.newline": "Va a capo, nei punti e nei percorsi",
-  "draw.keys.attributes.revert": "Riporta il valore com’era; di nuovo, torna al foglio"
+  "draw.keys.attributes.revert": "Riporta il valore com’era; di nuovo, torna al foglio",
+  "draw.outline": "Contorno",
+  "draw.outline.solid": "Continuo",
+  "draw.outline.dashed": "Tratteggiato",
+  "draw.outline.dotted": "Punteggiato",
+  "draw.outline.dashdot": "Tratto e punto",
+  "draw.outline.custom": "Su misura: {value}",
+  "draw.outline.butt": "Estremi piatti",
+  "draw.outline.round_cap": "Estremi arrotondati",
+  "draw.outline.square": "Estremi quadrati",
+  "draw.outline.miter": "Angoli vivi",
+  "draw.outline.round_join": "Angoli arrotondati",
+  "draw.outline.bevel": "Angoli smussati",
+  "draw.outline.none": "Nessun oggetto scelto ha un contorno.",
+  "draw.outlined.one": "{style}: un contorno.",
+  "draw.outlined.other": "{style}: {count} contorni.",
+  "draw.action.dash": "Tratteggio",
+  "draw.action.cap": "Estremi del contorno",
+  "draw.action.join": "Angoli del contorno"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -735,7 +753,25 @@ const EN: Record<DrawKey, string> = {
   "draw.keys.attributes.toggle": "Show or hide the attributes of the selected object",
   "draw.keys.attributes.apply": "Apply the value",
   "draw.keys.attributes.newline": "New line, in points and paths",
-  "draw.keys.attributes.revert": "Restore the value; again, back to the drawing sheet"
+  "draw.keys.attributes.revert": "Restore the value; again, back to the drawing sheet",
+  "draw.outline": "Outline",
+  "draw.outline.solid": "Solid",
+  "draw.outline.dashed": "Dashed",
+  "draw.outline.dotted": "Dotted",
+  "draw.outline.dashdot": "Dash-dot",
+  "draw.outline.custom": "Custom: {value}",
+  "draw.outline.butt": "Flat ends",
+  "draw.outline.round_cap": "Round ends",
+  "draw.outline.square": "Square ends",
+  "draw.outline.miter": "Sharp corners",
+  "draw.outline.round_join": "Round corners",
+  "draw.outline.bevel": "Beveled corners",
+  "draw.outline.none": "None of the selected objects has an outline.",
+  "draw.outlined.one": "{style}: one outline.",
+  "draw.outlined.other": "{style}: {count} outlines.",
+  "draw.action.dash": "Dash pattern",
+  "draw.action.cap": "Outline ends",
+  "draw.action.join": "Outline corners"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

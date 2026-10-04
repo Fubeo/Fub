@@ -144,6 +144,7 @@ import {
   type Order,
 } from "./arrange";
 import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
+import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, type Cap, type Dash, type Join, type OutlineChange } from "./outline";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -436,6 +437,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-unlink": ["M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5", "M4 8h2.5", "M8 4v2.5", "M20 16h-2.5", "M16 20v-2.5"],
   "draw-open-link": ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
   "draw-attributes": ["M8 7l-5 5 5 5", "M16 7l5 5-5 5", "M13.5 5l-3 14"],
+  "draw-outline": ["M3 6h18", "M3 12h4", "M10 12h4", "M17 12h4", "M3.5 18h0", "M8.5 18h0", "M13.5 18h0", "M18.5 18h0"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -975,7 +977,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const orderButton = arrangeButton("draw.order", "draw-order", null, () => openMenu(orderButton, orderItems()));
   const intoButton = arrangeButton("draw.into_layer", "draw-into-layer", null, () => openMenu(intoButton, intoItems()));
   const alignButton = arrangeButton("draw.align", "draw-align", null, () => openMenu(alignButton, alignItems()));
-  for (const control of [orderButton, intoButton, alignButton]) {
+  // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
+  const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
+  for (const control of [orderButton, intoButton, alignButton, outlineButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -1625,6 +1629,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Con un livello solo, che ha già tutto, non c'è dove spostare.
     const layers = currentIndex().layers;
     intoButton.hidden = layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
+    outlineButton.hidden = !reaches(level, "expert");
     arrangeFocus.sync(null);
     if (!focused) return;
     const active = document.activeElement;
@@ -3208,6 +3213,47 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return items;
   };
 
+  /// Dà `change` ai contorni scelti, e dice quanti ne ha cambiati col nome
+  /// della scelta.
+  function outlineSelection(change: OutlineChange, style: string): void {
+    if (!reaches(level, "expert")) return;
+    const units = arranging();
+    if (units === null) return;
+    if (outlinesOf(engine.model!, units).length === 0) {
+      announce(t("draw.outline.none"));
+      return;
+    }
+    const outlined = outlineOps(engine.model!, units, change, newIds());
+    const label: DrawKey = "dash" in change ? "draw.action.dash" : "cap" in change ? "draw.action.cap" : "draw.action.join";
+    if (arrange(label, outlined)) announce(plural(outlined.changed, "draw.outlined.one", "draw.outlined.other", { style }));
+  }
+
+  /// Le voci del contorno: i tratteggi, gli estremi e gli angoli, ciascuno
+  /// una scelta, segnata se i contorni scelti l'hanno tutti. Un tratteggio
+  /// che non è del menu c'è, segnato e spento, col suo valore.
+  const outlineItems = (): MenuItem[] => {
+    const model = engine.model;
+    const outlines = model === null ? [] : outlinesOf(model, selectedUnits());
+    const look = outlineLook(outlines);
+    const none = outlines.length === 0;
+    const choice = (label: string, checked: boolean, separator: boolean, change: OutlineChange): MenuItem => ({
+      label,
+      choice: "radio",
+      checked,
+      separator,
+      disabled: none,
+      run: () => outlineSelection(change, label),
+    });
+    const items: MenuItem[] = DASHES.map((dash) => choice(t(DASH_LABELS[dash]), look.dash === dash, false, { dash }));
+    if (none) items[0]!.description = t("draw.outline.none");
+    if (look.dash === "custom" && look.custom !== null) {
+      items.push({ label: t("draw.outline.custom", { value: look.custom }), choice: "radio", checked: true, disabled: true, run: () => {} });
+    }
+    items.push(...CAPS.map((cap, at) => choice(t(CAP_LABELS[cap]), look.cap === cap, at === 0, { cap })));
+    items.push(...JOINS.map((join, at) => choice(t(JOIN_LABELS[join]), look.join === join, at === 0, { join })));
+    return items;
+  };
+
   /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
   function moveIntoLayer(layer: LayerInfo): void {
     const units = arranging();
@@ -4262,6 +4308,26 @@ const AXES: ReadonlyArray<{ readonly axis: Axis; readonly label: DrawKey }> = [
   { axis: "x", label: "draw.distribute.x" },
   { axis: "y", label: "draw.distribute.y" },
 ];
+
+/// I nomi delle voci del contorno.
+const DASH_LABELS: Readonly<Record<Dash, DrawKey>> = {
+  solid: "draw.outline.solid",
+  dashed: "draw.outline.dashed",
+  dotted: "draw.outline.dotted",
+  dashdot: "draw.outline.dashdot",
+};
+
+const CAP_LABELS: Readonly<Record<Cap, DrawKey>> = {
+  butt: "draw.outline.butt",
+  round: "draw.outline.round_cap",
+  square: "draw.outline.square",
+};
+
+const JOIN_LABELS: Readonly<Record<Join, DrawKey>> = {
+  miter: "draw.outline.miter",
+  round: "draw.outline.round_join",
+  bevel: "draw.outline.bevel",
+};
 
 /// Che cosa si annuncia quando una forma entra nel disegno.
 const ADDED: Readonly<Record<ShapeTool, DrawKey>> = {
