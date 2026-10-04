@@ -181,6 +181,11 @@ export function keyword(name: string, value: string): boolean {
   return KEYWORDS.get(name)?.includes(trim(value)) ?? false;
 }
 
+/// Le parole chiave di `name`, nell'ordine di §4; vuote se `name` non ne ha.
+export function keywords(name: string): readonly string[] {
+  return KEYWORDS.get(name) ?? [];
+}
+
 const ALIGN = [
   "none", "xMinYMin", "xMidYMin", "xMaxYMin", "xMinYMid", "xMidYMid", "xMaxYMid", "xMinYMax",
   "xMidYMax", "xMaxYMax",

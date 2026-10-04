@@ -325,8 +325,8 @@ dalla geometria.
 - Oggetti: `o` seguito da 8 caratteri base36 casuali. Livelli: `l` seguito da
   8 caratteri. Carta: `fub-paper`.
 - Un id è unico nel documento: un id casuale già usato si rigenera.
-- Un id esistente non cambia mai. La superficie aggiunge un id solo agli
-  elementi che crea o modifica.
+- Un id esistente cambia solo se lo si chiede, dagli attributi del livello
+  Esperto. La superficie aggiunge un id solo agli elementi che crea o modifica.
 - Un documento con id duplicati si apre in sola lettura, con l'errore S003.
 
 ### Scrittura canonica

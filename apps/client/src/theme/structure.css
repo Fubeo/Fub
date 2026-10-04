@@ -1413,9 +1413,10 @@ html, body, #app {
   max-width: calc(100% - 16px);
   transform: translateX(-50%);
 }
-/* Il foglio e, accanto, l'albero degli oggetti; su un riquadro stretto
-   l'albero va sotto. Una riga dell'albero misura almeno 44 px: è un bersaglio
-   come gli altri, e l'albero virtualizzato conta su quell'altezza. */
+/* Il foglio e, accanto, i pannelli: l'albero degli oggetti e, sotto, gli
+   attributi. Su un riquadro stretto i pannelli vanno sotto il foglio. Una
+   riga dell'albero misura almeno 44 px: è un bersaglio come gli altri, e
+   l'albero virtualizzato conta su quell'altezza. */
 .draw-body {
   display: flex;
   flex: 1;
@@ -1423,8 +1424,9 @@ html, body, #app {
   min-height: 0;
 }
 /* Il lato del bordo segue la disposizione, che è della struttura; il colore
-   e il tratto sono della pelle. */
-.draw-objects {
+   e il tratto sono della pelle. Gli attributi vogliono più spazio dei nomi
+   dell'albero: con loro il pannello si allarga. */
+.draw-dock {
   display: flex;
   flex-direction: column;
   flex: 0 0 min(20rem, 40%);
@@ -1432,6 +1434,22 @@ html, body, #app {
   min-height: 0;
   border-width: 0;
   border-inline-start-width: 1px;
+}
+.draw-dock:has(> .draw-inspector:not([hidden])) {
+  flex-basis: min(26rem, 45%);
+}
+/* Due pannelli aperti si dividono l'altezza, con un filo fra loro. */
+.draw-objects,
+.draw-inspector {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  border-width: 0;
+}
+.draw-objects:not([hidden]) + .draw-inspector {
+  border-block-start-width: 1px;
 }
 .draw-objects-header {
   display: flex;
@@ -1482,11 +1500,93 @@ html, body, #app {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Gli attributi: una tabella col nome, il valore e il pulsante che lo
+   toglie. Il nome va a capo dove serve; il valore prende il resto, e il campo
+   che si scrive è un bersaglio da 44 px. Sotto, il riquadro per aggiungerne
+   uno. */
+.draw-inspector-header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+.draw-inspector-title,
+.draw-inspector-subject,
+.draw-inspector-empty,
+.draw-inspector-note,
+.draw-inspector-error,
+.draw-inspector-add-title {
+  margin: 0;
+}
+.draw-inspector-subject {
+  overflow-wrap: anywhere;
+}
+.draw-inspector-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-inspector-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.draw-inspector-key {
+  width: 38%;
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.draw-inspector-key > label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.draw-inspector-value {
+  vertical-align: top;
+}
+.draw-inspector-actions {
+  width: 44px;
+  vertical-align: top;
+}
+.draw-inspector-field {
+  display: flex;
+  align-items: center;
+}
+.draw-inspector-input {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+textarea.draw-inspector-input {
+  resize: vertical;
+}
+.draw-inspector-swatch {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  forced-color-adjust: none;
+}
+.draw-inspector-note,
+.draw-inspector-error {
+  overflow-wrap: anywhere;
+}
+.draw-inspector-add {
+  display: flex;
+  flex-direction: column;
+}
+.draw-inspector-add-value {
+  display: flex;
+}
 @container (max-width: 36rem) {
   .draw-body {
     flex-direction: column;
   }
-  .draw-objects {
+  .draw-dock,
+  .draw-dock:has(> .draw-inspector:not([hidden])) {
     flex: 0 0 40%;
     border-inline-start-width: 0;
     border-block-start-width: 1px;

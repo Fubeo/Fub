@@ -1,0 +1,67 @@
+# Disegni, livello Esperto
+
+> **Per chi:** chi disegna in un vault e vuole il file sotto il disegno.
+> **Risultato:** sapere che cosa aggiunge il livello Esperto a un disegno, e
+> come si legge e si cambia un oggetto attributo per attributo.
+
+Il livello Esperto è il terzo dei livelli d'interfaccia dell'editor dei
+[disegni](drawing.md), dopo l'Essenziale e lo Standard, e comprende tutto ciò
+che offrono loro. Si sceglie come gli altri, nelle Impostazioni, con «Livello
+d'interfaccia». Come gli altri filtra soltanto ciò che si offre: un disegno si
+apre uguale a ogni livello.
+
+## Attributi
+
+«Attributi», nella barra (`Ctrl+Maiusc+X`, come l'editor XML di Inkscape),
+apre accanto al foglio il tag dell'oggetto scelto come lo scrive il file, una
+riga per attributo; sotto l'albero degli oggetti, se è aperto anche quello. È
+il modo più corto di dare un valore preciso, e per chi non vede il foglio una
+tabella da leggere, col nome dell'attributo come nome del campo. Le regole
+stanno in `apps/client/src/editors/spatial/tools/attributes.ts`, il pannello
+in `apps/client/src/editors/spatial/tools/inspector.ts`.
+
+- **Le righe** sono l'id e gli attributi scritti, nell'ordine canonico del
+  formato, coi valori come sono scritti: le entità risolte, le unità
+  com'erano.
+- **Un valore si cambia** scrivendolo e premendo `Invio`, o lasciando il
+  campo; una scelta, come `stroke-linecap` o il carattere di un testo, parte
+  quando si fa. Si scrive come lo scrive FubDraw: un colore `#rrggbb` o
+  `none`, anche se lo si è scritto `#F00` o `red`; le lunghezze in unità
+  utente con al più due decimali e le opacità con quattro; una `transform`
+  come una `matrix` sola, tolta se è l'identità; un `d` coi comandi assoluti.
+  Ogni cambio è un passo, che si annulla col suo nome.
+- **Un valore che il formato non ammette non parte.** Resta scritto, il campo
+  è segnato e sotto c'è che cosa ci vuole; `Invio` lo dice anche a voce.
+  `Esc` riporta il valore com'era e, di nuovo, torna al foglio. In un elenco
+  di punti o in un percorso `Maiusc+Invio` va a capo.
+- **Si toglie** col pulsante della riga, e **si aggiunge** dal riquadro in
+  fondo: il nome si sceglie fra quelli che servono all'oggetto, niente
+  contorno su un tratto a penna, che è tutto riempimento, e niente carattere
+  su un rettangolo. Il valore parte da quello iniziale di SVG, che non cambia
+  niente.
+- **Il carattere di un testo** si sceglie fra Inter, Literata e JetBrains
+  Mono, che Fub porta con sé. Un altro carattere, scritto da un altro
+  programma, resta fra le scelte finché non lo si cambia.
+- **Ciò che ha un padrone si legge soltanto**, con la ragione accanto: il `d`
+  di un tratto, che viene dall'inchiostro, e quello di una freccia, che viene
+  dalla sua geometria; gli attributi `fub:*`, che scrive FubDraw; quelli di
+  altri programmi, che FubDraw conserva; gli `href` di collegamenti e
+  immagini, che hanno i loro comandi; un valore oltre i 100 000 caratteri.
+  Cambiare lo spessore di una freccia ne ridisegna la punta.
+- **L'id si cambia** nella prima riga. Un nome comincia con una lettera o `_`
+  e continua con lettere, cifre, `_`, `.` e `-`, fino a 64 caratteri; è unico
+  nel disegno, e gli id che cominciano con `fub-` sono del formato. Un id che
+  una parte di un altro programma cita, come un gradiente o un `use`, non si
+  cambia: il riferimento si romperebbe. Un oggetto senza id ne riceve uno al
+  primo cambio, e resta scelto.
+- **Il disegno può cambiare mentre si scrive**, per un annulla o per chi
+  lavora insieme: le righe si aggiornano, e il campo che ha il fuoco tiene ciò
+  che c'è scritto, come un valore che non è partito.
+- **I tasti del foglio non partono dal pannello**: un `?` o un `Canc` scritti
+  in un valore restano lì, e `Canc` sul pulsante che toglie un attributo non
+  toglie l'oggetto. Fuori da un campo di testo `Ctrl+Z` annulla come sul
+  foglio.
+
+Un documento in sola lettura si legge tutto e non si scrive. Scendendo
+dall'Esperto il pannello si chiude e «Attributi» sparisce dalla barra.
+

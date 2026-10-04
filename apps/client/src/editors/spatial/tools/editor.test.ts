@@ -1924,6 +1924,7 @@ describe("da tastiera", () => {
       "Disponi · dal livello Standard",
       "Testo · dal livello Standard",
       "Griglia · dal livello Standard",
+      "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
     expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
@@ -1940,10 +1941,39 @@ describe("da tastiera", () => {
     expect(editor.grid.shown).toBe(false);
   });
 
-  it("dallo Standard niente da aggiungere, e nessun «Mostra tutto»", () => {
+  it("dallo Standard «Mostra tutto» aggiunge i tasti dell'Esperto; dall'Esperto non c'è", async () => {
     mount(SOURCE, { level: "standard" });
     key("?", { shiftKey: true });
+    dialog().querySelector<HTMLButtonElement>(".keys-show-all")!.click();
+    const extra = dialog().querySelector<HTMLElement>(".keys-more")!;
+    const tables = [...extra.querySelectorAll("table")].map((table) => ({
+      caption: table.querySelector("caption")!.textContent,
+      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
+    }));
+    expect(tables).toEqual([
+      {
+        caption: "Attributi · dal livello Esperto",
+        rows: [
+          ["Ctrl+Shift+X", "Mostra o nasconde gli attributi dell’oggetto scelto"],
+          ["Enter", "Applica il valore scritto"],
+          ["Shift+Enter", "Va a capo, nei punti e nei percorsi"],
+          ["Esc", "Riporta il valore com’era; di nuovo, torna al foglio"],
+        ],
+      },
+    ]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+    // Dallo Standard il tasto non apre niente.
+    editor.select(["o1a2b3c4d"]);
+    key("X", { ctrlKey: true, shiftKey: true });
+    expect(host.querySelector<HTMLElement>(".draw-inspector")!.hidden).toBe(true);
+
+    editor.setLevel("expert");
+    // L'elenco di prima si chiude con la sua risposta.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    key("?", { shiftKey: true });
     expect(dialog().querySelector(".keys-show-all")).toBeNull();
+    expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toContain("Attributi");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 
@@ -2027,6 +2057,169 @@ describe("l'albero degli oggetti", () => {
     dialog().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     tree().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
+  });
+});
+
+describe("gli attributi, dal livello Esperto", () => {
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Attributi"]')!;
+  const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-inspector")!;
+  const dock = (): HTMLElement => host.querySelector<HTMLElement>(".draw-dock")!;
+  const row = (name: string): HTMLTableRowElement => panel().querySelector<HTMLTableRowElement>(`tr[data-key="${name}"]`)!;
+  const control = (name: string): HTMLInputElement => row(name).querySelector<HTMLInputElement>(".draw-inspector-input")!;
+  const keysOf = (): string[] => [...panel().querySelectorAll<HTMLTableRowElement>("tbody tr")].map((tr) => tr.dataset.key!);
+
+  function write(target: HTMLInputElement, text: string): void {
+    target.focus();
+    target.value = text;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  it("il pulsante c'è solo all'Esperto; apre il pannello accanto al foglio, e il fuoco ci va", () => {
+    mount(SOURCE, { level: "standard" });
+    expect(button().hidden).toBe(true);
+    editor.setLevel("expert");
+    expect(button().hidden).toBe(false);
+    expect(button().title).toBe("Attributi (Ctrl+Shift+X)");
+    expect(button().getAttribute("aria-keyshortcuts")).toBe("Control+Shift+X");
+    expect(button().getAttribute("aria-controls")).toBe(panel().id);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(dock().hidden).toBe(true);
+    button().click();
+    expect(panel().hidden).toBe(false);
+    expect(dock().hidden).toBe(false);
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    expect(panel().querySelector(".draw-inspector-empty")!.textContent).toBe("Scegli un oggetto per vederne gli attributi.");
+    expect(document.activeElement).toBe(panel());
+    editor.select(["o1a2b3c4d"]);
+    expect(panel().querySelector(".draw-inspector-subject")!.textContent).toBe("Rettangolo, Nero, elemento rect");
+    expect(keysOf()).toEqual(["id", "x", "y", "width", "height", "fill", "stroke", "stroke-width"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Il tasto lo chiude, anche da un campo, e il fuoco torna al foglio.
+    key("X", { ctrlKey: true, shiftKey: true }, control("fill"));
+    expect(panel().hidden).toBe(true);
+    expect(dock().hidden).toBe(true);
+    expect(document.activeElement).toBe(surface());
+    key("X", { ctrlKey: true, shiftKey: true });
+    expect(panel().hidden).toBe(false);
+    expect(document.activeElement).toBe(control("id"));
+    // Scesi dall'Esperto, il pannello si chiude e il pulsante sparisce.
+    editor.setLevel("standard");
+    expect(panel().hidden).toBe(true);
+    expect(button().hidden).toBe(true);
+  });
+
+  it("l'albero e gli attributi stanno uno sotto l'altro", () => {
+    mount(SOURCE, { level: "expert" });
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    button().click();
+    expect([...dock().children].map((child) => child.className)).toEqual(["draw-objects", "draw-inspector"]);
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    expect(dock().hidden).toBe(false);
+    button().click();
+    expect(dock().hidden).toBe(true);
+  });
+
+  it("un valore cambiato è un passo, che si annulla col suo nome", () => {
+    mount(SOURCE, { level: "expert" });
+    editor.select(["o1a2b3c4d"]);
+    button().click();
+    write(control("stroke-width"), "4");
+    key("Enter", {}, control("stroke-width"));
+    expect(editor.engine.text).toContain('stroke-width="4"');
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("stroke-width cambiato.");
+    expect(editor.selection).toEqual(["o1a2b3c4d"]);
+    // Annulla dal pulsante che toglie, fuori da un campo di testo.
+    row("fill").querySelector<HTMLButtonElement>(".draw-inspector-remove")!.focus();
+    key("z", { ctrlKey: true }, row("fill").querySelector<HTMLButtonElement>(".draw-inspector-remove")!);
+    expect(editor.engine.text).toContain('stroke-width="2"');
+    expect(spoken()).toBe("Annullato: Modifica di un attributo.");
+    expect(control("stroke-width").value).toBe("2");
+  });
+
+  it("un oggetto senza id lo riceve, e resta scelto col campo che si stava usando", () => {
+    mount(doc(`${LAYER}<rect x="0" y="0" width="20" height="20" fill="#000000"/></g>`), { level: "expert" });
+    editor.select(["@0.0"]);
+    button().click();
+    expect(control("id").value).toBe("");
+    // Un valore che non è partito, in un'altra riga, resta com'era scritto.
+    write(control("x"), "dieci");
+    key("Enter", {}, control("x"));
+    write(control("fill"), "#e69f00");
+    const field = control("fill");
+    key("Enter", {}, field);
+    expect(control("x").value).toBe("dieci");
+    expect(control("x").getAttribute("aria-invalid")).toBe("true");
+    expect(editor.engine.text).toMatch(/<rect id="(o[a-z0-9]{8})" x="0" y="0" width="20" height="20" fill="#e69f00"\/>/);
+    const id = /<rect id="(o[a-z0-9]{8})"/.exec(editor.engine.text)![1]!;
+    expect(editor.selection).toEqual([id]);
+    expect(control("id").value).toBe(id);
+    expect(control("fill")).toBe(field);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("l'id si cambia, e resta scelto l'oggetto col nome nuovo", () => {
+    mount(SOURCE, { level: "expert" });
+    editor.select(["o1a2b3c4d"]);
+    button().click();
+    write(control("id"), "Quadrato");
+    key("Enter", {}, control("id"));
+    expect(editor.engine.text).toContain('<rect id="Quadrato"');
+    expect(editor.selection).toEqual(["Quadrato"]);
+    expect(spoken()).toBe("Ora l’id è «Quadrato».");
+    editor.undo();
+    expect(editor.engine.text).toContain('<rect id="o1a2b3c4d"');
+    expect(spoken()).toBe("Annullato: Cambio dell’id.");
+  });
+
+  it("un id citato da una parte di un altro programma non si cambia", () => {
+    const source = doc(
+      `<defs><linearGradient id="sfumato"><stop offset="0" stop-color="#ffffff"/></linearGradient></defs>${LAYER}<rect id="o1a2b3c4d" x="0" y="0" width="20" height="20" fill="#000000"/></g><use href="#o1a2b3c4d" x="40"/>`,
+    );
+    mount(source, { level: "expert" });
+    editor.select(["o1a2b3c4d"]);
+    button().click();
+    write(control("id"), "Quadrato");
+    key("Enter", {}, control("id"));
+    expect(editor.engine.text).toBe(source);
+    expect(row("id").querySelector(".draw-inspector-error")!.textContent).toBe(
+      "Una parte di un altro programma cita «o1a2b3c4d»: cambiarlo romperebbe il riferimento.",
+    );
+  });
+
+  it("i tasti del foglio non partono dal pannello", () => {
+    mount(SOURCE, { level: "expert" });
+    editor.select(["o1a2b3c4d"]);
+    button().click();
+    write(control("fill"), "#00");
+    for (const name of ["Delete", "Backspace", "?", "r", "#", "Escape"]) key(name, {}, control("fill"));
+    expect(editor.engine.text).toContain("o1a2b3c4d");
+    expect(editor.tool).toBe("pen");
+    expect(editor.grid.shown).toBe(false);
+    expect(document.querySelectorAll(".modale")).toHaveLength(0);
+    // Esc ha riportato il valore; il secondo torna al foglio, con la selezione.
+    expect(control("fill").value).toBe("none");
+    key("Escape", {}, control("fill"));
+    expect(document.activeElement).toBe(surface());
+    expect(editor.selection).toEqual(["o1a2b3c4d"]);
+    // In un campo, Ctrl+Z è del campo; Canc sul pulsante che toglie non
+    // elimina l'oggetto.
+    key("z", { ctrlKey: true }, control("fill"));
+    const remove = row("stroke").querySelector<HTMLButtonElement>(".draw-inspector-remove")!;
+    key("Delete", {}, remove);
+    expect(changes).toEqual([]);
+  });
+
+  it("un documento in sola lettura si legge e non si scrive, e torna a scriversi dal vivo", () => {
+    mount(SOURCE, { level: "expert" });
+    editor.select(["o1a2b3c4d"]);
+    button().click();
+    editor.setReadOnly(true);
+    expect(control("fill").readOnly).toBe(true);
+    expect(panel().querySelector<HTMLElement>(".draw-inspector-add")!.hidden).toBe(true);
+    editor.setReadOnly(false);
+    expect(control("fill").readOnly).toBe(false);
+    expect(panel().querySelector<HTMLElement>(".draw-inspector-add")!.hidden).toBe(false);
   });
 });
 

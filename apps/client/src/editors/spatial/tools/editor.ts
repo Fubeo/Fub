@@ -143,6 +143,7 @@ import {
   type Edge,
   type Order,
 } from "./arrange";
+import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -191,6 +192,7 @@ import {
   shiftLayerOps,
   type Shift,
 } from "./layers";
+import { createInspector } from "./inspector";
 import { createObjectTree, type TreeEntry } from "./objects";
 import {
   customColor,
@@ -375,6 +377,10 @@ const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
   expert: "draw.level.expert",
 };
 
+/// Il tasto che mostra e nasconde gli attributi, dal livello Esperto: lo
+/// stesso dell'editor XML di Inkscape.
+const ATTRIBUTES_BINDING = "Mod-Shift-x";
+
 /// Lo scarto di una copia dal suo originale, e fra due immagini incollate
 /// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
 const COPY_STEP_PX = 24;
@@ -429,6 +435,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-link": ["M9.5 14.5l5-5", "M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5"],
   "draw-unlink": ["M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5", "M4 8h2.5", "M8 4v2.5", "M20 16h-2.5", "M16 20v-2.5"],
   "draw-open-link": ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
+  "draw-attributes": ["M8 7l-5 5 5 5", "M16 7l5 5-5 5", "M13.5 5l-3 14"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -866,6 +873,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   tree.element.hidden = true;
   relabels.push(() => tree.relabel());
 
+  // Gli attributi dell'oggetto scelto, dal livello Esperto: chiusi finché
+  // qualcuno non li apre, sotto l'albero se è aperto anche quello.
+  const inspector = createInspector(life, {
+    onSet: (subject, key, value) => {
+      const change = attributeOps(subject, key, value, newIds());
+      return changeObject("draw.action.attribute", change.ops, change.id);
+    },
+    onRename: (subject, next) => changeObject("draw.action.rename", renameOps(subject, next), next),
+    taken: (id) => engine.holder(id) !== null,
+    cited: (id) => cited(id),
+    announce: (text) => announce(text),
+    onLeave: () => surface.focus({ preventScroll: true }),
+  });
+  inspector.element.hidden = true;
+  relabels.push(() => inspector.relabel());
+
   const viewGroup = group("draw.view", false);
   button(viewGroup, "draw-button", () => t("draw.zoom_out"), "draw-zoom-out", () => zoomBy(1 / ZOOM_STEP));
   // Il nome contiene la percentuale che si vede (WCAG 2.5.3): chi la dice a
@@ -881,6 +904,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
+  // Gli attributi, dal livello Esperto.
+  const attributesButton = button(viewGroup, "draw-button", () => t("draw.attributes"), "draw-attributes", () => showAttributes(inspector.element.hidden));
+  attributesButton.setAttribute("aria-expanded", "false");
+  attributesButton.setAttribute("aria-controls", inspector.element.id);
+  attributesButton.setAttribute("aria-keyshortcuts", ariaBinding(ATTRIBUTES_BINDING));
+  relabels.push(() => {
+    attributesButton.title = `${t("draw.attributes")} (${displayBinding(ATTRIBUTES_BINDING)})`;
+  });
   const keysButton = button(viewGroup, "draw-button", () => t("draw.keys"), "keyboard", () => void keys());
   keysButton.setAttribute("aria-keyshortcuts", "?");
   keysButton.setAttribute("aria-haspopup", "dialog");
@@ -989,13 +1020,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   linkLayer.className = "draw-link-layer";
   linkLayer.hidden = options.links === undefined;
 
-  // Il foglio con la sua barra e, accanto, l'albero degli oggetti.
+  // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
+  // oggetti e, sotto, gli attributi.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
   stage.append(surface, linkLayer, textLayer, arrangeBar);
+  const dock = document.createElement("div");
+  dock.className = "draw-dock";
+  dock.hidden = true;
+  dock.append(tree.element, inspector.element);
   const body = document.createElement("div");
   body.className = "draw-body";
-  body.append(stage, tree.element);
+  body.append(stage, dock);
   header.append(toolbar, titleField);
   root.append(header, body, surfaceHint, live);
   host.append(root);
@@ -1211,6 +1247,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       noticed = keys;
       followSelection();
       syncTree();
+      syncInspector();
       options.onSelectionChange?.();
     }
   };
@@ -1376,16 +1413,95 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Apre o chiude l'albero; aperto, il fuoco ci va.
   function showObjects(open: boolean): void {
+    if (!open && tree.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     tree.element.hidden = !open;
     objectsButton.setAttribute("aria-expanded", String(open));
+    dock.hidden = tree.element.hidden && inspector.element.hidden;
     if (open) {
       treeShown = null;
       syncTree();
       tree.focus();
-    } else if (tree.element.contains(document.activeElement)) {
-      surface.focus({ preventScroll: true });
     }
   }
+
+  // --- Gli attributi -----------------------------------------------------------
+
+  /// Ciò che il pannello mostra; la chiave con cui conosce l'oggetto, che
+  /// resta la stessa quando l'oggetto riceve un id o lo cambia dal pannello.
+  let inspectorShown: {
+    readonly subject: Subject | null;
+    readonly unit: string | null;
+    readonly key: string | null;
+    readonly label: string;
+    readonly count: number;
+    readonly editable: boolean;
+  } | null = null;
+  /// L'oggetto che il pannello ha appena cambiato, con la chiave di prima.
+  let carried: { readonly unit: string; readonly key: string | null } | null = null;
+  /// Vero mentre il pannello cambia l'oggetto: la selezione lo segue dopo.
+  let changing = false;
+
+  /// Porta il pannello degli attributi, se è aperto, all'oggetto scelto.
+  function syncInspector(): void {
+    if (inspector.element.hidden || changing) return;
+    const units = selectedUnits();
+    const unit = units.length === 1 ? units[0]! : null;
+    const model = engine.model;
+    const subject = unit === null || model === null ? null : subjectOf(nodeOf(model, unit));
+    if (carried !== null && carried.unit !== unit?.key) carried = null;
+    const key = unit === null ? null : carried !== null ? carried.key : unit.key;
+    const label = unit === null ? "" : labelOf(unit);
+    const canEdit = editable();
+    const last = inspectorShown;
+    if (last !== null && last.subject === subject && last.unit === (unit?.key ?? null) && last.key === key && last.label === label && last.count === units.length && last.editable === canEdit) return;
+    inspectorShown = { subject, unit: unit?.key ?? null, key, label, count: units.length, editable: canEdit };
+    inspector.update({ subject, key, label, count: units.length, editable: canEdit });
+  }
+
+  /// Apre o chiude gli attributi; aperti, il fuoco ci va. Chiusi, un valore
+  /// scritto a metà parte prima, come lasciando il campo.
+  function showAttributes(open: boolean): void {
+    if (open && !reaches(level, "expert")) return;
+    if (!open && inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    inspector.element.hidden = !open;
+    attributesButton.setAttribute("aria-expanded", String(open));
+    dock.hidden = tree.element.hidden && inspector.element.hidden;
+    if (open) {
+      inspectorShown = null;
+      syncInspector();
+      inspector.focus();
+    }
+  }
+
+  /// Applica il cambio `ops` dell'oggetto che porterà l'id `id`, e lo tiene
+  /// scelto: anche se l'id l'ha appena ricevuto, o cambiato. `null` se il
+  /// disegno l'ha accettato, altrimenti la ragione per cui no.
+  function changeObject(label: DrawKey, ops: readonly Op[], id: string): string | null {
+    const before = inspectorShown?.key ?? null;
+    cancelGesture();
+    changing = true;
+    let outcome: Applied | string | null;
+    try {
+      outcome = attempt(label, asGesture(ops));
+    } finally {
+      changing = false;
+    }
+    if (outcome === null) return t("draw.rejected", { reason: t("draw.reason.read_only") });
+    if (typeof outcome === "string") return t("draw.rejected", { reason: outcome });
+    carried = { unit: id, key: before };
+    select([id]);
+    return null;
+  }
+
+  /// Vero se una parte estranea del disegno cita `id`: cambiarlo romperebbe
+  /// il riferimento. Le parti che FubDraw scrive non citano niente.
+  const cited = (id: string): boolean => {
+    const model = engine.model;
+    if (model === null) return false;
+    if (cites(model.root.head, id)) return true;
+    const text = engine.text;
+    return engine.scene().some((item) => item.kind === "foreign" && cites(text.slice(item.utf16[0], item.utf16[1]), id));
+  };
 
   // --- Il livello corrente ---------------------------------------------------
 
@@ -1557,6 +1673,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     deleteButton.disabled = !canEdit || selection.length === 0;
     propertiesButton.disabled = !canEdit;
     pageButton.hidden = !reaches(level, "standard");
+    attributesButton.hidden = !reaches(level, "expert");
+    if (attributesButton.hidden && !inspector.element.hidden) showAttributes(false);
+    syncInspector();
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
     syncLayers();
@@ -1582,6 +1701,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncControls();
     showHandles();
     syncTree();
+    syncInspector();
   };
 
   // --- Operazioni -----------------------------------------------------------
@@ -1591,19 +1711,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     options.onChange?.({ text: applied.text, operation: applied.operation, origin });
   };
 
-  /// Applica il gesto `op` e lo mette nella cronologia col nome `label`.
-  const commit = (label: DrawKey, op: Op | null): Applied | null => {
+  /// Applica il gesto `op` come `commit`, in silenzio: un rifiuto rende la
+  /// sua ragione, a parole.
+  const attempt = (label: DrawKey, op: Op | null): Applied | string | null => {
     if (op === null || !editable()) return null;
     const outcome = engine.apply(op);
     if (outcome.outcome === "rejected") {
-      announce(t("draw.rejected", { reason: t(REASONS[outcome.reason]) }));
       clearPreviews();
-      return null;
+      return t(REASONS[outcome.reason]);
     }
     history.record(label, outcome);
     refresh();
     emit(outcome, "input");
     return outcome;
+  };
+
+  /// Applica il gesto `op` e lo mette nella cronologia col nome `label`.
+  const commit = (label: DrawKey, op: Op | null): Applied | null => {
+    const outcome = attempt(label, op);
+    if (typeof outcome !== "string") return outcome;
+    announce(t("draw.rejected", { reason: outcome }));
+    return null;
   };
 
   const replay = (step: Replay | null, origin: "undo" | "redo"): void => {
@@ -3535,6 +3663,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti degli attributi, dal livello Esperto.
+  const attributeKeys = (at: Level): KeyGroup[] =>
+    reaches(at, "expert")
+      ? [
+          {
+            title: t("draw.attributes"),
+            rows: [
+              [ATTRIBUTES_BINDING, t("draw.keys.attributes.toggle")],
+              ["Enter", t("draw.keys.attributes.apply")],
+              ["Shift-Enter", t("draw.keys.attributes.newline")],
+              ["Escape", t("draw.keys.attributes.revert")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti del testo, dal livello Standard.
   const textKeys = (at: Level): KeyGroup[] =>
     reaches(at, "standard")
@@ -3579,6 +3723,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...arrangeKeys(at),
     ...textKeys(at),
     ...gridKeys(at),
+    ...attributeKeys(at),
     {
       title: t("draw.view"),
       rows: [
@@ -3856,6 +4001,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
     if (event.defaultPrevented || event.target === titleInput || event.target === textInput) return;
+    // Il pannello degli attributi tiene i suoi tasti: un `?` o un Canc
+    // scritti in un valore restano lì, e un Canc sul pulsante che toglie un
+    // attributo non toglie l'oggetto. Passano il tasto che lo chiude e, fuori
+    // da un campo di testo, annulla e ripeti.
+    if (event.target instanceof Node && inspector.element.contains(event.target)) {
+      const key = event.key.toLowerCase();
+      const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
+      const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+      if (!(mod && ((key === "x" && event.shiftKey) || (!field && (key === "z" || (key === "y" && !event.shiftKey)))))) return;
+    }
     const onSurface = event.target === surface;
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
@@ -3888,6 +4043,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (key === "a" && !event.shiftKey) {
         select(currentIndex().units.map((unit) => unit.key));
         announceSelection();
+      } else if (key === "x" && event.shiftKey && reaches(level, "expert")) {
+        showAttributes(inspector.element.hidden);
       } else if (arranges && key === "d" && !event.shiftKey) {
         duplicateSelection();
       } else if (arranges && key === "g") {

@@ -66,6 +66,9 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 
 - Un elemento **modificabile** senza id riceve un id con `ident`, nello stesso
   `batch` dell'operazione che lo modifica.
+- Un id si cambia con un `batch` di due `ident` sullo stesso percorso: il
+  primo toglie l'id, il secondo dà quello nuovo. L'annulla rimette l'id di
+  prima com'era scritto.
 - Un elemento **estraneo** senza id si indirizza con il percorso, solo per
   `remove` e `move`.
 - Commenti, istruzioni di elaborazione e testo non si indirizzano: restano
@@ -80,7 +83,7 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 | `set` | `id`, `attrs` (una stringa, oppure `null` per togliere) | cambia attributi | `set` con i valori precedenti |
 | `text` | `id`, `lines` (lista di stringhe) | sostituisce le righe di un `text` | `text` con le righe precedenti |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
-| `ident` | `path`, `tag`, `id` | dà un id a un elemento modificabile che non ne ha | `ident` con `id: null`, che lo toglie |
+| `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
 | `page` | `viewBox` (`"x y w h"`) | cambia insieme `viewBox`, `width` e `height` della radice e la geometria della carta | `page` con i valori precedenti |
 | `meta` | `title`, `desc` (una stringa, oppure `null` per togliere) | crea, cambia o toglie titolo e descrizione della radice | `meta` con i valori precedenti |
 | `adopt` | `undo` facoltativo | «Modifica»: aggiunge `xmlns:fub` e `fub:version="1"` alla radice di un documento estraneo | `adopt` con `undo: true`, che li toglie |
@@ -147,7 +150,9 @@ toglie, ed è con un `set` che si sblocca. È bloccato solo ciò che contiene.
 - Ogni operazione passa dalla stessa validazione, che venga dall'utente,
   dall'undo o dalla rete: tag e attributi ammessi, numeri finiti, colori,
   grammatica di `transform`, regole di `href`, grammatica e limiti di
-  `fub:ink`, chiavi di `fub:brush`, formato degli id nuovi.
+  `fub:ink`, chiavi di `fub:brush`, formato degli id che `add` crea. `ident`
+  accetta ogni id che il formato ammette, non vuoto e che nessun altro
+  elemento porti; un `set` non cambia `id`.
 - L'inchiostro si conserva grezzo, e il contorno `d` ne è solo una
   conseguenza. Un tratto ricevuto dalla rete non porta il contorno: se `d` è
   presente si scarta, e chi possiede il documento lo ricalcola da `fub:ink` e

@@ -59,8 +59,9 @@ usa un lettore di schermo.
 
 ## Il livello Standard
 
-L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, e lo
-Standard, che aggiunge strumenti alla stessa barra. Si sceglie nelle
+L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, lo
+Standard, che aggiunge strumenti alla stessa barra, e l'Esperto, che mostra il
+file sotto il disegno (vedi «Il livello Esperto»). Si sceglie nelle
 Impostazioni, nel gruppo «Disegni», con «Livello d'interfaccia»: è
 un'impostazione del vault, `draw.level`, che vale per chiunque lo apra e che un
 plugin o una macro non cambiano. Il livello filtra soltanto ciò che si offre:
@@ -305,6 +306,11 @@ dice con un avviso.
 
 Chi monta l'editor sceglie e apre i documenti con `links`; senza, il disegno
 non ha segni né «Collega a una nota…», e un collegamento si toglie lo stesso.
+
+## Il livello Esperto
+
+L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e da cambiare uno
+per uno, e ha una pagina sua: [Disegni, livello Esperto](drawing-expert.md).
 
 ## Da tastiera
 
