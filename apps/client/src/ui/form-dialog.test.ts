@@ -95,6 +95,22 @@ describe("promptForm", () => {
     dialog().querySelector("form")!.requestSubmit();
     expect((await answer)?.h).toBe("3");
   });
+
+  it("un testo che non si lascia vuoto rifiuta anche i soli spazi, e ha una lunghezza massima", async () => {
+    const answer = promptForm({ title: "Rinomina", fields: [{ id: "name", label: "Nome", value: "Sfondo", kind: "text", required: true, maxLength: 80 }] });
+    const input = field("name") as HTMLInputElement;
+    expect(input.required).toBe(true);
+    expect(input.maxLength).toBe(80);
+    input.value = "   ";
+    dialog().querySelector("form")!.requestSubmit();
+    expect(input.validationMessage).toBe("Scrivi qualcosa: i soli spazi non bastano.");
+    // Scrivendo, l'errore se ne va: altrimenti fermerebbe l'invio.
+    input.value = "Note";
+    input.dispatchEvent(new Event("input"));
+    expect(input.validationMessage).toBe("");
+    dialog().querySelector("form")!.requestSubmit();
+    expect(await answer).toEqual({ name: "Note" });
+  });
 });
 
 describe("showKeys", () => {

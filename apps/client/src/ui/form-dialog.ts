@@ -21,6 +21,10 @@ export interface FormField {
   /// Un campo che si legge e non si cambia: un lato che misura zero non ha
   /// una misura da cambiare.
   readonly disabled?: boolean;
+  /// Un testo che non si lascia vuoto, né fatto di soli spazi.
+  readonly required?: boolean;
+  /// La lunghezza massima di un testo.
+  readonly maxLength?: number;
 }
 
 export interface FormOptions {
@@ -87,6 +91,11 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
         }
         control = input;
       }
+      if (field.kind === "text" || field.kind === "multiline") {
+        control.required = field.required === true;
+        if (field.maxLength !== undefined) control.maxLength = field.maxLength;
+        if (field.required === true) control.addEventListener("input", () => explainBlank(control));
+      }
       control.name = field.id;
       control.value = field.value;
       control.disabled = field.disabled === true;
@@ -112,7 +121,10 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
     form.append(row);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      for (const [field, control] of controls) if (field.kind === "color") explainColor(control);
+      for (const [field, control] of controls) {
+        if (field.kind === "color") explainColor(control);
+        else if (field.required === true) explainBlank(control);
+      }
       if (!form.checkValidity()) {
         form.reportValidity();
         return;
@@ -167,6 +179,13 @@ function colorPicker(input: HTMLInputElement, value: string): HTMLInputElement {
 /// non resta indietro rispetto al valore.
 function explainColor(control: HTMLInputElement | HTMLTextAreaElement): void {
   control.setCustomValidity(control.validity.patternMismatch ? t("form.color.invalid") : "");
+}
+
+/// Un testo che non si lascia vuoto non è nemmeno fatto di soli spazi, che
+/// il browser lascerebbe passare. Come per il colore, si rifà a ogni battuta:
+/// un errore rimasto fermerebbe l'invio prima di arrivare qui.
+function explainBlank(control: HTMLInputElement | HTMLTextAreaElement): void {
+  control.setCustomValidity(control.value !== "" && control.value.trim() === "" ? t("form.blank") : "");
 }
 
 /// Un gruppo dell'elenco dei tasti: il titolo, e per ogni riga i tasti, nella

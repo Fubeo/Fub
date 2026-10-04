@@ -40,6 +40,12 @@
 //   (`arrange.ts`); Alt+F10 ci porta il fuoco, Esc lo riporta al foglio.
 //   Ogni comando è un passo di annulla, e la selezione segue ciò che ha
 //   fatto: le copie, il gruppo, i figli.
+// - **Livelli.** Dal livello Standard si disegna nel livello corrente, che un
+//   pulsante della barra mostra e un menu sceglie, crea e cambia
+//   (`layers.ts`); scegliere oggetti di un livello solo lo rende corrente. Un
+//   livello corrente bloccato o nascosto non riceve niente, e lo si dice.
+//   Sotto lo Standard il disegno va nel livello più alto che si vede e non è
+//   bloccato.
 // - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
 //   entra nel file come data URI (`images.ts`): il disegno resta un file
 //   solo. Oltre il peso massimo l'editor propone di ridurla.
@@ -57,7 +63,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import { fit as fitBounds, screenToWorld, zoomAtPoint, type Camera, type ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
-import { countObjects, describe, outline, type OutlineNode } from "../describe";
+import { countObjects, describe, keyOf, outline, type OutlineNode } from "../describe";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
@@ -83,6 +89,7 @@ import {
   addOp,
   boxMatrix,
   destination,
+  destinationIn,
   gesture as asGesture,
   moveOps,
   movedMatrix,
@@ -96,7 +103,7 @@ import {
   type Destination,
 } from "./edit";
 import { alignOps, distributeOps, duplicateOps, groupOps, isGroup, orderOps, ungroupOps, type Arranged, type Axis, type Edge, type Order } from "./arrange";
-import { elemBounds, SceneIndex, SceneIndexer, type Unit } from "./hit";
+import { elemBounds, SceneIndex, SceneIndexer, type LayerInfo, type Unit } from "./hit";
 import { History, type Replay } from "./history";
 import {
   browserCodec,
@@ -115,6 +122,21 @@ import {
   type Encoded,
   type ImageCodec,
 } from "./images";
+import {
+  addLayerOps,
+  canShiftLayer,
+  freshLayerName,
+  hideLayerOps,
+  inLayer,
+  intoLayerOps,
+  layerName,
+  lockLayerOps,
+  MAX_LAYER_NAME,
+  removeLayerOps,
+  renameLayerOps,
+  shiftLayerOps,
+  type Shift,
+} from "./layers";
 import { createObjectTree, type TreeEntry } from "./objects";
 import {
   customColor,
@@ -290,8 +312,10 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-duplicate": ["M9 9h11v11H9z", "M15 9V4H4v11h5"],
   "draw-group": ["M3 7V3h4", "M17 3h4v4", "M21 17v4h-4", "M7 21H3v-4", "M7 7h6v6H7z", "M11 11h6v6h-6z"],
   "draw-ungroup": ["M3 3h8v8H3z", "M13 13h8v8h-8z"],
-  "draw-order": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
+  "draw-order": ["M10 14H4V4h10v6", "M10 10h10v10H10z"],
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
+  "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
+  "draw-into-layer": ["M12 11l9 5-9 5-9-5z", "M12 2v7", "M9 6l3 3 3-3"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -388,6 +412,33 @@ function matrixText(m: Matrix): string {
   return `matrix(${m.join(" ")})`;
 }
 
+/// Quanti caratteri del nome di un livello entrano nel nome di un comando:
+/// il resto, come «su» e «giù», deve restare in vista.
+const LAYER_IN_COMMAND = 24;
+
+/// Il nome di un livello come si mostra: gli spazi raccolti e, oltre `max`
+/// caratteri, tagliato coi puntini. Un livello senza nome lo dice.
+function layerTitle(layer: LayerInfo, max = MAX_LAYER_NAME): string {
+  const name = layer.name.replace(/\s+/g, " ").trim();
+  if (name === "") return t("draw.layer.unnamed");
+  const chars = Array.from(name);
+  return chars.length <= max ? name : `${chars.slice(0, max - 1).join("").trimEnd()}…`;
+}
+
+/// Lo stato di un livello a parole, come nell'albero degli oggetti: vuoto se
+/// si vede e non è bloccato.
+function layerState(layer: LayerInfo): string {
+  const parts: string[] = [];
+  if (layer.locked) parts.push(t("draw.state.locked"));
+  if (layer.hidden) parts.push(t("draw.state.hidden"));
+  return parts.join(", ");
+}
+
+/// Perché in `layer` non si disegna, o `null` se ci si disegna.
+function layerRefusal(layer: LayerInfo): DrawKey | null {
+  return layer.hidden ? "draw.layer.hidden_here" : layer.locked ? "draw.layer.locked_here" : null;
+}
+
 /// Monta l'editor dentro `host`.
 export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner: Lifetime, options: DrawEditorOptions = {}): DrawEditor {
   ensureIcons();
@@ -438,6 +489,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Quante volte l'editor ha caricato un altro documento: un'immagine letta
   /// per il documento di prima non entra in quello nuovo.
   let loads = 0;
+  /// Il livello corrente scelto, dal livello Standard: la sua chiave, e il
+  /// suo posto fra i figli della radice per ritrovarlo quando la chiave non
+  /// c'è più. `null` finché nessuno ne sceglie uno.
+  let chosen: { readonly key: string; readonly at: number } | null = null;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -584,6 +639,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   propertiesButton.setAttribute("aria-keyshortcuts", "Enter");
   propertiesButton.setAttribute("aria-haspopup", "dialog");
 
+  // I livelli, dal livello Standard: il pulsante dice dove si disegna e apre
+  // il menu che li sceglie e li cambia.
+  const layerGroup = group("draw.layers", false);
+  const layersButton = button(layerGroup, "draw-button draw-layer-button", () => layersLabel(), "draw-layers", () => openMenu(layersButton, layerItems()));
+  layersButton.setAttribute("aria-haspopup", "menu");
+  layersButton.setAttribute("aria-expanded", "false");
+  const layerText = document.createElement("span");
+  layerText.className = "draw-layer-name";
+  const layerStateText = document.createElement("span");
+  layerStateText.className = "draw-layer-state";
+  layersButton.append(layerText, layerStateText);
+
   // L'albero degli oggetti, chiuso finché qualcuno non lo apre.
   const tree = createObjectTree(life, {
     onSelect(keys) {
@@ -650,9 +717,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   arrangeButton("draw.duplicate", "draw-duplicate", "Mod-d", () => duplicateSelection());
   const groupButton = arrangeButton("draw.group", "draw-group", "Mod-g", () => groupSelection());
   const ungroupButton = arrangeButton("draw.ungroup", "draw-ungroup", "Mod-Shift-g", () => ungroupSelection());
-  const orderButton = arrangeButton("draw.order", "draw-order", null, () => openArrangeMenu(orderButton, orderItems()));
-  const alignButton = arrangeButton("draw.align", "draw-align", null, () => openArrangeMenu(alignButton, alignItems()));
-  for (const control of [orderButton, alignButton]) {
+  const orderButton = arrangeButton("draw.order", "draw-order", null, () => openMenu(orderButton, orderItems()));
+  const intoButton = arrangeButton("draw.into_layer", "draw-into-layer", null, () => openMenu(intoButton, intoItems()));
+  const alignButton = arrangeButton("draw.align", "draw-align", null, () => openMenu(alignButton, alignItems()));
+  for (const control of [orderButton, intoButton, alignButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -859,6 +927,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const keys = selection.join("\n");
     if (keys !== noticed) {
       noticed = keys;
+      followSelection();
       syncTree();
       options.onSelectionChange?.();
     }
@@ -922,30 +991,36 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return node === undefined ? unit.tag : describeNode(node, unit);
   };
 
-  const entriesOf = (nodes: readonly OutlineNode[], index: SceneIndex): TreeEntry[] =>
+  /// Le voci dell'albero; il livello di chiave `current` dice che è quello
+  /// corrente.
+  const entriesOf = (nodes: readonly OutlineNode[], index: SceneIndex, current: string | null): TreeEntry[] =>
     nodes.map((node) => {
       const unit = index.get(node.key) ?? undefined;
       const layer = node.item.role === "layer";
+      const mark = layer && node.key === current ? `, ${t("draw.state.current")}` : "";
       return {
         key: node.key,
         layer,
         selectable: unit !== undefined,
-        children: layer ? entriesOf(node.children, index) : [],
-        label: () => describeNode(node, unit),
+        children: layer ? entriesOf(node.children, index, current) : [],
+        label: () => `${describeNode(node, unit)}${mark}`,
       };
     });
 
-  /// Le voci dell'albero per l'indice di adesso, e la selezione mostrata.
-  let treeShown: { readonly index: SceneIndex; readonly entries: TreeEntry[]; readonly count: number; keys: string } | null = null;
+  /// Le voci dell'albero per l'indice e il livello corrente di adesso, e la
+  /// selezione mostrata.
+  let treeShown: { readonly index: SceneIndex; readonly layer: string | null; readonly entries: TreeEntry[]; readonly count: number; keys: string } | null = null;
 
   /// Porta l'albero, se è aperto, alla scena e alla selezione di adesso.
   function syncTree(): void {
     if (tree.element.hidden) return;
     const index = currentIndex();
     const keys = selection.join("\n");
-    if (treeShown?.index !== index) {
+    const layer = reaches(level, "standard") ? currentLayer() : null;
+    const current = layer === null ? null : keyOf(layer);
+    if (treeShown?.index !== index || treeShown.layer !== current) {
       const nodes = outlineNow().nodes;
-      treeShown = { index, entries: entriesOf(nodes, index), count: countObjects(nodes), keys: "" };
+      treeShown = { index, layer: current, entries: entriesOf(nodes, index, current), count: countObjects(nodes), keys: "" };
     } else if (treeShown.keys === keys) {
       return;
     }
@@ -964,6 +1039,81 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } else if (tree.element.contains(document.activeElement)) {
       surface.focus({ preventScroll: true });
     }
+  }
+
+  // --- Il livello corrente ---------------------------------------------------
+
+  /// Il livello scelto, se c'è ancora: per chiave; o allo stesso posto, se ha
+  /// perso l'id con annulla o se non l'aveva e l'ha ricevuto; o, se se n'è
+  /// andato, quello che gli stava sotto, o il più basso.
+  const chosenIn = (layers: readonly LayerInfo[]): LayerInfo | null => {
+    if (chosen === null) return null;
+    const { key, at } = chosen;
+    const same = layers.find((layer) => keyOf(layer) === key)
+      ?? layers.find((layer) => layer.path[0] === at && (layer.id === null || key.startsWith("@")));
+    if (same !== undefined) return same;
+    let below: LayerInfo | null = null;
+    for (const layer of layers) if (layer.path[0]! < at) below = layer;
+    return below ?? layers[0] ?? null;
+  };
+
+  /// Il livello in cui si disegna dal livello Standard: quello scelto; se
+  /// nessuno l'ha scelto, il più alto che si vede e non è bloccato, o il più
+  /// alto. `null` se il disegno non ha livelli.
+  function currentLayer(): LayerInfo | null {
+    const layers = currentIndex().layers;
+    const found = chosenIn(layers);
+    if (found !== null) return found;
+    for (let i = layers.length - 1; i >= 0; i--) if (!layers[i]!.locked && !layers[i]!.hidden) return layers[i]!;
+    return layers[layers.length - 1] ?? null;
+  }
+
+  /// `layer` diventa il livello corrente.
+  const choose = (layer: LayerInfo): void => {
+    chosen = { key: keyOf(layer), at: layer.path[0]! };
+    syncLayers();
+  };
+
+  /// Dal livello Standard il livello corrente segue la selezione: diventa
+  /// quello degli oggetti scelti, se stanno tutti in uno.
+  function followSelection(): void {
+    if (!reaches(level, "standard") || selection.length === 0) return;
+    const units = selectedUnits();
+    const at = units[0]?.path[0];
+    if (at === undefined || units.some((unit) => unit.path.length < 2 || unit.path[0] !== at)) return;
+    const layer = currentIndex().layers.find((other) => other.path[0] === at);
+    if (layer !== undefined) choose(layer);
+  }
+
+  /// Il nome del pulsante dei livelli: dove si disegna e, a parole, lo stato
+  /// di quel livello.
+  function layersLabel(): string {
+    const layer = currentLayer();
+    if (layer === null) return t("draw.layers.none");
+    const label = t("draw.layers.current", { name: layerTitle(layer) });
+    const state = layerState(layer);
+    return state === "" ? label : `${label}, ${state}`;
+  }
+
+  /// Il pulsante dei livelli c'è dal livello Standard, e mostra il nome del
+  /// livello corrente e il suo stato; l'albero dice qual è.
+  function syncLayers(): void {
+    layerGroup.hidden = !reaches(level, "standard");
+    layersButton.disabled = !editable();
+    if (!layerGroup.hidden) {
+      const layer = currentLayer();
+      const name = layer === null ? t("draw.layers.none.short") : layerTitle(layer);
+      const state = layer === null ? "" : layerState(layer);
+      if (layerText.textContent !== name) layerText.textContent = name;
+      if (layerStateText.textContent !== state) layerStateText.textContent = state;
+      layerStateText.hidden = state === "";
+      const label = layersLabel();
+      if (layersButton.getAttribute("aria-label") !== label) {
+        layersButton.setAttribute("aria-label", label);
+        layersButton.title = label;
+      }
+    }
+    syncTree();
   }
 
   // --- Stato dei controlli --------------------------------------------------
@@ -999,10 +1149,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     arrangeBar.hidden = units.length === 0;
     groupButton.disabled = units.length < 2;
     ungroupButton.disabled = !units.some(isGroup);
+    // Con un livello solo, che ha già tutto, non c'è dove spostare.
+    const layers = currentIndex().layers;
+    intoButton.hidden = layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
     arrangeFocus.sync(null);
     if (!focused) return;
     const active = document.activeElement;
-    if (!arrangeBar.hidden && active instanceof HTMLButtonElement && arrangeBar.contains(active) && !active.disabled) return;
+    if (!arrangeBar.hidden && active instanceof HTMLButtonElement && arrangeBar.contains(active) && !active.disabled && !active.hidden) return;
     const next = arrangeBar.hidden ? null : arrangeFocus.current();
     if (next !== null) next.focus();
     else surface.focus({ preventScroll: true });
@@ -1043,6 +1196,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     propertiesButton.disabled = !canEdit;
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
+    syncLayers();
     toolbarFocus.sync(null);
     syncArrange();
   };
@@ -1055,6 +1209,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showPage();
     index = null;
     selection = inOrder(selection);
+    // Il livello scelto si ritrova anche se ha cambiato posto o chiave.
+    if (chosen !== null) {
+      const layer = chosenIn(currentIndex().layers);
+      chosen = layer === null ? null : { key: keyOf(layer), at: layer.path[0]! };
+    }
     syncControls();
     showHandles();
     syncTree();
@@ -1092,9 +1251,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const applied = step.outcome;
     refresh();
-    // La selezione segue ciò che il passo ha toccato e che c'è ancora.
+    // La selezione segue ciò che il passo ha toccato e che c'è ancora, e
+    // così il livello corrente.
     const touched = inOrder(applied.touched);
     if (touched.length > 0) selection = touched;
+    const layer = reaches(level, "standard") ? currentIndex().layers.find((other) => other.id !== null && applied.touched.includes(other.id)) : undefined;
+    if (layer !== undefined) choose(layer);
+    else if (touched.length > 0) followSelection();
     syncControls();
     showHandles();
     emit(applied, origin);
@@ -1286,10 +1449,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- La pipeline della penna ------------------------------------------------
 
-  /// Il livello che riceve: se non c'è lo si dice, e il gesto non scrive.
+  /// Il livello che riceve: dal livello Standard quello corrente; sotto, il
+  /// più alto che si vede e non è bloccato. Se non c'è o non riceve, lo si
+  /// dice, e il gesto non scrive.
   const target = (ids: NewIds): Destination | null => {
-    const to = destination(currentIndex(), ids);
-    if (to === null) announce(t("draw.no_layer"));
+    const layer = reaches(level, "standard") ? currentLayer() : null;
+    if (layer === null) {
+      const to = destination(currentIndex(), ids);
+      if (to === null) announce(t("draw.no_layer"));
+      return to;
+    }
+    const name = layerTitle(layer);
+    const refusal = layerRefusal(layer);
+    if (refusal !== null) {
+      announce(t(refusal, { name }));
+      return null;
+    }
+    const to = destinationIn(layer, ids);
+    if (to === null) announce(t("draw.layer.flat", { name }));
     return to;
   };
 
@@ -1448,11 +1625,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   const finishInk = (g: InkGesture, stroke: FinishedStroke): void => {
-    const to = destination(currentIndex(), g.ids);
-    if (to === null) {
-      announce(t("draw.no_layer"));
-      return;
-    }
+    // Il livello di adesso: mentre il gesto durava, il disegno può essere
+    // cambiato.
+    const to = target(g.ids);
+    if (to === null) return;
     const local = sameDestination(to, g.to) ? g.local : g.scene.map((sample) => toLocal(sample, to.inverse));
     let brush = g.brush;
     if (stroke.split) brush = { ...brush, taperEnd: 0 };
@@ -1480,11 +1656,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   const finishShape = (g: ShapeGesture): void => {
-    const to = destination(currentIndex(), g.ids);
-    if (to === null) {
-      announce(t("draw.no_layer"));
-      return;
-    }
+    // Il livello di adesso: mentre il gesto durava, il disegno può essere
+    // cambiato.
+    const to = target(g.ids);
+    if (to === null) return;
     const ends = shapeEnds(g, to);
     if (ends === null) return;
     const elem = shapeElem(g.tool, g.ids.next("object"), ends[0], ends[1], { color: g.color, width: g.width }, minimumFor(to));
@@ -2048,14 +2223,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange("draw.action.distribute", distributeOps(units, axis, newIds()))) announce(t("draw.distributed", { count }));
   }
 
-  /// Apre il menu di un pulsante della barra, sotto il pulsante.
-  const openArrangeMenu = (trigger: HTMLButtonElement, items: MenuItem[]): void => {
+  /// Apre il menu di un pulsante, sotto il pulsante, col nome del pulsante.
+  function openMenu(trigger: HTMLButtonElement, items: MenuItem[]): void {
     const box = trigger.getBoundingClientRect();
+    if (trigger.id === "") trigger.id = identifier("draw-menu-button");
     trigger.setAttribute("aria-expanded", "true");
     showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+      labelledBy: trigger.id,
       onClose: () => trigger.setAttribute("aria-expanded", "false"),
     });
-  };
+  }
 
   /// Le voci dell'ordine: spenta quella che non cambierebbe niente.
   const orderItems = (): MenuItem[] => {
@@ -2092,6 +2269,212 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         run: () => distributeSelection(axis),
       });
     }
+    return items;
+  };
+
+  /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
+  function moveIntoLayer(layer: LayerInfo): void {
+    const units = arranging();
+    if (units === null) return;
+    const name = layerTitle(layer);
+    const refusal = layerRefusal(layer);
+    if (refusal !== null) {
+      announce(t(refusal, { name }));
+      return;
+    }
+    const arranged = intoLayerOps(engine.model!, units, layer, newIds());
+    if (arranged === null) {
+      announce(t("draw.layer.flat", { name }));
+      return;
+    }
+    const moving = units.filter((unit) => !inLayer(unit, layer)).length;
+    if (!arrange("draw.action.into_layer", arranged)) return;
+    // La selezione ha le stesse chiavi, ma sta nel livello nuovo.
+    followSelection();
+    announce(plural(moving, "draw.moved_to_layer.one", "draw.moved_to_layer.other", { name }));
+  }
+
+  /// Le voci di «Sposta in un livello», dalla cima: spento il livello che ha
+  /// già tutti gli oggetti scelti, e quello bloccato o nascosto, che lo dice.
+  const intoItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const layers = currentIndex().layers;
+    const items: MenuItem[] = [];
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i]!;
+      const here = units.length > 0 && units.every((unit) => inLayer(unit, layer));
+      const description = here ? t("draw.into_layer.here") : layerState(layer);
+      items.push({
+        label: layerTitle(layer),
+        disabled: here || layerRefusal(layer) !== null,
+        ...(description === "" ? {} : { description }),
+        run: () => moveIntoLayer(layer),
+      });
+    }
+    return items;
+  };
+
+  // --- Livelli -----------------------------------------------------------------
+
+  /// Il livello su cui lavora un comando dei livelli: quello corrente, dal
+  /// livello Standard e col disegno che si scrive.
+  const layering = (): LayerInfo | null => {
+    if (!reaches(level, "standard") || !editable()) return null;
+    cancelGesture();
+    return currentLayer();
+  };
+
+  /// Scrive un comando sui livelli col nome `label`; il livello di chiave
+  /// `key`, se c'è, diventa quello corrente. `false` se non c'era niente da
+  /// cambiare, e lo si dice, o se il motore ha rifiutato.
+  const writeLayers = (label: DrawKey, arranged: Arranged, key: string | null): boolean => {
+    if (arranged.ops.length === 0) {
+      announce(t("draw.unchanged"));
+      return false;
+    }
+    // Il livello corrente è già quello di dopo quando l'editor si rinfresca.
+    const before = chosen;
+    if (key !== null) chosen = { key, at: chosen?.at ?? 0 };
+    if (commit(label, asGesture(arranged.ops)) === null) {
+      chosen = before;
+      syncLayers();
+      return false;
+    }
+    return true;
+  };
+
+  /// Sceglie il livello corrente; se lì non si disegna, lo dice subito.
+  function chooseLayer(layer: LayerInfo): void {
+    if (!reaches(level, "standard")) return;
+    choose(layer);
+    const name = layerTitle(layer);
+    const refusal = layerRefusal(layer);
+    announce(refusal === null ? t("draw.layer.chosen", { name }) : `${t("draw.layer.chosen", { name })} ${t(refusal, { name })}`);
+  }
+
+  /// Un livello nuovo e vuoto sopra quello corrente, che diventa lui.
+  function addLayer(): void {
+    if (!reaches(level, "standard") || !editable()) return;
+    cancelGesture();
+    const name = freshLayerName(currentIndex().layers, (n) => t("draw.layer.default", { n }));
+    const arranged = addLayerOps(engine.model!, currentLayer(), name, newIds());
+    if (writeLayers("draw.action.layer_add", arranged, arranged.keys[0] ?? null)) announce(t("draw.layer.added", { name }));
+  }
+
+  /// «Rinomina…»: il nome nuovo del livello corrente, mai vuoto.
+  async function renameLayer(): Promise<void> {
+    if (asking) return;
+    const layer = layering();
+    if (layer === null) return;
+    asking = true;
+    try {
+      const answer = await promptForm({
+        title: t("draw.layer.rename.dialog"),
+        fields: [{ id: "name", label: t("draw.layer.name"), value: layer.name, kind: "text", required: true, maxLength: MAX_LAYER_NAME }],
+      });
+      if (answer === null || disposed || !editable()) return;
+      const name = layerName(answer.name ?? "");
+      // Mentre la finestra era aperta il disegno può essere cambiato: vale il
+      // livello che ha ancora la stessa chiave.
+      const now = currentIndex().layers.find((other) => keyOf(other) === keyOf(layer));
+      if (name === "" || now === undefined) return;
+      const arranged = renameLayerOps(engine.model!, now, name, newIds());
+      if (writeLayers("draw.action.layer_rename", arranged, arranged.keys[0] ?? null)) {
+        announce(t("draw.layer.renamed", { name: layerTitle({ ...now, name }) }));
+      }
+    } finally {
+      asking = false;
+    }
+  }
+
+  function hideLayer(hidden: boolean): void {
+    const layer = layering();
+    if (layer === null) return;
+    const arranged = hideLayerOps(engine.model!, layer, hidden, newIds());
+    if (writeLayers(hidden ? "draw.action.layer_hide" : "draw.action.layer_show", arranged, arranged.keys[0] ?? null)) {
+      announce(t(hidden ? "draw.layer.hidden" : "draw.layer.shown", { name: layerTitle(layer) }));
+    }
+  }
+
+  function lockLayer(locked: boolean): void {
+    const layer = layering();
+    if (layer === null) return;
+    const arranged = lockLayerOps(engine.model!, layer, locked, newIds());
+    if (writeLayers(locked ? "draw.action.layer_lock" : "draw.action.layer_unlock", arranged, arranged.keys[0] ?? null)) {
+      announce(t(locked ? "draw.layer.locked" : "draw.layer.unlocked", { name: layerTitle(layer) }));
+    }
+  }
+
+  /// Porta il livello corrente sopra quello che ha sopra, o sotto quello
+  /// che ha sotto.
+  function shiftLayer(shift: Shift): void {
+    const layer = layering();
+    if (layer === null) return;
+    const layers = currentIndex().layers;
+    const at = layers.findIndex((other) => other.path[0] === layer.path[0]);
+    const other = layers[shift === "up" ? at + 1 : at - 1];
+    const arranged = shiftLayerOps(engine.model!, layers, layer, shift, newIds());
+    if (writeLayers("draw.action.layer_order", arranged, arranged.keys[0] ?? null) && other !== undefined) {
+      announce(t(shift === "up" ? "draw.layer.moved_up" : "draw.layer.moved_down", { name: layerTitle(layer), other: layerTitle(other) }));
+    }
+  }
+
+  /// Elimina il livello corrente con ciò che contiene; diventa corrente
+  /// quello sotto, o quello sopra. L'unico livello, o uno bloccato, resta.
+  function deleteLayer(): void {
+    const layer = layering();
+    if (layer === null) return;
+    const layers = currentIndex().layers;
+    if (layers.length < 2 || layer.locked) return;
+    const at = layers.findIndex((other) => other.path[0] === layer.path[0]);
+    const next = layers[at - 1] ?? layers[at + 1]!;
+    // Dopo, il livello sopra ha un posto in meno.
+    const nextAt = next.path[0]! > layer.path[0]! ? next.path[0]! - 1 : next.path[0]!;
+    const count = outlineNow().byKey.get(keyOf(layer))?.children.length ?? 0;
+    if (!writeLayers("draw.action.layer_delete", removeLayerOps(layer), next.id ?? `@${nextAt}`)) return;
+    const name = layerTitle(layer);
+    const gone = count === 0 ? t("draw.layer.deleted", { name }) : plural(count, "draw.layer.deleted.one", "draw.layer.deleted.other", { name });
+    announce(`${gone} ${t("draw.layer.chosen", { name: layerTitle(next) })}`);
+  }
+
+  /// Il menu dei livelli: i livelli dalla cima, per scegliere quello
+  /// corrente, e i comandi su quello corrente.
+  const layerItems = (): MenuItem[] => {
+    const layers = currentIndex().layers;
+    const current = currentLayer();
+    const items: MenuItem[] = [];
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i]!;
+      const checked = current !== null && layer.path[0] === current.path[0];
+      const state = layerState(layer);
+      items.push({
+        label: layerTitle(layer),
+        choice: "radio",
+        checked,
+        selected: checked,
+        ...(state === "" ? {} : { description: state }),
+        run: () => chooseLayer(layer),
+      });
+    }
+    items.push({ label: t("draw.layer.new"), separator: true, run: () => addLayer() });
+    if (current === null) return items;
+    const name = layerTitle(current, LAYER_IN_COMMAND);
+    const lone = layers.length < 2;
+    items.push(
+      { label: t("draw.layer.rename", { name }), run: () => void renameLayer() },
+      { label: t(current.hidden ? "draw.layer.show" : "draw.layer.hide", { name }), run: () => hideLayer(!current.hidden) },
+      { label: t(current.locked ? "draw.layer.unlock" : "draw.layer.lock", { name }), run: () => lockLayer(!current.locked) },
+      { label: t("draw.layer.up", { name }), disabled: !canShiftLayer(layers, current, "up"), run: () => shiftLayer("up") },
+      { label: t("draw.layer.down", { name }), disabled: !canShiftLayer(layers, current, "down"), run: () => shiftLayer("down") },
+      {
+        label: t("draw.layer.delete", { name }),
+        separator: true,
+        danger: true,
+        disabled: lone || current.locked,
+        ...(lone ? { description: t("draw.layer.delete.last") } : current.locked ? { description: t("draw.layer.delete.locked") } : {}),
+        run: () => deleteLayer(),
+      },
+    );
     return items;
   };
 
@@ -2659,6 +3042,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       loads++;
       history.clear();
       selection = [];
+      chosen = null;
       cursor = null;
       cursorMark.hidden = true;
       refresh();

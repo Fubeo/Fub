@@ -425,7 +425,8 @@ describe("disporre, dal livello Standard", () => {
     expect(bar().hidden).toBe(false);
     expect(bar().getAttribute("role")).toBe("toolbar");
     expect(bar().getAttribute("aria-label")).toBe("Disponi");
-    expect([...bar().querySelectorAll("button")].map((control) => control.getAttribute("aria-label"))).toEqual([
+    // «Sposta in un livello» non serve con un livello solo, che ha già tutto.
+    expect([...bar().querySelectorAll("button:not([hidden])")].map((control) => control.getAttribute("aria-label"))).toEqual([
       "Duplica",
       "Raggruppa",
       "Separa",
@@ -614,6 +615,240 @@ describe("disporre, dal livello Standard", () => {
     expect(rows).toContainEqual(["Alt+F10", "Va alla barra della selezione"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+  });
+});
+
+describe("i livelli, dal livello Standard", () => {
+  /// Due livelli con un rettangolo ciascuno: «Sfondo» sotto, «Note» sopra.
+  const TWO = doc(
+    `<title>Prova</title><g id="l1" fub:layer="Sfondo"><rect id="oa1a1a1a1" x="10" y="10" width="20" height="10" fill="#0072b2"/></g>` +
+      `<g id="l2" fub:layer="Note"><rect id="ob2b2b2b2" x="40" y="40" width="10" height="10" fill="#000000"/></g>`,
+  );
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+
+  const layers = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>(".draw-layer-button")!;
+  const shownName = (): string => `${layers().querySelector(".draw-layer-name")!.textContent}${layers().querySelector<HTMLElement>(".draw-layer-state")!.hidden ? "" : ` (${layers().querySelector(".draw-layer-state")!.textContent})`}`;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  /// Apre il menu dei livelli e ne preme la voce `label`.
+  const choose = (label: string): void => {
+    layers().click();
+    menu().find((entry) => labelOf(entry) === label)!.click();
+  };
+  /// Gli id dei livelli e dei rettangoli, nell'ordine del file.
+  const order = (): string[] => [...editor.engine.text.matchAll(/<(?:g|rect) id="([a-z0-9]+)"/g)].map((match) => match[1]!);
+
+  afterEach(() => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("il pulsante c'è dal livello Standard e dice dove si disegna; il menu sceglie il livello corrente", () => {
+    mount(TWO);
+    expect(layers().closest("[hidden]")).not.toBeNull();
+    editor.setLevel("standard");
+    expect(layers().closest("[hidden]")).toBeNull();
+    expect(layers().closest('[role="group"]')!.getAttribute("aria-label")).toBe("Livelli");
+    expect(shownName()).toBe("Note");
+    expect(layers().getAttribute("aria-label")).toBe("Livelli: si disegna in «Note»");
+    expect(layers().getAttribute("aria-haspopup")).toBe("menu");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    layers().click();
+    expect(layers().getAttribute("aria-expanded")).toBe("true");
+    const open = document.querySelector<HTMLElement>(".context-menu")!;
+    expect(open.getAttribute("aria-labelledby")).toBe(layers().id);
+    expect(menu().map((entry) => [entry.getAttribute("role"), labelOf(entry), entry.getAttribute("aria-checked"), entry.getAttribute("aria-disabled")])).toEqual([
+      ["menuitemradio", "Note", "true", null],
+      ["menuitemradio", "Sfondo", "false", null],
+      ["menuitem", "Nuovo livello", null, null],
+      ["menuitem", "Rinomina «Note»…", null, null],
+      ["menuitem", "Nascondi «Note»", null, null],
+      ["menuitem", "Blocca «Note»", null, null],
+      ["menuitem", "Sposta «Note» su", null, "true"],
+      ["menuitem", "Sposta «Note» giù", null, null],
+      ["menuitem", "Elimina «Note»", null, null],
+    ]);
+    menu().find((entry) => labelOf(entry) === "Sfondo")!.click();
+    expect(spoken()).toBe("Si disegna in «Sfondo».");
+    expect(shownName()).toBe("Sfondo");
+    expect(changes).toEqual([]);
+
+    // Il rettangolo va nel livello corrente, anche se sotto.
+    editor.setTool("rect");
+    drag([[60, 60], [90, 80]]);
+    expect(editor.engine.text).toMatch(new RegExp(`<g id="l1" fub:layer="Sfondo">\\s*<rect id="${A}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>`));
+    expect(editor.selection).toEqual([]);
+    // All'Essenziale si disegna nel più alto, come sempre.
+    editor.setLevel("essential");
+    drag([[60, 60], [90, 80]]);
+    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${B}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>\\s*</svg>`));
+  });
+
+  it("scegliere oggetti di un livello solo lo rende corrente, e l'albero lo dice", () => {
+    mount(TWO, { level: "standard" });
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    const labels = (): string[] => [...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent ?? "");
+    expect(labels()).toEqual(["Livello «Sfondo»", "Rettangolo, Blu", "Livello «Note», corrente", "Rettangolo, Nero"]);
+    editor.select([A]);
+    expect(shownName()).toBe("Sfondo");
+    expect(labels()).toEqual(["Livello «Sfondo», corrente", "Rettangolo, Blu", "Livello «Note»", "Rettangolo, Nero"]);
+    // Oggetti di due livelli non cambiano il livello corrente.
+    editor.select([A, B]);
+    expect(shownName()).toBe("Sfondo");
+    editor.select([B]);
+    expect(shownName()).toBe("Note");
+    editor.setLevel("essential");
+    expect(labels()).toEqual(["Livello «Sfondo»", "Rettangolo, Blu", "Livello «Note»", "Rettangolo, Nero"]);
+  });
+
+  it("un livello nuovo sopra quello corrente, rinominato, nascosto e mostrato: un passo di annulla ciascuno", async () => {
+    mount(TWO, { level: "standard" });
+    choose("Sfondo");
+    choose("Nuovo livello");
+    const [, , made] = order();
+    expect(made).toMatch(/^l[a-z0-9]+$/);
+    expect(order()).toEqual(["l1", A, made, "l2", B]);
+    expect(editor.engine.text).toMatch(new RegExp(`<g id="${made}" fub:layer="Livello 3">\\s*</g>`));
+    expect(spoken()).toBe("Livello «Livello 3» creato: si disegna lì.");
+    expect(shownName()).toBe("Livello 3");
+
+    choose("Rinomina «Livello 3»…");
+    expect(dialog().querySelector("h2")!.textContent).toBe("Rinomina il livello");
+    const name = field("name") as HTMLInputElement;
+    expect([name.value, name.required, name.maxLength]).toEqual(["Livello 3", true, 80]);
+    name.value = "  Schizzi  ";
+    await submit();
+    expect(editor.engine.text).toMatch(new RegExp(`<g id="${made}" fub:layer="Schizzi">\\s*</g>`));
+    expect(spoken()).toBe("Il livello ora si chiama «Schizzi».");
+
+    choose("Nascondi «Schizzi»");
+    expect(editor.engine.text).toMatch(new RegExp(`<g id="${made}" fub:layer="Schizzi" display="none">\\s*</g>`));
+    expect(spoken()).toBe("«Schizzi» nascosto.");
+    expect(shownName()).toBe("Schizzi (nascosto)");
+    expect(layers().getAttribute("aria-label")).toBe("Livelli: si disegna in «Schizzi», nascosto");
+    // In un livello nascosto non si disegna, e lo si dice.
+    const before = editor.engine.text;
+    editor.setTool("rect");
+    drag([[60, 60], [90, 80]]);
+    expect(editor.engine.text).toBe(before);
+    expect(spoken()).toBe("«Schizzi» è nascosto: mostralo, o scegli un altro livello, per disegnare.");
+
+    choose("Mostra «Schizzi»");
+    expect(spoken()).toBe("«Schizzi» di nuovo visibile.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Livello mostrato.");
+    editor.undo();
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nome del livello.");
+    editor.undo();
+    expect(editor.engine.text).toBe(TWO);
+    expect(spoken()).toBe("Annullato: Nuovo livello.");
+    // Il livello che se n'è andato lascia corrente quello che aveva sotto.
+    expect(shownName()).toBe("Sfondo");
+  });
+
+  it("un livello bloccato non riceve né si elimina; i suoi oggetti escono dalla selezione", () => {
+    mount(TWO, { level: "standard" });
+    editor.select([B]);
+    choose("Blocca «Note»");
+    expect(editor.engine.text).toContain('<g id="l2" fub:layer="Note" fub:locked="true">');
+    expect(spoken()).toBe("«Note» bloccato.");
+    expect(editor.selection).toEqual([]);
+    expect(shownName()).toBe("Note (bloccato)");
+    editor.setTool("pen");
+    const before = editor.engine.text;
+    drag([[60, 60], [70, 70], [80, 75]]);
+    expect(editor.engine.text).toBe(before);
+    expect(spoken()).toBe("«Note» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.");
+
+    layers().click();
+    const remove = menu().find((entry) => labelOf(entry) === "Elimina «Note»")!;
+    expect(remove.getAttribute("aria-disabled")).toBe("true");
+    expect(remove.querySelector(".menu-description")!.textContent).toBe("È bloccato: sbloccalo per eliminarlo.");
+    expect(menu().find((entry) => labelOf(entry) === "Note")!.querySelector(".menu-description")!.textContent).toBe("bloccato");
+    // Sceglierne uno bloccato dice subito che lì non si disegna.
+    menu().find((entry) => labelOf(entry) === "Sfondo")!.click();
+    choose("Note");
+    expect(spoken()).toBe("Si disegna in «Note». «Note» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.");
+    choose("Sblocca «Note»");
+    expect(editor.engine.text).toBe(TWO);
+    expect(spoken()).toBe("«Note» sbloccato.");
+  });
+
+  it("cambia l'ordine dei livelli ed elimina quello corrente con ciò che contiene; annulla lo riporta", () => {
+    mount(TWO, { level: "standard" });
+    choose("Sfondo");
+    layers().click();
+    expect(menu().find((entry) => labelOf(entry) === "Sposta «Sfondo» giù")!.getAttribute("aria-disabled")).toBe("true");
+    menu().find((entry) => labelOf(entry) === "Sposta «Sfondo» su")!.click();
+    expect(order()).toEqual(["l2", B, "l1", A]);
+    expect(spoken()).toBe("«Sfondo» ora sta sopra «Note».");
+    choose("Sposta «Sfondo» giù");
+    expect(order()).toEqual(["l1", A, "l2", B]);
+    expect(spoken()).toBe("«Sfondo» ora sta sotto «Note».");
+    const shifted = editor.engine.text;
+
+    choose("Elimina «Sfondo»");
+    expect(order()).toEqual(["l2", B]);
+    expect(spoken()).toBe("«Sfondo» eliminato, con 1 oggetto. Si disegna in «Note».");
+    expect(shownName()).toBe("Note");
+    layers().click();
+    const remove = menu().find((entry) => labelOf(entry) === "Elimina «Note»")!;
+    expect(remove.getAttribute("aria-disabled")).toBe("true");
+    expect(remove.querySelector(".menu-description")!.textContent).toBe("È l’unico livello.");
+    document.querySelector(".context-menu")!.remove();
+
+    editor.undo();
+    expect(editor.engine.text).toBe(shifted);
+    expect(spoken()).toBe("Annullato: Eliminazione del livello.");
+    // Ciò che torna è scelto, e il suo livello è di nuovo quello corrente.
+    expect(editor.selection).toEqual([A]);
+    expect(shownName()).toBe("Sfondo");
+  });
+
+  it("«Sposta in un livello» porta la selezione in cima a un altro livello, dove si vedeva", () => {
+    const scaled = TWO.replace('<g id="l2" fub:layer="Note">', '<g id="l2" fub:layer="Note" transform="scale(2)">');
+    mount(scaled, { level: "standard" });
+    const into = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Sposta in un livello"]')!;
+    editor.select([A]);
+    expect(into().hidden).toBe(false);
+    expect(into().getAttribute("aria-haspopup")).toBe("menu");
+    into().click();
+    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled"), entry.querySelector(".menu-description")?.textContent ?? null])).toEqual([
+      ["Note", null, null],
+      ["Sfondo", "true", "Gli oggetti scelti sono già qui."],
+    ]);
+    menu()[0]!.click();
+    expect(order()).toEqual(["l1", "l2", B, A]);
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="10" y="10" width="20" height="10" fill="#0072b2" transform="matrix(0.5 0 0 0.5 0 0)"/>`);
+    expect(spoken()).toBe("1 oggetto spostato in «Note».");
+    expect(editor.selection).toEqual([A]);
+    expect(shownName()).toBe("Note");
+    editor.undo();
+    expect(editor.engine.text).toBe(scaled);
+    expect(spoken()).toBe("Annullato: Spostamento in un livello.");
+    expect(shownName()).toBe("Sfondo");
+  });
+
+  it("un livello senza id resta quello corrente quando ne riceve uno", () => {
+    const source = doc(`<g fub:layer="Sotto"/><g fub:layer="Sopra"/>`);
+    mount(source, { level: "standard" });
+    choose("Sotto");
+    editor.setTool("rect");
+    drag([[10, 10], [40, 30]]);
+    expect(editor.engine.text).toMatch(/<g id="l[a-z0-9]+" fub:layer="Sotto">\s*<rect id="o[a-z0-9]{8}"[^>]*\/>\s*<\/g>\s*<g fub:layer="Sopra"\/>/);
+    expect(shownName()).toBe("Sotto");
+    drag([[50, 10], [80, 30]]);
+    expect(editor.engine.text).toMatch(/fub:layer="Sotto">\s*<rect[^>]*\/>\s*<rect[^>]*\/>\s*<\/g>/);
+    // Annullato l'id, il livello resta quello corrente.
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(source);
+    expect(shownName()).toBe("Sotto");
   });
 });
 
