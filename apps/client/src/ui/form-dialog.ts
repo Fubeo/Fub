@@ -17,8 +17,11 @@ export interface FormField {
   /// Invio va a capo; `color` un codice di colore, `#rrggbb` o `#rgb`, con
   /// accanto il selettore del sistema che lo scrive.
   readonly kind: "text" | "multiline" | "number" | "color";
-  /// Il minimo di un numero.
+  /// Il minimo e il massimo di un numero.
   readonly min?: number;
+  readonly max?: number;
+  /// Un numero che non può essere zero, come una scala.
+  readonly nonZero?: boolean;
   /// Un campo che si legge e non si cambia: un lato che misura zero non ha
   /// una misura da cambiare.
   readonly disabled?: boolean;
@@ -39,7 +42,7 @@ export interface FormOptions {
 let messageCount = 0;
 
 /// Più campi in una domanda: `null` se l'utente ha annullato, i valori per
-/// `id` se ha confermato. Un numero che non si legge, o sotto il minimo, non
+/// `id` se ha confermato. Un numero che non si legge, o fuori dai limiti, non
 /// conferma: il campo lo dice nella lingua del browser, e il fuoco ci va.
 /// Senza campi è una domanda sì o no, col fuoco sulla conferma.
 export function promptForm(options: FormOptions): Promise<Readonly<Record<string, string>> | null> {
@@ -80,6 +83,8 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
           input.step = "any";
           input.required = true;
           if (field.min !== undefined) input.min = String(field.min);
+          if (field.max !== undefined) input.max = String(field.max);
+          if (field.nonZero === true) input.addEventListener("input", () => explainZero(input));
         } else if (field.kind === "color") {
           input.type = "text";
           input.required = true;
@@ -125,6 +130,7 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
       for (const [field, control] of controls) {
         if (field.kind === "color") explainColor(control);
         else if (field.required === true) explainBlank(control);
+        else if (field.nonZero === true) explainZero(control);
       }
       if (!form.checkValidity()) {
         form.reportValidity();
@@ -187,6 +193,12 @@ function explainColor(control: HTMLInputElement | HTMLTextAreaElement): void {
 /// un errore rimasto fermerebbe l'invio prima di arrivare qui.
 function explainBlank(control: HTMLInputElement | HTMLTextAreaElement): void {
   control.setCustomValidity(control.value !== "" && control.value.trim() === "" ? t("form.blank") : "");
+}
+
+/// Uno zero dove non va: il browser non ha un vincolo che lo dica. Come il
+/// testo vuoto, si rifà a ogni battuta e prima di confermare.
+function explainZero(control: HTMLInputElement | HTMLTextAreaElement): void {
+  control.setCustomValidity(control.value !== "" && Number(control.value) === 0 ? t("form.nonzero") : "");
 }
 
 /// Un gruppo dell'elenco dei tasti: il titolo, e per ogni riga i tasti, nella

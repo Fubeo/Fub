@@ -65,7 +65,6 @@ in `apps/client/src/editors/spatial/tools/inspector.ts`.
 Un documento in sola lettura si legge tutto e non si scrive. Scendendo
 dall'Esperto il pannello si chiude e «Attributi» sparisce dalla barra.
 
-
 ## Contorno
 
 «Contorno», nella barra della selezione, cambia il contorno degli oggetti
@@ -96,3 +95,33 @@ Le regole stanno in `apps/client/src/editors/spatial/tools/outline.ts`.
   gruppo che lo contiene o da SVG, si toglie invece di scriversi.
 - **Ogni scelta è un passo**, che si annulla col suo nome: «Tratteggio»,
   «Estremi del contorno» o «Angoli del contorno».
+
+## Trasforma
+
+«Trasforma…», nella barra della selezione (`Ctrl+Maiusc+M`, come la finestra
+di Inkscape), ruota, scala e inclina gli oggetti scelti di quanto si scrive.
+La finestra parte da ciò che non cambia niente: rotazione e inclinazioni a
+zero, scale al cento per cento. Le regole stanno in
+`apps/client/src/editors/spatial/tools/transform.ts`.
+
+- **Attorno al centro degli oggetti scelti**, cioè del riquadro che si vede,
+  contorno compreso. La selezione si trasforma come un insieme, come quando
+  la si ridimensiona dalle proprietà.
+- **In un ordine fisso:** prima la scala, poi l'inclinazione orizzontale e
+  quella verticale, infine la rotazione.
+- **La rotazione va in senso orario**, in gradi, come `rotate()` di SVG e
+  come si vede sullo schermo. Le inclinazioni sono quelle di `skewX` e
+  `skewY`, fra −89° e 89°.
+- **Le scale sono percentuali**, fino a mille volte. Una scala negativa
+  rispecchia: −100 % in orizzontale scambia la sinistra con la destra. Zero
+  no: schiaccerebbe gli oggetti su una linea.
+- **Cambia solo `transform`**, come spostare e ridimensionare: la geometria
+  resta com'è scritta e il contorno si trasforma con l'oggetto. Ogni oggetto
+  riceve la stessa trasformazione, composta con quella che aveva, e un
+  oggetto che resterebbe scritto com'è non si tocca: un giro intero non
+  cambia il file.
+- **Niente che il file perderebbe.** `transform` si scrive con quattro
+  decimali: una trasformazione che rimpicciolirebbe un oggetto al punto da
+  deformarlo, scritta, non parte, e lo si dice.
+- **È un passo solo**, «Trasformazione», e la pagina si allarga se gli
+  oggetti ne escono.

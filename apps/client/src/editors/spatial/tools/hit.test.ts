@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { PF1_DEFAULTS } from "../ink/brush";
 import { quantizeInk, type InkSample } from "../ink/sample";
+import { compose, IDENTITY, rotate, translate } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import { strokeElem } from "./edit";
 import { elemBounds, linesBounds } from "./hit";
@@ -46,6 +47,18 @@ describe("gli oggetti della scena", () => {
     expect(index.get("r")?.bounds).toEqual({ min: [9, 9], max: [31, 31] });
     expect(index.get("g")?.bounds).toEqual({ min: [50, 0], max: [60, 10] });
     expect(index.get("g")?.frame()).toEqual({ min: [0, 0], max: [10, 10] });
+  });
+
+  it("sanno dove finirebbero dopo una trasformazione della scena, anche ruotati", () => {
+    const { index } = open(SHAPES);
+    const rect = index.get("r")!;
+    expect(rect.boundsAfter(IDENTITY)).toEqual(rect.bounds);
+    // Ruotato di 45° attorno al centro: gli spigoli vanno sugli assi.
+    const turned = rect.boundsAfter(compose(translate(20, 20), compose(rotate(45), translate(-20, -20))))!;
+    const reach = 10 * Math.SQRT2 + 1;
+    [...turned.min, ...turned.max].forEach((value, at) => expect(value).toBeCloseTo(at < 2 ? 20 - reach : 20 + reach, 6));
+    // Dentro un gruppo vale la scena, non le coordinate del gruppo.
+    expect(index.get("g")!.boundsAfter(translate(0, 5))).toEqual({ min: [50, 5], max: [60, 15] });
   });
 
   it("hanno anche il riquadro della geometria, senza contorno, per la griglia", () => {

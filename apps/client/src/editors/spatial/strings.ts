@@ -387,7 +387,19 @@ const IT = {
   "draw.outlined.other": "{style}: {count} contorni.",
   "draw.action.dash": "Tratteggio",
   "draw.action.cap": "Estremi del contorno",
-  "draw.action.join": "Angoli del contorno"
+  "draw.action.join": "Angoli del contorno",
+  "draw.transform": "Trasforma…",
+  "draw.transform.title": "Trasforma",
+  "draw.transform.message": "Attorno al centro degli oggetti scelti: prima la scala, poi l’inclinazione, poi la rotazione. Una scala negativa rispecchia.",
+  "draw.transform.rotate": "Rotazione in senso orario (°)",
+  "draw.transform.scale_x": "Scala orizzontale (%)",
+  "draw.transform.scale_y": "Scala verticale (%)",
+  "draw.transform.skew_x": "Inclinazione orizzontale (°)",
+  "draw.transform.skew_y": "Inclinazione verticale (°)",
+  "draw.transform.unwritable": "Un oggetto diventerebbe troppo piccolo per scriverne la trasformazione: niente è cambiato.",
+  "draw.transformed.one": "{count} oggetto trasformato.",
+  "draw.transformed.other": "{count} oggetti trasformati.",
+  "draw.action.transform": "Trasformazione"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -771,7 +783,19 @@ const EN: Record<DrawKey, string> = {
   "draw.outlined.other": "{style}: {count} outlines.",
   "draw.action.dash": "Dash pattern",
   "draw.action.cap": "Outline ends",
-  "draw.action.join": "Outline corners"
+  "draw.action.join": "Outline corners",
+  "draw.transform": "Transform…",
+  "draw.transform.title": "Transform",
+  "draw.transform.message": "Around the center of the selected objects: first the scale, then the skew, then the rotation. A negative scale mirrors.",
+  "draw.transform.rotate": "Clockwise rotation (°)",
+  "draw.transform.scale_x": "Horizontal scale (%)",
+  "draw.transform.scale_y": "Vertical scale (%)",
+  "draw.transform.skew_x": "Horizontal skew (°)",
+  "draw.transform.skew_y": "Vertical skew (°)",
+  "draw.transform.unwritable": "An object would become too small to write its transform: nothing changed.",
+  "draw.transformed.one": "{count} object transformed.",
+  "draw.transformed.other": "{count} objects transformed.",
+  "draw.action.transform": "Transform"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

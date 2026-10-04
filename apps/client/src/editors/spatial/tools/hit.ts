@@ -150,6 +150,18 @@ export class Unit {
     return this.frameBounds;
   }
 
+  /// Il riquadro nella scena dopo `m`, una trasformazione della scena,
+  /// contorno compreso: dove finisce l'oggetto, anche ruotato.
+  boundsAfter(m: Matrix): Bounds | null {
+    const out = new BoundsBuilder();
+    for (const part of this.parts) {
+      const matrix = compose(m, part.matrix);
+      const bounds = transformedBounds(part.segments, matrix);
+      if (bounds !== null) includeInflated(out, bounds, part.radius * scaleOf(matrix));
+    }
+    return out.finish();
+  }
+
   /// Vero se il punto `p` della scena tocca l'oggetto, con una tolleranza
   /// `tolerance` in unità della scena.
   hits(p: Point, tolerance: number): boolean {
