@@ -135,7 +135,8 @@ sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
   sotto, o quello sopra. L'unico livello e uno bloccato non si eliminano, e la
   voce spenta dice perché.
 
-Penna, evidenziatore, forme e immagini incollate vanno nel livello corrente.
+Penna, evidenziatore, forme, testi e immagini incollate vanno nel livello
+corrente.
 Se è nascosto o bloccato il gesto non scrive, e un annuncio dice perché e che
 cosa fare. Scegliere oggetti che stanno tutti in un livello rende corrente quel
 livello, e l'albero degli oggetti dice qual è: «Livello «Note», corrente».
@@ -188,7 +189,9 @@ Con l'aggancio:
   righe più in là con `Maiusc`; con `Ctrl` o `⌘` lo muovono libero di un
   pixel;
 - **Duplica** scosta le copie di un numero intero di passi, e un'immagine
-  incollata ha l'angolo in alto a sinistra sull'incrocio più vicino.
+  incollata ha l'angolo in alto a sinistra sull'incrocio più vicino;
+- la prima linea di base di un testo nuovo comincia sull'incrocio più
+  vicino.
 
 **Adatta la pagina al disegno** porta la pagina attorno a tutto il disegno,
 livelli nascosti e bloccati compresi, con 20 unità di margine, e la allarga
@@ -198,6 +201,49 @@ spegne, e dice perché, quando il disegno è vuoto o la pagina è già adattata.
 
 All'Essenziale il pulsante non c'è, la griglia non si vede e non aggancia; le
 scelte restano, e tornano col livello Standard.
+
+## Testo
+
+Dal livello Standard lo strumento **Testo** (`T`) viene dopo la freccia. Un
+tocco sul foglio apre lì un campo, con la prima riga a metà sul punto
+toccato; un tocco su un testo lo apre com'è. Con la selezione un testo si
+apre con due tocchi, con `F2` o con «Modifica il testo» nella barra
+«Disponi»; con lo strumento Testo, `Spazio` scrive dov'è il cursore.
+
+Il campo prende il posto del testo, col suo carattere, il suo corpo, il suo
+colore, il suo allineamento e la sua trasformazione, anche ruotato o
+ingrandito, e il testo sotto si nasconde finché si scrive. `Invio` va a capo;
+`Esc`, `Tab` e `Ctrl+Invio` o `⌘Invio` concludono, e così un tocco sul
+foglio, il fuoco che va altrove o un altro strumento. Il tocco che conclude
+non apre un altro testo. Ciò che si è scritto entra nel file in un
+solo passo di annulla, mentre dentro il campo `Ctrl+Z` o `⌘Z` annulla la
+scrittura.
+
+Un testo nuovo è in Inter, il carattere dell'interfaccia, col colore della
+penna e una delle tre dimensioni che, con lo strumento Testo, prendono il
+posto degli spessori: Piccolo, Medio e Grande, 24, 32 e 48 unità. Colore e
+dimensione scelti mentre si scrive valgono per il testo nuovo nel campo. Nel
+file è un `text` col punto d'ancoraggio, una riga per `tspan`, a
+un'interlinea di 1,25 volte il corpo:
+
+```xml
+<text id="o5e6f7g8h" x="120" y="300" fill="#000000" font-family="Inter, sans-serif" font-size="32">
+  <tspan x="120" dy="0">Evaporazione</tspan>
+  <tspan x="120" dy="40">e pioggia</tspan>
+</text>
+```
+
+Il file scrive ciò che si vede: spazi e tabulazioni in fila valgono uno, e ai
+bordi di una riga niente; le righe vuote in testa e in coda non ci sono, e
+una vuota fra due scritte resta, come uno spazio indivisibile. Un testo nuovo
+vuoto non si scrive, e uno svuotato si elimina. In Lettura, dove il disegno è
+un'immagine, il testo è in Inter se il sistema lo ha, altrimenti nel
+carattere senza grazie del sistema.
+
+Cambiare un testo che c'è riscrive solo le sue righe, e il resto resta come
+l'ha scritto chi l'ha fatto, anche in un altro programma: una riga nuova
+copia la precedente e ne prende l'interlinea. Si cambia sul posto un testo di
+righe semplici, un `tspan` per riga, che non sta in un gruppo.
 
 ## Da tastiera
 

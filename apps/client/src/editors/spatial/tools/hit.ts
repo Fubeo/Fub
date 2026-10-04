@@ -24,8 +24,8 @@ import { apply, compose, IDENTITY, toRadians, type Matrix, type Point } from "..
 import { tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { length, points as parsePoints, transform as parseTransform } from "../scene/values";
-import type { PaintAttr, PaintBuilder, PaintNode, PaintShape } from "../painter/paint";
+import { length, nonNegativeLength, points as parsePoints, transform as parseTransform } from "../scene/values";
+import type { PaintAttr, PaintBuilder, PaintNode, PaintShape, TextRun } from "../painter/paint";
 
 /// L'errore massimo dell'appiattimento, in unità della scena.
 export const FLATNESS = 0.05;
@@ -44,6 +44,24 @@ export interface LayerInfo {
   readonly hidden: boolean;
   /// Dalle coordinate del livello a quelle della scena.
   readonly matrix: Matrix;
+}
+
+/// Come si vede un testo, per chi lo modifica sul posto: nelle coordinate
+/// dell'oggetto, con lo stile che eredita.
+export interface TextLook {
+  /// Il punto della linea di base della prima riga dove la riga comincia,
+  /// sta al centro o finisce, secondo `anchor`.
+  readonly x: number;
+  readonly y: number;
+  /// Il corpo, e il passo fra una riga e l'altra.
+  readonly size: number;
+  readonly leading: number;
+  readonly anchor: "start" | "middle" | "end";
+  /// `font-family`, `font-weight` e `fill` come li eredita; `null` se nessuno
+  /// li scrive.
+  readonly family: string | null;
+  readonly weight: string | null;
+  readonly color: string | null;
 }
 
 /// Un pezzo di un oggetto che si disegna da solo: una forma.
@@ -109,6 +127,8 @@ export class Unit {
     /// la griglia aggancia.
     readonly geometry: Bounds | null,
     private readonly parts: readonly Part[],
+    /// Come si vede, se è un testo.
+    readonly look: TextLook | null = null,
   ) {}
 
   /// Dalle coordinate dell'oggetto a quelle della scena.
@@ -184,16 +204,19 @@ export class SceneIndex {
 }
 
 /// Lo stile che un contenitore trasmette ai figli, per quanto serve a
-/// toccarli.
+/// toccarli e a modificarne il testo.
 interface Style {
   readonly fill: boolean;
   readonly stroke: boolean;
   readonly strokeWidth: number;
   readonly fontSize: number;
   readonly anchor: string;
+  readonly family: string | null;
+  readonly weight: string | null;
+  readonly color: string | null;
 }
 
-const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, anchor: "start" };
+const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, anchor: "start", family: null, weight: null, color: null };
 
 /// Costruisce gli indici di un documento, ricordando la geometria delle
 /// forme che non cambiano fra una scena e l'altra.
@@ -275,6 +298,7 @@ export class SceneIndexer {
     }
     const id = node.facts.id;
     const tag = tagName(node);
+    const look = node.kind === "leaf" && node.details!.role === "text" ? textLook(this.builder.shape(node), styleOf(style, attrs)) : null;
     out.push(new Unit(
       id ?? `@${path.join(".")}`,
       id ?? { path, tag },
@@ -289,6 +313,7 @@ export class SceneIndexer {
       scene.finish(),
       geometry.finish(),
       parts,
+      look,
     ));
   }
 
@@ -321,7 +346,7 @@ export class SceneIndexer {
     let segments: readonly Segment[];
     if (shape.tag === "text") {
       // Il riquadro di un testo dipende dallo stile ereditato: non si ricorda.
-      segments = textSegments(shape, style);
+      segments = textSegments(shape.attrs, shape.runs ?? [], style);
       cache = null;
     } else {
       if (cache === null) {
@@ -381,13 +406,20 @@ function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
   const width = attr(attrs, "stroke-width");
   const size = attr(attrs, "font-size");
   const anchor = attr(attrs, "text-anchor");
-  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined) return parent;
+  const family = attr(attrs, "font-family");
+  const weight = attr(attrs, "font-weight");
+  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined && family === undefined && weight === undefined) {
+    return parent;
+  }
   return {
     fill: fill === undefined ? parent.fill : fill.trim() !== "none",
     stroke: stroke === undefined ? parent.stroke : stroke.trim() !== "none",
     strokeWidth: width === undefined ? parent.strokeWidth : Math.max(0, length(width) ?? parent.strokeWidth),
-    fontSize: size === undefined ? parent.fontSize : Math.max(0, length(size) ?? parent.fontSize),
+    fontSize: size === undefined ? parent.fontSize : nonNegativeLength(size) ?? parent.fontSize,
     anchor: anchor === undefined ? parent.anchor : anchor.trim(),
+    family: family === undefined ? parent.family : family.trim(),
+    weight: weight === undefined ? parent.weight : weight.trim(),
+    color: fill === undefined ? parent.color : fill.trim(),
   };
 }
 
@@ -461,26 +493,83 @@ function shapeSegments(tag: string, attrs: readonly PaintAttr[]): readonly Segme
   }
 }
 
+/// Quanto è largo un carattere, e dove stanno sopra e sotto la linea di base
+/// i bordi di una riga, in volte il corpo: una stima, la misura vera dipende
+/// dai caratteri.
+const CHAR_EM = 0.6;
+const ASCENT_EM = 0.8;
+const DESCENT_EM = 0.25;
+
+/// Dove comincia una riga larga `width` col punto d'ancoraggio in `x`.
+function lineStart(x: number, width: number, anchor: string): number {
+  return anchor === "middle" ? x - width / 2 : anchor === "end" ? x - width : x;
+}
+
+/// Quanti caratteri si leggono in `text`: gli spazi in fila contano uno, ai
+/// bordi niente, come li mostra SVG.
+function readable(text: string): number {
+  return [...text.replace(/\s+/g, " ").trim()].length;
+}
+
 /// Le righe di un testo come rettangoli: l'altezza va da 0,8 em sopra la
 /// linea di base a 0,25 em sotto, la larghezza è 0,6 em per carattere.
-function textSegments(shape: PaintShape, style: Style): Segment[] {
-  const attrs = shape.attrs;
+function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], style: Style): Segment[] {
   const x = len(attrs, "x") ?? 0;
   let y = len(attrs, "y") ?? 0;
   const segments: Segment[] = [];
-  for (const run of shape.runs ?? []) {
+  for (const run of runs) {
     if (run.kind !== "span") continue;
     const size = len(run.attrs, "font-size") ?? style.fontSize;
     y += len(run.attrs, "dy") ?? 0;
     const lineX = len(run.attrs, "x") ?? x;
-    const chars = [...run.text.replace(/\s+/g, " ").trim()].length;
+    const chars = readable(run.text);
     if (chars === 0) continue;
-    const width = 0.6 * size * chars;
+    const width = CHAR_EM * size * chars;
     const anchor = attr(run.attrs, "text-anchor")?.trim() ?? style.anchor;
-    const left = anchor === "middle" ? lineX - width / 2 : anchor === "end" ? lineX - width : lineX;
-    segments.push(...rectPath(left, y - 0.8 * size, width, 1.05 * size, 0, 0));
+    segments.push(...rectPath(lineStart(lineX, width, anchor), y - ASCENT_EM * size, width, (ASCENT_EM + DESCENT_EM) * size, 0, 0));
   }
   return segments;
+}
+
+/// Come si vede il testo `shape` con lo stile `style`, che comprende i suoi
+/// attributi: la prima riga dà ancoraggio e corpo. Il passo è quello che
+/// l'operazione `text` dà a una riga nuova: il `dy` dell'ultima riga dopo la
+/// prima che lo scrive, oppure 1,25 volte il corpo dell'ultima riga.
+function textLook(shape: PaintShape | null, style: Style): TextLook {
+  const attrs = shape?.attrs ?? [];
+  const spans = (shape?.runs ?? []).filter((run) => run.kind === "span");
+  const first = spans[0]?.attrs ?? [];
+  const size = len(first, "font-size") ?? style.fontSize;
+  let step: number | null = null;
+  for (let k = spans.length - 1; k >= 1 && step === null; k--) step = len(spans[k]!.attrs, "dy");
+  const last = spans.length === 0 ? style.fontSize : len(spans[spans.length - 1]!.attrs, "font-size") ?? style.fontSize;
+  const anchor = attr(first, "text-anchor")?.trim() ?? style.anchor;
+  return {
+    x: len(first, "x") ?? len(attrs, "x") ?? 0,
+    y: (len(attrs, "y") ?? 0) + (len(first, "dy") ?? 0),
+    size,
+    leading: step !== null && step > 0 ? step : last * 1.25,
+    anchor: anchor === "middle" || anchor === "end" ? anchor : "start",
+    family: attr(first, "font-family")?.trim() ?? style.family,
+    weight: attr(first, "font-weight")?.trim() ?? style.weight,
+    color: attr(first, "fill")?.trim() ?? style.color,
+  };
+}
+
+/// Il riquadro nella scena delle righe `lines` scritte come `look`, con
+/// `matrix` dalle coordinate del testo a quelle della scena: la stessa stima
+/// con cui poi le si tocca. `null` se non c'è niente da leggere.
+export function linesBounds(look: TextLook, lines: readonly string[], matrix: Matrix): Bounds | null {
+  const out = new BoundsBuilder();
+  lines.forEach((line, i) => {
+    const chars = readable(line);
+    if (chars === 0) return;
+    const width = CHAR_EM * look.size * chars;
+    const left = lineStart(look.x, width, look.anchor);
+    const top = look.y + i * look.leading - ASCENT_EM * look.size;
+    out.path(rectPath(left, top, width, (ASCENT_EM + DESCENT_EM) * look.size, 0, 0), matrix);
+  });
+  return out.finish();
 }
 
 /// Il riquadro nella scena di una forma che uno strumento sta per scrivere,
@@ -489,7 +578,10 @@ function textSegments(shape: PaintShape, style: Style): Segment[] {
 export function elemBounds(elem: Elem, matrix: Matrix): Bounds | null {
   const attrs: PaintAttr[] = Object.entries(elem.attrs);
   const style = styleOf(INITIAL, attrs);
-  const bounds = transformedBounds(shapeSegments(elem.tag, attrs), matrix);
+  const segments = elem.tag === "text"
+    ? textSegments(attrs, (elem.children ?? []).map((child): TextRun => ({ kind: "span", attrs: Object.entries(child.attrs), space: null, text: child.text ?? "" })), style)
+    : shapeSegments(elem.tag, attrs);
+  const bounds = transformedBounds(segments, matrix);
   if (bounds === null) return null;
   const out = new BoundsBuilder();
   includeInflated(out, bounds, style.stroke ? (style.strokeWidth / 2) * scaleOf(matrix) : 0);

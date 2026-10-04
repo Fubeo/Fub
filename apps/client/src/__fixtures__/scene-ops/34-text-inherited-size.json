@@ -1,0 +1,53 @@
+{
+  "name": "text-inherited-size",
+  "description": "l'interlinea di una riga nuova viene dal corpo con cui si vede l'ultima riga, anche ereditato",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Etichette</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\" font-size=\"12\">\n    <text id=\"o4d5e6f7g\" x=\"100\" y=\"200\" fill=\"#000000\">\n      <tspan x=\"100\" dy=\"0\">Nord</tspan>\n    </text>\n    <text id=\"o5e6f7g8h\" x=\"400\" y=\"200\" fill=\"#0072b2\" font-size=\"32\">\n      <tspan x=\"400\" dy=\"0\" font-size=\"20\">Sud</tspan>\n    </text>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "batch",
+      "label": "Testo",
+      "ops": [
+        {
+          "op": "text",
+          "id": "o4d5e6f7g",
+          "lines": [
+            "Nord",
+            "polo"
+          ]
+        },
+        {
+          "op": "text",
+          "id": "o5e6f7g8h",
+          "lines": [
+            "Sud",
+            "polo"
+          ]
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Etichette</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\" font-size=\"12\">\n    <text id=\"o4d5e6f7g\" x=\"100\" y=\"200\" fill=\"#000000\">\n      <tspan x=\"100\" dy=\"0\">Nord</tspan>\n      <tspan x=\"100\" dy=\"15\">polo</tspan>\n    </text>\n    <text id=\"o5e6f7g8h\" x=\"400\" y=\"200\" fill=\"#0072b2\" font-size=\"32\">\n      <tspan x=\"400\" dy=\"0\" font-size=\"20\">Sud</tspan>\n      <tspan x=\"400\" dy=\"25\" font-size=\"20\">polo</tspan>\n    </text>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "text",
+          "id": "o5e6f7g8h",
+          "lines": [
+            "Sud"
+          ]
+        },
+        {
+          "op": "text",
+          "id": "o4d5e6f7g",
+          "lines": [
+            "Nord"
+          ]
+        }
+      ],
+      "label": "Testo"
+    }
+  }
+}

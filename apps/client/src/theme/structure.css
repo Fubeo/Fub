@@ -1221,6 +1221,9 @@ html, body, #app {
   width: 24px;
   min-height: 1px;
 }
+.draw-size-glyph {
+  display: block;
+}
 .draw-title {
   display: flex;
   flex: 1 1 16rem;
@@ -1252,6 +1255,9 @@ html, body, #app {
    taglierebbe il riquadro che lo contiene. */
 .draw-surface:focus-visible {
   outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-surface[data-tool="text"] {
+  cursor: text;
 }
 .draw-surface[data-tool="select"],
 .draw-editor[data-readonly] .draw-surface {
@@ -1318,6 +1324,45 @@ html, body, #app {
   left: -3px;
   width: 6px;
   height: 6px;
+}
+/* Il campo in cui si scrive un testo: uno strato sopra il foglio, che lo
+   taglia ai bordi e non scorre, e nello strato il campo, trasparente, al
+   posto del testo. Il carattere, il corpo, l'interlinea, il colore e la
+   trasformazione li dà l'editor, presi dal testo: il campo non ha niente di
+   suo che sposti le righe. Il colore resta quello del testo anche coi colori
+   forzati, perché la carta resta bianca. */
+.draw-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overflow: clip;
+  pointer-events: none;
+}
+.draw-text-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: content-box;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  resize: none;
+  background: transparent;
+  font-style: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-indent: 0;
+  text-transform: none;
+  white-space: pre;
+  overflow-wrap: normal;
+  transform-origin: 0 0;
+  transition: none;
+  pointer-events: auto;
+  forced-color-adjust: none;
 }
 /* Il foglio e la sua barra: la barra della selezione galleggia in cima al
    foglio, al centro, così quando compare il foglio non si sposta. Va a capo

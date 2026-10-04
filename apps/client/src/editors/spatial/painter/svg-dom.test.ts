@@ -169,7 +169,7 @@ describe("il documento vivo", () => {
 });
 
 describe("l'anteprima degli strumenti", () => {
-  it("cambia il transform e sbiadisce senza ricreare i nodi, e sopravvive a una scena nuova", async () => {
+  it("cambia il transform, sbiadisce e nasconde senza ricreare i nodi, e sopravvive a una scena nuova", async () => {
     const engine = SceneEngine.open(doc(
       `${LAYER}<rect id="a" width="4" height="4" transform="matrix(2 0 0 2 0 0)"/><rect id="b" width="4" height="4"/>`
         + '<g id="g"><rect id="c" width="1" height="1"/></g></g>',
@@ -207,6 +207,12 @@ describe("l'anteprima degli strumenti", () => {
     expect(node("b").style.opacity).toBe("");
     expect(node("g").hasAttribute("transform")).toBe(false);
     expect(node("a")).toBe(a);
+    // Un testo scritto sul posto si nasconde, e torna com'era.
+    painter.setDraft({ hidden: new Set([paintA!]) });
+    expect(a.style.visibility).toBe("hidden");
+    expect(node("b").style.visibility).toBe("");
+    painter.setDraft(null);
+    expect(a.style.visibility).toBe("");
   });
 
   it("dà a due elementi identici di un motore riaperto due forme diverse", () => {

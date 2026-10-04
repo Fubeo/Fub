@@ -55,6 +55,12 @@
 // - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
 //   entra nel file come data URI (`images.ts`): il disegno resta un file
 //   solo. Oltre il peso massimo l'editor propone di ridurla.
+// - **Testo.** Dal livello Standard lo strumento Testo scrive dove si tocca,
+//   in un campo sopra il foglio, col carattere, il corpo, il colore e la
+//   trasformazione del testo, così ciò che si scrive sta dove resterà
+//   (`text.ts`). Lo stesso campo cambia un testo che c'è: col tocco dello
+//   strumento, col doppio tocco della selezione, o con F2. Il testo si scrive
+//   quando il campo si chiude, in un passo di annulla solo.
 //
 // La superficie che lo monta nella shell gli passa il motore del
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
@@ -110,7 +116,7 @@ import {
   transformValue,
   type Destination,
 } from "./edit";
-import { alignOps, distributeOps, duplicateOps, groupOps, isGroup, orderOps, ungroupOps, type Arranged, type Axis, type Edge, type Order } from "./arrange";
+import { alignOps, distributeOps, duplicateOps, groupOps, isGroup, nodeOf, orderOps, Plan, ungroupOps, type Arranged, type Axis, type Edge, type Order } from "./arrange";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -125,7 +131,7 @@ import {
   wholeSteps,
   type Grid,
 } from "./grid";
-import { elemBounds, SceneIndex, SceneIndexer, type LayerInfo, type Unit } from "./hit";
+import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, type Replay } from "./history";
 import {
   browserCodec,
@@ -176,6 +182,7 @@ import {
 } from "./palette";
 import { DEFAULT_TOOL, reaches, toolForKey, TOOLS, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
 import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
+import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
 /// `EditorChange` (operazioni sulla scena, §6).
@@ -282,6 +289,9 @@ const MIN_SHAPE_PX = 4;
 const FRAME_PX = 4;
 
 const ZOOM_STEP = 1.25;
+
+/// La lettera dei pulsanti delle dimensioni del testo, in pixel.
+const SIZE_GLYPH_PX: readonly number[] = [12, 16, 22];
 const FIT_PAD = 0.08;
 
 /// Di quanto le frecce spostano o ridimensionano la selezione, in unità
@@ -324,6 +334,25 @@ const COPY_STEP_PX = 24;
 
 const INK_KEY = "pen";
 
+/// Due tocchi sullo stesso testo entro questo tempo, in millisecondi, e
+/// questa distanza, in pixel, lo aprono: un doppio tocco come quello di un
+/// mouse, che vale anche per la penna e il dito.
+const DOUBLE_TAP_MS = 500;
+const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 6, touch: 16 };
+
+/// Dove sta la linea di base nella riga di un campo di testo, in volte il
+/// corpo, sotto la metà della riga: metà della differenza fra la parte sopra
+/// e quella sotto del carattere. Il browser la misura; dove non sa, vale
+/// quella di Inter.
+const BASELINE_EM = 0.363;
+
+/// Lo spazio del cursore di testo in fondo alla riga più lunga, in pixel.
+const CARET_PX = 2;
+
+/// Quanto è largo un carattere, in volte il corpo, dove il browser non
+/// misura il campo: una stima.
+const CHAR_EM = 0.6;
+
 /// Le icone della barra, col costrutto di `ui/icons.ts`.
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-select": ["M6 3v15.5l4.2-4.1 2.9 6.6 2.6-1.1-2.9-6.5H19z"],
@@ -348,6 +377,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
   "draw-into-layer": ["M12 11l9 5-9 5-9-5z", "M12 2v7", "M9 6l3 3 3-3"],
   "draw-page-grid": ["M3 3h18v18H3z", "M9 3v18", "M15 3v18", "M3 9h18", "M3 15h18"],
+  "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
+  "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -357,7 +388,7 @@ function ensureIcons(): void {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | EraseGesture | RefusedGesture;
+type Gesture = InkGesture | ShapeGesture | SelectGesture | EraseGesture | TextGesture | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -404,12 +435,35 @@ interface SelectGesture extends GestureBase {
   /// L'angolo della geometria scelta che la griglia aggancia: il più vicino
   /// al punto preso.
   source: Point | null;
+  /// L'oggetto sotto il primo punto, per il doppio tocco.
+  hit: string | null;
 }
 
 interface EraseGesture extends GestureBase {
   readonly kind: "erase";
   last: Point | null;
   readonly marked: Map<string, Unit>;
+}
+
+/// Un tocco dello strumento Testo: dove si alza il puntatore si scrive.
+interface TextGesture extends GestureBase {
+  readonly kind: "text";
+  from: Point | null;
+}
+
+/// Un testo che si sta scrivendo nel campo sopra il foglio.
+interface Typing {
+  /// La chiave del testo che si cambia; `null` per uno nuovo.
+  readonly key: string | null;
+  /// Il testo del campo all'apertura: se non cambia, non si scrive niente.
+  readonly before: string;
+  /// Come si vede il testo che si cambia; `null` per uno nuovo, che ha il
+  /// colore e la dimensione dello strumento.
+  readonly look: TextLook | null;
+  /// Il punto d'ancoraggio, nelle coordinate del testo.
+  readonly at: Point;
+  /// Dalle coordinate del testo a quelle della scena.
+  readonly matrix: Matrix;
 }
 
 /// Un gesto che non scrive: il documento non si modifica, o nessun livello
@@ -500,9 +554,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH },
     highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH },
   };
-  const style = (): { color: string; width: number } => styles[tool === "highlighter" ? "highlighter" : "pen"];
-  /// Gli spessori che la barra offre allo strumento di adesso.
-  const widthsNow = (): readonly Width[] => (tool === "highlighter" ? HIGHLIGHTER_WIDTHS : WIDTHS);
+  /// Il testo ha il colore della penna e il corpo suo, che la barra mostra
+  /// al posto dello spessore.
+  const textStyle = {
+    get color(): string {
+      return styles.pen.color;
+    },
+    set color(value: string) {
+      styles.pen.color = value;
+    },
+    width: TEXT_SIZE,
+  };
+  const style = (): { color: string; width: number } => (tool === "text" ? textStyle : styles[tool === "highlighter" ? "highlighter" : "pen"]);
+  /// Gli spessori, o le dimensioni del testo, che la barra offre allo
+  /// strumento di adesso.
+  const widthsNow = (): readonly Width[] => (tool === "highlighter" ? HIGHLIGHTER_WIDTHS : tool === "text" ? TEXT_SIZES : WIDTHS);
   /// L'ultimo colore scelto a piacere: un campione in più nella barra.
   let custom: string | null = null;
   let selection: string[] = [];
@@ -542,6 +608,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// tasto giù l'aggancio aspetta.
   let grid: Grid = options.grid === undefined ? DEFAULT_GRID : checkedGrid(options.grid, DEFAULT_GRID);
   let free = false;
+  /// Il testo che si sta scrivendo nel campo sopra il foglio.
+  let typing: Typing | null = null;
+  /// Il puntatore è sceso sul foglio mentre si scriveva: quel tocco chiude il
+  /// testo, e lo strumento Testo non ne apre un altro.
+  let closedTyping = false;
+  /// L'ultimo tocco della selezione su un oggetto, per il doppio tocco.
+  let lastTap: { readonly key: string; readonly time: number; readonly at: Point } | null = null;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -665,17 +738,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   moreButton.setAttribute("aria-haspopup", "dialog");
 
   // Gli spessori, per posizione: Sottile, Medio, Spesso valgono per la penna
-  // e le forme quelli della tavolozza, per l'evidenziatore i suoi.
-  const widthButtons: Array<{ readonly control: HTMLButtonElement; readonly bar: HTMLElement }> = [];
+  // e le forme quelli della tavolozza, per l'evidenziatore i suoi. Per il
+  // testo sono le dimensioni, Piccolo, Medio e Grande, con una lettera al
+  // posto della barra.
+  const widthButtons: Array<{ readonly control: HTMLButtonElement; readonly bar: HTMLElement; readonly glyph: HTMLElement }> = [];
   const widthGroup = group("draw.widths", true);
-  WIDTHS.forEach((option, at) => {
-    const control = button(widthGroup, "draw-button draw-width", () => t(option.label), null, () => setWidth(widthsNow()[at]!.value));
+  WIDTHS.forEach((_, at) => {
+    const control = button(widthGroup, "draw-button draw-width", () => t(widthsNow()[at]!.label), null, () => setWidth(widthsNow()[at]!.value));
     control.setAttribute("role", "radio");
     const bar = document.createElement("span");
     bar.className = "draw-width-bar";
-    control.append(bar);
-    widthButtons.push({ control, bar });
+    const glyph = document.createElement("span");
+    glyph.className = "draw-size-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = "A";
+    glyph.style.setProperty("--draw-size", `${SIZE_GLYPH_PX[at]}px`);
+    control.append(bar, glyph);
+    widthButtons.push({ control, bar, glyph });
   });
+  /// Il nome del gruppo e dei pulsanti: spessori, o dimensioni del testo.
+  const showWidthLabels = (): void => {
+    const label = t(tool === "text" ? "draw.sizes" : "draw.widths");
+    if (widthGroup.getAttribute("aria-label") !== label) widthGroup.setAttribute("aria-label", label);
+    const widths = widthsNow();
+    widthButtons.forEach(({ control }, at) => {
+      const text = t(widths[at]!.label);
+      if (control.getAttribute("aria-label") === text) return;
+      control.setAttribute("aria-label", text);
+      control.title = text;
+    });
+  };
+  relabels.push(showWidthLabels);
 
   const editGroup = group("draw.edit", false);
   const undoButton = button(editGroup, "draw-button", () => t("draw.undo"), "draw-undo", () => undo());
@@ -762,11 +855,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const arrangeButton = (label: DrawKey, iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
     const control = button(arrangeBar, "draw-button", () => (binding === null ? t(label) : `${t(label)} (${displayBinding(binding)})`), iconName, run);
     if (binding !== null) {
-      control.setAttribute("aria-keyshortcuts", ariaBinding(binding));
+      // Un tasto senza modificatori, come F2, si scrive com'è.
+      control.setAttribute("aria-keyshortcuts", ariaBinding(binding) || binding);
       relabels.push(() => control.setAttribute("aria-label", t(label)));
     }
     return control;
   };
+  // Un testo scelto da solo si cambia sul posto.
+  const textButton = arrangeButton("draw.text.edit", "draw-text-edit", "F2", () => editSelectedText());
   arrangeButton("draw.duplicate", "draw-duplicate", "Mod-d", () => duplicateSelection());
   const groupButton = arrangeButton("draw.group", "draw-group", "Mod-g", () => groupSelection());
   const ungroupButton = arrangeButton("draw.ungroup", "draw-ungroup", "Mod-Shift-g", () => ungroupSelection());
@@ -784,10 +880,35 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     surface.focus({ preventScroll: true });
   });
 
+  // Il campo in cui si scrive un testo: sopra il foglio e fuori dalla sua
+  // pipeline, nascosto finché non si scrive. Lo strato lo taglia ai bordi
+  // del foglio e non scorre mai.
+  const textLayer = document.createElement("div");
+  textLayer.className = "draw-text-layer";
+  textLayer.hidden = true;
+  const textInput = document.createElement("textarea");
+  textInput.className = "draw-text-input";
+  textInput.wrap = "off";
+  textInput.rows = 1;
+  textInput.autocomplete = "off";
+  textInput.spellcheck = true;
+  const textHint = document.createElement("span");
+  textHint.className = "sr-only";
+  textHint.id = identifier("draw-text-hint");
+  textInput.setAttribute("aria-describedby", textHint.id);
+  textLayer.append(textInput, textHint);
+  /// Il nome del campo: un testo nuovo, o uno che c'è.
+  const labelText = (): void => textInput.setAttribute("aria-label", t(typing !== null && typing.key !== null ? "draw.text.change" : "draw.text.new"));
+  relabels.push(() => {
+    textHint.textContent = t("draw.text.hint", { key: modifierName("Mod") ?? "Ctrl" });
+    labelText();
+  });
+  ensureTextFont();
+
   // Il foglio con la sua barra e, accanto, l'albero degli oggetti.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, arrangeBar);
+  stage.append(surface, textLayer, arrangeBar);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, tree.element);
@@ -910,6 +1031,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showGrid();
     showZoom();
     showCursor();
+    placeText();
   };
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.
   let coordinates: Intl.NumberFormat | null = null;
@@ -1214,13 +1336,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// La barra della selezione: c'è dal livello Standard, con qualcosa di
-  /// scelto e il disegno che si scrive. Un pulsante che non serve si spegne;
-  /// se aveva il fuoco, il fuoco passa a quello che prende il Tab, o al
-  /// foglio quando la barra se ne va.
+  /// scelto e il disegno che si scrive, e non mentre si scrive un testo. Un
+  /// pulsante che non serve si spegne; se aveva il fuoco, il fuoco passa a
+  /// quello che prende il Tab, o al foglio quando la barra se ne va.
   const syncArrange = (): void => {
     const focused = arrangeBar.contains(document.activeElement);
-    const units = reaches(level, "standard") && editable() && selection.length > 0 ? selectedUnits() : [];
+    const units = typing === null && reaches(level, "standard") && editable() && selection.length > 0 ? selectedUnits() : [];
     arrangeBar.hidden = units.length === 0;
+    textButton.hidden = units.length !== 1 || units[0]!.look === null;
     groupButton.disabled = units.length < 2;
     ungroupButton.disabled = !units.some(isGroup);
     // Con un livello solo, che ha già tutto, non c'è dove spostare.
@@ -1258,12 +1381,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     moreButton.hidden = moreGroup.hidden;
     moreButton.disabled = !canEdit;
     const widths = widthsNow();
-    widthButtons.forEach(({ control, bar }, at) => {
+    const sizes = tool === "text";
+    widthButtons.forEach(({ control, bar, glyph }, at) => {
       const value = widths[at]!.value;
-      bar.style.setProperty("--draw-width", `${value}px`);
+      bar.hidden = sizes;
+      glyph.hidden = !sizes;
+      if (!sizes) bar.style.setProperty("--draw-width", `${value}px`);
       control.setAttribute("aria-checked", String(value === now.width));
       control.disabled = !canEdit;
     });
+    showWidthLabels();
     undoButton.disabled = !canEdit || !history.canUndo;
     redoButton.disabled = !canEdit || !history.canRedo;
     deleteButton.disabled = !canEdit || selection.length === 0;
@@ -1289,6 +1416,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const layer = chosenIn(currentIndex().layers);
       chosen = layer === null ? null : { key: keyOf(layer), at: layer.path[0]! };
     }
+    showTyping();
     syncControls();
     showHandles();
     syncTree();
@@ -1341,12 +1469,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function undo(): void {
     if (!editable()) return;
+    finishText();
     cancelGesture();
     replay(history.undo(engine), "undo");
   }
 
   function redo(): void {
     if (!editable()) return;
+    finishText();
     cancelGesture();
     replay(history.redo(engine), "redo");
   }
@@ -1421,6 +1551,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (found !== null) break;
     }
     if (found === null) return false;
+    finishText();
     cancelGesture();
     select([found.key]);
     frameBounds(found.bounds);
@@ -1445,6 +1576,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function setReadOnly(readOnly: boolean): void {
     if (readOnly === locked) return;
+    // Un documento che non si scrive più non riceve il testo in corso.
+    if (readOnly) finishText(false);
     locked = readOnly;
     if (locked) cancelGesture();
     syncControls();
@@ -1454,6 +1587,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function setLevel(next: Level): void {
     if (next === level) return;
+    finishText();
     level = next;
     tools = toolsFor(level);
     if (!tools.some((spec) => spec.id === tool)) {
@@ -1473,7 +1607,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function setTool(id: ToolId): void {
     if (!tools.some((spec) => spec.id === id)) return;
-    if (id !== tool) cancelGesture();
+    if (id !== tool) {
+      finishText();
+      cancelGesture();
+    }
     tool = id;
     syncControls();
     announce(t("draw.announce.tool", { tool: t(toolSpec(id).label) }));
@@ -1488,12 +1625,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     style().color = code;
     syncControls();
+    // Un testo nuovo cambia colore mentre lo si scrive.
+    placeText();
   }
 
   function setWidth(value: number): void {
     if (!widthsNow().some((option) => option.value === value)) return;
     style().width = value;
     syncControls();
+    placeText();
   }
 
   /// «Altro colore…»: il codice, o il selettore del sistema. Un colore della
@@ -1586,7 +1726,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "eraser":
         return { ...base, kind: "erase", last: null, marked: new Map() };
       case "select":
-        return { ...base, kind: "select", from: null, end: null, mode: "pending", units: [], base: [], release: null, source: null };
+        return { ...base, kind: "select", from: null, end: null, mode: "pending", units: [], base: [], release: null, source: null, hit: null };
+      case "text":
+        // Il tocco che ha concluso un testo non ne apre un altro.
+        return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
     }
   };
 
@@ -1639,6 +1782,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     g.from = p;
     g.end = p;
     const hit = currentIndex().at(p, HIT_PX[g.pointer] / camera.scale);
+    g.hit = hit?.key ?? null;
     if (hit === null) {
       g.mode = "marquee";
       g.base = shift ? selection : [];
@@ -1685,8 +1829,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showHandles();
   };
 
-  const selectEnd = (g: SelectGesture): void => {
+  const selectEnd = (g: SelectGesture, time: number): void => {
     if (g.mode === "move") {
+      lastTap = null;
       const [dx, dy] = moveDelta(g);
       painter.setDraft(null);
       current = null;
@@ -1696,6 +1841,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     current = null;
     if (g.mode === "pending" && g.release !== null) select(selection.filter((key) => key !== g.release));
+    // Due tocchi sullo stesso testo lo aprono.
+    const tap = g.mode === "pending" && g.release === null && !shift && g.hit !== null && g.from !== null ? { key: g.hit, time, at: g.from } : null;
+    const previous = lastTap;
+    lastTap = tap;
+    if (tap !== null && previous !== null && previous.key === tap.key && tap.time - previous.time <= DOUBLE_TAP_MS) {
+      const apart = Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * camera.scale;
+      const unit = apart <= DOUBLE_TAP_PX[g.pointer] ? currentIndex().get(tap.key) : null;
+      if (unit !== null && unit.look !== null && reaches(level, "standard") && editable()) {
+        lastTap = null;
+        editText(unit);
+        return;
+      }
+    }
     showHandles();
     announceSelection();
   };
@@ -1795,6 +1953,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Il puntatore prende il posto della tastiera: il suo gesto finisce.
       cancelPress();
       followPointer(event);
+      // Il puntatore sul foglio conclude il testo che si scrive.
+      closedTyping = typing !== null;
+      finishText();
       // Dopo un tratto le scorciatoie valgono: il fuoco va al foglio.
       if (document.activeElement !== surface) surface.focus({ preventScroll: true });
     },
@@ -1849,6 +2010,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           for (const sample of samples) eraseAlong(g, toPoint(sample));
           showErased(g);
           break;
+        case "text":
+          g.from ??= toPoint(samples[0]!);
+          break;
         case "refused":
           break;
       }
@@ -1879,11 +2043,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           showShape(null, g.to.matrix);
           return;
         case "select":
-          selectEnd(g);
+          selectEnd(g, stroke.timeStamp);
           return;
         case "erase":
           current = null;
           finishErase(g);
+          return;
+        case "text":
+          current = null;
+          if (g.from !== null) openText(g.from, g.pointer);
           return;
         case "refused":
           current = null;
@@ -1900,6 +2068,247 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...(options.touch === undefined ? {} : { touch: options.touch }),
   };
   const pen = attachPenInput(surface, handlers, life);
+
+  // --- Il testo ------------------------------------------------------------------
+  //
+  // Il campo prende il posto del testo che si scrive: il testo che c'è si
+  // nasconde, e il campo ha il suo carattere, il suo corpo, il suo colore e
+  // la sua trasformazione, così le righe stanno dove resteranno. Si scrive
+  // quando il campo si chiude, in un passo di annulla solo.
+
+  /// Come si vede il testo che si scrive: quello che c'è, o uno nuovo col
+  /// colore e la dimensione dello strumento.
+  const lookOf = (now: Typing): TextLook =>
+    now.look ?? {
+      x: now.at[0],
+      y: now.at[1],
+      size: textStyle.width,
+      leading: textStyle.width * LINE_SPACING,
+      anchor: "start",
+      family: TEXT_FAMILY,
+      weight: null,
+      color: textStyle.color,
+    };
+
+  /// Il contesto con cui il browser misura un carattere; `null` dove non sa.
+  let probe: CanvasRenderingContext2D | null | undefined;
+  /// La linea di base sotto la metà della riga, in volte il corpo, per un
+  /// carattere scritto come `font-style`, `font-weight` e `font-family`.
+  const baselineOf = (style: string, weight: string, family: string): number => {
+    probe ??= document.createElement("canvas").getContext("2d");
+    if (probe === null) return BASELINE_EM;
+    probe.font = `${style} ${weight} 100px ${family}`;
+    const metrics = probe.measureText("");
+    const ascent = metrics.fontBoundingBoxAscent;
+    const descent = metrics.fontBoundingBoxDescent;
+    if (!Number.isFinite(ascent) || !Number.isFinite(descent) || ascent + descent <= 0) return BASELINE_EM;
+    return (ascent - descent) / 200;
+  };
+
+  /// Porta il campo sopra il testo che si scrive, sullo schermo: la prima
+  /// linea di base dove il file la mette, il punto d'ancoraggio al suo
+  /// posto, e la larghezza delle righe, più il cursore.
+  function placeText(): void {
+    const now = typing;
+    if (now === null) return;
+    const look = lookOf(now);
+    // Dalle coordinate del testo a quelle dello strato, che copre il foglio.
+    const view: Matrix = [camera.scale, 0, 0, camera.scale, camera.tx + surface.offsetLeft + surface.clientLeft, camera.ty + surface.offsetTop + surface.clientTop];
+    const m = compose(view, now.matrix);
+    const k = scaleOf(m);
+    const style = textInput.style;
+    // Un testo schiacciato su una linea non ha un campo da mostrare.
+    style.visibility = k > 0 && Number.isFinite(k) ? "" : "hidden";
+    if (style.visibility === "hidden") return;
+    const size = look.size * k;
+    const leading = look.leading * k;
+    style.fontFamily = look.family ?? "";
+    style.fontWeight = look.weight ?? "";
+    style.fontSize = `${size}px`;
+    style.lineHeight = `${leading}px`;
+    // Un colore che il campo non sa mostrare, come un gradiente, lascia il
+    // nero, il colore di un testo che non ne scrive uno.
+    style.color = "#000000";
+    if (look.color !== null) style.color = look.color;
+    style.textAlign = look.anchor === "middle" ? "center" : look.anchor === "end" ? "right" : "left";
+    const rows = textInput.value.split("\n");
+    style.height = `${rows.length * leading}px`;
+    style.width = "0px";
+    const longest = Math.max(...rows.map((row) => [...row].length));
+    const width = Math.ceil(textInput.scrollWidth || longest * CHAR_EM * size) + CARET_PX;
+    style.width = `${width}px`;
+    const computed = getComputedStyle(textInput);
+    const baseline = baselineOf(computed.fontStyle, computed.fontWeight, computed.fontFamily);
+    const left = look.x * k - (look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0);
+    const top = look.y * k - leading / 2 - baseline * size;
+    style.transform = `matrix(${m[0] / k}, ${m[1] / k}, ${m[2] / k}, ${m[3] / k}, ${m[4]}, ${m[5]}) translate(${left}px, ${top}px)`;
+    textInput.scrollLeft = 0;
+    textInput.scrollTop = 0;
+  }
+
+  /// Il testo che si cambia resta nascosto sotto il campo anche quando il
+  /// painter ridisegna, e il campo lo segue.
+  function showTyping(): void {
+    if (typing === null) return;
+    const unit = typing.key === null ? null : currentIndex().get(typing.key);
+    if (unit !== null) painter.setDraft({ hidden: new Set(unit.paints) });
+    placeText();
+  }
+
+  /// Apre il campo con `text`, e il fuoco ci va. Il testo di prima si
+  /// conclude.
+  const startTyping = (next: Typing, text: string): void => {
+    finishText();
+    cancelGesture();
+    typing = next;
+    textInput.value = text;
+    labelText();
+    textLayer.hidden = false;
+    cursorMark.hidden = true;
+    select([]);
+    showTyping();
+    textInput.focus({ preventScroll: true });
+    textInput.setSelectionRange(text.length, text.length);
+  };
+
+  /// Apre il campo su `unit`, un testo che c'è.
+  const editText = (unit: Unit): void => {
+    const look = unit.look;
+    const model = engine.model;
+    if (look === null || model === null || !editable() || !reaches(level, "standard")) return;
+    const text = editableText(nodeOf(model, unit).details?.lines ?? []);
+    startTyping({ key: unit.key, before: text, look, at: [look.x, look.y], matrix: unit.matrix }, text);
+  };
+
+  /// F2, o «Modifica il testo»: il testo scelto, se è solo.
+  function editSelectedText(): void {
+    if (!editable() || !reaches(level, "standard")) return;
+    const units = selectedUnits();
+    if (units.length !== 1 || units[0]!.look === null) {
+      announce(t("draw.text.none"));
+      return;
+    }
+    editText(units[0]!);
+  }
+
+  /// Lo strumento Testo in `p`: cambia il testo che c'è sotto, o ne comincia
+  /// uno nuovo con la prima riga a metà su `p`, come il cursore di testo.
+  /// Con l'aggancio la linea di base va sulla griglia.
+  const openText = (p: Point, pointer: InkPointerType): void => {
+    if (!editable() || !reaches(level, "standard")) return;
+    const hit = currentIndex().at(p, HIT_PX[pointer] / camera.scale);
+    if (hit !== null && hit.look !== null) {
+      editText(hit);
+      return;
+    }
+    const to = target(newIds());
+    if (to === null) return;
+    const local = apply(to.inverse, p);
+    const below = baselineOf("normal", "400", TEXT_FAMILY) * textStyle.width;
+    const base = snapped(apply(to.matrix, [local[0], local[1] + below]));
+    startTyping({ key: null, before: "", look: null, at: apply(to.inverse, base), matrix: to.matrix }, "");
+  };
+
+  /// Chiude il campo; con `write` scrive ciò che è cambiato, in un passo di
+  /// annulla. Un testo nuovo entra nel livello che riceve, uno che c'è
+  /// cambia le sue righe, e uno svuotato se ne va.
+  function finishText(write = true): void {
+    const now = typing;
+    if (now === null) return;
+    typing = null;
+    const value = textInput.value;
+    // Il fuoco torna al foglio prima che il campo sparisca: altrimenti
+    // andrebbe alla pagina, e i tasti del disegno non varrebbero più.
+    if (document.activeElement === textInput) surface.focus({ preventScroll: true });
+    textLayer.hidden = true;
+    textInput.value = "";
+    painter.setDraft(null);
+    const unit = now.key === null ? null : currentIndex().get(now.key);
+    const lines = textLines(value);
+    if (!write || value === now.before || !editable() || (now.key === null && lines.length === 0)) {
+      if (unit !== null) select([unit.key]);
+      else syncControls();
+      return;
+    }
+    if (now.key === null) {
+      const ids = newIds();
+      const to = target(ids);
+      if (to === null) {
+        syncControls();
+        return;
+      }
+      const id = ids.next("object");
+      const elem = textElem(id, apply(to.inverse, apply(now.matrix, now.at)), lines, { color: textStyle.color, size: textStyle.width });
+      const ops: Op[] = [...to.prelude, addOp(to, elem)];
+      const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
+      if (page !== null) ops.push({ op: "page", viewBox: page });
+      if (commit("draw.action.text", asGesture(ops)) === null) return;
+      select([id]);
+      announce(`${t("draw.added.text")} ${objects()}`);
+      return;
+    }
+    const model = engine.model;
+    if (unit === null || model === null) {
+      announce(t("draw.rejected", { reason: t("draw.reason.missing_target") }));
+      syncControls();
+      return;
+    }
+    if (lines.length === 0) {
+      if (commit("draw.action.delete", asGesture(removeOps([unit]))) === null) return;
+      select([]);
+      announce(`${plural(1, "draw.deleted.one", "draw.deleted.other")} ${objects()}`);
+      return;
+    }
+    const node = nodeOf(model, unit);
+    const old = node.details?.lines ?? [];
+    if (old.length === lines.length && old.every((line, i) => line === lines[i])) {
+      select([unit.key]);
+      return;
+    }
+    const plan = new Plan(model, newIds());
+    const id = plan.idOf(node);
+    plan.ops.push({ op: "text", id, lines });
+    const ops: Op[] = [...plan.finish([id]).ops];
+    const page = pageFor(scene.root.page, linesBounds(unit.look ?? now.look!, lines, unit.matrix));
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    if (commit("draw.action.text_edit", asGesture(ops)) === null) return;
+    select([id]);
+    announce(t("draw.text.edited"));
+  }
+
+  life.listen(textInput, "input", () => placeText());
+  life.listen(textInput, "keydown", (event) => {
+    if (event.isComposing) return;
+    if (event.key === "Escape" || event.key === "Tab" || (event.key === "Enter" && (event.ctrlKey || event.metaKey))) {
+      event.preventDefault();
+      finishText();
+    }
+  });
+  // Il fuoco che va altrove conclude il testo. Una finestra dell'editor, come
+  // «Altro colore…», lo ridà al campo quando si chiude, e così la finestra
+  // del browser quando ci si torna.
+  life.listen(textInput, "blur", () => {
+    if (asking || !document.hasFocus()) return;
+    finishText();
+  });
+  // Lo strato non scorre: il campo resta sopra il suo testo.
+  life.listen(textLayer, "scroll", () => {
+    textLayer.scrollTop = 0;
+    textLayer.scrollLeft = 0;
+  });
+  // Un carattere che arriva dopo cambia le misure del campo.
+  if (typeof document.fonts?.addEventListener === "function") life.listen(document.fonts, "loadingdone", () => placeText());
+  // Il tocco che apre un testo col dito manda dopo, per compatibilità, un
+  // `mousedown` che porterebbe il fuoco al foglio.
+  life.listen(surface, "mousedown", (event) => {
+    if (typing !== null) event.preventDefault();
+  });
+  // Un pulsante della barra non toglie il fuoco al campo: il colore e la
+  // dimensione scelti mentre si scrive valgono per il testo nuovo, e i
+  // pulsanti che cambiano altro lo concludono da sé.
+  life.listen(toolbar, "mousedown", (event) => {
+    if (typing !== null && (event.target as Element | null)?.closest("button")) event.preventDefault();
+  });
 
   // --- Il cursore del foglio ----------------------------------------------------
   //
@@ -1988,6 +2397,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const press = (timeStamp: number): void => {
     if (pressed !== null || !editable()) return;
     cancelGesture();
+    closedTyping = false;
     const at = cursorPoint();
     const start: StrokeStart = { id: --keyStrokes, pointerType: "mouse", pressure: false, timeStamp, continued: false };
     const first: InkSample = { x: at[0], y: at[1], t: 0 };
@@ -2081,27 +2491,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(surface, "pointercancel", onPointerEnd);
   life.listen(surface, "lostpointercapture", onPointerEnd);
 
-  life.listen(
-    surface,
-    "wheel",
-    (event) => {
-      event.preventDefault();
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? surface.clientHeight : 1;
-      const dx = event.deltaX * unit;
-      const dy = event.deltaY * unit;
-      if (event.ctrlKey || event.metaKey) {
-        // Il pizzico del trackpad arriva così, a passi piccoli; la rotella
-        // del mouse a passi da 100: il limite tiene lo scatto entro il 22%.
-        const step = Math.max(-50, Math.min(50, dy));
-        setCamera(zoomAtPoint(camera, Math.exp(-step * 0.005), localPoint(event.clientX, event.clientY), DRAW_SCALE_LIMITS));
-      } else if (event.shiftKey && dx === 0) {
-        setCamera({ ...camera, tx: camera.tx - dy });
-      } else {
-        setCamera({ ...camera, tx: camera.tx - dx, ty: camera.ty - dy });
-      }
-    },
-    { passive: false },
-  );
+  /// La rotella e il pizzico del trackpad, sul foglio e sul campo del testo.
+  const onWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? surface.clientHeight : 1;
+    const dx = event.deltaX * unit;
+    const dy = event.deltaY * unit;
+    if (event.ctrlKey || event.metaKey) {
+      // Il pizzico del trackpad arriva così, a passi piccoli; la rotella del
+      // mouse a passi da 100: il limite tiene lo scatto entro il 22%.
+      const step = Math.max(-50, Math.min(50, dy));
+      setCamera(zoomAtPoint(camera, Math.exp(-step * 0.005), localPoint(event.clientX, event.clientY), DRAW_SCALE_LIMITS));
+    } else if (event.shiftKey && dx === 0) {
+      setCamera({ ...camera, tx: camera.tx - dy });
+    } else {
+      setCamera({ ...camera, tx: camera.tx - dx, ty: camera.ty - dy });
+    }
+  };
+  life.listen(surface, "wheel", onWheel, { passive: false });
+  life.listen(textLayer, "wheel", onWheel, { passive: false });
 
   // --- Tastiera --------------------------------------------------------------
 
@@ -2767,6 +3175,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il fuoco torna dov'era, come da ogni finestra.
   async function properties(): Promise<void> {
     if (asking || !editable()) return;
+    finishText();
     asking = true;
     cancelGesture();
     try {
@@ -2881,6 +3290,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti del testo, dal livello Standard.
+  const textKeys = (): KeyGroup[] =>
+    reaches(level, "standard")
+      ? [
+          {
+            title: t("draw.keys.text"),
+            rows: [
+              ["Space", t("draw.keys.text.write")],
+              ["F2", t("draw.keys.text.edit")],
+              ["Enter", t("draw.keys.text.newline")],
+              ["Escape Tab Mod-Enter", t("draw.keys.text.finish")],
+            ],
+          },
+        ]
+      : [];
+
   /// L'elenco dei tasti, nei gruppi in cui si usano.
   const keyGroups = (): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: tools.map((spec) => [spec.shortcut, t(spec.label)] as const) },
@@ -2906,6 +3331,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ],
     },
     ...arrangeKeys(),
+    ...textKeys(),
     ...gridKeys(),
     {
       title: t("draw.view"),
@@ -3013,6 +3439,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.image.unreadable"));
       return;
     }
+    finishText();
     asking = true;
     cancelGesture();
     const loaded = loads;
@@ -3121,12 +3548,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     event.preventDefault();
     void addImages(files, cursor);
   });
-  life.listen(surface, "dragover", (event) => {
+  const onDragOver = (event: DragEvent): void => {
     if (!editable() || !carriesFiles(event.dataTransfer)) return;
     event.preventDefault();
     event.dataTransfer!.dropEffect = "copy";
-  });
-  life.listen(surface, "drop", (event) => {
+  };
+  const onDrop = (event: DragEvent): void => {
     if (!carriesFiles(event.dataTransfer)) return;
     // Un file lasciato qui non apre una pagina al posto della shell.
     event.preventDefault();
@@ -3138,7 +3565,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const world = screenToWorld(camera, localPoint(event.clientX, event.clientY));
     void addImages(files, [world.x, world.y]);
-  });
+  };
+  // Anche sul campo del testo, che sta sopra il foglio: un'immagine lasciata
+  // lì conclude il testo ed entra nel disegno.
+  for (const target of [surface, textLayer]) {
+    life.listen(target, "dragover", onDragOver);
+    life.listen(target, "drop", onDrop);
+  }
 
   /// Maiusc, Ctrl o ⌘ premuti o lasciati a metà gesto: la forma e lo
   /// spostamento si ridisegnano subito.
@@ -3153,7 +3586,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keyup", onModifiers);
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
-    if (event.defaultPrevented || event.target === titleInput) return;
+    if (event.defaultPrevented || event.target === titleInput || event.target === textInput) return;
     const onSurface = event.target === surface;
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
@@ -3216,8 +3649,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } else if (onSurface && event.key === " ") {
       if (event.repeat) {
         // Tenuto giù: un tasto, un passo.
-      } else if (pressed === null) press(event.timeStamp);
+      } else if (pressed === null && tool === "text") openText(cursorPoint(), "mouse");
+      else if (pressed === null) press(event.timeStamp);
       else release();
+    } else if (onSurface && event.key === "F2" && reaches(level, "standard")) {
+      if (pressed !== null) return;
+      editSelectedText();
     } else if (onSurface && event.key === "Enter") {
       if (pressed !== null) release();
       else void properties();
@@ -3314,6 +3751,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (disposed) return;
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
       cancelGesture();
+      // Il testo in corso era del documento di prima.
+      finishText(false);
       engine = next;
       loads++;
       history.clear();

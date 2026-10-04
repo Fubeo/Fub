@@ -7,7 +7,7 @@ import { PF1_DEFAULTS } from "../ink/brush";
 import { quantizeInk, type InkSample } from "../ink/sample";
 import { doc } from "../scene/test-support";
 import { strokeElem } from "./edit";
-import { elemBounds } from "./hit";
+import { elemBounds, linesBounds } from "./hit";
 import { LAYER, open } from "./test-support";
 
 const SHAPES = doc(
@@ -128,5 +128,40 @@ describe("il riquadro di un elemento nuovo", () => {
     const elem = { tag: "rect", attrs: { id: "n", x: "10", y: "10", width: "20", height: "20", fill: "none", stroke: "#000000", "stroke-width": "4" } };
     expect(elemBounds(elem, [1, 0, 0, 1, 0, 0])).toEqual({ min: [8, 8], max: [32, 32] });
     expect(elemBounds(elem, [2, 0, 0, 2, 5, 0])).toEqual({ min: [21, 16], max: [69, 64] });
+  });
+});
+
+describe("come si vede un testo", () => {
+  const TEXTS = doc(
+    `${LAYER}<text id="t" x="10" y="40" fill="#0072b2" font-family="Inter, sans-serif" font-size="20"><tspan x="10" dy="0">Ciao</tspan><tspan x="10" dy="30">a te</tspan></text>`
+      + '<g id="g"><text id="dentro" x="0" y="0"><tspan x="0" dy="0">no</tspan></text></g></g>'
+      + '<g id="l2" fub:layer="Stile" font-size="12" font-weight="700" fill="#d55e00" text-anchor="middle">'
+      + '<text id="n" x="50" y="80" transform="rotate(90 50 80)"><tspan x="50" dy="0">x</tspan></text></g>',
+  );
+
+  it("sa dove comincia la prima riga, il corpo, il passo e lo stile che eredita", () => {
+    const { index } = open(TEXTS);
+    expect(index.get("t")?.look).toEqual({ x: 10, y: 40, size: 20, leading: 30, anchor: "start", family: "Inter, sans-serif", weight: null, color: "#0072b2" });
+    // Con una riga sola, il passo è quello che l'operazione `text` darà alla
+    // seconda.
+    expect(index.get("n")?.look).toEqual({ x: 50, y: 80, size: 12, leading: 15, anchor: "middle", family: null, weight: "700", color: "#d55e00" });
+    // Un gruppo si sceglie intero: il testo dentro non si cambia sul posto.
+    expect(index.get("g")?.look).toBeNull();
+  });
+
+  it("le righe che si scriveranno hanno il riquadro che l'indice darà loro", () => {
+    const opened = open(TEXTS);
+    const lines = ["Ciao", "a te", "e a voi"];
+    const expected = ["t", "n"].map((id) => {
+      const unit = opened.index.get(id)!;
+      return linesBounds(unit.look!, lines, unit.matrix);
+    });
+    for (const id of ["t", "n"]) expect(opened.engine.apply({ op: "text", id, lines }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect([index.get("t")?.bounds, index.get("n")?.bounds]).toEqual(expected);
+    // Il testo girato va giù, come la sua prima riga.
+    expect(expected[1]!.max[0]).toBeLessThanOrEqual(50 + 12 * 0.8 + 1e-9);
+    const t = opened.index.get("t")!;
+    expect(linesBounds(t.look!, [" ", ""], t.matrix)).toBeNull();
   });
 });
