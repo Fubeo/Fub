@@ -12,6 +12,10 @@
 //! diagnostica di §12. La sorgente resta autorevole: ogni byte che non sta in
 //! una voce è spazio fra due voci, e la scena non ne possiede una copia.
 //!
+//! [`read_annotations`] legge allo stesso modo un `.fubann`, le annotazioni
+//! di un PDF ([formato](../../../docs/reference/annotation-format.md)): la
+//! scena, e in più il documento annotato, le pagine e le note.
+//!
 //! [`Ink`] e [`Brush`] sono il codec di `fub:ink` e la lettura di `fub:brush`
 //! (§5): la scena li usa per dire se un tratto si ridisegna, e chi scrive un
 //! tratto li usa per quantizzarlo.
@@ -25,6 +29,7 @@ use std::fmt;
 use serde::Serialize;
 
 mod analysis;
+mod annotation;
 mod brush;
 mod classify;
 mod diagnostics;
@@ -37,6 +42,7 @@ mod xml;
 pub use analysis::{
     BBox, Counts, Excerpt, Index, InkTotals, Reference, Summary, MAX_IMAGE_BYTES, MIN_CONTRAST,
 };
+pub use annotation::{read_annotations, Annotated, Annotations, Note, Page};
 pub use brush::{Brush, BrushError, PF1, PF1_KEYS};
 pub use classify::{ElementItem, ForeignItem, Item, Layer, Role, RootItem, Stroke, Tags, Tool};
 pub use diagnostics::{Code, Diagnostic, Severity};
@@ -169,6 +175,16 @@ impl std::error::Error for ReadError {}
 /// radice che non è `title` o `desc`: abbastanza per titolo e riepilogo, con
 /// `truncated: true`.
 pub fn read(source: &str) -> Result<Scene, ReadError> {
+    read_then(source, |_, _| ()).map(|(scene, ())| scene)
+}
+
+/// La lettura di [`read`], e poi `more` sullo stesso documento XML e sulla
+/// stessa mappa degli offset: chi legge qualcosa in più della scena, come le
+/// annotazioni di un PDF, non legge il file due volte.
+pub(crate) fn read_then<T>(
+    source: &str,
+    more: impl FnOnce(&xml::Document<'_>, &Utf16Map<'_>) -> T,
+) -> Result<(Scene, T), ReadError> {
     let truncated = source.len() > MAX_EDIT_BYTES;
     let doc = xml::parse(source, truncated).map_err(|e| ReadError::Malformed {
         offset: e.offset,
@@ -256,10 +272,11 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
         (classified.items, summary)
     };
     let index = analysis::index(&doc, &map, &mut diagnostics);
+    let more = more(&doc, &map);
 
     read_only.sort();
     diagnostics::sort(&mut diagnostics);
-    Ok(Scene {
+    let scene = Scene {
         status,
         read_only,
         version,
@@ -271,7 +288,8 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
         index,
         summary,
         diagnostics,
-    })
+    };
+    Ok((scene, more))
 }
 
 /// Segnala con S003 ogni elemento che ripete l'id di uno precedente, in
