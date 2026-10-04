@@ -1260,6 +1260,7 @@ html, body, #app {
   cursor: text;
 }
 .draw-surface[data-tool="select"],
+.draw-surface[data-tool="nodes"],
 .draw-editor[data-readonly] .draw-surface {
   cursor: default;
 }

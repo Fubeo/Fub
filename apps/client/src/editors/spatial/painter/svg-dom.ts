@@ -19,7 +19,8 @@
 //   remoto, mostrano il segnaposto.
 // - **Anteprima degli strumenti:** mentre si trascina una selezione o si
 //   passa la gomma, `setDraft` cambia il `transform` dei nodi vivi o li
-//   sbiadisce, senza ricrearli e senza toccare la scena; l'operazione scritta
+//   sbiadisce, e cambia il `d` di un tracciato i cui nodi si spostano, senza
+//   ricrearli e senza toccare la scena; l'operazione scritta
 //   alla fine porta la scena nuova. Un testo che si scrive sul posto si
 //   nasconde allo stesso modo.
 //
@@ -67,6 +68,9 @@ export interface PainterDraft {
   /// Il `transform` da mostrare al posto di quello dipinto; `null` lo toglie.
   /// È il valore che l'operazione scriverà, così l'anteprima è il risultato.
   readonly transforms?: ReadonlyMap<PaintNode, string | null>;
+  /// Il `d` da mostrare al posto di quello dipinto: un tracciato i cui nodi
+  /// si stanno spostando. Anche questo è il valore che si scriverà.
+  readonly paths?: ReadonlyMap<PaintNode, string>;
   /// I nodi che la gomma sta per togliere: si vedono sbiaditi.
   readonly faded?: ReadonlySet<PaintNode>;
   /// I nodi che non si vedono: un testo mentre lo si scrive sul posto, che
@@ -348,9 +352,11 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   /// Riporta un nodo a ciò che la sua scena dipinge.
   const restore = (record: NodeRecord): void => {
-    const painted = record.paint.attrs.find(([name]) => name === "transform");
-    if (painted === undefined) record.el.removeAttribute("transform");
-    else if (record.el.getAttribute("transform") !== painted[1]) record.el.setAttribute("transform", painted[1]);
+    for (const name of ["transform", "d"]) {
+      const painted = record.paint.attrs.find(([key]) => key === name);
+      if (painted === undefined) record.el.removeAttribute(name);
+      else if (record.el.getAttribute(name) !== painted[1]) record.el.setAttribute(name, painted[1]);
+    }
     record.el.style.removeProperty("opacity");
     record.el.style.removeProperty("visibility");
   };
@@ -367,6 +373,12 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       for (const record of recordsOf(paint)) {
         if (transform === null) record.el.removeAttribute("transform");
         else record.el.setAttribute("transform", transform);
+        touched.add(record);
+      }
+    }
+    for (const [paint, d] of draft.paths ?? []) {
+      for (const record of recordsOf(paint)) {
+        record.el.setAttribute("d", d);
         touched.add(record);
       }
     }

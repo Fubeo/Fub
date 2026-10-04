@@ -61,6 +61,13 @@
 //   (`text.ts`). Lo stesso campo cambia un testo che c'è: col tocco dello
 //   strumento, col doppio tocco della selezione, o con F2. Il testo si scrive
 //   quando il campo si chiude, in un passo di annulla solo.
+// - **Nodi.** Dal livello Esperto lo strumento Nodi modifica un tracciato
+//   dell'oggetto scelto (`nodes.ts`): si trascinano un nodo coi suoi
+//   compagni scelti, una maniglia o un punto di un segmento, e un riquadro
+//   sceglie più nodi. Una barra in cima al foglio, al posto di quella della
+//   selezione, aggiunge, elimina, cambia tipo, spezza e unisce, coi tasti di
+//   Inkscape; Tab passa di nodo in nodo e le frecce spostano quelli scelti.
+//   Ogni modifica riscrive il `d` intero, in un passo di annulla.
 // - **Collegamenti.** Dal livello Standard Ctrl+K collega gli oggetti scelti
 //   a una nota del vault, che sceglie chi monta l'editor, o porta a un'altra
 //   nota il collegamento scelto; Ctrl+Maiusc+K lo toglie (`arrange.ts`). A
@@ -88,9 +95,9 @@ import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
 import { formatNumber } from "../number";
 import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInputOptions, type StrokeStart } from "../pen/pen-input";
 import type { TouchPolicy } from "../pen/roles";
-import { BoundsBuilder, type Bounds } from "../scene/geometry";
-import { apply, compose, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren } from "../scene/model";
+import { BoundsBuilder, parsePath, type Bounds } from "../scene/geometry";
+import { apply, compose, invert, type Matrix, type Point } from "../scene/matrix";
+import { elementChildren, pathOf, tagName, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
@@ -98,9 +105,9 @@ import type { Applied, SceneEngine } from "../scene/engine";
 import type { Tool } from "../scene/analysis";
 import type { Item } from "../scene/classify";
 import type { Op, Reason } from "../scene/ops";
-import type { Elem } from "../scene/serialize";
+import { pathData, type Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
-import { createOverlay, type OverlayHandle } from "../painter/overlay";
+import { createOverlay, type NodeShape, type OverlayHandle } from "../painter/overlay";
 import { PaintBuilder, type PaintNode, type PaintScene } from "../painter/paint";
 import { createSvgPainter, type PainterOptions } from "../painter/svg-dom";
 import {
@@ -134,6 +141,7 @@ import {
   linkTarget,
   nodeOf,
   orderOps,
+  plainAttributes,
   Plan,
   relinkOps,
   ungroupOps,
@@ -148,6 +156,36 @@ import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, typ
 import { boundsAfter, numericMatrix, numericOps } from "./transform";
 import { applyOps } from "./apply";
 import { pathOps } from "./topath";
+import {
+  bend,
+  breakNodes,
+  deleteNodes,
+  handleAt,
+  handleNode,
+  handlePoint,
+  handlesFor,
+  insertNode,
+  insertNodes,
+  joinNodes,
+  kindOf,
+  linkAt,
+  moveHandle,
+  moveNodes,
+  nodeAt,
+  nodeKey,
+  nodesWithin,
+  parseKey,
+  readNodes,
+  samePlace,
+  setKind,
+  setLinks,
+  writeNodes,
+  type HandleRef,
+  type KindOf,
+  type NodeKey,
+  type NodeKind,
+  type Subpath,
+} from "./nodes";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -406,6 +444,14 @@ const INK_KEY = "pen";
 const DOUBLE_TAP_MS = 500;
 const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 6, touch: 16 };
 
+/// Quanto lontano da un nodo o da una maniglia un tocco li prende ancora, in
+/// pixel: un bersaglio largo almeno 24 pixel (WCAG 2.5.8), di più per il
+/// dito. Fra due vicini vince il più vicino.
+const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
+
+/// La forma di un nodo, per tipo, come la disegna lo strato sopra.
+const NODE_SHAPES: Readonly<Record<NodeKind, NodeShape>> = { corner: "diamond", smooth: "square", symmetric: "circle" };
+
 /// Dove sta la linea di base nella riga di un campo di testo, in volte il
 /// corpo, sotto la metà della riga: metà della differenza fra la parte sopra
 /// e quella sotto del carattere. Il browser la misura; dove non sa, vale
@@ -453,6 +499,16 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-transform": ["M4 10h10v10H4z", "M10 4a10 10 0 0 1 10 10", "M16.5 11.5L20 14l2.5-3.5"],
   "draw-apply-transform": ["M2 17L6 5h9l-4 12z", "M15 16.5l2.5 2.5L22 14"],
   "draw-to-path": ["M5 19C5 11 11 5 19 5", "M3 17h4v4H3z", "M17 3h4v4h-4z"],
+  "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
+  "draw-node-add": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M12 3v6", "M9 6h6"],
+  "draw-node-delete": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M9 6h6"],
+  "draw-node-corner": ["M3 20l9-13 9 13", "M12 4l3 3-3 3-3-3z"],
+  "draw-node-smooth": ["M3 20C3 13 7 8 12 8s9 5 9 12", "M10.5 6.5h3v3h-3z", "M7 8h3.5", "M13.5 8H20"],
+  "draw-node-symmetric": ["M3 20C3 13 7 8 12 8s9 5 9 12", "M10.5 8a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M5 8h5.5", "M13.5 8H19"],
+  "draw-segment-line": ["M3 17h4v4H3z", "M17 3h4v4h-4z", "M7 17L17 7"],
+  "draw-segment-curve": ["M3 17h4v4H3z", "M17 3h4v4h-4z", "M7 19c7 0 12-5 12-12"],
+  "draw-node-break": ["M2 12h6", "M16 12h6", "M8 10h3v4H8z", "M13 10h3v4h-3z"],
+  "draw-node-join": ["M2 12h4", "M18 12h4", "M10.5 10.5h3v3h-3z", "M6 9l3 3-3 3", "M18 9l-3 3 3 3"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -470,7 +526,7 @@ interface LinkMark {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | EraseGesture | TextGesture | RefusedGesture;
+type Gesture = InkGesture | ShapeGesture | SelectGesture | NodesGesture | EraseGesture | TextGesture | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -521,6 +577,34 @@ interface SelectGesture extends GestureBase {
   hit: string | null;
 }
 
+/// Che cosa ha preso il primo punto di un gesto dei nodi: un nodo, una
+/// maniglia, un punto di un segmento, il vuoto per un riquadro, o niente da
+/// trascinare. `origin` è dov'era il punto preso, nella scena.
+type NodeGrab =
+  | { readonly kind: "node"; readonly key: NodeKey; readonly origin: Point; readonly toggle: boolean; readonly only: boolean }
+  | { readonly kind: "handle"; readonly handle: HandleRef; readonly origin: Point }
+  | { readonly kind: "segment"; readonly sub: number; readonly link: number; readonly t: number }
+  /// Un riquadro sceglie nodi, o oggetti se non c'è un tracciato da
+  /// modificare; con Maiusc aggiunge a quelli scelti.
+  | { readonly kind: "marquee"; readonly objects: boolean; readonly additive: boolean }
+  | { readonly kind: "none" };
+
+/// Un gesto dello strumento Nodi.
+interface NodesGesture extends GestureBase {
+  readonly kind: "nodes";
+  from: Point | null;
+  end: Point | null;
+  grab: NodeGrab | null;
+  /// Oltre la soglia del trascinamento.
+  dragging: boolean;
+  /// I nodi scelti e la selezione di prima, che un gesto annullato
+  /// ripristina; per il riquadro, ciò che Maiusc conserva.
+  readonly nodes: ReadonlySet<NodeKey>;
+  readonly selection: readonly string[];
+  /// I nodi come li lascia il trascinamento, da scrivere quando si alza.
+  draft: readonly Subpath[] | null;
+}
+
 interface EraseGesture extends GestureBase {
   readonly kind: "erase";
   last: Point | null;
@@ -548,6 +632,23 @@ interface Typing {
   readonly matrix: Matrix;
 }
 
+/// Il tracciato di cui lo strumento Nodi modifica i nodi: uno solo, dentro
+/// l'oggetto scelto o l'oggetto stesso.
+interface Editing {
+  readonly unit: Unit;
+  /// L'elemento `path`, e il suo percorso nel modello.
+  readonly leaf: LeafNode;
+  readonly path: readonly number[];
+  /// Il `d` letto, e i nodi che ne vengono.
+  readonly d: string;
+  readonly subs: readonly Subpath[];
+  /// Dalle coordinate del tracciato a quelle della scena, e ritorno.
+  readonly matrix: Matrix;
+  readonly inverse: Matrix;
+  /// Ciò che il painter disegna per lui.
+  readonly paints: readonly PaintNode[];
+}
+
 /// Un gesto che non scrive: il documento non si modifica, o nessun livello
 /// lo riceve.
 interface RefusedGesture extends GestureBase {
@@ -573,6 +674,63 @@ function translated(bounds: Bounds | null, dx: number, dy: number): Bounds | nul
 function toLocal(sample: InkSample, inverse: Matrix): InkSample {
   const [x, y] = apply(inverse, [sample.x, sample.y]);
   return { ...sample, x, y };
+}
+
+function samePath(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((at, i) => at === b[i]);
+}
+
+/// Vero se `a` e `b` hanno gli stessi sottotracciati con gli stessi nodi:
+/// le chiavi dei nodi valgono per tutti e due.
+function sameNodes(a: readonly Subpath[], b: readonly Subpath[]): boolean {
+  return a.length === b.length && a.every((sub, s) => sub.nodes.length === b[s]!.nodes.length && sub.closed === b[s]!.closed);
+}
+
+/// Vero se il nodo `at` ha un segmento da tutti e due i lati: solo lui ha un
+/// tipo, e si spezza.
+function innerNode(sub: Subpath, at: number): boolean {
+  return sub.closed ? sub.nodes.length > 1 : at > 0 && at < sub.nodes.length - 1;
+}
+
+/// I nodi di `subs`, in ordine.
+function allNodes(subs: readonly Subpath[]): NodeKey[] {
+  return subs.flatMap((sub, s) => sub.nodes.map((_, at) => nodeKey(s, at)));
+}
+
+/// I nodi di `keys` che `subs` ha.
+function presentNodes(subs: readonly Subpath[], keys: Iterable<NodeKey>): NodeKey[] {
+  return [...keys].filter((key) => {
+    const [s, at] = parseKey(key);
+    return subs[s]?.nodes[at] !== undefined;
+  });
+}
+
+/// I tipi dati ai nodi, portati dove una modifica porta i nodi.
+function remapped(kinds: ReadonlyMap<NodeKey, NodeKind>, moved: ReadonlyMap<NodeKey, NodeKey>): Map<NodeKey, NodeKind> {
+  const out = new Map<NodeKey, NodeKind>();
+  for (const [key, kind] of kinds) {
+    const to = moved.get(key);
+    if (to !== undefined) out.set(to, kind);
+  }
+  return out;
+}
+
+/// I segmenti fra due nodi scelti: se ce n'è uno, se uno non è una linea, e
+/// se uno non è una cubica.
+function linksBetween(subs: readonly Subpath[], selected: ReadonlySet<NodeKey>): { readonly any: boolean; readonly toLine: boolean; readonly toCurve: boolean } {
+  let any = false;
+  let toLine = false;
+  let toCurve = false;
+  subs.forEach((sub, s) => {
+    sub.links.forEach((link, i) => {
+      const end = (i + 1) % sub.nodes.length;
+      if (end === i || !selected.has(nodeKey(s, i)) || !selected.has(nodeKey(s, end))) return;
+      any = true;
+      if (link.kind !== "line") toLine = true;
+      if (link.kind !== "cubic") toCurve = true;
+    });
+  });
+  return { any, toLine, toCurve };
 }
 
 function sameDestination(a: Destination, b: Destination): boolean {
@@ -697,6 +855,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let closedTyping = false;
   /// L'ultimo tocco della selezione su un oggetto, per il doppio tocco.
   let lastTap: { readonly key: string; readonly time: number; readonly at: Point } | null = null;
+  /// Lo strumento Nodi: il tracciato che modifica, o perché l'oggetto
+  /// scelto non ne ha uno; i nodi scelti; il tipo che chi modifica ha dato
+  /// a un nodo, che il file non scrive e che vale finché il tracciato ha gli
+  /// stessi nodi; e la forma toccata per ultima dentro un gruppo, col suo
+  /// percorso nel modello.
+  let editing: Editing | null = null;
+  let noEditing: DrawKey | null = null;
+  let nodeSelection: ReadonlySet<NodeKey> = new Set();
+  let nodeKinds: ReadonlyMap<NodeKey, NodeKind> = new Map();
+  let preferredShape: readonly number[] | null = null;
+  /// Ciò con cui il tracciato è stato trovato: cambiato, lo si ritrova.
+  let resolvedFor: {
+    readonly index: SceneIndex;
+    readonly keys: string;
+    readonly tool: ToolId;
+    readonly level: Level;
+    readonly editable: boolean;
+    readonly preferred: readonly number[] | null;
+  } | null = null;
+  /// L'ultimo tocco su un segmento, per il doppio tocco che aggiunge un nodo.
+  let lastSegmentTap: { readonly sub: number; readonly link: number; readonly time: number; readonly at: Point } | null = null;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -1004,12 +1183,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
-  // Esc nella barra torna al foglio, con la selezione com'era.
-  life.listen(arrangeBar, "keydown", (event) => {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    surface.focus({ preventScroll: true });
-  });
+  // I comandi dei nodi, dal livello Esperto: con lo strumento Nodi e un
+  // tracciato da modificare prendono il posto di quelli della selezione,
+  // con le scorciatoie di Inkscape.
+  const nodesBar = document.createElement("div");
+  nodesBar.className = "draw-arrange";
+  nodesBar.setAttribute("role", "toolbar");
+  nodesBar.hidden = true;
+  relabels.push(() => nodesBar.setAttribute("aria-label", t("draw.nodes.bar")));
+  const nodesButton = (label: DrawKey, iconName: string, binding: string, run: () => void): HTMLButtonElement => {
+    const control = button(nodesBar, "draw-button", () => t(label), iconName, run);
+    control.setAttribute("aria-keyshortcuts", ariaBinding(binding) || binding);
+    relabels.push(() => nameArrange(control, t(label), binding));
+    return control;
+  };
+  const insertNodesButton = nodesButton("draw.nodes.insert", "draw-node-add", "Insert", () => insertSelectedNodes());
+  const deleteNodesButton = nodesButton("draw.nodes.delete", "draw-node-delete", "Delete", () => deleteSelectedNodes());
+  const cornerButton = nodesButton("draw.nodes.corner", "draw-node-corner", "Shift-c", () => kindSelectedNodes("corner"));
+  const smoothButton = nodesButton("draw.nodes.smooth", "draw-node-smooth", "Shift-s", () => kindSelectedNodes("smooth"));
+  const symmetricButton = nodesButton("draw.nodes.symmetric", "draw-node-symmetric", "Shift-y", () => kindSelectedNodes("symmetric"));
+  const linesButton = nodesButton("draw.nodes.line", "draw-segment-line", "Shift-l", () => linkSelectedNodes("line"));
+  const curvesButton = nodesButton("draw.nodes.curve", "draw-segment-curve", "Shift-u", () => linkSelectedNodes("curve"));
+  const breakButton = nodesButton("draw.nodes.break", "draw-node-break", "Shift-b", () => breakSelectedNodes());
+  const joinButton = nodesButton("draw.nodes.join", "draw-node-join", "Shift-j", () => joinSelectedNodes());
+  // Esc in una barra torna al foglio, con la selezione com'era.
+  for (const bar of [arrangeBar, nodesBar]) {
+    life.listen(bar, "keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      surface.focus({ preventScroll: true });
+    });
+  }
 
   // Il campo in cui si scrive un testo: sopra il foglio e fuori dalla sua
   // pipeline, nascosto finché non si scrive. Lo strato lo taglia ai bordi
@@ -1049,7 +1253,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // oggetti e, sotto, gli attributi.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
@@ -1236,12 +1440,112 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return currentIndex().units.filter((unit) => wanted.has(unit.key)).map((unit) => unit.key);
   };
 
-  /// Le cornici della selezione, e il riquadro di un trascinamento sul vuoto.
+  // --- I nodi -------------------------------------------------------------
+
+  /// Il tracciato di cui lo strumento Nodi modifica i nodi: con lo strumento
+  /// Nodi, dal livello Esperto, col disegno che si scrive e un oggetto solo
+  /// scelto. Dentro un gruppo vale la forma toccata per ultima, o quella di
+  /// prima, o la prima. Una chiave dice perché non ce n'è uno; `null`, che
+  /// non c'è niente da dire.
+  const nodeTarget = (): Editing | DrawKey | null => {
+    if (tool !== "nodes" || !reaches(level, "expert") || !editable() || selection.length === 0) return null;
+    const units = selectedUnits();
+    if (units.length !== 1) return "draw.nodes.many";
+    const unit = units[0]!;
+    // Una freccia e un tratto a penna sono tracciati scritti da una regola:
+    // prima diventano tracciati qualunque, con «Oggetto in tracciato».
+    const shapes = unit.shapes().filter(({ leaf }) => leaf.details?.role === "path");
+    if (shapes.length === 0) return "draw.nodes.no_path";
+    const at = (path: readonly number[] | null): (typeof shapes)[number] | undefined =>
+      path === null ? undefined : shapes.find(({ leaf }) => samePath(pathOf(leaf), path));
+    const shape = at(preferredShape) ?? at(editing?.path ?? null) ?? shapes[0]!;
+    const d = plainAttributes(shape.leaf).get("d") ?? "";
+    const segments = parsePath(d);
+    if (segments === null) return "draw.nodes.unreadable";
+    const subs = readNodes(segments);
+    if (subs.length === 0) return "draw.nodes.empty";
+    const inverse = invert(shape.matrix);
+    if (inverse === null) return "draw.nodes.flat";
+    return { unit, leaf: shape.leaf, path: pathOf(shape.leaf), d, subs, matrix: shape.matrix, inverse, paints: builder.paintsOf(shape.leaf) };
+  };
+
+  /// Ritrova il tracciato quando cambia ciò da cui dipende: la scena, la
+  /// selezione, lo strumento, il livello, la scrittura, la forma toccata. I
+  /// nodi scelti e i tipi dati restano finché il tracciato è lo stesso, con
+  /// gli stessi nodi. Vero se l'ha ritrovato.
+  const resolveNodes = (): boolean => {
+    const index = currentIndex();
+    const keys = selection.join("\n");
+    const canEdit = editable();
+    const last = resolvedFor;
+    if (
+      last !== null && last.index === index && last.keys === keys && last.tool === tool && last.level === level &&
+      last.editable === canEdit && last.preferred === preferredShape
+    ) return false;
+    resolvedFor = { index, keys, tool, level, editable: canEdit, preferred: preferredShape };
+    const before = editing;
+    const found = nodeTarget();
+    editing = found === null || typeof found === "string" ? null : found;
+    noEditing = typeof found === "string" ? found : null;
+    if (editing === null || before === null || !samePath(before.path, editing.path) || !sameNodes(before.subs, editing.subs)) {
+      nodeSelection = new Set();
+      nodeKinds = new Map();
+    }
+    return true;
+  };
+
+  /// Il tipo di ogni nodo di `subs`: quello dato da chi modifica, o quello
+  /// che si legge. I capi di un sottotracciato aperto non ne hanno uno, e
+  /// valgono come spigoli.
+  const kindsOf = (subs: readonly Subpath[]): KindOf => (s, at) => {
+    const sub = subs[s]!;
+    return innerNode(sub, at) ? nodeKinds.get(nodeKey(s, at)) ?? kindOf(sub, at) : "corner";
+  };
+
+  /// Le maniglie che si vedono: quelle dei segmenti che toccano un nodo
+  /// scelto, tranne una ritirata sul suo nodo, che il nodo copre.
+  const shownHandles = (subs: readonly Subpath[]): HandleRef[] =>
+    handlesFor(subs, nodeSelection).filter((handle) => {
+      const point = handlePoint(subs, handle);
+      const sub = subs[handle.sub]!;
+      return point !== null && (handle.which === "control" || !samePlace(point, sub.nodes[handleNode(sub, handle)]!));
+    });
+
+  /// Il contorno del tracciato, le maniglie e i nodi, come li lascia il
+  /// trascinamento se ce n'è uno: prima il contorno, sopra le maniglie, sopra
+  /// ancora i nodi.
+  const nodeHandles = (now: Editing): OverlayHandle[] => {
+    const subs = (current?.kind === "nodes" ? current.draft : null) ?? now.subs;
+    const m = now.matrix;
+    const out: OverlayHandle[] = [{ kind: "outline", segments: writeNodes(subs), matrix: m }];
+    for (const handle of shownHandles(subs)) {
+      const [x, y] = apply(m, handlePoint(subs, handle)!);
+      const sub = subs[handle.sub]!;
+      // Il punto di una quadratica è dei suoi due nodi: una linea per
+      // ciascuno.
+      const owners = handle.which === "control" ? [handle.link, (handle.link + 1) % sub.nodes.length] : [handleNode(sub, handle)];
+      for (const owner of owners) out.push({ kind: "control", x, y, node: apply(m, sub.nodes[owner]!) });
+    }
+    const kinds = kindsOf(subs);
+    subs.forEach((sub, s) => {
+      sub.nodes.forEach((node, at) => {
+        const [x, y] = apply(m, node);
+        out.push({ kind: "node", x, y, shape: NODE_SHAPES[kinds(s, at)], selected: nodeSelection.has(nodeKey(s, at)) });
+      });
+    });
+    return out;
+  };
+
+  /// Le cornici della selezione, i nodi del tracciato che si modifica, e il
+  /// riquadro di un trascinamento sul vuoto.
   const showHandles = (): void => {
+    if (resolveNodes()) syncArrange();
     const handles: OverlayHandle[] = [];
     const move = current?.kind === "select" && current.mode === "move" ? current : null;
     const delta = move === null ? null : moveDelta(move);
     for (const unit of selectedUnits()) {
+      // L'oggetto di cui si modificano i nodi mostra i nodi, non la cornice.
+      if (editing !== null && unit.key === editing.unit.key) continue;
       const frame = unit.frame();
       if (frame === null) continue;
       let matrix = unit.matrix;
@@ -1260,9 +1564,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         matrix,
       });
     }
-    if (current?.kind === "select" && current.mode === "marquee" && current.from !== null && current.end !== null) {
-      const [x1, y1] = current.from;
-      const [x2, y2] = current.end;
+    if (editing !== null) handles.push(...nodeHandles(editing));
+    const lasso = current?.kind === "select" && current.mode === "marquee"
+      ? current
+      : current?.kind === "nodes" && current.dragging && current.grab?.kind === "marquee" ? current : null;
+    if (lasso !== null && lasso.from !== null && lasso.end !== null) {
+      const [x1, y1] = lasso.from;
+      const [x2, y2] = lasso.end;
       handles.push({ kind: "lasso", points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] });
     }
     overlay.setHandles(handles);
@@ -1626,14 +1934,42 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     customButton.title = label;
   };
 
+  /// I pulsanti dei nodi: si spegne quello che coi nodi scelti non farebbe
+  /// niente.
+  const syncNodesBar = (): void => {
+    const now = editing;
+    if (now === null) return;
+    const between = linksBetween(now.subs, nodeSelection);
+    const inner = [...nodeSelection].some((key) => {
+      const [s, at] = parseKey(key);
+      const sub = now.subs[s];
+      return sub !== undefined && innerNode(sub, at);
+    });
+    insertNodesButton.disabled = !between.any;
+    deleteNodesButton.disabled = nodeSelection.size === 0;
+    for (const control of [cornerButton, smoothButton, symmetricButton, breakButton]) control.disabled = !inner;
+    linesButton.disabled = !between.toLine;
+    curvesButton.disabled = !between.toCurve;
+    joinButton.disabled = joinNodes(now.subs, nodeSelection) === null;
+    nodesFocus.sync(null);
+  };
+
   /// La barra della selezione: c'è dal livello Standard, con qualcosa di
-  /// scelto e il disegno che si scrive, e non mentre si scrive un testo. Un
-  /// pulsante che non serve si spegne; se aveva il fuoco, il fuoco passa a
-  /// quello che prende il Tab, o al foglio quando la barra se ne va.
+  /// scelto e il disegno che si scrive, e non mentre si scrive un testo. Con
+  /// lo strumento Nodi e un tracciato da modificare c'è al suo posto quella
+  /// dei nodi. Un pulsante che non serve si spegne; se aveva il fuoco, il
+  /// fuoco passa a quello che prende il Tab, o al foglio quando la barra se
+  /// ne va.
   const syncArrange = (): void => {
-    const focused = arrangeBar.contains(document.activeElement);
-    const units = typing === null && reaches(level, "standard") && editable() && selection.length > 0 ? selectedUnits() : [];
+    resolveNodes();
+    const focused = arrangeBar.contains(document.activeElement) || nodesBar.contains(document.activeElement);
+    const noding = typing === null && editing !== null;
+    const units = !noding && typing === null && reaches(level, "standard") && editable() && selection.length > 0 ? selectedUnits() : [];
     arrangeBar.hidden = units.length === 0;
+    nodesBar.hidden = !noding;
+    // Canc, coi nodi, elimina i nodi: il pulsante dell'oggetto non lo dice.
+    if (noding) deleteButton.removeAttribute("aria-keyshortcuts");
+    else deleteButton.setAttribute("aria-keyshortcuts", "Delete");
     textButton.hidden = units.length !== 1 || units[0]!.look === null;
     groupButton.disabled = units.length < 2;
     ungroupButton.disabled = !units.some(isGroup);
@@ -1655,10 +1991,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     pathButton.hidden = !reaches(level, "expert");
     outlineButton.hidden = !reaches(level, "expert");
     arrangeFocus.sync(null);
+    syncNodesBar();
     if (!focused) return;
     const active = document.activeElement;
-    if (!arrangeBar.hidden && active instanceof HTMLButtonElement && arrangeBar.contains(active) && !active.disabled && !active.hidden) return;
-    const next = arrangeBar.hidden ? null : arrangeFocus.current();
+    for (const bar of [arrangeBar, nodesBar]) {
+      if (!bar.hidden && active instanceof HTMLButtonElement && bar.contains(active) && !active.disabled && !active.hidden) return;
+    }
+    const next = !arrangeBar.hidden ? arrangeFocus.current() : !nodesBar.hidden ? nodesFocus.current() : null;
     if (next !== null) next.focus();
     else surface.focus({ preventScroll: true });
   };
@@ -1932,7 +2271,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     tool = id;
     syncControls();
-    announce(t("draw.announce.tool", { tool: t(toolSpec(id).label) }));
+    const named = t("draw.announce.tool", { tool: t(toolSpec(id).label) });
+    // Con lo strumento Nodi, anche di che cosa si modificano i nodi.
+    const target = id === "nodes" ? targetText() : "";
+    announce(target === "" ? named : `${named} ${target}`);
   }
 
   function setColor(value: string): void {
@@ -2047,6 +2389,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return { ...base, kind: "erase", last: null, marked: new Map() };
       case "select":
         return { ...base, kind: "select", from: null, end: null, mode: "pending", units: [], base: [], release: null, source: null, hit: null };
+      case "nodes":
+        return { ...base, kind: "nodes", from: null, end: null, grab: null, dragging: false, nodes: new Set(nodeSelection), selection: [...selection], draft: null };
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
         return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
@@ -2176,6 +2520,248 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     showHandles();
     announceSelection();
+  };
+
+  // --- I gesti dei nodi --------------------------------------------------------
+
+  /// Quanti nodi ha il tracciato.
+  const nodeCount = (subs: readonly Subpath[]): number => subs.reduce((count, sub) => count + sub.nodes.length, 0);
+
+  /// Dove sta il nodo `key`, nella scena.
+  const nodePoint = (now: Editing, key: NodeKey): Point => {
+    const [s, at] = parseKey(key);
+    return apply(now.matrix, now.subs[s]!.nodes[at]!);
+  };
+
+  /// Il nodo `key` a parole: quale, di che tipo e dove.
+  const nodeText = (now: Editing, key: NodeKey): string => {
+    const [s, at] = parseKey(key);
+    let index = at + 1;
+    for (let i = 0; i < s; i++) index += now.subs[i]!.nodes.length;
+    const sub = now.subs[s]!;
+    const end = !sub.closed && (at === 0 || at === sub.nodes.length - 1);
+    const [x, y] = nodePoint(now, key);
+    return t("draw.nodes.walk", {
+      index,
+      count: nodeCount(now.subs),
+      kind: t(KIND_NAMES[end ? "end" : kindsOf(now.subs)(s, at)]),
+      x: numberText(x),
+      y: numberText(y),
+    });
+  };
+
+  /// Di che cosa si modificano i nodi, o perché di niente; vuoto se non
+  /// c'è niente di scelto.
+  const targetText = (): string => {
+    resolveNodes();
+    if (editing !== null) {
+      return plural(nodeCount(editing.subs), "draw.nodes.shown.one", "draw.nodes.shown.other", { object: labelOf(editing.unit) });
+    }
+    return noEditing === null ? "" : t(noEditing);
+  };
+
+  /// Dice di che cosa si modificano i nodi; senza niente di scelto, la
+  /// selezione.
+  const announceTarget = (): void => {
+    const text = targetText();
+    if (text === "") announceSelection();
+    else announce(text);
+  };
+
+  /// I nodi scelti a parole: quello solo, o quanti.
+  const announceNodes = (): void => {
+    const now = editing;
+    if (now !== null && nodeSelection.size === 1) {
+      announce(nodeText(now, [...nodeSelection][0]!));
+      return;
+    }
+    announce(nodeSelection.size === 0 ? t("draw.nodes.selected.none") : plural(nodeSelection.size, "draw.nodes.selected.one", "draw.nodes.selected.other"));
+  };
+
+  /// I nodi `keys` diventano quelli scelti.
+  const setNodes = (keys: Iterable<NodeKey>): void => {
+    nodeSelection = new Set(editing === null ? [] : presentNodes(editing.subs, keys));
+    syncNodesBar();
+    showHandles();
+  };
+
+  /// Lo spostamento da `a` a `b`, due punti della scena, nelle coordinate
+  /// del tracciato.
+  const localDelta = (now: Editing, a: Point, b: Point): Point => {
+    const p = apply(now.inverse, a);
+    const q = apply(now.inverse, b);
+    return [q[0] - p[0], q[1] - p[1]];
+  };
+
+  /// Il nodo o la maniglia sotto `p`: il più vicino entro il raggio del
+  /// puntatore, e a pari distanza il nodo.
+  const grabAt = (now: Editing, p: Point, pointer: InkPointerType): { readonly node: NodeKey } | { readonly handle: HandleRef } | null => {
+    const tolerance = NODE_PX[pointer] / camera.scale;
+    const node = nodeAt(now.subs, now.matrix, p, tolerance);
+    const handle = handleAt(now.subs, shownHandles(now.subs), now.matrix, p, tolerance);
+    if (handle === null) return node === null ? null : { node };
+    if (node === null) return { handle };
+    const gap = (q: Point): number => Math.hypot(q[0] - p[0], q[1] - p[1]);
+    return gap(apply(now.matrix, handlePoint(now.subs, handle)!)) < gap(nodePoint(now, node)) ? { handle } : { node };
+  };
+
+  /// Il tracciato come lo lascia il trascinamento, sul foglio e nei nodi.
+  const showNodeDraft = (now: Editing, subs: readonly Subpath[]): void => {
+    const d = pathData(writeNodes(subs));
+    painter.setDraft({ paths: new Map(now.paints.map((paint) => [paint, d])) });
+    showHandles();
+  };
+
+  /// Il primo punto di un gesto dei nodi. Un nodo si sceglie e si potrà
+  /// trascinare, e con Maiusc si aggiunge o si toglie; una maniglia e un
+  /// segmento si trascinano. Fuori dal tracciato, un altro oggetto, o
+  /// un'altra forma dello stesso, diventa quello di cui si modificano i
+  /// nodi; il vuoto comincia un riquadro.
+  const nodesStart = (g: NodesGesture, p: Point): void => {
+    g.from = p;
+    g.end = p;
+    const now = editing;
+    if (now !== null) {
+      const hit = grabAt(now, p, g.pointer);
+      if (hit !== null && "node" in hit) {
+        const chosen = nodeSelection.has(hit.node);
+        if (!chosen) setNodes(shift ? [...nodeSelection, hit.node] : [hit.node]);
+        g.grab = { kind: "node", key: hit.node, origin: nodePoint(now, hit.node), toggle: shift && chosen, only: !shift && chosen && nodeSelection.size > 1 };
+        return;
+      }
+      if (hit !== null) {
+        g.grab = { kind: "handle", handle: hit.handle, origin: apply(now.matrix, handlePoint(now.subs, hit.handle)!) };
+        return;
+      }
+      const link = linkAt(now.subs, now.matrix, p, HIT_PX[g.pointer] / camera.scale);
+      if (link !== null) {
+        g.grab = { kind: "segment", sub: link.sub, link: link.link, t: link.t };
+        return;
+      }
+    }
+    const tolerance = HIT_PX[g.pointer] / camera.scale;
+    const unit = currentIndex().at(p, tolerance);
+    const shape = unit?.shapeAt(p, tolerance) ?? null;
+    if (unit !== null && shape !== null && (now === null || unit.key !== now.unit.key || !samePath(pathOf(shape), now.path))) {
+      preferredShape = pathOf(shape);
+      select([unit.key]);
+      g.grab = { kind: "none" };
+      return;
+    }
+    g.grab = { kind: "marquee", objects: now === null, additive: shift };
+    if (now === null && !shift) select([]);
+  };
+
+  /// Il gesto dei nodi fino al punto di adesso. Oltre la soglia trascina: un
+  /// nodo con quelli scelti, e con l'aggancio il nodo preso sulla griglia;
+  /// una maniglia; o il segmento, nel punto preso. Il riquadro sceglie.
+  const nodesUpdate = (g: NodesGesture): void => {
+    const grab = g.grab;
+    if (g.from === null || g.end === null || grab === null || grab.kind === "none") return;
+    if (!g.dragging) {
+      if (Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale <= DRAG_PX[g.pointer]) return;
+      g.dragging = true;
+      lastSegmentTap = null;
+    }
+    if (grab.kind === "marquee") {
+      const [x1, y1] = g.from;
+      const [x2, y2] = g.end;
+      const area: Bounds = { min: [Math.min(x1, x2), Math.min(y1, y2)], max: [Math.max(x1, x2), Math.max(y1, y2)] };
+      if (grab.objects) {
+        selection = inOrder([...(grab.additive ? g.selection : []), ...currentIndex().within(area).map((unit) => unit.key)]);
+        syncControls();
+      } else if (editing !== null) {
+        nodeSelection = new Set([...(grab.additive ? g.nodes : []), ...nodesWithin(editing.subs, editing.matrix, area)]);
+        syncNodesBar();
+      }
+      showHandles();
+      return;
+    }
+    const now = editing;
+    if (now === null) return;
+    const kinds = kindsOf(now.subs);
+    if (grab.kind === "segment") {
+      g.draft = bend(now.subs, grab.sub, grab.link, grab.t, localDelta(now, g.from, g.end), kinds);
+    } else {
+      const to = snapped([grab.origin[0] + g.end[0] - g.from[0], grab.origin[1] + g.end[1] - g.from[1]]);
+      g.draft = grab.kind === "node"
+        ? moveNodes(now.subs, nodeSelection, localDelta(now, grab.origin, to), kinds)
+        : moveHandle(now.subs, grab.handle, apply(now.inverse, to), kinds);
+    }
+    showNodeDraft(now, g.draft);
+  };
+
+  /// Il gesto dei nodi finisce. Un trascinamento si scrive; un tocco su un
+  /// nodo lo sceglie da solo, o con Maiusc lo toglie; uno su un segmento
+  /// sceglie i suoi due nodi, e il doppio tocco ci aggiunge un nodo; uno sul
+  /// vuoto toglie la scelta dei nodi, poi quella dell'oggetto.
+  const nodesEnd = (g: NodesGesture, time: number): void => {
+    current = null;
+    const grab: NodeGrab = g.grab ?? { kind: "none" };
+    if (g.dragging) {
+      if (grab.kind === "marquee") {
+        showHandles();
+        if (grab.objects) announceTarget();
+        else announceNodes();
+        return;
+      }
+      painter.setDraft(null);
+      const draft = g.draft;
+      if (draft === null || editing === null) {
+        showHandles();
+        return;
+      }
+      const label: DrawKey = grab.kind === "node" ? "draw.action.nodes_move" : grab.kind === "handle" ? "draw.action.handle" : "draw.action.bend";
+      if (writeEdit(label, draft, nodeSelection, nodeKinds) !== true) return;
+      if (grab.kind === "node") announceMoved();
+      else announce(t(grab.kind === "handle" ? "draw.nodes.handle_moved" : "draw.nodes.bent"));
+      return;
+    }
+    const now = editing;
+    switch (grab.kind) {
+      case "node":
+        if (grab.toggle) setNodes([...nodeSelection].filter((key) => key !== grab.key));
+        else if (grab.only) setNodes([grab.key]);
+        announceNodes();
+        return;
+      case "segment": {
+        if (now === null || g.from === null) return;
+        const tap = { sub: grab.sub, link: grab.link, time, at: g.from };
+        const previous = lastSegmentTap;
+        lastSegmentTap = tap;
+        const again = previous !== null && previous.sub === tap.sub && previous.link === tap.link && tap.time - previous.time <= DOUBLE_TAP_MS &&
+          Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer];
+        if (again) {
+          lastSegmentTap = null;
+          const edited = insertNode(now.subs, grab.sub, grab.link, grab.t);
+          if (writeEdit("draw.action.nodes_insert", edited.subs, edited.selected, remapped(nodeKinds, edited.moved)) === true) {
+            announce(plural(edited.changed, "draw.nodes.inserted.one", "draw.nodes.inserted.other"));
+          }
+          return;
+        }
+        const sub = now.subs[grab.sub]!;
+        const ends = [nodeKey(grab.sub, grab.link), nodeKey(grab.sub, (grab.link + 1) % sub.nodes.length)];
+        setNodes(shift ? [...nodeSelection, ...ends] : ends);
+        announceNodes();
+        return;
+      }
+      case "marquee":
+        if (grab.additive) return;
+        if (grab.objects) announceSelection();
+        else if (nodeSelection.size > 0) {
+          setNodes([]);
+          announceNodes();
+        } else {
+          select([]);
+          announceSelection();
+        }
+        return;
+      case "none":
+        announceTarget();
+        return;
+      case "handle":
+        return;
+    }
   };
 
   const eraseAlong = (g: EraseGesture, p: Point): void => {
@@ -2326,6 +2912,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           g.end = toPoint(samples[samples.length - 1]!);
           selectUpdate(g);
           break;
+        case "nodes":
+          if (g.from === null) nodesStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          nodesUpdate(g);
+          break;
         case "erase":
           for (const sample of samples) eraseAlong(g, toPoint(sample));
           showErased(g);
@@ -2365,6 +2956,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "select":
           selectEnd(g, stroke.timeStamp);
           return;
+        case "nodes":
+          nodesEnd(g, stroke.timeStamp);
+          return;
         case "erase":
           current = null;
           finishErase(g);
@@ -2383,6 +2977,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (g === null || g.stroke !== id) return;
       current = null;
       if (g.kind === "select" && g.mode === "marquee") select(g.base);
+      // I nodi tornano com'erano, e l'oggetto con loro.
+      if (g.kind === "nodes") {
+        select(g.selection);
+        setNodes(g.nodes);
+      }
       clearPreviews();
     },
     ...(options.touch === undefined ? {} : { touch: options.touch }),
@@ -2872,6 +3471,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
   const toolbarFocus = rove(toolbar);
   const arrangeFocus = rove(arrangeBar);
+  const nodesFocus = rove(nodesBar);
 
   life.listen(titleInput, "change", () => {
     const value = titleInput.value.trim();
@@ -3367,6 +3967,207 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange("draw.action.to_path", traced)) announce(`${plural(traced.changed, "draw.traced.one", "draw.traced.other")}${refused}`);
   }
 
+  // --- I comandi dei nodi -----------------------------------------------------
+
+  /// Scrive i nodi `subs` nel tracciato che si modifica, col nome `label`:
+  /// il `d` intero, in un passo di annulla, e la pagina cresce se il
+  /// tracciato ne esce. Un tracciato rimasto senza nodi se ne va. Dopo sono
+  /// scelti i nodi `selected`, coi tipi dati `kinds`. Vero se ha scritto;
+  /// falso se non c'era niente da cambiare; `null` se non si scrive, o il
+  /// motore ha rifiutato.
+  const writeEdit = (label: DrawKey, subs: readonly Subpath[], selected: Iterable<NodeKey>, kinds: ReadonlyMap<NodeKey, NodeKind>): boolean | null => {
+    const now = editing;
+    const model = engine.model;
+    if (now === null || model === null || !editable()) return null;
+    const segments = writeNodes(subs);
+    const d = pathData(segments);
+    const chosen = [...selected];
+    if (d === pathData(writeNodes(now.subs))) {
+      nodeKinds = kinds;
+      setNodes(chosen);
+      return false;
+    }
+    const node = nodeOf(model, now);
+    const plan = new Plan(model, newIds());
+    // L'oggetto è il tracciato stesso, o un gruppo che lo contiene e che
+    // resta scelto.
+    const alone = samePath(now.unit.path, now.path);
+    let keys: string[];
+    let extent: Bounds | null = null;
+    if (segments.length === 0) {
+      plan.ops.push({ op: "remove", target: node.facts.id ?? { path: [...now.path], tag: tagName(node) } });
+      keys = alone ? [] : [now.unit.key];
+    } else {
+      const id = plan.idOf(node);
+      plan.ops.push({ op: "set", id, attrs: { d } });
+      keys = alone ? [id] : [now.unit.key];
+      extent = elemBounds({ tag: "path", attrs: { ...Object.fromEntries(plainAttributes(node)), d } }, now.matrix);
+    }
+    if (!arrange(label, plan.finish(keys), extent)) return null;
+    nodeKinds = kinds;
+    setNodes(chosen);
+    return true;
+  };
+
+  /// Il tracciato su cui lavora un comando dei nodi, coi nodi scelti. `null`,
+  /// e lo si dice, se non ce n'è uno o se nessun nodo è scelto.
+  const noding = (): Editing | null => {
+    if (!editable()) return null;
+    resolveNodes();
+    if (editing === null) {
+      announceTarget();
+      return null;
+    }
+    if (nodeSelection.size === 0) {
+      announce(t("draw.nodes.selected.none"));
+      return null;
+    }
+    cancelGesture();
+    return editing;
+  };
+
+  /// Dice che i nodi scelti si sono spostati: dove, se è uno solo.
+  const announceMoved = (): void => {
+    const now = editing;
+    if (now !== null && nodeSelection.size === 1) {
+      const [x, y] = nodePoint(now, [...nodeSelection][0]!);
+      announce(t("draw.nodes.moved.at", { x: numberText(x), y: numberText(y) }));
+      return;
+    }
+    announce(plural(nodeSelection.size, "draw.nodes.moved.one", "draw.nodes.moved.other"));
+  };
+
+  /// Insert, o «Aggiungi nodi»: un nodo a metà di ogni segmento fra due nodi
+  /// scelti. Dopo sono scelti i nodi nuovi.
+  function insertSelectedNodes(): void {
+    const now = noding();
+    if (now === null) return;
+    const edited = insertNodes(now.subs, nodeSelection);
+    if (edited.changed === 0) {
+      announce(t("draw.nodes.insert.none"));
+      return;
+    }
+    if (writeEdit("draw.action.nodes_insert", edited.subs, edited.selected, remapped(nodeKinds, edited.moved)) === true) {
+      announce(plural(edited.changed, "draw.nodes.inserted.one", "draw.nodes.inserted.other"));
+    }
+  }
+
+  /// Canc, o «Elimina nodi»: i segmenti attorno si uniscono in una curva che
+  /// passa vicino a dov'erano. Mai l'oggetto: senza nodi scelti non elimina
+  /// niente, ma un tracciato rimasto senza nodi se ne va.
+  function deleteSelectedNodes(): void {
+    const now = noding();
+    if (now === null) return;
+    const edited = deleteNodes(now.subs, nodeSelection);
+    if (writeEdit("draw.action.nodes_delete", edited.subs, edited.selected, remapped(nodeKinds, edited.moved)) !== true) return;
+    if (edited.subs.length === 0) announce(`${t("draw.nodes.deleted.all")} ${objects()}`);
+    else announce(plural(edited.changed, "draw.nodes.deleted.one", "draw.nodes.deleted.other"));
+  }
+
+  /// Maiusc+C, S o Y: i nodi scelti a spigolo, lisci o simmetrici. Il tipo
+  /// resta ai nodi anche dove la geometria non cambia, come per lo spigolo.
+  function kindSelectedNodes(kind: NodeKind): void {
+    const now = noding();
+    if (now === null) return;
+    const edited = setKind(now.subs, nodeSelection, kind);
+    if (edited.changed === 0) {
+      announce(t("draw.nodes.kind.none"));
+      return;
+    }
+    const kinds = remapped(nodeKinds, edited.moved);
+    for (const key of edited.selected) {
+      const [s, at] = parseKey(key);
+      if (innerNode(edited.subs[s]!, at)) kinds.set(key, kind);
+    }
+    if (writeEdit("draw.action.nodes_kind", edited.subs, edited.selected, kinds) === null) return;
+    const [one, other] = MADE[kind];
+    announce(plural(edited.changed, one, other));
+  }
+
+  /// Maiusc+L o U: i segmenti fra due nodi scelti in linee o in curve.
+  function linkSelectedNodes(kind: "line" | "curve"): void {
+    const now = noding();
+    if (now === null) return;
+    const edited = setLinks(now.subs, nodeSelection, kind);
+    if (edited.changed === 0) {
+      announce(t(linksBetween(now.subs, nodeSelection).any ? "draw.unchanged" : "draw.nodes.links.none"));
+      return;
+    }
+    if (writeEdit("draw.action.segments", edited.subs, edited.selected, remapped(nodeKinds, edited.moved)) === null) return;
+    announce(kind === "line"
+      ? plural(edited.changed, "draw.nodes.lines.one", "draw.nodes.lines.other")
+      : plural(edited.changed, "draw.nodes.curves.one", "draw.nodes.curves.other"));
+  }
+
+  /// Maiusc+B: il tracciato si spezza ai nodi scelti.
+  function breakSelectedNodes(): void {
+    const now = noding();
+    if (now === null) return;
+    const edited = breakNodes(now.subs, nodeSelection);
+    if (edited.changed === 0) {
+      announce(t("draw.nodes.break.none"));
+      return;
+    }
+    if (writeEdit("draw.action.nodes_break", edited.subs, edited.selected, remapped(nodeKinds, edited.moved)) === null) return;
+    announce(plural(edited.changed, "draw.nodes.broken.one", "draw.nodes.broken.other"));
+  }
+
+  /// Maiusc+J: unisce i due capi scelti.
+  function joinSelectedNodes(): void {
+    const now = noding();
+    if (now === null) return;
+    const edited = joinNodes(now.subs, nodeSelection);
+    if (edited === null) {
+      announce(t("draw.nodes.join.none"));
+      return;
+    }
+    const closed = edited.subs.length === now.subs.length;
+    if (writeEdit("draw.action.nodes_join", edited.subs, edited.selected, remapped(nodeKinds, edited.moved)) === null) return;
+    announce(t(closed ? "draw.nodes.closed" : "draw.nodes.joined"));
+  }
+
+  /// Un comando dei nodi di Maiusc e una lettera.
+  const runNodeCommand = (command: NodeCommand): void => {
+    if (command === "line" || command === "curve") linkSelectedNodes(command);
+    else if (command === "break") breakSelectedNodes();
+    else if (command === "join") joinSelectedNodes();
+    else kindSelectedNodes(command);
+  };
+
+  /// Le frecce coi nodi scelti: li spostano di 1, di 10 con Maiusc, di un
+  /// pixel dello schermo con Ctrl o ⌘. Con l'aggancio l'angolo in alto a
+  /// sinistra del loro riquadro va di riga in riga della griglia, cinque con
+  /// Maiusc, sull'asse della freccia.
+  const nudgeNodes = (x: number, y: number, fine: boolean, big: boolean): void => {
+    const now = noding();
+    if (now === null) return;
+    let delta: Point;
+    if (fine) {
+      delta = [x / camera.scale, y / camera.scale];
+    } else if (gridOn()) {
+      const [left, top] = nodesBox(now)!.min;
+      const lines = big ? GRID_MAJOR : 1;
+      delta = [x === 0 ? 0 : lineBeyond(left, grid.step, sign(x), lines) - left, y === 0 ? 0 : lineBeyond(top, grid.step, sign(y), lines) - top];
+    } else {
+      const step = big ? NUDGE_SHIFT : NUDGE;
+      delta = [x * step, y * step];
+    }
+    moveSelectedNodes(now, delta);
+  };
+
+  /// Sposta i nodi scelti di `delta`, nella scena, e lo dice.
+  const moveSelectedNodes = (now: Editing, delta: Point): void => {
+    const subs = moveNodes(now.subs, nodeSelection, localDelta(now, [0, 0], delta), kindsOf(now.subs));
+    if (writeEdit("draw.action.nodes_move", subs, nodeSelection, nodeKinds) === true) announceMoved();
+  };
+
+  /// Il riquadro dei nodi scelti, nella scena.
+  const nodesBox = (now: Editing): Bounds | null => {
+    const box = new BoundsBuilder();
+    for (const key of presentNodes(now.subs, nodeSelection)) box.include(nodePoint(now, key));
+    return box.finish();
+  };
+
   /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
   function moveIntoLayer(layer: LayerInfo): void {
     const units = arranging();
@@ -3638,8 +4439,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Frecce, finestre ed elenco dei tasti -----------------------------------
 
-  /// Alt+F10: il fuoco va alla barra della selezione, se c'è.
+  /// Alt+F10: il fuoco va alla barra della selezione, o a quella dei nodi,
+  /// se c'è. Una barra dei nodi senza un pulsante che serva dice perché.
   const focusArrange = (): boolean => {
+    if (!nodesBar.hidden) {
+      nodesFocus.sync(null);
+      const target = nodesFocus.current();
+      if (target === null) announce(t("draw.nodes.selected.none"));
+      else target.focus();
+      return true;
+    }
     if (arrangeBar.hidden) return false;
     arrangeFocus.sync(null);
     const target = arrangeFocus.current();
@@ -3648,16 +4457,30 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return true;
   };
 
+  /// Vero se i tasti valgono per i nodi: lo strumento Nodi ha un tracciato
+  /// da modificare, e la tastiera non sta premendo.
+  const nodeKeysOn = (): boolean => {
+    if (tool !== "nodes" || pressed !== null) return false;
+    resolveNodes();
+    return editing !== null;
+  };
+
   /// Le frecce sul foglio. Con una selezione la spostano, e con Ctrl o ⌘ la
   /// ridimensionano; senza, o mentre la tastiera preme, muovono il cursore.
   /// Con l'aggancio vanno di riga in riga della griglia, cinque con Maiusc.
+  /// Con lo strumento Nodi spostano i nodi scelti, e senza il cursore: mai
+  /// l'oggetto.
   const arrows = (event: KeyboardEvent): boolean => {
     const direction = ARROWS[event.key];
     if (direction === undefined) return false;
     const [x, y] = direction;
     const fine = event.ctrlKey || event.metaKey;
     const lines = event.shiftKey ? GRID_MAJOR : 1;
-    if (pressed === null && selection.length > 0 && editable()) {
+    if (nodeKeysOn() && nodeSelection.size > 0) {
+      nudgeNodes(x, y, fine, event.shiftKey);
+      return true;
+    }
+    if (tool !== "nodes" && pressed === null && selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       if (gridOn()) {
         if (fine) resizeOnGrid(x, y, lines);
@@ -3692,9 +4515,36 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return true;
   };
 
+  /// Sceglie da solo il nodo `at` del tracciato, in ordine, lo porta in
+  /// vista e lo dice. `false` se non c'è.
+  const visitNode = (at: number): boolean => {
+    const now = editing;
+    const key = now === null ? undefined : allNodes(now.subs)[at];
+    if (now === null || key === undefined) return false;
+    cancelGesture();
+    setNodes([key]);
+    const p = nodePoint(now, key);
+    frameBounds({ min: p, max: p });
+    announce(nodeText(now, key));
+    return true;
+  };
+
+  /// Tab con lo strumento Nodi: il nodo dopo l'ultimo scelto, o con Maiusc
+  /// quello prima del primo; senza nodi scelti, il primo o l'ultimo. Oltre
+  /// le estremità, `false`.
+  const walkNodes = (step: 1 | -1): boolean => {
+    const keys = allNodes(editing!.subs);
+    const chosen = keys.flatMap((key, i) => (nodeSelection.has(key) ? [i] : []));
+    if (chosen.length === 0) return visitNode(step > 0 ? 0 : keys.length - 1);
+    return visitNode(step > 0 ? chosen[chosen.length - 1]! + 1 : chosen[0]! - 1);
+  };
+
   /// Tab con una selezione: l'oggetto dopo l'ultimo scelto, o con Maiusc
-  /// quello prima del primo. Oltre le estremità il Tab esce dal foglio.
+  /// quello prima del primo. Oltre le estremità il Tab esce dal foglio. Con
+  /// lo strumento Nodi passa prima di nodo in nodo, e oltre l'ultimo
+  /// all'oggetto dopo.
   const walk = (step: 1 | -1): boolean => {
+    if (nodeKeysOn() && walkNodes(step)) return true;
     if (selection.length === 0 || pressed !== null) return false;
     const anchor = step > 0 ? selection[selection.length - 1] : selection[0];
     const at = currentIndex().units.findIndex((unit) => unit.key === anchor);
@@ -3709,7 +4559,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     asking = true;
     cancelGesture();
     try {
-      if (selection.length > 0) await placeDialog();
+      if (tool === "nodes" && nodeSelection.size > 0 && editing !== null) await placeNodesDialog();
+      else if (selection.length > 0) await placeDialog();
       else await documentDialog();
     } finally {
       asking = false;
@@ -3750,6 +4601,32 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (placeSelection(units, from, { min: [x, y], max: [x + width, y + height] })) {
       announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
     }
+  };
+
+  /// Invio coi nodi scelti: dove sta l'angolo in alto a sinistra del loro
+  /// riquadro, nella scena; per un nodo solo, il nodo. Un campo non toccato
+  /// resta esatto.
+  const placeNodesDialog = async (): Promise<void> => {
+    const before = editing === null ? null : nodesBox(editing);
+    if (before === null) return;
+    const shown = [before.min[0], before.min[1]].map((value) => formatNumber(value, PLACES));
+    const answer = await promptForm({
+      title: t("draw.nodes.place"),
+      fields: [
+        { id: "x", label: "X", value: shown[0]!, kind: "number" },
+        { id: "y", label: "Y", value: shown[1]!, kind: "number" },
+      ],
+    });
+    if (answer === null || disposed || !editable()) return;
+    // Mentre la finestra era aperta il disegno può essere cambiato: valgono
+    // i nodi scelti adesso.
+    const now = editing;
+    const from = now === null ? null : nodesBox(now);
+    if (now === null || from === null) return;
+    const value = (id: string, at: number): number => (answer[id] === undefined || answer[id] === shown[at] ? from.min[at]! : Number(answer[id]));
+    const delta: Point = [value("x", 0) - from.min[0], value("y", 1) - from.min[1]];
+    if (delta[0] === 0 && delta[1] === 0) return;
+    moveSelectedNodes(now, delta);
   };
 
   const documentDialog = async (): Promise<void> => {
@@ -3855,6 +4732,34 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti dello strumento Nodi, dal livello Esperto.
+  const nodeToolKeys = (at: Level): KeyGroup[] =>
+    reaches(at, "expert")
+      ? [
+          {
+            title: t("draw.tool.nodes"),
+            rows: [
+              [ARROW_KEYS, t(gridOn(at) ? "draw.keys.nodes.nudge.grid" : "draw.keys.nodes.nudge")],
+              ["Tab Shift-Tab", t("draw.keys.nodes.walk")],
+              ["Home End", t("draw.keys.nodes.ends")],
+              ["Mod-a", t("draw.keys.nodes.all")],
+              ["Enter", t("draw.nodes.place")],
+              ["Insert", t("draw.nodes.insert")],
+              ["Delete", t("draw.nodes.delete")],
+              ["Shift-c", t("draw.nodes.corner")],
+              ["Shift-s", t("draw.nodes.smooth")],
+              ["Shift-y", t("draw.nodes.symmetric")],
+              ["Shift-l", t("draw.nodes.line")],
+              ["Shift-u", t("draw.nodes.curve")],
+              ["Shift-b", t("draw.nodes.break")],
+              ["Shift-j", t("draw.nodes.join")],
+              ["Escape", t("draw.keys.nodes.deselect")],
+              ["Alt-F10", t("draw.keys.nodes.bar")],
+            ],
+          },
+        ]
+      : [];
+
   /// L'elenco dei tasti del livello `at`, nei gruppi in cui si usano.
   const keyGroups = (at: Level): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: toolsFor(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
@@ -3881,6 +4786,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ],
     },
     ...arrangeKeys(at),
+    ...nodeToolKeys(at),
     ...textKeys(at),
     ...gridKeys(at),
     ...attributeKeys(at),
@@ -4155,6 +5061,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else return;
     if (current?.kind === "shape") drawShape(current);
     else if (current?.kind === "select" && current.mode === "move") selectUpdate(current);
+    else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
   };
 
   life.listen(root, "keyup", onModifiers);
@@ -4172,6 +5079,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (!(mod && ((key === "x" && event.shiftKey) || (!field && (key === "z" || (key === "y" && !event.shiftKey)))))) return;
     }
     const onSurface = event.target === surface;
+    const inNodesBar = event.target instanceof Node && nodesBar.contains(event.target);
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
       return;
@@ -4201,8 +5109,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (key === "y" && !event.shiftKey) {
         redo();
       } else if (key === "a" && !event.shiftKey) {
-        select(currentIndex().units.map((unit) => unit.key));
-        announceSelection();
+        if (nodeKeysOn()) {
+          setNodes(allNodes(editing!.subs));
+          announceNodes();
+        } else {
+          select(currentIndex().units.map((unit) => unit.key));
+          announceSelection();
+        }
       } else if (key === "x" && event.shiftKey && reaches(level, "expert")) {
         showAttributes(inspector.element.hidden);
       } else if (arranges && key === "m" && event.shiftKey && reaches(level, "expert")) {
@@ -4240,6 +5153,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (pressed !== null) return;
       if (event.key === "PageUp") orderSelection(event.shiftKey ? "front" : "forward");
       else orderSelection(event.shiftKey ? "back" : "backward");
+    } else if (onSurface && (event.key === "Home" || event.key === "End") && nodeKeysOn()) {
+      visitNode(event.key === "Home" ? 0 : nodeCount(editing!.subs) - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End")) {
       if (pressed !== null || !visit(event.key === "Home" ? 0 : currentIndex().units.length - 1)) return;
     } else if (onSurface && event.key === " ") {
@@ -4256,12 +5171,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       else void properties();
     } else if (event.key === "?") {
       void keys();
+    } else if ((event.key === "Delete" || event.key === "Backspace") && nodeKeysOn()) {
+      // Con lo strumento Nodi Canc elimina i nodi, mai l'oggetto.
+      deleteSelectedNodes();
     } else if (event.key === "Delete" || event.key === "Backspace") {
       if (selection.length === 0) return;
       deleteSelection();
+    } else if (event.key === "Insert" && !event.shiftKey && nodeKeysOn() && (onSurface || inNodesBar)) {
+      insertSelectedNodes();
+    } else if (event.shiftKey && NODE_COMMANDS[event.key.toLowerCase()] !== undefined && nodeKeysOn() && (onSurface || inNodesBar)) {
+      runNodeCommand(NODE_COMMANDS[event.key.toLowerCase()]!);
     } else if (event.key === "Escape") {
       if (current !== null) cancelGesture();
-      else if (selection.length > 0) {
+      else if (tool === "nodes" && nodeSelection.size > 0) {
+        setNodes([]);
+        announceNodes();
+      } else if (selection.length > 0) {
         select([]);
         announceSelection();
       } else return;
@@ -4339,7 +5264,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Chi sposta o cancella guarda oggetti che il testo nuovo può non
       // avere più: il gesto si annulla. Tratto e forma si scrivono alla fine,
       // sul livello che c'è allora.
-      if (current !== null && (current.kind === "select" || current.kind === "erase")) cancelGesture();
+      if (current !== null && (current.kind === "select" || current.kind === "nodes" || current.kind === "erase")) cancelGesture();
       engine = next;
       refresh();
     },
@@ -4443,6 +5368,33 @@ const JOIN_LABELS: Readonly<Record<Join, DrawKey>> = {
   miter: "draw.outline.miter",
   round: "draw.outline.round_join",
   bevel: "draw.outline.bevel",
+};
+
+/// I comandi dei nodi di Maiusc e una lettera, quelli di Inkscape.
+type NodeCommand = NodeKind | "line" | "curve" | "break" | "join";
+const NODE_COMMANDS: Readonly<Record<string, NodeCommand>> = {
+  c: "corner",
+  s: "smooth",
+  y: "symmetric",
+  l: "line",
+  u: "curve",
+  b: "break",
+  j: "join",
+};
+
+/// Il tipo di un nodo a parole; un capo di un tracciato aperto non ne ha.
+const KIND_NAMES: Readonly<Record<NodeKind | "end", DrawKey>> = {
+  corner: "draw.nodes.kind.corner",
+  smooth: "draw.nodes.kind.smooth",
+  symmetric: "draw.nodes.kind.symmetric",
+  end: "draw.nodes.kind.end",
+};
+
+/// Che cosa si annuncia quando i nodi cambiano tipo.
+const MADE: Readonly<Record<NodeKind, readonly [DrawKey, DrawKey]>> = {
+  corner: ["draw.nodes.made.corner.one", "draw.nodes.made.corner.other"],
+  smooth: ["draw.nodes.made.smooth.one", "draw.nodes.made.smooth.other"],
+  symmetric: ["draw.nodes.made.symmetric.one", "draw.nodes.made.symmetric.other"],
 };
 
 /// Che cosa si annuncia quando una forma entra nel disegno.

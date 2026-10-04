@@ -13,7 +13,7 @@ export type Level = "essential" | "standard" | "expert";
 
 const LEVEL_ORDER: readonly Level[] = ["essential", "standard", "expert"];
 
-export type ToolId = "select" | "pen" | "highlighter" | "eraser" | "rect" | "ellipse" | "line" | "arrow" | "text";
+export type ToolId = "select" | "nodes" | "pen" | "highlighter" | "eraser" | "rect" | "ellipse" | "line" | "arrow" | "text";
 
 /// Come la barra raggruppa gli strumenti: scegliere, scrivere a mano, forme,
 /// testo.
@@ -33,6 +33,8 @@ export interface ToolSpec {
 
 export const TOOLS: readonly ToolSpec[] = [
   { id: "select", level: "essential", group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
+  // Lo stesso tasto di Inkscape.
+  { id: "nodes", level: "expert", group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "n" },
   { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
   { id: "highlighter", level: "standard", group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
   { id: "eraser", level: "essential", group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },

@@ -19,8 +19,9 @@
 // riquadro stimato delle sue righe: la misura vera dipende dai caratteri.
 
 import type { Role } from "../scene/analysis";
-import { BoundsBuilder, fmin, parsePath, rectPath, remEuclid, type Bounds, type Segment } from "../scene/geometry";
-import { apply, compose, IDENTITY, toRadians, type Matrix, type Point } from "../scene/matrix";
+import { BoundsBuilder, fmin, parsePath, rectPath, type Bounds, type Segment } from "../scene/geometry";
+import { arcCenter, onEllipse } from "../scene/curves";
+import { apply, compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
 import { tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
@@ -66,6 +67,8 @@ export interface TextLook {
 
 /// Un pezzo di un oggetto che si disegna da solo: una forma.
 interface Part {
+  /// L'elemento che la disegna.
+  readonly leaf: LeafNode;
   readonly segments: readonly Segment[];
   /// Dalle coordinate della forma a quelle della scena.
   readonly matrix: Matrix;
@@ -162,11 +165,25 @@ export class Unit {
     return out.finish();
   }
 
+  /// Le forme che disegnano l'oggetto, in ordine di documento: l'elemento,
+  /// e la matrice dalle sue coordinate a quelle della scena.
+  shapes(): Array<{ readonly leaf: LeafNode; readonly matrix: Matrix }> {
+    return this.parts.map((part) => ({ leaf: part.leaf, matrix: part.matrix }));
+  }
+
   /// Vero se il punto `p` della scena tocca l'oggetto, con una tolleranza
   /// `tolerance` in unità della scena.
   hits(p: Point, tolerance: number): boolean {
     if (!near(this.bounds, p, p, tolerance)) return false;
     return this.parts.some((part) => partHits(part, p, tolerance));
+  }
+
+  /// La forma più in alto dell'oggetto che il punto `p` della scena tocca;
+  /// `null` se nessuna.
+  shapeAt(p: Point, tolerance: number): LeafNode | null {
+    if (!near(this.bounds, p, p, tolerance)) return null;
+    for (let i = this.parts.length - 1; i >= 0; i--) if (partHits(this.parts[i]!, p, tolerance)) return this.parts[i]!.leaf;
+    return null;
   }
 
   /// Vero se il segmento da `a` a `b` tocca l'oggetto: il passaggio della
@@ -400,7 +417,7 @@ export class SceneIndexer {
     // riquadro.
     const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
     const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
-    return { segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null };
+    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null };
   }
 
   /// Il riquadro geometrico di una forma nella scena, ricordato per matrice.
@@ -761,45 +778,15 @@ function steps(estimate: number): number {
 /// nella scena da `m`: la conversione al centro delle note di SVG (F.6.5).
 function arcPoints(from: Point, radii: Point, rotation: number, large: boolean, sweep: boolean, to: Point, m: Matrix): Point[] {
   if (from[0] === to[0] && from[1] === to[1]) return [];
-  let rx = Math.abs(radii[0]);
-  let ry = Math.abs(radii[1]);
-  if (rx === 0 || ry === 0) return [apply(m, to)];
-  const radians = toRadians(rotation);
-  const sin = Math.sin(radians);
-  const cos = Math.cos(radians);
-  const dx = (from[0] - to[0]) / 2;
-  const dy = (from[1] - to[1]) / 2;
-  const x1 = cos * dx + sin * dy;
-  const y1 = -sin * dx + cos * dy;
-  const lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
-  if (lambda > 1) {
-    rx *= Math.sqrt(lambda);
-    ry *= Math.sqrt(lambda);
-  }
-  const numerator = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
-  const denominator = rx * rx * y1 * y1 + ry * ry * x1 * x1;
-  let coefficient = Math.sqrt(Math.max(numerator / denominator, 0));
-  if (large === sweep) coefficient = -coefficient;
-  const cx1 = (coefficient * rx * y1) / ry;
-  const cy1 = (-coefficient * ry * x1) / rx;
-  const cx = cos * cx1 - sin * cy1 + (from[0] + to[0]) / 2;
-  const cy = sin * cx1 + cos * cy1 + (from[1] + to[1]) / 2;
-  const theta1 = Math.atan2((y1 - cy1) / ry, (x1 - cx1) / rx);
-  const theta2 = Math.atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx);
-  let delta = remEuclid(theta2 - theta1, 2 * Math.PI);
-  if (!sweep && delta > 0) delta -= 2 * Math.PI;
+  const arc = arcCenter(from, { kind: "arc", radii, rotation, large, sweep, to });
+  if (arc === null) return [apply(m, to)];
   // Il passo angolare che tiene la corda entro `FLATNESS` dall'arco, sul
   // raggio più grande nella scena.
-  const radius = Math.max(rx, ry) * Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]));
+  const radius = Math.max(arc.radii[0], arc.radii[1]) * Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]));
   const angle = radius > FLATNESS ? 2 * Math.acos(fmin(1, 1 - FLATNESS / radius)) : Math.PI / 2;
-  const n = steps(Math.abs(delta) / angle);
+  const n = steps(Math.abs(arc.delta) / angle);
   const out: Point[] = [];
-  for (let i = 1; i < n; i++) {
-    const theta = theta1 + (delta * i) / n;
-    const ex = rx * Math.cos(theta);
-    const ey = ry * Math.sin(theta);
-    out.push(apply(m, [cx + cos * ex - sin * ey, cy + sin * ex + cos * ey]));
-  }
+  for (let i = 1; i < n; i++) out.push(apply(m, onEllipse(arc, arc.start + (arc.delta * i) / n)));
   out.push(apply(m, to));
   return out;
 }

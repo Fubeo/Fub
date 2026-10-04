@@ -200,3 +200,58 @@ regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
   prefisso è dichiarato sull'oggetto stesso, perché un'operazione non sa
   dichiararlo di nuovo.
 - **È un passo solo**, «Oggetto in tracciato», e la selezione resta quella.
+
+## Nodi
+
+Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi del tracciato
+scelto: i punti per cui passa, i segmenti fra loro e le maniglie delle curve.
+Si sceglie un oggetto solo; un oggetto che non è un tracciato lo si fa
+diventare con «Oggetto in tracciato», e lo strumento lo dice. Una freccia e
+un tratto a penna, che si ridisegnano con la loro regola, passano anche loro
+da «Oggetto in tracciato». Le regole stanno in
+`apps/client/src/editors/spatial/tools/nodes.ts`.
+
+- **Col puntatore** si trascina un nodo, coi nodi scelti insieme a lui, una
+  maniglia o un punto di un segmento, che si piega. Un tocco su un nodo lo
+  sceglie, con `Maiusc` lo aggiunge o lo toglie; un tocco su un segmento
+  sceglie i suoi due nodi, e due tocchi ci aggiungono un nodo. Un
+  trascinamento sul vuoto sceglie i nodi nel riquadro; un tocco sul vuoto
+  toglie la scelta dei nodi, poi quella dell'oggetto. Un tocco su un altro
+  oggetto, o su un'altra forma dello stesso gruppo, passa a quella.
+- **La barra dei nodi** prende il posto di quella della selezione, coi tasti
+  di Inkscape: «Aggiungi nodi» (`Ins`) a metà dei segmenti fra due nodi
+  scelti, «Elimina nodi» (`Canc`), «Nodi a spigolo», «Nodi lisci» e «Nodi
+  simmetrici» (`Maiusc+C`, `S`, `Y`), «Segmenti in linee» e «Segmenti in
+  curve» (`Maiusc+L` e `U`), «Spezza ai nodi» (`Maiusc+B`) e «Unisci i capi»
+  (`Maiusc+J`). `Alt+F10` ci va, ed `Esc` torna al foglio.
+- **Dalla tastiera** `Tab` e `Maiusc+Tab` passano di nodo in nodo, e oltre
+  l'ultimo all'oggetto dopo; `Home` e `Fine` vanno al primo e all'ultimo
+  nodo, `Ctrl+A` li sceglie tutti ed `Esc` toglie la scelta dei nodi, poi
+  quella dell'oggetto. Ogni nodo si dice col numero, il tipo e la posizione:
+  «Nodo 2 di 3, spigolo: x 50, y 10». Le frecce spostano i nodi scelti di 1,
+  10 con `Maiusc` e un pixel dello schermo con `Ctrl` o `⌘`, di riga in riga
+  con l'aggancio alla griglia; senza nodi scelti muovono il cursore, mai
+  l'oggetto. `Invio` apre la posizione dei nodi scelti, da scrivere coi
+  numeri.
+- **Ogni segmento resta del suo tipo:** linea, quadratica, cubica o arco.
+  Spostare un nodo porta con lui le maniglie delle sue cubiche; un arco
+  tiene raggi e rotazione. Piegare una linea la fa diventare la cubica
+  dritta che è; un arco piegato resta un arco.
+- **Il tipo di un nodo si legge dalle direzioni**, perché SVG non ha dove
+  scriverlo: liscio se i due segmenti vi passano allineati, simmetrico se
+  anche le maniglie sono lunghe uguali, spigolo altrimenti. Un nodo liscio
+  resta liscio mentre si trascinano lui, i vicini o le sue maniglie. Il tipo
+  scelto con la barra vale finché il tracciato resta scelto; i capi di un
+  tracciato aperto non ne hanno.
+- **Eliminare un nodo** unisce i suoi segmenti: due linee in una linea, se
+  no in una curva che passa vicino a dov'erano e tiene i versi ai capi, così
+  un nodo liscio accanto resta liscio. Ai capi di un tracciato aperto il
+  segmento se ne va. Un tracciato rimasto senza nodi se ne va con loro, e
+  `Canc` non elimina mai l'oggetto: lo fa «Elimina la selezione».
+- **Spezzare** fa di un nodo due nodi nello stesso punto, scelti: un
+  tracciato chiuso si apre, uno aperto si divide. **Unire** due capi scelti
+  chiude il tracciato, se sono i suoi, o ne fa uno solo; due capi nello
+  stesso punto diventano un nodo solo, se no li unisce una linea.
+- **Ogni modifica riscrive il `d` intero**, in coordinate assolute con due
+  decimali, in un passo che si annulla col suo nome; il resto del tracciato
+  non si tocca. La pagina si allarga se il tracciato ne esce.

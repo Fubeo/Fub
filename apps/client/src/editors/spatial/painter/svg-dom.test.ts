@@ -215,6 +215,24 @@ describe("l'anteprima degli strumenti", () => {
     expect(a.style.visibility).toBe("");
   });
 
+  it("mostra un altro `d` per un tracciato, e lo riporta a quello dipinto", async () => {
+    const engine = SceneEngine.open(doc(`${LAYER}<path id="p" d="M0 0 L4 0" stroke="#000000"/><rect id="r" width="4" height="4"/></g>`));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const path = host.querySelector(`[data-scene-id="p"]`)!;
+    const [paint] = builder.paintsOf(engine.holder("p")!);
+    const [rect] = builder.paintsOf(engine.holder("r")!);
+    painter.setDraft({ paths: new Map([[paint!, "M0 0 C1 2 3 2 4 0"]]), transforms: new Map([[rect!, "matrix(1 0 0 1 2 0)"]]) });
+    expect(host.querySelector(`[data-scene-id="p"]`)).toBe(path);
+    expect(path.getAttribute("d")).toBe("M0 0 C1 2 3 2 4 0");
+    painter.setDraft(null);
+    expect(path.getAttribute("d")).toBe("M0 0 L4 0");
+    expect(host.querySelector(`[data-scene-id="r"]`)!.hasAttribute("d")).toBe(false);
+    painter.dispose();
+  });
+
   it("dà a due elementi identici di un motore riaperto due forme diverse", () => {
     const body = `${LAYER}<rect width="4" height="4"/><rect width="4" height="4"/></g>`;
     const builder = new PaintBuilder();
