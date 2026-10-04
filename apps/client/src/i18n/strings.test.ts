@@ -22,9 +22,9 @@
 //    e una di un provider in due lingue diverse sullo stesso schermo.
 // 4. **Le chiavi morte**, che sono il modo in cui un catalogo marcisce: si
 //    riscrive un pannello, la chiave resta, e la si traduce per anni.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import html from "../../index.html?raw";
-import { applyStrings, catalogFor, catalogLanguage, expand, effectiveLanguage, plural, t } from "./strings";
+import { applyStrings, catalog, catalogFor, catalogLanguage, expand, effectiveLanguage, plural, t } from "./strings";
 
 /// Gli attributi con cui `index.html` nomina una chiave. Lo stesso elenco sta
 /// in `strings.ts`, come `CHIAVE_TEMA` sta in due posti e per la stessa
@@ -251,6 +251,57 @@ describe("i nomi fra graffe", () => {
     // @ts-expect-error: il modello nomina `{name}` e `{reason}`.
     expect(t("explorer.bad_name", { nome: "a", motivo: "b" })).toContain("{name}");
     expect(t("explorer.bad_name", { name: "a", reason: "b" })).not.toContain("{");
+  });
+});
+
+describe("un catalogo che arriva quando serve", () => {
+  // Il catalogo di una parte del client caricata con un `import()`: chiavi
+  // sue, ma la lingua, la scala e le regole della shell. Due lingue diverse
+  // sullo stesso schermo sono il difetto che la scala comune evita.
+  const PROVA = {
+    "prova.nome": "Ciao, {name}",
+    "prova.una": "Una prova",
+    "prova.altre": "{count} prove",
+  } as const;
+  const prova = catalog(PROVA, { en: { "prova.nome": "Hello, {name}", "prova.una": "One test", "prova.altre": "{count} tests" } });
+
+  afterEach(() => {
+    // La lingua del banco, come la fissa `test-setup.ts`.
+    vi.stubGlobal("navigator", { language: "it-IT" });
+  });
+
+  it("parla la lingua della shell, e la segue quando cambia", () => {
+    expect(prova.t("prova.nome", { name: "Ada" })).toBe("Ciao, Ada");
+    vi.stubGlobal("navigator", { language: "en-GB" });
+    expect(prova.t("prova.nome", { name: "Ada" })).toBe("Hello, Ada");
+    expect(prova.plural(3, "prova.una", "prova.altre")).toBe("3 tests");
+    vi.stubGlobal("navigator", { language: "de-DE" });
+    expect(prova.t("prova.nome", { name: "Ada" })).toBe("Ciao, Ada");
+  });
+
+  it("scende per la stessa scala", () => {
+    expect(prova.catalogFor("en-GB")).toBe(prova.catalogFor("en"));
+    expect(prova.catalogFor("it_IT")).toBe(PROVA);
+    expect(prova.catalogFor("ja")).toBe(PROVA);
+  });
+
+  it("sceglie il plurale della lingua", () => {
+    expect(prova.plural(1, "prova.una", "prova.altre")).toBe("Una prova");
+    expect(prova.plural(0, "prova.una", "prova.altre")).toBe("0 prove");
+  });
+
+  it("ripiega sull'italiano, e poi sulla chiave nuda", () => {
+    const monco = catalog(PROVA, { en: {} as never });
+    vi.stubGlobal("navigator", { language: "en" });
+    expect(monco.t("prova.una")).toBe("Una prova");
+    expect(monco.t("non.esiste" as never)).toBe("non.esiste");
+  });
+
+  it("chiede i nomi del modello, come `t`", () => {
+    // @ts-expect-error: il modello nomina `{name}`.
+    expect(prova.t("prova.nome", { nome: "Ada" })).toBe("Ciao, {name}");
+    // @ts-expect-error: senza argomenti il modello resta con il buco.
+    expect(prova.t("prova.nome")).toBe("Ciao, {name}");
   });
 });
 

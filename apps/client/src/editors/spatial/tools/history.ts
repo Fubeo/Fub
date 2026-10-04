@@ -14,7 +14,7 @@
 // serie di piccoli spostamenti si annulla in un colpo. Un annulla o un ripeti
 // chiude il passo in cima.
 
-import type { Key } from "../../../i18n/strings";
+import type { DrawKey } from "../strings";
 import { mergeUndo, type Applied, type Outcome, type SceneEngine, type Undo } from "../scene/engine";
 
 /// I passi che la pila ricorda: oltre, il più vecchio si dimentica.
@@ -26,7 +26,7 @@ export const MERGE_MS = 500;
 /// Un gesto applicato.
 export interface Step {
   /// Il nome del gesto, per gli annunci: «Annullato: Rettangolo».
-  readonly label: Key;
+  readonly label: DrawKey;
   readonly undo: Undo;
   /// Quando è arrivata l'ultima operazione del passo; `-Infinity` per un
   /// passo chiuso, che non si fonde più.
@@ -59,7 +59,7 @@ export class History {
 
   /// Ricorda un gesto applicato, fuso col passo in cima se può: i passi da
   /// ripetere non valgono più.
-  record(label: Key, applied: Applied): void {
+  record(label: DrawKey, applied: Applied): void {
     if (applied.duplicate) return;
     this.future.length = 0;
     const at = this.clock();

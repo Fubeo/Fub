@@ -9,7 +9,7 @@
 // colore. Il colore di un oggetto lo aggiunge chi lo conosce: l'editor, che
 // ha il painter.
 
-import { plural, t, type Key } from "../../i18n/strings";
+import { plural, t, type DrawKey } from "./strings";
 import type { Role } from "./scene/analysis";
 import type { ElementItem, Item } from "./scene/classify";
 
@@ -36,7 +36,7 @@ export function keyOf(item: { readonly id: string | null; readonly path: readonl
 /// e la carta, che è il fondo.
 const NOT_OBJECTS: ReadonlySet<Role> = new Set<Role>(["title", "desc", "paper"]);
 
-const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper">, Key>> = {
+const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper">, DrawKey>> = {
   layer: "draw.kind.layer",
   group: "draw.kind.group",
   link: "draw.kind.link",

@@ -6,7 +6,7 @@
 // Le scorciatoie sono una lettera senza modificatori, quelle che chi disegna
 // conosce già da altri programmi, e valgono solo col fuoco sulla superficie.
 
-import type { Key } from "../../../i18n/strings";
+import type { DrawKey } from "../strings";
 
 /// I livelli dell'interfaccia, dal più semplice al più ricco.
 export type Level = "essential" | "standard" | "expert";
@@ -24,8 +24,8 @@ export interface ToolSpec {
   readonly group: ToolGroup;
   /// Il nome di un'icona registrata (`ui/icons.ts`).
   readonly icon: string;
-  readonly label: Key;
-  readonly description: Key;
+  readonly label: DrawKey;
+  readonly description: DrawKey;
   /// Il tasto, minuscolo, come lo dà `KeyboardEvent.key`.
   readonly shortcut: string;
 }

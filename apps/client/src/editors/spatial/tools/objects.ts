@@ -20,7 +20,7 @@
 // - **Virtualizzato** oltre [`VIRTUAL_AFTER`] righe: si disegnano quelle che si
 //   vedono, più qualcuna, e la riga attiva.
 
-import { plural, t } from "../../../i18n/strings";
+import { plural, t } from "../strings";
 import { identifier, stableIdentifier } from "../../../ui/a11y";
 import type { Lifetime } from "../../../ui/lifetime";
 

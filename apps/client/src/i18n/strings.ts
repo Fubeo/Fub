@@ -36,6 +36,14 @@
 // Ciò che il compilatore **non** copre è il testo fermo di `index.html`, che
 // nomina le chiavi in un attributo: quello lo presidia `strings.test.ts`,
 // leggendo il file vero.
+//
+// # I cataloghi che arrivano dopo
+//
+// Questo catalogo si scarica all'avvio, con la shell. Una parte del client
+// che arriva con un `import()` porta le sue stringhe in un catalogo suo, fatto
+// con `catalog`: la stessa lingua, la stessa scala, gli stessi nomi fra
+// graffe, e chiavi che la shell non ha. È il caso dell'editor dei disegni
+// (`editors/spatial/strings.ts`).
 import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
@@ -1389,202 +1397,6 @@ const IT = { // --- la scocca --------------------------------------------------
   "canvas.edge_to_end": "Terminazione finale",
   "canvas.convert_note": "Converti in nota",
   "canvas.too_large": "La lavagna supera il limite interattivo; usa la modalità Sorgente.",
-  "draw.toolbar": "Strumenti di disegno",
-  "draw.surface": "Foglio del disegno",
-  "draw.tools": "Strumento",
-  "draw.colors": "Colore",
-  "draw.widths": "Spessore",
-  "draw.edit": "Modifica",
-  "draw.view": "Vista",
-  "draw.tool.select": "Selezione",
-  "draw.tool.select.hint": "Tocca un oggetto per sceglierlo e trascinalo per spostarlo; trascina sul vuoto per sceglierne più d’uno con un riquadro. Con Maiusc aggiungi o togli oggetti dalla selezione; le frecce spostano di 1, con Maiusc di 10.",
-  "draw.tool.pen": "Penna",
-  "draw.tool.pen.hint": "Disegna a mano libera; con la penna lo spessore segue la pressione.",
-  "draw.tool.highlighter": "Evidenziatore",
-  "draw.tool.highlighter.hint": "Passa sopra ciò che vuoi mettere in risalto: il segno è largo, di spessore costante, e lascia vedere ciò che copre.",
-  "draw.tool.eraser": "Gomma",
-  "draw.tool.eraser.hint": "Toglie gli oggetti interi che attraversi.",
-  "draw.tool.rect": "Rettangolo",
-  "draw.tool.rect.hint": "Trascina per disegnare un rettangolo; con Maiusc un quadrato.",
-  "draw.tool.ellipse": "Ellisse",
-  "draw.tool.ellipse.hint": "Trascina per disegnare un’ellisse; con Maiusc un cerchio.",
-  "draw.tool.line": "Linea",
-  "draw.tool.line.hint": "Trascina per disegnare una linea; con Maiusc l’angolo va a passi di 15°.",
-  "draw.tool.arrow": "Freccia",
-  "draw.tool.arrow.hint": "Trascina per disegnare una freccia; con Maiusc l’angolo va a passi di 15°.",
-  "draw.color.black": "Nero",
-  "draw.color.blue": "Blu",
-  "draw.color.vermilion": "Vermiglio",
-  "draw.color.green": "Verde",
-  "draw.color.purple": "Porpora",
-  "draw.color.orange": "Arancione",
-  "draw.color.sky": "Azzurro",
-  "draw.color.yellow": "Giallo",
-  "draw.color.custom": "Personalizzato {code}",
-  "draw.color.custom.light": "Personalizzato {code}, chiaro: sulla carta bianca si legge poco",
-  "draw.color.more": "Altro colore…",
-  "draw.color.dialog": "Colore personalizzato",
-  "draw.color.code": "Codice del colore",
-  "draw.width.thin": "Sottile",
-  "draw.width.medium": "Medio",
-  "draw.width.thick": "Spesso",
-  "draw.undo": "Annulla",
-  "draw.redo": "Ripeti",
-  "draw.delete": "Elimina la selezione",
-  "draw.zoom_in": "Ingrandisci",
-  "draw.zoom_out": "Riduci",
-  "draw.zoom_reset": "{zoom}: riporta lo zoom al 100%",
-  "draw.fit": "Mostra tutto il disegno",
-  "draw.title": "Che cosa hai disegnato?",
-  "draw.title.placeholder": "Per esempio: la rete di casa",
-  "draw.objects.one": "Il disegno ha {count} oggetto.",
-  "draw.objects.other": "Il disegno ha {count} oggetti.",
-  "draw.selected.none": "Nessun oggetto scelto.",
-  "draw.selected.one": "{count} oggetto scelto.",
-  "draw.selected.other": "{count} oggetti scelti.",
-  "draw.deleted.one": "{count} oggetto eliminato.",
-  "draw.deleted.other": "{count} oggetti eliminati.",
-  "draw.erased.one": "{count} oggetto cancellato.",
-  "draw.erased.other": "{count} oggetti cancellati.",
-  "draw.moved.one": "{count} oggetto spostato.",
-  "draw.moved.other": "{count} oggetti spostati.",
-  "draw.added.stroke": "Tratto aggiunto.",
-  "draw.added.highlight": "Evidenziatura aggiunta.",
-  "draw.added.rect": "Rettangolo aggiunto.",
-  "draw.added.ellipse": "Ellisse aggiunta.",
-  "draw.added.line": "Linea aggiunta.",
-  "draw.added.arrow": "Freccia aggiunta.",
-  "draw.announce.tool": "Strumento: {tool}.",
-  "draw.announce.color": "Colore: {color}.",
-  "draw.rejected": "Modifica non applicata: {reason}.",
-  "draw.reason.missing_target": "l’oggetto non c’è più",
-  "draw.reason.missing_parent": "il livello non c’è più",
-  "draw.reason.duplicate_id": "un identificativo è già in uso",
-  "draw.reason.invalid": "la modifica non è valida",
-  "draw.reason.locked": "l’oggetto è in un livello bloccato",
-  "draw.reason.foreign": "la parte viene da un altro programma e FubDraw la lascia com’è",
-  "draw.reason.limit": "il disegno ha raggiunto la dimensione massima",
-  "draw.reason.read_only": "il disegno è in sola lettura",
-  "draw.undone": "Annullato: {action}.",
-  "draw.redone": "Ripetuto: {action}.",
-  "draw.undo.failed": "Impossibile annullare «{action}»: il disegno è cambiato nel frattempo.",
-  "draw.redo.failed": "Impossibile ripetere «{action}»: il disegno è cambiato nel frattempo.",
-  "draw.no_layer": "Ogni livello è bloccato o nascosto: non c’è dove disegnare.",
-  "draw.ink_failed": "Impossibile salvare il tratto.",
-  "draw.action.stroke": "Tratto",
-  "draw.action.highlight": "Evidenziatura",
-  "draw.action.move": "Spostamento",
-  "draw.action.erase": "Cancellazione",
-  "draw.action.delete": "Eliminazione",
-  "draw.action.title": "Titolo",
-  "draw.action.adopt": "Disegno reso modificabile",
-  "draw.adopted": "Ora il disegno si modifica.",
-  "draw.kind.layer": "Livello",
-  "draw.kind.group": "Gruppo",
-  "draw.kind.link": "Collegamento",
-  "draw.kind.stroke": "Tratto",
-  "draw.kind.highlighter": "Evidenziatura",
-  "draw.kind.path": "Tracciato",
-  "draw.kind.circle": "Cerchio",
-  "draw.kind.polyline": "Spezzata",
-  "draw.kind.polygon": "Poligono",
-  "draw.kind.text": "Testo",
-  "draw.kind.image": "Immagine",
-  "draw.describe.named": "{kind} «{name}»",
-  "draw.describe.parts.one": "{count} oggetto",
-  "draw.describe.parts.other": "{count} oggetti",
-  "draw.state.locked": "bloccato",
-  "draw.state.hidden": "nascosto",
-  "draw.objects": "Oggetti",
-  "draw.objects.empty": "Il disegno è vuoto.",
-  "draw.surface.hint": "Le frecce muovono il cursore o la selezione; Spazio preme e rilascia; Tab passa all’oggetto dopo; Invio apre le proprietà; ? elenca i tasti.",
-  "draw.properties": "Proprietà",
-  "draw.properties.selection": "Posizione e misure",
-  "draw.properties.document": "Proprietà del disegno",
-  "draw.field.width": "Larghezza",
-  "draw.field.height": "Altezza",
-  "draw.field.title": "Titolo",
-  "draw.field.desc": "Descrizione",
-  "draw.field.page_width": "Larghezza della pagina",
-  "draw.field.page_height": "Altezza della pagina",
-  "draw.keys": "Tasti del disegno",
-  "draw.keys.tools": "Strumenti",
-  "draw.keys.cursor": "Disegnare da tastiera",
-  "draw.keys.cursor.move": "Muove il cursore: 10 px, 50 con Maiusc, 1 con Ctrl o ⌘",
-  "draw.keys.cursor.press": "Preme, e poi rilascia",
-  "draw.keys.cancel": "Annulla il gesto",
-  "draw.keys.nudge": "Sposta la selezione di 1, con Maiusc di 10",
-  "draw.keys.resize": "Ridimensiona la selezione di 1, con Maiusc di 10",
-  "draw.keys.walk": "L’oggetto dopo o prima",
-  "draw.keys.ends": "Il primo o l’ultimo oggetto",
-  "draw.keys.all": "Sceglie tutto",
-  "draw.keys.deselect": "Toglie la selezione",
-  "draw.keys.actual": "Zoom al 100%",
-  "draw.cursor.at": "x {x}, y {y}",
-  "draw.cursor.down": "Premuto: le frecce tracciano, Spazio rilascia, Esc annulla.",
-  "draw.cursor.up": "Rilasciato.",
-  "draw.resized": "Misure: {width} × {height}.",
-  "draw.walk": "{object}, {index} di {count}.",
-  "draw.action.resize": "Ridimensionamento",
-  "draw.keys.paste": "Incolla un’immagine",
-  "draw.action.image": "Immagine",
-  "draw.added.image.one": "Immagine aggiunta.",
-  "draw.added.image.other": "{count} immagini aggiunte.",
-  "draw.image.heavy.one": "Immagine troppo pesante",
-  "draw.image.heavy.other": "Immagini troppo pesanti",
-  "draw.image.large": "L’immagine pesa {size}, e in un disegno un’immagine può pesare al più {limit}. Ridurla? Avrà meno pixel, ma la stessa misura sul foglio.",
-  "draw.image.shared": "Le immagini pesano {size} in tutto, e quelle aggiunte insieme possono pesare al più {limit}. Ridurle? Avranno meno pixel, ma la stessa misura sul foglio.",
-  "draw.image.room": "Nel disegno resta posto per {limit} di immagini, e ne servono {size}. Ridurre? Le immagini avranno meno pixel, ma la stessa misura sul foglio.",
-  "draw.image.reduce": "Riduci",
-  "draw.image.reducing": "Riduzione dell’immagine…",
-  "draw.image.unreadable": "Non è un’immagine che il disegno sa leggere.",
-  "draw.image.full": "Il disegno è vicino al limite di {limit}: un’altra immagine non ci sta.",
-  "draw.image.failed": "Impossibile ridurre l’immagine.",
-  "draw.arrange": "Disponi",
-  "draw.duplicate": "Duplica",
-  "draw.group": "Raggruppa",
-  "draw.ungroup": "Separa",
-  "draw.order": "Ordine",
-  "draw.order.front": "Porta in primo piano",
-  "draw.order.forward": "Porta avanti",
-  "draw.order.backward": "Porta indietro",
-  "draw.order.back": "Porta in secondo piano",
-  "draw.align": "Allinea e distribuisci",
-  "draw.align.left": "Allinea a sinistra",
-  "draw.align.center": "Allinea al centro",
-  "draw.align.right": "Allinea a destra",
-  "draw.align.top": "Allinea in alto",
-  "draw.align.middle": "Allinea in mezzo",
-  "draw.align.bottom": "Allinea in basso",
-  "draw.align.to_page": "{action}, rispetto alla pagina",
-  "draw.distribute.x": "Distribuisci orizzontalmente",
-  "draw.distribute.y": "Distribuisci verticalmente",
-  "draw.distribute.few": "Servono almeno tre oggetti.",
-  "draw.action.duplicate": "Duplicazione",
-  "draw.action.order": "Cambio d’ordine",
-  "draw.action.group": "Raggruppamento",
-  "draw.action.ungroup": "Separazione",
-  "draw.action.align": "Allineamento",
-  "draw.action.distribute": "Distribuzione",
-  "draw.duplicated.one": "{count} oggetto duplicato.",
-  "draw.duplicated.other": "{count} oggetti duplicati.",
-  "draw.duplicate.foreign": "Non duplicato: un oggetto ha parti di un altro programma, che FubDraw non sa copiare.",
-  "draw.ordered.front": "In primo piano.",
-  "draw.ordered.forward": "Un posto più avanti.",
-  "draw.ordered.backward": "Un posto più indietro.",
-  "draw.ordered.back": "In secondo piano.",
-  "draw.grouped": "Gruppo di {count} oggetti.",
-  "draw.group.few": "Per un gruppo servono almeno due oggetti.",
-  "draw.ungrouped.one": "{count} gruppo separato.",
-  "draw.ungrouped.other": "{count} gruppi separati.",
-  "draw.ungroup.none": "Fra gli oggetti scelti non c’è un gruppo.",
-  "draw.ungroup.foreign": "Non separato: il gruppo ha parti di un altro programma, che non seguirebbero la sua posizione o il suo stile.",
-  "draw.aligned.one": "{count} oggetto allineato.",
-  "draw.aligned.other": "{count} oggetti allineati.",
-  "draw.distributed": "{count} oggetti distribuiti.",
-  "draw.unchanged": "È già così: niente da cambiare.",
-  "draw.keys.arrange": "Va alla barra della selezione",
-  "draw.surface.hint.arrange": "Le frecce muovono il cursore o la selezione; Spazio preme e rilascia; Tab passa all’oggetto dopo; Invio apre le proprietà; con una selezione, Alt+F10 porta ai comandi per disporla; ? elenca i tasti.",
   "vector.foreign": "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.",
   "vector.foreign.edit": "Modifica",
   "vector.read_only": "Questo disegno si apre solo da guardare: {reason}. Il testo si cambia con «{command}».",
@@ -2889,202 +2701,6 @@ const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the editor",
   "canvas.edge_to_end": "To end",
   "canvas.convert_note": "Convert to note",
   "canvas.too_large": "Canvas exceeds the interactive limit; use Source mode.",
-  "draw.toolbar": "Drawing tools",
-  "draw.surface": "Drawing sheet",
-  "draw.tools": "Tool",
-  "draw.colors": "Color",
-  "draw.widths": "Width",
-  "draw.edit": "Edit",
-  "draw.view": "View",
-  "draw.tool.select": "Select",
-  "draw.tool.select.hint": "Tap an object to select it and drag it to move it; drag on empty space to select several with a box. Hold Shift to add or remove objects from the selection; arrow keys move by 1, with Shift by 10.",
-  "draw.tool.pen": "Pen",
-  "draw.tool.pen.hint": "Draw freehand; with a pen the width follows the pressure.",
-  "draw.tool.highlighter": "Highlighter",
-  "draw.tool.highlighter.hint": "Go over what you want to stand out: the mark is wide, of even width, and lets what it covers show through.",
-  "draw.tool.eraser": "Eraser",
-  "draw.tool.eraser.hint": "Removes the whole objects you cross.",
-  "draw.tool.rect": "Rectangle",
-  "draw.tool.rect.hint": "Drag to draw a rectangle; hold Shift for a square.",
-  "draw.tool.ellipse": "Ellipse",
-  "draw.tool.ellipse.hint": "Drag to draw an ellipse; hold Shift for a circle.",
-  "draw.tool.line": "Line",
-  "draw.tool.line.hint": "Drag to draw a line; hold Shift to snap the angle to 15° steps.",
-  "draw.tool.arrow": "Arrow",
-  "draw.tool.arrow.hint": "Drag to draw an arrow; hold Shift to snap the angle to 15° steps.",
-  "draw.color.black": "Black",
-  "draw.color.blue": "Blue",
-  "draw.color.vermilion": "Vermilion",
-  "draw.color.green": "Green",
-  "draw.color.purple": "Purple",
-  "draw.color.orange": "Orange",
-  "draw.color.sky": "Sky blue",
-  "draw.color.yellow": "Yellow",
-  "draw.color.custom": "Custom {code}",
-  "draw.color.custom.light": "Custom {code}, light: hard to read on white paper",
-  "draw.color.more": "Other color…",
-  "draw.color.dialog": "Custom color",
-  "draw.color.code": "Color code",
-  "draw.width.thin": "Thin",
-  "draw.width.medium": "Medium",
-  "draw.width.thick": "Thick",
-  "draw.undo": "Undo",
-  "draw.redo": "Redo",
-  "draw.delete": "Delete selection",
-  "draw.zoom_in": "Zoom in",
-  "draw.zoom_out": "Zoom out",
-  "draw.zoom_reset": "{zoom}: reset zoom to 100%",
-  "draw.fit": "Show the whole drawing",
-  "draw.title": "What did you draw?",
-  "draw.title.placeholder": "For example: the home network",
-  "draw.objects.one": "The drawing has {count} object.",
-  "draw.objects.other": "The drawing has {count} objects.",
-  "draw.selected.none": "Nothing selected.",
-  "draw.selected.one": "{count} object selected.",
-  "draw.selected.other": "{count} objects selected.",
-  "draw.deleted.one": "{count} object deleted.",
-  "draw.deleted.other": "{count} objects deleted.",
-  "draw.erased.one": "{count} object erased.",
-  "draw.erased.other": "{count} objects erased.",
-  "draw.moved.one": "{count} object moved.",
-  "draw.moved.other": "{count} objects moved.",
-  "draw.added.stroke": "Stroke added.",
-  "draw.added.highlight": "Highlight added.",
-  "draw.added.rect": "Rectangle added.",
-  "draw.added.ellipse": "Ellipse added.",
-  "draw.added.line": "Line added.",
-  "draw.added.arrow": "Arrow added.",
-  "draw.announce.tool": "Tool: {tool}.",
-  "draw.announce.color": "Color: {color}.",
-  "draw.rejected": "Change not applied: {reason}.",
-  "draw.reason.missing_target": "the object is gone",
-  "draw.reason.missing_parent": "the layer is gone",
-  "draw.reason.duplicate_id": "an identifier is already in use",
-  "draw.reason.invalid": "the change is not valid",
-  "draw.reason.locked": "the object is on a locked layer",
-  "draw.reason.foreign": "that part comes from another program and FubDraw leaves it as it is",
-  "draw.reason.limit": "the drawing has reached its maximum size",
-  "draw.reason.read_only": "the drawing is read-only",
-  "draw.undone": "Undone: {action}.",
-  "draw.redone": "Redone: {action}.",
-  "draw.undo.failed": "Cannot undo “{action}”: the drawing has changed in the meantime.",
-  "draw.redo.failed": "Cannot redo “{action}”: the drawing has changed in the meantime.",
-  "draw.no_layer": "Every layer is locked or hidden: there is nowhere to draw.",
-  "draw.ink_failed": "Could not save the stroke.",
-  "draw.action.stroke": "Stroke",
-  "draw.action.highlight": "Highlight",
-  "draw.action.move": "Move",
-  "draw.action.erase": "Erase",
-  "draw.action.delete": "Delete",
-  "draw.action.title": "Title",
-  "draw.action.adopt": "Drawing made editable",
-  "draw.adopted": "The drawing can now be edited.",
-  "draw.kind.layer": "Layer",
-  "draw.kind.group": "Group",
-  "draw.kind.link": "Link",
-  "draw.kind.stroke": "Stroke",
-  "draw.kind.highlighter": "Highlight",
-  "draw.kind.path": "Path",
-  "draw.kind.circle": "Circle",
-  "draw.kind.polyline": "Polyline",
-  "draw.kind.polygon": "Polygon",
-  "draw.kind.text": "Text",
-  "draw.kind.image": "Image",
-  "draw.describe.named": "{kind} “{name}”",
-  "draw.describe.parts.one": "{count} object",
-  "draw.describe.parts.other": "{count} objects",
-  "draw.state.locked": "locked",
-  "draw.state.hidden": "hidden",
-  "draw.objects": "Objects",
-  "draw.objects.empty": "The drawing is empty.",
-  "draw.surface.hint": "Arrow keys move the cursor or the selection; Space presses and releases; Tab goes to the next object; Enter opens properties; ? lists the keys.",
-  "draw.properties": "Properties",
-  "draw.properties.selection": "Position and size",
-  "draw.properties.document": "Drawing properties",
-  "draw.field.width": "Width",
-  "draw.field.height": "Height",
-  "draw.field.title": "Title",
-  "draw.field.desc": "Description",
-  "draw.field.page_width": "Page width",
-  "draw.field.page_height": "Page height",
-  "draw.keys": "Drawing keys",
-  "draw.keys.tools": "Tools",
-  "draw.keys.cursor": "Drawing with the keyboard",
-  "draw.keys.cursor.move": "Move the cursor: 10 px, 50 with Shift, 1 with Ctrl or ⌘",
-  "draw.keys.cursor.press": "Press, then release",
-  "draw.keys.cancel": "Cancel the gesture",
-  "draw.keys.nudge": "Move the selection by 1, with Shift by 10",
-  "draw.keys.resize": "Resize the selection by 1, with Shift by 10",
-  "draw.keys.walk": "Next or previous object",
-  "draw.keys.ends": "First or last object",
-  "draw.keys.all": "Select all",
-  "draw.keys.deselect": "Clear the selection",
-  "draw.keys.actual": "Zoom to 100%",
-  "draw.cursor.at": "x {x}, y {y}",
-  "draw.cursor.down": "Pressed: arrows trace, Space releases, Esc cancels.",
-  "draw.cursor.up": "Released.",
-  "draw.resized": "Size: {width} × {height}.",
-  "draw.walk": "{object}, {index} of {count}.",
-  "draw.action.resize": "Resize",
-  "draw.keys.paste": "Paste an image",
-  "draw.action.image": "Image",
-  "draw.added.image.one": "Image added.",
-  "draw.added.image.other": "{count} images added.",
-  "draw.image.heavy.one": "Image too large",
-  "draw.image.heavy.other": "Images too large",
-  "draw.image.large": "The image is {size}, and an image in a drawing can be at most {limit}. Reduce it? It will have fewer pixels, but the same size on the sheet.",
-  "draw.image.shared": "The images are {size} in all, and images added together can be at most {limit}. Reduce them? They will have fewer pixels, but the same size on the sheet.",
-  "draw.image.room": "The drawing has room for {limit} of images, and {size} are needed. Reduce? The images will have fewer pixels, but the same size on the sheet.",
-  "draw.image.reduce": "Reduce",
-  "draw.image.reducing": "Reducing the image…",
-  "draw.image.unreadable": "This is not an image the drawing can read.",
-  "draw.image.full": "The drawing is close to its {limit} limit: another image does not fit.",
-  "draw.image.failed": "Could not reduce the image.",
-  "draw.arrange": "Arrange",
-  "draw.duplicate": "Duplicate",
-  "draw.group": "Group",
-  "draw.ungroup": "Ungroup",
-  "draw.order": "Order",
-  "draw.order.front": "Bring to front",
-  "draw.order.forward": "Bring forward",
-  "draw.order.backward": "Send backward",
-  "draw.order.back": "Send to back",
-  "draw.align": "Align and distribute",
-  "draw.align.left": "Align left",
-  "draw.align.center": "Align center",
-  "draw.align.right": "Align right",
-  "draw.align.top": "Align top",
-  "draw.align.middle": "Align middle",
-  "draw.align.bottom": "Align bottom",
-  "draw.align.to_page": "{action}, relative to the page",
-  "draw.distribute.x": "Distribute horizontally",
-  "draw.distribute.y": "Distribute vertically",
-  "draw.distribute.few": "Needs at least three objects.",
-  "draw.action.duplicate": "Duplicate",
-  "draw.action.order": "Reorder",
-  "draw.action.group": "Group",
-  "draw.action.ungroup": "Ungroup",
-  "draw.action.align": "Align",
-  "draw.action.distribute": "Distribute",
-  "draw.duplicated.one": "{count} object duplicated.",
-  "draw.duplicated.other": "{count} objects duplicated.",
-  "draw.duplicate.foreign": "Not duplicated: an object has parts from another program that FubDraw cannot copy.",
-  "draw.ordered.front": "Brought to front.",
-  "draw.ordered.forward": "Brought forward.",
-  "draw.ordered.backward": "Sent backward.",
-  "draw.ordered.back": "Sent to back.",
-  "draw.grouped": "Grouped {count} objects.",
-  "draw.group.few": "A group needs at least two objects.",
-  "draw.ungrouped.one": "{count} group ungrouped.",
-  "draw.ungrouped.other": "{count} groups ungrouped.",
-  "draw.ungroup.none": "None of the selected objects is a group.",
-  "draw.ungroup.foreign": "Not ungrouped: the group has parts from another program that would not follow its position or style.",
-  "draw.aligned.one": "{count} object aligned.",
-  "draw.aligned.other": "{count} objects aligned.",
-  "draw.distributed": "{count} objects distributed.",
-  "draw.unchanged": "Already like that: nothing to change.",
-  "draw.keys.arrange": "Go to the selection bar",
-  "draw.surface.hint.arrange": "Arrow keys move the cursor or the selection; Space presses and releases; Tab goes to the next object; Enter opens properties; with a selection, Alt+F10 goes to the commands that arrange it; ? lists the keys.",
   "vector.foreign": "This SVG was not made with FubDraw: you can look at it, and draw on it after “Edit”. The file gets two attributes on its root; everything else stays as it is.",
   "vector.foreign.edit": "Edit",
   "vector.read_only": "This drawing opens for viewing only: {reason}. Its text can be changed with “{command}”.",
@@ -3162,7 +2778,14 @@ const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the editor",
 /// La lingua di ripiego di questa shell, che è quella in cui è scritto.
 const FALLBACK = "it";
 
-const CATALOGS: Record<string, Record<string, string>> = { it: IT, en: EN };
+/// Le lingue in cui la shell è tradotta, oltre a quella in cui è scritta. Un
+/// catalogo di [`catalog`] le deve avere tutte: una lingua nuova non compila
+/// finché ognuno non la traduce.
+export type Translation = "en";
+
+const TRANSLATIONS: Record<Translation, Record<Key, string>> = { en: EN };
+
+const CATALOGS: Record<string, Record<string, string>> = { [FALLBACK]: IT, ...TRANSLATIONS };
 
 /// La chiave dell'impostazione della lingua. La stessa stringa sta in
 /// `fub-kernel/src/locale.rs`, come `CHIAVE_TEMA` sta in
@@ -3311,13 +2934,16 @@ export function expand(template: string, args: Record<string, string | number>):
 /// italiano e in inglese «uno» è singolare, ma una lingua nuova non deve
 /// portarsi dietro l'assunzione.
 export function plural(count: number, one: Key, other: Key, args: Record<string, string | number> = {}): string {
-  let form = "other";
+  return t(singular(count) ? one : other, { count, n: count, ...args });
+}
+
+/// Se `count` vuole la forma singolare nella lingua che si sta parlando.
+function singular(count: number): boolean {
   try {
-    form = new Intl.PluralRules(resolvedLanguage()).select(count);
+    return new Intl.PluralRules(resolvedLanguage()).select(count) === "one";
   } catch {
-    form = count === 1 ? "one" : "other";
+    return count === 1;
   }
-  return t(form === "one" ? one : other, { count, n: count, ...args });
 }
 
 /// I nomi fra graffe di un modello del catalogo: `"«{name}»: {reason}"` →
@@ -3337,17 +2963,56 @@ type Placeholders<S extends string> = S extends `${string}{${infer Rest}`
 /// la forma di una qualunque delle chiavi possibili: la prova piena è sulle
 /// chiamate con la chiave scritta. Una chiave forzata (`as never`, letta da
 /// un attributo) non promette niente e non chiede niente.
-export type ArgsFor<K extends Key> = [K] extends [never] ? [args?: Record<string, string | number>] : ArgsOf<K>;
+export type ArgsFor<K extends Key> = TemplateArgs<typeof IT, K>;
 
-type ArgsOf<K extends Key> = K extends Key
-  ? [Placeholders<(typeof IT)[K]>] extends [never]
-    ? [args?: Record<string, string | number>]
-    : [args: Record<Placeholders<(typeof IT)[K]>, string | number> & Record<string, string | number>]
-  : never;
+/// Lo stesso per la chiave `K` di un catalogo qualunque `C`, i cui testi sono
+/// i modelli nella lingua di ripiego.
+export type TemplateArgs<C extends Readonly<Record<string, string>>, K extends keyof C> = [K] extends [never]
+  ? [args?: Record<string, string | number>]
+  : K extends keyof C
+    ? [Placeholders<C[K]>] extends [never]
+      ? [args?: Record<string, string | number>]
+      : [args: Record<Placeholders<C[K]>, string | number> & Record<string, string | number>]
+    : never;
 
 export function t<K extends Key>(key: K, ...[args = {}]: ArgsFor<K>): string {
   const template = catalogFor(languageCurrent())[key] ?? IT[key] ?? key;
   return expand(template, args);
+}
+
+/// Il catalogo di una parte del client che arriva quando serve.
+///
+/// Questo catalogo si scarica all'avvio, con la shell. Una parte grande che
+/// arriva con un `import()`, come l'editor dei disegni, porta le sue stringhe
+/// con sé, e chi non la apre non le scarica. Parla la lingua della shell, con
+/// la stessa scala di ripiego, gli stessi nomi fra graffe e gli stessi
+/// plurali; le chiavi sono sue, e il tipo le tiene complete in ogni lingua
+/// come `Key` tiene quelle della shell.
+export interface Catalog<C extends Readonly<Record<string, string>>> {
+  /// Il testo di una chiave, nella lingua di chi guarda, come [`t`].
+  t<K extends keyof C & string>(key: K, ...args: TemplateArgs<C, K>): string;
+  /// La frase giusta per un numero, come [`plural`].
+  plural(count: number, one: keyof C & string, other: keyof C & string, args?: Record<string, string | number>): string;
+  /// I testi per una lingua, con la scala di [`catalogFor`].
+  catalogFor(language: string): Readonly<Record<string, string>>;
+}
+
+/// Un catalogo coi modelli di `source`, scritti nella lingua di ripiego, e le
+/// loro traduzioni.
+export function catalog<const C extends Readonly<Record<string, string>>>(
+  source: C,
+  translations: Readonly<Record<Translation, Readonly<Record<keyof C, string>>>>,
+): Catalog<C> {
+  const fallback: Readonly<Record<string, string>> = source;
+  const tables: Readonly<Record<string, Readonly<Record<string, string>>>> = { [FALLBACK]: fallback, ...translations };
+  const tableFor = (language: string): Readonly<Record<string, string>> => tables[catalogLanguage(language)] ?? fallback;
+  const text = (key: string, args: Record<string, string | number>): string =>
+    expand(tableFor(languageCurrent())[key] ?? fallback[key] ?? key, args);
+  return {
+    t: (key, ...args) => text(key, (args as [Record<string, string | number>?])[0] ?? {}),
+    plural: (count, one, other, args = {}) => text(singular(count) ? one : other, { count, n: count, ...args }),
+    catalogFor: tableFor,
+  };
 }
 
 /// Gli attributi che il testo fermo di `index.html` può chiedere, e dove
