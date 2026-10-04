@@ -12,9 +12,10 @@ describe("il registro degli strumenti", () => {
     expect(DEFAULT_TOOL).toBe("pen");
   });
 
-  it("aggiunge allo Standard l'evidenziatore, dopo la penna", () => {
-    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow"]);
+  it("aggiunge allo Standard l'evidenziatore, dopo la penna, e il testo in fondo", () => {
+    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
     expect(toolSpec("highlighter").shortcut).toBe("h");
+    expect(toolSpec("text").shortcut).toBe("t");
     expect(reaches("standard", "essential")).toBe(true);
     expect(reaches("standard", "standard")).toBe(true);
     expect(reaches("standard", "expert")).toBe(false);

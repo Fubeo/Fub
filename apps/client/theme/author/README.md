@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **116 ruoli**, espone **432 hook**, **7 stati** (154 assegnazioni su 48 componenti). Hook non assegnati: **0**. Gli elenchi e le coppie di contrasto sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **116 ruoli**, espone **433 hook**, **7 stati** (154 assegnazioni su 48 componenti). Hook non assegnati: **0**. Gli elenchi e le coppie di contrasto sono in `contract.json`, generato dalle sorgenti della shell.
 
 ## Struttura minima
 

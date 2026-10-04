@@ -20,7 +20,8 @@
 // - **Anteprima degli strumenti:** mentre si trascina una selezione o si
 //   passa la gomma, `setDraft` cambia il `transform` dei nodi vivi o li
 //   sbiadisce, senza ricrearli e senza toccare la scena; l'operazione scritta
-//   alla fine porta la scena nuova.
+//   alla fine porta la scena nuova. Un testo che si scrive sul posto si
+//   nasconde allo stesso modo.
 //
 // Tutto ciò che il painter apre (timer, osservatori, lease) appartiene alla
 // sua vita, e la vita di chi lo monta la chiude.
@@ -68,6 +69,9 @@ export interface PainterDraft {
   readonly transforms?: ReadonlyMap<PaintNode, string | null>;
   /// I nodi che la gomma sta per togliere: si vedono sbiaditi.
   readonly faded?: ReadonlySet<PaintNode>;
+  /// I nodi che non si vedono: un testo mentre lo si scrive sul posto, che
+  /// l'editor mostra al suo posto.
+  readonly hidden?: ReadonlySet<PaintNode>;
 }
 
 /// L'opacità di un nodo sbiadito dalla gomma.
@@ -348,6 +352,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     if (painted === undefined) record.el.removeAttribute("transform");
     else if (record.el.getAttribute("transform") !== painted[1]) record.el.setAttribute("transform", painted[1]);
     record.el.style.removeProperty("opacity");
+    record.el.style.removeProperty("visibility");
   };
 
   const clearDraft = (): void => {
@@ -368,6 +373,12 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     for (const paint of draft.faded ?? []) {
       for (const record of recordsOf(paint)) {
         record.el.style.setProperty("opacity", FADED_OPACITY);
+        touched.add(record);
+      }
+    }
+    for (const paint of draft.hidden ?? []) {
+      for (const record of recordsOf(paint)) {
+        record.el.style.setProperty("visibility", "hidden");
         touched.add(record);
       }
     }

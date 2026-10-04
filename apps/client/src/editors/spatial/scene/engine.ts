@@ -1294,12 +1294,12 @@ export class SceneEngine {
       }
       // Una riga nuova copia gli attributi della precedente, senza id, e va
       // giù di un'interlinea: quella delle righe che ci sono già, oppure 1,25
-      // volte il corpo del testo.
+      // volte il corpo con cui si vede l'ultima riga.
       let spacing: string | null = null;
       for (let k = tspans.length - 1; k >= 1 && spacing === null; k--) spacing = valueOf(tspans[k]!, NS_NONE, "dy") ?? null;
       if (spacing === null) {
-        const size = valueOf(element, NS_NONE, "font-size");
-        spacing = formatNumber(((size === undefined ? null : svgLength(size)) ?? 16) * 1.25, 2);
+        const last = tspans.length === 0 ? [] : [tspans[tspans.length - 1]!];
+        spacing = formatNumber(this.fontSize([...last, element], node.parent) * 1.25, 2);
       }
       const name = scope.svgName("tspan")!;
       const written: OutElement[] = [];
@@ -1320,6 +1320,25 @@ export class SceneEngine {
     });
     this.touched.add(op.id);
     return { op: "text", id: op.id, lines: previous };
+  }
+
+  /// Il corpo con cui si vede il primo di `elements`, dal più interno al
+  /// più esterno, dentro `container`: il primo `font-size` valido che si
+  /// incontra salendo, 16 se nessuno lo scrive.
+  private fontSize(elements: readonly ElementNode[], container: ContainerNode | null): number {
+    const sizeOf = (element: ElementNode): number | null => {
+      const value = valueOf(element, NS_NONE, "font-size");
+      return value === undefined ? null : svgLength(value);
+    };
+    for (const element of elements) {
+      const size = sizeOf(element);
+      if (size !== null && size >= 0) return size;
+    }
+    for (let c = container; c !== null; c = c.parent) {
+      const size = sizeOf(this.reread(c).element);
+      if (size !== null && size >= 0) return size;
+    }
+    return 16;
   }
 
   private ident(op: Record<string, unknown>): Op {

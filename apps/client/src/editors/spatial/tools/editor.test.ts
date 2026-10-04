@@ -268,7 +268,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -1139,6 +1139,305 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     key("?", { shiftKey: true });
     expect(rows()).toContainEqual(["←↑→↓", "Sposta la selezione alla riga seguente della griglia, a cinque righe con Maiusc"]);
     expect(rows()).toContainEqual(["Ctrl+←↑→↓", "Ridimensiona la selezione fino alla riga seguente della griglia, a cinque righe con Maiusc"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+  });
+});
+
+describe("il testo, dal livello Standard", () => {
+  /// Un testo blu di due righe, nel corpo 20: il suo riquadro va da (10, 24)
+  /// a (46, 70).
+  const T = "ot1t1t1t1";
+  const TEXT = doc(
+    `<title>Prova</title>${LAYER}<text id="${T}" x="10" y="40" fill="#0072b2" font-family="Inter, sans-serif" font-size="20">` +
+      `<tspan x="10" dy="0">Uno</tspan><tspan x="10" dy="25">Due</tspan></text></g>`,
+  );
+  const EMPTY = doc(`<title>Prova</title>${LAYER}</g>`);
+
+  const input = (): HTMLTextAreaElement => host.querySelector<HTMLTextAreaElement>(".draw-text-input")!;
+  const layer = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-layer")!;
+  const painted = (): SVGElement => host.querySelector<SVGElement>(".spatial-painter text")!;
+  /// Un tocco col mouse in (`x`, `y`).
+  const tap = (x: number, y: number): void => drag([[x, y]]);
+  /// Scrive `value` nel campo, come la tastiera.
+  const type = (value: string): void => {
+    input().value = value;
+    input().dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  /// Le righe del testo `id`, come le scrive il file.
+  const lines = (id: string): string[] => {
+    const text = new RegExp(`<text id="${id}"[^>]*>([\\s\\S]*?)</text>`).exec(editor.engine.text)?.[1] ?? "";
+    return [...text.matchAll(/<tspan[^>]*>([^<]*)<\/tspan>/g)].map((match) => match[1]!);
+  };
+
+  it("lo strumento c'è dal livello Standard: un tocco apre il campo dove resterà il testo, ed Esc lo scrive in un passo che si annulla", () => {
+    mount(EMPTY);
+    key("t");
+    expect(editor.tool).toBe("pen");
+    editor.setLevel("standard");
+    key("t");
+    expect(editor.tool).toBe("text");
+    expect(surface().dataset.tool).toBe("text");
+    tap(30, 50);
+    expect(layer().hidden).toBe(false);
+    expect(document.activeElement).toBe(input());
+    expect(input().getAttribute("aria-label")).toBe("Testo nuovo");
+    expect(document.getElementById(input().getAttribute("aria-describedby")!)?.textContent).toBe("Invio va a capo; Esc, Tab o Ctrl+Invio concludono.");
+    expect(input().style.fontFamily).toBe("Inter, sans-serif");
+    expect(input().style.fontSize).toBe("32px");
+    expect(input().style.lineHeight).toBe("40px");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    expect(changes).toEqual([]);
+
+    // Gli spazi in fila valgono uno, le righe vuote ai bordi non ci sono, e
+    // quella in mezzo resta.
+    type("  Ciao\t  mondo \n\n due\n\n");
+    expect(input().style.height).toBe("200px");
+    expect(key("Enter", {}, input()).defaultPrevented).toBe(false);
+    expect(key("Escape", {}, input()).defaultPrevented).toBe(true);
+    expect(layer().hidden).toBe(true);
+    expect(document.activeElement).toBe(surface());
+    expect(changes).toHaveLength(1);
+    // La prima linea di base va sotto il tocco di metà riga.
+    expect(editor.engine.text).toMatch(/<text id="o[a-z0-9]{8}" x="30" y="61.62" fill="#000000" font-family="Inter, sans-serif" font-size="32">/);
+    const [id] = editor.selection;
+    expect(lines(id!)).toEqual(["Ciao mondo", " ", "due"]);
+    expect(editor.engine.text).toContain('<tspan x="30" dy="40">due</tspan>');
+    expect(spoken()).toBe("Testo aggiunto. Il disegno ha 1 oggetto.");
+
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).not.toContain("<text");
+    expect(spoken()).toBe("Annullato: Testo.");
+  });
+
+  it("un tocco su un testo lo apre com'è, al suo posto, e Tab scrive le righe cambiate", () => {
+    mount(TEXT, { level: "standard" });
+    editor.setTool("text");
+    tap(20, 35);
+    expect(input().value).toBe("Uno\nDue");
+    expect(input().getAttribute("aria-label")).toBe("Testo");
+    expect(input().style.fontSize).toBe("20px");
+    expect(input().style.lineHeight).toBe("25px");
+    expect(input().style.textAlign).toBe("left");
+    // Il testo sotto il campo non si vede, finché il campo è aperto.
+    expect(painted().style.visibility).toBe("hidden");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    type("Uno\n\nTre");
+    expect(key("Tab", {}, input()).defaultPrevented).toBe(true);
+    expect(painted().style.visibility).toBe("");
+    expect(lines(T)).toEqual(["Uno", " ", "Tre"]);
+    // Le righe nuove copiano la precedente e ne prendono l'interlinea.
+    expect(editor.engine.text).toContain('<tspan x="10" dy="25"> </tspan>');
+    expect(editor.engine.text).toContain('<tspan x="10" dy="25">Tre</tspan>');
+    expect(editor.selection).toEqual([T]);
+    expect(spoken()).toBe("Testo modificato.");
+    expect(changes).toHaveLength(1);
+    key("z", { ctrlKey: true });
+    expect(lines(T)).toEqual(["Uno", "Due"]);
+    expect(spoken()).toBe("Annullato: Modifica del testo.");
+  });
+
+  it("Ctrl+Invio conclude; un testo nuovo vuoto, o uno che non cambia, non scrive niente; uno svuotato se ne va", () => {
+    mount(TEXT, { level: "standard" });
+    editor.setTool("text");
+    tap(80, 90);
+    type(" \n\t ");
+    expect(key("Enter", { ctrlKey: true }, input()).defaultPrevented).toBe(true);
+    expect(layer().hidden).toBe(true);
+    expect(changes).toEqual([]);
+
+    tap(20, 35);
+    type("Uno  \nDue");
+    key("Escape", {}, input());
+    expect(changes).toEqual([]);
+    expect(editor.selection).toEqual([T]);
+
+    tap(20, 35);
+    type("\n ");
+    key("Escape", {}, input());
+    expect(editor.engine.text).not.toContain(T);
+    expect(editor.selection).toEqual([]);
+    expect(spoken()).toBe("1 oggetto eliminato. Il disegno ha 0 oggetti.");
+    key("z", { ctrlKey: true });
+    expect(lines(T)).toEqual(["Uno", "Due"]);
+  });
+
+  it("con la selezione, due tocchi su un testo lo aprono; F2 e «Modifica il testo» aprono quello scelto", () => {
+    mount(doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="60" y="60" width="20" height="20" fill="#000000"/>${TEXT.slice(TEXT.indexOf("<text"), TEXT.indexOf("</g>"))}</g>`), { level: "standard" });
+    editor.setTool("select");
+    tap(20, 35);
+    expect(editor.selection).toEqual([T]);
+    expect(layer().hidden).toBe(true);
+    tap(22, 36);
+    expect(layer().hidden).toBe(false);
+    expect(document.activeElement).toBe(input());
+    key("Escape", {}, input());
+    expect(editor.selection).toEqual([T]);
+    // Due tocchi lenti non lo aprono.
+    tap(20, 35);
+    clock += 1000;
+    tap(20, 35);
+    expect(layer().hidden).toBe(true);
+
+    const edit = host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Modifica il testo"]')!;
+    expect(edit.hidden).toBe(false);
+    expect(edit.title).toBe("Modifica il testo (F2)");
+    expect(edit.getAttribute("aria-keyshortcuts")).toBe("F2");
+    edit.click();
+    expect(document.activeElement).toBe(input());
+    // Mentre si scrive, la barra della selezione non c'è.
+    expect(host.querySelector<HTMLElement>(".draw-arrange")!.hidden).toBe(true);
+    key("Escape", {}, input());
+
+    surface().focus();
+    expect(key("F2").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(input());
+    key("Escape", {}, input());
+    editor.select(["oa1a1a1a1"]);
+    expect(edit.hidden).toBe(true);
+    key("F2");
+    expect(layer().hidden).toBe(true);
+    expect(spoken()).toBe("Scegli un testo da modificare.");
+    expect(changes).toEqual([]);
+    editor.setLevel("essential");
+    editor.select([T]);
+    expect(key("F2").defaultPrevented).toBe(false);
+    expect(layer().hidden).toBe(true);
+  });
+
+  it("Spazio scrive dov'è il cursore, e con l'aggancio la linea di base va sulla griglia", () => {
+    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20 } });
+    size(200, 100);
+    editor.setTool("text");
+    surface().focus();
+    expect(key(" ").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(input());
+    type("A");
+    key("Escape", {}, input());
+    expect(editor.engine.text).toMatch(/<text id="o[a-z0-9]{8}" x="100" y="60" /);
+  });
+
+  it("toccare il foglio, cambiare strumento o livello e annullare concludono il testo; caricare un documento o la sola lettura lo lasciano", () => {
+    mount(TEXT, { level: "standard" });
+    editor.setTool("text");
+    tap(80, 90);
+    type("Tre");
+    // Il tocco che conclude un testo non ne apre un altro.
+    tap(70, 10);
+    expect(layer().hidden).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("Testo aggiunto. Il disegno ha 2 oggetti.");
+    tap(70, 10);
+    expect(layer().hidden).toBe(false);
+    type("Quattro");
+    editor.setTool("select");
+    expect(changes).toHaveLength(2);
+
+    editor.setTool("text");
+    tap(60, 95);
+    type("Cinque");
+    editor.undo();
+    expect(changes).toHaveLength(4);
+    expect(editor.engine.text).not.toContain("Cinque");
+    expect(editor.canRedo).toBe(true);
+
+    tap(60, 95);
+    type("Sei");
+    editor.setLevel("essential");
+    expect(changes).toHaveLength(5);
+    expect(editor.engine.text).toContain(">Sei</tspan>");
+    editor.setLevel("standard");
+    editor.setTool("text");
+
+    tap(60, 80);
+    type("Sette");
+    host.querySelector<HTMLInputElement>(".draw-title-input")!.focus();
+    expect(changes).toHaveLength(6);
+    expect(editor.engine.text).toContain(">Sette</tspan>");
+
+    tap(60, 65);
+    type("Otto");
+    editor.setReadOnly(true);
+    expect(layer().hidden).toBe(true);
+    expect(changes).toHaveLength(6);
+    editor.setReadOnly(false);
+
+    tap(60, 65);
+    type("Nove");
+    editor.load(SceneEngine.open(TEXT));
+    expect(layer().hidden).toBe(true);
+    expect(changes).toHaveLength(6);
+    expect(editor.engine.text).not.toContain("Nove");
+  });
+
+  it("le dimensioni prendono il posto degli spessori; il colore è quello della penna, e cambiano il testo che si scrive", () => {
+    mount(SOURCE, { level: "standard" });
+    editor.setColor("#d55e00");
+    editor.setTool("text");
+    expect(editor.color).toBe("#d55e00");
+    expect(editor.width).toBe(32);
+    const group = host.querySelector<HTMLElement>('[role="toolbar"] .draw-group[aria-label="Dimensione"]');
+    expect(group).not.toBeNull();
+    const sizes = [...host.querySelectorAll<HTMLButtonElement>(".draw-width")];
+    expect(sizes.map((control) => [control.getAttribute("aria-label"), control.getAttribute("aria-checked")])).toEqual([
+      ["Piccolo", "false"],
+      ["Medio", "true"],
+      ["Grande", "false"],
+    ]);
+    for (const control of sizes) {
+      expect(control.querySelector<HTMLElement>(".draw-width-bar")!.hidden).toBe(true);
+      expect(control.querySelector<HTMLElement>(".draw-size-glyph")!.hidden).toBe(false);
+    }
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    tap(20, 30);
+    type("Ciao");
+    // Un pulsante della barra lascia il fuoco al campo.
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    sizes[2]!.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    sizes[2]!.click();
+    expect(editor.width).toBe(48);
+    expect(input().style.fontSize).toBe("48px");
+    expect(input().style.lineHeight).toBe("60px");
+    editor.setColor("#009e73");
+    expect(input().style.color).toMatch(/^(#009e73|rgb\(0, 158, 115\))$/);
+    key("Escape", {}, input());
+    expect(editor.engine.text).toMatch(/<text id="o[a-z0-9]{8}" x="20" y="[\d.]+" fill="#009e73" font-family="Inter, sans-serif" font-size="48">/);
+
+    // La penna ha il suo spessore, e lo stesso colore.
+    editor.setTool("pen");
+    expect(editor.width).toBe(4);
+    expect(editor.color).toBe("#009e73");
+    expect(group!.getAttribute("aria-label")).toBe("Spessore");
+    expect(sizes.map((control) => control.getAttribute("aria-label"))).toEqual(["Sottile", "Medio", "Spesso"]);
+  });
+
+  it("il campo segue la trasformazione del testo e lo zoom", () => {
+    const turned = doc(`<title>Prova</title>${LAYER}<text id="${T}" x="0" y="0" transform="rotate(90 50 50)" font-size="10"><tspan x="0" dy="0">Su</tspan></text></g>`);
+    mount(turned, { level: "standard" });
+    editor.setTool("text");
+    editor.select([T]);
+    surface().focus();
+    key("F2");
+    const [, matrix] = /^matrix\(([^)]*)\) translate\(/.exec(input().style.transform) ?? [];
+    expect(matrix!.split(", ").map((n) => Math.round(Number(n) * 1e9) / 1e9 || 0)).toEqual([0, 1, -1, 0, 100, 0]);
+    expect(input().style.fontSize).toBe("10px");
+    key("+");
+    expect(input().style.fontSize).toBe("12.5px");
+    key("Escape", {}, input());
+  });
+
+  it("«?» elenca i tasti del testo", () => {
+    mount(SOURCE, { level: "standard" });
+    key("?", { shiftKey: true });
+    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Testo");
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect(rows).toContainEqual(["Space", "Con lo strumento Testo: scrive dov’è il cursore, o cambia il testo che c’è"]);
+    expect(rows).toContainEqual(["F2", "Modifica il testo scelto"]);
+    expect(rows).toContainEqual(["Enter", "Va a capo, mentre si scrive"]);
+    expect(rows).toContainEqual(["Esc o Tab o Ctrl+Enter", "Conclude il testo, mentre si scrive"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
   });
 });

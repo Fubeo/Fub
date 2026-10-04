@@ -276,7 +276,27 @@ const IT = {
   "draw.keys.grid.free": "Tenuto mentre si trascina: posa libero, fuori dalla griglia",
   "draw.keys.cursor.move.grid": "Muove il cursore alla riga seguente della griglia, a cinque righe con Maiusc; libero di 1 px con Ctrl o ⌘",
   "draw.keys.nudge.grid": "Sposta la selezione alla riga seguente della griglia, a cinque righe con Maiusc",
-  "draw.keys.resize.grid": "Ridimensiona la selezione fino alla riga seguente della griglia, a cinque righe con Maiusc"
+  "draw.keys.resize.grid": "Ridimensiona la selezione fino alla riga seguente della griglia, a cinque righe con Maiusc",
+  "draw.tool.text": "Testo",
+  "draw.tool.text.hint": "Tocca il foglio per scrivere un testo, o un testo per cambiarlo. Invio va a capo; Esc conclude.",
+  "draw.sizes": "Dimensione",
+  "draw.size.small": "Piccolo",
+  "draw.size.medium": "Medio",
+  "draw.size.large": "Grande",
+  "draw.text.new": "Testo nuovo",
+  "draw.text.change": "Testo",
+  "draw.text.hint": "Invio va a capo; Esc, Tab o {key}+Invio concludono.",
+  "draw.text.edit": "Modifica il testo",
+  "draw.action.text": "Testo",
+  "draw.action.text_edit": "Modifica del testo",
+  "draw.added.text": "Testo aggiunto.",
+  "draw.text.edited": "Testo modificato.",
+  "draw.text.none": "Scegli un testo da modificare.",
+  "draw.keys.text": "Testo",
+  "draw.keys.text.write": "Con lo strumento Testo: scrive dov’è il cursore, o cambia il testo che c’è",
+  "draw.keys.text.edit": "Modifica il testo scelto",
+  "draw.keys.text.newline": "Va a capo, mentre si scrive",
+  "draw.keys.text.finish": "Conclude il testo, mentre si scrive"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -549,7 +569,27 @@ const EN: Record<DrawKey, string> = {
   "draw.keys.grid.free": "Held while dragging: place freely, off the grid",
   "draw.keys.cursor.move.grid": "Move the cursor to the next grid line, five lines with Shift; freely by 1 px with Ctrl or ⌘",
   "draw.keys.nudge.grid": "Move the selection to the next grid line, five lines with Shift",
-  "draw.keys.resize.grid": "Resize the selection to the next grid line, five lines with Shift"
+  "draw.keys.resize.grid": "Resize the selection to the next grid line, five lines with Shift",
+  "draw.tool.text": "Text",
+  "draw.tool.text.hint": "Tap the sheet to write a text, or a text to change it. Enter starts a new line; Escape finishes.",
+  "draw.sizes": "Size",
+  "draw.size.small": "Small",
+  "draw.size.medium": "Medium",
+  "draw.size.large": "Large",
+  "draw.text.new": "New text",
+  "draw.text.change": "Text",
+  "draw.text.hint": "Enter starts a new line; Escape, Tab or {key}+Enter finish.",
+  "draw.text.edit": "Edit text",
+  "draw.action.text": "Text",
+  "draw.action.text_edit": "Text edit",
+  "draw.added.text": "Text added.",
+  "draw.text.edited": "Text changed.",
+  "draw.text.none": "Select a text to edit.",
+  "draw.keys.text": "Text",
+  "draw.keys.text.write": "With the Text tool: write where the cursor is, or change the text there",
+  "draw.keys.text.edit": "Edit the selected text",
+  "draw.keys.text.newline": "Start a new line, while writing",
+  "draw.keys.text.finish": "Finish the text, while writing"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

@@ -13,10 +13,11 @@ export type Level = "essential" | "standard" | "expert";
 
 const LEVEL_ORDER: readonly Level[] = ["essential", "standard", "expert"];
 
-export type ToolId = "select" | "pen" | "highlighter" | "eraser" | "rect" | "ellipse" | "line" | "arrow";
+export type ToolId = "select" | "pen" | "highlighter" | "eraser" | "rect" | "ellipse" | "line" | "arrow" | "text";
 
-/// Come la barra raggruppa gli strumenti: scegliere, scrivere, forme.
-export type ToolGroup = "pick" | "ink" | "shape";
+/// Come la barra raggruppa gli strumenti: scegliere, scrivere a mano, forme,
+/// testo.
+export type ToolGroup = "pick" | "ink" | "shape" | "text";
 
 export interface ToolSpec {
   readonly id: ToolId;
@@ -39,6 +40,7 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "ellipse", level: "essential", group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
   { id: "line", level: "essential", group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
   { id: "arrow", level: "essential", group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "a" },
+  { id: "text", level: "standard", group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t" },
 ];
 
 /// Lo strumento con cui si apre un disegno: la penna, perché un disegno si

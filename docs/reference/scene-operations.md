@@ -200,7 +200,9 @@ tiene, per ogni elemento:
   forma canonica dell'elemento.
 - **Righe nuove di `text`:** una riga nuova copia gli attributi del `tspan`
   precedente tranne `id` e `dy`. Il `dy` è quello dell'ultimo `tspan` dopo il
-  primo; se non c'è, è 1,25 volte `font-size`, che vale 16 se manca.
+  primo che lo scrive; se non c'è, è 1,25 volte il corpo con cui si vede
+  l'ultima riga: il primo `font-size` che si incontra salendo dal suo `tspan`
+  al `text` e ai contenitori, 16 se nessuno lo scrive.
 - **`move`:** una cancellazione e un inserimento, calcolati sul testo di
   partenza, ordinati e non sovrapposti. Le righe interne dell'elemento
   spostato prendono il rientro della nuova profondità, ma solo se cominciano
@@ -331,6 +333,7 @@ devono verificare renderebbe il test circolare.
 | 31 | `remove-foreign-by-path` | `remove` di un elemento estraneo senza id, indirizzato con il percorso |
 | 32 | `set-self-closing-group` | `set` su un `<g/>` autochiuso, riscritto per intero |
 | 33 | `first-under-root` | `first` sotto la radice va dopo titolo e carta |
+| 34 | `text-inherited-size` | interlinea di una riga nuova dal corpo ereditato |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le
