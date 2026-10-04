@@ -147,6 +147,7 @@ import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attri
 import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, type Cap, type Dash, type Join, type OutlineChange } from "./outline";
 import { boundsAfter, numericMatrix, numericOps } from "./transform";
 import { applyOps } from "./apply";
+import { pathOps } from "./topath";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -451,6 +452,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-outline": ["M3 6h18", "M3 12h4", "M10 12h4", "M17 12h4", "M3.5 18h0", "M8.5 18h0", "M13.5 18h0", "M18.5 18h0"],
   "draw-transform": ["M4 10h10v10H4z", "M10 4a10 10 0 0 1 10 10", "M16.5 11.5L20 14l2.5-3.5"],
   "draw-apply-transform": ["M2 17L6 5h9l-4 12z", "M15 16.5l2.5 2.5L22 14"],
+  "draw-to-path": ["M5 19C5 11 11 5 19 5", "M3 17h4v4H3z", "M17 3h4v4h-4z"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -995,6 +997,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   transformButton.setAttribute("aria-haspopup", "dialog");
   // Dal livello Esperto: la trasformazione passa nella geometria.
   const applyButton = arrangeButton("draw.apply_transform", "draw-apply-transform", null, () => applySelection());
+  const pathButton = arrangeButton("draw.to_path", "draw-to-path", null, () => traceSelection());
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
   for (const control of [orderButton, intoButton, alignButton, outlineButton]) {
@@ -1649,6 +1652,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     intoButton.hidden = layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
     transformButton.hidden = !reaches(level, "expert");
     applyButton.hidden = !reaches(level, "expert");
+    pathButton.hidden = !reaches(level, "expert");
     outlineButton.hidden = !reaches(level, "expert");
     arrangeFocus.sync(null);
     if (!focused) return;
@@ -3346,6 +3350,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     if (arrange("draw.action.apply_transform", applied)) announce(`${plural(applied.changed, "draw.applied.one", "draw.applied.other")}${kept}`);
+  }
+
+  /// «Oggetto in tracciato», dal livello Esperto: gli oggetti scelti
+  /// diventano `path`, che i nodi sanno modificare.
+  function traceSelection(): void {
+    if (!reaches(level, "expert")) return;
+    const units = arranging();
+    if (units === null) return;
+    const traced = pathOps(engine.model!, units, newIds());
+    const refused = traced.refused === 0 ? "" : ` ${plural(traced.refused, "draw.traced.refused.one", "draw.traced.refused.other")}`;
+    if (traced.ops.length === 0) {
+      announce(`${t("draw.unchanged")}${refused}`);
+      return;
+    }
+    if (arrange("draw.action.to_path", traced)) announce(`${plural(traced.changed, "draw.traced.one", "draw.traced.other")}${refused}`);
   }
 
   /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.

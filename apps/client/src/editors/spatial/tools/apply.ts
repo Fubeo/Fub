@@ -39,8 +39,8 @@ import { apply, compose, IDENTITY, invert, toRadians, type Matrix, type Point } 
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { pathData } from "../scene/serialize";
 import { length, nonNegativeLength, points as parsePoints, transform as parseTransform } from "../scene/values";
-import { FUB_NS, SVG_NS } from "../scene/xml";
-import { nodeOf, plainAttributes, Plan, readHead, type Arranged } from "./arrange";
+import { SVG_NS } from "../scene/xml";
+import { fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { transformValue, type NewIds } from "./edit";
 import type { Unit } from "./hit";
 import { inheritedBy, passed, type Inherited } from "./outline";
@@ -65,14 +65,6 @@ const place = (value: number): string => formatNumber(value, 2);
 const linear = (m: Matrix): Matrix => [m[0], m[1], m[2], m[3], 0, 0];
 
 const determinant = (m: Matrix): number => m[0] * m[3] - m[1] * m[2];
-
-/// Gli attributi `fub:` di `node`, per nome locale.
-function fubAttributes(node: ElementPart): Map<string, string> {
-  const read = readHead(node);
-  const out = new Map<string, string>();
-  for (const attr of read?.element.attrs ?? []) if (read!.doc.namespaces[attr.ns] === FUB_NS) out.set(attr.local, attr.value);
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // Che cosa prende una forma.
@@ -522,7 +514,6 @@ export interface Applied extends Arranged {
 /// ne riceve uno.
 export function applyOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Applied {
   const plan = new Plan(model, ids);
-  const named = new Set<ElementPart>();
   let changed = 0;
   let kept = 0;
   for (const unit of units) {
@@ -530,16 +521,10 @@ export function applyOps(model: DocumentModel, units: readonly Unit[], ids: NewI
     // Un oggetto scelto non ha un gruppo che gli passi qualcosa: `bake` lo
     // fa sempre.
     const baked = bake(node, null, inheritedBy(node))!;
-    for (const change of baked.changes) {
-      named.add(change.node);
-      plan.ops.push({ op: "set", id: plan.idOf(change.node), attrs: change.attrs });
-    }
+    for (const change of baked.changes) plan.ops.push({ op: "set", id: plan.idOf(change.node), attrs: change.attrs });
     if (baked.changes.length > 0) changed++;
     if (baked.kept) kept++;
   }
-  const keys = units.map((unit) => {
-    const node = nodeOf(model, unit);
-    return named.has(node) ? plan.idOf(node) : unit.key;
-  });
+  const keys = units.map((unit) => plan.keyOf(nodeOf(model, unit), unit.key));
   return { ...plan.finish(keys), changed, kept };
 }

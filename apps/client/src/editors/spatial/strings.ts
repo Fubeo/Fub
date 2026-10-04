@@ -405,7 +405,13 @@ const IT = {
   "draw.applied.other": "Trasformazione applicata a {count} oggetti.",
   "draw.applied.kept.one": "{count} oggetto conserva una trasformazione che la sua forma non sa scrivere.",
   "draw.applied.kept.other": "{count} oggetti conservano una trasformazione che la loro forma non sa scrivere.",
-  "draw.action.apply_transform": "Applicazione della trasformazione"
+  "draw.action.apply_transform": "Applicazione della trasformazione",
+  "draw.to_path": "Oggetto in tracciato",
+  "draw.traced.one": "{count} oggetto è diventato un tracciato.",
+  "draw.traced.other": "{count} oggetti sono diventati tracciati.",
+  "draw.traced.refused.one": "{count} oggetto resta com'è: testi, immagini e forme vuote non diventano tracciati.",
+  "draw.traced.refused.other": "{count} oggetti restano come sono: testi, immagini e forme vuote non diventano tracciati.",
+  "draw.action.to_path": "Oggetto in tracciato"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -807,7 +813,13 @@ const EN: Record<DrawKey, string> = {
   "draw.applied.other": "Transform applied to {count} objects.",
   "draw.applied.kept.one": "{count} object keeps a transform its shape cannot express.",
   "draw.applied.kept.other": "{count} objects keep a transform their shape cannot express.",
-  "draw.action.apply_transform": "Apply transform"
+  "draw.action.apply_transform": "Apply transform",
+  "draw.to_path": "Object to path",
+  "draw.traced.one": "{count} object became a path.",
+  "draw.traced.other": "{count} objects became paths.",
+  "draw.traced.refused.one": "{count} object stays as it is: text, images and empty shapes don't become paths.",
+  "draw.traced.refused.other": "{count} objects stay as they are: text, images and empty shapes don't become paths.",
+  "draw.action.to_path": "Object to path"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle
