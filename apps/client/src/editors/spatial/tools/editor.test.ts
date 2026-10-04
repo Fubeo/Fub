@@ -1924,6 +1924,7 @@ describe("da tastiera", () => {
       "Disponi · dal livello Standard",
       "Testo · dal livello Standard",
       "Griglia · dal livello Standard",
+      "Disponi · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
@@ -1951,6 +1952,7 @@ describe("da tastiera", () => {
       rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
     }));
     expect(tables).toEqual([
+      { caption: "Disponi · dal livello Esperto", rows: [["Ctrl+Shift+M", "Trasforma…"]] },
       {
         caption: "Attributi · dal livello Esperto",
         rows: [
@@ -2327,6 +2329,110 @@ describe("il contorno, dal livello Esperto", () => {
     item("Estremi quadrati").click();
     expect(editor.engine.text).toContain('stroke-linecap="square" stroke-dasharray="5,1 2"');
     expect(spoken()).toBe("Estremi quadrati: un contorno.");
+  });
+});
+
+describe("trasformare con i numeri, dal livello Esperto", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const RECT_A = `<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000"/>`;
+  const RECT_B = `<rect id="${B}" x="40" y="0" width="10" height="10" fill="#000000"/>`;
+  const SHAPES = doc(`${LAYER}${RECT_A}${RECT_B}</g>`);
+
+  const transform = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Trasforma…"]')!;
+
+  it("c'è solo all'Esperto, col suo tasto, e apre una finestra che parte da niente da cambiare", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select([A]);
+    editor.focus();
+    expect(transform().hidden).toBe(true);
+    // Sotto l'Esperto il tasto resta a chi lo aveva.
+    expect(key("m", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(document.querySelectorAll(".modale")).toHaveLength(0);
+    editor.setLevel("expert");
+    expect(transform().hidden).toBe(false);
+    expect(transform().getAttribute("aria-haspopup")).toBe("dialog");
+    expect(transform().getAttribute("aria-keyshortcuts")).toBe("Control+Shift+M");
+    key("m", { ctrlKey: true, shiftKey: true });
+    expect(dialog().querySelector("h2")!.textContent).toBe("Trasforma");
+    expect(document.getElementById(dialog().getAttribute("aria-describedby")!)!.textContent).toBe(
+      "Attorno al centro degli oggetti scelti: prima la scala, poi l’inclinazione, poi la rotazione. Una scala negativa rispecchia.",
+    );
+    const fields = ["rotate", "scaleX", "scaleY", "skewX", "skewY"];
+    expect(fields.map((name) => [field(name).closest("label")!.querySelector(".palette-label")!.textContent, field(name).value])).toEqual([
+      ["Rotazione in senso orario (°)", "0"],
+      ["Scala orizzontale (%)", "100"],
+      ["Scala verticale (%)", "100"],
+      ["Inclinazione orizzontale (°)", "0"],
+      ["Inclinazione verticale (°)", "0"],
+    ]);
+    expect([(field("skewX") as HTMLInputElement).min, (field("skewX") as HTMLInputElement).max]).toEqual(["-89", "89"]);
+    expect(document.activeElement).toBe(field("rotate"));
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    // Un secondo Ctrl+Maiusc+M non apre un'altra finestra; Esc non scrive.
+    key("m", { ctrlKey: true, shiftKey: true });
+    expect(document.querySelectorAll(".modale")).toHaveLength(1);
+    dialog().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(changes).toEqual([]);
+  });
+
+  it("ruota attorno al centro, in un passo che si annulla, e la pagina cresce se l'oggetto ne esce", async () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    transform().click();
+    field("rotate").value = "90";
+    await submit();
+    // Il centro è (10, 5): in senso orario la destra va in basso.
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(0 1 -1 0 15 -5)"/>`);
+    expect(editor.engine.text).toContain('viewBox="0 -256 100 356"');
+    expect(spoken()).toBe("1 oggetto trasformato.");
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Trasformazione.");
+  });
+
+  it("trasforma la selezione come un insieme: una scala negativa la rispecchia attorno al suo centro", async () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A, B]);
+    transform().click();
+    field("scaleX").value = "-100";
+    await submit();
+    // Il riquadro va da 0 a 50: ogni oggetto passa dall'altra parte.
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
+    expect(editor.engine.text).toContain(`<rect id="${B}" x="40" y="0" width="10" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
+    expect(spoken()).toBe("2 oggetti trasformati.");
+    expect(editor.selection).toEqual([A, B]);
+  });
+
+  it("non scrive una trasformazione che il file perderebbe, e non scrive niente se non cambia niente", async () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    transform().click();
+    field("scaleX").value = "0.001";
+    field("scaleY").value = "0.001";
+    await submit();
+    expect(spoken()).toBe("Un oggetto diventerebbe troppo piccolo per scriverne la trasformazione: niente è cambiato.");
+    transform().click();
+    field("rotate").value = "360";
+    await submit();
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    // Scendendo dall'Esperto mentre la finestra è aperta, la risposta non
+    // scrive niente.
+    transform().click();
+    field("rotate").value = "45";
+    editor.setLevel("standard");
+    await submit();
+    expect(changes).toEqual([]);
+  });
+
+  it("l'elenco dei tasti lo nomina all'Esperto", () => {
+    mount(SHAPES, { level: "expert" });
+    key("?", { shiftKey: true });
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect(rows).toContainEqual(["Ctrl+Shift+M", "Trasforma…"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 

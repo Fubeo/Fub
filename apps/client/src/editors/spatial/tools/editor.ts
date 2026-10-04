@@ -145,6 +145,7 @@ import {
 } from "./arrange";
 import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
 import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, type Cap, type Dash, type Join, type OutlineChange } from "./outline";
+import { boundsAfter, numericMatrix, numericOps } from "./transform";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -382,6 +383,15 @@ const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
 /// stesso dell'editor XML di Inkscape.
 const ATTRIBUTES_BINDING = "Mod-Shift-x";
 
+/// «Trasforma», dal livello Esperto: lo stesso tasto della finestra di
+/// Inkscape.
+const TRANSFORM_BINDING = "Mod-Shift-m";
+
+/// I limiti dei campi di «Trasforma»: una scala fino a mille volte, e
+/// un'inclinazione che non arriva all'angolo retto, dove non ha misura.
+const MAX_SCALE_PERCENT = 100_000;
+const MAX_SKEW = 89;
+
 /// Lo scarto di una copia dal suo originale, e fra due immagini incollate
 /// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
 const COPY_STEP_PX = 24;
@@ -438,6 +448,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-open-link": ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
   "draw-attributes": ["M8 7l-5 5 5 5", "M16 7l5 5-5 5", "M13.5 5l-3 14"],
   "draw-outline": ["M3 6h18", "M3 12h4", "M10 12h4", "M17 12h4", "M3.5 18h0", "M8.5 18h0", "M13.5 18h0", "M18.5 18h0"],
+  "draw-transform": ["M4 10h10v10H4z", "M10 4a10 10 0 0 1 10 10", "M16.5 11.5L20 14l2.5-3.5"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -977,6 +988,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const orderButton = arrangeButton("draw.order", "draw-order", null, () => openMenu(orderButton, orderItems()));
   const intoButton = arrangeButton("draw.into_layer", "draw-into-layer", null, () => openMenu(intoButton, intoItems()));
   const alignButton = arrangeButton("draw.align", "draw-align", null, () => openMenu(alignButton, alignItems()));
+  // Dal livello Esperto: ruotare, scalare e inclinare di quanto si scrive.
+  const transformButton = arrangeButton("draw.transform", "draw-transform", TRANSFORM_BINDING, () => void transformDialog());
+  transformButton.setAttribute("aria-haspopup", "dialog");
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
   for (const control of [orderButton, intoButton, alignButton, outlineButton]) {
@@ -1629,6 +1643,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Con un livello solo, che ha già tutto, non c'è dove spostare.
     const layers = currentIndex().layers;
     intoButton.hidden = layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
+    transformButton.hidden = !reaches(level, "expert");
     outlineButton.hidden = !reaches(level, "expert");
     arrangeFocus.sync(null);
     if (!focused) return;
@@ -3254,6 +3269,64 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return items;
   };
 
+  /// Ctrl+Maiusc+M, dal livello Esperto: ruota, scala e inclina gli oggetti
+  /// scelti di quanto si scrive, attorno al centro del loro riquadro, in un
+  /// passo solo. Il fuoco torna dov'era, come da ogni finestra.
+  async function transformDialog(): Promise<void> {
+    if (asking || !reaches(level, "expert") || arranging() === null) return;
+    const opened = loads;
+    const scale = (id: string, label: DrawKey): FormField => ({
+      id, label: t(label), value: "100", kind: "number", min: -MAX_SCALE_PERCENT, max: MAX_SCALE_PERCENT, nonZero: true,
+    });
+    const skew = (id: string, label: DrawKey): FormField => ({ id, label: t(label), value: "0", kind: "number", min: -MAX_SKEW, max: MAX_SKEW });
+    asking = true;
+    let answer: Readonly<Record<string, string>> | null;
+    try {
+      answer = await promptForm({
+        title: t("draw.transform.title"),
+        message: t("draw.transform.message"),
+        okLabel: t("draw.transform.title"),
+        fields: [
+          { id: "rotate", label: t("draw.transform.rotate"), value: "0", kind: "number" },
+          scale("scaleX", "draw.transform.scale_x"),
+          scale("scaleY", "draw.transform.scale_y"),
+          skew("skewX", "draw.transform.skew_x"),
+          skew("skewY", "draw.transform.skew_y"),
+        ],
+      });
+    } finally {
+      asking = false;
+    }
+    if (answer === null || disposed || loads !== opened || !reaches(level, "expert")) return;
+    // Mentre la finestra era aperta il disegno può essere cambiato: valgono
+    // gli oggetti scelti adesso, attorno al loro centro.
+    const units = arranging();
+    const from = units === null ? null : boundsOf(units);
+    if (units === null || from === null) return;
+    const value = (id: string, unchanged: number): number => {
+      const number = Number(answer[id]);
+      return Number.isFinite(number) ? number : unchanged;
+    };
+    const m = numericMatrix(
+      {
+        rotate: value("rotate", 0),
+        scaleX: value("scaleX", 100) / 100,
+        scaleY: value("scaleY", 100) / 100,
+        skewX: value("skewX", 0),
+        skewY: value("skewY", 0),
+      },
+      [(from.min[0] + from.max[0]) / 2, (from.min[1] + from.max[1]) / 2],
+    );
+    const transformed = numericOps(units, m, newIds());
+    if (transformed === null) {
+      announce(t("draw.transform.unwritable"));
+      return;
+    }
+    if (arrange("draw.action.transform", transformed, boundsAfter(units, m))) {
+      announce(plural(transformed.changed, "draw.transformed.one", "draw.transformed.other"));
+    }
+  }
+
   /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
   function moveIntoLayer(layer: LayerInfo): void {
     const units = arranging();
@@ -3688,6 +3761,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ["Mod-] PageUp", t("draw.order.forward")],
               ["Mod-[ PageDown", t("draw.order.backward")],
               ["Mod-Shift-[ Shift-PageDown", t("draw.order.back")],
+              ...(reaches(at, "expert") ? [[TRANSFORM_BINDING, t("draw.transform")] as const] : []),
               ["Alt-F10", t("draw.keys.arrange")],
             ],
           },
@@ -4091,6 +4165,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         announceSelection();
       } else if (key === "x" && event.shiftKey && reaches(level, "expert")) {
         showAttributes(inspector.element.hidden);
+      } else if (arranges && key === "m" && event.shiftKey && reaches(level, "expert")) {
+        void transformDialog();
       } else if (arranges && key === "d" && !event.shiftKey) {
         duplicateSelection();
       } else if (arranges && key === "g") {

@@ -96,6 +96,29 @@ describe("promptForm", () => {
     expect((await answer)?.h).toBe("3");
   });
 
+  it("un numero ha anche un massimo, e può non ammettere lo zero", async () => {
+    const answer = promptForm({
+      title: "Trasforma",
+      fields: [
+        { id: "scale", label: "Scala", value: "100", kind: "number", min: -1000, max: 1000, nonZero: true },
+        { id: "skew", label: "Inclinazione", value: "0", kind: "number", min: -89, max: 89 },
+      ],
+    });
+    const scale = field("scale") as HTMLInputElement;
+    expect(scale.max).toBe("1000");
+    expect((field("skew") as HTMLInputElement).max).toBe("89");
+    // Lo zero si spiega con la frase del campo, anche scritto in un altro modo.
+    scale.value = "-0.0";
+    dialog().querySelector("form")!.requestSubmit();
+    expect(scale.validationMessage).toBe("Scrivi un numero diverso da zero.");
+    scale.value = "-100";
+    scale.dispatchEvent(new Event("input"));
+    expect(scale.validationMessage).toBe("");
+    // Lo zero di un campo che lo ammette resta un numero come gli altri.
+    dialog().querySelector("form")!.requestSubmit();
+    expect(await answer).toEqual({ scale: "-100", skew: "0" });
+  });
+
   it("un testo che non si lascia vuoto rifiuta anche i soli spazi, e ha una lunghezza massima", async () => {
     const answer = promptForm({ title: "Rinomina", fields: [{ id: "name", label: "Nome", value: "Sfondo", kind: "text", required: true, maxLength: 80 }] });
     const input = field("name") as HTMLInputElement;
