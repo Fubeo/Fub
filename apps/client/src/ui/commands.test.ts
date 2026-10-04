@@ -11,6 +11,7 @@ import {
   commandOfKeybindingKey,
   ariaBinding,
   displayBinding,
+  modifierName,
   keybindingKey,
   parseChords,
   chordMap,
@@ -575,6 +576,12 @@ describe("una scorciatoia come si preme", () => {
     expect(displayBinding("Shift-F2", "mac")).toBe("⇧F2");
     expect(displayBinding("Mod-o || Mod-k o", "other")).toBe("Ctrl+O");
     expect(displayBinding(null, "other")).toBe("");
+    // Un modificatore da solo è quel tasto, tenuto.
+    expect(displayBinding("Mod", "other")).toBe("Ctrl");
+    expect(displayBinding("Mod", "mac")).toBe("⌘");
+    expect(modifierName("Shift", "other")).toBe("Shift");
+    expect(modifierName("alt", "mac")).toBe("⌥");
+    expect(modifierName("Ctrl", "other")).toBeNull();
     // Ciò che non si sa leggere resta scritto, non sparisce.
     expect(displayBinding("Hyper-x", "other")).toBe("Hyper-x");
   });

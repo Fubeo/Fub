@@ -852,6 +852,297 @@ describe("i livelli, dal livello Standard", () => {
   });
 });
 
+describe("la griglia e la pagina, dal livello Standard", () => {
+  /// La griglia con l'aggancio acceso, al passo di partenza.
+  const SNAP = { shown: false, snap: true, step: 20 } as const;
+  /// Un quadrato pieno senza contorno, fuori dalla griglia, in una pagina
+  /// che lo lascia muovere: il riquadro è quello scritto.
+  const OFF = doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="13" y="7" width="40" height="40" fill="#000000"/></g>`).replace(
+    'viewBox="0 0 100 100"',
+    'viewBox="0 0 400 400"',
+  );
+  const A = "oa1a1a1a1";
+
+  const pageButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!;
+  const lines = (): HTMLElement => host.querySelector<HTMLElement>(".draw-grid")!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const entry = (label: string): HTMLButtonElement => menu().find((one) => labelOf(one) === label)!;
+  /// Apre «Pagina e griglia» e ne preme la voce `label`.
+  const choose = (label: string): void => {
+    pageButton().click();
+    entry(label).click();
+  };
+  /// Un tasto premuto con AltGr, che su Windows arriva come Ctrl e Alt.
+  const altGraph = (name: string): KeyboardEvent => {
+    const event = new KeyboardEvent("keydown", { key: name, ctrlKey: true, altKey: true, bubbles: true, cancelable: true });
+    Object.defineProperty(event, "getModifierState", { value: (state: string) => state === "AltGraph" });
+    surface().dispatchEvent(event);
+    return event;
+  };
+
+  afterEach(() => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("«Pagina e griglia» c'è dal livello Standard; la griglia si vede sopra la carta, e chi monta l'editor lo sa", () => {
+    const grids: unknown[] = [];
+    mount(SOURCE, { onGridChange: (grid) => grids.push(grid) });
+    size(200, 100);
+    expect(pageButton().hidden).toBe(true);
+    expect(lines().style.display).toBe("none");
+    editor.setLevel("standard");
+    expect(pageButton().hidden).toBe(false);
+    expect(pageButton().getAttribute("aria-haspopup")).toBe("menu");
+    expect(lines().getAttribute("aria-hidden")).toBe("true");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    pageButton().click();
+    expect(pageButton().getAttribute("aria-expanded")).toBe("true");
+    expect(menu().map((one) => [one.getAttribute("role"), labelOf(one), one.getAttribute("aria-checked"), one.getAttribute("aria-keyshortcuts")])).toEqual([
+      ["menuitemcheckbox", "Mostra la griglia", "false", "#"],
+      ["menuitemcheckbox", "Aggancia alla griglia", "false", "%"],
+      ["menuitemradio", "Passo di 5", "false", null],
+      ["menuitemradio", "Passo di 10", "false", null],
+      ["menuitemradio", "Passo di 20", "true", null],
+      ["menuitemradio", "Passo di 50", "false", null],
+      ["menuitemradio", "Passo di 100", "false", null],
+      ["menuitem", "Adatta la pagina al disegno", null, null],
+    ]);
+    expect(entry("Aggancia alla griglia").querySelector(".menu-description")!.textContent).toBe("Tieni premuto Ctrl mentre trascini per posare libero.");
+    entry("Mostra la griglia").click();
+    expect(spoken()).toBe("Griglia visibile.");
+    expect(lines().style.display).toBe("");
+    const [minor, major] = [...lines().querySelectorAll("path")];
+    expect(minor!.getAttribute("d")).toContain("M20.5 0V100");
+    expect(major!.getAttribute("data-major")).toBe("");
+    expect(major!.getAttribute("d")).toContain("M100.5 0V100");
+    expect(major!.getAttribute("d")).not.toContain("M20.5 0V100");
+
+    choose("Passo di 50");
+    expect(spoken()).toBe("Passo della griglia: 50.");
+    expect(minor!.getAttribute("d")).toContain("M50.5 0V100");
+    pageButton().click();
+    expect(entry("Passo di 50").getAttribute("aria-checked")).toBe("true");
+    expect(entry("Mostra la griglia").getAttribute("aria-checked")).toBe("true");
+    entry("Aggancia alla griglia").click();
+    expect(spoken()).toBe("Aggancio alla griglia acceso.");
+    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50 });
+    expect(grids).toEqual([
+      { shown: true, snap: false, step: 20 },
+      { shown: true, snap: false, step: 50 },
+      { shown: true, snap: true, step: 50 },
+    ]);
+
+    // Sotto lo Standard non si vede e non aggancia, ma resta com'era.
+    editor.setLevel("essential");
+    expect(lines().style.display).toBe("none");
+    expect(editor.grid.shown).toBe(true);
+    editor.setLevel("standard");
+    expect(lines().style.display).toBe("");
+    // La griglia non entra nel file.
+    expect(changes).toEqual([]);
+  });
+
+  it("`setGrid` la cambia senza dirlo; un passo fuori dai limiti resta quello di prima, e uno insolito entra nel menu", () => {
+    const grids: unknown[] = [];
+    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0 }, onGridChange: (grid) => grids.push(grid) });
+    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20 });
+    editor.setGrid({ shown: true, snap: true, step: 25 });
+    editor.setGrid({ shown: false, snap: true, step: 5000 });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25 });
+    expect(spoken()).toBe("");
+    expect(grids).toEqual([]);
+    pageButton().click();
+    expect(menu().filter((one) => one.getAttribute("role") === "menuitemradio").map(labelOf)).toEqual([
+      "Passo di 5",
+      "Passo di 10",
+      "Passo di 20",
+      "Passo di 25",
+      "Passo di 50",
+      "Passo di 100",
+    ]);
+    expect(entry("Passo di 25").getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("«#» la mostra e «%» aggancia, anche con AltGr; con Ctrl e sotto lo Standard no", () => {
+    mount(SOURCE, { level: "standard" });
+    expect(key("#", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Griglia visibile.");
+    expect(key("%", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Aggancio alla griglia acceso.");
+    expect(altGraph("#").defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Griglia nascosta.");
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20 });
+    expect(key("#", { ctrlKey: true }).defaultPrevented).toBe(false);
+    editor.setLevel("essential");
+    expect(key("%", { shiftKey: true }).defaultPrevented).toBe(false);
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20 });
+    // Nel titolo si scrivono.
+    editor.setLevel("standard");
+    const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
+    expect(key("#", { shiftKey: true }, title).defaultPrevented).toBe(false);
+    expect(editor.grid.shown).toBe(false);
+  });
+
+  it("una forma va da un incrocio all'altro; tenendo Ctrl si posa libera", () => {
+    mount(doc(`${LAYER}</g>`), { level: "standard", grid: SNAP });
+    editor.setTool("rect");
+    drag([[13, 17], [30, 40], [59, 61]]);
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="20" y="20" width="40" height="40" fill="none"/);
+    drag([[13, 17], [30, 40], [59, 61]], { ctrlKey: true });
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="13" y="17" width="46" height="44" fill="none"/);
+    // All'Essenziale non si aggancia.
+    editor.setLevel("essential");
+    drag([[113, 117], [159, 161]]);
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="113" y="117" width="46" height="44" fill="none"/);
+  });
+
+  it("trascinare porta sull'incrocio più vicino l'angolo della geometria vicino al punto preso, contorno escluso", () => {
+    mount(SOURCE, { level: "standard", grid: SNAP });
+    editor.setTool("select");
+    // Preso a sinistra, a metà altezza: l'angolo in alto a sinistra, (60, 60),
+    // spostato di (13, 9) va a (73, 69), e si aggancia a (80, 60).
+    drag([[60, 70], [66, 74], [73, 79]]);
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 20 0)"');
+    expect(spoken()).toBe("1 oggetto spostato.");
+    editor.undo();
+    drag([[60, 70], [66, 74], [73, 79]], { ctrlKey: true });
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 13 9)"');
+  });
+
+  it("le frecce spostano la selezione di riga in riga, cinque con Maiusc", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(OFF, { level: "standard", grid: SNAP });
+    editor.select([A]);
+    key("ArrowRight");
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 7 0)"');
+    key("ArrowRight");
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 27 0)"');
+    key("ArrowDown", { shiftKey: true });
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 27 93)"');
+    key("ArrowLeft");
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 7 93)"');
+    // I colpi di fila sono un passo solo.
+    editor.undo();
+    expect(editor.engine.text).toBe(OFF);
+  });
+
+  it("Ctrl e le frecce portano il lato destro o quello in basso alla riga dopo, ma non oltre la prima dopo quello opposto", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(doc(`${LAYER}<rect id="${A}" x="0" y="0" width="50" height="10" fill="#000000"/></g>`), { level: "standard", grid: SNAP });
+    editor.select([A]);
+    key("ArrowRight", { ctrlKey: true });
+    expect(editor.engine.text).toContain('transform="matrix(1.2 0 0 1 0 0)"');
+    expect(spoken()).toBe("Misure: 60 × 10.");
+    key("ArrowDown", { ctrlKey: true });
+    expect(editor.engine.text).toContain('transform="matrix(1.2 0 0 2 0 0)"');
+    expect(spoken()).toBe("Misure: 60 × 20.");
+    key("ArrowLeft", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toContain('transform="matrix(0.4 0 0 2 0 0)"');
+    expect(spoken()).toBe("Misure: 20 × 20.");
+    const before = editor.engine.text;
+    key("ArrowLeft", { ctrlKey: true });
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("con un contorno, la geometria va sulla riga e la misura detta è quella che si vede", () => {
+    mount(SOURCE, { level: "standard", grid: SNAP });
+    editor.select(["o1a2b3c4d"]);
+    key("ArrowRight", { ctrlKey: true });
+    // Da 60–80 a 60–100: il contorno di 2 si allarga con la forma.
+    expect(editor.engine.text).toContain('transform="matrix(2 0 0 1 -60 0)"');
+    expect(spoken()).toBe("Misure: 44 × 22.");
+  });
+
+  it("il cursore va di incrocio in incrocio; con Ctrl resta libero", () => {
+    mount(SOURCE, { level: "standard", grid: SNAP });
+    size(200, 140);
+    key("ArrowRight");
+    expect(spoken()).toBe("x 120, y 80");
+    key("ArrowDown", { shiftKey: true });
+    expect(spoken()).toBe("x 120, y 180");
+    key("ArrowLeft", { ctrlKey: true });
+    expect(spoken()).toBe("x 119, y 180");
+    key("ArrowUp");
+    expect(spoken()).toBe("x 120, y 160");
+    expect(changes).toEqual([]);
+  });
+
+  it("Ctrl+D scosta le copie di un numero intero di passi", () => {
+    mount(OFF, { level: "standard", grid: SNAP });
+    editor.select([A]);
+    key("d", { ctrlKey: true });
+    const [copy] = editor.selection;
+    expect(editor.engine.text).toContain(`<rect id="${copy}" x="13" y="7" width="40" height="40" fill="#000000" transform="matrix(1 0 0 1 40 40)"/>`);
+  });
+
+  it("«Adatta la pagina» la porta attorno al disegno con un margine, in un passo che si annulla", () => {
+    mount(SOURCE, { level: "standard" });
+    choose("Adatta la pagina al disegno");
+    // Il rettangolo col contorno va da 59 a 81: 20 di margine, a numeri interi.
+    expect(editor.engine.text).toContain('viewBox="39 39 62 62"');
+    expect(spoken()).toBe("Pagina adattata: 62 × 62.");
+    expect(changes).toHaveLength(1);
+    expect(editor.engine.text).toContain('<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20"');
+    pageButton().click();
+    const fit = entry("Adatta la pagina al disegno");
+    expect(fit.getAttribute("aria-disabled")).toBe("true");
+    expect(fit.querySelector(".menu-description")!.textContent).toBe("La pagina è già adattata al disegno.");
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Pagina adattata al disegno.");
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("comprende i livelli bloccati e nascosti", () => {
+    mount(
+      doc(
+        `<g id="l1" fub:layer="Sfondo" fub:locked="true"><rect x="-50" y="-50" width="10" height="10" fill="#000000"/></g>` +
+          `<g id="l2" fub:layer="Note" display="none"><rect x="200" y="10" width="10" height="10" fill="#000000"/></g>` +
+          `<g id="l3" fub:layer="Disegno"><rect x="10" y="10" width="10" height="10" fill="#000000"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    choose("Adatta la pagina al disegno");
+    expect(editor.engine.text).toContain('viewBox="-70 -70 300 110"');
+    expect(spoken()).toBe("Pagina adattata: 300 × 110.");
+  });
+
+  it("un disegno vuoto non ha una pagina da adattare, e lo dice", () => {
+    mount(doc(`${LAYER}</g>`), { level: "standard" });
+    pageButton().click();
+    const fit = entry("Adatta la pagina al disegno");
+    expect(fit.getAttribute("aria-disabled")).toBe("true");
+    expect(fit.querySelector(".menu-description")!.textContent).toBe("Il disegno è vuoto.");
+    fit.click();
+    expect(changes).toEqual([]);
+  });
+
+  it("«?» elenca i tasti della griglia, e le frecce dicono dove vanno con l'aggancio", async () => {
+    mount(SOURCE, { level: "standard" });
+    const rows = (): (string | null)[][] => [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    key("?", { shiftKey: true });
+    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Griglia");
+    expect(rows()).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(rows()).toContainEqual(["%", "Accende o spegne l’aggancio alla griglia"]);
+    expect(rows()).toContainEqual(["Ctrl", "Tenuto mentre si trascina: posa libero, fuori dalla griglia"]);
+    expect(rows()).toContainEqual(["←↑→↓", "Sposta la selezione di 1, con Maiusc di 10"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    editor.setGrid(SNAP);
+    key("?", { shiftKey: true });
+    expect(rows()).toContainEqual(["←↑→↓", "Sposta la selezione alla riga seguente della griglia, a cinque righe con Maiusc"]);
+    expect(rows()).toContainEqual(["Ctrl+←↑→↓", "Ridimensiona la selezione fino alla riga seguente della griglia, a cinque righe con Maiusc"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+  });
+});
+
 describe("da tastiera", () => {
   /// Un rettangolo pieno senza contorno: il suo riquadro è quello scritto.
   const BOXES = doc(
@@ -1285,6 +1576,17 @@ describe("le immagini incollate", () => {
     expect(editor.selection).toHaveLength(2);
     expect(changes).toHaveLength(1);
     expect(spoken()).toBe("2 immagini aggiunte. Il disegno ha 3 oggetti.");
+  });
+
+  it("con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più vicino, e le immagini si scostano di passi interi", async () => {
+    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20 } });
+    size(1000, 500);
+    editor.setTool("select");
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
+    paste([file(PNG), file(PNG, "due.png")]);
+    await settle();
+    // Da (250, 275) a (260, 280); la seconda parte 40 più in là, non 24.
+    expect(images().map((line) => line.match(/ x="[^"]*" y="[^"]*"/)![0])).toEqual([' x="260" y="280"', ' x="300" y="320"']);
   });
 
   it("oltre i 5 MiB propone di ridurla: una foto diventa JPEG, con la stessa misura sul foglio", async () => {

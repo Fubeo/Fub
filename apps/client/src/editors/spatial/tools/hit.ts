@@ -105,6 +105,9 @@ export class Unit {
     /// Il riquadro nella scena, contorno compreso; `null` se non disegna
     /// niente.
     readonly bounds: Bounds | null,
+    /// Il riquadro della geometria nella scena, senza contorno: quello che
+    /// la griglia aggancia.
+    readonly geometry: Bounds | null,
     private readonly parts: readonly Part[],
   ) {}
 
@@ -203,6 +206,28 @@ export class SceneIndexer {
   index(model: DocumentModel): SceneIndex {
     const units: Unit[] = [];
     const layers: LayerInfo[] = [];
+    this.walk(model, false, units, layers);
+    return new SceneIndex(units, layers);
+  }
+
+  /// Il riquadro di tutto ciò che `model` disegna, contorno compreso: anche
+  /// gli oggetti dei livelli bloccati o nascosti, che l'indice non tocca ma
+  /// che restano nel disegno. `null` se non disegna niente.
+  extent(model: DocumentModel): Bounds | null {
+    const units: Unit[] = [];
+    this.walk(model, true, units, []);
+    const out = new BoundsBuilder();
+    for (const unit of units) {
+      if (unit.bounds === null) continue;
+      out.include(unit.bounds.min);
+      out.include(unit.bounds.max);
+    }
+    return out.finish();
+  }
+
+  /// Gli oggetti e i livelli di `model`; con `all` anche gli oggetti dei
+  /// livelli bloccati o nascosti.
+  private walk(model: DocumentModel, all: boolean, units: Unit[], layers: LayerInfo[]): void {
     const root = model.root;
     const rootStyle = styleOf(INITIAL, this.builder.headInfo(root).attrs);
     childLoop(root, (child, index) => {
@@ -223,14 +248,13 @@ export class SceneIndexer {
       const layer = child.details!.layer!;
       const info: LayerInfo = { id: child.facts.id, path: [index], name: layer.name, locked: layer.locked, hidden: layer.hidden || head.hidden, matrix };
       layers.push(info);
-      if (info.locked || info.hidden) return;
+      if (!all && (info.locked || info.hidden)) return;
       const style = styleOf(rootStyle, head.attrs);
       childLoop(child, (grandchild, inner) => {
         if (grandchild.kind === "leaf" && (grandchild.details === null || grandchild.details.role === "title" || grandchild.details.role === "desc")) return;
         this.unit(grandchild, [index, inner], info.id, matrix, style, units);
       });
     });
-    return new SceneIndex(units, layers);
   }
 
   /// Aggiunge a `out` l'oggetto `node`, se si vede.
@@ -242,9 +266,12 @@ export class SceneIndexer {
     const parts: Part[] = [];
     this.collect(node, matrix, IDENTITY, styleOf(style, attrs), parts);
     const scene = new BoundsBuilder();
+    const geometry = new BoundsBuilder();
     for (const part of parts) {
       const bounds = this.sceneBounds(part);
-      if (bounds !== null) includeInflated(scene, bounds, part.radius * scaleOf(part.matrix));
+      if (bounds === null) continue;
+      includeInflated(scene, bounds, part.radius * scaleOf(part.matrix));
+      includeInflated(geometry, bounds, 0);
     }
     const id = node.facts.id;
     const tag = tagName(node);
@@ -260,6 +287,7 @@ export class SceneIndexer {
       own,
       this.builder.paintsOf(node),
       scene.finish(),
+      geometry.finish(),
       parts,
     ));
   }

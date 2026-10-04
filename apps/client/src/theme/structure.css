@@ -1273,6 +1273,23 @@ html, body, #app {
   overflow: visible;
   pointer-events: none;
 }
+/* La griglia copre il foglio, sopra la carta e sotto il disegno. Le righe
+   cadono a metà dei pixel e restano nitide, anche nei colori forzati: sono
+   grigie e trasparenti, e si leggono sulla carta bianca come sul tavolo. */
+.draw-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  forced-color-adjust: none;
+}
+.draw-grid path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+}
 /* Il cursore del foglio, che la tastiera muove: un punto senza misura, e il
    segno attorno lo disegna la pelle. */
 .draw-cursor {

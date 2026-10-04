@@ -472,12 +472,33 @@ export function keyName(key: string): string {
   return KEY_NAMES[key.toLowerCase()] ?? (key.length === 1 || /^f\d{1,2}$/i.test(key) ? key.toUpperCase() : key);
 }
 
+/// Il nome che si legge di un modificatore da solo, tenuto mentre si fa
+/// altro: `Mod` è Ctrl, o ⌘ su macOS. `null` se `name` non è un modificatore.
+export function modifierName(
+  name: string,
+  platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
+): string | null {
+  const mac = platform === "mac";
+  switch (name.trim().toLowerCase()) {
+    case "mod":
+      return mac ? "⌘" : "Ctrl";
+    case "alt":
+      return mac ? "⌥" : "Alt";
+    case "shift":
+      return mac ? "⇧" : "Shift";
+    default:
+      return null;
+  }
+}
+
 export function displayBinding(
   binding: string | null | undefined,
   platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
 ): string {
   const first = splitAlternatives(binding)[0];
   if (!first) return "";
+  const held = modifierName(first, platform);
+  if (held !== null) return held;
   const chords = parseChords(first);
   if (!chords) return first;
   const mac = platform === "mac";

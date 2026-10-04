@@ -46,6 +46,12 @@
 //   livello corrente bloccato o nascosto non riceve niente, e lo si dice.
 //   Sotto lo Standard il disegno va nel livello più alto che si vede e non è
 //   bloccato.
+// - **Griglia e pagina.** Dal livello Standard il pulsante «Pagina e griglia»
+//   mostra la griglia, ne accende l'aggancio e ne sceglie il passo
+//   (`grid.ts`), e adatta la pagina al disegno. La griglia aiuta la vista e
+//   non entra nel file. Con l'aggancio vanno sulla griglia le forme, gli
+//   spostamenti, le copie, le immagini incollate e il cursore. Ctrl o ⌘,
+//   tenuto durante un gesto del puntatore, lo sospende.
 // - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
 //   entra nel file come data URI (`images.ts`): il disegno resta un file
 //   solo. Oltre il peso massimo l'editor propone di ridurla.
@@ -56,7 +62,7 @@
 
 import { onLanguage, resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
-import { ariaBinding, displayBinding } from "../../../ui/commands";
+import { ariaBinding, displayBinding, modifierName } from "../../../ui/commands";
 import { promptForm, showKeys, type FormField, type KeyGroup } from "../../../ui/form-dialog";
 import { icon, iconEl, registerIcon } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -90,7 +96,9 @@ import {
   boxMatrix,
   destination,
   destinationIn,
+  fittedPage,
   gesture as asGesture,
+  mappedBounds,
   moveOps,
   movedMatrix,
   NewIds,
@@ -103,6 +111,20 @@ import {
   type Destination,
 } from "./edit";
 import { alignOps, distributeOps, duplicateOps, groupOps, isGroup, orderOps, ungroupOps, type Arranged, type Axis, type Edge, type Order } from "./arrange";
+import {
+  DEFAULT_GRID,
+  GRID_MAJOR,
+  GRID_STEPS,
+  gridLines,
+  lineBeyond,
+  nearestCorner,
+  snapDelta,
+  snapPoint,
+  snapValue,
+  validStep,
+  wholeSteps,
+  type Grid,
+} from "./grid";
 import { elemBounds, SceneIndex, SceneIndexer, type LayerInfo, type Unit } from "./hit";
 import { History, type Replay } from "./history";
 import {
@@ -175,6 +197,10 @@ export interface DrawEditorOptions {
   /// Chi legge e ricodifica le immagini incollate: quello del browser, se
   /// non è dato; `null` le rifiuta.
   readonly imageCodec?: ImageCodec | null;
+  /// La griglia di partenza (default spenta, col passo di 20 unità).
+  readonly grid?: Grid;
+  /// Chi disegna ha cambiato la griglia, dal menu o coi tasti.
+  readonly onGridChange?: (grid: Grid) => void;
   readonly onChange?: (change: DrawChange) => void;
   /// La selezione è cambiata: altri oggetti, o gli stessi con chiavi nuove.
   readonly onSelectionChange?: () => void;
@@ -220,6 +246,11 @@ export interface DrawEditor {
   /// Standard, uno a piacere, come lo legge `customColor`.
   setColor(color: string): void;
   setWidth(width: number): void;
+  /// La griglia: se si vede, se aggancia, e il passo.
+  readonly grid: Grid;
+  /// Un'altra griglia, da chi monta l'editor: non si annuncia e non torna a
+  /// `onGridChange`. Un passo fuori dai limiti lascia quello di prima.
+  setGrid(grid: Grid): void;
   select(keys: readonly string[]): void;
   deleteSelection(): void;
   undo(): void;
@@ -316,6 +347,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
   "draw-into-layer": ["M12 11l9 5-9 5-9-5z", "M12 2v7", "M9 6l3 3 3-3"],
+  "draw-page-grid": ["M3 3h18v18H3z", "M9 3v18", "M15 3v18", "M3 9h18", "M3 15h18"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -369,6 +401,9 @@ interface SelectGesture extends GestureBase {
   base: readonly string[];
   /// Maiusc su un oggetto già scelto: un tocco lo toglie dalla selezione.
   release: string | null;
+  /// L'angolo della geometria scelta che la griglia aggancia: il più vicino
+  /// al punto preso.
+  source: Point | null;
 }
 
 interface EraseGesture extends GestureBase {
@@ -439,6 +474,16 @@ function layerRefusal(layer: LayerInfo): DrawKey | null {
   return layer.hidden ? "draw.layer.hidden_here" : layer.locked ? "draw.layer.locked_here" : null;
 }
 
+/// `next` come griglia, col passo di `before` se il suo è fuori dai limiti.
+function checkedGrid(next: Grid, before: Grid): Grid {
+  return { shown: next.shown, snap: next.snap, step: validStep(next.step) ? next.step : before.step };
+}
+
+/// Il verso di una freccia su un asse.
+function sign(value: number): 1 | -1 {
+  return value < 0 ? -1 : 1;
+}
+
 /// Monta l'editor dentro `host`.
 export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner: Lifetime, options: DrawEditorOptions = {}): DrawEditor {
   ensureIcons();
@@ -493,6 +538,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// suo posto fra i figli della radice per ritrovarlo quando la chiave non
   /// c'è più. `null` finché nessuno ne sceglie uno.
   let chosen: { readonly key: string; readonly at: number } | null = null;
+  /// La griglia, e se Ctrl o ⌘ è tenuto durante un gesto del puntatore: col
+  /// tasto giù l'aggancio aspetta.
+  let grid: Grid = options.grid === undefined ? DEFAULT_GRID : checkedGrid(options.grid, DEFAULT_GRID);
+  let free = false;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -674,6 +723,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   button(viewGroup, "draw-button", () => t("draw.zoom_in"), "draw-zoom-in", () => zoomBy(ZOOM_STEP));
   const fitButton = button(viewGroup, "draw-button", () => t("draw.fit"), "draw-fit", () => fit());
   fitButton.setAttribute("aria-keyshortcuts", "Shift+1");
+  // La griglia e la pagina, dal livello Standard: un menu.
+  const pageButton = button(viewGroup, "draw-button", () => t("draw.page_grid"), "draw-page-grid", () => openMenu(pageButton, pageItems()));
+  pageButton.setAttribute("aria-haspopup", "menu");
+  pageButton.setAttribute("aria-expanded", "false");
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
@@ -742,14 +795,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   root.append(header, body, surfaceHint, live);
   host.append(root);
 
-  // La carta, il painter, poi l'anteprima delle forme, poi lo strato sopra:
-  // l'ordine in cui si vedono. La carta è bianca in ogni tema: è il fondo su
-  // cui il disegno si legge anche fuori dall'editor, e su cui S009 misura il
-  // contrasto del tratto.
+  // La carta, la griglia, il painter, poi l'anteprima delle forme, poi lo
+  // strato sopra: l'ordine in cui si vedono. La carta è bianca in ogni tema:
+  // è il fondo su cui il disegno si legge anche fuori dall'editor, e su cui
+  // S009 misura il contrasto del tratto.
   const paper = document.createElement("div");
   paper.className = "draw-page";
   paper.setAttribute("aria-hidden", "true");
   surface.append(paper);
+  // Le righe sottili e, una ogni cinque, quelle marcate.
+  const gridMark = document.createElementNS(SVG_NS, "svg");
+  gridMark.setAttribute("class", "draw-grid");
+  gridMark.setAttribute("aria-hidden", "true");
+  const gridMinor = document.createElementNS(SVG_NS, "path");
+  const gridMajor = document.createElementNS(SVG_NS, "path");
+  gridMajor.setAttribute("data-major", "");
+  gridMark.append(gridMinor, gridMajor);
+  surface.append(gridMark);
   const painter = createSvgPainter(surface, life, options.images === undefined ? {} : { images: options.images });
   const preview = document.createElementNS(SVG_NS, "svg");
   preview.setAttribute("class", "draw-preview");
@@ -821,6 +883,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     paper.style.height = `${scale * page.height}px`;
   };
 
+  /// La griglia sullo schermo, dal livello Standard e se la si vuole vedere.
+  const showGrid = (): void => {
+    const shown = reaches(level, "standard") && grid.shown;
+    gridMark.style.display = shown ? "" : "none";
+    if (!shown) return;
+    const lines = gridLines(camera, surface.clientWidth, surface.clientHeight, grid.step);
+    gridMinor.setAttribute("d", lines.minor);
+    gridMajor.setAttribute("d", lines.major);
+  };
+
   /// Il cursore del foglio sullo schermo; pieno mentre la tastiera preme.
   const showCursor = (): void => {
     cursorMark.toggleAttribute("data-pressed", pressed !== null);
@@ -835,6 +907,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     overlay.setView(next);
     previewCamera.setAttribute("transform", `matrix(${next.scale} 0 0 ${next.scale} ${next.tx} ${next.ty})`);
     showPage();
+    showGrid();
     showZoom();
     showCursor();
   };
@@ -876,6 +949,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   if (typeof ResizeObserver !== "undefined") {
     const sizeObserver = new ResizeObserver(() => {
       if (!placed) fit();
+      showGrid();
     });
     sizeObserver.observe(surface);
     life.add(() => sizeObserver.disconnect());
@@ -1194,6 +1268,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     redoButton.disabled = !canEdit || !history.canRedo;
     deleteButton.disabled = !canEdit || selection.length === 0;
     propertiesButton.disabled = !canEdit;
+    pageButton.hidden = !reaches(level, "standard");
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
     syncLayers();
@@ -1392,6 +1467,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (swatchOf(styles.highlighter.color) === null) styles.highlighter.color = HIGHLIGHTER_COLOR;
     }
     showSurfaceHint();
+    showGrid();
     syncControls();
   }
 
@@ -1470,6 +1546,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return to;
   };
 
+  /// La griglia aggancia: dal livello Standard, con l'aggancio acceso.
+  const gridOn = (): boolean => reaches(level, "standard") && grid.snap;
+
+  /// Un punto di un gesto: sull'incrocio più vicino quando la griglia
+  /// aggancia e Ctrl o ⌘ non è tenuto.
+  const snapped = (p: Point): Point => (gridOn() && !free ? snapPoint(p, grid.step) : p);
+
   const begin = (start: StrokeStart): Gesture => {
     const base = { stroke: start.id, pointer: start.pointerType };
     if (!editable()) return { ...base, kind: "refused" };
@@ -1503,7 +1586,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "eraser":
         return { ...base, kind: "erase", last: null, marked: new Map() };
       case "select":
-        return { ...base, kind: "select", from: null, end: null, mode: "pending", units: [], base: [], release: null };
+        return { ...base, kind: "select", from: null, end: null, mode: "pending", units: [], base: [], release: null, source: null };
     }
   };
 
@@ -1527,7 +1610,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const shapeEnds = (g: ShapeGesture, to: Destination): [Point, Point] | null => {
     if (g.from === null || g.end === null) return null;
     const from = apply(to.inverse, g.from);
-    const end = apply(to.inverse, g.end);
+    const end = apply(to.inverse, snapped(g.end));
     return [from, shift ? constrainEnd(g.tool, from, end) : end];
   };
 
@@ -1544,7 +1627,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const moveDelta = (g: SelectGesture): [number, number] => {
     if (g.from === null || g.end === null) return [0, 0];
-    return [roundDelta(g.end[0] - g.from[0]), roundDelta(g.end[1] - g.from[1])];
+    const dx = g.end[0] - g.from[0];
+    const dy = g.end[1] - g.from[1];
+    if (gridOn() && !free && g.source !== null) return snapDelta(g.source, dx, dy, grid.step);
+    return [roundDelta(dx), roundDelta(dy)];
   };
 
   /// Il primo punto di un gesto di selezione: un oggetto sotto il puntatore
@@ -1567,6 +1653,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       select([hit.key]);
     }
     g.units = selectedUnits();
+    const geometry = geometryOf(g.units);
+    g.source = geometry === null ? null : nearestCorner(geometry, p);
   };
 
   const selectUpdate = (g: SelectGesture): void => {
@@ -1683,11 +1771,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const toPoint = (sample: InkSample): Point => [sample.x, sample.y];
 
-  // Maiusc si legge dall'evento del puntatore prima della pipeline, che
-  // ascolta in cattura sullo stesso elemento: registrato prima di lei, questo
-  // ascolto la precede, e il gesto vede lo stato dell'evento in corso.
+  // Maiusc, e Ctrl o ⌘, si leggono dall'evento del puntatore prima della
+  // pipeline, che ascolta in cattura sullo stesso elemento: registrato prima
+  // di lei, questo ascolto la precede, e il gesto vede lo stato dell'evento
+  // in corso.
   const readModifiers = (event: PointerEvent): void => {
     shift = event.shiftKey;
+    free = event.ctrlKey || event.metaKey;
   };
   /// Il puntatore porta con sé il cursore del foglio, che si nasconde: la
   /// tastiera ripartirà da lì.
@@ -1744,7 +1834,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           drawInk(g);
           break;
         case "shape":
-          g.from ??= toPoint(samples[0]!);
+          // Il primo punto si aggancia subito, l'ultimo a ogni disegno:
+          // Ctrl o ⌘ può cambiare a metà gesto.
+          g.from ??= snapped(toPoint(samples[0]!));
           g.end = toPoint(samples[samples.length - 1]!);
           drawShape(g);
           break;
@@ -1866,16 +1958,30 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (g.samples.length >= INK_MAX_SAMPLES) release();
   };
 
-  /// Muove il cursore di (`dx`, `dy`) pixel dello schermo.
-  const moveCursor = (dx: number, dy: number): void => {
-    const [x, y] = cursorPoint();
-    const next: Point = [x + dx / camera.scale, y + dy / camera.scale];
+  /// Porta il cursore in `next`, un punto della scena.
+  const placeCursor = (next: Point): void => {
     cursor = next;
     cursorMark.hidden = false;
     keepInView(next);
     showCursor();
     trace(next);
     announceCursor();
+  };
+
+  /// Muove il cursore di (`dx`, `dy`) pixel dello schermo.
+  const moveCursor = (dx: number, dy: number): void => {
+    const [x, y] = cursorPoint();
+    placeCursor([x + dx / camera.scale, y + dy / camera.scale]);
+  };
+
+  /// Con l'aggancio, una freccia porta il cursore all'incrocio `lines` righe
+  /// più in là nel suo verso, e sulla riga più vicina sull'altro asse.
+  const moveCursorOnGrid = (x: number, y: number, lines: number): void => {
+    const [cx, cy] = cursorPoint();
+    placeCursor([
+      x === 0 ? snapValue(cx, grid.step) : lineBeyond(cx, grid.step, sign(x), lines),
+      y === 0 ? snapValue(cy, grid.step) : lineBeyond(cy, grid.step, sign(y), lines),
+    ]);
   };
 
   /// Spazio: il gesto comincia dove è il cursore.
@@ -2066,14 +2172,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return bounds;
   };
 
+  /// Il riquadro della geometria di `units`, senza contorno: quello che la
+  /// griglia aggancia. Un oggetto senza geometria conta col suo riquadro.
+  const geometryOf = (units: readonly Unit[]): Bounds | null => {
+    let bounds: Bounds | null = null;
+    for (const unit of units) bounds = union(bounds, unit.geometry ?? unit.bounds);
+    return bounds;
+  };
+
   /// Porta il riquadro `from` della selezione in `to`, e la tiene scelta: la
   /// pagina cresce se serve, come per ogni oggetto che ne esce.
-  const placeSelection = (units: readonly Unit[], from: Bounds, to: Bounds): boolean => {
+  const placeSelection = (units: readonly Unit[], from: Bounds, to: Bounds): boolean =>
     // Il riquadro va da `from` a `to` scalando sugli assi: ogni oggetto, il
     // suo contorno compreso, finisce dentro `to`.
-    const moved = transformOps(units, boxMatrix(from, to), newIds());
+    transformSelection(units, boxMatrix(from, to), to);
+
+  /// Applica `m`, una scala e una traslazione della scena, agli oggetti
+  /// scelti, e li tiene scelti: la pagina cresce se `extent`, dove finiscono,
+  /// ne esce.
+  const transformSelection = (units: readonly Unit[], m: Matrix, extent: Bounds): boolean => {
+    const moved = transformOps(units, m, newIds());
     const ops: Op[] = [...moved.ops];
-    const page = pageFor(scene.root.page, to);
+    const page = pageFor(scene.root.page, extent);
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.resize", asGesture(ops)) === null) return false;
     selection = inOrder(moved.keys);
@@ -2096,6 +2216,40 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (width === w && height === h) return;
     const to: Bounds = { min: from.min, max: [from.min[0] + width, from.min[1] + height] };
     if (placeSelection(units, from, to)) announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+  };
+
+  /// Con l'aggancio, le frecce portano l'angolo in alto a sinistra della
+  /// geometria scelta alla riga `lines` righe più in là, sull'asse della
+  /// freccia.
+  const moveOnGrid = (x: number, y: number, lines: number): void => {
+    const units = selectedUnits();
+    const from = geometryOf(units);
+    if (from === null) return;
+    const [left, top] = from.min;
+    const dx = x === 0 ? 0 : lineBeyond(left, grid.step, sign(x), lines) - left;
+    const dy = y === 0 ? 0 : lineBeyond(top, grid.step, sign(y), lines) - top;
+    moveSelection(units, roundDelta(dx), roundDelta(dy));
+  };
+
+  /// Con l'aggancio, Ctrl o ⌘ e le frecce portano il lato destro o quello in
+  /// basso della geometria scelta alla riga `lines` righe più in là, fermo
+  /// l'angolo in alto a sinistra. Il lato non passa la prima riga dopo
+  /// quello opposto, e un lato che misura zero resta zero.
+  const resizeOnGrid = (x: number, y: number, lines: number): void => {
+    const units = selectedUnits();
+    const from = geometryOf(units);
+    const shown = boundsOf(units);
+    if (from === null || shown === null) return;
+    const edge = (min: number, max: number, direction: number): number =>
+      direction === 0 || max <= min ? max : Math.max(lineBeyond(max, grid.step, sign(direction), lines), lineBeyond(min, grid.step, 1, 1));
+    const right = edge(from.min[0], from.max[0], x);
+    const bottom = edge(from.min[1], from.max[1], y);
+    if (right === from.max[0] && bottom === from.max[1]) return;
+    const m = boxMatrix(from, { min: from.min, max: [right, bottom] });
+    const to = mappedBounds(shown, m);
+    if (transformSelection(units, m, to)) {
+      announce(t("draw.resized", { width: numberText(to.max[0] - to.min[0]), height: numberText(to.max[1] - to.min[1]) }));
+    }
   };
 
   // --- Disporre ----------------------------------------------------------------
@@ -2143,7 +2297,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function duplicateSelection(): void {
     const units = arranging();
     if (units === null) return;
-    const step = roundDelta(COPY_STEP_PX / camera.scale);
+    // Con l'aggancio le copie si scostano di passi interi della griglia, e
+    // ciò che ci stava sopra ci resta.
+    const distance = COPY_STEP_PX / camera.scale;
+    const step = gridOn() ? wholeSteps(distance, grid.step) : roundDelta(distance);
     const arranged = duplicateOps(engine.model!, units, step, step, newIds());
     if (arranged === null) {
       announce(t("draw.duplicate.foreign"));
@@ -2478,6 +2635,71 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return items;
   };
 
+  // --- Griglia e pagina -------------------------------------------------------
+
+  /// La griglia diventa `next` per scelta di chi disegna: si vede subito, si
+  /// dice che cosa è cambiato, e chi monta l'editor lo sa.
+  const changeGrid = (next: Grid): void => {
+    const before = grid;
+    grid = checkedGrid(next, before);
+    showGrid();
+    if (grid.shown !== before.shown) announce(t(grid.shown ? "draw.grid.shown" : "draw.grid.hidden"));
+    else if (grid.snap !== before.snap) announce(t(grid.snap ? "draw.grid.snap.on" : "draw.grid.snap.off"));
+    else if (grid.step !== before.step) announce(t("draw.grid.stepped", { step: numberText(grid.step) }));
+    else return;
+    options.onGridChange?.(grid);
+  };
+
+  /// «Adatta la pagina al disegno»: la pagina va attorno a tutto il disegno,
+  /// livelli bloccati e nascosti compresi, con un margine. È un passo di
+  /// annulla, e gli oggetti restano dove sono.
+  function fitPage(): void {
+    if (!reaches(level, "standard") || !editable()) return;
+    cancelGesture();
+    const extent = indexer.extent(engine.model!);
+    const viewBox = fittedPage(scene.root.page, extent);
+    if (viewBox === null) {
+      announce(t(extent === null ? "draw.page.fit.empty" : "draw.page.fit.already"));
+      return;
+    }
+    if (commit("draw.action.fit_page", { op: "page", viewBox }) === null) return;
+    const page = scene.root.page;
+    if (page !== null) announce(t("draw.page.fitted", { width: numberText(page.width), height: numberText(page.height) }));
+  }
+
+  /// Le voci di «Pagina e griglia»: la griglia, il suo passo, e la pagina.
+  /// Adattare la pagina si spegne, e dice perché, quando non cambierebbe
+  /// niente.
+  const pageItems = (): MenuItem[] => {
+    const steps = GRID_STEPS.includes(grid.step) ? GRID_STEPS : [...GRID_STEPS, grid.step].sort((a, b) => a - b);
+    const extent = engine.model === null ? null : indexer.extent(engine.model);
+    const viewBox = fittedPage(scene.root.page, extent);
+    const fitItem: MenuItem = { label: t("draw.page.fit"), separator: true, disabled: !editable() || viewBox === null, run: () => fitPage() };
+    if (extent === null) fitItem.description = t("draw.page.fit.empty");
+    else if (viewBox === null) fitItem.description = t("draw.page.fit.already");
+    return [
+      { label: t("draw.grid.show"), choice: "checkbox", checked: grid.shown, hint: "#", run: () => changeGrid({ ...grid, shown: !grid.shown }) },
+      {
+        label: t("draw.grid.snap"),
+        choice: "checkbox",
+        checked: grid.snap,
+        hint: "%",
+        description: t("draw.grid.snap.free", { key: modifierName("Mod") ?? "Ctrl" }),
+        run: () => changeGrid({ ...grid, snap: !grid.snap }),
+      },
+      ...steps.map((step, at): MenuItem => ({
+        label: t("draw.grid.step", { step: numberText(step) }),
+        choice: "radio",
+        checked: step === grid.step,
+        separator: at === 0,
+        run: () => changeGrid({ ...grid, step }),
+      })),
+      fitItem,
+    ];
+  };
+
+  // --- Frecce, finestre ed elenco dei tasti -----------------------------------
+
   /// Alt+F10: il fuoco va alla barra della selezione, se c'è.
   const focusArrange = (): boolean => {
     if (arrangeBar.hidden) return false;
@@ -2490,15 +2712,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Le frecce sul foglio. Con una selezione la spostano, e con Ctrl o ⌘ la
   /// ridimensionano; senza, o mentre la tastiera preme, muovono il cursore.
+  /// Con l'aggancio vanno di riga in riga della griglia, cinque con Maiusc.
   const arrows = (event: KeyboardEvent): boolean => {
     const direction = ARROWS[event.key];
     if (direction === undefined) return false;
     const [x, y] = direction;
     const fine = event.ctrlKey || event.metaKey;
+    const lines = event.shiftKey ? GRID_MAJOR : 1;
     if (pressed === null && selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
-      if (fine) resizeSelection(x * step, y * step);
-      else moveSelection(selectedUnits(), x * step, y * step);
+      if (gridOn()) {
+        if (fine) resizeOnGrid(x, y, lines);
+        else moveOnGrid(x, y, lines);
+      } else if (fine) {
+        resizeSelection(x * step, y * step);
+      } else {
+        moveSelection(selectedUnits(), x * step, y * step);
+      }
+      return true;
+    }
+    // Ctrl o ⌘ lascia il cursore libero, come lascia libero il puntatore.
+    if (gridOn() && !fine) {
+      moveCursorOnGrid(x, y, lines);
       return true;
     }
     const px = fine ? CURSOR_PX_FINE : event.shiftKey ? CURSOR_PX_SHIFT : CURSOR_PX;
@@ -2631,13 +2866,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti della griglia, dal livello Standard.
+  const gridKeys = (): KeyGroup[] =>
+    reaches(level, "standard")
+      ? [
+          {
+            title: t("draw.keys.grid"),
+            rows: [
+              ["#", t("draw.keys.grid.show")],
+              ["%", t("draw.keys.grid.snap")],
+              ["Mod", t("draw.keys.grid.free")],
+            ],
+          },
+        ]
+      : [];
+
   /// L'elenco dei tasti, nei gruppi in cui si usano.
   const keyGroups = (): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: tools.map((spec) => [spec.shortcut, t(spec.label)] as const) },
     {
       title: t("draw.keys.cursor"),
       rows: [
-        [ARROW_KEYS, t("draw.keys.cursor.move")],
+        [ARROW_KEYS, t(gridOn() ? "draw.keys.cursor.move.grid" : "draw.keys.cursor.move")],
         ["Space Enter", t("draw.keys.cursor.press")],
         ["Escape", t("draw.keys.cancel")],
       ],
@@ -2645,8 +2895,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     {
       title: t("draw.objects"),
       rows: [
-        [ARROW_KEYS, t("draw.keys.nudge")],
-        [`Mod-${ARROW_KEYS}`, t("draw.keys.resize")],
+        [ARROW_KEYS, t(gridOn() ? "draw.keys.nudge.grid" : "draw.keys.nudge")],
+        [`Mod-${ARROW_KEYS}`, t(gridOn() ? "draw.keys.resize.grid" : "draw.keys.resize")],
         ["Tab Shift-Tab", t("draw.keys.walk")],
         ["Home End", t("draw.keys.ends")],
         ["Enter", t("draw.properties")],
@@ -2656,6 +2906,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ],
     },
     ...arrangeKeys(),
+    ...gridKeys(),
     {
       title: t("draw.view"),
       rows: [
@@ -2814,7 +3065,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const view = viewBounds();
     const inView = at !== null && at[0] >= view.min[0] && at[0] <= view.max[0] && at[1] >= view.min[1] && at[1] <= view.max[1];
     const base: Point = inView ? at : [(view.min[0] + view.max[0]) / 2, (view.min[1] + view.max[1]) / 2];
-    const step = COPY_STEP_PX / camera.scale;
+    const distance = COPY_STEP_PX / camera.scale;
+    const step = gridOn() ? wholeSteps(distance, grid.step) : distance;
     // La scala del livello: una unità della scena vale `1 / k` unità sue.
     const k = Math.sqrt(Math.abs(to.matrix[0] * to.matrix[3] - to.matrix[1] * to.matrix[2]));
     const ops: Op[] = [...to.prelude];
@@ -2822,7 +3074,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const bounds = new BoundsBuilder();
     let hrefBytes = 0;
     pictures.forEach((picture, i) => {
-      const box = placeImage(picture.decoded.width, picture.decoded.height, view, [base[0] + i * step, base[1] + i * step]);
+      let box = placeImage(picture.decoded.width, picture.decoded.height, view, [base[0] + i * step, base[1] + i * step]);
+      // Con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più
+      // vicino.
+      if (gridOn()) box = translated(box, ...snapDelta(box.min, 0, 0, grid.step))!;
       const [cx, cy] = apply(to.inverse, [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2]);
       const w = (box.max[0] - box.min[0]) / k;
       const h = (box.max[1] - box.min[1]) / k;
@@ -2885,15 +3140,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     void addImages(files, [world.x, world.y]);
   });
 
-  const onShift = (event: KeyboardEvent): void => {
-    if (event.key !== "Shift") return;
-    shift = event.type === "keydown";
+  /// Maiusc, Ctrl o ⌘ premuti o lasciati a metà gesto: la forma e lo
+  /// spostamento si ridisegnano subito.
+  const onModifiers = (event: KeyboardEvent): void => {
+    if (event.key === "Shift") shift = event.type === "keydown";
+    else if (event.key === "Control" || event.key === "Meta") free = event.ctrlKey || event.metaKey;
+    else return;
     if (current?.kind === "shape") drawShape(current);
+    else if (current?.kind === "select" && current.mode === "move") selectUpdate(current);
   };
 
-  life.listen(root, "keyup", onShift);
+  life.listen(root, "keyup", onModifiers);
   life.listen(root, "keydown", (event) => {
-    onShift(event);
+    onModifiers(event);
     if (event.defaultPrevented || event.target === titleInput) return;
     const onSurface = event.target === surface;
     if (onSurface && !event.altKey && arrows(event)) {
@@ -2901,6 +3160,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const mod = event.ctrlKey || event.metaKey;
+    // «#» e «%» valgono come si scrivono, anche con AltGr, che su Windows
+    // arriva come Ctrl e Alt insieme.
+    const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
+    if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && reaches(level, "standard")) {
+      if (event.key === "#") changeGrid({ ...grid, shown: !grid.shown });
+      else changeGrid({ ...grid, snap: !grid.snap });
+      event.preventDefault();
+      return;
+    }
     // I comandi della selezione prendono i loro tasti solo quando c'è una
     // selezione: senza, Ctrl+D e gli altri restano a chi li aveva.
     const arranges = reaches(level, "standard") && selection.length > 0 && editable();
@@ -3023,6 +3291,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     get canRedo() {
       return history.canRedo;
+    },
+    get grid() {
+      return grid;
+    },
+    setGrid(next) {
+      if (disposed) return;
+      grid = checkedGrid(next, grid);
+      showGrid();
     },
     setEngine(next) {
       if (disposed) return;
