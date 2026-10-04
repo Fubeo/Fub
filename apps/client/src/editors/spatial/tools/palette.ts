@@ -17,7 +17,7 @@
 // I valori sono quelli che le operazioni scrivono nel file: colori `#rrggbb`
 // minuscoli e spessori in unità della scena.
 
-import type { Key } from "../../../i18n/strings";
+import type { DrawKey } from "../strings";
 import { contrast, WHITE } from "../scene/analysis";
 import { paint } from "../scene/values";
 
@@ -31,7 +31,7 @@ export interface Swatch {
   readonly shape: SwatchShape;
   /// Sotto il contrasto 3:1 sulla carta bianca.
   readonly light: boolean;
-  readonly label: Key;
+  readonly label: DrawKey;
 }
 
 export interface Width {
@@ -39,7 +39,7 @@ export interface Width {
   /// Lo spessore in unità della scena: `size` della penna, `stroke-width`
   /// delle forme.
   readonly value: number;
-  readonly label: Key;
+  readonly label: DrawKey;
 }
 
 export const PALETTE: readonly Swatch[] = [

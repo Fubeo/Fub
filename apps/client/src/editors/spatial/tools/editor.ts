@@ -48,7 +48,7 @@
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
 // un'altra superficie arriva con `setEngine`, e annulla e ripeti restano.
 
-import { onLanguage, plural, resolvedLanguage, t, type Key } from "../../../i18n/strings";
+import { onLanguage, resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { ariaBinding, displayBinding } from "../../../ui/commands";
 import { promptForm, showKeys, type FormField, type KeyGroup } from "../../../ui/form-dialog";
@@ -75,6 +75,7 @@ import type { Tool } from "../scene/analysis";
 import type { Item } from "../scene/classify";
 import type { Op, Reason } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
+import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, type OverlayHandle } from "../painter/overlay";
 import { PaintBuilder, type PaintNode, type PaintScene } from "../painter/paint";
 import { createSvgPainter, type PainterOptions } from "../painter/svg-dom";
@@ -472,7 +473,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showSurfaceHint();
   });
 
-  const group = (label: Key, radio: boolean): HTMLElement => {
+  const group = (label: DrawKey, radio: boolean): HTMLElement => {
     const element = document.createElement("div");
     element.className = "draw-group";
     element.setAttribute("role", radio ? "radiogroup" : "group");
@@ -638,7 +639,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   arrangeBar.hidden = true;
   relabels.push(() => arrangeBar.setAttribute("aria-label", t("draw.arrange")));
   /// Un pulsante della barra: il nome, e nel suggerimento la scorciatoia.
-  const arrangeButton = (label: Key, iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
+  const arrangeButton = (label: DrawKey, iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
     const control = button(arrangeBar, "draw-button", () => (binding === null ? t(label) : `${t(label)} (${displayBinding(binding)})`), iconName, run);
     if (binding !== null) {
       control.setAttribute("aria-keyshortcuts", ariaBinding(binding));
@@ -1067,7 +1068,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Applica il gesto `op` e lo mette nella cronologia col nome `label`.
-  const commit = (label: Key, op: Op | null): Applied | null => {
+  const commit = (label: DrawKey, op: Op | null): Applied | null => {
     if (op === null || !editable()) return null;
     const outcome = engine.apply(op);
     if (outcome.outcome === "rejected") {
@@ -1941,7 +1942,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Scrive `arranged` col nome `label`, e la selezione diventa la sua; la
   /// pagina cresce se `extent` ne esce. `false` se non c'era niente da
   /// cambiare, e lo si dice, o se il motore ha rifiutato.
-  const arrange = (label: Key, arranged: Arranged, extent: Bounds | null = null): boolean => {
+  const arrange = (label: DrawKey, arranged: Arranged, extent: Bounds | null = null): boolean => {
     if (arranged.ops.length === 0) {
       announce(t("draw.unchanged"));
       return false;
@@ -2684,7 +2685,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 }
 
 /// Perché il motore ha rifiutato un gesto, detto a chi disegna.
-const REASONS: Readonly<Record<Reason, Key>> = {
+const REASONS: Readonly<Record<Reason, DrawKey>> = {
   "missing-target": "draw.reason.missing_target",
   "missing-parent": "draw.reason.missing_parent",
   "missing-anchor": "draw.reason.missing_target",
@@ -2698,7 +2699,7 @@ const REASONS: Readonly<Record<Reason, Key>> = {
 };
 
 /// Le voci dell'ordine, dalla cima al fondo, con le loro scorciatoie.
-const ORDERS: ReadonlyArray<{ readonly order: Order; readonly label: Key; readonly binding: string }> = [
+const ORDERS: ReadonlyArray<{ readonly order: Order; readonly label: DrawKey; readonly binding: string }> = [
   { order: "front", label: "draw.order.front", binding: "Mod-Shift-]" },
   { order: "forward", label: "draw.order.forward", binding: "Mod-]" },
   { order: "backward", label: "draw.order.backward", binding: "Mod-[" },
@@ -2706,7 +2707,7 @@ const ORDERS: ReadonlyArray<{ readonly order: Order; readonly label: Key; readon
 ];
 
 /// Che cosa si annuncia dopo un cambio d'ordine.
-const ORDERED: Readonly<Record<Order, Key>> = {
+const ORDERED: Readonly<Record<Order, DrawKey>> = {
   front: "draw.ordered.front",
   forward: "draw.ordered.forward",
   backward: "draw.ordered.backward",
@@ -2715,7 +2716,7 @@ const ORDERED: Readonly<Record<Order, Key>> = {
 
 /// Le voci dell'allineamento: prima i bordi e il centro in orizzontale, poi
 /// in verticale.
-const EDGES: ReadonlyArray<{ readonly edge: Edge; readonly label: Key }> = [
+const EDGES: ReadonlyArray<{ readonly edge: Edge; readonly label: DrawKey }> = [
   { edge: "left", label: "draw.align.left" },
   { edge: "center", label: "draw.align.center" },
   { edge: "right", label: "draw.align.right" },
@@ -2724,13 +2725,13 @@ const EDGES: ReadonlyArray<{ readonly edge: Edge; readonly label: Key }> = [
   { edge: "bottom", label: "draw.align.bottom" },
 ];
 
-const AXES: ReadonlyArray<{ readonly axis: Axis; readonly label: Key }> = [
+const AXES: ReadonlyArray<{ readonly axis: Axis; readonly label: DrawKey }> = [
   { axis: "x", label: "draw.distribute.x" },
   { axis: "y", label: "draw.distribute.y" },
 ];
 
 /// Che cosa si annuncia quando una forma entra nel disegno.
-const ADDED: Readonly<Record<ShapeTool, Key>> = {
+const ADDED: Readonly<Record<ShapeTool, DrawKey>> = {
   rect: "draw.added.rect",
   ellipse: "draw.added.ellipse",
   line: "draw.added.line",
