@@ -507,6 +507,31 @@ describe("ident", () => {
     rejects(lf(ROOT, PAPER, L1, BARE, R2, END_G, END), { op: "ident", path: [1, 0], tag: "rect", id: "o2b3c4d5e" }, "duplicate-id");
   });
 
+  it("cambia un id togliendolo e dandone un altro, e l'undo rimette quello di prima com'era", () => {
+    const source = lf(ROOT, PAPER, L1, "    <rect id='path1234' x=\"10\" y=\"10\" width=\"50\" height=\"50\"/>", END_G, END);
+    const engine = SceneEngine.open(source);
+    const rename: Op = {
+      op: "batch",
+      ops: [
+        { op: "ident", path: [1, 0], tag: "rect", id: null },
+        { op: "ident", path: [1, 0], tag: "rect", id: "Sole_1" },
+      ],
+    };
+    const out = apply(engine, rename);
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, '    <rect id="Sole_1" x="10" y="10" width="50" height="50"/>', END_G, END));
+    expect([...out.touched].sort()).toEqual(["Sole_1", "path1234"]);
+    expect(applied(engine.apply(out.inverse)).text, "l'undo").toBe(lf(ROOT, PAPER, L1, BARE.replace("<rect", '<rect id="path1234"'), END_G, END));
+  });
+
+  it("dà ogni id che il formato ammette, e rifiuta quello vuoto, non XML o troppo lungo", () => {
+    const source = lf(ROOT, PAPER, L1, BARE, END_G, END);
+    const engine = SceneEngine.open(source);
+    expect(apply(engine, { op: "ident", path: [1, 0], tag: "rect", id: "un sole & più" }).text).toContain('<rect id="un sole &amp; più"');
+    rejects(source, { op: "ident", path: [1, 0], tag: "rect", id: "" }, "invalid-elem");
+    rejects(source, { op: "ident", path: [1, 0], tag: "rect", id: "a\u0001" }, "invalid-elem");
+    rejects(source, { op: "ident", path: [1, 0], tag: "rect", id: "a".repeat(MAX_VALUE_BYTES + 1) }, "limit");
+  });
+
   it("scrive l'id nel tag così com'è, senza riordinare il resto", () => {
     const engine = SceneEngine.open(lf(ROOT, PAPER, L1, "    <rect height='50'   width='50'/>", END_G, END));
     const out = apply(engine, { op: "ident", path: [1, 0], tag: "rect", id: "o0a1b2c3d" });

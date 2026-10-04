@@ -6,8 +6,9 @@
 // multiplo di 36 che sta in un byte, così nessuna cifra esce più spesso delle
 // altre. Un id già usato nel documento si scarta e se ne genera un altro.
 //
-// FubDraw non cambia mai un id esistente: questi id sono solo per gli
-// elementi nuovi, e per quelli che ricevono un id con l'operazione `ident`.
+// FubDraw non cambia un id da sé: questi id sono per gli elementi nuovi, e
+// per quelli che ricevono un id con l'operazione `ident`. Un id esistente lo
+// cambia solo chi lo chiede, e allora vale ogni id che il formato ammette.
 
 /// L'id della carta (§2).
 export const PAPER_ID = "fub-paper";

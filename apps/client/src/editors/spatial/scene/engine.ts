@@ -1355,8 +1355,11 @@ export class SceneEngine {
     this.guard(node, true);
     const old = node.facts.id;
     if (id !== null) {
-      const kind = roleOf(node) === "layer" ? "layer" : "object";
-      if (!isNewId(id, kind)) reject("invalid-elem", `id non valido: ${JSON.stringify(id)}`);
+      // Ogni id che il formato ammette, non solo quelli che FubDraw genera:
+      // un id si cambia togliendolo e dandone un altro, e l'undo rimette
+      // quello di prima com'era scritto.
+      if (id === "") reject("invalid-elem", "id vuoto");
+      this.checkValue(tag, "", "id", id);
       if (this.t.has(id)) reject("duplicate-id", `id già usato: ${id}`);
     }
     // Si tocca solo l'attributo, nel testo del tag: gli altri restano come

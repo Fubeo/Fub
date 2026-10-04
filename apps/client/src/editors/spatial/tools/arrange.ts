@@ -130,7 +130,7 @@ function sameMatrix(a: Matrix, b: Matrix): boolean {
 // ---------------------------------------------------------------------------
 
 /// Il tag d'apertura di `node` letto da solo, nello scope del genitore.
-function readHead(node: ElementPart): { readonly doc: XmlDocument; readonly element: ElementNode } | null {
+export function readHead(node: ElementPart): { readonly doc: XmlDocument; readonly element: ElementNode } | null {
   const raw = node.kind === "leaf" ? node.raw : node.tail === null ? node.head : `${node.head}</${node.facts.name}>`;
   const fragment = parseFragment(raw, scopeOf(node.parent!));
   if (fragment === null) return null;

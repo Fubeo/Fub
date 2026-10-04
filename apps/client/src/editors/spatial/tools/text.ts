@@ -16,10 +16,11 @@
 //   chi lo riapre trova ciò che ha visto.
 // - **Solo ciò che XML ammette.** I caratteri di controllo e i surrogati
 //   spaiati di un testo incollato restano fuori: il file resta ben formato.
-// - **Il carattere** è Inter, quello dell'interfaccia, col ripiego generico.
-//   L'editor lo registra col nome che il file scrive, dal file che l'app porta
-//   già, così il foglio mostra il testo come lo esporta l'export. Dentro un
-//   `<img>`, come in Lettura, vale il ripiego.
+// - **Il carattere** è Inter, quello dell'interfaccia, col ripiego generico;
+//   dal livello Esperto anche Literata o JetBrains Mono, gli altri due che il
+//   file scrive. L'editor li registra coi nomi che il file scrive, dai file
+//   che l'app porta già, così il foglio mostra il testo come lo esporta
+//   l'export. Dentro un `<img>`, come in Lettura, vale il ripiego.
 
 import { formatNumber } from "../number";
 import type { Point } from "../scene/matrix";
@@ -28,6 +29,10 @@ import type { Width } from "./palette";
 
 /// Il carattere di un testo nuovo, come lo scrive il file.
 export const TEXT_FAMILY = "Inter, sans-serif";
+
+/// I caratteri che il file scrive (formato della scena, §4): quelli che Fub
+/// distribuisce, ciascuno col suo ripiego generico.
+export const TEXT_FAMILIES: readonly string[] = [TEXT_FAMILY, "Literata, serif", "JetBrains Mono, monospace"];
 
 /// Le dimensioni di un testo nuovo, come gli spessori: tre, coi loro nomi,
 /// in unità della scena.
@@ -94,23 +99,30 @@ export function textElem(id: string, at: Point, lines: readonly string[], style:
   };
 }
 
-/// Il file di Inter che l'app porta per l'interfaccia, e i caratteri che
-/// copre: quelli di `theme/serie/fonts.css`.
-const INTER_URL = "/fonts/inter-latin-wght-normal.woff2";
-const INTER_RANGE =
+/// I file dei caratteri che l'app porta per l'interfaccia, coi nomi che il
+/// file del disegno scrive, e i caratteri che coprono: quelli di
+/// `theme/serie/fonts.css`.
+const FONT_FILES: ReadonlyArray<readonly [family: string, url: string, weight: string]> = [
+  ["Inter", "/fonts/inter-latin-wght-normal.woff2", "100 900"],
+  ["Literata", "/fonts/literata-latin-wght-normal.woff2", "200 900"],
+  ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-normal.woff2", "100 800"],
+];
+const FONT_RANGE =
   "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
 
 let registered = false;
 
-/// Registra Inter col nome che il file del disegno scrive, una volta sola:
-/// il carattere si scarica quando un testo lo usa. Dove il browser non sa
+/// Registra i caratteri coi nomi che il file del disegno scrive, una volta
+/// sola: ciascuno si scarica quando un testo lo usa. Dove il browser non sa
 /// registrare un carattere, il testo usa il ripiego.
 export function ensureTextFont(): void {
   if (registered || typeof FontFace === "undefined" || typeof document === "undefined" || document.fonts === undefined) return;
   registered = true;
-  try {
-    document.fonts.add(new FontFace("Inter", `url("${INTER_URL}") format("woff2")`, { style: "normal", weight: "100 900", display: "swap", unicodeRange: INTER_RANGE }));
-  } catch {
-    // Un carattere che non si registra lascia il ripiego.
+  for (const [family, url, weight] of FONT_FILES) {
+    try {
+      document.fonts.add(new FontFace(family, `url("${url}") format("woff2")`, { style: "normal", weight, display: "swap", unicodeRange: FONT_RANGE }));
+    } catch {
+      // Un carattere che non si registra lascia il ripiego.
+    }
   }
 }
