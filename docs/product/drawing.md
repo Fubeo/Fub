@@ -114,7 +114,6 @@ altro programma, non si copia, e un gruppo che la contiene si separa solo se
 non ha niente da portarle.
 
 ## Da tastiera
-## Da tastiera
 
 Ogni strumento funziona senza puntatore. Sul foglio le frecce muovono un
 cursore, 10 pixel per volta, 50 con `Maiusc` e 1 con `Ctrl` o `⌘`; `Spazio`
