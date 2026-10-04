@@ -37,6 +37,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly canvasAttachments?: CanvasAttachmentPort;
   readonly onCreateCanvasNote?: (text: string) => Promise<string>;
   readonly onPickCanvasFile?: () => Promise<string | null>;
+  /// Il documento a cui porta un collegamento del disegno `from`, scelto
+  /// dall'utente; `current` è l'`href` del collegamento che si cambia.
+  readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
   readonly renderCanvasMarkdown?: (
     nodeId: string,
     text: string,
@@ -275,6 +278,7 @@ export function createDocumentSurfaceRegistry(
           onOpenPath: options.onOpenPath,
           onCreateNote: options.onCreateCanvasNote,
           onPickFile: options.onPickCanvasFile,
+          onPickDrawingLink: options.onPickDrawingLink,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,

@@ -117,6 +117,20 @@
   box-shadow: var(--shadow-md);
 }
 
+/* Il segno di un collegamento: un tondo col fondo della barra, che si vede
+   sulla carta e sul tavolo di ogni tema, e che col puntatore sopra prende il
+   fondo attivo quando si può toccare. */
+.draw-link-mark {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+}
+.draw-link-layer[data-active] > .draw-link-mark:hover {
+  background: var(--bg-active);
+}
+
 /* La superficie nella shell: l'avviso è informazione, non allarme. Dice com'è
    il documento (estraneo, in sola lettura, illeggibile) col fondo e il filo
    dell'informazione, e il testo resta nel colore del testo. */
@@ -214,11 +228,26 @@
   color: var(--text);
   font-size: var(--text-sm);
 }
-.vector-about:has(> .vector-about-desc[hidden]):has(> .vector-about-objects[hidden]) {
+.vector-about:has(> .vector-about-desc[hidden]):has(> .vector-about-links[hidden]):has(> .vector-about-objects[hidden]) {
   display: none;
 }
-.vector-about-desc + .vector-about-objects {
+.vector-about > :not([hidden]) ~ :not([hidden]) {
   margin-top: var(--space-2);
+}
+/* I collegamenti si leggono come link: il testo sottolineato. */
+.vector-about-links {
+  gap: 0 var(--space-3);
+}
+.vector-about-links ul {
+  gap: 0 var(--space-1);
+}
+.vector-about-links-title {
+  color: var(--muted);
+}
+.vector-about-link {
+  padding: 0 var(--space-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .vector-about-objects > summary {
   padding: var(--space-3) 0;

@@ -618,6 +618,207 @@ describe("disporre, dal livello Standard", () => {
   });
 });
 
+describe("i collegamenti a una nota", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const L = "ol1l1l1l1";
+  const RECT_A = `<rect id="${A}" x="10" y="10" width="20" height="10" fill="#0072b2"/>`;
+  const RECT_B = `<rect id="${B}" x="40" y="40" width="10" height="10" fill="#000000"/>`;
+  const ROW = doc(`<title>Prova</title>${LAYER}${RECT_A}${RECT_B}</g>`);
+  const NOTE = "Note/Ciclo%20dell'acqua.md";
+  const LINKED = doc(`<title>Prova</title>${LAYER}<a id="${L}" href="${NOTE}">${RECT_A}</a>${RECT_B}</g>`);
+
+  /// Chi monta l'editor: sceglie `answer`, e apre ciò che gli si chiede.
+  const stub = (answer: string | null = NOTE) => ({ choose: vi.fn(async (_current: string | null) => answer), open: vi.fn() });
+  /// Aspetta che l'editor riceva la scelta.
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const named = (label: string): HTMLButtonElement | null => bar().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  const shown = (): string[] => [...bar().querySelectorAll("button:not([hidden])")].map((control) => control.getAttribute("aria-label")!);
+  const layer = (): HTMLElement => host.querySelector<HTMLElement>(".draw-link-layer")!;
+  const marks = (): HTMLButtonElement[] => [...layer().querySelectorAll<HTMLButtonElement>(".draw-link-mark")];
+
+  it("Ctrl+K mette gli oggetti scelti in un collegamento alla nota che si sceglie, al posto del più alto", async () => {
+    const links = stub();
+    mount(ROW, { level: "standard", links });
+    editor.select([A, B]);
+    expect(shown()).toEqual(["Duplica", "Raggruppa", "Separa", "Collega a una nota…", "Ordine", "Allinea e distribuisci"]);
+    const link = named("Collega a una nota…")!;
+    expect(link.title).toBe("Collega a una nota… (Ctrl+K)");
+    expect(link.getAttribute("aria-keyshortcuts")).toBe("Control+K");
+    expect(link.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    expect(key("k", { ctrlKey: true }).defaultPrevented).toBe(true);
+    await settle();
+    expect(links.choose).toHaveBeenCalledWith(null);
+    const [created] = editor.selection;
+    expect(editor.engine.text).toContain(`<a id="${created}" href="${NOTE}">`);
+    expect(editor.engine.text).toMatch(new RegExp(`<a id="${created}" href="[^"]+">\\s*<rect id="${A}"[^>]*/>\\s*<rect id="${B}"[^>]*/>\\s*</a>`));
+    expect(spoken()).toBe("Collegato a «Ciclo dell'acqua».");
+    expect(changes.map((change) => change.origin)).toEqual(["input"]);
+    // Scelto da solo, il collegamento si cambia, si apre e si toglie.
+    expect(shown()).toEqual(["Duplica", "Raggruppa", "Separa", "Cambia il collegamento…", "Apri «Ciclo dell'acqua»", "Togli il collegamento", "Ordine", "Allinea e distribuisci"]);
+    expect(named("Togli il collegamento")!.title).toBe("Togli il collegamento (Ctrl+Shift+K)");
+
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(ROW);
+    expect(spoken()).toBe("Annullato: Collegamento.");
+  });
+
+  it("col collegamento scelto da solo, Ctrl+K lo porta a un'altra nota, partendo da quella di adesso", async () => {
+    const links = stub("Altre/b.md");
+    mount(LINKED, { level: "standard", links });
+    editor.select([L]);
+    named("Cambia il collegamento…")!.click();
+    await settle();
+    expect(links.choose).toHaveBeenCalledWith(NOTE);
+    expect(editor.engine.text).toContain(`<a id="${L}" href="Altre/b.md">`);
+    expect(editor.selection).toEqual([L]);
+    expect(spoken()).toBe("Ora il collegamento porta a «b».");
+    expect(named("Apri «b»")!.hidden).toBe(false);
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(LINKED);
+    expect(spoken()).toBe("Annullato: Cambio del collegamento.");
+  });
+
+  it("un collegamento non ne contiene un altro: il pulsante si spegne, e Ctrl+K lo dice", () => {
+    const links = stub();
+    mount(LINKED, { level: "standard", links });
+    editor.select([L, B]);
+    expect(named("Collega a una nota…")!.disabled).toBe(true);
+    key("k", { ctrlKey: true });
+    expect(spoken()).toContain("Non collegato");
+    expect(links.choose).not.toHaveBeenCalled();
+    expect(changes).toEqual([]);
+  });
+
+  it("una scelta lasciata a metà, o che non riesce, non cambia niente; una seconda non parte finché c'è la prima", async () => {
+    const empty = stub(null);
+    mount(ROW, { level: "standard", links: empty });
+    editor.select([A]);
+    key("k", { ctrlKey: true });
+    key("k", { ctrlKey: true });
+    await settle();
+    expect(empty.choose).toHaveBeenCalledTimes(1);
+    expect(changes).toEqual([]);
+
+    owner.close();
+    owner = openLifetime();
+    host.replaceChildren();
+    const failing = { choose: vi.fn(async () => Promise.reject(new Error("no"))), open: vi.fn() };
+    mount(ROW, { level: "standard", links: failing });
+    editor.select([A]);
+    key("k", { ctrlKey: true });
+    await settle();
+    expect(failing.choose).toHaveBeenCalledTimes(1);
+    expect(changes).toEqual([]);
+  });
+
+  it("mentre si sceglie la nota, valgono gli oggetti scelti alla fine", async () => {
+    let answer: (href: string | null) => void = () => {};
+    const links = { choose: vi.fn(() => new Promise<string | null>((resolve) => (answer = resolve))), open: vi.fn() };
+    mount(ROW, { level: "standard", links });
+    editor.select([A, B]);
+    key("k", { ctrlKey: true });
+    editor.select([B]);
+    answer("c.md");
+    await settle();
+    expect(editor.engine.text).toMatch(new RegExp(`${RECT_A}\\s*<a id="${editor.selection[0]}" href="c.md">\\s*${RECT_B}\\s*</a>`));
+  });
+
+  it("Ctrl+Maiusc+K toglie i collegamenti scelti e lascia gli oggetti dov'erano, anche senza chi sceglie le note", () => {
+    mount(LINKED, { level: "standard" });
+    editor.select([B]);
+    // Senza chi sceglie le note non si collega: Ctrl+K resta al browser.
+    expect(shown()).not.toContain("Collega a una nota…");
+    expect(key("k", { ctrlKey: true }).defaultPrevented).toBe(false);
+    key("K", { ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("Fra gli oggetti scelti non c’è un collegamento.");
+
+    editor.select([L, B]);
+    expect(shown()).toContain("Togli il collegamento");
+    expect(shown()).not.toContain("Apri «Ciclo dell'acqua»");
+    expect(key("K", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+    expect(editor.engine.text).not.toContain("<a ");
+    expect(editor.engine.text).toMatch(new RegExp(`${RECT_A}\\s*${RECT_B}`));
+    expect(editor.selection).toEqual([A, B]);
+    expect(spoken()).toBe("1 collegamento tolto.");
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(LINKED);
+    expect(spoken()).toBe("Annullato: Rimozione del collegamento.");
+  });
+
+  it("ogni collegamento che si vede ha un segno sull'angolo in alto a destra, che apre la sua nota", () => {
+    const links = stub();
+    const source = doc(
+      `<title>Prova</title>${LAYER}<a id="${L}" href="${NOTE}">${RECT_A}</a><g id="og1g1g1g1"><a id="ol2l2l2l2" href="b.md">${RECT_B}</a></g>` +
+        `<a id="ol3l3l3l3" href="https://example.org"><rect x="70" y="70" width="5" height="5"/></a></g>`,
+    );
+    mount(source, { links });
+    // Anche al livello Essenziale, e anche dentro un gruppo; un indirizzo
+    // del web non porta a una nota, e non ha segno.
+    expect(marks().map((mark) => [mark.getAttribute("aria-label"), mark.title, mark.tabIndex, mark.style.transform])).toEqual([
+      ["Apri «Ciclo dell'acqua»", "Apri «Ciclo dell'acqua»", -1, "translate(30px, 10px)"],
+      ["Apri «b»", "Apri «b»", -1, "translate(50px, 40px)"],
+    ]);
+    // Il tocco è di chi disegna, tranne con la Selezione.
+    expect(layer().hasAttribute("data-active")).toBe(false);
+    editor.setTool("select");
+    expect(layer().hasAttribute("data-active")).toBe(true);
+    marks()[1]!.querySelector("svg")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(links.open).toHaveBeenCalledWith("b.md");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    // I segni seguono la camera e il disegno.
+    key("+");
+    expect(marks()[0]!.style.transform).not.toBe("translate(30px, 10px)");
+    key("0", { ctrlKey: true });
+    editor.select([L]);
+    editor.deleteSelection();
+    expect(marks().map((mark) => mark.getAttribute("aria-label"))).toEqual(["Apri «b»"]);
+  });
+
+  it("senza chi apre le note, i segni non ci sono", () => {
+    mount(LINKED);
+    expect(layer().hidden).toBe(true);
+    expect(marks()).toEqual([]);
+  });
+
+  it("Alt+Invio apre la nota del collegamento scelto, a ogni livello e anche in un disegno che non si modifica", () => {
+    const links = stub();
+    mount(LINKED.replace(' fub:version="1"', ""), { links });
+    expect(host.querySelector(".draw-editor")!.hasAttribute("data-readonly")).toBe(true);
+    expect(layer().hasAttribute("data-active")).toBe(true);
+    expect(key("Enter", { altKey: true }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Scegli un collegamento per aprire la sua nota.");
+    editor.select([L]);
+    key("Enter", { altKey: true });
+    expect(links.open).toHaveBeenCalledWith(NOTE);
+    expect(changes).toEqual([]);
+  });
+
+  it("l'albero degli oggetti nomina la nota", () => {
+    mount(LINKED, { links: stub() });
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    expect([...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent)).toEqual([
+      "Livello «Livello 1»",
+      "Collegamento a «Ciclo dell'acqua», 1 oggetto",
+      "Rettangolo, Nero",
+    ]);
+  });
+
+  it("«?» elenca i tasti dei collegamenti", () => {
+    mount(ROW, { level: "standard", links: stub() });
+    key("?", { shiftKey: true });
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect(rows).toContainEqual(["Ctrl+K", "Collega a una nota, o cambia il collegamento scelto"]);
+    expect(rows).toContainEqual(["Ctrl+Shift+K", "Togli il collegamento"]);
+    expect(rows).toContainEqual(["Alt+Enter", "Apre la nota del collegamento scelto"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+  });
+});
+
 describe("i livelli, dal livello Standard", () => {
   /// Due livelli con un rettangolo ciascuno: «Sfondo» sotto, «Note» sopra.
   const TWO = doc(

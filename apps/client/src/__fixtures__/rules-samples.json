@@ -1666,6 +1666,83 @@
       "out": ""
     }
   ],
+  "relative_ref": [
+    {
+      "from": "note.md",
+      "to": "altra.md",
+      "out": "altra.md"
+    },
+    {
+      "from": "a/b/disegno.svg",
+      "to": "a/b/nota.md",
+      "out": "nota.md"
+    },
+    {
+      "from": "a/b/disegno.svg",
+      "to": "a/c/nota.md",
+      "out": "../c/nota.md"
+    },
+    {
+      "from": "a/b/disegno.svg",
+      "to": "nota.md",
+      "out": "../../nota.md"
+    },
+    {
+      "from": "disegno.svg",
+      "to": "a/b/nota.md",
+      "out": "a/b/nota.md"
+    },
+    {
+      "from": "a/disegno.svg",
+      "to": "a",
+      "out": "../a"
+    },
+    {
+      "from": "a/b/disegno.svg",
+      "to": "a/b",
+      "out": "../b"
+    },
+    {
+      "from": "Città/disegno.svg",
+      "to": "Città/Perché è così.md",
+      "out": "Perché%20è%20così.md"
+    },
+    {
+      "from": "x.svg",
+      "to": "note (2).md",
+      "out": "note%20%282%29.md"
+    },
+    {
+      "from": "x.svg",
+      "to": "100% vero?.md",
+      "out": "100%25%20vero%3F.md"
+    },
+    {
+      "from": "x.svg",
+      "to": "c#.md",
+      "out": "c%23.md"
+    },
+    {
+      "from": "x.svg",
+      "to": "nota:1.md",
+      "out": "nota:1.md"
+    },
+    {
+      "from": "x.svg",
+      "to": "it's!$&+,;=@*~.md",
+      "out": "it's!$&+,;=@*~.md"
+    },
+    {
+      "from": "x.svg",
+      "to": "tab\tquote\"<>.md",
+      "out": "tab%09quote%22%3C%3E.md"
+    },
+    {
+      "from": "x.svg",
+      "to": "colori 🎨.md",
+      "out": "colori%20🎨.md"
+    }
+  ],
   "task_checked": [
     {
       "symbol": "x",

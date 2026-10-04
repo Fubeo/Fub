@@ -10,7 +10,13 @@
 //
 // La Lettura dice anche a parole che cosa c'è: la descrizione del disegno
 // accanto all'immagine, e l'elenco degli oggetti in albero, chiuso finché non
-// lo si apre e costruito soltanto allora (`describe.ts`).
+// lo si apre e costruito soltanto allora (`describe.ts`). I collegamenti, che
+// nell'immagine non si toccano, sono una riga di pulsanti che aprono le note.
+//
+// I collegamenti del disegno sono `a` con un `href` relativo al disegno: la
+// shell sceglie la nota e la apre (`onPickLink`, `onOpenPath`), e la
+// superficie scrive il riferimento come lo scrive il kernel quando lo
+// riscrive dopo un rename.
 //
 // In Disegno il documento può non essere modificabile, e la modalità del
 // riquadro non cambia per questo (`docs/product/drawing.md`):
@@ -22,25 +28,46 @@
 // - un file che non si legge come scena è il motivo e basta: il testo lo
 //   mostra «Apri come sorgente».
 
+import { errorText } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { relativeRef } from "../../rules/mirrored";
 import { identifier } from "../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { notify } from "../../ui/notify";
 import type { EditorRange, EditorSelections, EditorSurface, SelectedText, SurfaceMountContext } from "../core/registry";
 import type { EditorChange } from "../core/text-operation";
 import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
-import { countObjects, describe, keyOf, outline, type OutlineNode } from "./describe";
+import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
 import { VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
-import { MAX_EDIT_BYTES, MAX_ELEMENTS, ReadError, type ReadOnly } from "./scene/read";
-import { createDrawEditor, type DrawEditor } from "./tools/editor";
+import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
+import { href as parseHref } from "./scene/values";
+import { linkTarget, nodeOf } from "./tools/arrange";
+import { createDrawEditor, type DrawEditor, type DrawLinks } from "./tools/editor";
 
 type VectorMode = "draw" | "read";
 
 export interface VectorSurfaceOptions {
   onChange(change: EditorChange): void;
   onSelectionChange(): void;
+  /// Apre il percorso `path` com'è scritto nel disegno, relativo al disegno o
+  /// dalla radice del vault: la shell lo risolve. Lancia se non ci riesce.
+  onOpenPath?(path: string): Promise<void>;
+  /// Chiede il documento del vault a cui porta un collegamento; `current` è
+  /// l'`href` di quello che si cambia, `null` per uno nuovo. Torna il suo
+  /// `DocId`, o `null` se chi disegna rinuncia.
+  onPickLink?(current: string | null): Promise<string | null>;
+}
+
+/// L'`href` con cui il disegno `drawing` porta al documento `doc`: relativo
+/// alla cartella del disegno, come lo scrive il kernel. Se il primo segmento
+/// si leggerebbe come uno schema (`nota:1.md`), con `./` davanti, che non
+/// cambia la destinazione.
+export function linkHref(drawing: string, doc: string): string {
+  const ref = relativeRef(drawing, doc);
+  return parseHref(ref).kind === "vault" ? ref : `./${ref}`;
 }
 
 /// Come si apre un testo: una scena da modificare (anche estranea), un
@@ -90,6 +117,24 @@ function fileName(id: string): string {
   return id.split("/").pop() || id;
 }
 
+/// Dove portano i collegamenti di `engine`: dal modello, se c'è; da una
+/// lettura del testo per un documento in sola lettura.
+function targetsOf(engine: SceneEngine): LinkTargets {
+  const model = engine.model;
+  if (model !== null) return (item) => linkTarget(nodeOf(model, item));
+  return sceneTargets(readScene(engine.text));
+}
+
+/// I percorsi dei collegamenti di `nodes`, una volta ciascuno, nell'ordine
+/// del disegno.
+function linkTargetsIn(nodes: readonly OutlineNode[], out: string[] = []): string[] {
+  for (const node of nodes) {
+    if (node.target !== null && !out.includes(node.target)) out.push(node.target);
+    linkTargetsIn(node.children, out);
+  }
+  return out;
+}
+
 /// Gli oggetti in elenchi annidati, come l'albero dell'editor.
 function objectList(nodes: readonly OutlineNode[]): HTMLUListElement {
   const list = document.createElement("ul");
@@ -130,7 +175,17 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   aboutObjects.className = "vector-about-objects";
   const aboutSummary = document.createElement("summary");
   aboutObjects.append(aboutSummary);
-  about.append(aboutDesc, aboutObjects);
+  // I collegamenti, che nell'immagine non si toccano: un pulsante per nota.
+  const aboutLinks = document.createElement("nav");
+  aboutLinks.className = "vector-about-links";
+  aboutLinks.hidden = true;
+  const aboutLinksTitle = document.createElement("span");
+  aboutLinksTitle.className = "vector-about-links-title";
+  aboutLinksTitle.id = identifier("vector-links");
+  aboutLinks.setAttribute("aria-labelledby", aboutLinksTitle.id);
+  const aboutLinksList = document.createElement("ul");
+  aboutLinks.append(aboutLinksTitle, aboutLinksList);
+  about.append(aboutDesc, aboutLinks, aboutObjects);
   root.append(notice, drawHost, readHost);
   context.parent.append(root);
 
@@ -149,12 +204,52 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let encoded: { readonly text: string; readonly bytes: Uint8Array } | null = null;
   /// Il testo di cui l'elenco degli oggetti è disegnato.
   let listedText: string | null = null;
+  /// I collegamenti della Lettura, e il testo e la lingua di cui sono
+  /// disegnati.
+  let linkedText: string | null = null;
+  let linkedLanguage: string | null = null;
+
+  // --- I collegamenti -------------------------------------------------------
+
+  /// Apre il collegamento `href`; se non si apre, lo dice.
+  const openLink = (href: string): void => {
+    const open = options.onOpenPath;
+    if (open === undefined) return;
+    void Promise.resolve()
+      .then(() => open(href))
+      .catch((error: unknown) => notify(t("preview.open_failed", { page: linkName(href), reason: errorText(error) }), "guasto"));
+  };
+
+  /// Chi sceglie e apre le note dei collegamenti dell'editor, se la shell lo
+  /// sa fare.
+  const pick = options.onPickLink;
+  const links: DrawLinks | undefined =
+    pick === undefined || options.onOpenPath === undefined
+      ? undefined
+      : {
+          choose: async (current) => {
+            try {
+              const doc = await pick(current);
+              return doc === null ? null : linkHref(context.documentId, doc);
+            } catch (error) {
+              notify(errorText(error), "guasto");
+              return null;
+            }
+          },
+          open: openLink,
+        };
+
+  life.listen(aboutLinksList, "click", (event) => {
+    const control = event.target instanceof Element ? event.target.closest("button") : null;
+    if (control instanceof HTMLButtonElement && control.dataset.href !== undefined) openLink(control.dataset.href);
+  });
 
   // --- L'editor -------------------------------------------------------------
 
   const mountEditor = (engine: SceneEngine): DrawEditor => {
     const owner = openLifetime();
     const mounted = createDrawEditor(drawHost, engine, owner, {
+      links,
       onChange: (change) => {
         text = change.text;
         opened = { kind: "scene", engine: mounted.engine };
@@ -210,8 +305,18 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   /// La descrizione e il conteggio sotto l'immagine; l'elenco si costruisce
   /// quando lo si apre, e ogni volta che il testo cambia mentre è aperto.
+  /// Il disegno in albero, una volta per testo: coi collegamenti, se la
+  /// shell li sa aprire.
+  let outlined: { readonly text: string; readonly nodes: readonly OutlineNode[] } | null = null;
+  const outlineShown = (): readonly OutlineNode[] => {
+    const engine = shownEngine();
+    if (engine === null) return [];
+    if (outlined?.text !== text) outlined = { text, nodes: outline(engine.scene(), options.onOpenPath === undefined ? undefined : targetsOf(engine)) };
+    return outlined.nodes;
+  };
+
   const showAbout = (): void => {
-    const nodes = outline(shownEngine()?.scene() ?? []);
+    const nodes = outlineShown();
     const desc = rootText("desc");
     aboutDesc.textContent = desc ?? "";
     aboutDesc.hidden = desc === null;
@@ -219,6 +324,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     else view?.stage.setAttribute("aria-describedby", aboutDesc.id);
     aboutSummary.textContent = t("vector.read.objects", { count: countObjects(nodes) });
     aboutObjects.hidden = nodes.length === 0;
+    showLinks(nodes);
     if (!aboutObjects.open) {
       aboutObjects.querySelector("ul")?.remove();
       listedText = null;
@@ -229,6 +335,31 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     }
   };
   life.listen(aboutObjects, "toggle", () => showAbout());
+
+  /// La riga dei collegamenti, ridisegnata quando cambia il testo o la
+  /// lingua.
+  const showLinks = (nodes: readonly OutlineNode[]): void => {
+    const language = resolvedLanguage();
+    if (linkedText === text && linkedLanguage === language) return;
+    linkedText = text;
+    linkedLanguage = language;
+    const targets = linkTargetsIn(nodes);
+    aboutLinks.hidden = targets.length === 0;
+    aboutLinksTitle.textContent = t("vector.read.links");
+    aboutLinksList.replaceChildren(
+      ...targets.map((target) => {
+        const item = document.createElement("li");
+        const control = document.createElement("button");
+        control.type = "button";
+        control.className = "vector-about-link";
+        control.dataset.href = target;
+        control.textContent = linkName(target);
+        control.title = t("vector.link.open", { note: linkName(target) });
+        item.append(control);
+        return item;
+      }),
+    );
+  };
 
   const showImage = (): void => {
     const label = t("vector.read.label", { name: drawingName() });

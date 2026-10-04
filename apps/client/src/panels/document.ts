@@ -237,6 +237,27 @@ async function pickCanvasFile(): Promise<string | null> {
   });
 }
 
+/// Il documento a cui porta un collegamento del disegno `from`: uno che c'è,
+/// scelto dall'utente fra i file del vault, come il file di una card. Il
+/// disegno stesso non c'è; quello a cui porta adesso il collegamento `current`,
+/// se si trova, è già scelto, e c'è anche oltre le voci elencate.
+async function pickDrawingLink(from: string, current: string | null): Promise<string | null> {
+  const [page, now] = await Promise.all([
+    vaultEntries({ offset: 0, limit: CANVAS_FILE_CHOICES }),
+    current === null ? null : resolvedReference({ kind: "path", value: current }, from).catch(() => null),
+  ]);
+  const ids = page.items.map((entry) => entry.id).filter((id) => id !== from);
+  const known = now?.doc ?? null;
+  if (known !== null && known !== from && !ids.includes(known)) ids.unshift(known);
+  return pickFromList<string>({
+    title: t(current === null ? "vector.link.pick" : "vector.link.change"),
+    placeholder: t("vector.link.filter"),
+    items: ids.map((id) => ({ label: pageName(id), detail: id, value: id })),
+    more: Math.max(0, page.total - page.offset - page.items.length),
+    current: known ?? undefined,
+  });
+}
+
 async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   const configured = (await settings()).find((entry) => entry.spec.key === "files.attachment-folder")?.value;
   const folder = typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER;
@@ -402,6 +423,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
     },
     onCreateCanvasNote: createCanvasNote,
     onPickCanvasFile: pickCanvasFile,
+    onPickDrawingLink: pickDrawingLink,
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
       openWikilink: (page, heading, block) => openWikilink(page, heading, block),

@@ -1338,6 +1338,33 @@ html, body, #app {
   overflow: clip;
   pointer-events: none;
 }
+/* I segni dei collegamenti, in uno strato sopra il foglio che non scorre e
+   taglia ai bordi. Un segno sta appena fuori dall'angolo in alto a destra del
+   suo collegamento, così non copre il disegno, e si tocca solo quando lo
+   strato è attivo: con gli altri strumenti il tocco va al foglio. */
+.draw-link-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overflow: clip;
+  pointer-events: none;
+}
+.draw-link-mark {
+  position: absolute;
+  top: -30px;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  pointer-events: none;
+}
+.draw-link-layer[data-active] > .draw-link-mark {
+  pointer-events: auto;
+}
 .draw-text-input {
   position: absolute;
   top: 0;
@@ -1523,6 +1550,21 @@ html, body, #app {
   margin: 0;
   padding-inline-start: 1.5em;
 }
+/* I collegamenti in Lettura: il titolo e una riga di pulsanti, che va a capo. */
+.vector-about-links,
+.vector-about-links ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.vector-about-links ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vector-about-link {
+  min-height: 44px;
+}
 @media (forced-colors: active) {
   .draw-width-bar,
   .draw-swatch-frame {
@@ -1538,6 +1580,11 @@ html, body, #app {
   }
   .draw-surface:focus-visible {
     outline-offset: -2px !important;
+  }
+  .draw-link-mark {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
   }
 }
 .base-search { min-width: 8rem; flex: 1; }

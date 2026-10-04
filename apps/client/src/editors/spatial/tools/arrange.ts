@@ -1,6 +1,6 @@
 // Disporre gli oggetti scelti (livello Standard): duplicare, cambiare ordine,
-// raggruppare e separare, allineare e distribuire. Ogni comando diventa un
-// `batch` solo, così annulla e ripeti lo disfano intero.
+// raggruppare e separare, collegare a una nota, allineare e distribuire. Ogni
+// comando diventa un `batch` solo, così annulla e ripeti lo disfano intero.
 //
 // - **Gli id prima di tutto.** Un oggetto o un livello senza id, che il
 //   comando deve nominare, lo riceve con `ident` in testa al `batch`: i
@@ -14,6 +14,9 @@
 //   moltiplica la sua opacità nella loro. Un gruppo con parti estranee si
 //   separa solo se non ha niente da portare, perché un elemento estraneo non
 //   cambia.
+// - **Un collegamento è un gruppo che porta a una nota**: un `a` con `href`,
+//   che si crea attorno agli oggetti come un gruppo e si toglie come si
+//   separa un gruppo. Un collegamento non ne contiene un altro.
 // - **La copia è un oggetto nuovo.** Un duplicato ha id nuovi in tutto il
 //   sottoalbero, e sta sopra gli originali del suo livello, spostato di un
 //   passo; un oggetto con parti estranee non si duplica, perché
@@ -27,7 +30,7 @@ import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
 import { declarationsOf, elementChildren, parseFragment, pathOf, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { ROOT, type Op, type Pos, type Target } from "../scene/ops";
 import type { Elem, NamespaceScope } from "../scene/serialize";
-import { opacity as parseOpacity, transform as parseTransform } from "../scene/values";
+import { href as parseHref, opacity as parseOpacity, transform as parseTransform } from "../scene/values";
 import { FUB_NS, NS_SVG, SVG_NS, XLINK_NS, XML_URI, type ElementNode, type XmlDocument } from "../scene/xml";
 import { formatNumber } from "../number";
 import { moveOps, movedMatrix, roundDelta, transformValue, type Moved, type NewIds } from "./edit";
@@ -108,8 +111,8 @@ export class Plan {
   }
 }
 
-/// Il nodo del modello di `unit`.
-export function nodeOf(model: DocumentModel, unit: Unit): ElementPart {
+/// Il nodo del modello di `unit`, o di una voce della scena col suo percorso.
+export function nodeOf(model: DocumentModel, unit: { readonly path: readonly number[] }): ElementPart {
   let node: ElementPart = model.root;
   for (const at of unit.path) node = elementChildren(node as ContainerNode)[at]!;
   return node;
@@ -167,6 +170,31 @@ function plainAttributes(node: ElementPart): Map<string, string> {
   if (read === null) return out;
   for (const attr of read.element.attrs) if ((read.doc.namespaces[attr.ns] ?? "") === "" && !attr.name.startsWith("xmlns")) out.set(attr.local, attr.value);
   return out;
+}
+
+/// I valori di `href` e di `xlink:href` di `node`; `null` quello che manca.
+function hrefAttributes(node: ElementPart): { readonly plain: string | null; readonly xlink: string | null } {
+  const read = readHead(node);
+  let plain: string | null = null;
+  let xlink: string | null = null;
+  for (const attr of read?.element.attrs ?? []) {
+    if (attr.local !== "href") continue;
+    const uri = read!.doc.namespaces[attr.ns] ?? "";
+    if (uri === "") plain = attr.value;
+    else if (uri === XLINK_NS) xlink = attr.value;
+  }
+  return { plain, xlink };
+}
+
+/// Il percorso del vault a cui porta il collegamento `node`, com'è scritto:
+/// relativo al disegno, o dalla radice del vault se comincia con `/`. Come in
+/// SVG 2, `href` prevale su `xlink:href`. `null` se non porta nel vault.
+export function linkTarget(node: ElementPart): string | null {
+  const { plain, xlink } = hrefAttributes(node);
+  const value = plain ?? xlink;
+  if (value === null) return null;
+  const target = parseHref(value);
+  return target.kind === "vault" ? target.url : null;
 }
 
 /// Un elemento letto, come lo scrive un'operazione.
@@ -327,11 +355,11 @@ export function orderOps(model: DocumentModel, index: SceneIndex, units: readonl
 // Gruppi.
 // ---------------------------------------------------------------------------
 
-/// Un gruppo nuovo con `units`, al posto del più alto e nel suo livello, con
-/// gli oggetti nell'ordine di prima. Un oggetto di un altro livello vi entra
-/// con la trasformazione che lo lascia dov'era. `null` se il livello del più
-/// alto schiaccia il piano.
-export function groupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | null {
+/// Un contenitore nuovo `elem` con `units`, al posto del più alto e nel suo
+/// livello, con gli oggetti nell'ordine di prima. Un oggetto di un altro
+/// livello vi entra con la trasformazione che lo lascia dov'era. `null` se il
+/// livello del più alto schiaccia il piano.
+function wrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, tag: "g" | "a", attrs: Readonly<Record<string, string>>): Arranged | null {
   const top = units[units.length - 1];
   if (top === undefined) return null;
   const inverse = invert(top.parent);
@@ -340,16 +368,22 @@ export function groupOps(model: DocumentModel, units: readonly Unit[], ids: NewI
   const topNode = nodeOf(model, top);
   const parent = plan.parentOf(topNode);
   const after = plan.idOf(topNode);
-  const group = ids.next("object");
-  plan.ops.push({ op: "add", parent, pos: { after }, elem: { tag: "g", attrs: { id: group }, children: [] } });
+  const wrapper = ids.next("object");
+  plan.ops.push({ op: "add", parent, pos: { after }, elem: { tag, attrs: { id: wrapper, ...attrs }, children: [] } });
   for (const unit of units) {
     const id = plan.idOf(nodeOf(model, unit));
     if (!sameMatrix(unit.parent, top.parent)) {
       plan.ops.push({ op: "set", id, attrs: { transform: transformValue(compose(inverse, unit.matrix)) } });
     }
-    plan.ops.push({ op: "move", target: id, parent: group, pos: { last: true } });
+    plan.ops.push({ op: "move", target: id, parent: wrapper, pos: { last: true } });
   }
-  return plan.finish([group]);
+  return plan.finish([wrapper]);
+}
+
+/// Un gruppo nuovo con `units`, al posto del più alto e nel suo livello: vedi
+/// [`wrapOps`].
+export function groupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | null {
+  return wrapOps(model, units, ids, "g", {});
 }
 
 /// Vero se `unit` è un gruppo che si separa: un `g` che non è un livello.
@@ -357,25 +391,31 @@ export function isGroup(unit: Unit): boolean {
   return unit.tag === "g" && unit.role === "group";
 }
 
-/// Separa i gruppi fra `units`: i figli prendono il posto del gruppo, in
-/// ordine, con la sua trasformazione e lo stile che ne ereditavano; titolo e
-/// descrizione del gruppo se ne vanno con lui. La selezione dopo sono i
-/// figli e gli altri oggetti scelti. `"foreign"` se un gruppo ha parti
-/// estranee e qualcosa da portare su di loro.
+/// Separa i gruppi fra `units`: vedi [`unwrapOps`].
 export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | "foreign" {
+  return unwrapOps(model, units, ids, isGroup);
+}
+
+/// Toglie i contenitori fra `units` che `unwraps` sceglie: i figli prendono
+/// il posto del contenitore, in ordine, con la sua trasformazione e lo stile
+/// che ne ereditavano; titolo e descrizione del contenitore se ne vanno con
+/// lui. La selezione dopo sono i figli e gli
+/// altri oggetti scelti. `"foreign"` se un contenitore ha parti estranee e
+/// qualcosa da portare su di loro.
+function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, unwraps: (unit: Unit) => boolean): Arranged | "foreign" {
   const plan = new Plan(model, ids);
   const kept: Unit[] = [];
   const freed: string[] = [];
-  // Dall'ultimo gruppo al primo, e in ogni gruppo dall'ultimo figlio al
+  // Dall'ultimo contenitore al primo, e in ognuno dall'ultimo figlio al
   // primo: così il percorso di una parte estranea senza id vale ancora
   // quando tocca a lei.
   for (const unit of [...units].reverse()) {
-    if (!isGroup(unit)) {
+    if (!unwraps(unit)) {
       kept.push(unit);
       continue;
     }
     const node = nodeOf(model, unit) as ContainerNode;
-    const group = plan.idOf(node);
+    const container = plan.idOf(node);
     const parent = plan.parentOf(node);
     const own = plainAttributes(node);
     const matrix = parseTransform(own.get("transform") ?? "") ?? IDENTITY;
@@ -403,15 +443,66 @@ export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: Ne
           if (Object.keys(change).length > 0) plan.ops.push({ op: "set", id, attrs: change });
         }
       }
-      plan.ops.push({ op: "move", target, parent, pos: { after: group } });
+      plan.ops.push({ op: "move", target, parent, pos: { after: container } });
     }
-    plan.ops.push({ op: "remove", target: group });
+    plan.ops.push({ op: "remove", target: container });
   }
   if (plan.ops.length === 0) return { ops: [], keys: units.map((unit) => unit.key) };
   // Un oggetto rimasto scelto riceve un id: i figli portati fuori cambiano il
   // suo percorso.
   const named = kept.map((unit) => plan.idOf(nodeOf(model, unit)));
   return plan.finish([...named, ...freed]);
+}
+
+// ---------------------------------------------------------------------------
+// Collegamenti.
+// ---------------------------------------------------------------------------
+
+/// Vero se `unit` è un collegamento: un `a`.
+export function isLink(unit: Unit): boolean {
+  return unit.tag === "a" && unit.role === "link";
+}
+
+/// Vero se `node` è un `a` o ne contiene uno.
+function holdsLink(node: ElementPart): boolean {
+  if (node.facts.uri === SVG_NS && node.facts.local === "a") return true;
+  return node.kind === "container" && elementChildren(node).some(holdsLink);
+}
+
+/// Vero se uno di `units` è un collegamento o ne contiene uno: attorno non
+/// se ne crea un altro, che porterebbe in due posti.
+export function holdsLinks(model: DocumentModel, units: readonly Unit[]): boolean {
+  return units.some((unit) => holdsLink(nodeOf(model, unit)));
+}
+
+/// Un collegamento nuovo a `href` attorno a `units`, al posto del più alto e
+/// nel suo livello, come un gruppo. `"nested"` se un oggetto è un
+/// collegamento o ne contiene uno (vedi [`holdsLinks`]). `null` se il livello
+/// del più alto schiaccia il piano.
+export function linkOps(model: DocumentModel, units: readonly Unit[], href: string, ids: NewIds): Arranged | "nested" | null {
+  if (holdsLinks(model, units)) return "nested";
+  return wrapOps(model, units, ids, "a", { href });
+}
+
+/// Porta il collegamento `unit` a `href`. Un `xlink:href`, per i lettori di
+/// SVG 1.1, cambia insieme a `href`; uno da solo resta solo.
+export function relinkOps(model: DocumentModel, unit: Unit, href: string, ids: NewIds): Arranged {
+  const plan = new Plan(model, ids);
+  const node = nodeOf(model, unit);
+  const now = hrefAttributes(node);
+  const attrs: Record<string, string> = {};
+  if (now.plain !== null || now.xlink === null) attrs.href = href;
+  if (now.xlink !== null) attrs["xlink:href"] = href;
+  if (now.plain === (attrs.href ?? null) && now.xlink === (attrs["xlink:href"] ?? null)) return { ops: [], keys: [unit.key] };
+  const id = plan.idOf(node);
+  plan.ops.push({ op: "set", id, attrs });
+  return plan.finish([id]);
+}
+
+/// Toglie i collegamenti fra `units`: gli oggetti restano dov'erano, come
+/// quelli di un gruppo che si separa (vedi [`unwrapOps`]).
+export function unlinkOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | "foreign" {
+  return unwrapOps(model, units, ids, isLink);
 }
 
 // ---------------------------------------------------------------------------

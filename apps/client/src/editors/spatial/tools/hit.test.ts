@@ -75,6 +75,28 @@ describe("il riquadro di tutto il disegno", () => {
   });
 });
 
+describe("i collegamenti che si vedono", () => {
+  it("ci sono a ogni profondità e anche nei livelli bloccati, ma non in ciò che è nascosto", () => {
+    const opened = open(doc(
+      `${LAYER}<a id="a1" href="uno.md"><rect x="10" y="10" width="10" height="10"/></a>`
+        + '<g id="g" transform="translate(50 0)"><a id="a2" href="due.md"><rect x="0" y="0" width="10" height="10"/></a></g>'
+        + '<g id="off" display="none"><a id="a3" href="tre.md"><rect x="0" y="0" width="10" height="10"/></a></g>'
+        + '<a id="a4" href="quattro.md" display="none"><rect x="0" y="0" width="10" height="10"/></a></g>'
+        + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><a id="a5" href="cinque.md"><rect x="0" y="40" width="10" height="10"/></a></g>'
+        + '<g id="l3" fub:layer="Nascosto" display="none"><a id="a6" href="sei.md"><rect x="0" y="0" width="10" height="10"/></a></g>',
+    ));
+    expect(opened.links().map((unit) => [unit.key, unit.layer, unit.bounds])).toEqual([
+      ["a1", "l1", { min: [10, 10], max: [20, 20] }],
+      ["a2", "l1", { min: [50, 0], max: [60, 10] }],
+      ["a5", "l2", { min: [0, 40], max: [10, 50] }],
+    ]);
+    // Quello dentro un gruppo non si sceglie da solo: si sceglie il gruppo,
+    // che è sulla sua strada.
+    expect(opened.index.units.map((unit) => unit.key)).toEqual(["a1", "g"]);
+    expect(opened.links()[1]!.path).toEqual([...opened.index.get("g")!.path, 0]);
+  });
+});
+
 describe("toccare un oggetto", () => {
   it("vuol dire toccarne ciò che si dipinge: il contorno di un rettangolo vuoto, non il suo interno", () => {
     const { index } = open(SHAPES);
