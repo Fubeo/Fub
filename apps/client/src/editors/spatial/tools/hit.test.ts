@@ -47,6 +47,32 @@ describe("gli oggetti della scena", () => {
     expect(index.get("g")?.bounds).toEqual({ min: [50, 0], max: [60, 10] });
     expect(index.get("g")?.frame()).toEqual({ min: [0, 0], max: [10, 10] });
   });
+
+  it("hanno anche il riquadro della geometria, senza contorno, per la griglia", () => {
+    const { index } = open(SHAPES);
+    expect(index.get("r")?.geometry).toEqual({ min: [10, 10], max: [30, 30] });
+    expect(index.get("@2.3")?.geometry).toEqual({ min: [0, 90], max: [40, 90] });
+    expect(index.get("g")?.geometry).toEqual({ min: [50, 0], max: [60, 10] });
+  });
+});
+
+describe("il riquadro di tutto il disegno", () => {
+  it("comprende i livelli bloccati e nascosti, ma non la carta e ciò che è nascosto da sé", () => {
+    const opened = open(doc(
+      `<title>Prova</title><rect id="fub-paper" fub:role="paper" x="0" y="0" width="100" height="100" fill="#ffffff"/>${LAYER}`
+        + '<rect id="a" x="10" y="10" width="20" height="20"/>'
+        + '<rect id="off" x="500" y="500" width="5" height="5" display="none"/></g>'
+        + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="b" x="40" y="-50" width="10" height="10"/></g>'
+        + '<g id="l3" fub:layer="Nascosto" display="none"><rect id="c" x="200" y="20" width="10" height="10" stroke="#000000" stroke-width="4"/></g>',
+    ));
+    expect(opened.extent()).toEqual({ min: [10, -50], max: [212, 32] });
+    // L'indice resta quello degli oggetti che si toccano.
+    expect(opened.index.units.map((unit) => unit.key)).toEqual(["a"]);
+  });
+
+  it("non c'è in un disegno vuoto", () => {
+    expect(open(doc(`${LAYER}</g>`)).extent()).toBeNull();
+  });
 });
 
 describe("toccare un oggetto", () => {

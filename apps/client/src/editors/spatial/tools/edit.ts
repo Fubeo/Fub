@@ -20,7 +20,8 @@
 //   di un oggetto senza id resta valido fino al suo turno.
 // - **La pagina** si allarga a passi di 256 unità per lato quando un oggetto
 //   ne esce, nello stesso `batch` dell'operazione che lo fa uscire, e non si
-//   restringe mai (formato della scena, §2).
+//   restringe mai da sola (formato della scena, §2). «Adatta la pagina» la
+//   porta attorno a tutto il disegno, con un margine.
 
 import { formatNumber } from "../number";
 import { formatBrush, type Pf1Brush } from "../ink/brush";
@@ -38,6 +39,10 @@ import { HIGHLIGHTER_OPACITY } from "./palette";
 
 /// Il passo con cui la pagina si allarga.
 export const PAGE_STEP = 256;
+
+/// Il margine attorno al disegno di una pagina adattata, in unità della
+/// scena.
+export const PAGE_MARGIN = 20;
 
 const IDENTITY_TEXT = formatTransform(IDENTITY);
 
@@ -238,4 +243,19 @@ export function pageFor(page: Page | null, bounds: Bounds | null): string | null
   const maxX = up(page.x + page.width + right);
   const maxY = up(page.y + page.height + bottom);
   return [minX, minY, maxX - minX, maxY - minY].map((v) => formatNumber(v, 2)).join(" ");
+}
+
+/// Il `viewBox` della pagina adattata a `extent`, il riquadro di tutto il
+/// disegno: [`PAGE_MARGIN`] unità attorno, coi bordi arrotondati all'unità
+/// verso l'esterno. `null` se il disegno è vuoto, o se la pagina è già
+/// quella.
+export function fittedPage(page: Page | null, extent: Bounds | null): string | null {
+  if (extent === null) return null;
+  const minX = Math.floor(extent.min[0] - PAGE_MARGIN + 1e-6);
+  const minY = Math.floor(extent.min[1] - PAGE_MARGIN + 1e-6);
+  const maxX = Math.ceil(extent.max[0] + PAGE_MARGIN - 1e-6);
+  const maxY = Math.ceil(extent.max[1] + PAGE_MARGIN - 1e-6);
+  const box = [minX, minY, maxX - minX, maxY - minY];
+  if (page !== null && box.every((v, i) => v === [page.x, page.y, page.width, page.height][i])) return null;
+  return box.map((v) => formatNumber(v, 2)).join(" ");
 }

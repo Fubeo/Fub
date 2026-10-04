@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
-import { boxMatrix, destination, gesture, mappedBounds, moveOps, NewIds, pageFor, removeOps, roundDelta, transformOps, transformValue } from "./edit";
+import { boxMatrix, destination, fittedPage, gesture, mappedBounds, moveOps, NewIds, pageFor, removeOps, roundDelta, transformOps, transformValue } from "./edit";
 import { LAYER, open } from "./test-support";
 
 const ids = (taken: readonly string[] = []): NewIds => new NewIds((id) => taken.includes(id));
@@ -206,6 +206,37 @@ describe("la pagina", () => {
     const viewBox = pageFor(PAGE, { min: [110, 0], max: [120, 10] })!;
     expect(opened.engine.apply(gesture([...moved.ops, { op: "page", viewBox }])!).outcome).toBe("applied");
     expect(opened.engine.text).toContain('viewBox="0 0 356 100"');
+  });
+});
+
+describe("la pagina adattata", () => {
+  const PAGE = { x: 0, y: 0, width: 100, height: 100 };
+
+  it("abbraccia il disegno con 20 unità di margine, arrotondate all'unità verso l'esterno", () => {
+    expect(fittedPage(PAGE, { min: [30.4, 40], max: [70.2, 90.0000001] })).toBe("10 20 81 90");
+    expect(fittedPage(PAGE, { min: [-500, -3], max: [-400, 2] })).toBe("-520 -23 140 45");
+  });
+
+  it("non cambia niente in un disegno vuoto, o se la pagina è già quella", () => {
+    expect(fittedPage(PAGE, null)).toBeNull();
+    expect(fittedPage({ x: 10, y: 20, width: 81, height: 90 }, { min: [30.4, 40], max: [70.2, 90] })).toBeNull();
+  });
+
+  it("dà una pagina anche a un documento che non l'aveva", () => {
+    expect(fittedPage(null, { min: [0, 0], max: [10, 10] })).toBe("-20 -20 50 50");
+  });
+
+  it("e il motore la accetta, e annulla rimette la pagina di prima", () => {
+    const opened = open(doc(`${LAYER}<rect id="o1a2b3c4d" x="90" y="0" width="10" height="10"/></g>`));
+    const before = opened.engine.text;
+    const viewBox = fittedPage(PAGE, { min: [90, 0], max: [100, 10] })!;
+    expect(viewBox).toBe("70 -20 50 50");
+    const applied = opened.engine.apply({ op: "page", viewBox });
+    expect(applied.outcome).toBe("applied");
+    expect(opened.engine.text).toContain('viewBox="70 -20 50 50" width="50" height="50"');
+    if (applied.outcome !== "applied") return;
+    expect(opened.engine.apply(applied.inverse).outcome).toBe("applied");
+    expect(opened.engine.text).toBe(before);
   });
 });
 

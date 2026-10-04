@@ -4,7 +4,7 @@
 // disegno: il loro codice arriva con lui, e non pesa sulla shell.
 
 import { t } from "../i18n/strings";
-import { displayBinding, keyName, parseChords } from "./commands";
+import { displayBinding, keyName, modifierName, parseChords } from "./commands";
 import { actions, openFrame } from "./dialogs";
 
 export interface FormField {
@@ -201,7 +201,7 @@ export interface KeyGroup {
 function keysOf(binding: string): HTMLElement[] {
   return binding.split(" ").map((one) => {
     const kbd = document.createElement("kbd");
-    kbd.textContent = parseChords(one) === null ? keyName(one) : displayBinding(one);
+    kbd.textContent = modifierName(one) ?? (parseChords(one) === null ? keyName(one) : displayBinding(one));
     return kbd;
   });
 }

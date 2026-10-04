@@ -150,6 +150,55 @@ Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
 che ha toccato, se c'è ancora. All'Essenziale il pulsante non c'è, e il disegno va nel
 livello più alto che si vede e non è bloccato.
 
+## Griglia e pagina
+
+Dal livello Standard la barra ha il pulsante «Pagina e griglia». La griglia è
+un aiuto della vista e non entra nel file: un disegno si apre uguale con la
+griglia e senza. Il menu ha:
+
+- **Mostra la griglia** (`#`): righe sottili sopra la carta e sotto il
+  disegno, su tutto il foglio, con una riga più marcata ogni cinque. Le righe
+  stanno sui multipli del passo contati dall'origine della scena, l'angolo
+  della pagina di un documento nuovo, e restano lì quando la pagina cresce.
+  Quando lo zoom le avvicina sotto gli 8 pixel se ne vede una ogni cinque, poi
+  una ogni venticinque;
+- **Aggancia alla griglia** (`%`), che vale anche con la griglia nascosta;
+- il **passo**: 5, 10, 20, 50 o 100 unità, che dividono tutti la pagina di un
+  documento nuovo. Si parte da 20, con la griglia nascosta e l'aggancio
+  spento;
+- **Adatta la pagina al disegno**.
+
+`#` e `%` valgono come si scrivono, anche con `AltGr`. Ogni cambiamento si
+annuncia, per esempio «Griglia visibile.» o «Passo della griglia: 50.», e chi
+monta l'editor lo legge e lo sceglie con `grid`, `setGrid` e `onGridChange`.
+
+Con l'aggancio:
+
+- le forme vanno da un incrocio all'altro;
+- uno spostamento col puntatore porta sull'incrocio più vicino l'angolo della
+  geometria più vicino al punto preso. Il contorno resta fuori, perché esce
+  dalla griglia anche in una forma disegnata agganciata;
+- tenendo premuto `Ctrl` o `⌘` mentre si trascina, si posa libero;
+- con una selezione, le frecce portano l'angolo in alto a sinistra della
+  geometria alla riga seguente, cinque righe più in là con `Maiusc`; con
+  `Ctrl` o `⌘` portano il lato destro o quello in basso alla riga seguente,
+  ferma l'angolo in alto a sinistra, ma non oltre la prima riga dopo il lato
+  opposto;
+- senza selezione le frecce portano il cursore all'incrocio seguente, cinque
+  righe più in là con `Maiusc`; con `Ctrl` o `⌘` lo muovono libero di un
+  pixel;
+- **Duplica** scosta le copie di un numero intero di passi, e un'immagine
+  incollata ha l'angolo in alto a sinistra sull'incrocio più vicino.
+
+**Adatta la pagina al disegno** porta la pagina attorno a tutto il disegno,
+livelli nascosti e bloccati compresi, con 20 unità di margine, e la allarga
+fino a numeri interi. Riscrive `viewBox`, `width` e `height` della radice e la
+carta, gli oggetti restano dove sono, ed è un passo di annulla. La voce si
+spegne, e dice perché, quando il disegno è vuoto o la pagina è già adattata.
+
+All'Essenziale il pulsante non c'è, la griglia non si vede e non aggancia; le
+scelte restano, e tornano col livello Standard.
+
 ## Da tastiera
 
 Ogni strumento funziona senza puntatore. Sul foglio le frecce muovono un
@@ -160,9 +209,11 @@ trascinamento con la selezione. `Esc` annulla il gesto. Il cursore dice dove
 si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu».
 
 Con una selezione le frecce la spostano di 1, 10 con `Maiusc`, e con `Ctrl` o
-`⌘` la ridimensionano dall'angolo in alto a sinistra. `Tab` e `Maiusc+Tab`
-passano all'oggetto dopo e a quello prima, e lo dicono col nome e la
-posizione; oltre l'ultimo il fuoco esce dal foglio, che non lo trattiene mai.
+`⌘` la ridimensionano dall'angolo in alto a sinistra; con l'aggancio alla
+griglia vanno di riga in riga, come dice «Griglia e pagina». `Tab` e
+`Maiusc+Tab` passano all'oggetto dopo e a quello prima, e lo dicono col nome e
+la posizione; oltre l'ultimo il fuoco esce dal foglio, che non lo trattiene
+mai.
 `Home` e `Fine` scelgono il primo e l'ultimo oggetto. `Invio` apre posizione e
 misure della selezione, da scrivere coi numeri; senza selezione apre le
 proprietà del disegno: titolo, descrizione e misure della pagina. `?` elenca

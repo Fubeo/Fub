@@ -90,6 +90,15 @@
     var(--shadow-sm);
 }
 
+/* La griglia: righe grigie e trasparenti, che si vedono sulla carta bianca e
+   sul tavolo di ogni tema. Una ogni cinque è più marcata, per contare. */
+.draw-grid path {
+  stroke: rgb(128 128 128 / 0.25);
+}
+.draw-grid [data-major] {
+  stroke: rgb(128 128 128 / 0.5);
+}
+
 /* La barra della selezione galleggia sul disegno: il fondo della barra in
    cima, un filo e un'ombra che la staccano da ciò che copre. */
 .draw-arrange {

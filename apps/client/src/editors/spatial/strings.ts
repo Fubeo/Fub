@@ -254,7 +254,29 @@ const IT = {
   "draw.into_layer.here": "Gli oggetti scelti sono già qui.",
   "draw.moved_to_layer.one": "{count} oggetto spostato in «{name}».",
   "draw.moved_to_layer.other": "{count} oggetti spostati in «{name}».",
-  "draw.state.current": "corrente"
+  "draw.state.current": "corrente",
+  "draw.page_grid": "Pagina e griglia",
+  "draw.grid.show": "Mostra la griglia",
+  "draw.grid.snap": "Aggancia alla griglia",
+  "draw.grid.snap.free": "Tieni premuto {key} mentre trascini per posare libero.",
+  "draw.grid.step": "Passo di {step}",
+  "draw.grid.shown": "Griglia visibile.",
+  "draw.grid.hidden": "Griglia nascosta.",
+  "draw.grid.snap.on": "Aggancio alla griglia acceso.",
+  "draw.grid.snap.off": "Aggancio alla griglia spento.",
+  "draw.grid.stepped": "Passo della griglia: {step}.",
+  "draw.page.fit": "Adatta la pagina al disegno",
+  "draw.page.fit.empty": "Il disegno è vuoto.",
+  "draw.page.fit.already": "La pagina è già adattata al disegno.",
+  "draw.page.fitted": "Pagina adattata: {width} × {height}.",
+  "draw.action.fit_page": "Pagina adattata al disegno",
+  "draw.keys.grid": "Griglia",
+  "draw.keys.grid.show": "Mostra o nasconde la griglia",
+  "draw.keys.grid.snap": "Accende o spegne l’aggancio alla griglia",
+  "draw.keys.grid.free": "Tenuto mentre si trascina: posa libero, fuori dalla griglia",
+  "draw.keys.cursor.move.grid": "Muove il cursore alla riga seguente della griglia, a cinque righe con Maiusc; libero di 1 px con Ctrl o ⌘",
+  "draw.keys.nudge.grid": "Sposta la selezione alla riga seguente della griglia, a cinque righe con Maiusc",
+  "draw.keys.resize.grid": "Ridimensiona la selezione fino alla riga seguente della griglia, a cinque righe con Maiusc"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -505,7 +527,29 @@ const EN: Record<DrawKey, string> = {
   "draw.into_layer.here": "The selected objects are already here.",
   "draw.moved_to_layer.one": "{count} object moved to “{name}”.",
   "draw.moved_to_layer.other": "{count} objects moved to “{name}”.",
-  "draw.state.current": "current"
+  "draw.state.current": "current",
+  "draw.page_grid": "Page and grid",
+  "draw.grid.show": "Show grid",
+  "draw.grid.snap": "Snap to grid",
+  "draw.grid.snap.free": "Hold {key} while dragging to place freely.",
+  "draw.grid.step": "Spacing {step}",
+  "draw.grid.shown": "Grid shown.",
+  "draw.grid.hidden": "Grid hidden.",
+  "draw.grid.snap.on": "Snap to grid on.",
+  "draw.grid.snap.off": "Snap to grid off.",
+  "draw.grid.stepped": "Grid spacing: {step}.",
+  "draw.page.fit": "Fit page to drawing",
+  "draw.page.fit.empty": "The drawing is empty.",
+  "draw.page.fit.already": "The page already fits the drawing.",
+  "draw.page.fitted": "Page fitted: {width} × {height}.",
+  "draw.action.fit_page": "Fit page to drawing",
+  "draw.keys.grid": "Grid",
+  "draw.keys.grid.show": "Show or hide the grid",
+  "draw.keys.grid.snap": "Turn snap to grid on or off",
+  "draw.keys.grid.free": "Held while dragging: place freely, off the grid",
+  "draw.keys.cursor.move.grid": "Move the cursor to the next grid line, five lines with Shift; freely by 1 px with Ctrl or ⌘",
+  "draw.keys.nudge.grid": "Move the selection to the next grid line, five lines with Shift",
+  "draw.keys.resize.grid": "Resize the selection to the next grid line, five lines with Shift"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

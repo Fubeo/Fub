@@ -3,6 +3,7 @@
 
 import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
+import type { Bounds } from "../scene/geometry";
 import { SceneIndexer, type SceneIndex } from "./hit";
 
 export const LAYER = '<g id="l1" fub:layer="Livello 1">';
@@ -12,6 +13,8 @@ export interface Opened {
   readonly index: SceneIndex;
   /// L'indice di adesso, dopo le operazioni applicate al motore.
   reindex(): SceneIndex;
+  /// Il riquadro di tutto il disegno di adesso.
+  extent(): Bounds | null;
 }
 
 export function open(source: string): Opened {
@@ -22,5 +25,9 @@ export function open(source: string): Opened {
     builder.build(engine);
     return indexer.index(engine.model!);
   };
-  return { engine, index: reindex(), reindex };
+  const extent = (): Bounds | null => {
+    builder.build(engine);
+    return indexer.extent(engine.model!);
+  };
+  return { engine, index: reindex(), reindex, extent };
 }
