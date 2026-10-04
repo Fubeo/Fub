@@ -404,6 +404,9 @@
     "palette-error",
     "keys-list",
     "keys-table",
+    "keys-more",
+    "keys-note",
+    "keys-show-all",
     "media-surface",
     "media-image",
     "zoom-view",
@@ -1240,7 +1243,10 @@
         "palette-actions",
         "palette-error",
         "keys-list",
-        "keys-table"
+        "keys-table",
+        "keys-more",
+        "keys-note",
+        "keys-show-all"
       ],
       "states": [
         "rest",
@@ -1886,7 +1892,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 438,
+    "hooks": 441,
     "state_names": 7,
     "assigned_states": 154,
     "components": 48,

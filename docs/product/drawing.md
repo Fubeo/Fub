@@ -60,11 +60,19 @@ usa un lettore di schermo.
 ## Il livello Standard
 
 L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, e lo
-Standard, che aggiunge strumenti alla stessa barra. Il livello filtra soltanto
-ciò che si offre: un disegno si apre uguale a ogni livello, e cambiare livello
-non lo modifica. Cambia dal vivo, senza riaprire il disegno e senza perdere la
+Standard, che aggiunge strumenti alla stessa barra. Si sceglie nelle
+Impostazioni, nel gruppo «Disegni», con «Livello d'interfaccia»: è
+un'impostazione del vault, `draw.level`, che vale per chiunque lo apra e che un
+plugin o una macro non cambiano. Il livello filtra soltanto ciò che si offre:
+un disegno si apre uguale a ogni livello, e cambiare livello non lo modifica.
+Cambia dal vivo, anche nei disegni aperti, senza riaprirli e senza perdere la
 selezione o la cronologia; chi monta l'editor lo sceglie con `level` e
 `setLevel` (`apps/client/src/editors/spatial/tools/editor.ts`).
+
+Dall'editor il livello non si cambia, così l'Essenziale resta tale anche in
+mano a un bambino. `?` elenca i tasti del livello di adesso, e **Mostra tutto**
+aggiunge in fondo quelli dei livelli sopra, ciascuno col livello da cui vale e
+con una frase che dice dove si sceglie.
 
 Lo Standard aggiunge:
 
@@ -156,7 +164,10 @@ livello più alto che si vede e non è bloccato.
 
 Dal livello Standard la barra ha il pulsante «Pagina e griglia». La griglia è
 un aiuto della vista e non entra nel file: un disegno si apre uguale con la
-griglia e senza. Il menu ha:
+griglia e senza. Resta l'ultima scelta, su questa macchina: un disegno aperto
+dopo, anche dopo un riavvio, ha la griglia com'era nell'ultimo. Non entra
+nemmeno nelle impostazioni del vault, così su un vault condiviso ognuno ha la
+sua. Il menu ha:
 
 - **Mostra la griglia** (`#`): righe sottili sopra la carta e sotto il
   disegno, su tutto il foglio, con una riga più marcata ogni cinque. Le righe
@@ -166,8 +177,8 @@ griglia e senza. Il menu ha:
   una ogni venticinque;
 - **Aggancia alla griglia** (`%`), che vale anche con la griglia nascosta;
 - il **passo**: 5, 10, 20, 50 o 100 unità, che dividono tutti la pagina di un
-  documento nuovo. Si parte da 20, con la griglia nascosta e l'aggancio
-  spento;
+  documento nuovo. La prima volta si parte da 20, con la griglia nascosta e
+  l'aggancio spento;
 - **Adatta la pagina al disegno**.
 
 `#` e `%` valgono come si scrivono, anche con `AltGr`. Ogni cambiamento si
@@ -313,7 +324,7 @@ mai.
 `Home` e `Fine` scelgono il primo e l'ultimo oggetto. `Invio` apre posizione e
 misure della selezione, da scrivere coi numeri; senza selezione apre le
 proprietà del disegno: titolo, descrizione e misure della pagina. `?` elenca
-tutti i tasti.
+i tasti del livello di adesso, e «Mostra tutto» quelli dei livelli sopra.
 
 Ridimensionare scrive un `transform`: anche lo spessore del contorno segue la
 scala, e il riquadro che si chiede è quello che l'oggetto occupa.

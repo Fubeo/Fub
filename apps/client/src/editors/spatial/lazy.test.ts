@@ -5,12 +5,33 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EditorSurface } from "../core/registry";
+import { createFakeHost, type FakeHost } from "../../host/fake";
 import { notify } from "../../ui/notify";
 import { mountVectorSurfaceLazily } from "./lazy";
 import { doc } from "./scene/test-support";
 import { LAYER } from "./tools/test-support";
 
 vi.mock("../../ui/notify", () => ({ notify: vi.fn() }));
+
+// La superficie vera chiede all'host il livello e la griglia: risponde il finto.
+const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
+
+vi.mock("../../host/ipc", () => {
+  const now = () => {
+    if (!box.host) throw new Error("l'host finto non è stato montato");
+    return box.host.module;
+  };
+  return {
+    api: new Proxy(
+      {},
+      {
+        get: (_t, name: string) => (...args: unknown[]) =>
+          (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args),
+      },
+    ),
+    onKernelEvent: (handler: (n: unknown) => void) => now().onKernelEvent(handler as never),
+  };
+});
 
 type SurfaceModule = typeof import("./surface");
 
@@ -49,6 +70,7 @@ async function fail(error: unknown): Promise<void> {
 const at = (text: string, marker: string): number => new TextEncoder().encode(text.slice(0, text.indexOf(marker))).length + 1;
 
 beforeEach(() => {
+  box.host = createFakeHost();
   parent = document.createElement("div");
   document.body.append(parent);
   surface = null;

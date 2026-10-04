@@ -614,7 +614,7 @@ describe("disporre, dal livello Standard", () => {
     expect(rows).toContainEqual(["Ctrl+Shift+[ o Shift+PgDn", "Porta in secondo piano"]);
     expect(rows).toContainEqual(["Alt+F10", "Va alla barra della selezione"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -815,7 +815,7 @@ describe("i collegamenti a una nota", () => {
     expect(rows).toContainEqual(["Ctrl+K", "Collega a una nota, o cambia il collegamento scelto"]);
     expect(rows).toContainEqual(["Ctrl+Shift+K", "Togli il collegamento"]);
     expect(rows).toContainEqual(["Alt+Enter", "Apre la nota del collegamento scelto"]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -1333,14 +1333,14 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(rows()).toContainEqual(["Ctrl", "Tenuto mentre si trascina: posa libero, fuori dalla griglia"]);
     expect(rows()).toContainEqual(["←↑→↓", "Sposta la selezione di 1, con Maiusc di 10"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     editor.setGrid(SNAP);
     key("?", { shiftKey: true });
     expect(rows()).toContainEqual(["←↑→↓", "Sposta la selezione alla riga seguente della griglia, a cinque righe con Maiusc"]);
     expect(rows()).toContainEqual(["Ctrl+←↑→↓", "Ridimensiona la selezione fino alla riga seguente della griglia, a cinque righe con Maiusc"]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -1639,7 +1639,7 @@ describe("il testo, dal livello Standard", () => {
     expect(rows).toContainEqual(["Enter", "Va a capo, mentre si scrive"]);
     expect(rows).toContainEqual(["Esc o Tab o Ctrl+Enter", "Conclude il testo, mentre si scrive"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -1889,7 +1889,7 @@ describe("da tastiera", () => {
     mount();
     key("?", { shiftKey: true });
     expect(dialog().querySelector("h2")!.textContent).toBe("Tasti del disegno");
-    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toEqual([
+    expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toEqual([
       "Strumenti",
       "Disegnare da tastiera",
       "Oggetti",
@@ -1903,7 +1903,48 @@ describe("da tastiera", () => {
     expect(rows).toContainEqual(["Ctrl+Shift+Z o Ctrl+Y", "Ripeti"]);
     expect(rows).toContainEqual(["Esc", "Toglie la selezione"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+
+  it("«Mostra tutto» aggiunge i tasti dei livelli sopra, ciascuno col livello da cui vale", () => {
+    mount();
+    key("?", { shiftKey: true });
+    const extra = dialog().querySelector<HTMLElement>(".keys-more")!;
+    expect(extra.hidden).toBe(true);
+    dialog().querySelector<HTMLButtonElement>(".keys-show-all")!.click();
+    expect(extra.querySelector(".keys-note")!.textContent).toBe(
+      "Il livello di adesso è «Essenziale». I tasti qui sotto valgono da un livello più alto, che si sceglie nelle Impostazioni, nel gruppo «Disegni».",
+    );
+    const tables = [...extra.querySelectorAll("table")].map((table) => ({
+      caption: table.querySelector("caption")!.textContent,
+      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
+    }));
+    expect(tables.map((table) => table.caption)).toEqual([
+      "Strumenti · dal livello Standard",
+      "Disponi · dal livello Standard",
+      "Testo · dal livello Standard",
+      "Griglia · dal livello Standard",
+    ]);
+    // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
+    expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
+    expect(tables[1]!.rows).toContainEqual(["Ctrl+D", "Duplica"]);
+    expect(tables[3]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+
+    // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+    key("h");
+    expect(editor.tool).toBe("pen");
+    expect(editor.level).toBe("essential");
+    key("#");
+    expect(editor.grid.shown).toBe(false);
+  });
+
+  it("dallo Standard niente da aggiungere, e nessun «Mostra tutto»", () => {
+    mount(SOURCE, { level: "standard" });
+    key("?", { shiftKey: true });
+    expect(dialog().querySelector(".keys-show-all")).toBeNull();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 
   it("i pulsanti della barra fanno lo stesso", () => {
@@ -1913,7 +1954,7 @@ describe("da tastiera", () => {
     expect(named("Tasti del disegno").getAttribute("aria-haspopup")).toBe("dialog");
     named("Tasti del disegno").click();
     expect(dialog().querySelector("h2")!.textContent).toBe("Tasti del disegno");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button")!.click();
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 
   it("la camera non si anima mai: ogni inquadratura è subito quella nuova", () => {

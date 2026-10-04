@@ -75,7 +75,7 @@
 import { onLanguage, resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { ariaBinding, displayBinding, modifierName } from "../../../ui/commands";
-import { promptForm, showKeys, type FormField, type KeyGroup } from "../../../ui/form-dialog";
+import { promptForm, showKeys, type FormField, type KeyGroup, type MoreKeys } from "../../../ui/form-dialog";
 import { icon, iconEl, registerIcon } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
@@ -206,7 +206,7 @@ import {
   WIDTHS,
   type Width,
 } from "./palette";
-import { DEFAULT_TOOL, reaches, toolForKey, TOOLS, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
+import { DEFAULT_TOOL, levelsAbove, reaches, toolForKey, TOOLS, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
 import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
 import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
@@ -367,6 +367,13 @@ const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
 
 /// Le frecce come si leggono nell'elenco dei tasti.
 const ARROW_KEYS = "←↑→↓";
+
+/// Il nome di ogni livello, come lo dice l'elenco dei tasti.
+const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
+  essential: "draw.level.essential",
+  standard: "draw.level.standard",
+  expert: "draw.level.expert",
+};
 
 /// Lo scarto di una copia dal suo originale, e fra due immagini incollate
 /// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
@@ -1841,8 +1848,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return to;
   };
 
-  /// La griglia aggancia: dal livello Standard, con l'aggancio acceso.
-  const gridOn = (): boolean => reaches(level, "standard") && grid.snap;
+  /// La griglia aggancia: dal livello Standard, con l'aggancio acceso. `at`
+  /// è il livello da guardare, di solito quello di adesso.
+  const gridOn = (at: Level = level): boolean => reaches(at, "standard") && grid.snap;
 
   /// Un punto di un gesto: sull'incrocio più vicino quando la griglia
   /// aggancia e Ctrl o ⌘ non è tenuto.
@@ -3491,8 +3499,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// I tasti dei comandi della selezione, dal livello Standard.
-  const arrangeKeys = (): KeyGroup[] =>
-    reaches(level, "standard")
+  const arrangeKeys = (at: Level): KeyGroup[] =>
+    reaches(at, "standard")
       ? [
           {
             title: t("draw.arrange"),
@@ -3513,8 +3521,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       : [];
 
   /// I tasti della griglia, dal livello Standard.
-  const gridKeys = (): KeyGroup[] =>
-    reaches(level, "standard")
+  const gridKeys = (at: Level): KeyGroup[] =>
+    reaches(at, "standard")
       ? [
           {
             title: t("draw.keys.grid"),
@@ -3528,8 +3536,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       : [];
 
   /// I tasti del testo, dal livello Standard.
-  const textKeys = (): KeyGroup[] =>
-    reaches(level, "standard")
+  const textKeys = (at: Level): KeyGroup[] =>
+    reaches(at, "standard")
       ? [
           {
             title: t("draw.keys.text"),
@@ -3543,13 +3551,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// L'elenco dei tasti, nei gruppi in cui si usano.
-  const keyGroups = (): KeyGroup[] => [
-    { title: t("draw.keys.tools"), rows: tools.map((spec) => [spec.shortcut, t(spec.label)] as const) },
+  /// L'elenco dei tasti del livello `at`, nei gruppi in cui si usano.
+  const keyGroups = (at: Level): KeyGroup[] => [
+    { title: t("draw.keys.tools"), rows: toolsFor(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
     {
       title: t("draw.keys.cursor"),
       rows: [
-        [ARROW_KEYS, t(gridOn() ? "draw.keys.cursor.move.grid" : "draw.keys.cursor.move")],
+        [ARROW_KEYS, t(gridOn(at) ? "draw.keys.cursor.move.grid" : "draw.keys.cursor.move")],
         ["Space Enter", t("draw.keys.cursor.press")],
         ["Escape", t("draw.keys.cancel")],
       ],
@@ -3557,8 +3565,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     {
       title: t("draw.objects"),
       rows: [
-        [ARROW_KEYS, t(gridOn() ? "draw.keys.nudge.grid" : "draw.keys.nudge")],
-        [`Mod-${ARROW_KEYS}`, t(gridOn() ? "draw.keys.resize.grid" : "draw.keys.resize")],
+        [ARROW_KEYS, t(gridOn(at) ? "draw.keys.nudge.grid" : "draw.keys.nudge")],
+        [`Mod-${ARROW_KEYS}`, t(gridOn(at) ? "draw.keys.resize.grid" : "draw.keys.resize")],
         ["Tab Shift-Tab", t("draw.keys.walk")],
         ["Home End", t("draw.keys.ends")],
         ["Enter", t("draw.properties")],
@@ -3568,9 +3576,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["Escape", t("draw.keys.deselect")],
       ],
     },
-    ...arrangeKeys(),
-    ...textKeys(),
-    ...gridKeys(),
+    ...arrangeKeys(at),
+    ...textKeys(at),
+    ...gridKeys(at),
     {
       title: t("draw.view"),
       rows: [
@@ -3591,13 +3599,36 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
   ];
 
-  /// «?»: l'elenco dei tasti.
+  /// I tasti che i livelli sopra quello di adesso aggiungono, col livello da
+  /// cui valgono: una riga è nuova se il suo gruppo non aveva i suoi tasti.
+  const moreKeys = (): MoreKeys => {
+    const seen = new Set<string>();
+    const remember = (group: KeyGroup, keys: string): boolean => {
+      const id = `${group.title}\u0000${keys}`;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    };
+    for (const group of keyGroups(level)) for (const [keys] of group.rows) remember(group, keys);
+    const groups: KeyGroup[] = [];
+    for (const above of levelsAbove(level)) {
+      for (const group of keyGroups(above)) {
+        const rows = group.rows.filter(([keys]) => remember(group, keys));
+        if (rows.length > 0) groups.push({ title: t("draw.keys.from_level", { group: group.title, level: t(LEVEL_NAMES[above]) }), rows });
+      }
+    }
+    return { groups, note: t("draw.keys.more", { level: t(LEVEL_NAMES[level]) }) };
+  };
+
+  /// «?»: l'elenco dei tasti di questo livello, e con «Mostra tutto» quelli
+  /// dei livelli sopra. Il livello non si cambia da qui: lo sceglie chi
+  /// prepara il vault, e l'Essenziale resta tale anche in mano a un bambino.
   async function keys(): Promise<void> {
     if (asking) return;
     asking = true;
     cancelGesture();
     try {
-      await showKeys(t("draw.keys"), keyGroups());
+      await showKeys(t("draw.keys"), keyGroups(level), moreKeys());
     } finally {
       asking = false;
     }

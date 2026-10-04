@@ -8,6 +8,7 @@
 // cablaggio è quello di `surface-modes.e2e.test.ts` — `main.ts` sulla scocca
 // vera, contro l'host finto — con il registro vero e nessuna famiglia finta.
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SettingEntry } from "./host/contract";
 import type { FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
@@ -193,6 +194,48 @@ const last = <T>(items: readonly T[]): T | undefined => items[items.length - 1];
 const written = (host: FakeHost, doc: string): string[] =>
   host.atGate("writeDocument").filter((call) => call.args[0] === doc).map((call) => String(call.args[1]));
 
+/// Il livello dell'editor come lo dichiara il bundle `fub.draw`, col valore
+/// `value`: il finto non conosce nessuna feature, e la riga gliela dà il banco.
+function drawLevel(value: string): SettingEntry {
+  return {
+    spec: {
+      key: "draw.level",
+      label: "Livello d'interfaccia",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: {
+        kind: "choice",
+        default: "essential",
+        options: [
+          { value: "essential", label: "Essenziale" },
+          { value: "standard", label: "Standard" },
+        ],
+      },
+      program_writable: false,
+    },
+    value,
+    source: value === "essential" ? "default" : "vault",
+  };
+}
+
+/// Gli strumenti che la barra del riquadro attivo mostra.
+const tools = (): string[] =>
+  [...focusedPane().querySelectorAll<HTMLElement>(".draw-tool")]
+    .filter((control) => control.closest("[hidden]") === null)
+    .map((control) => control.dataset.tool ?? "");
+
+/// Se il disegno che si vede nel riquadro attivo mostra la griglia.
+const gridShown = (): boolean =>
+  [...focusedPane().querySelectorAll<HTMLElement>(".draw-grid")].some(
+    (mark) => mark.closest("[hidden]") === null && mark.style.display !== "none",
+  );
+
+/// Un tasto premuto dove sta il fuoco.
+function press(key: string, init: KeyboardEventInit = {}): void {
+  (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ...init }));
+}
+
 beforeEach(() => {
   activeStop?.();
   activeStop = null;
@@ -255,9 +298,6 @@ describe("un .svg è un disegno", () => {
     await open("casa.svg");
     const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
     sheet.focus();
-    const press = (key: string, init: KeyboardEventInit = {}): void => {
-      (document.activeElement ?? sheet).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ...init }));
-    };
     press("r");
     press(" ");
     press("ArrowRight", { shiftKey: true });
@@ -406,5 +446,77 @@ describe("uno screenshot incollato", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("il livello e la griglia del disegno", () => {
+  it("il livello si sceglie nelle impostazioni del vault, e vale subito nel disegno aperto", async () => {
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("essential")] }));
+    await open("casa.svg");
+    const editor = focusedPane().querySelector(".draw-editor");
+    expect(tools()).toEqual(["select", "pen", "eraser", "rect", "ellipse", "line", "arrow"]);
+
+    await host.module.api.setSetting("draw.level", "standard");
+    await waitFor("l'evidenziatore compare", () => tools().includes("highlighter"));
+    expect(tools()).toEqual(["select", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
+    expect(focusedPane().querySelector(".draw-editor"), "lo stesso editor, non uno nuovo").toBe(editor);
+
+    await host.module.api.setSetting("draw.level", "essential");
+    await waitFor("l'evidenziatore se ne va", () => !tools().includes("highlighter"));
+    // Il livello cambia gli strumenti, non il disegno.
+    expect(written(host, "casa.svg")).toEqual([]);
+    expect(host.files()["casa.svg"]).toBe(HOUSE);
+  });
+
+  it("dallo Standard, Ctrl+K collega l'oggetto scelto a una nota del vault, e Alt+Invio la apre", async () => {
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("standard")] }));
+    await open("casa.svg");
+    await waitFor("il livello Standard", () => tools().includes("highlighter"));
+    const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
+    sheet.focus();
+    press("a", { ctrlKey: true });
+    press("k", { ctrlKey: true });
+
+    await waitFor("l'elenco delle note", () => document.querySelector('.shell-dialog input[role="combobox"]') !== null);
+    const filter = document.querySelector<HTMLInputElement>('.shell-dialog input[role="combobox"]')!;
+    const offeredNotes = [...document.querySelectorAll('.shell-dialog [role="option"]')].map((option) => option.textContent ?? "");
+    expect(offeredNotes.some((option) => option.includes("Benvenuto.md"))).toBe(true);
+    expect(offeredNotes.some((option) => option.includes("casa.svg")), "il disegno stesso non c'è").toBe(false);
+    filter.value = "Benvenuto";
+    filter.dispatchEvent(new Event("input"));
+    press("Enter");
+
+    await waitFor("il collegamento arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<a [^>]*href="Benvenuto\.md"[^>]*>\s*<rect id="o1a2b3c4d"/);
+    await waitFor("il fuoco torna al foglio", () => document.activeElement === sheet);
+    press("Enter", { altKey: true });
+    await waitFor("la nota si apre", () => focusedPane().querySelector(".vector-surface") === null);
+    expect(await activeTab()).toMatchObject({ k: "doc", doc: "Benvenuto.md" });
+  });
+
+  it("la griglia scelta resta per i disegni aperti dopo, anche dopo un riavvio, e non entra nel vault", async () => {
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("standard")] }));
+    await open("casa.svg");
+    await waitFor("il livello Standard", () => tools().includes("highlighter"));
+    focusedPane().querySelector<HTMLElement>(".draw-surface")!.focus();
+    expect(gridShown()).toBe(false);
+    press("#");
+    expect(gridShown()).toBe(true);
+    await waitFor("la griglia si ricorda", () => host.atGate("setViewState").some((call) => call.args[0] === "draw.grid"));
+    expect(await host.module.api.viewState("draw.grid")).toEqual({ shown: true, snap: false, step: 20 });
+
+    await open("albero.svg");
+    expect(await activeTab()).toMatchObject({ k: "doc", doc: "albero.svg" });
+    expect(gridShown(), "il disegno aperto dopo").toBe(true);
+    // Né i disegni né le impostazioni del vault cambiano.
+    expect(host.atGate("setSetting")).toEqual([]);
+    expect(written(host, "casa.svg")).toEqual([]);
+    expect(written(host, "albero.svg")).toEqual([]);
+
+    activeStop?.();
+    activeStop = null;
+    await start(host);
+    await open("albero.svg");
+    await waitFor("la griglia ricordata dopo il riavvio", () => gridShown());
   });
 });

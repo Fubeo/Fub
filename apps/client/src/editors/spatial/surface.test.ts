@@ -3,6 +3,8 @@
 // sessione, i documenti che non si modificano e le selezioni in byte del file.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SettingEntry } from "../../host/contract";
+import { createFakeHost, type FakeHost } from "../../host/fake";
 import type { EditorSurface } from "../core/registry";
 import type { EditorChange } from "../core/text-operation";
 import { doc, HEAD } from "./scene/test-support";
@@ -10,6 +12,27 @@ import { VECTOR_MODES } from "./modes";
 import { clearHistory, recentNotices } from "../../ui/notify";
 import { linkHref, mountVectorSurface, type VectorSurfaceOptions } from "./surface";
 import { LAYER } from "./tools/test-support";
+
+// Il livello e la griglia la superficie li chiede all'host: qui risponde il
+// finto, che non dichiara il livello finché un caso non glielo dà.
+const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
+
+vi.mock("../../host/ipc", () => {
+  const now = () => {
+    if (!box.host) throw new Error("l'host finto non è stato montato");
+    return box.host.module;
+  };
+  return {
+    api: new Proxy(
+      {},
+      {
+        get: (_t, name: string) => (...args: unknown[]) =>
+          (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args),
+      },
+    ),
+    onKernelEvent: (handler: (n: unknown) => void) => now().onKernelEvent(handler as never),
+  };
+});
 
 const SOURCE = doc(
   `<title>Casa</title>${LAYER}<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`,
@@ -79,6 +102,7 @@ const shown = (at: HTMLElement = parent): { notice: string | null; adopt: boolea
 const lines = (text: string): string[] => text.split(/(?<=\n)/);
 
 beforeEach(() => {
+  box.host = createFakeHost();
   parent = document.createElement("div");
   document.body.append(parent);
   mounted = [];
@@ -500,5 +524,92 @@ describe("montare e smontare", () => {
     expect(parent.childNodes).toHaveLength(0);
     expect(added).toEqual([]);
     expect(revoked.mock.calls.map(([url]) => url).sort()).toEqual(created.mock.results.map((r) => r.value as string).sort());
+  });
+});
+
+describe("il livello e la griglia", () => {
+  /// Il livello dichiarato da `fub.draw`, col valore `value`.
+  const level = (value: string): SettingEntry => ({
+    spec: {
+      key: "draw.level",
+      label: "Livello d'interfaccia",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: {
+        kind: "choice",
+        default: "essential",
+        options: [
+          { value: "essential", label: "Essenziale" },
+          { value: "standard", label: "Standard" },
+        ],
+      },
+      program_writable: false,
+    },
+    value,
+    source: "vault",
+  });
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const tools = (at: HTMLElement): string[] =>
+    [...at.querySelectorAll<HTMLElement>(".draw-tool")].filter((control) => control.closest("[hidden]") === null).map((control) => control.dataset.tool!);
+  const gridShown = (at: HTMLElement): boolean => at.querySelector<HTMLElement>(".draw-grid")!.style.display !== "none";
+  const reads = (host: FakeHost): number =>
+    host.atGate("queryIndex").filter((call) => (call.args[0] as { kind: string }).kind === "settings").length;
+
+  /// Moduli nuovi, perché il livello e la griglia letti restano in memoria,
+  /// e il router del kernel acceso: è lui che porta `setting_changed`.
+  async function fresh(host: FakeHost) {
+    box.host = host;
+    vi.resetModules();
+    const { mountVectorSurface: mountFresh } = await import("./surface");
+    await (await import("../../state/kernel")).startKernelRouter();
+    return (at: HTMLElement): EditorSurface => {
+      const surface = mountFresh(
+        { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
+        { onChange: () => {}, onSelectionChange: () => {} },
+      );
+      surface.buffer!.setDoc(SOURCE);
+      mounted.push({ surface, changes: [], selections: { count: 0 }, parent: at });
+      return surface;
+    };
+  }
+
+  it("una superficie nuova parte dall'ultimo livello e dall'ultima griglia, senza aspettare la lettura", async () => {
+    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    mountFresh(parent);
+    expect(tools(parent), "prima della lettura").not.toContain("highlighter");
+    await settle();
+    expect(tools(parent)).toContain("highlighter");
+    key(parent, { key: "#" });
+    expect(gridShown(parent)).toBe(true);
+
+    const other = document.createElement("div");
+    document.body.append(other);
+    try {
+      mountFresh(other);
+      expect(tools(other), "subito").toContain("highlighter");
+      expect(gridShown(other), "subito").toBe(true);
+    } finally {
+      other.remove();
+    }
+  });
+
+  it("segue il livello finché vive, e smette quando si distrugge", async () => {
+    const host = createFakeHost({ settings: [level("essential")] });
+    const mountFresh = await fresh(host);
+    const surface = mountFresh(parent);
+    await settle();
+    expect(tools(parent)).not.toContain("highlighter");
+
+    await host.module.api.setSetting("draw.level", "standard");
+    await settle();
+    expect(tools(parent)).toContain("highlighter");
+    expect(reads(host)).toBe(2);
+
+    surface.destroy();
+    mounted = [];
+    await host.module.api.setSetting("draw.level", "essential");
+    await settle();
+    expect(reads(host), "una superficie distrutta non rilegge").toBe(2);
   });
 });

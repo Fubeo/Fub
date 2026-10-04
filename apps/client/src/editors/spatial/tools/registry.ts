@@ -47,9 +47,19 @@ export const TOOLS: readonly ToolSpec[] = [
 /// apre per disegnare.
 export const DEFAULT_TOOL: ToolId = "pen";
 
+/// Vero se `value` è il nome di un livello.
+export function isLevel(value: unknown): value is Level {
+  return typeof value === "string" && (LEVEL_ORDER as readonly string[]).includes(value);
+}
+
 /// Vero se ciò che chiede il livello `minimum` c'è al livello `level`.
 export function reaches(level: Level, minimum: Level): boolean {
   return LEVEL_ORDER.indexOf(minimum) <= LEVEL_ORDER.indexOf(level);
+}
+
+/// I livelli sopra `level`, dal più vicino.
+export function levelsAbove(level: Level): readonly Level[] {
+  return LEVEL_ORDER.slice(LEVEL_ORDER.indexOf(level) + 1);
 }
 
 /// Gli strumenti di un livello: i suoi e quelli dei livelli sotto.
