@@ -311,9 +311,9 @@ non ha segni né «Collega a una nota…», e un collegamento si toglie lo stess
 
 L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e da cambiare uno
 per uno, il contorno, le trasformazioni scritte in numeri, «Applica
-trasformazione», «Oggetto in tracciato» e lo strumento Nodi, che modifica un
-tracciato nodo per nodo, e ha una pagina sua: [Disegni, livello
-Esperto](drawing-expert.md).
+trasformazione», «Oggetto in tracciato», lo strumento Nodi, che modifica un
+tracciato nodo per nodo, e la penna di Bézier, che ne disegna uno, e ha una
+pagina sua: [Disegni, livello Esperto](drawing-expert.md).
 
 ## Da tastiera
 

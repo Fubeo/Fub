@@ -484,7 +484,24 @@ const IT = {
   "draw.keys.nodes.ends": "Il primo o l’ultimo nodo",
   "draw.keys.nodes.all": "Sceglie tutti i nodi",
   "draw.keys.nodes.deselect": "Toglie la scelta dei nodi, poi quella dell’oggetto",
-  "draw.keys.nodes.bar": "Va alla barra dei nodi"
+  "draw.keys.nodes.bar": "Va alla barra dei nodi",
+  "draw.tool.bezier": "Bézier",
+  "draw.tool.bezier.hint": "Disegna un tracciato nodo per nodo: un tocco mette uno spigolo, un trascinamento un nodo con le maniglie, e con Maiusc gli angoli vanno a passi di 15°. Tocca il primo nodo per chiudere il tracciato, l’ultimo o Invio per concluderlo; Canc toglie l’ultimo nodo.",
+  "draw.bezier.node": "Nodo {index}, {kind}: x {x}, y {y}.",
+  "draw.bezier.deleted": "Nodo {index} eliminato.",
+  "draw.bezier.step.node": "Nodo {index}",
+  "draw.bezier.step.handle": "Maniglia del nodo {index}",
+  "draw.bezier.step.delete": "Eliminazione del nodo {index}",
+  "draw.bezier.short": "Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.",
+  "draw.bezier.cursor.close": "Primo nodo, Spazio chiude il tracciato",
+  "draw.bezier.cursor.last": "Ultimo nodo, Spazio conclude il tracciato",
+  "draw.added.path": "Tracciato aggiunto.",
+  "draw.added.path.closed": "Tracciato chiuso aggiunto.",
+  "draw.action.bezier": "Tracciato",
+  "draw.keys.bezier.node": "Un nodo dove è il cursore: Spazio e di nuovo Spazio per uno spigolo, o in mezzo le frecce per tirarne le maniglie",
+  "draw.keys.bezier.angle": "Tenuto, porta il nodo o la maniglia a passi di 15°",
+  "draw.keys.bezier.finish": "Conclude il tracciato",
+  "draw.keys.bezier.delete": "Elimina l’ultimo nodo"
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -965,7 +982,24 @@ const EN: Record<DrawKey, string> = {
   "draw.keys.nodes.ends": "First or last node",
   "draw.keys.nodes.all": "Select all nodes",
   "draw.keys.nodes.deselect": "Clear the node selection, then the object selection",
-  "draw.keys.nodes.bar": "Go to the node bar"
+  "draw.keys.nodes.bar": "Go to the node bar",
+  "draw.tool.bezier": "Bézier",
+  "draw.tool.bezier.hint": "Draw a path node by node: a tap places a corner, a drag a node with handles, and with Shift the angles go in 15° steps. Tap the first node to close the path, the last one or press Enter to finish it; Delete removes the last node.",
+  "draw.bezier.node": "Node {index}, {kind}: x {x}, y {y}.",
+  "draw.bezier.deleted": "Node {index} deleted.",
+  "draw.bezier.step.node": "Node {index}",
+  "draw.bezier.step.handle": "Handle of node {index}",
+  "draw.bezier.step.delete": "Delete node {index}",
+  "draw.bezier.short": "A path needs at least two nodes in different places: there is nothing to write.",
+  "draw.bezier.cursor.close": "First node, Space closes the path",
+  "draw.bezier.cursor.last": "Last node, Space finishes the path",
+  "draw.added.path": "Path added.",
+  "draw.added.path.closed": "Closed path added.",
+  "draw.action.bezier": "Path",
+  "draw.keys.bezier.node": "A node at the cursor: Space and Space again for a corner, or the arrow keys in between to pull its handles",
+  "draw.keys.bezier.angle": "Held, moves the node or the handle in 15° steps",
+  "draw.keys.bezier.finish": "Finish the path",
+  "draw.keys.bezier.delete": "Delete the last node"
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

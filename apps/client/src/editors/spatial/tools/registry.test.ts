@@ -22,11 +22,14 @@ describe("il registro degli strumenti", () => {
     expect(reaches("essential", "standard")).toBe(false);
   });
 
-  it("aggiunge all'Esperto i nodi, accanto alla selezione, col tasto di Inkscape", () => {
-    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "nodes", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
+  it("aggiunge all'Esperto i nodi accanto alla selezione e la penna di Bézier dopo le forme, coi tasti di Inkscape", () => {
+    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "nodes", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "bezier", "text"]);
     expect(toolSpec("nodes")).toMatchObject({ level: "expert", group: "pick", shortcut: "n" });
+    expect(toolSpec("bezier")).toMatchObject({ level: "expert", group: "shape", shortcut: "b" });
     expect(toolForKey(toolsFor("standard"), "n")).toBeNull();
+    expect(toolForKey(toolsFor("standard"), "b")).toBeNull();
     expect(toolForKey(toolsFor("expert"), "N")?.id).toBe("nodes");
+    expect(toolForKey(toolsFor("expert"), "B")?.id).toBe("bezier");
   });
 
   it("riconosce i nomi dei livelli, e sa quali stanno sopra", () => {

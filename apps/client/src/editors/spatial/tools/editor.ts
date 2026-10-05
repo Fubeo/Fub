@@ -186,6 +186,7 @@ import {
   type NodeKind,
   type Subpath,
 } from "./nodes";
+import { collapsed, penKind, penNode, penPath, type PenNode } from "./bezier";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
@@ -500,6 +501,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-apply-transform": ["M2 17L6 5h9l-4 12z", "M15 16.5l2.5 2.5L22 14"],
   "draw-to-path": ["M5 19C5 11 11 5 19 5", "M3 17h4v4H3z", "M17 3h4v4h-4z"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
+  "draw-bezier": ["M12 21L7 12l3-8h4l3 8z", "M12 21v-7.5", "M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-node-add": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M12 3v6", "M9 6h6"],
   "draw-node-delete": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M9 6h6"],
   "draw-node-corner": ["M3 20l9-13 9 13", "M12 4l3 3-3 3-3-3z"],
@@ -526,7 +528,7 @@ interface LinkMark {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | NodesGesture | EraseGesture | TextGesture | RefusedGesture;
+type Gesture = InkGesture | ShapeGesture | SelectGesture | NodesGesture | BezierGesture | EraseGesture | TextGesture | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -605,6 +607,22 @@ interface NodesGesture extends GestureBase {
   draft: readonly Subpath[] | null;
 }
 
+/// Un gesto della penna di Bézier: aggiunge un nodo, chiude il tracciato sul
+/// primo nodo, o prende l'ultimo, che un tocco conclude e un trascinamento
+/// ne cambia la maniglia d'uscita.
+interface BezierGesture extends GestureBase {
+  readonly kind: "bezier";
+  readonly to: Destination;
+  mode: "add" | "close" | "last" | null;
+  /// Dove è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// Il nodo che il gesto mette o prende.
+  at: Point | null;
+  /// Oltre la soglia del trascinamento.
+  dragging: boolean;
+}
+
 interface EraseGesture extends GestureBase {
   readonly kind: "erase";
   last: Point | null;
@@ -630,6 +648,23 @@ interface Typing {
   readonly at: Point;
   /// Dalle coordinate del testo a quelle della scena.
   readonly matrix: Matrix;
+}
+
+/// Un passo della penna di Bézier: i nodi di prima, o di dopo per un passo
+/// annullato, e che cosa ha fatto a quale nodo, per dirlo.
+interface DraftStep {
+  readonly nodes: readonly PenNode[];
+  readonly label: DrawKey;
+  readonly index: number;
+}
+
+/// Il tracciato della penna di Bézier, finché non si conclude.
+interface Drafting {
+  nodes: readonly PenNode[];
+  readonly done: DraftStep[];
+  readonly undone: DraftStep[];
+  /// Il livello dell'ultimo gesto, per l'anteprima fra un gesto e l'altro.
+  to: Destination;
 }
 
 /// Il tracciato di cui lo strumento Nodi modifica i nodi: uno solo, dentro
@@ -876,6 +911,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   } | null = null;
   /// L'ultimo tocco su un segmento, per il doppio tocco che aggiunge un nodo.
   let lastSegmentTap: { readonly sub: number; readonly link: number; readonly time: number; readonly at: Point } | null = null;
+  /// Il tracciato che la penna di Bézier sta disegnando: i nodi nella scena,
+  /// i passi fatti e quelli annullati, che Annulla e Ripeti percorrono, gli
+  /// id e il livello dell'anteprima. Si scrive quando si conclude, sul
+  /// livello di allora.
+  let drafting: Drafting | null = null;
+  /// Il puntatore sopra il foglio, senza premere, o il cursore mentre la
+  /// penna di Bézier disegna: lì va il segmento che verrebbe.
+  let hover: { readonly at: Point; readonly pointer: InkPointerType } | null = null;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -1565,6 +1608,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       });
     }
     if (editing !== null) handles.push(...nodeHandles(editing));
+    if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
     const lasso = current?.kind === "select" && current.mode === "marquee"
       ? current
       : current?.kind === "nodes" && current.dragging && current.grab?.kind === "marquee" ? current : null;
@@ -2036,8 +2080,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       control.disabled = !canEdit;
     });
     showWidthLabels();
-    undoButton.disabled = !canEdit || !history.canUndo;
-    redoButton.disabled = !canEdit || !history.canRedo;
+    undoButton.disabled = !canEdit || !undoable();
+    redoButton.disabled = !canEdit || !redoable();
     deleteButton.disabled = !canEdit || selection.length === 0;
     propertiesButton.disabled = !canEdit;
     pageButton.hidden = !reaches(level, "standard");
@@ -2129,6 +2173,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (!editable()) return;
     finishText();
     cancelGesture();
+    if (drafting !== null && drafting.done.length > 0) {
+      replayBezier(drafting, "undo");
+      return;
+    }
+    // Un tracciato vuoto, senza passi da annullare, lascia il posto al
+    // disegno, se il disegno ne ha uno.
+    if (!history.canUndo) return;
+    dropBezier();
     replay(history.undo(engine), "undo");
   }
 
@@ -2136,6 +2188,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (!editable()) return;
     finishText();
     cancelGesture();
+    if (drafting !== null && drafting.undone.length > 0) {
+      replayBezier(drafting, "redo");
+      return;
+    }
+    if (drawing() !== null || !history.canRedo) return;
+    dropBezier();
     replay(history.redo(engine), "redo");
   }
 
@@ -2237,7 +2295,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Un documento che non si scrive più non riceve il testo in corso.
     if (readOnly) finishText(false);
     locked = readOnly;
-    if (locked) cancelGesture();
+    if (locked) {
+      cancelGesture();
+      dropBezier();
+    }
     syncControls();
   }
 
@@ -2246,6 +2307,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function setLevel(next: Level): void {
     if (next === level) return;
     finishText();
+    // La penna di Bézier c'è solo all'Esperto: il suo tracciato si conclude
+    // prima che il livello cambi.
+    if (!reaches(next, "expert")) {
+      cancelGesture();
+      finishBezier(false, true);
+    }
     level = next;
     tools = toolsFor(level);
     if (!tools.some((spec) => spec.id === tool)) {
@@ -2265,16 +2332,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function setTool(id: ToolId): void {
     if (!tools.some((spec) => spec.id === id)) return;
+    // Cambiare strumento conclude il tracciato della penna di Bézier, come in
+    // Inkscape: ciò che ne dice la fine precede il nome dello strumento.
+    let finished = "";
     if (id !== tool) {
       finishText();
       cancelGesture();
+      const before = live.textContent;
+      finishBezier(false, true);
+      if (live.textContent !== before) finished = (live.textContent ?? "").trim();
     }
     tool = id;
     syncControls();
     const named = t("draw.announce.tool", { tool: t(toolSpec(id).label) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi.
     const target = id === "nodes" ? targetText() : "";
-    announce(target === "" ? named : `${named} ${target}`);
+    announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
   function setColor(value: string): void {
@@ -2286,8 +2359,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     style().color = code;
     syncControls();
-    // Un testo nuovo cambia colore mentre lo si scrive.
+    // Un testo nuovo cambia colore mentre lo si scrive, e così il tracciato
+    // della penna.
     placeText();
+    if (drafting !== null) showBezier();
   }
 
   function setWidth(value: number): void {
@@ -2295,6 +2370,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     style().width = value;
     syncControls();
     placeText();
+    if (drafting !== null) showBezier();
   }
 
   /// «Altro colore…»: il codice, o il selettore del sistema. Un colore della
@@ -2384,6 +2460,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (to === null) return { ...base, kind: "refused" };
         const { color, width } = style();
         return { ...base, kind: "shape", tool, color, width, to, ids, from: null, end: null };
+      }
+      case "bezier": {
+        // Il livello si guarda a ogni nodo: se non riceve più, lo si dice e
+        // il nodo non entra.
+        const to = target(newIds());
+        if (to === null) return { ...base, kind: "refused" };
+        return { ...base, kind: "bezier", to, mode: null, from: null, end: null, at: null, dragging: false };
       }
       case "eraser":
         return { ...base, kind: "erase", last: null, marked: new Map() };
@@ -2822,6 +2905,245 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (commit(toolSpec(g.tool).label, asGesture(ops)) !== null) announce(`${t(ADDED[g.tool])} ${objects()}`);
   };
 
+  // --- La penna di Bézier ------------------------------------------------------
+  //
+  // Il tracciato si disegna in più gesti, e vive fra un gesto e l'altro: un
+  // tocco mette uno spigolo, un trascinamento un nodo simmetrico, un tocco
+  // sul primo nodo chiude il tracciato, uno sull'ultimo lo conclude. Si
+  // scrive quando si conclude, in un passo solo; fino ad allora Annulla e
+  // Ripeti percorrono i suoi passi.
+
+  /// Il tracciato della penna, se ha almeno un nodo.
+  const drawing = (): Drafting | null => (drafting !== null && drafting.nodes.length > 0 ? drafting : null);
+
+  /// Vero se `p` prende il nodo in `node` col puntatore `pointer`.
+  const onNode = (p: Point, node: Point, pointer: InkPointerType): boolean =>
+    Math.hypot(p[0] - node[0], p[1] - node[1]) * camera.scale <= NODE_PX[pointer];
+
+  /// Che cosa prende un tocco in `p`: il primo nodo, che chiude il
+  /// tracciato, l'ultimo, o il vuoto, dove va un nodo nuovo. Fra il primo e
+  /// l'ultimo, vicini, vince il più vicino; a pari distanza l'ultimo, così
+  /// un nodo solo, che è l'uno e l'altro, non si chiude.
+  const bezierTarget = (p: Point, pointer: InkPointerType): "add" | "close" | "last" => {
+    const nodes = drafting?.nodes ?? [];
+    const last = nodes[nodes.length - 1];
+    if (last === undefined) return "add";
+    const first = nodes[0]!;
+    const closes = onNode(p, first.at, pointer);
+    const ends = onNode(p, last.at, pointer);
+    if (closes && ends) return Math.hypot(p[0] - first.at[0], p[1] - first.at[1]) < Math.hypot(p[0] - last.at[0], p[1] - last.at[1]) ? "close" : "last";
+    return closes ? "close" : ends ? "last" : "add";
+  };
+
+  /// Dove va un nodo nuovo puntato in `p`: sull'incrocio della griglia, e con
+  /// Maiusc a passi di 15° dall'ultimo nodo, come una linea.
+  const bezierPoint = (p: Point): Point => {
+    const point = snapped(p);
+    const nodes = drafting?.nodes ?? [];
+    const last = nodes[nodes.length - 1];
+    return shift && last !== undefined ? constrainEnd("line", last.at, point) : point;
+  };
+
+  /// La maniglia che il trascinamento di `g` tira dal suo nodo: sulla
+  /// griglia, e con Maiusc a passi di 15°. `null` per un tocco, o se torna
+  /// sul nodo.
+  const bezierHandle = (g: BezierGesture): Point | null => {
+    if (!g.dragging || g.at === null || g.end === null) return null;
+    const point = snapped(g.end);
+    const handle = shift ? constrainEnd("line", g.at, point) : point;
+    return Math.hypot(handle[0] - g.at[0], handle[1] - g.at[1]) * camera.scale <= DRAG_PX[g.pointer] ? null : handle;
+  };
+
+  /// I nodi come li lascia il gesto `g`, e se il tracciato si chiude.
+  const bezierAfter = (g: BezierGesture): { readonly nodes: readonly PenNode[]; readonly closed: boolean } => {
+    const nodes = (drafting?.nodes ?? []).slice();
+    const handle = bezierHandle(g);
+    if (g.mode === "add") nodes.push(penNode(g.at!, handle));
+    // Trascinato, il primo nodo diventa simmetrico: il tracciato vi passa
+    // senza spigolo. L'ultimo cambia solo la maniglia verso il nodo dopo.
+    else if (g.mode === "close" && handle !== null) nodes[0] = penNode(nodes[0]!.at, handle);
+    else if (g.mode === "last" && g.dragging) nodes[nodes.length - 1] = { ...nodes[nodes.length - 1]!, out: handle };
+    return { nodes, closed: g.mode === "close" };
+  };
+
+  /// Il tracciato dei nodi `nodes` come lo scrive la penna, nelle coordinate
+  /// del livello `to`, col colore e lo spessore di adesso. `null` se si
+  /// scriverebbe in un punto.
+  const bezierElem = (id: string, nodes: readonly PenNode[], closed: boolean, to: Destination): Elem | null => {
+    const sub = penPath(nodes, closed, to.inverse);
+    if (collapsed(sub)) return null;
+    const { color, width } = style();
+    return {
+      tag: "path",
+      attrs: {
+        id,
+        d: pathData(writeNodes([sub])),
+        fill: "none",
+        stroke: color,
+        "stroke-width": formatNumber(width, 2),
+        // Un tracciato chiuso non ha capi.
+        ...(closed ? {} : { "stroke-linecap": "round" }),
+        "stroke-linejoin": "round",
+      },
+    };
+  };
+
+  /// Sopra il tracciato della penna: il segmento che verrebbe dove punta il
+  /// puntatore, le maniglie del nodo che il gesto tiene o dell'ultimo, e i
+  /// nodi, pieno quello che il gesto tiene o che un tocco prenderebbe.
+  const bezierHandles = (): OverlayHandle[] => {
+    const g = current?.kind === "bezier" && current.mode !== null ? current : null;
+    const nodes = g === null ? drafting?.nodes ?? [] : bezierAfter(g).nodes;
+    const last = nodes[nodes.length - 1];
+    if (last === undefined) return [];
+    const out: OverlayHandle[] = [];
+    const aim = g === null && hover !== null ? bezierTarget(hover.at, hover.pointer) : null;
+    if (aim === "add" || aim === "close") {
+      const next = aim === "close" ? nodes[0]! : penNode(bezierPoint(hover!.at), null);
+      const identity: Matrix = [1, 0, 0, 1, 0, 0];
+      out.push({ kind: "outline", segments: writeNodes([penPath([last, next], false, identity)]), matrix: identity });
+    }
+    const held = g?.mode === "close" ? 0 : nodes.length - 1;
+    const node = nodes[held]!;
+    for (const handle of [node.in, node.out]) if (handle !== null) out.push({ kind: "control", x: handle[0], y: handle[1], node: node.at });
+    const hot = g !== null ? held : aim === "close" ? 0 : aim === "last" ? nodes.length - 1 : -1;
+    nodes.forEach((each, i) => out.push({ kind: "node", x: each.at[0], y: each.at[1], shape: NODE_SHAPES[penKind(each)], selected: i === hot }));
+    return out;
+  };
+
+  /// Il tracciato della penna come si scriverà, col gesto che lo cambia, e
+  /// sopra i suoi nodi.
+  function showBezier(): void {
+    const g = current?.kind === "bezier" && current.mode !== null ? current : null;
+    const to = g?.to ?? drafting?.to ?? null;
+    const { nodes, closed } = g === null ? { nodes: drafting?.nodes ?? [], closed: false } : bezierAfter(g);
+    const elem = to === null ? null : bezierElem("preview", nodes, closed, to);
+    showShape(elem, to?.matrix ?? [1, 0, 0, 1, 0, 0]);
+    showHandles();
+  }
+
+  /// Il nodo `at` del tracciato della penna a parole: quale, di che tipo e
+  /// dove.
+  const bezierNodeText = (nodes: readonly PenNode[], at: number): string => {
+    const node = nodes[at]!;
+    return t("draw.bezier.node", { index: at + 1, kind: t(KIND_NAMES[penKind(node)]), x: numberText(node.at[0]), y: numberText(node.at[1]) });
+  };
+
+  /// Il primo punto di un gesto della penna: che cosa prende, e il nodo.
+  const bezierStart = (g: BezierGesture, p: Point): void => {
+    g.from = p;
+    g.mode = bezierTarget(p, g.pointer);
+    const nodes = drafting?.nodes ?? [];
+    g.at = g.mode === "add" ? bezierPoint(p) : g.mode === "close" ? nodes[0]!.at : nodes[nodes.length - 1]!.at;
+    hover = null;
+  };
+
+  const bezierUpdate = (g: BezierGesture): void => {
+    if (g.from === null || g.end === null) return;
+    if (!g.dragging && Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale > DRAG_PX[g.pointer]) g.dragging = true;
+    showBezier();
+  };
+
+  /// Un passo del tracciato della penna: i nodi diventano `nodes`, e
+  /// Ripeti non ha più niente da rimettere.
+  const bezierStep = (draft: Drafting, nodes: readonly PenNode[], label: DrawKey, index: number): void => {
+    draft.done.push({ nodes: draft.nodes, label, index });
+    draft.undone.length = 0;
+    draft.nodes = nodes;
+  };
+
+  /// La fine di un gesto della penna: il nodo entra nel tracciato, o il
+  /// tracciato si chiude o si conclude.
+  const bezierEnd = (g: BezierGesture): void => {
+    current = null;
+    if (g.mode === null) return;
+    if (g.mode === "last" && !g.dragging) {
+      finishBezier(false);
+      return;
+    }
+    const { nodes, closed } = bezierAfter(g);
+    if (closed) {
+      drafting!.nodes = nodes;
+      finishBezier(true);
+      return;
+    }
+    const draft = drafting ?? { nodes: [], done: [], undone: [], to: g.to };
+    bezierStep(draft, nodes, g.mode === "add" ? "draw.bezier.step.node" : "draw.bezier.step.handle", nodes.length);
+    draft.to = g.to;
+    drafting = draft;
+    showBezier();
+    syncControls();
+    announce(bezierNodeText(nodes, nodes.length - 1));
+  };
+
+  /// Il tracciato della penna non c'è più, né la sua anteprima. `false` se
+  /// non c'era.
+  function dropBezier(): boolean {
+    if (drafting === null) return false;
+    drafting = null;
+    hover = null;
+    showShape(null, [1, 0, 0, 1, 0, 0]);
+    showHandles();
+    syncControls();
+    return true;
+  }
+
+  /// Il tracciato della penna entra nel disegno, sul livello di adesso, in
+  /// un passo solo che si annulla. Un nodo solo non fa un tracciato. Se il
+  /// livello non riceve, lo si dice e il tracciato resta, da concludere
+  /// quando riceverà; `leaving`, perché lo strumento cambia, lo butta.
+  function finishBezier(closed: boolean, leaving = false): void {
+    const draft = drawing();
+    if (draft === null || draft.nodes.length < 2) {
+      dropBezier();
+      if (draft !== null) announce(t("draw.bezier.short"));
+      return;
+    }
+    // Il livello di adesso: mentre il tracciato cresceva, il disegno può
+    // essere cambiato.
+    const ids = newIds();
+    const to = target(ids);
+    if (to === null) {
+      if (leaving) dropBezier();
+      return;
+    }
+    dropBezier();
+    const elem = bezierElem(ids.next("object"), draft.nodes, closed, to);
+    if (elem === null) {
+      announce(t("draw.bezier.short"));
+      return;
+    }
+    const ops: Op[] = [...to.prelude, addOp(to, elem)];
+    const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    if (commit("draw.action.bezier", asGesture(ops)) !== null) announce(`${t(closed ? "draw.added.path.closed" : "draw.added.path")} ${objects()}`);
+  }
+
+  /// Canc con la penna: l'ultimo nodo se ne va, in un passo che si annulla.
+  const deleteBezierNode = (draft: Drafting): void => {
+    const index = draft.nodes.length;
+    bezierStep(draft, draft.nodes.slice(0, -1), "draw.bezier.step.delete", index);
+    showBezier();
+    syncControls();
+    announce(t("draw.bezier.deleted", { index }));
+  };
+
+  /// Annulla e Ripeti valgono per il tracciato della penna finché ha passi
+  /// da percorrere, poi per il disegno.
+  const undoable = (): boolean => (drafting !== null && drafting.done.length > 0) || history.canUndo;
+  const redoable = (): boolean => (drafting !== null && drafting.undone.length > 0) || (drawing() === null && history.canRedo);
+
+  /// Un passo del tracciato della penna, annullato o ripetuto. Senza nodi il
+  /// tracciato resta, vuoto, finché Ripeti può rimetterli.
+  const replayBezier = (draft: Drafting, origin: "undo" | "redo"): void => {
+    const step = (origin === "undo" ? draft.done : draft.undone).pop()!;
+    (origin === "undo" ? draft.undone : draft.done).push({ ...step, nodes: draft.nodes });
+    draft.nodes = step.nodes;
+    showBezier();
+    syncControls();
+    announce(t(origin === "undo" ? "draw.undone" : "draw.redone", { action: t(step.label, { index: step.index }) }));
+  };
+
   const finishErase = (g: EraseGesture): void => {
     const units = [...g.marked.values()];
     if (units.length === 0) {
@@ -2873,9 +3195,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     (event) => {
       readModifiers(event);
       followPointer(event);
+      // Sopra il foglio, la penna di Bézier mostra il segmento che verrebbe.
+      if (drawing() !== null && current === null && pressed === null) {
+        const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+        const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
+        hover = { at: [point.x, point.y], pointer };
+        showBezier();
+      }
     },
     { capture: true },
   );
+  life.listen(surface, "pointerleave", () => {
+    if (hover === null) return;
+    hover = null;
+    showBezier();
+  });
 
   // I gestori della pipeline, che riceve anche il cursore del foglio.
   const handlers: PenInputOptions = {
@@ -2916,6 +3250,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           if (g.from === null) nodesStart(g, toPoint(samples[0]!));
           g.end = toPoint(samples[samples.length - 1]!);
           nodesUpdate(g);
+          break;
+        case "bezier":
+          if (g.from === null) bezierStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          bezierUpdate(g);
           break;
         case "erase":
           for (const sample of samples) eraseAlong(g, toPoint(sample));
@@ -2959,6 +3298,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "nodes":
           nodesEnd(g, stroke.timeStamp);
           return;
+        case "bezier":
+          bezierEnd(g);
+          return;
         case "erase":
           current = null;
           finishErase(g);
@@ -2983,6 +3325,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         setNodes(g.nodes);
       }
       clearPreviews();
+      // Il tracciato della penna resta com'era prima del gesto.
+      if (g.kind === "bezier") showBezier();
     },
     ...(options.touch === undefined ? {} : { touch: options.touch }),
   };
@@ -3260,10 +3604,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setCamera({ ...camera, tx: camera.tx + dx, ty: camera.ty + dy });
   };
 
-  /// Dove è il cursore, e che cosa c'è sotto.
+  /// Dove è il cursore, e che cosa c'è sotto: con la penna di Bézier, il
+  /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato.
   const announceCursor = (): void => {
     const p = cursorPoint();
     const at = t("draw.cursor.at", { x: numberText(p[0]), y: numberText(p[1]) });
+    const aim = pressed === null && drawing() !== null ? bezierTarget(p, "mouse") : "add";
+    if (aim !== "add") {
+      announce(`${at}: ${t(aim === "close" ? "draw.bezier.cursor.close" : "draw.bezier.cursor.last")}`);
+      return;
+    }
     const hit = pressed === null ? currentIndex().at(p, HIT_PX.mouse / camera.scale) : null;
     announce(hit === null ? at : `${at}: ${labelOf(hit)}`);
   };
@@ -3293,6 +3643,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     keepInView(next);
     showCursor();
     trace(next);
+    if (pressed === null && drawing() !== null) {
+      hover = { at: next, pointer: "mouse" };
+      showBezier();
+    }
     announceCursor();
   };
 
@@ -4469,7 +4823,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// ridimensionano; senza, o mentre la tastiera preme, muovono il cursore.
   /// Con l'aggancio vanno di riga in riga della griglia, cinque con Maiusc.
   /// Con lo strumento Nodi spostano i nodi scelti, e senza il cursore: mai
-  /// l'oggetto.
+  /// l'oggetto. Con la penna di Bézier muovono sempre il cursore, che mette
+  /// i nodi.
   const arrows = (event: KeyboardEvent): boolean => {
     const direction = ARROWS[event.key];
     if (direction === undefined) return false;
@@ -4480,7 +4835,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       nudgeNodes(x, y, fine, event.shiftKey);
       return true;
     }
-    if (tool !== "nodes" && pressed === null && selection.length > 0 && editable()) {
+    if (tool !== "nodes" && tool !== "bezier" && pressed === null && selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       if (gridOn()) {
         if (fine) resizeOnGrid(x, y, lines);
@@ -4760,6 +5115,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti della penna di Bézier, dal livello Esperto.
+  const bezierKeys = (at: Level): KeyGroup[] =>
+    reaches(at, "expert")
+      ? [
+          {
+            title: t("draw.tool.bezier"),
+            rows: [
+              ["Space", t("draw.keys.bezier.node")],
+              ["Shift", t("draw.keys.bezier.angle")],
+              ["Enter Escape", t("draw.keys.bezier.finish")],
+              ["Delete", t("draw.keys.bezier.delete")],
+            ],
+          },
+        ]
+      : [];
+
   /// L'elenco dei tasti del livello `at`, nei gruppi in cui si usano.
   const keyGroups = (at: Level): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: toolsFor(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
@@ -4787,6 +5158,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     ...arrangeKeys(at),
     ...nodeToolKeys(at),
+    ...bezierKeys(at),
     ...textKeys(at),
     ...gridKeys(at),
     ...attributeKeys(at),
@@ -5062,6 +5434,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (current?.kind === "shape") drawShape(current);
     else if (current?.kind === "select" && current.mode === "move") selectUpdate(current);
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
+    else if (current?.kind === "bezier") bezierUpdate(current);
+    else if (hover !== null && drawing() !== null) showBezier();
   };
 
   life.listen(root, "keyup", onModifiers);
@@ -5168,12 +5542,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       editSelectedText();
     } else if (onSurface && event.key === "Enter") {
       if (pressed !== null) release();
-      else void properties();
+      else if (drawing() !== null) {
+        // A metà gesto il tracciato aspetta che il gesto finisca, come per
+        // Canc.
+        if (current === null) finishBezier(false);
+      } else void properties();
     } else if (event.key === "?") {
       void keys();
     } else if ((event.key === "Delete" || event.key === "Backspace") && nodeKeysOn()) {
       // Con lo strumento Nodi Canc elimina i nodi, mai l'oggetto.
       deleteSelectedNodes();
+    } else if ((event.key === "Delete" || event.key === "Backspace") && drawing() !== null) {
+      // Con la penna di Bézier, l'ultimo nodo del tracciato.
+      if (current !== null) return;
+      deleteBezierNode(drawing()!);
     } else if (event.key === "Delete" || event.key === "Backspace") {
       if (selection.length === 0) return;
       deleteSelection();
@@ -5183,7 +5565,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       runNodeCommand(NODE_COMMANDS[event.key.toLowerCase()]!);
     } else if (event.key === "Escape") {
       if (current !== null) cancelGesture();
-      else if (tool === "nodes" && nodeSelection.size > 0) {
+      else if (drawing() !== null) {
+        // Esc conclude il tracciato della penna, come conclude un testo: ciò
+        // che si è disegnato non si perde, e Annulla lo toglie in un passo.
+        finishBezier(false);
+      } else if (tool === "nodes" && nodeSelection.size > 0) {
         setNodes([]);
         announceNodes();
       } else if (selection.length > 0) {
@@ -5245,10 +5631,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return selection;
     },
     get canUndo() {
-      return history.canUndo;
+      return undoable();
     },
     get canRedo() {
-      return history.canRedo;
+      return redoable();
     },
     get grid() {
       return grid;
@@ -5272,8 +5658,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (disposed) return;
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
       cancelGesture();
-      // Il testo in corso era del documento di prima.
+      // Il testo in corso era del documento di prima, e così il tracciato
+      // della penna.
       finishText(false);
+      dropBezier();
       engine = next;
       loads++;
       history.clear();
