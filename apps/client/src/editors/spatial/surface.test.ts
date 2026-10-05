@@ -10,7 +10,10 @@ import type { EditorChange } from "../core/text-operation";
 import { doc, HEAD } from "./scene/test-support";
 import { VECTOR_MODES } from "./modes";
 import { clearHistory, recentNotices } from "../../ui/notify";
-import { linkHref, mountVectorSurface, type VectorSurfaceOptions } from "./surface";
+import { imageInfo, svgSize } from "../media/image-view";
+import { IMAGE_PLACEHOLDER } from "./painter/paint";
+import { READ_IMAGE_BYTES } from "./read-images";
+import { linkHref, mountVectorSurface, type VectorImages, type VectorSurfaceOptions } from "./surface";
 import { LAYER } from "./tools/test-support";
 
 // Il livello e la griglia la superficie li chiede all'host: qui risponde il
@@ -48,7 +51,7 @@ let mounted: { surface: EditorSurface; changes: EditorChange[]; selections: { co
 function mount(
   text: string | null = SOURCE,
   at: HTMLElement = parent,
-  shell: Pick<VectorSurfaceOptions, "onOpenPath" | "onPickLink"> = {},
+  shell: Pick<VectorSurfaceOptions, "onOpenPath" | "onPickLink" | "images"> = {},
 ): { surface: EditorSurface; changes: EditorChange[]; selections: { count: number } } {
   const changes: EditorChange[] = [];
   const selections = { count: 0 };
@@ -527,52 +530,53 @@ describe("montare e smontare", () => {
   });
 });
 
-describe("il livello e la griglia", () => {
-  /// Il livello dichiarato da `fub.draw`, col valore `value`.
-  const level = (value: string): SettingEntry => ({
-    spec: {
-      key: "draw.level",
-      label: "Livello d'interfaccia",
-      description: "",
-      group: "Disegni",
-      scope: "vault",
-      kind: {
-        kind: "choice",
-        default: "essential",
-        options: [
-          { value: "essential", label: "Essenziale" },
-          { value: "standard", label: "Standard" },
-        ],
-      },
-      program_writable: false,
+/// Il livello dichiarato da `fub.draw`, col valore `value`.
+const level = (value: string): SettingEntry => ({
+  spec: {
+    key: "draw.level",
+    label: "Livello d'interfaccia",
+    description: "",
+    group: "Disegni",
+    scope: "vault",
+    kind: {
+      kind: "choice",
+      default: "essential",
+      options: [
+        { value: "essential", label: "Essenziale" },
+        { value: "standard", label: "Standard" },
+      ],
     },
-    value,
-    source: "vault",
-  });
+    program_writable: false,
+  },
+  value,
+  source: "vault",
+});
+
+/// Moduli nuovi, perché il livello e la griglia letti restano in memoria,
+/// e il router del kernel acceso: è lui che porta `setting_changed`.
+async function fresh(host: FakeHost) {
+  box.host = host;
+  vi.resetModules();
+  const { mountVectorSurface: mountFresh } = await import("./surface");
+  await (await import("../../state/kernel")).startKernelRouter();
+  return (at: HTMLElement, shell: Pick<VectorSurfaceOptions, "images"> = {}): EditorSurface => {
+    const surface = mountFresh(
+      { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
+      { onChange: () => {}, onSelectionChange: () => {}, ...shell },
+    );
+    surface.buffer!.setDoc(SOURCE);
+    mounted.push({ surface, changes: [], selections: { count: 0 }, parent: at });
+    return surface;
+  };
+}
+
+describe("il livello e la griglia", () => {
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
   const tools = (at: HTMLElement): string[] =>
     [...at.querySelectorAll<HTMLElement>(".draw-tool")].filter((control) => control.closest("[hidden]") === null).map((control) => control.dataset.tool!);
   const gridShown = (at: HTMLElement): boolean => at.querySelector<HTMLElement>(".draw-grid")!.style.display !== "none";
   const reads = (host: FakeHost): number =>
     host.atGate("queryIndex").filter((call) => (call.args[0] as { kind: string }).kind === "settings").length;
-
-  /// Moduli nuovi, perché il livello e la griglia letti restano in memoria,
-  /// e il router del kernel acceso: è lui che porta `setting_changed`.
-  async function fresh(host: FakeHost) {
-    box.host = host;
-    vi.resetModules();
-    const { mountVectorSurface: mountFresh } = await import("./surface");
-    await (await import("../../state/kernel")).startKernelRouter();
-    return (at: HTMLElement): EditorSurface => {
-      const surface = mountFresh(
-        { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
-        { onChange: () => {}, onSelectionChange: () => {} },
-      );
-      surface.buffer!.setDoc(SOURCE);
-      mounted.push({ surface, changes: [], selections: { count: 0 }, parent: at });
-      return surface;
-    };
-  }
 
   it("una superficie nuova parte dall'ultimo livello e dall'ultima griglia, senza aspettare la lettura", async () => {
     const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
@@ -611,5 +615,153 @@ describe("il livello e la griglia", () => {
     await host.module.api.setSetting("draw.level", "essential");
     await settle();
     expect(reads(host), "una superficie distrutta non rilegge").toBe(2);
+  });
+});
+
+describe("le immagini del vault", () => {
+  const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47]);
+  const PNG_URI = "data:image/png;base64,iVBORw==";
+  const image = (id: string, href: string): string => `<image id="${id}" x="0" y="0" width="10" height="10" href="${href}"/>`;
+  const PICTURES = doc(
+    `<title>Casa</title>${LAYER}${image("oi1i1i1i1", "foto.png")}${image("oi2i2i2i2", "manca.png")}${image("oi3i3i3i3", "https://example.org/a.png")}</g>`,
+  );
+  /// Le letture finiscono: la shell, poi i byte in data URI.
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  /// La shell: apre e legge i file di `files`, e tiene il conto di che cosa
+  /// legge e con quale tetto. Il tetto lo lascia a chi la chiama.
+  function shell(files: Record<string, Blob>): VectorImages & { reads: string[]; limits: (number | undefined)[] } {
+    const reads: string[] = [];
+    const limits: (number | undefined)[] = [];
+    return {
+      reads,
+      limits,
+      url: async (path) => `blob:vault/${path}`,
+      read: async (path, limit) => {
+        reads.push(path);
+        limits.push(limit);
+        return files[path] ?? null;
+      },
+    };
+  }
+
+  /// Il browser misura ogni immagine 40 × 20: happy-dom non sa farlo.
+  function measure(): void {
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 40, height: 20, close: () => {} }));
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  /// Il testo dell'immagine che la Lettura mostra per ultima.
+  const lastShown = ({ mock: { calls } }: { mock: { calls: unknown[][] } }): Promise<string> => (calls[calls.length - 1]![0] as Blob).text();
+  const info = (): string => parent.querySelector(".vector-read .zoom-info")!.textContent ?? "";
+
+  it("il foglio le mostra con l'URL che apre la shell", async () => {
+    mount(PICTURES, parent, { images: shell({}) });
+    await settle();
+    const hrefs = [...parent.querySelectorAll(".draw-surface image[data-scene-id]")].map((element) => element.getAttribute("href"));
+    expect(hrefs).toEqual(["blob:vault/foto.png", "blob:vault/manca.png", IMAGE_PLACEHOLDER]);
+  });
+
+  it("in Lettura entrano coi loro byte, le altre restano segnaposti, e il peso detto è quello del file", async () => {
+    const created = vi.spyOn(URL, "createObjectURL");
+    const images = shell({ "foto.png": new Blob([PNG], { type: "image/png" }) });
+    const { surface } = mount(PICTURES, parent, { images });
+    surface.setMode!("read");
+    const placeholders = PICTURES.replace('href="foto.png"', `href="${IMAGE_PLACEHOLDER}"`)
+      .replace('href="manca.png"', `href="${IMAGE_PLACEHOLDER}"`)
+      .replace('href="https://example.org/a.png"', `href="${IMAGE_PLACEHOLDER}"`);
+    // Subito i segnaposti, poi le immagini lette.
+    expect(await lastShown(created)).toBe(placeholders);
+    const size = svgSize(PICTURES);
+    const before = info();
+    expect(before).toBe(imageInfo({ format: "SVG", blob: new Blob([PICTURES]) }, size?.width ?? null, size?.height ?? null));
+    await settle();
+    expect(images.reads).toEqual(["foto.png", "manca.png"]);
+    // Una alla volta, col tetto che resta.
+    expect(images.limits).toEqual([READ_IMAGE_BYTES, READ_IMAGE_BYTES - PNG.length]);
+    expect(await lastShown(created)).toBe(placeholders.replace(`href="${IMAGE_PLACEHOLDER}"`, `href="${PNG_URI}"`));
+    expect(info()).toBe(before);
+    // Il file resta com'è.
+    expect(surface.buffer!.getDoc()).toBe(PICTURES);
+  });
+
+  it("un testo nuovo mostra subito quelle già lette, e riprova soltanto quelle che non si sono aperte", async () => {
+    const created = vi.spyOn(URL, "createObjectURL");
+    const images = shell({ "foto.png": new Blob([PNG], { type: "image/png" }) });
+    const { surface } = mount(PICTURES, parent, { images });
+    surface.setMode!("read");
+    await settle();
+    const shown = created.mock.calls.length;
+    surface.buffer!.syncDoc(PICTURES.replace("Casa", "Albero"));
+    expect(created.mock.calls.length).toBe(shown + 1);
+    expect(await lastShown(created)).toContain(`href="${PNG_URI}"`);
+    await settle();
+    expect(images.reads).toEqual(["foto.png", "manca.png", "manca.png"]);
+    // Niente di nuovo, niente da mostrare di nuovo.
+    expect(created.mock.calls.length).toBe(shown + 1);
+    // Tolta dal testo, un'immagine si scorda: tornando, si rilegge.
+    surface.buffer!.syncDoc(PICTURES.replace('href="foto.png"', 'href="altra.png"'));
+    surface.buffer!.syncDoc(PICTURES);
+    await settle();
+    expect(images.reads.filter((path) => path === "foto.png")).toHaveLength(2);
+  });
+
+  it("una lettura che finisce dopo un testo nuovo non mostra il testo di prima", async () => {
+    const created = vi.spyOn(URL, "createObjectURL");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const read = async (): Promise<Blob> => {
+      await gate;
+      return new Blob([PNG], { type: "image/png" });
+    };
+    const { surface } = mount(PICTURES, parent, { images: { url: async () => null, read } });
+    surface.setMode!("read");
+    // Il testo nuovo non ha immagini da leggere.
+    surface.buffer!.syncDoc(SOURCE);
+    release();
+    await settle();
+    expect(await lastShown(created)).toBe(SOURCE);
+  });
+
+  it("oltre il tetto della Lettura un'immagine resta un segnaposto", async () => {
+    const created = vi.spyOn(URL, "createObjectURL");
+    // Un file enorme che una shell dà lo stesso: conta solo quanto dice di
+    // pesare.
+    const huge = { size: READ_IMAGE_BYTES + 1, type: "image/png" } as Blob;
+    const { surface } = mount(PICTURES, parent, { images: shell({ "foto.png": huge, "manca.png": new Blob([PNG], { type: "image/png" }) }) });
+    surface.setMode!("read");
+    await settle();
+    const text = await lastShown(created);
+    expect(text).toContain(`<image id="oi1i1i1i1" x="0" y="0" width="10" height="10" href="${IMAGE_PLACEHOLDER}"/>`);
+    expect(text).toContain(`<image id="oi2i2i2i2" x="0" y="0" width="10" height="10" href="${PNG_URI}"/>`);
+  });
+
+  it("Ctrl+I sceglie con la shell, e l'immagine si scrive relativa al disegno", async () => {
+    measure();
+    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const images = shell({ "foto/a%20b.png": new Blob([PNG], { type: "image/png" }) });
+    const surface = mountFresh(parent, { images: { ...images, pick: async () => "disegni/foto/a b.png" } });
+    await settle();
+    key(parent, { key: "i", ctrlKey: true });
+    await settle();
+    // Il percorso si scrive come un collegamento, e si legge com'è scritto.
+    expect(images.reads).toEqual(["foto/a%20b.png"]);
+    expect(surface.buffer!.getDoc()).toMatch(/<image id="[^"]+" x="[^"]+" y="[^"]+" width="40" height="20" href="foto\/a%20b\.png"\/>/);
+  });
+
+  it("una scelta che fallisce lo dice, e non aggiunge niente", async () => {
+    measure();
+    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    // Gli avvisi di questa superficie sono quelli dei moduli nuovi.
+    const notices = await import("../../ui/notify");
+    notices.clearHistory();
+    const surface = mountFresh(parent, { images: { ...shell({}), pick: () => Promise.reject(new Error("il vault non risponde")) } });
+    await settle();
+    key(parent, { key: "i", ctrlKey: true });
+    await settle();
+    expect(notices.recentNotices().map((notice) => notice.text)).toContain("il vault non risponde");
+    expect(surface.buffer!.getDoc()).toBe(SOURCE);
   });
 });

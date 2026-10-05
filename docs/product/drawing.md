@@ -37,7 +37,9 @@ sorgente». Il riquadro ricorda la modalità del disegno come quella di ogni
 altra famiglia.
 
 In Lettura il file non entra mai nel DOM della shell: è un `<img>` da un blob,
-che non esegue script e non carica risorse. Se il disegno ha un titolo,
+che non esegue script e non carica risorse; le immagini del vault vi entrano
+coi loro byte ([Disegni, immagini](drawing-images.md)). Se il disegno ha un
+titolo,
 l'immagine si chiama col titolo; altrimenti col nome del file. Sotto
 l'immagine ci sono la descrizione del disegno, che l'immagine annuncia come
 sua, i collegamenti del disegno, uno per pulsante (vedi «Collegamenti»), e
@@ -85,7 +87,10 @@ Lo Standard aggiunge:
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
   tre cifre o senza `#`, oppure il selettore del sistema accanto. Il colore
   scelto resta come campione in più, un anello che ha per nome il suo codice;
-  se sulla carta bianca sta sotto il contrasto 3:1, il nome lo dice.
+  se sulla carta bianca sta sotto il contrasto 3:1, il nome lo dice;
+- **«Immagine dal vault…»** (`Ctrl+I`), nel gruppo «Inserisci» dopo gli
+  strumenti: mette nel disegno un'immagine che è già nel vault (vedi
+  [Disegni, immagini](drawing-images.md)).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore riprende la penna, e un colore a piacere
@@ -145,8 +150,8 @@ sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
   sotto, o quello sopra. L'unico livello e uno bloccato non si eliminano, e la
   voce spenta dice perché.
 
-Penna, evidenziatore, forme, testi e immagini incollate vanno nel livello
-corrente.
+Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
+livello corrente.
 Se è nascosto o bloccato il gesto non scrive, e un annuncio dice perché e che
 cosa fare. Scegliere oggetti che stanno tutti in un livello rende corrente quel
 livello, e l'albero degli oggetti dice qual è: «Livello «Note», corrente».
@@ -355,25 +360,9 @@ ridurre.
 ## Immagini
 
 Un'immagine incollata con `Ctrl+V` o `⌘V`, o un file lasciato sul foglio,
-entra nel disegno come `<image>` con i byte nell'attributo `href`, in un data
-URI: il file resta uno solo, e si apre uguale su un altro computer. Entrano
-PNG, JPEG, GIF e WebP così come sono; un altro formato che il browser sa
-leggere diventa PNG, e un JPEG girato dall'EXIF si ricodifica diritto, perché
-non tutti i programmi che leggono un SVG seguono l'EXIF. Un SVG non entra come
-immagine.
-
-L'immagine va dove sono il puntatore o il cursore, se sono nella vista, e
-altrimenti al centro della vista. Ogni pixel misura un'unità, finché
-l'immagine non supera i quattro quinti della vista: allora si rimpicciolisce
-fino a starci. Più immagini insieme si dispongono a scala, sono un passo solo
-di annulla, e restano scelte con lo strumento selezione.
-
-Un'immagine pesa al più 5 MiB, e quelle incollate insieme se li dividono.
-Oltre, la finestra propone di ridurle: una foto senza trasparenza diventa
-JPEG, una con la trasparenza resta PNG e perde pixel, e sul foglio la misura
-resta la stessa. Una GIF ridotta perde l'animazione. Un disegno vicino al
-limite oltre il quale si aprirebbe in sola lettura riceve soltanto le immagini
-che ci stanno.
+entra nel disegno coi suoi byte; dallo Standard, «Immagine dal vault…»
+(`Ctrl+I`) ne mette una del vault per riferimento. Come entrano, quanto pesano
+e dove si vedono è in [Disegni, immagini](drawing-images.md).
 
 ## Documenti che non si modificano subito
 

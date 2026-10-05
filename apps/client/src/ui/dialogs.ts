@@ -12,7 +12,7 @@
 // sostituisce in un file.
 import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
-import { openLifetime } from "./lifetime";
+import { openLifetime, type Lifetime } from "./lifetime";
 import { enterSurface, exitSurface } from "./motion";
 
 /// Una finestra aperta: la `.modale` col suo titolo, il fuoco intrappolato
@@ -129,6 +129,10 @@ export interface PickItem<T> {
   readonly label: string;
   readonly detail?: string;
   readonly value: T;
+  /// La miniatura della voce, per chi sceglie un'immagine: il suo URL, aperto
+  /// nella vita della finestra, o `null` se non si apre. Si chiede la prima
+  /// volta che la voce si vede.
+  readonly thumbnail?: (life: Lifetime) => Promise<string | null>;
 }
 
 export interface PickOptions<T> {
@@ -145,9 +149,12 @@ export interface PickOptions<T> {
 export function pickFromList<T>(options: PickOptions<T>): Promise<T | null> {
   return new Promise((resolve) => {
     let settled = false;
+    // Le miniature vivono quanto la finestra.
+    const life = openLifetime();
     const settle = (value: T | null): void => {
       if (settled) return;
       settled = true;
+      life.close();
       frame.close();
       resolve(value);
     };
@@ -172,6 +179,50 @@ export function pickFromList<T>(options: PickOptions<T>): Promise<T | null> {
     if (options.more) more.textContent = t("dialog.more", { n: options.more });
     let visible: PickItem<T>[] = [];
     let selected = Math.max(0, options.items.findIndex((item) => options.current !== undefined && item.value === options.current));
+    // Una miniatura per voce, fatta una volta: l'elenco si ridisegna a ogni
+    // tasto, e l'immagine non si richiede. L'URL si chiede quando la voce
+    // entra nell'elenco che si vede, così cinquecento immagini non si aprono
+    // tutte insieme.
+    const thumbnails = new Map<PickItem<T>, HTMLImageElement>();
+    const owners = new Map<Element, PickItem<T>>();
+    const load = (item: PickItem<T>, image: HTMLImageElement): void => {
+      void item.thumbnail!(life).then(
+        (url) => {
+          if (url !== null && !life.closed) image.src = url;
+        },
+        () => {},
+      );
+    };
+    let watcher: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver === "function") {
+      watcher = new IntersectionObserver((entries, self) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          self.unobserve(entry.target);
+          const item = owners.get(entry.target);
+          if (item !== undefined) load(item, entry.target as HTMLImageElement);
+        }
+      }, { root: list });
+      life.add(() => watcher?.disconnect());
+    }
+    const thumbnailOf = (item: PickItem<T>): HTMLImageElement => {
+      let image = thumbnails.get(item);
+      if (image === undefined) {
+        image = document.createElement("img");
+        image.className = "palette-thumb";
+        // Il ritaglio nel quadrato è la forma del componente: un tema dipinge
+        // la miniatura, ma non decide come l'immagine riempie il riquadro.
+        image.style.objectFit = "cover";
+        // Il nome della voce dice già che cosa è.
+        image.alt = "";
+        image.decoding = "async";
+        thumbnails.set(item, image);
+        owners.set(image, item);
+        if (watcher !== null) watcher.observe(image);
+        else load(item, image);
+      }
+      return image;
+    };
     const render = (): void => {
       const query = input.value.trim().toLocaleLowerCase();
       visible = options.items.filter((item) =>
@@ -185,6 +236,7 @@ export function pickFromList<T>(options: PickOptions<T>): Promise<T | null> {
         li.setAttribute("aria-selected", String(index === selected));
         const row = document.createElement("div");
         row.className = "palette-row";
+        if (item.thumbnail !== undefined) row.append(thumbnailOf(item));
         const title = document.createElement("span");
         title.className = "palette-title";
         title.textContent = item.label;

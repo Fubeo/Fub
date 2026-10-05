@@ -9,7 +9,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { decodeInk } from "../ink/codec";
 import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
-import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions } from "./editor";
+import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages } from "./editor";
 import { MERGE_MS } from "./history";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { LAYER } from "./test-support";
@@ -3809,6 +3809,186 @@ describe("le immagini incollate", () => {
     paste([file(PNG)]);
     await settle();
     expect(spoken()).toBe("Il disegno è vicino al limite di 20 MiB: un’altra immagine non ci sta.");
+    expect(changes).toEqual([]);
+  });
+});
+
+describe("le immagini del vault, dal livello Standard", () => {
+  const PNG = new Blob([Uint8Array.from([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
+  const HREF = "immagini/foto.png";
+
+  /// Un codec che misura ogni immagine `width` × `height` pixel, o nessuna.
+  function codec(width: number, height: number, readable = true): ImageCodec & { closed: number } {
+    const fake = {
+      closed: 0,
+      async decode(): Promise<Decoded | null> {
+        if (!readable) return null;
+        return {
+          width,
+          height,
+          opaque: () => true,
+          encode: async () => null,
+          close() {
+            fake.closed++;
+          },
+        };
+      },
+    };
+    return fake;
+  }
+
+  /// Chi monta l'editor: sceglie `choice`, e del vault legge `blob`.
+  function vault(choice: string | null | Error, blob: Blob | null = PNG): DrawImages & { calls: string[] } {
+    const calls: string[] = [];
+    return {
+      calls,
+      async url(href) {
+        calls.push(`url ${href}`);
+        return `blob:vault/${href}`;
+      },
+      async read(href) {
+        calls.push(`read ${href}`);
+        return blob;
+      },
+      async choose() {
+        calls.push("choose");
+        if (choice instanceof Error) throw choice;
+        return choice;
+      },
+    };
+  }
+
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  const imageLine = (): string => editor.engine.text.match(/<image [^>]*\/>/)?.[0] ?? "";
+  const imageButton = (): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="toolbar"] button')].find((control) => control.getAttribute("aria-label") === "Immagine dal vault…")!;
+  const insertShown = (): boolean => imageButton().closest("[hidden]") === null;
+
+  it("Ctrl+I mette l'immagine scelta per riferimento, dove è il cursore e con la sua misura, e il foglio la mostra", async () => {
+    const images = vault(HREF);
+    const fake = codec(200, 100);
+    mount(SOURCE, { level: "standard", imageCodec: fake, images });
+    size(1000, 500);
+    editor.setTool("pen");
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
+    expect(key("i", { ctrlKey: true }).defaultPrevented).toBe(true);
+    await settle();
+    const [id] = editor.selection;
+    expect(imageLine()).toBe(`<image id="${id}" x="200" y="250" width="200" height="100" href="${HREF}"/>`);
+    expect(images.calls.slice(0, 2)).toEqual(["choose", `read ${HREF}`]);
+    // I byte servono solo a misurarla: il decodificato si chiude.
+    expect(fake.closed).toBe(1);
+    expect(editor.tool).toBe("select");
+    expect(spoken()).toBe("Immagine aggiunta. Strumento: Selezione. Il disegno ha 2 oggetti.");
+    // Il foglio chiede l'URL a chi monta l'editor.
+    expect(images.calls).toContain(`url ${HREF}`);
+    expect(surface().querySelector(`image[data-scene-id="${id}"]`)!.getAttribute("href")).toBe(`blob:vault/${HREF}`);
+    // Un gesto solo, che annulla toglie intero.
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(imageLine()).toBe("");
+  });
+
+  it("il pulsante «Immagine dal vault…» c'è dallo Standard, se chi monta l'editor sa scegliere", async () => {
+    const images = vault(HREF);
+    mount(SOURCE, { imageCodec: codec(20, 10), images });
+    expect(insertShown()).toBe(false);
+    expect(key("i", { ctrlKey: true }).defaultPrevented).toBe(false);
+    editor.setLevel("standard");
+    expect(insertShown()).toBe(true);
+    const control = imageButton();
+    expect(control.closest('[role="group"]')!.getAttribute("aria-label")).toBe("Inserisci");
+    expect(control.title).toBe("Immagine dal vault… (Ctrl+I)");
+    expect(control.getAttribute("aria-keyshortcuts")).toBe("Control+I");
+    expect(control.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    control.click();
+    await settle();
+    expect(imageLine()).toContain(`href="${HREF}"`);
+    expect(changes).toHaveLength(1);
+    // In sola lettura il pulsante si spegne, e Ctrl+I non chiede niente.
+    editor.setReadOnly(true);
+    expect(imageButton().disabled).toBe(true);
+    key("i", { ctrlKey: true });
+    await settle();
+    expect(images.calls.filter((call) => call === "choose")).toHaveLength(1);
+    owner.close();
+    host.replaceChildren();
+    owner = openLifetime();
+    // Chi non sa scegliere non ha il pulsante, né il tasto.
+    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: { url: images.url, read: images.read } });
+    expect(insertShown()).toBe(false);
+    expect(key("i", { ctrlKey: true }).defaultPrevented).toBe(false);
+  });
+
+  it("«?» elenca Ctrl+I tra i tasti della modifica", () => {
+    mount(SOURCE, { level: "standard", images: vault(HREF) });
+    key("?", { shiftKey: true });
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect(rows).toContainEqual(["Ctrl+I", "Immagine dal vault…"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+
+  it("una scelta annullata o fallita non aggiunge niente; un'immagine sparita o illeggibile lo si dice", async () => {
+    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: vault(null) });
+    key("i", { ctrlKey: true });
+    await settle();
+    expect(spoken()).toBe("");
+    owner.close();
+    host.replaceChildren();
+    owner = openLifetime();
+    // Chi sceglie dice da sé perché non ha potuto.
+    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: vault(new Error("rotto")) });
+    key("i", { ctrlKey: true });
+    await settle();
+    expect(spoken()).toBe("");
+    owner.close();
+    host.replaceChildren();
+    owner = openLifetime();
+    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: vault(HREF, null) });
+    key("i", { ctrlKey: true });
+    await settle();
+    expect(spoken()).toBe("L’immagine scelta non si apre: forse non è più nel vault.");
+    owner.close();
+    host.replaceChildren();
+    owner = openLifetime();
+    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10, false), images: vault(HREF) });
+    key("i", { ctrlKey: true });
+    await settle();
+    expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere.");
+    expect(changes).toEqual([]);
+  });
+
+  it("un documento che cambia mentre si sceglie non riceve l'immagine", async () => {
+    let answer: (href: string | null) => void = () => {};
+    let asked = 0;
+    let read = 0;
+    const images: DrawImages = {
+      url: async () => null,
+      read: async () => {
+        read++;
+        return PNG;
+      },
+      choose: () => {
+        asked++;
+        return new Promise((resolve) => (answer = resolve));
+      },
+    };
+    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images });
+    key("i", { ctrlKey: true });
+    await settle();
+    // Un secondo Ctrl+I, mentre la scelta è aperta, non ne apre un'altra.
+    key("i", { ctrlKey: true });
+    expect(asked).toBe(1);
+    editor.load(SceneEngine.open(SOURCE));
+    answer(HREF);
+    await settle();
+    // L'immagine non si legge nemmeno.
+    expect(read).toBe(0);
+    expect(imageLine()).toBe("");
     expect(changes).toEqual([]);
   });
 });

@@ -17,6 +17,7 @@ import { t } from "../../i18n/strings";
 import type { EditorChange, TextOperation } from "../core/text-operation";
 import { mountVectorSurfaceLazily } from "../spatial/lazy";
 import { VECTOR_PROFILE } from "../spatial/modes";
+import type { Lifetime } from "../../ui/lifetime";
 
 export const CANVAS_OWNER = "fub.shell.canvas";
 export const CANVAS_FAMILY = "canvas" as const;
@@ -35,9 +36,27 @@ export interface CanvasSurfaceCallbacks {
   readonly onPickFile?: CanvasEngineOptions["onPickFile"];
   /** The vault document a drawing's link goes to, chosen by the user: `from` is the drawing, `current` the `href` of the link being changed. */
   readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
+  /** The vault images of drawing `from`, resolved by the shell. */
+  readonly drawingImages?: DrawingImagePort;
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
+}
+
+/**
+ * The vault images of a drawing: `path` is an image `href` as the drawing
+ * `from` writes it, relative to the drawing or from the vault root.
+ */
+export interface DrawingImagePort {
+  /** The image's URL, opened for `life`; `null` when it does not resolve. */
+  url(path: string, from: string, life: Lifetime): Promise<string | null>;
+  /**
+   * The image's bytes, with their type; `null` when it does not resolve, or
+   * when it weighs more than `limit` bytes, which are then not read.
+   */
+  read(path: string, from: string, limit?: number): Promise<Blob | null>;
+  /** Asks the user for a vault image to put in the drawing: its `DocId`, or `null`. */
+  pick?(from: string): Promise<string | null>;
 }
 
 /** Signature precisa del mount per Main: factory + modes + fallback. */
@@ -87,6 +106,8 @@ export function mountCanvasSurface(
     // li risolve da lì, come quelli di una nota.
     const openPath = callbacks.onOpenPath;
     const pickLink = callbacks.onPickDrawingLink;
+    const images = callbacks.drawingImages;
+    const pickImage = images?.pick;
     return mountVectorSurfaceLazily(context, {
       onChange: (change) => callbacks.onChange(context.paneId, change),
       onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
@@ -94,6 +115,12 @@ export function mountCanvasSurface(
         await openPath(path, context.documentId);
       },
       onPickLink: pickLink === undefined ? undefined : (current) => pickLink(context.documentId, current),
+      // Le immagini, come i collegamenti, si risolvono dal disegno.
+      images: images === undefined ? undefined : {
+        url: (path, life) => images.url(path, context.documentId, life),
+        read: (path, limit) => images.read(path, context.documentId, limit),
+        pick: pickImage === undefined ? undefined : () => pickImage(context.documentId),
+      },
     });
   }
   const host = document.createElement("div");
