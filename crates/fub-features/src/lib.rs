@@ -121,8 +121,8 @@ pub use commands::{
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "draw")]
 pub use draw::{
-    DrawCommands, PdfExport, PngExport, DRAWING_CREATE, DRAW_ID, DRAW_LEVELS, DRAW_LEVEL_KEY,
-    DRAW_PDF, DRAW_PNG,
+    DrawCommands, PdfExport, PngExport, DRAWING_CREATE, DRAW_CUSTOM_DEFAULT, DRAW_CUSTOM_KEY,
+    DRAW_ID, DRAW_LEVELS, DRAW_LEVEL_KEY, DRAW_PDF, DRAW_PNG,
 };
 #[cfg(feature = "formatting")]
 pub use formatting::{FormattingCommands, FORMATTING_ID};

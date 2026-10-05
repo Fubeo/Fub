@@ -6,8 +6,8 @@
 //! documento. Un `.svgz` resta di specie sconosciuta nei due casi: è
 //! compresso, e nessuna tabella gli dà un MIME. Il Markdown non cambia.
 //!
-//! Accesa, il vault ha anche l'impostazione del livello dell'editor; spenta,
-//! la chiave non c'è.
+//! Accesa, il vault ha anche le impostazioni del livello dell'editor e delle
+//! parti del Personalizzato; spenta, le chiavi non ci sono.
 //!
 //! Lo stesso file si compila nei due giri della CI: `cargo test --workspace`
 //! prova il ramo spento, `cargo test -p fub-host --features draw` quello acceso.
@@ -150,6 +150,82 @@ fn the_editor_level_is_a_vault_setting_only_with_the_draw_feature() {
     }
 
     // Il livello filtra ciò che l'editor offre: il disegno non cambia.
+    assert_eq!(
+        std::fs::read_to_string(root.join("schizzo.svg")).unwrap(),
+        DRAWING
+    );
+}
+
+#[test]
+fn the_custom_level_parts_are_a_vault_list_only_with_the_draw_feature() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    std::fs::write(root.join("schizzo.svg"), DRAWING).unwrap();
+    let mut mounted = mounted(&root);
+    let ws = &mut mounted.workspace;
+    let parts =
+        |names: &[&str]| SettingValue::List(names.iter().map(|name| name.to_string()).collect());
+
+    #[cfg(not(feature = "draw"))]
+    {
+        assert!(ws.setting("draw.custom").is_err());
+        assert!(ws.set_setting("draw.custom", parts(&["pen"])).is_err());
+    }
+
+    #[cfg(feature = "draw")]
+    {
+        let Ok(IndexResult::Settings(entries)) = ws.query_index(IndexQuery::Settings {
+            plugin: Some(fub_features::DRAW_ID.into()),
+        }) else {
+            panic!("le impostazioni dei disegni rispondono")
+        };
+        // Prima le impostazioni del bundle, poi i permessi e i tasti dei comandi.
+        let keys: Vec<&str> = entries
+            .iter()
+            .map(|entry| entry.spec.key.as_str())
+            .take(2)
+            .collect();
+        assert_eq!(
+            keys,
+            [fub_features::DRAW_LEVEL_KEY, fub_features::DRAW_CUSTOM_KEY],
+            "le parti vengono dopo il livello, nello stesso gruppo"
+        );
+        let entry = &entries[1];
+        assert_eq!(entry.spec.group, entries[0].spec.group);
+        assert_eq!(entry.spec.scope, fub_abi::settings::SettingScope::Vault);
+        assert!(!entry.spec.program_writable);
+        assert_eq!(entry.value, parts(&fub_features::DRAW_CUSTOM_DEFAULT));
+
+        ws.set_setting(
+            fub_features::DRAW_LEVEL_KEY,
+            SettingValue::Text("custom".into()),
+        )
+        .expect("il Personalizzato è un livello");
+        // Un nome che l'editor non conosce si scrive com'è: lo conosce una
+        // versione più nuova, e questa lo lascia stare.
+        let chosen = parts(&["pen", "layers", "domani"]);
+        ws.set_setting(fub_features::DRAW_CUSTOM_KEY, chosen.clone())
+            .expect("le parti sono un elenco di nomi");
+        assert_eq!(ws.setting(fub_features::DRAW_CUSTOM_KEY).unwrap(), chosen);
+        // Nessuna parte si può: resta la Selezione.
+        ws.set_setting(fub_features::DRAW_CUSTOM_KEY, parts(&[]))
+            .expect("l'elenco vuoto è una scelta");
+        // Ciò che non è un elenco non si scrive, e resta quello di prima.
+        assert!(ws
+            .set_setting(
+                fub_features::DRAW_CUSTOM_KEY,
+                SettingValue::Text("pen".into())
+            )
+            .is_err());
+        assert_eq!(
+            ws.setting(fub_features::DRAW_CUSTOM_KEY).unwrap(),
+            parts(&[])
+        );
+        let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
+        assert!(written.contains("\"draw.custom\""), "{written}");
+    }
+
+    // Le parti filtrano ciò che l'editor offre: il disegno non cambia.
     assert_eq!(
         std::fs::read_to_string(root.join("schizzo.svg")).unwrap(),
         DRAWING
