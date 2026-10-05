@@ -255,3 +255,44 @@ da «Oggetto in tracciato». Le regole stanno in
 - **Ogni modifica riscrive il `d` intero**, in coordinate assolute con due
   decimali, in un passo che si annulla col suo nome; il resto del tracciato
   non si tocca. La pagina si allarga se il tracciato ne esce.
+
+## Bézier
+
+La penna di Bézier (`B`, come in Inkscape), nella barra dopo la freccia,
+disegna un tracciato nodo per nodo: i punti per cui passa e le maniglie delle
+sue curve. Il tracciato si scrive quando si conclude, sul livello corrente,
+col colore e lo spessore della barra. Le regole stanno in
+`apps/client/src/editors/spatial/tools/bezier.ts`.
+
+- **Col puntatore** un tocco mette uno spigolo, e un trascinamento un nodo
+  simmetrico: la maniglia verso cui il tracciato riparte segue il puntatore,
+  quella da cui arriva le sta opposta. Fra due spigoli il segmento è una
+  linea, altrimenti una curva. Mentre si disegna il segmento che verrebbe
+  segue il puntatore, le maniglie dell'ultimo nodo si vedono, e il nodo che
+  un tocco prenderebbe è pieno.
+- **Chiudere e concludere:** un tocco sul primo nodo chiude il tracciato, e
+  trascinato da lì ne fa un nodo simmetrico, così il tracciato vi passa senza
+  spigolo. Un tocco sull'ultimo nodo conclude il tracciato aperto, e così
+  due tocchi, `Invio` ed `Esc`, che tiene il lavoro fatto; trascinare
+  dall'ultimo nodo tira solo la sua maniglia verso il nodo dopo, e riportata
+  sul nodo la toglie. Cambiare strumento o livello conclude il tracciato. Un
+  tracciato con un nodo solo non si scrive, e lo si dice. Su un livello che
+  non riceve, perché bloccato o nascosto, lo si dice e il tracciato resta, da
+  concludere quando riceverà; cambiare strumento allora lo butta.
+- **`Maiusc`** porta il nodo nuovo a passi di 15° dall'ultimo, e la maniglia
+  a passi di 15° dal suo nodo. Con l'aggancio alla griglia nodi e maniglie
+  vanno sugli incroci, e `Ctrl` o `⌘` li lascia liberi.
+- **Annulla e Ripeti** percorrono i passi del tracciato in corso, i nodi, le
+  maniglie e le eliminazioni, poi quelli del disegno; `Canc` e `⌫` eliminano
+  l'ultimo nodo. Il tracciato concluso entra nel disegno in un passo solo,
+  «Tracciato».
+- **Dalla tastiera** le frecce muovono il cursore anche con una selezione, e
+  `Spazio` mette un nodo dove sta: `Spazio` di nuovo lo lascia spigolo, le
+  frecce in mezzo ne tirano le maniglie. Il cursore sul primo nodo dice che
+  `Spazio` chiude il tracciato, sull'ultimo che lo conclude; ogni nodo messo
+  si dice col numero, il tipo e la posizione: «Nodo 2, simmetrico: x 50,
+  y 0.»
+- **Si scrive un `path`** senza riempimento, coi giunti arrotondati e, se è
+  aperto, i capi arrotondati, nelle coordinate del livello e coi due decimali
+  di ogni `d`. La pagina si allarga se il tracciato ne esce. Lo strumento
+  Nodi ritrova i nodi col tipo che avevano mentre si disegnavano.

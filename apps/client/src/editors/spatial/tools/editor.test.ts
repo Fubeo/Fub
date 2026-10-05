@@ -1927,6 +1927,7 @@ describe("da tastiera", () => {
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
+      "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
@@ -1954,7 +1955,7 @@ describe("da tastiera", () => {
       rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
     }));
     expect(tables).toEqual([
-      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"]] },
+      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["B", "Bézier"]] },
       { caption: "Disponi · dal livello Esperto", rows: [["Ctrl+Shift+M", "Trasforma…"]] },
       {
         caption: "Nodi · dal livello Esperto",
@@ -1975,6 +1976,15 @@ describe("da tastiera", () => {
           ["Shift+J", "Unisci i capi"],
           ["Esc", "Toglie la scelta dei nodi, poi quella dell’oggetto"],
           ["Alt+F10", "Va alla barra dei nodi"],
+        ],
+      },
+      {
+        caption: "Bézier · dal livello Esperto",
+        rows: [
+          ["Space", "Un nodo dove è il cursore: Spazio e di nuovo Spazio per uno spigolo, o in mezzo le frecce per tirarne le maniglie"],
+          ["Shift", "Tenuto, porta il nodo o la maniglia a passi di 15°"],
+          ["Enter o Esc", "Conclude il tracciato"],
+          ["Del", "Elimina l’ultimo nodo"],
         ],
       },
       {
@@ -2988,6 +2998,448 @@ describe("i nodi, dal livello Esperto", () => {
     expect(rows).toContainEqual(["Alt+F10", "Va alla barra dei nodi"]);
     expect(rows).toContainEqual(["Tab o Shift+Tab", "Il nodo dopo o prima"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
+describe("la penna di Bézier, dal livello Esperto", () => {
+  const EMPTY = doc(`${LAYER}</g>`);
+  const R = "or3r3r3r3";
+  const WITH_RECT = doc(`${LAYER}<rect id="${R}" x="200" y="200" width="20" height="20" fill="#000000"/></g>`);
+  /// Il tracciato scritto: tutto l'elemento, o il suo `d`.
+  const PATH = /<path id="o[a-z0-9]{8}" d="([^"]*)"([^>]*)\/>/;
+  const written = (): string | null => PATH.exec(editor.engine.text)?.[1] ?? null;
+  const look = (): string | null => PATH.exec(editor.engine.text)?.[2] ?? null;
+  /// Il `d` dell'anteprima, nelle coordinate del livello.
+  const preview = (): string | null => host.querySelector(".draw-preview path")?.getAttribute("d") ?? null;
+  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
+  const bezierTool = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-tool[aria-label="Bézier"]')!;
+  const undoButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-toolbar button[aria-label="Annulla"]')!;
+  const redoButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-toolbar button[aria-label="Ripeti"]')!;
+  /// Preme la voce `label` del menu dei livelli.
+  const chooseLayer = (label: string): void => {
+    host.querySelector<HTMLButtonElement>(".draw-layer-button")!.click();
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")].find((entry) => entry.querySelector(".menu-label")!.textContent === label)!.click();
+  };
+
+  afterEach(() => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  /// Un disegno vuoto all'Esperto, con la penna di Bézier.
+  const drawing = (source = EMPTY): void => {
+    mount(source, { level: "expert" });
+    editor.focus();
+    key("b");
+  };
+
+  it("c'è solo all'Esperto, col tasto B, dopo le forme", () => {
+    mount(EMPTY, { level: "standard" });
+    editor.focus();
+    expect(bezierTool().hidden).toBe(true);
+    key("b");
+    expect(editor.tool).toBe("pen");
+    editor.setLevel("expert");
+    expect(bezierTool().hidden).toBe(false);
+    expect(bezierTool().title).toBe("Bézier (B)");
+    const tools = [...host.querySelectorAll<HTMLButtonElement>(".draw-tool:not([hidden])")].map((control) => control.dataset.tool);
+    expect(tools.slice(tools.indexOf("arrow"))).toEqual(["arrow", "bezier", "text"]);
+    key("b");
+    expect(editor.tool).toBe("bezier");
+    expect(bezierTool().getAttribute("aria-checked")).toBe("true");
+    expect(spoken()).toBe("Strumento: Bézier.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("un tocco mette uno spigolo, e Invio scrive il tracciato in un passo che si annulla", () => {
+    drawing();
+    tap(10, 10);
+    expect(spoken()).toBe("Nodo 1, spigolo: x 10, y 10.");
+    expect(preview()).toBeNull();
+    tap(50, 10);
+    expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 10.");
+    expect(preview()).toBe("M10 10 L50 10");
+    tap(50, 50);
+    expect(preview()).toBe("M10 10 L50 10 L50 50");
+    // Finché si disegna, il disegno non cambia.
+    expect(changes).toEqual([]);
+    key("Enter");
+    expect(written()).toBe("M10 10 L50 10 L50 50");
+    expect(look()).toBe(' fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"');
+    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
+    expect(changes).toHaveLength(1);
+    expect(preview()).toBeNull();
+    // Invio di nuovo apre le proprietà, come sempre: il tracciato è finito.
+    editor.undo();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(spoken()).toBe("Annullato: Tracciato.");
+  });
+
+  it("un trascinamento mette un nodo simmetrico, e un tocco sull'ultimo nodo conclude", () => {
+    drawing();
+    editor.setColor("#0072b2");
+    editor.setWidth(8);
+    tap(10, 10);
+    drag([[50, 10], [55, 20], [60, 30]]);
+    expect(spoken()).toBe("Nodo 2, simmetrico: x 50, y 10.");
+    expect(preview()).toBe("M10 10 C10 10 40 -10 50 10");
+    tap(90, 10);
+    expect(preview()).toBe("M10 10 C10 10 40 -10 50 10 C60 30 90 10 90 10");
+    // Il secondo tocco di un doppio clic cade sull'ultimo nodo, anche se
+    // trema un poco.
+    drag([[91, 11], [92, 12]]);
+    expect(written()).toBe("M10 10 C10 10 40 -10 50 10 C60 30 90 10 90 10");
+    expect(look()).toBe(' fill="none" stroke="#0072b2" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"');
+    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
+    // Il tracciato dopo comincia da capo.
+    tap(200, 200);
+    expect(spoken()).toBe("Nodo 1, spigolo: x 200, y 200.");
+  });
+
+  it("un tocco sul primo nodo chiude il tracciato; trascinato, il primo nodo diventa simmetrico", () => {
+    drawing();
+    tap(0, 0);
+    tap(40, 0);
+    tap(40, 40);
+    tap(2, 1);
+    expect(written()).toBe("M0 0 L40 0 L40 40 Z");
+    // Un tracciato chiuso non ha capi.
+    expect(look()).toBe(' fill="none" stroke="#000000" stroke-width="4" stroke-linejoin="round"');
+    expect(spoken()).toBe("Tracciato chiuso aggiunto. Il disegno ha 1 oggetto.");
+    editor.undo();
+    tap(100, 0);
+    tap(140, 0);
+    tap(140, 40);
+    drag([[100, 0], [100, -10], [100, -20]]);
+    expect(written()).toBe("M100 0 C100 -20 140 0 140 0 L140 40 C140 40 100 20 100 0 Z");
+    editor.undo();
+    // Riportato sul primo nodo, il trascinamento chiude con uno spigolo.
+    tap(100, 0);
+    tap(140, 0);
+    tap(140, 40);
+    drag([[100, 0], [110, 0], [100.5, 0]]);
+    expect(written()).toBe("M100 0 L140 0 L140 40 Z");
+    // Un nodo solo non si chiude: il tocco lo conclude.
+    tap(300, 300);
+    tap(301, 300);
+    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
+    expect(changes).toHaveLength(5);
+  });
+
+  it("trascinare dall'ultimo nodo ne cambia la maniglia d'uscita: lo spigolo dopo una curva", () => {
+    drawing();
+    drag([[0, 0], [10, 0], [20, 0]]);
+    expect(spoken()).toBe("Nodo 1, simmetrico: x 0, y 0.");
+    drag([[40, 0], [40, 10], [40, 20]]);
+    expect(spoken()).toBe("Nodo 2, simmetrico: x 40, y 0.");
+    drag([[40, 0], [50, 0], [60, 0]]);
+    expect(spoken()).toBe("Nodo 2, spigolo: x 40, y 0.");
+    tap(80, 0);
+    expect(preview()).toBe("M0 0 C20 0 40 -20 40 0 C60 0 80 0 80 0");
+    // Una maniglia riportata sul suo nodo non c'è: il trascinamento non
+    // conclude il tracciato.
+    drag([[80, 0], [90, 0], [80.5, 0]]);
+    expect(spoken()).toBe("Nodo 3, spigolo: x 80, y 0.");
+    expect(changes).toEqual([]);
+    // Così un nodo nuovo trascinato e riportato al suo posto è uno spigolo, e
+    // il segmento una linea.
+    drag([[120, 0], [130, 0], [120.5, 0]]);
+    expect(spoken()).toBe("Nodo 4, spigolo: x 120, y 0.");
+    key("Enter");
+    expect(written()).toBe("M0 0 C20 0 40 -20 40 0 C60 0 80 0 80 0 L120 0");
+  });
+
+  it("Maiusc porta i nodi e le maniglie a passi di 15°, e la griglia li aggancia", () => {
+    drawing();
+    // La maniglia a 0°, e il nodo dopo a 15° dal primo.
+    drag([[100, 0], [110, 1], [120, 2]], { shiftKey: true });
+    tap(148, 14, { shiftKey: true });
+    key("Enter");
+    expect(written()).toBe("M100 0 C120.1 0 148.3 12.94 148.3 12.94");
+    editor.undo();
+    editor.setGrid({ shown: false, snap: true, step: 10 });
+    tap(1, 2);
+    drag([[38, 41], [44, 47], [52, 49]]);
+    // Ctrl lascia il punto libero.
+    tap(73, 77, { ctrlKey: true });
+    key("Enter");
+    expect(written()).toBe("M0 0 C0 0 30 30 40 40 C50 50 73 77 73 77");
+    // Due nodi sullo stesso incrocio non fanno un tracciato.
+    editor.setGrid({ shown: false, snap: true, step: 50 });
+    tap(0, 0);
+    tap(20, 0);
+    expect(spoken()).toBe("Nodo 2, spigolo: x 0, y 0.");
+    expect(preview()).toBeNull();
+    const before = editor.engine.text;
+    key("Enter");
+    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("Canc toglie l'ultimo nodo, e Annulla e Ripeti percorrono i passi del tracciato", () => {
+    drawing();
+    expect(undoButton().disabled).toBe(true);
+    tap(10, 10);
+    tap(50, 10);
+    drag([[50, 10], [60, 10], [70, 10]]);
+    expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 10.");
+    expect(undoButton().disabled).toBe(false);
+    expect(editor.canUndo).toBe(true);
+    expect(editor.canRedo).toBe(false);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Maniglia del nodo 2.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nodo 2.");
+    expect(preview()).toBeNull();
+    expect(redoButton().disabled).toBe(false);
+    editor.redo();
+    expect(spoken()).toBe("Ripetuto: Nodo 2.");
+    expect(preview()).toBe("M10 10 L50 10");
+    key("Delete");
+    expect(spoken()).toBe("Nodo 2 eliminato.");
+    expect(preview()).toBeNull();
+    // Un passo nuovo toglie quelli da ripetere.
+    expect(editor.canRedo).toBe(false);
+    key("Backspace");
+    expect(spoken()).toBe("Nodo 1 eliminato.");
+    // Il tracciato vuoto tiene i suoi passi: Annulla rimette il nodo, anche
+    // dopo un Ripeti che non aveva niente da fare.
+    expect(editor.canUndo).toBe(true);
+    editor.redo();
+    key("z", { ctrlKey: true });
+    expect(spoken()).toBe("Annullato: Eliminazione del nodo 1.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Eliminazione del nodo 2.");
+    expect(preview()).toBe("M10 10 L50 10");
+    editor.undo();
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nodo 1.");
+    // Senza nodi e senza passi, Annulla torna al disegno, che non ne ha: i
+    // passi da ripetere restano.
+    expect(editor.canUndo).toBe(false);
+    expect(editor.canRedo).toBe(true);
+    editor.undo();
+    editor.redo();
+    expect(spoken()).toBe("Ripetuto: Nodo 1.");
+    tap(30, 30);
+    key("Enter");
+    expect(written()).toBe("M10 10 L30 30");
+    expect(changes).toHaveLength(1);
+  });
+
+  it("Annulla e Ripeti tornano al disegno quando il tracciato non ha più passi", () => {
+    drawing();
+    tap(10, 10);
+    tap(50, 10);
+    key("Enter");
+    tap(10, 50);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nodo 1.");
+    // Il tracciato vuoto lascia il posto al disegno, e i suoi passi vanno.
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Tracciato.");
+    expect(editor.engine.text).toBe(EMPTY);
+    editor.redo();
+    expect(spoken()).toBe("Ripetuto: Tracciato.");
+    expect(written()).toBe("M10 10 L50 10");
+    // Mentre il tracciato ha nodi, Ripeti non tocca il disegno.
+    editor.undo();
+    tap(10, 50);
+    expect(editor.canRedo).toBe(false);
+    editor.redo();
+    expect(editor.engine.text).toBe(EMPTY);
+  });
+
+  it("Esc conclude il tracciato; a metà gesto annulla solo il gesto", () => {
+    drawing();
+    tap(10, 10);
+    key("Escape");
+    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
+    expect(changes).toEqual([]);
+    tap(10, 10);
+    tap(50, 50);
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 90, clientY: 10 }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 100, clientY: 20 }));
+    expect(preview()).toBe("M10 10 L50 50 C50 50 80 0 90 10");
+    key("Escape");
+    expect(preview()).toBe("M10 10 L50 50");
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 100, clientY: 20 }));
+    expect(changes).toEqual([]);
+    key("Escape");
+    expect(written()).toBe("M10 10 L50 50");
+    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
+    // Senza tracciato, Esc fa ciò che faceva.
+    editor.select([editor.engine.text.match(/<path id="(o[a-z0-9]{8})"/)![1]!]);
+    key("Escape");
+    expect(editor.selection).toEqual([]);
+  });
+
+  it("cambiare strumento o livello conclude il tracciato; la sola lettura e un altro documento lo buttano", () => {
+    const paths = (): number => editor.engine.text.match(/<path /g)?.length ?? 0;
+    drawing();
+    tap(10, 10);
+    tap(50, 10);
+    key("v");
+    expect(written()).toBe("M10 10 L50 10");
+    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto. Strumento: Selezione.");
+    key("b");
+    tap(10, 100);
+    editor.setTool("pen");
+    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere. Strumento: Penna.");
+    key("b");
+    tap(10, 200);
+    tap(50, 200);
+    editor.setLevel("standard");
+    expect(editor.tool).toBe("pen");
+    expect(paths()).toBe(2);
+    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 2 oggetti.");
+    editor.setLevel("expert");
+    key("b");
+    tap(10, 300);
+    tap(50, 300);
+    editor.setReadOnly(true);
+    expect(preview()).toBeNull();
+    editor.setReadOnly(false);
+    tap(90, 300);
+    key("Enter");
+    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
+    expect(paths()).toBe(2);
+    tap(10, 10);
+    editor.load(SceneEngine.open(EMPTY));
+    expect(preview()).toBeNull();
+    expect(editor.canUndo).toBe(false);
+    expect(changes).toHaveLength(2);
+  });
+
+  it("da tastiera: Spazio mette i nodi al cursore, e le frecce ne tirano le maniglie", () => {
+    drawing(WITH_RECT);
+    editor.select([R]);
+    // Con la penna le frecce muovono il cursore, mai la selezione.
+    key("ArrowRight");
+    expect(spoken()).toBe("x 10, y 0");
+    key(" ");
+    key(" ");
+    expect(spoken()).toBe("Nodo 1, spigolo: x 10, y 0.");
+    for (let i = 0; i < 4; i++) key("ArrowRight");
+    key(" ");
+    key("ArrowDown");
+    key("ArrowDown");
+    key(" ");
+    expect(spoken()).toBe("Nodo 2, simmetrico: x 50, y 0.");
+    key("ArrowUp");
+    key("ArrowUp");
+    expect(spoken()).toBe("x 50, y 0: Ultimo nodo, Spazio conclude il tracciato");
+    for (let i = 0; i < 4; i++) key("ArrowLeft");
+    expect(spoken()).toBe("x 10, y 0: Primo nodo, Spazio chiude il tracciato");
+    expect(changes).toEqual([]);
+    key(" ");
+    key(" ");
+    expect(written()).toBe("M10 0 C10 0 50 -20 50 0 C50 20 10 0 10 0 Z");
+    expect(spoken()).toBe("Tracciato chiuso aggiunto. Il disegno ha 2 oggetti.");
+    expect(editor.selection).toEqual([R]);
+  });
+
+  it("scrive nelle coordinate del livello, anche trasformato", () => {
+    drawing(doc(`<g id="l1" fub:layer="Livello 1" transform="matrix(2 0 0 2 100 0)"></g>`));
+    tap(100, 0);
+    drag([[140, 0], [150, 10], [160, 20]]);
+    expect(host.querySelector(".draw-preview g g")!.getAttribute("transform")).toBe("matrix(2 0 0 2 100 0)");
+    expect(preview()).toBe("M0 0 C0 0 10 -10 20 0");
+    key("Enter");
+    expect(written()).toBe("M0 0 C0 0 10 -10 20 0");
+    expect(editor.engine.text).toContain('stroke-width="4"');
+  });
+
+  it("fra il primo e l'ultimo nodo, vicini, un tocco prende il più vicino", () => {
+    drawing();
+    for (const [x, y] of [[0, 0], [100, 0], [20, 0], [8, 0]] as const) tap(x, y);
+    expect(written()).toBe("M0 0 L100 0 L20 0 Z");
+    editor.undo();
+    for (const [x, y] of [[0, 0], [100, 0], [20, 0], [12, 0]] as const) tap(x, y);
+    expect(written()).toBe("M0 0 L100 0 L20 0");
+    // La pagina si allarga quando il tracciato, col suo spessore, ne esce.
+    expect(editor.engine.text).toContain('viewBox="-256 -256 612 356"');
+    // Un nodo solo è l'ultimo: trascinarlo ne tira la maniglia, e il
+    // tracciato continua.
+    tap(300, 0);
+    drag([[300, 0], [310, 0], [320, 0]]);
+    expect(spoken()).toBe("Nodo 1, spigolo: x 300, y 0.");
+    tap(340, 20);
+    expect(preview()).toBe("M300 0 C320 0 340 20 340 20");
+  });
+
+  it("Maiusc, il colore e lo spessore cambiano subito l'anteprima, e Canc e Invio aspettano la fine del gesto", () => {
+    drawing();
+    tap(0, 0);
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 50, clientY: 0 }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 70, clientY: 2 }));
+    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
+    key("Shift", { shiftKey: true });
+    expect(preview()).toBe("M0 0 C0 0 29.9 0 50 0");
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
+    key("Delete");
+    key("Enter");
+    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 70, clientY: 2 }));
+    expect(spoken()).toBe("Nodo 2, simmetrico: x 50, y 0.");
+    editor.setColor("#0072b2");
+    expect(host.querySelector(".draw-preview path")!.getAttribute("stroke")).toBe("#0072b2");
+    editor.setWidth(8);
+    expect(host.querySelector(".draw-preview path")!.getAttribute("stroke-width")).toBe("8");
+    // Canc toglie l'ultimo nodo, non il primo.
+    tap(100, 0);
+    key("Delete");
+    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
+  });
+
+  it("un livello bloccato non riceve i nodi, e il tracciato aspetta che riceva", () => {
+    const LOCKED = "«Livello 1» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.";
+    drawing();
+    tap(10, 10);
+    tap(50, 10);
+    chooseLayer("Blocca «Livello 1»");
+    tap(90, 10);
+    expect(spoken()).toBe(LOCKED);
+    key("Enter");
+    expect(preview()).toBe("M10 10 L50 10");
+    expect(written()).toBeNull();
+    chooseLayer("Sblocca «Livello 1»");
+    key("Enter");
+    expect(written()).toBe("M10 10 L50 10");
+    // Cambiare strumento lo butta, e lo dice.
+    tap(10, 50);
+    tap(50, 50);
+    chooseLayer("Blocca «Livello 1»");
+    key("v");
+    expect(spoken()).toBe(`${LOCKED} Strumento: Selezione.`);
+    expect(preview()).toBeNull();
+    expect(editor.engine.text.match(/<path /g)).toHaveLength(1);
+  });
+
+  it("si scrive sul livello corrente quando si conclude, e l'anteprima lo segue", () => {
+    drawing(doc(`${LAYER}</g><g id="l2" fub:layer="Sopra" transform="matrix(2 0 0 2 100 0)"></g>`));
+    const transform = (): string | null => host.querySelector(".draw-preview g g")!.getAttribute("transform");
+    tap(100, 0);
+    tap(140, 0);
+    expect(transform()).toBe("matrix(2 0 0 2 100 0)");
+    expect(preview()).toBe("M0 0 L20 0");
+    chooseLayer("Livello 1");
+    tap(140, 40);
+    expect(transform()).toBe("matrix(1 0 0 1 0 0)");
+    expect(preview()).toBe("M100 0 L140 0 L140 40");
+    key("Enter");
+    expect(editor.engine.text).toMatch(/<g id="l1" fub:layer="Livello 1">\s*<path id="o[a-z0-9]{8}" d="M100 0 L140 0 L140 40"/);
+  });
+
+  it("i tasti della penna stanno nell'elenco, dal livello Esperto", () => {
+    drawing();
+    key("?", { shiftKey: true });
+    const table = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Bézier")!;
+    expect([...table.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["Space", "Shift", "Enter o Esc", "Del"]);
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
