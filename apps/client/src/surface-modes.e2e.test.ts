@@ -212,7 +212,7 @@ async function open(doc: string): Promise<void> {
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
-const SOURCE_COMMANDS = ["shell.doc.source.open", "shell.doc.source.close"];
+const SOURCE_COMMANDS = ["shell.doc.source.open", "shell.doc.source.side", "shell.doc.source.close"];
 
 /// I comandi fra `ids` che la palette e la tastiera offrono adesso.
 async function offered(ids: readonly string[]): Promise<string[]> {
@@ -337,7 +337,7 @@ describe("la vista sorgente di una scheda", () => {
       expect(await offered(SOURCE_COMMANDS), doc).toEqual([]);
     }
     await open("schizzo.draw");
-    expect(await offered(SOURCE_COMMANDS)).toEqual(["shell.doc.source.open"]);
+    expect(await offered(SOURCE_COMMANDS)).toEqual(["shell.doc.source.open", "shell.doc.source.side"]);
   });
 
   it("apre il testo sulla stessa sessione, col fuoco, e torna senza perdere niente", async () => {
@@ -429,6 +429,90 @@ describe("la vista sorgente di una scheda", () => {
     await choose("Chiudi la vista sorgente");
     expect(mountedTextEditors()).toHaveLength(0);
     expect(liveDraws()).toHaveLength(1);
+    await choose("Apri come sorgente accanto");
+    expect(mountedTextEditors()).toHaveLength(1);
+    expect(liveDraws()).toHaveLength(1);
+    expect(document.querySelectorAll(".pane")).toHaveLength(2);
+  });
+
+  it("accanto apre il testo in un riquadro nuovo a destra, senza resa e col fuoco, e la superficie resta", async () => {
+    const host = await start();
+    const layout = await import("./state/layout");
+    await open("schizzo.draw");
+    const origin = layout.layout.focus;
+    const reads = host.atGate("readDocument").filter((call) => call.args[0] === "schizzo.draw").length;
+
+    await run("shell.doc.source.side");
+    const [left, right] = layout.panes();
+    expect(left).toBe(origin);
+    expect(layout.layout.focus).toBe(right);
+    expect(layout.layout.tree).toMatchObject({ k: "split", dir: "row", children: [{ pane: left }, { pane: right }] });
+    expect(layout.activeTab(left)).toEqual({ k: "doc", doc: "schizzo.draw" });
+    expect(layout.activeTab(right)).toEqual({ k: "doc", doc: "schizzo.draw", override: { family: "text", profile: "svg" } });
+    // Il disegno accanto è già la resa: il testo si apre senza anteprima.
+    expect(paneMode()).toBe("source");
+    expect(focusedPane().contains(document.activeElement), "il fuoco è nel testo").toBe(true);
+    expect(liveDraws(), "il disegno resta montato").toHaveLength(1);
+    expect(await offered(SOURCE_COMMANDS)).toEqual(["shell.doc.source.close"]);
+
+    const [editor] = mountedTextEditors();
+    editor!.dispatch({ changes: { from: 0, insert: "<!-- accanto -->" } });
+    await settle();
+    expect(liveDraws()[0]!.text).toBe(`<!-- accanto -->${DRAWING}`);
+    expect(
+      host.atGate("readDocument").filter((call) => call.args[0] === "schizzo.draw"),
+      "nessuna rilettura dal disco",
+    ).toHaveLength(reads);
+  });
+
+  it("accanto, ripetuto, torna al testo che c'è già invece di aprirne un altro", async () => {
+    await start();
+    const layout = await import("./state/layout");
+    const { synchronize } = await import("./panels/document");
+    await open("schizzo.draw");
+    const origin = layout.layout.focus;
+    await run("shell.doc.source.side");
+    const beside = layout.layout.focus;
+
+    layout.focusPane(origin);
+    await synchronize();
+    await run("shell.doc.source.side");
+    expect(layout.panes()).toEqual([origin, beside]);
+    expect(layout.layout.focus).toBe(beside);
+    expect(mountedTextEditors()).toHaveLength(1);
+
+    // Anche quando il testo sta dietro un'altra linguetta di quel riquadro.
+    await open("Benvenuto.md");
+    layout.focusPane(origin);
+    await synchronize();
+    await run("shell.doc.source.side");
+    expect(layout.panes()).toEqual([origin, beside]);
+    expect(layout.layout.focus).toBe(beside);
+    expect(layout.activeTab(beside)).toEqual({ k: "doc", doc: "schizzo.draw", override: { family: "text", profile: "svg" } });
+    expect(focusedPane().contains(document.activeElement)).toBe(true);
+  });
+
+  it("accanto preferisce il riquadro dove il testo si vede già", async () => {
+    await start();
+    const layout = await import("./state/layout");
+    const { synchronize } = await import("./panels/document");
+    await open("schizzo.draw");
+    const origin = layout.layout.focus;
+    await run("shell.doc.source.side");
+    const hidden = layout.layout.focus;
+    await open("Benvenuto.md");
+    // Un terzo riquadro, dopo, con il testo in vista.
+    const shown = layout.split(hidden, "row")!;
+    await synchronize();
+    await open("schizzo.draw");
+    await run("shell.doc.source.open");
+    expect(layout.panes()).toEqual([origin, hidden, shown]);
+
+    layout.focusPane(origin);
+    await synchronize();
+    await run("shell.doc.source.side");
+    expect(layout.layout.focus).toBe(shown);
+    expect(layout.activeTab(hidden)).toEqual({ k: "doc", doc: "Benvenuto.md" });
   });
 
   it("una scelta che la superficie non offre più si scarta, senza la superficie d'errore", async () => {

@@ -673,9 +673,9 @@ function registerCommands(): void {
   });
   // La vista sorgente di una scheda (ADR 0203): lo stesso documento, sulla
   // stessa sessione, nella superficie che la sua dichiara come sorgente — un
-  // disegno come testo SVG. Uno dei due comandi c'è soltanto quando l'altro
-  // non c'è: aprirla dove la superficie la offre e la scheda non la mostra
-  // già, tornare indietro dove la scheda la mostra.
+  // disegno come testo SVG. Aprirla, lì o accanto, si può dove la superficie
+  // la offre e la scheda non la mostra già; tornare indietro, dove la scheda
+  // la mostra: mai le due cose insieme.
   registerShellCommand({
     id: "shell.doc.source.open",
     title: "commands.doc.source.open",
@@ -683,6 +683,14 @@ function registerCommands(): void {
     layer: "document",
     available: () => offeredSourceView(panes.get(layout.focus)) !== null,
     run: () => void openSourceView(),
+  });
+  registerShellCommand({
+    id: "shell.doc.source.side",
+    title: "commands.doc.source.side",
+    description: "commands.doc.source.side.desc",
+    layer: "document",
+    available: () => offeredSourceView(panes.get(layout.focus)) !== null,
+    run: () => void openSourceViewBeside(layout.focus),
   });
   registerShellCommand({
     id: "shell.doc.source.close",
@@ -2487,6 +2495,13 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         void showSourceView(r.id, sourceShown ? null : sourceView);
       },
     }] : []),
+    ...(sourceView ? [{
+      label: t("commands.doc.source.side"),
+      run: () => {
+        focusPane(r.id);
+        void openSourceViewBeside(r.id);
+      },
+    }] : []),
     ...(doc && surface?.insertReferences ? [{
       label: t(r.disposeRecorder ? "pane.recorder.close" : "pane.recorder.open"),
       run: () => void toggleRecorder(r, doc),
@@ -2988,6 +3003,46 @@ async function closeSourceView(): Promise<void> {
   if (tabOverride(activeTab()) !== null) await showSourceView(layout.focus, null);
 }
 
+/// «Apri come sorgente accanto»: la vista sorgente della scheda attiva di un
+/// riquadro, in un riquadro nuovo alla sua destra, sullo stesso documento e
+/// sulla stessa sessione. La superficie resta dov'è e il testo le sta accanto,
+/// nella modalità che lo mostra senza resa, perché la resa è già lì. Il fuoco
+/// va sul testo, come dopo una divisione.
+///
+/// Se un altro riquadro ha già quella vista dello stesso documento si va lì,
+/// invece di aprirne una seconda: chi ripete il gesto vuole il testo accanto,
+/// non un terzo riquadro.
+async function openSourceViewBeside(id: string): Promise<void> {
+  const view = offeredSourceView(panes.get(id));
+  const doc = activeDoc(id);
+  if (!view || !doc) return;
+  const there = sourceTabElsewhere(id, doc, view);
+  if (there) {
+    activateTab(there.pane, there.index);
+    await showSourceView(there.pane, view);
+    return;
+  }
+  const added = split(id, "row");
+  if (!added) return;
+  openIn(added, doc);
+  await showSourceView(added, view, "source");
+}
+
+/// La linguetta di un riquadro diverso da `id` che mostra `doc` nella vista
+/// `view`: quella attiva, se c'è, altrimenti la prima.
+function sourceTabElsewhere(id: string, doc: string, view: SourceView): { pane: string; index: number } | null {
+  const shows = (tab: Tab): boolean => tab.k === "doc" && tab.doc === doc && sameOverride(tabOverride(tab), view);
+  let first: { pane: string; index: number } | null = null;
+  for (const other of layoutPanes()) {
+    const p = paneState(other);
+    if (other === id || !p) continue;
+    if (p.active >= 0 && p.active < p.tabs.length && shows(p.tabs[p.active]!)) return { pane: other, index: p.active };
+    const index = p.tabs.findIndex(shows);
+    if (index >= 0) first ??= { pane: other, index };
+  }
+  return first;
+}
+
 /// Mette la scheda attiva di un riquadro nella vista sorgente, o la riporta
 /// alla superficie del documento con `null`, e porta il fuoco sulla
 /// superficie nuova: quella di prima non c'è più, e il fuoco che stava dentro
@@ -2997,14 +3052,18 @@ async function closeSourceView(): Promise<void> {
 /// La vista sorgente si apre per scrivere: se il riquadro ricorda una lettura
 /// per la sua famiglia (una nota lasciata in Lettura), si passa alla scrittura
 /// che il toggle sceglierebbe, invece di mostrare un'altra resa a chi ha
-/// chiesto il testo.
-async function showSourceView(id: string, view: SourceView | null): Promise<void> {
+/// chiesto il testo. Con `context` si passa invece alla modalità che ha quel
+/// ruolo, se la vista ne ha una.
+async function showSourceView(id: string, view: SourceView | null, context?: PaneMode): Promise<void> {
   const p = paneState(id);
   if (!p || p.active < 0) return;
   setTabOverride(id, p.active, view);
   await synchronize();
   const r = panes.get(id);
-  if (view && r?.surface && layout.focus === id && selectedMode(r)?.contextMode === "reading") {
+  if (view && r?.surface && layout.focus === id && context) {
+    const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
+    if (target && target.id !== selectedMode(r)?.id) await setMode(target.id);
+  } else if (view && r?.surface && layout.focus === id && selectedMode(r)?.contextMode === "reading") {
     const { family, modes, defaultMode } = r.surface;
     const writing = readingToggleTarget(modes, selectedMode(r)?.id, writingModes.get(id)?.get(family), defaultMode);
     if (writing) await setMode(writing.id);

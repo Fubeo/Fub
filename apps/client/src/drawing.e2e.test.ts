@@ -128,7 +128,7 @@ async function loaded(): Promise<void> {
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
-const SOURCE_COMMANDS = ["shell.doc.source.open", "shell.doc.source.close"];
+const SOURCE_COMMANDS = ["shell.doc.source.open", "shell.doc.source.side", "shell.doc.source.close"];
 
 async function offered(ids: readonly string[]): Promise<string[]> {
   const { allCommands } = await import("./ui/commands");
@@ -251,7 +251,7 @@ describe("un .svg è un disegno", () => {
     expect(focusedPane().querySelector(".vector-surface .draw-editor")).not.toBeNull();
     expect(mountedTextEditors()).toHaveLength(0);
     expect(await offered(MODE_COMMANDS)).toEqual(["shell.mode.reading", "shell.mode.live"]);
-    expect(await offered(SOURCE_COMMANDS)).toEqual(["shell.doc.source.open"]);
+    expect(await offered(SOURCE_COMMANDS)).toEqual(["shell.doc.source.open", "shell.doc.source.side"]);
   });
 
   it("senza la feature `draw` resta testo con l'anteprima accanto", async () => {
@@ -416,6 +416,33 @@ describe("«Apri come sorgente» su un disegno", () => {
     expect(mountedTextEditors()[0]!.state.doc.toString()).toBe(HOUSE);
     await open("albero.svg");
     expect(focusedPane().querySelector(".vector-surface")).not.toBeNull();
+  });
+});
+
+describe("«Apri come sorgente accanto» su un disegno", () => {
+  it("il disegno resta a sinistra, il testo si apre a destra, e ogni gesto si legge nel testo", async () => {
+    const host = await start();
+    await open("casa.svg");
+    const reads = host.atGate("readDocument").filter((call) => call.args[0] === "casa.svg").length;
+    await run("shell.doc.source.side");
+    const [left, right] = panes();
+    expect(left!.querySelector(".draw-surface")).not.toBeNull();
+    expect(right!.querySelector(".draw-surface")).toBeNull();
+    expect(right!.classList.contains("focus")).toBe(true);
+    expect(right!.dataset.mode, "il testo senza anteprima: la resa è il disegno accanto").toBe("source");
+    expect(right!.contains(document.activeElement)).toBe(true);
+    const [editor] = mountedTextEditors();
+    expect(editor!.state.doc.toString()).toBe(HOUSE);
+
+    drawRect(left);
+    await settle();
+    expect(editor!.state.doc.toString().match(/<rect /g)).toHaveLength(2);
+    await waitFor("il rettangolo arriva al disco", () => written(host, "casa.svg").length === 1);
+    undo(left);
+    await settle();
+    expect(editor!.state.doc.toString()).toBe(HOUSE);
+    await waitFor("il disco torna com'era", () => last(written(host, "casa.svg")) === HOUSE);
+    expect(host.atGate("readDocument").filter((call) => call.args[0] === "casa.svg")).toHaveLength(reads);
   });
 });
 

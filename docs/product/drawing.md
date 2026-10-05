@@ -406,6 +406,13 @@ La scelta è della linguetta. Resta salvata con il layout dopo un riavvio, e non
 passa alle altre linguette: un altro disegno aperto nello stesso riquadro si
 apre come disegno.
 
+«Apri come sorgente accanto», negli stessi due posti, apre il testo in un
+riquadro nuovo a destra e lascia il disegno dov'è: ogni gesto si legge subito
+nel testo, e il testo scritto a mano si vede subito nel disegno. Il testo si
+apre senza anteprima, perché l'anteprima è il disegno accanto, e prende il
+fuoco. Se un altro riquadro mostra già il testo dello stesso disegno, il
+comando porta lì invece di aprirne un altro.
+
 ## Più riquadri sullo stesso disegno
 
 Due riquadri possono mostrare lo stesso disegno, anche uno come disegno e uno

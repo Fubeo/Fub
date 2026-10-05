@@ -343,3 +343,12 @@ col colore e lo spessore della barra. Le regole stanno in
   aperto, i capi arrotondati, nelle coordinate del livello e coi due decimali
   di ogni `d`. La pagina si allarga se il tracciato ne esce. Lo strumento
   Nodi ritrova i nodi col tipo che avevano mentre si disegnavano.
+
+## Il file accanto
+
+Il file intero, mentre si disegna, sta nel riquadro accanto: «Apri come
+sorgente accanto», nella palette e nel menu del riquadro, apre il testo SVG a
+destra del disegno, sullo stesso documento. Ogni gesto si legge subito nel
+testo, e ciò che si scrive nel testo si vede subito nel disegno. Il comando è
+della shell e c'è a ogni livello, come [«Apri come
+sorgente»](drawing.md#apri-come-sorgente).

@@ -80,12 +80,14 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.mode.live", None),
     ("shell.mode.source", None),
     // Apre la linguetta attiva nella vista sorgente che la sua superficie
-    // dichiara (un disegno come testo SVG, ADR 0203), e ne torna. **Senza
-    // accordo**: il gesto serve a capire cosa c'è scritto sotto una resa, non
-    // si ripete mentre si lavora, e i comandi esistono soltanto dove una
-    // superficie offre la vista; nella palette e nel menu del riquadro li
-    // trova chi li cerca.
+    // dichiara (un disegno come testo SVG, ADR 0203), lì o in un riquadro
+    // nuovo accanto, e ne torna. **Senza accordo**: il gesto serve a capire
+    // cosa c'è scritto sotto una resa, o a scriverlo mentre la resa resta
+    // accanto, non si ripete mentre si lavora, e i comandi esistono soltanto
+    // dove una superficie offre la vista; nella palette e nel menu del
+    // riquadro li trova chi li cerca.
     ("shell.doc.source.open", None),
+    ("shell.doc.source.side", None),
     ("shell.doc.source.close", None),
     ("shell.pane.split.right", Some("Mod-\\")),
     // **Senza accordo**: `Mod-Shift-\` dentro l'editor è
