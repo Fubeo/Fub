@@ -2937,6 +2937,19 @@ progress::-moz-progress-bar {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* La miniatura di una voce che è un'immagine: un quadrato fisso, così le
+   righe restano allineate anche prima che arrivi, o se non arriva. Accanto
+   a lei il nome sta a metà altezza. */
+.modale .palette-row:has(.palette-thumb) {
+  align-items: center;
+}
+.modale .palette-thumb {
+  flex: none;
+  width: var(--space-10);
+  height: var(--space-10);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+}
 /* Le parole scritte dentro il nome proposto: in colore d'accento, senza il
    fondo pieno degli estratti — sono lettere di un nome, non una citazione. */
 .modale .palette-title mark {

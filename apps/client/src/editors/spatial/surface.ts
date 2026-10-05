@@ -18,6 +18,12 @@
 // superficie scrive il riferimento come lo scrive il kernel quando lo
 // riscrive dopo un rename.
 //
+// Le immagini del vault sono `image` con un `href` scritto allo stesso modo:
+// la shell le risolve, le apre e ne sceglie una da inserire (`images`). Sul
+// foglio il painter le mostra con l'URL che la shell apre; in Lettura, dove
+// l'`<img>` non carica niente da fuori, entrano nell'immagine coi loro byte
+// (`read-images.ts`).
+//
 // Il livello dell'editor è l'impostazione del vault `draw.level`, e la
 // griglia l'ultima scelta su questa macchina (`preferences.ts`): la
 // superficie le legge quando nasce, segue il livello finché vive, e ricorda
@@ -51,7 +57,8 @@ import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
-import { createDrawEditor, type DrawEditor, type DrawLinks } from "./tools/editor";
+import { createDrawEditor, type DrawEditor, type DrawImages, type DrawLinks } from "./tools/editor";
+import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages, type ImageRef } from "./read-images";
 
 type VectorMode = "draw" | "read";
 
@@ -65,6 +72,22 @@ export interface VectorSurfaceOptions {
   /// l'`href` di quello che si cambia, `null` per uno nuovo. Torna il suo
   /// `DocId`, o `null` se chi disegna rinuncia.
   onPickLink?(current: string | null): Promise<string | null>;
+  /// Le immagini del vault, che la shell risolve dal disegno.
+  images?: VectorImages;
+}
+
+/// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
+/// disegno, relativo al disegno o dalla radice del vault.
+export interface VectorImages {
+  /// L'URL dell'immagine `path`, aperto nella vita che riceve; `null` se non
+  /// si risolve.
+  url(path: string, life: Lifetime): Promise<string | null>;
+  /// I byte dell'immagine `path`, col loro tipo; `null` se non si risolve, o
+  /// se pesa più di `limit` byte, che allora non si leggono.
+  read(path: string, limit?: number): Promise<Blob | null>;
+  /// Chiede un'immagine del vault da mettere nel disegno; torna il suo
+  /// `DocId`, o `null` se chi disegna rinuncia.
+  pick?(): Promise<string | null>;
 }
 
 /// L'`href` con cui il disegno `drawing` porta al documento `doc`: relativo
@@ -252,6 +275,30 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
           open: openLink,
         };
 
+  /// Le immagini del vault per l'editor: le apre e le legge la shell, e
+  /// quella scelta si scrive relativa al disegno, come un collegamento.
+  const imagePort = options.images;
+  const pickImage = imagePort?.pick;
+  const images: DrawImages | undefined = imagePort === undefined
+    ? undefined
+    : {
+        url: (path, owner) => imagePort.url(path, owner),
+        read: (path) => imagePort.read(path),
+        ...(pickImage === undefined
+          ? {}
+          : {
+              choose: async () => {
+                try {
+                  const doc = await pickImage();
+                  return doc === null ? null : linkHref(context.documentId, doc);
+                } catch (error) {
+                  notify(errorText(error), "guasto");
+                  return null;
+                }
+              },
+            }),
+      };
+
   life.listen(aboutLinksList, "click", (event) => {
     const control = event.target instanceof Element ? event.target.closest("button") : null;
     if (control instanceof HTMLButtonElement && control.dataset.href !== undefined) openLink(control.dataset.href);
@@ -270,6 +317,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         saveGrid(next);
       },
       links,
+      ...(images === undefined ? {} : { images }),
       onChange: (change) => {
         text = change.text;
         opened = { kind: "scene", engine: mounted.engine };
@@ -381,21 +429,27 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     );
   };
 
-  const showImage = (): void => {
+  /// Le immagini del vault che la Lettura ha letto, per percorso: il data URI
+  /// e quanti byte pesa. Restano quelle del testo che si mostra; una che non
+  /// si è aperta si riprova al testo dopo.
+  const readImages = new Map<string, { readonly uri: string; readonly bytes: number }>();
+  /// Il giro della lettura delle immagini: uno più recente rende vecchi gli
+  /// altri.
+  let imagesRound = 0;
+
+  const imageSources = (): Map<string, string> => new Map([...readImages].map(([path, entry]) => [path, entry.uri]));
+
+  /// Mostra `source`, il testo di adesso con le immagini al loro posto. La
+  /// riga sotto dice il peso del file, non quello delle immagini.
+  const display = (source: string): void => {
     const label = t("vector.read.label", { name: drawingName() });
-    if (shownText === text && view !== null) {
-      view.stage.setAttribute("aria-label", label);
-      view.image.alt = label;
-      showAbout();
-      return;
-    }
-    const blob = new Blob([text], { type: "image/svg+xml" });
+    const file = new Blob([text], { type: "image/svg+xml" });
+    const blob = source === text ? file : new Blob([source], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const size = svgSize(text);
-    const info = imageInfo({ format: "SVG", blob }, size?.width ?? null, size?.height ?? null);
+    const info = imageInfo({ format: "SVG", blob: file }, size?.width ?? null, size?.height ?? null);
     const previous = shownUrl;
     shownUrl = url;
-    shownText = text;
     if (view === null) {
       // La carta è bianca anche dove il disegno non ne ha una.
       view = mountZoomView(url, { label, size, backdrop: "light", vector: true, info }, life);
@@ -407,7 +461,52 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       view.image.alt = label;
     }
     if (previous !== null) URL.revokeObjectURL(previous);
+  };
+
+  /// Legge le immagini del vault di `refs` che mancano, e mostra di nuovo
+  /// l'immagine se è ancora quella di `shown`. Oltre il tetto della Lettura
+  /// un'immagine resta un segnaposto, e la si riprova al testo dopo.
+  const readVaultImages = async (shown: string, refs: readonly ImageRef[]): Promise<void> => {
+    const port = options.images;
+    if (port === undefined) return;
+    const paths = [...new Set(refs.flatMap((ref) => (ref.path === null || readImages.has(ref.path) ? [] : [ref.path])))];
+    if (paths.length === 0) return;
+    const round = ++imagesRound;
+    let spent = 0;
+    for (const entry of readImages.values()) spent += entry.bytes;
+    let added = false;
+    // Una alla volta, col tetto che resta: un'immagine che non ci sta non si
+    // legge nemmeno.
+    for (const path of paths) {
+      const room = READ_IMAGE_BYTES - spent;
+      const blob = await port.read(path, room).catch(() => null);
+      const uri = blob === null || blob.size > room ? null : await imageDataUri(blob);
+      if (life.closed || round !== imagesRound) return;
+      if (uri === null) continue;
+      readImages.set(path, { uri, bytes: blob!.size });
+      spent += blob!.size;
+      added = true;
+    }
+    if (!added || life.closed || round !== imagesRound || shownText !== shown || view === null) return;
+    display(withImages(shown, refs, imageSources()));
+  };
+
+  const showImage = (): void => {
+    if (shownText === text && view !== null) {
+      const label = t("vector.read.label", { name: drawingName() });
+      view.stage.setAttribute("aria-label", label);
+      view.image.alt = label;
+      showAbout();
+      return;
+    }
+    const refs = imageRefs(text);
+    // Restano lette soltanto le immagini che il testo ha ancora.
+    const kept = new Set(refs.map((ref) => ref.path));
+    for (const path of [...readImages.keys()]) if (!kept.has(path)) readImages.delete(path);
+    shownText = text;
+    display(withImages(text, refs, imageSources()));
     showAbout();
+    void readVaultImages(text, refs);
   };
 
   // --- Lo stato a vista -----------------------------------------------------

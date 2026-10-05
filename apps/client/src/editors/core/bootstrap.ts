@@ -16,6 +16,7 @@ import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
+import type { DrawingImagePort } from "../canvas/surface";
 import type { SyntaxForm } from "../../host/contract";
 import {
   DocumentSurfaceRegistry,
@@ -40,6 +41,8 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// Il documento a cui porta un collegamento del disegno `from`, scelto
   /// dall'utente; `current` è l'`href` del collegamento che si cambia.
   readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
+  /// Le immagini del vault dei disegni: aperte, lette e scelte dalla shell.
+  readonly drawingImages?: DrawingImagePort;
   readonly renderCanvasMarkdown?: (
     nodeId: string,
     text: string,
@@ -279,6 +282,7 @@ export function createDocumentSurfaceRegistry(
           onCreateNote: options.onCreateCanvasNote,
           onPickFile: options.onPickCanvasFile,
           onPickDrawingLink: options.onPickDrawingLink,
+          drawingImages: options.drawingImages,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,

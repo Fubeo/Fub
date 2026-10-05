@@ -547,3 +547,59 @@ describe("il livello e la griglia del disegno", () => {
     await waitFor("la griglia ricordata dopo il riavvio", () => gridShown());
   });
 });
+
+describe("le immagini del vault nel disegno", () => {
+  it("dallo Standard, Ctrl+I ne sceglie una con la miniatura, il disegno la scrive per riferimento e la Lettura la mostra", async () => {
+    // happy-dom non decodifica immagini e non dice che cosa si vede.
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 64, height: 48, close() {} }));
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const created = vi.spyOn(URL, "createObjectURL");
+    try {
+      const host = await start(createFakeHost({ file: { ...VAULT, "immagini/gatto.jpg": "jpg" }, draw: true, settings: [drawLevel("standard")] }));
+      await open("casa.svg");
+      await waitFor("il livello Standard", () => tools().includes("highlighter"));
+      const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
+      sheet.focus();
+      press("i", { ctrlKey: true });
+
+      await waitFor("l'elenco delle immagini", () => document.querySelector('.shell-dialog input[role="combobox"]') !== null);
+      // Le immagini e basta: né i disegni, né le note, né gli altri file.
+      const options = [...document.querySelectorAll('.shell-dialog [role="option"]')];
+      expect(options.map((option) => [option.querySelector(".palette-title")!.textContent, option.querySelector(".palette-scope")!.textContent])).toEqual([
+        ["foto", "foto.png"],
+        ["gatto", "immagini/gatto.jpg"],
+      ]);
+      await waitFor("le miniature", () => [...document.querySelectorAll<HTMLImageElement>(".shell-dialog .palette-thumb")].every((thumb) => thumb.getAttribute("src")));
+      expect(formatIssues(checkAccessibility(document.querySelector<HTMLElement>(".shell-dialog")!))).toBe("");
+      const filter = document.querySelector<HTMLInputElement>('.shell-dialog input[role="combobox"]')!;
+      filter.value = "gatto";
+      filter.dispatchEvent(new Event("input"));
+      press("Enter");
+
+      await waitFor("l'immagine arriva al disco", () => written(host, "casa.svg").length === 1);
+      expect(written(host, "casa.svg")[0]).toMatch(/<image id="[^"]+" x="[^"]+" y="[^"]+" width="64" height="48" href="immagini\/gatto\.jpg"\/>/);
+      // Il vault non cambia: l'immagine c'era già.
+      expect(host.atGate("resourceWrite")).toEqual([]);
+      await waitFor("il fuoco torna al foglio", () => document.activeElement === sheet);
+      // Il foglio la mostra dal vault.
+      await waitFor("il foglio apre l'immagine", () => {
+        const image = focusedPane().querySelector(".draw-surface image[data-scene-id]");
+        return image !== null && host.atGate("resourceOpen").some((call) => call.args[0] === "immagini/gatto.jpg") && !image.getAttribute("href")!.startsWith("data:");
+      });
+
+      pressModE();
+      await waitFor("la Lettura", () => paneMode() === "read");
+      const shownSvg = async (): Promise<string[]> =>
+        Promise.all(created.mock.calls.map(([blob]) => blob as Blob).filter((blob) => blob.type === "image/svg+xml").map((blob) => blob.text()));
+      let texts: string[] = [];
+      await waitFor("la Lettura mostra i byte dell'immagine", () => {
+        void shownSvg().then((all) => (texts = all));
+        return texts.some((text) => text.includes(`href="data:image/jpeg;base64,${btoa("jpg")}"`));
+      });
+      // Il file resta per riferimento.
+      expect(host.files()["casa.svg"]).toContain('href="immagini/gatto.jpg"');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

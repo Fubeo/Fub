@@ -55,6 +55,11 @@
 // - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
 //   entra nel file come data URI (`images.ts`): il disegno resta un file
 //   solo. Oltre il peso massimo l'editor propone di ridurla.
+// - **Immagini del vault.** Dal livello Standard Ctrl+I, o «Immagine dal
+//   vault…», mette nel disegno un'immagine del vault che sceglie chi monta
+//   l'editor: entra per riferimento, col percorso relativo al disegno, dove
+//   entrerebbe incollata. Il foglio la mostra con l'URL che chi monta
+//   l'editor apre (`images`).
 // - **Testo.** Dal livello Standard lo strumento Testo scrive dove si tocca,
 //   in un campo sopra il foglio, col carattere, il corpo, il colore e la
 //   trasformazione del testo, così ciò che si scrive sta dove resterà
@@ -109,7 +114,7 @@ import { pathData, type Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, type NodeShape, type OverlayHandle } from "../painter/overlay";
 import { PaintBuilder, type PaintNode, type PaintScene } from "../painter/paint";
-import { createSvgPainter, type PainterOptions } from "../painter/svg-dom";
+import { createSvgPainter } from "../painter/svg-dom";
 import {
   addOp,
   boxMatrix,
@@ -280,11 +285,26 @@ export interface DrawLinks {
   open(href: string): void;
 }
 
+/// Le immagini del vault, da chi monta l'editor: chi le apre, chi ne legge i
+/// byte e chi ne sceglie una da inserire. Senza, ogni immagine del vault è un
+/// segnaposto e l'editor non ne inserisce.
+export interface DrawImages {
+  /// L'URL dell'immagine `href`, com'è scritto nel disegno, aperto nella vita
+  /// che riceve; `null` se non si risolve.
+  url(href: string, life: Lifetime): Promise<string | null>;
+  /// I byte dell'immagine `href`; `null` se non si risolve.
+  read(href: string): Promise<Blob | null>;
+  /// Chiede l'immagine del vault da inserire; torna l'`href` da scrivere,
+  /// relativo al disegno, o `null` se chi disegna rinuncia. Senza, l'editor
+  /// non ne inserisce.
+  choose?(): Promise<string | null>;
+}
+
 export interface DrawEditorOptions {
   /// Il livello degli strumenti (default `essential`); cambia con
   /// `setLevel`.
   readonly level?: Level;
-  readonly images?: PainterOptions["images"];
+  readonly images?: DrawImages;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
   /// Chi legge e ricodifica le immagini incollate: quello del browser, se
@@ -430,6 +450,10 @@ const ATTRIBUTES_BINDING = "Mod-Shift-x";
 /// Inkscape.
 const TRANSFORM_BINDING = "Mod-Shift-m";
 
+/// «Immagine dal vault…», dal livello Standard: il tasto con cui Inkscape
+/// importa.
+const IMAGE_BINDING = "Mod-i";
+
 /// I limiti dei campi di «Trasforma»: una scala fino a mille volte, e
 /// un'inclinazione che non arriva all'angolo retto, dove non ha misura.
 const MAX_SCALE_PERCENT = 100_000;
@@ -493,6 +517,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-into-layer": ["M12 11l9 5-9 5-9-5z", "M12 2v7", "M9 6l3 3 3-3"],
   "draw-page-grid": ["M3 3h18v18H3z", "M9 3v18", "M15 3v18", "M3 9h18", "M3 15h18"],
   "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
+  "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
   "draw-link": ["M9.5 14.5l5-5", "M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5"],
   "draw-unlink": ["M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5", "M4 8h2.5", "M8 4v2.5", "M20 16h-2.5", "M16 20v-2.5"],
@@ -1007,6 +1032,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     toolButtons.set(spec.id, control);
   }
 
+  // Le immagini del vault, dal livello Standard e se chi monta l'editor le
+  // sa scegliere: un pulsante accanto agli strumenti, che apre la scelta.
+  const insertGroup = group("draw.insert", false);
+  const imageButton = button(insertGroup, "draw-button", () => t("draw.image.vault"), "draw-image", () => void vaultImage());
+  imageButton.setAttribute("aria-haspopup", "dialog");
+  imageButton.setAttribute("aria-keyshortcuts", ariaBinding(IMAGE_BINDING));
+  relabels.push(() => {
+    imageButton.title = `${t("draw.image.vault")} (${displayBinding(IMAGE_BINDING)})`;
+  });
+
   const colorButtons = new Map<string, HTMLButtonElement>();
   const colorGroup = group("draw.colors", true);
   for (const swatch of PALETTE) {
@@ -1331,7 +1366,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   gridMajor.setAttribute("data-major", "");
   gridMark.append(gridMinor, gridMajor);
   surface.append(gridMark);
-  const painter = createSvgPainter(surface, life, options.images === undefined ? {} : { images: options.images });
+  const images = options.images;
+  const painter = createSvgPainter(surface, life, images === undefined ? {} : { images: (href, owner) => images.url(href, owner) });
   const preview = document.createElementNS(SVG_NS, "svg");
   preview.setAttribute("class", "draw-preview");
   preview.setAttribute("aria-hidden", "true");
@@ -2092,6 +2128,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     deleteButton.disabled = !canEdit || selection.length === 0;
     propertiesButton.disabled = !canEdit;
     pageButton.hidden = !reaches(level, "standard");
+    insertGroup.hidden = !insertsImages(level);
+    imageButton.disabled = !canEdit;
     attributesButton.hidden = !reaches(level, "expert");
     if (attributesButton.hidden && !inspector.element.hidden) showAttributes(false);
     syncInspector();
@@ -5219,6 +5257,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["Mod-z", t("draw.undo")],
         ["Mod-Shift-z Mod-y", t("draw.redo")],
         ["Mod-v", t("draw.keys.paste")],
+        ...(insertsImages(at) ? [[IMAGE_BINDING, t("draw.image.vault")] as const] : []),
         ["?", t("draw.keys")],
       ],
     },
@@ -5371,15 +5410,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         }
         if (gone()) return;
       }
-      placeImages(pictures, at);
+      placeImages(
+        pictures.map((picture) => ({
+          width: picture.decoded.width,
+          height: picture.decoded.height,
+          href: dataUri(picture.encoded.type, picture.encoded.bytes),
+        })),
+        at,
+      );
     } finally {
       for (const picture of pictures) picture.decoded.close();
       asking = false;
     }
   }
 
+  /// Un'immagine da mettere sul foglio: le misure in pixel e l'`href`.
+  interface Placed {
+    readonly width: number;
+    readonly height: number;
+    readonly href: string;
+  }
+
   /// Le immagini nel livello che riceve, una sopra l'altra con uno scarto.
-  const placeImages = (pictures: readonly Picture[], at: Point | null): void => {
+  const placeImages = (pictures: readonly Placed[], at: Point | null): void => {
     const ids = newIds();
     const to = target(ids);
     if (to === null) return;
@@ -5395,7 +5448,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const bounds = new BoundsBuilder();
     let hrefBytes = 0;
     pictures.forEach((picture, i) => {
-      let box = placeImage(picture.decoded.width, picture.decoded.height, view, [base[0] + i * step, base[1] + i * step]);
+      let box = placeImage(picture.width, picture.height, view, [base[0] + i * step, base[1] + i * step]);
       // Con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più
       // vicino.
       if (gridOn()) box = translated(box, ...snapDelta(box.min, 0, 0, grid.step))!;
@@ -5403,7 +5456,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const w = (box.max[0] - box.min[0]) / k;
       const h = (box.max[1] - box.min[1]) / k;
       const id = ids.next("object");
-      const elem = imageElem(id, dataUri(picture.encoded.type, picture.encoded.bytes), { min: [cx - w / 2, cy - h / 2], max: [cx + w / 2, cy + h / 2] });
+      const elem = imageElem(id, picture.href, { min: [cx - w / 2, cy - h / 2], max: [cx + w / 2, cy + h / 2] });
       ops.push(addOp(to, elem));
       keys.push(id);
       hrefBytes += utf8Length(elem.attrs.href!);
@@ -5431,6 +5484,63 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const now = switched ? ` ${t("draw.announce.tool", { tool: t(toolSpec("select").label) })}` : "";
     announce(`${added}${now} ${objects()}`);
   };
+
+  // --- Le immagini del vault --------------------------------------------------
+
+  /// Al livello `at` l'editor inserisce immagini del vault: dallo Standard, se
+  /// chi lo monta le sa scegliere.
+  function insertsImages(at: Level): boolean {
+    return reaches(at, "standard") && options.images?.choose !== undefined;
+  }
+
+  /// Ctrl+I, o «Immagine dal vault…»: l'immagine che sceglie chi monta
+  /// l'editor entra per riferimento, dove entrerebbe incollata e con la sua
+  /// misura in pixel, scelta e con lo strumento della selezione. I byte si
+  /// leggono soltanto per misurarla.
+  async function vaultImage(): Promise<void> {
+    const port = options.images;
+    const choose = port?.choose;
+    if (port === undefined || choose === undefined || asking || disposed) return;
+    if (!insertsImages(level) || !editable()) return;
+    if (codec === null) {
+      announce(t("draw.image.unreadable"));
+      return;
+    }
+    finishText();
+    asking = true;
+    cancelGesture();
+    const loaded = loads;
+    // Il posto è quello del cursore di adesso: la finestra prende il fuoco.
+    const at = cursor;
+    let decoded: Decoded | null = null;
+    try {
+      let href: string | null;
+      try {
+        href = await choose();
+      } catch {
+        // Chi sceglie dice da sé perché non ha potuto.
+        href = null;
+      }
+      const gone = (): boolean => disposed || loads !== loaded || !editable();
+      if (href === null || gone()) return;
+      const blob = await port.read(href).catch(() => null);
+      if (gone()) return;
+      if (blob === null) {
+        announce(t("draw.image.gone"));
+        return;
+      }
+      decoded = await codec.decode(blob).catch(() => null);
+      if (gone()) return;
+      if (decoded === null) {
+        announce(t("draw.image.unreadable"));
+        return;
+      }
+      placeImages([{ width: decoded.width, height: decoded.height, href }], at);
+    } finally {
+      decoded?.close();
+      asking = false;
+    }
+  }
 
   // Un incolla che porta immagini non va oltre; uno di solo testo, o in un
   // campo, segue la sua strada.
@@ -5541,6 +5651,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (arranges && key === "g") {
         if (event.shiftKey) ungroupSelection();
         else groupSelection();
+      } else if (key === "i" && !event.shiftKey && insertsImages(level) && editable()) {
+        void vaultImage();
       } else if (arranges && key === "k" && (event.shiftKey || options.links !== undefined)) {
         if (event.shiftKey) unlinkSelection();
         else void linkSelection();

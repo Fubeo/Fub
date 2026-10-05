@@ -38,6 +38,9 @@ import { NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
+import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
+import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
+import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
@@ -52,7 +55,7 @@ import { invalidateDocumentCaches, renameInDocumentCaches } from "../state/docum
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, notesByName, renderPrint, resolvedReference, settings, vaultEntries, vaultTags } from "../host/query";
-import { theseDocuments, type PaneMode, type SyntaxForm, type ViewContext } from "../host/contract";
+import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "../state/recent";
 import { onEvent } from "../state/kernel";
 import { emit, on, state } from "../state/store";
@@ -258,6 +261,57 @@ async function pickDrawingLink(from: string, current: string | null): Promise<st
   });
 }
 
+/// I byte dei file del vault, per chi li legge interi.
+const mediaTransport: ResourceTransport = {
+  open: (id, vault) => api.resourceOpen(id, vault ?? null),
+  read_chunk: api.resourceReadChunk,
+  close: api.resourceClose,
+};
+
+/// Un'immagine del vault che un disegno mostra per nome. Gli SVG non si
+/// propongono: nel vault sono disegni, e a un disegno si porta un
+/// collegamento.
+function drawingImageChoice(id: string): boolean {
+  return mediaKindOfId(id) === "image" && mimeOfId(id) !== "image/svg+xml";
+}
+
+/// Le immagini del vault, dalla più recente: l'anagrafe degli allegati letta a
+/// pagine, tutta, perché l'elenco dica quante ne lascia fuori.
+async function drawingImageEntries(): Promise<VaultEntry[]> {
+  const found: VaultEntry[] = [];
+  for (let offset = 0; ;) {
+    const page = await vaultEntries({ offset, limit: CANVAS_FILE_CHOICES }, "asset");
+    for (const entry of page.items) if (drawingImageChoice(entry.id)) found.push(entry);
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+  return found.sort((a, b) => b.mtime - a.mtime || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/// L'immagine del vault da mettere in un disegno: una che c'è, scelta con la
+/// sua miniatura fra le immagini del vault, le più recenti prima.
+async function pickDrawingImage(): Promise<string | null> {
+  const images = await drawingImageEntries();
+  if (images.length === 0) {
+    notify(t("vector.image.none"));
+    return null;
+  }
+  const shown = images.slice(0, CANVAS_FILE_CHOICES);
+  return pickFromList<string>({
+    title: t("vector.image.pick"),
+    placeholder: t("vector.image.filter"),
+    items: shown.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id, thumbnail: vaultImageSource(entry.id) })),
+    more: images.length - shown.length,
+  });
+}
+
+/// L'immagine a cui porta l'`href` `path` del disegno `from`: il documento,
+/// se c'è ed è un'immagine.
+async function drawingImageId(path: string, from: string): Promise<string | null> {
+  const id = (await resolvedReference({ kind: "path", value: path }, from).catch(() => null))?.doc ?? null;
+  return id !== null && mediaKindOfId(id) === "image" ? id : null;
+}
+
 async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   const configured = (await settings()).find((entry) => entry.spec.key === "files.attachment-folder")?.value;
   const folder = typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER;
@@ -424,6 +478,24 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
     onCreateCanvasNote: createCanvasNote,
     onPickCanvasFile: pickCanvasFile,
     onPickDrawingLink: pickDrawingLink,
+    drawingImages: {
+      url: async (path, from, owner) => {
+        const id = await drawingImageId(path, from);
+        return id === null ? null : vaultImageSource(id)(owner);
+      },
+      read: async (path, from, limit) => {
+        const id = await drawingImageId(path, from);
+        if (id === null) return null;
+        const port = await openResourcePort(mediaTransport, id);
+        try {
+          if (limit !== undefined && port.descriptor.len > limit) return null;
+          return new Blob([(await port.readAll()) as BlobPart], { type: port.descriptor.mime });
+        } finally {
+          await port.close();
+        }
+      },
+      pick: () => pickDrawingImage(),
+    },
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
       openWikilink: (page, heading, block) => openWikilink(page, heading, block),
@@ -473,11 +545,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
     },
     gridHost: api,
     media: {
-      transport: {
-        open: (id, vault) => api.resourceOpen(id, vault ?? null),
-        read_chunk: api.resourceReadChunk,
-        close: api.resourceClose,
-      },
+      transport: mediaTransport,
       assetUrl: api.assetUrl,
       copyText: writeClipboardText,
     },
