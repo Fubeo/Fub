@@ -258,7 +258,20 @@ import {
   WIDTHS,
   type Width,
 } from "./palette";
-import { DEFAULT_TOOL, levelsAbove, reaches, toolForKey, TOOLS, toolsFor, toolSpec, type Level, type ToolId, type ToolSpec } from "./registry";
+import {
+  CUSTOM_DEFAULT,
+  featuresFor,
+  levelsAbove,
+  startTool,
+  toolForKey,
+  TOOLS,
+  toolsOf,
+  toolSpec,
+  type Feature,
+  type Level,
+  type ToolId,
+  type ToolSpec,
+} from "./registry";
 import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
 import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
@@ -304,6 +317,9 @@ export interface DrawEditorOptions {
   /// Il livello degli strumenti (default `essential`); cambia con
   /// `setLevel`.
   readonly level?: Level;
+  /// Le parti del livello Personalizzato, per nome (default quelle
+  /// dell'Essenziale): un nome che l'editor non conosce non conta.
+  readonly custom?: readonly string[];
   readonly images?: DrawImages;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
@@ -324,6 +340,8 @@ export interface DrawEditor {
   readonly element: HTMLElement;
   readonly engine: SceneEngine;
   readonly level: Level;
+  /// Le parti che il livello di adesso offre.
+  readonly features: ReadonlySet<Feature>;
   readonly tool: ToolId;
   /// Il colore e lo spessore dello strumento di adesso.
   readonly color: string;
@@ -351,10 +369,11 @@ export interface DrawEditor {
   /// di annulla. `false` se il documento non è estraneo o la scrittura è
   /// tolta.
   adopt(): boolean;
-  /// Un altro livello, dal vivo: la barra e i tasti cambiano, il documento
-  /// e la cronologia restano. Uno strumento che il livello non ha più torna
-  /// alla penna, e un colore personalizzato al nero.
-  setLevel(level: Level): void;
+  /// Un altro livello, dal vivo, e le parti del Personalizzato (default
+  /// quelle di prima): la barra e i tasti cambiano, il documento e la
+  /// cronologia restano. Uno strumento che il livello non ha più torna alla
+  /// penna, o al primo che c'è, e un colore personalizzato al nero.
+  setLevel(level: Level, custom?: readonly string[]): void;
   setTool(id: ToolId): void;
   /// Il colore dello strumento di adesso: uno della tavolozza o, dal livello
   /// Standard, uno a piacere, come lo legge `customColor`.
@@ -440,7 +459,11 @@ const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
   essential: "draw.level.essential",
   standard: "draw.level.standard",
   expert: "draw.level.expert",
+  custom: "draw.level.custom",
 };
+
+/// Le parti che hanno un pulsante nella barra della selezione.
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "transform", "apply", "path", "boolean", "outline"];
 
 /// Il tasto che mostra e nasconde gli attributi, dal livello Esperto: lo
 /// stesso dell'editor XML di Inkscape.
@@ -846,11 +869,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   ensureIcons();
   const life = openLifetime();
   let level: Level = options.level ?? "essential";
-  let tools = toolsFor(level);
+  /// Le parti scelte per il Personalizzato, anche mentre il livello è un
+  /// altro: tornando al Personalizzato valgono di nuovo.
+  let picked: readonly string[] = options.custom ?? CUSTOM_DEFAULT;
+  let features = featuresFor(level, picked);
+  let tools = toolsOf(features);
+  /// Vero se il livello di adesso offre `feature`.
+  const has = (feature: Feature): boolean => features.has(feature);
   const relabels: Array<() => void> = [];
 
   let engine = initial;
-  let tool: ToolId = DEFAULT_TOOL;
+  let tool: ToolId = startTool(tools);
   /// Il colore e lo spessore di chi scrive: la penna e le forme li
   /// condividono, l'evidenziatore ha i suoi.
   const styles: Record<Tool, { color: string; width: number }> = {
@@ -933,7 +962,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly index: SceneIndex;
     readonly keys: string;
     readonly tool: ToolId;
-    readonly level: Level;
+    readonly features: ReadonlySet<Feature>;
     readonly editable: boolean;
     readonly preferred: readonly number[] | null;
   } | null = null;
@@ -972,9 +1001,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   surfaceHint.id = identifier("draw-surface-hint");
   surface.setAttribute("aria-describedby", surfaceHint.id);
   /// Il suggerimento del foglio dice anche come si arriva ai comandi della
-  /// selezione, dal livello che li ha.
+  /// selezione, quando il livello ne ha.
   const showSurfaceHint = (): void => {
-    surfaceHint.textContent = t(reaches(level, "standard") ? "draw.surface.hint.arrange" : "draw.surface.hint");
+    surfaceHint.textContent = t(BAR_FEATURES.some(has) ? "draw.surface.hint.arrange" : "draw.surface.hint");
   };
   relabels.push(() => {
     toolbar.setAttribute("aria-label", t("draw.toolbar"));
@@ -1222,11 +1251,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     control.setAttribute("aria-label", text);
     control.title = binding === null ? text : `${text} (${displayBinding(binding)})`;
   };
+  /// I pulsanti della barra: se nessuno si vede, la barra non c'è.
+  const arrangeButtons: HTMLButtonElement[] = [];
   /// Un pulsante della barra; il nome è una chiave, o una funzione per quelli
   /// che cambiano nome con la selezione.
   const arrangeButton = (label: DrawKey | (() => string), iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
     const text = typeof label === "function" ? label : () => t(label);
     const control = button(arrangeBar, "draw-button", text, iconName, run);
+    arrangeButtons.push(control);
     // Un tasto senza modificatori, come F2, si scrive com'è.
     if (binding !== null) control.setAttribute("aria-keyshortcuts", ariaBinding(binding) || binding);
     relabels.push(() => nameArrange(control, text(), binding));
@@ -1234,7 +1266,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
   // Un testo scelto da solo si cambia sul posto.
   const textButton = arrangeButton("draw.text.edit", "draw-text-edit", "F2", () => editSelectedText());
-  arrangeButton("draw.duplicate", "draw-duplicate", "Mod-d", () => duplicateSelection());
+  const duplicateButton = arrangeButton("draw.duplicate", "draw-duplicate", "Mod-d", () => duplicateSelection());
   const groupButton = arrangeButton("draw.group", "draw-group", "Mod-g", () => groupSelection());
   const ungroupButton = arrangeButton("draw.ungroup", "draw-ungroup", "Mod-Shift-g", () => ungroupSelection());
   // Il collegamento scelto da solo: dove porta, e il suo nome. Il pulsante
@@ -1438,9 +1470,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     paper.style.height = `${scale * page.height}px`;
   };
 
-  /// La griglia sullo schermo, dal livello Standard e se la si vuole vedere.
+  /// La griglia sullo schermo, se il livello la offre e la si vuole vedere.
   const showGrid = (): void => {
-    const shown = reaches(level, "standard") && grid.shown;
+    const shown = has("grid") && grid.shown;
     gridMark.style.display = shown ? "" : "none";
     if (!shown) return;
     const lines = gridLines(camera, surface.clientWidth, surface.clientHeight, grid.step);
@@ -1528,12 +1560,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // --- I nodi -------------------------------------------------------------
 
   /// Il tracciato di cui lo strumento Nodi modifica i nodi: con lo strumento
-  /// Nodi, dal livello Esperto, col disegno che si scrive e un oggetto solo
+  /// Nodi, se il livello lo offre, col disegno che si scrive e un oggetto solo
   /// scelto. Dentro un gruppo vale la forma toccata per ultima, o quella di
   /// prima, o la prima. Una chiave dice perché non ce n'è uno; `null`, che
   /// non c'è niente da dire.
   const nodeTarget = (): Editing | DrawKey | null => {
-    if (tool !== "nodes" || !reaches(level, "expert") || !editable() || selection.length === 0) return null;
+    if (tool !== "nodes" || !has("nodes") || !editable() || selection.length === 0) return null;
     const units = selectedUnits();
     if (units.length !== 1) return "draw.nodes.many";
     const unit = units[0]!;
@@ -1564,10 +1596,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const canEdit = editable();
     const last = resolvedFor;
     if (
-      last !== null && last.index === index && last.keys === keys && last.tool === tool && last.level === level &&
+      last !== null && last.index === index && last.keys === keys && last.tool === tool && last.features === features &&
       last.editable === canEdit && last.preferred === preferredShape
     ) return false;
-    resolvedFor = { index, keys, tool, level, editable: canEdit, preferred: preferredShape };
+    resolvedFor = { index, keys, tool, features, editable: canEdit, preferred: preferredShape };
     const before = editing;
     const found = nodeTarget();
     editing = found === null || typeof found === "string" ? null : found;
@@ -1818,7 +1850,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (tree.element.hidden) return;
     const index = currentIndex();
     const keys = selection.join("\n");
-    const layer = reaches(level, "standard") ? currentLayer() : null;
+    const layer = has("layers") ? currentLayer() : null;
     const current = layer === null ? null : keyOf(layer);
     if (treeShown?.index !== index || treeShown.layer !== current) {
       const nodes = outlineNow().nodes;
@@ -1880,7 +1912,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Apre o chiude gli attributi; aperti, il fuoco ci va. Chiusi, un valore
   /// scritto a metà parte prima, come lasciando il campo.
   function showAttributes(open: boolean): void {
-    if (open && !reaches(level, "expert")) return;
+    if (open && !has("attributes")) return;
     if (!open && inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     inspector.element.hidden = !open;
     attributesButton.setAttribute("aria-expanded", String(open));
@@ -1938,7 +1970,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return below ?? layers[0] ?? null;
   };
 
-  /// Il livello in cui si disegna dal livello Standard: quello scelto; se
+  /// Il livello in cui si disegna, quando l'interfaccia offre i livelli:
+  /// quello scelto; se
   /// nessuno l'ha scelto, il più alto che si vede e non è bloccato, o il più
   /// alto. `null` se il disegno non ha livelli.
   function currentLayer(): LayerInfo | null {
@@ -1955,10 +1988,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncLayers();
   };
 
-  /// Dal livello Standard il livello corrente segue la selezione: diventa
-  /// quello degli oggetti scelti, se stanno tutti in uno.
+  /// Quando l'interfaccia offre i livelli, il livello corrente segue la
+  /// selezione: diventa quello degli oggetti scelti, se stanno tutti in uno.
   function followSelection(): void {
-    if (!reaches(level, "standard") || selection.length === 0) return;
+    if (!has("layers") || selection.length === 0) return;
     const units = selectedUnits();
     const at = units[0]?.path[0];
     if (at === undefined || units.some((unit) => unit.path.length < 2 || unit.path[0] !== at)) return;
@@ -1976,10 +2009,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return state === "" ? label : `${label}, ${state}`;
   }
 
-  /// Il pulsante dei livelli c'è dal livello Standard, e mostra il nome del
-  /// livello corrente e il suo stato; l'albero dice qual è.
+  /// Il pulsante dei livelli c'è quando l'interfaccia li offre, e mostra il
+  /// nome del livello corrente e il suo stato; l'albero dice qual è.
   function syncLayers(): void {
-    layerGroup.hidden = !reaches(level, "standard");
+    layerGroup.hidden = !has("layers");
     layersButton.disabled = !editable();
     if (!layerGroup.hidden) {
       const layer = currentLayer();
@@ -2012,7 +2045,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Il campione del colore a piacere: il colore, il nome, e se si vede.
   const showCustom = (): void => {
-    customButton.hidden = custom === null || !reaches(level, "standard");
+    customButton.hidden = custom === null || !has("colors");
     if (custom === null) return;
     customChip.style.setProperty("--swatch", custom);
     const label = customLabel();
@@ -2040,43 +2073,44 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     nodesFocus.sync(null);
   };
 
-  /// La barra della selezione: c'è dal livello Standard, con qualcosa di
-  /// scelto e il disegno che si scrive, e non mentre si scrive un testo. Con
-  /// lo strumento Nodi e un tracciato da modificare c'è al suo posto quella
-  /// dei nodi. Un pulsante che non serve si spegne; se aveva il fuoco, il
-  /// fuoco passa a quello che prende il Tab, o al foglio quando la barra se
-  /// ne va.
+  /// La barra della selezione: c'è con qualcosa di scelto e il disegno che
+  /// si scrive, e non mentre si scrive un testo, se il livello ha un suo
+  /// pulsante. Ha i pulsanti delle parti che il livello offre. Con lo
+  /// strumento Nodi e un tracciato da modificare c'è al suo posto quella dei
+  /// nodi. Un pulsante che non serve si spegne; se aveva il fuoco, il fuoco
+  /// passa a quello che prende il Tab, o al foglio quando la barra se ne va.
   const syncArrange = (): void => {
     resolveNodes();
     const focused = arrangeBar.contains(document.activeElement) || nodesBar.contains(document.activeElement);
     const noding = typing === null && editing !== null;
-    const units = !noding && typing === null && reaches(level, "standard") && editable() && selection.length > 0 ? selectedUnits() : [];
-    arrangeBar.hidden = units.length === 0;
+    const units = !noding && typing === null && BAR_FEATURES.some(has) && editable() && selection.length > 0 ? selectedUnits() : [];
     nodesBar.hidden = !noding;
     // Canc, coi nodi, elimina i nodi: il pulsante dell'oggetto non lo dice.
     if (noding) deleteButton.removeAttribute("aria-keyshortcuts");
     else deleteButton.setAttribute("aria-keyshortcuts", "Delete");
-    textButton.hidden = units.length !== 1 || units[0]!.look === null;
+    textButton.hidden = !has("text") || units.length !== 1 || units[0]!.look === null;
+    for (const control of [duplicateButton, groupButton, ungroupButton, orderButton, alignButton]) control.hidden = !has("arrange");
     groupButton.disabled = units.length < 2;
     ungroupButton.disabled = !units.some(isGroup);
     // Un collegamento non ne contiene un altro: attorno a uno che c'è non se
     // ne crea un secondo, ma quello scelto da solo si cambia.
     const single = units.length === 1 && isLink(units[0]!) ? units[0]! : null;
     shownLink = single === null ? null : { target: linkTarget(nodeOf(engine.model!, single)) };
-    linkButton.hidden = options.links === undefined;
+    linkButton.hidden = !has("links") || options.links === undefined;
     linkButton.disabled = shownLink === null && units.length > 0 && holdsLinks(engine.model!, units);
     nameArrange(linkButton, linkText(), "Mod-k");
     openLinkButton.hidden = options.links === undefined || (shownLink?.target ?? null) === null;
     nameArrange(openLinkButton, openLinkText(), "Alt-Enter");
-    unlinkButton.hidden = !units.some(isLink);
+    unlinkButton.hidden = !has("links") || !units.some(isLink);
     // Con un livello solo, che ha già tutto, non c'è dove spostare.
     const layers = currentIndex().layers;
-    intoButton.hidden = layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
-    transformButton.hidden = !reaches(level, "expert");
-    applyButton.hidden = !reaches(level, "expert");
-    pathButton.hidden = !reaches(level, "expert");
-    booleanButton.hidden = !reaches(level, "expert");
-    outlineButton.hidden = !reaches(level, "expert");
+    intoButton.hidden = !has("layers") || layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
+    transformButton.hidden = !has("transform");
+    applyButton.hidden = !has("apply");
+    pathButton.hidden = !has("path");
+    booleanButton.hidden = !has("boolean");
+    outlineButton.hidden = !has("outline");
+    arrangeBar.hidden = units.length === 0 || arrangeButtons.every((control) => control.hidden);
     arrangeFocus.sync(null);
     syncNodesBar();
     if (!focused) return;
@@ -2109,7 +2143,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     customButton.disabled = !canEdit;
     // Il gruppo intero, non solo il pulsante: un gruppo vuoto nella barra
     // occuperebbe comunque il suo spazio.
-    moreGroup.hidden = !reaches(level, "standard");
+    moreGroup.hidden = !has("colors");
     moreButton.hidden = moreGroup.hidden;
     moreButton.disabled = !canEdit;
     const widths = widthsNow();
@@ -2127,10 +2161,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     redoButton.disabled = !canEdit || !redoable();
     deleteButton.disabled = !canEdit || selection.length === 0;
     propertiesButton.disabled = !canEdit;
-    pageButton.hidden = !reaches(level, "standard");
-    insertGroup.hidden = !insertsImages(level);
+    pageButton.hidden = !has("grid");
+    insertGroup.hidden = !insertsImages(features);
     imageButton.disabled = !canEdit;
-    attributesButton.hidden = !reaches(level, "expert");
+    attributesButton.hidden = !has("attributes");
     if (attributesButton.hidden && !inspector.element.hidden) showAttributes(false);
     syncInspector();
     titleInput.disabled = !canEdit;
@@ -2205,7 +2239,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // così il livello corrente.
     const touched = inOrder(applied.touched);
     if (touched.length > 0) selection = touched;
-    const layer = reaches(level, "standard") ? currentIndex().layers.find((other) => other.id !== null && applied.touched.includes(other.id)) : undefined;
+    const layer = has("layers") ? currentIndex().layers.find((other) => other.id !== null && applied.touched.includes(other.id)) : undefined;
     if (layer !== undefined) choose(layer);
     else if (touched.length > 0) followSelection();
     syncControls();
@@ -2349,24 +2383,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Strumenti --------------------------------------------------------------
 
-  function setLevel(next: Level): void {
-    if (next === level) return;
+  function setLevel(next: Level, custom: readonly string[] = picked): void {
+    picked = custom;
+    const offered = featuresFor(next, picked);
+    if (next === level && offered.size === features.size && [...offered].every((feature) => features.has(feature))) return;
     finishText();
-    // La penna di Bézier c'è solo all'Esperto: il suo tracciato si conclude
-    // prima che il livello cambi.
-    if (!reaches(next, "expert")) {
+    // Il tracciato della penna di Bézier si conclude prima che la penna se
+    // ne vada.
+    if (!offered.has("bezier")) {
       cancelGesture();
       finishBezier(false, true);
     }
     level = next;
-    tools = toolsFor(level);
+    features = offered;
+    tools = toolsOf(features);
     if (!tools.some((spec) => spec.id === tool)) {
       cancelGesture();
-      tool = DEFAULT_TOOL;
+      tool = startTool(tools);
     }
-    // Sotto lo Standard la barra non ha un campione per un colore a piacere:
+    // Senza i colori a piacere la barra non ha un campione per uno di loro:
     // chi lo usava riparte dai colori di partenza, che la barra mostra.
-    if (!reaches(level, "standard")) {
+    if (!has("colors")) {
       if (swatchOf(styles.pen.color) === null) styles.pen.color = DEFAULT_COLOR;
       if (swatchOf(styles.highlighter.color) === null) styles.highlighter.color = HIGHLIGHTER_COLOR;
     }
@@ -2399,7 +2436,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const code = customColor(value);
     if (code === null) return;
     if (swatchOf(code) === null) {
-      if (!reaches(level, "standard")) return;
+      if (!has("colors")) return;
       custom = code;
     }
     style().color = code;
@@ -2421,7 +2458,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// «Altro colore…»: il codice, o il selettore del sistema. Un colore della
   /// tavolozza sceglie il suo campione.
   async function chooseColor(): Promise<void> {
-    if (asking || !editable() || !reaches(level, "standard")) return;
+    if (asking || !editable() || !has("colors")) return;
     asking = true;
     cancelGesture();
     try {
@@ -2447,11 +2484,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- La pipeline della penna ------------------------------------------------
 
-  /// Il livello che riceve: dal livello Standard quello corrente; sotto, il
-  /// più alto che si vede e non è bloccato. Se non c'è o non riceve, lo si
-  /// dice, e il gesto non scrive.
+  /// Il livello che riceve: quello corrente, quando l'interfaccia offre i
+  /// livelli; senza, il più alto che si vede e non è bloccato. Se non c'è o
+  /// non riceve, lo si dice, e il gesto non scrive.
   const target = (ids: NewIds): Destination | null => {
-    const layer = reaches(level, "standard") ? currentLayer() : null;
+    const layer = has("layers") ? currentLayer() : null;
     if (layer === null) {
       const to = destination(currentIndex(), ids);
       if (to === null) announce(t("draw.no_layer"));
@@ -2468,9 +2505,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return to;
   };
 
-  /// La griglia aggancia: dal livello Standard, con l'aggancio acceso. `at`
-  /// è il livello da guardare, di solito quello di adesso.
-  const gridOn = (at: Level = level): boolean => reaches(at, "standard") && grid.snap;
+  /// La griglia aggancia: se il livello la offre, con l'aggancio acceso. `at`
+  /// sono le parti da guardare, di solito quelle di adesso.
+  const gridOn = (at: ReadonlySet<Feature> = features): boolean => at.has("grid") && grid.snap;
 
   /// Un punto di un gesto: sull'incrocio più vicino quando la griglia
   /// aggancia e Ctrl o ⌘ non è tenuto.
@@ -2640,7 +2677,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (tap !== null && previous !== null && previous.key === tap.key && tap.time - previous.time <= DOUBLE_TAP_MS) {
       const apart = Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * camera.scale;
       const unit = apart <= DOUBLE_TAP_PX[g.pointer] ? currentIndex().get(tap.key) : null;
-      if (unit !== null && unit.look !== null && reaches(level, "standard") && editable()) {
+      if (unit !== null && unit.look !== null && has("text") && editable()) {
         lastTap = null;
         editText(unit);
         return;
@@ -3483,14 +3520,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const editText = (unit: Unit): void => {
     const look = unit.look;
     const model = engine.model;
-    if (look === null || model === null || !editable() || !reaches(level, "standard")) return;
+    if (look === null || model === null || !editable() || !has("text")) return;
     const text = editableText(nodeOf(model, unit).details?.lines ?? []);
     startTyping({ key: unit.key, before: text, look, at: [look.x, look.y], matrix: unit.matrix }, text);
   };
 
   /// F2, o «Modifica il testo»: il testo scelto, se è solo.
   function editSelectedText(): void {
-    if (!editable() || !reaches(level, "standard")) return;
+    if (!editable() || !has("text")) return;
     const units = selectedUnits();
     if (units.length !== 1 || units[0]!.look === null) {
       announce(t("draw.text.none"));
@@ -3503,7 +3540,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// uno nuovo con la prima riga a metà su `p`, come il cursore di testo.
   /// Con l'aggancio la linea di base va sulla griglia.
   const openText = (p: Point, pointer: InkPointerType): void => {
-    if (!editable() || !reaches(level, "standard")) return;
+    if (!editable() || !has("text")) return;
     const hit = currentIndex().at(p, HIT_PX[pointer] / camera.scale);
     if (hit !== null && hit.look !== null) {
       editText(hit);
@@ -3981,11 +4018,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Disporre ----------------------------------------------------------------
 
-  /// Gli oggetti su cui lavora un comando di disposizione: quelli scelti, dal
-  /// livello Standard e col disegno che si scrive. `null`, e lo si dice, se
-  /// non c'è niente di scelto.
-  const arranging = (): Unit[] | null => {
-    if (!reaches(level, "standard") || !editable()) return null;
+  /// Gli oggetti su cui lavora un comando della selezione, della parte
+  /// `feature`: quelli scelti, se il livello offre la parte e il disegno si
+  /// scrive. `null`, e lo si dice, se non c'è niente di scelto.
+  const arranging = (feature: Feature): Unit[] | null => {
+    if (!has(feature) || !editable()) return null;
     const units = selectedUnits();
     if (units.length === 0) {
       announce(t("draw.selected.none"));
@@ -4022,7 +4059,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// originali; la selezione passa alle copie, così un secondo Ctrl+D
   /// prosegue la fila.
   function duplicateSelection(): void {
-    const units = arranging();
+    const units = arranging("arrange");
     if (units === null) return;
     // Con l'aggancio le copie si scostano di passi interi della griglia, e
     // ciò che ci stava sopra ci resta.
@@ -4038,13 +4075,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   function orderSelection(order: Order): void {
-    const units = arranging();
+    const units = arranging("arrange");
     if (units === null) return;
     if (arrange("draw.action.order", orderOps(engine.model!, currentIndex(), units, order, newIds()))) announce(t(ORDERED[order]));
   }
 
   function groupSelection(): void {
-    const units = arranging();
+    const units = arranging("arrange");
     if (units === null) return;
     if (units.length < 2) {
       announce(t("draw.group.few"));
@@ -4059,7 +4096,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   function ungroupSelection(): void {
-    const units = arranging();
+    const units = arranging("arrange");
     if (units === null) return;
     const groups = units.filter(isGroup).length;
     if (groups === 0) {
@@ -4084,7 +4121,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   async function linkSelection(): Promise<void> {
     const links = options.links;
     if (links === undefined || asking) return;
-    const units = arranging();
+    const units = arranging("links");
     if (units === null) return;
     const single = lonelyLink(units);
     if (single === null && holdsLinks(engine.model!, units)) {
@@ -4106,7 +4143,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (href === null || disposed || loads !== opened) return;
     // Mentre si sceglieva il disegno può essere cambiato: valgono gli oggetti
     // scelti adesso.
-    const now = arranging();
+    const now = arranging("links");
     if (now === null) return;
     const again = lonelyLink(now);
     if (again !== null) {
@@ -4128,7 +4165,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Ctrl+Maiusc+K, o «Togli il collegamento»: gli oggetti dei collegamenti
   /// scelti restano dov'erano, e la selezione passa a loro.
   function unlinkSelection(): void {
-    const units = arranging();
+    const units = arranging("links");
     if (units === null) return;
     const count = units.filter(isLink).length;
     if (count === 0) {
@@ -4164,7 +4201,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   function alignSelection(edge: Edge): void {
-    const units = arranging();
+    const units = arranging("arrange");
     if (units === null) return;
     const reference = alignReference(units);
     if (reference === null) return;
@@ -4177,7 +4214,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const drawn = (units: readonly Unit[]): number => units.filter((unit) => unit.bounds !== null).length;
 
   function distributeSelection(axis: Axis): void {
-    const units = arranging();
+    const units = arranging("arrange");
     if (units === null) return;
     const count = drawn(units);
     if (count < 3) {
@@ -4239,8 +4276,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Dà `change` ai contorni scelti, e dice quanti ne ha cambiati col nome
   /// della scelta.
   function outlineSelection(change: OutlineChange, style: string): void {
-    if (!reaches(level, "expert")) return;
-    const units = arranging();
+    const units = arranging("outline");
     if (units === null) return;
     if (outlinesOf(engine.model!, units).length === 0) {
       announce(t("draw.outline.none"));
@@ -4281,7 +4317,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// scelti di quanto si scrive, attorno al centro del loro riquadro, in un
   /// passo solo. Il fuoco torna dov'era, come da ogni finestra.
   async function transformDialog(): Promise<void> {
-    if (asking || !reaches(level, "expert") || arranging() === null) return;
+    if (asking || arranging("transform") === null) return;
     const opened = loads;
     const scale = (id: string, label: DrawKey): FormField => ({
       id, label: t(label), value: "100", kind: "number", min: -MAX_SCALE_PERCENT, max: MAX_SCALE_PERCENT, nonZero: true,
@@ -4305,10 +4341,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } finally {
       asking = false;
     }
-    if (answer === null || disposed || loads !== opened || !reaches(level, "expert")) return;
-    // Mentre la finestra era aperta il disegno può essere cambiato: valgono
-    // gli oggetti scelti adesso, attorno al loro centro.
-    const units = arranging();
+    if (answer === null || disposed || loads !== opened) return;
+    // Mentre la finestra era aperta il disegno, o il livello, può essere
+    // cambiato: valgono gli oggetti scelti adesso, attorno al loro centro.
+    const units = arranging("transform");
     const from = units === null ? null : boundsOf(units);
     if (units === null || from === null) return;
     const value = (id: string, unchanged: number): number => {
@@ -4339,8 +4375,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// loro geometria, e dice quanti ne ha cambiati e quanti ne conservano una
   /// parte, che la loro forma non sa scrivere.
   function applySelection(): void {
-    if (!reaches(level, "expert")) return;
-    const units = arranging();
+    const units = arranging("apply");
     if (units === null) return;
     const applied = applyOps(engine.model!, units, newIds());
     const kept = applied.kept === 0 ? "" : ` ${plural(applied.kept, "draw.applied.kept.one", "draw.applied.kept.other")}`;
@@ -4354,8 +4389,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// «Oggetto in tracciato», dal livello Esperto: gli oggetti scelti
   /// diventano `path`, che i nodi sanno modificare.
   function traceSelection(): void {
-    if (!reaches(level, "expert")) return;
-    const units = arranging();
+    const units = arranging("path");
     if (units === null) return;
     const traced = pathOps(engine.model!, units, newIds());
     const refused = traced.refused === 0 ? "" : ` ${plural(traced.refused, "draw.traced.refused.one", "draw.traced.refused.other")}`;
@@ -4374,8 +4408,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// quelle scelte diventa il risultato, o i pezzi della divisione, e le
   /// altre se ne vanno.
   function combineSelection(kind: BooleanKind): void {
-    if (!reaches(level, "expert")) return;
-    const units = arranging();
+    const units = arranging("boolean");
     if (units === null) return;
     const combined = combineOps(engine.model!, units, kind, newIds());
     if ("reason" in combined) {
@@ -4604,7 +4637,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
   function moveIntoLayer(layer: LayerInfo): void {
-    const units = arranging();
+    const units = arranging("layers");
     if (units === null) return;
     const name = layerTitle(layer);
     const refusal = layerRefusal(layer);
@@ -4646,10 +4679,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Livelli -----------------------------------------------------------------
 
-  /// Il livello su cui lavora un comando dei livelli: quello corrente, dal
-  /// livello Standard e col disegno che si scrive.
+  /// Il livello su cui lavora un comando dei livelli: quello corrente, se
+  /// l'interfaccia offre i livelli e il disegno si scrive.
   const layering = (): LayerInfo | null => {
-    if (!reaches(level, "standard") || !editable()) return null;
+    if (!has("layers") || !editable()) return null;
     cancelGesture();
     return currentLayer();
   };
@@ -4675,7 +4708,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Sceglie il livello corrente; se lì non si disegna, lo dice subito.
   function chooseLayer(layer: LayerInfo): void {
-    if (!reaches(level, "standard")) return;
+    if (!has("layers")) return;
     choose(layer);
     const name = layerTitle(layer);
     const refusal = layerRefusal(layer);
@@ -4684,7 +4717,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Un livello nuovo e vuoto sopra quello corrente, che diventa lui.
   function addLayer(): void {
-    if (!reaches(level, "standard") || !editable()) return;
+    if (!has("layers") || !editable()) return;
     cancelGesture();
     const name = freshLayerName(currentIndex().layers, (n) => t("draw.layer.default", { n }));
     const arranged = addLayerOps(engine.model!, currentLayer(), name, newIds());
@@ -4827,7 +4860,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// livelli bloccati e nascosti compresi, con un margine. È un passo di
   /// annulla, e gli oggetti restano dove sono.
   function fitPage(): void {
-    if (!reaches(level, "standard") || !editable()) return;
+    if (!has("grid") || !editable()) return;
     cancelGesture();
     const extent = indexer.extent(engine.model!);
     const viewBox = fittedPage(scene.root.page, extent);
@@ -5097,32 +5130,32 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     commit("draw.properties.document", asGesture(ops));
   };
 
-  /// I tasti dei comandi della selezione, dal livello Standard.
-  const arrangeKeys = (at: Level): KeyGroup[] =>
-    reaches(at, "standard")
-      ? [
-          {
-            title: t("draw.arrange"),
-            rows: [
-              ["Mod-d", t("draw.duplicate")],
-              ["Mod-g", t("draw.group")],
-              ["Mod-Shift-g", t("draw.ungroup")],
-              ...(options.links === undefined ? [] : [["Mod-k", t("draw.keys.link")] as const]),
-              ["Mod-Shift-k", t("draw.unlink")],
-              ["Mod-Shift-] Shift-PageUp", t("draw.order.front")],
-              ["Mod-] PageUp", t("draw.order.forward")],
-              ["Mod-[ PageDown", t("draw.order.backward")],
-              ["Mod-Shift-[ Shift-PageDown", t("draw.order.back")],
-              ...(reaches(at, "expert") ? [[TRANSFORM_BINDING, t("draw.transform")] as const] : []),
-              ["Alt-F10", t("draw.keys.arrange")],
-            ],
-          },
-        ]
-      : [];
+  /// I tasti dei comandi della selezione, delle parti `at` che ne hanno.
+  const arrangeKeys = (at: ReadonlySet<Feature>): KeyGroup[] => {
+    if (!BAR_FEATURES.some((feature) => at.has(feature))) return [];
+    const arrange = at.has("arrange");
+    const links = at.has("links");
+    const rows: KeyGroup["rows"] = [
+      ...(arrange ? ([["Mod-d", t("draw.duplicate")], ["Mod-g", t("draw.group")], ["Mod-Shift-g", t("draw.ungroup")]] as const) : []),
+      ...(links && options.links !== undefined ? [["Mod-k", t("draw.keys.link")] as const] : []),
+      ...(links ? [["Mod-Shift-k", t("draw.unlink")] as const] : []),
+      ...(arrange
+        ? ([
+            ["Mod-Shift-] Shift-PageUp", t("draw.order.front")],
+            ["Mod-] PageUp", t("draw.order.forward")],
+            ["Mod-[ PageDown", t("draw.order.backward")],
+            ["Mod-Shift-[ Shift-PageDown", t("draw.order.back")],
+          ] as const)
+        : []),
+      ...(at.has("transform") ? [[TRANSFORM_BINDING, t("draw.transform")] as const] : []),
+      ["Alt-F10", t("draw.keys.arrange")],
+    ];
+    return [{ title: t("draw.arrange"), rows }];
+  };
 
-  /// I tasti della griglia, dal livello Standard.
-  const gridKeys = (at: Level): KeyGroup[] =>
-    reaches(at, "standard")
+  /// I tasti della griglia, se le parti `at` la offrono.
+  const gridKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("grid")
       ? [
           {
             title: t("draw.keys.grid"),
@@ -5135,9 +5168,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// I tasti degli attributi, dal livello Esperto.
-  const attributeKeys = (at: Level): KeyGroup[] =>
-    reaches(at, "expert")
+  /// I tasti degli attributi, se le parti `at` li offrono.
+  const attributeKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("attributes")
       ? [
           {
             title: t("draw.attributes"),
@@ -5151,9 +5184,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// I tasti del testo, dal livello Standard.
-  const textKeys = (at: Level): KeyGroup[] =>
-    reaches(at, "standard")
+  /// I tasti del testo, se le parti `at` lo offrono.
+  const textKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("text")
       ? [
           {
             title: t("draw.keys.text"),
@@ -5167,9 +5200,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// I tasti dello strumento Nodi, dal livello Esperto.
-  const nodeToolKeys = (at: Level): KeyGroup[] =>
-    reaches(at, "expert")
+  /// I tasti dello strumento Nodi, se le parti `at` lo offrono.
+  const nodeToolKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("nodes")
       ? [
           {
             title: t("draw.tool.nodes"),
@@ -5195,9 +5228,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// I tasti della penna di Bézier, dal livello Esperto.
-  const bezierKeys = (at: Level): KeyGroup[] =>
-    reaches(at, "expert")
+  /// I tasti della penna di Bézier, se le parti `at` la offrono.
+  const bezierKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("bezier")
       ? [
           {
             title: t("draw.tool.bezier"),
@@ -5211,9 +5244,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// L'elenco dei tasti del livello `at`, nei gruppi in cui si usano.
-  const keyGroups = (at: Level): KeyGroup[] => [
-    { title: t("draw.keys.tools"), rows: toolsFor(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
+  /// L'elenco dei tasti delle parti `at`, nei gruppi in cui si usano.
+  const keyGroups = (at: ReadonlySet<Feature>): KeyGroup[] => [
+    { title: t("draw.keys.tools"), rows: toolsOf(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
     {
       title: t("draw.keys.cursor"),
       rows: [
@@ -5265,6 +5298,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// I tasti che i livelli sopra quello di adesso aggiungono, col livello da
   /// cui valgono: una riga è nuova se il suo gruppo non aveva i suoi tasti.
+  /// Per il Personalizzato sono quelli delle parti che non ha, col livello
+  /// pronto da cui valgono.
   const moreKeys = (): MoreKeys => {
     const seen = new Set<string>();
     const remember = (group: KeyGroup, keys: string): boolean => {
@@ -5273,15 +5308,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       seen.add(id);
       return true;
     };
-    for (const group of keyGroups(level)) for (const [keys] of group.rows) remember(group, keys);
+    for (const group of keyGroups(features)) for (const [keys] of group.rows) remember(group, keys);
     const groups: KeyGroup[] = [];
     for (const above of levelsAbove(level)) {
-      for (const group of keyGroups(above)) {
+      for (const group of keyGroups(featuresFor(above))) {
         const rows = group.rows.filter(([keys]) => remember(group, keys));
         if (rows.length > 0) groups.push({ title: t("draw.keys.from_level", { group: group.title, level: t(LEVEL_NAMES[above]) }), rows });
       }
     }
-    return { groups, note: t("draw.keys.more", { level: t(LEVEL_NAMES[level]) }) };
+    return { groups, note: level === "custom" ? t("draw.keys.more.custom") : t("draw.keys.more", { level: t(LEVEL_NAMES[level]) }) };
   };
 
   /// «?»: l'elenco dei tasti di questo livello, e con «Mostra tutto» quelli
@@ -5292,7 +5327,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     asking = true;
     cancelGesture();
     try {
-      await showKeys(t("draw.keys"), keyGroups(level), moreKeys());
+      await showKeys(t("draw.keys"), keyGroups(features), moreKeys());
     } finally {
       asking = false;
     }
@@ -5487,10 +5522,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Le immagini del vault --------------------------------------------------
 
-  /// Al livello `at` l'editor inserisce immagini del vault: dallo Standard, se
-  /// chi lo monta le sa scegliere.
-  function insertsImages(at: Level): boolean {
-    return reaches(at, "standard") && options.images?.choose !== undefined;
+  /// Con le parti `at` l'editor inserisce immagini del vault: se le offrono,
+  /// e chi lo monta le sa scegliere.
+  function insertsImages(at: ReadonlySet<Feature>): boolean {
+    return at.has("images") && options.images?.choose !== undefined;
   }
 
   /// Ctrl+I, o «Immagine dal vault…»: l'immagine che sceglie chi monta
@@ -5501,7 +5536,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const port = options.images;
     const choose = port?.choose;
     if (port === undefined || choose === undefined || asking || disposed) return;
-    if (!insertsImages(level) || !editable()) return;
+    if (!insertsImages(features) || !editable()) return;
     if (codec === null) {
       announce(t("draw.image.unreadable"));
       return;
@@ -5614,15 +5649,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // «#» e «%» valgono come si scrivono, anche con AltGr, che su Windows
     // arriva come Ctrl e Alt insieme.
     const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
-    if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && reaches(level, "standard")) {
+    if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
       if (event.key === "#") changeGrid({ ...grid, shown: !grid.shown });
       else changeGrid({ ...grid, snap: !grid.snap });
       event.preventDefault();
       return;
     }
     // I comandi della selezione prendono i loro tasti solo quando c'è una
-    // selezione: senza, Ctrl+D e gli altri restano a chi li aveva.
-    const arranges = reaches(level, "standard") && selection.length > 0 && editable();
+    // selezione e il livello offre la loro parte: senza, Ctrl+D e gli altri
+    // restano a chi li aveva.
+    const arranges = (feature: Feature): boolean => has(feature) && selection.length > 0 && editable();
     if (mod) {
       if (event.altKey) return;
       const key = event.key.toLowerCase();
@@ -5642,21 +5678,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           select(currentIndex().units.map((unit) => unit.key));
           announceSelection();
         }
-      } else if (key === "x" && event.shiftKey && reaches(level, "expert")) {
+      } else if (key === "x" && event.shiftKey && has("attributes")) {
         showAttributes(inspector.element.hidden);
-      } else if (arranges && key === "m" && event.shiftKey && reaches(level, "expert")) {
+      } else if (key === "m" && event.shiftKey && arranges("transform")) {
         void transformDialog();
-      } else if (arranges && key === "d" && !event.shiftKey) {
+      } else if (key === "d" && !event.shiftKey && arranges("arrange")) {
         duplicateSelection();
-      } else if (arranges && key === "g") {
+      } else if (key === "g" && arranges("arrange")) {
         if (event.shiftKey) ungroupSelection();
         else groupSelection();
-      } else if (key === "i" && !event.shiftKey && insertsImages(level) && editable()) {
+      } else if (key === "i" && !event.shiftKey && insertsImages(features) && editable()) {
         void vaultImage();
-      } else if (arranges && key === "k" && (event.shiftKey || options.links !== undefined)) {
+      } else if (key === "k" && (event.shiftKey || options.links !== undefined) && arranges("links")) {
         if (event.shiftKey) unlinkSelection();
         else void linkSelection();
-      } else if (arranges && bracket !== 0) {
+      } else if (bracket !== 0 && arranges("arrange")) {
         if (bracket > 0) orderSelection(event.shiftKey ? "front" : "forward");
         else orderSelection(event.shiftKey ? "back" : "backward");
       } else {
@@ -5677,7 +5713,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
-    } else if (onSurface && arranges && (event.key === "PageUp" || event.key === "PageDown")) {
+    } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && arranges("arrange")) {
       if (pressed !== null) return;
       if (event.key === "PageUp") orderSelection(event.shiftKey ? "front" : "forward");
       else orderSelection(event.shiftKey ? "back" : "backward");
@@ -5691,7 +5727,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (pressed === null && tool === "text") openText(cursorPoint(), "mouse");
       else if (pressed === null) press(event.timeStamp);
       else release();
-    } else if (onSurface && event.key === "F2" && reaches(level, "standard")) {
+    } else if (onSurface && event.key === "F2" && has("text")) {
       if (pressed !== null) return;
       editSelectedText();
     } else if (onSurface && event.key === "Enter") {
@@ -5771,6 +5807,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     get level() {
       return level;
+    },
+    get features() {
+      return features;
     },
     get tool() {
       return tool;

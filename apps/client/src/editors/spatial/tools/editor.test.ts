@@ -4181,6 +4181,132 @@ describe("per chi lo monta", () => {
   });
 });
 
+describe("il livello Personalizzato", () => {
+  /// Due livelli: «Sfondo» con due rettangoli, «Note» con un testo.
+  const PARTS = doc(
+    `<title>Prova</title><g id="l1" fub:layer="Sfondo"><rect id="oa5a5a5a5" x="0" y="0" width="20" height="20" fill="#d55e00"/>` +
+      `<rect id="ob5b5b5b5" x="10" y="10" width="20" height="20" fill="#0072b2"/></g>` +
+      `<g id="l2" fub:layer="Note"><text id="ot5t5t5t5" x="0" y="60"><tspan x="0" dy="0">Ciao</tspan></text></g>`,
+  );
+  const A = "oa5a5a5a5";
+  const B = "ob5b5b5b5";
+  const T = "ot5t5t5t5";
+
+  const shownTools = (): string[] =>
+    [...host.querySelectorAll<HTMLButtonElement>(".draw-tool:not([hidden])")].map((control) => control.getAttribute("aria-label") ?? "");
+  /// Se nella barra degli strumenti si vede il pulsante `label`.
+  const visible = (label: string): boolean =>
+    [...host.querySelectorAll<HTMLButtonElement>(".draw-toolbar button")].some(
+      (control) => control.getAttribute("aria-label") === label && control.closest("[hidden]") === null,
+    );
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const barButtons = (): string[] => [...bar().querySelectorAll<HTMLButtonElement>("button:not([hidden])")].map((control) => control.getAttribute("aria-label") ?? "");
+  const hint = (): string => document.getElementById(surface().getAttribute("aria-describedby")!)?.textContent ?? "";
+
+  it("ha le parti scelte una per una, e i tasti e i comandi delle altre non partono", () => {
+    mount(PARTS, { level: "custom", custom: ["rect", "ellipse", "layers", "boolean", "futuro"] });
+    expect(editor.level).toBe("custom");
+    // Un nome che l'editor non conosce non conta.
+    expect([...editor.features]).toEqual(["rect", "ellipse", "layers", "boolean"]);
+    // Senza la penna si comincia dal primo strumento che disegna.
+    expect(editor.tool).toBe("rect");
+    expect(shownTools()).toEqual(["Selezione", "Rettangolo", "Ellisse"]);
+    expect(host.querySelector(".draw-layer-button")!.closest("[hidden]")).toBeNull();
+    expect(visible("Pagina e griglia")).toBe(false);
+    expect(visible("Altro colore…")).toBe(false);
+    expect(visible("Attributi")).toBe(false);
+    key("p");
+    expect(editor.tool).toBe("rect");
+    key("#");
+    expect(editor.grid.shown).toBe(false);
+
+    editor.select([A, B]);
+    // Della barra della selezione, i pulsanti delle parti scelte.
+    expect(barButtons()).toEqual(["Sposta in un livello", "Operazioni booleane"]);
+    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(key("g", { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(key("M", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(hint()).toContain("Alt+F10");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Un testo scelto da solo non si modifica senza la parte del testo.
+    editor.select([T]);
+    expect(barButtons()).toEqual(["Sposta in un livello", "Operazioni booleane"]);
+    expect(key("F2").defaultPrevented).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("la barra della selezione c'è quando ha un pulsante da mostrare", () => {
+    mount(PARTS, { level: "custom", custom: ["text"] });
+    editor.select([T]);
+    expect(bar().hidden).toBe(false);
+    expect(barButtons()).toEqual(["Modifica il testo"]);
+    editor.select([A]);
+    expect(bar().hidden).toBe(true);
+    expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
+    editor.setLevel("custom", ["pen"]);
+    editor.select([T]);
+    expect(bar().hidden).toBe(true);
+    expect(hint()).not.toContain("Alt+F10");
+  });
+
+  it("cambia dal vivo con le parti, e tornando al Personalizzato ritrova quelle di prima", () => {
+    mount(PARTS, { level: "custom", custom: ["pen", "text"] });
+    expect(editor.tool).toBe("pen");
+    expect(shownTools()).toEqual(["Selezione", "Penna", "Testo"]);
+    editor.setTool("text");
+    editor.setLevel("custom", ["ellipse", "pen"]);
+    // Uno strumento che se ne va lascia il posto alla penna, se c'è.
+    expect(editor.tool).toBe("pen");
+    editor.setLevel("custom", ["ellipse"]);
+    expect(editor.tool).toBe("ellipse");
+    editor.setLevel("standard");
+    expect(editor.features.has("text")).toBe(true);
+    editor.setLevel("custom");
+    expect([...editor.features]).toEqual(["ellipse"]);
+    // Senza strumenti che disegnano resta la Selezione.
+    editor.setLevel("custom", []);
+    expect(editor.tool).toBe("select");
+    expect(shownTools()).toEqual(["Selezione"]);
+    expect(changes).toEqual([]);
+  });
+
+  it("«Mostra tutto» elenca i tasti delle parti che non ha, col livello da cui vengono", () => {
+    mount(SOURCE, { level: "custom", custom: ["pen", "eraser", "rect", "ellipse", "line", "arrow", "grid", "nodes"] });
+    key("?", { shiftKey: true });
+    expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toEqual([
+      "Strumenti",
+      "Disegnare da tastiera",
+      "Oggetti",
+      "Nodi",
+      "Griglia",
+      "Vista",
+      "Modifica",
+    ]);
+    dialog().querySelector<HTMLButtonElement>(".keys-show-all")!.click();
+    const extra = dialog().querySelector<HTMLElement>(".keys-more")!;
+    expect(extra.querySelector(".keys-note")!.textContent).toBe(
+      "Il livello di adesso è «Personalizzato». I tasti qui sotto sono delle parti che non ha: si aggiungono nelle Impostazioni, nel gruppo «Disegni».",
+    );
+    const tables = [...extra.querySelectorAll("table")].map((table) => ({
+      caption: table.querySelector("caption")!.textContent,
+      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
+    }));
+    expect(tables.map((table) => table.caption)).toEqual([
+      "Strumenti · dal livello Standard",
+      "Disponi · dal livello Standard",
+      "Testo · dal livello Standard",
+      "Strumenti · dal livello Esperto",
+      "Disponi · dal livello Esperto",
+      "Bézier · dal livello Esperto",
+      "Attributi · dal livello Esperto",
+    ]);
+    expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
+    expect(tables[3]!.rows).toEqual([["B", "Bézier"]]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
 describe("la fine", () => {
   it("toglie l'editor dalla pagina e smette di ascoltare", () => {
     mount();

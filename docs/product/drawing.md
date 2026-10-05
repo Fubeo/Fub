@@ -63,7 +63,9 @@ usa un lettore di schermo.
 
 L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, lo
 Standard, che aggiunge strumenti alla stessa barra, e l'Esperto, che mostra il
-file sotto il disegno (vedi «Il livello Esperto»). Si sceglie nelle
+file sotto il disegno (vedi «Il livello Esperto»); il Personalizzato ha le
+parti che si scelgono una per una da tutti e tre (vedi «Il livello
+Personalizzato»). Si sceglie nelle
 Impostazioni, nel gruppo «Disegni», con «Livello d'interfaccia»: è
 un'impostazione del vault, `draw.level`, che vale per chiunque lo apra e che un
 plugin o una macro non cambiano. Il livello filtra soltanto ciò che si offre:
@@ -320,6 +322,14 @@ trasformazione», «Oggetto in tracciato», le operazioni booleane fra le forme,
 lo strumento Nodi, che modifica un tracciato nodo per nodo, e la penna di
 Bézier, che ne disegna uno, e ha una pagina sua: [Disegni, livello
 Esperto](drawing-expert.md).
+
+## Il livello Personalizzato
+
+Il Personalizzato ha soltanto le parti che si scelgono, una per una, dagli
+altri tre livelli: la penna, il testo e i livelli senza la gomma, o le forme,
+la griglia e i collegamenti senza l'evidenziatore. Le parti si scelgono nelle
+Impostazioni, sotto il livello, e il Personalizzato ha una pagina sua:
+[Disegni, livello Personalizzato](drawing-custom.md).
 
 ## Da tastiera
 

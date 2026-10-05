@@ -53,6 +53,23 @@ function levelEntry(value: string): SettingEntry {
   };
 }
 
+/// La riga delle parti del Personalizzato, col valore `value`.
+function customEntry(value: unknown): SettingEntry {
+  return {
+    spec: {
+      key: "draw.custom",
+      label: "Parti del Personalizzato",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
+      program_writable: false,
+    },
+    value,
+    source: "vault",
+  } as SettingEntry;
+}
+
 /// Un'altra impostazione, che il disegno non guarda.
 const OTHER: SettingEntry = {
   spec: {
@@ -166,6 +183,38 @@ describe("il livello del disegno", () => {
     expect(currentLevel()).toBe("essential");
   });
 
+  it("le parti del Personalizzato si leggono col livello, e un loro cambio fa rileggere", async () => {
+    const host = createFakeHost({ settings: [levelEntry("custom"), customEntry(["pen", "layers", 7, "domani"])] });
+    const { currentCustom, currentLevel, watchLevel } = await boot(host);
+    expect(currentCustom(), "prima di leggere").toEqual(["pen", "eraser", "rect", "ellipse", "line", "arrow"]);
+
+    const applied: [string, readonly string[]][] = [];
+    const stop = watchLevel((level, custom) => applied.push([level, custom]));
+    await settle();
+    // Ciò che non è un nome cade; un nome sconosciuto resta, per chi lo conosce.
+    expect(applied).toEqual([["custom", ["pen", "layers", "domani"]]]);
+    expect(currentLevel()).toBe("custom");
+    expect(currentCustom()).toEqual(["pen", "layers", "domani"]);
+    expect(settingsReads(host), "una lettura per le due impostazioni").toHaveLength(1);
+
+    await host.module.api.setSetting("draw.custom", ["text"]);
+    await settle();
+    expect(applied[applied.length - 1]).toEqual(["custom", ["text"]]);
+    expect(currentCustom()).toEqual(["text"]);
+    expect(settingsReads(host)).toHaveLength(2);
+
+    // Senza la riga, o con un valore che non è un elenco, valgono le parti dell'Essenziale.
+    for (const settings of [[levelEntry("custom")], [levelEntry("custom"), customEntry("pen")]]) {
+      const other = createFakeHost({ settings });
+      const fresh = await boot(other);
+      const seen: (readonly string[])[] = [];
+      fresh.watchLevel((_level, custom) => seen.push(custom));
+      await settle();
+      expect(seen, JSON.stringify(settings.map((e) => e.value))).toEqual([["pen", "eraser", "rect", "ellipse", "line", "arrow"]]);
+    }
+    stop();
+  });
+
   it("se le impostazioni non si leggono, vale l'ultimo livello letto", async () => {
     const host = createFakeHost({ settings: [levelEntry("standard")] });
     const { currentLevel, watchLevel } = await boot(host);
@@ -174,11 +223,11 @@ describe("il livello del disegno", () => {
     stop();
 
     const heal = host.fault("queryIndex", "vault chiuso");
-    const applied: string[] = [];
-    watchLevel((level) => applied.push(level));
+    const applied: [string, readonly string[]][] = [];
+    watchLevel((level, custom) => applied.push([level, custom]));
     await settle();
     heal();
-    expect(applied).toEqual(["standard"]);
+    expect(applied).toEqual([["standard", ["pen", "eraser", "rect", "ellipse", "line", "arrow"]]]);
     expect(currentLevel()).toBe("standard");
   });
 });

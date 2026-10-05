@@ -1,9 +1,11 @@
 // Il livello e la griglia con cui la superficie apre l'editor del disegno.
 //
 // - **Il livello** è l'impostazione del vault `draw.level`, che dichiara il
-//   bundle `fub.draw`: si legge dal canale dati e si segue con
-//   `setting_changed`, così un cambio nelle Impostazioni vale subito anche
-//   nei disegni aperti. Un valore che l'editor non conosce vale l'Essenziale.
+//   bundle `fub.draw`, e le parti del Personalizzato sono `draw.custom`: si
+//   leggono dal canale dati e si seguono con `setting_changed`, così un
+//   cambio nelle Impostazioni vale subito anche nei disegni aperti. Un
+//   livello che l'editor non conosce vale l'Essenziale; senza `draw.custom`
+//   il Personalizzato ha le parti dell'Essenziale.
 // - **La griglia** è uno stato della vista, della macchina e non del vault:
 //   l'ultima scelta, con cui si apre ogni disegno dopo. Non entra né nel file
 //   del disegno né in quello delle impostazioni del vault, che a ogni `#`
@@ -20,7 +22,7 @@ import { t } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { notify } from "../../ui/notify";
 import { DEFAULT_GRID, validStep, type Grid } from "./tools/grid";
-import { isLevel, type Level } from "./tools/registry";
+import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
 
 /// Il bundle che dichiara il livello.
 const DRAW_BUNDLE = "fub.draw";
@@ -28,13 +30,23 @@ const DRAW_BUNDLE = "fub.draw";
 /// L'impostazione del livello.
 export const LEVEL_KEY = "draw.level";
 
+/// L'impostazione delle parti del Personalizzato.
+export const CUSTOM_KEY = "draw.custom";
+
 /// La chiave dello stato di vista che ricorda la griglia.
 export const GRID_KEY = "draw.grid";
 
 /// Il livello di partenza, quando l'impostazione non dice niente.
 const DEFAULT_LEVEL: Level = "essential";
 
+/// Il livello e le parti del Personalizzato, come li dicono le impostazioni.
+interface LevelChoice {
+  readonly level: Level;
+  readonly custom: readonly string[];
+}
+
 let lastLevel: Level = DEFAULT_LEVEL;
+let lastCustom: readonly string[] = CUSTOM_DEFAULT;
 /// Quante letture del livello sono partite, e quale ha dato l'ultimo letto.
 let levelReads = 0;
 let levelRead = 0;
@@ -48,43 +60,59 @@ export function currentLevel(): Level {
   return lastLevel;
 }
 
+/// Le parti del Personalizzato dell'ultima lettura.
+export function currentCustom(): readonly string[] {
+  return lastCustom;
+}
+
+/// `value` come parti del Personalizzato: i nomi di un elenco, senza ciò che
+/// non è un nome. Un nome che l'editor non conosce resta: non conta, e una
+/// versione più nuova lo conosce.
+function customOf(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : CUSTOM_DEFAULT;
+}
+
 /// La griglia dell'ultima lettura o dell'ultima scelta.
 export function currentGrid(): Grid {
   return lastGrid;
 }
 
-/// Legge il livello. Se la lettura non riesce, vale l'ultimo letto.
-async function readLevel(): Promise<Level> {
+/// Legge il livello e le parti del Personalizzato. Se la lettura non
+/// riesce, valgono gli ultimi letti.
+async function readLevel(): Promise<LevelChoice> {
   const ticket = ++levelReads;
   try {
-    const value = (await settings(DRAW_BUNDLE)).find((entry) => entry.spec.key === LEVEL_KEY)?.value;
-    const level = isLevel(value) ? value : DEFAULT_LEVEL;
+    const entries = await settings(DRAW_BUNDLE);
+    const value = (key: string): unknown => entries.find((entry) => entry.spec.key === key)?.value;
+    const level = value(LEVEL_KEY);
+    const choice: LevelChoice = { level: isLevel(level) ? level : DEFAULT_LEVEL, custom: customOf(value(CUSTOM_KEY)) };
     // Una lettura partita prima di quella che ha già risposto è più vecchia.
     if (ticket > levelRead) {
       levelRead = ticket;
-      lastLevel = level;
+      lastLevel = choice.level;
+      lastCustom = choice.custom;
     }
-    return level;
+    return choice;
   } catch {
     // Senza vault, o con le impostazioni guaste.
-    return lastLevel;
+    return { level: lastLevel, custom: lastCustom };
   }
 }
 
-/// Legge il livello adesso e a ogni suo cambio, e lo dà a `apply`; una
-/// lettura superata da una più recente non arriva. Torna la funzione che
-/// smette di ascoltare.
-export function watchLevel(apply: (level: Level) => void): () => void {
+/// Legge il livello e le parti del Personalizzato adesso e a ogni loro
+/// cambio, e li dà a `apply`; una lettura superata da una più recente non
+/// arriva. Torna la funzione che smette di ascoltare.
+export function watchLevel(apply: (level: Level, custom: readonly string[]) => void): () => void {
   let generation = 0;
   let stopped = false;
   const read = (): void => {
     const ticket = ++generation;
-    void readLevel().then((level) => {
-      if (!stopped && ticket === generation) apply(level);
+    void readLevel().then(({ level, custom }) => {
+      if (!stopped && ticket === generation) apply(level, custom);
     });
   };
   const stop = onEvent("setting_changed", (event) => {
-    if (event.key === LEVEL_KEY) read();
+    if (event.key === LEVEL_KEY || event.key === CUSTOM_KEY) read();
   });
   read();
   return () => {

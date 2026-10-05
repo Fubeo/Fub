@@ -24,10 +24,10 @@
 // l'`<img>` non carica niente da fuori, entrano nell'immagine coi loro byte
 // (`read-images.ts`).
 //
-// Il livello dell'editor è l'impostazione del vault `draw.level`, e la
-// griglia l'ultima scelta su questa macchina (`preferences.ts`): la
-// superficie le legge quando nasce, segue il livello finché vive, e ricorda
-// la griglia che chi disegna sceglie.
+// Il livello dell'editor è l'impostazione del vault `draw.level`, con le parti
+// del Personalizzato in `draw.custom`, e la griglia l'ultima scelta su questa
+// macchina (`preferences.ts`): la superficie li legge quando nasce, segue il
+// livello finché vive, e ricorda la griglia che chi disegna sceglie.
 //
 // In Disegno il documento può non essere modificabile, e la modalità del
 // riquadro non cambia per questo (`docs/product/drawing.md`):
@@ -51,7 +51,7 @@ import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
 import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
 import { VECTOR_MODES, VECTOR_PROFILE } from "./modes";
-import { currentGrid, currentLevel, readGrid, saveGrid, watchLevel } from "./preferences";
+import { currentCustom, currentGrid, currentLevel, readGrid, saveGrid, watchLevel } from "./preferences";
 import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
@@ -237,9 +237,10 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// disegnati.
   let linkedText: string | null = null;
   let linkedLanguage: string | null = null;
-  /// Il livello e la griglia dell'editor: quelli dell'ultima lettura, finché
-  /// non arriva quella di questa superficie.
+  /// Il livello, le parti del Personalizzato e la griglia dell'editor: quelli
+  /// dell'ultima lettura, finché non arriva quella di questa superficie.
   let level = currentLevel();
+  let custom = currentCustom();
   let grid = currentGrid();
   /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
   /// indietro.
@@ -310,6 +311,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const owner = openLifetime();
     const mounted = createDrawEditor(drawHost, engine, owner, {
       level,
+      custom,
       grid,
       onGridChange: (next) => {
         grid = next;
@@ -554,9 +556,10 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   // --- Il livello e la griglia ----------------------------------------------
 
-  life.add(watchLevel((next) => {
+  life.add(watchLevel((next, parts) => {
     level = next;
-    editor?.setLevel(next);
+    custom = parts;
+    editor?.setLevel(next, parts);
   }));
   void readGrid().then((next) => {
     if (life.closed || gridChosen) return;

@@ -552,6 +552,21 @@ const level = (value: string): SettingEntry => ({
   source: "vault",
 });
 
+/// Le parti del Personalizzato, col valore `value`.
+const custom = (value: string[]): SettingEntry => ({
+  spec: {
+    key: "draw.custom",
+    label: "Parti del Personalizzato",
+    description: "",
+    group: "Disegni",
+    scope: "vault",
+    kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
+    program_writable: false,
+  },
+  value,
+  source: "vault",
+});
+
 /// Moduli nuovi, perché il livello e la griglia letti restano in memoria,
 /// e il router del kernel acceso: è lui che porta `setting_changed`.
 async function fresh(host: FakeHost) {
@@ -615,6 +630,27 @@ describe("il livello e la griglia", () => {
     await host.module.api.setSetting("draw.level", "essential");
     await settle();
     expect(reads(host), "una superficie distrutta non rilegge").toBe(2);
+  });
+
+  it("il Personalizzato ha le parti scelte, anche su una superficie nuova, e ne segue i cambi", async () => {
+    const host = createFakeHost({ settings: [level("custom"), custom(["rect", "text"])] });
+    const mountFresh = await fresh(host);
+    mountFresh(parent);
+    await settle();
+    expect(tools(parent)).toEqual(["select", "rect", "text"]);
+
+    await host.module.api.setSetting("draw.custom", ["ellipse", "highlighter"]);
+    await settle();
+    expect(tools(parent)).toEqual(["select", "highlighter", "ellipse"]);
+
+    const other = document.createElement("div");
+    document.body.append(other);
+    try {
+      mountFresh(other);
+      expect(tools(other), "subito").toEqual(["select", "highlighter", "ellipse"]);
+    } finally {
+      other.remove();
+    }
   });
 });
 

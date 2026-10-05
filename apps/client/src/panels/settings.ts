@@ -815,6 +815,7 @@ async function renderForm(): Promise<HTMLElement[]> {
   const nodes: HTMLElement[] = [];
   if (entries.length === 0) nodes.push(row("muted settings-note", t("settings.none")));
   const themes = await themeCatalog().catch(() => []);
+  await loadOwnListFields(entries);
   const groups = groupEntries(entries);
   for (const [index, group] of groups.entries()) {
     const parts = sectionBlock(group.title, index);
@@ -1295,7 +1296,11 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   control.append(field(entry));
   // Chi arriva al campo col lettore di schermo sente anche cosa fa e dove
   // vale, non solo l'etichetta: la prosa sotto la riga era solo per gli occhi.
-  for (const focusable of control.querySelectorAll<HTMLElement>("input, select, textarea, [role=radiogroup]")) {
+  for (const focusable of control.querySelectorAll<HTMLElement>("input, select, textarea, [role=radiogroup], [role=group]")) {
+    // Un gruppo di caselle si descrive una volta, sul gruppo, e non a ogni
+    // casella.
+    const group = focusable.parentElement?.closest("[role=group]");
+    if (group && control.contains(group)) continue;
     const existing = focusable.getAttribute("aria-describedby");
     focusable.setAttribute("aria-describedby", [...described, ...(existing ? [existing] : [])].join(" "));
   }
@@ -1328,7 +1333,7 @@ function rowMeta(entry: SettingEntry, modified: boolean): HTMLElement {
   // Lingua e fuso vuoti vogliono dire «come il sistema», ed è così che li
   // chiama il loro controllo: il predefinito deve dirlo con la stessa parola.
   const empty = SYSTEM_WHEN_EMPTY.has(entry.spec.key) ? t("settings.as_system") : undefined;
-  meta.append(row("setting-default", t("settings.default", { value: defaultText(entry, empty) })));
+  meta.append(row("setting-default", t("settings.default", { value: ownDefaultText(entry) ?? defaultText(entry, empty) })));
   const resetButton = document.createElement("button");
   resetButton.type = "button";
   resetButton.className = "link-button setting-reset";
@@ -1339,6 +1344,15 @@ function rowMeta(entry: SettingEntry, modified: boolean): HTMLElement {
   });
   meta.append(resetButton);
   return meta;
+}
+
+/// Il predefinito di una lista col campo di chi la possiede, detto da lui:
+/// i nomi delle parti e non i loro identificativi. `null` per le altre righe.
+function ownDefaultText(entry: SettingEntry): string | null {
+  const own = ownListFields.get(entry.spec.key);
+  const kind = entry.spec.kind;
+  if (own === undefined || kind.kind !== "list") return null;
+  return own.describe(kind.default) || t("settings.nothing");
 }
 
 /// Dove vale un valore, in una pastiglia: la macchina o il vault. È nascosta a
@@ -1362,6 +1376,42 @@ function scopeChip(scope: SettingScope): HTMLElement {
 // solo per le chiavi per cui la shell possiede un gesto utente esplicito:
 // `program_writable` è deliberatamente un'altra capacità.
 const editableListKeys = new Set(["files.excluded-folders"]);
+
+/// Il campo di una lista che sceglie fra nomi che conosce chi la possiede, e
+/// come quel campo dice un valore: nomi e stringhe sono suoi (0192).
+interface OwnListField {
+  field(entry: SettingEntry, id: string, write: (value: string[], part: string, checked: boolean) => void): HTMLElement;
+  describe(value: readonly string[]): string;
+}
+
+/// Le liste che hanno un campo di chi le possiede. Arriva con un `import()`,
+/// con le sue stringhe, quando il form ha la riga: chi non la vede non lo
+/// scarica.
+const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
+  [
+    "draw.custom",
+    () => import("../editors/spatial/custom-field").then(({ customField, describeCustom }) => ({ field: customField, describe: describeCustom })),
+  ],
+]);
+const ownListFields = new Map<string, OwnListField>();
+
+/// Carica i campi delle liste di `entries` che ne hanno uno e non l'hanno
+/// ancora. Uno che non arriva lascia la lista in sola lettura, e si riprova
+/// al prossimo ridisegno.
+async function loadOwnListFields(entries: readonly SettingEntry[]): Promise<void> {
+  await Promise.all(
+    entries.map(async (entry) => {
+      const load = OWN_LIST_FIELDS.get(entry.spec.key);
+      if (load === undefined || ownListFields.has(entry.spec.key)) return;
+      try {
+        ownListFields.set(entry.spec.key, await load());
+      } catch {
+        // Il modulo non è arrivato: la lista resta leggibile.
+      }
+    }),
+  );
+}
+
 const structuralFolderKeys = new Set([".fub", ".trash", ".", ".."]);
 
 function normalizedFolder(raw: string): string {
@@ -1522,10 +1572,17 @@ function field(entry: SettingEntry): HTMLElement {
       return numberInput(entry, id, control.min, control.max);
     case "text":
       return textField(entry, id);
-    case "list":
+    case "list": {
+      const own = ownListFields.get(entry.spec.key);
+      if (own !== undefined) {
+        return own.field(entry, id, (value, part, checked) => {
+          void writeRow(entry.spec.key, `${part}: ${show(checked)}`, () => api.setSetting(entry.spec.key, value));
+        });
+      }
       return editableListKeys.has(entry.spec.key)
         ? listField(entry, id)
         : readonlyListField(entry, id);
+    }
   }
 }
 

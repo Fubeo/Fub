@@ -2,7 +2,22 @@
 
 import { describe, expect, it } from "vitest";
 import { icon } from "../../../ui/icons";
-import { DEFAULT_TOOL, isLevel, levelsAbove, reaches, TOOLS, toolForKey, toolsFor, toolSpec } from "./registry";
+import {
+  CUSTOM_DEFAULT,
+  DEFAULT_TOOL,
+  FEATURES,
+  featuresFor,
+  isFeature,
+  isLevel,
+  levelsAbove,
+  reaches,
+  startTool,
+  TOOLS,
+  toolForKey,
+  toolsFor,
+  toolsOf,
+  toolSpec,
+} from "./registry";
 
 describe("il registro degli strumenti", () => {
   it("dà all'Essenziale i sette strumenti, nell'ordine della barra", () => {
@@ -33,11 +48,44 @@ describe("il registro degli strumenti", () => {
   });
 
   it("riconosce i nomi dei livelli, e sa quali stanno sopra", () => {
-    expect(["essential", "standard", "expert"].every(isLevel)).toBe(true);
+    expect(["essential", "standard", "expert", "custom"].every(isLevel)).toBe(true);
     for (const other of ["Standard", "", "beginner", 1, null, undefined]) expect(isLevel(other)).toBe(false);
     expect(levelsAbove("essential")).toEqual(["standard", "expert"]);
     expect(levelsAbove("standard")).toEqual(["expert"]);
     expect(levelsAbove("expert")).toEqual([]);
+    // Al Personalizzato può mancare una parte di ogni livello.
+    expect(levelsAbove("custom")).toEqual(["essential", "standard", "expert"]);
+  });
+
+  it("elenca le parti per livello, prima gli strumenti nell'ordine della barra, ciascuna una volta", () => {
+    expect(FEATURES.map((feature) => feature.id)).toEqual([
+      "pen", "eraser", "rect", "ellipse", "line", "arrow",
+      "highlighter", "text", "colors", "arrange", "layers", "grid", "links", "images",
+      "nodes", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean",
+    ]);
+    expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
+    // Ogni strumento è una parte, tranne la Selezione, che c'è sempre.
+    for (const tool of TOOLS) expect(isFeature(tool.id)).toBe(tool.id !== "select");
+    for (const other of ["select", "Pen", "", 1, null]) expect(isFeature(other)).toBe(false);
+  });
+
+  it("dà a un livello pronto le sue parti e quelle sotto, e al Personalizzato quelle scelte che conosce", () => {
+    expect([...featuresFor("essential")]).toEqual(CUSTOM_DEFAULT);
+    expect(featuresFor("standard").has("layers")).toBe(true);
+    expect(featuresFor("standard").has("nodes")).toBe(false);
+    expect(featuresFor("expert").size).toBe(FEATURES.length);
+    expect([...featuresFor("custom", ["boolean", "pen", "futuro", 3, "select"])]).toEqual(["boolean", "pen"]);
+    // Senza una scelta, il Personalizzato parte dall'Essenziale.
+    expect(featuresFor("custom")).toEqual(featuresFor("essential"));
+    expect(CUSTOM_DEFAULT).toEqual(["pen", "eraser", "rect", "ellipse", "line", "arrow"]);
+  });
+
+  it("dà sempre la Selezione, e comincia dalla penna o dal primo strumento che disegna", () => {
+    expect(toolsOf(new Set()).map((tool) => tool.id)).toEqual(["select"]);
+    expect(toolsOf(featuresFor("custom", ["text", "nodes"])).map((tool) => tool.id)).toEqual(["select", "nodes", "text"]);
+    expect(startTool(toolsFor("essential"))).toBe(DEFAULT_TOOL);
+    expect(startTool(toolsOf(featuresFor("custom", ["text", "nodes", "ellipse"])))).toBe("ellipse");
+    expect(startTool(toolsOf(featuresFor("custom", ["nodes"])))).toBe("select");
   });
 
   it("dà a ogni strumento un tasto suo, una lettera minuscola", () => {

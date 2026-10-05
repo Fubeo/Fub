@@ -35,6 +35,7 @@ flowchart LR
 - [Disegni](product/drawing.md)
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
+- [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
 - [Budget prestazionale](product/performance-budget.md)
