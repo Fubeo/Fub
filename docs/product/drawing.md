@@ -97,8 +97,9 @@ testo che si seleziona. Il file si chiama come il disegno, `acqua.png` o
 salvano. Il file compare nel centro attività, che si apre da sé, e «Salva…»
 chiede dove metterlo.
 
-Entrano soltanto le immagini dentro il disegno: un'immagine che il disegno
-prende da un altro file del vault, o da un indirizzo, resta fuori.
+Entrano le immagini dentro il disegno e quelle che il disegno prende dal
+vault, in PNG, JPEG, GIF o WebP, fino a 64 MiB per disegno. Un'immagine presa
+da un indirizzo, o da un file che nel vault non c'è, resta fuori.
 
 ## Più riquadri sullo stesso disegno
 

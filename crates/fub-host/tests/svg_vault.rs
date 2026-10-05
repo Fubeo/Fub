@@ -79,6 +79,8 @@ const FLUSSO: &str = include_str!("../../fub-scene/tests/corpus/mermaid-flowchar
 
 /// L'intestazione di un PNG: un allegato.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+/// Un PNG intero, 2 × 1 pixel blu: la foto del disegno, che l'export disegna.
+const FOTO: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x02\0\0\0\x01\x08\x02\0\0\0\x7b\x40\xe8\xdd\0\0\0\rIDAT\x78\xda\x63\x60\x28\xda\x04\x44\0\x06\x9f\x02\x49\x2c\x3a\xd5\x76\0\0\0\0IEND\xae\x42\x60\x82";
 /// L'intestazione di gzip: un `.svgz` non è testo.
 const GZIP: &[u8] = &[0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0];
 
@@ -108,7 +110,7 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf) {
         "# Indice\n\n![[acqua.svg]]\n\nVedi [[acqua]] e [la mappa](../mappe/quartiere.svg), poi [[Pioggia]].\n",
     );
     write(&root, "disegni/acqua.svg", ACQUA);
-    write(&root, "disegni/foto/mare.png", PNG);
+    write(&root, "disegni/foto/mare.png", FOTO);
     write(&root, "mappe/quartiere.svg", QUARTIERE);
     write(
         &root,
@@ -623,7 +625,8 @@ fn markdown_does_not_notice_the_drawings() {
 
 /// L'export dei disegni sul montaggio di produzione: i due formati ci sono,
 /// il disegno esce accanto a sé col titolo del suo `<title>`, la nota della
-/// selezione si salta e l'immagine del vault resta fuori, detta nel log.
+/// selezione si salta e l'immagine del vault entra, risolta dal disegno e
+/// letta dall'host.
 #[test]
 fn a_drawing_exports_to_png_and_pdf_with_its_title() {
     let (_dir, root) = vault();
@@ -655,6 +658,10 @@ fn a_drawing_exports_to_png_and_pdf_with_its_title() {
             b"/Title (Ciclo dell'acqua)"
         };
         assert!(bytes.windows(title.len()).any(|w| w == title), "{target}");
+        if target == "draw.pdf" {
+            let image: &[u8] = b"/Subtype /Image";
+            assert!(bytes.windows(image.len()).any(|w| w == image));
+        }
 
         let log: Vec<_> = report
             .log
@@ -663,18 +670,11 @@ fn a_drawing_exports_to_png_and_pdf_with_its_title() {
             .collect();
         assert_eq!(
             log,
-            [
-                (
-                    NoteLevel::Info,
-                    "1 selected document is not a drawing and was skipped",
-                    None
-                ),
-                (
-                    NoteLevel::Warning,
-                    "1 image reference points outside the drawing and was not exported: foto/mare.png",
-                    Some("disegni/acqua.svg")
-                ),
-            ],
+            [(
+                NoteLevel::Info,
+                "1 selected document is not a drawing and was skipped",
+                None
+            )],
             "{target}"
         );
     }

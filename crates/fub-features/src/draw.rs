@@ -16,22 +16,30 @@
 //! il PDF annotato, cioè l'originale con le annotazioni sopra, e il PDF
 //! redatto, dove ciò che le coperture nascondono non c'è più. Il disegno di
 //! ogni pagina passa dalle stesse opzioni di `usvg` e dagli stessi caratteri
-//! dei disegni.
+//! dei disegni, senza le immagini del vault, che l'editor delle annotazioni
+//! non mostra.
 //!
-//! # Niente oltre al documento
+//! # Niente oltre al documento e alle sue immagini
 //!
 //! Un SVG può nominare altre risorse: un'immagine per path (`foto/mare.png`),
 //! per URL o per `file:`, un `<use>` che punta a un altro file, un `@import` in
-//! un `<style>`. L'export non ne segue nessuna, e non per una regola che
-//! qualcuno deve ricordarsi di applicare: le opzioni di `usvg` costruite da
-//! [`options`] non hanno un modo di farlo.
+//! un `<style>`. L'export ne segue una specie sola, le immagini del vault, e
+//! non per una regola che qualcuno deve ricordarsi di applicare: le opzioni di
+//! `usvg` costruite da [`options`] non hanno un modo di seguire le altre.
 //!
-//! - Un'immagine si carica soltanto quando è **dentro** il documento, come
-//!   `data:` URI di un formato raster (PNG, JPEG, GIF o WebP), riconosciuto dai
-//!   byte e non dal tipo dichiarato. Un SVG incorporato come `data:` resta
-//!   fuori: il risolutore accetta solo raster.
+//! - Un'immagine **dentro** il documento si carica come `data:` URI di un
+//!   formato raster (PNG, JPEG, GIF o WebP), riconosciuto dai byte e non dal
+//!   tipo dichiarato. Un SVG incorporato come `data:` resta fuori: il
+//!   risolutore accetta solo raster.
+//! - Un'immagine **del vault** si carica dal vault ([`VaultImages`]): un
+//!   `href` senza schema è un percorso, come per il client, che si risolve dal
+//!   disegno come un collegamento, e i byte li dà l'host. Valgono le regole del
+//!   `data:`, e un disegno porta al più 64 MiB di immagini del vault. Il
+//!   confine è il vault: l'host non legge fuori, e un percorso che esce dalla
+//!   radice non porta a niente.
 //! - Ogni altro riferimento a un'immagine passa dal risolutore delle stringhe,
-//!   che non apre niente e lo annota: il log dell'export lo riporta.
+//!   che non apre niente e lo annota. Il log dell'export lo riporta, come ogni
+//!   immagine del vault rimasta fuori.
 //! - `resources_dir` è `None`. `usvg` non risolve `<use>` verso altri file e
 //!   non segue `@import` né `@font-face`, e `roxmltree` non espande le entità
 //!   esterne di una DTD.
@@ -43,9 +51,10 @@
 //!   chiede: `resvg` è compilato senza `system-fonts`, e il database non passa
 //!   mai da `load_system_fonts`.
 //!
-//! È la regola con cui la webview mostra un SVG dentro un `<img>`, dove le
-//! risorse esterne non si caricano: l'export non mostra niente che l'anteprima
-//! del disegno non mostri, a parte i caratteri, che qui sono quelli veri.
+//! È la regola con cui la webview mostra un SVG dentro un `<img>`, dove la rete
+//! e i file del computer non si caricano, con le immagini del vault in più: del
+//! disegno fanno parte quanto quelle incorporate. E i caratteri, qui, sono
+//! quelli veri.
 //!
 //! # Lo stesso disegno, gli stessi byte
 //!
@@ -57,15 +66,16 @@
 //! dizionari e rinumera gli oggetti nell'ordine in cui si raggiungono dalla
 //! radice: lo stesso albero dà sempre lo stesso file.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, BufWriter, Write};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use fub_abi::error::PluginError;
-use fub_abi::model::{Block, DocId, Inline};
+use fub_abi::model::{Block, DocId, Inline, LinkTarget};
+use fub_abi::rules::media::mime_of;
 use fub_abi::rules::path::strip_ext;
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::ReadApi;
+use fub_abi::traits::{FolderScope, IndexQuery, IndexResult, ReadApi};
 use fub_abi::transfer::{
     artifact_key, ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest,
     ExportTarget, TransferNote,
@@ -365,7 +375,8 @@ impl Drawing {
             .read_document_bytes(doc)
             .map_err(|error| error.to_string())?;
         let refused = Arc::new(Mutex::new(Refused::default()));
-        let tree = Tree::from_data(&bytes, &options(&refused))
+        let images = VaultImages::new(host, doc);
+        let tree = Tree::from_data(&bytes, &options(&refused, Some(&images)))
             .map_err(|error| format!("not a readable SVG drawing: {error}"))?;
         let refused = std::mem::take(&mut *lock(&refused));
         Ok(Drawing {
@@ -379,20 +390,28 @@ impl Drawing {
     /// Le note di un disegno esportato: ciò che è rimasto fuori e i caratteri
     /// che i caratteri di Fub non hanno.
     fn notes(&self, report: &mut ExportReport) {
-        let embedded = (self.refused.embedded > 0).then(|| {
-            let count = self.refused.embedded;
+        let refused = &self.refused;
+        let embedded = (refused.embedded > 0).then(|| {
+            let count = refused.embedded;
             format!(
-                "{count} embedded {} not PNG, JPEG, GIF or WebP and {} not exported",
-                if count == 1 { "image is" } else { "images are" },
+                "{count} embedded {} and {} not exported",
+                if count == 1 {
+                    "image is not a readable PNG, JPEG, GIF or WebP image"
+                } else {
+                    "images are not readable PNG, JPEG, GIF or WebP images"
+                },
                 if count == 1 { "was" } else { "were" },
             )
         });
-        let notes = [
-            external_note(&self.refused.external, "the drawing"),
-            embedded,
-            glyphs_note(&missing_glyphs(&self.tree)),
-        ];
-        for message in notes.into_iter().flatten() {
+        let notes = std::iter::once(external_note(&refused.external, "the vault"))
+            .chain(
+                refused
+                    .vault
+                    .iter()
+                    .map(|(why, images)| vault_note(*why, images)),
+            )
+            .chain([embedded, glyphs_note(&missing_glyphs(&self.tree))]);
+        for message in notes.flatten() {
             report
                 .log
                 .push(TransferNote::warning(message).about(self.doc.to_string()));
@@ -400,23 +419,18 @@ impl Drawing {
     }
 }
 
-/// La nota dei riferimenti esterni rimasti fuori, i primi per nome; `within`
-/// è il documento da cui puntano fuori (`the drawing`).
-fn external_note(external: &BTreeSet<String>, within: &str) -> Option<String> {
-    if external.is_empty() {
+/// Una nota su ciò che sta in `set`: quanti sono, detti con `one` o con
+/// `many`, e i primi per nome.
+fn listed(set: &BTreeSet<String>, one: &str, many: &str) -> Option<String> {
+    if set.is_empty() {
         return None;
     }
-    let count = external.len();
-    let listed: Vec<&str> = external.iter().take(LISTED).map(String::as_str).collect();
+    let count = set.len();
+    let listed: Vec<&str> = set.iter().take(LISTED).map(String::as_str).collect();
     let rest = count.saturating_sub(LISTED);
     Some(format!(
-        "{count} image {} outside {within} and {} not exported: {}{}",
-        if count == 1 {
-            "reference points"
-        } else {
-            "references point"
-        },
-        if count == 1 { "was" } else { "were" },
+        "{count} {}: {}{}",
+        if count == 1 { one } else { many },
         listed.join(", "),
         if rest > 0 {
             format!(" and {rest} more")
@@ -424,6 +438,46 @@ fn external_note(external: &BTreeSet<String>, within: &str) -> Option<String> {
             String::new()
         },
     ))
+}
+
+/// La nota dei riferimenti esterni rimasti fuori, i primi per nome; `within`
+/// è ciò da cui puntano fuori (`the vault`, `the annotations`).
+fn external_note(external: &BTreeSet<String>, within: &str) -> Option<String> {
+    listed(
+        external,
+        &format!("image reference points outside {within} and was not exported"),
+        &format!("image references point outside {within} and were not exported"),
+    )
+}
+
+/// La nota delle immagini del vault rimaste fuori per `why`, le prime per
+/// nome.
+fn vault_note(why: LeftOut, images: &BTreeSet<String>) -> Option<String> {
+    let (one, many) = match why {
+        LeftOut::Missing => (
+            "image is not in the vault and was not exported".to_string(),
+            "images are not in the vault and were not exported".to_string(),
+        ),
+        LeftOut::NotRaster => (
+            "vault image is not a readable PNG, JPEG, GIF or WebP image and was not exported"
+                .to_string(),
+            "vault images are not readable PNG, JPEG, GIF or WebP images and were not exported"
+                .to_string(),
+        ),
+        LeftOut::Unreadable => (
+            "vault image could not be read and was not exported".to_string(),
+            "vault images could not be read and were not exported".to_string(),
+        ),
+        LeftOut::OverBudget => (
+            format!(
+                "vault image did not fit in the {VAULT_IMAGES_MIB} MiB of images of a drawing and was not exported"
+            ),
+            format!(
+                "vault images did not fit in the {VAULT_IMAGES_MIB} MiB of images of a drawing and were not exported"
+            ),
+        ),
+    };
+    listed(images, &one, &many)
 }
 
 /// La nota dei caratteri che i caratteri di Fub non hanno.
@@ -469,10 +523,13 @@ fn heading(blocks: &[Block]) -> Option<String> {
 /// Ciò che il risolutore delle immagini ha lasciato fuori.
 #[derive(Default)]
 struct Refused {
-    /// I riferimenti esterni, senza ripetizioni e in ordine.
+    /// I riferimenti esterni, senza ripetizioni e in ordine: fuori dal vault
+    /// per un disegno, fuori dal documento per le annotazioni.
     external: BTreeSet<String>,
-    /// Le immagini incorporate che non sono raster.
+    /// Le immagini incorporate che non sono raster leggibili.
     embedded: usize,
+    /// Le immagini del vault rimaste fuori, per motivo.
+    vault: BTreeMap<LeftOut, BTreeSet<String>>,
 }
 
 /// Quanto di un riferimento esterno finisce nel log.
@@ -486,9 +543,13 @@ fn lock(refused: &Mutex<Refused>) -> MutexGuard<'_, Refused> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Le opzioni di `usvg` per un disegno. Sono il confine di questo modulo: vedi
-/// la documentazione in testa al file.
-fn options(refused: &Arc<Mutex<Refused>>) -> usvg::Options<'static> {
+/// Le opzioni di `usvg` per un documento. Sono il confine di questo modulo:
+/// vedi la documentazione in testa al file. `vault` sono le immagini del vault
+/// che il documento può nominare; senza, ogni riferimento resta fuori.
+fn options<'a>(
+    refused: &Arc<Mutex<Refused>>,
+    vault: Option<&'a VaultImages<'a>>,
+) -> usvg::Options<'a> {
     let embedded = Arc::clone(refused);
     let external = Arc::clone(refused);
     usvg::Options {
@@ -504,8 +565,17 @@ fn options(refused: &Arc<Mutex<Refused>>) -> usvg::Options<'static> {
             }),
             resolve_string: Box::new(move |href, _| {
                 let shown: String = href.chars().take(HREF_SHOWN).collect();
-                lock(&external).external.insert(shown);
-                None
+                let (Some(vault), Some(path)) = (vault, vault_path(href)) else {
+                    lock(&external).external.insert(shown);
+                    return None;
+                };
+                match vault.image(&path) {
+                    Ok(kind) => Some(kind),
+                    Err(why) => {
+                        lock(&external).vault.entry(why).or_default().insert(shown);
+                        None
+                    }
+                }
             }),
         },
         fontdb: Arc::clone(fonts()),
@@ -513,20 +583,188 @@ fn options(refused: &Arc<Mutex<Refused>>) -> usvg::Options<'static> {
     }
 }
 
-/// Un'immagine incorporata, se è di un formato raster: lo dicono i primi byte,
-/// non il tipo che il `data:` dichiara.
+/// Un'immagine, se è di un formato raster che `usvg` sa misurare. Il formato
+/// lo dicono i primi byte, non il tipo che il `data:` o il nome del file
+/// dichiarano; la misura la prende `imagesize`, come in `usvg`, che
+/// un'immagine senza misura la scarta senza dirlo.
 fn raster(data: Arc<Vec<u8>>) -> Option<ImageKind> {
     let bytes = data.as_slice();
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some(ImageKind::PNG(data))
+    let kind: fn(Arc<Vec<u8>>) -> ImageKind = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        ImageKind::PNG
     } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-        Some(ImageKind::JPEG(data))
+        ImageKind::JPEG
     } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        Some(ImageKind::GIF(data))
+        ImageKind::GIF
     } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
-        Some(ImageKind::WEBP(data))
+        ImageKind::WEBP
     } else {
-        None
+        return None;
+    };
+    imagesize::blob_size(bytes)
+        .is_ok_and(|size| size.width > 0 && size.height > 0)
+        .then(|| kind(data))
+}
+
+/// Quanti MiB di immagini del vault porta al più un disegno: i byte restano in
+/// memoria finché il disegno non è uscito.
+const VAULT_IMAGES_MIB: usize = 64;
+const VAULT_IMAGES_MAX: usize = VAULT_IMAGES_MIB * 1024 * 1024;
+
+/// I tipi dei file che l'export legge come immagini del vault: i raster che
+/// `resvg` e `svg2pdf` sanno disegnare.
+const RASTER_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+/// Il percorso del vault che un `href` d'immagine nomina, letto come lo legge
+/// il client (`href` in `apps/client/src/editors/spatial/scene/values.ts`),
+/// cioè come un URL: senza spazi e controlli ai due capi e senza tabulazioni e
+/// a capo dentro. `None` per ciò che non è un percorso:
+/// il valore vuoto, un frammento, `//host`, un URL col suo schema, `file:`
+/// compreso.
+fn vault_path(href: &str) -> Option<String> {
+    let url: String = href
+        .trim_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect();
+    let slash = |c: Option<char>| matches!(c, Some('/' | '\\'));
+    let mut start = url.chars();
+    if url.is_empty() || url.starts_with('#') || (slash(start.next()) && slash(start.next())) {
+        return None;
+    }
+    let scheme = url.split_once(':').is_some_and(|(name, _)| {
+        let mut chars = name.chars();
+        chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+    (!scheme).then_some(url)
+}
+
+/// Perché un'immagine del vault è rimasta fuori, nell'ordine delle note del
+/// log.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum LeftOut {
+    /// Il percorso non porta a un file del vault.
+    Missing,
+    /// Il file non è un raster leggibile: un altro tipo, un SVG, byte rotti.
+    NotRaster,
+    /// L'host non ha risposto, o non ha dato i byte.
+    Unreadable,
+    /// Il file non ci stava più nel tetto del disegno.
+    OverBudget,
+}
+
+/// Le immagini del vault di un disegno. Un percorso ([`vault_path`]) si risolve
+/// dal disegno con la domanda dei collegamenti ([`IndexQuery::Resolve`]); il file deve avere il tipo di
+/// un raster, e i suoi byte, letti dall'host, devono esserlo davvero
+/// ([`raster`]).
+///
+/// Le immagini si leggono nell'ordine in cui `usvg` le incontra, finché ci
+/// stanno nel tetto: una che non ci sta resta fuori, e le altre si leggono
+/// ancora. La misura si chiede prima all'anagrafe, così un file che non ci sta
+/// non si legge nemmeno. Un file si legge una volta per disegno, anche se il
+/// disegno lo nomina più volte o per due percorsi.
+struct VaultImages<'h> {
+    host: &'h dyn ReadApi,
+    /// Il disegno: i percorsi sono relativi alla sua cartella.
+    from: DocId,
+    read: Mutex<ImagesRead>,
+}
+
+/// Ciò che le immagini del vault di un disegno hanno già dato.
+#[derive(Default)]
+struct ImagesRead {
+    /// L'esito di ogni percorso già chiesto.
+    paths: BTreeMap<String, Result<ImageKind, LeftOut>>,
+    /// L'esito di ogni file già letto.
+    files: BTreeMap<DocId, Result<ImageKind, LeftOut>>,
+    /// I byte letti finora.
+    bytes: usize,
+}
+
+impl<'h> VaultImages<'h> {
+    fn new(host: &'h dyn ReadApi, from: &DocId) -> Self {
+        VaultImages {
+            host,
+            from: from.clone(),
+            read: Mutex::new(ImagesRead::default()),
+        }
+    }
+
+    /// L'immagine del vault a `path`, o perché resta fuori.
+    fn image(&self, path: &str) -> Result<ImageKind, LeftOut> {
+        // Come per `Refused`: nessuno va in panico tenendo il lucchetto, e ciò
+        // che è già stato letto resterebbe valido.
+        let mut read = self
+            .read
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(found) = read.paths.get(path) {
+            return found.clone();
+        }
+        let found = self.find(path, &mut read);
+        read.paths.insert(path.to_string(), found.clone());
+        found
+    }
+
+    fn find(&self, path: &str, read: &mut ImagesRead) -> Result<ImageKind, LeftOut> {
+        let file = match self.host.query_index(IndexQuery::Resolve {
+            target: LinkTarget::Path(path.to_string()),
+            from: Some(self.from.clone()),
+        }) {
+            Ok(IndexResult::Resolved(Some(found))) => found.doc,
+            Ok(IndexResult::Resolved(None)) => return Err(LeftOut::Missing),
+            _ => return Err(LeftOut::Unreadable),
+        };
+        if let Some(found) = read.files.get(&file) {
+            return found.clone();
+        }
+        let found = self.read_file(&file, read);
+        read.files.insert(file, found.clone());
+        found
+    }
+
+    /// I byte di `file`, se è un raster che ci sta nel tetto.
+    fn read_file(&self, file: &DocId, read: &mut ImagesRead) -> Result<ImageKind, LeftOut> {
+        // Una nota, un disegno, un video: niente da leggere.
+        if !mime_of(file).is_some_and(|mime| RASTER_TYPES.contains(&mime)) {
+            return Err(LeftOut::NotRaster);
+        }
+        let room = VAULT_IMAGES_MAX - read.bytes;
+        if self.size_of(file).is_some_and(|size| size > room as u64) {
+            return Err(LeftOut::OverBudget);
+        }
+        let bytes = self
+            .host
+            .read_document_bytes(file)
+            .map_err(|_| LeftOut::Unreadable)?;
+        // L'anagrafe può non conoscere il file, o averne una misura vecchia.
+        if bytes.len() > room {
+            return Err(LeftOut::OverBudget);
+        }
+        let size = bytes.len();
+        let kind = raster(Arc::new(bytes)).ok_or(LeftOut::NotRaster)?;
+        read.bytes += size;
+        Ok(kind)
+    }
+
+    /// La misura di `file` secondo l'anagrafe del vault, senza leggerlo.
+    fn size_of(&self, file: &DocId) -> Option<u64> {
+        let folder = file
+            .as_str()
+            .rsplit_once('/')
+            .map_or("", |(folder, _)| folder);
+        match self.host.query_index(IndexQuery::Entries {
+            of_kind: None,
+            within: Some(FolderScope::direct(folder)),
+            page: None,
+        }) {
+            Ok(IndexResult::Entries(entries)) => entries
+                .items
+                .into_iter()
+                .find(|entry| entry.id == *file)
+                .map(|entry| entry.size),
+            _ => None,
+        }
     }
 }
 
@@ -1426,18 +1664,29 @@ mod tests {
     #[test]
     fn only_raster_images_are_kept_and_the_bytes_decide() {
         let kind = |bytes: &[u8]| raster(Arc::new(bytes.to_vec()));
+        // Il minimo che dice formato e misura, 2 × 1 pixel: l'intestazione del
+        // file, e per il JPEG il suo primo `SOF`.
         assert!(matches!(
-            kind(b"\x89PNG\r\n\x1a\n...."),
+            kind(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x02\0\0\0\x01"),
             Some(ImageKind::PNG(_))
         ));
         assert!(matches!(
-            kind(&[0xFF, 0xD8, 0xFF, 0xE0]),
+            kind(&[
+                0xFF, 0xD8, 0xFF, 0xC0, 0, 0x11, 8, 0, 1, 0, 2, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11,
+                1
+            ]),
             Some(ImageKind::JPEG(_))
         ));
-        assert!(matches!(kind(b"GIF89a.."), Some(ImageKind::GIF(_))));
-        assert!(matches!(kind(b"GIF87a.."), Some(ImageKind::GIF(_))));
         assert!(matches!(
-            kind(b"RIFF\0\0\0\0WEBPVP8L"),
+            kind(b"GIF89a\x02\0\x01\0\0\0\0"),
+            Some(ImageKind::GIF(_))
+        ));
+        assert!(matches!(
+            kind(b"GIF87a\x02\0\x01\0\0\0\0"),
+            Some(ImageKind::GIF(_))
+        ));
+        assert!(matches!(
+            kind(b"RIFF\0\0\0\0WEBPVP8L\0\0\0\0\x2f\x01\0\0\0"),
             Some(ImageKind::WEBP(_))
         ));
         // Un SVG, anche quando si dichiara `image/png`, resta fuori: dentro
@@ -1447,6 +1696,42 @@ mod tests {
         assert!(kind(b"RIFF\0\0\0\0AVI LIST").is_none());
         assert!(kind(b"RIFF").is_none());
         assert!(kind(b"").is_none());
+        // Il formato giusto senza una misura che si legga, o con un lato
+        // nullo: `usvg` la scarterebbe senza dirlo, e qui resta fuori prima.
+        assert!(kind(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR").is_none());
+        assert!(kind(&[0xFF, 0xD8, 0xFF, 0xE0]).is_none());
+        assert!(kind(b"GIF89a\0\0\x01\0\0\0\0").is_none());
+        assert!(kind(b"RIFF\0\0\0\0WEBPVP8L").is_none());
+    }
+
+    #[test]
+    fn a_vault_path_is_read_like_the_client_reads_it() {
+        for (href, path) in [
+            ("foto/mare.png", Some("foto/mare.png")),
+            ("/Allegati/foto.png", Some("/Allegati/foto.png")),
+            ("../foto.png", Some("../foto.png")),
+            ("  foto.png\n", Some("foto.png")),
+            ("fo\tto\r\n.png", Some("foto.png")),
+            ("foto mare.png", Some("foto mare.png")),
+            ("foto%20mare.png", Some("foto%20mare.png")),
+            // Un `:` dopo una barra non fa uno schema.
+            ("cartella/ore 10:30.png", Some("cartella/ore 10:30.png")),
+            ("1nota:foto.png", Some("1nota:foto.png")),
+            ("", None),
+            ("  ", None),
+            ("#foto", None),
+            ("//example.org/foto.png", None),
+            ("\\\\server\\foto.png", None),
+            ("/\\server/foto.png", None),
+            ("https://example.org/foto.png", None),
+            ("HTTP://example.org/foto.png", None),
+            ("file:///etc/foto.png", None),
+            ("data:image/png;base64,AAAA", None),
+            ("C:\\foto.png", None),
+            ("nota:foto.png", None),
+        ] {
+            assert_eq!(vault_path(href).as_deref(), path, "{href:?}");
+        }
     }
 
     #[test]

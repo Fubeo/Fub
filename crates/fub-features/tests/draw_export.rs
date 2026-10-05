@@ -1,6 +1,6 @@
 //! L'export dei disegni (`fub.draw`): che cosa esce, e che cosa non si tocca.
 //!
-//! Tre domande, e un gruppo di prove per ciascuna.
+//! Quattro domande, e un gruppo di prove per ciascuna.
 //!
 //! - **Che cosa esce.** Il PNG e il PDF di una scena si confrontano con le
 //!   baseline in `tests/baselines/draw/`. Si rigenerano soltanto con
@@ -13,13 +13,16 @@
 //!   oggetti con gli stessi valori, i numeri a meno di un millesimo, i flussi
 //!   decompressi; la tabella dei riferimenti incrociati e le lunghezze non
 //!   contano, perché dipendono dal numero di cifre di un numero.
+//! - **Le immagini del vault.** Entrano risolte dal disegno e lette una volta,
+//!   finché ci stanno nel tetto; quelle che restano fuori, il log le nomina.
 //! - **Che cosa non si tocca.** Un disegno ostile nomina la rete (un server in
 //!   ascolto su `127.0.0.1`), file locali per `file:` e per path assoluto, un
-//!   documento del vault, un `@import`, un `<use>` esterno, un `feImage`, un
-//!   SVG incorporato e un carattere di sistema. Nessuna di quelle risorse si
-//!   apre, e l'export è uguale a quello del suo gemello pulito. Dove il sistema
-//!   ha le FIFO, i file locali lo sono: aprirne una in lettura si blocca, quindi
-//!   un export che finisce non ne ha aperta nessuna.
+//!   file oltre la radice del vault, un SVG del vault, un `@import`, un `<use>`
+//!   esterno, un `feImage`, un SVG incorporato e un carattere di sistema.
+//!   Nessuna di quelle risorse si apre, e l'export è uguale a quello del suo
+//!   gemello pulito. Dove il sistema ha le FIFO, i file locali lo sono:
+//!   aprirne una in lettura si blocca, quindi un export che finisce non ne ha
+//!   aperta nessuna.
 //! - **Lo stesso disegno, gli stessi byte.** Due export dello stesso disegno
 //!   sono identici, anche con più caratteri nello stesso PDF.
 
@@ -669,6 +672,123 @@ fn characters_outside_fubs_fonts_are_noted() {
 }
 
 // ---------------------------------------------------------------------------
+// Le immagini del vault
+// ---------------------------------------------------------------------------
+
+/// Un disegno di 160 × 100 con le immagini `images`, ognuna `(href, x,
+/// larghezza)` a tutta altezza, i pixel senza sfumature.
+fn with_images(images: &[(&str, u32, u32)]) -> String {
+    let images: String = images
+        .iter()
+        .map(|(href, x, width)| {
+            format!(
+                r#"<image x="{x}" y="0" width="{width}" height="100" preserveAspectRatio="none" image-rendering="optimizeSpeed" href="{href}"/>"#
+            )
+        })
+        .collect();
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" width="160" height="100">{images}</svg>"#
+    )
+}
+
+#[test]
+fn vault_images_reach_both_formats() {
+    // Un percorso relativo al disegno, come lo scrive `format_link`, e uno
+    // dalla radice del vault.
+    let svg = with_images(&[("foto/rosso.png", 0, 80), ("/Allegati/rosso.png", 80, 80)]);
+    let host = host()
+        .with_document("disegni/acqua.svg", &svg)
+        .with_binary_document("disegni/foto/rosso.png", &red_png())
+        .with_binary_document("Allegati/rosso.png", &red_png());
+
+    let report = export(
+        &PngExport,
+        &host,
+        DRAW_PNG,
+        &["disegni/acqua.svg"],
+        serde_json::Value::Null,
+    )
+    .unwrap();
+    assert!(report.log.is_empty(), "{:?}", report.log);
+    let image = decode(&only_artifact(&report).1);
+    assert_eq!(red_pixels(&image), (image.width * image.height) as usize);
+
+    let report = export(
+        &PdfExport,
+        &host,
+        DRAW_PDF,
+        &["disegni/acqua.svg"],
+        serde_json::Value::Null,
+    )
+    .unwrap();
+    assert!(report.log.is_empty(), "{:?}", report.log);
+    let pdf = only_artifact(&report).1;
+    assert!(String::from_utf8_lossy(&pdf).contains("/Subtype /Image"));
+}
+
+#[test]
+fn a_vault_image_is_read_once_per_drawing() {
+    // Quattro modi di scrivere lo stesso file: due percorsi uguali dopo la
+    // pulizia dell'URL, due diversi che portano allo stesso file.
+    let svg = with_images(&[
+        ("rosso.png", 0, 40),
+        (" rosso.png ", 40, 40),
+        ("./rosso.png", 80, 40),
+        ("/rosso.png", 120, 40),
+    ]);
+    let red = red_png();
+    let host = host()
+        .with_document("disegno.svg", &svg)
+        .with_binary_document("rosso.png", &red);
+
+    let image = decode(&png_of(&host, "disegno.svg"));
+    assert_eq!(red_pixels(&image), (image.width * image.height) as usize);
+    assert_eq!(host.reads_on("rosso.png"), (1, red.len()));
+}
+
+#[test]
+fn vault_images_stop_at_the_budget_and_the_rest_still_come_in() {
+    // Il tetto è di 64 MiB per disegno, in ordine di testo: la prima immagine
+    // ne consuma un poco, e la seconda, che da sola ci starebbe, non ci sta più.
+    // Non si legge nemmeno, e la terza entra lo stesso.
+    let red = red_png();
+    let mut large = b"\x89PNG\r\n\x1a\n".to_vec();
+    large.resize(64 * 1024 * 1024 - red.len() + 1, 0);
+    let svg = with_images(&[
+        ("prima.png", 0, 40),
+        ("grande.png", 40, 80),
+        ("terza.png", 120, 40),
+    ]);
+    let host = host()
+        .with_document("disegno.svg", &svg)
+        .with_binary_document("prima.png", &red)
+        .with_binary_document("grande.png", &large)
+        .with_binary_document("terza.png", &red);
+
+    let report = export(
+        &PngExport,
+        &host,
+        DRAW_PNG,
+        &["disegno.svg"],
+        serde_json::Value::Null,
+    )
+    .unwrap();
+    assert_eq!(
+        messages(&report),
+        ["1 vault image did not fit in the 64 MiB of images of a drawing and was not exported: grande.png"]
+    );
+    assert_eq!(host.reads_on("grande.png"), (0, 0));
+    assert_eq!(host.reads_on("terza.png"), (1, red.len()));
+    // Le due immagini che ci stanno, metà del disegno, e in mezzo lo sfondo
+    // trasparente.
+    let image = decode(&only_artifact(&report).1);
+    assert_eq!(
+        red_pixels(&image),
+        (image.width * image.height / 2) as usize
+    );
+}
+
+// ---------------------------------------------------------------------------
 // La selezione, i nomi, gli errori
 // ---------------------------------------------------------------------------
 
@@ -862,8 +982,8 @@ fn hostile() -> Hostile {
   <image x="60" y="10" width="20" height="20" xlink:href="{net}/rosso.png"/>
   <image x="80" y="10" width="20" height="20" href="{red_file}"/>
   <image x="80" y="10" width="20" height="20" href="{absolute}"/>
-  <image x="100" y="10" width="20" height="20" href="Allegati/foto.png"/>
-  <image x="100" y="10" width="20" height="20" href="/Allegati/foto.png"/>
+  <image x="100" y="10" width="20" height="20" href="../rosso.png"/>
+  <image x="100" y="10" width="20" height="20" href="Allegati/rosso.svg"/>
   <image x="120" y="10" width="20" height="20" href="data:image/svg+xml;base64,{red_svg}"/>
   <filter id="remoto"><feImage href="{net}/filtro.png"/></filter>
   <rect x="0" y="50" width="160" height="50" fill="#ff0000" filter="url(#remoto)"/>
@@ -897,9 +1017,15 @@ fn a_hostile_drawing_opens_nothing_and_exports_like_its_clean_twin() {
     let hostile = hostile();
     // Lo stesso nome nei due vault: il titolo dei file viene da lì, e così i
     // due export si possono confrontare byte per byte.
+    // Rossi anche nel vault: il PNG dove un `..` di troppo porterebbe se la
+    // radice non fosse un confine, e un SVG, che non è un raster.
     let host = host()
         .with_document("disegno.svg", &hostile.svg)
-        .with_binary_document("Allegati/foto.png", &red_png());
+        .with_binary_document("rosso.png", &red_png())
+        .with_document(
+            "Allegati/rosso.svg",
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>"##,
+        );
     let twin = self::host().with_document("disegno.svg", &hostile.clean);
 
     let png = png_of(&host, "disegno.svg");
@@ -911,9 +1037,10 @@ fn a_hostile_drawing_opens_nothing_and_exports_like_its_clean_twin() {
         other => panic!("the export reached the network: {other:?}"),
     }
     assert!(host.network_requests().is_empty());
-    // Niente vault oltre al disegno: l'immagine del vault non è stata letta, e
-    // le sole letture sono le due del disegno, una per formato.
-    assert_eq!(host.reads_on("Allegati/foto.png"), (0, 0));
+    // Niente vault oltre al disegno: le due immagini rosse non sono state
+    // lette, e le sole letture sono le due del disegno, una per formato.
+    assert_eq!(host.reads_on("rosso.png"), (0, 0));
+    assert_eq!(host.reads_on("Allegati/rosso.svg"), (0, 0));
     let drawing = hostile.svg.len();
     assert_eq!(host.reads_on("disegno.svg"), (2, 2 * drawing));
     assert_eq!(host.read_totals(), (2, 2 * drawing));
@@ -942,8 +1069,26 @@ fn a_hostile_drawing_opens_nothing_and_exports_like_its_clean_twin() {
 
 #[test]
 fn the_log_names_what_was_left_out() {
-    let hostile = hostile();
-    let host = host().with_document("ostile.svg", &hostile.svg);
+    let broken_png = base64(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR");
+    let red_svg = base64(
+        br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>"##,
+    );
+    let svg = with_images(&[
+        ("https://example.org/a.png", 0, 10),
+        ("file:///etc/b.png", 0, 10),
+        ("//example.org/c.png", 0, 10),
+        ("#d", 0, 10),
+        ("mancante.png", 0, 10),
+        ("../fuori.png", 0, 10),
+        ("nota.md", 0, 10),
+        ("rotta.png", 0, 10),
+        (&format!("data:image/png;base64,{broken_png}"), 0, 10),
+        (&format!("data:image/svg+xml;base64,{red_svg}"), 0, 10),
+    ]);
+    let host = host()
+        .with_document("ostile.svg", &svg)
+        .with_document("nota.md", "# Nota\n")
+        .with_binary_document("rotta.png", b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR");
     let report = export(
         &PngExport,
         &host,
@@ -952,21 +1097,21 @@ fn the_log_names_what_was_left_out() {
         serde_json::Value::Null,
     )
     .unwrap();
-    let log = messages(&report);
-    assert_eq!(log.len(), 2, "{log:?}");
-    assert!(
-        log[0].starts_with("6 image references point outside the drawing and were not exported: "),
-        "{log:?}"
-    );
-    assert!(log[0].ends_with(" and 3 more"), "{log:?}");
     assert_eq!(
-        log[1],
-        "1 embedded image is not PNG, JPEG, GIF or WebP and was not exported"
+        messages(&report),
+        [
+            "4 image references point outside the vault and were not exported: #d, //example.org/c.png, file:///etc/b.png and 1 more",
+            "2 images are not in the vault and were not exported: ../fuori.png, mancante.png",
+            "2 vault images are not readable PNG, JPEG, GIF or WebP images and were not exported: nota.md, rotta.png",
+            "2 embedded images are not readable PNG, JPEG, GIF or WebP images and were not exported",
+        ]
     );
     assert!(report
         .log
         .iter()
         .all(|note| note.entry.as_deref() == Some("ostile.svg")));
+    // Una nota non è un'immagine: non si legge nemmeno.
+    assert_eq!(host.reads_on("nota.md"), (0, 0));
 }
 
 /// La prova più stretta, dove il sistema la permette: le risorse locali sono
