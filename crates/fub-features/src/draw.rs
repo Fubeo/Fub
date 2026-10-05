@@ -5,7 +5,8 @@
 //! dal provider del formato, con un nome libero, e si apre.
 //!
 //! Il livello è un'impostazione del vault, [`DRAW_LEVEL_KEY`]: l'editor la
-//! legge, e la segue dal vivo, per sapere quali strumenti offrire.
+//! legge, e la segue dal vivo, per sapere quali strumenti offrire. Le parti
+//! del livello Personalizzato sono un'altra, [`DRAW_CUSTOM_KEY`].
 //!
 //! L'export sono due [`ExportProvider`], uno per formato, che leggono il disegno nello stesso
 //! modo: i byte del documento passano da `usvg`, che ne fa un albero, e da lì
@@ -83,8 +84,14 @@ pub const DRAW_PNG: &str = "draw.png";
 pub const DRAW_PDF: &str = "draw.pdf";
 /// L'impostazione del livello dell'editor: quali strumenti offre.
 pub const DRAW_LEVEL_KEY: &str = "draw.level";
-/// I valori del livello, dal più semplice: il primo è quello di serie.
-pub const DRAW_LEVELS: [&str; 3] = ["essential", "standard", "expert"];
+/// I valori del livello: i tre gradini, dal più semplice, e il
+/// Personalizzato. Il primo è quello di serie.
+pub const DRAW_LEVELS: [&str; 4] = ["essential", "standard", "expert", "custom"];
+/// L'impostazione delle parti del livello Personalizzato: quali strumenti e
+/// comandi offre, ciascuno coi suoi tasti.
+pub const DRAW_CUSTOM_KEY: &str = "draw.custom";
+/// Le parti di serie del Personalizzato: quelle dell'Essenziale.
+pub const DRAW_CUSTOM_DEFAULT: [&str; 6] = ["pen", "eraser", "rect", "ellipse", "line", "arrow"];
 
 /// L'opzione del PNG: quanti pixel per pixel CSS del disegno.
 const SCALE: &str = "scale";
@@ -114,8 +121,12 @@ const S_LEVEL_DESC: &str = "s_level_desc";
 const S_ESSENTIAL: &str = "s_essential";
 const S_STANDARD: &str = "s_standard";
 const S_EXPERT: &str = "s_expert";
+const S_CUSTOM: &str = "s_custom";
+const S_CUSTOM_PARTS: &str = "s_custom_parts";
+const S_CUSTOM_PARTS_DESC: &str = "s_custom_parts_desc";
 
-/// Lo schema delle impostazioni dei disegni: il livello dell'editor.
+/// Lo schema delle impostazioni dei disegni: il livello dell'editor e le
+/// parti del Personalizzato.
 ///
 /// Del **vault**, perché il livello lo sceglie chi prepara il vault: chi
 /// insegna e lo lascia all'Essenziale per una classe lo lascia su ogni
@@ -123,25 +134,42 @@ const S_EXPERT: &str = "s_expert";
 /// ragione: un componente che alzasse il livello da sé metterebbe davanti a chi
 /// disegna strumenti che nessuno ha scelto di dargli.
 ///
-/// Cambiare livello non tocca i disegni: filtra soltanto ciò che l'editor
-/// offre. La griglia invece qui non c'è: è uno stato della vista, e lo ricorda
-/// la macchina, senza riscrivere il file del vault a ogni `#`.
+/// Le parti sono un elenco di nomi che conosce l'editor, ed è lui a darne il
+/// campo e le stringhe; qui l'elenco non si controlla, così un nome di una
+/// versione più nuova resta scritto e non conta. Valgono soltanto col
+/// Personalizzato, e si preparano anche con un altro livello scelto.
+///
+/// Cambiare livello o parti non tocca i disegni: filtra soltanto ciò che
+/// l'editor offre. La griglia invece qui non c'è: è uno stato della vista, e lo
+/// ricorda la macchina, senza riscrivere il file del vault a ogni `#`.
 pub fn settings() -> Vec<SettingSpec> {
-    let [essential, standard, expert] = DRAW_LEVELS;
-    vec![SettingSpec::new(
-        DRAW_LEVEL_KEY,
-        Text::key(S_LEVEL),
-        SettingKind::Choice {
-            default: essential.into(),
-            options: vec![
-                UiOption::new(essential, Text::key(S_ESSENTIAL)),
-                UiOption::new(standard, Text::key(S_STANDARD)),
-                UiOption::new(expert, Text::key(S_EXPERT)),
-            ],
-        },
-    )
-    .describing(Text::key(S_LEVEL_DESC))
-    .grouped(Text::key(S_GROUP))]
+    let [essential, standard, expert, custom] = DRAW_LEVELS;
+    vec![
+        SettingSpec::new(
+            DRAW_LEVEL_KEY,
+            Text::key(S_LEVEL),
+            SettingKind::Choice {
+                default: essential.into(),
+                options: vec![
+                    UiOption::new(essential, Text::key(S_ESSENTIAL)),
+                    UiOption::new(standard, Text::key(S_STANDARD)),
+                    UiOption::new(expert, Text::key(S_EXPERT)),
+                    UiOption::new(custom, Text::key(S_CUSTOM)),
+                ],
+            },
+        )
+        .describing(Text::key(S_LEVEL_DESC))
+        .grouped(Text::key(S_GROUP)),
+        SettingSpec::new(
+            DRAW_CUSTOM_KEY,
+            Text::key(S_CUSTOM_PARTS),
+            SettingKind::List {
+                default: DRAW_CUSTOM_DEFAULT.map(String::from).to_vec(),
+            },
+        )
+        .describing(Text::key(S_CUSTOM_PARTS_DESC))
+        .grouped(Text::key(S_GROUP)),
+    ]
 }
 
 /// Le stringhe del componente: quelle del comando, dell'impostazione, e
@@ -168,16 +196,26 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Quali strumenti offre l'editor dei disegni. Essenziale ne ha sette, \
                  ciascuno con un tasto, adatti anche ai bambini; Standard aggiunge \
                  l'evidenziatore, altri colori, il testo, i livelli del disegno, la \
-                 griglia, i collegamenti alle note e la barra «Disponi»; Esperto \
-                 aggiunge gli attributi di ogni oggetto, il contorno, le \
-                 trasformazioni in numeri, «Applica trasformazione», «Oggetto in \
-                 tracciato», le operazioni booleane, lo strumento Nodi e la penna di \
-                 Bézier. Cambiare livello non modifica i disegni, e vale subito anche \
-                 per quelli aperti.",
+                 griglia, i collegamenti alle note, le immagini del vault e la barra \
+                 «Disponi»; Esperto aggiunge gli attributi di ogni oggetto, il \
+                 contorno, le trasformazioni in numeri, «Applica trasformazione», \
+                 «Oggetto in tracciato», le operazioni booleane, lo strumento Nodi e \
+                 la penna di Bézier; Personalizzato ha soltanto le parti scelte in \
+                 «Parti del Personalizzato», da tutti e tre. Cambiare livello non \
+                 modifica i disegni, e vale subito anche per quelli aperti.",
             )
             .with(S_ESSENTIAL, "Essenziale")
             .with(S_STANDARD, "Standard")
-            .with(S_EXPERT, "Esperto"),
+            .with(S_EXPERT, "Esperto")
+            .with(S_CUSTOM, "Personalizzato")
+            .with(S_CUSTOM_PARTS, "Parti del Personalizzato")
+            .with(
+                S_CUSTOM_PARTS_DESC,
+                "Gli strumenti e i comandi dell'editor dei disegni col livello \
+                 Personalizzato, scelti uno per uno dai tre livelli; ciascuno porta \
+                 i suoi tasti. Valgono soltanto quando il livello è Personalizzato, \
+                 e si possono preparare prima. Di serie sono quelli dell'Essenziale.",
+            ),
         create::in_english(StringCatalog::new("en"))
             .with(E_TARGET, "«{target}» is not a drawing export destination.")
             .with(E_NO_DRAWINGS, "The selection contains no drawings.")
@@ -197,15 +235,25 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Which tools the drawing editor offers. Essential has seven, each \
                  with its own key, suited to children too; Standard adds the \
                  highlighter, more colors, text, drawing layers, the grid, links to \
-                 notes and the Arrange bar; Expert adds the attributes of each \
-                 object, the outline, numeric transforms, Apply transform, Object to \
-                 path, boolean operations, the Nodes tool and the Bézier pen. \
-                 Changing the level does not modify drawings, and takes effect at \
-                 once, open ones included.",
+                 notes, images from the vault and the Arrange bar; Expert adds the \
+                 attributes of each object, the outline, numeric transforms, Apply \
+                 transform, Object to path, boolean operations, the Nodes tool and \
+                 the Bézier pen; Custom has only the parts chosen in “Custom level \
+                 parts”, from all three. Changing the level does not modify \
+                 drawings, and takes effect at once, open ones included.",
             )
             .with(S_ESSENTIAL, "Essential")
             .with(S_STANDARD, "Standard")
-            .with(S_EXPERT, "Expert"),
+            .with(S_EXPERT, "Expert")
+            .with(S_CUSTOM, "Custom")
+            .with(S_CUSTOM_PARTS, "Custom level parts")
+            .with(
+                S_CUSTOM_PARTS_DESC,
+                "The drawing editor tools and commands of the Custom level, picked \
+                 one by one from the three levels; each brings its own keys. They \
+                 apply only when the level is Custom, and can be prepared ahead. By \
+                 default they are those of Essential.",
+            ),
     ]
 }
 
