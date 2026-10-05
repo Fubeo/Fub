@@ -169,8 +169,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                  ciascuno con un tasto, adatti anche ai bambini; Standard aggiunge \
                  l'evidenziatore, altri colori, il testo, i livelli del disegno, la \
                  griglia, i collegamenti alle note e la barra «Disponi»; Esperto \
-                 aggiunge gli attributi di ogni oggetto, da leggere e da cambiare uno \
-                 per uno. Cambiare livello non modifica i disegni, e vale subito anche \
+                 aggiunge gli attributi di ogni oggetto, il contorno, le \
+                 trasformazioni in numeri, «Applica trasformazione», «Oggetto in \
+                 tracciato», le operazioni booleane, lo strumento Nodi e la penna di \
+                 Bézier. Cambiare livello non modifica i disegni, e vale subito anche \
                  per quelli aperti.",
             )
             .with(S_ESSENTIAL, "Essenziale")
@@ -196,8 +198,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                  with its own key, suited to children too; Standard adds the \
                  highlighter, more colors, text, drawing layers, the grid, links to \
                  notes and the Arrange bar; Expert adds the attributes of each \
-                 object, to read and change one by one. Changing the level does not \
-                 modify drawings, and takes effect at once, open ones included.",
+                 object, the outline, numeric transforms, Apply transform, Object to \
+                 path, boolean operations, the Nodes tool and the Bézier pen. \
+                 Changing the level does not modify drawings, and takes effect at \
+                 once, open ones included.",
             )
             .with(S_ESSENTIAL, "Essential")
             .with(S_STANDARD, "Standard")
