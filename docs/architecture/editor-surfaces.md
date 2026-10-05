@@ -66,15 +66,19 @@ quello della shell. Un caricamento fallito lascia il testo alla sessione.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
-scelta sulla scheda attiva; sono disponibili uno alla volta, nella palette e
-nel menu del riquadro, senza accordo. Il cambio passa dalla via del cambio di
-scheda: il riquadro stacca e distrugge la superficie e ne monta un'altra sulla
-stessa `DocumentSession`, che restituisce testo e descrittore senza leggere il
-disco. Testo sporco, coda di salvataggio e bozza restano; la cronologia locale
-della superficie smontata si perde come a ogni cambio di scheda, quella degli
-altri riquadri no. Il fuoco va sulla superficie nuova. Se il riquadro ricorda
-una lettura per la famiglia della vista, l'apertura passa alla scrittura che
-sceglierebbe `Mod-E`, perché chi chiede il sorgente vuole il testo.
+scelta sulla scheda attiva; `shell.doc.source.side` («Apri come sorgente
+accanto») la imposta nel riquadro nuovo di una divisione verso destra, o va al
+riquadro che la mostra già. Aprire e chiudere non sono mai disponibili
+insieme; stanno nella palette e nel menu del riquadro, senza accordo. Il
+cambio passa dalla via del cambio di scheda: il riquadro stacca e distrugge la
+superficie e ne monta un'altra sulla stessa `DocumentSession`, che restituisce
+testo e descrittore senza leggere il disco. Testo sporco, coda di salvataggio
+e bozza restano; la cronologia locale della superficie smontata si perde come
+a ogni cambio di scheda, quella degli altri riquadri no. Il fuoco va sulla
+superficie nuova. Se il riquadro ricorda una lettura per la famiglia della
+vista, l'apertura passa alla scrittura che sceglierebbe `Mod-E`, perché chi
+chiede il sorgente vuole il testo; accanto passa alla modalità di ruolo
+`source`, se c'è, perché la resa è già nel riquadro di partenza.
 
 Una scelta vale finché la superficie naturale dichiara quella vista e il
 registro risolve la scelta proprio a lei. Altrimenti (il profilo non la offre
