@@ -38,6 +38,11 @@ export type OverlayHandle =
   | { readonly kind: "box"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly matrix: Matrix }
   /// Un punto da trascinare, di misura fissa sullo schermo.
   | { readonly kind: "grip"; readonly x: number; readonly y: number }
+  /// La maniglia tonda che ruota, legata da un gambo al punto `stem`.
+  | { readonly kind: "rotor"; readonly x: number; readonly y: number; readonly stem: Point }
+  /// Una scritta breve, come le misure mentre si ridimensiona: centrata
+  /// sotto il punto, su un fondo del colore della linea.
+  | { readonly kind: "label"; readonly x: number; readonly y: number; readonly text: string }
   /// Il contorno di una selezione a mano libera, tratteggiato.
   | { readonly kind: "lasso"; readonly points: readonly Point[] }
   /// Il contorno di un tracciato di cui si modificano i nodi: i segmenti
@@ -71,6 +76,15 @@ const GRIP = 8;
 /// maniglia è più piccolo, perché non si confonda con un nodo.
 const NODE = 9;
 const CONTROL = 6;
+
+/// Il diametro della maniglia che ruota, in pixel CSS.
+const ROTOR = 10;
+
+/// La scritta: il corpo, il margine attorno, e la distanza dal punto, in
+/// pixel CSS.
+const LABEL_SIZE = 12;
+const LABEL_PAD = 4;
+const LABEL_GAP = 12;
 
 /// Monta lo strato dentro `host`, sopra ciò che c'è.
 export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay {
@@ -119,6 +133,34 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     if (typeof matchMedia === "function" && matchMedia("(forced-colors: active)").matches) return "Canvas";
     const value = getComputedStyle(canvas).getPropertyValue("--bg").trim();
     return value === "" ? "Canvas" : value;
+  };
+
+  /// Il testo sopra il colore della linea.
+  const onAccent = (): string => {
+    if (typeof matchMedia === "function" && matchMedia("(forced-colors: active)").matches) return "HighlightText";
+    const value = getComputedStyle(canvas).getPropertyValue("--accent-contrast").trim();
+    return value === "" ? "HighlightText" : value;
+  };
+
+  /// Una scritta centrata sotto `x`, `y` sullo schermo, sul colore della
+  /// linea; nel carattere dell'interfaccia, che lo strato non eredita.
+  const drawLabel = (ctx: CanvasRenderingContext2D, x: number, y: number, text: string, line: string): void => {
+    const family = getComputedStyle(host).fontFamily;
+    ctx.font = `${LABEL_SIZE}px ${family === "" ? "sans-serif" : family}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const w = Math.ceil(ctx.measureText(text).width) + 2 * LABEL_PAD;
+    const h = LABEL_SIZE + 2 * LABEL_PAD;
+    // Dentro la vista, anche vicino a un bordo.
+    const left = Math.max(0, Math.min(Math.round(x - w / 2), width - w));
+    const top = Math.max(0, Math.min(Math.round(y + LABEL_GAP), height - h));
+    ctx.fillStyle = line;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") ctx.roundRect(left, top, w, h, 3);
+    else ctx.rect(left, top, w, h);
+    ctx.fill();
+    ctx.fillStyle = onAccent();
+    ctx.fillText(text, left + w / 2, top + h / 2 + 0.5);
   };
 
   /// Un punto della scena sullo schermo, in pixel CSS.
@@ -245,6 +287,12 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.moveTo(...screen(handle.node[0], handle.node[1]));
         ctx.lineTo(...screen(handle.x, handle.y));
         ctx.stroke();
+      } else if (handle.kind === "rotor") {
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(...screen(handle.stem[0], handle.stem[1]));
+        ctx.lineTo(...screen(handle.x, handle.y));
+        ctx.stroke();
       }
     }
     ctx.setLineDash([]);
@@ -258,10 +306,10 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         const y = Math.round(py - GRIP / 2) + 0.5;
         ctx.fillRect(x, y, GRIP, GRIP);
         ctx.strokeRect(x, y, GRIP, GRIP);
-      } else if (handle.kind === "control") {
+      } else if (handle.kind === "control" || handle.kind === "rotor") {
         const [px, py] = screen(handle.x, handle.y);
         ctx.beginPath();
-        ctx.arc(px, py, CONTROL / 2, 0, 2 * Math.PI);
+        ctx.arc(px, py, (handle.kind === "rotor" ? ROTOR : CONTROL) / 2, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
       }
@@ -272,6 +320,11 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
       const [px, py] = screen(handle.x, handle.y);
       ctx.fillStyle = handle.selected ? line : fill;
       drawNode(ctx, px, py, handle.shape);
+    }
+    for (const handle of handles) {
+      if (handle.kind !== "label") continue;
+      const [px, py] = screen(handle.x, handle.y);
+      drawLabel(ctx, px, py, handle.text, line);
     }
   };
 

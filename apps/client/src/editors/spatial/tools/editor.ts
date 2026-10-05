@@ -101,13 +101,13 @@ import { formatNumber } from "../number";
 import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInputOptions, type StrokeStart } from "../pen/pen-input";
 import type { TouchPolicy } from "../pen/roles";
 import { BoundsBuilder, parsePath, type Bounds } from "../scene/geometry";
-import { apply, compose, invert, type Matrix, type Point } from "../scene/matrix";
+import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, pathOf, tagName, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
-import type { Tool } from "../scene/analysis";
+import type { Role, Tool } from "../scene/analysis";
 import type { Item } from "../scene/classify";
 import type { Op, Reason } from "../scene/ops";
 import { pathData, type Elem } from "../scene/serialize";
@@ -130,6 +130,7 @@ import {
   removeOps,
   roundDelta,
   strokeElem,
+  transformedMatrix,
   transformOps,
   transformValue,
   type Destination,
@@ -159,6 +160,28 @@ import {
 import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
 import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, type Cap, type Dash, type Join, type OutlineChange } from "./outline";
 import { boundsAfter, numericMatrix, numericOps } from "./transform";
+import {
+  angleOf,
+  FRAME_PX,
+  frameCenter,
+  frameSize,
+  frameView,
+  gridSnap,
+  gripAt,
+  gripCursor,
+  isCorner,
+  MAGNET_DEGREES,
+  movedFrame,
+  normalized,
+  resized,
+  resizeMatrix,
+  rotation,
+  rotationMatrix,
+  type Frame,
+  type FrameView,
+  type Grip,
+  type GripCursor,
+} from "./frame";
 import { applyOps } from "./apply";
 import { pathOps } from "./topath";
 import type { BooleanKind } from "./boolean";
@@ -411,9 +434,6 @@ const DRAG_PX: Readonly<Record<InkPointerType, number>> = { pen: 3, mouse: 3, to
 /// Sotto questa misura, in pixel, una forma è un tocco e non si scrive.
 const MIN_SHAPE_PX = 4;
 
-/// Lo scarto fra un oggetto e la cornice della sua selezione, in pixel.
-const FRAME_PX = 4;
-
 const ZOOM_STEP = 1.25;
 
 /// La lettera dei pulsanti delle dimensioni del testo, in pixel.
@@ -425,8 +445,23 @@ const FIT_PAD = 0.08;
 const NUDGE = 1;
 const NUDGE_SHIFT = 10;
 
-/// La misura più piccola a cui le frecce riducono un lato della selezione.
+/// La misura più piccola a cui le frecce, o la cornice, riducono un lato
+/// della selezione.
 const MIN_SIZE = 1;
+
+/// Il passo di `[` e `]`, e della rotazione con Maiusc, in gradi; con Maiusc
+/// i tasti girano di un angolo retto.
+const ROTATE_STEP = 15;
+const ROTATE_STEP_SHIFT = 90;
+
+/// Gli oggetti che la cornice ridimensiona dagli angoli tenendo le
+/// proporzioni, se Maiusc non dice il contrario: deformati, non sono più
+/// loro.
+const RATIO_ROLES: ReadonlySet<Role> = new Set<Role>(["group", "link", "stroke", "text", "image"]);
+
+/// Di quanto il segno di un collegamento scelto si scosta, in pixel CSS, in
+/// alto e a destra: oltre la maniglia d'angolo, che sporge di 4 dalla cornice.
+const MARK_CLEAR_PX = FRAME_PX + 4;
 
 /// Di quanto le frecce muovono il cursore del foglio, in pixel: con Maiusc a
 /// passi lunghi, con Ctrl o ⌘ a passi corti.
@@ -616,8 +651,9 @@ interface SelectGesture extends GestureBase {
   readonly kind: "select";
   from: Point | null;
   end: Point | null;
-  /// `pending` finché un tocco su un oggetto non diventa trascinamento.
-  mode: "pending" | "move" | "marquee";
+  /// `pending` finché un tocco su un oggetto, o su una maniglia della
+  /// cornice, non diventa trascinamento.
+  mode: "pending" | "move" | "marquee" | "resize" | "rotate";
   units: readonly Unit[];
   /// Per il riquadro: la selezione di partenza, che Maiusc conserva.
   base: readonly string[];
@@ -628,6 +664,12 @@ interface SelectGesture extends GestureBase {
   source: Point | null;
   /// L'oggetto sotto il primo punto, per il doppio tocco.
   hit: string | null;
+  /// La maniglia della cornice presa, con la cornice di allora.
+  grip: { readonly grip: Grip; readonly frame: Frame } | null;
+  /// La trasformazione della scena che la cornice mostra, e i gradi della
+  /// rotazione.
+  matrix: Matrix | null;
+  angle: number;
 }
 
 /// Che cosa ha preso il primo punto di un gesto dei nodi: un nodo, una
@@ -940,6 +982,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// tasto giù l'aggancio aspetta.
   let grid: Grid = options.grid === undefined ? DEFAULT_GRID : checkedGrid(options.grid, DEFAULT_GRID);
   let free = false;
+  /// Alt tenuto durante un gesto del puntatore: la cornice scala dal centro.
+  let alt = false;
+  /// La cornice di più oggetti dopo che la si è ruotata, ridimensionata o
+  /// spostata: resta com'è diventata finché la selezione e il disegno non
+  /// cambiano per altro. Una rotazione dopo l'altra gira così sempre
+  /// attorno allo stesso centro.
+  let kept: { readonly index: SceneIndex; readonly keys: string; readonly frame: Frame } | null = null;
   /// Il testo che si sta scrivendo nel campo sopra il foglio.
   let typing: Typing | null = null;
   /// Il puntatore è sceso sul foglio mentre si scriveva: quel tocco chiude il
@@ -1498,7 +1547,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showZoom();
     showCursor();
     placeText();
-    showLinks();
+    // Le cornici hanno un margine e le maniglie una misura sullo schermo.
+    showHandles();
   };
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.
   let coordinates: Intl.NumberFormat | null = null;
@@ -1653,6 +1703,73 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return out;
   };
 
+  // --- La cornice di trasformazione ------------------------------------------
+
+  /// La cornice di `units`: quella di un oggetto solo, che ruota con lui, o
+  /// il riquadro comune di più oggetti, se non ne tengono uno loro. `null`
+  /// se non disegnano niente.
+  const frameOf = (units: readonly Unit[]): Frame | null => {
+    if (units.length === 1) {
+      const unit = units[0]!;
+      const box = unit.frame();
+      return box === null ? null : { matrix: unit.matrix, box, geometry: unit.shapeFrame() ?? box };
+    }
+    if (kept !== null && kept.index === currentIndex() && kept.keys === units.map((unit) => unit.key).join("\n")) return kept.frame;
+    let box: Bounds | null = null;
+    let geometry: Bounds | null = null;
+    for (const unit of units) {
+      box = union(box, unit.bounds);
+      geometry = union(geometry, unit.geometry ?? unit.bounds);
+    }
+    return box === null ? null : { matrix: IDENTITY, box, geometry: geometry ?? box };
+  };
+
+  /// La cornice che si vede adesso: con lo strumento Selezione, se il
+  /// disegno si scrive. Durante un gesto della cornice, com'è diventata;
+  /// mentre si sposta o si sceglie col riquadro, nessuna.
+  const frameNow = (): FrameView | null => {
+    if (tool !== "select" || !editable() || selection.length === 0) return null;
+    const g = current?.kind === "select" ? current : null;
+    if (g !== null && (g.mode === "move" || g.mode === "marquee")) return null;
+    if (g !== null && g.grip !== null) return frameView(g.matrix === null ? g.grip.frame : movedFrame(g.grip.frame, g.matrix), camera.scale);
+    const frame = frameOf(selectedUnits());
+    return frame === null ? null : frameView(frame, camera.scale);
+  };
+
+  /// Le misure e gli angoli come si leggono sulla cornice.
+  const measuresText = ([width, height]: readonly [number, number]): string => `${numberText(width)} × ${numberText(height)}`;
+  const degreesText = (degrees: number): string => `${numberText(degrees)}°`;
+
+  /// La cornice fra le maniglie: il riquadro comune di più oggetti, le
+  /// maniglie, e mentre la si tira le misure o l'angolo, sotto di lei.
+  const frameHandles = (): OverlayHandle[] => {
+    const view = frameNow();
+    if (view === null) return [];
+    const out: OverlayHandle[] = [];
+    const { min, max } = view.padded;
+    if (selection.length > 1) {
+      out.push({ kind: "box", x: min[0], y: min[1], width: max[0] - min[0], height: max[1] - min[1], matrix: view.frame.matrix });
+    }
+    for (const { grip, at } of view.spots) {
+      out.push(grip === "rotate" ? { kind: "rotor", x: at[0], y: at[1], stem: view.stem } : { kind: "grip", x: at[0], y: at[1] });
+    }
+    const g = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current : null;
+    if (g !== null) {
+      const corners = [min, [max[0], min[1]], max, [min[0], max[1]]].map((corner) => apply(view.frame.matrix, corner as Point));
+      const x = corners.reduce((sum, corner) => sum + corner[0], 0) / 4;
+      const y = Math.max(...corners.map((corner) => corner[1]));
+      const text = g.mode === "rotate" ? degreesText(normalized(angleOf(g.grip!.frame.matrix) + g.angle)) : measuresText(frameSize(view.frame));
+      out.push({ kind: "label", x, y, text });
+    }
+    return out;
+  };
+
+  /// Il cursore del foglio sopra una maniglia, o durante il suo gesto.
+  const showGrip = (cursor: GripCursor | "rotating" | null): void => {
+    if (cursor === null) delete surface.dataset.grip;
+    else surface.dataset.grip = cursor;
+  };
+
   /// Le cornici della selezione, i nodi del tracciato che si modifica, e il
   /// riquadro di un trascinamento sul vuoto.
   const showHandles = (): void => {
@@ -1660,6 +1777,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const handles: OverlayHandle[] = [];
     const move = current?.kind === "select" && current.mode === "move" ? current : null;
     const delta = move === null ? null : moveDelta(move);
+    const shaping = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current.matrix : null;
     for (const unit of selectedUnits()) {
       // L'oggetto di cui si modificano i nodi mostra i nodi, non la cornice.
       if (editing !== null && unit.key === editing.unit.key) continue;
@@ -1669,18 +1787,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (delta !== null) {
         const moved = movedMatrix(unit, delta[0], delta[1]);
         if (moved !== null) matrix = compose(unit.parent, moved);
+      } else if (shaping !== null) {
+        matrix = compose(shaping, matrix);
       }
-      const scale = scaleOf(matrix) * camera.scale;
-      const pad = scale > 0 ? FRAME_PX / scale : 0;
+      // Il margine è lo stesso sullo schermo lungo i due assi, anche per un
+      // oggetto scalato più in un verso che nell'altro.
+      const sx = Math.hypot(matrix[0], matrix[1]) * camera.scale;
+      const sy = Math.hypot(matrix[2], matrix[3]) * camera.scale;
+      const padX = sx > 0 ? FRAME_PX / sx : 0;
+      const padY = sy > 0 ? FRAME_PX / sy : 0;
       handles.push({
         kind: "box",
-        x: frame.min[0] - pad,
-        y: frame.min[1] - pad,
-        width: frame.max[0] - frame.min[0] + 2 * pad,
-        height: frame.max[1] - frame.min[1] + 2 * pad,
+        x: frame.min[0] - padX,
+        y: frame.min[1] - padY,
+        width: frame.max[0] - frame.min[0] + 2 * padX,
+        height: frame.max[1] - frame.min[1] + 2 * padY,
         matrix,
       });
     }
+    handles.push(...frameHandles());
     if (editing !== null) handles.push(...nodeHandles(editing));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
     const lasso = current?.kind === "select" && current.mode === "marquee"
@@ -1719,7 +1844,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   relabels.push(labelMarks);
 
   /// I segni sullo schermo. Durante uno spostamento seguono gli oggetti
-  /// scelti, di `delta` nella scena, e i collegamenti che contengono.
+  /// scelti, di `delta` nella scena, e i collegamenti che contengono; durante
+  /// un ridimensionamento o una rotazione, la loro trasformazione. Con la
+  /// Selezione il segno di un oggetto scelto si scosta, per lasciare libera
+  /// la maniglia della cornice sul suo angolo.
   function showLinks(delta: readonly [number, number] | null = null): void {
     if (options.links === undefined) return;
     if (marks === null) {
@@ -1741,12 +1869,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       linkLayer.replaceChildren(...list.map((mark) => mark.element));
       labelMarks();
     }
-    const moving = delta === null ? [] : selectedUnits().map((unit) => unit.path);
+    const shaping = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current.matrix : null;
+    // Anche mentre si sposta, quando la cornice non si vede: il segno non salta.
+    const framed = tool === "select" && editable();
+    const chosen = delta !== null || shaping !== null || framed ? selectedUnits().map((unit) => unit.path) : [];
     const { scale, tx, ty } = camera;
     for (const { unit, element } of marks) {
-      const moved = delta !== null && moving.some((path) => path.every((at, i) => unit.path[i] === at));
-      const bounds = (moved ? translated(unit.bounds, delta[0], delta[1]) : unit.bounds)!;
-      element.style.transform = `translate(${tx + scale * bounds.max[0]}px, ${ty + scale * bounds.min[1]}px)`;
+      const inside = chosen.some((path) => path.every((at, i) => unit.path[i] === at));
+      let bounds = unit.bounds!;
+      if (inside && delta !== null) bounds = translated(bounds, delta[0], delta[1])!;
+      else if (inside && shaping !== null) bounds = unit.boundsAfter(shaping) ?? bounds;
+      const clear = framed && inside ? MARK_CLEAR_PX : 0;
+      element.style.transform = `translate(${tx + scale * bounds.max[0] + clear}px, ${ty + scale * bounds.min[1] - clear}px)`;
     }
   }
 
@@ -2291,6 +2425,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// lo riceve, e la sua chiave diventa quella.
   const moveSelection = (units: readonly Unit[], dx: number, dy: number): void => {
     if (units.length === 0 || (dx === 0 && dy === 0)) return;
+    // La cornice che più oggetti tengono si sposta con loro.
+    const frame = units.length > 1 ? frameOf(units) : null;
     const moved = moveOps(units, dx, dy, newIds());
     let bounds: Bounds | null = null;
     for (const unit of units) bounds = union(bounds, translated(unit.bounds, dx, dy));
@@ -2299,6 +2435,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.move", asGesture(ops)) === null) return;
     selection = inOrder(moved.keys);
+    if (frame !== null && frame.matrix !== IDENTITY) kept = { index: currentIndex(), keys: selection.join("\n"), frame: movedFrame(frame, translate(dx, dy)) };
     syncControls();
     showHandles();
     announce(plural(units.length, "draw.moved.one", "draw.moved.other"));
@@ -2426,6 +2563,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     tool = id;
     syncControls();
+    // La cornice è dello strumento Selezione.
+    showHandles();
+    showGrip(null);
     const named = t("draw.announce.tool", { tool: t(toolSpec(id).label) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi.
     const target = id === "nodes" ? targetText() : "";
@@ -2553,7 +2693,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "eraser":
         return { ...base, kind: "erase", last: null, marked: new Map() };
       case "select":
-        return { ...base, kind: "select", from: null, end: null, mode: "pending", units: [], base: [], release: null, source: null, hit: null };
+        return {
+          ...base,
+          kind: "select",
+          from: null,
+          end: null,
+          mode: "pending",
+          units: [],
+          base: [],
+          release: null,
+          source: null,
+          hit: null,
+          grip: null,
+          matrix: null,
+          angle: 0,
+        };
       case "nodes":
         return { ...base, kind: "nodes", from: null, end: null, grab: null, dragging: false, nodes: new Set(nodeSelection), selection: [...selection], draft: null };
       case "text":
@@ -2605,11 +2759,80 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return [roundDelta(dx), roundDelta(dy)];
   };
 
-  /// Il primo punto di un gesto di selezione: un oggetto sotto il puntatore
-  /// si sceglie e si potrà trascinare; il vuoto comincia un riquadro.
+  /// La trasformazione della scena del ridimensionamento in corso. Gli
+  /// angoli tengono le proporzioni degli oggetti che, deformati, non sono più
+  /// loro, e Maiusc inverte la scelta; Alt tiene fermo il centro. Con la
+  /// griglia, a cornice dritta, si tira la geometria, senza il contorno.
+  const resizeNow = (g: SelectGesture): Matrix | null => {
+    if (g.grip === null || g.grip.grip === "rotate" || g.from === null || g.end === null) return null;
+    const { grip, frame } = g.grip;
+    const inverse = invert(frame.matrix);
+    if (inverse === null) return null;
+    const [a, b, c, d] = inverse;
+    const delta = apply([a, b, c, d, 0, 0], [roundDelta(g.end[0] - g.from[0]), roundDelta(g.end[1] - g.from[1])]);
+    const snap = gridOn() && !free ? gridSnap(frame.matrix, grid.step) : null;
+    const work = snap === null ? frame.box : frame.geometry;
+    const [m0, m1, m2, m3] = frame.matrix;
+    const minimum: [number, number] = [MIN_SIZE / Math.hypot(m0, m1), MIN_SIZE / Math.hypot(m2, m3)];
+    const ratio = isCorner(grip) && g.units.some((unit) => RATIO_ROLES.has(unit.role)) !== shift;
+    return resizeMatrix(frame, work, resized(work, grip, delta, { ratio, fromCenter: alt, minimum, snap }));
+  };
+
+  /// La trasformazione della scena della rotazione in corso, attorno al
+  /// centro della cornice. Con Maiusc l'angolo va a passi di 15°; senza, si
+  /// ferma da solo sugli angoli retti, se Ctrl o ⌘ non lo lascia libero.
+  const rotateNow = (g: SelectGesture): Matrix | null => {
+    if (g.grip === null || g.from === null || g.end === null) return null;
+    const { frame } = g.grip;
+    const pivot = frameCenter(frame);
+    g.angle = rotation(pivot, g.from, g.end, angleOf(frame.matrix), { step: shift ? ROTATE_STEP : null, magnet: free ? 0 : MAGNET_DEGREES });
+    return rotationMatrix(pivot, g.angle);
+  };
+
+  /// Scrive `m`, la trasformazione della cornice `frame`, in un passo, e lo
+  /// dice: le misure di dopo o, per una rotazione di `turn` gradi, di
+  /// quanto. Più oggetti tengono la cornice com'è diventata.
+  const applyFrame = (units: readonly Unit[], frame: Frame, m: Matrix, turn: number | null): void => {
+    const transformed = numericOps(units, m, newIds());
+    if (transformed === null) {
+      announce(t("draw.transform.unwritable"));
+      return;
+    }
+    if (transformed.changed === 0) return;
+    if (!arrange(turn === null ? "draw.action.resize" : "draw.action.rotate", transformed, boundsAfter(units, m))) return;
+    const after = movedFrame(frame, m);
+    kept = units.length > 1 ? { index: currentIndex(), keys: selection.join("\n"), frame: after } : null;
+    showHandles();
+    if (turn === null) {
+      const [width, height] = frameSize(after);
+      announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+    } else {
+      announce(t(turn > 0 ? "draw.rotated.clockwise" : "draw.rotated.counter", { angle: degreesText(Math.abs(turn)) }));
+    }
+  };
+
+  /// `[` e `]`: la selezione ruota di `degrees` gradi, in senso orario se
+  /// positivi, attorno al centro della sua cornice.
+  const rotateSelection = (degrees: number): void => {
+    const units = selectedUnits();
+    const frame = frameOf(units);
+    if (frame === null) return;
+    applyFrame(units, frame, rotationMatrix(frameCenter(frame), degrees), degrees);
+  };
+
+  /// Il primo punto di un gesto di selezione: una maniglia della cornice si
+  /// potrà tirare; un oggetto sotto il puntatore si sceglie e si potrà
+  /// trascinare; il vuoto comincia un riquadro.
   const selectStart = (g: SelectGesture, p: Point): void => {
     g.from = p;
     g.end = p;
+    const view = frameNow();
+    const grip = view === null ? null : gripAt(view, p, camera.scale, g.pointer);
+    if (grip !== null) {
+      g.grip = { grip, frame: view!.frame };
+      g.units = selectedUnits();
+      return;
+    }
     const hit = currentIndex().at(p, HIT_PX[g.pointer] / camera.scale);
     g.hit = hit?.key ?? null;
     if (hit === null) {
@@ -2635,10 +2858,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (g.mode === "pending") {
       const distance = Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale;
       if (distance <= DRAG_PX[g.pointer]) return;
-      g.mode = "move";
+      g.mode = g.grip === null ? "move" : g.grip.grip === "rotate" ? "rotate" : "resize";
       g.release = null;
+      if (g.grip !== null) showGrip(g.grip.grip === "rotate" ? "rotating" : gripCursor(g.grip.frame, g.grip.grip));
     }
-    if (g.mode === "move") {
+    if (g.mode === "resize" || g.mode === "rotate") {
+      g.matrix = g.mode === "resize" ? resizeNow(g) : rotateNow(g);
+      const transforms = new Map<PaintNode, string | null>();
+      for (const unit of g.matrix === null ? [] : g.units) {
+        const next = transformedMatrix(unit, g.matrix!);
+        if (next === null) continue;
+        const value = transformValue(next);
+        for (const paint of unit.paints) transforms.set(paint, value);
+      }
+      painter.setDraft({ transforms });
+    } else if (g.mode === "move") {
       const [dx, dy] = moveDelta(g);
       const transforms = new Map<PaintNode, string | null>();
       for (const unit of g.units) {
@@ -2659,6 +2893,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   const selectEnd = (g: SelectGesture, time: number): void => {
+    if (g.grip !== null) {
+      // Un tocco su una maniglia, senza tirarla, non cambia niente.
+      lastTap = null;
+      painter.setDraft(null);
+      current = null;
+      showGrip(null);
+      if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null);
+      showHandles();
+      return;
+    }
     if (g.mode === "move") {
       lastTap = null;
       const [dx, dy] = moveDelta(g);
@@ -3239,13 +3483,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const toPoint = (sample: InkSample): Point => [sample.x, sample.y];
 
-  // Maiusc, e Ctrl o ⌘, si leggono dall'evento del puntatore prima della
+  // Maiusc, Ctrl o ⌘, e Alt si leggono dall'evento del puntatore prima della
   // pipeline, che ascolta in cattura sullo stesso elemento: registrato prima
   // di lei, questo ascolto la precede, e il gesto vede lo stato dell'evento
   // in corso.
   const readModifiers = (event: PointerEvent): void => {
     shift = event.shiftKey;
     free = event.ctrlKey || event.metaKey;
+    alt = event.altKey;
+  };
+  /// La maniglia sotto il puntatore che passa senza premere, nel cursore.
+  const hoverGrip = (event: PointerEvent): void => {
+    const view = event.buttons === 0 ? frameNow() : null;
+    if (view === null) {
+      showGrip(null);
+      return;
+    }
+    const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+    const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
+    const grip = gripAt(view, [point.x, point.y], camera.scale, pointer);
+    showGrip(grip === null ? null : gripCursor(view.frame, grip));
   };
   /// Il puntatore porta con sé il cursore del foglio, che si nasconde: la
   /// tastiera ripartirà da lì.
@@ -3284,10 +3541,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hover = { at: [point.x, point.y], pointer };
         showBezier();
       }
+      // Sopra una maniglia della cornice, il cursore dice che cosa fa.
+      if (current === null && pressed === null) hoverGrip(event);
     },
     { capture: true },
   );
   life.listen(surface, "pointerleave", () => {
+    if (current === null) showGrip(null);
     if (hover === null) return;
     hover = null;
     showBezier();
@@ -3401,6 +3661,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (g === null || g.stroke !== id) return;
       current = null;
       if (g.kind === "select" && g.mode === "marquee") select(g.base);
+      if (g.kind === "select") showGrip(null);
       // I nodi tornano com'erano, e l'oggetto con loro.
       if (g.kind === "nodes") {
         select(g.selection);
@@ -5260,6 +5521,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       rows: [
         [ARROW_KEYS, t(gridOn(at) ? "draw.keys.nudge.grid" : "draw.keys.nudge")],
         [`Mod-${ARROW_KEYS}`, t(gridOn(at) ? "draw.keys.resize.grid" : "draw.keys.resize")],
+        ["[ ]", t("draw.keys.rotate")],
         ["Tab Shift-Tab", t("draw.keys.walk")],
         ["Home End", t("draw.keys.ends")],
         ["Enter", t("draw.properties")],
@@ -5612,14 +5874,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     life.listen(target, "drop", onDrop);
   }
 
-  /// Maiusc, Ctrl o ⌘ premuti o lasciati a metà gesto: la forma e lo
-  /// spostamento si ridisegnano subito.
+  /// Maiusc, Ctrl o ⌘, o Alt premuti o lasciati a metà gesto: la forma, lo
+  /// spostamento e la cornice si ridisegnano subito.
   const onModifiers = (event: KeyboardEvent): void => {
     if (event.key === "Shift") shift = event.type === "keydown";
     else if (event.key === "Control" || event.key === "Meta") free = event.ctrlKey || event.metaKey;
+    else if (event.key === "Alt") alt = event.type === "keydown";
     else return;
     if (current?.kind === "shape") drawShape(current);
-    else if (current?.kind === "select" && current.mode === "move") selectUpdate(current);
+    else if (current?.kind === "select" && (current.mode === "move" || current.mode === "resize" || current.mode === "rotate")) selectUpdate(current);
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);
     else if (hover !== null && drawing() !== null) showBezier();
@@ -5649,6 +5912,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // «#» e «%» valgono come si scrivono, anche con AltGr, che su Windows
     // arriva come Ctrl e Alt insieme.
     const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
+    // `[` e `]` ruotano la selezione, `{` e `}` di un angolo retto: come si
+    // scrivono, anche con AltGr; con Ctrl o ⌘ cambiano l'ordine.
+    const turn = { "[": -ROTATE_STEP, "]": ROTATE_STEP, "{": -ROTATE_STEP_SHIFT, "}": ROTATE_STEP_SHIFT }[event.key];
+    if (turn !== undefined && onSurface && (altGraph || !mod) && tool !== "nodes" && tool !== "bezier") {
+      if (current !== null || pressed !== null || selection.length === 0 || !editable()) return;
+      rotateSelection(turn);
+      event.preventDefault();
+      return;
+    }
     if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
       if (event.key === "#") changeGrid({ ...grid, shown: !grid.shown });
       else changeGrid({ ...grid, snap: !grid.snap });
