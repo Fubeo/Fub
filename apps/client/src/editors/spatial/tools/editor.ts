@@ -156,6 +156,8 @@ import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, typ
 import { boundsAfter, numericMatrix, numericOps } from "./transform";
 import { applyOps } from "./apply";
 import { pathOps } from "./topath";
+import type { BooleanKind } from "./boolean";
+import { combineOps, isShape, type Refused } from "./combine";
 import {
   bend,
   breakNodes,
@@ -500,6 +502,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-transform": ["M4 10h10v10H4z", "M10 4a10 10 0 0 1 10 10", "M16.5 11.5L20 14l2.5-3.5"],
   "draw-apply-transform": ["M2 17L6 5h9l-4 12z", "M15 16.5l2.5 2.5L22 14"],
   "draw-to-path": ["M5 19C5 11 11 5 19 5", "M3 17h4v4H3z", "M17 3h4v4h-4z"],
+  "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
   "draw-bezier": ["M12 21L7 12l3-8h4l3 8z", "M12 21v-7.5", "M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-node-add": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M12 3v6", "M9 6h6"],
@@ -1220,9 +1223,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto: la trasformazione passa nella geometria.
   const applyButton = arrangeButton("draw.apply_transform", "draw-apply-transform", null, () => applySelection());
   const pathButton = arrangeButton("draw.to_path", "draw-to-path", null, () => traceSelection());
+  // Dal livello Esperto: unione, differenza, intersezione, esclusione e
+  // divisione, in un menu.
+  const booleanButton = arrangeButton("draw.boolean", "draw-boolean", null, () => openMenu(booleanButton, booleanItems()));
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
-  for (const control of [orderButton, intoButton, alignButton, outlineButton]) {
+  for (const control of [orderButton, intoButton, alignButton, booleanButton, outlineButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -2033,6 +2039,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     transformButton.hidden = !reaches(level, "expert");
     applyButton.hidden = !reaches(level, "expert");
     pathButton.hidden = !reaches(level, "expert");
+    booleanButton.hidden = !reaches(level, "expert");
     outlineButton.hidden = !reaches(level, "expert");
     arrangeFocus.sync(null);
     syncNodesBar();
@@ -4321,6 +4328,41 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange("draw.action.to_path", traced)) announce(`${plural(traced.changed, "draw.traced.one", "draw.traced.other")}${refused}`);
   }
 
+  /// Perché un'operazione booleana non si fa, a parole.
+  const refusal = (refused: Refused): string =>
+    refused.reason === "not_shapes" ? plural(refused.count, "draw.boolean.not_shapes.one", "draw.boolean.not_shapes.other") : t(REFUSALS[refused.reason]);
+
+  /// Un'operazione booleana, dal livello Esperto: la forma più in basso fra
+  /// quelle scelte diventa il risultato, o i pezzi della divisione, e le
+  /// altre se ne vanno.
+  function combineSelection(kind: BooleanKind): void {
+    if (!reaches(level, "expert")) return;
+    const units = arranging();
+    if (units === null) return;
+    const combined = combineOps(engine.model!, units, kind, newIds());
+    if ("reason" in combined) {
+      announce(refusal(combined));
+      return;
+    }
+    const { label, action } = BOOLEANS.find((entry) => entry.kind === kind)!;
+    if (!arrange(action, combined)) return;
+    announce(kind === "division" ? t("draw.divided", { count: combined.pieces }) : plural(units.length, "draw.combined.one", "draw.combined.other", { action: t(label) }));
+  }
+
+  /// Le voci delle operazioni booleane: spente, e dicono perché, se fra gli
+  /// oggetti scelti c'è qualcosa che non è una forma, o se le forme sono
+  /// poche.
+  const booleanItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const others = units.filter((unit) => !isShape(unit)).length;
+    return BOOLEANS.map(({ kind, label }) => {
+      const reason = others > 0
+        ? refusal({ reason: "not_shapes", count: others })
+        : units.length < (kind === "union" ? 1 : 2) ? refusal({ reason: "few" }) : null;
+      return { label: t(label), disabled: reason !== null, ...(reason === null ? {} : { description: reason }), run: () => combineSelection(kind) };
+    });
+  };
+
   // --- I comandi dei nodi -----------------------------------------------------
 
   /// Scrive i nodi `subs` nel tracciato che si modifica, col nome `label`:
@@ -5737,6 +5779,25 @@ const AXES: ReadonlyArray<{ readonly axis: Axis; readonly label: DrawKey }> = [
   { axis: "x", label: "draw.distribute.x" },
   { axis: "y", label: "draw.distribute.y" },
 ];
+
+/// Le operazioni booleane, nell'ordine del menu: il nome della voce e quello
+/// del passo di annulla.
+const BOOLEANS: ReadonlyArray<{ readonly kind: BooleanKind; readonly label: DrawKey; readonly action: DrawKey }> = [
+  { kind: "union", label: "draw.boolean.union", action: "draw.action.union" },
+  { kind: "difference", label: "draw.boolean.difference", action: "draw.action.difference" },
+  { kind: "intersection", label: "draw.boolean.intersection", action: "draw.action.intersection" },
+  { kind: "exclusion", label: "draw.boolean.exclusion", action: "draw.action.exclusion" },
+  { kind: "division", label: "draw.boolean.division", action: "draw.action.division" },
+];
+
+/// Che cosa si dice quando un'operazione booleana non si fa.
+const REFUSALS: Readonly<Record<Exclude<Refused["reason"], "not_shapes">, DrawKey>> = {
+  few: "draw.boolean.few",
+  empty: "draw.boolean.empty",
+  whole: "draw.boolean.whole",
+  foreign: "draw.boolean.foreign",
+  failed: "draw.boolean.failed",
+};
 
 /// I nomi delle voci del contorno.
 const DASH_LABELS: Readonly<Record<Dash, DrawKey>> = {

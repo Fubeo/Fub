@@ -25,7 +25,7 @@ import type { NewIds } from "./edit";
 import { shapeSegments, type Unit } from "./hit";
 
 /// Gli attributi di geometria che `d` sostituisce, per tag.
-const GEOMETRY: Readonly<Record<string, readonly string[]>> = {
+export const GEOMETRY: Readonly<Record<string, readonly string[]>> = {
   rect: ["x", "y", "width", "height", "rx", "ry"],
   ellipse: ["cx", "cy", "rx", "ry"],
   circle: ["cx", "cy", "r"],
@@ -65,6 +65,53 @@ function withoutStill(segments: readonly Segment[]): Segment[] {
   return out;
 }
 
+/// Gli attributi `fub:` che fanno di `node` una freccia o un tratto, a
+/// `null`: da togliere perché resti un tracciato e basta. Vuoti per gli
+/// altri oggetti.
+export function syntheticNulls(node: ElementPart): Record<string, null> {
+  const names = SYNTHETIC[node.details?.role ?? ""] ?? [];
+  const present = fubAttributes(node);
+  const attrs: Record<string, null> = {};
+  for (const name of names) if (present.has(name)) attrs[`fub:${name}`] = null;
+  return attrs;
+}
+
+/// Mette al posto della forma `node`, che non è un `path`, un `path` che
+/// disegna `d`: stesso id, stesso posto fra i fratelli, stessi attributi
+/// tranne la geometria che `d` sostituisce, stessi figli. Falso, senza
+/// operazioni, se `node` ha parti o attributi che un'operazione non sa
+/// scrivere.
+export function replaceWithPath(plan: Plan, node: ElementPart, d: string): boolean {
+  const geometry = GEOMETRY[node.details!.tag] ?? [];
+  const elem = elemOf(node);
+  if (elem === null) return false;
+  const attrs: Record<string, string> = {};
+  for (const [name, value] of Object.entries(elem.attrs)) if (!geometry.includes(name)) attrs[name] = value;
+  // Un id che nessuno ha ancora, finché il vecchio elemento c'è; poi il
+  // tracciato prende il suo, al suo posto.
+  const id = plan.idOf(node);
+  const stand = plan.ids.next("object");
+  const path: Elem = elem.children === undefined
+    ? { tag: "path", attrs: { ...attrs, id: stand, d } }
+    : { tag: "path", attrs: { ...attrs, id: stand, d }, children: elem.children };
+  // Un'operazione non dichiara namespace: un attributo di un altro
+  // programma col prefisso dichiarato sull'elemento stesso non si
+  // riscrive, e l'elemento resta com'è.
+  try {
+    elemToOut(path, scopeOf(node.parent!));
+  } catch {
+    return false;
+  }
+  const at = pathOf(node);
+  plan.ops.push(
+    { op: "add", parent: plan.parentOf(node), pos: { after: id }, elem: path },
+    { op: "remove", target: id },
+    { op: "ident", path: at, tag: "path", id: null },
+    { op: "ident", path: at, tag: "path", id },
+  );
+  return true;
+}
+
 /// Le operazioni che fanno di `units` dei tracciati. La selezione resta la
 /// stessa; un oggetto che cambia senza id ne riceve uno.
 export function pathOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Traced {
@@ -86,55 +133,24 @@ export function pathOps(model: DocumentModel, units: readonly Unit[], ids: NewId
       case "path":
         return;
       case "arrow":
-      case "stroke": {
-        const present = fubAttributes(node);
-        const attrs: Record<string, null> = {};
-        for (const name of SYNTHETIC[details.role]!) if (present.has(name)) attrs[`fub:${name}`] = null;
-        plan.ops.push({ op: "set", id: plan.idOf(node), attrs });
+      case "stroke":
+        plan.ops.push({ op: "set", id: plan.idOf(node), attrs: syntheticNulls(node) });
         changed++;
         return;
-      }
     }
-    const geometry = GEOMETRY[details.tag];
-    const elem = geometry === undefined ? null : elemOf(node);
-    let segments = geometry === undefined ? [] : shapeSegments(details.tag, [...plainAttributes(node)]);
+    let segments = GEOMETRY[details.tag] === undefined ? [] : shapeSegments(details.tag, [...plainAttributes(node)]);
     if (details.tag === "rect") segments = withoutStill(segments);
-    if (elem === null || segments.length === 0) {
+    if (segments.length === 0) {
       refused++;
       return;
     }
     const d = pathData(segments);
     // Il `d` scritto si rilegge: uno che no, con numeri fuori dal formato,
     // non si scrive.
-    if (parsePath(d) === null) {
+    if (parsePath(d) === null || !replaceWithPath(plan, node, d)) {
       refused++;
       return;
     }
-    const attrs: Record<string, string> = {};
-    for (const [name, value] of Object.entries(elem.attrs)) if (!geometry!.includes(name)) attrs[name] = value;
-    // Un id che nessuno ha ancora, finché il vecchio elemento c'è; poi il
-    // tracciato prende il suo, al suo posto.
-    const id = plan.idOf(node);
-    const stand = plan.ids.next("object");
-    const path: Elem = elem.children === undefined
-      ? { tag: "path", attrs: { ...attrs, id: stand, d } }
-      : { tag: "path", attrs: { ...attrs, id: stand, d }, children: elem.children };
-    // Un'operazione non dichiara namespace: un attributo di un altro
-    // programma col prefisso dichiarato sull'elemento stesso non si
-    // riscrive, e l'elemento resta com'è.
-    try {
-      elemToOut(path, scopeOf(node.parent!));
-    } catch {
-      refused++;
-      return;
-    }
-    const at = pathOf(node);
-    plan.ops.push(
-      { op: "add", parent: plan.parentOf(node), pos: { after: id }, elem: path },
-      { op: "remove", target: id },
-      { op: "ident", path: at, tag: "path", id: null },
-      { op: "ident", path: at, tag: "path", id },
-    );
     changed++;
   };
 

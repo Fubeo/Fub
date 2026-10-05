@@ -2566,6 +2566,180 @@ describe("l'oggetto in tracciato, dal livello Esperto", () => {
   });
 });
 
+describe("le operazioni booleane, dal livello Esperto", () => {
+  const A = "oa4a4a4a4";
+  const B = "ob4b4b4b4";
+  const C = "oc4c4c4c4";
+  const T = "ot4t4t4t4";
+  const P = "op4p4p4p4";
+  const SHAPES = doc(
+    `${LAYER}<rect id="${A}" x="0" y="0" width="20" height="20" fill="#d55e00"/>`
+      + `<rect id="${B}" x="10" y="10" width="20" height="20" fill="#0072b2"/>`
+      + `<circle id="${C}" cx="100" cy="100" r="5" fill="#000000"/>`
+      + `<path id="${P}" d="M50 50 L60 50 L60 60 Z" fill="#000000"/>`
+      + `<text id="${T}" x="0" y="60"><tspan x="0" dy="0">Ciao</tspan></text></g>`,
+  );
+
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const booleans = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Operazioni booleane"]')!;
+  /// Le voci del menu aperto per ultimo.
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
+  /// Le voci, col nome, se sono spente e che cosa dicono.
+  const entries = (): (string | boolean | null)[][] =>
+    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
+  const closeMenus = (): void => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  };
+  /// L'operazione `label` sugli oggetti `keys`, dal menu.
+  const run = (keys: string[], label: string): void => {
+    editor.select(keys);
+    booleans().click();
+    item(label).click();
+    closeMenus();
+  };
+
+  afterEach(closeMenus);
+
+  it("c'è solo all'Esperto, nella barra della selezione, con le cinque operazioni", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select([A, B]);
+    expect(bar().hidden).toBe(false);
+    expect(booleans().hidden).toBe(true);
+    // Sotto l'Esperto il comando non scrive, anche chiesto.
+    run([A, B], "Unione");
+    expect(changes).toEqual([]);
+    editor.setLevel("expert");
+    expect(booleans().hidden).toBe(false);
+    expect(booleans().getAttribute("aria-haspopup")).toBe("menu");
+    expect(booleans().hasAttribute("aria-keyshortcuts")).toBe(false);
+    booleans().click();
+    expect(booleans().getAttribute("aria-expanded")).toBe("true");
+    expect(entries()).toEqual([
+      ["Unione", false, null],
+      ["Differenza", false, null],
+      ["Intersezione", false, null],
+      ["Esclusione", false, null],
+      ["Divisione", false, null],
+    ]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    closeMenus();
+    editor.setLevel("standard");
+    expect(booleans().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("le voci spente dicono perché: una forma sola si unisce e basta, e un testo non è una forma", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    booleans().click();
+    const few = "Servono almeno due forme.";
+    expect(entries()).toEqual([
+      ["Unione", false, null],
+      ["Differenza", true, few],
+      ["Intersezione", true, few],
+      ["Esclusione", true, few],
+      ["Divisione", true, few],
+    ]);
+    item("Differenza").click();
+    expect(changes).toEqual([]);
+    closeMenus();
+    editor.select([A, B, T]);
+    booleans().click();
+    const text = "Le operazioni booleane lavorano sulle forme: 1 oggetto scelto non lo è.";
+    expect(entries()).toEqual(
+      ["Unione", "Differenza", "Intersezione", "Esclusione", "Divisione"].map((label) => [label, true, text]),
+    );
+    item("Unione").click();
+    expect(changes).toEqual([]);
+  });
+
+  it("l'unione fa della forma più in basso un tracciato, con l'area di tutte, in un passo che si annulla", () => {
+    mount(SHAPES, { level: "expert" });
+    run([B, A], "Unione");
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L30 10 L30 30 L10 30 L10 20 L0 20 Z" fill="#d55e00"/>`);
+    expect(editor.engine.text).not.toContain(B);
+    expect(spoken()).toBe("Unione: 2 forme diventano un tracciato.");
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Unione.");
+    // Una forma sola diventa il tracciato della sua area.
+    run([A], "Unione");
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 20 L0 20 Z" fill="#d55e00"/>`);
+    expect(spoken()).toBe("Unione: 1 forma diventa un tracciato.");
+  });
+
+  it("differenza, intersezione ed esclusione", () => {
+    mount(SHAPES, { level: "expert" });
+    run([A, B], "Differenza");
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L10 10 L10 20 L0 20 Z" fill="#d55e00"/>`);
+    expect(spoken()).toBe("Differenza: 2 forme diventano un tracciato.");
+    editor.undo();
+    run([A, B], "Intersezione");
+    // Ogni anello comincia, se può, da un nodo della forma più in basso.
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M20 20 L10 20 L10 10 L20 10 Z" fill="#d55e00"/>`);
+    editor.undo();
+    run([A, B], "Esclusione");
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L10 10 L10 20 L0 20 Z M20 20 L20 10 L30 10 L30 30 L10 30 L10 20 Z" fill="#d55e00"/>`);
+    expect(spoken()).toBe("Esclusione: 2 forme diventano un tracciato.");
+    expect(changes).toHaveLength(5);
+  });
+
+  it("la divisione taglia la forma più in basso, e sono scelti i pezzi", () => {
+    mount(SHAPES, { level: "expert" });
+    run([A, B], "Divisione");
+    const pieces = [...editor.engine.text.matchAll(/<path id="([^"]+)" d="([^"]+)" fill="#d55e00"\/>/g)].map((match) => [match[1], match[2]]);
+    expect(pieces).toHaveLength(2);
+    expect(pieces[0]).toEqual([A, "M0 0 L20 0 L20 10 L10 10 L10 20 L0 20 Z"]);
+    expect(pieces[1]![1]).toBe("M20 20 L10 20 L10 10 L20 10 Z");
+    expect(editor.engine.text).not.toContain(B);
+    expect(editor.selection).toEqual([A, pieces[1]![0]]);
+    expect(spoken()).toBe("Divisione: la forma diventa 2 tracciati.");
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Divisione.");
+  });
+
+  it("un risultato vuoto, o una divisione che non divide, non cambiano niente, e lo si dice", () => {
+    mount(SHAPES, { level: "expert" });
+    run([A, C], "Intersezione");
+    expect(spoken()).toBe("Il risultato sarebbe vuoto: niente è cambiato.");
+    run([A, C], "Divisione");
+    expect(spoken()).toBe("Le altre forme non dividono quella più in basso: niente è cambiato.");
+    expect(editor.selection).toEqual([A, C]);
+    // Un tracciato solo che è già il risultato resta com'è.
+    run([P], "Unione");
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(changes).toEqual([]);
+    // Una forma lontana non toglie niente, e se ne va.
+    run([A, C], "Differenza");
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 20 L0 20 Z" fill="#d55e00"/>`);
+    expect(editor.engine.text).not.toContain(C);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("dice quando la forma più in basso non si riscrive", () => {
+    mount(doc(`${LAYER}<rect xmlns:x="urn:x" id="${A}" x:a="1" x="0" y="0" width="20" height="20"/><rect id="${B}" x="10" y="10" width="20" height="20"/></g>`), { level: "expert" });
+    run([A, B], "Unione");
+    expect(spoken()).toBe("La forma più in basso ha attributi di un altro programma che FubDraw non sa riscrivere: niente è cambiato.");
+    expect(changes).toEqual([]);
+  });
+
+  it("dice quando il calcolo non riesce", () => {
+    mount(doc(`${LAYER}<rect id="${A}" x="0" y="0" width="20" height="20" transform="scale(0)"/><rect id="${B}" x="10" y="10" width="20" height="20"/></g>`), { level: "expert" });
+    run([A, B], "Unione");
+    expect(spoken()).toBe("Il calcolo non riesce su queste forme: niente è cambiato.");
+    expect(changes).toEqual([]);
+  });
+});
+
 describe("i nodi, dal livello Esperto", () => {
   const P = "op3p3p3p3";
   const C = "oc3c3c3c3";
