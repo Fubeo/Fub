@@ -239,6 +239,90 @@ describe("l'esito vicino al campo", () => {
   });
 });
 
+describe("le parti del Personalizzato nel pannello", () => {
+  const CUSTOM = "draw.custom";
+  const ESSENTIAL = ["pen", "eraser", "rect", "ellipse", "line", "arrow"];
+  const custom = (value: string[], source: "default" | "vault" = "vault"): SettingEntry => ({
+    spec: {
+      key: CUSTOM,
+      label: "Parti del Personalizzato",
+      description: "Valgono quando il livello è Personalizzato.",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: ESSENTIAL },
+      program_writable: false,
+    },
+    value,
+    source,
+  });
+  const field = (): HTMLElement => document.getElementById(`setting-${CUSTOM}`)!;
+  const box = (part: string): HTMLInputElement => document.getElementById(`setting-${CUSTOM}-${part}`) as HTMLInputElement;
+  /// Preme la casella di `part` e aspetta che la riga abbia scritto.
+  const toggle = async (part: string): Promise<void> => {
+    const input = box(part);
+    input.focus();
+    input.click();
+    await vi.waitFor(() => {
+      expect(document.querySelector(`[data-setting-key="${CUSTOM}"]`)?.getAttribute("aria-busy")).toBeNull();
+      expect(box(part)).not.toBe(input);
+    });
+  };
+
+  it("una casella per parte, nei gruppi dei livelli da cui vengono, e il gruppo si descrive una volta", async () => {
+    await openPanel([custom(["pen", "text", "boolean"])]);
+    const group = field();
+    expect(group.getAttribute("role")).toBe("group");
+    expect(document.getElementById(group.getAttribute("aria-labelledby")!)?.textContent).toBe("Parti del Personalizzato");
+    const levels = [...group.querySelectorAll("fieldset")].map((set) => [
+      set.querySelector("legend")!.textContent,
+      set.querySelectorAll("input[type=checkbox]").length,
+    ]);
+    expect(levels).toEqual([["Essenziale", 6], ["Standard", 8], ["Esperto", 8]]);
+    const checked = [...group.querySelectorAll<HTMLInputElement>("input:checked")].map((input) => input.closest("label")!.textContent);
+    expect(checked).toEqual(["Penna", "Testo", "Operazioni booleane"]);
+
+    // La prosa e la provenienza le sente chi arriva al gruppo, non a ogni casella.
+    const described = group.getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)?.textContent);
+    expect(described).toContain("Valgono quando il livello è Personalizzato.");
+    expect([...group.querySelectorAll("input")].filter((input) => input.hasAttribute("aria-describedby"))).toEqual([]);
+  });
+
+  it("una casella scrive l'elenco intero nell'ordine delle parti, tiene i nomi che non conosce e il fuoco", async () => {
+    await openPanel([custom(["text", "pen", "domani"])]);
+
+    await toggle("layers");
+    expect(fake.setSetting).toHaveBeenCalledWith(CUSTOM, ["pen", "text", "layers", "domani"]);
+    expect(box("layers").checked).toBe(true);
+    expect(document.activeElement, "il fuoco resta sulla casella").toBe(box("layers"));
+
+    await toggle("pen");
+    expect(fake.setSetting).toHaveBeenLastCalledWith(CUSTOM, ["text", "layers", "domani"]);
+
+    // Togliere tutto si può: resta la Selezione, e l'elenco vuoto non è un azzera.
+    await toggle("text");
+    await toggle("layers");
+    expect(fake.setSetting).toHaveBeenLastCalledWith(CUSTOM, ["domani"]);
+    expect(fake.resetSetting).not.toHaveBeenCalled();
+  });
+
+  it("il predefinito accanto a «Azzera» dice le parti per nome", async () => {
+    await openPanel([custom(["pen"])]);
+    const row = document.querySelector<HTMLElement>(`[data-setting-key="${CUSTOM}"]`)!;
+    expect(row.querySelector(".setting-default")?.textContent).toBe("Predefinito: Penna, Gomma, Rettangolo, Ellisse, Linea, Freccia");
+  });
+
+  it("se la scrittura non riesce, le caselle tornano al valore scritto e l'esito dice la parte provata", async () => {
+    await openPanel([custom(ESSENTIAL, "default")]);
+    fake.setSetting.mockRejectedValueOnce(new Error("disco non scrivibile"));
+
+    await toggle("grid");
+    const error = document.querySelector(`[data-setting-key="${CUSTOM}"] .setting-error`);
+    expect(error?.textContent).toContain("Impostazione non cambiata");
+    expect(error?.textContent).toContain("Pagina e griglia: acceso");
+    expect(box("grid").checked).toBe(false);
+  });
+});
+
 describe("il focus resta sulla riga (A03)", () => {
   function toggleEntry(key: string, value: boolean): SettingEntry {
     return {

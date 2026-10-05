@@ -219,6 +219,23 @@ function drawLevel(value: string): SettingEntry {
   };
 }
 
+/// Le parti del Personalizzato come le dichiara `fub.draw`, col valore `value`.
+function drawCustom(value: string[]): SettingEntry {
+  return {
+    spec: {
+      key: "draw.custom",
+      label: "Parti del Personalizzato",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
+      program_writable: false,
+    },
+    value,
+    source: "vault",
+  };
+}
+
 /// Gli strumenti che la barra del riquadro attivo mostra.
 const tools = (): string[] =>
   [...focusedPane().querySelectorAll<HTMLElement>(".draw-tool")]
@@ -491,6 +508,27 @@ describe("il livello e la griglia del disegno", () => {
     await host.module.api.setSetting("draw.level", "essential");
     await waitFor("l'evidenziatore se ne va", () => !tools().includes("highlighter"));
     // Il livello cambia gli strumenti, non il disegno.
+    expect(written(host, "casa.svg")).toEqual([]);
+    expect(host.files()["casa.svg"]).toBe(HOUSE);
+  });
+
+  it("le parti del Personalizzato si scelgono nelle Impostazioni, e valgono subito nel disegno aperto", async () => {
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("custom"), drawCustom(["rect"])] }));
+    await open("casa.svg");
+    await waitFor("il Personalizzato", () => tools().join() === "select,rect");
+    const editor = focusedPane().querySelector(".draw-editor");
+
+    document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+    await waitFor("la casella dell'ellisse", () => document.getElementById("setting-draw.custom-ellipse") !== null);
+    const ellipse = document.getElementById("setting-draw.custom-ellipse") as HTMLInputElement;
+    expect(ellipse.closest("label")!.textContent).toBe("Ellisse");
+    ellipse.click();
+
+    await waitFor("l'ellisse compare", () => tools().includes("ellipse"));
+    expect(tools()).toEqual(["select", "rect", "ellipse"]);
+    expect(host.atGate("setSetting").map((call) => call.args), "l'elenco intero, nell'ordine delle parti").toEqual([["draw.custom", ["rect", "ellipse"]]]);
+    expect(focusedPane().querySelector(".draw-editor"), "lo stesso editor, non uno nuovo").toBe(editor);
+    // Le parti cambiano gli strumenti, non il disegno.
     expect(written(host, "casa.svg")).toEqual([]);
     expect(host.files()["casa.svg"]).toBe(HOUSE);
   });
