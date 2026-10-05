@@ -146,7 +146,7 @@ function similar(m: Matrix): Matrix | null {
 /// L'ellisse di raggi `rx` e `ry`, ruotata di `degrees`, dopo la parte
 /// lineare di `m`: i suoi raggi e la sua rotazione, dalla decomposizione ai
 /// valori singolari di L · R(φ) · diag(rx, ry).
-function mappedEllipse(m: Matrix, rx: number, ry: number, degrees: number): { readonly radii: Point; readonly rotation: number } {
+export function mappedEllipse(m: Matrix, rx: number, ry: number, degrees: number): { readonly radii: Point; readonly rotation: number } {
   const angle = toRadians(degrees);
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);

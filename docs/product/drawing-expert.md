@@ -201,6 +201,53 @@ regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
   dichiararlo di nuovo.
 - **È un passo solo**, «Oggetto in tracciato», e la selezione resta quella.
 
+## Operazioni booleane
+
+«Operazioni booleane», nella barra della selezione, apre un menu con
+l'unione, la differenza, l'intersezione, l'esclusione e la divisione delle
+forme scelte, come il menu Tracciato di Inkscape. Le regole stanno in
+`apps/client/src/editors/spatial/tools/combine.ts`, e il calcolo in
+`boolean.ts`, accanto.
+
+- **Le forme sono le aree che riempiono**: tracciati, rettangoli, ellissi,
+  cerchi, linee, spezzate, poligoni, frecce e tratti a penna, ciascuno con la
+  regola con cui lo si dipinge, nonzero. Gruppi, collegamenti, testi e
+  immagini non sono forme: se ce n'è uno fra gli oggetti scelti le voci si
+  spengono, e dicono perché.
+- **L'unione** fa un'area sola di quelle di tutte le forme, e anche di una
+  forma sola, che così si ripulisce di sovrapposizioni e contorni che si
+  incrociano. **La differenza** toglie dalla forma più in basso l'area delle
+  altre; **l'intersezione** tiene l'area che hanno tutte; **l'esclusione**
+  quella coperta da un numero dispari di forme. Queste ultime chiedono
+  almeno due forme, e la voce spenta lo dice.
+- **La divisione** taglia la forma più in basso lungo i contorni delle
+  altre, anche aperti, come quello di una linea: ogni pezzo diventa un
+  tracciato. Il primo prende il posto della forma; gli altri le stanno
+  sopra, coi suoi colori e il suo contorno, e sono scelti con lei.
+- **La forma più in basso resta lei**, come in «Oggetto in tracciato»:
+  diventa il tracciato del risultato con lo stesso id, lo stesso posto fra
+  gli altri, gli stessi colori, la stessa trasformazione, il titolo e gli
+  attributi di altri programmi. Le altre forme se ne vanno. Il risultato si
+  scrive nelle sue coordinate, dove le altre arrivano con le loro
+  trasformazioni e quelle dei loro livelli e gruppi.
+- **Le curve restano curve.** Un lato che passa intero nel risultato si
+  riscrive com'era; un pezzo di curva torna il pezzo della cubica, della
+  quadratica o dell'arco da cui viene, coi capi sugli incroci veri. Dove due
+  forme hanno un lato in comune vale quello della forma più in basso, e ogni
+  anello gira nel suo verso e comincia da un nodo, se può: dai suoi prima
+  che da quelli delle altre.
+- **I contorni vicini si toccano.** Due punti a meno di un centesimo e mezzo
+  sono lo stesso punto, perché i numeri si scrivono al centesimo: i bordi in
+  comune, i contatti e le tangenze non lasciano fessure né schegge, e ciò
+  che è più sottile di così sparisce.
+- **Un risultato vuoto non cambia niente**, e nemmeno una divisione che non
+  divide: le forme restano, e il comando lo dice. Così una forma con un
+  attributo di un altro programma il cui prefisso è dichiarato sulla forma
+  stessa, come in «Oggetto in tracciato».
+- **È un passo solo**, col nome dell'operazione, e dopo è scelto il
+  risultato, o i pezzi della divisione. Le operazioni non hanno tasti: si
+  trovano nel menu.
+
 ## Nodi
 
 Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi del tracciato
