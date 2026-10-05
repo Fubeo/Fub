@@ -2034,6 +2034,252 @@ describe("da tastiera", () => {
   });
 });
 
+describe("la cornice di trasformazione", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const G = "og1g1g1g1";
+  /// Un rettangolo pieno senza contorno, da (100, 100) a (200, 150). La
+  /// cornice gli sta a 4 px: l'angolo in basso a destra è (204, 154), il lato
+  /// destro (204, 125), la maniglia della rotazione (150, 72).
+  const RECT = `<rect id="${A}" x="100" y="100" width="100" height="50" fill="#000000"/>`;
+  const ONE = doc(`${LAYER}${RECT}</g>`);
+  /// Lo stesso riquadro, in due metà raccolte in un gruppo.
+  const GROUP = doc(
+    `${LAYER}<g id="${G}"><rect id="${A}" x="100" y="100" width="50" height="50" fill="#000000"/>` +
+      `<rect id="${B}" x="150" y="100" width="50" height="50" fill="#000000"/></g></g>`,
+  );
+  /// Due oggetti diversi: il loro riquadro comune, da (30, 30) a (62, 70),
+  /// cambia forma quando ruotano, e ruotando restano nella pagina.
+  const TWO = doc(
+    `${LAYER}<rect id="${A}" x="30" y="30" width="20" height="10" fill="#000000"/>` +
+      `<rect id="${B}" x="55" y="45" width="7" height="25" fill="#000000"/></g>`,
+  );
+
+  const transformOf = (id: string): string | null => editor.engine.text.match(new RegExp(`id="${id}"[^>]*? transform="([^"]*)"`))?.[1] ?? null;
+  const matrixOf = (id: string): number[] => transformOf(id)!.match(/^matrix\((.*)\)$/)![1]!.split(" ").map(Number);
+  const hover = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const selecting = (source: string, keys: readonly string[], options: DrawEditorOptions = {}): void => {
+    mount(source, options);
+    editor.setTool("select");
+    editor.select(keys);
+  };
+
+  it("un angolo tira due bordi e tiene fermo l'opposto; le misure si dicono, e il passo si annulla", () => {
+    selecting(ONE, [A]);
+    drag([[204, 154], [230, 170], [254, 179]]);
+    expect(transformOf(A)).toBe("matrix(1.5 0 0 1.5 -50 -50)");
+    expect(spoken()).toBe("Misure: 150 × 75.");
+    expect(editor.selection).toEqual([A]);
+    editor.undo();
+    expect(editor.engine.text).toBe(ONE);
+    expect(spoken()).toBe("Annullato: Ridimensionamento.");
+  });
+
+  it("un lato tira un bordo solo; con Alt il centro resta fermo", () => {
+    selecting(ONE, [A]);
+    drag([[204, 125], [230, 140], [254, 140]]);
+    expect(transformOf(A)).toBe("matrix(1.5 0 0 1 -50 0)");
+    editor.undo();
+    drag([[204, 125], [214, 125], [224, 125]], { altKey: true });
+    expect(transformOf(A)).toBe("matrix(1.4 0 0 1 -60 0)");
+    expect(spoken()).toBe("Misure: 140 × 50.");
+  });
+
+  it("con Maiusc un angolo tiene le proporzioni", () => {
+    selecting(ONE, [A]);
+    drag([[204, 154], [230, 154], [254, 154]], { shiftKey: true });
+    expect(transformOf(A)).toBe("matrix(1.4 0 0 1.4 -40 -40)");
+  });
+
+  it("un gruppo tiene le proporzioni da sé, e Maiusc lo lascia libero", () => {
+    selecting(GROUP, [G]);
+    drag([[204, 154], [230, 154], [254, 154]]);
+    expect(transformOf(G)).toBe("matrix(1.4 0 0 1.4 -40 -40)");
+    editor.undo();
+    drag([[204, 154], [230, 154], [254, 154]], { shiftKey: true });
+    expect(transformOf(G)).toBe("matrix(1.5 0 0 1 -50 0)");
+    expect(editor.selection).toEqual([G]);
+  });
+
+  it("più oggetti si ridimensionano insieme, nel loro riquadro comune", () => {
+    const PAIR = doc(
+      `${LAYER}<rect id="${A}" x="100" y="100" width="50" height="20" fill="#000000"/>` +
+        `<rect id="${B}" x="160" y="120" width="40" height="30" fill="#000000"/></g>`,
+    );
+    selecting(PAIR, [A, B]);
+    drag([[204, 154], [230, 170], [254, 179]]);
+    expect(transformOf(A)).toBe("matrix(1.5 0 0 1.5 -50 -50)");
+    expect(transformOf(B)).toBe("matrix(1.5 0 0 1.5 -50 -50)");
+    expect(spoken()).toBe("Misure: 150 × 75.");
+    expect(editor.selection).toEqual([A, B]);
+  });
+
+  it("con la griglia il bordo va sulla riga, e Ctrl o ⌘ lo lascia libero", () => {
+    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20 } });
+    drag([[204, 125], [220, 125], [237, 125]]);
+    expect(transformOf(A)).toBe("matrix(1.4 0 0 1 -40 0)");
+    editor.undo();
+    drag([[204, 125], [220, 125], [237, 125]], { ctrlKey: true });
+    expect(transformOf(A)).toBe("matrix(1.33 0 0 1 -33 0)");
+  });
+
+  it("una linea dritta ha solo le maniglie lungo di sé, e si allunga col suo contorno", () => {
+    const LINE = doc(`${LAYER}<line id="${A}" x1="100" y1="100" x2="200" y2="100" stroke="#000000" stroke-width="2"/></g>`);
+    selecting(LINE, [A]);
+    // Il contorno arriva a 201, la cornice 4 px più in là.
+    hover(205, 100);
+    expect(surface().dataset.grip).toBe("ew");
+    hover(150, 105);
+    expect(surface().dataset.grip).toBeUndefined();
+    drag([[205, 100], [230, 100], [256, 100]]);
+    expect(transformOf(A)).toBe("matrix(1.5 0 0 1 -49.5 0)");
+  });
+
+  it("un oggetto ruotato si ridimensiona lungo i suoi assi, e le maniglie lo seguono", () => {
+    const TURNED = doc(`${LAYER}<rect id="${A}" x="100" y="100" width="100" height="50" fill="#000000" transform="rotate(90 150 125)"/></g>`);
+    selecting(TURNED, [A]);
+    // Ruotato di 90° attorno al centro, il lato destro guarda in basso.
+    hover(150, 179);
+    expect(surface().dataset.grip).toBe("ns");
+    drag([[150, 179], [150, 200], [150, 229]]);
+    expect(transformOf(A)).toBe("matrix(0 1.5 -1 0 275 -75)");
+    expect(spoken()).toBe("Misure: 150 × 50.");
+  });
+
+  it("la maniglia in alto ruota attorno al centro, e si ferma da sola sugli angoli retti", () => {
+    selecting(ONE, [A]);
+    drag([[150, 72], [180, 80], [203, 125]]);
+    expect(transformOf(A)).toBe("matrix(0 1 -1 0 275 -25)");
+    expect(spoken()).toBe("Rotazione di 90° in senso orario.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Rotazione.");
+    // Poco più di un grado prima dell'angolo retto: la calamita lo prende,
+    // Ctrl o ⌘ la spegne.
+    drag([[150, 72], [180, 80], [203, 124]]);
+    expect(transformOf(A)).toBe("matrix(0 1 -1 0 275 -25)");
+    editor.undo();
+    drag([[150, 72], [180, 80], [203, 124]], { ctrlKey: true });
+    expect(spoken()).toBe("Rotazione di 88,9° in senso orario.");
+    editor.undo();
+    drag([[150, 72], [120, 80], [97, 125]]);
+    expect(transformOf(A)).toBe("matrix(0 -1 1 0 25 275)");
+    expect(spoken()).toBe("Rotazione di 90° in senso antiorario.");
+  });
+
+  it("con Maiusc la rotazione va a passi di 15°", () => {
+    selecting(ONE, [A]);
+    // 20° dalla maniglia: il passo più vicino è 15°.
+    drag([[150, 72], [160, 74], [168, 75]], { shiftKey: true });
+    expect(spoken()).toBe("Rotazione di 15° in senso orario.");
+    const [a, b] = matrixOf(A);
+    expect(a).toBeCloseTo(Math.cos(Math.PI / 12), 3);
+    expect(b).toBeCloseTo(Math.sin(Math.PI / 12), 3);
+  });
+
+  it("[ e ] ruotano la selezione di 15°, con Maiusc di 90°, anche con AltGr; senza selezione il tasto resta a chi lo aveva", () => {
+    mount(ONE);
+    expect(key("]").defaultPrevented).toBe(false);
+    editor.select([A]);
+    expect(key("]").defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Rotazione di 15° in senso orario.");
+    const [a, b] = matrixOf(A);
+    expect(a).toBeCloseTo(Math.cos(Math.PI / 12), 3);
+    expect(b).toBeCloseTo(Math.sin(Math.PI / 12), 3);
+    key("}", { shiftKey: true });
+    expect(spoken()).toBe("Rotazione di 90° in senso orario.");
+    key("{", { shiftKey: true });
+    key("[");
+    expect(spoken()).toBe("Rotazione di 15° in senso antiorario.");
+    // Su una tastiera italiana [ è AltGr+è, che arriva come Ctrl e Alt.
+    const event = new KeyboardEvent("keydown", { key: "[", ctrlKey: true, altKey: true, bubbles: true, cancelable: true });
+    Object.defineProperty(event, "getModifierState", { value: (state: string) => state === "AltGraph" });
+    surface().dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Rotazione di 15° in senso antiorario.");
+    const [c, d] = matrixOf(A);
+    expect(c).toBeCloseTo(Math.cos(Math.PI / 12), 3);
+    expect(d).toBeCloseTo(-Math.sin(Math.PI / 12), 3);
+  });
+
+  it("più oggetti tengono la loro cornice ruotata: un giro intero li riporta dov'erano, e si annulla in un passo", () => {
+    mount(TWO);
+    editor.select([A, B]);
+    for (let turn = 0; turn < 24; turn++) key("]");
+    expect(editor.selection).toEqual([A, B]);
+    for (const id of [A, B]) {
+      const [a, b, c, d, e, f] = matrixOf(id);
+      expect([a, b, c, d]).toEqual([1, 0, 0, 1].map((value) => expect.closeTo(value, 3)));
+      expect([e, f]).toEqual([0, 0].map((value) => expect.closeTo(value, 1)));
+    }
+    editor.undo();
+    expect(editor.engine.text).toBe(TWO);
+  });
+
+  it("Esc a metà del gesto lascia tutto com'era, e un tocco su una maniglia non cambia niente", () => {
+    selecting(ONE, [A]);
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 204, clientY: 154, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 254, clientY: 179, timeStamp: (clock += 8) }));
+    expect(surface().dataset.grip).toBe("nwse");
+    key("Escape");
+    expect(surface().dataset.grip).toBeUndefined();
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 254, clientY: 179, timeStamp: (clock += 8) }));
+    drag([[204, 154], [204, 154]]);
+    drag([[150, 72], [150, 72]]);
+    expect(editor.engine.text).toBe(ONE);
+    expect(changes).toEqual([]);
+    expect(editor.selection).toEqual([A]);
+  });
+
+  it("sopra una maniglia il puntatore dice che cosa farà; con un altro strumento no", () => {
+    selecting(ONE, [A]);
+    hover(204, 154);
+    expect(surface().dataset.grip).toBe("nwse");
+    hover(204, 96);
+    expect(surface().dataset.grip).toBe("nesw");
+    hover(150, 154);
+    expect(surface().dataset.grip).toBe("ns");
+    hover(150, 72);
+    expect(surface().dataset.grip).toBe("rotate");
+    hover(150, 125);
+    expect(surface().dataset.grip).toBeUndefined();
+    hover(204, 125);
+    expect(surface().dataset.grip).toBe("ew");
+    editor.setTool("pen");
+    expect(surface().dataset.grip).toBeUndefined();
+    hover(204, 125);
+    expect(surface().dataset.grip).toBeUndefined();
+  });
+
+  it("il segno di un collegamento scelto lascia libera la maniglia d'angolo, e segue la cornice", () => {
+    const L = "ol1l1l1l1";
+    const LINKED = doc(`${LAYER}<a id="${L}" href="n.md">${RECT}</a></g>`);
+    mount(LINKED, { links: { choose: vi.fn(async () => null), open: vi.fn() } });
+    const mark = (): string => host.querySelector<HTMLElement>(".draw-link-mark")!.style.transform;
+    editor.select([L]);
+    expect(mark()).toBe("translate(200px, 100px)");
+    editor.setTool("select");
+    expect(mark()).toBe("translate(208px, 92px)");
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 204, clientY: 154, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 254, clientY: 179, timeStamp: (clock += 8) }));
+    expect(mark()).toBe("translate(258px, 92px)");
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 254, clientY: 179, timeStamp: (clock += 8) }));
+    expect(transformOf(L)).toBe("matrix(1.5 0 0 1.5 -50 -50)");
+    expect(mark()).toBe("translate(258px, 92px)");
+  });
+
+  it("«?» elenca i tasti della rotazione", () => {
+    mount(ONE);
+    key("?", { shiftKey: true });
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect(rows).toContainEqual(["[ o ]", "Ruota la selezione di 15° in senso antiorario o orario, con Maiusc di 90°"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
 describe("l'albero degli oggetti", () => {
   const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!;
   const tree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;

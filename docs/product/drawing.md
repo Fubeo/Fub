@@ -59,6 +59,9 @@ La barra è un solo punto di tabulazione e si percorre con le frecce. Tasto
 centrale, due dita e rotella muovono la vista. Ogni gesto si annuncia a chi
 usa un lettore di schermo.
 
+Con la selezione gli oggetti scelti stanno in una cornice, con le maniglie
+che li ridimensionano e li ruotano: [Disegni, trasformare](drawing-transform.md).
+
 ## Il livello Standard
 
 L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, lo
@@ -342,7 +345,8 @@ si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu».
 
 Con una selezione le frecce la spostano di 1, 10 con `Maiusc`, e con `Ctrl` o
 `⌘` la ridimensionano dall'angolo in alto a sinistra; con l'aggancio alla
-griglia vanno di riga in riga, come dice «Griglia e pagina». `Tab` e
+griglia vanno di riga in riga, come dice «Griglia e pagina». `[` e `]` la
+ruotano di 15°, `{` e `}` di 90°. `Tab` e
 `Maiusc+Tab` passano all'oggetto dopo e a quello prima, e lo dicono col nome e
 la posizione; oltre l'ultimo il fuoco esce dal foglio, che non lo trattiene
 mai.

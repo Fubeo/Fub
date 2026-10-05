@@ -104,6 +104,7 @@ interface ShapeCache {
 /// Un oggetto della scena.
 export class Unit {
   private frameBounds: Bounds | null | undefined = undefined;
+  private shapeBounds: Bounds | null | undefined = undefined;
 
   constructor(
     /// L'id, o il percorso per un oggetto che non ne ha: la chiave della
@@ -151,6 +152,21 @@ export class Unit {
       this.frameBounds = out.finish();
     }
     return this.frameBounds;
+  }
+
+  /// Il riquadro della geometria nelle coordinate dell'oggetto, senza
+  /// contorno: quello che la griglia aggancia quando la cornice non ruota, e
+  /// che dice se un asse dell'oggetto misura zero.
+  shapeFrame(): Bounds | null {
+    if (this.shapeBounds === undefined) {
+      const out = new BoundsBuilder();
+      for (const part of this.parts) {
+        const local = part.frameMatrix === IDENTITY && part.cache !== null ? localBounds(part) : transformedBounds(part.segments, part.frameMatrix);
+        if (local !== null) includeInflated(out, local, 0);
+      }
+      this.shapeBounds = out.finish();
+    }
+    return this.shapeBounds;
   }
 
   /// Il riquadro nella scena dopo `m`, una trasformazione della scena,

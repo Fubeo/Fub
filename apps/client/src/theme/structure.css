@@ -1264,6 +1264,26 @@ html, body, #app {
 .draw-editor[data-readonly] .draw-surface {
   cursor: default;
 }
+/* Sopra una maniglia della cornice, e mentre la si tira: la direzione in cui
+   ridimensiona, o la presa che ruota. */
+.draw-surface[data-grip="ew"] {
+  cursor: ew-resize;
+}
+.draw-surface[data-grip="ns"] {
+  cursor: ns-resize;
+}
+.draw-surface[data-grip="nwse"] {
+  cursor: nwse-resize;
+}
+.draw-surface[data-grip="nesw"] {
+  cursor: nesw-resize;
+}
+.draw-surface[data-grip="rotate"] {
+  cursor: grab;
+}
+.draw-surface[data-grip="rotating"] {
+  cursor: grabbing;
+}
 .draw-page {
   position: absolute;
   top: 0;
