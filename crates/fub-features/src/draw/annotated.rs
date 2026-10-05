@@ -26,7 +26,8 @@
 //! # Le pagine come le mostra l'editor
 //!
 //! Il disegno delle annotazioni passa dalle stesse opzioni di `usvg` dei
-//! disegni ([`super::options`]): niente oltre al documento, e i caratteri di
+//! disegni ([`super::options`]), senza le immagini del vault, che l'editor
+//! delle annotazioni non mostra: niente oltre al documento, e i caratteri di
 //! Fub. Del PDF, l'export redatto disegna ciò che l'editor mostra, cioè ciò
 //! che mostra pdf.js: i livelli con la loro configurazione e l'aspetto
 //! scritto delle annotazioni del PDF.
@@ -738,12 +739,13 @@ impl Pages {
                 format!("page {number} could not be drawn: {error}"),
             )
         };
-        let tree = Tree::from_str(&sheets.svg(number, size), &options(&refused)).map_err(broken)?;
+        let tree =
+            Tree::from_str(&sheets.svg(number, size), &options(&refused, None)).map_err(broken)?;
         // La copia marcata si legge e non si disegna: ciò che il suo
         // risolutore rifiuta l'ha già contato quello del disegno.
         let scratch = Arc::new(Mutex::new(Refused::default()));
-        let marked =
-            Tree::from_str(&sheets.marked(number, size), &options(&scratch)).map_err(broken)?;
+        let marked = Tree::from_str(&sheets.marked(number, size), &options(&scratch, None))
+            .map_err(broken)?;
         let reading = read_marks(sheets, number, &marked);
 
         let refused = std::mem::take(&mut *lock(&refused));
@@ -819,7 +821,7 @@ impl Pages {
         }
         if !self.embedded.is_empty() {
             notes.push(Note::warning(format!(
-                "embedded images that are not PNG, JPEG, GIF or WebP were not exported ({} {})",
+                "embedded images that are not readable PNG, JPEG, GIF or WebP images were not exported ({} {})",
                 pages_word(self.embedded.len()),
                 ranges(&self.embedded),
             )));

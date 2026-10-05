@@ -88,6 +88,7 @@ draw = [
     "dep:svg2pdf",
     "dep:png",
     "dep:image",
+    "dep:imagesize",
     "dep:lopdf",
     "dep:hayro",
     "dep:flate2",
@@ -114,8 +115,8 @@ tantivy = { version = "0.26", optional = true }
 regex = { workspace = true, optional = true }
 # Dietro `draw`, e solo lì. `resvg` senza i default, che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
-# Restano il testo e la decodifica delle immagini raster incorporate come
-# `data:`. `fontdb` sa comunque leggere dal disco, perché `svg2pdf` lo prende
+# Restano il testo e la decodifica delle immagini raster, incorporate come
+# `data:` o lette dal vault. `fontdb` sa comunque leggere dal disco, perché `svg2pdf` lo prende
 # con le sue feature di serie e le feature si sommano: che non lo faccia lo
 # garantisce il codice, che costruisce il database dai soli byte incorporati, e
 # lo prova un test.
@@ -126,9 +127,12 @@ svg2pdf = { version = "0.13.0", optional = true }
 png = { version = "0.18.1", optional = true }
 # Non lo chiama nessuno: c'è per accendere `webp` nella copia di `image` che usa
 # `svg2pdf`, che di suo decodifica solo JPEG, PNG e GIF. Senza questa riga
-# un'immagine WebP incorporata in un disegno uscirebbe nel PNG e mancherebbe
-# nel PDF. Il decoder è lo stesso `image-webp` che `resvg` porta già.
+# un'immagine WebP in un disegno uscirebbe nel PNG e mancherebbe nel PDF. Il decoder è lo stesso `image-webp` che `resvg` porta già.
 image = { version = "0.25.10", default-features = false, features = ["webp"], optional = true }
+# La misura di un'immagine raster, presa come la prende `usvg`, che è la stessa
+# crate: un'immagine che `usvg` non sa misurare la scarta senza dirlo, e il
+# risolutore la lascia fuori prima, così il log la nomina.
+imagesize = { version = "0.13.0", optional = true }
 # Dietro `draw`, per l'export delle annotazioni dei PDF. Le annotazioni le legge
 # il lettore del formato, lo stesso del provider `fubann`.
 fub-scene = { workspace = true, optional = true }

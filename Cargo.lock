@@ -1956,6 +1956,7 @@ dependencies = [
  "fub-testkit",
  "hayro",
  "image",
+ "imagesize",
  "jiff",
  "lopdf",
  "png 0.18.1",
