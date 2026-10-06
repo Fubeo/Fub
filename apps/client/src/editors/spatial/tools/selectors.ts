@@ -1,26 +1,31 @@
-// I fogli di stile di un disegno letti per ciò che scelgono: le regole coi
-// loro selettori, e se un selettore sceglie un elemento. Le dichiarazioni non
-// si leggono. Serve ai comandi che spostano gli elementi senza cambiarli: un
-// foglio che sceglie per posizione, come `#m .node rect` di Mermaid,
-// sceglierebbe altro dopo lo spostamento, e ciò che si vede cambierebbe.
+// I fogli di stile di un disegno letti come li legge un browser: le regole
+// coi loro selettori e le loro dichiarazioni, e se un selettore sceglie un
+// elemento. Serve ai comandi che spostano gli elementi senza cambiarli: un
+// foglio che sceglie per posizione, come `#m .node rect` di Mermaid, dopo lo
+// spostamento sceglierebbe altro, e chi sposta deve sapere che cosa dava a
+// ogni elemento (`cascade.ts`).
 //
 // - **I selettori che si trovano negli SVG**, come li legge un browser: tipo
 //   e universale coi namespace di `@namespace`, id, classi, attributi con
 //   ogni operatore e coi modificatori `i` e `s`, i quattro combinatori, le
 //   pseudo-classi strutturali, `:not()`, `:is()`, `:where()`, `:lang()`,
-//   `:root` ed `:empty`.
+//   `:root` ed `:empty`, e le regole annidate, lette come `:is(genitore)`.
+//   Ogni selettore ha la sua specificità.
 // - **Tre risposte:** sì, no, o non si sa. Non si sa per `:has()`, per le
 //   pseudo-classi che qui non si conoscono e per ciò che non si legge, come
-//   le regole annidate o `@scope`; chi chiede tratta il dubbio come un
+//   le regole dentro `@scope`; chi chiede tratta il dubbio come un
 //   cambiamento.
 // - **Senza interazione.** Un disegno si guarda come immagine, dove non si
 //   passa col puntatore: `:hover`, `:focus` e le altre pseudo-classi
 //   d'interazione non scelgono niente. Un selettore con uno pseudo-elemento
 //   non sceglie l'elemento.
-// - **Le regole condizionate contano tutte:** quelle dentro `@media`,
-//   `@supports`, `@layer`, `@container` e `@starting-style`, perché la
-//   condizione non dipende da dove sta un elemento. Un selettore che un
-//   browser non accetta toglie la sua regola, e così una regola vuota.
+// - **Le condizioni:** `@media` vale per uno schermo; non si sa per la
+//   stampa, dove un disegno in una nota può finire, né con le
+//   caratteristiche, come la larghezza o il tema scuro; non si sa nemmeno per
+//   `@supports`, `@container` e `@document`.
+//   `@starting-style` non vale mai in un disegno fermo. `@layer` ordina le
+//   regole come in un browser. Un selettore che un browser non accetta toglie
+//   la sua regola, e così una dichiarazione senza valore.
 
 import { commentEnd, escapeEnd, isNameChar, readName, stringEnd } from "./stylesheet";
 
@@ -71,29 +76,68 @@ type Simple =
   | { readonly kind: "empty" }
   | { readonly kind: "link" }
   | { readonly kind: "not"; readonly list: readonly Selector[] }
-  | { readonly kind: "is"; readonly list: readonly Selector[] }
+  /// `:is()` e i suoi sinonimi; `zero` per `:where()`, che non pesa.
+  | { readonly kind: "is"; readonly list: readonly Selector[]; readonly zero: boolean }
   | { readonly kind: "lang"; readonly ranges: readonly string[] }
   /// `:has()`, che non si sa e che guarda dentro.
   | { readonly kind: "has" }
-  | { readonly kind: "fixed"; readonly value: Maybe };
+  /// Una risposta fissa: per una pseudo-classe, o per uno pseudo-elemento
+  /// (`element`), che pesa come un tipo.
+  | { readonly kind: "fixed"; readonly value: Maybe; readonly element: boolean };
 
 /// Un selettore di una regola; `null` se non si legge e non si sa che cosa
 /// sceglie.
 export type Selector = Complex | null;
 
-/// I selettori di un foglio, nell'ordine delle regole.
+/// Una dichiarazione: la proprietà in minuscolo, o una variabile `--x` com'è
+/// scritta, e il valore senza `!important`, senza commenti e senza gli spazi
+/// ai bordi.
+export interface Declaration {
+  readonly property: string;
+  readonly value: string;
+  readonly important: boolean;
+}
+
+/// Una regola di stile, una per ogni selettore della sua lista.
+export interface Rule {
+  /// Chi è, fra i fogli di un disegno: il foglio e il posto della regola nel
+  /// foglio. Resta lo stesso se il foglio cambia posto.
+  readonly id: string;
+  readonly selector: Selector;
+  /// Il selettore com'è scritto, per dirlo.
+  readonly text: string;
+  readonly specificity: number;
+  readonly declarations: readonly Declaration[];
+  /// Se valgono le condizioni delle at-rule attorno: `null` se dipende da
+  /// dove si guarda il disegno.
+  readonly condition: Maybe;
+  /// L'at-rule della condizione che non si sa, com'è scritta.
+  readonly at: string | null;
+  /// Vero se la condizione dipende anche da dove sta l'elemento, come in
+  /// `@container`.
+  readonly placed: boolean;
+  /// Il posto del suo livello di `@layer`, dal più debole: le regole fuori da
+  /// ogni livello hanno il più alto.
+  readonly layer: number;
+  /// L'ordine nel documento.
+  readonly order: number;
+}
+
+/// Le regole dei fogli di un disegno, nell'ordine del documento.
 export interface Sheet {
+  readonly rules: readonly Rule[];
+  /// I selettori delle regole, nello stesso ordine.
   readonly selectors: readonly Selector[];
   /// Vero se un selettore guarda dentro gli elementi, con `:has()`: ciò che
   /// sceglie dipende anche da ciò che sta sotto e dopo.
   readonly deep: boolean;
+  /// Gli indirizzi dei fogli che importa con `@import`, che qui non si
+  /// leggono.
+  readonly imports: readonly string[];
 }
 
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 const XLINK_NS = "http://www.w3.org/1999/xlink";
-
-/// Le at-rule che contengono regole che contano tutte.
-const GROUPING: ReadonlySet<string> = new Set(["media", "supports", "layer", "container", "document", "-moz-document", "starting-style"]);
 
 /// Le pseudo-classi d'interazione, o dei moduli, che in un disegno non
 /// scelgono niente.
@@ -114,27 +158,113 @@ const LEGACY_ELEMENTS: ReadonlySet<string> = new Set(["before", "after", "first-
 /// Le pseudo-classi che prendono una lista di selettori che scelgono.
 const ANY_OF: ReadonlySet<string> = new Set(["is", "where", "matches", "-webkit-any", "-moz-any"]);
 
+/// I pesi della specificità: id, classi e simili, tipi.
+const BY_ID = 1_000_000;
+const BY_CLASS = 1_000;
+
 // ---------------------------------------------------------------------------
 // Fogli.
 // ---------------------------------------------------------------------------
 
-/// I selettori del foglio `css`.
+/// Le regole del foglio `css`, da solo.
 export function readSheet(css: string): Sheet {
-  const reader = new SheetReader(css);
-  reader.rules(0, css.length);
-  return { selectors: reader.selectors, deep: reader.deep };
+  return readSheets([{ id: "0", css }]);
+}
+
+/// Le regole dei fogli `sheets`, nell'ordine del documento: i livelli di
+/// `@layer` hanno lo stesso nome in tutti i fogli.
+export function readSheets(sheets: ReadonlyArray<{ readonly id: string; readonly css: string }>): Sheet {
+  const layers = new LayerNode(null);
+  const read: Read[] = [];
+  let deep = false;
+  const imports: string[] = [];
+  for (const { id, css } of sheets) {
+    const reader = new SheetReader(css, id, read.length);
+    reader.rules(0, css.length, { condition: true, at: null, placed: false, scoped: false, layer: layers });
+    read.push(...reader.read);
+    deep ||= reader.deep;
+    imports.push(...reader.imports);
+  }
+  layers.rank(0);
+  const rules = read.map(({ layer, ...rule }) => ({ ...rule, layer: layer.order }));
+  return { rules, selectors: rules.map((rule) => rule.selector), deep, imports };
+}
+
+/// Una regola letta, col livello di cui alla fine si sa il posto.
+type Read = Omit<Rule, "layer"> & { readonly layer: LayerNode };
+
+/// Un livello di `@layer`, coi sottolivelli nell'ordine in cui compaiono.
+/// La radice sono le regole fuori da ogni livello.
+class LayerNode {
+  private readonly children = new Map<string, LayerNode>();
+  private anonymous = 0;
+  /// Il posto, dal più debole; vale dopo `rank`.
+  order = 0;
+
+  constructor(readonly parent: LayerNode | null) {}
+
+  /// Il sottolivello `names`, con un punto fra un nome e l'altro.
+  at(names: readonly string[]): LayerNode {
+    let node: LayerNode = this;
+    for (const name of names) {
+      let child = node.children.get(name);
+      if (child === undefined) {
+        child = new LayerNode(node);
+        node.children.set(name, child);
+      }
+      node = child;
+    }
+    return node;
+  }
+
+  /// Un sottolivello senza nome, diverso da ogni altro.
+  fresh(): LayerNode {
+    return this.at([`\u0000${this.anonymous++}`]);
+  }
+
+  /// I posti, da `from`: prima i sottolivelli, nell'ordine, poi le regole
+  /// del livello stesso, che li vincono. Restituisce il posto successivo.
+  rank(from: number): number {
+    let next = from;
+    for (const child of this.children.values()) next = child.rank(next);
+    this.order = next;
+    return next + 1;
+  }
+}
+
+/// Dove sta una regola: le condizioni delle at-rule che la contengono, il
+/// livello, e se i suoi selettori si leggono.
+interface Context {
+  readonly condition: Maybe;
+  readonly at: string | null;
+  readonly placed: boolean;
+  /// Vero dentro `@scope`, che sceglie a partire da elementi che dice lui.
+  readonly scoped: boolean;
+  readonly layer: LayerNode;
+}
+
+/// Ciò che sta in un blocco di stile: le dichiarazioni e le regole annidate.
+interface Body {
+  readonly declarations: Declaration[];
+  readonly nested: Array<{ readonly at: string | null; readonly prelude: string; readonly from: number; readonly to: number }>;
 }
 
 class SheetReader {
-  readonly selectors: Selector[] = [];
+  readonly read: Read[] = [];
   deep = false;
+  readonly imports: string[] = [];
   /// I namespace dichiarati, per prefisso; il predefinito sta a `null`.
   private readonly namespaces = new Map<string | null, string>();
+  private count = 0;
 
-  constructor(private readonly css: string) {}
+  constructor(
+    private readonly css: string,
+    private readonly sheet: string,
+    private order: number,
+  ) {}
 
   /// Le regole fra `from` e `to`.
-  rules(from: number, to: number): void {
+  rules(from: number, to: number, context: Context): void {
     const css = this.css;
     let i = from;
     while (i < to) {
@@ -143,7 +273,7 @@ class SheetReader {
       else if (c === "/" && css[i + 1] === "*") i = commentEnd(css, i);
       else if (css.startsWith("<!--", i)) i += 4;
       else if (css.startsWith("-->", i)) i += 3;
-      else i = c === "@" ? this.atRule(i, to) : this.rule(i, to);
+      else i = c === "@" ? this.atRule(i, to, context) : this.rule(i, to, context);
     }
   }
 
@@ -167,79 +297,159 @@ class SheetReader {
   }
 
   /// La fine del blocco che si apre col `{` in `at`, dopo il `}` che lo
-  /// chiude, o `to`; e se dentro c'è un altro blocco.
-  private blockEnd(at: number, to: number): [end: number, nested: boolean] {
+  /// chiude, o `to`.
+  private blockEnd(at: number, to: number): number {
     const css = this.css;
     let depth = 0;
-    let nested = false;
     let i = at;
     while (i < to) {
       const c = css[i]!;
       if (c === '"' || c === "'") i = stringEnd(css, i);
       else if (c === "/" && css[i + 1] === "*") i = commentEnd(css, i);
       else if (c === "\\") i = escapeEnd(css, i);
-      else if (c === "{") {
-        if (depth > 0) nested = true;
-        depth++;
-        i++;
-      } else if (c === "}") {
+      else if (c === "{") (depth++, i++);
+      else if (c === "}") {
         depth--;
         i++;
-        if (depth === 0) return [i, nested];
+        if (depth === 0) return i;
       } else i++;
     }
-    return [Math.min(i, to), nested];
+    return Math.min(i, to);
   }
 
-  /// Vero se fra `from` e `to` c'è qualcosa oltre a spazi e commenti.
-  private filled(from: number, to: number): boolean {
-    const css = this.css;
-    for (let i = from; i < to; ) {
-      if (/\s/.test(css[i]!)) i++;
-      else if (css[i] === "/" && css[i + 1] === "*") i = commentEnd(css, i);
-      else return true;
-    }
-    return false;
+  /// Il contenuto del blocco che finisce in `close`: senza il `}`.
+  private inner(close: number): number {
+    return this.css[close - 1] === "}" ? close - 1 : close;
   }
 
   /// Una regola coi selettori, che finisce dove torna il suo indice.
-  private rule(at: number, to: number): number {
+  private rule(at: number, to: number, context: Context): number {
     const css = this.css;
     const end = this.preludeEnd(at, to);
     // Senza blocco la regola non vale, e si salta fino al `;` o al `}`.
     if (end >= to || css[end] !== "{") return end + 1;
-    const [close, nested] = this.blockEnd(end, to);
-    // Le regole annidate scelgono a partire da questa: non si leggono.
-    if (nested) {
-      this.selectors.push(null);
-      return close;
-    }
-    if (!this.filled(end + 1, close - 1)) return close;
-    const list = parseList(css.slice(at, end), this.namespaces, false);
-    if (list === "invalid") return close;
-    for (const selector of list) {
-      this.selectors.push(selector);
-      if (selector !== null && deepIn(selector)) this.deep = true;
-    }
+    const close = this.blockEnd(end, to);
+    this.styleRule(css.slice(at, end), null, end + 1, this.inner(close), context);
     return close;
   }
 
+  /// Una regola di stile col preludio `prelude`, annidata nella regola dei
+  /// selettori `parents` o no, col blocco fra `from` e `to`. Una regola
+  /// annidata sceglie come `:is(parents) prelude`, o al posto di `&`.
+  private styleRule(prelude: string, parents: string | null, from: number, to: number, context: Context): void {
+    const written = parents === null ? prelude : nest(prelude, parents);
+    const list = parseList(written, this.namespaces, false);
+    if (list === "invalid") return;
+    const texts = splitTop(prelude, ",").map((text) => text.trim());
+    const body = this.body(from, to);
+    if (body.declarations.length > 0) {
+      list.forEach((selector, at) => {
+        const chosen = context.scoped ? null : selector;
+        if (chosen !== null && deepIn(chosen)) this.deep = true;
+        this.read.push({
+          id: `${this.sheet}:${this.count++}`,
+          selector: chosen,
+          text: texts[at] ?? written.trim(),
+          specificity: chosen === null ? 0 : specificity(chosen),
+          declarations: body.declarations,
+          condition: context.condition,
+          at: context.at,
+          placed: context.placed,
+          layer: context.layer,
+          order: this.order++,
+        });
+      });
+    }
+    for (const inner of body.nested) {
+      if (inner.at === null) this.styleRule(inner.prelude, written, inner.from, inner.to, context);
+      else {
+        const next = this.within(inner.at, inner.prelude, context);
+        if (next !== null) this.styleRule("&", written, inner.from, inner.to, next);
+      }
+    }
+  }
+
+  /// Le dichiarazioni e le regole annidate del blocco fra `from` e `to`.
+  private body(from: number, to: number): Body {
+    const css = this.css;
+    const body: Body = { declarations: [], nested: [] };
+    let i = from;
+    while (i < to) {
+      const c = css[i]!;
+      if (/\s/.test(c) || c === ";") {
+        i++;
+        continue;
+      }
+      if (c === "/" && css[i + 1] === "*") {
+        i = commentEnd(css, i);
+        continue;
+      }
+      const end = this.preludeEnd(i, to);
+      if (end < to && css[end] === "{") {
+        const close = this.blockEnd(end, to);
+        if (c === "@") {
+          const [nameEnd, name] = readName(css, i + 1);
+          body.nested.push({ at: name.toLowerCase(), prelude: css.slice(nameEnd, end), from: end + 1, to: this.inner(close) });
+        } else {
+          body.nested.push({ at: null, prelude: css.slice(i, end), from: end + 1, to: this.inner(close) });
+        }
+        i = close;
+        continue;
+      }
+      if (c !== "@") {
+        const declaration = readDeclaration(css.slice(i, end));
+        if (declaration !== null) body.declarations.push(declaration);
+      }
+      i = end + 1;
+    }
+    return body;
+  }
+
   /// Un'at-rule, che finisce dove torna il suo indice.
-  private atRule(at: number, to: number): number {
+  private atRule(at: number, to: number, context: Context): number {
     const css = this.css;
     const [nameEnd, raw] = readName(css, at + 1);
     const name = raw.toLowerCase();
     const end = this.preludeEnd(nameEnd, to);
+    const prelude = css.slice(nameEnd, end);
     if (end >= to || css[end] !== "{") {
-      if (name === "namespace") this.namespace(css.slice(nameEnd, end));
+      if (name === "namespace") this.namespace(prelude);
+      else if (name === "import") this.imports.push(importUrl(prelude));
+      // `@layer a, b;` dice l'ordine dei livelli prima delle regole.
+      else if (name === "layer") for (const each of splitTop(prelude, ",")) context.layer.at(layerPath(each));
       return end + 1;
     }
-    const [close] = this.blockEnd(end, to);
-    const inner = css[close - 1] === "}" ? close - 1 : close;
-    if (GROUPING.has(name)) this.rules(end + 1, inner);
-    // `@scope` sceglie a partire da elementi che dice lui.
-    else if (name === "scope" && this.filled(end + 1, inner)) this.selectors.push(null);
+    const close = this.blockEnd(end, to);
+    const next = this.within(name, prelude, context);
+    if (next !== null) this.rules(end + 1, this.inner(close), next);
     return close;
+  }
+
+  /// Dove stanno le regole dentro l'at-rule `name`; `null` se non contano:
+  /// quelle senza regole di stile, come `@font-face`, e `@starting-style`.
+  private within(name: string, prelude: string, context: Context): Context | null {
+    const written = `@${name} ${prelude.trim()}`.trim();
+    switch (name) {
+      case "media": {
+        const condition = media(prelude);
+        if (condition === false) return null;
+        return { ...context, condition: and(context.condition, condition), at: condition === null ? written : context.at };
+      }
+      case "supports":
+      case "document":
+      case "-moz-document":
+        return { ...context, condition: and(context.condition, null), at: written };
+      case "container":
+        return { ...context, condition: and(context.condition, null), at: written, placed: true };
+      case "layer": {
+        const path = layerPath(prelude);
+        return { ...context, layer: path.length === 0 ? context.layer.fresh() : context.layer.at(path) };
+      }
+      case "scope":
+        return { ...context, scoped: true };
+      default:
+        return null;
+    }
   }
 
   /// `@namespace prefisso? url(…)` o con una stringa.
@@ -248,6 +458,96 @@ class SheetReader {
     if (match === null) return;
     this.namespaces.set(match[1] ?? null, match[3] ?? match[5] ?? "");
   }
+}
+
+/// L'indirizzo di `@import`, scritto con `url()` o come stringa.
+function importUrl(prelude: string): string {
+  const match = /^\s*(?:url\(\s*(["']?)([^"')]*)\1\s*\)|(["'])([^"']*)\3)/i.exec(prelude);
+  return match === null ? prelude.trim() : (match[2] ?? match[4] ?? "");
+}
+
+/// Il nome di un livello, `a.b`, come percorso; vuoto per uno senza nome.
+function layerPath(text: string): string[] {
+  const trimmed = text.trim();
+  return trimmed === "" ? [] : trimmed.split(".").map((name) => name.trim());
+}
+
+/// I selettori `prelude` di una regola annidata in quella dei selettori
+/// `parents`: `&` vale `:is(parents)`, e senza `&` la regola sta dentro.
+function nest(prelude: string, parents: string): string {
+  const parent = `:is(${parents})`;
+  return splitTop(prelude, ",")
+    .map((part) => (part.includes("&") ? part.replace(/&/g, parent) : `${parent} ${part.trim()}`))
+    .join(", ");
+}
+
+/// Se vale `@media prelude` per un disegno: sì per `all` e `screen`; non si
+/// sa per `print`, perché un disegno in una nota si stampa, né con le
+/// caratteristiche; no per gli altri tipi, che un browser non riconosce più.
+function media(prelude: string): Maybe {
+  const text = prelude.replace(/\/\*[\s\S]*?\*\//g, " ").trim().toLowerCase();
+  if (text === "") return true;
+  let out: Maybe = false;
+  for (const query of splitTop(text, ",")) {
+    const match = /^(?:(not|only)\s+)?([a-z-]+)(?:\s+and\s+[\s\S]*)?$/.exec(query.trim());
+    let fits: Maybe;
+    if (match === null || match[2] === "not" || match[2] === "only") fits = null;
+    else {
+      const type: Maybe = match[2] === "all" || match[2] === "screen" ? true : match[2] === "print" ? null : false;
+      fits = /\sand\s/.test(query) ? and(type, null) : type;
+      if (match[1] === "not") fits = fits === null ? null : !fits;
+    }
+    out = or(out, fits);
+  }
+  return out;
+}
+
+/// Una dichiarazione, `proprietà: valore`; `null` se non lo è.
+export function readDeclaration(text: string): Declaration | null {
+  const colon = text.indexOf(":");
+  if (colon < 0) return null;
+  const name = stripComments(text.slice(0, colon)).trim();
+  if (!/^-?[A-Za-z_][\w-]*$|^--[\w-]+$/.test(name)) return null;
+  const custom = name.startsWith("--");
+  let value = text.slice(colon + 1);
+  if (!custom) value = stripComments(value);
+  const important = /!\s*important\s*$/i.exec(value);
+  if (important !== null) value = value.slice(0, important.index);
+  value = value.trim();
+  if (value === "" && !custom) return null;
+  return { property: custom ? name : name.toLowerCase(), value, important: important !== null };
+}
+
+/// Le dichiarazioni di un blocco, come quello dell'attributo `style`.
+export function readDeclarations(text: string): Declaration[] {
+  const out: Declaration[] = [];
+  for (const part of splitTop(text, ";")) {
+    const declaration = readDeclaration(part);
+    if (declaration !== null) out.push(declaration);
+  }
+  return out;
+}
+
+/// `text` senza i commenti fuori dalle stringhe.
+function stripComments(text: string): string {
+  if (!text.includes("/*")) return text;
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i]!;
+    if (c === '"' || c === "'") {
+      const end = stringEnd(text, i);
+      out += text.slice(i, end);
+      i = end;
+    } else if (c === "/" && text[i + 1] === "*") {
+      i = commentEnd(text, i);
+      out += " ";
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
 }
 
 /// Vero se `selector` ha un `:has()`, che si legge come non si sa.
@@ -260,6 +560,60 @@ function deepIn(selector: Complex): boolean {
       return false;
     }),
   );
+}
+
+/// I nomi degli attributi senza namespace che `selector` guarda.
+export function attributeNames(selector: Selector, into: Set<string> = new Set()): Set<string> {
+  if (selector === null) return into;
+  for (const compound of selector.compounds) {
+    for (const simple of compound) {
+      if (simple.kind === "attr" && simple.ns !== null && simple.ns !== "") continue;
+      if (simple.kind === "attr") into.add(simple.local);
+      else if (simple.kind === "not" || simple.kind === "is") for (const inner of simple.list) attributeNames(inner, into);
+      else if (simple.kind === "nth" && simple.of !== null) for (const inner of simple.of) attributeNames(inner, into);
+    }
+  }
+  return into;
+}
+
+/// La specificità di `selector`: gli id, poi le classi, gli attributi e le
+/// pseudo-classi, poi i tipi e gli pseudo-elementi, in un numero solo.
+export function specificity(selector: Complex): number {
+  let out = 0;
+  for (const compound of selector.compounds) for (const simple of compound) out += weight(simple);
+  return out;
+}
+
+/// La specificità più alta di una lista, come per `:is()` e `:not()`.
+function heaviest(list: readonly Selector[]): number {
+  let out = 0;
+  for (const selector of list) if (selector !== null) out = Math.max(out, specificity(selector));
+  return out;
+}
+
+function weight(simple: Simple): number {
+  switch (simple.kind) {
+    case "type":
+      return simple.local === null ? 0 : 1;
+    case "id":
+      return BY_ID;
+    case "class":
+    case "attr":
+    case "root":
+    case "empty":
+    case "link":
+    case "lang":
+    case "has":
+      return BY_CLASS;
+    case "nth":
+      return BY_CLASS + (simple.of === null ? 0 : heaviest(simple.of));
+    case "not":
+      return heaviest(simple.list);
+    case "is":
+      return simple.zero ? 0 : heaviest(simple.list);
+    case "fixed":
+      return simple.element ? 1 : BY_CLASS;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +824,7 @@ class SelectorParser {
     const fallback = this.namespaces.get(null);
     if (!typed && fallback !== undefined) simples.unshift({ kind: "type", local: null, ns: fallback });
     // Uno pseudo-elemento non è l'elemento.
-    if (element) simples.push({ kind: "fixed", value: false });
+    if (element) simples.push({ kind: "fixed", value: false, element: true });
     return simples;
   }
 
@@ -549,7 +903,7 @@ class SelectorParser {
       }
       if (ANY_OF.has(name)) {
         const list = parseList(args, this.namespaces, true);
-        return [{ kind: "is", list: list === "invalid" ? [] : list }];
+        return [{ kind: "is", list: list === "invalid" ? [] : list, zero: name === "where" }];
       }
       if (name === "nth-child" || name === "nth-last-child") {
         const [formula, of] = splitOf(args);
@@ -572,7 +926,7 @@ class SelectorParser {
         return [{ kind: "lang", ranges }];
       }
       if (name === "has") return [{ kind: "has" }];
-      return [{ kind: "fixed", value: null }];
+      return [{ kind: "fixed", value: null, element: false }];
     }
     switch (name) {
       case "root":
@@ -597,9 +951,9 @@ class SelectorParser {
       case "-webkit-any-link":
         return [{ kind: "link" }];
     }
-    if (NEVER.has(name)) return [{ kind: "fixed", value: false }];
-    if (ALWAYS.has(name)) return [{ kind: "fixed", value: true }];
-    return [{ kind: "fixed", value: null }];
+    if (NEVER.has(name)) return [{ kind: "fixed", value: false, element: false }];
+    if (ALWAYS.has(name)) return [{ kind: "fixed", value: true, element: false }];
+    return [{ kind: "fixed", value: null, element: false }];
   }
 }
 

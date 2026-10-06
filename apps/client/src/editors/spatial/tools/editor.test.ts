@@ -4,6 +4,7 @@
 // cosa è successo.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { applyOperation } from "../../core/text-operation";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -18,7 +19,7 @@ import { MERGE_MS } from "./history";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { rasterize } from "./png";
 import { arrowPath } from "./shapes";
-import { LAYER } from "./test-support";
+import { appearance, LAYER } from "./test-support";
 import { DEFAULT_CURVE } from "../pen/pressure";
 import { closeRadial } from "./radial";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
@@ -682,42 +683,86 @@ describe("disporre, dal livello Standard", () => {
     expect(document.activeElement).toBe(named("Duplica"));
   });
 
-  it("un gruppo che porta una trasformazione su parti estranee non si separa, e lo dice", () => {
-    const source = doc(`${LAYER}<g id="og1g1g1g1" transform="translate(5 0)"><rect id="oa1a1a1a1" x="0" y="0" width="5" height="5"/><use href="#oa1a1a1a1"/></g></g>`);
+  it("un gruppo con parti estranee si separa, e loro restano dove si vedevano; non si duplica", () => {
+    const source = doc(`${LAYER}<g id="og1g1g1g1" transform="translate(5 0)"><rect id="oa1a1a1a1" x="0" y="0" width="5" height="5"/><use href="#oa1a1a1a1" x="10"/><circle class="c" r="2"/></g></g>`);
     mount(source, { level: "standard" });
     editor.select(["og1g1g1g1"]);
-    key("g", { ctrlKey: true, shiftKey: true });
-    expect(editor.engine.text).toBe(source);
-    expect(spoken()).toContain("Non separato");
     key("d", { ctrlKey: true });
     expect(editor.engine.text).toBe(source);
     expect(spoken()).toContain("Non duplicato");
+    key("g", { ctrlKey: true, shiftKey: true });
+    // La copia collegata mostra il quadrato con la sua trasformazione nuova:
+    // resta com'era scritta.
+    expect(editor.engine.text).toContain('<rect id="oa1a1a1a1" x="0" y="0" width="5" height="5" transform="matrix(1 0 0 1 5 0)"/>');
+    expect(editor.engine.text).toContain('<use href="#oa1a1a1a1" x="10"/>');
+    expect(editor.engine.text).toContain('<circle class="c" r="2" transform="matrix(1 0 0 1 5 0)"/>');
+    expect(appearance(editor.engine.text)).toEqual(appearance(source));
+    expect(spoken()).toBe("1 gruppo separato. 1 elemento riscritto perché resti com’era.");
+    editor.undo();
+    expect(editor.engine.text).toBe(source);
   });
 
-  it("un gruppo per cui passa il foglio di stile del disegno non si separa, come in Mermaid, e lo dice", () => {
-    const source = doc(
-      "<style>#m .node rect{fill:#ececff;stroke:#9370db}#m .edge{stroke:#333;fill:none}</style>"
-        + `${LAYER}<g id="m"><g class="node"><rect x="10" y="50" width="90" height="40"/></g><path class="edge" d="M 100 70 L 140 70"/></g></g>`,
-    );
+  it("il diagramma di Mermaid del banco di fedeltà si separa coi tasti e con la barra, e si vede com'era", () => {
+    const source = FIDELITY.find((scene) => scene.id === "mermaid")!.text;
     mount(source, { level: "standard" });
     editor.select(["m"]);
-    key("g", { ctrlKey: true, shiftKey: true });
+    expect(key("g", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+    const after = editor.engine.text;
+    expect(after).not.toContain('id="m"');
+    expect(after).toContain('<rect x="10" y="50" width="90" height="40" rx="5" fill="#ECECFF" stroke="#9370DB"/>');
+    expect(appearance(after)).toEqual(appearance(source));
+    expect(spoken()).toBe("1 gruppo separato. 5 elementi riscritti perché restino com’erano.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
     expect(editor.engine.text).toBe(source);
     expect(editor.selection).toEqual(["m"]);
-    expect(spoken()).toBe("Non separato: il foglio di stile del disegno dà lo stile a ciò che il gruppo contiene passando da lui, e senza il gruppo cambierebbe aspetto.");
+
+    named("Separa").click();
+    // Lo stesso testo, salvo l'id nuovo della punta della freccia.
+    const unnamed = (text: string): string => text.replace(/id="o[a-z0-9]{8}"/g, 'id=""');
+    expect(unnamed(editor.engine.text)).toBe(unnamed(after));
+    expect(spoken()).toBe("1 gruppo separato. 5 elementi riscritti perché restino com’erano.");
+    // Si sceglie la punta della freccia, l'unica parte che FubDraw sa
+    // scrivere; le altre restano parti estranee.
+    expect(editor.selection).toHaveLength(1);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
-  it("non raggruppa né riordina ciò a cui il foglio di stile del disegno darebbe un altro stile", () => {
+  it("Ctrl+G e Ctrl+Maiusc+G restano all'editor anche senza niente di scelto, o dal pannello, e lo dicono", () => {
+    mount(doc(`${LAYER}<g id="og1g1g1g1"><rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`), { level: "standard" });
+    expect(key("g", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Nessun oggetto scelto.");
+    expect(key("g", { ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Nessun oggetto scelto.");
+    editor.select(["og1g1g1g1"]);
+    host.querySelector<HTMLButtonElement>(`[aria-controls="${properties().id}"]`)!.click();
+    expect(key("g", { ctrlKey: true, shiftKey: true }, properties()).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("1 gruppo separato.");
+    // All'Essenziale non si raggruppa: i tasti restano a chi li aveva.
+    editor.setLevel("essential");
+    expect(key("g", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+  });
+
+  it("non raggruppa né riordina ciò a cui il foglio di stile del disegno darebbe uno stile che non si può togliere, e dice perché", () => {
     const source = doc(`<style>g g rect{fill:#d55e00}rect:last-child{stroke:#000}</style>${LAYER}<rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g>`);
     mount(source, { level: "standard" });
     editor.select([A, B]);
     key("g", { ctrlKey: true });
     expect(editor.engine.text).toBe(source);
-    expect(spoken()).toBe("Non raggruppato: in un gruppo il foglio di stile del disegno darebbe un altro stile agli oggetti.");
+    expect(spoken()).toBe("Non raggruppato: un elemento cambierebbe «fill», e FubDraw non sa riscriverlo com’era.");
     editor.select([A]);
     key("]", { ctrlKey: true, shiftKey: true });
     expect(editor.engine.text).toBe(source);
-    expect(spoken()).toBe("Ordine invariato: il foglio di stile del disegno sceglie gli oggetti per posizione, e darebbe loro un altro stile.");
+    expect(spoken()).toBe("Ordine invariato: un elemento cambierebbe «stroke», e FubDraw non sa riscriverlo com’era.");
+  });
+
+  it("un foglio di stile che dipende da dove si guarda il disegno ferma il comando, e si dice quale", () => {
+    const source = doc(`<style>@media (prefers-color-scheme: dark){#m rect{fill:#ffffff}}</style>${LAYER}<g id="m"><rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`);
+    mount(source, { level: "standard" });
+    editor.select(["m"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(spoken()).toBe("Non separato: il foglio di stile del disegno ha uno stile che dipende da dove si guarda il disegno, «@media (prefers-color-scheme: dark)», e l’aspetto potrebbe cambiare.");
   });
 
   it("un foglio di stile che sceglie per classe, come quelli di Illustrator, lascia separare", () => {
@@ -4101,7 +4146,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
     expect(changes).toHaveLength(2);
   });
 
-  it("un oggetto non va dove il foglio di stile del disegno gli darebbe un altro stile", () => {
+  it("un oggetto che cambia livello tiene lo stile che gli dava il foglio del disegno; non va dove gliene darebbe uno che non si toglie", () => {
     const source = doc(
       `<style>#l2 rect{fill:#d55e00}</style>${LAYER}<rect id="oe5e5e5e5" width="10" height="10"/></g>`
         + `<g id="l2" fub:layer="Sopra"><rect id="oc3c3c3c3" width="10" height="10"/></g>`,
@@ -4113,9 +4158,18 @@ describe("spostare dall'albero, dal livello Standard", () => {
     inTree("ArrowDown");
     expect(activeKey()).toBe("oc3c3c3c3");
     inTree("ArrowDown", { altKey: true });
-    expect(spoken()).toBe("Lì non va: il foglio di stile del disegno darebbe un altro stile a ciò che si sposta.");
+    expect(parentOf("oc3c3c3c3")).toBe("l1");
+    expect(editor.engine.text).toContain('<rect id="oc3c3c3c3" width="10" height="10" fill="#d55e00"/>');
+    expect(spoken()).toMatch(/ 1 elemento riscritto perché resti com’era\.$/);
+    expect(changes).toHaveLength(1);
+    editor.undo();
     expect(editor.engine.text).toBe(source);
-    expect(changes).toHaveLength(0);
+
+    inTree("End");
+    expect(activeKey()).toBe("oe5e5e5e5");
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("Lì non va: un elemento cambierebbe «fill», e FubDraw non sa riscriverlo com’era.");
+    expect(editor.engine.text).toBe(source);
   });
 
   it("un collegamento non entra in un altro collegamento: Alt lo porta oltre", () => {

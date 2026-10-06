@@ -193,7 +193,6 @@ describe("raggruppare", () => {
       `${HEAD}\n  ${LAYER}\n    <g id="${arranged.keys[0]}">\n      ${RECT("oaaaaaaaa", 0)}\n      ${RECT("obbbbbbbb", 40)}\n    </g>\n  </g>\n</svg>\n`,
     );
     const back = ungroupOps(opened.engine.model!, opened.reindex().units, ids(opened));
-    if (back === "foreign") throw new Error("estraneo");
     applied(opened, back);
     expect(opened.engine.text).toBe(`${HEAD}\n  ${LAYER}\n    ${RECT("oaaaaaaaa", 0)}\n    ${RECT("obbbbbbbb", 40)}\n  </g>\n</svg>\n`);
   });
@@ -217,7 +216,6 @@ describe("separare", () => {
         + `${RECT("oaaaaaaaa", 0)}${RECT("obbbbbbbb", 20, 0, ' fill="#0072b2" transform="translate(1 1)"')}</g>${RECT("oyyyyyyyy", 90)}</g>`,
     ));
     const arranged = ungroupOps(opened.engine.model!, units(opened, "ogggggggg"), ids(opened));
-    if (arranged === "foreign") throw new Error("estraneo");
     const index = applied(opened, arranged);
     expect(keys(index)).toEqual(["oxxxxxxxx", "oaaaaaaaa", "obbbbbbbb", "oyyyyyyyy"]);
     expect(new Set(arranged.keys)).toEqual(new Set(["oaaaaaaaa", "obbbbbbbb"]));
@@ -232,7 +230,6 @@ describe("separare", () => {
   it("moltiplica l'opacità del gruppo in quella dei figli", () => {
     const opened = open(doc(`${LAYER}<g id="ogggggggg" opacity="0.5">${RECT("oaaaaaaaa", 0, 0, ' opacity="0.4"')}${RECT("obbbbbbbb", 20)}</g></g>`));
     const arranged = ungroupOps(opened.engine.model!, opened.index.units, ids(opened));
-    if (arranged === "foreign") throw new Error("estraneo");
     applied(opened, arranged);
     expect(opened.engine.text).toContain('<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" opacity="0.2"/>');
     expect(opened.engine.text).toContain('<rect id="obbbbbbbb" x="20" y="0" width="10" height="10" opacity="0.5"/>');
@@ -241,22 +238,21 @@ describe("separare", () => {
   it("porta fuori anche una parte estranea, se il gruppo non ha niente da darle", () => {
     const opened = open(doc(`${LAYER}<g id="ogggggggg">${RECT("oaaaaaaaa", 0)}<use href="#oaaaaaaaa"/><rect x="30" y="0" width="5" height="5"/></g></g>`));
     const arranged = ungroupOps(opened.engine.model!, opened.index.units, ids(opened));
-    if (arranged === "foreign") throw new Error("estraneo");
     const index = applied(opened, arranged);
     expect(opened.engine.text).not.toContain("ogggggggg");
     expect(opened.engine.text).toMatch(/<rect id="oaaaaaaaa"[^>]*\/>\s*<use href="#oaaaaaaaa"\/>\s*<rect id="o[a-z0-9]{8}" x="30"/);
     expect(index.units).toHaveLength(2);
   });
 
-  it("non separa un gruppo trasformato con una parte estranea, che non cambierebbe con lui", () => {
+  it("porta fuori com'è una parte estranea anche da un gruppo trasformato: ciò che le serve per restare dov'era lo aggiunge l'editor", () => {
     const opened = open(doc(`${LAYER}<g id="ogggggggg" transform="translate(5 0)">${RECT("oaaaaaaaa", 0)}<use href="#oaaaaaaaa"/></g></g>`));
-    expect(ungroupOps(opened.engine.model!, opened.index.units, ids(opened))).toBe("foreign");
+    applied(opened, ungroupOps(opened.engine.model!, opened.index.units, ids(opened)));
+    expect(opened.engine.text).toContain(`${RECT("oaaaaaaaa", 0, 0, ' transform="matrix(1 0 0 1 5 0)"')}\n<use href="#oaaaaaaaa"/></g>`);
   });
 
   it("dà un id a un oggetto scelto senza, che i figli portati fuori spostano", () => {
     const opened = open(doc(`${LAYER}<g id="ogggggggg">${RECT("oaaaaaaaa", 0)}${RECT("obbbbbbbb", 20)}</g><rect x="50" y="0" width="5" height="5"/></g>`));
     const arranged = ungroupOps(opened.engine.model!, opened.index.units, ids(opened));
-    if (arranged === "foreign") throw new Error("estraneo");
     const index = applied(opened, arranged);
     const named = arranged.keys.find((key) => key !== "oaaaaaaaa" && key !== "obbbbbbbb")!;
     expect(index.get(named)!.bounds).toEqual({ min: [50, 0], max: [55, 5] });
@@ -265,7 +261,6 @@ describe("separare", () => {
   it("separa più gruppi in un passo, e lascia scelti gli altri oggetti", () => {
     const opened = open(doc(`${LAYER}<g id="og1111111">${RECT("oaaaaaaaa", 0)}</g>${RECT("oxxxxxxxx", 50)}<g id="og2222222">${RECT("obbbbbbbb", 20)}${RECT("occcccccc", 30)}</g></g>`));
     const arranged = ungroupOps(opened.engine.model!, opened.index.units, ids(opened));
-    if (arranged === "foreign") throw new Error("estraneo");
     const index = applied(opened, arranged);
     expect(keys(index)).toEqual(["oaaaaaaaa", "oxxxxxxxx", "obbbbbbbb", "occcccccc"]);
     expect(new Set(arranged.keys)).toEqual(new Set(keys(index)));
@@ -331,7 +326,6 @@ describe("collegare a una nota", () => {
   it("toglie il collegamento e lascia gli oggetti dov'erano, con ciò che ereditavano", () => {
     const opened = open(doc(`${LAYER}${RECT("oxxxxxxxx", 90)}<a id="ollllllll" href="a.md" transform="translate(10 0)" fill="#0072b2"><title>Vedi</title>${RECT("oaaaaaaaa", 0)}${RECT("obbbbbbbb", 20)}</a></g>`));
     const arranged = unlinkOps(opened.engine.model!, opened.index.units, ids(opened));
-    if (arranged === "foreign") throw new Error("estraneo");
     const index = applied(opened, arranged);
     expect(keys(index)).toEqual(["oxxxxxxxx", "oaaaaaaaa", "obbbbbbbb"]);
     expect(new Set(arranged.keys)).toEqual(new Set(keys(index)));
@@ -343,11 +337,9 @@ describe("collegare a una nota", () => {
   it("toglie solo i collegamenti, e separa solo i gruppi", () => {
     const opened = open(doc(`${LAYER}<a id="ollllllll" href="a.md">${RECT("oaaaaaaaa", 0)}</a><g id="ogggggggg">${RECT("obbbbbbbb", 20)}</g></g>`));
     const unlinked = unlinkOps(opened.engine.model!, opened.index.units, ids(opened));
-    if (unlinked === "foreign") throw new Error("estraneo");
     expect(keys(applied(opened, unlinked))).toEqual(["oaaaaaaaa", "ogggggggg"]);
     const again = open(doc(`${LAYER}<a id="ollllllll" href="a.md">${RECT("oaaaaaaaa", 0)}</a><g id="ogggggggg">${RECT("obbbbbbbb", 20)}</g></g>`));
     const ungrouped = ungroupOps(again.engine.model!, again.index.units, ids(again));
-    if (ungrouped === "foreign") throw new Error("estraneo");
     expect(keys(applied(again, ungrouped))).toEqual(["ollllllll", "obbbbbbbb"]);
   });
 });

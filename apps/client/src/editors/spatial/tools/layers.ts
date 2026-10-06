@@ -18,6 +18,7 @@ import { ROOT } from "../scene/ops";
 import { nodeOf, Plan, type Arranged } from "./arrange";
 import { transformValue, type NewIds } from "./edit";
 import type { LayerInfo, Unit } from "./hit";
+import { carriedTo } from "./place";
 
 /// La lunghezza massima del nome di un livello, in caratteri.
 export const MAX_LAYER_NAME = 80;
@@ -140,8 +141,9 @@ export function inLayer(unit: Unit, layer: LayerInfo): boolean {
 }
 
 /// Porta in cima a `layer` gli oggetti di `units` che stanno altrove,
-/// nell'ordine in cui stavano e con la trasformazione che li lascia dove si
-/// vedevano. Le chiavi che tornano sono gli id di tutti. `null` se il
+/// nell'ordine in cui stavano, con la trasformazione che li lascia dove si
+/// vedevano e lo stile che ereditavano, come uno spostamento nell'albero
+/// degli oggetti. Le chiavi che tornano sono gli id di tutti. `null` se il
 /// livello schiaccia il piano.
 export function intoLayerOps(model: DocumentModel, units: readonly Unit[], layer: LayerInfo, ids: NewIds): Arranged | null {
   const inverse = invert(layer.matrix);
@@ -149,13 +151,16 @@ export function intoLayerOps(model: DocumentModel, units: readonly Unit[], layer
   const plan = new Plan(model, ids);
   const moving = units.filter((unit) => !inLayer(unit, layer));
   if (moving.length === 0) return { ops: [], keys: units.map((unit) => unit.key) };
-  const parent = plan.idOf(layerNode(model, layer), "layer");
+  const target = layerNode(model, layer);
+  const parent = plan.idOf(target, "layer");
   for (const unit of moving) {
-    const id = plan.idOf(nodeOf(model, unit));
+    const node = nodeOf(model, unit);
+    const id = plan.idOf(node);
+    const attrs: Record<string, string | null> = {};
     // Da un livello con la stessa trasformazione l'oggetto passa com'è.
-    if (!unit.parent.every((v, i) => v === layer.matrix[i])) {
-      plan.ops.push({ op: "set", id, attrs: { transform: transformValue(compose(inverse, unit.matrix)) } });
-    }
+    if (!unit.parent.every((v, i) => v === layer.matrix[i])) attrs.transform = transformValue(compose(inverse, unit.matrix));
+    Object.assign(attrs, carriedTo(node, target));
+    if (Object.keys(attrs).length > 0) plan.ops.push({ op: "set", id, attrs });
     plan.ops.push({ op: "move", target: id, parent, pos: { last: true } });
   }
   // Anche chi resta riceve un id: chi se ne va dal suo livello può cambiare il

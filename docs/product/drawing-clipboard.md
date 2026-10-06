@@ -70,12 +70,28 @@ col loro testo. Un SVG malformato, senza niente da incollare o più grande di un
 disegno modificabile non entra, e lo si dice.
 
 I comandi che spostano gli elementi non riscrivono i fogli di stile del
-disegno, incollati o già nel file. Se dopo un comando un foglio sceglierebbe
-altri elementi, e qualcosa cambierebbe aspetto, il comando non si fa e lo si
-dice: succede per esempio separando un diagramma di Mermaid, il cui foglio dà
-lo stile alle forme passando dal gruppo che le contiene. Vale per i gruppi,
-l'ordine, i collegamenti, i livelli e gli spostamenti in «Oggetti»; un foglio
-che sceglie per classe, come quelli di Illustrator, non li ferma.
+disegno, incollati o già nel file: riscrivono gli elementi. Se dopo un comando
+un foglio sceglierebbe altri elementi, ciascuno che cambierebbe aspetto riceve
+il valore che aveva, in un attributo di presentazione o, dove il foglio lo
+vincerebbe, nel suo `style`, anche con `!important`; il comando lo dice, con
+quanti elementi ha riscritto. Succede per esempio separando un diagramma di
+Mermaid, il cui foglio dà lo stile alle forme passando dal gruppo che le
+contiene. Vale per i gruppi, l'ordine, i collegamenti, i livelli e gli
+spostamenti in «Oggetti», ed è lo stesso passo di annulla. Si confrontano il
+colore, il contorno, il carattere, l'opacità e la trasformazione che si
+vedono, con l'eredità, `currentColor`, le variabili, `@layer` e le misure in
+`em`; chi entra in un altro livello o in un altro gruppo ne prende l'opacità e
+la visibilità, come gli oggetti di FubDraw, e tiene il resto.
+
+Il comando non si fa, e dice perché, quando non si può sapere o non si può
+rifare l'aspetto di prima: un selettore che FubDraw non legge; una regola che
+dipende da dove si guarda il disegno, come `@media (min-width: …)` o la stampa
+(`:hover` invece non vale mai, perché il disegno è fermo); un gruppo che dà a
+ciò che contiene un effetto d'insieme, come un filtro o una maschera, che
+senza di lui andrebbe perso; un foglio che darebbe un effetto al gruppo nuovo;
+una copia collegata (`<use>`) che cambierebbe aspetto; un `@import` che non
+sia di un servizio di caratteri. Un foglio che sceglie per classe, come quelli
+di Illustrator, di solito non chiede niente.
 
 ## Incolli grandi
 

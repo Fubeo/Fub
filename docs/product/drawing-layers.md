@@ -84,7 +84,9 @@ Una riga scelta porta con sé le altre righe scelte, nell'ordine in cui
 stavano; una che non lo era prima si sceglie. Un livello va da solo, e soltanto
 fra i livelli; un oggetto va dentro un livello, non fra un livello e l'altro.
 Entrando in un gruppo o in un livello trasformato l'oggetto riceve la
-trasformazione che lo lascia dove si vedeva, come con «Sposta in un livello».
+trasformazione che lo lascia dove si vedeva, come con «Sposta in un livello»,
+e tiene lo stile che ereditava; un foglio di stile del disegno che lo
+sceglierebbe diversamente non lo cambia ([Disegni, appunti](drawing-clipboard.md)).
 
 Ogni spostamento è un passo di annulla, la selezione e la riga attiva lo
 seguono, e ciò che ora lo contiene si apre. L'annuncio dice dove è arrivato,
@@ -101,7 +103,9 @@ Le righe restano dove sono, e l'editor dice perché, se si sposta:
 - un gruppo dentro sé stesso;
 - un livello insieme a degli oggetti, o un oggetto fra i livelli;
 - qualcosa dentro un livello o un gruppo che la sua trasformazione schiaccia,
-  perché non si inverte.
+  perché non si inverte;
+- qualcosa che un foglio di stile del disegno farebbe vedere diverso, quando
+  non si sa riscrivere com'era.
 
 ## Le miniature
 
