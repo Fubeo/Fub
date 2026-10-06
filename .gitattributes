@@ -19,3 +19,8 @@ apps/client/src/__fixtures__/scene/*.svg -text
 # `foreign-crlf-bom.svg` esiste per provare che la riscrittura dei
 # collegamenti lascia identici BOM e CRLF.
 crates/fub-format-svg/tests/fixtures/*.svg -text
+
+# I disegni sintetici del corpus delle forme dal tratto li scrive il loro
+# generatore (`recognize-corpus.ts`), e il test controlla che siano i suoi:
+# nelle revisioni si leggono il generatore e i titoli, non le coordinate.
+apps/client/src/__fixtures__/ink-shapes/sintetico-*.svg linguist-generated

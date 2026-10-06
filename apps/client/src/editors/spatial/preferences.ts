@@ -130,9 +130,9 @@ export function watchLevel(apply: (level: Level, custom: readonly string[]) => v
 /// conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, closed } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, shapes, closed } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  for (const flag of [guides, rulers, rulerGuides, bar]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  for (const flag of [guides, rulers, rulerGuides, bar, shapes]) if (flag !== undefined && typeof flag !== "boolean") return null;
   if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
   if (steps !== undefined && (typeof steps !== "object" || steps === null)) return null;
   const sections = closed === undefined ? DEFAULT_GRID.closed : validClosed(closed);
@@ -147,6 +147,7 @@ function gridOf(value: unknown): Grid | null {
     rulerGuides: (rulerGuides as boolean | undefined) ?? DEFAULT_GRID.rulerGuides,
     panel: (panel as boolean | null | undefined) ?? DEFAULT_GRID.panel,
     bar: (bar as boolean | undefined) ?? DEFAULT_GRID.bar,
+    shapes: (shapes as boolean | undefined) ?? DEFAULT_GRID.shapes,
     closed: sections,
   };
 }
