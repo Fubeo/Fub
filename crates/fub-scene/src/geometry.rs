@@ -407,7 +407,7 @@ impl BoundsBuilder {
     fn arc(
         &mut self,
         from: [f64; 2],
-        [rx, ry]: [f64; 2],
+        radii: [f64; 2],
         rotation: f64,
         large: bool,
         sweep: bool,
@@ -418,41 +418,19 @@ impl BoundsBuilder {
             // Estremi uguali: l'arco non si disegna (F.6.2).
             return;
         }
-        let (mut rx, mut ry) = (rx.abs(), ry.abs());
-        if rx == 0.0 || ry == 0.0 {
+        let Some(arc) = CenterArc::new(from, radii, rotation, large, sweep, to) else {
             self.include(m.apply(from));
             self.include(m.apply(to));
             return;
-        }
-        let (sin, cos) = rotation.to_radians().sin_cos();
-        let dx = (from[0] - to[0]) / 2.0;
-        let dy = (from[1] - to[1]) / 2.0;
-        let x1 = cos * dx + sin * dy;
-        let y1 = -sin * dx + cos * dy;
-        let lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
-        if lambda > 1.0 {
-            rx *= lambda.sqrt();
-            ry *= lambda.sqrt();
-        }
-        let numerator = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
-        let denominator = rx * rx * y1 * y1 + ry * ry * x1 * x1;
-        let mut coefficient = (numerator / denominator).max(0.0).sqrt();
-        if large == sweep {
-            coefficient = -coefficient;
-        }
-        let cx1 = coefficient * rx * y1 / ry;
-        let cy1 = -coefficient * ry * x1 / rx;
-        let center = [
-            cos * cx1 - sin * cy1 + (from[0] + to[0]) / 2.0,
-            sin * cx1 + cos * cy1 + (from[1] + to[1]) / 2.0,
-        ];
-        let angle = |ux: f64, uy: f64| uy.atan2(ux);
-        let theta1 = angle((x1 - cx1) / rx, (y1 - cy1) / ry);
-        let theta2 = angle((-x1 - cx1) / rx, (-y1 - cy1) / ry);
-        let mut delta = (theta2 - theta1).rem_euclid(TAU);
-        if !sweep && delta > 0.0 {
-            delta -= TAU;
-        }
+        };
+        let CenterArc {
+            center,
+            radii: [rx, ry],
+            sin,
+            cos,
+            theta1,
+            delta,
+        } = arc;
 
         // P(θ) = M·c + A·(cos θ, sin θ), con A = lineare(M) · R(φ) · diag(rx, ry).
         let [a, b, c, d, _, _] = m.0;
@@ -492,6 +470,232 @@ impl BoundsBuilder {
         self.include([o[0] - half[0], o[1] - half[1]]);
         self.include([o[0] + half[0], o[1] + half[1]]);
     }
+}
+
+/// Un arco ellittico in forma di centro, con la conversione delle note
+/// d'implementazione di SVG (F.6.5): i raggi già ingranditi se non bastavano a
+/// unire gli estremi, la rotazione dell'asse x, l'angolo d'inizio e l'ampiezza
+/// con il segno del verso.
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct CenterArc {
+    pub center: [f64; 2],
+    pub radii: [f64; 2],
+    pub sin: f64,
+    pub cos: f64,
+    pub theta1: f64,
+    pub delta: f64,
+}
+
+impl CenterArc {
+    /// L'arco da `from` a `to`; `None` se un raggio è nullo, e allora l'arco è
+    /// il segmento fra gli estremi (F.6.2). Gli estremi uguali, per cui l'arco
+    /// non si disegna, li esclude chi chiama.
+    pub fn new(
+        from: [f64; 2],
+        [rx, ry]: [f64; 2],
+        rotation: f64,
+        large: bool,
+        sweep: bool,
+        to: [f64; 2],
+    ) -> Option<CenterArc> {
+        let (mut rx, mut ry) = (rx.abs(), ry.abs());
+        if rx == 0.0 || ry == 0.0 {
+            return None;
+        }
+        let (sin, cos) = rotation.to_radians().sin_cos();
+        let dx = (from[0] - to[0]) / 2.0;
+        let dy = (from[1] - to[1]) / 2.0;
+        let x1 = cos * dx + sin * dy;
+        let y1 = -sin * dx + cos * dy;
+        let lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
+        if lambda > 1.0 {
+            rx *= lambda.sqrt();
+            ry *= lambda.sqrt();
+        }
+        let numerator = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
+        let denominator = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+        let mut coefficient = (numerator / denominator).max(0.0).sqrt();
+        if large == sweep {
+            coefficient = -coefficient;
+        }
+        let cx1 = coefficient * rx * y1 / ry;
+        let cy1 = -coefficient * ry * x1 / rx;
+        let center = [
+            cos * cx1 - sin * cy1 + (from[0] + to[0]) / 2.0,
+            sin * cx1 + cos * cy1 + (from[1] + to[1]) / 2.0,
+        ];
+        let angle = |ux: f64, uy: f64| uy.atan2(ux);
+        let theta1 = angle((x1 - cx1) / rx, (y1 - cy1) / ry);
+        let theta2 = angle((-x1 - cx1) / rx, (-y1 - cy1) / ry);
+        let mut delta = (theta2 - theta1).rem_euclid(TAU);
+        if !sweep && delta > 0.0 {
+            delta -= TAU;
+        }
+        Some(CenterArc {
+            center,
+            radii: [rx, ry],
+            sin,
+            cos,
+            theta1,
+            delta,
+        })
+    }
+
+    /// Il punto dell'arco all'angolo `theta`, nelle coordinate del path.
+    pub fn point(&self, theta: f64) -> [f64; 2] {
+        let (s, c) = theta.sin_cos();
+        let [rx, ry] = self.radii;
+        [
+            self.center[0] + self.cos * rx * c - self.sin * ry * s,
+            self.center[1] + self.sin * rx * c + self.cos * ry * s,
+        ]
+    }
+}
+
+/// In quante corde [`flatten`] divide una curva o un arco.
+pub(crate) const CURVE_STEPS: u32 = 16;
+
+/// I sottotracciati di un path come poligoni, nelle coordinate di `m`: ogni
+/// curva e ogni arco diventano [`CURVE_STEPS`] corde. Un poligono si intende
+/// chiuso, come un sottotracciato quando lo si riempie. Serve a dire se un
+/// punto sta dentro una figura piena, non a disegnarla: la corda di un quarto
+/// d'ellisse in sedici parti si scosta dall'arco di meno di due millesimi del
+/// raggio.
+pub(crate) fn flatten(segments: &[Segment], m: &Matrix) -> Vec<Vec<[f64; 2]>> {
+    let mut polygons = Vec::new();
+    let mut polygon: Vec<[f64; 2]> = Vec::new();
+    let mut current = [0.0, 0.0];
+    let mut start = [0.0, 0.0];
+    let close = |polygon: &mut Vec<[f64; 2]>, polygons: &mut Vec<Vec<[f64; 2]>>| {
+        if polygon.len() > 2 {
+            polygons.push(std::mem::take(polygon));
+        }
+        polygon.clear();
+    };
+    let steps = (1..=CURVE_STEPS).map(|k| f64::from(k) / f64::from(CURVE_STEPS));
+    for segment in segments {
+        if polygon.is_empty() && !matches!(segment, Segment::Move(_)) {
+            polygon.push(m.apply(current));
+        }
+        match *segment {
+            Segment::Move(p) => {
+                close(&mut polygon, &mut polygons);
+                polygon.push(m.apply(p));
+                current = p;
+                start = p;
+            }
+            Segment::Line(p) => {
+                polygon.push(m.apply(p));
+                current = p;
+            }
+            Segment::Quad(c, p) => {
+                for t in steps.clone() {
+                    let u = 1.0 - t;
+                    polygon.push(m.apply([
+                        u * u * current[0] + 2.0 * u * t * c[0] + t * t * p[0],
+                        u * u * current[1] + 2.0 * u * t * c[1] + t * t * p[1],
+                    ]));
+                }
+                current = p;
+            }
+            Segment::Cubic(c1, c2, p) => {
+                for t in steps.clone() {
+                    let u = 1.0 - t;
+                    let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                    polygon.push(m.apply([
+                        a * current[0] + b * c1[0] + c * c2[0] + d * p[0],
+                        a * current[1] + b * c1[1] + c * c2[1] + d * p[1],
+                    ]));
+                }
+                current = p;
+            }
+            Segment::Arc {
+                radii,
+                rotation,
+                large,
+                sweep,
+                to,
+            } => {
+                if current != to {
+                    match CenterArc::new(current, radii, rotation, large, sweep, to) {
+                        Some(arc) => {
+                            for t in steps.clone() {
+                                polygon.push(m.apply(arc.point(arc.theta1 + arc.delta * t)));
+                            }
+                        }
+                        None => polygon.push(m.apply(to)),
+                    }
+                }
+                current = to;
+            }
+            Segment::Close => {
+                close(&mut polygon, &mut polygons);
+                current = start;
+            }
+        }
+    }
+    close(&mut polygon, &mut polygons);
+    polygons
+}
+
+/// Il numero di avvolgimento di `p` intorno ai poligoni: diverso da zero se
+/// `p` sta dentro con la regola `nonzero`, quella di SVG quando `fill-rule`
+/// manca, e §4 non lo ammette. Un lato conta se attraversa l'orizzontale di
+/// `p` salendo o scendendo, con l'estremo basso compreso e l'alto escluso:
+/// così un vertice sull'orizzontale conta una volta sola.
+pub(crate) fn winding(polygons: &[Vec<[f64; 2]>], p: [f64; 2]) -> i32 {
+    let mut winding = 0;
+    for polygon in polygons {
+        for (i, &a) in polygon.iter().enumerate() {
+            let b = polygon[(i + 1) % polygon.len()];
+            let side = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
+            if a[1] <= p[1] {
+                if b[1] > p[1] && side > 0.0 {
+                    winding += 1;
+                }
+            } else if b[1] <= p[1] && side < 0.0 {
+                winding -= 1;
+            }
+        }
+    }
+    winding
+}
+
+/// I segmenti di un'ellisse di centro `center` e raggi `radii`: quattro archi
+/// a partire dal punto a destra del centro, nel verso di SVG.
+pub(crate) fn ellipse_path([cx, cy]: [f64; 2], [rx, ry]: [f64; 2]) -> Vec<Segment> {
+    let arc = |to: [f64; 2]| Segment::Arc {
+        radii: [rx, ry],
+        rotation: 0.0,
+        large: false,
+        sweep: true,
+        to,
+    };
+    vec![
+        Segment::Move([cx + rx, cy]),
+        arc([cx, cy + ry]),
+        arc([cx - rx, cy]),
+        arc([cx, cy - ry]),
+        arc([cx + rx, cy]),
+        Segment::Close,
+    ]
+}
+
+/// I segmenti di un poligono o di una polilinea: SVG riempie anche la
+/// polilinea, come se fosse chiusa.
+pub(crate) fn points_path(points: &[[f64; 2]]) -> Vec<Segment> {
+    let mut segments = Vec::with_capacity(points.len() + 1);
+    for (i, &p) in points.iter().enumerate() {
+        segments.push(if i == 0 {
+            Segment::Move(p)
+        } else {
+            Segment::Line(p)
+        });
+    }
+    if !segments.is_empty() {
+        segments.push(Segment::Close);
+    }
+    segments
 }
 
 /// Le radici reali di `a·t² + b·t + c`, anche quando l'equazione degenera in
@@ -554,6 +758,49 @@ pub(crate) fn rect_path(x: f64, y: f64, w: f64, h: f64, rx: f64, ry: f64) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn polygons(d: &str, m: Matrix) -> Vec<Vec<[f64; 2]>> {
+        flatten(&parse_path(d).unwrap(), &m)
+    }
+
+    #[test]
+    fn flattened_shapes_wind_around_the_points_inside() {
+        let square = "M0 0 L10 0 L10 10 L0 10 Z";
+        assert_ne!(winding(&polygons(square, Matrix::IDENTITY), [5.0, 5.0]), 0);
+        assert_eq!(winding(&polygons(square, Matrix::IDENTITY), [15.0, 5.0]), 0);
+        // Con `nonzero` un buco disegnato al contrario resta vuoto, uno nello
+        // stesso verso si riempie.
+        let hole = "M0 0 L10 0 L10 10 L0 10 Z M3 3 L3 7 L7 7 L7 3 Z";
+        assert_eq!(winding(&polygons(hole, Matrix::IDENTITY), [5.0, 5.0]), 0);
+        assert_ne!(winding(&polygons(hole, Matrix::IDENTITY), [1.0, 5.0]), 0);
+        let same = "M0 0 L10 0 L10 10 L0 10 Z M3 3 L7 3 L7 7 L3 7 Z";
+        assert_eq!(
+            winding(&polygons(same, Matrix::IDENTITY), [5.0, 5.0]).abs(),
+            2
+        );
+        // Gli archi e le curve seguono la loro forma.
+        let ellipse = flatten(&ellipse_path([0.0, 0.0], [10.0, 5.0]), &Matrix::IDENTITY);
+        assert_ne!(winding(&ellipse, [9.0, 0.0]), 0);
+        assert_eq!(winding(&ellipse, [9.0, 4.0]), 0);
+        let bulge = polygons("M0 0 Q5 10 10 0 Z", Matrix::IDENTITY);
+        assert_ne!(winding(&bulge, [5.0, 4.0]), 0);
+        assert_eq!(winding(&bulge, [5.0, 6.0]), 0);
+        // La matrice sposta i poligoni.
+        let moved = polygons(square, Matrix::translate(100.0, 0.0));
+        assert_ne!(winding(&moved, [105.0, 5.0]), 0);
+        assert_eq!(winding(&moved, [5.0, 5.0]), 0);
+        // Un sottotracciato aperto si riempie come se fosse chiuso; una
+        // linea non ha area.
+        assert_ne!(
+            winding(&polygons("M0 0 L10 0 L10 10", Matrix::IDENTITY), [8.0, 2.0]),
+            0
+        );
+        assert!(polygons("M0 0 L10 10", Matrix::IDENTITY).is_empty());
+        // Dopo `Z` senza `M` il sottotracciato nuovo riparte dall'inizio.
+        let again = polygons("M0 0 L10 0 L10 10 Z L0 10 L-10 10 Z", Matrix::IDENTITY);
+        assert_eq!(again.len(), 2);
+        assert_eq!(again[1][0], [0.0, 0.0]);
+    }
 
     fn bounds(d: &str, m: Matrix) -> Bounds {
         let mut b = BoundsBuilder::default();

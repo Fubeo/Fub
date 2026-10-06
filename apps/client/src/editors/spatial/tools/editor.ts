@@ -124,7 +124,7 @@ import { BoundsBuilder, type Bounds } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
-import { MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
+import { auditScene, MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
 import type { Role, Tool } from "../scene/analysis";
@@ -197,7 +197,7 @@ import {
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { lookOf as selectionLook, lookOps, styleOf, styleOps, type Style } from "./look";
+import { lookOf as selectionLook, lookOps, styleOf, styleOps, type LookChange, type Style } from "./look";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
@@ -328,6 +328,8 @@ import {
 import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
+import { createAccessPanel } from "./accessibility-panel";
+import { overlaps, problemsOf, readingOrder, type AuditCode, type Problem } from "./audit";
 import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "./clipboard";
 import {
   browserCodec,
@@ -363,7 +365,7 @@ import {
   type Shift,
 } from "./layers";
 import { createInspector } from "./inspector";
-import { cleanName, nameable, nameOps } from "./naming";
+import { cleanName, decorative, decorativeOps, NAME_MAX, nameable, nameOps } from "./naming";
 import { createObjectTree, type TreeDrop, type TreeEntry, type TreeKind, type TreeThumbnail } from "./objects";
 import { placeOps, type Place } from "./place";
 import {
@@ -663,6 +665,10 @@ const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", 
 /// foglio (`structure.css`).
 const PANEL_ROOM_REM = 36;
 
+/// Quanto aspetta la verifica dell'accessibilità, dopo l'ultimo cambio del
+/// disegno, prima di rileggerlo: rileggerlo costa quanto aprirlo.
+const AUDIT_MS = 250;
+
 /// Il tasto che mostra e nasconde gli attributi, dal livello Esperto: lo
 /// stesso dell'editor XML di Inkscape.
 const ATTRIBUTES_BINDING = "Mod-Shift-x";
@@ -848,6 +854,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-selection": ["M4 7V4h3", "M10 4h4", "M17 4h3v3", "M20 10v4", "M20 17v3h-3", "M14 20h-4", "M7 20H4v-3", "M4 14v-4"],
   "draw-back": ["M10 6l-6 6 6 6", "M4 12h16"],
   "draw-history": ["M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5", "M3.5 4v4.5H8", "M12 7.5V12l3 2"],
+  "draw-access": ["M12 2.75a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5z", "M5 8.5l7 1.5 7-1.5", "M12 10v4.5", "M8.5 21l3.5-6.5 3.5 6.5"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -1857,6 +1864,35 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncHistory();
   });
 
+  // La verifica dell'accessibilità, dal livello Standard: i problemi del
+  // disegno con le loro correzioni, e l'ordine di lettura. Il disegno si
+  // rilegge soltanto col pannello aperto. Ciò che ha trovato nel testo
+  // `text`, e ciò che il pannello mostra.
+  let audited: { readonly text: string; readonly problems: readonly Problem[] } | null = null;
+  let accessShown: {
+    readonly problems: readonly Problem[];
+    readonly items: readonly Item[];
+    readonly selected: string | null;
+    readonly editable: boolean;
+  } | null = null;
+  let auditTimer: ReturnType<typeof setTimeout> | undefined;
+  life.add(() => clearTimeout(auditTimer));
+  const accessPanel = createAccessPanel(life, {
+    onGo: (key) => goToObject(key),
+    onFix: (problem) => fixProblem(problem),
+    onDescribe: (key, text) => describeImage(key, text),
+    onDecorative: (key) => decorateImage(key),
+    onMove: (key, later, confirmed) => moveInReading(key, later, confirmed),
+    onLeave: () => surface.focus({ preventScroll: true }),
+  });
+  accessPanel.element.hidden = true;
+  relabels.push(() => {
+    accessNames.clear();
+    accessShown = null;
+    accessPanel.relabel();
+    syncAccess();
+  });
+
   // Gli attributi dell'oggetto scelto, dal livello Esperto: chiusi finché
   // qualcuno non li apre, sotto l'albero se è aperto anche quello.
   const inspector = createInspector(life, {
@@ -1935,6 +1971,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const historyButton = button(viewGroup, "draw-button", () => t("draw.history"), "draw-history", () => showHistory(historyPanel.element.hidden));
   historyButton.setAttribute("aria-expanded", "false");
   historyButton.setAttribute("aria-controls", historyPanel.element.id);
+  const accessButton = button(viewGroup, "draw-button", () => t("draw.access"), "draw-access", () => showAccess(accessPanel.element.hidden));
+  accessButton.setAttribute("aria-expanded", "false");
+  accessButton.setAttribute("aria-controls", accessPanel.element.id);
   // Gli attributi, dal livello Esperto.
   const attributesButton = button(viewGroup, "draw-button", () => t("draw.attributes"), "draw-attributes", () => showAttributes(inspector.element.hidden));
   attributesButton.setAttribute("aria-expanded", "false");
@@ -2149,15 +2188,61 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     progressStop.title = `${text} (Esc)`;
   });
 
+  // La descrizione delle immagini appena entrate, dallo Standard: in fondo al
+  // foglio, una alla volta, col campo, «Scrivi», «Decorativa» e «Salta». Non
+  // è una finestra: il disegno resta di chi lo fa, e la barra aspetta.
+  const describeBar = document.createElement("div");
+  describeBar.className = "draw-describe";
+  describeBar.setAttribute("role", "group");
+  describeBar.hidden = true;
+  const describeLabel = document.createElement("label");
+  describeLabel.className = "draw-describe-label";
+  describeLabel.id = identifier("draw-describe");
+  const describeInput = document.createElement("input");
+  describeInput.type = "text";
+  describeInput.className = "draw-describe-input";
+  describeInput.id = identifier("draw-describe-input");
+  describeInput.autocomplete = "off";
+  describeInput.maxLength = NAME_MAX;
+  describeLabel.htmlFor = describeInput.id;
+  describeBar.setAttribute("aria-labelledby", describeLabel.id);
+  const describeHint = document.createElement("span");
+  describeHint.className = "sr-only";
+  describeHint.id = identifier("draw-describe-hint");
+  describeInput.setAttribute("aria-describedby", describeHint.id);
+  const describeButton = (action: string): HTMLButtonElement => {
+    const control = document.createElement("button");
+    control.type = "button";
+    control.className = "draw-button draw-describe-action";
+    control.dataset.action = action;
+    return control;
+  };
+  const describeWrite = describeButton("write");
+  const describeDecorative = describeButton("decorative");
+  const describeSkip = describeButton("skip");
+  describeBar.append(describeLabel, describeInput, describeHint, describeWrite, describeDecorative, describeSkip);
+  relabels.push(() => {
+    describeInput.placeholder = t("draw.access.describe.placeholder");
+    describeHint.textContent = t("draw.describe.hint");
+    describeWrite.textContent = t("draw.describe.write");
+    describeDecorative.textContent = t("draw.access.fix.decorative");
+    describeDecorative.setAttribute("aria-label", t("draw.access.fix.decorative.label"));
+    describeSkip.textContent = t("draw.describe.skip");
+    describeSkip.setAttribute("aria-label", t("draw.describe.skip.label"));
+    describeLabel.textContent = t("draw.describe");
+    showDescription();
+  });
+
   // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
-  // oggetti, le proprietà, gli attributi e, in fondo, la cronologia.
+  // oggetti, le proprietà, gli attributi e, in fondo, la cronologia e
+  // l'accessibilità.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(tree.element, panel.element, inspector.element, historyPanel.element);
+  dock.append(tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, dock);
@@ -2362,11 +2447,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let coordinates: Intl.NumberFormat | null = null;
   const numberText = (value: number): string =>
     (coordinates ??= new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 1 })).format(Math.round(value * 10) / 10 || 0);
+  /// Il formato di un contrasto o di un corpo detti a voce, al centesimo.
+  let hundredths: Intl.NumberFormat | null = null;
+  const hundredthsText = (value: number): string =>
+    (hundredths ??= new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 2, useGrouping: false })).format(value);
   relabels.push(() => {
     percent = null;
     degrees = null;
     showTurn(true);
     coordinates = null;
+    hundredths = null;
     unitFormats = null;
     tickFormats.clear();
     showZoom(true);
@@ -3548,6 +3638,316 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     });
   }
 
+  /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
+  /// Chiusa, dimentica ciò che ha letto.
+  function showAccess(open: boolean): void {
+    if (open && !has("accessibility")) return;
+    if (!open && accessPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    accessPanel.element.hidden = !open;
+    accessButton.setAttribute("aria-expanded", String(open));
+    syncDock();
+    accessShown = null;
+    if (open) {
+      syncAccess(true);
+      accessPanel.focus();
+    } else {
+      clearTimeout(auditTimer);
+      audited = null;
+      accessNames.clear();
+    }
+  }
+
+  /// I problemi del testo `text`; nessuno se non si legge.
+  const auditOf = (text: string): readonly Problem[] => {
+    try {
+      const audit = auditScene(text);
+      return problemsOf(audit.scene, audit.measures);
+    } catch {
+      return [];
+    }
+  };
+
+  /// Il nome a parole di ogni oggetto della verifica, come nell'albero, per
+  /// chiave: si rifà a ogni disegno nuovo.
+  const accessNames = new Map<string, string>();
+  const accessName = (key: string): string => {
+    let name = accessNames.get(key);
+    if (name === undefined) {
+      const node = outlineNow().byKey.get(key);
+      name = node === undefined ? key : describeNode(node, currentIndex().get(key) ?? undefined);
+      accessNames.set(key, name);
+    }
+    return name;
+  };
+
+  /// Porta la verifica, se è aperta, al disegno di adesso. L'ordine di
+  /// lettura segue subito; i problemi di un disegno cambiato si rileggono un
+  /// momento dopo l'ultimo cambio, o subito con `now`.
+  function syncAccess(now = false): void {
+    if (accessPanel.element.hidden) return;
+    const text = engine.text;
+    if (audited === null || audited.text !== text) {
+      clearTimeout(auditTimer);
+      if (now || audited === null) audited = { text, problems: auditOf(text) };
+      else auditTimer = setTimeout(() => syncAccess(true), AUDIT_MS);
+    }
+    const { items, nodes } = outlineNow();
+    const selected = selection.length === 1 ? selection[0]! : null;
+    const canEdit = editable();
+    if (accessShown !== null && accessShown.problems === audited.problems && accessShown.items === items && accessShown.selected === selected && accessShown.editable === canEdit) return;
+    if (accessShown?.items !== items) accessNames.clear();
+    accessShown = { problems: audited.problems, items, selected, editable: canEdit };
+    // Un oggetto che non si sceglie, bloccato o fuori dal gruppo isolato, non
+    // si corregge da qui: ci si va, e si dice perché.
+    const index = currentIndex();
+    const problems = audited.problems.map((problem) =>
+      problem.key === null || problem.fix === null || index.get(problem.key) !== null ? problem : { ...problem, fix: null },
+    );
+    accessPanel.update({ problems, reading: readingOrder(nodes), nameOf: accessName, selected, editable: canEdit });
+  }
+
+  /// Il problema `code` dell'oggetto `key` nel disegno di adesso, letto di
+  /// nuovo se è cambiato; `null` se non c'è più.
+  const problemNow = (code: AuditCode, key: string | null): Problem | null => {
+    syncAccess(true);
+    return audited?.problems.find((problem) => problem.code === code && problem.key === key) ?? null;
+  };
+
+  /// Sceglie l'oggetto `key` e lo mostra; uno che non si sceglie lo dice.
+  function goToObject(key: string): void {
+    cancelGesture();
+    const unit = currentIndex().get(key);
+    if (unit === null) {
+      announce(t("draw.access.unreachable", { name: accessName(key) }));
+      return;
+    }
+    select([key]);
+    frameBounds(unit.bounds);
+    announceSelection();
+  }
+
+  /// La selezione di prima, con l'oggetto `key` che ora si chiama `now`.
+  const renamedIn = (key: string, now: string): void => {
+    if (now !== key && selection.includes(key)) select(selection.map((each) => (each === key ? now : each)));
+  };
+
+  /// Corregge `stale`, com'è nel disegno di adesso, in un passo.
+  function fixProblem(stale: Problem): void {
+    const problem = problemNow(stale.code, stale.key);
+    const fix = problem?.fix ?? null;
+    if (problem === null || fix === null) return;
+    if (fix.kind === "title") {
+      titleInput.focus();
+      titleInput.select();
+      return;
+    }
+    const model = engine.model;
+    const unit = problem.key === null ? null : currentIndex().get(problem.key);
+    if (fix.kind === "describe" || model === null || unit === null || !editable()) return;
+    cancelGesture();
+    const change: LookChange = fix.kind === "size" ? { size: fix.size } : fix.paint === "fill" ? { fill: fix.color } : { stroke: fix.color };
+    const restyled = lookOps(model, [unit], change, newIds());
+    if (restyled.ops.length === 0) return;
+    const name = accessName(unit.key);
+    if (commit(fix.kind === "size" ? "draw.action.font_size" : fix.paint === "fill" ? "draw.action.fill" : "draw.action.outline_color", asGesture(restyled.ops)) === null) return;
+    renamedIn(unit.key, restyled.keys[0] ?? unit.key);
+    syncAccess(true);
+    announce(
+      fix.kind === "size"
+        ? t("draw.access.fixed.size", { name, size: hundredthsText(fix.size) })
+        : t("draw.access.fixed.color", { name, color: fix.color, ratio: hundredthsText(Math.floor(fix.ratio * 100) / 100) }),
+    );
+  }
+
+  /// Dà all'immagine `key` la descrizione `text`, il suo titolo, in un
+  /// passo. Vero se l'ha scritta.
+  function writeDescription(key: string, text: string): boolean {
+    const model = engine.model;
+    const node = outlineNow().byKey.get(key);
+    if (model === null || node === undefined || currentIndex().get(key) === null || !editable()) return false;
+    cancelGesture();
+    const change = nameOps(model, node.item, text, newIds());
+    if (change === "foreign") {
+      announce(t("draw.rename.foreign"));
+      return false;
+    }
+    if (change.ops.length === 0 || commit("draw.action.describe", asGesture(change.ops)) === null) return false;
+    renamedIn(key, change.keys[0] ?? key);
+    announce(t("draw.access.described", { text }));
+    return true;
+  }
+
+  /// Dichiara decorativa l'immagine `key`, in un passo: lo screen reader la
+  /// salta. Vero se l'ha dichiarata.
+  function writeDecorative(key: string): boolean {
+    const model = engine.model;
+    const node = outlineNow().byKey.get(key);
+    if (model === null || node === undefined || currentIndex().get(key) === null || !editable()) return false;
+    cancelGesture();
+    const name = accessName(key);
+    const change = decorativeOps(model, node.item, newIds());
+    if (change.ops.length === 0 || commit("draw.action.decorative", asGesture(change.ops)) === null) return false;
+    renamedIn(key, change.keys[0] ?? key);
+    announce(t("draw.access.decorated", { name }));
+    return true;
+  }
+
+  /// Dalla verifica: descrive l'immagine `key`, se le serve ancora.
+  function describeImage(key: string, text: string): void {
+    if (problemNow("S012", key) !== null && writeDescription(key, text)) syncAccess(true);
+  }
+
+  /// Dalla verifica: dichiara decorativa l'immagine `key`, se le serve
+  /// ancora una descrizione.
+  function decorateImage(key: string): void {
+    if (problemNow("S012", key) !== null && writeDecorative(key)) syncAccess(true);
+  }
+
+  // --- La descrizione delle immagini appena entrate -------------------------------
+
+  /// Le immagini appena entrate a cui la barra chiede una descrizione, e
+  /// quella di adesso.
+  let asked: { readonly keys: readonly string[]; at: number } | null = null;
+
+  /// Vero se l'immagine `key` c'è, si sceglie e non ha né una descrizione né
+  /// la dichiarazione di essere decorativa.
+  const undescribed = (key: string): boolean => {
+    const model = engine.model;
+    const node = outlineNow().byKey.get(key);
+    if (model === null || node === undefined || node.item.role !== "image" || currentIndex().get(key) === null) return false;
+    return (node.item.title ?? "").trim() === "" && !decorative(model, node.item);
+  };
+
+  /// Chiede la descrizione delle immagini `keys`, appena entrate, se
+  /// l'interfaccia ha la verifica dell'accessibilità; il fuoco va al campo.
+  function askDescriptions(keys: readonly string[]): void {
+    if (!has("accessibility") || !editable() || keys.length === 0) return;
+    asked = { keys, at: -1 };
+    nextDescription(true);
+  }
+
+  /// Passa alla prossima immagine che ha ancora bisogno di una descrizione,
+  /// e la sceglie se sono più d'una; senza, chiude la barra.
+  function nextDescription(focus: boolean): void {
+    if (asked === null) return;
+    let at = asked.at + 1;
+    while (at < asked.keys.length && !undescribed(asked.keys[at]!)) at++;
+    if (at >= asked.keys.length) {
+      closeDescriptions();
+      return;
+    }
+    asked.at = at;
+    describeInput.value = "";
+    showDescription();
+    if (asked.keys.length > 1) select([asked.keys[at]!]);
+    if (focus) describeInput.focus({ preventScroll: true });
+  }
+
+  /// Chiude la barra. Se si descrivevano più immagini e la scelta è ancora
+  /// quella della barra, tornano scelte tutte quelle che restano.
+  function closeDescriptions(): void {
+    const was = asked;
+    if (was === null) return;
+    asked = null;
+    const focused = describeBar.contains(document.activeElement);
+    describeBar.hidden = true;
+    const current = was.keys[was.at];
+    if (was.keys.length > 1 && current !== undefined && selection.length === 1 && selection[0] === current) {
+      select(was.keys.filter((key) => currentIndex().get(key) !== null));
+    }
+    if (focused) surface.focus({ preventScroll: true });
+  }
+
+  /// La barra, com'è adesso: il suo nome dice quale immagine, se sono più
+  /// d'una.
+  function showDescription(): void {
+    if (asked === null) return;
+    describeBar.hidden = false;
+    describeLabel.textContent =
+      asked.keys.length === 1 ? t("draw.describe") : t("draw.describe.of", { n: asked.at + 1, count: asked.keys.length });
+  }
+
+  /// Dopo ogni cambio: la barra va avanti se l'immagine di adesso non le
+  /// chiede più niente (descritta altrove, tolta, annullata), e si chiude
+  /// se l'interfaccia o il documento non la vogliono più.
+  function syncDescriptions(): void {
+    if (asked === null) return;
+    if (!has("accessibility") || !editable()) {
+      closeDescriptions();
+      return;
+    }
+    const current = asked.keys[asked.at];
+    if (current === undefined || !undescribed(current)) nextDescription(describeBar.contains(document.activeElement));
+  }
+
+  /// «Scrivi» e Invio: la descrizione del campo, e poi la prossima.
+  function writeAsked(): void {
+    const key = asked?.keys[asked.at];
+    if (key === undefined) return;
+    const text = cleanName(describeInput.value);
+    if (text === "") {
+      announce(t("draw.describe.empty"));
+      describeInput.focus({ preventScroll: true });
+      return;
+    }
+    if (!writeDescription(key, text)) {
+      describeInput.focus({ preventScroll: true });
+      return;
+    }
+    // Di solito il cambio stesso ha già portato la barra avanti.
+    if (asked?.keys[asked.at] === key) nextDescription(true);
+  }
+
+  life.listen(describeWrite, "click", () => writeAsked());
+  life.listen(describeDecorative, "click", () => {
+    const key = asked?.keys[asked.at];
+    if (key === undefined) return;
+    if (!writeDecorative(key)) describeInput.focus({ preventScroll: true });
+    else if (asked?.keys[asked.at] === key) nextDescription(true);
+  });
+  life.listen(describeSkip, "click", () => nextDescription(true));
+  life.listen(describeInput, "keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    writeAsked();
+  });
+  // Esc chiude la barra: le immagini che restano senza descrizione le
+  // elenca la verifica.
+  life.listen(describeBar, "keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeDescriptions();
+    surface.focus({ preventScroll: true });
+  });
+
+  /// Sposta l'oggetto `key` di un posto nell'ordine di lettura, dopo il
+  /// vicino seguente se `later`: è anche l'ordine in cui si dipinge, e
+  /// l'oggetto passa sopra o sotto il vicino. Se i due si sovrappongono e lo
+  /// spostamento non è `confirmed`, non si fa: torna l'avviso.
+  function moveInReading(key: string, later: boolean, confirmed: boolean): string | null {
+    const model = engine.model;
+    if (model === null || !editable()) return null;
+    const index = currentIndex();
+    const unit = index.get(key);
+    if (unit === null) {
+      announce(t("draw.access.unreachable", { name: accessName(key) }));
+      return null;
+    }
+    const siblings = index.siblings(unit);
+    const neighbor = siblings[siblings.findIndex((each) => each.key === key) + (later ? 1 : -1)];
+    if (neighbor === undefined) {
+      announce(t(later ? "draw.access.move.last" : "draw.access.move.first"));
+      return null;
+    }
+    const names = { name: accessName(key), other: accessName(neighbor.key) };
+    if (!confirmed && overlaps(unit.bounds, neighbor.bounds)) return t(later ? "draw.access.move.above" : "draw.access.move.below", names);
+    cancelGesture();
+    if (!arrange("draw.action.reading", orderOps(model, index, [unit], later ? "forward" : "backward", newIds()), null, t("draw.order.styled"))) return null;
+    announce(t(later ? "draw.access.moved.later" : "draw.access.moved.earlier", names));
+    return null;
+  }
+
   /// Apre o chiude l'albero; aperto, il fuoco ci va.
   function showObjects(open: boolean): void {
     if (!open && tree.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
@@ -3645,7 +4045,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// attributi, che vogliono più spazio.
   function syncDock(): void {
     const nested = nestedNow();
-    dock.hidden = tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden;
+    dock.hidden = tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
     dock.toggleAttribute("data-wide", nested ? !panel.element.hidden : !inspector.element.hidden);
   }
 
@@ -4346,6 +4746,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     historyButton.hidden = !has("history");
     if (historyButton.hidden && !historyPanel.element.hidden) showHistory(false);
     syncHistory();
+    accessButton.hidden = !has("accessibility");
+    if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
+    syncAccess();
+    syncDescriptions();
     syncInspector();
     syncProperties();
     titleInput.disabled = !canEdit;
@@ -10024,6 +10428,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti della verifica dell'accessibilità, se le parti `at` la offrono.
+  const accessKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("accessibility")
+      ? [
+          {
+            title: t("draw.access"),
+            rows: [
+              ["ArrowUp ArrowDown Home End", t("draw.keys.access.walk")],
+              ["Enter Space", t("draw.keys.access.go")],
+              ["Alt-ArrowUp Alt-ArrowDown", t("draw.keys.access.move")],
+              ["Escape", t("draw.keys.access.leave")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti della selezione avanzata.
   const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("selection")
@@ -10110,6 +10530,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ],
     },
     ...historyKeys(at),
+    ...accessKeys(at),
   ];
 
   /// I tasti che i livelli sopra quello di adesso aggiungono, col livello da
@@ -10339,6 +10760,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const added = plural(keys.length, "draw.added.image.one", "draw.added.image.other");
     const now = switched ? ` ${t("draw.announce.tool", { tool: t(toolSpec("select").label) })}` : "";
     announce(`${added}${now} ${objects()}`);
+    askDescriptions(keys);
   };
 
   // --- Gli appunti --------------------------------------------------------------
@@ -10869,8 +11291,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       event.preventDefault();
       return;
     }
-    // I pannelli delle proprietà e degli attributi, e i campi dell'albero (la
-    // ricerca, il tipo e il nome), tengono i loro tasti: un `?` o un Canc
+    // I pannelli delle proprietà, degli attributi e dell'accessibilità, e i
+    // campi dell'albero (la ricerca, il tipo e il nome), tengono i loro tasti: un `?` o un Canc
     // scritti in un valore restano lì, le frecce cambiano un numero, e un Canc
     // sul pulsante che toglie un attributo non toglie l'oggetto. Passano i
     // tasti che portano agli attributi e a «Trasforma» e, fuori da un campo
@@ -10878,7 +11300,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const treeField =
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
       (tree.element.contains(event.target) || historyPanel.element.contains(event.target));
-    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField)) {
+    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target));
+    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
       const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
@@ -11186,6 +11609,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       dropBezier();
       engine = next;
       loads++;
+      closeDescriptions();
       history.clear();
       selection = [];
       chosen = null;

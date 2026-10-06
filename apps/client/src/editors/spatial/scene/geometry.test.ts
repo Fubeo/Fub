@@ -3,8 +3,12 @@
 // trasformate.
 
 import { describe, expect, it } from "vitest";
-import { BoundsBuilder, parsePath, rectPath, type Bounds } from "./geometry";
-import { IDENTITY, rotate, type Matrix, type Point } from "./matrix";
+import { BoundsBuilder, ellipsePath, flatten, parsePath, rectPath, winding, type Bounds } from "./geometry";
+import { IDENTITY, rotate, translate, type Matrix, type Point } from "./matrix";
+
+function polygons(d: string, m: Matrix): Point[][] {
+  return flatten(parsePath(d)!, m);
+}
 
 function bounds(d: string, m: Matrix): Bounds {
   const b = new BoundsBuilder();
@@ -64,6 +68,38 @@ describe("la geometria (geometry.rs)", () => {
       { kind: "close" },
       { kind: "line", to: [11, 11] },
     ]);
+  });
+
+  it("le figure appiattite girano intorno ai punti che contengono", () => {
+    const square = "M0 0 L10 0 L10 10 L0 10 Z";
+    expect(winding(polygons(square, IDENTITY), [5, 5])).not.toBe(0);
+    expect(winding(polygons(square, IDENTITY), [15, 5])).toBe(0);
+    // Con `nonzero` un buco disegnato al contrario resta vuoto, uno nello
+    // stesso verso si riempie.
+    const hole = "M0 0 L10 0 L10 10 L0 10 Z M3 3 L3 7 L7 7 L7 3 Z";
+    expect(winding(polygons(hole, IDENTITY), [5, 5])).toBe(0);
+    expect(winding(polygons(hole, IDENTITY), [1, 5])).not.toBe(0);
+    const same = "M0 0 L10 0 L10 10 L0 10 Z M3 3 L7 3 L7 7 L3 7 Z";
+    expect(Math.abs(winding(polygons(same, IDENTITY), [5, 5]))).toBe(2);
+    // Gli archi e le curve seguono la loro forma.
+    const ellipse = flatten(ellipsePath([0, 0], [10, 5]), IDENTITY);
+    expect(winding(ellipse, [9, 0])).not.toBe(0);
+    expect(winding(ellipse, [9, 4])).toBe(0);
+    const bulge = polygons("M0 0 Q5 10 10 0 Z", IDENTITY);
+    expect(winding(bulge, [5, 4])).not.toBe(0);
+    expect(winding(bulge, [5, 6])).toBe(0);
+    // La matrice sposta i poligoni.
+    const moved = polygons(square, translate(100, 0));
+    expect(winding(moved, [105, 5])).not.toBe(0);
+    expect(winding(moved, [5, 5])).toBe(0);
+    // Un sottotracciato aperto si riempie come se fosse chiuso; una linea
+    // non ha area.
+    expect(winding(polygons("M0 0 L10 0 L10 10", IDENTITY), [8, 2])).not.toBe(0);
+    expect(polygons("M0 0 L10 10", IDENTITY)).toEqual([]);
+    // Dopo `Z` senza `M` il sottotracciato nuovo riparte dall'inizio.
+    const again = polygons("M0 0 L10 0 L10 10 Z L0 10 L-10 10 Z", IDENTITY);
+    expect(again).toHaveLength(2);
+    expect(again[1]![0]).toEqual([0, 0]);
   });
 
   it("le curve contribuiscono coi loro estremi, non coi punti di controllo", () => {

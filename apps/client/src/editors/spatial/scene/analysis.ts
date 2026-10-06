@@ -7,14 +7,29 @@
 // testi anche se FubDraw non li modifica. Trova anche S001, S005 e S006.
 // [`Tally`] invece segue la classificazione, che gli passa ogni elemento
 // modificabile con il contesto ereditato dai contenitori: ne escono il
-// riepilogo di `fub.scene.summary` e S009, che riguardano la scena come la
+// riepilogo di `fub.scene.summary` e, con [`Legibility`], i controlli su come
+// il disegno si legge (S009, S012, S013), che riguardano la scena come la
 // modifica FubDraw.
 
+import { Legibility, type Measures } from "./accessibility";
 import { diagnostic, type Diagnostic } from "./diagnostics";
 import { BoundsBuilder, fmax, fmin, parsePath, rectPath } from "./geometry";
 import { apply, compose, IDENTITY, type Matrix, type Point } from "./matrix";
 import type { Span } from "./text";
-import { href, isJavascript, length, opacity, paint, points, transform, trim, type Paint, type Rgb } from "./values";
+import {
+  href,
+  isJavascript,
+  keyword,
+  length,
+  nonNegativeLength,
+  opacity,
+  paint,
+  points,
+  transform,
+  trim,
+  type Paint,
+  type Rgb,
+} from "./values";
 import {
   attrOf,
   isSvg,
@@ -33,8 +48,25 @@ import {
 /// Quanti byte decodificati può avere un'immagine incorporata (§11).
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-/// Il contrasto minimo fra un tratto e la carta (§12).
+/// Il contrasto minimo fra un tratto, o un testo grande, e ciò che ha sotto
+/// (§12).
 export const MIN_CONTRAST = 3;
+
+/// Il contrasto minimo fra un testo e ciò che ha sotto (§12).
+export const MIN_TEXT_CONTRAST = 4.5;
+
+/// Da quanti pixel a grandezza naturale un testo è grande, e gli basta
+/// [`MIN_CONTRAST`]: 18 punti, come in WCAG.
+export const LARGE_TEXT = 24;
+
+/// Da quanti pixel un testo in grassetto è grande: 14 punti.
+export const LARGE_BOLD_TEXT = (14 * 96) / 72;
+
+/// La grandezza minima di un testo a grandezza naturale, in pixel (§12).
+export const MIN_TEXT_SIZE = 12;
+
+/// La grandezza di un testo che non la dice, come nei browser.
+export const DEFAULT_FONT_SIZE = 16;
 
 /// Che cosa rappresenta un elemento modificabile (§4). `ngon` e `star` sono il
 /// poligono regolare e la stella sintetici, un `path` con `fub:shape` (§6);
@@ -174,11 +206,16 @@ export class Context {
     /// Un antenato ha `display="none"`.
     readonly hidden: boolean,
     /// Il `fill` in vigore; `null` se la radice ne ha uno che §4 non legge.
-    private readonly fillPaint: Paint | null,
+    private readonly fillValue: Paint | null,
     /// Il `fill-opacity` in vigore, come `fill`.
     private readonly fillOpacity: number | null,
     /// Il prodotto delle `opacity` dei contenitori.
     private readonly opacity: number,
+    /// Il `font-size` in vigore, in unità utente; `null` se la radice ne ha
+    /// uno che §4 non legge.
+    readonly fontSize: number | null,
+    /// Il `font-weight` in vigore è da grassetto: `bold` o da 700 in su.
+    readonly bold: boolean,
   ) {}
 
   /// Il contesto dei figli della radice. Della radice contano solo `fill` e
@@ -186,12 +223,16 @@ export class Context {
   static root(root: ElementNode): Context {
     const fill = valueOf(root, NS_NONE, "fill");
     const alpha = valueOf(root, NS_NONE, "fill-opacity");
+    const size = valueOf(root, NS_NONE, "font-size");
+    const weight = valueOf(root, NS_NONE, "font-weight");
     return new Context(
       IDENTITY,
       false,
       fill === undefined ? [0, 0, 0] : paint(fill),
       alpha === undefined ? 1 : opacity(alpha),
       1,
+      size === undefined ? DEFAULT_FONT_SIZE : nonNegativeLength(size),
+      weight !== undefined && bold(weight),
     );
   }
 
@@ -209,32 +250,64 @@ export class Context {
     const alpha = value("fill-opacity");
     const groupAlpha = value("opacity");
     const group = groupAlpha === undefined ? null : opacity(groupAlpha);
+    const size = value("font-size");
+    const weight = value("font-weight");
     return new Context(
       matrix,
       hidden,
-      fill === undefined ? this.fillPaint : paint(fill),
+      fill === undefined ? this.fillValue : paint(fill),
       alpha === undefined ? this.fillOpacity : opacity(alpha),
       group === null ? this.opacity : this.opacity * group,
+      size === undefined ? this.fontSize : nonNegativeLength(size),
+      weight === undefined ? this.bold : bold(weight),
+    );
+  }
+
+  /// Il contesto di una riga di `text`, un `tspan`: come [`Context.child`], ma
+  /// senza `transform`, che SVG non applica a un `tspan`.
+  line(tspan: ElementNode): Context {
+    const line = this.child(tspan);
+    return new Context(
+      this.matrix,
+      line.hidden,
+      line.fillValue,
+      line.fillOpacity,
+      line.opacity,
+      line.fontSize,
+      line.bold,
     );
   }
 
   /// Il colore del riempimento con la sua opacità totale; `null` se non si
   /// sa o se è `none`.
   fill(): [Rgb, number] | null {
-    if (this.fillPaint === null || this.fillOpacity === null || this.fillPaint === "none") return null;
-    return [this.fillPaint, this.fillOpacity * this.opacity];
+    const fill = this.fillPaint();
+    return fill === "none" ? null : fill;
+  }
+
+  /// Il riempimento in vigore, distinguendo ciò che non si sa: `null` se non
+  /// si sa, `"none"` se è `none`.
+  fillPaint(): [Rgb, number] | "none" | null {
+    if (this.fillValue === null || this.fillOpacity === null) return null;
+    if (this.fillValue === "none") return "none";
+    return [this.fillValue, this.fillOpacity * this.opacity];
   }
 
   /// Il colore della carta sul bianco della superficie; `null` se non si sa.
   paperColor(): Rgb | null {
     if (this.hidden) return WHITE;
-    if (this.fillPaint === null || this.fillOpacity === null) return null;
-    if (this.fillPaint === "none") return WHITE;
-    return over(this.fillPaint, this.fillOpacity * this.opacity, WHITE);
+    if (this.fillValue === null || this.fillOpacity === null) return null;
+    if (this.fillValue === "none") return WHITE;
+    return over(this.fillValue, this.fillOpacity * this.opacity, WHITE);
   }
 }
 
 export const WHITE: Rgb = [255, 255, 255];
+
+/// Vero per un `font-weight` da grassetto: `bold` o da 700 in su.
+function bold(weight: string): boolean {
+  return keyword("font-weight", weight) && ["bold", "700", "800", "900"].includes(trim(weight));
+}
 
 /// `f64::round`: la metà si allontana dallo zero, non va verso +∞ come
 /// `Math.round`.
@@ -285,9 +358,9 @@ export class Tally {
   /// Il colore della prima carta: `undefined` senza carta, `null` se non si
   /// sa.
   private paper: Rgb | null | undefined = undefined;
-  /// I tratti a penna col loro colore, da confrontare con la carta alla
-  /// fine: la carta può venire dopo.
-  private readonly pens: Array<[Span, [Rgb, number]]> = [];
+  /// I controlli su come il disegno si legge, da chiudere alla fine: la
+  /// carta può venire dopo.
+  private readonly legibility = new Legibility();
 
   /// Conta un blocco estraneo.
   foreign(): void {
@@ -318,10 +391,6 @@ export class Tally {
           const duration = Math.max(stroke.duration ?? 0, 0);
           // `saturating_add` su `i64`.
           this.ink.duration = Math.min(this.ink.duration + duration, I64_MAX);
-          if (stroke.tool === "pen") {
-            const fill = context.fill();
-            if (fill !== null) this.pens.push([span, fill]);
-          }
         }
         break;
       case "arrow":
@@ -348,24 +417,23 @@ export class Tally {
       default:
         break;
     }
-    if (!context.hidden) bounds(doc, element, role, context.matrix, this.bounds);
+    if (!context.hidden) {
+      bounds(doc, element, role, context.matrix, this.bounds);
+      this.legibility.element(doc, element, role, context, span, stroke);
+    }
   }
 
-  /// Chiude il conteggio: il riepilogo, più S009 per ogni tratto a penna
-  /// che contrasta poco con la carta.
+  /// Ciò che i controlli su come il disegno si legge hanno misurato, dopo
+  /// [`Tally.finish`].
+  get measures(): Measures {
+    return this.legibility.measures;
+  }
+
+  /// Chiude il conteggio: il riepilogo, più i controlli su come il disegno si
+  /// legge.
   finish(foreign: boolean, version: number | null, diagnostics: Diagnostic[]): Summary {
     // Senza carta il disegno sta sul bianco della superficie (§12).
-    const paper = this.paper === undefined ? WHITE : this.paper;
-    if (paper !== null) {
-      for (const [span, [rgb, alpha]] of this.pens) {
-        const ratio = contrast(over(rgb, alpha, paper), paper);
-        if (ratio < MIN_CONTRAST) {
-          // Troncato, non arrotondato: 2,996 non deve leggersi «3.00».
-          const shown = Math.floor(ratio * 100) / 100;
-          diagnostics.push(diagnostic("S009", span, shown.toFixed(2)));
-        }
-      }
-    }
+    this.legibility.finish(this.paper === undefined ? WHITE : this.paper, diagnostics);
     const b = this.bounds.finish();
     let bbox: BBox | null = null;
     if (b !== null) {
@@ -404,14 +472,14 @@ export function truncatedSummary(foreign: boolean, version: number | null): Summ
 }
 
 /// Una lunghezza di `element`, già validata da §4.
-function len(element: ElementNode, name: string): number | null {
+export function len(element: ElementNode, name: string): number | null {
   const value = valueOf(element, NS_NONE, name);
   return value === undefined ? null : length(value);
 }
 
 /// I raggi di un'ellisse o degli angoli di un rettangolo: in SVG 2 un raggio
 /// assente vale l'altro.
-function radii(element: ElementNode): Point {
+export function radii(element: ElementNode): Point {
   const rx = len(element, "rx");
   const ry = len(element, "ry");
   if (rx !== null && ry !== null) return [rx, ry];
@@ -490,7 +558,7 @@ function unrendered(element: ElementNode): boolean {
 /// Accoda a `out` il testo di `id` e dei suoi discendenti, in ordine: dati di
 /// carattere, CDATA e le entità che sono testo semplice. Una pila, non la
 /// ricorsione: un `tspan` può annidarne centomila.
-function textContent(doc: XmlDocument, id: NodeId, out: string[]): void {
+export function textContent(doc: XmlDocument, id: NodeId, out: string[]): void {
   const stack: Array<[NodeId, number]> = [[id, 0]];
   while (stack.length > 0) {
     const frame = stack[stack.length - 1]!;

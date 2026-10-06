@@ -48,6 +48,23 @@ export function nameOps(model: DocumentModel, item: { readonly path: readonly nu
   return node.kind === "container" ? nameContainer(model, node, name, ids) : nameLeaf(model, node, name, ids);
 }
 
+/// Le operazioni che dichiarano decorativa l'immagine `item`: uno screen
+/// reader la salta, e non le serve una descrizione. Nessuna operazione se lo
+/// è già. La chiave che torna è l'id dell'immagine.
+export function decorativeOps(model: DocumentModel, item: { readonly path: readonly number[] }, ids: NewIds): Arranged {
+  if (decorative(model, item)) return { ops: [], keys: [] };
+  const node = nodeOf(model, item);
+  const plan = new Plan(model, ids);
+  const id = plan.idOf(node);
+  plan.ops.push({ op: "set", id, attrs: { "aria-hidden": "true" } });
+  return plan.finish([id]);
+}
+
+/// Vero se l'immagine `item` è dichiarata decorativa.
+export function decorative(model: DocumentModel, item: { readonly path: readonly number[] }): boolean {
+  return elemOf(nodeOf(model, item))?.attrs["aria-hidden"]?.trim() === "true";
+}
+
 /// Vero se l'oggetto `item` sa cambiare nome: un'unità con parti o nomi che
 /// un'operazione non sa scrivere no, qualunque nome riceva.
 export function nameable(model: DocumentModel, item: { readonly path: readonly number[] }): boolean {

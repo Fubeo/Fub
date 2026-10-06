@@ -24,13 +24,18 @@ pub enum Code {
     S007,
     /// `<!DOCTYPE>` presente: sola lettura.
     S008,
-    /// Un tratto a penna contrasta con la carta meno di 3:1; l'evidenziatore
-    /// no, perché è fatto per stare sotto il testo.
+    /// Un tratto a penna o un testo contrastano poco con ciò che hanno sotto:
+    /// meno di 3:1 un tratto o un testo grande, meno di 4,5:1 un altro testo.
+    /// L'evidenziatore no, perché è fatto per stare sotto il testo.
     S009,
     /// Canali d'inchiostro sconosciuti.
     S010,
     /// `fub:units` o `fub:guides` fuori grammatica: si ignorano e restano.
     S011,
+    /// Un'immagine senza descrizione, e non dichiarata decorativa.
+    S012,
+    /// Un testo sotto i 12 pixel a grandezza naturale.
+    S013,
 }
 
 /// La gravità di una diagnostica.
@@ -47,10 +52,14 @@ impl Code {
     pub fn severity(self) -> Severity {
         match self {
             Code::S003 | Code::S004 => Severity::Error,
-            Code::S001 | Code::S005 | Code::S006 => Severity::Warning,
-            Code::S002 | Code::S007 | Code::S008 | Code::S009 | Code::S010 | Code::S011 => {
-                Severity::Info
-            }
+            Code::S001 | Code::S005 | Code::S006 | Code::S012 => Severity::Warning,
+            Code::S002
+            | Code::S007
+            | Code::S008
+            | Code::S009
+            | Code::S010
+            | Code::S011
+            | Code::S013 => Severity::Info,
         }
     }
 
@@ -65,9 +74,11 @@ impl Code {
             Code::S006 => "immagine incorporata oltre 5 MiB",
             Code::S007 => "versione del formato più recente di quella supportata: sola lettura",
             Code::S008 => "il documento ha un DOCTYPE: sola lettura",
-            Code::S009 => "il tratto contrasta con la carta meno di 3:1",
+            Code::S009 => "contrasta poco con ciò che ha sotto: un tratto o un testo grande vogliono 3:1, un testo 4,5:1",
             Code::S010 => "canali d'inchiostro sconosciuti: il tratto non si ridisegna",
             Code::S011 => "unità o guide del documento non valide: si ignorano e restano nel file",
+            Code::S012 => "immagine senza descrizione: chi non la vede non sa che cosa mostra",
+            Code::S013 => "testo sotto i 12 px a grandezza naturale",
         }
     }
 }
@@ -83,7 +94,7 @@ pub struct Diagnostic {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub span: Option<Span>,
     /// Il dettaglio: l'id ripetuto, l'errore dell'inchiostro, il contrasto
-    /// misurato.
+    /// misurato, la grandezza del testo.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }

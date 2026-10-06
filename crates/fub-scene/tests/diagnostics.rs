@@ -275,6 +275,251 @@ fn s009_a_pen_stroke_that_fades_into_the_paper() {
     assert_eq!(details(&scene, Code::S009), ["1.32"]);
 }
 
+/// Un testo di una riga, con gli attributi dati sul `text`.
+fn label(attributes: &str, line: &str) -> String {
+    format!(r#"<text x="20" y="50" {attributes}><tspan x="20" dy="0">{line}</tspan></text>"#)
+}
+
+#[test]
+fn s009_a_text_that_fades_into_what_lies_under_it() {
+    // Un testo normale vuole 4,5:1: il verde della tavolozza ne ha 3,42
+    // sul bianco, il nero sul blu 4,04. Il fondo è la carta con sopra le
+    // forme piene che coprono l'inizio della riga, composte con le loro
+    // opacità, e un testo bianco sul bianco non si legge.
+    let black_box = r##"<rect x="0" y="0" width="100" height="100" fill="#000000"/>"##;
+    let blue_box = r##"<rect x="0" y="0" width="100" height="100" fill="#0072b2"/>"##;
+    for (body, detail) in [
+        (label(r##"fill="#f0e442""##, "Sole"), "1.32"),
+        (label(r##"fill="#009e73""##, "Prato"), "3.42"),
+        (format!("{blue_box}{}", label("", "Mare")), "4.04"),
+        (label(r##"fill="#ffffff""##, "Neve"), "1.00"),
+        // Un rettangolo nero a metà: il fondo è grigio, e il bianco ci sta
+        // sotto 4,5:1.
+        (
+            format!(
+                r##"<rect width="100" height="100" fill="#000000" opacity="0.5"/>{}"##,
+                label(r##"fill="#ffffff""##, "Nebbia")
+            ),
+            "3.94",
+        ),
+        // Una forma dipinta dopo il testo gli sta sopra, non sotto.
+        (
+            format!("{}{black_box}", label(r##"fill="#ffffff""##, "Sotto")),
+            "1.00",
+        ),
+        // Il colore di una riga vince su quello del testo; conta la riga
+        // peggiore.
+        (
+            r##"<text x="20" y="50"><tspan x="20" dy="0">Uno</tspan><tspan x="20" dy="20" fill="#f0e442">Due</tspan></text>"##
+                .to_owned(),
+            "1.32",
+        ),
+        // Fuori dall'ellisse, anche se dentro il suo rettangolo.
+        (
+            format!(
+                r##"<ellipse cx="60" cy="60" rx="60" ry="60" fill="#000000"/>{}"##,
+                r##"<text x="5" y="10" fill="#ffffff"><tspan x="5" dy="0">Angolo</tspan></text>"##
+            ),
+            "1.00",
+        ),
+    ] {
+        let scene = on_paper("#ffffff", &body);
+        let found = of(&scene, Code::S009);
+        assert_eq!(found.len(), 1, "{body}");
+        assert_eq!(found[0].severity, Severity::Info);
+        assert_eq!(found[0].detail.as_deref(), Some(detail), "{body}");
+    }
+    for body in [
+        // Il nero sul bianco, il blu della tavolozza (5,19:1), il bianco
+        // sul nero di un rettangolo, di un'ellisse, di un poligono, di un
+        // tracciato con le curve e di un rettangolo arrotondato.
+        label("", "Nero"),
+        label(r##"fill="#0072b2""##, "Blu"),
+        format!("{black_box}{}", label(r##"fill="#ffffff""##, "Notte")),
+        format!(
+            r##"<ellipse cx="50" cy="50" rx="45" ry="30" fill="#000000"/>{}"##,
+            label(r##"fill="#ffffff""##, "Uovo")
+        ),
+        r##"<polygon points="0 0 100 0 100 100" fill="#000000"/><text x="80" y="40" fill="#ffffff"><tspan x="80" dy="0">Vela</tspan></text>"##
+            .to_owned(),
+        format!(
+            r##"<path d="M0 0 C50 -20 150 20 100 0 Q120 50 100 100 A50 50 0 0 1 0 100 Z" fill="#000000"/>{}"##,
+            label(r##"fill="#ffffff""##, "Onda")
+        ),
+        format!(
+            r##"<rect width="100" height="100" rx="30" fill="#000000"/>{}"##,
+            label(r##"fill="#ffffff""##, "Tondo")
+        ),
+        // Un testo grande vuole 3:1: 24 px, 19 px in grassetto, 12 px in un
+        // gruppo che raddoppia.
+        label(r##"fill="#009e73" font-size="24""##, "Titolo"),
+        label(r##"fill="#009e73" font-size="19" font-weight="bold""##, "Forte"),
+        format!(
+            r#"<g transform="scale(2)" font-size="12">{}</g>"#,
+            label(r##"fill="#009e73""##, "Grande")
+        ),
+        // Sopra un'immagine il fondo non si sa, finché una forma opaca non la
+        // copre.
+        format!(
+            r#"<image x="0" y="0" width="100" height="100" href="foto.png" aria-hidden="true"/>{}"#,
+            label(r##"fill="#ffffff""##, "Foto")
+        ),
+        // Nascosto, senza riempimento, o di righe vuote: non si legge.
+        label(r##"fill="#ffffff" display="none""##, "Via"),
+        label(r#"fill="none""#, "Vuoto"),
+        label(r##"fill="#ffffff""##, " "),
+    ] {
+        assert!(of(&on_paper("#ffffff", &body), Code::S009).is_empty(), "{body}");
+    }
+    // Un'immagine coperta da una forma opaca: il fondo torna a sapersi.
+    let scene = on_paper(
+        "#ffffff",
+        &format!(
+            r#"<image x="0" y="0" width="100" height="100" href="foto.png" aria-hidden="true"/>{black_box}{}"#,
+            label(r##"fill="#000000""##, "Buio")
+        ),
+    );
+    assert_eq!(details(&scene, Code::S009), ["1.00"]);
+    // Il grassetto a 18 px non è ancora grande.
+    let scene = on_paper(
+        "#ffffff",
+        &label(
+            r##"fill="#009e73" font-size="18" font-weight="700""##,
+            "Quasi",
+        ),
+    );
+    assert_eq!(details(&scene, Code::S009), ["3.42"]);
+}
+
+#[test]
+fn s009_a_pen_stroke_is_measured_on_what_lies_under_it() {
+    // Il bianco su un rettangolo nero si legge; a cavallo del bordo conta il
+    // contrasto mediano, quello della parte più lunga.
+    let pen = |d: &str| {
+        format!(
+            r##"<path fub:tool="pen" fub:brush="pf1" fub:ink="1 s10 cxy 0,0" d="{d}" fill="#ffffff"/>"##
+        )
+    };
+    let black_box = r##"<rect x="0" y="0" width="50" height="100" fill="#000000"/>"##;
+    let inside = pen("M10 10 L20 20 L10 20 Z");
+    assert!(of(
+        &on_paper("#ffffff", &format!("{black_box}{inside}")),
+        Code::S009
+    )
+    .is_empty());
+    // Tre vertici su cinque fuori dal rettangolo: la mediana sta sul bianco.
+    let across = pen("M40 10 L60 10 L70 20 L80 30 L40 30 Z");
+    let scene = on_paper("#ffffff", &format!("{black_box}{across}"));
+    assert_eq!(details(&scene, Code::S009), ["1.00"]);
+    // Tre su cinque dentro: la mediana sta sul nero.
+    let mostly = pen("M10 10 L20 10 L30 20 L80 30 L60 30 Z");
+    assert!(of(
+        &on_paper("#ffffff", &format!("{black_box}{mostly}")),
+        Code::S009
+    )
+    .is_empty());
+    // Un tratto senza geometria non si vede, e non si misura.
+    assert!(of(&on_paper("#ffffff", &pen("")), Code::S009).is_empty());
+}
+
+#[test]
+fn s012_an_image_without_a_description() {
+    let image = |attributes: &str, children: &str| {
+        let tag = r#"<image x="0" y="0" width="10" height="10" href="foto.png""#;
+        if children.is_empty() {
+            titled(&format!("{tag} {attributes}/>"))
+        } else {
+            titled(&format!("{tag} {attributes}>{children}</image>"))
+        }
+    };
+    for source in [
+        image("", ""),
+        image("", "<title> </title>"),
+        image(r#"aria-hidden="false""#, ""),
+        // Anche un'immagine incorporata.
+        titled(r#"<image width="1" height="1" href="data:image/png;base64,iVBORw0KGgo="/>"#),
+    ] {
+        let scene = load(&source);
+        let found = of(&scene, Code::S012);
+        assert_eq!(found.len(), 1, "{source}");
+        assert_eq!(found[0].severity, Severity::Warning);
+        let span = found[0].span.expect("S012 riguarda l'immagine");
+        assert!(text(&source, &span).starts_with("<image"), "{source}");
+    }
+    for source in [
+        image("", "<title>Il porto</title>"),
+        image("", "<desc>Barche ormeggiate al tramonto</desc>"),
+        image(r#"aria-hidden="true""#, ""),
+        image(r#"display="none""#, ""),
+    ] {
+        assert!(of(&load(&source), Code::S012).is_empty(), "{source}");
+    }
+    // `aria-hidden` vale solo `true` o `false`: altrimenti l'immagine è
+    // estranea, e la superficie non la descrive.
+    let scene = load(&image(r#"aria-hidden="forse""#, ""));
+    assert!(of(&scene, Code::S012).is_empty());
+    assert_eq!(of(&scene, Code::S002).len(), 1);
+}
+
+#[test]
+fn s013_a_text_too_small_at_full_size() {
+    for (body, detail) in [
+        (label(r#"font-size="11""#, "Nota"), "11.00"),
+        (label(r#"font-size="8pt""#, "Punti"), "10.66"),
+        (
+            format!(r#"<g font-size="10">{}</g>"#, label("", "Eredita")),
+            "10.00",
+        ),
+        (
+            format!(
+                r#"<g transform="scale(0.5)">{}</g>"#,
+                label(r#"font-size="20""#, "Ridotto")
+            ),
+            "10.00",
+        ),
+        // Conta l'altezza: schiacciato in verticale si legge piccolo.
+        (
+            format!(
+                r#"<g transform="scale(1 0.5)">{}</g>"#,
+                label(r#"font-size="20""#, "Schiacciato")
+            ),
+            "10.00",
+        ),
+        // La riga più piccola.
+        (
+            r#"<text x="0" y="20"><tspan x="0" dy="0">Grande</tspan><tspan x="0" dy="20" font-size="9">piccolo</tspan></text>"#
+                .to_owned(),
+            "9.00",
+        ),
+    ] {
+        let scene = load(&titled(&body));
+        let found = of(&scene, Code::S013);
+        assert_eq!(found.len(), 1, "{body}");
+        assert_eq!(found[0].severity, Severity::Info);
+        assert_eq!(found[0].detail.as_deref(), Some(detail), "{body}");
+    }
+    for body in [
+        label(r#"font-size="12""#, "Giusto"),
+        label("", "Di serie"),
+        format!(
+            r#"<g transform="rotate(90)">{}</g>"#,
+            label(r#"font-size="16""#, "Ruotato")
+        ),
+        format!(
+            r#"<g transform="scale(2)">{}</g>"#,
+            label(r#"font-size="8""#, "Ingrandito")
+        ),
+        label(r#"font-size="9" display="none""#, "Nascosto"),
+        label(r#"font-size="9""#, "  "),
+    ] {
+        assert!(of(&load(&titled(&body)), Code::S013).is_empty(), "{body}");
+    }
+    // Una grandezza della radice che §4 non legge non dice niente.
+    let source = titled(&label("", "Em"))
+        .replace("fub:version=\"1\"", "fub:version=\"1\" font-size=\"0.5em\"");
+    assert!(of(&load(&source), Code::S013).is_empty());
+}
+
 #[test]
 fn s010_unknown_ink_channels() {
     let ink = |channels: &str| {
@@ -332,6 +577,8 @@ fn every_code_has_its_severity_and_a_message() {
         (S009, Severity::Info),
         (S010, Severity::Info),
         (S011, Severity::Info),
+        (S012, Severity::Warning),
+        (S013, Severity::Info),
     ] {
         assert_eq!(code.severity(), severity);
         assert!(!code.message().is_empty());
