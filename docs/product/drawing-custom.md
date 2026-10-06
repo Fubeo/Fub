@@ -45,6 +45,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Duplica, raggruppa, ordina, allinea e distribuisci | Standard | questi comandi della barra «Disponi», coi loro tasti |
 | Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello |
 | Pagina e griglia | Standard | il pulsante «Pagina e griglia», `#` e `%` |
+| Guide intelligenti | Standard | l'aggancio agli altri oggetti e alla pagina, la loro casella in «Pagina e griglia», e le misure con `Alt` |
 | Collegamenti alle note | Standard | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
 | Nodi, Bézier | Esperto | lo strumento (`N`, `B`) |

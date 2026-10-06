@@ -41,6 +41,9 @@ si sposta la selezione o si sceglie col riquadro
 - Con l'aggancio alla griglia, a cornice dritta, il bordo tirato va sulla
   riga più vicina. Conta la geometria, senza il contorno, come negli
   spostamenti; `Ctrl` o `⌘` lascia libero.
+- Dal livello Standard il bordo tirato si ferma anche in linea con gli altri
+  oggetti e con la pagina, e una linea lo mostra: [Disegni, guide
+  intelligenti](drawing-guides.md).
 - Un lato non scende sotto un'unità, e l'oggetto non si ribalta tirando oltre
   il bordo opposto.
 - Mentre si tira, sotto la cornice si leggono le misure, contorno compreso;

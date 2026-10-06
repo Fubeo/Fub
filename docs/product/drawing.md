@@ -216,6 +216,10 @@ Con l'aggancio:
 - la prima linea di base di un testo nuovo comincia sull'incrocio più
   vicino.
 
+Nello stesso menu, la casella **Guide intelligenti** fa fermare ciò che si
+muove in linea con gli altri oggetti e con la pagina: [Disegni, guide
+intelligenti](drawing-guides.md).
+
 **Adatta la pagina al disegno** porta la pagina attorno a tutto il disegno,
 livelli nascosti e bloccati compresi, con 20 unità di margine, e la allarga
 fino a numeri interi. Riscrive `viewBox`, `width` e `height` della radice e la

@@ -7,6 +7,7 @@ import { apply, compose, IDENTITY, rotate, translate, type Matrix, type Point } 
 import {
   angleOf,
   frameCenter,
+  frameGuides,
   frameSize,
   frameView,
   gridSnap,
@@ -21,8 +22,11 @@ import {
   type FrameView,
   type ResizeOptions,
 } from "./frame";
+import { GuideIndex, type GuideTarget } from "./guides";
 
 const box = (x1: number, y1: number, x2: number, y2: number): Bounds => ({ min: [x1, y1], max: [x2, y2] });
+
+const target = (bounds: Bounds): GuideTarget => ({ kind: "object", box: bounds, key: "" });
 
 const exact = (values: readonly number[]): number[] => values.map((value) => Number(value.toFixed(6)) + 0);
 
@@ -162,6 +166,36 @@ describe("ridimensionare", () => {
     expect(edges(resized(BOX, "e", [-95, 0], { ...FREE, snap }))).toEqual([100, 100, 120, 150]);
     // Con le proporzioni comanda l'asse più lungo.
     expect(edges(resized(BOX, "se", [33, 0], { ...FREE, ratio: true, snap }))).toEqual([100, 100, 220, 160]);
+  });
+
+  it("con le guide il bordo va sul bersaglio entro la soglia, e fra bersaglio e riga sul più vicino", () => {
+    const guides = frameGuides(new GuideIndex([target(box(0, 0, 237, 40))]), IDENTITY, 6, 1);
+    // Tirato a 233, il bordo destro si ferma sul 237, a 4 pixel.
+    expect(edges(resized(BOX, "e", [33, 0], { ...FREE, guides }))).toEqual([100, 100, 237, 150]);
+    // A 12 pixel resta dov'è.
+    expect(edges(resized(BOX, "e", [25, 0], { ...FREE, guides }))).toEqual([100, 100, 225, 150]);
+    const snap = gridSnap(IDENTITY, 20);
+    // La riga 240 è a 7, il bersaglio a 4; a 229 il bersaglio è fuori soglia.
+    expect(edges(resized(BOX, "e", [33, 0], { ...FREE, snap, guides }))).toEqual([100, 100, 237, 150]);
+    expect(edges(resized(BOX, "e", [29, 0], { ...FREE, snap, guides }))).toEqual([100, 100, 220, 150]);
+  });
+
+  it("con le proporzioni si ferma l'asse più vicino al suo bersaglio, sullo schermo", () => {
+    const both = frameGuides(new GuideIndex([target(box(250, 0, 300, 10)), target(box(0, 171, 10, 200))]), IDENTITY, 6, 1);
+    // Il puntatore porta l'angolo a 247,2 per 173,6: il 171 è a 2,6, il 250 a 2,8.
+    expect(edges(resized(BOX, "se", [48, 22], { ...FREE, ratio: true, guides: both }))).toEqual([100, 100, 242, 171]);
+    const across = frameGuides(new GuideIndex([target(box(250, 0, 300, 10))]), IDENTITY, 6, 1);
+    expect(edges(resized(BOX, "se", [48, 22], { ...FREE, ratio: true, guides: across }))).toEqual([100, 100, 250, 175]);
+  });
+
+  it("un bersaglio oltre il bordo fermo non ribalta, e una cornice ruotata non ha guide", () => {
+    const index = new GuideIndex([target(box(96, 300, 98, 310))]);
+    expect(edges(resized(BOX, "e", [-98, 0], { ...FREE, guides: frameGuides(index, IDENTITY, 6, 1) }))).toEqual([100, 100, 102, 150]);
+    expect(frameGuides(index, rotate(30), 6, 1)).toBeNull();
+    // Su una cornice scalata la x 118 è la 236 della scena, a uno dal 237.
+    const scaled = frameGuides(new GuideIndex([target(box(0, 0, 237, 40))]), [2, 0, 0, 1, 0, 0], 6, 1)!;
+    expect(scaled.near(0, 118)).toBe(118.5);
+    expect(scaled.pixels(0)).toBe(2);
   });
 
   it("la griglia segue una cornice scalata o ribaltata, non una ruotata", () => {

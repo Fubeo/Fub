@@ -236,11 +236,11 @@ describe("la griglia ricordata", () => {
   it("si legge dallo stato di vista, e ciò che non è una griglia vale quella di serie", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid } = await boot(host);
-    const standard = { shown: false, snap: false, step: 20 };
+    const standard = { shown: false, snap: false, step: 20, guides: true };
     expect(currentGrid()).toEqual(standard);
     expect(await readGrid(), "niente di ricordato").toEqual(standard);
 
-    const chosen = { shown: true, snap: true, step: 50 };
+    const chosen = { shown: true, snap: true, step: 50, guides: false };
     await host.module.api.setViewState(GRID_KEY, chosen);
     expect(await readGrid()).toEqual(chosen);
     expect(currentGrid()).toEqual(chosen);
@@ -252,16 +252,24 @@ describe("la griglia ricordata", () => {
       { shown: true, snap: true, step: 0 },
       { shown: true, snap: true, step: 5000 },
       { shown: true, snap: true },
+      { shown: true, snap: true, step: 50, guides: "sì" },
     ]) {
       await host.module.api.setViewState(GRID_KEY, broken);
       expect(await readGrid(), JSON.stringify(broken)).toEqual(standard);
     }
   });
 
+  it("una griglia ricordata prima delle guide intelligenti le ha accese", async () => {
+    const host = createFakeHost();
+    const { readGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10 });
+    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, guides: true });
+  });
+
   it("se lo stato di vista non si legge, resta l'ultima griglia", async () => {
     const host = createFakeHost();
     const { readGrid, saveGrid } = await boot(host);
-    const chosen = { shown: true, snap: false, step: 10 };
+    const chosen = { shown: true, snap: false, step: 10, guides: true };
     saveGrid(chosen);
     await settle();
     const heal = host.fault("viewState");
@@ -272,8 +280,8 @@ describe("la griglia ricordata", () => {
   it("si ricorda nell'ordine delle scelte, e la lettura aspetta le scritture", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid, saveGrid } = await boot(host);
-    const shown = { shown: true, snap: false, step: 20 };
-    const snapped = { shown: true, snap: true, step: 10 };
+    const shown = { shown: true, snap: false, step: 20, guides: true };
+    const snapped = { shown: true, snap: true, step: 10, guides: false };
 
     const release = host.throttle("setViewState");
     saveGrid(shown);
@@ -295,12 +303,12 @@ describe("la griglia ricordata", () => {
   it("una scelta fatta mentre si legge vale più di ciò che si legge", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid, saveGrid } = await boot(host);
-    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: true, step: 50 });
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: true, step: 50, guides: true });
 
     const release = host.throttle("viewState");
     const reading = readGrid();
     await settle();
-    const chosen = { shown: false, snap: false, step: 5 };
+    const chosen = { shown: false, snap: false, step: 5, guides: false };
     saveGrid(chosen);
     release();
     expect(await reading).toEqual(chosen);
@@ -313,14 +321,14 @@ describe("la griglia ricordata", () => {
     clearHistory();
 
     const heal = host.fault("setViewState", "disco pieno");
-    saveGrid({ shown: true, snap: false, step: 20 });
+    saveGrid({ shown: true, snap: false, step: 20, guides: true });
     await settle();
     expect(recentNotices().map(({ text, tone }) => ({ text, tone }))).toEqual([
       { text: "Non riesco a ricordare la griglia per i prossimi disegni: disco pieno", tone: "guasto" },
     ]);
     heal();
 
-    const next = { shown: true, snap: true, step: 100 };
+    const next = { shown: true, snap: true, step: 100, guides: true };
     saveGrid(next);
     await settle();
     expect(await host.module.api.viewState(GRID_KEY)).toEqual(next);

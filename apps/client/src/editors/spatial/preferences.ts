@@ -6,10 +6,11 @@
 //   cambio nelle Impostazioni vale subito anche nei disegni aperti. Un
 //   livello che l'editor non conosce vale l'Essenziale; senza `draw.custom`
 //   il Personalizzato ha le parti dell'Essenziale.
-// - **La griglia** è uno stato della vista, della macchina e non del vault:
-//   l'ultima scelta, con cui si apre ogni disegno dopo. Non entra né nel file
-//   del disegno né in quello delle impostazioni del vault, che a ogni `#`
-//   cambierebbe, e su un vault condiviso cambierebbe la griglia degli altri.
+// - **La griglia**, con le guide intelligenti, è uno stato della vista, della
+//   macchina e non del vault: l'ultima scelta, con cui si apre ogni disegno
+//   dopo. Non entra né nel file del disegno né in quello delle impostazioni
+//   del vault, che a ogni `#` cambierebbe, e su un vault condiviso
+//   cambierebbe la griglia degli altri.
 //
 // L'ultima lettura resta qui: una superficie nuova parte da lì, e la lettura
 // che fa la conferma o la corregge, senza che la barra cambi sotto gli occhi
@@ -121,12 +122,14 @@ export function watchLevel(apply: (level: Level, custom: readonly string[]) => v
   };
 }
 
-/// `value` come griglia, se lo è.
+/// `value` come griglia, se lo è. Una griglia ricordata prima delle guide
+/// intelligenti le ha accese, come la prima volta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step } = value as Record<string, unknown>;
+  const { shown, snap, step, guides } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  return { shown, snap, step };
+  if (guides !== undefined && typeof guides !== "boolean") return null;
+  return { shown, snap, step, guides: guides ?? DEFAULT_GRID.guides };
 }
 
 /// Legge la griglia ricordata: quella di serie se non ce n'è una, o se non
