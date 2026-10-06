@@ -51,6 +51,20 @@ describe("sanitizeThemeCss", () => {
     expect(() => sanitizeThemeCss(":root { --text: red;", POLICY)).toThrow(ThemeCssError);
   });
 
+  it("dice riga e colonna giuste anche in fondo a un foglio lungo, alternando i fogli", () => {
+    const rules = Array.from({ length: 3000 }, () => ".brand { color: var(--text); }").join("\n");
+    const long = `:root { --text: #fff; --bg: #000; }\n${rules}\n.brand {\n  display: grid;\n}\n`;
+    const short = `:root { --text: #fff; --bg: #000; }\n.brand { padding: 1rem; }`;
+    const where = (css: string): [string, number, number][] =>
+      themeCssViolations(css, POLICY).map(({ code, line, column }) => [code, line, column]);
+    for (let round = 0; round < 2; round += 1) {
+      expect(where(long)).toEqual([["structural-property", 3003, 3]]);
+      expect(where(short)).toEqual([["structural-property", 2, 10]]);
+    }
+    // In fondo, oltre l'ultimo a capo, c'è una riga vuota.
+    expect(themeCssViolations(":root { --text: #fff; }\n", POLICY).map(({ line, column }) => [line, column])).toEqual([[2, 1]]);
+  });
+
   it("nomina insieme tutte le violazioni in ordine deterministico", () => {
     const css = `
       @import url("https://example.test/spia.css");
