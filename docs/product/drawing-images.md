@@ -63,3 +63,12 @@ Chi monta l'editor apre, legge e sceglie le immagini del vault con `images`;
 senza, un'immagine del vault è un riquadro e «Immagine dal vault…» non c'è.
 Le regole della Lettura stanno in `apps/client/src/editors/spatial/read-images.ts`,
 la copia che si vede da sola, coi caratteri, in `picture.ts` accanto.
+
+## La descrizione
+
+Dal [livello Standard](drawing.md#il-livello-standard) un'immagine che entra,
+incollata, lasciata sul foglio o presa dal vault, chiede che cosa mostra: una
+barra in fondo al foglio ne scrive la descrizione, ciò che uno screen reader
+dice al posto dei pixel, oppure la dichiara decorativa, da saltare. Si può
+anche lasciarla senza, e ritrovarla poi fra i problemi della verifica:
+[Disegni, accessibilità](drawing-accessibility.md#la-descrizione-allinserimento).

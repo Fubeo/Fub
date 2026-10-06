@@ -45,6 +45,7 @@ flowchart LR
 - [Disegni, forme dal tratto](product/drawing-ink-shapes.md)
 - [Disegni, vista ruotata, gesti e menu radiale](product/drawing-view.md)
 - [Disegni, cronologia](product/drawing-history.md)
+- [Disegni, accessibilità](product/drawing-accessibility.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
@@ -80,6 +81,7 @@ flowchart LR
 - [Formato della scena](reference/scene-format.md)
 - [Formato della scena, unità e guide](reference/scene-format-rulers.md)
 - [Formato della scena, poligoni e stelle](reference/scene-format-shapes.md)
+- [Formato della scena, accessibilità](reference/scene-format-accessibility.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 
 ## Vedere stato e direzione
