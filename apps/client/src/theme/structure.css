@@ -1325,6 +1325,12 @@ html, body, #app {
   stroke-width: 1px;
   shape-rendering: crispEdges;
 }
+/* Su un foglio girato di sbieco le righe e le guide sono oblique: senza
+   l'antialiasing sarebbero a scalini. */
+.draw-grid[data-slanted] path,
+.draw-guides[data-slanted] path {
+  shape-rendering: auto;
+}
 /* Le guide del documento attraversano il foglio sopra il disegno, linee di
    un pixel a metà dei pixel. Quella sotto il puntatore, o che si tira, è
    più spessa; una bloccata è tratteggiata, e una che rilasciata se ne va è
@@ -1352,6 +1358,102 @@ html, body, #app {
   stroke-dasharray: 4 4;
   opacity: 0.5;
 }
+/* Il menu radiale: uno strato su tutta la finestra, che prende il tocco
+   fuori dalle voci, e attorno al punto chiesto il disco con otto voci in
+   cerchio. L'anello è un punto, il centro: il disco, le voci e il nome
+   sopra stanno attorno a lui, e lui si ingrandisce quando il menu entra. */
+.draw-radial {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu);
+  touch-action: none;
+}
+.draw-radial-ring {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.draw-radial-ring::before {
+  content: "";
+  position: absolute;
+  top: -104px;
+  left: -104px;
+  width: 208px;
+  height: 208px;
+  border-radius: 50%;
+}
+.draw-radial-item {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  padding: 0;
+  border-radius: 50%;
+}
+.draw-radial-center {
+  position: absolute;
+  top: -28px;
+  left: -28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+}
+/* La punta che dice la direzione indicata, sul bordo del centro: in alto,
+   e girata di un ottavo di giro per ogni voce dopo. */
+.draw-radial-center[data-pointing]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -6px 0 0 -6px;
+  border: 6px solid transparent;
+  transform: translateY(-36px);
+}
+.draw-radial-center[data-pointing="ne"]::after {
+  transform: rotate(45deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="e"]::after {
+  transform: rotate(90deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="se"]::after {
+  transform: rotate(135deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="s"]::after {
+  transform: rotate(180deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="sw"]::after {
+  transform: rotate(225deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="w"]::after {
+  transform: rotate(270deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="nw"]::after {
+  transform: rotate(315deg) translateY(-36px);
+}
+/* La prova della penna in «Penna e dita»: il dito e la penna disegnano, e il
+   browser non se li prende per scorrere. */
+.draw-touch-pad {
+  touch-action: none;
+}
+.draw-radial-caption {
+  position: absolute;
+  top: -112px;
+  left: 0;
+  max-width: 80vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
+.draw-radial-caption:empty {
+  display: none;
+}
 /* I righelli, in alto e a sinistra, coprono il bordo del foglio senza
    spostare il disegno: sopra ogni cosa del foglio, sotto le barre che
    galleggiano. Le tacche cadono a metà dei pixel; i numeri sono piccoli e
@@ -1372,6 +1474,13 @@ html, body, #app {
 .draw-rulers text {
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+/* Nell'angolo dei righelli, sul foglio girato, la freccia verso il suo alto. */
+.draw-rulers [data-part="north"] {
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  shape-rendering: auto;
 }
 /* Il cursore del foglio, che la tastiera muove: un punto senza misura, e il
    segno attorno lo disegna la pelle. */
@@ -2195,6 +2304,37 @@ textarea.draw-properties-input {
   .draw-rulers [data-part="selection"] {
     fill: Highlight !important;
     opacity: 0.5 !important;
+  }
+  /* «Penna e dita»: la curva col colore della scelta, la diagonale e il
+     tratto d'esempio grigi, quello della penna col testo. */
+  .draw-touch-curve,
+  .draw-touch-pad {
+    border-color: CanvasText !important;
+  }
+  .draw-touch-line {
+    stroke: Highlight !important;
+  }
+  .draw-touch-dot {
+    fill: Highlight !important;
+    stroke: Canvas !important;
+  }
+  .draw-touch-diagonal {
+    stroke: GrayText !important;
+  }
+  .draw-touch-sample {
+    fill: GrayText !important;
+  }
+  .draw-touch-strokes line {
+    stroke: CanvasText !important;
+  }
+  /* Il menu radiale: la voce indicata col colore della scelta, anche senza
+     fondo. */
+  .draw-radial-item[data-hot] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .draw-radial-center[data-pointing]::after {
+    border-bottom-color: Highlight !important;
   }
 }
 .base-search { min-width: 8rem; flex: 1; }

@@ -2136,7 +2136,8 @@ progress::-moz-progress-bar {
 
 /* I righelli: il fondo della barra, tacche e numeri attenuati, un filo verso
    il foglio. Una fascia grigia dice dove sta la pagina, una d'accento dove
-   sta la selezione; una linea segue il puntatore. */
+   sta la selezione; una linea segue il puntatore. Sul foglio girato una
+   freccia nell'angolo dice dov'è il suo alto. */
 .draw-rulers [data-part="bg"],
 .draw-rulers [data-part="corner"] {
   fill: var(--bg-elev);
@@ -2157,8 +2158,58 @@ progress::-moz-progress-bar {
   fill: var(--accent);
   opacity: 0.35;
 }
-.draw-rulers [data-part="pointer"] {
+.draw-rulers [data-part="pointer"],
+.draw-rulers [data-part="north"] {
   stroke: var(--text);
+}
+
+/* Il menu radiale galleggia come un menu: il disco col fondo, il filo e
+   l'ombra delle superfici che galleggiano. La voce indicata, dal puntatore
+   o dalla direzione del gesto, prende il fondo della scelta e un bordo; una
+   spenta sbiadisce. Nel mezzo, lo strumento di adesso cerchiato del suo
+   colore, con un filo del testo che lo stacca dal fondo anche quando il
+   colore è quello del fondo. */
+.draw-radial-ring::before {
+  border: 1px solid var(--elevation-floating-border);
+  background: var(--elevation-floating-surface);
+  box-shadow: var(--elevation-floating-shadow);
+}
+.draw-radial-item {
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.draw-radial-item:hover,
+.draw-radial-item[data-hot] {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+.draw-radial-item[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+.draw-radial-item[aria-disabled="true"]:hover {
+  border-color: transparent;
+  background: transparent;
+}
+.draw-radial-center {
+  border: 3px solid var(--radial-color, var(--border));
+  background: var(--bg-input);
+  box-shadow: 0 0 0 1px var(--text);
+  color: var(--text);
+}
+.draw-radial-center[data-pointing]::after {
+  border-bottom-color: var(--accent);
+}
+.draw-radial-caption {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--elevation-floating-border);
+  border-radius: var(--radius-pill);
+  background: var(--elevation-floating-surface);
+  box-shadow: var(--elevation-floating-shadow);
+  color: var(--text);
+  font-size: var(--text-sm);
 }
 
 /* La barra della selezione galleggia sul disegno: il fondo della barra in
@@ -3370,7 +3421,8 @@ button.draw-isolation-crumb:hover {
   cursor: pointer;
 }
 .modale .draw-guides-remove,
-.modale .draw-guides-tools button {
+.modale .draw-guides-tools button,
+.modale .draw-touch-tools button {
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -3391,10 +3443,12 @@ button.draw-isolation-crumb:hover {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.modale .draw-guides-tools button {
+.modale .draw-guides-tools button,
+.modale .draw-touch-tools button {
   padding: var(--space-2) var(--space-4);
 }
-.modale .draw-guides-tools button:disabled {
+.modale .draw-guides-tools button:disabled,
+.modale .draw-touch-tools button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -3407,6 +3461,124 @@ button.draw-isolation-crumb:hover {
   border-color: var(--danger);
   background: var(--danger-wash);
   color: var(--danger);
+}
+
+/* La finestra «Penna e dita»: due gruppi coi loro titoli, le dita e la
+   penna. La curva sta accanto alle sue tre manopole, o sopra quando lo
+   spazio non basta; sotto, il riquadro dove provare la penna, che non fa
+   scorrere né ingrandire la pagina mentre ci si disegna. Il tratto
+   d'esempio è più tenue di quello che la penna lascia, che è il vero. */
+.modale .draw-touch-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modale .draw-touch-group legend {
+  padding: 0 0 var(--space-2);
+  font-weight: var(--weight-bold);
+}
+.modale .palette-form .draw-touch-check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  font-weight: normal;
+  cursor: pointer;
+}
+.modale .draw-touch-check input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+.modale .draw-touch-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .draw-touch-pressure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.modale .draw-touch-curve {
+  flex: none;
+  width: 8rem;
+  height: 8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  overflow: visible;
+}
+.modale .draw-touch-knobs {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.modale .palette-form .draw-touch-knob {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 var(--space-2);
+  font-weight: normal;
+}
+.modale .draw-touch-knob output {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.modale .draw-touch-knob input[type="range"] {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.modale .draw-touch-diagonal {
+  fill: none;
+  stroke: var(--muted);
+}
+.modale .draw-touch-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.modale .draw-touch-dot {
+  fill: var(--accent);
+  stroke: var(--bg-input);
+  stroke-width: 2;
+}
+.modale .draw-touch-pad {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 320 / 120;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  cursor: crosshair;
+}
+.modale .draw-touch-sample {
+  fill: var(--muted);
+}
+.modale .draw-touch-strokes line {
+  stroke: var(--text);
+}
+.modale .draw-touch-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.modale .draw-touch-tools button:not(:disabled):hover {
+  border-color: var(--accent);
 }
 
 .modale .palette-actions .keys-show-all {
@@ -5663,6 +5835,22 @@ button.draw-isolation-crumb:hover {
 }
 .context-menu[data-shell-motion="exit"] {
   animation: fub-exit-rise-sm var(--duration-fast) var(--ease);
+}
+
+/* Il menu radiale si apre dal punto chiesto: il disco cresce dal centro
+   mentre lo strato appare, e se ne va sbiadendo. */
+@keyframes fub-radial-grow {
+  from { transform: scale(0.8); }
+  to { transform: none; }
+}
+.draw-radial[data-shell-motion="enter"] {
+  animation: fub-enter-fade var(--duration-med) var(--ease-out);
+}
+.draw-radial[data-shell-motion="enter"] .draw-radial-ring {
+  animation: fub-radial-grow var(--duration-med) var(--ease-out);
+}
+.draw-radial[data-shell-motion="exit"] {
+  animation: fub-exit-fade var(--duration-fast) var(--ease);
 }
 
 /* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
