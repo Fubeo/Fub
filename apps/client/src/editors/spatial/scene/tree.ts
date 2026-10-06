@@ -32,6 +32,22 @@ export type Entry =
   | { readonly kind: "head"; readonly node: ContainerNode; readonly before: HeadState; readonly after: HeadState }
   | { readonly kind: "status"; readonly before: Status; readonly after: Status };
 
+/// Quanti pezzi si passano come argomenti a `splice`, al più: un incolla
+/// grande ne porta più di quanti una chiamata ne accetta.
+const SPREAD = 4_096;
+
+/// Sostituisce `count` pezzi di `parts` da `index` con `inserted`.
+function replaceRange(parts: Part[], index: number, count: number, inserted: readonly Part[]): void {
+  if (inserted.length <= SPREAD) {
+    parts.splice(index, count, ...inserted);
+    return;
+  }
+  const tail = parts.splice(index + count);
+  parts.length = index;
+  for (const part of inserted) parts.push(part);
+  for (const part of tail) parts.push(part);
+}
+
 /// Lo stato del tag di `node`.
 export function headState(node: ContainerNode): HeadState {
   return { head: node.head, tail: node.tail, facts: node.facts, details: node.details, declarations: node.declarations };
@@ -105,7 +121,7 @@ export class Tree {
       this.index(part, true);
       this.elements += elementsIn(part);
     }
-    owner.parts.splice(index, count, ...inserted);
+    replaceRange(owner.parts, index, count, inserted);
     this.log.push({ kind: "splice", owner, index, removed, inserted: [...inserted] });
     return removed;
   }

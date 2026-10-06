@@ -30,7 +30,7 @@ export interface Opened {
 export function open(source: string): Opened {
   const engine = SceneEngine.open(source);
   const builder = new PaintBuilder();
-  const indexer = new SceneIndexer(builder);
+  const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
   const reindex = (scope: ContainerNode | null = null): SceneIndex => {
     builder.build(engine);
     return indexer.index(engine.model!, scope);

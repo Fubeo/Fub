@@ -1743,6 +1743,123 @@
       "out": "colori%20🎨.md"
     }
   ],
+  "resolve_against": [
+    {
+      "src": "a.md",
+      "raw": "note/altra.md",
+      "out": "note/altra.md"
+    },
+    {
+      "src": "sub/a.md",
+      "raw": "altra.md",
+      "out": "sub/altra.md"
+    },
+    {
+      "src": "sub/deep/a.md",
+      "raw": "../altra.md",
+      "out": "sub/altra.md"
+    },
+    {
+      "src": "sub/a.md",
+      "raw": "./b.md",
+      "out": "sub/b.md"
+    },
+    {
+      "src": "sub/deep/a.md",
+      "raw": "/note/altra.md",
+      "out": "note/altra.md"
+    },
+    {
+      "src": "a.md",
+      "raw": "../fuori.md",
+      "out": null
+    },
+    {
+      "src": "sub/a.md",
+      "raw": "../../fuori.md",
+      "out": null
+    },
+    {
+      "src": "dir/x.svg",
+      "raw": "..",
+      "out": null
+    },
+    {
+      "src": "x.svg",
+      "raw": "/",
+      "out": null
+    },
+    {
+      "src": "a.md",
+      "raw": "#frammento",
+      "out": null
+    },
+    {
+      "src": "a.md",
+      "raw": "",
+      "out": null
+    },
+    {
+      "src": "a/disegno.svg",
+      "raw": "foto.png#x",
+      "out": "a/foto.png"
+    },
+    {
+      "src": "a/disegno.svg",
+      "raw": "  foto%20bella.png  ",
+      "out": "a/foto bella.png"
+    },
+    {
+      "src": "a/disegno.svg",
+      "raw": "Citt%C3%A0/foto.png",
+      "out": "a/Città/foto.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "100%25.png",
+      "out": "100%.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "%zz.png",
+      "out": "%zz.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "50%.png",
+      "out": "50%.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "%C3.png",
+      "out": "%C3.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "%EF%BB%BFfoto.png",
+      "out": "﻿foto.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "a//b/./c.png",
+      "out": "a/b/c.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": " foto.png",
+      "out": "foto.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "﻿foto.png",
+      "out": "﻿foto.png"
+    },
+    {
+      "src": "x.svg",
+      "raw": "foto.png ",
+      "out": "foto.png"
+    }
+  ],
   "task_checked": [
     {
       "symbol": "x",

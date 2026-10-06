@@ -11,7 +11,8 @@
 //   vede come una linea: il suo colore si legge e si scrive come contorno.
 //   Lo spessore è dei contorni che si vedono, tranne quello di un tratto a
 //   penna, che viene dall'inchiostro. Un gruppo o un collegamento passano
-//   tutto alle parti; un'immagine ha soltanto l'opacità.
+//   tutto alle parti; un'immagine ha soltanto l'opacità. Una parte bloccata
+//   dentro un gruppo scelto resta com'è.
 // - **L'opacità è dell'oggetto scelto**, gruppo compreso: non si eredita, si
 //   moltiplica, e scritta sulle parti si vedrebbe diversa dove si
 //   sovrappongono.
@@ -26,6 +27,11 @@
 // - **L'allineamento resta sul punto d'ancoraggio**, come il testo a punto
 //   dei programmi di disegno: le righe si allineano attorno al punto dove il
 //   testo è nato, ed è esatto, senza stimare la larghezza delle lettere.
+// - **Lo stile si copia e si incolla** (livello Standard): il riempimento,
+//   il contorno col suo spessore, tratteggio, estremi e angoli, l'opacità e
+//   il carattere di un oggetto vanno sugli oggetti scelti in un passo, a
+//   ciascuna parte ciò che ha. Si copia ciò che si vede, anche se viene dal
+//   gruppo che lo contiene.
 // - **Mille oggetti scelti** si leggono entro un fotogramma: gli attributi di
 //   un nodo e ciò che un contenitore passa ai figli si leggono una volta
 //   sola, finché un'operazione non li cambia.
@@ -84,6 +90,7 @@ const INITIAL: Inherited = new Map([
   ["stroke-dasharray", "none"],
   ["font-family", ""],
   ["font-size", "16"],
+  ["font-weight", "normal"],
   ["text-anchor", "start"],
 ]);
 
@@ -193,7 +200,8 @@ function partsOf(model: DocumentModel, units: readonly Unit[]): Parts {
   const out: Parts = { chosen: [], fills: [], strokes: [], outlines: [], texts: [] };
   const visit = (node: ElementPart, inherited: Inherited, chosen: boolean): void => {
     const role = node.details?.role;
-    if (role === undefined) return;
+    // Ciò che è bloccato dentro un gruppo scelto resta com'è.
+    if (role === undefined || (!chosen && node.details?.locked === true)) return;
     const part: Part = { node, role, own: ownOf(node), inherited };
     if (chosen) out.chosen.push(part);
     if (CONTAINERS.has(role)) {
@@ -269,96 +277,249 @@ export interface Restyled extends Arranged {
 /// Un numero come lo scrive il file.
 const place = (value: number): string => formatNumber(value, 2);
 
+/// Due valori scritti che si vedono uguali.
+type Same = (a: string, b: string) => boolean;
+
+const sameText: Same = (a, b) => trim(a) === trim(b);
+const samePaint: Same = (a, b) => paintText(a) === paintText(b);
+const sameLength: Same = (a, b) => {
+  const p = length(a);
+  const q = length(b);
+  return p !== null && q !== null && place(p) === place(q);
+};
+const sameDashes: Same = (a, b) => (writtenDashes(a) ?? a) === (writtenDashes(b) ?? b);
+
+/// I cambi di un comando, parte per parte, e le operazioni che li scrivono.
+class Changes {
+  private readonly attrs = new Map<ElementPart, Record<string, string | null>>();
+  private replaced = 0;
+
+  constructor(
+    private readonly plan: Plan,
+    private readonly model: DocumentModel,
+  ) {}
+
+  of(part: Part): Record<string, string | null> {
+    let attrs = this.attrs.get(part.node);
+    if (attrs === undefined) {
+      attrs = {};
+      this.attrs.set(part.node, attrs);
+    }
+    return attrs;
+  }
+
+  /// Vero se il comando cambia `name` in `part`.
+  touches(part: Part, name: string): boolean {
+    return this.attrs.get(part.node)?.[name] !== undefined;
+  }
+
+  /// Scrive `value` in `name`, o lo toglie se la parte lo vede comunque.
+  /// `same` dice quando due valori scritti si vedono uguali.
+  write(part: Part, name: string, value: string, same: Same = (a, b) => a === b): void {
+    const own = part.own.get(name);
+    if (same(value, part.inherited.get(name)!)) {
+      if (own !== undefined) this.of(part)[name] = null;
+    } else if (own === undefined || !same(own, value)) {
+      this.of(part)[name] = value;
+    }
+  }
+
+  /// L'opacità `value` sull'oggetto scelto `part`: senza attributo se è
+  /// piena.
+  opacity(part: Part, value: number): void {
+    const written = formatNumber(value, OPACITY_PLACES);
+    const own = part.own.get("opacity");
+    if (written === "1") {
+      if (own !== undefined) this.of(part).opacity = null;
+    } else if (own === undefined || parseOpacity(own) === null || formatNumber(parseOpacity(own)!, OPACITY_PLACES) !== written) {
+      this.of(part).opacity = written;
+    }
+  }
+
+  /// Una freccia il cui spessore cambia ridisegna la punta.
+  arrow(part: Part): void {
+    const arrow = part.node.details?.arrow;
+    const width = this.attrs.get(part.node)?.["stroke-width"];
+    if (part.role !== "arrow" || arrow === undefined || width === undefined) return;
+    const [x1, y1, x2, y2] = arrow;
+    this.of(part).d = arrowPath(x1, y1, x2, y2, width === null ? nonNegativeLength(part.inherited.get("stroke-width")!) ?? 1 : Number(width));
+  }
+
+  /// Il corpo `size` del testo `part`, con le righe che scendono nella
+  /// stessa proporzione. Va per ultimo: il testo si riscrive coi cambi
+  /// che ha già.
+  size(part: Part, size: number): void {
+    const before = sizeOf(part);
+    this.write(part, "font-size", place(size), sameLength);
+    const attrs = this.attrs.get(part.node);
+    if (attrs === undefined || before === null || before <= 0) return;
+    const elem = respaced(part.node, attrs, size / before);
+    if (elem === null) return;
+    // Le righe si riscrivono con l'elemento: il resto passa da lui.
+    if (replaceElem(this.plan, part.node, elem)) {
+      this.attrs.delete(part.node);
+      this.replaced++;
+    }
+  }
+
+  /// Le operazioni, con le chiavi di `units` dopo.
+  finish(units: readonly Unit[]): Restyled {
+    for (const [node, attrs] of this.attrs) {
+      if (Object.keys(attrs).length === 0) continue;
+      this.plan.ops.push({ op: "set", id: this.plan.idOf(node), attrs } satisfies Op);
+    }
+    const nodes = nodesOf(this.model, units);
+    const keys = units.map((unit, at) => this.plan.keyOf(nodes[at]!, unit.key));
+    const changed = [...this.attrs.values()].filter((attrs) => Object.keys(attrs).length > 0).length + this.replaced;
+    return { ...this.plan.finish(keys), changed };
+  }
+}
+
 /// Le operazioni che danno `change` a `units`. La selezione resta la
 /// stessa; un elemento che cambia senza id ne riceve uno.
 export function lookOps(model: DocumentModel, units: readonly Unit[], change: LookChange, ids: NewIds): Restyled {
-  const plan = new Plan(model, ids);
+  const changes = new Changes(new Plan(model, ids), model);
   const parts = partsOf(model, units);
-  const changes = new Map<ElementPart, Record<string, string | null>>();
-  const attrsOf = (part: Part): Record<string, string | null> => {
-    let attrs = changes.get(part.node);
-    if (attrs === undefined) {
-      attrs = {};
-      changes.set(part.node, attrs);
-    }
-    return attrs;
-  };
-  /// Scrive `value` in `name`, o lo toglie se la parte lo vede comunque.
-  /// `same` dice quando due valori scritti si vedono uguali.
-  const write = (part: Part, name: string, value: string, same = (a: string, b: string): boolean => a === b): void => {
-    const own = part.own.get(name);
-    if (same(value, part.inherited.get(name)!)) {
-      if (own !== undefined) attrsOf(part)[name] = null;
-    } else if (own === undefined || !same(own, value)) {
-      attrsOf(part)[name] = value;
-    }
-  };
-  const samePaint = (a: string, b: string): boolean => paintText(a) === paintText(b);
-  const sameLength = (a: string, b: string): boolean => {
-    const p = length(a);
-    const q = length(b);
-    return p !== null && q !== null && place(p) === place(q);
-  };
-  let replaced = 0;
 
   if ("fill" in change) {
-    for (const part of parts.fills) write(part, "fill", change.fill, samePaint);
+    for (const part of parts.fills) changes.write(part, "fill", change.fill, samePaint);
   } else if ("stroke" in change) {
-    for (const part of parts.strokes) write(part, part.role === "stroke" ? "fill" : "stroke", change.stroke, samePaint);
+    for (const part of parts.strokes) changes.write(part, part.role === "stroke" ? "fill" : "stroke", change.stroke, samePaint);
   } else if ("width" in change) {
     const width = place(change.width);
     for (const { part, outline } of parts.outlines) {
-      write(part, "stroke-width", width, sameLength);
+      changes.write(part, "stroke-width", width, sameLength);
       // Il tratteggio del menu resta quello che si vedeva, sullo spessore
       // nuovo.
       const dash = dashOf(outline.dashes, outline.width, outline.cap);
-      if (dash !== null && dash !== "solid") {
-        write(part, "stroke-dasharray", dashValue(dash, change.width, outline.cap), (a, b) => (writtenDashes(a) ?? a) === (writtenDashes(b) ?? b));
-      }
-      const arrow = part.node.details?.arrow;
-      if (part.role === "arrow" && arrow !== undefined && changes.get(part.node)?.["stroke-width"] !== undefined) {
-        const [x1, y1, x2, y2] = arrow;
-        attrsOf(part).d = arrowPath(x1, y1, x2, y2, Number(width));
-      }
+      if (dash !== null && dash !== "solid") changes.write(part, "stroke-dasharray", dashValue(dash, change.width, outline.cap), sameDashes);
+      changes.arrow(part);
     }
   } else if ("opacity" in change) {
-    const value = formatNumber(change.opacity, OPACITY_PLACES);
-    for (const part of parts.chosen) {
-      const own = part.own.get("opacity");
-      if (value === "1") {
-        if (own !== undefined) attrsOf(part).opacity = null;
-      } else if (own === undefined || parseOpacity(own) === null || formatNumber(parseOpacity(own)!, OPACITY_PLACES) !== value) {
-        attrsOf(part).opacity = value;
-      }
-    }
+    for (const part of parts.chosen) changes.opacity(part, change.opacity);
   } else if ("family" in change) {
-    for (const part of parts.texts) write(part, "font-family", change.family, (a, b) => trim(a) === trim(b));
+    for (const part of parts.texts) changes.write(part, "font-family", change.family, sameText);
   } else if ("anchor" in change) {
-    for (const part of parts.texts) write(part, "text-anchor", change.anchor, (a, b) => trim(a) === trim(b));
+    for (const part of parts.texts) changes.write(part, "text-anchor", change.anchor, sameText);
   } else {
-    const size = place(change.size);
+    for (const part of parts.texts) changes.size(part, change.size);
+  }
+  return changes.finish(units);
+}
+
+// ---------------------------------------------------------------------------
+// Copiare e incollare lo stile.
+// ---------------------------------------------------------------------------
+
+/// Il contorno di uno stile, come lo vede l'oggetto copiato.
+export interface StyleOutline {
+  readonly width: string;
+  readonly dashes: string;
+  readonly cap: string;
+  readonly join: string;
+}
+
+/// Il carattere di uno stile: `family` è `""` se nessuno lo scrive.
+export interface StyleFont {
+  readonly family: string;
+  readonly size: number;
+  readonly weight: string;
+}
+
+/// Lo stile di un oggetto, per «Copia stile» e «Incolla stile»: ciò che
+/// si vede, come lo scrive il file. Ciò che l'oggetto copiato non ha è
+/// `null`, e incollando non cambia.
+export interface Style {
+  /// Il riempimento: di una forma che ne ha uno, o il colore di un testo.
+  readonly fill: string | null;
+  /// Il contorno di una forma, o il colore di un tratto a penna.
+  readonly stroke: string | null;
+  readonly outline: StyleOutline | null;
+  /// L'opacità dell'oggetto scelto, da 0 a 1.
+  readonly opacity: number;
+  readonly font: StyleFont | null;
+}
+
+/// La prima parte di `units` che ha un aspetto suo, nell'ordine del
+/// documento: una forma, un tratto a penna, un testo o un'immagine.
+function firstPart(model: DocumentModel, unit: Unit): Part | null {
+  let found: Part | null = null;
+  const visit = (node: ElementPart, inherited: Inherited): void => {
+    const role = node.details?.role;
+    if (found !== null || role === undefined || node.details?.locked === true) return;
+    if (CONTAINERS.has(role)) {
+      if (node.kind !== "container") return;
+      const inner = passedBy(node);
+      for (const child of elementChildren(node)) visit(child, inner);
+      return;
+    }
+    if (FILLED.has(role) || OUTLINED.has(role) || role === "stroke" || role === "image") found = { node, role, own: ownOf(node), inherited };
+  };
+  const [node] = nodesOf(model, [unit]);
+  visit(node!, passedBy(node!.parent));
+  return found;
+}
+
+/// Lo stile di `unit`: quello della sua prima parte, con l'opacità
+/// dell'oggetto stesso. `null` se non ha parti che si possano copiare.
+export function styleOf(model: DocumentModel, unit: Unit): Style | null {
+  const part = firstPart(model, unit);
+  if (part === null) return null;
+  const [node] = nodesOf(model, [unit]);
+  const written = ownOf(node!).get("opacity");
+  const opacity = written === undefined ? 1 : (parseOpacity(written) ?? 1);
+  const size = part.role === "text" ? sizeOf(part) : null;
+  return {
+    fill: FILLED.has(part.role) ? seen(part, "fill") : null,
+    stroke: OUTLINED.has(part.role) ? seen(part, "stroke") : part.role === "stroke" ? seen(part, "fill") : null,
+    outline: OUTLINED.has(part.role)
+      ? { width: seen(part, "stroke-width"), dashes: seen(part, "stroke-dasharray"), cap: seen(part, "stroke-linecap"), join: seen(part, "stroke-linejoin") }
+      : null,
+    opacity,
+    font: part.role === "text" && size !== null ? { family: trim(seen(part, "font-family")), size, weight: trim(seen(part, "font-weight")) } : null,
+  };
+}
+
+/// Il primo colore di `values` che si vede: non `none`, non `null`.
+const shown = (...values: Array<string | null>): string | null => values.find((value) => value !== null && trim(value) !== "none") ?? null;
+
+/// Le operazioni che danno `style` a `units`, in un passo: l'opacità
+/// all'oggetto scelto, il resto alle parti, e a ciascuna ciò che ha. Il
+/// colore di un testo e di un tratto a penna è uno solo: prende quello che
+/// si vede dello stile, il riempimento per il testo, il contorno per il
+/// tratto. La selezione resta la stessa.
+export function styleOps(model: DocumentModel, units: readonly Unit[], style: Style, ids: NewIds): Restyled {
+  const changes = new Changes(new Plan(model, ids), model);
+  const parts = partsOf(model, units);
+  for (const part of parts.chosen) changes.opacity(part, style.opacity);
+  for (const part of parts.fills) {
+    const value = part.role === "text" ? shown(style.fill, style.stroke) : style.fill;
+    if (value !== null) changes.write(part, "fill", value, samePaint);
+  }
+  for (const part of parts.strokes) {
+    if (part.role === "stroke") {
+      const value = shown(style.stroke, style.fill);
+      if (value !== null) changes.write(part, "fill", value, samePaint);
+      continue;
+    }
+    if (style.stroke !== null) changes.write(part, "stroke", style.stroke, samePaint);
+    const outline = style.outline;
+    if (outline === null) continue;
+    changes.write(part, "stroke-width", outline.width, sameLength);
+    changes.write(part, "stroke-dasharray", outline.dashes, sameDashes);
+    changes.write(part, "stroke-linecap", outline.cap, sameText);
+    changes.write(part, "stroke-linejoin", outline.join, sameText);
+    changes.arrow(part);
+  }
+  const font = style.font;
+  if (font !== null) {
     for (const part of parts.texts) {
-      const before = sizeOf(part);
-      write(part, "font-size", size, sameLength);
-      const attrs = changes.get(part.node);
-      if (attrs === undefined || before === null || before <= 0) continue;
-      const elem = respaced(part.node, attrs, change.size / before);
-      if (elem === null) continue;
-      // Le righe si riscrivono con l'elemento: il resto passa da lui.
-      if (replaceElem(plan, part.node, elem)) {
-        changes.delete(part.node);
-        replaced++;
-      }
+      changes.write(part, "font-family", font.family, sameText);
+      changes.write(part, "font-weight", font.weight, sameText);
+      changes.size(part, font.size);
     }
   }
-
-  for (const [node, attrs] of changes) {
-    if (Object.keys(attrs).length === 0) continue;
-    plan.ops.push({ op: "set", id: plan.idOf(node), attrs } satisfies Op);
-  }
-  const nodes = nodesOf(model, units);
-  const keys = units.map((unit, at) => plan.keyOf(nodes[at]!, unit.key));
-  return { ...plan.finish(keys), changed: [...changes.values()].filter((attrs) => Object.keys(attrs).length > 0).length + replaced };
+  return changes.finish(units);
 }
 
 /// Il testo `node` con gli attributi `attrs` cambiati e le righe che

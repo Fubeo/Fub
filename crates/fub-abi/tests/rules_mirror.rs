@@ -41,7 +41,7 @@ use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
 use fub_abi::rules::keys;
-use fub_abi::rules::path::{relative_ref, resolution_key};
+use fub_abi::rules::path::{relative_ref, resolution_key, resolve_against};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
 use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
@@ -127,6 +127,44 @@ fn relative_ref_cases() -> Vec<Value> {
     ]
     .into_iter()
     .map(|(from, to)| json!({"from": from, "to": to, "out": relative_ref(&DocId::new(from), &DocId::new(to))}))
+    .collect()
+}
+
+/// Il path del vault a cui porta un riferimento scritto in un documento: la
+/// shell lo chiede per riscrivere l'immagine di un disegno incollata in un
+/// altro. I casi ostili sono la decodifica (un `%` scritto a mano, byte che
+/// non sono UTF-8, il BOM), gli spazi che le due lingue non contano allo
+/// stesso modo (NEL sì, BOM no), e i `..` che escono dal vault.
+fn resolve_against_cases() -> Vec<Value> {
+    [
+        ("a.md", "note/altra.md"),
+        ("sub/a.md", "altra.md"),
+        ("sub/deep/a.md", "../altra.md"),
+        ("sub/a.md", "./b.md"),
+        ("sub/deep/a.md", "/note/altra.md"),
+        ("a.md", "../fuori.md"),
+        ("sub/a.md", "../../fuori.md"),
+        ("dir/x.svg", ".."),
+        ("x.svg", "/"),
+        ("a.md", "#frammento"),
+        ("a.md", ""),
+        ("a/disegno.svg", "foto.png#x"),
+        ("a/disegno.svg", "  foto%20bella.png  "),
+        ("a/disegno.svg", "Citt%C3%A0/foto.png"),
+        ("x.svg", "100%25.png"),
+        ("x.svg", "%zz.png"),
+        ("x.svg", "50%.png"),
+        ("x.svg", "%C3.png"),
+        ("x.svg", "%EF%BB%BFfoto.png"),
+        ("x.svg", "a//b/./c.png"),
+        ("x.svg", "\u{a0}foto.png"),
+        ("x.svg", "\u{feff}foto.png"),
+        ("x.svg", "\u{85}foto.png\u{2003}"),
+    ]
+    .into_iter()
+    .map(
+        |(src, raw)| json!({"src": src, "raw": raw, "out": resolve_against(&DocId::new(src), raw)}),
+    )
     .collect()
 }
 
@@ -779,6 +817,7 @@ fn expected() -> Value {
         "normalized_name": normalized_name_cases(),
         "resolution_key": resolution_key_cases(),
         "relative_ref": relative_ref_cases(),
+        "resolve_against": resolve_against_cases(),
         "task_checked": task_checked_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),

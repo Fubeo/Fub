@@ -29,6 +29,7 @@ import { isNewId } from "./ids";
 import {
   buildDocument,
   buildFragment,
+  buildSequence,
   declarationsOf,
   deepest,
   deriveItems,
@@ -41,6 +42,7 @@ import {
   layout,
   materialize,
   parseFragment,
+  parseSequence,
   pathOf,
   rawOf,
   scopeOf,
@@ -51,6 +53,7 @@ import {
   type ElementPart,
   type Fragment,
   type Part,
+  type Sequence,
 } from "./model";
 import {
   MAX_BATCH,
@@ -94,7 +97,9 @@ import {
   FUB_NS,
   isSpace,
   isSvg,
+  NS_FUB,
   NS_NONE,
+  NS_SVG,
   SVG_NS,
   valueOf,
   XLINK_NS,
@@ -328,7 +333,7 @@ function attributeSpan(doc: XmlDocument, element: ElementNode, attr: Attr): [num
 /// valori o il contenuto estraneo. Se anche una sola riga non comincia con
 /// `from`, il rientro del file non è regolare e l'elemento resta com'è: così
 /// la stessa regola, applicata all'indietro, rimette i byte di prima.
-function reindent(raw: string, scope: NamespaceScope, underRoot: boolean, depth: number, from: string, to: string): string {
+export function reindent(raw: string, scope: NamespaceScope, underRoot: boolean, depth: number, from: string, to: string): string {
   if (from === to || raw.includes("xml:space")) return raw;
   const fragment = parseFragment(raw, scope);
   if (fragment === null) return raw;
@@ -426,6 +431,10 @@ export class SceneEngine {
   // Lo stato di un'applicazione in corso.
   private touched = new Set<string>();
   private duplicate = false;
+  /// Vero mentre si applica un'inversa del motore: il limite delle
+  /// operazioni di un `batch` vale per ciò che arriva, e l'inversa di un
+  /// `add` grande toglie i suoi elementi uno per uno.
+  private inverse = false;
 
   private constructor(source: string) {
     const opened = openSource(source);
@@ -520,7 +529,12 @@ export class SceneEngine {
       tree.undo(exact.entries);
       return this.commit(tree.take(mark), undo.inverse, undo.forward, undo.touched, false, exact.before);
     }
-    return this.apply(undo.inverse);
+    this.inverse = true;
+    try {
+      return this.apply(undo.inverse);
+    } finally {
+      this.inverse = false;
+    }
   }
 
   /// Chiude un'applicazione: il testo nuovo, la `TextOperation` e l'undo.
@@ -607,7 +621,7 @@ export class SceneEngine {
         (sum, inner) => sum + (isRecord(inner) && inner.op === "batch" && Array.isArray(inner.ops) ? count(inner.ops) : 1),
         0,
       );
-    if (count(ops) > MAX_BATCH) reject("limit", `batch oltre ${MAX_BATCH} operazioni`);
+    if (!this.inverse && count(ops) > MAX_BATCH) reject("limit", `batch oltre ${MAX_BATCH} operazioni`);
     const inverses: Op[] = [];
     for (let i = 0; i < ops.length; i++) {
       try {
@@ -742,14 +756,15 @@ export class SceneEngine {
     this.t.splice(owner, start, end - start, tidy(items));
   }
 
-  /// Mette `node` nel punto, preceduto da `gap`.
-  private insertAt(point: Point, gap: string, node: ElementPart): void {
+  /// Mette nel punto, preceduti da `gap`, un elemento o pezzi che
+  /// cominciano e finiscono con un elemento.
+  private insertAt(point: Point, gap: string, parts: readonly Part[]): void {
     const { owner, index, split } = point;
     const there = owner.parts[index];
     if (typeof there === "string" && split > 0) {
-      this.replace(owner, index, index + 1, [there.slice(0, split) + gap, node, there.slice(split)]);
+      this.replace(owner, index, index + 1, [there.slice(0, split) + gap, ...parts, there.slice(split)]);
     } else {
-      this.replace(owner, index, index, [gap, node]);
+      this.replace(owner, index, index, [gap, ...parts]);
     }
   }
 
@@ -891,17 +906,18 @@ export class SceneEngine {
     return indentAt(this.t.model, owner, index, lead + to.gap);
   }
 
-  /// Mette `node` in `to`.
-  private place(to: Destination, node: ElementPart): void {
+  /// Mette in `to` un elemento, o pezzi che cominciano e finiscono con un
+  /// elemento.
+  private place(to: Destination, parts: readonly Part[]): void {
     if (to.kind === "point") {
-      this.insertAt(to.point, to.gap, node);
+      this.insertAt(to.point, to.gap, parts);
       return;
     }
     // Un genitore vuoto si riscrive in forma aperta, col figlio dentro (§6).
     const { parent } = to;
     const indent = indentOf(this.t.model, parent);
     if (parent.tail === null) this.rewriteHead(parent, (attrs) => attrs, false);
-    this.t.splice(parent, 0, parent.parts.length, [this.eolOf(`\n${to.indent}`), node, this.eolOf(`\n${indent}`)]);
+    this.t.splice(parent, 0, parent.parts.length, [this.eolOf(`\n${to.indent}`), ...parts, this.eolOf(`\n${indent}`)]);
   }
 
   // -------------------------------------------------------------------------
@@ -1091,6 +1107,10 @@ export class SceneEngine {
   private add(op: Record<string, unknown>): Op {
     const parent = this.container(op.parent);
     if (this.lockedInside(parent)) reject("locked", "il genitore è bloccato o sta in un contenitore bloccato");
+    if (op.raw !== undefined) {
+      if (op.elem !== undefined) reject("invalid-elem", "un add porta elem oppure raw, non tutti e due");
+      return this.addRaw(parent, op.pos, op.raw);
+    }
     const root = parent === this.t.model.root;
     const scope = scopeOf(parent);
     const elem = this.prepare(op.elem, scope, root);
@@ -1114,9 +1134,151 @@ export class SceneEngine {
     const problem = this.problem(node);
     if (problem !== null) reject("invalid-elem", problem);
     this.checkNesting(node, parent);
-    this.place(to, node);
+    this.place(to, [node]);
     this.touch(node);
     return { op: "remove", target: this.targetOf(node) };
+  }
+
+  /// `add` con `raw`: uno o più elementi fratelli scritti così come sono,
+  /// coi ritorni a capo del documento (§2). Quelli che il formato ammette
+  /// passano dagli stessi controlli di `elem`, e il contorno dei loro tratti
+  /// si ricalcola; gli estranei restano come sono.
+  private addRaw(parent: ContainerNode, pos: unknown, raw: unknown): Op {
+    if (typeof raw !== "string") reject("invalid-elem", "raw non è un testo");
+    const scope = scopeOf(parent);
+    let text = this.eolOf(raw.replace(/\r\n?/g, "\n"));
+    let sequence = parseSequence(text, scope);
+    if (sequence === null) reject("invalid-elem", "raw non è una sequenza di elementi ben formata");
+    let parts = buildSequence(sequence, parent);
+    const edits = this.checkSequence(sequence, parts, parent);
+    if (edits.length > 0) {
+      let rewritten = "";
+      let at = 0;
+      for (const [from, to, value] of edits) {
+        rewritten += text.slice(at, from) + value;
+        at = to;
+      }
+      text = rewritten + text.slice(at);
+      sequence = parseSequence(text, scope);
+      if (sequence === null) reject("invalid-elem", "il contorno riscritto non si legge");
+      parts = buildSequence(sequence, parent);
+    }
+    const nodes = parts.filter((part): part is ElementPart => typeof part !== "string" && part.kind !== "other");
+    for (const node of nodes) {
+      const problem = this.rawProblem(node);
+      if (problem !== null) reject("invalid-elem", problem);
+    }
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const node of nodes) {
+      for (const id of idsIn(node)) {
+        if (seen.has(id)) reject("duplicate-id", `id ripetuto: ${id}`);
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+    // Un `add` ripetuto dalla rete è un doppione, non un errore (§8).
+    const same = (node: ElementPart): boolean => {
+      const existing = node.facts.id === null ? null : this.t.element(node.facts.id);
+      return existing !== null && rawOf(existing) === rawOf(node);
+    };
+    if (nodes.every(same)) {
+      this.duplicate = true;
+      return { op: "batch", ops: [] };
+    }
+    const taken = ids.find((id) => this.t.has(id));
+    if (taken !== undefined) reject("duplicate-id", `id già usato: ${taken}`);
+    const to = this.destination(parent, pos);
+    for (const node of nodes) this.checkNesting(node, parent);
+    this.place(to, parts);
+    for (const node of nodes) this.touch(node);
+    // Dall'ultimo al primo: togliere un elemento non sposta i percorsi di
+    // quelli che lo precedono.
+    const removes = nodes.map((node): Op => ({ op: "remove", target: this.targetOf(node) })).reverse();
+    return removes.length === 1 ? removes[0]! : { op: "batch", ops: removes };
+  }
+
+  /// I controlli di `elem` sugli elementi modificabili di `sequence`, letta
+  /// come `parts` sotto `parent`: valori nei limiti, id nella forma degli
+  /// id nuovi, niente carta, livelli solo sotto la radice, titolo e
+  /// descrizione della radice solo con `meta`. Restituisce, in ordine e
+  /// negli indici di `raw`, le modifiche che portano il `d` di ogni tratto
+  /// al contorno ricalcolato (§4).
+  private checkSequence(sequence: Sequence, parts: readonly Part[], parent: ContainerNode): Array<[number, number, string]> {
+    const { doc, offset } = sequence;
+    const underRoot = parent === this.t.model.root;
+    const edits: Array<[number, number, string]> = [];
+    const check = (element: ElementNode, top: boolean): void => {
+      const tag = element.local;
+      for (const attr of element.attrs) {
+        if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) continue;
+        this.checkValue(tag, doc.namespaces[attr.ns]!, attr.local, attr.value);
+      }
+      if (valueOf(element, NS_FUB, "role") === "paper") reject("invalid-elem", "la carta nasce solo col documento");
+      const layer = tag === "g" && valueOf(element, NS_FUB, "layer") !== undefined;
+      if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
+      const id = valueOf(element, NS_NONE, "id");
+      if (id === undefined) {
+        if (tag !== "title" && tag !== "desc" && tag !== "tspan") reject("invalid-elem", `${tag} senza id`);
+      } else if (!isNewId(id, layer ? "layer" : "object")) {
+        reject("invalid-elem", `id non valido per un ${layer ? "livello" : "oggetto"}: ${JSON.stringify(id)}`);
+      }
+      const tool = valueOf(element, NS_FUB, "tool");
+      if (tag !== "path" || (tool !== "pen" && tool !== "highlighter")) return;
+      const d = this.stroke(valueOf(element, NS_FUB, "ink"), valueOf(element, NS_FUB, "brush"));
+      if (d === null) return;
+      const written = element.attrs.find((attr) => attr.ns === NS_NONE && attr.local === "d");
+      if (written === undefined) {
+        const at = element.openEnd - (element.closeStart === null ? 2 : 1) - offset;
+        edits.push([at, at, ` d="${escapeAttribute(d)}"`]);
+      } else if (written.value !== d) {
+        edits.push([written.raw[0] - offset, written.raw[1] - offset, escapeAttribute(d)]);
+      }
+    };
+    /// Un elemento modificabile con quelli che contiene.
+    const visit = (id: NodeId, node: ElementPart, top: boolean): void => {
+      if (node.details === null) return;
+      const element = doc.element(id)!;
+      check(element, top);
+      const inner = element.children.filter((child) => doc.element(child) !== null);
+      if (node.kind === "container") {
+        const children = elementChildren(node);
+        inner.forEach((child, i) => visit(child, children[i]!, false));
+        return;
+      }
+      const stack = inner.reverse();
+      while (stack.length > 0) {
+        const child = doc.element(stack.pop()!)!;
+        check(child, false);
+        for (let i = child.children.length - 1; i >= 0; i--) if (doc.element(child.children[i]!) !== null) stack.push(child.children[i]!);
+      }
+    };
+    const nodes = parts.filter((part): part is ElementPart => typeof part !== "string" && part.kind !== "other");
+    const top = doc.children(sequence.id).filter((child) => doc.element(child) !== null);
+    top.forEach((child, i) => {
+      const element = doc.element(child)!;
+      if (underRoot && element.ns === NS_SVG && (element.local === "title" || element.local === "desc")) {
+        reject("invalid-elem", "titolo e descrizione della radice cambiano con meta");
+      }
+      visit(child, nodes[i]!, true);
+    });
+    return edits;
+  }
+
+  /// Il primo problema di un elemento letto da `raw`: un tratto che non si
+  /// legge (S004). Le parti estranee non ne hanno.
+  private rawProblem(node: ElementPart): string | null {
+    if (node.details === null) return null;
+    if (node.kind === "leaf") {
+      const s004 = node.problems.find(([code]) => code === "S004");
+      return s004 === undefined ? null : s004[1];
+    }
+    for (const part of node.parts) {
+      if (typeof part === "string" || part.kind === "other") continue;
+      const inner = this.rawProblem(part);
+      if (inner !== null) return inner;
+    }
+    return null;
   }
 
   /// La forma canonica di un elemento del documento, per confrontarla.
@@ -1143,7 +1305,7 @@ export class SceneEngine {
     if (node === null) reject("invalid-elem", "l'elemento da rimettere non si legge");
     const taken = idsIn(node).find((id) => this.t.has(id));
     if (taken !== undefined) reject("duplicate-id", `id già usato: ${taken}`);
-    this.insertAt(this.pointOf(anchor), op.gap, node);
+    this.insertAt(this.pointOf(anchor), op.gap, [node]);
     this.touch(node);
     return { op: "remove", target: this.targetOf(node) };
   }
@@ -1211,7 +1373,7 @@ export class SceneEngine {
       }
     }
     if (roleOf(built) !== roleOf(node)) reject("invalid-elem", "lo spostamento cambierebbe il ruolo dell'elemento");
-    this.place(to, built);
+    this.place(to, [built]);
     return { op: "move", target: this.targetOf(built), slot: this.slotOf(anchor), gap };
   }
 
@@ -1548,7 +1710,7 @@ export class SceneEngine {
       }
       const node = this.build(this.eolOf(writeElement(out, this.indentFor(to))), root);
       if (node === null || node.details === null) reject("invalid-elem", `${field} non rientra nel formato`);
-      this.place(to, node);
+      this.place(to, [node]);
     }
     return inverse;
   }

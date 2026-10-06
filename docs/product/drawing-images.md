@@ -15,8 +15,8 @@ entra nel disegno come `<image>` con i byte nell'attributo `href`, in un data
 URI: il file resta uno solo, e si apre uguale su un altro computer. Entrano
 PNG, JPEG, GIF e WebP così come sono; un altro formato che il browser sa
 leggere diventa PNG, e un JPEG girato dall'EXIF si ricodifica diritto, perché
-non tutti i programmi che leggono un SVG seguono l'EXIF. Un SVG non entra come
-immagine.
+non tutti i programmi che leggono un SVG seguono l'EXIF. Un SVG entra coi suoi
+elementi, come dice [Disegni, appunti](drawing-clipboard.md).
 
 L'immagine va dove sono il puntatore o il cursore, se sono nella vista, e
 altrimenti al centro della vista. Ogni pixel misura un'unità, finché

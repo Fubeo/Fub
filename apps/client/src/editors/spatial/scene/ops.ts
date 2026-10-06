@@ -4,11 +4,13 @@
 // sezioni.
 //
 // Le forme pubbliche sono quelle della tabella di §2, le stesse sulla rete e
-// nell'undo. Tre inverse hanno una forma in più, che scrive soltanto il
-// motore: `add` con `slot` rimette esattamente ciò che un `remove` ha tolto,
-// anche un elemento estraneo; `move` con `slot` riporta un elemento al punto
-// esatto da cui è partito; `page` con `previous` rimette i valori di prima,
-// anche assenti. Non arrivano mai dalla rete: `parseWireOp` le rifiuta.
+// nell'undo; `add` porta `elem`, un elemento del formato, oppure `raw`, il
+// testo di uno o più elementi fratelli così come vanno scritti. Tre inverse
+// hanno una forma in più, che scrive soltanto il motore: `add` con `slot`
+// rimette esattamente ciò che un `remove` ha tolto, anche un elemento
+// estraneo; `move` con `slot` riporta un elemento al punto esatto da cui è
+// partito; `page` con `previous` rimette i valori di prima, anche assenti.
+// Non arrivano mai dalla rete: `parseWireOp` le rifiuta.
 
 import { utf8Length } from "./text";
 import type { Elem } from "./serialize";
@@ -72,6 +74,15 @@ export interface AddOp {
   readonly parent: string;
   readonly pos: Pos;
   readonly elem: Elem;
+}
+
+/// Uno o più elementi fratelli, scritti così come sono: è la forma con cui si
+/// incolla, anche ciò che il formato non ammette (§2).
+export interface AddRawOp {
+  readonly op: "add";
+  readonly parent: string;
+  readonly pos: Pos;
+  readonly raw: string;
 }
 
 /// L'inversa di `remove`: rimette `gap` e `raw`, gli spazi e l'elemento
@@ -149,6 +160,7 @@ export interface BatchOp {
 /// Un'operazione sulla scena.
 export type Op =
   | AddOp
+  | AddRawOp
   | RestoreOp
   | RemoveOp
   | SetOp
@@ -188,7 +200,7 @@ export function parseWireOp(value: unknown): { readonly op: Op } | { readonly re
     if (typeof record.op !== "string" || !OP_NAMES.has(record.op)) {
       return { reason: "invalid-elem", detail: `operazione sconosciuta: ${JSON.stringify(record.op)}` };
     }
-    if ("slot" in record || "raw" in record || "gap" in record || "previous" in record) {
+    if ("slot" in record || "gap" in record || "previous" in record || ("raw" in record && record.op !== "add")) {
       return { reason: "invalid-elem", detail: `forma di ${record.op} riservata al motore` };
     }
     if (record.op !== "batch") {

@@ -41,7 +41,7 @@
 
 import { errorText } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
-import { relativeRef } from "../../rules/mirrored";
+import { relativeRef, resolveAgainst } from "../../rules/mirrored";
 import { identifier } from "../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
@@ -57,7 +57,7 @@ import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
-import { createDrawEditor, type DrawEditor, type DrawImages, type DrawLinks } from "./tools/editor";
+import { createDrawEditor, type DrawEditor, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages, type ImageRef } from "./read-images";
 
 type VectorMode = "draw" | "read";
@@ -300,6 +300,13 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
             }),
       };
 
+  /// Dove sta il disegno nel vault: gli `href` che gli appunti portano da un
+  /// disegno all'altro si leggono e si riscrivono da qui.
+  const place: DrawPlace = {
+    locate: (href) => resolveAgainst(context.documentId, href),
+    refer: (doc) => linkHref(context.documentId, doc),
+  };
+
   life.listen(aboutLinksList, "click", (event) => {
     const control = event.target instanceof Element ? event.target.closest("button") : null;
     if (control instanceof HTMLButtonElement && control.dataset.href !== undefined) openLink(control.dataset.href);
@@ -320,6 +327,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       },
       links,
       ...(images === undefined ? {} : { images }),
+      place,
       onChange: (change) => {
         text = change.text;
         opened = { kind: "scene", engine: mounted.engine };

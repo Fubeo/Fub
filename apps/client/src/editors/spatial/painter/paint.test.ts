@@ -130,6 +130,36 @@ describe("gli strati immagine", () => {
     expect(image(scene, 1).transparent).toBe(true);
   });
 
+  it("sanno quali contenitori le racchiudono tutte", () => {
+    const engine = SceneEngine.open(doc(
+      `<use href="#a"/>${LAYER}<g id="g"><rect id="a" width="1" height="1"/><use href="#a"/></g><use href="#a" x="2"/></g>`,
+    ));
+    const scene = new PaintBuilder().build(engine);
+    expect(kinds(scene)).toEqual(["image", "live", "image", "image"]);
+    const [layer, group] = [engine.holder("l1"), engine.holder("g")];
+    expect(image(scene, 0).containers).toHaveLength(0);
+    expect(image(scene, 2).containers).toHaveLength(2);
+    expect(image(scene, 2).containers[0]).toBe(layer);
+    expect(image(scene, 2).containers[1]).toBe(group);
+    // È la chiave dei gruppi che il painter ritrova.
+    expect(image(scene, 2).containers[1]).toBe(((live(scene, 1).nodes[0] as PaintGroup).children[0] as PaintGroup).key);
+    expect(image(scene, 3).containers).toHaveLength(1);
+    expect(image(scene, 3).containers[0]).toBe(layer);
+  });
+
+  it("unite oltre il limite, le racchiude solo chi le contiene tutte e due", () => {
+    let body = `${LAYER}<g id="g"><use href="#a"/></g><use href="#a"/>`;
+    for (let i = 0; i < MAX_IMAGE_LAYERS + 2; i++) body += `<rect id="r${i}" width="1" height="1"/><use href="#a"/>`;
+    const engine = SceneEngine.open(doc(`${body}</g>`));
+    const scene = new PaintBuilder().build(engine);
+    // Fra la sequenza nel gruppo e quella dopo non c'è niente di vivo: si
+    // uniscono per prime.
+    const first = image(scene, 0);
+    expect(first.body).toContain('<g id="g"><use href="#a"/></g><use href="#a"/>');
+    expect(first.containers).toHaveLength(1);
+    expect(first.containers[0]).toBe(engine.holder("l1"));
+  });
+
   it("non nascono per ciò che da solo non disegna", () => {
     const scene = sceneOf(doc(
       '<defs><linearGradient id="g"/></defs><metadata>m</metadata><!-- nota --><fub:extra/>'

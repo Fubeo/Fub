@@ -36,7 +36,7 @@ export type Place = { readonly after: ElementPart } | "first" | "last";
 /// cui nessuno li scrive: chi esce da un contenitore che non li scriveva per
 /// entrare in uno che li scrive li prende così. `font-family` non ne ha uno
 /// che si possa scrivere, e resta quello che trova.
-const INITIAL: Readonly<Record<string, string>> = {
+export const INITIAL: Readonly<Record<string, string>> = {
   fill: "#000000",
   "fill-opacity": "1",
   stroke: "none",
@@ -53,9 +53,15 @@ const INITIAL: Readonly<Record<string, string>> = {
 /// Gli attributi ereditati che contano per `node`: per un testo e per un
 /// contenitore tutti, per una forma quelli del colore e del contorno, per
 /// un'immagine nessuno.
-function inheritedFor(node: ElementPart): readonly string[] {
-  if (node.kind === "container" || node.facts.local === "text") return INHERITED;
-  if (node.facts.local === "image") return [];
+export function inheritedFor(node: ElementPart): readonly string[] {
+  return inheritedBy(node.facts.local, node.kind === "container");
+}
+
+/// Gli attributi ereditati che contano per un elemento `local`, contenitore
+/// o no.
+export function inheritedBy(local: string, container: boolean): readonly string[] {
+  if (container || local === "text") return INHERITED;
+  if (local === "image") return [];
   return INHERITED.filter((name) => !name.startsWith("font-") && name !== "text-anchor");
 }
 

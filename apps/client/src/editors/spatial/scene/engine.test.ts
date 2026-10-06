@@ -80,6 +80,12 @@ describe("parseWireOp", () => {
     }
   });
 
+  it("accetta un add con raw, e rifiuta raw sulle altre operazioni", () => {
+    const op = { op: "batch", ops: [{ op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw: '<rect style="fill:red"/>' }] };
+    expect(parseWireOp(op)).toEqual({ op });
+    expect(parseWireOp({ op: "remove", target: "o1a2b3c4d", raw: "<rect/>" })).toMatchObject({ reason: "invalid-elem" });
+  });
+
   it("rifiuta ciò che non è un'operazione", () => {
     for (const value of [null, 3, [], {}, { op: "drop" }, { op: "batch" }, { op: "batch", ops: [null] }]) {
       expect(parseWireOp(value)).toMatchObject({ reason: "invalid-elem" });
@@ -667,6 +673,119 @@ describe("i terminatori", () => {
     const engine = SceneEngine.open(source);
     const out = apply(engine, { op: "set", id: "o6f7g8h9i", attrs: { opacity: "0.5" } });
     expect(out.text).toBe([ROOT, PAPER, L1, '    <g id="o6f7g8h9i" opacity="0.5">', "    </g>", END_G, END, ""].join("\r\n"));
+  });
+});
+
+describe("add con raw", () => {
+  const RAW = '<g style="fill:#e69f00">\n      <!-- un commento -->\n      <rect width="10" height="10"/>\n    </g>';
+
+  it("scrive l'elemento estraneo così com'è, e l'inversa lo toglie col percorso", () => {
+    const engine = SceneEngine.open(BASE);
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { after: "o1a2b3c4d" }, raw: RAW });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, `    ${RAW}`, R2, R3, END_G, END));
+    expect(out.inverse).toEqual({ op: "remove", target: { path: [2, 1], tag: "g" } });
+    expect(engine.scene().some((item) => item.kind === "foreign")).toBe(true);
+    apply(engine, out.inverse);
+    expect(engine.text).toBe(BASE);
+  });
+
+  it("con un id lo toglie per id, e un add ripetuto è un doppione", () => {
+    const engine = SceneEngine.open(BASE);
+    const raw = '<use id="u1" href="#o1a2b3c4d" x="10"/>';
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw });
+    expect(out.inverse).toEqual({ op: "remove", target: "u1" });
+    expect(out.touched).toContain("u1");
+    const again = applied(engine.apply({ op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }));
+    expect(again.duplicate).toBe(true);
+    expect(again.text).toBe(out.text);
+  });
+
+  it("i ritorni a capo diventano quelli del documento", () => {
+    const source = [ROOT, TITLE, PAPER, L1, E1, END_G, END, ""].join("\r\n");
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw: '<g style="x">\n<rect/>\r</g>' });
+    expect(out.text).toBe([ROOT, TITLE, PAPER, L1, E1, '    <g style="x">', "<rect/>", "</g>", END_G, END, ""].join("\r\n"));
+  });
+
+  it("uno script entra inerte, con S005", () => {
+    const engine = SceneEngine.open(BASE);
+    const out = apply(engine, { op: "add", parent: "#root", pos: { last: true }, raw: "<script>alert(1)</script>" });
+    expect(readScene(out.text).diagnostics.map((d) => d.code)).toContain("S005");
+  });
+
+  it("una sequenza entra con gli spazi fra gli elementi, e l'inversa la toglie dall'ultimo al primo", () => {
+    const engine = SceneEngine.open(BASE);
+    const raw = `${R4.trim()}\n    <g style="x"><!-- nota --><rect/></g>`;
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3, R4, '    <g style="x"><!-- nota --><rect/></g>', END_G, END));
+    expect(out.inverse).toEqual({ op: "batch", ops: [{ op: "remove", target: { path: [2, 4], tag: "g" } }, { op: "remove", target: "o4d5e6f7g" }] });
+    expect(engine.scene().some((item) => item.kind === "element" && item.id === "o4d5e6f7g")).toBe(true);
+    apply(engine, out.inverse);
+    expect(engine.text).toBe(BASE);
+  });
+
+  it("in un genitore vuoto la sequenza va su righe sue", () => {
+    const engine = SceneEngine.open(lf(ROOT, TITLE, PAPER, '  <g id="l3f8a0c2d" fub:layer="Livello 1"/>', END));
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw: `${R4.trim()}\n    <rect style="x"/>` });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R4, '    <rect style="x"/>', END_G, END));
+  });
+
+  it("un elemento del formato tiene i suoi byte, e il contorno dei tratti si ricalcola", () => {
+    const engine = SceneEngine.open(BASE);
+    const d = pf1(inkToQuantized(decodeInk(INK)), parseBrush(BRUSH));
+    const group = '<g id="o5e6f7g8h"  opacity=\'0.5\'>\n      <!-- c -->\n      <foo xmlns="urn:x"/>\n      <rect id="o6f7g8h9i" x="1" y="1" width="2" height="2"/>\n    </g>';
+    const stale = `<path id="o7k2m9x4q" fub:tool="pen" fub:brush="${BRUSH}" d="M0 0 Z" fill="#000000" fub:ink="${INK}"/>`;
+    const bare = `<path id="o8m3n0y5r" fub:tool="highlighter" fub:brush="${BRUSH}" fill="#000000" fub:ink="${INK}"></path>`;
+    const raw = `${group}\n    ${stale}\n    ${bare}`;
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { first: true }, raw });
+    const strokes = [stale.replace('d="M0 0 Z"', `d="${d}"`), bare.replace('"></path>', `" d="${d}"></path>`)];
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, `    ${group}`, ...strokes.map((s) => `    ${s}`), E1, R2, R3, END_G, END));
+    expect(out.inverse).toEqual({ op: "batch", ops: ["o8m3n0y5r", "o7k2m9x4q", "o5e6f7g8h"].map((target) => ({ op: "remove", target })) });
+    expect(out.touched).toEqual(expect.arrayContaining(["o5e6f7g8h", "o6f7g8h9i", "o7k2m9x4q", "o8m3n0y5r"]));
+  });
+
+  it("rifiuta una forma sbagliata, un elemento del formato che elem non ammetterebbe, gli id presi e i genitori bloccati", () => {
+    const add = (raw: unknown, parent = "l3f8a0c2d"): unknown => ({ op: "add", parent, pos: { last: true }, raw });
+    rejects(BASE, { ...(add("<rect style='x'/>") as object), elem: R4_ELEM }, "invalid-elem");
+    const malformed = ["<rect style='x'>", "<rect style='x'/>testo<rect style='y'/>", " <rect style='x'/>", "<rect style='x'/> ", "<!-- c --><rect style='x'/>", "<rect style='x'/><!-- c --><rect style='y'/>", "<rect style='x'/><?pi?><rect style='y'/>", "testo", 7, ""];
+    for (const raw of malformed) rejects(BASE, add(raw), "invalid-elem");
+    for (const raw of [
+      '<rect width="10" height="10"/>',
+      '<rect id="z" width="10" height="10"/>',
+      '<g id="l1b2c3d4e" fub:layer="Dentro"/>',
+      '<rect id="o9z8y7x6w" fub:role="paper" width="10" height="10"/>',
+      '<g id="o9z8y7x6w"><rect width="1" height="1"/></g>',
+      `<path id="o9z8y7x6w" fub:tool="pen" fub:brush="${BRUSH}" fub:ink="1 s100 cxypt"/>`,
+    ]) {
+      rejects(BASE, add(raw), "invalid-elem");
+    }
+    rejects(BASE, add("<title>Nome</title>", "#root"), "invalid-elem");
+    rejects(BASE, add(`<rect id="o9z8y7x6w" width="1" height="1" font-family="${"x".repeat(MAX_VALUE_BYTES + 1)}"/>`), "limit");
+    rejects(BASE, add('<g style="x"><rect id="o2b3c4d5e"/></g>'), "duplicate-id");
+    rejects(BASE, add('<g style="x"><rect id="z"/><rect id="z"/></g>'), "duplicate-id");
+    rejects(BASE, add(`${R4.trim()}<rect style="x" id="o4d5e6f7g"/>`), "duplicate-id");
+    rejects(lf(ROOT, TITLE, PAPER, L1_LOCKED, E1, END_G, END), add("<rect style='x'/>"), "locked");
+    rejects(BASE, add("<rect style='x'/>", "o1a2b3c4d"), "missing-parent");
+  });
+
+  it("un estraneo porta valori oltre il limite di elem", () => {
+    const engine = SceneEngine.open(BASE);
+    const raw = `<rect style="x" data-n="${"x".repeat(MAX_VALUE_BYTES + 1)}"/>`;
+    expect(apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }).text).toContain(raw);
+  });
+
+  it(`l'inversa di una sequenza lunga si applica anche oltre ${MAX_BATCH} operazioni`, () => {
+    const engine = SceneEngine.open(BASE);
+    const ids = Array.from({ length: MAX_BATCH + 1 }, (_, i) => `o${i.toString(36).padStart(8, "0")}`);
+    const raw = ids.map((id) => `<rect id="${id}" x="0" y="0" width="1" height="1"/>`).join("\n    ");
+    const added = applied(engine.apply({ op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }));
+    // Un'altra modifica in mezzo: l'annulla non è più esatto, e passa
+    // dall'inversa.
+    applied(engine.apply({ op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } }));
+    applied(engine.undo(added.undo));
+    expect(engine.text).toBe(BASE.replace('fill="none"', 'fill="#000000"'));
+    // Ciò che arriva resta nel limite.
+    rejects(BASE, added.undo.inverse, "limit");
   });
 });
 

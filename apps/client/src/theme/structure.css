@@ -1554,6 +1554,37 @@ html, body, #app {
 .draw-isolation-sep {
   flex: none;
 }
+/* La barra di un incolla lungo, in alto al centro del foglio: che cosa fa,
+   quanto manca, e il pulsante che lo interrompe. Un testo lungo finisce coi
+   puntini; coi righelli la barra non copre quello in alto. */
+.draw-progress {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+  transform: translateX(-50%);
+}
+.draw-stage[data-rulers] > .draw-progress {
+  top: 32px;
+}
+.draw-progress-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-progress-meter {
+  flex: none;
+  width: 8rem;
+}
+.draw-progress-stop {
+  flex: none;
+  min-height: 44px;
+}
 .draw-stage[data-rulers] > .draw-text-layer,
 .draw-stage[data-rulers] > .draw-link-layer {
   clip-path: inset(24px 0 0 24px);

@@ -93,9 +93,10 @@ Lo Standard aggiunge:
   tre cifre o senza `#`, oppure il selettore del sistema accanto. Il colore
   scelto resta come campione in più, un anello che ha per nome il suo codice;
   se sulla carta bianca sta sotto il contrasto 3:1, il nome lo dice;
-- **«Immagine dal vault…»** (`Ctrl+I`), nel gruppo «Inserisci» dopo gli
-  strumenti: mette nel disegno un'immagine che è già nel vault (vedi
-  [Disegni, immagini](drawing-images.md));
+- **«Immagine dal vault…»** (`Ctrl+I`), nel gruppo «Inserisci»: un'immagine
+  che è già nel vault ([Disegni, immagini](drawing-images.md));
+- **«Copia lo stile»** e **«Incolla lo stile»** (`Ctrl+Alt+C`, `Ctrl+Alt+V`),
+  da un oggetto agli altri ([Disegni, appunti](drawing-clipboard.md));
 - il pannello delle **«Proprietà»**, accanto al foglio, per scrivere coi
   numeri com'è fatta la selezione: [Disegni, proprietà](drawing-properties.md);
 - l'albero degli oggetti come **pannello dei livelli**: i nomi, il filtro, le
@@ -379,12 +380,11 @@ La scelta non si legge mai dal solo colore: lo strumento, il colore e lo
 spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
 si anima: ogni inquadratura è subito quella nuova, e non c'è moto da ridurre.
 
-## Immagini
+## Appunti e immagini
 
-Un'immagine incollata con `Ctrl+V` o `⌘V`, o un file lasciato sul foglio,
-entra nel disegno coi suoi byte; dallo Standard, «Immagine dal vault…»
-(`Ctrl+I`) ne mette una del vault per riferimento. Come entrano, quanto pesano
-e dove si vedono è in [Disegni, immagini](drawing-images.md).
+Copia, taglia e incolla parlano SVG, fra i disegni e con gli altri programmi
+([Disegni, appunti](drawing-clipboard.md)); un'immagine entra coi suoi byte, o
+dal vault per riferimento ([Disegni, immagini](drawing-images.md)).
 
 ## Documenti che non si modificano subito
 

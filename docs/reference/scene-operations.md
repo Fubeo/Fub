@@ -78,7 +78,7 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 
 | `op` | Campi | Effetto | Inversa |
 |---|---|---|---|
-| `add` | `parent`, `pos`, `elem` | inserisce l'elemento | `remove` con lo stesso `id` |
+| `add` | `parent`, `pos`, `elem` oppure `raw` | inserisce l'elemento | `remove` con lo stesso `id`, o col percorso |
 | `remove` | `target` | elimina l'elemento con i suoi figli | `add` con l'elemento tolto e il suo posto |
 | `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere) | cambia attributi | `set` con i valori precedenti |
 | `text` | `id`, `lines` (lista di stringhe) | sostituisce le righe di un `text` | `text` con le righe precedenti |
@@ -107,6 +107,31 @@ accetta:
 
 Altri dettagli:
 
+- **`add` con `raw`:** al posto di `elem`, `raw` porta il testo XML di uno o
+  più elementi fratelli, così come vanno scritti: è la forma con cui si
+  incolla, e gli elementi restano identici byte per byte, anche quelli che il
+  formato non ammette.
+  - Il testo è una sequenza di elementi ben formati nei namespace che il
+    genitore dichiara (ognuno può dichiararne di suoi), separati soltanto da
+    spazi, senza niente prima del primo o dopo l'ultimo.
+  - Un elemento che, letto in quel posto, il formato ammette passa dagli
+    stessi controlli di `elem` (§4): valori nei limiti di §5, id nella forma
+    degli id nuovi, niente carta, livelli solo sotto la radice, titolo e
+    descrizione della radice solo con `meta`, tratti che si leggono. Il `d`
+    di ogni tratto si riscrive col contorno ricalcolato, al suo posto o, se
+    manca, in fondo al tag d'apertura; il resto resta com'è scritto.
+  - Un elemento estraneo resta com'è: la forma degli id nuovi non si chiede,
+    e il limite del valore di un attributo non vale, perché conta solo
+    quello dell'operazione.
+  - Ogni `id` della sequenza è nuovo, cioè assente dal documento e diverso
+    dagli altri; altrimenti `duplicate-id`.
+  - I ritorni a capo diventano quelli del documento. Uno `script` o un
+    attributo `on…` restano inerti come in ogni elemento estraneo (S005).
+  - `raw` ed `elem` insieme, o nessuno dei due, sono `invalid-elem`.
+  - L'inversa è `remove` per un elemento solo e, per una sequenza, un
+    `batch` di `remove` dall'ultimo elemento al primo, ognuno con l'id o, se
+    manca, col percorso. Un `add` ripetuto, in cui ogni elemento ha un id già
+    presente e scritto uguale, è un doppione (§8).
 - **`adopt`:** se il prefisso `fub` è già legato a un altro namespace, si usa
   il primo `fubN` libero. L'inversa toglie `fub:version`, e la dichiarazione
   del prefisso solo se nient'altro la usa.
@@ -183,6 +208,11 @@ lo decide la superficie, come per le guide bloccate.
 | Valore di un attributo | 512 KiB; per l'`href` di un'immagine 7 MiB |
 | Annidamento di gruppi | 32 livelli |
 
+Il limite delle operazioni di un `batch` vale per ciò che arriva al motore.
+L'inversa che il motore stesso calcola non lo conta: quella di un `add` con
+una sequenza lunga toglie gli elementi uno per uno, e un annulla deve
+riuscire anche così.
+
 ## 6. Dall'operazione alla `TextOperation`
 
 La `DocumentSession` accetta solo `SurfaceEdit { text, operation }` e verifica
@@ -200,7 +230,8 @@ tiene, per ogni elemento:
   span del fratello `after`; con `first` subito dopo il tag di apertura del
   genitore, con `last` prima della riga del tag di chiusura. Un genitore vuoto
   scritto come `<g …/>` si riscrive per intero, in forma aperta, con il figlio
-  dentro.
+  dentro. Con `raw` si inserisce `raw` al posto della forma canonica, con le
+  righe interne come sono e soltanto il `d` dei tratti riscritto.
 - **`remove`:** si cancella lo span dell'elemento. Se l'elemento comincia una
   riga, si cancellano anche il ritorno a capo e il rientro che lo precedono,
   così non resta una riga vuota.
@@ -358,6 +389,9 @@ devono verificare renderebbe il test circolare.
 | 40 | `locked-group` | un oggetto dentro un gruppo bloccato non cambia: rifiuto `locked` |
 | 41 | `locked-group-add` | dentro un gruppo bloccato non si aggiunge niente: rifiuto `locked` |
 | 42 | `locked-object-unlock` | una forma bloccata si cambia ancora: un `set` la sblocca |
+| 43 | `add-raw-foreign` | `add` con `raw` scrive l'elemento estraneo così com'è, e l'inversa lo toglie col percorso |
+| 44 | `add-raw-sequence` | un `raw` con un elemento del formato e uno estraneo; l'inversa è un `batch` che li toglie dall'ultimo al primo |
+| 45 | `add-raw-duplicate-id` | un `raw` con dentro un id già presente: rifiuto `duplicate-id` |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

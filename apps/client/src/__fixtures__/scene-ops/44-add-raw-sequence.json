@@ -1,0 +1,38 @@
+{
+  "name": "add-raw-sequence",
+  "description": "add con raw porta una sequenza: un elemento del formato e uno estraneo, separati da un a capo; l'inversa li toglie dall'ultimo al primo",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "add",
+      "parent": "l3f8a0c2d",
+      "pos": {
+        "last": true
+      },
+      "raw": "<rect id=\"o5e6f7g8h\" x=\"1100\" y=\"100\" width=\"200\" height=\"120\" fill=\"#cc79a7\"/>\n    <path style=\"fill:#56b4e9\" d=\"M1100 300h200v120h-200z\"/>"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n    <rect id=\"o5e6f7g8h\" x=\"1100\" y=\"100\" width=\"200\" height=\"120\" fill=\"#cc79a7\"/>\n    <path style=\"fill:#56b4e9\" d=\"M1100 300h200v120h-200z\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "remove",
+          "target": {
+            "path": [
+              2,
+              3
+            ],
+            "tag": "path"
+          }
+        },
+        {
+          "op": "remove",
+          "target": "o5e6f7g8h"
+        }
+      ]
+    }
+  }
+}

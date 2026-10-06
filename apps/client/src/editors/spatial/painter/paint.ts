@@ -152,6 +152,10 @@ export interface ImageLayer {
   /// Vero se sotto l'immagine ci sono altri strati: la radice non dipinge
   /// lo sfondo.
   readonly transparent: boolean;
+  /// I contenitori che racchiudono tutto lo strato, dal più esterno, con le
+  /// chiavi dei loro gruppi (`PaintGroup.key`): uno strato dentro un gruppo
+  /// che si sposta lo segue, e uno dentro il gruppo isolato non si attenua.
+  readonly containers: readonly object[];
 }
 
 export type PaintLayer = LiveLayer | ImageLayer;
@@ -270,7 +274,7 @@ const ROOT_VIEW: ReadonlySet<string> = new Set(["x", "y", "width", "height", "vi
 
 /// Gli elementi SVG che non disegnano niente da soli: risorse, stili,
 /// metadati. Un elemento di un altro namespace non disegna mai.
-const NON_RENDERING: ReadonlySet<string> = new Set([
+export const NON_RENDERING: ReadonlySet<string> = new Set([
   "defs",
   "style",
   "script",
@@ -892,6 +896,8 @@ interface ImageDraft {
   /// Il primo e l'ultimo nodo che porta, nell'ordine del documento.
   readonly start: Position;
   end: Position;
+  /// Quanti dei contenitori aperti racchiudono tutto ciò che porta.
+  depth: number;
 }
 
 /// La seconda visita: costruisce gli strati.
@@ -909,7 +915,7 @@ class BuildRun implements Visitor {
   private ordinals = new Map<ContainerNode, number>();
   // Lo strato immagine in corso, e quelli chiusi che aspettano i `defs`.
   private image: ImageDraft | null = null;
-  private readonly closed: Array<{ readonly image: ImageDraft; readonly slot: number }> = [];
+  private readonly closed: Array<{ readonly image: ImageDraft; readonly slot: number; readonly containers: readonly ContainerNode[] }> = [];
   /// Le unità con un foglio di stile, in tutto il documento: valgono anche
   /// per un'immagine che le precede, e anche da un livello nascosto.
   private readonly styles: LeafNode[] = [];
@@ -941,7 +947,9 @@ class BuildRun implements Visitor {
     this.chain.pop();
     if (this.liveChain.length > this.chain.length) this.liveChain.length = this.chain.length;
     const image = this.image;
-    if (image !== null && node.tail !== null) image.pieces.push(node.tail);
+    if (image === null) return;
+    if (node.tail !== null) image.pieces.push(node.tail);
+    image.depth = Math.min(image.depth, this.chain.length);
   }
 
   element(node: LeafNode, index: number): void {
@@ -973,6 +981,7 @@ class BuildRun implements Visitor {
         foreign: [],
         start: { owner, index: from },
         end: { owner, index: from },
+        depth: this.chain.length,
       };
     }
     for (let i = from; i < to; i++) {
@@ -998,7 +1007,7 @@ class BuildRun implements Visitor {
   finish(): PaintLayer[] {
     this.closeImage();
     this.closeLive();
-    for (const { image, slot } of this.closed) this.layers[slot] = this.imageLayer(image);
+    for (const { image, slot, containers } of this.closed) this.layers[slot] = this.imageLayer(image, containers);
     return this.layers as PaintLayer[];
   }
 
@@ -1047,11 +1056,11 @@ class BuildRun implements Visitor {
       const tail = this.chain[i]!.tail;
       if (tail !== null) image.pieces.push(tail);
     }
-    this.closed.push({ image, slot: this.layers.length });
+    this.closed.push({ image, slot: this.layers.length, containers: this.chain.slice(0, image.depth) });
     this.layers.push(null);
   }
 
-  private imageLayer(image: ImageDraft): ImageLayer {
+  private imageLayer(image: ImageDraft, containers: readonly ContainerNode[]): ImageLayer {
     const defs = this.defsFor(image);
     const key = `${this.builder.serialOf(this.root)}|${image.keys.join(",")}|${defs.map((node) => this.builder.contentKey(node)).join(",")}`;
     const layer = this.builder.image(key, () => ({
@@ -1061,6 +1070,7 @@ class BuildRun implements Visitor {
       root: this.root,
       body: `${this.defsText(defs)}${image.pieces.join("")}</${this.root.name}>`,
       transparent: true,
+      containers,
     }));
     this.nextImages.set(key, layer);
     return layer;
@@ -1214,5 +1224,6 @@ function readWholeDocument(text: string): ImageLayer | null {
     root: imageRootOf(element),
     body,
     transparent: false,
+    containers: [],
   };
 }

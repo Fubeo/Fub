@@ -359,3 +359,93 @@ describe("come si vede un testo", () => {
     expect(linesBounds(t.look!, [" ", ""], t.matrix)).toBeNull();
   });
 });
+
+describe("un blocco estraneo dentro un oggetto", () => {
+  // Un `class` o uno `style` fanno di un elemento un blocco estraneo.
+  const FOREIGN = doc(
+    `${LAYER}<g id="w">`
+      + '<rect class="a" x="10" y="10" width="20" height="10"/>'
+      + '<path style="fill: none; stroke: #000000; stroke-width: 4 !important" d="M 40 10 L 80 10"/>'
+      + '<g class="b" transform="translate(0 50)"><circle cx="5" cy="5" r="5"/></g>'
+      + '</g><rect class="sciolto" x="200" y="200" width="10" height="10"/></g>',
+  );
+
+  it("conta nella geometria dell'oggetto, ma da solo non è un oggetto", () => {
+    const { index } = open(FOREIGN);
+    expect(index.units.map((unit) => unit.key)).toEqual(["w"]);
+    // Il tracciato senza riempimento conta col suo contorno, come lo dice lo
+    // `style`.
+    expect(index.get("w")?.bounds).toEqual({ min: [0, 8], max: [82, 60] });
+    expect(index.get("w")?.geometry).toEqual({ min: [0, 10], max: [80, 60] });
+  });
+
+  it("si tocca dove si dipinge", () => {
+    const { index } = open(FOREIGN);
+    for (const p of [[20, 15], [60, 11], [5, 55]] as const) expect(index.at(p, 0.5)?.key).toBe("w");
+    for (const p of [[60, 15], [35, 40]] as const) expect(index.at(p, 0.5)).toBeNull();
+    // Il pezzo toccato non è un tracciato da modificare.
+    expect(index.get("w")!.shapeAt([20, 15], 0.5)?.details).toBeNull();
+  });
+
+  it("dà al riquadro di tutto il disegno anche quando sta da solo", () => {
+    expect(open(FOREIGN).extent()).toEqual({ min: [0, 8], max: [210, 210] });
+  });
+
+  it("non conta ciò che è nascosto, ma un figlio può tornare visibile", () => {
+    const { index } = open(doc(
+      `${LAYER}<g id="v">`
+        + '<rect class="x" x="0" y="0" width="10" height="10" visibility="hidden"/>'
+        + '<g class="y" style="visibility: hidden"><rect x="20" y="0" width="5" height="5" visibility="visible"/><rect x="0" y="40" width="5" height="5"/></g>'
+        + '<rect class="z" x="100" y="100" width="5" height="5" style="display:none"/>'
+        + '<g class="nulla"><rect x="0" y="80" width="5" height="5" fill="none"/></g>'
+        + '</g></g>',
+    ));
+    expect(index.get("v")?.bounds).toEqual({ min: [20, 0], max: [25, 5] });
+  });
+
+  it("dà il riquadro di testi, immagini e documenti annidati", () => {
+    const { index } = open(doc(
+      `${LAYER}<g id="t"><text class="c" x="10" y="20" font-size="10">Ciao</text></g>`
+        + '<g id="righe"><text class="c" style="font-size: 10px"><tspan x="0" y="10">ab</tspan><tspan x="0" y="30">abcd</tspan></text></g>'
+        + '<g id="b"><foreignObject x="0" y="0" width="10" height="10"/><svg x="20" y="0" width="5" height="5"><rect width="100" height="100"/></svg></g>'
+        + '</g>',
+    ));
+    // 0,6 em per carattere, da 0,8 em sopra la linea di base a 0,25 sotto.
+    expect(index.get("t")?.bounds).toEqual({ min: [10, 12], max: [34, 22.5] });
+    expect(index.get("righe")?.bounds).toEqual({ min: [0, 2], max: [24, 32.5] });
+    expect(index.get("b")?.bounds).toEqual({ min: [0, 0], max: [25, 10] });
+  });
+
+  it("segue un `use` fino al simbolo, anche in un altro blocco, e se ne accorge quando cambia", () => {
+    const opened = open(doc(
+      `${LAYER}<g id="u"><defs id="d"><symbol id="s" viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10"/></symbol></defs>`
+        + '<use href="#s" x="5" y="5" width="40" height="20"/></g>'
+        + '<g id="x"><use xlink:href="#s" transform="translate(100 0)"/><use href="https://example.com/a.svg#s"/></g></g>',
+    ));
+    // Il `viewBox` sta intero nel riquadro, al centro.
+    expect(opened.index.get("u")?.bounds).toEqual({ min: [15, 5], max: [35, 25] });
+    // Senza misure, il simbolo resta com'è; una risorsa esterna non si legge.
+    expect(opened.index.get("x")?.bounds).toEqual({ min: [100, 0], max: [110, 10] });
+    expect(opened.engine.apply({ op: "remove", target: "d" }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect(index.get("u")?.bounds).toBeNull();
+    expect(index.get("x")?.bounds).toBeNull();
+  });
+
+  it("con tante forme conta come il suo riquadro", () => {
+    const rects = Array.from({ length: 3000 }, (_, i) => `<rect x="${i % 100}" y="${Math.floor(i / 100)}" width="0.5" height="0.5"/>`).join("");
+    const { index } = open(doc(`${LAYER}<g id="m"><g class="tanti">${rects}</g></g></g>`));
+    const unit = index.get("m")!;
+    expect(unit.shapes()).toHaveLength(1);
+    expect(unit.bounds).toEqual({ min: [0, 0], max: [99.5, 29.5] });
+    expect(unit.hits([50.75, 10.75], 0)).toBe(true);
+  });
+
+  it("si sposta con l'oggetto", () => {
+    const opened = open(FOREIGN);
+    expect(opened.engine.apply({ op: "set", id: "w", attrs: { transform: "matrix(1 0 0 1 100 0)" } }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect(index.get("w")?.bounds).toEqual({ min: [100, 8], max: [182, 60] });
+    expect(index.at([120, 15], 0.5)?.key).toBe("w");
+  });
+});
