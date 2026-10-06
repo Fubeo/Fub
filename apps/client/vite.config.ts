@@ -88,6 +88,12 @@ export default defineConfig({
           if (/\/src\/editors\/spatial\/(scene\/|painter\/|ink\/|number\.ts$)|\/node_modules\/perfect-freehand\//.test(id)) {
             return "drawing-scene";
           }
+          // La geometria dei disegni senza DOM: i nodi dei tracciati, la
+          // spina dei tratti, le forme e il loro riconoscimento. Dipendono
+          // soltanto dal formato, e gli strumenti dell'editor le usano.
+          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|shapes|recognize)\.ts$/.test(id)) {
+            return "drawing-geometry";
+          }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
             return "theme-series";
           }
