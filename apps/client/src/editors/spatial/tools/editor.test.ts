@@ -4068,8 +4068,10 @@ describe("spostare dall'albero, dal livello Standard", () => {
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
     vi.stubGlobal("cancelAnimationFrame", () => {});
+    // Le miniature si disegnano finché il fotogramma ha tempo, e le altre al
+    // fotogramma dopo: su una macchina carica ne servono più d'uno.
     const frame = (): void => {
-      for (const callback of frames.splice(0)) callback(0);
+      for (let round = 0; round < 50 && frames.length > 0; round++) for (const callback of frames.splice(0)) callback(0);
     };
     mount(STACKED, { level: "standard" });
     openAt("oc3c3c3c3");
