@@ -178,6 +178,54 @@ describe("i livelli bloccati", () => {
   });
 });
 
+describe("i gruppi e le forme bloccati", () => {
+  const LOCKED_GROUP = '    <g id="o6f7g8h9i" fub:locked="true">';
+  const INNER = '      <rect id="o4d5e6f7g" x="10" y="20" width="30" height="40"/>';
+  const IN_GROUP = lf(ROOT, PAPER, L1, LOCKED_GROUP, INNER, "    </g>", R2, END_G, END);
+  const move = (id: string, parent: string): Op => ({ op: "move", target: id, parent, pos: { last: true } });
+
+  const cases: [string, Op][] = [
+    ["un figlio non si cambia", { op: "set", id: "o4d5e6f7g", attrs: { fill: "#000000" } }],
+    ["un figlio non esce", move("o4d5e6f7g", "l3f8a0c2d")],
+    ["un altro oggetto non entra", move("o2b3c4d5e", "o6f7g8h9i")],
+    ["un figlio non si toglie", { op: "remove", target: "o4d5e6f7g" }],
+  ];
+  for (const [name, op] of cases) {
+    it(name, () => rejects(IN_GROUP, op, "locked"));
+  }
+
+  it("un gruppo dentro un gruppo bloccato è fermo anche lui, coi suoi figli", () => {
+    const deep = lf(ROOT, PAPER, L1, LOCKED_GROUP, '      <g id="o7g8h9i0j">', '        <rect id="o4d5e6f7g" x="10" y="20" width="30" height="40"/>', "      </g>", "    </g>", END_G, END);
+    rejects(deep, { op: "set", id: "o7g8h9i0j", attrs: { opacity: "0.5" } }, "locked");
+    rejects(deep, { op: "set", id: "o4d5e6f7g", attrs: { opacity: "0.5" } }, "locked");
+  });
+
+  it("il gruppo stesso si sposta, si toglie e si sblocca", () => {
+    const engine = SceneEngine.open(IN_GROUP);
+    apply(engine, { op: "set", id: "o6f7g8h9i", attrs: { transform: "translate(5 5)" } });
+    apply(engine, { op: "move", target: "o6f7g8h9i", parent: "l3f8a0c2d", pos: { last: true } });
+    const out = apply(engine, { op: "set", id: "o6f7g8h9i", attrs: { "fub:locked": null } });
+    expect(out.touched).toEqual(["o6f7g8h9i", "o4d5e6f7g"]);
+    apply(engine, { op: "set", id: "o4d5e6f7g", attrs: { fill: "#000000" } });
+    apply(SceneEngine.open(IN_GROUP), { op: "remove", target: "o6f7g8h9i" });
+  });
+
+  it("una forma bloccata si cambia ancora, e la scena lo dice", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, '    <rect id="o2b3c4d5e" x="500" y="100" width="200" height="120" fill="#e69f00" fub:locked="true" display="none"/>', END_G, END));
+    const item = engine.scene().find((entry) => entry.kind === "element" && entry.id === "o2b3c4d5e");
+    expect(item).toMatchObject({ locked: true, hidden: true });
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "fub:locked": null, display: null } });
+    const after = engine.scene().find((entry) => entry.kind === "element" && entry.id === "o2b3c4d5e");
+    expect(after).not.toHaveProperty("locked");
+    expect(after).not.toHaveProperty("hidden");
+  });
+
+  it("un valore diverso da true non blocca", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, '    <g id="o6f7g8h9i" fub:locked="yes">', INNER, "    </g>", END_G, END));
+    apply(engine, { op: "set", id: "o4d5e6f7g", attrs: { fill: "#000000" } });
+  });
+});
+
 describe("i limiti", () => {
   /// Gruppi annidati, ciascuno dentro il precedente, a partire da `first`.
   function nested(count: number, first = 0): Elem {

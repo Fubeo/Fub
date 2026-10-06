@@ -681,26 +681,27 @@ export class SceneEngine {
     return container === this.t.model.root ? ROOT : this.targetOf(container);
   }
 
-  /// Vero se un livello bloccato contiene `node`, `node` escluso.
+  /// Vero se un contenitore bloccato, livello, gruppo o collegamento,
+  /// contiene `node`, `node` escluso.
   private lockedAbove(node: ElementPart): boolean {
     for (let c = node.parent; c !== null; c = c.parent) {
-      if (c.details?.layer?.locked === true) return true;
+      if (c.details?.locked === true) return true;
     }
     return false;
   }
 
-  /// Vero se in `container` non si scrive: è un livello bloccato o sta
-  /// dentro uno.
+  /// Vero se in `container` non si scrive: è bloccato o sta dentro un
+  /// contenitore bloccato.
   private lockedInside(container: ContainerNode): boolean {
-    return container.details?.layer?.locked === true || this.lockedAbove(container);
+    return container.details?.locked === true || this.lockedAbove(container);
   }
 
   /// I controlli comuni su un elemento da cambiare: niente carta, niente
-  /// livelli bloccati sopra e, se `editable`, niente estranei. Un livello
-  /// bloccato si cambia: è così che si sblocca.
+  /// contenitori bloccati sopra e, se `editable`, niente estranei. Un
+  /// elemento bloccato si cambia: è così che si sblocca.
   private guard(node: ElementPart, editable: boolean): void {
     if (roleOf(node) === "paper") reject("locked", "la carta cambia solo con page");
-    if (this.lockedAbove(node)) reject("locked", "l'elemento sta in un livello bloccato");
+    if (this.lockedAbove(node)) reject("locked", "l'elemento sta in un livello o in un gruppo bloccato");
     if (editable && node.details === null) reject("foreign", "l'elemento è estraneo");
   }
 
@@ -1089,7 +1090,7 @@ export class SceneEngine {
 
   private add(op: Record<string, unknown>): Op {
     const parent = this.container(op.parent);
-    if (this.lockedInside(parent)) reject("locked", "il genitore è un livello bloccato o ci sta dentro");
+    if (this.lockedInside(parent)) reject("locked", "il genitore è bloccato o sta in un contenitore bloccato");
     const root = parent === this.t.model.root;
     const scope = scopeOf(parent);
     const elem = this.prepare(op.elem, scope, root);
@@ -1137,7 +1138,7 @@ export class SceneEngine {
   private restore(op: Record<string, unknown>): Op {
     if (typeof op.raw !== "string" || typeof op.gap !== "string" || !isBlank(op.gap)) reject("invalid-elem", "ripristino non valido");
     const anchor = this.anchorOf(op.slot);
-    if (this.lockedInside(anchor.owner)) reject("locked", "il genitore è un livello bloccato o ci sta dentro");
+    if (this.lockedInside(anchor.owner)) reject("locked", "il genitore è bloccato o sta in un contenitore bloccato");
     const node = this.build(op.raw, anchor.owner);
     if (node === null) reject("invalid-elem", "l'elemento da rimettere non si legge");
     const taken = idsIn(node).find((id) => this.t.has(id));
@@ -1155,7 +1156,7 @@ export class SceneEngine {
     const node = this.target(op.target);
     this.guard(node, false);
     const parent = this.container(op.parent);
-    if (this.lockedInside(parent)) reject("locked", "il genitore è un livello bloccato o ci sta dentro");
+    if (this.lockedInside(parent)) reject("locked", "il genitore è bloccato o sta in un contenitore bloccato");
     if (this.within(parent, node)) reject("cycle", "un elemento non va dentro sé stesso");
     const root = parent === this.t.model.root;
     if (roleOf(node) === "layer" && !root) reject("invalid-elem", "un livello sta solo sotto la radice");
@@ -1180,7 +1181,7 @@ export class SceneEngine {
     // I riferimenti del punto valgono sulla scena con l'elemento al suo
     // posto: si risolvono prima di toglierlo.
     const anchor = this.anchorOf(op.slot);
-    if (this.lockedInside(anchor.owner)) reject("locked", "il genitore è un livello bloccato o ci sta dentro");
+    if (this.lockedInside(anchor.owner)) reject("locked", "il genitore è bloccato o sta in un contenitore bloccato");
     if (this.within(anchor.owner, node)) reject("cycle", "un elemento non va dentro sé stesso");
     if (anchor.after === node) reject("missing-anchor", "l'elemento di riferimento è quello che si sposta");
     return this.relocate(node, () => ({ kind: "point", point: this.pointOf(anchor), gap }));

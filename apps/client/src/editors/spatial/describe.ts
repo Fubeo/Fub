@@ -140,8 +140,8 @@ export function describe(node: OutlineNode, options: DescribeOptions = {}): stri
   const kind = t(item.role === "stroke" && item.stroke?.tool === "highlighter" ? "draw.kind.highlighter" : KINDS[role]);
   const named = node.name === null ? kind : t("draw.describe.named", { kind, name: node.name });
   const parts = [node.target === null ? named : t("draw.describe.link", { link: named, note: linkName(node.target) })];
-  if (item.layer?.locked) parts.push(t("draw.state.locked"));
-  if (item.layer?.hidden) parts.push(t("draw.state.hidden"));
+  if (item.locked) parts.push(t("draw.state.locked"));
+  if (item.hidden) parts.push(t("draw.state.hidden"));
   if (options.color) parts.push(options.color);
   if (options.parts && (item.role === "group" || item.role === "link")) {
     parts.push(plural(node.children.length, "draw.describe.parts.one", "draw.describe.parts.other"));
