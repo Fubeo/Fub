@@ -1194,7 +1194,10 @@ function svgPrefix(rootName: string): string {
 /// `style` della radice va anche sull'`svg` esterno, che è quello che dipinge
 /// lo sfondo. Una regola di stile del file che chiede la radice come genitore
 /// diretto (`:root > g`) lì non vale più.
-export function imageDocument(layer: ImageLayer, frame: ImageFrame): string {
+///
+/// `css`, un foglio senza marcatura, va in uno `style` primo figlio dell'`svg`
+/// più esterno: i caratteri che l'immagine non caricherebbe da fuori.
+export function imageDocument(layer: ImageLayer, frame: ImageFrame, css = ""): string {
   const { root } = layer;
   const own = root.style === null ? "" : root.style;
   const style = layer.transparent ? `${own}${own === "" ? "" : ";"}background:none!important` : own;
@@ -1202,9 +1205,11 @@ export function imageDocument(layer: ImageLayer, frame: ImageFrame): string {
   const size = ` width="${num(frame.pixelWidth)}" height="${num(frame.pixelHeight)}"`;
   const angle = frame.angle ?? 0;
   if (angle === 0) {
+    const colon = root.name.indexOf(":");
+    const sheet = colon < 0 ? "style" : `${root.name.slice(0, colon)}:style`;
     return `${layer.prolog}<${root.name}${root.attrs}${size}`
       + ` viewBox="${num(frame.x)} ${num(frame.y)} ${num(frame.width)} ${num(frame.height)}"`
-      + ` preserveAspectRatio="none"${styled}>${layer.body}`;
+      + ` preserveAspectRatio="none"${styled}>${css === "" ? "" : `<${sheet}>${css}</${sheet}>`}${layer.body}`;
   }
   // Il riquadro della scena attorno al rettangolo girato, largo due pixel in
   // più per lato: il bordo della vista annidata non sfuma gli angoli.
@@ -1218,7 +1223,7 @@ export function imageDocument(layer: ImageLayer, frame: ImageFrame): string {
   const bh = Math.max(...ys) - Math.min(...ys) + 2 * pad;
   const box = `${num(bx)} ${num(by)} ${num(bw)} ${num(bh)}`;
   return `${layer.prolog}<svg xmlns="${SVG_NS}"${size} viewBox="0 0 ${num(frame.width)} ${num(frame.height)}"`
-    + ` preserveAspectRatio="none"${styled}>`
+    + ` preserveAspectRatio="none"${styled}>${css === "" ? "" : `<style>${css}</style>`}`
     + `<g transform="rotate(${num(angle)}) translate(${num(-frame.x)} ${num(-frame.y)})">`
     + `<${root.name}${root.attrs} x="${num(bx)}" y="${num(by)}" width="${num(bw)}" height="${num(bh)}"`
     + ` viewBox="${box}"${styled}>${layer.body}</g></svg>`;

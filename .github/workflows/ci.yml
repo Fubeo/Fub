@@ -290,3 +290,15 @@ jobs:
         if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
         run: npm run bench:a11y
         working-directory: apps/client
+      - name: i disegni si vedono uguali sul foglio, in Lettura e nell'export
+        id: bench_fidelity
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:fidelity
+        working-directory: apps/client
+      - name: le immagini del banco di fedeltà
+        if: ${{ failure() && steps.bench_fidelity.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-fedelta-${{ github.sha }}
+          path: apps/client/bench/.output/fidelity/
+          include-hidden-files: true

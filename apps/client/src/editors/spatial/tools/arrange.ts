@@ -13,7 +13,8 @@
 //   trasformazione e lo stile che i figli ereditavano su ciascun figlio, e
 //   moltiplica la sua opacità nella loro. Un gruppo con parti estranee si
 //   separa solo se non ha niente da portare, perché un elemento estraneo non
-//   cambia.
+//   cambia. Nemmeno un foglio di stile del disegno cambia: se dopo il
+//   comando sceglierebbe altro, l'editor non lo scrive (`styled.ts`).
 // - **Un collegamento è un gruppo che porta a una nota**: un `a` con `href`,
 //   che si crea attorno agli oggetti come un gruppo e si toglie come si
 //   separa un gruppo. Un collegamento non ne contiene un altro.

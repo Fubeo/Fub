@@ -51,7 +51,7 @@ let mounted: { surface: EditorSurface; changes: EditorChange[]; selections: { co
 function mount(
   text: string | null = SOURCE,
   at: HTMLElement = parent,
-  shell: Pick<VectorSurfaceOptions, "onOpenPath" | "onPickLink" | "images"> = {},
+  shell: Pick<VectorSurfaceOptions, "onOpenPath" | "onPickLink" | "images" | "fonts"> = {},
 ): { surface: EditorSurface; changes: EditorChange[]; selections: { count: number } } {
   const changes: EditorChange[] = [];
   const selections = { count: 0 };
@@ -800,6 +800,40 @@ describe("le immagini del vault", () => {
     const text = await lastShown(created);
     expect(text).toContain(`<image id="oi1i1i1i1" x="0" y="0" width="10" height="10" href="${IMAGE_PLACEHOLDER}"/>`);
     expect(text).toContain(`<image id="oi2i2i2i2" x="0" y="0" width="10" height="10" href="${PNG_URI}"/>`);
+  });
+
+  it("i caratteri dell'app entrano nella Lettura appena letti, prima delle immagini, e il file non cambia", async () => {
+    const created = vi.spyOn(URL, "createObjectURL");
+    const SHEET = '@font-face{font-family:"Inter";src:url(data:font/woff2;base64,SQ==)}';
+    let ready = false;
+    let arrive = (): void => {};
+    const fonts = {
+      now: (svg: string) => (!svg.includes("Inter") ? "" : ready ? SHEET : null),
+      load: () => new Promise<string>((resolve) => {
+        arrive = () => {
+          ready = true;
+          resolve(SHEET);
+        };
+      }),
+    };
+    const lettered = PICTURES.replace("</g>", '<text id="t" font-family="Inter" x="1" y="20">Casa</text></g>');
+    const { surface } = mount(lettered, parent, { images: shell({ "foto.png": new Blob([PNG], { type: "image/png" }) }), fonts });
+    surface.setMode!("read");
+    // Subito, coi caratteri del sistema.
+    expect(await lastShown(created)).not.toContain("@font-face");
+    await settle();
+    arrive();
+    await settle();
+    const text = await lastShown(created);
+    expect(text).toMatch(new RegExp(`^<svg [^>]*><style>${SHEET.replace(/[(){}]/g, "\\$&")}</style><title>`));
+    expect(text).toContain(`<image id="oi1i1i1i1" x="0" y="0" width="10" height="10" href="${PNG_URI}"/>`);
+    expect(text).toContain(`<image id="oi2i2i2i2" x="0" y="0" width="10" height="10" href="${IMAGE_PLACEHOLDER}"/>`);
+    expect(surface.buffer!.getDoc()).toBe(lettered);
+    // Un testo nuovo li ha già dal primo disegno.
+    const calls = created.mock.calls.length;
+    surface.buffer!.syncDoc(lettered.replace("Casa</text>", "Casetta</text>"));
+    expect(created.mock.calls.length).toBe(calls + 1);
+    expect(await lastShown(created)).toContain(`<style>${SHEET}</style>`);
   });
 
   it("Ctrl+I sceglie con la shell, e l'immagine si scrive relativa al disegno", async () => {

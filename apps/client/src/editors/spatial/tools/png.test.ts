@@ -1,9 +1,8 @@
 // Il PNG della selezione copiata: la misura, che il canvas di ogni browser
-// tiene; la densità scritta nel file; i caratteri dell'app dentro l'SVG che
-// il browser disegna.
+// tiene; la densità scritta nel file.
 
-import { describe, expect, it, vi } from "vitest";
-import { fontFaces, MAX_PNG_AREA, MAX_PNG_SIDE, pngSize, withDensity, withStyle } from "./png";
+import { describe, expect, it } from "vitest";
+import { MAX_PNG_AREA, MAX_PNG_SIDE, pngSize, withDensity } from "./png";
 
 /// Un PNG di un pixel, coi chunk senza dati veri: basta a contare i byte.
 function tinyPng(extra: readonly string[] = []): Uint8Array {
@@ -60,32 +59,5 @@ describe("la densità del PNG", () => {
     expect(withDensity(said, 2)).toBe(said);
     const other = new Uint8Array([1, 2, 3]);
     expect(withDensity(other, 2)).toBe(other);
-  });
-});
-
-describe("i caratteri dentro l'SVG", () => {
-  it("entrano solo quelli che un testo nomina, coi file come data URI, letti una volta", async () => {
-    const read = vi.fn(async (url: string) => new Blob([url.includes("literata") ? "L" : "I"]));
-    const svg = '<svg><text font-family="Literata, serif">A</text><text style="font-family: \'Inter\'">B</text></svg>';
-    const css = await fontFaces(svg, read);
-    expect(css).toContain('@font-face{font-family:"Literata";src:url(data:font/woff2;base64,TA==) format("woff2");font-weight:200 900;unicode-range:U+0000-00FF');
-    expect(css).toContain('font-family:"Inter";src:url(data:font/woff2;base64,SQ==)');
-    expect(css).not.toContain("JetBrains Mono");
-    await fontFaces(svg, read);
-    expect(read).toHaveBeenCalledTimes(2);
-    expect(await fontFaces("<svg><text>Inter</text></svg>", read)).toBe("");
-  });
-
-  it("un file che non si legge non entra, e si riprova la volta dopo", async () => {
-    const svg = '<svg><text font-family="JetBrains Mono">x</text></svg>';
-    expect(await fontFaces(svg, async () => null)).toBe("");
-    expect(await fontFaces(svg, async () => new Blob(["J"]))).toContain('font-family:"JetBrains Mono"');
-  });
-
-  it("vanno in uno stile, primo figlio della radice, anche con un prefisso", () => {
-    expect(withStyle('<svg xmlns="http://www.w3.org/2000/svg" a=">"><g/></svg>', "@font-face{}")).toBe('<svg xmlns="http://www.w3.org/2000/svg" a=">"><style>@font-face{}</style><g/></svg>');
-    expect(withStyle('<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:g/></s:svg>', "x{}")).toBe('<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:style>x{}</s:style><s:g/></s:svg>');
-    expect(withStyle("<svg/>", "x{}")).toBe("<svg/>");
-    expect(withStyle("<svg", "x{}")).toBe("<svg");
   });
 });

@@ -43,6 +43,7 @@
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { compose, invert, type Matrix } from "../scene/matrix";
 import { toScene, viewMatrix, viewTransform, type View } from "../view";
+import type { FontSheets } from "../picture";
 import {
   IMAGE_PLACEHOLDER,
   imageDocument,
@@ -71,6 +72,10 @@ export interface PainterOptions {
   /// Dopo quanti millisecondi senza movimento gli strati immagine si
   /// ridisegnano alla vista nuova.
   readonly settleMs?: number;
+  /// I caratteri dell'app per gli strati immagine, che da un `img` non li
+  /// caricherebbero. Senza, uno strato immagine scrive coi caratteri del
+  /// sistema.
+  readonly fonts?: FontSheets;
 }
 
 /// Ciò che uno strumento mostra prima di scriverlo, sui nodi della scena
@@ -626,13 +631,28 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     if (rendered !== null) URL.revokeObjectURL(rendered.url);
   };
 
+  /// Il foglio dei caratteri che lo strato di `record` nomina, se sono già
+  /// letti. Altrimenti lo strato si disegna subito coi caratteri del sistema,
+  /// e di nuovo quando arrivano, se nel frattempo non è cambiato.
+  const fontsOf = (record: ImageRecord, generation: number): string => {
+    const fonts = options.fonts;
+    if (fonts === undefined) return "";
+    const named = `${record.layer.root.attrs}${record.layer.body}`;
+    const css = fonts.now(named);
+    if (css !== null) return css;
+    void fonts.load(named).then(() => {
+      if (!disposed && record.generation === generation && fonts.now(named) !== null) render(record);
+    });
+    return "";
+  };
+
   const render = (record: ImageRecord): void => {
     const target = frameNow();
     if (target === null) return;
     const generation = ++record.generation;
     revoke(record.pending);
     record.pending = null;
-    const blob = new Blob([imageDocument(record.layer, target.frame)], { type: "image/svg+xml" });
+    const blob = new Blob([imageDocument(record.layer, target.frame, fontsOf(record, generation))], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const img = document.createElement("img");
     img.className = "spatial-image";

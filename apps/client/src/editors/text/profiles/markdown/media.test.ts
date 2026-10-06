@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LinkTarget } from "../../../../host/contract";
 import { openLifetime } from "../../../../ui/lifetime";
 import { embedSize, hydrateVaultMedia, vaultImageSource, type MediaPort } from "./media";
@@ -34,6 +34,46 @@ function html(markup: string): HTMLElement {
 }
 
 describe("i media del vault dentro una nota", () => {
+  it("un disegno si mostra come in Lettura, con le immagini del vault dentro, e il blob vive quanto la resa", async () => {
+    const PNG_URI = "data:image/png;base64,iVBORw==";
+    const DRAWING = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><image href="foto.png" width="5" height="5"/><text font-family="serif">Casa</text></svg>';
+    const blobs = new Map<string, Blob>();
+    const revoked: string[] = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      const url = `blob:disegno-${blobs.size + 1}`;
+      blobs.set(url, blob as Blob);
+      return url;
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => void revoked.push(url));
+    try {
+      const root = html('<span class="embed" data-embed-page="casa.svg">casa.svg</span><img data-vault-src="grande.svg" alt="g">');
+      const { media, asked } = port({ "casa.svg": "Disegni/casa.svg", "foto.png": "Disegni/foto.png", "grande.svg": "Disegni/grande.svg" });
+      const limits: number[] = [];
+      media.read = async (id, limit) => {
+        limits.push(limit);
+        if (id === "Disegni/grande.svg") return null;
+        return id.endsWith(".png")
+          ? new Blob([Uint8Array.from([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" })
+          : new Blob([DRAWING], { type: "image/svg+xml" });
+      };
+      const life = openLifetime();
+      await hydrateVaultMedia(root, "Note/qui.md", same, life, media);
+      const embedded = root.querySelector<HTMLImageElement>(".embed img")!;
+      expect(embedded.getAttribute("src")).toBe("blob:disegno-1");
+      const shown = await blobs.get("blob:disegno-1")!.text();
+      expect(shown).toBe(DRAWING.replace('href="foto.png"', `href="${PNG_URI}"`));
+      // L'immagine si risolve dal disegno, non dalla nota.
+      expect(asked.some(([target, from]) => target.kind === "path" && target.value === "foto.png" && from === "Disegni/casa.svg")).toBe(true);
+      expect(limits).toContain(16 * 1024 * 1024);
+      // Un disegno che non si legge si mostra dal file.
+      expect(root.querySelector<HTMLImageElement>("img[alt=g]")!.getAttribute("src")).toBe("fub-asset://localhost/h-Disegni/grande.svg");
+      life.close();
+      expect(revoked).toEqual(["blob:disegno-1"]);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("risolve col kernel, serve da fub-asset e chiude i lease allo smontaggio", async () => {
     const root = html(
       '<p><img data-vault-src="Risorse/a.png" alt="a"><img src="https://esterno/b.png"></p>'

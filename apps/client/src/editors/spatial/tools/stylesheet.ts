@@ -23,12 +23,12 @@ export interface Restyle {
 }
 
 /// Vero per un carattere che continua un nome CSS.
-function isNameChar(c: string): boolean {
+export function isNameChar(c: string): boolean {
   return /[A-Za-z0-9_-]/.test(c) || c.charCodeAt(0) >= 0x80;
 }
 
 /// La fine di una stringa CSS che comincia in `at`, con le virgolette.
-function stringEnd(css: string, at: number): number {
+export function stringEnd(css: string, at: number): number {
   const quote = css[at]!;
   let i = at + 1;
   while (i < css.length && css[i] !== quote && css[i] !== "\n") i += css[i] === "\\" ? 2 : 1;
@@ -36,13 +36,13 @@ function stringEnd(css: string, at: number): number {
 }
 
 /// La fine di un commento che comincia in `at`.
-function commentEnd(css: string, at: number): number {
+export function commentEnd(css: string, at: number): number {
   const end = css.indexOf("*/", at + 2);
   return end < 0 ? css.length : end + 2;
 }
 
 /// La fine di un escape CSS che comincia in `at`, sul `\`.
-function escapeEnd(css: string, at: number): number {
+export function escapeEnd(css: string, at: number): number {
   let i = at + 1;
   if (i >= css.length) return i;
   if (/[0-9A-Fa-f]/.test(css[i]!)) {
@@ -55,7 +55,7 @@ function escapeEnd(css: string, at: number): number {
 }
 
 /// Il nome che comincia in `at`, con i suoi escape: la fine e il nome letto.
-function readName(css: string, at: number): [end: number, name: string] {
+export function readName(css: string, at: number): [end: number, name: string] {
   let i = at;
   let name = "";
   while (i < css.length) {
