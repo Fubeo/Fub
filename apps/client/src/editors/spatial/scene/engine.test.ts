@@ -474,6 +474,47 @@ describe("page", () => {
   });
 });
 
+describe("set sulla radice", () => {
+  const guides = (value: string | null): Op => ({ op: "set", id: "#root", attrs: { "fub:guides": value } });
+
+  it("due spostamenti di una guida diventano un passo solo, esatto, e non toccano id", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, guides("x 100"));
+    const second = apply(engine, guides("x 110"));
+    expect(first.touched).toEqual([]);
+    expect(second.text).toBe(BASE.replace('height="1000">', 'height="1000" fub:guides="x 110">'));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(applied(engine.undo(merged)).text).toBe(BASE);
+  });
+
+  it("rifiuta dichiarazioni, altri attributi e valori fuori grammatica", () => {
+    for (const attrs of [
+      { "xmlns:fub": FUB_NS },
+      { "fub:version": "2" },
+      { "fub:layer": "A" },
+      { width: "10" },
+      { "fub:units": "pc" },
+      { "fub:units": 3 },
+      { "fub:guides": "x 1\u0001" },
+      { "fub:guides": "x 1", "altro:guides": "x 2" },
+    ]) {
+      rejects(BASE, { op: "set", id: "#root", attrs }, "invalid-elem");
+    }
+  });
+
+  it("su un documento estraneo aspetta «Modifica»", () => {
+    rejects(lf(`<svg ${NS} viewBox="0 0 10 10">`, END), guides("x 1"), "foreign");
+  });
+
+  it("le guide che non si leggono restano com'erano, finché non si riscrivono", () => {
+    const source = BASE.replace('height="1000">', 'height="1000" fub:guides="x 1;">');
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "set", id: "#root", attrs: { "fub:units": "mm" } });
+    expect(out.text).toBe(BASE.replace('height="1000">', 'height="1000" fub:units="mm" fub:guides="x 1;">'));
+    expect(apply(engine, guides("y 2")).inverse).toEqual(guides("x 1;"));
+  });
+});
+
 describe("meta", () => {
   it("mette la descrizione dopo il titolo, e null li toglie", () => {
     const engine = SceneEngine.open(BASE);

@@ -1,0 +1,18 @@
+{
+  "name": "root-other-attr",
+  "description": "sulla radice set non cambia ciò che cambiano page e adopt: rifiuto invalid-elem",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "set",
+      "id": "#root",
+      "attrs": {
+        "viewBox": "0 0 10 10"
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "invalid-elem"
+  }
+}

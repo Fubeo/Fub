@@ -236,6 +236,21 @@ describe("la diagnostica (§12)", () => {
     expect(of(load(ink("xyp")), "S010")).toEqual([]);
   });
 
+  it("S011: unità o guide fuori grammatica", () => {
+    const root = (attributes: string): string => titled("").replace('fub:version="1"', `fub:version="1" ${attributes}`);
+    const scene = load(root('fub:guides="x 1;" fub:units="MM"'));
+    const found = of(scene, "S011");
+    expect(found).toHaveLength(2);
+    expect(found.every((d) => d.severity === "info" && d.bytes === undefined)).toBe(true);
+    // Prima l'unità, poi le guide, come in Rust.
+    expect(details(scene, "S011")).toEqual(["fub:units", "fub:guides"]);
+    // Il documento resta modificabile: si ignorano soltanto.
+    expect(isEditable(scene)).toBe(true);
+    for (const valid of ['fub:units="mm" fub:guides="x 1; y 2 locked"', 'fub:guides=""', ""]) {
+      expect(of(load(root(valid)), "S011"), valid).toEqual([]);
+    }
+  });
+
   it("ogni codice ha la sua gravità e un messaggio", () => {
     const table: Array<[Code, Severity]> = [
       ["S001", "warning"],
@@ -248,6 +263,7 @@ describe("la diagnostica (§12)", () => {
       ["S008", "info"],
       ["S009", "info"],
       ["S010", "info"],
+      ["S011", "info"],
     ];
     for (const [code, severity] of table) {
       expect(severityOf(code), code).toBe(severity);

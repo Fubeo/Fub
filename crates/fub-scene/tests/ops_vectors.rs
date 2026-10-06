@@ -1,9 +1,10 @@
 //! I vettori delle operazioni sulla scena, scritti a mano per il motore della
 //! superficie (`apps/client/src/__fixtures__/scene-ops/`): qui si legge ogni
 //! testo che contengono, quello di partenza, quello atteso e quello che dà
-//! l'inversa. Ognuno si legge senza perdere un byte, senza errori S003 o S004
-//! e senza ragioni di sola lettura: così il motore TypeScript e il lettore
-//! Rust restano d'accordo sul formato che le operazioni scrivono.
+//! l'inversa. Ognuno si legge senza perdere un byte, senza errori S003 o S004,
+//! senza unità o guide fuori grammatica (S011) e senza ragioni di sola
+//! lettura: così il motore TypeScript e il lettore Rust restano d'accordo sul
+//! formato che le operazioni scrivono.
 
 mod common;
 
@@ -36,20 +37,20 @@ fn read_vectors() -> Vec<(String, Value)> {
         .collect()
 }
 
-/// Le diagnostiche d'errore di `scene`.
+/// Le diagnostiche d'errore di `scene`, e S011.
 fn errors(scene: &Scene) -> Vec<Code> {
     scene
         .diagnostics
         .iter()
         .map(|d| d.code)
-        .filter(|code| matches!(code, Code::S003 | Code::S004))
+        .filter(|code| matches!(code, Code::S003 | Code::S004 | Code::S011))
         .collect()
 }
 
 #[test]
-fn ci_sono_i_34_vettori() {
+fn ci_sono_i_39_vettori() {
     let names: Vec<String> = read_vectors().into_iter().map(|(name, _)| name).collect();
-    assert_eq!(names.len(), 34, "{names:?}");
+    assert_eq!(names.len(), 39, "{names:?}");
     for (i, name) in names.iter().enumerate() {
         assert!(name.starts_with(&format!("{:02}-", i + 1)), "{name}");
     }
@@ -81,7 +82,7 @@ fn ogni_testo_dei_vettori_si_legge_senza_errori() {
             checked += 1;
         }
     }
-    // 34 testi di partenza, 28 attesi (sei vettori sono rifiuti) e due
+    // 39 testi di partenza, 31 attesi (otto vettori sono rifiuti) e due
     // inverse che non tornano al testo di partenza.
-    assert_eq!(checked, 34 + 28 + 2);
+    assert_eq!(checked, 39 + 31 + 2);
 }

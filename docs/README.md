@@ -35,6 +35,7 @@ flowchart LR
 - [Disegni](product/drawing.md)
 - [Disegni, trasformare](product/drawing-transform.md)
 - [Disegni, guide intelligenti](product/drawing-guides.md)
+- [Disegni, righelli e guide](product/drawing-rulers.md)
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
@@ -69,6 +70,7 @@ flowchart LR
 - [Contratto IPC](reference/ipc-contract.md)
 - [Permessi e sicurezza](reference/permissions-and-security.md)
 - [Formato della scena](reference/scene-format.md)
+- [Formato della scena, unità e guide](reference/scene-format-rulers.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 
 ## Vedere stato e direzione

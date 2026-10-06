@@ -11,7 +11,7 @@
 use crate::geometry::Matrix;
 
 /// Gli spazi che SVG e CSS tolgono intorno a un valore.
-fn is_wsp(b: u8) -> bool {
+pub(crate) fn is_wsp(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'\x0c')
 }
 

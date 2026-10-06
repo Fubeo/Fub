@@ -22,7 +22,7 @@ import { settings } from "../../host/query";
 import { t } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { notify } from "../../ui/notify";
-import { DEFAULT_GRID, validStep, type Grid } from "./tools/grid";
+import { DEFAULT_GRID, validStep, validSteps, type Grid } from "./tools/grid";
 import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
 
 /// Il bundle che dichiara il livello.
@@ -122,14 +122,25 @@ export function watchLevel(apply: (level: Level, custom: readonly string[]) => v
   };
 }
 
-/// `value` come griglia, se lo è. Una griglia ricordata prima delle guide
-/// intelligenti le ha accese, come la prima volta.
+/// `value` come griglia, se lo è. Ciò che una griglia ricordata prima non
+/// aveva vale come la prima volta: le guide intelligenti accese, i righelli
+/// spenti e le loro guide accese, e in ogni unità il passo di serie. Un
+/// passo ricordato che la griglia non accetta non conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, guides } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, guides, rulers, rulerGuides } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  if (guides !== undefined && typeof guides !== "boolean") return null;
-  return { shown, snap, step, guides: guides ?? DEFAULT_GRID.guides };
+  for (const flag of [guides, rulers, rulerGuides]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  if (steps !== undefined && (typeof steps !== "object" || steps === null)) return null;
+  return {
+    shown,
+    snap,
+    step,
+    steps: validSteps(steps),
+    guides: (guides as boolean | undefined) ?? DEFAULT_GRID.guides,
+    rulers: (rulers as boolean | undefined) ?? DEFAULT_GRID.rulers,
+    rulerGuides: (rulerGuides as boolean | undefined) ?? DEFAULT_GRID.rulerGuides,
+  };
 }
 
 /// Legge la griglia ricordata: quella di serie se non ce n'è una, o se non

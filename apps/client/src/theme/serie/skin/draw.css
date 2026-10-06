@@ -106,6 +106,40 @@
   stroke: rgb(128 128 128 / 0.5);
 }
 
+/* Le guide del documento: un azzurro che non è quello della selezione né
+   quello delle guide intelligenti, e che si legge, almeno tre a uno, sulla
+   carta bianca come sul tavolo scuro. */
+.draw-guides path {
+  stroke: rgb(11 132 216);
+}
+
+/* I righelli: il fondo della barra, tacche e numeri attenuati, un filo verso
+   il foglio. Una fascia grigia dice dove sta la pagina, una d'accento dove
+   sta la selezione; una linea segue il puntatore. */
+.draw-rulers [data-part="bg"],
+.draw-rulers [data-part="corner"] {
+  fill: var(--bg-elev);
+}
+.draw-rulers [data-part="ticks"] {
+  stroke: var(--muted);
+}
+.draw-rulers text {
+  fill: var(--muted);
+}
+.draw-rulers [data-part="edge"] {
+  stroke: var(--border);
+}
+.draw-rulers [data-part="page"] {
+  fill: rgb(128 128 128 / 0.18);
+}
+.draw-rulers [data-part="selection"] {
+  fill: var(--accent);
+  opacity: 0.35;
+}
+.draw-rulers [data-part="pointer"] {
+  stroke: var(--text);
+}
+
 /* La barra della selezione galleggia sul disegno: il fondo della barra in
    cima, un filo e un'ombra che la staccano da ciò che copre. */
 .draw-arrange {

@@ -291,6 +291,33 @@ fn s010_unknown_ink_channels() {
 }
 
 #[test]
+fn s011_units_or_guides_out_of_grammar() {
+    let root = |attributes: &str| {
+        titled("").replace(
+            "fub:version=\"1\"",
+            &format!("fub:version=\"1\" {attributes}"),
+        )
+    };
+    let scene = load(&root(r#"fub:guides="x 1;" fub:units="MM""#));
+    let found = of(&scene, Code::S011);
+    assert_eq!(found.len(), 2);
+    assert!(found
+        .iter()
+        .all(|d| d.severity == Severity::Info && d.span.is_none()));
+    // Prima l'unità, poi le guide, come in TypeScript.
+    assert_eq!(details(&scene, Code::S011), ["fub:units", "fub:guides"]);
+    // Il documento resta modificabile: si ignorano soltanto.
+    assert!(scene.editable());
+    for valid in [
+        r#"fub:units="mm" fub:guides="x 1; y 2 locked""#,
+        r#"fub:guides="""#,
+        "",
+    ] {
+        assert!(of(&load(&root(valid)), Code::S011).is_empty(), "{valid}");
+    }
+}
+
+#[test]
 fn every_code_has_its_severity_and_a_message() {
     use Code::*;
     for (code, severity) in [
@@ -304,6 +331,7 @@ fn every_code_has_its_severity_and_a_message() {
         (S008, Severity::Info),
         (S009, Severity::Info),
         (S010, Severity::Info),
+        (S011, Severity::Info),
     ] {
         assert_eq!(code.severity(), severity);
         assert!(!code.message().is_empty());

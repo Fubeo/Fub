@@ -5,7 +5,7 @@
 import type { Span } from "./text";
 
 /// Un codice di §12.
-export type Code = "S001" | "S002" | "S003" | "S004" | "S005" | "S006" | "S007" | "S008" | "S009" | "S010";
+export type Code = "S001" | "S002" | "S003" | "S004" | "S005" | "S006" | "S007" | "S008" | "S009" | "S010" | "S011";
 
 /// La gravità di una diagnostica.
 export type Severity = "error" | "warning" | "info";
@@ -37,6 +37,7 @@ export const CODE_MESSAGES: Readonly<Record<Code, string>> = {
   S008: "il documento ha un DOCTYPE: sola lettura",
   S009: "il tratto contrasta con la carta meno di 3:1",
   S010: "canali d'inchiostro sconosciuti: il tratto non si ridisegna",
+  S011: "unità o guide del documento non valide: si ignorano e restano nel file",
 };
 
 /// Una diagnostica: il codice, la sua gravità, l'elemento o il blocco a cui

@@ -417,8 +417,8 @@ export function elementToOut(doc: XmlDocument, id: NodeId): OutElement {
 }
 
 /// Gli attributi della radice nell'ordine dell'esempio di §2: le
-/// dichiarazioni, `fub:version`, `viewBox`, `width` e `height`, poi gli altri
-/// nell'ordine originale.
+/// dichiarazioni, `fub:version`, `viewBox`, `width`, `height` e `fub:units`,
+/// poi gli altri nell'ordine originale e in fondo `fub:guides`.
 export function rootOrder(attrs: readonly OutAttr[]): OutAttr[] {
   const slot = (attr: OutAttr): number => {
     if (attr.uri === XMLNS_URI) return attr.local === "xmlns" ? 0 : 1;
@@ -427,7 +427,8 @@ export function rootOrder(attrs: readonly OutAttr[]): OutAttr[] {
       const geometry = ["viewBox", "width", "height"].indexOf(attr.local);
       if (geometry >= 0) return 3 + geometry;
     }
-    return 6;
+    if (attr.uri === FUB_NS && attr.local === "units") return 6;
+    return attr.uri === FUB_NS && attr.local === "guides" ? 8 : 7;
   };
   return attrs
     .map((attr, index) => ({ attr, index, slot: slot(attr) }))

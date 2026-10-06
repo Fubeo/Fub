@@ -187,9 +187,10 @@ sua. Il menu ha:
   Quando lo zoom le avvicina sotto gli 8 pixel se ne vede una ogni cinque, poi
   una ogni venticinque;
 - **Aggancia alla griglia** (`%`), che vale anche con la griglia nascosta;
-- il **passo**: 5, 10, 20, 50 o 100 unità, che dividono tutti la pagina di un
+- il **passo**: 5, 10, 20, 50 o 100 pixel, che dividono tutti la pagina di un
   documento nuovo. La prima volta si parte da 20, con la griglia nascosta e
-  l'aggancio spento;
+  l'aggancio spento. In un documento che misura in un'altra unità i passi
+  sono di quell'unità, e ciascuna ricorda il suo;
 - **Adatta la pagina al disegno**.
 
 `#` e `%` valgono come si scrivono, anche con `AltGr`. Ogni cambiamento si
@@ -218,7 +219,9 @@ Con l'aggancio:
 
 Nello stesso menu, la casella **Guide intelligenti** fa fermare ciò che si
 muove in linea con gli altri oggetti e con la pagina: [Disegni, guide
-intelligenti](drawing-guides.md).
+intelligenti](drawing-guides.md). I righelli, le guide che se ne tirano e
+l'unità del documento hanno le loro voci: [Disegni, righelli e
+guide](drawing-rulers.md).
 
 **Adatta la pagina al disegno** porta la pagina attorno a tutto il disegno,
 livelli nascosti e bloccati compresi, con 20 unità di margine, e la allarga

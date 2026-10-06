@@ -69,6 +69,7 @@ export type Feature =
   | "layers"
   | "grid"
   | "guides"
+  | "rulers"
   | "links"
   | "images"
   | "attributes"
@@ -93,6 +94,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "layers", level: "standard", label: "draw.feature.layers" },
   { id: "grid", level: "standard", label: "draw.feature.grid" },
   { id: "guides", level: "standard", label: "draw.feature.guides" },
+  { id: "rulers", level: "standard", label: "draw.feature.rulers" },
   { id: "links", level: "standard", label: "draw.feature.links" },
   { id: "images", level: "standard", label: "draw.feature.images" },
   { id: "attributes", level: "expert", label: "draw.feature.attributes" },

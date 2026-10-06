@@ -80,7 +80,7 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 |---|---|---|---|
 | `add` | `parent`, `pos`, `elem` | inserisce l'elemento | `remove` con lo stesso `id` |
 | `remove` | `target` | elimina l'elemento con i suoi figli | `add` con l'elemento tolto e il suo posto |
-| `set` | `id`, `attrs` (una stringa, oppure `null` per togliere) | cambia attributi | `set` con i valori precedenti |
+| `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere) | cambia attributi | `set` con i valori precedenti |
 | `text` | `id`, `lines` (lista di stringhe) | sostituisce le righe di un `text` | `text` con le righe precedenti |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
 | `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
@@ -117,6 +117,12 @@ Altri dettagli:
   ruolo o namespace è rifiutato con `invalid-elem`.
 - **Id toccati:** un `set` su un gruppo o un livello riporta anche gli id dei
   discendenti, perché cambia come si vedono.
+- **`set` sulla radice:** con `id` uguale a `#root` cambia soltanto l'unità e
+  le guide del documento, `fub:units` e `fub:guides`, coi valori nella loro
+  grammatica ([unità e guide](scene-format-rulers.md)). Ogni altro attributo
+  è rifiutato con `invalid-elem`, perché il resto della radice cambia con
+  `page` e `adopt`. L'inversa è un `set` su `#root` coi valori di prima;
+  nessun id è toccato.
 
 ## 3. Esiti e precondizioni
 
@@ -150,7 +156,8 @@ toglie, ed è con un `set` che si sblocca. È bloccato solo ciò che contiene.
 - Ogni operazione passa dalla stessa validazione, che venga dall'utente,
   dall'undo o dalla rete: tag e attributi ammessi, numeri finiti, colori,
   grammatica di `transform`, regole di `href`, grammatica e limiti di
-  `fub:ink`, chiavi di `fub:brush`, formato degli id che `add` crea. `ident`
+  `fub:ink`, chiavi di `fub:brush`, grammatica di `fub:units` e
+  `fub:guides`, formato degli id che `add` crea. `ident`
   accetta ogni id che il formato ammette, non vuoto e che nessun altro
   elemento porti; un `set` non cambia `id`.
 - L'inchiostro si conserva grezzo, e il contorno `d` ne è solo una
@@ -339,6 +346,11 @@ devono verificare renderebbe il test circolare.
 | 32 | `set-self-closing-group` | `set` su un `<g/>` autochiuso, riscritto per intero |
 | 33 | `first-under-root` | `first` sotto la radice va dopo titolo e carta |
 | 34 | `text-inherited-size` | interlinea di una riga nuova dal corpo ereditato |
+| 35 | `root-units-guides` | `set` su `#root` scrive unità e guide nell'ordine della radice; la geometria resta |
+| 36 | `root-guides-remove` | `null` toglie le guide, l'unità resta |
+| 37 | `root-guides-invalid` | guide fuori grammatica: rifiuto `invalid-elem` |
+| 38 | `root-units-other-prefix` | l'unità col prefisso che il documento lega al namespace di FubDraw |
+| 39 | `root-other-attr` | sulla radice un attributo che cambia con `page`: rifiuto `invalid-elem` |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le
