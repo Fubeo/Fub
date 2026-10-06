@@ -333,14 +333,15 @@ function reorder(keys: readonly string[], chosen: ReadonlySet<string>, order: Or
 }
 
 /// Le operazioni che portano `units` più su o più giù fra gli oggetti del
-/// loro livello: ciascuno resta nel suo. Nessuna operazione se l'ordine non
-/// cambia.
+/// loro livello, o del gruppo che li contiene: ciascuno resta nel suo.
+/// Nessuna operazione se l'ordine non cambia.
 export function orderOps(model: DocumentModel, index: SceneIndex, units: readonly Unit[], order: Order, ids: NewIds): Arranged {
   const plan = new Plan(model, ids);
   const chosen = new Set(units.map((unit) => unit.key));
-  const parents = new Set(units.map(parentKey));
-  for (const parent of parents) {
-    const siblings = index.units.filter((unit) => parentKey(unit) === parent);
+  const parents = new Map<string, Unit>();
+  for (const unit of units) if (!parents.has(parentKey(unit))) parents.set(parentKey(unit), unit);
+  for (const first of parents.values()) {
+    const siblings = index.siblings(first);
     const byKey = new Map(siblings.map((unit) => [unit.key, unit]));
     const before = siblings.map((unit) => unit.key);
     const after = reorder(before, chosen, order);

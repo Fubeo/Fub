@@ -23,6 +23,9 @@
 //   ricrearli e senza toccare la scena; l'operazione scritta
 //   alla fine porta la scena nuova. Un testo che si scrive sul posto si
 //   nasconde allo stesso modo.
+// - **Isolamento:** con un gruppo isolato, `setFocus` attenua tutto ciò che
+//   gli sta fuori, carta esclusa, con l'opacità degli elementi; il disegno
+//   non cambia.
 //
 // Tutto ciò che il painter apre (timer, osservatori, lease) appartiene alla
 // sua vita, e la vita di chi lo monta la chiude.
@@ -81,6 +84,10 @@ export interface PainterDraft {
 /// L'opacità di un nodo sbiadito dalla gomma.
 export const FADED_OPACITY = "0.25";
 
+/// Quanto si attenua ciò che sta fuori dal gruppo isolato: un fattore
+/// dell'opacità che il nodo ha già.
+export const DIMMED_OPACITY = 0.4;
+
 export interface ScenePainter {
   /// Disegna `scene` al posto della scena precedente.
   update(scene: PaintScene): void;
@@ -89,6 +96,12 @@ export interface ScenePainter {
   /// si ritrova dal suo contenitore, una forma che la scena nuova non
   /// contiene più resta senza anteprima.
   setDraft(draft: PainterDraft | null): void;
+  /// Attenua tutto tranne ciò che sta dentro l'ultimo dei contenitori
+  /// `chain`, chiavi di gruppi della scena (`PaintGroup.key`) dal più
+  /// esterno al più interno: il gruppo isolato e chi lo contiene. La carta
+  /// resta com'è. `null` toglie l'attenuazione. Vale finché non la si
+  /// cambia, anche dopo un `update`.
+  setFocus(chain: readonly object[] | null): void;
   /// Sposta la camera.
   setView(view: PainterView): void;
   /// Ridisegna subito gli strati immagine che ne hanno bisogno, senza
@@ -350,14 +363,17 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     return paint.kind === "group" ? index.keys.get(paint.key) ?? [] : [];
   };
 
-  /// Riporta un nodo a ciò che la sua scena dipinge.
+  /// Riporta un nodo a ciò che la sua scena dipinge, attenuato se sta fuori
+  /// dal gruppo isolato.
   const restore = (record: NodeRecord): void => {
     for (const name of ["transform", "d"]) {
       const painted = record.paint.attrs.find(([key]) => key === name);
       if (painted === undefined) record.el.removeAttribute(name);
       else if (record.el.getAttribute(name) !== painted[1]) record.el.setAttribute(name, painted[1]);
     }
-    record.el.style.removeProperty("opacity");
+    const dim = dimmed.get(record.el);
+    if (dim === undefined) record.el.style.removeProperty("opacity");
+    else record.el.style.setProperty("opacity", dim);
     record.el.style.removeProperty("visibility");
   };
 
@@ -402,6 +418,51 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     clearDraft();
     draft = next;
     applyDraft();
+  };
+
+  // --- isolamento ---------------------------------------------------------------
+
+  let focus: readonly object[] | null = null;
+  /// Gli elementi attenuati, con l'opacità che mostrano.
+  const dimmed = new Map<HTMLElement | SVGElement, string>();
+
+  /// Attenua `el`, che dipinge l'opacità `painted`: CSS vince
+  /// sull'attributo, quindi il fattore si moltiplica qui.
+  const dim = (el: HTMLElement | SVGElement, painted: string | undefined): void => {
+    const value = String(Math.round(opacityOf(painted) * DIMMED_OPACITY * 1000) / 1000);
+    el.style.setProperty("opacity", value);
+    dimmed.set(el, value);
+  };
+
+  const clearFocus = (): void => {
+    for (const el of dimmed.keys()) el.style.removeProperty("opacity");
+    dimmed.clear();
+  };
+
+  const applyFocus = (): void => {
+    const chain = focus;
+    if (chain === null) return;
+    const visit = (records: readonly NodeRecord[], depth: number): void => {
+      for (const record of records) {
+        const paint = record.paint;
+        if (paint.kind === "group" && paint.key === chain[depth]) {
+          if (depth + 1 < chain.length) visit(record.children, depth + 1);
+        } else if (paint.role !== "paper") {
+          dim(record.el, paint.attrs.find(([name]) => name === "opacity")?.[1]);
+        }
+      }
+    };
+    for (const layer of layers) {
+      if (layer.kind === "live") visit(layer.children, 0);
+      else dim(layer.el, undefined);
+    }
+  };
+
+  const setFocus = (chain: readonly object[] | null): void => {
+    if (disposed) return;
+    clearFocus();
+    focus = chain === null || chain.length === 0 ? null : [...chain];
+    applyFocus();
   };
 
   // --- strati vivi ------------------------------------------------------------
@@ -513,7 +574,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       record.el.replaceWith(img);
       revoke(record.shown);
       record.shown = rendered;
-      record.el = img;
+      swapped(record, img);
     };
     const failed = (): void => {
       if (disposed || record.generation !== generation || record.pending !== rendered) return;
@@ -525,10 +586,21 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       record.el.replaceWith(empty);
       revoke(record.shown);
       record.shown = null;
-      record.el = empty;
+      swapped(record, empty);
     };
     if (typeof img.decode === "function") img.decode().then(swap, failed);
     else swap();
+  };
+
+  /// Mette `el` al posto dell'elemento di `record`, attenuato come lui.
+  const swapped = (record: ImageRecord, el: HTMLElement): void => {
+    const dim = dimmed.get(record.el);
+    if (dim !== undefined) {
+      dimmed.delete(record.el);
+      el.style.setProperty("opacity", dim);
+      dimmed.set(el, dim);
+    }
+    record.el = el;
   };
 
   const emptySlot = (): HTMLElement => {
@@ -570,9 +642,10 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const update = (scene: PaintScene): void => {
     if (disposed) return;
-    // L'anteprima esce prima della riconciliazione, che confronta il DOM
-    // con la scena di prima, e rientra sui nodi nuovi.
+    // L'anteprima e l'attenuazione escono prima della riconciliazione, che
+    // confronta il DOM con la scena di prima, e rientrano sui nodi nuovi.
     clearDraft();
+    clearFocus();
     byPaint = null;
     const rootAttrs = scene.root.attrs;
     const lives = layers.filter((r): r is LiveRecord => r.kind === "live");
@@ -620,6 +693,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     for (const record of layers) if (!used.has(record)) disposeLayer(record);
     layers = out as LayerRecord[];
     place(root, layers.map((record) => record.el));
+    applyFocus();
     applyDraft();
   };
 
@@ -662,6 +736,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     disposed = true;
     draft = null;
     drafted = [];
+    focus = null;
+    dimmed.clear();
     byPaint = null;
     for (const record of layers) disposeLayer(record);
     layers = [];
@@ -670,7 +746,16 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
   owner.add(dispose);
 
-  return { update, setDraft, setView, settle, dispose };
+  return { update, setDraft, setFocus, setView, settle, dispose };
+}
+
+/// L'opacità che un attributo `opacity` dipinge: un numero o una
+/// percentuale, fra 0 e 1; 1 se manca o non si legge.
+function opacityOf(value: string | undefined): number {
+  if (value === undefined) return 1;
+  const text = value.trim();
+  const number = text.endsWith("%") ? Number(text.slice(0, -1)) / 100 : Number(text);
+  return text === "" || text === "%" || !Number.isFinite(number) ? 1 : Math.min(1, Math.max(0, number));
 }
 
 function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {

@@ -502,7 +502,7 @@ describe("il livello e la griglia del disegno", () => {
 
     await host.module.api.setSetting("draw.level", "standard");
     await waitFor("l'evidenziatore compare", () => tools().includes("highlighter"));
-    expect(tools()).toEqual(["select", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
+    expect(tools()).toEqual(["select", "lasso", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
     expect(focusedPane().querySelector(".draw-editor"), "lo stesso editor, non uno nuovo").toBe(editor);
 
     await host.module.api.setSetting("draw.level", "essential");

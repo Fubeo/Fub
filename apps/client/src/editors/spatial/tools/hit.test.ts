@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { PF1_DEFAULTS } from "../ink/brush";
 import { quantizeInk, type InkSample } from "../ink/sample";
 import { compose, IDENTITY, rotate, translate } from "../scene/matrix";
+import type { ContainerNode } from "../scene/model";
 import { doc } from "../scene/test-support";
 import { strokeElem } from "./edit";
 import { elemBounds, linesBounds } from "./hit";
@@ -172,6 +173,121 @@ describe("toccare un oggetto", () => {
     expect(index.at([35, 52], 0)?.key).toBe("o7k2m9x4q");
     expect(index.at([35, 60], 0)).toBeNull();
     expect(index.at([35, 60], 7)?.key).toBe("o7k2m9x4q");
+  });
+});
+
+describe("il lazo", () => {
+  it("prende gli oggetti che stanno interi dentro il poligono, anche se è concavo", () => {
+    const { index } = open(SHAPES);
+    const corner: Array<[number, number]> = [[-5, -5], [100, -5], [100, 40], [45, 40], [45, 100], [-5, 100]];
+    // Il cerchio sta nel riquadro del lazo, ma nell'angolo che resta fuori.
+    expect(index.inside(corner).map((unit) => unit.key)).toEqual(["r", "g", "@2.3", "loose"]);
+    // Un lato che attraversa un oggetto lo lascia fuori.
+    expect(index.inside([[0, 0], [20, 0], [20, 40], [0, 40]])).toEqual([]);
+    expect(index.inside([[0, 0], [65, 0]])).toEqual([]);
+  });
+
+  it("guarda la forma, non il suo riquadro, e conta il contorno", () => {
+    const { index } = open(doc(`${LAYER}<circle id="c" cx="70" cy="70" r="10"/><circle id="s" cx="20" cy="20" r="10" stroke="#000000" stroke-width="2"/></g>`));
+    // Un rombo attorno al cerchio: gli angoli del riquadro restano fuori.
+    const diamond = (cx: number, cy: number, half: number): Array<[number, number]> => [[cx + half, cy], [cx, cy + half], [cx - half, cy], [cx, cy - half]];
+    expect(index.inside(diamond(70, 70, 14.5)).map((unit) => unit.key)).toEqual(["c"]);
+    expect(index.inside(diamond(70, 70, 14))).toEqual([]);
+    // Il contorno largo 2 deve starci anche lui.
+    expect(index.inside(diamond(20, 20, 14.5))).toEqual([]);
+    expect(index.inside(diamond(20, 20, 16)).map((unit) => unit.key)).toEqual(["s"]);
+  });
+
+  it("chiuso ripassando sull'inizio non lascia buchi", () => {
+    const { index } = open(SHAPES);
+    const square: Array<[number, number]> = [[-5, -5], [65, -5], [65, 35], [-5, 35]];
+    expect(index.inside([...square, ...square]).map((unit) => unit.key)).toEqual(["r", "g"]);
+  });
+});
+
+describe("dentro i gruppi", () => {
+  const NEST = doc(
+    `${LAYER}<g id="g" transform="translate(50 0)"><rect id="a" x="0" y="0" width="10" height="10"/>`
+      + '<g id="inner" transform="translate(0 20)"><circle id="b" cx="5" cy="5" r="5"/><rect x="20" y="0" width="5" height="5"/></g>'
+      + '<rect id="la" x="20" y="0" width="10" height="10" fub:locked="true"/><rect id="hid" x="0" y="0" width="1" height="1" display="none"/></g>'
+      + '<g id="lg" fub:locked="true"><rect id="in-locked" x="0" y="50" width="10" height="10"/></g>'
+      + '<rect id="lr" x="80" y="80" width="10" height="10" fub:locked="true"/></g>'
+      + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><g id="lgg"><rect id="deep" x="0" y="0" width="5" height="5"/></g></g>',
+  );
+  const container = (opened: ReturnType<typeof open>, id: string): ContainerNode => opened.engine.holder(id) as ContainerNode;
+
+  it("in cima ci sono solo gli oggetti che si scelgono: niente di bloccato", () => {
+    const { index } = open(NEST);
+    expect(index.units.map((unit) => unit.key)).toEqual(["g"]);
+  });
+
+  it("si trovano a ogni profondità, nel posto dove le trasformazioni li portano", () => {
+    const { index } = open(NEST);
+    expect(index.get("a")?.bounds).toEqual({ min: [50, 0], max: [60, 10] });
+    expect(index.get("b")?.bounds).toEqual({ min: [50, 20], max: [60, 30] });
+    expect(index.get("b")?.path).toEqual([0, 0, 1, 0]);
+    expect(index.get("b")?.layer).toBe("l1");
+    expect(index.get("@0.0.1.1")?.bounds).toEqual({ min: [70, 20], max: [75, 25] });
+    // La stessa chiave dà lo stesso oggetto.
+    expect(index.children(index.get("g")!)[0]).toBe(index.get("a"));
+  });
+
+  it("non si trova ciò che è bloccato, nascosto, dentro qualcosa di bloccato, o che non è un oggetto", () => {
+    const { index } = open(NEST);
+    for (const key of ["la", "hid", "lg", "in-locked", "lr", "lgg", "deep", "l1", "@0", "@0.0.0", "@9.9", "@x", "nessuno"]) expect(index.get(key), key).toBeNull();
+  });
+
+  it("conoscono figli e fratelli che si scelgono", () => {
+    const { index } = open(NEST);
+    expect(index.children(index.get("g")!).map((unit) => unit.key)).toEqual(["a", "inner"]);
+    expect(index.children(index.get("a")!)).toEqual([]);
+    expect(index.siblings(index.get("b")!).map((unit) => unit.key)).toEqual(["b", "@0.0.1.1"]);
+    expect(index.siblings(index.get("g")!).map((unit) => unit.key)).toEqual(["g"]);
+  });
+
+  it("col clic più dentro si prende l'oggetto più dentro sotto il punto", () => {
+    const { index } = open(NEST);
+    expect(index.at([55, 25], 0)?.key).toBe("g");
+    expect(index.deepAt([55, 25], 0)?.key).toBe("b");
+    expect(index.deepAt([72, 22], 0)?.key).toBe("@0.0.1.1");
+    expect(index.deepAt([55, 5], 0)?.key).toBe("a");
+    // Sotto un figlio bloccato resta il gruppo.
+    expect(index.deepAt([75, 5], 0)?.key).toBe("g");
+    expect(index.deepAt([5, 55], 0)).toBeNull();
+  });
+
+  it("isolato un gruppo, si sceglie solo dentro", () => {
+    const opened = open(NEST);
+    const index = opened.reindex(container(opened, "g"));
+    expect(index.units.map((unit) => unit.key)).toEqual(["a", "inner"]);
+    expect(index.layers.map((layer) => layer.id)).toEqual(["l1", "l2"]);
+    expect(index.get("b")?.key).toBe("b");
+    expect(index.get("g")).toBeNull();
+    expect(index.at([55, 25], 0)?.key).toBe("inner");
+    expect(index.siblings(index.get("a")!).map((unit) => unit.key)).toEqual(["a", "inner"]);
+    expect(opened.reindex(container(opened, "inner")).units.map((unit) => unit.key)).toEqual(["b", "@0.0.1.1"]);
+  });
+
+  it("si entra in un gruppo solo se né lui né chi lo contiene è bloccato o nascosto", () => {
+    const opened = open(NEST);
+    const g = container(opened, "g");
+    expect(opened.opens(g)).toBe(true);
+    expect(opened.opens(container(opened, "inner"))).toBe(true);
+    expect(opened.opens(container(opened, "lg"))).toBe(false);
+    expect(opened.opens(container(opened, "lgg"))).toBe(false);
+    expect(opened.engine.apply({ op: "set", id: "g", attrs: { display: "none" } }).outcome).toBe("applied");
+    expect(opened.opens(g)).toBe(false);
+    expect(opened.opens(container(opened, "inner"))).toBe(false);
+    expect(opened.engine.apply({ op: "set", id: "g", attrs: { display: null } }).outcome).toBe("applied");
+    expect(opened.opens(g)).toBe(true);
+    expect(opened.engine.apply({ op: "remove", target: "g" }).outcome).toBe("applied");
+    expect(opened.opens(g)).toBe(false);
+  });
+
+  it("le guide vedono anche ciò che è bloccato, e i figli dei gruppi aperti", () => {
+    const opened = open(NEST);
+    expect(opened.seen().map((unit) => unit.key)).toEqual(["g", "lg", "lr", "lgg"]);
+    expect(opened.seen(new Set([container(opened, "g")])).map((unit) => unit.key)).toEqual(["a", "inner", "la", "lg", "lr", "lgg"]);
   });
 });
 

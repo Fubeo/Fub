@@ -5,14 +5,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { createObjectTree, ROW_PX, VIRTUAL_AFTER, type ObjectTree, type TreeEntry } from "./objects";
+import { createObjectTree, ROW_PX, VIRTUAL_AFTER, type ObjectTree, type TreeEntry, type TreeToggle } from "./objects";
 
-function object(key: string, selectable = true): TreeEntry {
-  return { key, layer: false, selectable, children: [], label: () => `Oggetto ${key}` };
+function object(key: string, selectable = true, more: Partial<TreeEntry> = {}): TreeEntry {
+  return { key, layer: false, selectable, locked: false, hidden: false, toggles: selectable, children: [], label: () => `Oggetto ${key}`, ...more };
 }
 
 function layer(key: string, children: readonly TreeEntry[], state = ""): TreeEntry {
-  return { key, layer: true, selectable: false, children, label: () => `Livello ${key}${state}` };
+  return { key, layer: true, selectable: false, locked: state !== "", hidden: false, toggles: true, children, label: () => `Livello ${key}${state}` };
 }
 
 const ENTRIES: readonly TreeEntry[] = [
@@ -36,6 +36,7 @@ function mount(entries: readonly TreeEntry[] = ENTRIES, selection: readonly stri
     onActivate: () => calls.push("activate"),
     onDelete: () => calls.push("delete"),
     onLeave: () => calls.push("leave"),
+    onToggle: (key: string, what: TreeToggle) => calls.push(`${what} ${key}`),
   });
   host.append(tree.element);
   tree.relabel();
@@ -82,8 +83,11 @@ describe("le righe", () => {
       ["✓Oggetto d", "2", "3", "3"],
       ["✓Oggetto e", "1", "3", "3"],
     ]);
-    // Il segno è nascosto agli screen reader: per loro c'è `aria-selected`.
-    expect(rows()[0]!.querySelector(".draw-object-mark")!.getAttribute("aria-hidden")).toBe("true");
+    // I segni sono nascosti agli screen reader: per loro c'è `aria-selected`,
+    // e il nome dice che il livello è bloccato.
+    for (const part of [".draw-object-twisty", ".draw-object-mark", ".draw-object-signs"]) expect(rows()[0]!.querySelector(part)!.getAttribute("aria-hidden")).toBe("true");
+    expect(rows()[0]!.querySelector('[data-sign="lock"]')!.hasAttribute("data-on")).toBe(true);
+    expect(rows()[0]!.querySelector('[data-sign="hide"]')!.hasAttribute("data-on")).toBe(false);
     expect(rows()[0]!.getAttribute("aria-expanded")).toBe("true");
     expect(rows()[0]!.hasAttribute("aria-selected")).toBe(false);
     expect(rows()[1]!.getAttribute("aria-disabled")).toBe("true");
@@ -158,7 +162,7 @@ describe("la tastiera", () => {
     key("ArrowLeft");
     expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "a", "l2", "e"]);
     expect(rows()[2]!.getAttribute("aria-expanded")).toBe("false");
-    expect(rows()[2]!.querySelector(".draw-object-mark")!.textContent).toBe("▸");
+    expect(rows()[2]!.querySelector(".draw-object-twisty")!.textContent).toBe("▸");
     key("ArrowRight");
     expect(rows()).toHaveLength(7);
     key("ArrowRight");
@@ -204,6 +208,75 @@ describe("il puntatore", () => {
     expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "a", "l2", "e"]);
     host.querySelector('[data-key="e"]')!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     expect(calls).toEqual(["activate"]);
+  });
+});
+
+describe("dentro i gruppi", () => {
+  const NESTED: readonly TreeEntry[] = [
+    layer("l1", [
+      object("g", true, { children: [object("a"), object("i", true, { children: [object("b")] }), object("c", false, { locked: true, toggles: true })] }),
+      object("h", false, { hidden: true }),
+    ]),
+  ];
+
+  it("un gruppo nasce chiuso e si apre con le frecce, come un livello, e resta scelto da solo", () => {
+    mount(NESTED);
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "g", "h"]);
+    expect(rows()[1]!.getAttribute("aria-expanded")).toBe("false");
+    expect(rows()[1]!.textContent).toBe("▸✓Oggetto g");
+    // Un oggetto senza figli non si apre.
+    expect(rows()[2]!.hasAttribute("aria-expanded")).toBe(false);
+    tree.focus();
+    key("ArrowDown");
+    expect(chosen.pop()).toEqual(["g"]);
+    key("ArrowRight");
+    expect(rows().map((row) => [row.dataset.key, row.getAttribute("aria-level")])).toEqual([["l1", "1"], ["g", "2"], ["a", "3"], ["i", "3"], ["c", "3"], ["h", "2"]]);
+    expect(rows()[2]!.style.getPropertyValue("--draw-depth")).toBe("2");
+    key("ArrowRight");
+    expect(chosen.pop()).toEqual(["a"]);
+    key("ArrowLeft");
+    expect(active()?.dataset.key).toBe("g");
+    key("ArrowLeft");
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "g", "h"]);
+  });
+
+  it("apre ciò che contiene la prima riga scelta quando la selezione arriva da fuori, una volta", () => {
+    mount(NESTED);
+    tree.update(NESTED, ["b"], 2);
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "g", "a", "i", "b", "c", "h"]);
+    expect(active()?.dataset.key).toBe("b");
+    // Chiuso a mano, resta chiuso finché la selezione è quella.
+    host.querySelector('[data-key="g"] .draw-object-twisty')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "g", "h"]);
+    expect(chosen).toEqual([]);
+    (document.activeElement as HTMLElement).blur();
+    tree.update(NESTED, ["b"], 2);
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "g", "h"]);
+  });
+
+  it("blocca e nasconde la riga attiva coi tasti e coi segni, dove si può", () => {
+    mount(NESTED, ["c"]);
+    tree.focus();
+    expect(active()?.dataset.key).toBe("c");
+    expect(active()!.querySelector('[data-sign="lock"]')!.hasAttribute("data-on")).toBe(true);
+    expect(active()!.querySelector<HTMLElement>('[data-sign="lock"]')!.title).toBe("Sblocca");
+    expect(active()!.querySelector<HTMLElement>('[data-sign="hide"]')!.title).toBe("Nascondi");
+    expect(key("L", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+    key("h", { metaKey: true, shiftKey: true });
+    expect(calls).toEqual(["lock c", "hide c"]);
+    // Senza Maiusc, o su una riga che non si cambia, il tasto passa.
+    expect(key("l", { ctrlKey: true }).defaultPrevented).toBe(false);
+    key("End");
+    expect(active()?.dataset.key).toBe("h");
+    expect(active()!.hasAttribute("data-toggles")).toBe(false);
+    expect(active()!.querySelector<HTMLElement>('[data-sign="hide"]')!.title).toBe("");
+    expect(key("h", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    host.querySelector('[data-key="h"] [data-sign="hide"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    host.querySelector('[data-key="l1"] [data-sign="hide"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    // Il segno cambia, e non sceglie né chiude il livello.
+    expect(calls).toEqual(["lock c", "hide c", "hide l1"]);
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "g", "a", "i", "c", "h"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 });
 

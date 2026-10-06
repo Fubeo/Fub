@@ -158,6 +158,19 @@ describe("l'ordine", () => {
     const arranged = orderOps(opened.engine.model!, opened.index, units(opened, "oaaaaaaaa", "occcccccc"), "front", ids(opened));
     expect(keys(applied(opened, arranged))).toEqual(["obbbbbbbb", "oaaaaaaaa", "odddddddd", "occcccccc"]);
   });
+
+  it("dentro un gruppo, ordina fra i figli: il gruppo resta al suo posto", () => {
+    const opened = open(doc(`${LAYER}${RECT("oxxxxxxxx", 9)}<g id="ogggggggg">${RECT("oaaaaaaaa", 0)}<rect x="1" y="0" width="5" height="5"/>${RECT("occcccccc", 2)}</g></g>`));
+    const nested = [opened.index.get("oaaaaaaaa")!];
+    const arranged = orderOps(opened.engine.model!, opened.index, nested, "front", ids(opened));
+    const index = applied(opened, arranged);
+    expect(keys(index)).toEqual(["oxxxxxxxx", "ogggggggg"]);
+    expect(index.children(index.get("ogggggggg")!).map((unit) => unit.key)).toEqual(["@0.1.0", "occcccccc", "oaaaaaaaa"]);
+    // In fondo, fra i figli: chi non ha id non ne riceve, perché nessuno lo
+    // sposta, e nemmeno il gruppo.
+    const back = orderOps(opened.engine.model!, index, [index.get("oaaaaaaaa")!], "back", ids(opened));
+    expect(back.ops).toEqual([{ op: "move", target: "oaaaaaaaa", parent: "ogggggggg", pos: { first: true } }]);
+  });
 });
 
 describe("raggruppare", () => {

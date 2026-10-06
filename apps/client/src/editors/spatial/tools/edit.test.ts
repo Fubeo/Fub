@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
-import { boxMatrix, destination, fittedPage, gesture, mappedBounds, moveOps, NewIds, pageFor, removeOps, roundDelta, transformOps, transformValue } from "./edit";
+import { boxMatrix, destination, destinationInto, fittedPage, gesture, mappedBounds, moveOps, NewIds, pageFor, removeOps, roundDelta, transformOps, transformValue } from "./edit";
 import { LAYER, open } from "./test-support";
 
 const ids = (taken: readonly string[] = []): NewIds => new NewIds((id) => taken.includes(id));
@@ -47,6 +47,25 @@ describe("dove scrive un oggetto nuovo", () => {
     expect(to.matrix).toEqual([2, 0, 0, 2, 10, 20]);
     // `+ 0` fa di uno zero negativo uno zero: per la matrice sono lo stesso.
     expect(to.inverse.map((v) => v + 0)).toEqual([0.5, 0, 0, 0.5, -5, -10]);
+  });
+
+  it("nel gruppo isolato, con le sue coordinate, e uno senza id lo riceve nello stesso gesto", () => {
+    const opened = open(doc(`${LAYER}<g id="ogggggggg" transform="translate(5 0)"><g transform="scale(2)"><rect width="1" height="1"/></g></g></g>`));
+    const outer = opened.index.get("ogggggggg")!;
+    expect(destinationInto(outer, ids())).toMatchObject({ parent: "ogggggggg", matrix: [1, 0, 0, 1, 5, 0], prelude: [] });
+    const inner = opened.index.get("@0.0.0")!;
+    const to = destinationInto(inner, ids())!;
+    expect(to.matrix).toEqual([2, 0, 0, 2, 5, 0]);
+    expect(to.parent).toMatch(/^o[a-z0-9]{8}$/);
+    expect(to.prelude).toEqual([{ op: "ident", path: [0, 0, 0], tag: "g", id: to.parent }]);
+    const elem = { tag: "rect", attrs: { id: "o1a2b3c4d", width: "5", height: "5" } };
+    expect(opened.engine.apply(gesture([...to.prelude, { op: "add", parent: to.parent, pos: { last: true }, elem }])!).outcome).toBe("applied");
+    expect(opened.reindex().get("o1a2b3c4d")!.path).toEqual([0, 0, 0, 1]);
+  });
+
+  it("non in un gruppo schiacciato su una retta", () => {
+    const opened = open(doc(`${LAYER}<g id="ogggggggg" transform="scale(1 0)"><rect width="1" height="1"/></g></g>`));
+    expect(destinationInto(opened.index.get("ogggggggg")!, ids())).toBeNull();
   });
 });
 

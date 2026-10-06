@@ -12,6 +12,7 @@ import {
   levelsAbove,
   reaches,
   startTool,
+  toolAfter,
   TOOLS,
   toolForKey,
   toolsFor,
@@ -27,8 +28,11 @@ describe("il registro degli strumenti", () => {
     expect(DEFAULT_TOOL).toBe("pen");
   });
 
-  it("aggiunge allo Standard l'evidenziatore, dopo la penna, e il testo in fondo", () => {
-    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
+  it("aggiunge allo Standard il lazo accanto alla selezione, l'evidenziatore dopo la penna e il testo in fondo", () => {
+    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "lasso", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
+    // Il tasto del lazo è quello di Illustrator.
+    expect(toolSpec("lasso")).toMatchObject({ level: "standard", group: "pick", shortcut: "q" });
+    expect(toolForKey(toolsFor("essential"), "q")).toBeNull();
     expect(toolSpec("highlighter").shortcut).toBe("h");
     expect(toolSpec("text").shortcut).toBe("t");
     expect(reaches("standard", "essential")).toBe(true);
@@ -38,7 +42,7 @@ describe("il registro degli strumenti", () => {
   });
 
   it("aggiunge all'Esperto i nodi accanto alla selezione e la penna di Bézier dopo le forme, coi tasti di Inkscape", () => {
-    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "nodes", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "bezier", "text"]);
+    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "lasso", "nodes", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "bezier", "text"]);
     expect(toolSpec("nodes")).toMatchObject({ level: "expert", group: "pick", shortcut: "n" });
     expect(toolSpec("bezier")).toMatchObject({ level: "expert", group: "shape", shortcut: "b" });
     expect(toolForKey(toolsFor("standard"), "n")).toBeNull();
@@ -60,7 +64,7 @@ describe("il registro degli strumenti", () => {
   it("elenca le parti per livello, prima gli strumenti nell'ordine della barra, ciascuna una volta", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
-      "highlighter", "text", "colors", "arrange", "layers", "grid", "guides", "rulers", "links", "images", "properties",
+      "lasso", "highlighter", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "links", "images", "properties",
       "nodes", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
@@ -86,6 +90,13 @@ describe("il registro degli strumenti", () => {
     expect(startTool(toolsFor("essential"))).toBe(DEFAULT_TOOL);
     expect(startTool(toolsOf(featuresFor("custom", ["text", "nodes", "ellipse"])))).toBe("ellipse");
     expect(startTool(toolsOf(featuresFor("custom", ["nodes"])))).toBe("select");
+  });
+
+  it("dopo uno strumento che sceglie riprende la Selezione, dopo gli altri lo strumento di partenza", () => {
+    expect(toolAfter(toolsFor("essential"), "lasso")).toBe("select");
+    expect(toolAfter(toolsFor("standard"), "nodes")).toBe("select");
+    expect(toolAfter(toolsFor("essential"), "highlighter")).toBe(DEFAULT_TOOL);
+    expect(toolAfter(toolsOf(featuresFor("custom", ["text"])), "pen")).toBe("text");
   });
 
   it("dà a ogni strumento un tasto suo, una lettera minuscola", () => {
