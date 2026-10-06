@@ -82,6 +82,12 @@ export default defineConfig({
           if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
             return "markdown-grammar";
           }
+          // Il formato dei disegni e la sua pittura: il modello, la lettura,
+          // le operazioni e il tratto a mano libera. Cambiano col formato, non
+          // con l'editor che ci lavora sopra, e non dipendono da lui.
+          if (/\/src\/editors\/spatial\/(scene\/|painter\/|ink\/|number\.ts$)|\/node_modules\/perfect-freehand\//.test(id)) {
+            return "drawing-scene";
+          }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
             return "theme-series";
           }
