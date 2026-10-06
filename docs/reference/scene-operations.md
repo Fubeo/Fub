@@ -203,8 +203,9 @@ tiene, per ogni elemento:
   così non resta una riga vuota.
 - **`set` su `g` o `a`:** si sostituisce solo il tag di apertura, perché i
   figli non cambiano. Un `g` o un `a` autochiuso si riscrive per intero.
-- **`ident` e `adopt`:** si riscrive solo il tag dell'elemento o della radice,
-  copiando così come sono gli attributi che non cambiano.
+- **`ident`, `adopt` e `set` su `#root`:** si riscrive solo il tag
+  dell'elemento o della radice, copiando così come sono gli attributi che non
+  cambiano.
 - **`page`:** si riscrivono il tag della radice e la riga della carta.
 - **`meta`:** si sostituiscono, si inseriscono o si cancellano le righe di
   `title` e `desc`, all'inizio della radice.
