@@ -53,11 +53,13 @@ export type OverlayHandle =
   /// Il contorno di una selezione a mano libera, tratteggiato.
   | { readonly kind: "lasso"; readonly points: readonly Point[] }
   /// Il contorno di un tracciato di cui si modificano i nodi: i segmenti
-  /// nelle coordinate del tracciato, portati nella scena da `matrix`.
-  | { readonly kind: "outline"; readonly segments: readonly Segment[]; readonly matrix: Matrix }
+  /// nelle coordinate del tracciato, portati nella scena da `matrix`. Un
+  /// `hint` è il contorno dell'oggetto sotto il puntatore, più tenue.
+  | { readonly kind: "outline"; readonly segments: readonly Segment[]; readonly matrix: Matrix; readonly hint?: boolean }
   /// Un nodo di un tracciato, di misura fissa sullo schermo: la forma dice
-  /// il tipo, e un nodo scelto è pieno.
-  | { readonly kind: "node"; readonly x: number; readonly y: number; readonly shape: NodeShape; readonly selected: boolean }
+  /// il tipo, e un nodo scelto è pieno. Un `hint` è un nodo dell'oggetto
+  /// sotto il puntatore, più piccolo.
+  | { readonly kind: "node"; readonly x: number; readonly y: number; readonly shape: NodeShape; readonly selected: boolean; readonly hint?: boolean }
   /// La maniglia di un nodo: un punto, legato al nodo da una linea.
   | { readonly kind: "control"; readonly x: number; readonly y: number; readonly node: Point }
   /// Una linea delle guide fra due punti: piena, o tratteggiata quando
@@ -91,6 +93,11 @@ const GRIP = 8;
 /// maniglia è più piccolo, perché non si confonda con un nodo.
 const NODE = 9;
 const CONTROL = 6;
+
+/// La misura dei nodi dell'oggetto sotto il puntatore, e la forza del suo
+/// contorno: si vedono, senza confondersi con quelli che si modificano.
+const HINT_NODE = 7;
+const HINT_ALPHA = 0.6;
 
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
@@ -266,13 +273,13 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.stroke();
   };
 
-  /// Un nodo in `x`, `y` sullo schermo.
-  const drawNode = (ctx: CanvasRenderingContext2D, x: number, y: number, shape: NodeShape): void => {
+  /// Un nodo in `x`, `y` sullo schermo, largo `size`.
+  const drawNode = (ctx: CanvasRenderingContext2D, x: number, y: number, shape: NodeShape, size: number): void => {
     ctx.beginPath();
     if (shape === "circle") {
-      ctx.arc(x, y, NODE / 2, 0, 2 * Math.PI);
+      ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
     } else if (shape === "diamond") {
-      const r = (NODE + 2) / 2;
+      const r = (size + 2) / 2;
       ctx.moveTo(x, y - r);
       ctx.lineTo(x + r, y);
       ctx.lineTo(x, y + r);
@@ -280,7 +287,7 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
       ctx.closePath();
     } else {
       // Sul mezzo pixel, perché il bordo di un pixel resti netto.
-      ctx.rect(Math.round(x - NODE / 2) + 0.5, Math.round(y - NODE / 2) + 0.5, NODE - 1, NODE - 1);
+      ctx.rect(Math.round(x - size / 2) + 0.5, Math.round(y - size / 2) + 0.5, size - 1, size - 1);
     }
     ctx.fill();
     ctx.stroke();
@@ -317,7 +324,9 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.stroke();
       } else if (handle.kind === "outline") {
         ctx.setLineDash([]);
+        ctx.globalAlpha = handle.hint === true ? HINT_ALPHA : 1;
         traceOutline(ctx, handle.segments, handle.matrix);
+        ctx.globalAlpha = 1;
       } else if (handle.kind === "control") {
         ctx.setLineDash([]);
         ctx.beginPath();
@@ -398,7 +407,7 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
       if (handle.kind !== "node") continue;
       const [px, py] = screen(handle.x, handle.y);
       ctx.fillStyle = handle.selected ? line : fill;
-      drawNode(ctx, px, py, handle.shape);
+      drawNode(ctx, px, py, handle.shape, handle.hint === true ? HINT_NODE : NODE);
     }
     for (const handle of handles) {
       if (handle.kind === "label") {

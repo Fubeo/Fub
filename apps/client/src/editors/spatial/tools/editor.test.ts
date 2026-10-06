@@ -8,7 +8,7 @@ import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { applyOperation } from "../../core/text-operation";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
-import { decodeInk } from "../ink/codec";
+import { decodeInk, inkLength, inkPoint } from "../ink/codec";
 import { polygonalAttrs, readPolygonal } from "../scene/parametric";
 import { SceneEngine } from "../scene/engine";
 import { readScene } from "../scene/read";
@@ -17,6 +17,7 @@ import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOpti
 import { MERGE_MS } from "./history";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { rasterize } from "./png";
+import { arrowPath } from "./shapes";
 import { LAYER } from "./test-support";
 import { DEFAULT_CURVE } from "../pen/pressure";
 import { closeRadial } from "./radial";
@@ -114,6 +115,36 @@ function typeIn(target: HTMLInputElement | HTMLTextAreaElement, text: string): v
 function enter(target: HTMLInputElement, text: string): void {
   typeIn(target, text);
   key("Enter", {}, target);
+}
+
+/// Lo strato sopra con un contesto che registra ciò che disegna, e i
+/// fotogrammi, che partono quando li si chiede. Va preparato prima di
+/// montare l'editor.
+function recording(): { readonly frame: () => void; readonly texts: () => string[]; readonly calls: () => Array<readonly [string, ...unknown[]]> } {
+  const calls: Array<readonly [string, ...unknown[]]> = [];
+  const context = new Proxy({} as Record<string | symbol, unknown>, {
+    get: (target, name) => {
+      if (name in target) return target[name];
+      if (name === "measureText") return () => ({ width: 10 });
+      return (...args: unknown[]) => void calls.push([String(name), ...args]);
+    },
+    set: (target, name, value) => {
+      target[name] = value;
+      return true;
+    },
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
+  // Ciò che ha fatto l'ultimo disegno, che comincia pulendo.
+  const last = (): Array<readonly [string, ...unknown[]]> => calls.slice(calls.map(([name]) => name).lastIndexOf("clearRect"));
+  return {
+    frame: () => {
+      for (const callback of frames.splice(0)) callback(0);
+    },
+    texts: () => last().filter(([name]) => name === "fillText").map(([, text]) => String(text)),
+    calls: last,
+  };
 }
 
 beforeEach(() => {
@@ -1479,38 +1510,6 @@ describe("le guide intelligenti, dal livello Standard", () => {
   };
   const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
   const entry = (label: string): HTMLButtonElement => menu().find((one) => labelOf(one) === label)!;
-
-  /// Lo strato sopra con un contesto che registra ciò che disegna, e i
-  /// fotogrammi, che partono quando li si chiede. Va preparato prima di
-  /// montare l'editor.
-  const recording = (): { readonly frame: () => void; readonly texts: () => string[] } => {
-    const calls: Array<readonly [string, ...unknown[]]> = [];
-    const context = new Proxy({} as Record<string | symbol, unknown>, {
-      get: (target, name) => {
-        if (name in target) return target[name];
-        if (name === "measureText") return () => ({ width: 10 });
-        return (...args: unknown[]) => void calls.push([String(name), ...args]);
-      },
-      set: (target, name, value) => {
-        target[name] = value;
-        return true;
-      },
-    });
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
-    const frames: FrameRequestCallback[] = [];
-    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
-    return {
-      frame: () => {
-        for (const callback of frames.splice(0)) callback(0);
-      },
-      // Le scritte dell'ultimo disegno, che comincia pulendo.
-      texts: () =>
-        calls
-          .slice(calls.map(([name]) => name).lastIndexOf("clearRect"))
-          .filter(([name]) => name === "fillText")
-          .map(([, text]) => String(text)),
-    };
-  };
 
   // Un menu rimasto aperto va chiuso davvero: tolto e basta, terrebbe il
   // fuoco anche nella prova dopo.
@@ -5377,12 +5376,14 @@ describe("i nodi, dal livello Esperto", () => {
     expect(changes).toEqual([]);
   });
 
-  it("dice quando l'oggetto scelto non è un tracciato, o gli oggetti sono più d'uno", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([R]);
+  it("dice quando l'oggetto scelto non ha nodi, o gli oggetti sono più d'uno", () => {
+    const T = "ot3t3t3t3";
+    const TEXT = `<text id="${T}" x="300" y="300" fill="#000000" font-family="Inter, sans-serif" font-size="20"><tspan x="300" dy="0">Ciao</tspan></text>`;
+    mount(doc(`${LAYER}${PATH}${CURVE}${RECT}${TEXT}</g>`), { level: "expert" });
+    editor.select([T]);
     editor.focus();
     key("n");
-    expect(spoken()).toBe("Strumento: Nodi. L’oggetto scelto non è un tracciato: «Oggetto in tracciato» lo rende modificabile coi nodi.");
+    expect(spoken()).toBe("Strumento: Nodi. Un testo non ha nodi: si modifica scrivendo.");
     expect(nodesBar().hidden).toBe(true);
     expect(arrangeBar().hidden).toBe(false);
     // Le frecce non spostano mai l'oggetto, con lo strumento Nodi.
@@ -5394,19 +5395,20 @@ describe("i nodi, dal livello Esperto", () => {
     editor.select([]);
     editor.setTool("nodes");
     expect(spoken()).toBe("Strumento: Nodi.");
-    // Un tocco sceglie l'oggetto di cui modificare i nodi.
+    // Un tocco sceglie l'oggetto di cui modificare i nodi, e prende subito
+    // ciò che tocca: qui un segmento, coi suoi due nodi.
     tap(30, 10);
     expect(editor.selection).toEqual([P]);
-    expect(spoken()).toBe("Tracciato, Nero: 3 nodi da modificare.");
-    tap(210, 210);
-    expect(editor.selection).toEqual([R]);
-    expect(spoken()).toBe("L’oggetto scelto non è un tracciato: «Oggetto in tracciato» lo rende modificabile coi nodi.");
-    // Senza un tracciato il riquadro sceglie gli oggetti, con Maiusc in
-    // aggiunta, e il vuoto toglie la scelta.
+    expect(spoken()).toBe("Tracciato, Nero: 3 nodi da modificare. 2 nodi scelti.");
+    tap(310, 292);
+    expect(editor.selection).toEqual([T]);
+    expect(spoken()).toBe("Un testo non ha nodi: si modifica scrivendo.");
+    // Senza nodi il riquadro sceglie gli oggetti, con Maiusc in aggiunta, e
+    // il vuoto toglie la scelta.
     drag([[0, 0], [60, 60]], { shiftKey: true });
-    expect(editor.selection).toEqual([P, R]);
+    expect(editor.selection).toEqual([P, T]);
     expect(spoken()).toBe("Scegli un oggetto solo per modificarne i nodi.");
-    tap(300, 300);
+    tap(120, 300);
     expect(editor.selection).toEqual([]);
     expect(spoken()).toBe("Nessun oggetto scelto.");
     drag([[0, 0], [60, 60]]);
@@ -5717,7 +5719,7 @@ describe("i nodi, dal livello Esperto", () => {
     key("n");
     expect(spoken()).toBe("Strumento: Nodi. Gruppo, 2 oggetti: 2 nodi da modificare.");
     tap(30, 50);
-    expect(spoken()).toBe("Gruppo, 2 oggetti: 3 nodi da modificare.");
+    expect(spoken()).toBe("Gruppo, 2 oggetti: 3 nodi da modificare. 2 nodi scelti.");
     drag([[50, 90], [60, 90], [70, 90]]);
     expect(d(B)).toBe("M10 50 L50 50 L70 90");
     expect(d(A)).toBe("M10 10 L50 10");
@@ -5725,6 +5727,164 @@ describe("i nodi, dal livello Esperto", () => {
     // La forma resta quella anche dopo la modifica.
     key("Home");
     expect(spoken()).toBe("Nodo 1 di 3, capo: x 10, y 50.");
+  });
+
+  it("un rettangolo ha i suoi quattro nodi: portati tutti resta un rettangolo, uno solo lo fa tracciato", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([R]);
+    editor.focus();
+    key("n");
+    expect(spoken()).toBe("Strumento: Nodi. Rettangolo, Nero: 4 nodi da modificare.");
+    expect(nodesBar().hidden).toBe(false);
+    // Dentro la forma, lontano dai bordi, si prendono tutti i nodi.
+    drag([[210, 210], [220, 210], [230, 220]]);
+    expect(editor.engine.text).toContain(`<rect id="${R}" x="220" y="210" width="20" height="20" fill="#000000"/>`);
+    expect(spoken()).toBe("4 nodi spostati.");
+    // Un tocco sul nodo in basso a destra lo sceglie da solo, e trascinarlo
+    // fa della forma un tracciato, con lo stesso id e lo stesso colore.
+    tap(240, 230);
+    expect(spoken()).toBe("Nodo 3 di 4, spigolo: x 240, y 230.");
+    drag([[240, 230], [250, 240], [260, 250]]);
+    expect(editor.engine.text).toContain(`<path id="${R}" d="M220 210 L240 210 L260 250 L220 230 Z" fill="#000000"/>`);
+    expect(spoken()).toBe("Nodo spostato: x 260, y 250. La forma ora è un tracciato.");
+    expect(editor.selection).toEqual([R]);
+    editor.undo();
+    expect(editor.engine.text).toContain(`<rect id="${R}" x="220" y="210" width="20" height="20" fill="#000000"/>`);
+    expect(changes).toHaveLength(3);
+  });
+
+  it("un punto su un nodo di un altro oggetto lo prende subito, e lo trascina nello stesso gesto", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([R]);
+    editor.focus();
+    key("n");
+    drag([[50, 50], [65, 50], [90, 50]]);
+    expect(editor.selection).toEqual([P]);
+    expect(d()).toBe("M10 10 L50 10 L90 50");
+    expect(spoken()).toBe("Nodo spostato: x 90, y 50. Agganciato: il punto in linea con il centro verticale della pagina.");
+    // Dentro un oggetto pieno, il punto prende tutti i suoi nodi.
+    drag([[210, 210], [215, 210], [220, 210]]);
+    expect(editor.selection).toEqual([R]);
+    expect(editor.engine.text).toContain(`<rect id="${R}" x="210" y="200" width="20" height="20" fill="#000000"/>`);
+    expect(spoken()).toBe("4 nodi spostati.");
+  });
+
+  it("la freccia ha i due capi dell'asta: la punta segue il suo, e l'asta non si piega", () => {
+    const F = "of3f3f3f3";
+    const arrow = (x1: number, y1: number, x2: number, y2: number): string =>
+      `<path id="${F}" fub:shape="arrow" fub:geom="${x1} ${y1} ${x2} ${y2}" d="${arrowPath(x1, y1, x2, y2, 2)}" fill="none" stroke="#000000" stroke-width="2"/>`;
+    mount(doc(`${LAYER}${arrow(20, 300, 120, 300)}</g>`), { level: "expert" });
+    editor.select([F]);
+    editor.focus();
+    key("n");
+    expect(spoken()).toBe("Strumento: Nodi. Freccia, Nero: 2 nodi da modificare.");
+    drag([[120, 300], [120, 320], [120, 340]]);
+    expect(editor.engine.text).toContain(arrow(20, 300, 120, 340));
+    expect(spoken()).toBe("Nodo spostato: x 120, y 340.");
+    // Il punto sull'asta prende tutta la freccia.
+    drag([[70, 320], [80, 320], [90, 330]]);
+    expect(editor.engine.text).toContain(arrow(40, 310, 140, 350));
+    expect(spoken()).toBe("2 nodi spostati.");
+    // In curva no, e nemmeno un nodo in più: lo dice, e niente cambia.
+    key("U", { shiftKey: true });
+    expect(spoken()).toBe("Una freccia ha un’asta dritta fra due capi: per curvarla o darle altri nodi, prima «Oggetto in tracciato».");
+    key("Insert");
+    expect(spoken()).toBe("Una freccia ha un’asta dritta fra due capi: per curvarla o darle altri nodi, prima «Oggetto in tracciato».");
+    expect(editor.engine.text).toContain(arrow(40, 310, 140, 350));
+    expect(changes).toHaveLength(2);
+  });
+
+  it("un tratto a penna ha i nodi della sua spina: spostarne uno porta l'inchiostro, e il tratto resta uno", () => {
+    mount(doc(`${LAYER}</g>`), { level: "expert" });
+    editor.setTool("pen");
+    drag([[20, 300], [40, 330], [60, 360], [80, 330], [100, 300]]);
+    const id = /<path id="(o[a-z0-9]{8})" fub:tool="pen"/.exec(editor.engine.text)![1]!;
+    const ink = () => decodeInk(/fub:ink="([^"]+)"/.exec(editor.engine.text)![1]!);
+    const shape = () => /fub:tool="pen" [^>]* d="([^"]+)"/.exec(editor.engine.text)![1]!;
+    const before = { ink: ink(), d: shape() };
+    editor.select([id]);
+    editor.focus();
+    key("n");
+    expect(spoken()).toBe("Strumento: Nodi. Tratto, Nero: 3 nodi da modificare.");
+    // Lo spigolo in basso scende di 20: il campione lì scende con lui, i capi
+    // restano, e il contorno si rifà.
+    drag([[60, 360], [60, 370], [60, 380]]);
+    expect(spoken()).toBe("Nodo spostato: x 60, y 380.");
+    const after = ink();
+    expect(inkLength(after)).toBe(inkLength(before.ink));
+    const points = Array.from({ length: inkLength(after) }, (_, i) => inkPoint(after, i));
+    expect(points).toContainEqual([60, 380]);
+    expect(points[0]).toEqual([20, 300]);
+    expect(points[points.length - 1]).toEqual([100, 300]);
+    expect(shape()).not.toBe(before.d);
+    expect(editor.selection).toEqual([id]);
+    // Non si spezza: lo dice, e niente cambia.
+    key("B", { shiftKey: true });
+    expect(spoken()).toBe("Un tratto a penna resta un tratto solo e aperto: non si spezza e non si chiude.");
+    editor.undo();
+    expect(ink()).toEqual(before.ink);
+    expect(shape()).toBe(before.d);
+  });
+
+  it("passando col puntatore, una forma mostra il contorno e i nodi prima di toccarla", () => {
+    const layer = recording();
+    mount(SHAPES, { level: "expert" });
+    editor.select([P]);
+    editor.focus();
+    key("n");
+    const hover = (x: number, y: number): void => {
+      surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+      layer.frame();
+    };
+    /// I rombi dei nodi a spigolo dell'ultimo disegno: dove stanno, e quanto
+    /// sono grandi.
+    const diamonds = (): string[] => {
+      const calls = layer.calls();
+      return calls.flatMap((call, i) => {
+        const next = calls[i + 1];
+        if (call[0] !== "moveTo" || next?.[0] !== "lineTo") return [];
+        const [x, top] = [call[1] as number, call[2] as number];
+        const [right, y] = [next[1] as number, next[2] as number];
+        return right - x === y - top && right > x ? [`${x},${y} r${right - x}`] : [];
+      });
+    };
+    hover(400, 400);
+    const editingOnly = diamonds();
+    // I tre nodi del tracciato, grandi.
+    expect(editingOnly).toEqual(expect.arrayContaining(["10,10 r5.5", "50,50 r5.5"]));
+    // Sopra il rettangolo: i suoi quattro spigoli, più piccoli.
+    hover(210, 210);
+    expect(diamonds().filter((each) => !editingOnly.includes(each))).toEqual(["200,200 r4.5", "220,200 r4.5", "220,220 r4.5", "200,220 r4.5"]);
+    // Sopra il tracciato che si modifica, o sul vuoto, niente in più.
+    hover(30, 10);
+    expect(diamonds()).toEqual(editingOnly);
+    hover(210, 210);
+    hover(400, 400);
+    expect(diamonds()).toEqual(editingOnly);
+    // Lo strumento Selezione non li mostra.
+    editor.setTool("select");
+    hover(210, 210);
+    expect(diamonds()).toEqual([]);
+  });
+
+  it("una parte di un altro programma non ha nodi, e un tocco lo dice", () => {
+    const G = "og5g5g5g5";
+    const A = "oa5a5a5a5";
+    mount(doc(
+      `${LAYER}<g id="${G}"><path id="${A}" d="M10 10 L50 10" fill="none" stroke="#000000" stroke-width="2"/>`
+        + `<path style="fill:none;stroke:#000000;stroke-width:2" d="M10 50 L50 50"/></g></g>`,
+    ), { level: "expert" });
+    editor.select([G]);
+    editor.focus();
+    key("n");
+    // La parte dell'altro programma non si conta fra gli oggetti.
+    expect(spoken()).toBe("Strumento: Nodi. Gruppo, 1 oggetto: 2 nodi da modificare.");
+    tap(30, 50);
+    expect(spoken()).toBe("Questa parte viene da un altro programma: FubDraw la lascia com’è, e i suoi nodi non si modificano.");
+    // I nodi restano quelli della forma di prima.
+    key("Home");
+    expect(spoken()).toBe("Nodo 1 di 2, capo: x 10, y 10.");
+    expect(changes).toEqual([]);
   });
 
   it("«?» elenca i tasti dei nodi, all'Esperto", () => {

@@ -85,7 +85,9 @@ export interface PainterDraft {
   /// È il valore che l'operazione scriverà, così l'anteprima è il risultato.
   readonly transforms?: ReadonlyMap<PaintNode, string | null>;
   /// Il `d` da mostrare al posto di quello dipinto: un tracciato i cui nodi
-  /// si stanno spostando. Anche questo è il valore che si scriverà.
+  /// si stanno spostando. Anche questo è il valore che si scriverà. Una
+  /// forma che non è un `path`, come un rettangolo, si nasconde, e al suo
+  /// posto si vede un `path` coi suoi attributi.
   readonly paths?: ReadonlyMap<PaintNode, string>;
   /// I raggi degli angoli da mostrare al posto di quelli dipinti, `rx` e
   /// `ry`: un rettangolo mentre la maniglia lo arrotonda; `null` ne toglie
@@ -109,6 +111,10 @@ export interface PainterDraft {
 /// Gli attributi che un'anteprima cambia, e che toglierla riporta a com'erano
 /// dipinti.
 const DRAFTED = ["transform", "d", "rx", "ry"] as const;
+
+/// Gli attributi della geometria delle forme, che il `path` al loro posto
+/// non prende.
+const SHAPE_GEOMETRY: ReadonlySet<string> = new Set(["x", "y", "width", "height", "rx", "ry", "cx", "cy", "r", "x1", "y1", "x2", "y2", "points"]);
 
 /// L'opacità di un nodo sbiadito dalla gomma.
 export const FADED_OPACITY = "0.25";
@@ -305,6 +311,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   let draft: PainterDraft | null = null;
   /// I nodi che mostrano l'anteprima, da riportare alla scena.
   let drafted: NodeRecord[] = [];
+  /// I `path` che l'anteprima mostra al posto delle forme.
+  let standIns: Element[] = [];
   /// I nodi del DOM per nodo della scena, e quelli dei gruppi per
   /// contenitore: ricostruiti solo quando servono.
   let byPaint: { readonly paints: Map<PaintNode, NodeRecord[]>; readonly keys: Map<object, NodeRecord[]> } | null = null;
@@ -378,6 +386,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   const clearDraft = (): void => {
     for (const record of drafted) restore(record);
     drafted = [];
+    for (const stand of standIns) stand.remove();
+    standIns = [];
     for (const record of carriedImages) {
       record.carried = null;
       frozen.add(record);
@@ -407,8 +417,17 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     }
     for (const [paint, d] of draft.paths ?? []) {
       for (const record of recordsOf(paint)) {
-        record.el.setAttribute("d", d);
         touched.add(record);
+        if (record.el.localName === "path") {
+          record.el.setAttribute("d", d);
+          continue;
+        }
+        const stand = record.el.ownerDocument.createElementNS(SVG, "path");
+        for (const { name, value } of [...record.el.attributes]) if (name !== "id" && !name.startsWith("data-") && !SHAPE_GEOMETRY.has(name)) stand.setAttribute(name, value);
+        stand.setAttribute("d", d);
+        record.el.after(stand);
+        record.el.style.setProperty("visibility", "hidden");
+        standIns.push(stand);
       }
     }
     for (const [paint, radii] of draft.radii ?? []) {

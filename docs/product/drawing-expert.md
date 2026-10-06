@@ -258,21 +258,29 @@ forme scelte, come il menu Tracciato di Inkscape. Le regole stanno in
 
 ## Nodi
 
-Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi del tracciato
+Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi dell'oggetto
 scelto: i punti per cui passa, i segmenti fra loro e le maniglie delle curve.
-Si sceglie un oggetto solo; un oggetto che non è un tracciato lo si fa
-diventare con «Oggetto in tracciato», e lo strumento lo dice. Una freccia, un
-poligono, una stella e un tratto a penna, che si ridisegnano con la loro
-regola, passano anche loro da «Oggetto in tracciato». Le regole stanno in
-`apps/client/src/editors/spatial/tools/nodes.ts`.
+Come con la Selezione diretta di Illustrator, ogni forma ha i suoi nodi: un
+tracciato, un rettangolo, un'ellisse, un cerchio, una linea, una spezzata, un
+poligono, una stella, una freccia e un tratto a penna. Un testo e
+un'immagine non ne hanno, e nemmeno una parte di un altro programma, che
+FubDraw lascia com'è: lo strumento dice perché. Si sceglie un oggetto solo.
+Le regole stanno in `apps/client/src/editors/spatial/tools/nodes.ts` e, per
+le forme che non sono tracciati, in `nodable.ts` accanto.
 
 - **Col puntatore** si trascina un nodo, coi nodi scelti insieme a lui, una
-  maniglia o un punto di un segmento, che si piega. Un tocco su un nodo lo
-  sceglie, con `Maiusc` lo aggiunge o lo toglie; un tocco su un segmento
-  sceglie i suoi due nodi, e due tocchi ci aggiungono un nodo. Un
-  trascinamento sul vuoto sceglie i nodi nel riquadro; un tocco sul vuoto
-  toglie la scelta dei nodi, poi quella dell'oggetto. Un tocco su un altro
-  oggetto, o su un'altra forma dello stesso gruppo, passa a quella.
+  maniglia o un punto di un segmento, che si piega. Dentro la forma, lontano
+  da nodi e segmenti, si prendono tutti i suoi nodi, che si trascinano
+  insieme. Un tocco su un nodo lo sceglie, con `Maiusc` lo aggiunge o lo
+  toglie; un tocco su un segmento sceglie i suoi due nodi, e due tocchi ci
+  aggiungono un nodo. Un trascinamento sul vuoto sceglie i nodi nel
+  riquadro; un tocco sul vuoto toglie la scelta dei nodi, poi quella
+  dell'oggetto. Su un altro oggetto, o su un'altra forma dello stesso
+  gruppo, il punto passa a quella e prende subito ciò che tocca: un suo nodo
+  si trascina in un gesto solo.
+- **Passando col puntatore**, senza premere, la forma sotto mostra il suo
+  contorno e i suoi nodi, più piccoli e più tenui di quelli che si
+  modificano: si vede dove sono prima di toccarli.
 - **La barra dei nodi** prende il posto di quella della selezione, coi tasti
   di Inkscape: «Aggiungi nodi» (`Ins`) a metà dei segmenti fra due nodi
   scelti, «Elimina nodi» (`Canc`), «Nodi a spigolo», «Nodi lisci» e «Nodi
@@ -310,6 +318,24 @@ regola, passano anche loro da «Oggetto in tracciato». Le regole stanno in
 - **Ogni modifica riscrive il `d` intero**, in coordinate assolute con due
   decimali, in un passo che si annulla col suo nome; il resto del tracciato
   non si tocca. La pagina si allarga se il tracciato ne esce.
+- **Una forma resta la sua finché i nodi la disegnano.** Un rettangolo coi
+  lati ancora dritti e in squadra, anche più largo o più alto, una linea, una
+  spezzata o un poligono coi segmenti dritti riscrivono solo i loro
+  attributi; un'ellisse, un cerchio, un poligono regolare e una stella
+  restano loro se si spostano interi. Altrimenti la forma diventa un
+  tracciato, come con «Oggetto in tracciato», nello stesso passo: stesso id,
+  stessi colori, stesso tratteggio, e lo strumento lo dice.
+- **Una freccia** ha i due capi dell'asta: spostarli la ridisegna, con la
+  punta che segue il suo capo. L'asta non si piega e non prende altri nodi:
+  un punto sull'asta porta tutta la freccia, e per curvarla serve prima
+  «Oggetto in tracciato».
+- **Un tratto a penna** ha i nodi della sua spina: pochi nodi su una curva
+  che passa per l'inchiostro, a meno di metà dello spessore del pennello.
+  Spostarli porta l'inchiostro con loro: ogni campione tiene la pressione,
+  il tempo, l'inclinazione della penna e lo scarto dalla spina, cioè il
+  tremolio della mano, e la penna ridisegna il contorno. Dove la spina si
+  allunga, con la pressione vera, arrivano campioni in mezzo. Il tratto
+  resta uno e aperto: non si spezza e non si chiude.
 
 ## Bézier
 
