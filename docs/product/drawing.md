@@ -106,7 +106,9 @@ Lo Standard aggiunge:
 - l'albero degli oggetti come **pannello dei livelli**: i nomi, il filtro, le
   miniature e le righe da trascinare ([Disegni, pannello dei livelli](drawing-layers.md));
 - la **vista ruotata**, i **gesti** delle dita, il **menu radiale** e la curva
-  della penna ([Disegni, vista ruotata, gesti e menu radiale](drawing-view.md)).
+  della penna ([Disegni, vista ruotata, gesti e menu radiale](drawing-view.md));
+- la **«Cronologia»**, accanto al foglio: i passi, per tornare a uno qualsiasi
+  in un colpo, e i segni ([Disegni, cronologia](drawing-history.md)).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
@@ -230,10 +232,9 @@ Con l'aggancio:
   vicino.
 
 Nello stesso menu, la casella **Guide intelligenti** fa fermare ciò che si
-muove in linea con gli altri oggetti e con la pagina: [Disegni, guide
-intelligenti](drawing-guides.md). I righelli, le guide che se ne tirano e
-l'unità del documento hanno le loro voci: [Disegni, righelli e
-guide](drawing-rulers.md).
+muove in linea con gli altri oggetti e con la pagina ([Disegni, guide
+intelligenti](drawing-guides.md)); i righelli, le guide che se ne tirano e
+l'unità del documento hanno le loro voci ([Disegni, righelli e guide](drawing-rulers.md)).
 
 **Adatta la pagina al disegno** porta la pagina attorno a tutto il disegno,
 livelli nascosti e bloccati compresi, con 20 unità di margine, e la allarga
@@ -341,8 +342,7 @@ L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e da cambiare uno
 per uno, il contorno, le trasformazioni scritte in numeri, «Applica
 trasformazione», «Oggetto in tracciato», le operazioni booleane fra le forme,
 lo strumento Nodi, che modifica un tracciato nodo per nodo, e la penna di
-Bézier, che ne disegna uno, e ha una pagina sua: [Disegni, livello
-Esperto](drawing-expert.md).
+Bézier, che ne disegna uno: [Disegni, livello Esperto](drawing-expert.md).
 
 ## Il livello Personalizzato
 
