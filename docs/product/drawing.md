@@ -36,8 +36,8 @@ sorgente». Il riquadro ricorda la modalità del disegno come quella di ogni
 altra famiglia.
 
 In Lettura il file non entra mai nel DOM della shell: è un `<img>` da un blob,
-che non esegue script e non carica risorse; le immagini del vault vi entrano
-coi loro byte ([Disegni, immagini](drawing-images.md)). Se il disegno ha un
+che non esegue script e non carica risorse; i caratteri dell'app e le
+immagini del vault vi entrano coi loro byte ([immagini](drawing-images.md)). Se il disegno ha un
 titolo, l'immagine si chiama col titolo; altrimenti col nome del file. Sotto
 l'immagine ci sono la descrizione del disegno, che l'immagine annuncia come
 sua, i collegamenti del disegno, uno per pulsante (vedi «Collegamenti»), e
@@ -278,9 +278,9 @@ un'interlinea di 1,25 volte il corpo:
 Il file scrive ciò che si vede: spazi e tabulazioni in fila valgono uno, e ai
 bordi di una riga niente; le righe vuote in testa e in coda non ci sono, e
 una vuota fra due scritte resta, come uno spazio indivisibile. Un testo nuovo
-vuoto non si scrive, e uno svuotato si elimina. In Lettura, dove il disegno è
-un'immagine, il testo è in Inter se il sistema lo ha, altrimenti nel
-carattere senza grazie del sistema.
+vuoto non si scrive, e uno svuotato si elimina. In Lettura e in una nota,
+dove il disegno è un'immagine, il testo ha i caratteri del foglio: l'immagine
+li porta dentro, fino a 192 KB, e il file non cambia.
 
 Cambiare un testo che c'è riscrive solo le sue righe, e il resto resta come
 l'ha scritto chi l'ha fatto, anche in un altro programma: una riga nuova

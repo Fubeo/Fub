@@ -16,6 +16,7 @@ npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
 npm run bench:verify
+npm run bench:fidelity
 ```
 
 Le fixture ammesse hanno digest `eeeacc27` per 2k/seed 6 e `abcf614b` per
@@ -34,6 +35,7 @@ Le fixture ammesse hanno digest `eeeacc27` per 2k/seed 6 e `abcf614b` per
 | Frame time 2k | p95 `≤ 25 ms`, max `≤ 50 ms`, total `≤ 10 s` | 120 frame iniziali | review-only, non CI-enforced |
 | Frame time 10k | initial p95 `≤ 35 ms`, max `≤ 50 ms`, total soak `≤ 60 s` | initial e referto completo | review-only, non CI-enforced |
 | Coerenza visuale | le scene correnti coincidono con le baseline Linux | `npm run bench:verify` | automatico, hard |
+| Fedeltà dei disegni | ogni scena del corpus dà gli stessi pixel sul foglio, in Lettura e nel PNG, entro lo 0,2%, e il banco vede un colore, i caratteri e un tratteggio cambiati apposta in una strada sola | `npm run bench:fidelity` | automatico, hard |
 | CI | workflow completi verdi sullo stesso SHA della PR | run push e pull request, tutti i job richiesti | automatico, hard |
 
 Il timeout di sicurezza del runner resta 30 s per campione. Non è un budget di

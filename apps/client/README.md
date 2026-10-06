@@ -31,6 +31,7 @@ npm run theme:generate
 npm run theme:verify
 npm run bench:a11y
 npm run bench:verify
+npm run bench:fidelity
 npm run bench:graph-scale
 ```
 
