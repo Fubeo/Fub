@@ -39,8 +39,7 @@ altra famiglia.
 In Lettura il file non entra mai nel DOM della shell: è un `<img>` da un blob,
 che non esegue script e non carica risorse; le immagini del vault vi entrano
 coi loro byte ([Disegni, immagini](drawing-images.md)). Se il disegno ha un
-titolo,
-l'immagine si chiama col titolo; altrimenti col nome del file. Sotto
+titolo, l'immagine si chiama col titolo; altrimenti col nome del file. Sotto
 l'immagine ci sono la descrizione del disegno, che l'immagine annuncia come
 sua, i collegamenti del disegno, uno per pulsante (vedi «Collegamenti»), e
 «Oggetti del disegno», l'elenco degli oggetti in albero: chiuso finché non lo
@@ -72,10 +71,9 @@ Personalizzato»). Si sceglie nelle Impostazioni, nel gruppo «Disegni», con
 «Livello d'interfaccia»: è un'impostazione del vault, `draw.level`, che vale
 per chiunque lo apra e che un plugin o una macro non cambiano. Il livello
 filtra soltanto ciò che si offre: un disegno si apre uguale a ogni livello, e
-cambiare livello non lo modifica.
-Cambia dal vivo, anche nei disegni aperti, senza riaprirli e senza perdere la
-selezione o la cronologia; chi monta l'editor lo sceglie con `level` e
-`setLevel` (`apps/client/src/editors/spatial/tools/editor.ts`).
+cambiare livello non lo modifica. Cambia dal vivo, anche nei disegni aperti,
+senza riaprirli e senza perdere la selezione o la cronologia; chi monta
+l'editor lo sceglie con `level` e `setLevel` (`apps/client/src/editors/spatial/tools/editor.ts`).
 
 Dall'editor il livello non si cambia, così l'Essenziale resta tale anche in
 mano a un bambino. `?` elenca i tasti del livello di adesso, e **Mostra tutto**
@@ -84,6 +82,8 @@ con una frase che dice dove si sceglie.
 
 Lo Standard aggiunge:
 
+- il **Lazo** (`Q`), dopo la freccia, e la **«Selezione avanzata»**: i simili,
+  i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, di spessore
   costante e con le punte piatte, che lascia vedere ciò che copre. Si scrive
   come un tratto a penna, con `fub:tool="highlighter"` e
@@ -100,8 +100,8 @@ Lo Standard aggiunge:
   numeri com'è fatta la selezione: [Disegni, proprietà](drawing-properties.md).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
-chi aveva in mano l'evidenziatore riprende la penna, e un colore a piacere
-torna al colore di partenza.
+chi aveva in mano l'evidenziatore riprende la penna, chi aveva il Lazo la
+Selezione, e un colore a piacere torna al colore di partenza.
 
 ## Disporre
 
@@ -370,9 +370,9 @@ scala, e il riquadro che si chiede è quello che l'oggetto occupa.
 livelli e i loro oggetti, con la stessa selezione del foglio. Le frecce
 scelgono la riga a cui arrivano, `Ctrl` o `⌘` le fanno soltanto arrivare,
 `Spazio` aggiunge o toglie, `Invio` apre le proprietà, `Canc` elimina ed `Esc`
-torna al foglio. Un oggetto di un livello bloccato o nascosto c'è, in corsivo,
-ma non si sceglie. Oltre 500 righe l'albero disegna soltanto quelle che si
-vedono.
+torna al foglio. Un oggetto bloccato, o di un livello bloccato o nascosto,
+c'è, in corsivo, ma non si sceglie, e un segno dice che cosa è bloccato e
+nascosto. Oltre 500 righe l'albero disegna soltanto quelle che si vedono.
 
 La scelta non si legge mai dal solo colore: lo strumento, il colore e lo
 spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
