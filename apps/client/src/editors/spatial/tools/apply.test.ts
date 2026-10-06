@@ -13,6 +13,7 @@ import { doc } from "../scene/test-support";
 import { applyOps, type Applied } from "./apply";
 import { gesture, NewIds } from "./edit";
 import type { SceneIndex } from "./hit";
+import { polygonalAttrs, polygonalPath, readPolygonal, type PolygonalShape } from "../scene/parametric";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
 
@@ -225,6 +226,35 @@ describe("«Applica trasformazione» nelle forme che prendono una parte", () => 
     expect(bake(`<circle id="c" cx="10" cy="0" r="3" ${STROKE} stroke-dasharray="0 0" transform="rotate(90)"/>`).text).toContain(
       '<circle id="c" cx="0" cy="10" r="3" fill="none" stroke="#000000" stroke-width="1" stroke-dasharray="0 0"/>',
     );
+  });
+
+  it("porta in un poligono regolare e in una stella rotazione, scala e ribaltamenti", () => {
+    const shape = (kind: PolygonalShape, geom: string, transform: string, extra = ""): string =>
+      `<path id="p" fub:shape="${kind}" fub:geom="${geom}" d="${polygonalPath(readPolygonal(kind, geom)!)}" ${STROKE}${extra} transform="${transform}"/>`;
+    const written = (kind: PolygonalShape, geom: string): string => {
+      const attrs = polygonalAttrs(readPolygonal(kind, geom)!)!;
+      return `fub:shape="${kind}" fub:geom="${attrs["fub:geom"]}" d="${attrs.d}"`;
+    };
+    // Il centro si muove, raggio e angoli scalano, la rotazione gira.
+    expect(bake(shape("polygon", "10 0 5 6 0 1", "rotate(90) scale(2)")).text).toContain(
+      `<path id="p" ${written("polygon", "0 20 10 6 90 2")} fill="none" stroke="#000000" stroke-width="2"/>`,
+    );
+    // Un ribaltamento porta l'angolo φ in -φ: la stella resta regolare.
+    const flipped = bake(shape("star", "10 0 5 5 0.5 10 0", "scale(-1 1)"));
+    expect(flipped.text).toContain(`<path id="p" ${written("star", "-10 0 5 5 0.5 -10 0")} ${STROKE}/>`);
+    expect(flipped.change.kept).toBe(0);
+    // Lo specchio sulla diagonale porta φ in 90° - φ: la punta da 280° a 170°.
+    const turned = bake(shape("star", "10 0 5 5 0.5 10 1", "matrix(0 1 1 0 3 4)"));
+    expect(turned.text).toContain(`<path id="p" ${written("star", "3 14 5 5 0.5 -100 1")} ${STROKE}/>`);
+    // Col tratteggio il ribaltamento resta nella trasformazione.
+    const dashed = bake(shape("polygon", "10 0 5 6 0 1", "scale(-1 1)", ' stroke-dasharray="2 1"'));
+    expect(dashed.text).toContain('stroke-dasharray="2 1" transform="matrix(-1 0 0 1 0 0)"/>');
+    expect(dashed.change.kept).toBe(1);
+    // Una scala diversa nei due versi la deformerebbe: prende la scala
+    // uguale e lascia il resto.
+    const squashed = bake(shape("polygon", "10 10 5 4 0 0", "scale(2 1)"), "geometry");
+    expect(squashed.text).toContain(`${written("polygon", "14.14 14.14 7.07 4 0 0")} fill="none" stroke="#000000" stroke-width="1.41" transform="matrix(1.4142 0 0 0.7071 0 0)"/>`);
+    expect(squashed.change.kept).toBe(1);
   });
 
   it("dà a un cerchio deformato una scala uguale nei due versi, e lascia il resto", () => {

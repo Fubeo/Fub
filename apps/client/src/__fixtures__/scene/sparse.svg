@@ -27,6 +27,8 @@
         <title>Nuvola</title>
       </rect>
     </a>
+    <path id="o00000022" fub:shape="polygon" fub:geom="1300 560 80 6 0 8" d="M1264.62 629.28 A8 8 0 0 1 1257.69 625.28 L1222.31 564 A8 8 0 0 1 1222.31 556 L1257.69 494.72 A8 8 0 0 1 1264.62 490.72 L1335.38 490.72 A8 8 0 0 1 1342.31 494.72 L1377.69 556 A8 8 0 0 1 1377.69 564 L1342.31 625.28 A8 8 0 0 1 1335.38 629.28 Z" fill="none" stroke="#0072b2" stroke-width="4"/>
+    <path id="o00000023" fub:shape="star" fub:geom="1100 820 70 5 0.382 0 0" d="M1100 750 L1115.72 798.37 L1166.57 798.37 L1125.43 828.26 L1141.14 876.63 L1100 846.74 L1058.86 876.63 L1074.57 828.26 L1033.43 798.37 L1084.28 798.37 Z" fill="#009e73"/>
   </g>
   <g id="l9z8y7x6w" fub:layer="Appunti" fub:locked="true" display="none">
     <path id="o00000030" fub:tool="pen" fub:at="2026-10-01T09:21:00.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1" d="M0 0 L1 1 Z" fill="#000000" fub:ink="1 s100 cxy 0,0 1"/>

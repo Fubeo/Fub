@@ -194,8 +194,8 @@ regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
   poligoni diventano il tracciato con cui SVG 2 li definisce, dallo stesso
   punto e nello stesso verso: anche un tratteggio comincia dove cominciava.
   Gli angoli arrotondati di un rettangolo e le ellissi diventano archi.
-- **Una freccia** perde la sua geometria (`fub:shape` e `fub:geom`), e **un
-  tratto a penna** l'inchiostro, il pennello, lo strumento e l'ora: resta il
+- **Una freccia, un poligono regolare e una stella** perdono la loro
+  geometria (`fub:shape` e `fub:geom`), e **un tratto a penna** l'inchiostro, il pennello, lo strumento e l'ora: resta il
   `d` che si vedeva. Il tratto diventa una figura piena, che la penna non
   ridisegna più.
 - **L'oggetto resta lui**: stesso id, stesso posto fra gli altri, stessi
@@ -261,9 +261,9 @@ forme scelte, come il menu Tracciato di Inkscape. Le regole stanno in
 Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi del tracciato
 scelto: i punti per cui passa, i segmenti fra loro e le maniglie delle curve.
 Si sceglie un oggetto solo; un oggetto che non è un tracciato lo si fa
-diventare con «Oggetto in tracciato», e lo strumento lo dice. Una freccia e
-un tratto a penna, che si ridisegnano con la loro regola, passano anche loro
-da «Oggetto in tracciato». Le regole stanno in
+diventare con «Oggetto in tracciato», e lo strumento lo dice. Una freccia, un
+poligono, una stella e un tratto a penna, che si ridisegnano con la loro
+regola, passano anche loro da «Oggetto in tracciato». Le regole stanno in
 `apps/client/src/editors/spatial/tools/nodes.ts`.
 
 - **Col puntatore** si trascina un nodo, coi nodi scelti insieme a lui, una
@@ -313,7 +313,7 @@ da «Oggetto in tracciato». Le regole stanno in
 
 ## Bézier
 
-La penna di Bézier (`B`, come in Inkscape), nella barra dopo la freccia,
+La penna di Bézier (`B`, come in Inkscape), nella barra dopo le forme,
 disegna un tracciato nodo per nodo: i punti per cui passa e le maniglie delle
 sue curve. Il tracciato si scrive quando si conclude, sul livello corrente,
 col colore e lo spessore della barra. Le regole stanno in

@@ -3,9 +3,9 @@
 // selezione, il documento e la vista. Che cosa mostra lo decide l'editor, e
 // lui scrive ogni cambio; qui c'è come si legge, si scrive e si raggiunge.
 //
-// - **Sezioni che si chiudono.** Posizione e misure, Aspetto, Testo,
+// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Testo,
 //   Disponi, e all'Esperto Trasforma e Attributi; senza selezione Documento
-//   e Vista. L'intestazione di una sezione è il pulsante che la apre e la
+//   e Vista, e Forma se lo strumento è il Poligono. L'intestazione di una sezione è il pulsante che la apre e la
 //   chiude, e il pannello dice all'editor quali sono chiuse, che le ricorda.
 // - **Un campo misto dice «Misto»** e non ha valore: scriverlo dà il valore a
 //   tutti gli oggetti scelti, in un passo.
@@ -35,7 +35,7 @@ import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 
 /// Le sezioni, nell'ordine in cui si vedono.
-export type SectionId = "place" | "look" | "text" | "arrange" | "transform" | "attributes" | "document" | "view";
+export type SectionId = "place" | "shape" | "look" | "text" | "arrange" | "transform" | "attributes" | "document" | "view";
 
 export type NumberId =
   | "x"
@@ -43,6 +43,9 @@ export type NumberId =
   | "width"
   | "height"
   | "rotation"
+  | "count"
+  | "inner"
+  | "corner"
   | "strokeWidth"
   | "opacity"
   | "size"
@@ -56,7 +59,7 @@ export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 export type PaintId = "fill" | "stroke";
 export type ChoiceId = "dash" | "cap" | "join" | "family" | "unit";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar";
-export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "anchor" | "desc";
+export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "anchor" | "desc";
 
 export type ActionId =
   | "align-left"
@@ -226,6 +229,10 @@ const SPECS: readonly Spec[] = [
   { id: "height", kind: "number", section: "place", column: "2" },
   { id: "ratio", kind: "press", section: "place", column: "3" },
   { id: "rotation", kind: "number", section: "place", column: "1" },
+  { id: "shape", kind: "segment", section: "shape", column: "all" },
+  { id: "count", kind: "number", section: "shape", column: "1" },
+  { id: "inner", kind: "number", section: "shape", column: "2" },
+  { id: "corner", kind: "number", section: "shape", column: "1" },
   { id: "fill", kind: "paint", section: "look", column: "all" },
   { id: "stroke", kind: "paint", section: "look", column: "all" },
   { id: "strokeWidth", kind: "number", section: "look", column: "1" },
@@ -255,6 +262,7 @@ const SPECS: readonly Spec[] = [
 
 const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey }> = [
   { id: "place", label: "draw.properties.selection" },
+  { id: "shape", label: "draw.properties.shape" },
   { id: "look", label: "draw.properties.look" },
   { id: "text", label: "draw.properties.text" },
   { id: "arrange", label: "draw.properties.arrange" },

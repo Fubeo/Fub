@@ -113,6 +113,7 @@ const ID_KEY = "id";
 const NOTES: Readonly<Record<Note, DrawKey>> = {
   ink: "draw.attributes.note.ink",
   arrow: "draw.attributes.note.arrow",
+  shape: "draw.attributes.note.shape",
   fubdraw: "draw.attributes.note.fubdraw",
   link: "draw.attributes.note.link",
   image: "draw.attributes.note.image",

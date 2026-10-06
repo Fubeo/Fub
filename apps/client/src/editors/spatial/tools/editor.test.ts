@@ -8,6 +8,7 @@ import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
 import { decodeInk } from "../ink/codec";
+import { polygonalAttrs, readPolygonal } from "../scene/parametric";
 import { SceneEngine } from "../scene/engine";
 import { readScene } from "../scene/read";
 import { doc } from "../scene/test-support";
@@ -323,7 +324,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -2256,6 +2257,271 @@ describe("il testo, dal livello Standard", () => {
   });
 });
 
+describe("i poligoni e le stelle, dal livello Standard", () => {
+  const A = "o1a2b3c4d";
+  const H = "oh1h1h1h1";
+  const hexagon = (geom: string): string => {
+    const attrs = polygonalAttrs(readPolygonal("polygon", geom)!)!;
+    return `<path id="${H}" fub:shape="polygon" fub:geom="${attrs["fub:geom"]}" d="${attrs.d}" fill="none" stroke="#000000" stroke-width="2"/>`;
+  };
+  /// Un rettangolo pieno da (100, 100) a (200, 150), e un esagono di raggio
+  /// 50 attorno a (200, 300).
+  const SHAPES = doc(`${LAYER}<rect id="${A}" x="100" y="100" width="100" height="50" fill="#000000"/>${hexagon("200 300 50 6 0 0")}</g>`);
+  const toolButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-keyshortcuts="Y"], [role="toolbar"] button[aria-label="Poligono"], [role="toolbar"] button[aria-label="Stella"]')!;
+  const press = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const move = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const release = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const hover = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const painted = (id: string): Element => host.querySelector(`[data-scene-id="${id}"]`)!;
+
+  it("il Poligono disegna dal centro, col vertice sotto il puntatore, e lo dice per nome", () => {
+    mount(SOURCE, { level: "standard" });
+    editor.setTool("polygon");
+    expect(spoken()).toBe("Strumento: Poligono.");
+    drag([[200, 200], [200, 170], [200, 150]]);
+    expect(editor.engine.text).toMatch(
+      /<path id="o[a-z0-9]{8}" fub:shape="polygon" fub:geom="200 200 50 6 -30 0" d="M200 250 L156.7 225 L156.7 175 L200 150 L243.3 175 L243.3 225 Z" fill="none" stroke="#000000" stroke-width="4"\/>/,
+    );
+    expect(spoken()).toBe("Esagono aggiunto. Il disegno ha 2 oggetti.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Poligono.");
+    // Un tocco non disegna niente.
+    drag([[200, 200], [201, 201]]);
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("Y di nuovo, o il pulsante, passa alla stella e ritorno; la stella ha una punta sotto il puntatore", () => {
+    mount(SOURCE, { level: "standard" });
+    key("y");
+    expect(editor.tool).toBe("polygon");
+    key("y");
+    expect(spoken()).toBe("Strumento: Stella.");
+    expect(toolButton().getAttribute("aria-label")).toBe("Stella");
+    drag([[200, 200], [200, 160]]);
+    expect(editor.engine.text).toContain('fub:shape="star" fub:geom="200 200 40 5 0.382 0 0" d="M200 160 ');
+    expect(spoken()).toBe("Stella a 5 punte aggiunta. Il disegno ha 2 oggetti.");
+    toolButton().click();
+    expect(spoken()).toBe("Strumento: Poligono.");
+    expect(toolButton().getAttribute("aria-label")).toBe("Poligono");
+    // Un altro strumento, e di nuovo Y: si torna al poligono di prima.
+    editor.setTool("rect");
+    key("y");
+    expect([editor.tool, toolButton().getAttribute("aria-label")]).toEqual(["polygon", "Poligono"]);
+  });
+
+  it("mentre si trascina, ↑ e ↓ cambiano i lati, ← e → il raggio interno della stella, e Maiusc la tiene diritta", () => {
+    mount(SOURCE, { level: "standard" });
+    editor.setTool("polygon");
+    press(200, 200);
+    move(200, 150);
+    key("ArrowUp");
+    key("ArrowUp");
+    expect(spoken()).toBe("Ottagono.");
+    release(200, 150);
+    expect(editor.engine.text).toContain('fub:geom="200 200 50 8 -22.5 0"');
+    // I lati restano per la forma dopo.
+    drag([[300, 200], [330, 240]], { shiftKey: true });
+    expect(editor.engine.text).toContain('fub:geom="300 200 50 8 0 0"');
+    key("y");
+    // Lontano dagli altri, perché niente si agganci.
+    press(437, 419);
+    move(437, 369);
+    key("ArrowRight");
+    expect(spoken()).toBe("Raggio interno 40%.");
+    key("PageDown");
+    expect(spoken()).toBe("Stella a 4 punte.");
+    // Le frecce non spostano niente mentre si disegna.
+    expect(editor.selection).toEqual([]);
+    release(437, 369);
+    expect(editor.engine.text).toContain('fub:shape="star" fub:geom="437 419 50 4 0.4 0 0"');
+    expect(spoken()).toBe("Stella a 4 punte aggiunta. Il disegno ha 4 oggetti.");
+  });
+
+  it("da tastiera: Spazio preme sul centro, le frecce tirano il vertice, PgUp e PgDn cambiano i lati", () => {
+    mount(SOURCE, { level: "standard" });
+    size(400, 300);
+    key("y");
+    key("ArrowRight");
+    key(" ");
+    key("ArrowUp", { shiftKey: true });
+    key("PageUp");
+    expect(spoken()).toBe("Ettagono.");
+    key(" ");
+    // Con un numero dispari di lati, diritto vuol dire un vertice in alto.
+    expect(editor.engine.text).toContain('fub:shape="polygon" fub:geom="210 150 50 7 0 0"');
+    // Il vertice tirato è sul bordo della pagina, e si aggancia.
+    expect(spoken()).toBe("Ettagono aggiunto. Il disegno ha 2 oggetti. Agganciato: il punto in linea con il bordo inferiore della pagina.");
+  });
+
+  it("Esc a metà lascia il disegno com'era", () => {
+    mount(SOURCE, { level: "standard" });
+    editor.setTool("polygon");
+    press(200, 200);
+    move(240, 230);
+    key("Escape");
+    release(240, 230);
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(changes).toEqual([]);
+  });
+
+  it("all'Essenziale non c'è, e Y non fa niente", () => {
+    mount(SOURCE);
+    key("y");
+    expect(editor.tool).toBe("pen");
+    expect(host.querySelector('[role="toolbar"] button[data-tool="polygon"]:not([hidden])')).toBeNull();
+  });
+
+  it("«Forma» nel pannello: senza selezione lo strumento, con un poligono scelto i suoi lati e il tipo, un passo ciascuno", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.setTool("polygon");
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
+    expect(property("shape").textContent).toContain("Per i poligoni e le stelle che disegnerai.");
+    expect(propertyLabel("count")).toBe("Lati");
+    enter(propertyInput("count"), "5");
+    drag([[400, 200], [400, 150]]);
+    expect(editor.engine.text).toContain('fub:geom="400 200 50 5 0 0"');
+    // Il tipo dello strumento dal pannello: il pulsante lo segue.
+    property("shape").querySelector<HTMLButtonElement>('button[aria-label="Stella"]')!.click();
+    expect(toolButton().getAttribute("aria-label")).toBe("Stella");
+    expect(propertyLabel("count")).toBe("Punte");
+    expect(propertyInput("inner").value).toBe("38,2");
+    // Con l'esagono scelto, il pannello cambia lui.
+    editor.setTool("select");
+    editor.select([H]);
+    expect(propertyLabel("count")).toBe("Lati");
+    expect(propertyInput("count").value).toBe("6");
+    const before = editor.engine.text;
+    enter(propertyInput("count"), "8");
+    expect(editor.engine.text).toContain(`<path id="${H}" fub:shape="polygon" fub:geom="200 300 50 8 0 0" d="${polygonalAttrs(readPolygonal("polygon", "200 300 50 8 0 0")!)!.d}"`);
+    expect(editor.selection).toEqual([H]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Lati o punte.");
+    expect(editor.engine.text).toBe(before);
+    property("shape").querySelector<HTMLButtonElement>('button[aria-label="Stella"]')!.click();
+    expect(editor.engine.text).toContain(`<path id="${H}" fub:shape="star" fub:geom="200 300 50 6 0.382 0 0"`);
+    expect(propertyLabel("count")).toBe("Punte");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Tipo di forma.");
+    // Il raggio degli angoli vale anche per il rettangolo, in un passo.
+    editor.select([A, H]);
+    enter(propertyInput("corner"), "4");
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="100" y="100" width="100" height="50" rx="4" fill="#000000"/>`);
+    expect(editor.engine.text).toContain('fub:geom="200 300 50 6 0 4"');
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Raggio degli angoli.");
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("la maniglia degli angoli arrotonda il rettangolo scelto mentre la si tira, in un passo che si annulla", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.setTool("select");
+    editor.select([A]);
+    // Sulla bisettrice dell'angolo in alto a sinistra, 16 pixel dentro.
+    const at = 100 + 16 * Math.SQRT1_2;
+    hover(at, at);
+    expect(surface().dataset.grip).toBe("nwse");
+    press(at, at);
+    move(at + 5, at + 5);
+    move(at + 10, at + 10);
+    expect(painted(A).getAttribute("rx")).toBe("10");
+    expect(editor.engine.text).toBe(SHAPES);
+    release(at + 10, at + 10);
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="100" y="100" width="100" height="50" rx="10" fill="#000000"/>`);
+    expect(spoken()).toBe("Raggio degli angoli 10.");
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toHaveLength(1);
+    // La maniglia sta dove il raggio l'ha portata, e torna indietro.
+    press(at + 10, at + 10);
+    move(at - 20, at - 20);
+    release(at - 20, at - 20);
+    expect(editor.engine.text).toBe(SHAPES);
+    editor.undo();
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Raggio degli angoli.");
+    expect(editor.engine.text).toBe(SHAPES);
+  });
+
+  it("e quella di un poligono sta sul vertice più in alto, e scrive il raggio nella sua geometria", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.setTool("select");
+    editor.select([H]);
+    // Il vertice in alto a sinistra è in (175, 256,7); la bisettrice va al
+    // centro, a 60° sotto l'orizzontale.
+    const [ix, iy] = [0.5, Math.sqrt(3) / 2];
+    const [x, y] = [175 + 16 * ix, 300 - 25 * Math.sqrt(3) + 16 * iy];
+    hover(x, y);
+    expect(surface().dataset.grip).toBe("nwse");
+    // 10 di raggio portano il centro dell'arco 10 / sin 60° più in là.
+    const along = 10 / (Math.sqrt(3) / 2);
+    press(x, y);
+    move(x + along * ix, y + along * iy);
+    expect(painted(H).getAttribute("d")).toBe(polygonalAttrs(readPolygonal("polygon", "200 300 50 6 0 10")!)!.d);
+    release(x + along * ix, y + along * iy);
+    expect(editor.engine.text).toContain('fub:geom="200 300 50 6 0 10"');
+    expect(spoken()).toBe("Raggio degli angoli 10.");
+  });
+
+  it("un tocco sulla maniglia o Esc a metà non cambiano niente; Esc riporta la forma di prima", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.setTool("select");
+    editor.select([A]);
+    const at = 100 + 16 * Math.SQRT1_2;
+    drag([[at, at], [at, at]]);
+    expect(editor.selection).toEqual([A]);
+    press(at, at);
+    move(at + 20, at + 20);
+    expect(painted(A).getAttribute("rx")).toBe("20");
+    key("Escape");
+    expect(painted(A).hasAttribute("rx")).toBe(false);
+    release(at + 20, at + 20);
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(changes).toEqual([]);
+  });
+
+  it("non c'è su una forma troppo piccola sullo schermo, con più oggetti scelti, o all'Essenziale", () => {
+    mount(SOURCE, { level: "standard" });
+    editor.setTool("select");
+    // Un quadrato di 20: la maniglia avrebbe meno di 32 pixel per scorrere.
+    editor.select([A]);
+    const at = 60 + 16 * Math.SQRT1_2;
+    hover(at, at);
+    expect(surface().dataset.grip).toBeUndefined();
+    owner.close();
+    owner = openLifetime();
+    host.replaceChildren();
+    mount(SHAPES, { level: "standard" });
+    editor.setTool("select");
+    editor.select([A, H]);
+    hover(100 + 16 * Math.SQRT1_2, 100 + 16 * Math.SQRT1_2);
+    expect(surface().dataset.grip).toBeUndefined();
+    editor.setLevel("essential");
+    editor.select([A]);
+    hover(100 + 16 * Math.SQRT1_2, 100 + 16 * Math.SQRT1_2);
+    expect(surface().dataset.grip).toBeUndefined();
+  });
+
+  it("«?» elenca i tasti del poligono", () => {
+    mount(SOURCE, { level: "standard" });
+    key("?", { shiftKey: true });
+    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Poligono");
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect(rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
+    expect(rows).toContainEqual(["↑ o ↓ o PgUp o PgDn", "Mentre si disegna, un lato o una punta in più o in meno; disegnando con la tastiera, PgUp e PgDn"]);
+    expect(rows).toContainEqual(["← o →", "Mentre si disegna una stella, il raggio interno"]);
+    expect(rows).toContainEqual(["Shift", "Tenuto, la forma resta diritta"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
 describe("il pannello delle proprietà, dal livello Standard", () => {
   const A = "o1a2b3c4d";
   const B = "ob2b2b2b2";
@@ -2796,6 +3062,7 @@ describe("da tastiera", () => {
       "Oggetti · dal livello Standard",
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
+      "Poligono · dal livello Standard",
       "Testo · dal livello Standard",
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
@@ -2809,7 +3076,7 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
     // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
@@ -2825,13 +3092,14 @@ describe("da tastiera", () => {
       ["Ctrl+Shift+H", "Nasconde la selezione; nell’albero nasconde o mostra la riga"],
       ["Shift+F10", "Apre il menu della selezione"],
     ]);
-    expect(tables[5]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[6]!.rows).toEqual([
+    expect(tables[4]!.rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
+    expect(tables[6]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[7]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
     // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[9]!.rows).toEqual([
+    expect(tables[10]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
@@ -5222,7 +5490,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     expect(bezierTool().hidden).toBe(false);
     expect(bezierTool().title).toBe("Bézier (B)");
     const tools = [...host.querySelectorAll<HTMLButtonElement>(".draw-tool:not([hidden])")].map((control) => control.dataset.tool);
-    expect(tools.slice(tools.indexOf("arrow"))).toEqual(["arrow", "bezier", "text"]);
+    expect(tools.slice(tools.indexOf("arrow"))).toEqual(["arrow", "polygon", "bezier", "text"]);
     key("b");
     expect(editor.tool).toBe("bezier");
     expect(bezierTool().getAttribute("aria-checked")).toBe("true");
@@ -6303,6 +6571,7 @@ describe("il livello Personalizzato", () => {
       "Oggetti · dal livello Standard",
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
+      "Poligono · dal livello Standard",
       "Testo · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
@@ -6313,8 +6582,8 @@ describe("il livello Personalizzato", () => {
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[9]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[10]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

@@ -40,6 +40,9 @@ export type OverlayHandle =
   | { readonly kind: "grip"; readonly x: number; readonly y: number }
   /// La maniglia tonda che ruota, legata da un gambo al punto `stem`.
   | { readonly kind: "rotor"; readonly x: number; readonly y: number; readonly stem: Point }
+  /// La maniglia degli angoli arrotondati: un anello col punto in mezzo,
+  /// diverso dalle maniglie della cornice e dai nodi.
+  | { readonly kind: "corner"; readonly x: number; readonly y: number }
   /// Una scritta breve, come le misure mentre si ridimensiona: centrata
   /// sotto il punto, su un fondo del colore della linea.
   | { readonly kind: "label"; readonly x: number; readonly y: number; readonly text: string }
@@ -87,6 +90,11 @@ const CONTROL = 6;
 
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
+
+/// Il diametro della maniglia degli angoli, e del punto in mezzo, in pixel
+/// CSS.
+const CORNER = 10;
+const CORNER_DOT = 3;
 
 /// Quanto una maniglia sporge dal suo punto, in pixel CSS: la metà della più
 /// grande, quella che ruota.
@@ -367,6 +375,17 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.arc(px, py, (handle.kind === "rotor" ? ROTOR : CONTROL) / 2, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
+      } else if (handle.kind === "corner") {
+        const [px, py] = screen(handle.x, handle.y);
+        ctx.beginPath();
+        ctx.arc(px, py, CORNER / 2, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = line;
+        ctx.beginPath();
+        ctx.arc(px, py, CORNER_DOT / 2, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = fill;
       }
     }
     // I nodi sopra le maniglie, e quelli scelti pieni del colore della linea.

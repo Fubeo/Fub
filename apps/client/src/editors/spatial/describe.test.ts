@@ -2,7 +2,7 @@
 // nome di ciascuno.
 
 import { describe as group, expect, it } from "vitest";
-import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type OutlineNode } from "./describe";
+import { countObjects, describe, keyOf, linkName, outline, polygonalKind, sceneTargets, type OutlineNode } from "./describe";
 import { readScene } from "./scene/read";
 import { doc, ink } from "./scene/test-support";
 
@@ -138,5 +138,30 @@ group("l'albero degli oggetti", () => {
     const strokes = outline(readScene(source).items).flatMap((node) => [node, ...node.children]).filter((node) => node.item.role === "stroke");
     expect(strokes.length).toBeGreaterThan(0);
     for (const node of strokes) expect(describe(node)).toMatch(/^(Tratto|Evidenziatura)$/);
+  });
+
+  it("chiama un poligono regolare col suo nome, e una stella con le sue punte", () => {
+    const nodes = outline(
+      readScene(
+        doc(
+          '<path fub:shape="polygon" fub:geom="0 0 10 6 0 0" d="M0 0 L1 0 L1 1 Z"/>' +
+            '<path fub:shape="polygon" fub:geom="0 0 10 20 0 2" d="M0 0 L1 0 L1 1 Z"/>' +
+            '<path fub:shape="star" fub:geom="0 0 10 5 0.382 0 0" d="M0 0 L1 0 L1 1 Z"/>' +
+            '<path fub:shape="star" fub:geom="0 0 10 5 0.382 0 0" d="M0 0 L1 0 L1 1 Z"><title>Cometa</title></path>' +
+            '<path fub:shape="polygon" fub:geom="0 0 10 2 0 0" d="M0 0 L1 0 L1 1 Z"/>',
+        ),
+      ).items,
+    );
+    expect(nodes.map((node) => describe(node))).toEqual([
+      "Esagono",
+      "Poligono di 20 lati",
+      "Stella a 5 punte",
+      "Stella a 5 punte «Cometa»",
+      "Tracciato",
+    ]);
+    const names = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((count) => polygonalKind({ shape: "polygon", count }));
+    expect(names).toEqual(["Triangolo", "Quadrato", "Pentagono", "Esagono", "Ettagono", "Ottagono", "Ennagono", "Decagono", "Endecagono", "Dodecagono"]);
+    expect(polygonalKind({ shape: "polygon", count: 13 })).toBe("Poligono di 13 lati");
+    expect(polygonalKind({ shape: "star", count: 4 })).toBe("Stella a 4 punte");
   });
 });

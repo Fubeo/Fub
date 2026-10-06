@@ -28,13 +28,16 @@ describe("il registro degli strumenti", () => {
     expect(DEFAULT_TOOL).toBe("pen");
   });
 
-  it("aggiunge allo Standard il lazo accanto alla selezione, l'evidenziatore dopo la penna e il testo in fondo", () => {
-    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "lasso", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"]);
+  it("aggiunge allo Standard il lazo accanto alla selezione, l'evidenziatore dopo la penna, il poligono dopo le forme e il testo in fondo", () => {
+    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "lasso", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "text"]);
     // Il tasto del lazo è quello di Illustrator.
     expect(toolSpec("lasso")).toMatchObject({ level: "standard", group: "pick", shortcut: "q" });
     expect(toolForKey(toolsFor("essential"), "q")).toBeNull();
     expect(toolSpec("highlighter").shortcut).toBe("h");
     expect(toolSpec("text").shortcut).toBe("t");
+    // Il tasto del poligono è quello di CorelDRAW.
+    expect(toolSpec("polygon")).toMatchObject({ level: "standard", group: "shape", shortcut: "y" });
+    expect(toolForKey(toolsFor("essential"), "y")).toBeNull();
     expect(reaches("standard", "essential")).toBe(true);
     expect(reaches("standard", "standard")).toBe(true);
     expect(reaches("standard", "expert")).toBe(false);
@@ -42,7 +45,7 @@ describe("il registro degli strumenti", () => {
   });
 
   it("aggiunge all'Esperto i nodi accanto alla selezione e la penna di Bézier dopo le forme, coi tasti di Inkscape", () => {
-    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "lasso", "nodes", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "bezier", "text"]);
+    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "lasso", "nodes", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "text"]);
     expect(toolSpec("nodes")).toMatchObject({ level: "expert", group: "pick", shortcut: "n" });
     expect(toolSpec("bezier")).toMatchObject({ level: "expert", group: "shape", shortcut: "b" });
     expect(toolForKey(toolsFor("standard"), "n")).toBeNull();
@@ -64,7 +67,7 @@ describe("il registro degli strumenti", () => {
   it("elenca le parti per livello, prima gli strumenti nell'ordine della barra, ciascuna una volta", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
-      "lasso", "highlighter", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "links", "images", "properties", "style",
+      "lasso", "highlighter", "polygon", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "links", "images", "properties", "style",
       "nodes", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);

@@ -78,7 +78,7 @@ Radice di un documento nuovo:
 | Elemento | Geometria | Uso |
 |---|---|---|
 | `path` con `fub:tool` `pen` o `highlighter` | `d`, `fub:ink`, `fub:brush` | tratto a mano libera: contorno pieno, `fill` senza `stroke` (§5) |
-| `path` con `fub:shape` | `d`, `fub:geom` | forma sintetica, per esempio la freccia (§6) |
+| `path` con `fub:shape` | `d`, `fub:geom` | forma sintetica: freccia, poligono regolare, stella (§6) |
 | `path` | `d` | tracciato vettoriale |
 | `rect` | `x y width height rx ry` | rettangolo |
 | `ellipse` | `cx cy rx ry` | ellisse |
@@ -306,16 +306,16 @@ dell'orologio di chi possiede il documento, corretta con lo scarto stimato.
 ## 6. Forme sintetiche
 
 Una forma sintetica è un `path` con `fub:shape` e `fub:geom`; `d` si rigenera
-dalla geometria.
+dalla geometria. Poligono regolare e stella: [poligoni e stelle](scene-format-shapes.md).
 
 - **Freccia:** `fub:shape="arrow"`, `fub:geom="x1 y1 x2 y2"`. `d` contiene
   l'asta e la punta aperta: `M x1 y1 L x2 y2 M hx1 hy1 L x2 y2 L hx2 hy2`.
   Attributi: `fill="none"`, `stroke-linecap="round"`,
   `stroke-linejoin="round"`. La punta è lunga 3 × `stroke-width` + 6 unità, e
   ogni lato forma 30° con l'asta.
-- **Forma sconosciuta:** un `fub:shape` sconosciuto, o una freccia con un
-  `fub:geom` che non sono quattro numeri SVG, è un tracciato normale: la
-  geometria si legge da `d`, gli attributi si conservano.
+- **Forma sconosciuta:** un `fub:shape` sconosciuto, o un `fub:geom` fuori
+  dalla grammatica della sua forma, come una freccia senza quattro numeri SVG,
+  è un tracciato normale: la geometria si legge da `d`, gli attributi restano.
 
 ## 7. Identità e serializzazione canonica
 
@@ -351,11 +351,11 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    6. gli attributi `fub:*` sconosciuti e quelli di altri namespace,
       nell'ordine originale;
    7. `fub:ink`, che è il più lungo.
-3. **Numeri:** al massimo 2 decimali per la geometria e 4 per `matrix`, senza
-   zeri finali, senza esponente; `-0` si scrive `0`. Si arrotonda con
-   `floor(v × 10ⁿ + 0,5)` in doppia precisione, la stessa regola in Rust e in
-   TypeScript, e si scrivono le cifre esatte dell'intero che ne risulta, anche
-   oltre 2⁵³.
+3. **Numeri:** al massimo 2 decimali per la geometria e 4 per `matrix` e per
+   il rapporto di una stella, senza zeri finali, senza esponente; `-0` si
+   scrive `0`. Si arrotonda con `floor(v × 10ⁿ + 0,5)` in doppia precisione, la
+   stessa regola in Rust e in TypeScript, e si scrivono le cifre esatte
+   dell'intero che ne risulta, anche oltre 2⁵³.
 4. **`d`:** comandi assoluti, ciascuno attaccato alle sue coordinate e
    separato dal successivo da uno spazio: `M10 20 L30 40 Z`.
 5. **Escape:** negli attributi `&amp;`, `&lt;`, `&gt;`, `&quot;`, più `&#9;`,

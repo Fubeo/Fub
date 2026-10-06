@@ -431,6 +431,28 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  it("mostra altri raggi degli angoli per un rettangolo, e li riporta a quelli dipinti", async () => {
+    const engine = SceneEngine.open(doc(`${LAYER}<rect id="r" width="40" height="20" rx="2" ry="3"/><rect id="s" width="4" height="4"/></g>`));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const rect = host.querySelector(`[data-scene-id="r"]`)!;
+    const square = host.querySelector(`[data-scene-id="s"]`)!;
+    const [paintR] = builder.paintsOf(engine.holder("r")!);
+    const [paintS] = builder.paintsOf(engine.holder("s")!);
+    // Soltanto `rx` e `ry`: un altro attributo non passa.
+    const radii: Record<string, string | null>[] = [{ rx: "6", ry: null }, { rx: "1", width: "9" }];
+    painter.setDraft({ radii: new Map([[paintR!, radii[0]!], [paintS!, radii[1]!]]) });
+    expect(host.querySelector(`[data-scene-id="r"]`)).toBe(rect);
+    expect([rect.getAttribute("rx"), rect.hasAttribute("ry")]).toEqual(["6", false]);
+    expect([square.getAttribute("rx"), square.getAttribute("width")]).toEqual(["1", "4"]);
+    painter.setDraft(null);
+    expect([rect.getAttribute("rx"), rect.getAttribute("ry")]).toEqual(["2", "3"]);
+    expect(square.hasAttribute("rx")).toBe(false);
+    painter.dispose();
+  });
+
   it("dà a due elementi identici di un motore riaperto due forme diverse", () => {
     const body = `${LAYER}<rect width="4" height="4"/><rect width="4" height="4"/></g>`;
     const builder = new PaintBuilder();

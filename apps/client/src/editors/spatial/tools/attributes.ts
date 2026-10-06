@@ -127,6 +127,9 @@ export type Note =
   | "ink"
   /// Il `d` di una freccia, che viene dalla sua geometria.
   | "arrow"
+  /// Il `d` di un poligono regolare o di una stella, che viene dai loro
+  /// parametri.
+  | "shape"
   /// Un attributo `fub:*`.
   | "fubdraw"
   /// L'`href` di un collegamento, che ha il suo comando.
@@ -231,6 +234,7 @@ function rowOf(role: Role, attr: OutAttr): Row {
   if (attr.uri !== "") return read("namespace");
   if (attr.local === "d" && role === "stroke") return read("ink");
   if (attr.local === "d" && role === "arrow") return read("arrow");
+  if (attr.local === "d" && (role === "ngon" || role === "star")) return read("shape");
   if (value.length > EDIT_LIMIT) return read("long");
   switch (kindOf(key)) {
     case "keyword":

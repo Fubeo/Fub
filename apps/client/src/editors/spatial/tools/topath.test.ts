@@ -143,6 +143,17 @@ describe("«Oggetto in tracciato» nelle forme di FubDraw", () => {
     expect(change).toMatchObject({ changed: 1, refused: 0 });
   });
 
+  it("toglie a un poligono regolare e a una stella i loro parametri, e il `d` resta", () => {
+    const d = "M-7.07 7.07 L-7.07 -7.07 L7.07 -7.07 L7.07 7.07 Z";
+    const polygon = trace(`<path id="p" fub:shape="polygon" fub:geom="0 0 10 4 0 0" d="${d}" fill="#0000ff"/>`);
+    expect(polygon.text).toContain(`<path id="p" d="${d}" fill="#0000ff"/>`);
+    expect(polygon.change).toMatchObject({ changed: 1, refused: 0 });
+    const star = "M0 -10 L2.94 -4.05 L9.51 -3.09 L4.76 1.55 L5.88 8.09 L0 5 L-5.88 8.09 L-4.76 1.55 L-9.51 -3.09 L-2.94 -4.05 Z";
+    expect(trace(`<path id="s" fub:shape="star" fub:geom="0 0 10 5 0.5 0 0" d="${star}" fill="#0000ff"/>`).text).toContain(
+      `<path id="s" d="${star}" fill="#0000ff"/>`,
+    );
+  });
+
   it("toglie a un tratto l'inchiostro, il pennello, lo strumento e l'ora", () => {
     const { text, change } = trace(
       '<path id="s" fub:tool="highlighter" fub:at="2026-10-01T09:20:31.250Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M0 0 L4 0 L4 4 Z" fill="#ffff00" fill-opacity="0.4" fub:ink="1 s100 cxypt 0,0,128,0 25,-3,2,8"/>',

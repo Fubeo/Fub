@@ -4,12 +4,13 @@
 
 import { describe, expect, it } from "vitest";
 import type { LengthUnit } from "../scene/rulers";
-import { lookChange, outlineChange, propertiesView, type FieldsInput, type SelectionFacts } from "./fields";
+import { lookChange, outlineChange, propertiesView, shapeChange, type FieldsInput, type SelectionFacts } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
 import type { ChoiceState, NumberState, SegmentState } from "./properties";
 import { featuresFor, type Level } from "./registry";
+import type { ShapeFacts } from "./reshape";
 import { fieldMin, fromUnit } from "./rulers";
 
 const NONE = { count: 0, value: null };
@@ -44,6 +45,7 @@ const selection = (parts: Partial<SelectionFacts> = {}): SelectionFacts => ({
   alignable: true,
   drawn: 1,
   orders: new Set(),
+  shape: null,
   ...parts,
 });
 
@@ -58,6 +60,7 @@ const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): F
     grid: DEFAULT_GRID,
     bar: true,
     attributes: false,
+    tool: null,
     ...rest,
   };
 };
@@ -140,6 +143,77 @@ describe("posizione e misure", () => {
   it("senza cornice non ci sono", () => {
     const view = propertiesView(input({ selection: selection({ frame: null }) }));
     expect(["x", "y", "width", "height", "ratio", "rotation"].filter((id) => id in view.fields)).toEqual([]);
+  });
+});
+
+describe("«Forma»", () => {
+  const facts = (parts: Partial<ShapeFacts> = {}): ShapeFacts => ({
+    shape: { count: 1, value: "star" },
+    count: { count: 1, value: 5 },
+    ratio: { count: 1, value: 0.382 },
+    corner: { count: 1, value: 4 },
+    ...parts,
+  });
+
+  it("ha il tipo, le punte, il raggio interno e quello degli angoli nell'unità del documento", () => {
+    const view = propertiesView(input({ unit: "mm", selection: selection({ shape: facts() }) }));
+    expect(view.fields.shape).toMatchObject({ kind: "segment", label: "Tipo", value: "star" });
+    expect((options(view.fields.shape) as SegmentState["options"]).map((option) => [option.label, option.icon])).toEqual([
+      ["Poligono", "draw-polygon"],
+      ["Stella", "draw-star"],
+    ]);
+    expect(number(view.fields.count)).toMatchObject({ label: "Punte", value: 5, places: 0, min: 3, max: 1000, relative: false });
+    expect(number(view.fields.inner)).toMatchObject({ label: "Raggio interno", unit: "%", places: 1, min: 1, max: 100 });
+    expect(number(view.fields.inner).value).toBeCloseTo(38.2, 9);
+    const corner = number(view.fields.corner);
+    expect([corner.label, corner.unit, corner.relative, corner.min]).toEqual(["Raggio degli angoli", "mm", true, 0]);
+    expect(corner.value).toBeCloseTo(4 * (25.4 / 96), 9);
+    expect(corner.note).toBeUndefined();
+  });
+
+  it("dice i lati di un poligono, e «Lati o punte» quando sono misti", () => {
+    const polygons = propertiesView(input({ selection: selection({ shape: facts({ shape: { count: 2, value: "polygon" }, ratio: { count: 0, value: null } }) }) }));
+    expect(number(polygons.fields.count).label).toBe("Lati");
+    expect(polygons.fields.inner).toBeUndefined();
+    const mixed = propertiesView(input({ selection: selection({ shape: facts({ shape: { count: 2, value: null }, count: { count: 2, value: null } }) }) }));
+    expect(mixed.fields.shape).toMatchObject({ value: null });
+    expect(number(mixed.fields.count)).toMatchObject({ label: "Lati o punte", value: null });
+  });
+
+  it("per i soli rettangoli ha soltanto il raggio degli angoli", () => {
+    const rects = facts({ shape: { count: 0, value: null }, count: { count: 0, value: null }, ratio: { count: 0, value: null }, corner: { count: 2, value: null } });
+    const view = propertiesView(input({ selection: selection({ shape: rects }) }));
+    expect(["shape", "count", "inner"].filter((id) => id in view.fields)).toEqual([]);
+    expect(number(view.fields.corner).value).toBeNull();
+  });
+
+  it("viene con lo strumento Poligono: nel Personalizzato senza di lui non c'è", () => {
+    const without = propertiesView(input({ features: featuresFor("custom", ["properties"]), selection: selection({ shape: facts() }) }));
+    expect(["shape", "count", "inner", "corner"].filter((id) => id in without.fields)).toEqual([]);
+    const withIt = propertiesView(input({ features: featuresFor("custom", ["properties", "polygon"]), selection: selection({ shape: facts() }) }));
+    expect(["shape", "count", "inner", "corner"].filter((id) => id in withIt.fields)).toEqual(["shape", "count", "inner", "corner"]);
+  });
+
+  it("senza selezione mostra lo strumento Poligono, con la nota", () => {
+    const tool = facts({ shape: { count: 1, value: "polygon" }, count: { count: 1, value: 6 }, ratio: { count: 0, value: null }, corner: { count: 1, value: 0 } });
+    const view = propertiesView(input({ tool }));
+    expect(view.fields.shape).toMatchObject({ value: "polygon", note: "Per i poligoni e le stelle che disegnerai." });
+    expect(number(view.fields.count).value).toBe(6);
+    expect(number(view.fields.corner).note).toBeUndefined();
+    expect(view.key).toBe("document\npx\npolygon");
+    // Il pannello si ricostruisce quando lo strumento diventa la stella.
+    expect(propertiesView(input({ tool: facts() })).key).toBe("document\npx\nstar");
+    expect(propertiesView(input()).fields.shape).toBeUndefined();
+  });
+
+  it("dal valore al cambio: le percentuali in frazione, il raggio nella scena", () => {
+    expect(shapeChange("shape", "star", "px")).toEqual({ shape: "star" });
+    expect(shapeChange("shape", "circle", "px")).toBeNull();
+    expect(shapeChange("count", 8, "px")).toEqual({ count: 8 });
+    expect(shapeChange("inner", 50, "px")).toEqual({ ratio: 0.5 });
+    expect(shapeChange("corner", 1, "in")).toEqual({ corner: 96 });
+    expect(shapeChange("corner", "1", "px")).toBeNull();
+    expect(shapeChange("x", 3, "px")).toBeNull();
   });
 });
 

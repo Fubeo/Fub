@@ -41,6 +41,7 @@ flowchart LR
 - [Disegni, proprietà](product/drawing-properties.md)
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, appunti](product/drawing-clipboard.md)
+- [Disegni, poligoni e stelle](product/drawing-shapes.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
@@ -75,6 +76,7 @@ flowchart LR
 - [Permessi e sicurezza](reference/permissions-and-security.md)
 - [Formato della scena](reference/scene-format.md)
 - [Formato della scena, unità e guide](reference/scene-format-rulers.md)
+- [Formato della scena, poligoni e stelle](reference/scene-format-shapes.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 
 ## Vedere stato e direzione

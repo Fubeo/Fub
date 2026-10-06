@@ -109,7 +109,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import { fit as fitBounds, screenToWorld, zoomAtPoint, type Camera, type ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
-import { countObjects, describe, keyOf, linkName, outline, type OutlineNode } from "../describe";
+import { countObjects, describe, keyOf, linkName, outline, polygonalKind, type OutlineNode } from "../describe";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages } from "../read-images";
@@ -190,6 +190,8 @@ import {
   lookChange,
   outlineChange,
   propertiesView,
+  SHAPE_ACTIONS,
+  shapeChange,
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
@@ -361,8 +363,9 @@ import {
   type ToolId,
   type ToolSpec,
 } from "./registry";
+import { cornerAttrs, cornerCursor, cornerDrag, cornerGrip, cornerSpot, shapeFacts, shapeOps, toolFacts, toolWith, type CornerGrip } from "./reshape";
 import { flagged, flagOps, hasLikeness, inverseOf, nodesOf, similarTo, type Flag, type Likeness } from "./selecting";
-import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
+import { constrainEnd, polygonCount, POLYGON_TOOL, shapeElem, stepRatio, withCount, type PolygonTool, type ShapeTool } from "./shapes";
 import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -683,6 +686,15 @@ const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse:
 /// dito. Fra due vicini vince il più vicino.
 const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
 
+/// Quanto dentro il vertice sta la maniglia degli angoli oltre il centro
+/// dell'arco, in pixel: lontana dalle maniglie della cornice anche quando il
+/// raggio è zero.
+const CORNER_INSET_PX = 16;
+
+/// Quanto deve poter scorrere sullo schermo la maniglia degli angoli perché
+/// si mostri, in pixel: su una forma più piccola coprirebbe la forma.
+const CORNER_ROOM_PX = 32;
+
 /// La forma di un nodo, per tipo, come la disegna lo strato sopra.
 const NODE_SHAPES: Readonly<Record<NodeKind, NodeShape>> = { corner: "diamond", smooth: "square", symmetric: "circle" };
 
@@ -708,6 +720,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-ellipse": ["M3 12a9 6.5 0 1 0 18 0a9 6.5 0 1 0-18 0"],
   "draw-line": ["M5 19L19 5"],
   "draw-arrow": ["M5 19L19 5", "M10 5h9v9"],
+  "draw-polygon": ["M7.5 4.2h9l4.5 7.8-4.5 7.8h-9L3 12z"],
+  "draw-star": ["M12 3l2.1 6.6H21l-5.5 4 2.1 6.6-5.6-4.1-5.6 4.1 2.1-6.6L3 9.6h6.9z"],
   "draw-highlighter": ["M13.5 3.5l7 7-7 7-7-7z", "M6.5 10.5L3 18l3 3 7.5-3.5", "M15 21h6"],
   "draw-color-more": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M12 8v8", "M8 12h8"],
   "draw-undo": ["M9 14L4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11"],
@@ -828,8 +842,8 @@ interface SelectGesture extends GestureBase {
   from: Point | null;
   end: Point | null;
   /// `pending` finché un tocco su un oggetto, o su una maniglia della
-  /// cornice, non diventa trascinamento.
-  mode: "pending" | "move" | "marquee" | "resize" | "rotate";
+  /// cornice o degli angoli, non diventa trascinamento.
+  mode: "pending" | "move" | "marquee" | "resize" | "rotate" | "corner";
   units: readonly Unit[];
   /// Per il riquadro: la selezione di partenza, che Maiusc conserva.
   base: readonly string[];
@@ -842,10 +856,21 @@ interface SelectGesture extends GestureBase {
   hit: string | null;
   /// La maniglia della cornice presa, con la cornice di allora.
   grip: { readonly grip: Grip; readonly frame: Frame } | null;
+  /// La maniglia degli angoli presa.
+  corner: CornerDrag | null;
   /// La trasformazione della scena che la cornice mostra, e i gradi della
   /// rotazione.
   matrix: Matrix | null;
   angle: number;
+}
+
+/// La maniglia degli angoli presa: l'oggetto, la sua maniglia, dove la si è
+/// presa nelle coordinate dell'oggetto, e il raggio mentre la si tira.
+interface CornerDrag {
+  readonly unit: Unit;
+  readonly grip: CornerGrip;
+  readonly from: Point;
+  radius: number;
 }
 
 /// Un gesto del Lazo: i punti che segue, nella scena, e la selezione di
@@ -1234,6 +1259,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     width: TEXT_SIZE,
   };
   const style = (): { color: string; width: number } => (tool === "text" ? textStyle : styles[tool === "highlighter" ? "highlighter" : "pen"]);
+  /// Come disegna lo strumento Poligono: poligono o stella, i lati, le punte,
+  /// il rapporto interno e il raggio degli angoli. Vale finché l'editor vive,
+  /// come il colore; lo cambiano i tasti mentre si disegna e il pannello
+  /// delle proprietà.
+  let polygonTool: PolygonTool = POLYGON_TOOL;
+  /// Il nome dello strumento `id`: il Poligono, quando disegna stelle, si
+  /// chiama Stella.
+  const toolLabel = (id: ToolId): DrawKey => (id === "polygon" && polygonTool.shape === "star" ? "draw.tool.star" : toolSpec(id).label);
+  const toolHint = (id: ToolId): DrawKey => (id === "polygon" && polygonTool.shape === "star" ? "draw.tool.star.hint" : toolSpec(id).description);
   /// Gli spessori, o le dimensioni del testo, che la barra offre allo
   /// strumento di adesso.
   const widthsNow = (): readonly Width[] => (tool === "highlighter" ? HIGHLIGHTER_WIDTHS : tool === "text" ? TEXT_SIZES : WIDTHS);
@@ -1401,9 +1435,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // restano nascosti finché il livello non sale.
   const toolButtons = new Map<ToolId, HTMLButtonElement>();
   const toolGroup = group("draw.tools", true);
+  /// Le parole del pulsante del Poligono, che cambiano con la stella.
+  let relabelPolygon = (): void => {};
   for (const spec of TOOLS) {
     const shortcut = spec.shortcut.toUpperCase();
-    const control = button(toolGroup, "draw-button draw-tool", () => `${t(spec.label)} (${shortcut})`, spec.icon, () => setTool(spec.id));
+    const control = button(toolGroup, "draw-button draw-tool", () => `${t(toolLabel(spec.id))} (${shortcut})`, spec.icon, () => pickTool(spec.id));
     control.setAttribute("role", "radio");
     control.setAttribute("aria-keyshortcuts", shortcut);
     control.dataset.tool = spec.id;
@@ -1411,13 +1447,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     hint.className = "sr-only";
     hint.id = identifier(`draw-hint-${spec.id}`);
     control.setAttribute("aria-describedby", hint.id);
-    relabels.push(() => {
-      hint.textContent = t(spec.description);
-      control.setAttribute("aria-label", t(spec.label));
-    });
+    const label = (): void => {
+      const text = t(toolLabel(spec.id));
+      control.title = `${text} (${shortcut})`;
+      control.setAttribute("aria-label", text);
+      hint.textContent = t(toolHint(spec.id));
+    };
+    relabels.push(label);
+    if (spec.id === "polygon") relabelPolygon = label;
     control.append(hint);
     toolButtons.set(spec.id, control);
   }
+
+  /// Il pulsante del Poligono come disegna adesso: l'icona e le parole della
+  /// stella o del poligono.
+  const showPolygonTool = (): void => {
+    const control = toolButtons.get("polygon");
+    const now = control?.querySelector("svg");
+    const glyph = iconEl(polygonTool.shape === "star" ? "draw-star" : "draw-polygon");
+    if (now != null && glyph !== null) now.replaceWith(glyph);
+    relabelPolygon();
+  };
 
   // Le immagini del vault, dal livello Standard e se chi monta l'editor le
   // sa scegliere: un pulsante accanto agli strumenti, che apre la scelta.
@@ -1599,6 +1649,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly features: ReadonlySet<Feature>;
     readonly ratio: unknown;
     readonly kept: unknown;
+    readonly polygon: PolygonTool | null;
   } | null = null;
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
@@ -2414,6 +2465,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     for (const { grip, at } of view.spots) {
       out.push(grip === "rotate" ? { kind: "rotor", x: at[0], y: at[1], stem: view.stem } : { kind: "grip", x: at[0], y: at[1] });
     }
+    const corner = cornerNow();
+    if (corner !== null) {
+      out.push({ kind: "corner", x: corner.spot[0], y: corner.spot[1] });
+      // Mentre la si tira, il raggio sotto di lei.
+      const drag = current?.kind === "select" && current.mode === "corner" ? current.corner : null;
+      if (drag !== null) out.push({ kind: "label", x: corner.spot[0], y: corner.spot[1], text: lengthText(drag.radius * scaleOf(drag.unit.matrix)) });
+    }
     const g = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current : null;
     if (g !== null) {
       const corners = [min, [max[0], min[1]], max, [min[0], max[1]]].map((corner) => apply(view.frame.matrix, corner as Point));
@@ -2423,6 +2481,39 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       out.push({ kind: "label", x, y, text });
     }
     return out;
+  };
+
+  /// La maniglia degli angoli che si vede: con lo strumento Selezione e un
+  /// poligono, una stella o un rettangolo scelto da solo, abbastanza grande
+  /// sullo schermo perché la maniglia abbia dove scorrere; durante il suo
+  /// gesto, dove la si tira. Mentre la cornice si tira, nessuna.
+  const cornerNow = (): { readonly unit: Unit; readonly grip: CornerGrip; readonly spot: Point } | null => {
+    const g = current?.kind === "select" ? current : null;
+    const inset = (unit: Unit): number => CORNER_INSET_PX / (scaleOf(unit.matrix) * camera.scale);
+    if (g !== null && g.corner !== null) {
+      const { unit, grip, radius } = g.corner;
+      return { unit, grip, spot: cornerSpot(grip, unit.matrix, radius, inset(unit)) };
+    }
+    if ((g !== null && g.mode !== "pending") || tool !== "select" || !editable() || !has("polygon") || selection.length !== 1) return null;
+    const unit = selectedUnits()[0];
+    const grip = unit === undefined ? null : cornerGrip(unit.node, unit.role, unit.matrix);
+    if (unit === undefined || grip === null) return null;
+    const k = scaleOf(unit.matrix) * camera.scale;
+    if (!(k > 0) || grip.max * grip.reach * k < CORNER_ROOM_PX) return null;
+    return { unit, grip, spot: cornerSpot(grip, unit.matrix, grip.radius, inset(unit)) };
+  };
+
+  /// La maniglia degli angoli sotto `p`, col puntatore `pointer`: se c'è, e
+  /// se è più vicina della maniglia `grip` della cornice `view`, che `p`
+  /// prende anche lei.
+  const cornerAt = (p: Point, pointer: InkPointerType, view: FrameView | null, grip: Grip | null): ReturnType<typeof cornerNow> => {
+    const corner = cornerNow();
+    if (corner === null) return null;
+    const away = Math.hypot(p[0] - corner.spot[0], p[1] - corner.spot[1]) * camera.scale;
+    if (away > NODE_PX[pointer]) return null;
+    const spot = grip === null ? undefined : view?.spots.find((each) => each.grip === grip);
+    if (spot !== undefined && Math.hypot(p[0] - spot.at[0], p[1] - spot.at[1]) * camera.scale < away) return null;
+    return corner;
   };
 
   /// Il cursore del foglio sopra una maniglia, o durante il suo gesto.
@@ -3139,6 +3230,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       alignable: alignReference(units) !== null,
       drawn: drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => orderOps(model, index, units, order, newIds()).ops.length > 0) : []),
+      shape: shapeFacts(model, units),
     };
   };
 
@@ -3151,6 +3243,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const keys = selection.join("\n");
     const unit = docUnit();
     const canEdit = editable();
+    // La forma dello strumento Poligono, quando è lui lo strumento.
+    const polygonNow = tool === "polygon" ? polygonTool : null;
     const last = panelShown;
     if (
       last !== null &&
@@ -3161,11 +3255,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last.grid === grid &&
       last.features === features &&
       last.ratio === ratioLock &&
-      last.kept === kept
+      last.kept === kept &&
+      last.polygon === polygonNow
     ) {
       return;
     }
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept };
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow };
     const units = selection.length === 0 || engine.model === null ? [] : selectedUnits();
     panel.update(
       propertiesView({
@@ -3177,6 +3272,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         grid,
         bar: BAR_FEATURES.some(has),
         attributes: nestedNow() && units.length === 1,
+        tool: polygonNow === null ? null : toolFacts(polygonNow),
       }),
     );
   }
@@ -3311,6 +3407,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return changeFromPanel("dash" in change ? "draw.action.dash" : "cap" in change ? "draw.action.cap" : "draw.action.join", outlined.ops, outlined.keys);
   };
 
+  /// Un campo di «Forma»: cambia i poligoni, le stelle e i rettangoli
+  /// scelti, o senza selezione lo strumento Poligono.
+  const shapeFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    const change = shapeChange(id, value, docUnit());
+    const model = engine.model;
+    if (change === null || model === null) return null;
+    const units = selectedUnits();
+    if (units.length === 0) {
+      if (tool === "polygon") setPolygonTool(toolWith(polygonTool, change));
+      return null;
+    }
+    const reshaped = shapeOps(model, units, change, newIds(), polygonTool);
+    return changeFromPanel(SHAPE_ACTIONS[id]!, reshaped.ops, reshaped.keys);
+  };
+
   /// Un lato della pagina, nell'unità del documento.
   const pageFromPanel = (id: "pageWidth" | "pageHeight", value: number): string | null => {
     const page = scene.root.page;
@@ -3386,6 +3497,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         break;
       case "rotation":
         if (Number.isFinite(number)) outcome = rotateFromPanel(number);
+        break;
+      case "shape":
+      case "count":
+      case "inner":
+      case "corner":
+        outcome = shapeFromPanel(id, value);
         break;
       default:
         outcome = styleFromPanel(id, value);
@@ -4128,7 +4245,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // La cornice è dello strumento Selezione.
     showHandles();
     showGrip(null);
-    const named = t("draw.announce.tool", { tool: t(toolSpec(id).label) });
+    const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi.
     const target = id === "nodes" ? targetText() : "";
     announce([finished, named, target].filter((part) => part !== "").join(" "));
@@ -4177,6 +4294,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } finally {
       asking = false;
     }
+  }
+
+  /// Lo strumento `id` scelto dalla barra o dal suo tasto. Il Poligono scelto
+  /// di nuovo passa dal poligono alla stella, e ritorno.
+  function pickTool(id: ToolId): void {
+    if (id === "polygon" && tool === "polygon") togglePolygon();
+    else setTool(id);
+  }
+
+  /// Lo strumento Poligono come `next`: la forma che si sta tirando, il
+  /// pulsante e il pannello lo seguono.
+  function setPolygonTool(next: PolygonTool): void {
+    const turned = next.shape !== polygonTool.shape;
+    polygonTool = next;
+    if (turned) showPolygonTool();
+    if (current?.kind === "shape" && current.tool === "polygon") drawShape(current);
+    syncProperties();
+  }
+
+  /// Dal poligono alla stella, e ritorno, anche a metà gesto.
+  function togglePolygon(): void {
+    setPolygonTool({ ...polygonTool, shape: polygonTool.shape === "star" ? "polygon" : "star" });
+    announce(t("draw.announce.tool", { tool: t(toolLabel("polygon")) }));
   }
 
   function cancelGesture(): void {
@@ -4753,7 +4893,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "rect":
       case "ellipse":
       case "line":
-      case "arrow": {
+      case "arrow":
+      case "polygon": {
         const ids = newIds();
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
@@ -4782,6 +4923,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           source: null,
           hit: null,
           grip: null,
+          corner: null,
           matrix: null,
           angle: 0,
         };
@@ -4824,12 +4966,42 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return scale > 0 ? MIN_SHAPE_PX / scale : 0;
   };
 
+  /// L'elemento della forma di `g`, con l'id `id`, nel livello `to`: un
+  /// poligono come lo vuole lo strumento, diritto con Maiusc.
+  const shapeOf = (g: ShapeGesture, id: string, to: Destination): Elem | null => {
+    const ends = shapeEnds(g, to);
+    if (ends === null) return null;
+    return shapeElem(g.tool, id, ends[0], ends[1], { color: g.color, width: g.width }, minimumFor(to), { ...polygonTool, straight: shift });
+  };
+
   const drawShape = (g: ShapeGesture): void => {
-    const ends = shapeEnds(g, g.to);
-    const elem = ends === null ? null : shapeElem(g.tool, "preview", ends[0], ends[1], { color: g.color, width: g.width }, minimumFor(g.to));
-    showShape(elem, g.to.matrix);
+    showShape(shapeOf(g, "preview", g.to), g.to.matrix);
     // Le guide seguono il punto che si tira.
     if (guidesOn() || guiding) showHandles();
+  };
+
+  /// Il poligono o la stella che lo strumento disegna, a parole: «Esagono»,
+  /// «Stella a 5 punte».
+  const polygonSaid = (): string => polygonalKind({ shape: polygonTool.shape, count: polygonCount(polygonTool) });
+
+  /// I tasti di un poligono mentre lo si disegna: ↑ e ↓, o Pag↑ e Pag↓, un
+  /// lato o una punta in più o in meno, ← e → il raggio interno di una
+  /// stella. Mentre la tastiera tiene premuto le frecce muovono il cursore, e
+  /// restano i tasti di pagina. Vero se il tasto era del poligono: anche ← e
+  /// → di un poligono, che non spostano niente a metà gesto.
+  const polygonKey = (event: KeyboardEvent): boolean => {
+    const arrowsFree = pressed === null;
+    const count =
+      event.key === "PageUp" || (arrowsFree && event.key === "ArrowUp") ? 1 : event.key === "PageDown" || (arrowsFree && event.key === "ArrowDown") ? -1 : 0;
+    const ratio = arrowsFree && event.key === "ArrowRight" ? 1 : arrowsFree && event.key === "ArrowLeft" ? -1 : 0;
+    if (count !== 0) {
+      setPolygonTool(withCount(polygonTool, polygonCount(polygonTool) + count));
+      announce(t("draw.polygon.count.said", { kind: polygonSaid() }));
+    } else if (ratio !== 0 && polygonTool.shape === "star") {
+      setPolygonTool({ ...polygonTool, ratio: stepRatio(polygonTool.ratio, ratio) });
+      announce(t("draw.polygon.ratio.said", { value: numberText(polygonTool.ratio * 100) }));
+    }
+    return count !== 0 || ratio !== 0;
   };
 
   /// Lo spostamento del gesto `g`. Con la griglia l'angolo preso va
@@ -4933,6 +5105,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     g.end = p;
     const view = frameNow();
     const grip = view === null ? null : gripAt(view, p, camera.scale, g.pointer);
+    const corner = cornerAt(p, g.pointer, view, grip);
+    const inverse = corner === null ? null : invert(corner.unit.matrix);
+    if (corner !== null && inverse !== null) {
+      g.corner = { unit: corner.unit, grip: corner.grip, from: apply(inverse, p), radius: corner.grip.radius };
+      g.units = [corner.unit];
+      return;
+    }
     if (grip !== null) {
       g.grip = { grip, frame: view!.frame };
       g.units = selectedUnits();
@@ -4980,14 +5159,47 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (before !== null) moved.set(unit.node, compose(compose(unit.parent, next), before));
   };
 
+  /// La maniglia degli angoli tirata in `p`, un punto della scena: il raggio
+  /// nuovo, e l'oggetto che lo mostra.
+  const cornerUpdate = (drag: CornerDrag, p: Point): void => {
+    const inverse = invert(drag.unit.matrix);
+    if (inverse === null) return;
+    drag.radius = cornerDrag(drag.grip, drag.from, apply(inverse, p), drag.grip.radius);
+    const attrs = cornerAttrs(drag.unit.node, drag.unit.role, drag.radius);
+    if (attrs === null) {
+      painter.setDraft(null);
+      return;
+    }
+    const d = attrs.d;
+    if (typeof d === "string") painter.setDraft({ paths: new Map(drag.unit.paints.map((paint) => [paint, d])) });
+    else painter.setDraft({ radii: new Map(drag.unit.paints.map((paint) => [paint, attrs])) });
+  };
+
+  /// Scrive il raggio a cui si è lasciata la maniglia degli angoli, in un
+  /// passo, e lo dice.
+  const applyCorner = (drag: CornerDrag): void => {
+    const model = engine.model;
+    if (model === null) return;
+    const scale = scaleOf(drag.unit.matrix);
+    const reshaped = shapeOps(model, [drag.unit], { corner: drag.radius * scale }, newIds(), polygonTool);
+    if (reshaped.ops.length === 0) return;
+    if (arrange("draw.action.corner", reshaped)) announce(t("draw.corner.said", { value: lengthText(drag.radius * scale) }));
+  };
+
   const selectUpdate = (g: SelectGesture): void => {
     if (g.from === null || g.end === null) return;
     if (g.mode === "pending") {
       const distance = Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale;
       if (distance <= DRAG_PX[g.pointer]) return;
-      g.mode = g.grip === null ? "move" : g.grip.grip === "rotate" ? "rotate" : "resize";
+      g.mode = g.corner !== null ? "corner" : g.grip === null ? "move" : g.grip.grip === "rotate" ? "rotate" : "resize";
       g.release = null;
-      if (g.grip !== null) showGrip(g.grip.grip === "rotate" ? "rotating" : gripCursor(g.grip.frame, g.grip.grip));
+      if (g.corner !== null) showGrip(cornerCursor(g.corner.grip, g.corner.unit.matrix));
+      else if (g.grip !== null) showGrip(g.grip.grip === "rotate" ? "rotating" : gripCursor(g.grip.frame, g.grip.grip));
+    }
+    if (g.mode === "corner") {
+      cornerUpdate(g.corner!, g.end);
+      showHandles();
+      return;
     }
     if (g.mode === "resize" || g.mode === "rotate") {
       g.matrix = g.mode === "resize" ? resizeNow(g) : rotateNow(g);
@@ -5024,6 +5236,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   const selectEnd = (g: SelectGesture, time: number): void => {
+    if (g.corner !== null) {
+      // Come per la cornice, un tocco sulla maniglia non cambia niente.
+      lastTap = null;
+      painter.setDraft(null);
+      current = null;
+      showGrip(null);
+      if (g.mode === "corner") applyCorner(g.corner);
+      showHandles();
+      return;
+    }
     if (g.grip !== null) {
       // Un tocco su una maniglia, senza tirarla, non cambia niente.
       lastTap = null;
@@ -5419,14 +5641,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // cambiato.
     const to = target(g.ids);
     if (to === null) return;
-    const ends = shapeEnds(g, to);
-    if (ends === null) return;
-    const elem = shapeElem(g.tool, g.ids.next("object"), ends[0], ends[1], { color: g.color, width: g.width }, minimumFor(to));
+    if (shapeEnds(g, to) === null) return;
+    const elem = shapeOf(g, g.ids.next("object"), to);
     if (elem === null) return;
     const ops: Op[] = [...to.prelude, addOp(to, elem)];
     const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
     if (page !== null) ops.push({ op: "page", viewBox: page });
-    if (commit(toolSpec(g.tool).label, asGesture(ops)) !== null) announce(noted(`${t(ADDED[g.tool])} ${objects()}`, note));
+    // Il poligono si dice col suo nome, la stella con le sue punte.
+    const added =
+      g.tool !== "polygon"
+        ? t(ADDED[g.tool])
+        : polygonTool.shape === "star"
+          ? t("draw.added.star", { count: polygonTool.points })
+          : t("draw.added.ngon", { kind: polygonSaid() });
+    if (commit(toolLabel(g.tool), asGesture(ops)) !== null) announce(noted(`${added} ${objects()}`, note));
   };
 
   // --- La penna di Bézier ------------------------------------------------------
@@ -5702,7 +5930,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
     const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
     const grip = gripAt(view, [point.x, point.y], camera.scale, pointer);
-    showGrip(grip === null ? null : gripCursor(view.frame, grip));
+    const corner = cornerAt([point.x, point.y], pointer, view, grip);
+    showGrip(corner !== null ? cornerCursor(corner.grip, corner.unit.matrix) : grip === null ? null : gripCursor(view.frame, grip));
   };
   /// La guida del documento sotto il puntatore che passa, con lo strumento
   /// Selezione: si accende, e il cursore dice dove si sposta. Sopra un
@@ -8167,6 +8396,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti dello strumento Poligono, se le parti `at` lo offrono.
+  const polygonKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("polygon")
+      ? [
+          {
+            title: t("draw.tool.polygon"),
+            rows: [
+              ["y", t("draw.keys.polygon.toggle")],
+              ["ArrowUp ArrowDown PageUp PageDown", t("draw.keys.polygon.count")],
+              ["ArrowLeft ArrowRight", t("draw.keys.polygon.ratio")],
+              ["Shift", t("draw.keys.polygon.straight")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti della selezione avanzata.
   const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("selection")
@@ -8217,6 +8462,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...arrangeKeys(at),
     ...selectionKeys(at),
     ...nodeToolKeys(at),
+    ...polygonKeys(at),
     ...bezierKeys(at),
     ...textKeys(at),
     ...gridKeys(at),
@@ -9019,6 +9265,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const onSurface = event.target === surface;
     const inNodesBar = event.target instanceof Node && nodesBar.contains(event.target);
     const inTree = event.target instanceof Node && tree.element.contains(event.target);
+    // Mentre si disegna un poligono, le frecce e i tasti di pagina sono suoi.
+    if (current?.kind === "shape" && current.tool === "polygon" && !event.ctrlKey && !event.metaKey && !event.altKey && polygonKey(event)) {
+      event.preventDefault();
+      return;
+    }
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
       return;
@@ -9213,7 +9464,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } else {
       const spec: ToolSpec | null = event.shiftKey ? null : toolForKey(tools, event.key);
       if (spec === null || !editable()) return;
-      setTool(spec.id);
+      pickTool(spec.id);
     }
     event.preventDefault();
   });
@@ -9435,7 +9686,7 @@ const MADE: Readonly<Record<NodeKind, readonly [DrawKey, DrawKey]>> = {
 };
 
 /// Che cosa si annuncia quando una forma entra nel disegno.
-const ADDED: Readonly<Record<ShapeTool, DrawKey>> = {
+const ADDED: Readonly<Record<Exclude<ShapeTool, "polygon">, DrawKey>> = {
   rect: "draw.added.rect",
   ellipse: "draw.added.ellipse",
   line: "draw.added.line",

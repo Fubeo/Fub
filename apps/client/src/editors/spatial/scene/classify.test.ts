@@ -1,12 +1,14 @@
 // La regola di classificazione del formato della scena (§4), una regola alla
 // volta, nei due versi: che cosa resta modificabile e che cosa diventa
 // estraneo. Sono i casi di `crates/fub-scene/tests/classify.rs`, uno per uno,
-// letti da questo lettore invece che da quello di Rust.
+// letti da questo lettore invece che da quello di Rust; quelli di poligoni e
+// stelle stanno in `__fixtures__/scene-shapes/cases.json`, per tutti e due.
 
 import { describe, expect, it } from "vitest";
 import type { Role } from "./analysis";
 import { MAX_DEPTH } from "./classify";
 import { at, doc, elements, first, foreign, load, role, text } from "./test-support";
+import shapes from "../../../__fixtures__/scene-shapes/cases.json";
 
 describe("la classificazione (§4)", () => {
   it("ogni tag della tabella è modificabile", () => {
@@ -529,7 +531,7 @@ describe("la classificazione (§4)", () => {
         '<path fub:shape="arrow" fub:geom="10 20 30" d="M0 0"/>' +
         '<path fub:shape="arrow" fub:geom="1 2 3 4 5" d="M0 0"/>' +
         '<path fub:shape="arrow" fub:geom="1 2 3 4px" d="M0 0"/>' +
-        '<path fub:shape="star" fub:geom="1 2 3 4" d="M0 0"/>' +
+        '<path fub:shape="hexagon" fub:geom="1 2 3 4" d="M0 0"/>' +
         '<path fub:shape="arrow" d="M0 0"/>',
     );
     const scene = load(source);
@@ -539,6 +541,19 @@ describe("la classificazione (§4)", () => {
     for (let index = 1; index < 6; index++) {
       expect(role(scene, [index]), String(index)).toBe("path");
       expect(at(scene, [index])!.arrow, String(index)).toBeUndefined();
+    }
+  });
+
+  it("un poligono e una stella vogliono la loro grammatica intera, altrimenti sono path", () => {
+    for (const { shape, geom, polygonal } of shapes.read) {
+      const item = at(load(doc(`<path fub:shape="${shape}" fub:geom="${geom}" d="M0 0 L10 0 L5 5 Z"/>`)), [0])!;
+      if (polygonal === null) {
+        expect(item.role, geom).toBe("path");
+        expect(item.polygonal, geom).toBeUndefined();
+      } else {
+        expect(item.role, geom).toBe(shape === "star" ? "star" : "ngon");
+        expect(item.polygonal, geom).toEqual({ shape, ...polygonal });
+      }
     }
   });
 

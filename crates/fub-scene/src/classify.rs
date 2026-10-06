@@ -19,6 +19,7 @@ use crate::brush::{Brush, BrushError};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::parse_path;
 use crate::ink::{Ink, InkError};
+use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
     dasharray, href, keyword, length, non_negative_length, number_list, opacity, paint, points,
@@ -47,6 +48,11 @@ pub enum Role {
     Stroke,
     /// Un `path` con `fub:shape="arrow"` e un `fub:geom` di quattro numeri (§6).
     Arrow,
+    /// Un `path` con `fub:shape="polygon"` e un `fub:geom` che si legge: il
+    /// poligono regolare sintetico (§6). `Polygon` è l'elemento `polygon`.
+    Ngon,
+    /// Un `path` con `fub:shape="star"` e un `fub:geom` che si legge (§6).
+    Star,
     /// Ogni altro `path`.
     Path,
     Rect,
@@ -151,6 +157,9 @@ pub struct ElementItem {
     /// `x1 y1 x2 y2` di una freccia.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arrow: Option<[f64; 4]>,
+    /// La geometria di un poligono regolare o di una stella: `fub:geom` letto.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub polygonal: Option<Polygonal>,
     /// Il testo del primo `title` figlio di un livello o di un oggetto, coi
     /// riferimenti risolti e gli spazi com'erano: il nome che qualcuno gli ha
     /// dato.
@@ -426,15 +435,15 @@ fn classify(doc: &Document<'_>, id: NodeId, under_root: bool) -> Option<(Tag, Ro
 
 /// Il ruolo di un `path`: tratto, freccia o tracciato.
 fn path_role(element: &Element<'_>) -> Role {
-    match element.value(NS_FUB, "tool") {
-        Some("pen" | "highlighter") => Role::Stroke,
-        // Uno strumento sconosciuto, o una forma sconosciuta, lasciano un
-        // tracciato: la geometria si legge da `d` (§6).
-        _ if element.value(NS_FUB, "shape") == Some("arrow")
-            && arrow_geometry(element).is_some() =>
-        {
-            Role::Arrow
-        }
+    if matches!(element.value(NS_FUB, "tool"), Some("pen" | "highlighter")) {
+        return Role::Stroke;
+    }
+    // Uno strumento sconosciuto, o una forma sconosciuta, lasciano un
+    // tracciato: la geometria si legge da `d` (§6).
+    match element.value(NS_FUB, "shape") {
+        Some("arrow") if arrow_geometry(element).is_some() => Role::Arrow,
+        Some("polygon") if polygonal_geometry(element).is_some() => Role::Ngon,
+        Some("star") if polygonal_geometry(element).is_some() => Role::Star,
         _ => Role::Path,
     }
 }
@@ -443,6 +452,12 @@ fn path_role(element: &Element<'_>) -> Role {
 fn arrow_geometry(element: &Element<'_>) -> Option<[f64; 4]> {
     let numbers = number_list(element.value(NS_FUB, "geom")?)?;
     <[f64; 4]>::try_from(numbers.as_slice()).ok()
+}
+
+/// `fub:geom` di un poligono regolare o di una stella, se si legge.
+fn polygonal_geometry(element: &Element<'_>) -> Option<Polygonal> {
+    let shape = PolygonalShape::parse(element.value(NS_FUB, "shape")?)?;
+    read_polygonal(shape, element.value(NS_FUB, "geom")?)
 }
 
 /// Un blocco estraneo in costruzione.
@@ -641,6 +656,9 @@ impl Builder<'_, '_> {
             stroke,
             arrow: (role == Role::Arrow)
                 .then(|| arrow_geometry(element))
+                .flatten(),
+            polygonal: matches!(role, Role::Ngon | Role::Star)
+                .then(|| polygonal_geometry(element))
                 .flatten(),
             title: object.then(|| first_title(doc, element)).flatten(),
             text: matches!(role, Role::Title | Role::Desc).then(|| character_data(doc, id)),

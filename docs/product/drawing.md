@@ -76,19 +76,19 @@ senza riaprirli e senza perdere la selezione o la cronologia; chi monta
 l'editor lo sceglie con `level` e `setLevel` (`apps/client/src/editors/spatial/tools/editor.ts`).
 
 Dall'editor il livello non si cambia, così l'Essenziale resta tale anche in
-mano a un bambino. `?` elenca i tasti del livello di adesso, e **Mostra tutto**
-aggiunge in fondo quelli dei livelli sopra, ciascuno col livello da cui vale e
-con una frase che dice dove si sceglie.
+mano a un bambino. **Mostra tutto**, in fondo ai tasti di `?`, aggiunge quelli
+dei livelli sopra, col livello da cui vale ciascuno e dove si sceglie.
 
 Lo Standard aggiunge:
 
-- il **Lazo** (`Q`), dopo la freccia, e la **«Selezione avanzata»**: i simili,
-  i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
-- l'**evidenziatore** (`H`), dopo la penna: un tratto largo, di spessore
-  costante e con le punte piatte, che lascia vedere ciò che copre. Si scrive
-  come un tratto a penna, con `fub:tool="highlighter"` e
-  `fill-opacity="0.4"`. Parte giallo e ha colore e spessori suoi, 8, 16 e 24
-  unità, e la penna ritrova i propri quando la si riprende;
+- il **Lazo** (`Q`), dopo la Selezione, e la **«Selezione avanzata»**: i
+  simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
+- l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
+  punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
+  con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
+  e spessori suoi, 8, 16 e 24 unità, e la penna ritrova i propri quando torna;
+- il **Poligono** (`Y`), dopo la freccia: poligoni regolari e stelle che si
+  cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md));
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
   tre cifre o senza `#`, oppure il selettore del sistema accanto. Il colore
   scelto resta come campione in più, un anello che ha per nome il suo codice;
@@ -103,8 +103,8 @@ Lo Standard aggiunge:
   miniature e le righe da trascinare ([Disegni, pannello dei livelli](drawing-layers.md)).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
-chi aveva in mano l'evidenziatore riprende la penna, chi aveva il Lazo la
-Selezione, e un colore a piacere torna al colore di partenza.
+chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
+il Lazo la Selezione, e un colore a piacere torna al colore di partenza.
 
 ## Disporre
 
@@ -239,7 +239,7 @@ scelte restano, e tornano col livello Standard.
 
 ## Testo
 
-Dal livello Standard lo strumento **Testo** (`T`) viene dopo la freccia. Un
+Dal livello Standard lo strumento **Testo** (`T`) viene dopo le forme. Un
 tocco sul foglio apre lì un campo, con la prima riga a metà sul punto
 toccato; un tocco su un testo lo apre com'è. Con la selezione un testo si
 apre con due tocchi, con `F2` o con «Modifica il testo» nella barra

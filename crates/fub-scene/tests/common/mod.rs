@@ -13,6 +13,32 @@ use fub_scene::{
 /// La radice di un documento FubDraw di prova, con i tre namespace.
 pub const HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" xmlns:xlink="http://www.w3.org/1999/xlink" fub:version="1" viewBox="0 0 100 100">"#;
 
+/// I casi scritti a mano di poligoni e stelle, che valgono anche per la
+/// superficie: `apps/client/src/__fixtures__/scene-shapes/cases.json`.
+pub fn shape_cases() -> serde_json::Value {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/__fixtures__/scene-shapes/cases.json");
+    let text = std::fs::read_to_string(&path).expect("i casi di poligoni e stelle");
+    serde_json::from_str(&text).expect("JSON dei casi")
+}
+
+/// `value` coi numeri tutti in virgola mobile: `4` e `4.0` del JSON si
+/// confrontano uguali.
+pub fn as_floats(value: serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::Number(n) => n
+            .as_f64()
+            .and_then(serde_json::Number::from_f64)
+            .map_or(Value::Number(n), Value::Number),
+        Value::Array(items) => Value::Array(items.into_iter().map(as_floats).collect()),
+        Value::Object(map) => {
+            Value::Object(map.into_iter().map(|(k, v)| (k, as_floats(v))).collect())
+        }
+        other => other,
+    }
+}
+
 /// Un documento FubDraw con `body` dentro la radice.
 pub fn doc(body: &str) -> String {
     format!("{HEAD}{body}</svg>")
