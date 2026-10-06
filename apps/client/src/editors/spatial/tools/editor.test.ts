@@ -3414,6 +3414,7 @@ describe("da tastiera", () => {
           ["Shift+U", "Segmenti in curve"],
           ["Shift+B", "Spezza ai nodi"],
           ["Shift+J", "Unisci i capi"],
+          ["Alt", "Tenuto, un nodo trascinato tira fuori le sue maniglie, e una maniglia trascinata si sposta da sola"],
           ["Esc", "Toglie la scelta dei nodi, poi quella dell’oggetto"],
           ["Alt+F10", "Va alla barra dei nodi"],
         ],
@@ -5972,8 +5973,226 @@ describe("i nodi, dal livello Esperto", () => {
     expect(rows).toContainEqual(["Shift+C", "Nodi a spigolo"]);
     expect(rows).toContainEqual(["Alt+F10", "Va alla barra dei nodi"]);
     expect(rows).toContainEqual(["Tab o Shift+Tab", "Il nodo dopo o prima"]);
+    expect(rows).toContainEqual(["Alt", "Tenuto, un nodo trascinato tira fuori le sue maniglie, e una maniglia trascinata si sposta da sola"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+
+  describe("le maniglie di ogni nodo", () => {
+    const A = "oa6a6a6a6";
+    const Q = "oq6q6q6q6";
+    const F = "of6f6f6f6";
+    const G = "og6g6g6g6";
+    /// Una linea, mezzo giro d'arco e una cubica con la prima maniglia
+    /// ritirata sul suo nodo, come la scrive la penna di Bézier.
+    const MIXED = `<path id="${A}" d="M100 100 L160 100 A30 30 0 0 1 220 100 C220 100 280 160 280 100" fill="none" stroke="#000000" stroke-width="2"/>`;
+    const SQUARE = `<rect id="${Q}" x="100" y="200" width="60" height="60" fill="#000000"/>`;
+    const ARROW = `<path id="${F}" fub:shape="arrow" fub:geom="300 300 400 300" d="${arrowPath(300, 300, 400, 300, 2)}" fill="none" stroke="#000000" stroke-width="2"/>`;
+    const FREE = { ctrlKey: true } as const;
+
+    /// L'oggetto `id` di `source` scelto, con lo strumento Nodi; lo strato
+    /// sopra registra ciò che disegna.
+    const nodesOn = (source: string, ...ids: string[]): ReturnType<typeof recording> => {
+      const layer = recording();
+      mount(doc(`${LAYER}${source}</g>`), { level: "expert" });
+      editor.select(ids);
+      editor.focus();
+      key("n");
+      return layer;
+    };
+    /// Le maniglie dell'ultimo disegno, arrotondate al pixel: i punti, e
+    /// quelli legati al nodo da una linea tratteggiata, le ritirate.
+    const handlesIn = (layer: ReturnType<typeof recording>): { readonly dots: string[]; readonly folded: string[] } => {
+      layer.frame();
+      const calls = layer.calls();
+      const at = (x: unknown, y: unknown): string => `${Math.round(x as number)},${Math.round(y as number)}`;
+      const dots = calls.filter((call) => call[0] === "arc" && call[3] === 3).map((call) => at(call[1], call[2]));
+      const folded = calls.flatMap((call, i) => {
+        const end = calls[i + 3];
+        return call[0] === "setLineDash" && JSON.stringify(call[1]) === "[2,2]" && end?.[0] === "lineTo" ? [at(end[1], end[2])] : [];
+      });
+      return { dots, folded };
+    };
+
+    it("ogni nodo scelto mostra le sue maniglie: sulle linee, sugli archi, e quella ritirata accanto, tratteggiata", () => {
+      const layer = nodesOn(`${MIXED}${SQUARE}${ARROW}<rect id="or6r6r6r6" x="450" y="100" width="18" height="18" fill="#000000"/>`, A);
+      tap(100, 100);
+      expect(handlesIn(layer)).toEqual({ dots: ["120,100"], folded: [] });
+      tap(160, 100);
+      expect(handlesIn(layer)).toEqual({ dots: ["140,100", "160,83", "220,83"], folded: [] });
+      tap(220, 100);
+      expect(handlesIn(layer)).toEqual({ dots: ["160,83", "220,83", "234,114", "280,160"], folded: ["234,114"] });
+      // La maniglia ritirata è del nodo prima: con l'ultimo si vede l'altra.
+      tap(280, 100);
+      expect(handlesIn(layer)).toEqual({ dots: ["280,160"], folded: [] });
+      // Gli spigoli di un rettangolo, sui suoi lati.
+      tap(130, 230);
+      tap(100, 200);
+      expect(spoken()).toBe("Nodo 1 di 4, spigolo: x 100, y 200.");
+      expect(handlesIn(layer)).toEqual({ dots: ["120,200", "100,220"], folded: [] });
+      // Lo stesso andando di nodo in nodo con Tab, e col riquadro.
+      key("Tab");
+      expect(spoken()).toBe("Nodo 2 di 4, spigolo: x 160, y 200.");
+      expect(handlesIn(layer)).toEqual({ dots: ["140,200", "160,220"], folded: [] });
+      drag([[270, 90], [280, 100], [290, 110]]);
+      expect(spoken()).toBe("Tracciato, Nero: 4 nodi da modificare. Nodo 4 di 4, capo: x 280, y 100.");
+      expect(handlesIn(layer)).toEqual({ dots: ["280,160"], folded: [] });
+      // L'asta di una freccia non si piega: niente maniglie.
+      tap(350, 300);
+      tap(400, 300);
+      expect(spoken()).toBe("Nodo 2 di 2, capo: x 400, y 300.");
+      expect(handlesIn(layer).dots).toEqual([]);
+      // Su un lato corto la maniglia coprirebbe il nodo: non si vede.
+      tap(459, 109);
+      tap(450, 100);
+      expect(spoken()).toBe("Nodo 1 di 4, spigolo: x 450, y 100.");
+      expect(handlesIn(layer).dots).toEqual([]);
+      expect(changes).toEqual([]);
+    });
+
+    it("trascinare la maniglia di un lato lo curva, e il rettangolo diventa un tracciato, in un passo", () => {
+      const layer = nodesOn(SQUARE, Q);
+      tap(100, 200);
+      drag([[120, 200], [120, 190], [120, 180]], FREE);
+      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 C120 180 140 200 160 200 L160 260 L100 260 Z" fill="#000000"/>`);
+      expect(spoken()).toBe("Maniglia tirata fuori. La forma ora è un tracciato.");
+      // Il nodo resta scelto, e il lato curvo ha ora anche la maniglia
+      // dell'altro capo.
+      expect(handlesIn(layer).dots).toEqual(["120,180", "140,200", "100,220"]);
+      expect(changes).toHaveLength(1);
+      editor.undo();
+      expect(editor.engine.text).toContain(SQUARE);
+      expect(spoken()).toBe("Annullato: Spostamento di una maniglia.");
+      // Col dito, allo stesso modo.
+      tap(100, 200, { pointerType: "touch" });
+      drag([[100, 220], [90, 230], [80, 240]], { ...FREE, pointerType: "touch" });
+      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 L160 200 L160 260 L100 260 C100 240 80 240 100 200 Z" fill="#000000"/>`);
+      expect(spoken()).toBe("Maniglia tirata fuori. La forma ora è un tracciato.");
+    });
+
+    it("la maniglia di un arco si trascina come quella delle cubiche che lo approssimano, e il nodo resta scelto", () => {
+      const layer = nodesOn(`<path id="${A}" d="M100 100 L160 100 A30 30 0 0 1 220 100 L280 100" fill="none" stroke="#000000" stroke-width="2"/>`, A);
+      tap(220, 100);
+      expect(handlesIn(layer).dots).toEqual(["160,83", "220,83", "240,100"]);
+      drag([[220, 83], [225, 75], [230, 70]], FREE);
+      expect(d(A)).toBe("M100 100 L160 100 C160 83.43 173.43 70 190 70 C206.57 70 230 70.43 220 100 L280 100");
+      expect(spoken()).toBe("Maniglia spostata.");
+      // Il nodo in mezzo all'arco è nuovo: quello scelto resta il suo.
+      expect(handlesIn(layer).dots).toEqual(["207,70", "230,70", "240,100"]);
+      key("Home");
+      key("End");
+      expect(spoken()).toBe("Nodo 5 di 5, capo: x 280, y 100.");
+      editor.undo();
+      expect(d(A)).toBe("M100 100 L160 100 A30 30 0 0 1 220 100 L280 100");
+    });
+
+    it("la maniglia ritirata si tira fuori dal suo nodo", () => {
+      const layer = nodesOn(MIXED, A);
+      tap(220, 100);
+      drag([[234, 114], [234, 130], [234, 150]], FREE);
+      expect(d(A)).toBe("M100 100 L160 100 A30 30 0 0 1 220 100 C234.14 150.14 280 160 280 100");
+      expect(spoken()).toBe("Maniglia tirata fuori.");
+      expect(handlesIn(layer).folded).toEqual([]);
+    });
+
+    it("con Alt, trascinare un nodo ne tira fuori le maniglie, e il nodo diventa simmetrico", () => {
+      const layer = nodesOn(`${SQUARE}${MIXED}`, Q, A);
+      expect(spoken()).toBe("Strumento: Nodi. 2 oggetti: 8 nodi da modificare.");
+      drag([[100, 200], [110, 195], [130, 190]], { ...FREE, altKey: true });
+      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 C130 190 140 200 160 200 L160 260 L100 260 C100 240 70 210 100 200 Z" fill="#000000"/>`);
+      expect(spoken()).toBe("Maniglie tirate fuori: il nodo ora è simmetrico. La forma ora è un tracciato.");
+      expect(handlesIn(layer).dots).toEqual(["130,190", "140,200", "100,240", "70,210"]);
+      expect(d(A)).toBe("M100 100 L160 100 A30 30 0 0 1 220 100 C220 100 280 160 280 100");
+      expect(changes).toHaveLength(1);
+      tap(100, 200);
+      expect(spoken()).toBe("Nodo 1 di 4, simmetrico: x 100, y 200.");
+      // Trascinato verso l'altro lato, la maniglia sotto il puntatore è di
+      // quello.
+      editor.undo();
+      expect(editor.engine.text).toContain(SQUARE);
+      drag([[160, 200], [150, 205], [130, 210]], { ...FREE, altKey: true });
+      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 C120 200 130 210 160 200 C190 190 160 240 160 260 L100 260 Z" fill="#000000"/>`);
+      // Un capo ha una maniglia sola; un tocco con Alt sceglie e basta.
+      tap(100, 100, { altKey: true });
+      expect(spoken()).toBe("Tracciato, Nero: 4 nodi da modificare. Nodo 1 di 4, capo: x 100, y 100.");
+      drag([[100, 100], [100, 90], [110, 80]], { ...FREE, altKey: true });
+      expect(d(A)).toBe("M100 100 C110 80 140 100 160 100 A30 30 0 0 1 220 100 C220 100 280 160 280 100");
+      expect(spoken()).toBe("Maniglia tirata fuori.");
+    });
+
+    it("con Alt un tratto a penna resta un tratto, e una freccia non si piega", () => {
+      const layer = nodesOn(ARROW, F);
+      drag([[400, 300], [400, 290], [410, 280]], { ...FREE, altKey: true });
+      expect(spoken()).toBe("Una freccia ha un’asta dritta fra due capi: per curvarla o darle altri nodi, prima «Oggetto in tracciato».");
+      expect(changes).toEqual([]);
+      expect(handlesIn(layer).dots).toEqual([]);
+      owner.close();
+      host.remove();
+      host = document.createElement("div");
+      document.body.append(host);
+      owner = openLifetime();
+      mount(doc(`${LAYER}</g>`), { level: "expert" });
+      editor.setTool("pen");
+      drag([[20, 300], [40, 330], [60, 360], [80, 330], [100, 300]]);
+      const id = /<path id="(o[a-z0-9]{8})" fub:tool="pen"/.exec(editor.engine.text)![1]!;
+      const ink = (): string => /fub:ink="([^"]+)"/.exec(editor.engine.text)![1]!;
+      const before = ink();
+      editor.select([id]);
+      editor.focus();
+      key("n");
+      drag([[60, 360], [70, 360], [90, 360]], { ...FREE, altKey: true });
+      expect(spoken()).toBe("Maniglie tirate fuori: il nodo ora è simmetrico.");
+      expect(ink()).not.toBe(before);
+      expect(editor.engine.text).toMatch(new RegExp(`<path id="${id}" fub:tool="pen"`));
+      expect(inkLength(decodeInk(ink()))).toBeGreaterThanOrEqual(inkLength(decodeInk(before)));
+    });
+
+    it("con Alt una maniglia si sposta da sola, e il suo nodo diventa uno spigolo", () => {
+      const S = `<path id="${A}" d="M100 100 C120 80 140 80 160 100 C180 120 200 120 220 100" fill="none" stroke="#000000" stroke-width="2"/>`;
+      nodesOn(S, A);
+      tap(160, 100);
+      expect(spoken()).toBe("Nodo 2 di 3, simmetrico: x 160, y 100.");
+      drag([[180, 120], [180, 130], [180, 140]], { ...FREE, altKey: true });
+      expect(d(A)).toBe("M100 100 C120 80 140 80 160 100 C180 140 200 120 220 100");
+      expect(spoken()).toBe("Maniglia spostata da sola: il nodo ora è uno spigolo.");
+      tap(160, 100);
+      expect(spoken()).toBe("Nodo 2 di 3, spigolo: x 160, y 100.");
+      // Annullato il passo il nodo torna simmetrico, e ripetuto uno spigolo.
+      editor.undo();
+      tap(160, 100);
+      expect(spoken()).toBe("Nodo 2 di 3, simmetrico: x 160, y 100.");
+      editor.redo();
+      tap(160, 100);
+      expect(spoken()).toBe("Nodo 2 di 3, spigolo: x 160, y 100.");
+      // Senza Alt l'altra maniglia segue quella trascinata.
+      editor.undo();
+      drag([[180, 120], [180, 130], [180, 140]], FREE);
+      expect(d(A)).toBe("M100 100 C120 80 140 60 160 100 C180 140 200 120 220 100");
+      expect(spoken()).toBe("Maniglia spostata.");
+    });
+
+    it("toccare la maniglia di una linea sceglie la linea, e il doppio tocco ci aggiunge un nodo", () => {
+      editing();
+      tap(50, 10);
+      tap(37, 10);
+      expect(spoken()).toBe("2 nodi scelti.");
+      expect(d()).toBe("M10 10 L50 10 L50 50");
+      tap(37, 10);
+      expect(d()).toBe("M10 10 L37 10 L50 10 L50 50");
+      expect(spoken()).toBe("1 nodo aggiunto.");
+    });
+
+    it("dentro un gruppo ingrandito le maniglie stanno dove si vedono, e la ritirata è lunga uguale sullo schermo", () => {
+      const layer = nodesOn(`<g id="${G}" transform="translate(300 0) scale(2)"><path id="${A}" d="M0 50 C0 50 20 80 40 50 L60 50" fill="none" stroke="#000000" stroke-width="1"/></g>`, G);
+      tap(300, 100);
+      expect(handlesIn(layer)).toEqual({ dots: ["311,117", "340,160"], folded: ["311,117"] });
+      tap(380, 100);
+      expect(handlesIn(layer).dots).toEqual(["340,160", "393,100"]);
+      tap(300, 100);
+      drag([[311, 117], [311, 130], [311, 140]], FREE);
+      expect(d(A)).toBe("M0 50 C5.55 69.82 20 80 40 50 L60 50");
+      expect(spoken()).toBe("Maniglia tirata fuori.");
+    });
   });
 });
 

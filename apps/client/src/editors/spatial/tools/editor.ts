@@ -251,7 +251,7 @@ import {
   deleteNodes,
   handleAt,
   handleNode,
-  handlePoint,
+  handleSpot,
   handlesFor,
   insertNode,
   insertNodes,
@@ -263,7 +263,11 @@ import {
   nodeAt,
   nodeKey,
   nodesWithin,
+  openNode,
   parseKey,
+  pullHandles,
+  pullSide,
+  realizeHandle,
   samePlace,
   setKind,
   setLinks,
@@ -756,6 +760,15 @@ const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse:
 /// dito. Fra due vicini vince il più vicino.
 const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
 
+/// Quanto lontano dal suo nodo si mostra una maniglia ritirata, in pixel:
+/// abbastanza da prenderla senza prendere il nodo.
+const FOLDED_PX = 20;
+
+/// Quanto lontano dal suo nodo deve stare sullo schermo la maniglia di una
+/// linea, o una ritirata, per mostrarsi, in pixel: più vicina coprirebbe il
+/// nodo. Ingrandendo il foglio, si vede.
+const LATENT_PX = 8;
+
 /// Quanto dentro il vertice sta la maniglia degli angoli oltre il centro
 /// dell'arco, in pixel: lontana dalle maniglie della cornice anche quando il
 /// raggio è zero.
@@ -985,7 +998,10 @@ type NodePick = ReadonlyMap<string, ReadonlySet<NodeKey>>;
 /// riquadro, o niente da trascinare. `origin` è dov'era il punto preso,
 /// nella scena. Un nodo preso con Maiusc fra quelli scelti si toglie con un
 /// tocco (`toggle`); senza Maiusc, un tocco lascia scelti soltanto i nodi
-/// `alone`.
+/// `alone`. Preso con Alt, trascinarlo ne tira fuori le maniglie (`pull`).
+/// Una maniglia presa con Alt si sposta da sola (`alone`), e il suo nodo
+/// diventa uno spigolo; una che sta su una linea, toccata, vale come il
+/// punto `segment` della linea.
 type NodeGrab =
   | {
     readonly kind: "node";
@@ -994,8 +1010,16 @@ type NodeGrab =
     readonly origin: Point;
     readonly toggle: boolean;
     readonly alone: readonly NodeKey[] | null;
+    readonly pull: boolean;
   }
-  | { readonly kind: "handle"; readonly shape: string; readonly handle: HandleRef; readonly origin: Point }
+  | {
+    readonly kind: "handle";
+    readonly shape: string;
+    readonly handle: HandleRef;
+    readonly origin: Point;
+    readonly alone: boolean;
+    readonly segment: { readonly sub: number; readonly link: number; readonly t: number } | null;
+  }
   | { readonly kind: "segment"; readonly shape: string; readonly sub: number; readonly link: number; readonly t: number }
   /// Un riquadro sceglie i nodi di tutte le forme che prende; con Maiusc
   /// aggiunge a quelli scelti.
@@ -1020,8 +1044,25 @@ interface NodesGesture extends GestureBase {
   /// I nodi di ogni forma come li lascia il trascinamento, da scrivere
   /// quando si alza.
   draft: ReadonlyMap<string, readonly Subpath[]> | null;
-  /// Perché la forma toccata non ha nodi.
+  /// Il lato del nodo di cui si tirano le maniglie, deciso dal verso in cui
+  /// il trascinamento comincia.
+  side: "in" | "out" | null;
+  /// La forma `shape` del trascinamento di una maniglia, o delle maniglie
+  /// tirate da un nodo, come la lascia: i nodi scelti e i tipi dati, e dove
+  /// è finito ogni nodo se se ne sono aggiunti.
+  reshaped: Reshaped | null;
+  /// Perché la forma toccata non ha nodi, o perché il trascinamento non fa
+  /// niente.
   missed: DrawKey | null;
+}
+
+/// Una forma come la lascia un trascinamento che le cambia i nodi o i tipi
+/// (vedi [`NodesGesture`]).
+interface Reshaped {
+  readonly shape: string;
+  readonly chosen: ReadonlySet<NodeKey>;
+  readonly kinds: ReadonlyMap<NodeKey, NodeKind>;
+  readonly moved: ReadonlyMap<NodeKey, NodeKey> | null;
 }
 
 /// Un gesto della penna di Bézier: aggiunge un nodo, chiude il tracciato sul
@@ -1515,6 +1556,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let noEditing: DrawKey | null = null;
   let nodeSelection: NodePick = new Map();
   let nodeKinds: ReadonlyMap<string, ReadonlyMap<NodeKey, NodeKind>> = new Map();
+  /// I tipi dati ai nodi a ogni punto della cronologia dove una modifica dei
+  /// nodi li ha lasciati: il file non li scrive, e un annulla o un ripeti li
+  /// riporta come erano lì.
+  const kindsAt = new Map<number, ReadonlyMap<string, ReadonlyMap<NodeKey, NodeKind>>>();
   let focused: readonly (readonly number[])[] = [];
   /// Quante forme l'ultima modifica dei nodi ha fatto tracciati, e perché
   /// ne ha lasciata com'era qualcuna.
@@ -2722,43 +2767,64 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const editedUnits = (): string[] => [...new Set(edits.map((edit) => edit.unit.key))];
 
   /// Il tipo di ogni nodo di `subs`, i nodi della forma `edit`: quello dato
-  /// da chi modifica, o quello che si legge. I capi di un sottotracciato
-  /// aperto non ne hanno uno, e valgono come spigoli.
-  const kindsOf = (edit: Editing, subs = edit.subs): KindOf => {
-    const given = nodeKinds.get(edit.key) ?? NO_KINDS;
-    return (s, at) => {
-      const sub = subs[s]!;
-      return innerNode(sub, at) ? given.get(nodeKey(s, at)) ?? kindOf(sub, at) : "corner";
-    };
+  /// da chi modifica, `given`, o quello che si legge. I capi di un
+  /// sottotracciato aperto non ne hanno uno, e valgono come spigoli.
+  const kindsOf = (edit: Editing, subs = edit.subs, given = nodeKinds.get(edit.key) ?? NO_KINDS): KindOf => (s, at) => {
+    const sub = subs[s]!;
+    return innerNode(sub, at) ? given.get(nodeKey(s, at)) ?? kindOf(sub, at) : "corner";
   };
 
-  /// Le maniglie che si vedono di `subs`, i nodi della forma `edit`: quelle
-  /// dei segmenti che toccano un suo nodo scelto, tranne una ritirata sul
-  /// suo nodo, che il nodo copre.
-  const shownHandles = (edit: Editing, subs = edit.subs): HandleRef[] =>
-    handlesFor(subs, pickedIn(edit)).filter((handle) => {
-      const point = handlePoint(subs, handle);
+  /// Le maniglie che si vedono di `subs`, i nodi della forma `edit`, coi
+  /// nodi `chosen` scelti: ognuna dove si vede ([`handleSpot`]), anche
+  /// quella di una linea o di un arco, e quella ritirata sul suo nodo
+  /// accanto a lui, lunga `FOLDED_PX` sullo schermo. Quella di una linea, o
+  /// una ritirata, se sta più vicina al nodo di `LATENT_PX` non si vede.
+  /// L'asta di una freccia non si piega: non ne ha.
+  const shownHandles = (edit: Editing, subs = edit.subs, chosen = pickedIn(edit)): Array<{ readonly handle: HandleRef; readonly point: Point; readonly folded: boolean }> => {
+    if (edit.nodable.kind === "arrow" || chosen.size === 0) return [];
+    const m = edit.matrix;
+    // Quanto è lungo sullo schermo un passo `direction` del tracciato.
+    const onScreen = (direction: Point): number => Math.hypot(m[0] * direction[0] + m[2] * direction[1], m[1] * direction[0] + m[3] * direction[1]) * camera.scale;
+    const stub = (direction: Point): number => {
+      const size = onScreen(direction);
+      return size > 0 ? FOLDED_PX / size : 0;
+    };
+    return handlesFor(subs, chosen).flatMap((handle) => {
+      const spot = handleSpot(subs, handle, stub);
+      if (spot === null) return [];
       const sub = subs[handle.sub]!;
-      return point !== null && (handle.which === "control" || !samePlace(point, sub.nodes[handleNode(sub, handle)]!));
+      if (spot.folded || sub.links[handle.link]!.kind === "line") {
+        const node = sub.nodes[handleNode(sub, handle)]!;
+        if (onScreen([spot.point[0] - node[0], spot.point[1] - node[1]]) < LATENT_PX) return [];
+      }
+      return [{ handle, ...spot }];
     });
+  };
+
+  /// La forma `edit` come la lascia il trascinamento in corso: i nodi, e i
+  /// nodi scelti e i tipi dati, che una maniglia tirata fuori può cambiare.
+  const draftOfEdit = (edit: Editing): { readonly subs: readonly Subpath[]; readonly chosen: ReadonlySet<NodeKey>; readonly kinds: KindOf } => {
+    const g = current?.kind === "nodes" ? current : null;
+    const subs = g?.draft?.get(edit.key) ?? edit.subs;
+    const reshaped = g?.reshaped?.shape === edit.key && g.draft?.has(edit.key) === true ? g.reshaped : null;
+    return { subs, chosen: reshaped?.chosen ?? pickedIn(edit), kinds: kindsOf(edit, subs, reshaped?.kinds) };
+  };
 
   /// Il contorno della forma `edit`, le maniglie e i nodi, come li lascia il
   /// trascinamento se ce n'è uno: prima il contorno, sopra le maniglie, sopra
   /// ancora i nodi.
   const nodeHandles = (edit: Editing): OverlayHandle[] => {
-    const subs = (current?.kind === "nodes" ? current.draft?.get(edit.key) : undefined) ?? edit.subs;
+    const { subs, chosen, kinds } = draftOfEdit(edit);
     const m = edit.matrix;
     const out: OverlayHandle[] = [{ kind: "outline", segments: writeNodes(subs), matrix: m }];
-    for (const handle of shownHandles(edit, subs)) {
-      const [x, y] = apply(m, handlePoint(subs, handle)!);
+    for (const { handle, point, folded } of shownHandles(edit, subs, chosen)) {
+      const [x, y] = apply(m, point);
       const sub = subs[handle.sub]!;
       // Il punto di una quadratica è dei suoi due nodi: una linea per
       // ciascuno.
       const owners = handle.which === "control" ? [handle.link, (handle.link + 1) % sub.nodes.length] : [handleNode(sub, handle)];
-      for (const owner of owners) out.push({ kind: "control", x, y, node: apply(m, sub.nodes[owner]!) });
+      for (const owner of owners) out.push({ kind: "control", x, y, node: apply(m, sub.nodes[owner]!), ...(folded ? { folded } : {}) });
     }
-    const kinds = kindsOf(edit, subs);
-    const chosen = pickedIn(edit);
     subs.forEach((sub, s) => {
       sub.nodes.forEach((node, at) => {
         const [x, y] = apply(m, node);
@@ -4361,6 +4427,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (layer !== undefined) choose(layer);
     else if (touched.length > 0) followSelection();
     syncControls();
+    // I tipi dati ai nodi tornano come erano a questo punto.
+    resolveNodes();
+    const kinds = kindsAt.get(history.position);
+    if (kinds !== undefined) nodeKinds = kinds;
     showHandles();
   };
 
@@ -4990,7 +5060,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// I nodi delle forme che si modificano che restano fermi, nella scena:
-  /// bersagli delle guide. Con `moving` si muovono quelli scelti.
+  /// bersagli delle guide. Con `moving` si muovono quelli scelti; senza, si
+  /// muove una maniglia, che si allinea anche al suo nodo.
   const fixedNodes = (moving: boolean): Point[] => {
     const out: Point[] = [];
     for (const edit of edits) {
@@ -5009,7 +5080,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// che restano fermi, una maniglia anche al suo nodo.
   const nodeDragTo = (g: NodesGesture, grab: Extract<NodeGrab, { readonly origin: Point }>): Point => {
     const p: Point = [grab.origin[0] + g.end![0] - g.from![0], grab.origin[1] + g.end![1] - g.from![1]];
-    return guided(p, () => guidesFor(g, editedUnits(), () => fixedNodes(grab.kind === "node")), g.pointer);
+    return guided(p, () => guidesFor(g, editedUnits(), () => fixedNodes(grab.kind === "node" && !grab.pull)), g.pointer);
   };
 
   /// I nodi della penna di Bézier, finché il tracciato non ne ha.
@@ -5071,7 +5142,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (g?.kind === "nodes" && g.dragging && g.from !== null && g.end !== null && edits.length > 0) {
       const grab = g.grab;
       if (grab?.kind !== "node" && grab?.kind !== "handle") return null;
-      return point(guidesFor(g, editedUnits(), () => fixedNodes(grab.kind === "node")), nodeDragTo(g, grab));
+      return point(guidesFor(g, editedUnits(), () => fixedNodes(grab.kind === "node" && !grab.pull)), nodeDragTo(g, grab));
     }
     if (g?.kind === "bezier" && g.mode !== null) {
       const p = g.dragging ? bezierHandle(g) : g.mode === "add" ? g.at : null;
@@ -5494,6 +5565,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           shapes: edits.map((edit) => edit.path),
           selection: [...selection],
           draft: null,
+          side: null,
+          reshaped: null,
           missed: null,
         };
       case "text":
@@ -6053,7 +6126,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     among: readonly Editing[],
     p: Point,
     pointer: InkPointerType,
-  ): { readonly edit: Editing; readonly node: NodeKey } | { readonly edit: Editing; readonly handle: HandleRef } | null => {
+  ): { readonly edit: Editing; readonly node: NodeKey } | { readonly edit: Editing; readonly handle: HandleRef; readonly at: Point } | null => {
     const tolerance = NODE_PX[pointer] / camera.scale;
     const gap = (q: Point): number => Math.hypot(q[0] - p[0], q[1] - p[1]);
     let best: ReturnType<typeof grabAt> = null;
@@ -6065,10 +6138,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         best = { edit, node };
         nearest = gap(nodePoint(edit, node));
       }
-      const handle = handleAt(edit.subs, shownHandles(edit), edit.matrix, p, tolerance);
-      const at = handle === null ? null : apply(edit.matrix, handlePoint(edit.subs, handle)!);
-      if (handle !== null && gap(at!) < nearest) {
-        best = { edit, handle };
+      const spot = handleAt(shownHandles(edit), edit.matrix, p, tolerance);
+      const at = spot === null ? null : apply(edit.matrix, spot.point);
+      if (spot !== null && gap(at!) < nearest) {
+        best = { edit, handle: spot.handle, at: at! };
         nearest = gap(at!);
       }
     }
@@ -6101,15 +6174,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       setNodes(pickOf(edit, keys));
     }
     const alone = !shift && all && (chosenCount() > keys.length || edits.length > 1) ? keys : null;
-    g.grab = { kind: "node", shape: edit.key, key: keys[0]!, origin: nodePoint(edit, keys[0]!), toggle: false, alone };
+    g.grab = { kind: "node", shape: edit.key, key: keys[0]!, origin: nodePoint(edit, keys[0]!), toggle: false, alone, pull: false };
   };
 
   /// Ciò che `p` prende delle forme `among`: un nodo, che si sceglie e si
-  /// potrà trascinare, e con Maiusc si aggiunge o si toglie; una maniglia o
-  /// un segmento da trascinare. L'asta di una freccia non si piega: si porta
+  /// potrà trascinare, e con Maiusc si aggiunge o si toglie, o con Alt
+  /// tirarne fuori le maniglie; una maniglia, con Alt da sola, o un
+  /// segmento da trascinare. L'asta di una freccia non si piega: si porta
   /// coi suoi due capi. Falso se `p` non prende niente.
   const grabOn = (g: NodesGesture, p: Point, among: readonly Editing[] = edits): boolean => {
     const hit = grabAt(among, p, g.pointer);
+    const tolerance = HIT_PX[g.pointer] / camera.scale;
     if (hit !== null && "node" in hit) {
       const { edit, node } = hit;
       const chosen = pickedIn(edit).has(node);
@@ -6119,14 +6194,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         setNodes(pickOf(edit, [node]));
       }
       const alone = !shift && chosen && (chosenCount() > 1 || edits.length > 1) ? [node] : null;
-      g.grab = { kind: "node", shape: edit.key, key: node, origin: nodePoint(edit, node), toggle: shift && chosen, alone };
+      g.grab = { kind: "node", shape: edit.key, key: node, origin: nodePoint(edit, node), toggle: shift && chosen, alone, pull: alt && !shift };
       return true;
     }
     if (hit !== null) {
-      g.grab = { kind: "handle", shape: hit.edit.key, handle: hit.handle, origin: apply(hit.edit.matrix, handlePoint(hit.edit.subs, hit.handle)!) };
+      // La maniglia di una linea sta sulla linea, a un terzo da un capo:
+      // toccarla è toccare la linea lì.
+      const { edit, handle } = hit;
+      let segment: { readonly sub: number; readonly link: number; readonly t: number } | null = null;
+      if (edit.subs[handle.sub]!.links[handle.link]!.kind === "line") {
+        const link = linkAt(edit.subs, edit.matrix, p, tolerance);
+        segment = link !== null && link.sub === handle.sub && link.link === handle.link ? link : { sub: handle.sub, link: handle.link, t: handle.which === "c1" ? 1 / 3 : 2 / 3 };
+      }
+      g.grab = { kind: "handle", shape: edit.key, handle, origin: hit.at, alone: alt && handle.which !== "control", segment };
       return true;
     }
-    const tolerance = HIT_PX[g.pointer] / camera.scale;
     for (let i = among.length - 1; i >= 0; i--) {
       const edit = among[i]!;
       const link = linkAt(edit.subs, edit.matrix, p, tolerance);
@@ -6225,15 +6307,70 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setNodes(pick);
   };
 
+  /// I nodi `keys` portati da `moved` dove sono finiti, se una modifica ne
+  /// ha aggiunti.
+  const movedKeys = (keys: Iterable<NodeKey>, moved: ReadonlyMap<NodeKey, NodeKey> | null): ReadonlySet<NodeKey> =>
+    new Set(moved === null ? keys : [...keys].flatMap((key) => {
+      const to = moved.get(key);
+      return to === undefined ? [] : [to];
+    }));
+
+  /// I nodi della forma `edit` con la maniglia presa dove il trascinamento
+  /// `g` la porta. Quella di una linea o di un arco diventa prima vera, e
+  /// con lei l'arco dall'altra parte di un nodo liscio ([`realizeHandle`]).
+  /// Con Alt la maniglia si sposta da sola, e il suo nodo diventa uno
+  /// spigolo.
+  const dragHandle = (g: NodesGesture, edit: Editing, grab: Extract<NodeGrab, { readonly kind: "handle" }>): Subpath[] => {
+    const was = kindsOf(edit);
+    const owner = handleNode(edit.subs[grab.handle.sub]!, grab.handle);
+    const smooth = !grab.alone && grab.handle.which !== "control" && was(grab.handle.sub, owner) !== "corner";
+    const real = realizeHandle(edit.subs, grab.handle, smooth);
+    const given = nodeKinds.get(edit.key) ?? NO_KINDS;
+    const kinds = real.moved === null ? new Map(given) : remapped(given, real.moved);
+    if (grab.alone) {
+      const s = real.handle.sub;
+      const at = handleNode(real.subs[s]!, real.handle);
+      if (innerNode(real.subs[s]!, at)) kinds.set(nodeKey(s, at), "corner");
+    }
+    g.reshaped = { shape: edit.key, chosen: movedKeys(pickedIn(edit), real.moved), kinds, moved: real.moved };
+    return moveHandle(real.subs, real.handle, apply(edit.inverse, nodeDragTo(g, grab)), kindsOf(edit, real.subs, kinds));
+  };
+
+  /// I nodi della forma `edit` con le maniglie del nodo preso tirate fuori
+  /// fin dove il trascinamento `g` porta il puntatore, come con lo strumento
+  /// Punto di ancoraggio di Illustrator: i segmenti ai suoi lati diventano
+  /// cubiche ([`openNode`]), quella dal lato verso cui il trascinamento
+  /// comincia segue il puntatore e l'altra le sta opposta, e il nodo
+  /// diventa simmetrico. `null` se il nodo non ha segmenti.
+  const pullFrom = (g: NodesGesture, edit: Editing, grab: Extract<NodeGrab, { readonly kind: "node" }>): Subpath[] | null => {
+    const opened = openNode(edit.subs, grab.key);
+    const to = apply(edit.inverse, nodeDragTo(g, grab));
+    const [s, at] = parseKey(opened.key);
+    const node = opened.subs[s]!.nodes[at]!;
+    g.side ??= pullSide(opened.subs, opened.key, [to[0] - node[0], to[1] - node[1]]);
+    if (g.side === null) return null;
+    const given = nodeKinds.get(edit.key) ?? NO_KINDS;
+    const kinds = opened.moved === null ? new Map(given) : remapped(given, opened.moved);
+    if (innerNode(opened.subs[s]!, at)) kinds.set(opened.key, "symmetric");
+    g.reshaped = { shape: edit.key, chosen: movedKeys(pickedIn(edit), opened.moved), kinds, moved: opened.moved };
+    return pullHandles(opened.subs, opened.key, g.side, to);
+  };
+
   /// Il gesto dei nodi fino al punto di adesso. Oltre la soglia trascina: un
   /// nodo con quelli scelti di ogni forma, e con l'aggancio il nodo preso
-  /// sulla griglia; una maniglia; o il segmento, nel punto preso. Il
-  /// riquadro sceglie.
+  /// sulla griglia; le maniglie tirate fuori da un nodo preso con Alt; una
+  /// maniglia; o il segmento, nel punto preso. Il riquadro sceglie.
   const nodesUpdate = (g: NodesGesture): void => {
     const grab = g.grab;
     if (g.from === null || g.end === null || grab === null || grab.kind === "none") return;
     if (!g.dragging) {
       if (Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale <= DRAG_PX[g.pointer]) return;
+      if (grab.kind === "node" && grab.pull && editOf(grab.shape)?.nodable.kind === "arrow") {
+        // L'asta di una freccia non si piega: non ha maniglie da tirare.
+        g.grab = { kind: "none" };
+        g.missed = "draw.nodes.arrow";
+        return;
+      }
       g.dragging = true;
       lastSegmentTap = null;
     }
@@ -6247,7 +6384,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (grab.kind === "segment") {
       draft.set(edit.key, bend(edit.subs, grab.sub, grab.link, grab.t, localDelta(edit, g.from, g.end), kindsOf(edit)));
     } else if (grab.kind === "handle") {
-      draft.set(edit.key, moveHandle(edit.subs, grab.handle, apply(edit.inverse, nodeDragTo(g, grab)), kindsOf(edit)));
+      draft.set(edit.key, dragHandle(g, edit, grab));
+    } else if (grab.pull) {
+      const pulled = pullFrom(g, edit, grab);
+      if (pulled !== null) draft.set(edit.key, pulled);
     } else {
       const to = nodeDragTo(g, grab);
       for (const each of chosenEdits()) draft.set(each.key, moveNodes(each.subs, pickedIn(each), localDelta(each, grab.origin, to), kindsOf(each)));
@@ -6280,16 +6420,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       painter.setDraft(null);
       const changes = [...(g.draft ?? [])].flatMap(([key, subs]): NodeChange[] => {
         const edit = editOf(key);
-        return edit === undefined ? [] : [{ edit, subs, selected: pickedIn(edit), kinds: nodeKinds.get(key) ?? NO_KINDS }];
+        if (edit === undefined) return [];
+        const reshaped = g.reshaped?.shape === key ? g.reshaped : null;
+        if (reshaped === null) return [{ edit, subs, selected: pickedIn(edit), kinds: nodeKinds.get(key) ?? NO_KINDS }];
+        return [{ edit, subs, selected: reshaped.chosen, kinds: reshaped.kinds, ...(reshaped.moved === null ? {} : { moved: reshaped.moved }) }];
       });
       if (changes.length === 0) {
         showHandles();
         return;
       }
-      const label: DrawKey = grab.kind === "node" ? "draw.action.nodes_move" : grab.kind === "handle" ? "draw.action.handle" : "draw.action.bend";
+      const pulled = grab.kind === "node" && grab.pull;
+      const label: DrawKey = pulled
+        ? "draw.action.handles_pull"
+        : grab.kind === "node" ? "draw.action.nodes_move" : grab.kind === "handle" ? "draw.action.handle" : "draw.action.bend";
+      // Ciò che si dice si legge dai nodi di prima.
+      const said: DrawKey = grab.kind === "handle" ? handleText(grab) : pulled ? pullText(grab) : "draw.nodes.bent";
       if (writeEdits(label, changes)?.written !== true) return;
-      if (grab.kind === "node") announceMoved(note);
-      else announce(afterEdit(noted(t(grab.kind === "handle" ? "draw.nodes.handle_moved" : "draw.nodes.bent"), note)));
+      if (grab.kind === "node" && !pulled) announceMoved(note);
+      else announce(afterEdit(noted(t(said), note)));
       return;
     }
     switch (grab.kind) {
@@ -6303,30 +6451,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         announceNodes(lead());
         return;
       }
-      case "segment": {
-        const edit = editOf(grab.shape);
-        if (edit === undefined || g.from === null) return;
-        const tap = { shape: grab.shape, sub: grab.sub, link: grab.link, time, at: g.from };
-        const previous = lastSegmentTap;
-        lastSegmentTap = tap;
-        const again = previous !== null && previous.shape === tap.shape && previous.sub === tap.sub && previous.link === tap.link &&
-          tap.time - previous.time <= DOUBLE_TAP_MS && Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer];
-        if (again) {
-          lastSegmentTap = null;
-          const done = writeEdits("draw.action.nodes_insert", [changeOf(edit, insertNode(edit.subs, grab.sub, grab.link, grab.t))]);
-          if (done?.written === true) announce(afterEdit(plural(done.count, "draw.nodes.inserted.one", "draw.nodes.inserted.other")));
-          return;
-        }
-        const sub = edit.subs[grab.sub]!;
-        const ends = [nodeKey(grab.sub, grab.link), nodeKey(grab.sub, (grab.link + 1) % sub.nodes.length)];
-        if (shift) setNodes(adding(nodeSelection, edit.key, ends));
-        else {
-          narrowTo(edit);
-          setNodes(pickOf(edit, ends));
-        }
-        announceNodes(lead());
+      case "segment":
+        tapSegment(g, grab.shape, grab, time, lead);
         return;
-      }
       case "marquee":
         if (grab.additive) return;
         if (chosenCount() > 0) {
@@ -6342,8 +6469,66 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         else announceTarget();
         return;
       case "handle":
+        if (grab.segment !== null) tapSegment(g, grab.shape, grab.segment, time, lead);
         return;
     }
+  };
+
+  /// Un tocco del gesto `g` sul punto `at` di un segmento della forma
+  /// `shape`: sceglie i due nodi del segmento, con Maiusc in aggiunta; il
+  /// doppio tocco ci aggiunge un nodo. `lead` dice le forme, se sono
+  /// cambiate.
+  const tapSegment = (
+    g: NodesGesture,
+    shape: string,
+    at: { readonly sub: number; readonly link: number; readonly t: number },
+    time: number,
+    lead: () => string,
+  ): void => {
+    const edit = editOf(shape);
+    if (edit === undefined || g.from === null) return;
+    const tap = { shape, sub: at.sub, link: at.link, time, at: g.from };
+    const previous = lastSegmentTap;
+    lastSegmentTap = tap;
+    const again = previous !== null && previous.shape === tap.shape && previous.sub === tap.sub && previous.link === tap.link &&
+      tap.time - previous.time <= DOUBLE_TAP_MS && Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer];
+    if (again) {
+      lastSegmentTap = null;
+      const done = writeEdits("draw.action.nodes_insert", [changeOf(edit, insertNode(edit.subs, at.sub, at.link, at.t))]);
+      if (done?.written === true) announce(afterEdit(plural(done.count, "draw.nodes.inserted.one", "draw.nodes.inserted.other")));
+      return;
+    }
+    const sub = edit.subs[at.sub]!;
+    const ends = [nodeKey(at.sub, at.link), nodeKey(at.sub, (at.link + 1) % sub.nodes.length)];
+    if (shift) setNodes(adding(nodeSelection, edit.key, ends));
+    else {
+      narrowTo(edit);
+      setNodes(pickOf(edit, ends));
+    }
+    announceNodes(lead());
+  };
+
+  /// Ciò che si dice di una maniglia trascinata, dai nodi di prima: tirata
+  /// fuori da una linea o dal suo nodo, spostata da sola da un nodo che non
+  /// era uno spigolo, o spostata.
+  const handleText = (grab: Extract<NodeGrab, { readonly kind: "handle" }>): DrawKey => {
+    const edit = editOf(grab.shape);
+    if (edit === undefined || grab.handle.which === "control") return "draw.nodes.handle_moved";
+    const sub = edit.subs[grab.handle.sub]!;
+    const at = handleNode(sub, grab.handle);
+    const link = sub.links[grab.handle.link]!;
+    if (grab.alone && innerNode(sub, at) && kindsOf(edit)(grab.handle.sub, at) !== "corner") return "draw.nodes.handle_alone";
+    if (link.kind === "line" || (link.kind === "cubic" && samePlace(link[grab.handle.which], sub.nodes[at]!))) return "draw.nodes.handle_out";
+    return "draw.nodes.handle_moved";
+  };
+
+  /// Ciò che si dice delle maniglie tirate da un nodo: di un nodo in mezzo,
+  /// che è diventato simmetrico; di un capo, che ne ha una sola.
+  const pullText = (grab: Extract<NodeGrab, { readonly kind: "node" }>): DrawKey => {
+    const edit = editOf(grab.shape);
+    if (edit === undefined) return "draw.nodes.handle_out";
+    const [s, at] = parseKey(grab.key);
+    return innerNode(edit.subs[s]!, at) ? "draw.nodes.pulled" : "draw.nodes.handle_out";
   };
 
   const eraseAlong = (g: EraseGesture, p: Point): void => {
@@ -8678,6 +8863,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Le spine si ricordano prima di scrivere: i nodi dei tratti nuovi si
     // cercano appena il disegno cambia, e una volta trovati restano quelli.
     for (const [ink, spine] of learned) remember(ink, spine);
+    const point = history.position;
     if (written > 0 && !arrange(label, plan.finish(keys), extent)) return null;
     converted = conversions;
     skipped = refusal;
@@ -8701,6 +8887,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     refreshNodes();
     nodeKinds = nextKinds;
+    if (written > 0) kindsAt.set(point, given);
+    kindsAt.set(history.position, nextKinds);
+    for (const at of kindsAt.keys()) if (at < history.start) kindsAt.delete(at);
     setNodes(nextPick);
     return { written: written > 0, count: accepted.reduce((sum, change) => sum + (change.changed ?? 1), 0) };
   };
@@ -9775,6 +9964,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ["Shift-u", t("draw.nodes.curve")],
               ["Shift-b", t("draw.nodes.break")],
               ["Shift-j", t("draw.nodes.join")],
+              ["Alt", t("draw.keys.nodes.alt")],
               ["Escape", t("draw.keys.nodes.deselect")],
               ["Alt-F10", t("draw.keys.nodes.bar")],
             ],

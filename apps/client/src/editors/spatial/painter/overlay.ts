@@ -60,8 +60,10 @@ export type OverlayHandle =
   /// il tipo, e un nodo scelto è pieno. Un `hint` è un nodo dell'oggetto
   /// sotto il puntatore, più piccolo.
   | { readonly kind: "node"; readonly x: number; readonly y: number; readonly shape: NodeShape; readonly selected: boolean; readonly hint?: boolean }
-  /// La maniglia di un nodo: un punto, legato al nodo da una linea.
-  | { readonly kind: "control"; readonly x: number; readonly y: number; readonly node: Point }
+  /// La maniglia di un nodo: un punto, legato al nodo da una linea. Una
+  /// maniglia `folded` è ritirata sul nodo e si mostra accanto, da tirare
+  /// fuori: la sua linea è tratteggiata.
+  | { readonly kind: "control"; readonly x: number; readonly y: number; readonly node: Point; readonly folded?: boolean }
   /// Una linea delle guide fra due punti: piena, o tratteggiata quando
   /// prolunga un bordo fino a una misura.
   | { readonly kind: "guide"; readonly from: Point; readonly to: Point; readonly dashed: boolean }
@@ -328,7 +330,7 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         traceOutline(ctx, handle.segments, handle.matrix);
         ctx.globalAlpha = 1;
       } else if (handle.kind === "control") {
-        ctx.setLineDash([]);
+        ctx.setLineDash(handle.folded === true ? [2, 2] : []);
         ctx.beginPath();
         ctx.moveTo(...screen(handle.node[0], handle.node[1]));
         ctx.lineTo(...screen(handle.x, handle.y));
