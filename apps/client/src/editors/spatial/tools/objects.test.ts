@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 // L'albero degli oggetti da solo: le righe dal davanti, la tastiera del
 // pattern ARIA, la selezione che segue il fuoco, il nome che si cambia, il
-// filtro e le righe disegnate oltre le 500.
+// filtro, le righe disegnate oltre le 500, lo spostamento col puntatore, col
+// dito e con Alt e le frecce, e le miniature.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { createObjectTree, ROW_PX, VIRTUAL_AFTER, type ObjectTree, type ObjectTreeOptions, type TreeEntry, type TreeToggle } from "./objects";
+import { createObjectTree, ROW_PX, VIRTUAL_AFTER, type ObjectTree, type ObjectTreeOptions, type TreeDrop, type TreeEntry, type TreeToggle } from "./objects";
 
 function object(key: string, selectable = true, more: Partial<TreeEntry> = {}): TreeEntry {
   return {
@@ -18,6 +19,7 @@ function object(key: string, selectable = true, more: Partial<TreeEntry> = {}): 
     toggles: selectable,
     name: null,
     renames: true,
+    moves: true,
     kind: "shape",
     children: [],
     label: () => `Oggetto ${key}`,
@@ -35,6 +37,7 @@ function layer(key: string, children: readonly TreeEntry[], state = ""): TreeEnt
     toggles: true,
     name: key,
     renames: true,
+    moves: true,
     kind: "layer",
     children,
     label: () => `Livello ${key}${state}`,
@@ -96,6 +99,9 @@ beforeEach(() => {
 afterEach(() => {
   life.close();
   host.remove();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("le righe", () => {
@@ -619,5 +625,369 @@ describe("il filtro", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("spostare", () => {
+  const group = (key: string, children: readonly TreeEntry[]): TreeEntry => object(key, true, { kind: "group", children });
+  // Dal davanti: l2, d, g (chiuso), b, l1, a.
+  const MOVABLE: readonly TreeEntry[] = [layer("l1", [object("a")]), layer("l2", [object("b"), group("g", [object("g1"), object("g2")]), object("d")])];
+
+  let moves: (readonly [readonly string[], TreeDrop])[];
+  let edges: string[];
+
+  function mountMoving(selection: readonly string[], more: Partial<ObjectTreeOptions> = {}): ObjectTree {
+    moves = [];
+    edges = [];
+    return mount(MOVABLE, selection, {
+      onMove: (keys, drop) => {
+        moves.push([[...keys], drop]);
+        return keys;
+      },
+      onEdge: (key, front) => edges.push(`${key} ${front ? "front" : "back"}`),
+      ...more,
+    });
+  }
+
+  const rowEl = (key: string): HTMLElement => host.querySelector<HTMLElement>(`.draw-object[data-key="${key}"]`)!;
+  const labelOf = (key: string): HTMLElement => rowEl(key).querySelector<HTMLElement>(".draw-object-label")!;
+  const depthOf = (key: string): string => rowEl(key).style.getPropertyValue("--draw-drop-depth");
+
+  /// Le righe una sotto l'altra, alte `ROW_PX`, con la freccia larga 20 px
+  /// che rientra di 20 px per livello; l'elenco lontano dai bordi, perché non
+  /// scorra. happy-dom non impagina.
+  function layout(): void {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      let top = 0;
+      let height = 0;
+      let left = 0;
+      let width = 300;
+      const row = this.closest<HTMLElement>(".draw-object");
+      if (this.classList.contains("draw-objects-scroll")) {
+        top = -1000;
+        height = 100000;
+      } else if (row !== null) {
+        top = Number(row.dataset.index) * ROW_PX;
+        height = ROW_PX;
+        if (this.classList.contains("draw-object-twisty")) {
+          left = 12 + (Number(row.getAttribute("aria-level")) - 1) * 20;
+          width = 20;
+        }
+      }
+      return { x: left, y: top, left, top, width, height, right: left + width, bottom: top + height, toJSON: () => ({}) } as DOMRect;
+    });
+  }
+
+  function pointer(type: string, target: Element, y: number, init: PointerEventInit = {}): PointerEvent {
+    const event = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse", button: 0, buttons: 1, clientX: 100, clientY: y, ...init });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  it("Alt con le frecce porta la riga attiva di un passo: oltre un gruppo chiuso, dentro uno aperto, fuori dal gruppo, nel livello accanto", () => {
+    mountMoving(["d"]);
+    tree.focus();
+    expect(active()?.dataset.key).toBe("d");
+    // Giù, cioè dietro: oltre il gruppo chiuso.
+    key("ArrowDown", { altKey: true });
+    expect(moves[moves.length - 1]).toEqual([["d"], { key: "g", place: "after" }]);
+    // Davanti a tutto nel livello più alto: più su non va, e lo si dice.
+    key("ArrowUp", { altKey: true });
+    expect(edges).toEqual(["d front"]);
+    // Un gruppo aperto si attraversa: ci si entra dal suo bordo.
+    key("ArrowDown");
+    key("ArrowRight");
+    key("ArrowUp");
+    expect(active()?.dataset.key).toBe("d");
+    key("ArrowDown", { altKey: true });
+    expect(moves[moves.length - 1]).toEqual([["d"], { key: "g", place: "top" }]);
+    // Al bordo di un gruppo se ne esce, davanti o dietro a lui.
+    key("ArrowDown");
+    key("ArrowDown");
+    expect(active()?.dataset.key).toBe("g2");
+    key("ArrowUp", { altKey: true });
+    expect(moves[moves.length - 1]).toEqual([["g2"], { key: "g", place: "before" }]);
+    key("ArrowDown");
+    key("ArrowDown", { altKey: true });
+    expect(moves[moves.length - 1]).toEqual([["g1"], { key: "g", place: "after" }]);
+    // Al bordo di un livello si va nel livello accanto, dal suo bordo vicino.
+    key("ArrowDown");
+    expect(active()?.dataset.key).toBe("b");
+    key("ArrowDown", { altKey: true });
+    expect(moves[moves.length - 1]).toEqual([["b"], { key: "l1", place: "top" }]);
+    key("End");
+    key("ArrowDown", { altKey: true });
+    expect(edges).toEqual(["d front", "a back"]);
+    // Un livello va fra i livelli.
+    key("ArrowUp");
+    expect(active()?.dataset.key).toBe("l1");
+    key("ArrowUp", { altKey: true });
+    expect(moves[moves.length - 1]).toEqual([["l1"], { key: "l2", place: "before" }]);
+    key("ArrowDown", { altKey: true });
+    expect(edges).toEqual(["d front", "a back", "l1 back"]);
+    // Il tasto è dell'albero: l'editor non lo sente.
+    expect(key("ArrowUp", { altKey: true }).defaultPrevented).toBe(true);
+  });
+
+  it("senza chi sposta, Alt e le frecce scorrono le righe come sempre", () => {
+    mount(MOVABLE, ["d"]);
+    tree.focus();
+    key("ArrowDown", { altKey: true });
+    expect(active()?.dataset.key).toBe("g");
+  });
+
+  it("trascinare una riga la porta sopra o sotto un'altra, e la sceglie; il clic che chiude il gesto non sceglie", () => {
+    layout();
+    mountMoving(["b"]);
+    pointer("pointerdown", labelOf("d"), ROW_PX + 10);
+    // Meno di cinque pixel non sono un trascinamento.
+    pointer("pointermove", treeEl(), ROW_PX + 12);
+    expect(treeEl().hasAttribute("data-dragging")).toBe(false);
+    // Sulla metà bassa di b: sotto, cioè dietro, alla profondità di b.
+    pointer("pointermove", treeEl(), 3 * ROW_PX + 30);
+    expect(treeEl().hasAttribute("data-dragging")).toBe(true);
+    expect(chosen[chosen.length - 1]).toEqual(["d"]);
+    expect(rowEl("d").hasAttribute("data-moving")).toBe(true);
+    expect(rowEl("b").dataset.drop).toBe("after");
+    expect(depthOf("b")).toBe("1");
+    const ghost = host.querySelector<HTMLElement>(".draw-objects-ghost")!;
+    expect(ghost.textContent).toBe("Oggetto d");
+    expect(ghost.getAttribute("aria-hidden")).toBe("true");
+    // Sulla metà alta: sopra.
+    pointer("pointermove", treeEl(), 3 * ROW_PX + 10);
+    expect(rowEl("b").dataset.drop).toBe("before");
+    expect(host.querySelectorAll("[data-drop]")).toHaveLength(1);
+    pointer("pointerup", treeEl(), 3 * ROW_PX + 10, { buttons: 0 });
+    expect(moves).toEqual([[["d"], { key: "b", place: "before" }]]);
+    expect(host.querySelector(".draw-objects-ghost")).toBeNull();
+    expect(treeEl().hasAttribute("data-dragging")).toBe(false);
+    expect(host.querySelector("[data-drop], [data-moving]")).toBeNull();
+    const before = chosen.length;
+    labelOf("b").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(chosen).toHaveLength(before);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("su un gruppo chiuso lo contorna e, fermi, lo apre; sotto l'ultima riga di un gruppo, più a sinistra se ne esce", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    layout();
+    mountMoving(["d"]);
+    pointer("pointerdown", labelOf("d"), ROW_PX + 10);
+    pointer("pointermove", treeEl(), 2 * ROW_PX + 22);
+    expect(rowEl("g").dataset.drop).toBe("inside");
+    expect(rowEl("g").getAttribute("aria-expanded")).toBe("false");
+    vi.advanceTimersByTime(600);
+    // Aperto: la linea sotto di lui, rientrata come i suoi figli.
+    expect(rowEl("g").getAttribute("aria-expanded")).toBe("true");
+    expect(rowEl("g").dataset.drop).toBe("after");
+    expect(depthOf("g")).toBe("2");
+    // Dal davanti: l2, d, g, g2, g1, b. Sotto g1, sul suo nome resta nel gruppo.
+    pointer("pointermove", treeEl(), 4 * ROW_PX + 40);
+    expect(rowEl("g1").dataset.drop).toBe("after");
+    expect(depthOf("g1")).toBe("2");
+    // Più a sinistra della sua freccia, dietro al gruppo.
+    pointer("pointermove", treeEl(), 4 * ROW_PX + 40, { clientX: 40 });
+    expect(depthOf("g1")).toBe("1");
+    pointer("pointerup", treeEl(), 4 * ROW_PX + 40, { clientX: 40, buttons: 0 });
+    expect(moves).toEqual([[["d"], { key: "g", place: "after" }]]);
+  });
+
+  it("dove l'editor dice di no non c'è segno; mentre si trascina i tasti aspettano, e Esc lascia stare", () => {
+    layout();
+    mountMoving(["d"], { canMove: (_keys, drop) => drop.key !== "a" });
+    pointer("pointerdown", labelOf("d"), ROW_PX + 10);
+    pointer("pointermove", treeEl(), 5 * ROW_PX + 10);
+    expect(treeEl().hasAttribute("data-refused")).toBe(true);
+    expect(host.querySelector("[data-drop]")).toBeNull();
+    pointer("pointermove", treeEl(), 3 * ROW_PX + 10);
+    expect(treeEl().hasAttribute("data-refused")).toBe(false);
+    expect(key("ArrowDown").defaultPrevented).toBe(true);
+    expect(active()?.dataset.key).toBe("d");
+    key("Escape");
+    expect(treeEl().hasAttribute("data-dragging")).toBe(false);
+    expect(host.querySelector(".draw-objects-ghost, [data-drop]")).toBeNull();
+    pointer("pointerup", treeEl(), 3 * ROW_PX + 10, { buttons: 0 });
+    expect(moves).toEqual([]);
+    expect(calls).not.toContain("leave");
+  });
+
+  it("un livello va da solo, sopra o sotto un altro livello intero, e non si sceglie", () => {
+    layout();
+    mountMoving(["d"]);
+    pointer("pointerdown", labelOf("l1"), 4 * ROW_PX + 10);
+    // Nella metà bassa di l2 con ciò che contiene: sotto l2.
+    pointer("pointermove", treeEl(), 3 * ROW_PX + 30);
+    expect(rowEl("b").dataset.drop).toBe("after");
+    expect(depthOf("b")).toBe("0");
+    expect(host.querySelector<HTMLElement>(".draw-objects-ghost")!.textContent).toBe("Livello l1");
+    pointer("pointermove", treeEl(), 30);
+    expect(rowEl("l2").dataset.drop).toBe("before");
+    pointer("pointerup", treeEl(), 30, { buttons: 0 });
+    expect(moves).toEqual([[["l1"], { key: "l2", place: "before" }]]);
+    expect(chosen).toEqual([]);
+  });
+
+  it("una riga scelta porta con sé le altre scelte, in ordine di documento", () => {
+    layout();
+    mountMoving(["d", "a"]);
+    pointer("pointerdown", labelOf("d"), ROW_PX + 10);
+    pointer("pointermove", treeEl(), 3 * ROW_PX + 10);
+    expect(host.querySelector<HTMLElement>(".draw-objects-ghost")!.textContent).toBe("2 oggetti");
+    expect(rowEl("a").hasAttribute("data-moving")).toBe(true);
+    pointer("pointerup", treeEl(), 3 * ROW_PX + 10, { buttons: 0 });
+    expect(moves).toEqual([[["a", "d"], { key: "b", place: "before" }]]);
+  });
+
+  it("col dito la riga si solleva tenendola premuta; un dito che si muove prima scorre l'elenco", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    layout();
+    mountMoving(["d"]);
+    const touch = { pointerType: "touch" };
+    pointer("pointerdown", labelOf("d"), ROW_PX + 10, touch);
+    pointer("pointermove", treeEl(), ROW_PX + 26, touch);
+    vi.advanceTimersByTime(400);
+    expect(treeEl().hasAttribute("data-dragging")).toBe(false);
+    pointer("pointerup", treeEl(), ROW_PX + 26, { ...touch, buttons: 0 });
+    pointer("pointerdown", labelOf("d"), ROW_PX + 10, touch);
+    // La pressione lunga non apre il menu del sistema.
+    const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    treeEl().dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+    vi.advanceTimersByTime(400);
+    expect(treeEl().hasAttribute("data-dragging")).toBe(true);
+    // Sollevata, il dito non scorre più l'elenco.
+    const swipe = new Event("touchmove", { bubbles: true, cancelable: true });
+    treeEl().dispatchEvent(swipe);
+    expect(swipe.defaultPrevented).toBe(true);
+    pointer("pointermove", treeEl(), 3 * ROW_PX + 10, touch);
+    pointer("pointerup", treeEl(), 3 * ROW_PX + 10, { ...touch, buttons: 0 });
+    expect(moves).toEqual([[["d"], { key: "b", place: "before" }]]);
+  });
+
+  it("la riga attiva segue la voce spostata, anche con la chiave nuova, e ciò che ora la contiene si apre", () => {
+    layout();
+    const after = [layer("l1", [object("a")]), layer("l2", [group("g", [object("g1"), object("g2"), object("nb")]), object("d")])];
+    mountMoving(["b"], {
+      onMove: (keys, drop) => {
+        moves.push([[...keys], drop]);
+        tree.update(after, ["nb"], 5);
+        return ["nb"];
+      },
+    });
+    pointer("pointerdown", labelOf("b"), 3 * ROW_PX + 10);
+    pointer("pointermove", treeEl(), 2 * ROW_PX + 22);
+    pointer("pointerup", treeEl(), 2 * ROW_PX + 22, { buttons: 0 });
+    expect(moves).toEqual([[["b"], { key: "g", place: "top" }]]);
+    expect(active()?.dataset.key).toBe("nb");
+    expect(rowEl("g").getAttribute("aria-expanded")).toBe("true");
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l2", "d", "g", "nb", "g2", "g1", "l1", "a"]);
+  });
+});
+
+describe("le miniature", () => {
+  let frames: Map<number, FrameRequestCallback>;
+  let drawn: string[];
+  let closed: string[];
+
+  beforeEach(() => {
+    frames = new Map();
+    drawn = [];
+    closed = [];
+    let next = 0;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.set(++next, callback);
+      return next;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+  });
+
+  /// Un fotogramma.
+  const frame = (): void => {
+    const due = [...frames.values()];
+    frames.clear();
+    for (const callback of due) callback(0);
+  };
+
+  /// Un oggetto la cui miniatura mostra `look`; `null` se non ne ha una.
+  function pictured(key: string, look: string | null): TreeEntry {
+    return object(key, true, {
+      thumbnail: () => look === null ? null : {
+        key: look,
+        draw: (thumbLife) => {
+          drawn.push(`${key} ${look}`);
+          thumbLife.add(() => closed.push(`${key} ${look}`));
+          const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          svg.setAttribute("data-look", look);
+          return svg;
+        },
+      },
+    });
+  }
+
+  const thumb = (key: string): HTMLElement => host.querySelector<HTMLElement>(`.draw-object[data-key="${key}"] .draw-object-thumb`)!;
+  const look = (key: string): string | null => thumb(key).querySelector("svg")?.getAttribute("data-look") ?? null;
+
+  it("si disegnano dopo, e restano finché non cambia ciò che mostrano", () => {
+    mount([pictured("a", "1"), pictured("b", null), object("c")]);
+    expect(drawn).toEqual([]);
+    expect(look("a")).toBeNull();
+    frame();
+    expect(drawn).toEqual(["a 1"]);
+    expect(look("a")).toBe("1");
+    expect(thumb("a").hasAttribute("data-empty")).toBe(false);
+    expect(thumb("a").getAttribute("aria-hidden")).toBe("true");
+    // Senza niente da mostrare ne resta il posto; senza miniature, no.
+    expect(thumb("b").hasAttribute("data-empty")).toBe(true);
+    expect(thumb("b").hidden).toBe(false);
+    expect(thumb("c").hidden).toBe(true);
+    // Ciò che mostra è lo stesso: niente da rifare.
+    tree.update([pictured("a", "1"), pictured("b", null), object("c")], [], 3);
+    frame();
+    expect(drawn).toEqual(["a 1"]);
+    // È cambiato: la vecchia resta finché non c'è la nuova.
+    tree.update([pictured("a", "2"), pictured("b", null), object("c")], [], 3);
+    expect(look("a")).toBe("1");
+    frame();
+    expect(drawn).toEqual(["a 1", "a 2"]);
+    expect(closed).toEqual(["a 1"]);
+    expect(look("a")).toBe("2");
+    // Una voce che se ne va si porta via la sua.
+    tree.update([object("c")], [], 1);
+    expect(closed).toEqual(["a 1", "a 2"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("qualche riga per fotogramma, e niente finché l'elenco non si vede", () => {
+    const observers: IntersectionObserverCallback[] = [];
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: IntersectionObserverCallback) {
+        observers.push(callback);
+      }
+      observe(): void {}
+      disconnect(): void {}
+    });
+    // Ogni miniatura prende più del tempo dato a un fotogramma.
+    vi.spyOn(performance, "now").mockImplementation(() => drawn.length * 7);
+    mount([pictured("a", "1"), pictured("b", "1"), pictured("c", "1")]);
+    const seen = (on: boolean): void => observers[0]!([{ isIntersecting: on } as IntersectionObserverEntry], {} as IntersectionObserver);
+    seen(false);
+    frame();
+    expect(drawn).toEqual([]);
+    seen(true);
+    frame();
+    expect(drawn).toEqual(["c 1"]);
+    frame();
+    expect(drawn).toEqual(["c 1", "b 1"]);
+    frame();
+    expect(drawn).toEqual(["c 1", "b 1", "a 1"]);
+    expect(frames.size).toBe(0);
+  });
+
+  it(`oltre ${VIRTUAL_AFTER} righe le disegna solo per quelle disegnate`, () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(Array.from({ length: VIRTUAL_AFTER * 2 }, (_, index) => pictured(`o${index}`, "1")));
+    frame();
+    expect(drawn).toHaveLength(rows().length);
+    expect(drawn.length).toBeLessThan(100);
   });
 });

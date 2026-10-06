@@ -2777,10 +2777,11 @@ describe("da tastiera", () => {
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
-    // Dell'albero, il nome e la ricerca.
+    // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
       ["Ctrl+F", "Nell’albero, porta alla ricerca fra gli oggetti"],
+      ["Alt+↑ o Alt+↓", "Nell’albero porta la riga di un passo, davanti o dietro, dentro o fuori da un gruppo"],
     ]);
     expect(tables[2]!.rows).toContainEqual(["Ctrl+D", "Duplica"]);
     expect(tables[3]!.rows).toEqual([
@@ -3383,6 +3384,200 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
     tree().focus();
     expect(inTree("F2").defaultPrevented).toBe(false);
     expect(changes.map((change) => change.origin)).toEqual(["input"]);
+  });
+});
+
+describe("spostare dall'albero, dal livello Standard", () => {
+  // Dal davanti: «Sopra» col cerchio, poi «Livello 1» con c, il gruppo g
+  // (chiuso, con b) e a.
+  const STACKED = doc(
+    `${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/>`
+      + '<g id="og1g1g1g1" transform="translate(50 0)"><rect id="ob2b2b2b2" x="0" y="0" width="10" height="10" fill="#000000"/></g>'
+      + '<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#0072b2"/></g>'
+      + '<g id="l2" fub:layer="Sopra"><circle id="od4d4d4d4" cx="5" cy="5" r="4" fill="#000000"/></g>',
+  );
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!;
+  const tree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
+  const keys = (): string[] => [...host.querySelectorAll<HTMLElement>(".draw-object")].map((row) => row.dataset.key ?? "");
+  const inTree = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, tree());
+  const activeKey = (): string | undefined => document.getElementById(tree().getAttribute("aria-activedescendant") ?? "")?.dataset.key;
+  /// Gli id degli elementi del disegno, in ordine di documento.
+  const order = (): string[] => [...editor.engine.text.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]!);
+  const parentOf = (id: string): string | null => editor.engine.holder(id)?.parent?.facts.id ?? null;
+
+  /// Apre l'albero con la riga `key` attiva e scelta.
+  function openAt(id: string): void {
+    button().click();
+    (document.activeElement as HTMLElement).blur();
+    editor.select([id]);
+    tree().focus();
+    expect(activeKey()).toBe(id);
+  }
+
+  it("Alt+↓ porta l'oggetto dietro a ciò che ha dietro, in un passo che si annulla, e dice dove è arrivato", () => {
+    mount(STACKED, { level: "standard" });
+    openAt("oc3c3c3c3");
+    expect(keys()).toEqual(["l2", "od4d4d4d4", "l1", "oc3c3c3c3", "og1g1g1g1", "oa1a1a1a1"]);
+    expect(inTree("ArrowDown", { altKey: true }).defaultPrevented).toBe(true);
+    // Oltre il gruppo chiuso: fra a e il gruppo.
+    expect(order()).toEqual(["l1", "oa1a1a1a1", "oc3c3c3c3", "og1g1g1g1", "ob2b2b2b2", "l2", "od4d4d4d4"]);
+    expect(spoken()).toBe("Rettangolo, Blu nel livello «Livello 1», al posto 2 di 3 dal davanti.");
+    expect(keys()).toEqual(["l2", "od4d4d4d4", "l1", "og1g1g1g1", "oc3c3c3c3", "oa1a1a1a1"]);
+    expect(editor.selection).toEqual(["oc3c3c3c3"]);
+    expect(activeKey()).toBe("oc3c3c3c3");
+    expect(document.activeElement).toBe(tree());
+    editor.undo();
+    expect(editor.engine.text).toBe(STACKED);
+    expect(spoken()).toBe("Annullato: Riordino.");
+    editor.redo();
+    expect(order()).toEqual(["l1", "oa1a1a1a1", "oc3c3c3c3", "og1g1g1g1", "ob2b2b2b2", "l2", "od4d4d4d4"]);
+    expect(changes.map((change) => change.origin)).toEqual(["input", "undo", "redo"]);
+  });
+
+  it("entra in un gruppo aperto restando dov'era sul foglio, ne esce, e passa al livello accanto", () => {
+    mount(STACKED, { level: "standard" });
+    openAt("oc3c3c3c3");
+    inTree("ArrowDown");
+    inTree("ArrowRight");
+    inTree("ArrowUp");
+    expect(activeKey()).toBe("oc3c3c3c3");
+    inTree("ArrowDown", { altKey: true });
+    expect(parentOf("oc3c3c3c3")).toBe("og1g1g1g1");
+    // Il gruppo è spostato di 50: il rettangolo lo compensa.
+    expect(editor.engine.text).toContain('<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#0072b2" transform="matrix(1 0 0 1 -50 0)"/>');
+    expect(spoken()).toMatch(/^Rettangolo, Blu dentro Gruppo.*, al posto 1 di 2 dal davanti\.$/);
+    expect(activeKey()).toBe("oc3c3c3c3");
+    // Davanti a tutto nel gruppo: Alt+↑ lo porta fuori, davanti al gruppo.
+    inTree("ArrowUp", { altKey: true });
+    expect(parentOf("oc3c3c3c3")).toBe("l1");
+    expect(order().slice(0, 5)).toEqual(["l1", "oa1a1a1a1", "og1g1g1g1", "ob2b2b2b2", "oc3c3c3c3"]);
+    expect(editor.engine.text).toContain('<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#0072b2"/>');
+    // Davanti a tutto nel livello: nel livello sopra, dietro a ciò che c'è.
+    inTree("ArrowUp", { altKey: true });
+    expect(parentOf("oc3c3c3c3")).toBe("l2");
+    expect(order()).toEqual(["l1", "oa1a1a1a1", "og1g1g1g1", "ob2b2b2b2", "l2", "oc3c3c3c3", "od4d4d4d4"]);
+    expect(spoken()).toBe("Rettangolo, Blu nel livello «Sopra», al posto 2 di 2 dal davanti.");
+    inTree("ArrowUp", { altKey: true });
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("È già davanti a tutto.");
+    expect(changes).toHaveLength(4);
+  });
+
+  it("un livello va sopra o sotto gli altri, e resta il livello corrente", () => {
+    mount(STACKED, { level: "standard" });
+    button().click();
+    inTree("Home");
+    expect(activeKey()).toBe("l2");
+    const current = host.querySelector(".draw-layer-button")?.textContent;
+    inTree("ArrowDown", { altKey: true });
+    expect(order()).toEqual(["l2", "od4d4d4d4", "l1", "oa1a1a1a1", "og1g1g1g1", "ob2b2b2b2", "oc3c3c3c3"]);
+    expect(spoken()).toBe("«Sopra» ora è al posto 2 di 2 dall’alto.");
+    expect(keys().filter((each) => each.startsWith("l"))).toEqual(["l1", "l2"]);
+    expect(activeKey()).toBe("l2");
+    expect(host.querySelector(".draw-layer-button")?.textContent).toBe(current);
+    inTree("ArrowDown", { altKey: true });
+    expect(spoken()).toBe("È già l’ultimo livello.");
+    editor.undo();
+    expect(editor.engine.text).toBe(STACKED);
+    expect(spoken()).toBe("Annullato: Ordine dei livelli.");
+  });
+
+  it("dice perché non sposta ciò che è bloccato, o dentro qualcosa di bloccato; non entra in un livello bloccato", () => {
+    mount(
+      doc(
+        `${LAYER.replace(">", ' fub:locked="true">')}<rect id="oe5e5e5e5" width="10" height="10"/></g>`
+          + `<g id="l2" fub:layer="Sopra"><rect id="oa1a1a1a1" width="10" height="10" fub:locked="true"/>`
+          + `<g id="og1g1g1g1" fub:locked="true"><rect id="ob2b2b2b2" width="10" height="10"/></g>`
+          + `<rect id="oc3c3c3c3" width="10" height="10"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    button().click();
+    expect(keys()).toEqual(["l2", "oc3c3c3c3", "og1g1g1g1", "oa1a1a1a1", "l1", "oe5e5e5e5"]);
+    inTree("End");
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("Il suo livello è bloccato: sblocca il livello per spostarlo.");
+    inTree("ArrowUp");
+    inTree("ArrowUp");
+    expect(activeKey()).toBe("oa1a1a1a1");
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("È bloccato: sbloccalo per spostarlo.");
+    inTree("ArrowUp");
+    inTree("ArrowRight");
+    inTree("ArrowRight");
+    expect(activeKey()).toBe("ob2b2b2b2");
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("Ciò che lo contiene è bloccato: sbloccalo prima di spostarlo.");
+    inTree("Home");
+    inTree("ArrowDown");
+    expect(activeKey()).toBe("oc3c3c3c3");
+    // Davanti a tutto, sopra non c'è niente; il gruppo bloccato si scavalca.
+    inTree("ArrowDown", { altKey: true });
+    expect(order().indexOf("oc3c3c3c3")).toBeLessThan(order().indexOf("og1g1g1g1"));
+    expect(parentOf("oc3c3c3c3")).toBe("l2");
+    inTree("ArrowDown", { altKey: true });
+    inTree("ArrowDown", { altKey: true });
+    expect(spoken()).toBe("Lì non va: quel livello è bloccato.");
+    expect(parentOf("oc3c3c3c3")).toBe("l2");
+    expect(changes).toHaveLength(2);
+  });
+
+  it("un collegamento non entra in un altro collegamento: Alt lo porta oltre", () => {
+    mount(
+      doc(
+        `${LAYER}<a id="ol1l1l1l1" href="Note/uno.md"><rect id="oa1a1a1a1" width="10" height="10"/></a>`
+          + `<a id="ol2l2l2l2" href="Note/due.md"><rect id="ob2b2b2b2" width="10" height="10"/></a></g>`,
+      ),
+      { level: "standard" },
+    );
+    openAt("ol2l2l2l2");
+    inTree("ArrowDown");
+    inTree("ArrowRight");
+    expect(activeKey()).toBe("ol1l1l1l1");
+    expect(keys()).toEqual(["l1", "ol2l2l2l2", "ol1l1l1l1", "oa1a1a1a1"]);
+    inTree("ArrowUp");
+    expect(activeKey()).toBe("ol2l2l2l2");
+    inTree("ArrowDown", { altKey: true });
+    expect(parentOf("ol2l2l2l2")).toBe("l1");
+    expect(order()).toEqual(["l1", "ol2l2l2l2", "ob2b2b2b2", "ol1l1l1l1", "oa1a1a1a1"]);
+  });
+
+  it("le righe hanno la miniatura di ciò che disegnano, e la rifanno quando cambia", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const frame = (): void => {
+      for (const callback of frames.splice(0)) callback(0);
+    };
+    mount(STACKED, { level: "standard" });
+    openAt("oc3c3c3c3");
+    frame();
+    const thumb = (id: string): Element | null => host.querySelector(`.draw-object[data-key="${id}"] .draw-object-thumb > svg`);
+    // Un oggetto inquadrato su di sé, un livello sulla pagina.
+    const viewBox = (id: string): number[] => thumb(id)!.getAttribute("viewBox")!.split(" ").map(Number);
+    viewBox("oc3c3c3c3").forEach((value, at) => expect(value).toBeCloseTo([68.8, 8.8, 22.4, 22.4][at]!, 9));
+    viewBox("l1").forEach((value, at) => expect(value).toBeCloseTo([-6, -6, 112, 112][at]!, 9));
+    expect(thumb("oc3c3c3c3")!.querySelector("rect")!.getAttribute("fill")).toBe("#0072b2");
+    expect(thumb("og1g1g1g1")!.querySelectorAll("rect")).toHaveLength(1);
+    const before = thumb("og1g1g1g1");
+    inTree("ArrowDown");
+    inTree("ArrowRight");
+    inTree("ArrowUp");
+    inTree("ArrowDown", { altKey: true });
+    frame();
+    expect(thumb("og1g1g1g1")).not.toBe(before);
+    expect(thumb("og1g1g1g1")!.querySelectorAll("rect")).toHaveLength(2);
+    expect(host.querySelector(".draw-object-thumb > svg [data-scene-id]")).toBeNull();
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("all'Essenziale l'albero non sposta e non ha miniature", () => {
+    mount(STACKED);
+    openAt("oc3c3c3c3");
+    inTree("ArrowDown", { altKey: true });
+    expect(editor.engine.text).toBe(STACKED);
+    expect(activeKey()).toBe("og1g1g1g1");
+    expect([...host.querySelectorAll<HTMLElement>(".draw-object-thumb")].every((holder) => holder.hidden)).toBe(true);
   });
 });
 

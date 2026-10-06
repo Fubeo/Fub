@@ -778,7 +778,29 @@ const IT = {
   "draw.layer.name.required": "Un livello ha sempre un nome: resta quello di prima.",
   "draw.action.name": "Nome",
   "draw.keys.rename": "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo",
-  "draw.keys.filter": "Nell’albero, porta alla ricerca fra gli oggetti"
+  "draw.keys.filter": "Nell’albero, porta alla ricerca fra gli oggetti",
+  "draw.keys.step": "Nell’albero porta la riga di un passo, davanti o dietro, dentro o fuori da un gruppo",
+  "draw.action.place": "Riordino",
+  "draw.move.locked": "È bloccato: sbloccalo per spostarlo.",
+  "draw.move.container_locked": "Ciò che lo contiene è bloccato: sbloccalo prima di spostarlo.",
+  "draw.move.layer_locked": "Il suo livello è bloccato: sblocca il livello per spostarlo.",
+  "draw.move.into_locked": "Lì non va: ciò che lo riceverebbe è bloccato.",
+  "draw.move.into_layer_locked": "Lì non va: quel livello è bloccato.",
+  "draw.move.link": "Lì non va: un collegamento non sta dentro un altro collegamento.",
+  "draw.move.inside": "Lì non va: un oggetto non sta dentro sé stesso.",
+  "draw.move.layers": "Un livello si sposta da solo e fra i livelli; un oggetto, dentro un livello.",
+  "draw.move.flat": "Lì non va: ciò che lo riceverebbe ha una trasformazione che lo schiaccia.",
+  "draw.move.edge.front": "È già davanti a tutto.",
+  "draw.move.edge.back": "È già dietro a tutto.",
+  "draw.layer.edge.top": "È già il primo livello.",
+  "draw.layer.edge.bottom": "È già l’ultimo livello.",
+  "draw.where.root": "nel disegno",
+  "draw.where.layer": "nel livello «{name}»",
+  "draw.where.group": "dentro {name}",
+  "draw.placed": "{name} {where}, al posto {position} di {total} dal davanti.",
+  "draw.placed.one": "{count} oggetto {where}, al posto {from} di {total} dal davanti.",
+  "draw.placed.other": "{count} oggetti {where}, ai posti da {from} a {to} di {total} dal davanti.",
+  "draw.layer.placed": "«{name}» ora è al posto {position} di {total} dall’alto."
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -1553,7 +1575,29 @@ const EN: Record<DrawKey, string> = {
   "draw.layer.name.required": "A layer always has a name: the previous one stays.",
   "draw.action.name": "Name",
   "draw.keys.rename": "In the tree, rename the row; on the sheet, the selected object, unless it’s a text",
-  "draw.keys.filter": "In the tree, go to the object search"
+  "draw.keys.filter": "In the tree, go to the object search",
+  "draw.keys.step": "In the tree, move the row one step forward or back, into or out of a group",
+  "draw.action.place": "Reorder",
+  "draw.move.locked": "It’s locked: unlock it to move it.",
+  "draw.move.container_locked": "What contains it is locked: unlock that first to move it.",
+  "draw.move.layer_locked": "Its layer is locked: unlock the layer to move it.",
+  "draw.move.into_locked": "It can’t go there: what would receive it is locked.",
+  "draw.move.into_layer_locked": "It can’t go there: that layer is locked.",
+  "draw.move.link": "It can’t go there: a link can’t sit inside another link.",
+  "draw.move.inside": "It can’t go there: an object can’t sit inside itself.",
+  "draw.move.layers": "A layer moves on its own and among layers; an object, inside a layer.",
+  "draw.move.flat": "It can’t go there: what would receive it has a transform that flattens it.",
+  "draw.move.edge.front": "It’s already in front of everything.",
+  "draw.move.edge.back": "It’s already behind everything.",
+  "draw.layer.edge.top": "It’s already the top layer.",
+  "draw.layer.edge.bottom": "It’s already the bottom layer.",
+  "draw.where.root": "in the drawing",
+  "draw.where.layer": "in layer “{name}”",
+  "draw.where.group": "inside {name}",
+  "draw.placed": "{name} {where}, position {position} of {total} from the front.",
+  "draw.placed.one": "{count} object {where}, position {from} of {total} from the front.",
+  "draw.placed.other": "{count} objects {where}, positions {from} to {to} of {total} from the front.",
+  "draw.layer.placed": "“{name}” is now at position {position} of {total} from the top."
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle
