@@ -231,8 +231,8 @@ int      = ["-"] 1*DIGIT
 - **`p`:** pressione × 255, arrotondata. Se manca (mouse, tocco), il pennello
   simula la pressione e `fub:brush` contiene `sim=1`.
 - **`t`:** millisecondi dal primo campione, che vale 0.
-- **`a`, `z`:** altitudine (0–90°) e azimut (0–359°) della penna, se il
-  dispositivo li fornisce; compaiono sempre insieme.
+- **`a`, `z`:** altitudine (0–90°) e azimut (0–359°, in senso orario
+  dall'asse x della scena) della penna, se il dispositivo li dà; sempre insieme.
 - **Canali sconosciuti:** una lettera diversa da `p`, `t`, `a` e `z`. Il
   tratto resta valido e si conserva, ma non si può ridisegnare (S010).
 - **Interi:** ogni valore, assoluto o differenza, sta entro 2⁵³ − 1 in valore

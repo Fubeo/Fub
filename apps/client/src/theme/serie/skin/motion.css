@@ -82,6 +82,22 @@
   animation: fub-exit-rise-sm var(--duration-fast) var(--ease);
 }
 
+/* Il menu radiale si apre dal punto chiesto: il disco cresce dal centro
+   mentre lo strato appare, e se ne va sbiadendo. */
+@keyframes fub-radial-grow {
+  from { transform: scale(0.8); }
+  to { transform: none; }
+}
+.draw-radial[data-shell-motion="enter"] {
+  animation: fub-enter-fade var(--duration-med) var(--ease-out);
+}
+.draw-radial[data-shell-motion="enter"] .draw-radial-ring {
+  animation: fub-radial-grow var(--duration-med) var(--ease-out);
+}
+.draw-radial[data-shell-motion="exit"] {
+  animation: fub-exit-fade var(--duration-fast) var(--ease);
+}
+
 /* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
 .cm-editor,
 .cm-editor *,

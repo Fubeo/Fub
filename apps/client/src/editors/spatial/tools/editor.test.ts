@@ -17,6 +17,9 @@ import { MERGE_MS } from "./history";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { rasterize } from "./png";
 import { LAYER } from "./test-support";
+import { DEFAULT_CURVE } from "../pen/pressure";
+import { closeRadial } from "./radial";
+import { setReducedMotionPreference } from "../../../theme/reduced-motion";
 
 // happy-dom non disegna: il PNG degli appunti è il testo che riceve.
 vi.mock("./png", async (real) => ({
@@ -1112,7 +1115,7 @@ describe("i livelli, dal livello Standard", () => {
 
 describe("la griglia e la pagina, dal livello Standard", () => {
   /// La griglia con l'aggancio acceso, al passo di partenza.
-  const SNAP = { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] } as const;
+  const SNAP = { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } as const;
   /// Un quadrato pieno senza contorno, fuori dalla griglia, in una pagina
   /// che lo lascia muovere: il riquadro è quello scritto.
   const OFF = doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="13" y="7" width="40" height="40" fill="#000000"/></g>`).replace(
@@ -1175,6 +1178,10 @@ describe("la griglia e la pagina, dal livello Standard", () => {
       ["menuitem", "Guide…", null, null],
       ["menuitem", "Unità: Pixel…", null, null],
       ["menuitemcheckbox", "Barra accanto alla selezione", "true", null],
+      ["menuitem", "Ruota la vista a sinistra", null, "4"],
+      ["menuitem", "Ruota la vista a destra", null, "6"],
+      ["menuitem", "Raddrizza la vista", null, "5"],
+      ["menuitem", "Penna e dita…", null, null],
       ["menuitem", "Adatta la pagina al disegno", null, null],
     ]);
     expect(entry("Aggancia alla griglia").querySelector(".menu-description")!.textContent).toBe("Tieni premuto Ctrl mentre trascini per posare libero.");
@@ -1195,11 +1202,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(entry("Mostra la griglia").getAttribute("aria-checked")).toBe("true");
     entry("Aggancia alla griglia").click();
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
-    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
     expect(grids).toEqual([
-      { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] },
-      { shown: true, snap: false, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] },
-      { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] },
+      { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
+      { shown: true, snap: false, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
+      { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
     ]);
 
     // Sotto lo Standard non si vede e non aggancia, ma resta com'era.
@@ -1214,11 +1221,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
 
   it("`setGrid` la cambia senza dirlo; un passo fuori dai limiti resta quello di prima, e uno insolito entra nel menu", () => {
     const grids: unknown[] = [];
-    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] }, onGridChange: (grid) => grids.push(grid) });
-    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
-    editor.setGrid({ shown: true, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
-    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE }, onGridChange: (grid) => grids.push(grid) });
+    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    editor.setGrid({ shown: true, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
     expect(spoken()).toBe("");
     expect(grids).toEqual([]);
     pageButton().click();
@@ -1241,11 +1248,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
     expect(altGraph("#").defaultPrevented).toBe(true);
     expect(spoken()).toBe("Griglia nascosta.");
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
     expect(key("#", { ctrlKey: true }).defaultPrevented).toBe(false);
     editor.setLevel("essential");
     expect(key("%", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
     // Nel titolo si scrivono.
     editor.setLevel("standard");
     const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
@@ -1510,7 +1517,7 @@ describe("le guide intelligenti, dal livello Standard", () => {
   });
 
   it("con la griglia vince il più vicino fra la riga e il bersaglio", () => {
-    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] } });
+    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
     editor.setTool("select");
     // In alto a 53: il bordo del rettangolo, a 50, è più vicino della riga a 60.
     drag([[40, 220], [41, 150], [43, 73]]);
@@ -1609,8 +1616,8 @@ describe("le guide intelligenti, dal livello Standard", () => {
     );
     item.click();
     expect(spoken()).toBe("Guide intelligenti spente.");
-    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
-    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] }]);
+    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE }]);
     editor.setTool("select");
     drag([[40, 220], [41, 150], [43, 73]]);
     expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
@@ -1781,7 +1788,7 @@ describe("i righelli e le guide del documento, dal livello Standard", () => {
   });
 
   it("si aggancia alla griglia e agli oggetti, finché Ctrl o ⌘ non è tenuto", () => {
-    withRulers(sheet(), { grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] } });
+    withRulers(sheet(), { grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
     drag([[10, 100], [50, 100], [93, 100]]);
     expect(guidesOf()).toBe("x 100");
     editor.undo();
@@ -1836,8 +1843,11 @@ describe("i righelli e le guide del documento, dal livello Standard", () => {
 
   it("il tasto destro su una guida apre il suo menu, anche per una bloccata; sull'angolo, quello dei righelli", () => {
     withRulers(sheet(' fub:guides="x 200; y 150 locked"'));
-    expect(rightClick(300, 280).defaultPrevented).toBe(false);
+    // Lontano dalle guide, la penna ha il suo menu radiale.
+    expect(rightClick(300, 280).defaultPrevented).toBe(true);
     expect(document.querySelector(".context-menu")).toBeNull();
+    expect(document.querySelector(".draw-radial")).not.toBeNull();
+    closeRadial();
 
     expect(rightClick(202, 280).defaultPrevented).toBe(true);
     expect(menu().map(labelOf)).toEqual(["Blocca la guida", "Elimina la guida", "Guide…", "Blocca tutte le guide", "Elimina tutte le guide"]);
@@ -2122,7 +2132,7 @@ describe("il testo, dal livello Standard", () => {
   });
 
   it("Spazio scrive dov'è il cursore, e con l'aggancio la linea di base va sulla griglia", () => {
-    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] } });
+    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
     size(200, 100);
     editor.setTool("text");
     surface().focus();
@@ -3283,6 +3293,7 @@ describe("da tastiera", () => {
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
+      "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
@@ -3314,8 +3325,15 @@ describe("da tastiera", () => {
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
-    // Copiare e incollare ci sono già; lo stile, dallo Standard.
+    // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
     expect(tables[11]!.rows).toEqual([
+      ["4", "Ruota la vista a sinistra"],
+      ["6", "Ruota la vista a destra"],
+      ["5", "Raddrizza la vista"],
+      ["Shift+F10", "Apre il menu radiale: strumenti, colori, annulla"],
+    ]);
+    // Copiare e incollare ci sono già; lo stile, dallo Standard.
+    expect(tables[12]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
@@ -3502,7 +3520,7 @@ describe("la cornice di trasformazione", () => {
   });
 
   it("con la griglia il bordo va sulla riga, e Ctrl o ⌘ lo lascia libero", () => {
-    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] } });
+    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
     drag([[204, 125], [220, 125], [237, 125]]);
     expect(transformOf(A)).toBe("matrix(1.4 0 0 1 -40 0)");
     editor.undo();
@@ -4450,9 +4468,12 @@ describe("la selezione avanzata, dal livello Standard", () => {
     rightClick(60, 20);
     expect(editor.selection).toEqual([A, B]);
     closeContextMenu();
-    // Con la penna il tasto destro resta al browser.
+    // Con la penna il tasto destro apre il menu radiale, e la selezione resta.
     editor.setTool("pen");
-    expect(rightClick(60, 20).defaultPrevented).toBe(false);
+    expect(rightClick(60, 20).defaultPrevented).toBe(true);
+    expect(document.querySelector(".draw-radial")).not.toBeNull();
+    expect(editor.selection).toEqual([A, B]);
+    closeRadial();
     editor.setTool("select");
     surface().focus();
     expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(true);
@@ -5693,7 +5714,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
   /// Un disegno vuoto all'Esperto, con la penna di Bézier.
   /// La penna, senza le guide intelligenti, che hanno i loro casi.
   const drawing = (source = EMPTY): void => {
-    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] } });
+    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
     editor.focus();
     key("b");
   };
@@ -5822,7 +5843,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M100 0 C120.1 0 148.3 12.94 148.3 12.94");
     editor.undo();
-    editor.setGrid({ shown: false, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    editor.setGrid({ shown: false, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
     tap(1, 2);
     drag([[38, 41], [44, 47], [52, 49]]);
     // Ctrl lascia il punto libero.
@@ -5830,7 +5851,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M0 0 C0 0 30 30 40 40 C50 50 73 77 73 77");
     // Due nodi sullo stesso incrocio non fanno un tracciato.
-    editor.setGrid({ shown: false, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    editor.setGrid({ shown: false, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
     tap(0, 0);
     tap(20, 0);
     expect(spoken()).toBe("Nodo 2, spigolo: x 0, y 0.");
@@ -6198,7 +6219,7 @@ describe("le immagini incollate", () => {
   });
 
   it("con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più vicino, e le immagini si scostano di passi interi", async () => {
-    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] } });
+    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
     size(1000, 500);
     editor.setTool("select");
     surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
@@ -6795,6 +6816,7 @@ describe("il livello Personalizzato", () => {
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
+      "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
@@ -6802,7 +6824,7 @@ describe("il livello Personalizzato", () => {
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[11]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[12]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
@@ -7231,5 +7253,415 @@ describe("la fine", () => {
     sheet.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, clientX: 10, clientY: 10 }));
     sheet.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, clientX: 50, clientY: 40 }));
     expect(changes).toEqual([]);
+  });
+});
+
+describe("la vista girata e i gesti, dal livello Standard", () => {
+  const A = "o1a2b3c4d";
+  /// La camera del foglio, come matrice `[a b c d e f]`.
+  const cameraOf = (): number[] => host.querySelector(".draw-preview g")!.getAttribute("transform")!.match(/^matrix\((.*)\)$/)![1]!.split(" ").map(Number);
+  const near = (actual: readonly number[], expected: readonly number[], digits = 9): void =>
+    expect(actual).toEqual(expected.map((value) => expect.closeTo(value, digits)));
+  /// Il punto della scena `p` sullo schermo, con la camera di adesso.
+  const onScreen = ([x, y]: readonly [number, number]): [number, number] => {
+    const [a, b, c, d, e, f] = cameraOf();
+    return [a! * x + c! * y + e!, b! * x + d! * y + f!];
+  };
+  const turnButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>(".draw-zoom-level[data-turn]")!;
+  const pageButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+  };
+  const entry = (label: string): HTMLButtonElement => menu().find((one) => one.querySelector(".menu-label")!.textContent === label)!;
+  /// Un dito, il `pointerId` `id`, in (`x`, `y`) al tempo `at`.
+  const touch = (type: string, id: number, x: number, y: number, at: number): void => {
+    const up = type === "pointerup";
+    surface().dispatchEvent(
+      pointer(type, { pointerId: id, pointerType: "touch", isPrimary: false, button: type === "pointermove" ? -1 : 0, buttons: up ? 0 : 1, pressure: up ? 0 : 0.5, clientX: x, clientY: y, timeStamp: at }),
+    );
+  };
+  const wheel = (init: { readonly deltaY: number; readonly ctrlKey?: boolean; readonly shiftKey?: boolean }): void => {
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: init.deltaY });
+    // happy-dom fa di WheelEvent un UIEvent: i tasti e il punto si danno a mano.
+    const fields = { ctrlKey: init.ctrlKey ?? false, shiftKey: init.shiftKey ?? false, metaKey: false, clientX: 100, clientY: 50 };
+    for (const [name, value] of Object.entries(fields)) Object.defineProperty(event, name, { value });
+    surface().dispatchEvent(event);
+  };
+
+  afterEach(() => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("4 e 6 girano la vista di 15° attorno al centro, 5 la raddrizza; il pulsante dice l'angolo e la raddrizza", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    expect(turnButton().hidden).toBe(true);
+    key("6");
+    expect(spoken()).toBe("Vista ruotata di 15°.");
+    expect(turnButton().hidden).toBe(false);
+    expect(turnButton().textContent).toBe("15°");
+    expect(turnButton().getAttribute("aria-label")).toBe("15°: raddrizza la vista");
+    expect(turnButton().getAttribute("aria-keyshortcuts")).toBe("5");
+    for (let i = 0; i < 5; i++) key("6");
+    // Il centro del foglio, (100, 50), resta fermo; l'angolo retto è esatto.
+    expect(spoken()).toBe("Vista ruotata di 90°.");
+    near(cameraOf(), [0, 1, -1, 0, 150, -50]);
+    expect(cameraOf().slice(0, 4)).toEqual([0, 1, -1, 0]);
+    key("4");
+    expect(spoken()).toBe("Vista ruotata di 75°.");
+    key("5");
+    expect(spoken()).toBe("Vista diritta.");
+    near(cameraOf(), [1, 0, 0, 1, 0, 0]);
+    expect(turnButton().hidden).toBe(true);
+    key("4");
+    expect(spoken()).toBe("Vista ruotata di -15°.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    turnButton().click();
+    expect(spoken()).toBe("Vista diritta.");
+    expect(turnButton().hidden).toBe(true);
+  });
+
+  it("all'Essenziale la vista non gira, e il livello che toglie la vista girata la raddrizza", () => {
+    mount();
+    size(200, 100);
+    key("6");
+    near(cameraOf(), [1, 0, 0, 1, 0, 0]);
+    expect(turnButton().hidden).toBe(true);
+    editor.setLevel("standard");
+    key("6");
+    expect(turnButton().hidden).toBe(false);
+    editor.setLevel("essential");
+    near(cameraOf(), [1, 0, 0, 1, 0, 0]);
+    expect(turnButton().hidden).toBe(true);
+  });
+
+  it("la rotella con Ctrl e Maiusc gira a passi, attorno al puntatore", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    wheel({ deltaY: 100, ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("Vista ruotata di 15°.");
+    // Il punto sotto il puntatore resta dov'è.
+    near(onScreen([100, 50]), [100, 50]);
+    wheel({ deltaY: 30, ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("Vista ruotata di 15°.");
+    wheel({ deltaY: 30, ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("Vista ruotata di 30°.");
+    wheel({ deltaY: -100, ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("Vista ruotata di 15°.");
+    // Senza Maiusc è lo zoom di sempre, all'angolo di adesso.
+    const before = cameraOf();
+    wheel({ deltaY: -50, ctrlKey: true });
+    expect(Math.atan2(cameraOf()[1]!, cameraOf()[0]!)).toBeCloseTo(Math.atan2(before[1]!, before[0]!), 12);
+    expect(Math.hypot(cameraOf()[0]!, cameraOf()[1]!)).toBeGreaterThan(Math.hypot(before[0]!, before[1]!));
+  });
+
+  it("sul foglio girato si sceglie e si sposta ciò che si vede sotto il puntatore, e le frecce vanno dove si vede", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    editor.setTool("select");
+    for (let i = 0; i < 6; i++) key("6");
+    // Il quadrato da (60, 60) a (80, 80) si vede da (70, 10) a (90, 30).
+    near(onScreen([60, 60]), [90, 10]);
+    drag([[80, 11], [85, 11], [90, 11]]);
+    expect(editor.selection).toEqual([A]);
+    // Dieci pixel a destra sullo schermo sono dieci verso l'alto nella scena.
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 0 -10)"');
+    key("ArrowRight");
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 0 -11)"');
+    key("ArrowDown");
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 1 -11)"');
+    // Ctrl e → allarga la misura che si vede in orizzontale: l'altezza.
+    key("ArrowRight", { ctrlKey: true });
+    const [a, b, c, d] = editor.engine.text.match(/transform="matrix\(([^)]*)\)"/)![1]!.split(" ").map(Number);
+    expect([a, b, c]).toEqual([1, 0, 0]);
+    expect(d).toBeGreaterThan(1);
+  });
+
+  it("il riquadro di selezione su un foglio girato di traverso sceglie ciò che sta nel rettangolo come si vede", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    editor.setTool("select");
+    key("6");
+    key("6");
+    // Il quadrato col suo contorno, da (59, 59) a (81, 81), sullo schermo.
+    const corners = ([[59, 59], [81, 59], [81, 81], [59, 81]] as const).map(onScreen);
+    const xs = corners.map(([x]) => x);
+    const ys = corners.map(([, y]) => y);
+    const [left, top, right, bottom] = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    // Un po' più stretto del quadrato girato: i suoi angoli escono.
+    drag([[left + 3, top + 3], [right - 3, bottom - 3]]);
+    expect(editor.selection).toEqual([]);
+    drag([[left - 2, top - 2], [right + 2, bottom + 2]]);
+    expect(editor.selection).toEqual([A]);
+  });
+
+  it("due dita che ruotano girano il foglio, oltre una soglia e senza salti, e rilasciate vicino a un angolo retto ci si posano", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    let at = 1000;
+    const around = (degrees: number): [number, number] => [50 + 100 * Math.cos((degrees * Math.PI) / 180), 50 + 100 * Math.sin((degrees * Math.PI) / 180)];
+    const twist = (steps: readonly number[]): void => {
+      touch("pointerdown", 11, 50, 50, (at += 16));
+      touch("pointerdown", 12, 150, 50, (at += 16));
+      touch("pointermove", 11, 50, 50, (at += 16));
+      for (const degrees of steps) touch("pointermove", 12, ...around(degrees), (at += 16));
+      touch("pointerup", 11, 50, 50, (at += 16));
+      touch("pointerup", 12, ...around(steps[steps.length - 1]!), (at += 16));
+    };
+    const angle = (): number => (Math.atan2(cameraOf()[1]!, cameraOf()[0]!) * 180) / Math.PI;
+    // I primi 10° aprono il gesto: il foglio gira dei 20 dopo.
+    twist([5, 10, 20, 30]);
+    expect(angle()).toBeCloseTo(20, 9);
+    expect(spoken()).toBe("Vista ruotata di 20°.");
+    // A 88° si posa sull'angolo retto, esatto: i pixel restano interi.
+    const square = (): void => {
+      const [a, b, c, d] = cameraOf();
+      expect([a, d]).toEqual([0, 0]);
+      expect(b).toBeCloseTo(1, 12);
+      expect(c).toBeCloseTo(-1, 12);
+    };
+    twist([5, 10, 78]);
+    square();
+    expect(spoken()).toBe("Vista ruotata di 90°.");
+    // Un pizzico che gira appena non gira il foglio, e non annulla niente.
+    twist([3, 6]);
+    square();
+    expect(editor.engine.text).toBe(SOURCE);
+    // Spenta, le dita non girano più.
+    editor.setGrid({ ...editor.grid, twist: false });
+    twist([5, 10, 40]);
+    square();
+  });
+
+  it("un tocco di due dita annulla, uno di tre ripete; un tocco lungo o che scorre no, e si spengono", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    drag([[10, 10], [40, 10]]);
+    const drawn = editor.engine.text;
+    expect(drawn).not.toBe(SOURCE);
+    let at = 5000;
+    const tap = (fingers: number, hold = 60, slide = 0): void => {
+      for (let i = 0; i < fingers; i++) touch("pointerdown", 21 + i, 100 + 20 * i, 50, (at += 10));
+      if (slide > 0) touch("pointermove", 21, 100 + slide, 50, (at += 10));
+      at += hold;
+      for (let i = 0; i < fingers; i++) touch("pointerup", 21 + i, 100 + 20 * i + (i === 0 ? slide : 0), 50, (at += 10));
+    };
+    tap(2);
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(spoken()).toBe("Annullato: Tratto.");
+    tap(3);
+    expect(editor.engine.text).toBe(drawn);
+    expect(spoken()).toBe("Ripetuto: Tratto.");
+    tap(3);
+    expect(spoken()).toBe("Niente da ripetere.");
+    tap(2, 400);
+    expect(editor.engine.text).toBe(drawn);
+    tap(2, 60, 30);
+    expect(editor.engine.text).toBe(drawn);
+    editor.setGrid({ ...editor.grid, taps: false });
+    tap(2);
+    expect(editor.engine.text).toBe(drawn);
+  });
+
+  it("«Penna e dita…», da «Pagina e griglia», sceglie i gesti e la curva della penna, che preme con lei", async () => {
+    const grids: unknown[] = [];
+    mount(SOURCE, { level: "standard", onGridChange: (grid) => grids.push(grid) });
+    size(200, 100);
+    pageButton().click();
+    entry("Penna e dita…").click();
+    expect(dialog().querySelector("h2")!.textContent).toBe("Penna e dita");
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    const checks = [...dialog().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    expect(checks.map((check) => [check.closest("label")!.textContent, check.checked])).toEqual([
+      ["Due dita che ruotano girano il foglio", true],
+      ["Un tocco di due dita annulla, uno di tre ripete", true],
+    ]);
+    expect(document.activeElement).toBe(checks[0]);
+    checks[0]!.click();
+    const soft = [...dialog().querySelectorAll<HTMLInputElement>('input[type="range"]')][0]!;
+    expect(soft.closest("label")!.querySelector("span")!.textContent).toBe("Morbidezza");
+    soft.value = "100";
+    soft.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(soft.getAttribute("aria-valuetext")).toBe("+100%");
+    await submit();
+    expect(spoken()).toBe("Penna e dita aggiornate.");
+    expect(editor.grid.twist).toBe(false);
+    expect(editor.grid.taps).toBe(true);
+    expect(editor.grid.pen).toEqual({ soft: 1, min: 0, full: 1 });
+    expect(grids[grids.length - 1]).toEqual(editor.grid);
+
+    // Un ottavo della corsa, sulla curva più morbida, è metà pressione.
+    const PEN = { pointerId: 5, pointerType: "pen" } as const;
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...PEN, button: 0, buttons: 1, pressure: 0.125, clientX: 10, clientY: 10, timeStamp: (clock += 8) }));
+    for (const x of [20, 30, 40]) target.dispatchEvent(pointer("pointermove", { ...PEN, button: -1, buttons: 1, pressure: 0.125, clientX: x, clientY: 10, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointerup", { ...PEN, button: 0, buttons: 0, pressure: 0, clientX: 40, clientY: 10, timeStamp: (clock += 8) }));
+    const ink = decodeInk(/fub:ink="([^"]+)"/.exec(editor.engine.text)![1]!);
+    const width = ink.channels.length;
+    const pressures = ink.values.filter((_, i) => i % width === ink.channels.indexOf("p"));
+    expect(pressures.length).toBeGreaterThan(1);
+    for (const p of pressures) expect(p).toBe(128);
+  });
+});
+
+describe("il menu radiale, dal livello Standard", () => {
+  const A = "o1a2b3c4d";
+  const radial = (): HTMLElement | null => document.querySelector<HTMLElement>(".draw-radial:not([data-shell-motion='exit'])");
+  /// Le voci, dall'alto in senso orario: il nome, o `-` per una spenta.
+  const voices = (): string[] =>
+    [...radial()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(
+      (one) => `${one.dataset.direction} ${one.getAttribute("aria-label")}${one.getAttribute("aria-disabled") === "true" ? " -" : ""}`,
+    );
+  const voice = (label: string): HTMLButtonElement =>
+    [...radial()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((one) => one.getAttribute("aria-label") === label)!;
+  /// Il menu contestuale, sull'orologio dei puntatori delle prove.
+  const rightClick = (x: number, y: number, init: Init = {}): MouseEvent => {
+    const event = pointer("contextmenu", { button: 2, pointerType: "mouse", clientX: x, clientY: y, timeStamp: (clock += 8), ...init });
+    surface().dispatchEvent(event);
+    return event;
+  };
+  const onPage = (type: string, init: Init): void => {
+    document.dispatchEvent(pointer(type, init));
+  };
+
+  beforeEach(() => setReducedMotionPreference(true));
+  afterEach(() => {
+    closeRadial();
+    for (const open of document.querySelectorAll(".draw-radial")) open.remove();
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+    setReducedMotionPreference(false);
+  });
+
+  it("il clic destro con la penna lo apre: annulla in alto, gli strumenti di prima a destra, i colori a sinistra", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    surface().focus();
+    expect(rightClick(100, 50).defaultPrevented).toBe(true);
+    expect(radial()!.querySelector('[role="menu"]')!.getAttribute("aria-label")).toBe("Menu radiale");
+    // Chi non ha ancora cambiato strumento o colore trova i più comuni.
+    expect(voices()).toEqual([
+      "n Annulla -",
+      "ne Selezione",
+      "e Gomma",
+      "se Evidenziatore",
+      "s Ripeti -",
+      "sw Colore: Verde",
+      "w Colore: Blu",
+      "nw Colore: Vermiglio",
+    ]);
+    expect(formatIssues(checkAccessibility(radial()!))).toBe("");
+    voice("Gomma").click();
+    expect(radial()).toBeNull();
+    expect(editor.tool).toBe("eraser");
+    expect(spoken()).toBe("Strumento: Gomma.");
+    expect(document.activeElement).toBe(surface());
+
+    rightClick(100, 50);
+    expect(voices().slice(1, 4)).toEqual(["ne Selezione", "e Penna", "se Evidenziatore"]);
+    voice("Colore: Blu").click();
+    expect(spoken()).toBe("Colore: Blu.");
+    editor.setTool("pen");
+    expect(host.querySelector('[role="toolbar"] button[aria-label="Blu"]')!.getAttribute("aria-checked")).toBe("true");
+    rightClick(100, 50);
+    // Il colore e lo strumento di prima, in orizzontale: un gesto solo per
+    // tornarci.
+    expect(voices().slice(1, 4)).toEqual(["ne Selezione", "e Gomma", "se Evidenziatore"]);
+    expect(voices().slice(5)).toEqual(["sw Colore: Verde", "w Colore: Nero", "nw Colore: Vermiglio"]);
+  });
+
+  it("tenuto premuto segue il puntatore: lasciato verso una voce la sceglie, e non disegna", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    drag([[10, 10], [40, 10]]);
+    const drawn = editor.engine.text;
+    // Il menu sta intero nella finestra: aperto lontano dai bordi, il suo
+    // centro è il punto del clic.
+    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 2, buttons: 2, clientX: 400, clientY: 300, timeStamp: (clock += 8) }));
+    // Su Linux e su macOS il menu contestuale arriva col tasto ancora giù.
+    rightClick(400, 300, { buttons: 2 });
+    expect(radial()).not.toBeNull();
+    onPage("pointermove", { ...MOUSE, button: -1, buttons: 2, clientX: 410, clientY: 200, timeStamp: (clock += 8) });
+    expect(voice("Annulla").hasAttribute("data-hot")).toBe(true);
+    expect(radial()!.querySelector(".draw-radial-caption")!.textContent).toMatch(/^Annulla · /);
+    onPage("pointerup", { ...MOUSE, button: 2, buttons: 0, clientX: 410, clientY: 200, timeStamp: (clock += 8) });
+    expect(radial()).toBeNull();
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(spoken()).toBe("Annullato: Tratto.");
+    // Su Windows arriva a tasto lasciato: il menu resta aperto.
+    rightClick(100, 50);
+    expect(radial()).not.toBeNull();
+    voice("Ripeti").click();
+    expect(editor.engine.text).toBe(drawn);
+  });
+
+  it("il tasto laterale della penna lo apre dov'è la penna; il clic destro che il sistema manda dopo non lo riapre", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    const PEN = { pointerId: 6, pointerType: "pen" } as const;
+    const down = pointer("pointerdown", { ...PEN, button: 2, buttons: 2, pressure: 0.3, clientX: 400, clientY: 300, timeStamp: (clock += 8) });
+    surface().dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(radial()).not.toBeNull();
+    onPage("pointermove", { ...PEN, button: -1, buttons: 2, pressure: 0.3, clientX: 480, clientY: 310, timeStamp: (clock += 8) });
+    onPage("pointerup", { ...PEN, button: 2, buttons: 0, pressure: 0, clientX: 480, clientY: 310, timeStamp: (clock += 8) });
+    expect(editor.tool).toBe("eraser");
+    expect(radial()).toBeNull();
+    expect(rightClick(480, 310, { pointerType: "pen" }).defaultPrevented).toBe(true);
+    expect(radial()).toBeNull();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("il tocco lungo del dito che disegna lo apre senza lasciare un punto; alzato nel mezzo, resta aperto", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    const FINGER = { pointerId: 9, pointerType: "touch" } as const;
+    surface().dispatchEvent(pointer("pointerdown", { ...FINGER, button: 0, buttons: 1, pressure: 0.5, clientX: 100, clientY: 50, timeStamp: (clock += 8) }));
+    rightClick(100, 50, { pointerType: "touch", buttons: 1 });
+    expect(radial()).not.toBeNull();
+    onPage("pointerup", { ...FINGER, button: 0, buttons: 0, pressure: 0, clientX: 102, clientY: 51, timeStamp: (clock += 8) });
+    expect(radial()).not.toBeNull();
+    expect(editor.engine.text).toBe(SOURCE);
+    key("Escape", {}, document.activeElement as HTMLElement);
+    expect(radial()).toBeNull();
+    expect(document.activeElement).toBe(surface());
+  });
+
+  it("Maiusc+F10 lo apre al cursore, col nome della voce che ha il fuoco; con qualcosa di scelto apre il menu della selezione", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    surface().focus();
+    expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(radial()).not.toBeNull();
+    // Niente da annullare: il fuoco va alla prima voce che vale.
+    expect(document.activeElement).toBe(voice("Selezione"));
+    expect(radial()!.querySelector(".draw-radial-caption")!.textContent).toBe("Selezione · V");
+    key("ArrowRight", {}, document.activeElement as HTMLElement);
+    expect(radial()!.querySelector(".draw-radial-caption")!.textContent).toBe("Gomma · E");
+    key("Escape", {}, document.activeElement as HTMLElement);
+    expect(document.activeElement).toBe(surface());
+    editor.select([A]);
+    key("F10", { shiftKey: true });
+    expect(radial()).toBeNull();
+    expect(document.querySelector(".context-menu")).not.toBeNull();
+  });
+
+  it("con gli strumenti che scelgono, sulle guide e all'Essenziale il clic destro resta quello di prima", () => {
+    mount(SOURCE, { level: "standard" });
+    size(200, 100);
+    editor.setTool("select");
+    rightClick(100, 50);
+    expect(radial()).toBeNull();
+    expect(document.querySelector(".context-menu")).not.toBeNull();
+    closeContextMenu();
+    editor.setTool("pen");
+    editor.setLevel("essential");
+    expect(rightClick(100, 50).defaultPrevented).toBe(false);
+    expect(radial()).toBeNull();
+    const PEN = { pointerId: 6, pointerType: "pen" } as const;
+    surface().dispatchEvent(pointer("pointerdown", { ...PEN, button: 2, buttons: 2, pressure: 0.3, clientX: 100, clientY: 50, timeStamp: (clock += 8) }));
+    expect(radial()).toBeNull();
+    expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(false);
   });
 });

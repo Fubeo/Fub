@@ -41,6 +41,12 @@
 // campione ne ha dato una vera, il tratto concluso non la porta. Un tocco
 // fermo ha due campioni nello stesso punto (vedi `pointerup`).
 //
+// La pressione scritta è quella che la curva di chi disegna (`pressure`) dà
+// alla pressione della penna: il file porta il tratto come si è visto, e lo
+// stesso disegno si vede uguale su ogni macchina. L'azimut si misura
+// dall'asse x della scena: su un foglio girato (`turn`) si toglie l'angolo
+// della vista.
+//
 // L'elemento deve avere `touch-action: none` (altrimenti il browser si prende
 // il dito per scorrere e manda `pointercancel`) e `user-select: none`: sono
 // regole di presentazione e le mette la superficie. La pipeline ascolta in
@@ -50,7 +56,7 @@
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { INK_MAX_SAMPLES, type InkSample } from "../ink/sample";
 import { classifyPointer, type PointerRole, type TouchPolicy } from "./roles";
-import { penAngles, reportsTilt } from "./tilt";
+import { penAngles, reportsTilt, type PenAngles } from "./tilt";
 
 export type InkPointerType = "pen" | "mouse" | "touch";
 
@@ -110,6 +116,12 @@ export interface PenInputOptions {
   readonly touch?: TouchPolicy;
   /// Campioni per tratto prima di dividerlo (default `INK_MAX_SAMPLES`).
   readonly maxSamples?: number;
+  /// La curva della pressione: dalla pressione della penna, 0…1, a quella
+  /// del tratto. Si legge a ogni campione. Senza, la pressione è com'è.
+  readonly pressure?: (p: number) => number;
+  /// L'angolo della vista, in gradi in senso orario. Si legge a ogni
+  /// campione. Senza, 0.
+  readonly turn?: () => number;
 }
 
 export interface PenInput {
@@ -271,9 +283,27 @@ export function attachPenInput(element: HTMLElement, options: PenInputOptions, o
     const { x, y } = point;
     const t = event.timeStamp - s.origin;
     if (!s.pressure) return { x, y, t };
-    const p = carry?.p ?? pressureOf(event);
-    const angles = carry ? (carry.a === undefined ? null : { a: carry.a, z: carry.z }) : penAngles(event);
+    const p = carry?.p ?? curved(pressureOf(event));
+    const angles = carry ? (carry.a === undefined ? null : { a: carry.a, z: carry.z }) : sceneAngles(event);
     return angles ? { x, y, p, t, a: angles.a, z: angles.z } : { x, y, p, t };
+  }
+
+  /// La pressione della penna passata per la curva, entro 0…1.
+  function curved(p: number): number {
+    const curve = options.pressure;
+    if (curve === undefined) return p;
+    const out = curve(p);
+    return Number.isFinite(out) ? Math.min(1, Math.max(0, out)) : p;
+  }
+
+  /// Gli angoli della penna, con l'azimut dall'asse x della scena.
+  function sceneAngles(event: PointerEvent): PenAngles | null {
+    const angles = penAngles(event);
+    const turn = options.turn?.() ?? 0;
+    if (angles === null || turn === 0 || !Number.isFinite(turn)) return angles;
+    let z = (angles.z - turn) % 360;
+    if (z < 0) z += 360;
+    return { a: angles.a, z };
   }
 
   /// Annuncia un tratto con `onStart`; `false` se chi lo riceve lo ha già

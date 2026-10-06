@@ -4,6 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { SceneEngine } from "../scene/engine";
 import { doc, HEAD } from "../scene/test-support";
+import { SourceText } from "../scene/text";
+import { NS_SVG, parseXml } from "../scene/xml";
 import {
   IMAGE_PLACEHOLDER,
   imageDocument,
@@ -234,6 +236,23 @@ describe("gli strati immagine", () => {
     expect(open).not.toContain("0 0 100 100");
     expect(open).toContain('width="200" height="100" viewBox="-5 10 50 25" preserveAspectRatio="none"');
     expect(open).toContain('style="background:#000;background:none!important"');
+  });
+
+  it("girate, annidano la radice in un svg che le gira, allineato ai pixel", () => {
+    const source = HEAD.replace(">", ' style="background:#000" fill="red">') + `${LAYER}<use href="#x"/></g></svg>`;
+    const scene = sceneOf(source);
+    const text = imageDocument(image(scene, 0), { x: 0, y: 0, width: 100, height: 50, pixelWidth: 200, pixelHeight: 100, angle: 90 });
+    const outer = text.slice(text.indexOf("<svg"), text.indexOf(">", text.indexOf("<svg")) + 1);
+    expect(outer).toBe('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 100 50" preserveAspectRatio="none" style="background:#000;background:none!important">');
+    expect(text).toContain('<g transform="rotate(90) translate(0 0)"><svg');
+    // La vista annidata copre il rettangolo girato, con due pixel in più per
+    // lato: a destra sullo schermo è in su nella scena.
+    expect(text).toContain('x="-1" y="-101" width="52" height="102" viewBox="-1 -101 52 102"');
+    expect(text).toContain('fill="red"');
+    expect(text.endsWith("</svg></g></svg>")).toBe(true);
+    // Un documento ben formato, con la radice esterna nel namespace di SVG.
+    const parsed = parseXml(new SourceText(text), false);
+    expect(parsed.element(parsed.root)?.ns).toBe(NS_SVG);
   });
 });
 

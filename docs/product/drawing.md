@@ -59,6 +59,9 @@ usa un lettore di schermo.
 
 Con la selezione gli oggetti scelti stanno in una cornice, con le maniglie
 che li ridimensionano e li ruotano: [Disegni, trasformare](drawing-transform.md).
+Copia, taglia e incolla parlano SVG, fra i disegni e con gli altri programmi
+([Disegni, appunti](drawing-clipboard.md)); un'immagine entra coi suoi byte, o
+dal vault per riferimento ([Disegni, immagini](drawing-images.md)).
 
 ## Il livello Standard
 
@@ -101,11 +104,14 @@ Lo Standard aggiunge:
 - il pannello delle **«Proprietà»**, accanto al foglio, per scrivere coi
   numeri com'è fatta la selezione: [Disegni, proprietà](drawing-properties.md);
 - l'albero degli oggetti come **pannello dei livelli**: i nomi, il filtro, le
-  miniature e le righe da trascinare ([Disegni, pannello dei livelli](drawing-layers.md)).
+  miniature e le righe da trascinare ([Disegni, pannello dei livelli](drawing-layers.md));
+- la **vista ruotata**, i **gesti** delle dita, il **menu radiale** e la curva
+  della penna ([Disegni, vista ruotata, gesti e menu radiale](drawing-view.md)).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
-il Lazo la Selezione, e un colore a piacere torna al colore di partenza.
+il Lazo la Selezione, un colore a piacere torna al colore di partenza e la
+vista girata si raddrizza.
 
 ## Disporre
 
@@ -379,12 +385,6 @@ nascosto. Oltre 500 righe l'albero disegna soltanto quelle che si vedono.
 La scelta non si legge mai dal solo colore: lo strumento, il colore e lo
 spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
 si anima: ogni inquadratura è subito quella nuova, e non c'è moto da ridurre.
-
-## Appunti e immagini
-
-Copia, taglia e incolla parlano SVG, fra i disegni e con gli altri programmi
-([Disegni, appunti](drawing-clipboard.md)); un'immagine entra coi suoi byte, o
-dal vault per riferimento ([Disegni, immagini](drawing-images.md)).
 
 ## Documenti che non si modificano subito
 

@@ -19,10 +19,11 @@
 //   quello scelto: un documento in millimetri ha la griglia in millimetri, e
 //   quello in pixel accanto resta com'era.
 
-import type { Camera } from "../../../spatial/camera";
+import { DEFAULT_CURVE, type PenCurve } from "../pen/pressure";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";
+import { sceneBox, toScreen, type View } from "../view";
 
 /// La griglia, e ciò che sta con lei nel menu «Pagina e griglia» e si
 /// ricorda con lei: le guide intelligenti, i righelli e le loro guide, le
@@ -56,6 +57,12 @@ export interface Grid {
   readonly shapes: boolean;
   /// Le sezioni del pannello delle proprietà che sono chiuse.
   readonly closed: readonly string[];
+  /// Due dita che ruotano girano anche il foglio.
+  readonly twist: boolean;
+  /// Un tocco di due dita annulla, uno di tre ripete.
+  readonly taps: boolean;
+  /// La curva della pressione della penna (`pen/pressure.ts`).
+  readonly pen: PenCurve;
 }
 
 /// I passi fra cui si sceglie, nell'unità: in pixel dividono tutti la
@@ -75,7 +82,9 @@ export const UNIT_STEP: Readonly<Record<LengthUnit, number>> = { px: 20, mm: 5, 
 /// La prima volta la griglia e i righelli sono spenti, le guide e le forme dal
 /// tratto accese, come nei programmi di disegno che chi disegna conosce già.
 /// Il pannello si apre da sé se c'è posto, con «Trasforma» e gli attributi
-/// chiusi, e la barra sta accanto alla selezione.
+/// chiusi, e la barra sta accanto alla selezione. Le dita girano il foglio e
+/// i loro tocchi annullano e ripetono, come sulle tavolette; la penna preme
+/// come la dà il suo driver.
 export const DEFAULT_GRID: Grid = {
   shown: false,
   snap: false,
@@ -88,6 +97,9 @@ export const DEFAULT_GRID: Grid = {
   bar: true,
   shapes: true,
   closed: ["transform", "attributes"],
+  twist: true,
+  taps: true,
+  pen: DEFAULT_CURVE,
 };
 
 /// Quante sezioni chiuse si ricordano, e quanto è lungo il nome di una: più
@@ -208,11 +220,13 @@ export interface GridLines {
 }
 
 /// Le righe della griglia di passo `step` in un foglio di `width` per
-/// `height` pixel, inquadrato dalla camera `view`.
-export function gridLines(view: Camera, width: number, height: number, step: number): GridLines {
+/// `height` pixel, inquadrato dalla camera `view`. La griglia è della scena:
+/// su un foglio girato gira con lui.
+export function gridLines(view: View, width: number, height: number, step: number): GridLines {
   if (!(view.scale > 0) || !validStep(step) || width <= 0 || height <= 0) return { minor: "", major: "" };
   let pitch = step;
   while (pitch * view.scale < GRID_MIN_PX) pitch *= GRID_MAJOR;
+  if (view.angle !== 0) return turnedLines(view, width, height, pitch);
   const minor: string[] = [];
   const major: string[] = [];
   const lines = (offset: number, size: number, draw: (at: number) => string): void => {
@@ -225,5 +239,31 @@ export function gridLines(view: Camera, width: number, height: number, step: num
   };
   lines(view.tx, width, (x) => `M${x} 0V${height}`);
   lines(view.ty, height, (y) => `M0 ${y}H${width}`);
+  return { minor: minor.join(""), major: major.join("") };
+}
+
+/// `gridLines` su un foglio girato: le righe della scena che attraversano
+/// ciò che si vede, da un bordo all'altro del riquadro della scena che lo
+/// copre. Girate di un angolo retto restano diritte sullo schermo, sul mezzo
+/// pixel; di sbieco sono oblique, a due decimali.
+function turnedLines(view: View, width: number, height: number, pitch: number): GridLines {
+  const box = sceneBox(view, { x: 0, y: 0, w: width, h: height });
+  const square = view.angle % 90 === 0;
+  const pin = (value: number): number => (square ? Math.round(value - 0.5) + 0.5 : Math.round(value * 100) / 100);
+  const minor: string[] = [];
+  const major: string[] = [];
+  for (const axis of [0, 1] as const) {
+    const first = Math.ceil(box.min[axis] / pitch);
+    const last = Math.floor(box.max[axis] / pitch);
+    for (let k = first; k <= last; k++) {
+      const at = k * pitch;
+      let [ax, ay] = toScreen(view, axis === 0 ? [at, box.min[1]] : [box.min[0], at]);
+      let [bx, by] = toScreen(view, axis === 0 ? [at, box.max[1]] : [box.max[0], at]);
+      if (square && Math.abs(ax - bx) < 1e-6) ax = bx = pin(ax);
+      else if (square) ay = by = pin(ay);
+      else [ax, ay, bx, by] = [pin(ax), pin(ay), pin(bx), pin(by)];
+      (k % GRID_MAJOR === 0 ? major : minor).push(`M${ax} ${ay}L${bx} ${by}`);
+    }
+  }
   return { minor: minor.join(""), major: major.join("") };
 }

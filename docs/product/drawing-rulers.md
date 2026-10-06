@@ -36,6 +36,14 @@ o il tasto destro su un righello, apre il menu dei righelli: l'unità del
 documento, **Mostra le guide**, **Guide…**, bloccare o sbloccare tutte le
 guide, eliminarle tutte e **Nascondi i righelli**.
 
+Sul foglio girato ([Disegni, vista ruotata, gesti e menu radiale](drawing-view.md))
+i righelli aspettano: niente tacche, numeri e fasce, perché nessuna misura
+lungo il bordo dello schermo sarebbe dritta nel disegno, e nell'angolo, al
+posto della sigla, una freccia segna dov'è l'alto del disegno. Il loro menu
+comincia con **Raddrizza la vista** (`5`). Le guide si tirano lo stesso e
+girano col foglio: dal righello in alto viene la guida del disegno che si vede
+più orizzontale, da quello a sinistra la più verticale.
+
 Come la griglia, mostrare i righelli è una scelta della vista: non entra nel
 file, si ricorda su questa macchina e chi monta l'editor la legge e la sceglie
 in `grid.rulers`, con `grid`, `setGrid` e `onGridChange`.

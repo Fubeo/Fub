@@ -119,7 +119,8 @@
 
 /* I righelli: il fondo della barra, tacche e numeri attenuati, un filo verso
    il foglio. Una fascia grigia dice dove sta la pagina, una d'accento dove
-   sta la selezione; una linea segue il puntatore. */
+   sta la selezione; una linea segue il puntatore. Sul foglio girato una
+   freccia nell'angolo dice dov'è il suo alto. */
 .draw-rulers [data-part="bg"],
 .draw-rulers [data-part="corner"] {
   fill: var(--bg-elev);
@@ -140,8 +141,58 @@
   fill: var(--accent);
   opacity: 0.35;
 }
-.draw-rulers [data-part="pointer"] {
+.draw-rulers [data-part="pointer"],
+.draw-rulers [data-part="north"] {
   stroke: var(--text);
+}
+
+/* Il menu radiale galleggia come un menu: il disco col fondo, il filo e
+   l'ombra delle superfici che galleggiano. La voce indicata, dal puntatore
+   o dalla direzione del gesto, prende il fondo della scelta e un bordo; una
+   spenta sbiadisce. Nel mezzo, lo strumento di adesso cerchiato del suo
+   colore, con un filo del testo che lo stacca dal fondo anche quando il
+   colore è quello del fondo. */
+.draw-radial-ring::before {
+  border: 1px solid var(--elevation-floating-border);
+  background: var(--elevation-floating-surface);
+  box-shadow: var(--elevation-floating-shadow);
+}
+.draw-radial-item {
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.draw-radial-item:hover,
+.draw-radial-item[data-hot] {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+.draw-radial-item[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+.draw-radial-item[aria-disabled="true"]:hover {
+  border-color: transparent;
+  background: transparent;
+}
+.draw-radial-center {
+  border: 3px solid var(--radial-color, var(--border));
+  background: var(--bg-input);
+  box-shadow: 0 0 0 1px var(--text);
+  color: var(--text);
+}
+.draw-radial-center[data-pointing]::after {
+  border-bottom-color: var(--accent);
+}
+.draw-radial-caption {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--elevation-floating-border);
+  border-radius: var(--radius-pill);
+  background: var(--elevation-floating-surface);
+  box-shadow: var(--elevation-floating-shadow);
+  color: var(--text);
+  font-size: var(--text-sm);
 }
 
 /* La barra della selezione galleggia sul disegno: il fondo della barra in

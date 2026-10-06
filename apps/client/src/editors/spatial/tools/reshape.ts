@@ -25,7 +25,7 @@ import { MAX_COUNT, MIN_COUNT, polygonalAttrs, polygonalVertices, type Polygonal
 import { length, nonNegativeLength } from "../scene/values";
 import { fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
-import type { GripCursor } from "./frame";
+import { directionCursor, type GripCursor } from "./frame";
 import type { Unit } from "./hit";
 import type { Shared } from "./look";
 import { MIN_RATIO, polygonCount, withCount, type PolygonTool } from "./shapes";
@@ -290,12 +290,11 @@ export function cornerDrag(grip: CornerGrip, from: Point, to: Point, start: numb
 
 /// Il cursore sopra la maniglia: la direzione della bisettrice sullo
 /// schermo, a passi di 45°, come quelli della cornice.
-export function cornerCursor(grip: CornerGrip, matrix: Matrix): GripCursor {
+export function cornerCursor(grip: CornerGrip, matrix: Matrix, turn = 0): GripCursor {
   const [x, y] = grip.inward;
   const dx = matrix[0] * x + matrix[2] * y;
   const dy = matrix[1] * x + matrix[3] * y;
-  const degrees = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 180;
-  return (["ew", "nwse", "ns", "nesw"] as const)[Math.round(degrees / 45) % 4]!;
+  return directionCursor((Math.atan2(dy, dx) * 180) / Math.PI + turn);
 }
 
 /// Gli attributi di `node` col raggio degli angoli `radius`, nelle sue

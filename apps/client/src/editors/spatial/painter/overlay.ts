@@ -10,13 +10,17 @@
 // vede. Più tratti insieme hanno chiavi diverse: quello della penna locale e
 // quelli che una sessione live riceve dal tablet.
 //
+// Con la vista girata l'inchiostro, i riquadri e le guide girano col foglio;
+// le maniglie, i nodi e le scritte restano diritti sullo schermo.
+//
 // I ridisegni si raccolgono in un fotogramma; `flush` disegna subito.
 
 import { arcToCubics } from "../scene/curves";
 import type { Segment } from "../scene/geometry";
-import type { Matrix, Point } from "../scene/matrix";
+import { compose, type Matrix, type Point } from "../scene/matrix";
 import type { OutlinePoint } from "../ink/pf1";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { toScreen, viewMatrix } from "../view";
 import type { PainterView } from "./svg-dom";
 
 /// Un tratto in corso.
@@ -120,7 +124,7 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
   host.append(canvas);
   const context = canvas.getContext("2d");
 
-  let view: PainterView = { scale: 1, tx: 0, ty: 0 };
+  let view: PainterView = { scale: 1, angle: 0, tx: 0, ty: 0 };
   let width = 0;
   let height = 0;
   let ratio = 1;
@@ -189,12 +193,14 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
   };
 
   /// Un punto della scena sullo schermo, in pixel CSS.
-  const screen = (x: number, y: number): Point => [x * view.scale + view.tx, y * view.scale + view.ty];
+  const screen = (x: number, y: number): Point => toScreen(view, [x, y]);
 
   /// Come `screen`, sul mezzo pixel: una linea dritta di un pixel resta
-  /// netta.
+  /// netta. Su un foglio girato di sbieco le linee della scena sono oblique,
+  /// e il mezzo pixel non le aiuta: restano dove sono.
   const crisp = ([x, y]: Point): Point => {
     const [px, py] = screen(x, y);
+    if (view.angle % 90 !== 0) return [px, py];
     return [Math.round(px - 0.5) + 0.5, Math.round(py - 0.5) + 0.5];
   };
 
@@ -202,9 +208,8 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     const points = ink.outline;
     const n = points.length;
     if (n < 3) return;
-    const [a, b, c, d, e, f] = ink.matrix;
-    const s = view.scale * ratio;
-    ctx.setTransform(a * s, b * s, c * s, d * s, (e * view.scale + view.tx) * ratio, (f * view.scale + view.ty) * ratio);
+    const [a, b, c, d, e, f] = compose(viewMatrix(view), ink.matrix);
+    ctx.setTransform(a * ratio, b * ratio, c * ratio, d * ratio, e * ratio, f * ratio);
     ctx.globalAlpha = Math.min(1, Math.max(0, ink.opacity));
     ctx.fillStyle = ink.color;
     ctx.beginPath();
@@ -443,8 +448,8 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
 
   return {
     setView(next) {
-      if (next.scale === view.scale && next.tx === view.tx && next.ty === view.ty) return;
-      view = { scale: next.scale, tx: next.tx, ty: next.ty };
+      if (next.scale === view.scale && next.angle === view.angle && next.tx === view.tx && next.ty === view.ty) return;
+      view = { scale: next.scale, angle: next.angle, tx: next.tx, ty: next.ty };
       if (inks.size > 0 || handles.length > 0) schedule();
     },
     setInk(key, ink) {

@@ -151,6 +151,26 @@ describe("pipeline della penna", () => {
     expect(quantizeInk(stroke!.samples).samples.map(({ a, z }) => [a, z])).toEqual([[45, 180], [60, 90]]);
   });
 
+  it("su un foglio girato l'azimut si misura dall'asse x della scena", () => {
+    attach({ turn: () => 90 });
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0, altitudeAngle: Math.PI / 4, azimuthAngle: Math.PI }));
+    dispatch(move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 8, altitudeAngle: Math.PI / 4, azimuthAngle: Math.PI / 4 }));
+    dispatch(up({ ...PEN, clientX: 4, clientY: 0, timeStamp: 10 }));
+    // 180° sullo schermo è 90° nella scena; 45° è 315°.
+    expect(quantizeInk(ends()[0]!.samples).samples.map(({ z }) => z)).toEqual([90, 315]);
+  });
+
+  it("la curva della pressione passa nel tratto, entro 0…1, e non tocca il mouse", () => {
+    attach({ pressure: (p) => p * p * 2 });
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, pressure: 0.5, timeStamp: 0 }));
+    dispatch(move({ ...PEN, clientX: 4, clientY: 0, pressure: 0.9, timeStamp: 8 }));
+    dispatch(up({ ...PEN, clientX: 4, clientY: 0, timeStamp: 10 }));
+    expect(ends()[0]!.samples.map(({ p }) => p)).toEqual([0.5, 1]);
+    dispatch(down({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 50 }));
+    dispatch(up({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 140 }));
+    expect(ends()[1]!.samples[0]).toEqual({ x: 15, y: 20, t: 0 });
+  });
+
   it("il punto dove la penna si alza entra con pressione e inclinazione del campione prima", () => {
     attach();
     dispatch(down({ ...PEN, clientX: 0, clientY: 0, pressure: 0.3, timeStamp: 0, altitudeAngle: 1 }));

@@ -51,6 +51,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Guide intelligenti | Standard | l'aggancio agli altri oggetti e alla pagina, la loro casella in «Pagina e griglia», e le misure con `Alt` |
 | Righelli e guide | Standard | i righelli (`Maiusc+R`), le guide del documento (`\|`), «Guide…» e l'unità del documento |
 | Forme dal tratto | Standard | il tratto a penna tenuto fermo che diventa una forma, la sua casella in «Pagina e griglia», e «Rendi forma» nella barra «Disponi» |
+| Vista ruotata, gesti e menu radiale | Standard | girare la vista (`4`, `6`, `5`, `Ctrl+Maiusc` con la rotella, due dita) e il pulsante dell'angolo; i tocchi di due e tre dita; il menu radiale (clic destro, tasto della penna, `Maiusc+F10`); «Penna e dita…» in «Pagina e griglia» |
 | Collegamenti alle note | Standard | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
 | Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
@@ -78,7 +79,8 @@ Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
 basso: chi aveva in mano il suo strumento riprende la penna, o il primo
 strumento che c'è, o la Selezione; chi sceglieva, col Lazo o coi Nodi,
 riprende la Selezione; un tracciato di Bézier a metà si conclude com'è; un
-colore a piacere torna al colore di partenza; da un gruppo isolato si esce.
+colore a piacere torna al colore di partenza; da un gruppo isolato si esce;
+la vista girata si raddrizza.
 Il disegno non cambia.
 
 `?` elenca i tasti delle parti scelte, e **Mostra tutto** aggiunge in fondo

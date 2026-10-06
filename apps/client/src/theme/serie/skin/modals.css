@@ -288,7 +288,8 @@
   cursor: pointer;
 }
 .modale .draw-guides-remove,
-.modale .draw-guides-tools button {
+.modale .draw-guides-tools button,
+.modale .draw-touch-tools button {
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -309,10 +310,12 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.modale .draw-guides-tools button {
+.modale .draw-guides-tools button,
+.modale .draw-touch-tools button {
   padding: var(--space-2) var(--space-4);
 }
-.modale .draw-guides-tools button:disabled {
+.modale .draw-guides-tools button:disabled,
+.modale .draw-touch-tools button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -325,6 +328,124 @@
   border-color: var(--danger);
   background: var(--danger-wash);
   color: var(--danger);
+}
+
+/* La finestra «Penna e dita»: due gruppi coi loro titoli, le dita e la
+   penna. La curva sta accanto alle sue tre manopole, o sopra quando lo
+   spazio non basta; sotto, il riquadro dove provare la penna, che non fa
+   scorrere né ingrandire la pagina mentre ci si disegna. Il tratto
+   d'esempio è più tenue di quello che la penna lascia, che è il vero. */
+.modale .draw-touch-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modale .draw-touch-group legend {
+  padding: 0 0 var(--space-2);
+  font-weight: var(--weight-bold);
+}
+.modale .palette-form .draw-touch-check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  font-weight: normal;
+  cursor: pointer;
+}
+.modale .draw-touch-check input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+.modale .draw-touch-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .draw-touch-pressure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.modale .draw-touch-curve {
+  flex: none;
+  width: 8rem;
+  height: 8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  overflow: visible;
+}
+.modale .draw-touch-knobs {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.modale .palette-form .draw-touch-knob {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 var(--space-2);
+  font-weight: normal;
+}
+.modale .draw-touch-knob output {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.modale .draw-touch-knob input[type="range"] {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.modale .draw-touch-diagonal {
+  fill: none;
+  stroke: var(--muted);
+}
+.modale .draw-touch-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.modale .draw-touch-dot {
+  fill: var(--accent);
+  stroke: var(--bg-input);
+  stroke-width: 2;
+}
+.modale .draw-touch-pad {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 320 / 120;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  cursor: crosshair;
+}
+.modale .draw-touch-sample {
+  fill: var(--muted);
+}
+.modale .draw-touch-strokes line {
+  stroke: var(--text);
+}
+.modale .draw-touch-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.modale .draw-touch-tools button:not(:disabled):hover {
+  border-color: var(--accent);
 }
 
 .modale .palette-actions .keys-show-all {
