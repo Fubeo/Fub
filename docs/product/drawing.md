@@ -338,11 +338,11 @@ non ha segni né «Collega a una nota…», e un collegamento si toglie lo stess
 
 ## Il livello Esperto
 
-L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e da cambiare uno
-per uno, il contorno, le trasformazioni scritte in numeri, «Applica
-trasformazione», «Oggetto in tracciato», le operazioni booleane fra le forme,
-lo strumento Nodi, che modifica ogni forma nodo per nodo, e la penna di
-Bézier, che ne disegna uno: [Disegni, livello Esperto](drawing-expert.md).
+L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
+per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
+«Oggetto in tracciato», le operazioni booleane, il Costruttore di forme, lo
+strumento Nodi, che modifica ogni forma nodo per nodo, e la penna di Bézier,
+che ne disegna uno: [Disegni, livello Esperto](drawing-expert.md).
 
 ## Il livello Personalizzato
 
