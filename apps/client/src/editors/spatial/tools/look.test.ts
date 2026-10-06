@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
-import { lookOf, lookOps, paintText, type LookChange, type Restyled } from "./look";
+import { lookOf, lookOps, paintText, styleOf, styleOps, type LookChange, type Restyled, type Style } from "./look";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
 
@@ -192,6 +192,85 @@ describe("le operazioni", () => {
     expect(after.indexOf('id="oaaaaaaaa"')).toBeLessThan(after.indexOf('id="obbbbbbbb"'));
     expect(after.indexOf('id="obbbbbbbb"')).toBeLessThan(after.indexOf('id="occcccccc"'));
     expect(after).toContain('dy="20"');
+  });
+});
+
+describe("lo stile copiato e incollato", () => {
+  /// Lo stile dell'oggetto di chiave `key`.
+  const copied = (opened: Opened, key: string): Style | null => styleOf(opened.engine.model!, opened.index.get(key)!);
+  /// `style` incollato sugli oggetti di chiave `keys`.
+  const pasted = (opened: Opened, keys: readonly string[], style: Style): Restyled =>
+    styleOps(opened.engine.model!, keys.map((key) => opened.index.get(key)!), style, ids(opened));
+
+  it("copia ciò che si vede, anche ciò che viene dal gruppo", () => {
+    const opened = open(doc(`${LAYER}<g id="ogroup000" stroke="#e69f00" stroke-dasharray="8 6" opacity="0.5">${RECT("oaaaaaaaa", ' fill="#0072b2" stroke-width="4" stroke-linecap="round"')}</g></g>`));
+    expect(copied(opened, "ogroup000")).toEqual({
+      fill: "#0072b2",
+      stroke: "#e69f00",
+      outline: { width: "4", dashes: "8 6", cap: "round", join: "miter" },
+      opacity: 0.5,
+      font: null,
+    });
+  });
+
+  it("copia il colore di un tratto a penna come contorno, e di un testo il carattere", () => {
+    const opened = open(doc(`${LAYER}${PEN("oaaaaaaaa")}${TEXT("obbbbbbbb", ["Uno"], ' font-family="Literata, serif" font-size="24" font-weight="bold"')}</g>`));
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null });
+    expect(copied(opened, "obbbbbbbb")).toEqual({
+      fill: "#000000",
+      stroke: null,
+      outline: null,
+      opacity: 1,
+      font: { family: "Literata, serif", size: 24, weight: "bold" },
+    });
+  });
+
+  it("di un'immagine copia soltanto l'opacità", () => {
+    const opened = open(doc(`${LAYER}<image id="oaaaaaaaa" x="0" y="0" width="10" height="10" href="foto.png" opacity="0.25"/></g>`));
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null });
+  });
+
+  it("incolla tutto in un passo, e toglie ciò che la parte eredita già", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#cc79a7" stroke="#e69f00" stroke-width="3" stroke-dasharray="1 2" stroke-linejoin="bevel" opacity="0.7"')}<g id="ogroup000" stroke="#e69f00">${RECT("obbbbbbbb")}</g></g>`));
+    const style = copied(opened, "oaaaaaaaa")!;
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], style));
+    expect(after).toContain('<rect id="obbbbbbbb" x="0" y="0" width="10" height="10" fill="#cc79a7" stroke-width="3" stroke-linejoin="bevel" stroke-dasharray="1 2" opacity="0.7"/>');
+    expect(copied(open(after), "obbbbbbbb")).toEqual(style);
+  });
+
+  it("dà a un tratto a penna e a un testo il colore che si vede", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="none" stroke="#009e73" stroke-width="2"')}${PEN("obbbbbbbb")}${TEXT("occcccccc", ["Uno"])}</g>`));
+    const after = applied(opened, pasted(opened, ["obbbbbbbb", "occcccccc"], copied(opened, "oaaaaaaaa")!));
+    expect(after).toContain(`fill="#009e73" fub:ink="${INK}"`);
+    expect(after).toContain('<text id="occcccccc" x="10" y="40" fill="#009e73"');
+    // Un testo non ha contorno.
+    expect(after).not.toContain('<text id="occcccccc" x="10" y="40" fill="#009e73" font-family="Inter, sans-serif" font-size="32" stroke');
+  });
+
+  it("dà a una forma il colore di un tratto a penna come contorno, e il resto lo lascia", () => {
+    const opened = open(doc(`${LAYER}${PEN("oaaaaaaaa")}${RECT("obbbbbbbb")}</g>`));
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], copied(opened, "oaaaaaaaa")!));
+    expect(after).toContain('<rect id="obbbbbbbb" x="0" y="0" width="10" height="10" fill="#0072b2" stroke="#d55e00" stroke-width="2"/>');
+  });
+
+  it("dà il carattere ai testi, con l'interlinea, e ridisegna la punta di una freccia", () => {
+    const opened = open(doc(`${LAYER}${TEXT("oaaaaaaaa", ["Uno"], ' font-family="Literata, serif" font-size="16" font-weight="bold"')}${TEXT("obbbbbbbb", ["Uno", "Due"])}${RECT("occcccccc", ' fill="none" stroke="#000000" stroke-width="4"')}${ARROW}</g>`));
+    const text = applied(opened, pasted(opened, ["obbbbbbbb"], copied(opened, "oaaaaaaaa")!));
+    // Il nero e il corpo di 16 sono quelli di SVG: non si scrivono.
+    expect(text).toContain('<text id="obbbbbbbb" x="10" y="40" font-family="Literata, serif" font-weight="bold">\n  <tspan x="10" dy="0">Uno</tspan>\n  <tspan x="10" dy="20">Due</tspan>\n</text>');
+    const next = open(text);
+    const arrow = applied(next, pasted(next, ["oarrow000"], copied(next, "occcccccc")!));
+    expect(arrow).toContain(`d="${arrowPath(0, 0, 100, 0, 4)}"`);
+    // Gli estremi e gli angoli tornano quelli di SVG.
+    expect(arrow).toContain('fill="none" stroke="#000000" stroke-width="4"/>');
+  });
+
+  it("dà l'opacità all'oggetto scelto, e lascia com'è ciò che è bloccato dentro di lui", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#cc79a7" opacity="0.5"')}<g id="ogroup000">${RECT("obbbbbbbb")}${RECT("occcccccc", ' fill="#000000" fub:locked="true"')}</g></g>`));
+    const after = applied(opened, pasted(opened, ["ogroup000"], copied(opened, "oaaaaaaaa")!));
+    expect(after).toContain('<g id="ogroup000" opacity="0.5">');
+    expect(after).toContain('<rect id="obbbbbbbb" x="0" y="0" width="10" height="10" fill="#cc79a7"/>');
+    expect(after).toContain('<rect id="occcccccc" x="0" y="0" width="10" height="10" fill="#000000" fub:locked="true"/>');
   });
 });
 

@@ -102,12 +102,12 @@ export function textElem(id: string, at: Point, lines: readonly string[], style:
 /// I file dei caratteri che l'app porta per l'interfaccia, coi nomi che il
 /// file del disegno scrive, e i caratteri che coprono: quelli di
 /// `theme/serie/fonts.css`.
-const FONT_FILES: ReadonlyArray<readonly [family: string, url: string, weight: string]> = [
+export const FONT_FILES: ReadonlyArray<readonly [family: string, url: string, weight: string]> = [
   ["Inter", "/fonts/inter-latin-wght-normal.woff2", "100 900"],
   ["Literata", "/fonts/literata-latin-wght-normal.woff2", "200 900"],
   ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-normal.woff2", "100 800"],
 ];
-const FONT_RANGE =
+export const FONT_RANGE =
   "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
 
 let registered = false;
