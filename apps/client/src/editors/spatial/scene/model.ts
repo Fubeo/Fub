@@ -320,6 +320,19 @@ export interface Fragment {
 /// Legge `raw`, il testo di un elemento solo, dentro un contenitore che
 /// dichiara `scope`. `null` se non è un elemento ben formato da solo.
 export function parseFragment(raw: string, scope: NamespaceScope): Fragment | null {
+  const open = wrapperOf(scope);
+  const doc = parseWrapped(open, raw);
+  if (doc === null) return null;
+  const children = doc.children(doc.root);
+  if (children.length !== 1) return null;
+  const element = doc.element(children[0]!);
+  if (element === null || element.start !== open.length || element.end !== open.length + raw.length) return null;
+  return { doc, id: children[0]! };
+}
+
+/// Il tag d'apertura dell'elemento che avvolge un frammento: dichiara i
+/// namespace di `scope`.
+function wrapperOf(scope: NamespaceScope): string {
   let open = "<fub-fragment";
   for (const [prefix, uri] of scope.entries()) {
     if (prefix === null) {
@@ -328,19 +341,62 @@ export function parseFragment(raw: string, scope: NamespaceScope): Fragment | nu
       open += ` xmlns:${prefix}="${escapeAttribute(uri)}"`;
     }
   }
-  open += ">";
-  let doc: XmlDocument;
+  return `${open}>`;
+}
+
+function parseWrapped(open: string, raw: string): XmlDocument | null {
   try {
-    doc = parseXml(new SourceText(`${open}${raw}</fub-fragment>`), false);
+    return parseXml(new SourceText(`${open}${raw}</fub-fragment>`), false);
   } catch (error) {
     if (error instanceof XmlError) return null;
     throw error;
   }
+}
+
+/// Uno o più elementi fratelli scritti da soli, `raw`, con gli spazi fra
+/// loro: i figli di `id` in `doc`, da `offset` nel testo letto.
+export interface Sequence {
+  readonly doc: XmlDocument;
+  readonly id: NodeId;
+  readonly offset: number;
+}
+
+/// Legge `raw` dentro un contenitore che dichiara `scope`: uno o più elementi
+/// fratelli, con spazi fra loro. `null` se non è ben formato, se non
+/// comincia e finisce con un elemento, o se fra gli elementi c'è altro.
+export function parseSequence(raw: string, scope: NamespaceScope): Sequence | null {
+  const open = wrapperOf(scope);
+  const doc = parseWrapped(open, raw);
+  if (doc === null) return null;
   const children = doc.children(doc.root);
-  if (children.length !== 1) return null;
-  const element = doc.element(children[0]!);
-  if (element === null || element.start !== open.length || element.end !== open.length + raw.length) return null;
-  return { doc, id: children[0]! };
+  const first = doc.element(children[0] ?? doc.root);
+  const last = doc.element(children[children.length - 1] ?? doc.root);
+  if (children.length === 0 || first === null || last === null) return null;
+  if (first.start !== open.length || last.end !== open.length + raw.length) return null;
+  for (const child of children) {
+    const node = doc.nodes[child]!;
+    if (node.kind === "element" || (node.kind === "text" && node.blank)) continue;
+    return null;
+  }
+  return { doc, id: doc.root, offset: open.length };
+}
+
+/// I pezzi di una sequenza letta, come figli di `parent`.
+export function buildSequence(sequence: Sequence, parent: ContainerNode): Part[] {
+  const parts = new Builder(sequence.doc).parts(sequence.id, parent);
+  const adopt = (container: ContainerNode): void => {
+    for (const part of container.parts) {
+      if (typeof part === "string") continue;
+      part.parent = container;
+      if (part.kind === "container") adopt(part);
+    }
+  };
+  for (const part of parts) {
+    if (typeof part === "string") continue;
+    part.parent = parent;
+    if (part.kind === "container") adopt(part);
+  }
+  return parts;
 }
 
 /// Il nodo di un frammento letto, come figlio di `parent`.

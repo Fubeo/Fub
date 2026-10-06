@@ -69,7 +69,7 @@ function sessionsWith(text: string): DocumentSessionCollection {
 }
 
 describe("i vettori delle operazioni", () => {
-  it("ci sono i 42 vettori di §9, in ordine", () => {
+  it("ci sono i 45 vettori di §9, in ordine", () => {
     expect(vectors.map((v) => v.name)).toEqual([
       "add-first-stroke",
       "add-last-in-layer",
@@ -113,6 +113,9 @@ describe("i vettori delle operazioni", () => {
       "locked-group",
       "locked-group-add",
       "locked-object-unlock",
+      "add-raw-foreign",
+      "add-raw-sequence",
+      "add-raw-duplicate-id",
     ]);
   });
 
