@@ -11,10 +11,10 @@
 // - **Ciò che si vede resta.** Raggruppare oggetti di livelli diversi ne
 //   compensa le trasformazioni; separare un gruppo porta la sua
 //   trasformazione e lo stile che i figli ereditavano su ciascun figlio, e
-//   moltiplica la sua opacità nella loro. Un gruppo con parti estranee si
-//   separa solo se non ha niente da portare, perché un elemento estraneo non
-//   cambia. Nemmeno un foglio di stile del disegno cambia: se dopo il
-//   comando sceglierebbe altro, l'editor non lo scrive (`styled.ts`).
+//   moltiplica la sua opacità nella loro. Qui si scrivono gli oggetti; le
+//   parti estranee si spostano come sono, e ciò che serve perché si vedano
+//   com'erano, anche con un foglio di stile del disegno che dopo il comando
+//   sceglierebbe altro, lo aggiunge l'editor (`styled.ts`).
 // - **Un collegamento è un gruppo che porta a una nota**: un `a` con `href`,
 //   che si crea attorno agli oggetti come un gruppo e si toglie come si
 //   separa un gruppo. Un collegamento non ne contiene un altro.
@@ -409,17 +409,17 @@ export function isGroup(unit: Unit): boolean {
 }
 
 /// Separa i gruppi fra `units`: vedi [`unwrapOps`].
-export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | "foreign" {
+export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged {
   return unwrapOps(model, units, ids, isGroup);
 }
 
 /// Toglie i contenitori fra `units` che `unwraps` sceglie: i figli prendono
 /// il posto del contenitore, in ordine, con la sua trasformazione e lo stile
 /// che ne ereditavano; titolo e descrizione del contenitore se ne vanno con
-/// lui. La selezione dopo sono i figli e gli
-/// altri oggetti scelti. `"foreign"` se un contenitore ha parti estranee e
-/// qualcosa da portare su di loro.
-function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, unwraps: (unit: Unit) => boolean): Arranged | "foreign" {
+/// lui. Le parti estranee si spostano come sono: ciò che portano lo
+/// aggiunge `styled.ts`. La selezione dopo sono i figli e gli altri oggetti
+/// scelti.
+function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, unwraps: (unit: Unit) => boolean): Arranged {
   const plan = new Plan(model, ids);
   const kept: Unit[] = [];
   const freed: string[] = [];
@@ -442,7 +442,6 @@ function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, un
     const fades = alpha !== null && alpha < 1;
     const carries = moves || inherited.length > 0 || fades;
     const children = elementChildren(node).filter((child) => !(child.facts.uri === SVG_NS && (child.facts.local === "title" || child.facts.local === "desc")));
-    if (carries && children.some((child) => child.details === null)) return "foreign";
     for (const child of [...children].reverse()) {
       let target: Target;
       if (child.details === null) {
@@ -518,7 +517,7 @@ export function relinkOps(model: DocumentModel, unit: Unit, href: string, ids: N
 
 /// Toglie i collegamenti fra `units`: gli oggetti restano dov'erano, come
 /// quelli di un gruppo che si separa (vedi [`unwrapOps`]).
-export function unlinkOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged | "foreign" {
+export function unlinkOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged {
   return unwrapOps(model, units, ids, isLink);
 }
 

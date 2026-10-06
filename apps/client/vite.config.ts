@@ -88,6 +88,12 @@ export default defineConfig({
           if (/\/src\/editors\/spatial\/(scene\/|painter\/|ink\/|number\.ts$)|\/node_modules\/perfect-freehand\//.test(id)) {
             return "drawing-scene";
           }
+          // I fogli di stile dei disegni: leggerli, la loro cascata e lo stile
+          // che resta a ciò che un comando sposta. Seguono CSS, non l'editor
+          // che li chiama, e dipendono soltanto dal formato.
+          if (/\/src\/editors\/spatial\/tools\/(stylesheet|selectors|cascade|styled)\.ts$/.test(id)) {
+            return "drawing-styles";
+          }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
             return "theme-series";
           }

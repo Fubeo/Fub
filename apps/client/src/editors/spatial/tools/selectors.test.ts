@@ -39,14 +39,56 @@ describe("leggere un foglio", () => {
     expect(sheet.deep).toBe(false);
   });
 
+  it("legge le dichiarazioni, con !important, e la specificità di ogni selettore", () => {
+    const sheet = readSheet("#a .b rect, :where(#a) rect, rect::before, :is(#a, .b) {fill: red !important; stroke : blue; /* nota */ --Var: 1}");
+    expect(sheet.rules.map((rule) => rule.specificity)).toEqual([1_001_001, 1, 2, 1_000_000]);
+    expect(sheet.rules[0]!.declarations).toEqual([
+      { property: "fill", value: "red", important: true },
+      { property: "stroke", value: "blue", important: false },
+      { property: "--Var", value: "1", important: false },
+    ]);
+  });
+
+  it("le regole annidate valgono come :is() del genitore", () => {
+    const b = el("rect", { class: "b" });
+    const both = el("rect", { class: "a b" });
+    el("g", { class: "a" }, [b]);
+    const sheet = readSheet(".a { fill: red; .b { x: 1 } &.b { x: 2 } }");
+    expect(sheet.rules.map((rule) => rule.text)).toEqual([".a", ".b", "&.b"]);
+    expect(sheet.selectors.map((selector) => new Matcher().selects(selector, b))).toEqual([false, true, false]);
+    expect(new Matcher().selects(sheet.selectors[2]!, both)).toBe(true);
+  });
+
+  it("ordina i livelli di @layer come un browser: per primo dichiarato, e fuori da ogni livello per ultimi", () => {
+    const sheet = readSheet("@layer a, b; @layer b { x {y:1} } @layer a { x {y:2} @layer c { x {y:3} } } x {y:4}");
+    const [b, a, c, none] = sheet.rules.map((rule) => rule.layer);
+    expect(c! < a!).toBe(true);
+    expect(a! < b!).toBe(true);
+    expect(b! < none!).toBe(true);
+  });
+
+  it("dice quando una regola vale secondo dove si guarda il disegno", () => {
+    const sheet = readSheet("@media screen { a {x:1} } @media print { b {x:1} } @media (min-width: 400px) { c {x:1} } @supports (display: grid) { d {x:1} } @container (width > 1px) { e {x:1} } @media speech { f {x:1} } @starting-style { g {x:1} }");
+    expect(sheet.rules.map((rule) => [rule.text, rule.condition, rule.at, rule.placed])).toEqual([
+      ["a", true, null, false],
+      ["b", null, "@media print", false],
+      ["c", null, "@media (min-width: 400px)", false],
+      ["d", null, "@supports (display: grid)", false],
+      ["e", null, "@container (width > 1px)", true],
+    ]);
+  });
+
+  it("tiene gli indirizzi dei fogli importati", () => {
+    expect(readSheet('@import url("a.css"); @import "b.css" screen; a {x:1}').imports).toEqual(["a.css", "b.css"]);
+  });
+
   it("lascia fuori le regole vuote e quelle coi selettori che un browser non accetta", () => {
     expect(readSheet("a {} b { /* niente */ }").selectors).toHaveLength(0);
     expect(readSheet("a, b!c {x:1}").selectors).toHaveLength(0);
     expect(readSheet("svg|rect {x:1}").selectors).toHaveLength(0);
   });
 
-  it("non sa che cosa scelgono le regole annidate e @scope", () => {
-    expect(readSheet(".a { .b { x: 1 } }").selectors).toEqual([null]);
+  it("non sa che cosa scelgono le regole di @scope, e un & senza genitore", () => {
     expect(readSheet("@scope (.a) { .b { x: 1 } }").selectors).toEqual([null]);
     expect(readSheet("& .a { x: 1 }").selectors).toEqual([null]);
   });
