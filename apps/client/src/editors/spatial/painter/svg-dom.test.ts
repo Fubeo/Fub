@@ -508,6 +508,27 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  it("mostra un altro `d` per una forma con un tracciato al suo posto, e lo toglie", async () => {
+    const engine = SceneEngine.open(doc(`${LAYER}<rect id="r" x="1" y="2" width="4" height="4" fill="#ff0000" transform="rotate(10)"/><circle id="c" r="2"/></g>`));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const rect = host.querySelector(`[data-scene-id="r"]`) as SVGElement;
+    const [paint] = builder.paintsOf(engine.holder("r")!);
+    painter.setDraft({ paths: new Map([[paint!, "M1 2 L9 2 L5 6 Z"]]) });
+    const stand = rect.nextElementSibling!;
+    expect(stand.localName).toBe("path");
+    expect([stand.getAttribute("d"), stand.getAttribute("fill"), stand.getAttribute("transform")]).toEqual(["M1 2 L9 2 L5 6 Z", "#ff0000", "rotate(10)"]);
+    expect(["x", "width", "data-scene-id"].some((name) => stand.hasAttribute(name))).toBe(false);
+    expect(rect.style.visibility).toBe("hidden");
+    expect(rect.hasAttribute("d")).toBe(false);
+    painter.setDraft(null);
+    expect(rect.nextElementSibling?.localName).toBe("circle");
+    expect(rect.style.visibility).toBe("");
+    painter.dispose();
+  });
+
   it("mostra altri raggi degli angoli per un rettangolo, e li riporta a quelli dipinti", async () => {
     const engine = SceneEngine.open(doc(`${LAYER}<rect id="r" width="40" height="20" rx="2" ry="3"/><rect id="s" width="4" height="4"/></g>`));
     const builder = new PaintBuilder();
