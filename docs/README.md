@@ -36,6 +36,7 @@ flowchart LR
 - [Disegni, trasformare](product/drawing-transform.md)
 - [Disegni, guide intelligenti](product/drawing-guides.md)
 - [Disegni, righelli e guide](product/drawing-rulers.md)
+- [Disegni, proprietà](product/drawing-properties.md)
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)

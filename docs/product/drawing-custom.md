@@ -49,17 +49,20 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Righelli e guide | Standard | i righelli (`Maiusc+R`), le guide del documento (`\|`), «Guide…» e l'unità del documento |
 | Collegamenti alle note | Standard | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
+| Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
 | Nodi, Bézier | Esperto | lo strumento (`N`, `B`) |
-| Attributi | Esperto | «Attributi» (`Ctrl+Maiusc+X`) |
+| Attributi | Esperto | la loro sezione nelle proprietà, o senza il pannello «Attributi» (`Ctrl+Maiusc+X`) |
 | Contorno: tratteggio, estremi e angoli | Esperto | «Contorno» |
-| Trasforma: rotazione, scala e inclinazione | Esperto | «Trasforma…» (`Ctrl+Maiusc+M`) |
+| Trasforma: rotazione, scala e inclinazione | Esperto | «Trasforma…» (`Ctrl+Maiusc+M`) e la sua sezione nelle proprietà |
 | Applica trasformazione | Esperto | «Applica trasformazione» |
 | Oggetto in tracciato | Esperto | «Oggetto in tracciato» |
 | Operazioni booleane | Esperto | «Operazioni booleane» |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
 bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la
-selezione, ha almeno un comando delle parti scelte. Ci sono a ogni livello,
+selezione, ha almeno un comando delle parti scelte, e sta accanto alla
+selezione; senza il pannello delle proprietà, la casella che la riporta in
+cima al foglio è in «Pagina e griglia». Ci sono a ogni livello,
 anche senza nessuna parte: la Selezione, le immagini incollate, l'albero degli
 oggetti, aprire un collegamento con `Alt+Invio` o col suo segno, e «Apri come
 sorgente».

@@ -12,11 +12,15 @@ apre uguale a ogni livello.
 
 ## Attributi
 
-«Attributi», nella barra (`Ctrl+Maiusc+X`, come l'editor XML di Inkscape),
-apre accanto al foglio il tag dell'oggetto scelto come lo scrive il file, una
-riga per attributo; sotto l'albero degli oggetti, se è aperto anche quello. È
-il modo più corto di dare un valore preciso, e per chi non vede il foglio una
-tabella da leggere, col nome dell'attributo come nome del campo. Le regole
+Gli attributi sono il tag dell'oggetto scelto come lo scrive il file, una
+riga per attributo, in una sezione del [pannello delle
+proprietà](drawing-properties.md), chiusa di partenza: `Ctrl+Maiusc+X`, come
+l'editor XML di Inkscape, la apre e le porta il fuoco, e di nuovo torna al
+foglio. Nel Personalizzato senza il pannello, «Attributi», nella barra, apre
+accanto al foglio un pannello loro, sotto l'albero degli oggetti se è aperto
+anche quello. È il modo più corto di dare un valore preciso, e per chi non
+vede il foglio una tabella da leggere, col nome dell'attributo come nome del
+campo. Le regole
 stanno in `apps/client/src/editors/spatial/tools/attributes.ts`, il pannello
 in `apps/client/src/editors/spatial/tools/inspector.ts`.
 
@@ -63,7 +67,7 @@ in `apps/client/src/editors/spatial/tools/inspector.ts`.
   foglio.
 
 Un documento in sola lettura si legge tutto e non si scrive. Scendendo
-dall'Esperto il pannello si chiude e «Attributi» sparisce dalla barra.
+dall'Esperto la sezione se ne va dal pannello delle proprietà.
 
 ## Contorno
 
@@ -99,9 +103,13 @@ Le regole stanno in `apps/client/src/editors/spatial/tools/outline.ts`.
 ## Trasforma
 
 «Trasforma…», nella barra della selezione (`Ctrl+Maiusc+M`, come la finestra
-di Inkscape), ruota, scala e inclina gli oggetti scelti di quanto si scrive.
-La finestra parte da ciò che non cambia niente: rotazione e inclinazioni a
-zero, scale al cento per cento. Le regole stanno in
+di Inkscape), porta il fuoco alla sezione «Trasforma» del [pannello delle
+proprietà](drawing-properties.md), che ruota, scala e inclina gli oggetti
+scelti di quanto si scrive, con «Applica»; nel Personalizzato senza il
+pannello apre una finestra con gli stessi campi. I campi partono da ciò che
+non cambia niente: rotazione e inclinazioni a zero, scale al cento per cento,
+e dopo «Applica» restano come sono, così un secondo «Applica» ripete la
+trasformazione. Le regole stanno in
 `apps/client/src/editors/spatial/tools/transform.ts`.
 
 - **Attorno al centro degli oggetti scelti**, cioè del riquadro che si vede,
