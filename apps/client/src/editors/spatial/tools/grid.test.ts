@@ -2,18 +2,25 @@
 // frecce, e le righe che si vedono a ogni zoom.
 
 import { describe, expect, it } from "vitest";
+import { UNITS } from "../scene/rulers";
 import {
   DEFAULT_GRID,
   GRID_MIN_PX,
   GRID_STEPS,
   gridLines,
+  gridStep,
   lineBeyond,
   nearestCorner,
+  sameStep,
   snapDelta,
   snapPoint,
   snapValue,
+  UNIT_STEP,
+  unitSteps,
   validStep,
+  validSteps,
   wholeSteps,
+  withStep,
 } from "./grid";
 
 /// Le coordinate delle righe di un `d`, in ordine.
@@ -22,12 +29,30 @@ const coordinates = (d: string, axis: "x" | "y"): number[] =>
 
 describe("la griglia", () => {
   it("parte spenta, con un passo che divide la pagina di un documento nuovo", () => {
-    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, guides: true });
-    for (const step of GRID_STEPS) {
+    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true });
+    for (const step of GRID_STEPS.px) {
       expect(1600 % step).toBe(0);
       expect(1000 % step).toBe(0);
     }
-    expect(GRID_STEPS).toContain(DEFAULT_GRID.step);
+    expect(GRID_STEPS.px).toContain(DEFAULT_GRID.step);
+  });
+
+  it("ogni unità ha i suoi passi, che la griglia accetta, e ricorda il suo", () => {
+    for (const unit of UNITS) {
+      expect(GRID_STEPS[unit]).toContain(UNIT_STEP[unit]);
+      for (const step of unitSteps(unit)) expect(validStep(step)).toBe(true);
+    }
+    expect(unitSteps("mm")[2]).toBeCloseTo(18.8976, 4);
+    expect(gridStep(DEFAULT_GRID, "px")).toBe(20);
+    expect(gridStep(DEFAULT_GRID, "in")).toBe(24);
+    const mm = withStep(DEFAULT_GRID, "mm", unitSteps("mm")[0]!);
+    expect(gridStep(mm, "mm")).toBeCloseTo(3.7795, 4);
+    expect(gridStep(mm, "px")).toBe(20);
+    expect(withStep(mm, "px", 50)).toMatchObject({ step: 50, steps: mm.steps });
+    expect(validSteps({ mm: 5, px: 3, cm: 0, in: "1", pc: 4 })).toEqual({ mm: 5 });
+    expect(validSteps(null)).toEqual({});
+    expect(sameStep(5 * (96 / 25.4), unitSteps("mm")[2]!)).toBe(true);
+    expect(sameStep(18.9, unitSteps("mm")[2]!)).toBe(false);
   });
 
   it("accetta un passo da 1 a 1000 unità", () => {

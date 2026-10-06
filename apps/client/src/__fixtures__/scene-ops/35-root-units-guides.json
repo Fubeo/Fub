@@ -1,0 +1,27 @@
+{
+  "name": "root-units-guides",
+  "description": "set su #root scrive unità e guide nell'ordine canonico della radice, e la geometria resta",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\" inkscape:version=\"1.3\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "set",
+      "id": "#root",
+      "attrs": {
+        "fub:guides": "x 120; y 340.5 locked",
+        "fub:units": "mm"
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\" fub:units=\"mm\" inkscape:version=\"1.3\" fub:guides=\"x 120; y 340.5 locked\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "set",
+      "id": "#root",
+      "attrs": {
+        "fub:guides": null,
+        "fub:units": null
+      }
+    }
+  }
+}

@@ -284,13 +284,13 @@ describe("lo smontaggio", () => {
   it("mostra un documento intero come un'immagine sola", async () => {
     const painter = createSvgPainter(host, owner);
     const layer = wholeDocumentLayer('<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script><rect width="9" height="9"/></svg>')!;
-    painter.update({ root: { attrs: [], page: null }, layers: [layer] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer] });
     await decoded();
     expect(host.querySelectorAll("rect, script")).toHaveLength(0);
     const text = await blobs.get(host.querySelector("img")!.getAttribute("src")!)!.text();
     expect(text).toContain("<script>x()</script>");
     expect(text).not.toContain("background:none");
-    painter.update({ root: { attrs: [], page: null }, layers: [layer] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer] });
     expect(urls).toBe(1);
   });
 });

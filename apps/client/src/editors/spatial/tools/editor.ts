@@ -52,6 +52,14 @@
 //   non entra nel file. Con l'aggancio vanno sulla griglia le forme, gli
 //   spostamenti, le copie, le immagini incollate e il cursore. Ctrl o ⌘,
 //   tenuto durante un gesto del puntatore, lo sospende.
+// - **Righelli e guide.** Dal livello Standard i righelli stanno sui bordi
+//   del foglio, nell'unità del documento (`fub:units`), e segnano la pagina,
+//   la selezione e il puntatore (`rulers.ts`). Da un righello si tira una
+//   guida, che entra nel file (`fub:guides`): con lo strumento Selezione la
+//   si sposta, riportata su un righello se ne va, e ciò che si muove ci si
+//   aggancia. «Guide…» le scrive coi numeri (`guide-dialog.ts`). L'unità
+//   vale per i righelli, i campi, le misure e gli annunci; il disegno resta
+//   in unità della scena.
 // - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
 //   entra nel file come data URI (`images.ts`): il disegno resta un file
 //   solo. Oltre il peso massimo l'editor propone di ridurla.
@@ -109,7 +117,8 @@ import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
 import type { Role, Tool } from "../scene/analysis";
 import type { Item } from "../scene/classify";
-import type { Op, Reason } from "../scene/ops";
+import { ROOT, type Op, type Reason } from "../scene/ops";
+import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, type NodeShape, type OverlayHandle } from "../painter/overlay";
@@ -236,17 +245,23 @@ import { collapsed, penKind, penNode, penPath, type PenNode } from "./bezier";
 import {
   DEFAULT_GRID,
   GRID_MAJOR,
-  GRID_STEPS,
   gridLines,
+  gridStep,
   lineBeyond,
   nearestCorner,
+  sameStep,
   snapDelta,
   snapPoint,
   snapValue,
+  unitSteps,
   validStep,
+  validSteps,
   wholeSteps,
+  withStep,
   type Grid,
 } from "./grid";
+import { guideDialog, unitSuffix } from "./guide-dialog";
+import { createGuideLines, createRulers, fieldMin, fieldText, fromUnit, GUIDE_HIT_PX, guideAt, RULER_PX, toUnit, UNIT_PLACES } from "./rulers";
 import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, type Replay } from "./history";
 import {
@@ -630,7 +645,7 @@ interface LinkMark {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | NodesGesture | BezierGesture | EraseGesture | TextGesture | RefusedGesture;
+type Gesture = InkGesture | ShapeGesture | SelectGesture | NodesGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -799,6 +814,31 @@ interface RefusedGesture extends GestureBase {
   readonly kind: "refused";
 }
 
+/// Un gesto su una guida del documento: una nuova, tirata da un righello, o
+/// una che c'è, presa sul foglio con lo strumento Selezione.
+interface GuideGesture extends GestureBase {
+  readonly kind: "guide";
+  /// `x` per una guida verticale, che sta su un valore di x; `y` per una
+  /// orizzontale.
+  readonly axis: "x" | "y";
+  /// Il posto della guida presa fra quelle del documento; `null` per una
+  /// nuova.
+  readonly index: number | null;
+  /// Dov'è sceso il puntatore, in pixel del foglio.
+  readonly from: Point;
+  /// Lo scarto, nella scena, fra la guida e il punto preso: la guida non
+  /// salta sotto il puntatore.
+  readonly offset: number;
+  /// Dove sta la guida adesso, nella scena.
+  at: number;
+  /// Il puntatore è sopra un righello o fuori dal foglio: rilasciata lì, una
+  /// guida nuova non entra e una che c'era se ne va.
+  away: boolean;
+  /// Il puntatore si è mosso oltre la soglia del trascinamento: un tocco
+  /// fermo non sposta niente.
+  moved: boolean;
+}
+
 function scaleOf(m: Matrix): number {
   return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 }
@@ -912,15 +952,46 @@ function layerRefusal(layer: LayerInfo): DrawKey | null {
   return layer.hidden ? "draw.layer.hidden_here" : layer.locked ? "draw.layer.locked_here" : null;
 }
 
-/// `next` come griglia, col passo di `before` se il suo è fuori dai limiti.
+/// `next` come griglia, col passo di `before` se il suo è fuori dai limiti,
+/// e i passi delle altre unità che la griglia accetta.
 function checkedGrid(next: Grid, before: Grid): Grid {
+  const flag = (value: unknown, fallback: boolean): boolean => (typeof value === "boolean" ? value : fallback);
   return {
     shown: next.shown,
     snap: next.snap,
     step: validStep(next.step) ? next.step : before.step,
-    guides: typeof next.guides === "boolean" ? next.guides : before.guides,
+    steps: typeof next.steps === "object" && next.steps !== null ? validSteps(next.steps) : before.steps,
+    guides: flag(next.guides, before.guides),
+    rulers: flag(next.rulers, before.rulers),
+    rulerGuides: flag(next.rulerGuides, before.rulerGuides),
   };
 }
+
+/// Il nome di ogni unità, come lo dicono i menu.
+const UNIT_NAMES: Readonly<Record<LengthUnit, DrawKey>> = {
+  px: "draw.unit.px",
+  mm: "draw.unit.mm",
+  cm: "draw.unit.cm",
+  in: "draw.unit.in",
+  pt: "draw.unit.pt",
+};
+
+/// Le unità come le conosce `Intl`, che le scrive e le dice nella lingua di
+/// adesso; il punto tipografico non è fra le sue.
+const INTL_UNITS: Readonly<Record<LengthUnit, string | null>> = { px: null, mm: "millimeter", cm: "centimeter", in: "inch", pt: null };
+
+/// Il tasto che mostra e nasconde i righelli: Ctrl+R, quello dei programmi di
+/// disegno, ricarica la pagina nel browser.
+const RULERS_BINDING = "Shift-r";
+
+/// Ciò che si dice quando il documento cambia unità.
+const UNITS_NOW: Readonly<Record<LengthUnit, DrawKey>> = {
+  px: "draw.units.now.px",
+  mm: "draw.units.now.mm",
+  cm: "draw.units.now.cm",
+  in: "draw.units.now.in",
+  pt: "draw.units.now.pt",
+};
 
 /// Ciò che le guide intelligenti mostrano: le linee su cui sta ciò che si
 /// muove, e le distanze uguali.
@@ -1060,6 +1131,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il puntatore sopra il foglio, senza premere, o il cursore mentre la
   /// penna di Bézier disegna: lì va il segmento che verrebbe.
   let hover: { readonly at: Point; readonly pointer: InkPointerType } | null = null;
+  /// Dov'è sceso l'ultimo puntatore, in pixel del foglio: un gesto che parte
+  /// su un righello o su una guida è loro.
+  let downAt: Point | null = null;
+  /// La guida del documento sotto il puntatore che passa, che si accende.
+  let hotGuide: number | null = null;
+  /// L'ultimo tocco su una guida, per il doppio tocco che apre «Guide».
+  let lastGuideTap: { readonly index: number; readonly time: number; readonly at: Point } | null = null;
   const history = new History();
 
   // --- DOM ----------------------------------------------------------------
@@ -1492,6 +1570,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   previewCamera.append(previewLayer);
   preview.append(previewCamera);
   surface.append(preview);
+  // Le guide del documento: sopra il disegno, sotto le maniglie.
+  const guideLines = createGuideLines(surface);
   const overlay = createOverlay(surface, life);
   // Il cursore del foglio: si vede quando lo muove la tastiera.
   const cursorMark = document.createElement("div");
@@ -1499,6 +1579,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   cursorMark.setAttribute("aria-hidden", "true");
   cursorMark.hidden = true;
   surface.append(cursorMark);
+  // I righelli, per ultimi: coprono i bordi in alto e a sinistra, sopra ogni
+  // cosa. Le tacche hanno i numeri della lingua di adesso.
+  const tickFormats = new Map<number, Intl.NumberFormat>();
+  const tickText = (value: number, places: number): string => {
+    let format = tickFormats.get(places);
+    if (format === undefined) {
+      format = new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: places, useGrouping: false });
+      tickFormats.set(places, format);
+    }
+    return format.format(value);
+  };
+  const rulers = createRulers(surface, tickText, (unit) => unit);
 
   const builder = new PaintBuilder();
   const indexer = new SceneIndexer(builder);
@@ -1559,7 +1651,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const shown = has("grid") && grid.shown;
     gridMark.style.display = shown ? "" : "none";
     if (!shown) return;
-    const lines = gridLines(camera, surface.clientWidth, surface.clientHeight, grid.step);
+    const lines = gridLines(camera, surface.clientWidth, surface.clientHeight, stepNow());
     gridMinor.setAttribute("d", lines.minor);
     gridMajor.setAttribute("d", lines.major);
   };
@@ -1579,10 +1671,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     previewCamera.setAttribute("transform", `matrix(${next.scale} 0 0 ${next.scale} ${next.tx} ${next.ty})`);
     showPage();
     showGrid();
+    showGuideLines();
     showZoom();
     showCursor();
     placeText();
-    // Le cornici hanno un margine e le maniglie una misura sullo schermo.
+    // Le cornici hanno un margine e le maniglie una misura sullo schermo; i
+    // righelli seguono la cornice.
     showHandles();
   };
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.
@@ -1592,8 +1686,171 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   relabels.push(() => {
     percent = null;
     coordinates = null;
+    unitFormats = null;
+    tickFormats.clear();
     showZoom(true);
+    // Le tacche si riscrivono coi numeri della lingua nuova.
+    if (rulersShown()) {
+      rulers.show(null);
+      showRulers();
+    }
   });
+
+  // --- L'unità del documento ----------------------------------------------------
+  //
+  // La scena misura in pixel; il documento dice in che unità si legge
+  // (`fub:units`). Righelli, campi, misure e annunci la usano; il disegno, i
+  // suoi spessori e i corpi del testo non cambiano.
+
+  /// L'unità del documento di adesso.
+  const docUnit = (): LengthUnit => scene.root.units;
+
+  /// Il passo della griglia per il documento di adesso, in unità della scena:
+  /// ogni unità ricorda il suo.
+  const stepNow = (): number => gridStep(grid, docUnit());
+
+  /// I formati dell'unità di adesso, nella lingua di adesso: il numero solo,
+  /// e con l'unità scritta corta e per intero.
+  let unitFormats: {
+    readonly unit: LengthUnit;
+    readonly plain: Intl.NumberFormat;
+    readonly short: Intl.NumberFormat | null;
+    readonly long: Intl.NumberFormat | null;
+  } | null = null;
+  const formatsNow = (): NonNullable<typeof unitFormats> => {
+    const unit = docUnit();
+    if (unitFormats?.unit !== unit) {
+      const language = resolvedLanguage();
+      const digits = { maximumFractionDigits: UNIT_PLACES[unit] };
+      const intl = INTL_UNITS[unit];
+      unitFormats = {
+        unit,
+        plain: new Intl.NumberFormat(language, digits),
+        short: intl === null ? null : new Intl.NumberFormat(language, { ...digits, style: "unit", unit: intl, unitDisplay: "short" }),
+        long: intl === null ? null : new Intl.NumberFormat(language, { ...digits, style: "unit", unit: intl, unitDisplay: "long" }),
+      };
+    }
+    return unitFormats;
+  };
+
+  /// Una lunghezza della scena nell'unità del documento, ai decimali con cui
+  /// l'unità si legge, e senza lo zero negativo.
+  const inUnit = (value: number): number => {
+    const unit = docUnit();
+    const factor = 10 ** UNIT_PLACES[unit];
+    return Math.round(toUnit(value, unit) * factor) / factor || 0;
+  };
+
+  /// Una coordinata nell'unità del documento: un numero solo, come nei campi
+  /// X e Y.
+  const coordText = (value: number): string => formatsNow().plain.format(inUnit(value));
+
+  /// Una lunghezza come si legge: in pixel il numero solo, nelle altre unità
+  /// con la sigla.
+  const lengthText = (value: number): string => {
+    const { unit, short } = formatsNow();
+    if (unit === "px") return coordText(value);
+    return short === null ? `${coordText(value)} ${unit}` : short.format(inUnit(value));
+  };
+
+  /// Una lunghezza come si dice: in pixel il numero solo, nelle altre unità
+  /// col nome intero, che uno screen reader non deve indovinare da una sigla.
+  const lengthSpoken = (value: number): string => {
+    const { unit, long } = formatsNow();
+    if (unit === "px") return coordText(value);
+    if (long !== null) return long.format(inUnit(value));
+    return plural(inUnit(value), "draw.unit.pt.one", "draw.unit.pt.other", { value: coordText(value) });
+  };
+
+  /// Un campo di una lunghezza: il nome con la sigla dell'unità, il valore
+  /// in quell'unità ai decimali di un campo, e il minimo che la misura in
+  /// unità della scena chiede.
+  const lengthField = (id: string, label: string, value: number, min?: number): FormField => {
+    const unit = docUnit();
+    return {
+      id,
+      label: unitSuffix(label, unit),
+      value: fieldText(value, unit),
+      kind: "number",
+      ...(min === undefined ? {} : { min: fieldMin(min, unit) }),
+    };
+  };
+
+  /// Il valore di un campo di lunghezza scritto da chi lo cambia, in unità
+  /// della scena, a due decimali come li scrive il file.
+  const fieldValue = (text: string): number => Math.round(fromUnit(Number(text), docUnit()) * 100) / 100 || 0;
+
+  // --- Righelli e guide del documento ---------------------------------------------
+
+  /// I righelli si vedono: se il livello li offre e chi disegna li vuole.
+  const rulersShown = (at: ReadonlySet<Feature> = features): boolean => at.has("rulers") && grid.rulers;
+
+  /// Le guide del documento si vedono, e agganciano, se il livello offre i
+  /// righelli e chi disegna le vuole.
+  const guidesShown = (at: ReadonlySet<Feature> = features): boolean => at.has("rulers") && grid.rulerGuides;
+
+  /// La parte del foglio che si vede, in pixel: i righelli coprono i bordi
+  /// in alto e a sinistra, e ciò che si inquadra va accanto a loro.
+  const viewArea = (): { readonly x: number; readonly y: number; readonly w: number; readonly h: number } => {
+    const inset = rulersShown() ? RULER_PX : 0;
+    return { x: inset, y: inset, w: Math.max(0, surface.clientWidth - inset), h: Math.max(0, surface.clientHeight - inset) };
+  };
+
+  /// Dove sta il punto `p` del foglio rispetto ai righelli: su quello in
+  /// alto, su quello a sinistra, sull'angolo fra i due, o su nessuno.
+  const rulerAt = (p: Point): "top" | "left" | "corner" | null => {
+    if (!rulersShown()) return null;
+    const top = p[1] >= 0 && p[1] < RULER_PX;
+    const left = p[0] >= 0 && p[0] < RULER_PX;
+    return top && left ? "corner" : top ? "top" : left ? "left" : null;
+  };
+
+  /// Il riquadro della selezione che i righelli segnano, nella scena: lo
+  /// tiene aggiornato `showHandles`, anche mentre la si sposta o la si
+  /// ridimensiona.
+  let selectionBand: Bounds | null = null;
+
+  /// I righelli sullo schermo, se si vedono: la pagina, la selezione e il
+  /// puntatore. Il foglio sa se ci sono, e sposta le barre che galleggiano
+  /// in cima.
+  const showRulers = (): void => {
+    const shown = rulersShown();
+    stage.toggleAttribute("data-rulers", shown);
+    if (!shown) {
+      rulers.show(null);
+      return;
+    }
+    rulers.show({
+      camera,
+      width: surface.clientWidth,
+      height: surface.clientHeight,
+      unit: docUnit(),
+      page: pageBox(),
+      selection: selectionBand,
+      pointer: pointerAt?.at ?? null,
+    });
+  };
+
+  /// Le guide del documento sullo schermo, se si vedono: quella sotto il
+  /// puntatore accesa, e quella che si trascina dove la porta il gesto.
+  const showGuideLines = (): void => {
+    const g = current?.kind === "guide" ? current : null;
+    // Una guida nuova si vede mentre la si tira anche con le guide nascoste.
+    const guides = guidesShown() ? (scene.root.guides ?? []) : [];
+    if (guides.length === 0 && (g === null || !g.moved)) {
+      guideLines.show(null);
+      return;
+    }
+    guideLines.show({
+      camera,
+      width: surface.clientWidth,
+      height: surface.clientHeight,
+      guides,
+      hot: g === null ? hotGuide : null,
+      hidden: g?.index ?? null,
+      moving: g === null || !g.moved ? null : { axis: g.axis, at: g.at, away: g.away },
+    });
+  };
 
   const localPoint = (clientX: number, clientY: number): { x: number; y: number } => {
     const rect = surface.getBoundingClientRect();
@@ -1601,22 +1858,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   const zoomBy = (factor: number): void => {
-    setCamera(zoomAtPoint(camera, factor, { x: surface.clientWidth / 2, y: surface.clientHeight / 2 }, DRAW_SCALE_LIMITS));
+    const area = viewArea();
+    setCamera(zoomAtPoint(camera, factor, { x: area.x + area.w / 2, y: area.y + area.h / 2 }, DRAW_SCALE_LIMITS));
+  };
+
+  /// `bounds` inquadrato in ciò che si vede del foglio, accanto ai righelli.
+  const fitted = (bounds: Bounds, area: ReturnType<typeof viewArea>): Camera => {
+    const world = { minX: bounds.min[0], minY: bounds.min[1], maxX: bounds.max[0], maxY: bounds.max[1] };
+    const view = fitBounds(world, { w: area.w, h: area.h }, FIT_PAD, 0, DRAW_SCALE_LIMITS);
+    return { ...view, tx: view.tx + area.x, ty: view.ty + area.y };
   };
 
   function fit(): void {
     const page = scene.root.page;
     let bounds: Bounds | null = page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
     for (const unit of currentIndex().units) bounds = union(bounds, unit.bounds);
-    const view = { w: surface.clientWidth, h: surface.clientHeight };
-    if (view.w === 0 || view.h === 0) return;
+    const area = viewArea();
+    if (area.w === 0 || area.h === 0) return;
     placed = true;
     if (bounds === null) {
-      setCamera({ scale: 1, tx: 0, ty: 0 });
+      setCamera({ scale: 1, tx: area.x, ty: area.y });
       return;
     }
-    const world = { minX: bounds.min[0], minY: bounds.min[1], maxX: bounds.max[0], maxY: bounds.max[1] };
-    setCamera(fitBounds(world, view, FIT_PAD, 0, DRAW_SCALE_LIMITS));
+    setCamera(fitted(bounds, area));
   }
 
   // Il primo inquadramento aspetta che il foglio abbia una misura.
@@ -1624,6 +1888,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const sizeObserver = new ResizeObserver(() => {
       if (!placed) fit();
       showGrid();
+      showGuideLines();
+      showRulers();
     });
     sizeObserver.observe(surface);
     life.add(() => sizeObserver.disconnect());
@@ -1771,8 +2037,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return frame === null ? null : frameView(frame, camera.scale);
   };
 
-  /// Le misure e gli angoli come si leggono sulla cornice.
-  const measuresText = ([width, height]: readonly [number, number]): string => `${numberText(width)} × ${numberText(height)}`;
+  /// Le misure e gli angoli come si leggono sulla cornice: le misure
+  /// nell'unità del documento, con la sigla una volta in fondo.
+  const measuresText = ([width, height]: readonly [number, number]): string => `${coordText(width)} × ${lengthText(height)}`;
   const degreesText = (degrees: number): string => `${numberText(degrees)}°`;
 
   /// La cornice fra le maniglie: il riquadro comune di più oggetti, le
@@ -1813,9 +2080,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const move = current?.kind === "select" && current.mode === "move" ? current : null;
     const delta = move === null ? null : moveDelta(move);
     const shaping = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current.matrix : null;
+    let band: Bounds | null = null;
     for (const unit of selectedUnits()) {
-      // L'oggetto di cui si modificano i nodi mostra i nodi, non la cornice.
-      if (editing !== null && unit.key === editing.unit.key) continue;
       const frame = unit.frame();
       if (frame === null) continue;
       let matrix = unit.matrix;
@@ -1825,6 +2091,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (shaping !== null) {
         matrix = compose(shaping, matrix);
       }
+      // I righelli segnano dove sta la selezione, anche a metà gesto.
+      for (const corner of [frame.min, [frame.max[0], frame.min[1]], frame.max, [frame.min[0], frame.max[1]]] as const) {
+        const [x, y] = apply(matrix, corner as Point);
+        band = union(band, { min: [x, y], max: [x, y] });
+      }
+      // L'oggetto di cui si modificano i nodi mostra i nodi, non la cornice.
+      if (editing !== null && unit.key === editing.unit.key) continue;
       // Il margine è lo stesso sullo schermo lungo i due assi, anche per un
       // oggetto scalato più in un verso che nell'altro.
       const sx = Math.hypot(matrix[0], matrix[1]) * camera.scale;
@@ -1856,8 +2129,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const measures = measureHandles();
     guiding = guides.length > 0;
     measured = measures.length > 0;
-    handles.push(...guides, ...measures);
+    handles.push(...guides, ...measures, ...guideLabel());
     overlay.setHandles(handles);
+    selectionBand = band;
+    showRulers();
     showLinks(delta);
     const keys = selection.join("\n");
     if (keys !== noticed) {
@@ -1955,6 +2230,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     overlay.setInk(INK_KEY, null);
     showShape(null, [1, 0, 0, 1, 0, 0]);
     painter.setDraft(null);
+    showGuideLines();
     showHandles();
     overlay.flush();
   };
@@ -2336,7 +2612,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     redoButton.disabled = !canEdit || !redoable();
     deleteButton.disabled = !canEdit || selection.length === 0;
     propertiesButton.disabled = !canEdit;
-    pageButton.hidden = !has("grid") && !has("guides");
+    pageButton.hidden = !has("grid") && !has("guides") && !has("rulers");
     insertGroup.hidden = !insertsImages(features);
     imageButton.disabled = !canEdit;
     attributesButton.hidden = !has("attributes");
@@ -2355,6 +2631,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     painter.setDraft(null);
     painter.update(scene);
     showPage();
+    // L'unità può essere cambiata, e con lei il passo della griglia.
+    showGrid();
     index = null;
     marks = null;
     selection = inOrder(selection);
@@ -2365,6 +2643,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     showTyping();
     syncControls();
+    if (hotGuide !== null && (scene.root.guides?.[hotGuide] === undefined || scene.root.guides[hotGuide]!.locked)) hotGuide = null;
+    showGuideLines();
     showHandles();
     syncTree();
     syncInspector();
@@ -2492,24 +2772,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Porta `bounds` in vista: resta dov'è se si vede già intero, va al
   /// centro se ci sta allo zoom di adesso, altrimenti si inquadra.
   const frameBounds = (bounds: Bounds | null): void => {
-    const view = { w: surface.clientWidth, h: surface.clientHeight };
-    if (bounds === null || view.w === 0 || view.h === 0) return;
+    const area = viewArea();
+    if (bounds === null || area.w === 0 || area.h === 0) return;
     placed = true;
     const { scale, tx, ty } = camera;
     const left = tx + scale * bounds.min[0];
     const top = ty + scale * bounds.min[1];
     const right = tx + scale * bounds.max[0];
     const bottom = ty + scale * bounds.max[1];
-    if (left >= 0 && top >= 0 && right <= view.w && bottom <= view.h) return;
+    if (left >= area.x && top >= area.y && right <= area.x + area.w && bottom <= area.y + area.h) return;
     const usable = 1 - 2 * FIT_PAD;
-    if (right - left <= view.w * usable && bottom - top <= view.h * usable) {
+    if (right - left <= area.w * usable && bottom - top <= area.h * usable) {
       const cx = (bounds.min[0] + bounds.max[0]) / 2;
       const cy = (bounds.min[1] + bounds.max[1]) / 2;
-      setCamera({ scale, tx: view.w / 2 - scale * cx, ty: view.h / 2 - scale * cy });
+      setCamera({ scale, tx: area.x + area.w / 2 - scale * cx, ty: area.y + area.h / 2 - scale * cy });
       return;
     }
-    const world = { minX: bounds.min[0], minY: bounds.min[1], maxX: bounds.max[0], maxY: bounds.max[1] };
-    setCamera(fitBounds(world, view, FIT_PAD, 0, DRAW_SCALE_LIMITS));
+    setCamera(fitted(bounds, area));
   };
 
   function reveal(offset: number): boolean {
@@ -2588,7 +2867,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     showSurfaceHint();
     showGrid();
+    showGuideLines();
     syncControls();
+    // I righelli vanno e vengono col livello, e la cornice con loro.
+    showHandles();
   }
 
   function setTool(id: ToolId): void {
@@ -2693,13 +2975,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Un punto di un gesto: sull'incrocio più vicino quando la griglia
   /// aggancia e Ctrl o ⌘ non è tenuto.
-  const snapped = (p: Point): Point => (gridOn() && !free ? snapPoint(p, grid.step) : p);
+  const snapped = (p: Point): Point => (gridOn() && !free ? snapPoint(p, stepNow()) : p);
 
   // --- Le guide intelligenti -------------------------------------------------
 
-  /// Le guide agganciano: se il livello le offre, accese. `at` sono le parti
-  /// da guardare, di solito quelle di adesso.
-  const guidesOn = (at: ReadonlySet<Feature> = features): boolean => at.has("guides") && grid.guides;
+  /// Le guide intelligenti agganciano agli oggetti e alla pagina: se il
+  /// livello le offre, accese. `at` sono le parti da guardare, di solito
+  /// quelle di adesso.
+  const smartOn = (at: ReadonlySet<Feature> = features): boolean => at.has("guides") && grid.guides;
+
+  /// Le guide del documento agganciano: se si vedono, e ce n'è una.
+  const rulerGuidesOn = (at: ReadonlySet<Feature> = features): boolean => guidesShown(at) && (scene.root.guides?.length ?? 0) > 0;
+
+  /// Qualcosa aggancia ciò che si muove: le guide intelligenti, o quelle del
+  /// documento.
+  const guidesOn = (at: ReadonlySet<Feature> = features): boolean => smartOn(at) || rulerGuidesOn(at);
 
   /// La soglia delle guide nella scena, per il puntatore `pointer`.
   const guideReach = (pointer: InkPointerType): number => GUIDE_PX[pointer] / camera.scale;
@@ -2721,25 +3011,35 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// I bersagli di `owner`, un gesto o i nodi della penna di Bézier, presi la
   /// prima volta che servono e tenuti finché la scena e la vista restano
-  /// quelle: gli oggetti che si vedono nella vista, tranne quelli di chiave
-  /// `skip`, la pagina, e i punti `points`. Ci si allinea a ciò che si
-  /// guarda; un foglio non ancora disposto, senza misure, vede tutto.
+  /// quelle: con le guide intelligenti gli oggetti che si vedono nella
+  /// vista, tranne quelli di chiave `skip`, la pagina, e i punti `points`;
+  /// con le guide del documento, quelle, tranne la guida `skipGuide`. Ci si
+  /// allinea a ciò che si guarda; un foglio non ancora disposto, senza
+  /// misure, vede tutto.
   let guideCache: { readonly owner: object; readonly index: SceneIndex; readonly view: Camera; readonly guides: GuideIndex } | null = null;
-  const guidesFor = (owner: object, skip: readonly string[], points: () => readonly Point[] = () => []): GuideIndex => {
+  const guidesFor = (owner: object, skip: readonly string[], points: () => readonly Point[] = () => [], skipGuide: number | null = null): GuideIndex => {
     const index = currentIndex();
     if (guideCache !== null && guideCache.owner === owner && guideCache.index === index && guideCache.view === camera) return guideCache.guides;
-    const skipped = new Set(skip);
-    const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
     const targets: GuideTarget[] = [];
-    for (const unit of seenUnits()) {
-      const box = unit.geometry ?? unit.bounds;
-      if (box === null || skipped.has(unit.key)) continue;
-      if (view !== null && (box.max[0] < view.min[0] || box.min[0] > view.max[0] || box.max[1] < view.min[1] || box.min[1] > view.max[1])) continue;
-      targets.push({ kind: "object", box, key: unit.key });
+    if (smartOn()) {
+      const skipped = new Set(skip);
+      const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
+      for (const unit of seenUnits()) {
+        const box = unit.geometry ?? unit.bounds;
+        if (box === null || skipped.has(unit.key)) continue;
+        if (view !== null && (box.max[0] < view.min[0] || box.min[0] > view.max[0] || box.max[1] < view.min[1] || box.min[1] > view.max[1])) continue;
+        targets.push({ kind: "object", box, key: unit.key });
+      }
+      const page = pageBox();
+      if (page !== null) targets.push({ kind: "page", box: page, key: "" });
+      for (const p of points()) targets.push({ kind: "node", box: { min: p, max: p }, key: "" });
     }
-    const page = pageBox();
-    if (page !== null) targets.push({ kind: "page", box: page, key: "" });
-    for (const p of points()) targets.push({ kind: "node", box: { min: p, max: p }, key: "" });
+    if (rulerGuidesOn()) {
+      (scene.root.guides ?? []).forEach((guide, i) => {
+        if (i === skipGuide) return;
+        targets.push({ kind: "guide", box: { min: [guide.at, guide.at], max: [guide.at, guide.at] }, key: String(i), axis: guide.axis === "x" ? 0 : 1 });
+      });
+    }
     const guides = new GuideIndex(targets);
     guideCache = { owner, index, view: camera, guides };
     return guides;
@@ -2750,7 +3050,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// bersaglio, finché Ctrl o ⌘ non è tenuto.
   const guided = (p: Point, guides: () => GuideIndex, pointer: InkPointerType): Point => {
     if (free) return p;
-    const line = gridOn() ? snapPoint(p, grid.step) : null;
+    const line = gridOn() ? snapPoint(p, stepNow()) : null;
     if (!guidesOn()) return line ?? p;
     const index = guides();
     const reach = guideReach(pointer);
@@ -2879,12 +3179,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const key = `${line.axis} ${line.gap[0]} ${line.gap[1]}`;
       if (written.has(key) || spaced(line.axis === 0 ? 1 : 0, line.gap)) continue;
       written.add(key);
-      out.push({ kind: "measure", from: along(line, line.gap[0]), to: along(line, line.gap[1]), text: numberText(line.gap[1] - line.gap[0]) });
+      out.push({ kind: "measure", from: along(line, line.gap[0]), to: along(line, line.gap[1]), text: lengthText(line.gap[1] - line.gap[0]) });
     }
     for (const { axis, gap, gaps } of view.spacings) {
       for (const { from, to, across } of gaps) {
         const at = (along: number): Point => (axis === 0 ? [along, across] : [across, along]);
-        out.push({ kind: "measure", from: at(from), to: at(to), text: numberText(gap) });
+        out.push({ kind: "measure", from: at(from), to: at(to), text: lengthText(gap) });
       }
     }
     return out;
@@ -2896,6 +3196,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const names = EDGE_NAMES[axis];
     const from = t(names[source]);
     if (target.kind === "node") return t("draw.guides.node", { source: from });
+    if (target.kind === "guide") return t("draw.guides.line", { source: from });
     const same = source === edge;
     if (target.kind === "page") return same ? t("draw.guides.page.same", { source: from }) : t("draw.guides.page", { source: from, edge: t(names[edge]) });
     const unit = seenUnits().find((each) => each.key === target.key);
@@ -2913,11 +3214,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     for (const axis of [0, 1] as const) {
       const spacing = view.spacings.find((each) => each.axis === axis);
       if (spacing !== undefined) {
-        parts.push(t(axis === 0 ? "draw.guides.spaced.x" : "draw.guides.spaced.y", { gap: numberText(spacing.gap) }));
+        parts.push(t(axis === 0 ? "draw.guides.spaced.x" : "draw.guides.spaced.y", { gap: lengthSpoken(spacing.gap) }));
         continue;
       }
+      // Prima un oggetto o un nodo, poi una guida, poi la pagina.
       const lines = view.lines.filter((line) => line.axis === axis);
-      const line = lines.find((each) => each.target.kind !== "page") ?? lines[0];
+      const line = lines.find((each) => each.target.kind !== "page" && each.target.kind !== "guide") ?? lines.find((each) => each.target.kind === "guide") ?? lines[0];
       if (line !== undefined) parts.push(lineText(line));
     }
     return parts.length === 0 ? "" : t("draw.guides.snapped", { parts: parts.join("; ") });
@@ -2955,12 +3257,208 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return [
       ...corners.map((corner, i): OverlayHandle => ({ kind: "guide", from: corner, to: corners[(i + 1) % 4]!, dashed: true })),
       ...extensions.map(([from, to]): OverlayHandle => ({ kind: "guide", from, to, dashed: true })),
-      ...measures.map(({ from, to, value }): OverlayHandle => ({ kind: "measure", from, to, text: numberText(value) })),
+      ...measures.map(({ from, to, value }): OverlayHandle => ({ kind: "measure", from, to, text: lengthText(value) })),
     ];
   };
 
+  // --- Il gesto delle guide del documento ----------------------------------------
+
+  /// Le guide del documento da scrivere, o perché non si può: le guide
+  /// scritte che non si leggono non si riscrivono a gesti, e lo si dice.
+  const writableGuides = (): readonly RulerGuide[] | null => {
+    const guides = scene.root.guides;
+    if (guides === null) announce(t("draw.guides.unreadable"));
+    return guides;
+  };
+
+  /// Le guide nascoste si fanno vedere per chi ne aggiunge: è ciò che vuole
+  /// vedere. Lo dice l'annuncio della guida.
+  const revealGuides = (): void => {
+    if (grid.rulerGuides) return;
+    grid = { ...grid, rulerGuides: true };
+    options.onGridChange?.(grid);
+  };
+
+  /// Scrive le guide `next` in un passo di annulla `label`, e dice `text`.
+  const commitGuides = (label: DrawKey, next: readonly RulerGuide[], text: string): boolean => {
+    if (commit(label, { op: "set", id: ROOT, attrs: { "fub:guides": writeGuides(next) } }) === null) return false;
+    announce(text);
+    return true;
+  };
+
+  /// Il gesto di una guida, se il puntatore è sceso su un righello o su una
+  /// guida: un righello ne tira una nuova, quello in alto un'orizzontale e
+  /// quello a sinistra una verticale; con lo strumento Selezione una guida
+  /// libera si sposta. Le maniglie della cornice vengono prima delle guide,
+  /// le guide prima degli oggetti. `null` se il gesto non è di una guida.
+  const guideStart = (base: GestureBase): GuideGesture | RefusedGesture | null => {
+    const down = downAt;
+    if (down === null || !has("rulers")) return null;
+    const ruler = rulerAt(down);
+    if (ruler === "corner") return { ...base, kind: "refused" };
+    const p = screenToWorld(camera, { x: down[0], y: down[1] });
+    if (ruler !== null) {
+      if (!editable()) return { ...base, kind: "refused" };
+      const guides = writableGuides();
+      if (guides === null) return { ...base, kind: "refused" };
+      if (guides.length >= MAX_GUIDES) {
+        announce(t("draw.guides.full", { count: MAX_GUIDES }));
+        return { ...base, kind: "refused" };
+      }
+      const axis = ruler === "top" ? "y" : "x";
+      return { ...base, kind: "guide", axis, index: null, from: down, offset: 0, at: axis === "x" ? p.x : p.y, away: true, moved: false };
+    }
+    if (tool !== "select" || !editable() || !guidesShown()) return null;
+    const guides = scene.root.guides;
+    if (guides === null) return null;
+    const view = frameNow();
+    if (view !== null && gripAt(view, [p.x, p.y], camera.scale, base.pointer) !== null) return null;
+    const index = guideAt(guides, camera, down, GUIDE_HIT_PX[base.pointer], true);
+    if (index === null) return null;
+    const guide = guides[index]!;
+    const offset = guide.at - (guide.axis === "x" ? p.x : p.y);
+    return { ...base, kind: "guide", axis: guide.axis, index, from: down, offset, at: guide.at, away: false, moved: false };
+  };
+
+  /// Dove va la guida del gesto `g` per il valore `value` della scena: sulla
+  /// riga della griglia o sul bersaglio più vicino, a pari distanza sul
+  /// bersaglio, finché Ctrl o ⌘ non è tenuto; a due decimali, come la
+  /// scrive il file.
+  const guideValue = (g: GuideGesture, value: number): number => {
+    let at = value;
+    if (!free) {
+      const axis: FrameAxis = g.axis === "x" ? 0 : 1;
+      const line = gridOn() ? snapValue(value, stepNow()) : null;
+      const target = guidesOn() ? guidesFor(g, [], () => [], g.index).nearest(axis, value, guideReach(g.pointer)) : null;
+      at = nearer(value, target, line);
+    }
+    return Math.round(at * 100) / 100 || 0;
+  };
+
+  /// Il gesto `g` col puntatore in `p`, nella scena: la guida lo segue, e
+  /// sopra un righello o fuori dal foglio si rilascia per toglierla.
+  const guideUpdate = (g: GuideGesture, p: Point): void => {
+    const x = camera.tx + camera.scale * p[0];
+    const y = camera.ty + camera.scale * p[1];
+    if (!g.moved && Math.hypot(x - g.from[0], y - g.from[1]) <= DRAG_PX[g.pointer]) return;
+    if (!g.moved) showGrip(g.axis === "x" ? "ew" : "ns");
+    g.moved = true;
+    g.away = x < 0 || y < 0 || x > surface.clientWidth || y > surface.clientHeight || rulerAt([x, y]) !== null;
+    g.at = guideValue(g, (g.axis === "x" ? p[0] : p[1]) + g.offset);
+    showGuideLines();
+    showHandles();
+  };
+
+  /// Accanto al puntatore che tira una guida: dove sta, o che rilasciata se
+  /// ne va. Resta nella parte del foglio che si vede, fuori dai righelli.
+  const guideLabel = (): OverlayHandle[] => {
+    const g = current?.kind === "guide" ? current : null;
+    if (g === null || !g.moved || pointerAt === null) return [];
+    const area = viewArea();
+    const x = Math.min(Math.max(camera.tx + camera.scale * pointerAt.at[0], area.x + 48), area.x + area.w - 48);
+    const y = Math.min(Math.max(camera.ty + camera.scale * pointerAt.at[1] + 8, area.y + 4), area.y + area.h - 24);
+    const at = screenToWorld(camera, { x, y });
+    return [{ kind: "label", x: at.x, y: at.y, text: g.away ? t("draw.guide.drop") : lengthText(g.at) }];
+  };
+
+  /// La fine del gesto `g`: una guida nuova entra se è sul foglio, una che
+  /// c'era va dove l'ha portata o, sopra un righello, se ne va. Un tocco fermo
+  /// non cambia niente; due tocchi sulla stessa guida aprono «Guide».
+  const guideEnd = (g: GuideGesture, time: number): void => {
+    current = null;
+    showGrip(null);
+    showGuideLines();
+    showHandles();
+    if (!g.moved) {
+      if (g.index === null) return;
+      const tap = lastGuideTap;
+      const twice = tap !== null && tap.index === g.index && time - tap.time <= DOUBLE_TAP_MS && Math.hypot(tap.at[0] - g.from[0], tap.at[1] - g.from[1]) <= DOUBLE_TAP_PX[g.pointer];
+      lastGuideTap = twice ? null : { index: g.index, time, at: g.from };
+      if (twice) void editGuides(g.index);
+      return;
+    }
+    lastGuideTap = null;
+    const guides = scene.root.guides;
+    if (guides === null) return;
+    const vertical = g.axis === "x";
+    if (g.index === null) {
+      if (g.away) return;
+      revealGuides();
+      const text = t(vertical ? "draw.guide.added.x" : "draw.guide.added.y", { at: lengthSpoken(g.at) });
+      commitGuides("draw.action.guide_add", [...guides, { axis: g.axis, at: g.at, locked: false }], text);
+      return;
+    }
+    const before = guides[g.index];
+    if (before === undefined) return;
+    if (g.away) {
+      commitGuides("draw.action.guide_delete", guides.filter((_, i) => i !== g.index), t(vertical ? "draw.guide.deleted.x" : "draw.guide.deleted.y"));
+      return;
+    }
+    if (g.at === before.at) return;
+    const text = t(vertical ? "draw.guide.moved.x" : "draw.guide.moved.y", { at: lengthSpoken(g.at) });
+    commitGuides("draw.action.guide_move", guides.map((each, i) => (i === g.index ? { ...each, at: g.at } : each)), text);
+  };
+
+  /// Blocca o sblocca la guida `index`: bloccata, il puntatore la attraversa.
+  const lockGuide = (index: number, lock: boolean): void => {
+    const guides = writableGuides();
+    if (guides === null || guides[index] === undefined || guides[index]!.locked === lock) return;
+    const next = guides.map((each, i) => (i === index ? { ...each, locked: lock } : each));
+    commitGuides(lock ? "draw.action.guide_lock" : "draw.action.guide_unlock", next, t(lock ? "draw.guide.locked" : "draw.guide.unlocked"));
+  };
+
+  /// Elimina la guida `index`.
+  const deleteGuide = (index: number): void => {
+    const guides = writableGuides();
+    const guide = guides?.[index];
+    if (guides === null || guide === undefined) return;
+    commitGuides("draw.action.guide_delete", guides.filter((_, i) => i !== index), t(guide.axis === "x" ? "draw.guide.deleted.x" : "draw.guide.deleted.y"));
+  };
+
+  /// Blocca o sblocca tutte le guide.
+  const lockAllGuides = (lock: boolean): void => {
+    const guides = writableGuides();
+    if (guides === null || guides.every((each) => each.locked === lock)) return;
+    commitGuides("draw.action.guides", guides.map((each) => ({ ...each, locked: lock })), t(lock ? "draw.guides.all_locked" : "draw.guides.all_unlocked"));
+  };
+
+  /// Elimina tutte le guide, in un passo di annulla.
+  const deleteAllGuides = (): void => {
+    const guides = writableGuides();
+    if (guides === null || guides.length === 0) return;
+    commitGuides("draw.action.guides", [], plural(guides.length, "draw.guides.deleted.one", "draw.guides.deleted.other"));
+  };
+
+  /// «Guide…»: le guide coi numeri, nell'unità del documento, col fuoco
+  /// sulla guida `focus`. Ciò che cambia si scrive in un passo di annulla.
+  async function editGuides(focus: number | null): Promise<void> {
+    if (asking || !editable() || !has("rulers")) return;
+    finishText();
+    cancelGesture();
+    asking = true;
+    try {
+      const area = viewArea();
+      const center = screenToWorld(camera, { x: area.x + area.w / 2, y: area.y + area.h / 2 });
+      const before = scene.root.guides;
+      const answer = await guideDialog({ guides: before, unit: docUnit(), center: [center.x, center.y], focus });
+      if (answer === null || disposed || !editable()) return;
+      // Mentre la finestra era aperta il disegno può essere cambiato: si
+      // scrive ciò che la finestra mostra, se è diverso da ciò che c'è.
+      const now = scene.root.guides;
+      if (now !== null && writeGuides(answer) === writeGuides(now)) return;
+      if (answer.length > (now?.length ?? 0)) revealGuides();
+      commitGuides("draw.action.guides", answer, t("draw.guides.changed"));
+    } finally {
+      asking = false;
+    }
+  }
+
   const begin = (start: StrokeStart): Gesture => {
     const base = { stroke: start.id, pointer: start.pointerType };
+    // Un righello o una guida sotto il puntatore prendono il gesto, con
+    // qualunque strumento il righello, con la Selezione la guida.
+    const guide = start.id >= 0 ? guideStart(base) : null;
+    if (guide !== null) return guide;
     if (!editable()) return { ...base, kind: "refused" };
     switch (tool) {
       case "pen":
@@ -3069,7 +3567,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const dx = g.end[0] - g.from[0];
     const dy = g.end[1] - g.from[1];
     if (free) return [roundDelta(dx), roundDelta(dy)];
-    const line = gridOn() && g.source !== null ? snapDelta(g.source, dx, dy, grid.step) : null;
+    const line = gridOn() && g.source !== null ? snapDelta(g.source, dx, dy, stepNow()) : null;
     const box = guidesOn() ? geometryOf(g.units) : null;
     if (box === null) return line ?? [roundDelta(dx), roundDelta(dy)];
     const index = guidesFor(g, g.units.map((unit) => unit.key));
@@ -3100,7 +3598,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (inverse === null) return null;
     const [a, b, c, d] = inverse;
     const delta = apply([a, b, c, d, 0, 0], [roundDelta(g.end[0] - g.from[0]), roundDelta(g.end[1] - g.from[1])]);
-    const snap = gridOn() && !free ? gridSnap(frame.matrix, grid.step) : null;
+    const snap = gridOn() && !free ? gridSnap(frame.matrix, stepNow()) : null;
     const guides = guidesOn() && !free ? frameGuides(guidesFor(g, g.units.map((unit) => unit.key)), frame.matrix, GUIDE_PX[g.pointer], camera.scale) : null;
     const work = snap === null && guides === null ? frame.box : frame.geometry;
     const [m0, m1, m2, m3] = frame.matrix;
@@ -3137,7 +3635,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showHandles();
     if (turn === null) {
       const [width, height] = frameSize(after);
-      announce(noted(t("draw.resized", { width: numberText(width), height: numberText(height) }), note));
+      announce(noted(t("draw.resized", { width: lengthSpoken(width), height: lengthSpoken(height) }), note));
     } else {
       announce(t(turn > 0 ? "draw.rotated.clockwise" : "draw.rotated.counter", { angle: degreesText(Math.abs(turn)) }));
     }
@@ -3288,8 +3786,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       index,
       count: nodeCount(now.subs),
       kind: t(KIND_NAMES[end ? "end" : kindsOf(now.subs)(s, at)]),
-      x: numberText(x),
-      y: numberText(y),
+      x: coordText(x),
+      y: coordText(y),
     });
   };
 
@@ -3690,7 +4188,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// dove.
   const bezierNodeText = (nodes: readonly PenNode[], at: number): string => {
     const node = nodes[at]!;
-    return t("draw.bezier.node", { index: at + 1, kind: t(KIND_NAMES[penKind(node)]), x: numberText(node.at[0]), y: numberText(node.at[1]) });
+    return t("draw.bezier.node", { index: at + 1, kind: t(KIND_NAMES[penKind(node)]), x: coordText(node.at[0]), y: coordText(node.at[1]) });
   };
 
   /// Il primo punto di un gesto della penna: che cosa prende, e il nodo.
@@ -3843,6 +4341,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const grip = gripAt(view, [point.x, point.y], camera.scale, pointer);
     showGrip(grip === null ? null : gripCursor(view.frame, grip));
   };
+  /// La guida del documento sotto il puntatore che passa, con lo strumento
+  /// Selezione: si accende, e il cursore dice dove si sposta. Sopra un
+  /// righello il cursore è la freccia; una maniglia della cornice viene
+  /// prima.
+  const hoverGuide = (event: PointerEvent): void => {
+    const local = localPoint(event.clientX, event.clientY);
+    const p: Point = [local.x, local.y];
+    const ruler = rulerAt(p);
+    if (ruler === null) delete surface.dataset.ruler;
+    else surface.dataset.ruler = ruler;
+    const guides = scene.root.guides;
+    let hot: number | null = null;
+    if (ruler === null && event.buttons === 0 && tool === "select" && editable() && guidesShown() && guides !== null && surface.dataset.grip === undefined) {
+      const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
+      hot = guideAt(guides, camera, p, GUIDE_HIT_PX[pointer], true);
+    }
+    if (hot !== null) surface.dataset.grip = guides![hot]!.axis === "x" ? "ew" : "ns";
+    if (hot === hotGuide) return;
+    hotGuide = hot;
+    showGuideLines();
+  };
   /// Il puntatore porta con sé il cursore del foglio, che si nasconde: la
   /// tastiera ripartirà da lì.
   const followPointer = (event: PointerEvent): void => {
@@ -3856,6 +4375,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     "pointerdown",
     (event) => {
       readModifiers(event);
+      const local = localPoint(event.clientX, event.clientY);
+      downAt = [local.x, local.y];
       // Il puntatore prende il posto della tastiera: il suo gesto finisce.
       cancelPress();
       followPointer(event);
@@ -3881,16 +4402,55 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hover = { at: [point.x, point.y], pointer };
         showBezier();
       }
-      // Sopra una maniglia della cornice, il cursore dice che cosa fa.
-      if (current === null && pressed === null) hoverGrip(event);
+      // Sopra una maniglia della cornice o una guida, il cursore dice che
+      // cosa fa.
+      if (current === null && pressed === null) {
+        hoverGrip(event);
+        hoverGuide(event);
+      }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
+      // I righelli segnano dov'è.
+      else if (rulersShown()) showRulers();
     },
     { capture: true },
   );
+  // Col tasto destro, o col tocco lungo, i righelli e le guide del
+  // documento hanno il loro menu, con qualunque strumento e anche per una
+  // guida bloccata, che solo da qui si sblocca col puntatore. Altrove il
+  // foglio resta com'è.
+  life.listen(surface, "contextmenu", (event) => {
+    const local = localPoint(event.clientX, event.clientY);
+    const p: Point = [local.x, local.y];
+    let items: MenuItem[] | null = null;
+    if (rulerAt(p) !== null) items = rulerItems();
+    else if (guidesShown() && scene.root.guides !== null) {
+      const touch = "pointerType" in event && (event as PointerEvent).pointerType === "touch";
+      const index = guideAt(scene.root.guides, camera, p, GUIDE_HIT_PX[touch ? "touch" : "mouse"], false);
+      if (index !== null) items = guideItems(index);
+    }
+    if (items === null || items.length === 0) return;
+    // Il tocco lungo che apre il menu non tira anche una guida.
+    if (current !== null && current.kind !== "guide") return;
+    event.preventDefault();
+    if (current !== null) cancelGesture();
+    showContextMenu(event, items);
+  });
+  // L'angolo fra i righelli apre il loro menu: l'unità, le guide, e
+  // nasconderli.
+  life.listen(surface, "click", (event) => {
+    const local = localPoint(event.clientX, event.clientY);
+    if (rulerAt([local.x, local.y]) === "corner") showContextMenu(event, rulerItems());
+  });
   life.listen(surface, "pointerleave", () => {
     if (current === null) showGrip(null);
+    surface.removeAttribute("data-ruler");
+    if (hotGuide !== null && current === null) {
+      hotGuide = null;
+      showGuideLines();
+    }
     pointerAt = null;
+    if (rulersShown()) showRulers();
     if (hover !== null) {
       hover = null;
       showBezier();
@@ -3951,6 +4511,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "text":
           g.from ??= toPoint(samples[0]!);
           break;
+        case "guide":
+          guideUpdate(g, toPoint(samples[samples.length - 1]!));
+          break;
         case "refused":
           break;
       }
@@ -4000,6 +4563,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           current = null;
           if (g.from !== null) openText(g.from, g.pointer);
           return;
+        case "guide":
+          guideEnd(g, stroke.timeStamp);
+          return;
         case "refused":
           current = null;
           return;
@@ -4010,7 +4576,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (g === null || g.stroke !== id) return;
       current = null;
       if (g.kind === "select" && g.mode === "marquee") select(g.base);
-      if (g.kind === "select") showGrip(null);
+      if (g.kind === "select" || g.kind === "guide") showGrip(null);
       // I nodi tornano com'erano, e l'oggetto con loro.
       if (g.kind === "nodes") {
         select(g.selection);
@@ -4275,20 +4841,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il cursore dov'è, o al centro di ciò che si vede.
   const cursorPoint = (): Point => {
     if (cursor === null) {
-      const center = screenToWorld(camera, { x: surface.clientWidth / 2, y: surface.clientHeight / 2 });
+      const area = viewArea();
+      const center = screenToWorld(camera, { x: area.x + area.w / 2, y: area.y + area.h / 2 });
       cursor = [center.x, center.y];
     }
     return cursor;
   };
 
-  /// La vista segue il cursore quando arriva al bordo.
+  /// La vista segue il cursore quando arriva al bordo, o sotto i righelli.
   const keepInView = (p: Point): void => {
-    const w = surface.clientWidth;
-    const h = surface.clientHeight;
+    const { x: left, y: top, w, h } = viewArea();
     if (w === 0 || h === 0) return;
     const margin = Math.min(CURSOR_MARGIN_PX, w / 4, h / 4);
-    const x = camera.tx + camera.scale * p[0];
-    const y = camera.ty + camera.scale * p[1];
+    const x = camera.tx + camera.scale * p[0] - left;
+    const y = camera.ty + camera.scale * p[1] - top;
     const dx = x < margin ? margin - x : x > w - margin ? w - margin - x : 0;
     const dy = y < margin ? margin - y : y > h - margin ? h - margin - y : 0;
     if (dx === 0 && dy === 0) return;
@@ -4300,7 +4866,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato.
   const announceCursor = (): void => {
     const p = cursorPoint();
-    const at = t("draw.cursor.at", { x: numberText(p[0]), y: numberText(p[1]) });
+    const at = t("draw.cursor.at", { x: coordText(p[0]), y: coordText(p[1]) });
     const aim = pressed === null && drawing() !== null ? bezierTarget(p, "mouse") : "add";
     if (aim !== "add") {
       announce(`${at}: ${t(aim === "close" ? "draw.bezier.cursor.close" : "draw.bezier.cursor.last")}`);
@@ -4353,8 +4919,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const moveCursorOnGrid = (x: number, y: number, lines: number): void => {
     const [cx, cy] = cursorPoint();
     placeCursor([
-      x === 0 ? snapValue(cx, grid.step) : lineBeyond(cx, grid.step, sign(x), lines),
-      y === 0 ? snapValue(cy, grid.step) : lineBeyond(cy, grid.step, sign(y), lines),
+      x === 0 ? snapValue(cx, stepNow()) : lineBeyond(cx, stepNow(), sign(x), lines),
+      y === 0 ? snapValue(cy, stepNow()) : lineBeyond(cy, stepNow(), sign(y), lines),
     ]);
   };
 
@@ -4589,7 +5155,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const height = h > 0 ? Math.max(Math.min(h, MIN_SIZE), h + dh) : h;
     if (width === w && height === h) return;
     const to: Bounds = { min: from.min, max: [from.min[0] + width, from.min[1] + height] };
-    if (placeSelection(units, from, to)) announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+    if (placeSelection(units, from, to)) announce(t("draw.resized", { width: lengthSpoken(width), height: lengthSpoken(height) }));
   };
 
   /// Con l'aggancio, le frecce portano l'angolo in alto a sinistra della
@@ -4600,8 +5166,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const from = geometryOf(units);
     if (from === null) return;
     const [left, top] = from.min;
-    const dx = x === 0 ? 0 : lineBeyond(left, grid.step, sign(x), lines) - left;
-    const dy = y === 0 ? 0 : lineBeyond(top, grid.step, sign(y), lines) - top;
+    const dx = x === 0 ? 0 : lineBeyond(left, stepNow(), sign(x), lines) - left;
+    const dy = y === 0 ? 0 : lineBeyond(top, stepNow(), sign(y), lines) - top;
     moveSelection(units, roundDelta(dx), roundDelta(dy));
   };
 
@@ -4615,14 +5181,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const shown = boundsOf(units);
     if (from === null || shown === null) return;
     const edge = (min: number, max: number, direction: number): number =>
-      direction === 0 || max <= min ? max : Math.max(lineBeyond(max, grid.step, sign(direction), lines), lineBeyond(min, grid.step, 1, 1));
+      direction === 0 || max <= min ? max : Math.max(lineBeyond(max, stepNow(), sign(direction), lines), lineBeyond(min, stepNow(), 1, 1));
     const right = edge(from.min[0], from.max[0], x);
     const bottom = edge(from.min[1], from.max[1], y);
     if (right === from.max[0] && bottom === from.max[1]) return;
     const m = boxMatrix(from, { min: from.min, max: [right, bottom] });
     const to = mappedBounds(shown, m);
     if (transformSelection(units, m, to)) {
-      announce(t("draw.resized", { width: numberText(to.max[0] - to.min[0]), height: numberText(to.max[1] - to.min[1]) }));
+      announce(t("draw.resized", { width: lengthSpoken(to.max[0] - to.min[0]), height: lengthSpoken(to.max[1] - to.min[1]) }));
     }
   };
 
@@ -4674,7 +5240,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Con l'aggancio le copie si scostano di passi interi della griglia, e
     // ciò che ci stava sopra ci resta.
     const distance = COPY_STEP_PX / camera.scale;
-    const step = gridOn() ? wholeSteps(distance, grid.step) : roundDelta(distance);
+    const step = gridOn() ? wholeSteps(distance, stepNow()) : roundDelta(distance);
     const arranged = duplicateOps(engine.model!, units, step, step, newIds());
     if (arranged === null) {
       announce(t("draw.duplicate.foreign"));
@@ -5109,7 +5675,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const now = editing;
     if (now !== null && nodeSelection.size === 1) {
       const [x, y] = nodePoint(now, [...nodeSelection][0]!);
-      announce(noted(t("draw.nodes.moved.at", { x: numberText(x), y: numberText(y) }), note));
+      announce(noted(t("draw.nodes.moved.at", { x: coordText(x), y: coordText(y) }), note));
       return;
     }
     announce(noted(plural(nodeSelection.size, "draw.nodes.moved.one", "draw.nodes.moved.other"), note));
@@ -5225,7 +5791,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } else if (gridOn()) {
       const [left, top] = nodesBox(now)!.min;
       const lines = big ? GRID_MAJOR : 1;
-      delta = [x === 0 ? 0 : lineBeyond(left, grid.step, sign(x), lines) - left, y === 0 ? 0 : lineBeyond(top, grid.step, sign(y), lines) - top];
+      delta = [x === 0 ? 0 : lineBeyond(left, stepNow(), sign(x), lines) - left, y === 0 ? 0 : lineBeyond(top, stepNow(), sign(y), lines) - top];
     } else {
       const step = big ? NUDGE_SHIFT : NUDGE;
       delta = [x * step, y * step];
@@ -5460,13 +6026,82 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const before = grid;
     grid = checkedGrid(next, before);
     showGrid();
+    showGuideLines();
+    // I righelli, e la cornice che segnano.
+    showHandles();
+    const unit = docUnit();
     if (grid.shown !== before.shown) announce(t(grid.shown ? "draw.grid.shown" : "draw.grid.hidden"));
     else if (grid.snap !== before.snap) announce(t(grid.snap ? "draw.grid.snap.on" : "draw.grid.snap.off"));
-    else if (grid.step !== before.step) announce(t("draw.grid.stepped", { step: numberText(grid.step) }));
+    else if (!sameStep(gridStep(grid, unit), gridStep(before, unit))) announce(t("draw.grid.stepped", { step: lengthSpoken(stepNow()) }));
     else if (grid.guides !== before.guides) announce(t(grid.guides ? "draw.guides.on" : "draw.guides.off"));
+    else if (grid.rulers !== before.rulers) announce(t(grid.rulers ? "draw.rulers.shown" : "draw.rulers.hidden"));
+    else if (grid.rulerGuides !== before.rulerGuides) announce(t(grid.rulerGuides ? "draw.rulers.guides.shown" : "draw.rulers.guides.hidden"));
     else return;
     options.onGridChange?.(grid);
   };
+
+  /// L'unità del documento diventa `unit`: un passo di annulla, e il disegno
+  /// resta com'è. I pixel non si scrivono, perché sono l'unità di serie.
+  const setUnits = (unit: LengthUnit): void => {
+    if (unit === docUnit() || !editable()) return;
+    if (commit("draw.action.units", { op: "set", id: ROOT, attrs: { "fub:units": unit === "px" ? null : unit } }) === null) return;
+    announce(t(UNITS_NOW[unit]));
+  };
+
+  /// Le unità del documento, una fra cinque.
+  const unitItems = (): MenuItem[] =>
+    UNITS.map((unit): MenuItem => ({
+      label: t(UNIT_NAMES[unit]),
+      choice: "radio",
+      checked: unit === docUnit(),
+      disabled: !editable(),
+      run: () => setUnits(unit),
+    }));
+
+  /// Le voci di tutte le guide del documento: «Guide…», bloccarle o
+  /// sbloccarle, eliminarle.
+  const allGuidesItems = (): MenuItem[] => {
+    const guides = scene.root.guides;
+    const count = guides?.length ?? 0;
+    const usable = editable() && count > 0;
+    const allLocked = count > 0 && guides!.every((each) => each.locked);
+    return [
+      { label: t("draw.guides.dialog"), separator: true, disabled: !editable(), run: () => void editGuides(null) },
+      { label: t(allLocked ? "draw.guides.unlock_all" : "draw.guides.lock_all"), disabled: !usable, run: () => lockAllGuides(!allLocked) },
+      { label: t("draw.guides.delete_all"), danger: true, disabled: !usable, run: () => deleteAllGuides() },
+    ];
+  };
+
+  /// Le voci di una guida, col tasto destro o col tocco lungo: bloccarla o
+  /// sbloccarla, eliminarla, e quelle di tutte le guide.
+  const guideItems = (index: number): MenuItem[] => {
+    const guide = scene.root.guides?.[index];
+    if (guide === undefined) return [];
+    const canEdit = editable();
+    const [dialog, ...rest] = allGuidesItems();
+    return [
+      { label: t(guide.locked ? "draw.guide.unlock" : "draw.guide.lock"), disabled: !canEdit, run: () => lockGuide(index, !guide.locked) },
+      { label: t("draw.guide.delete"), danger: true, disabled: !canEdit, run: () => deleteGuide(index) },
+      { ...dialog!, run: () => void editGuides(index) },
+      ...rest,
+    ];
+  };
+
+  /// Le voci dei righelli, dal loro angolo o col tasto destro: l'unità, le
+  /// guide, e nasconderli.
+  const rulerItems = (): MenuItem[] => [
+    ...unitItems(),
+    {
+      label: t("draw.rulers.guides.show"),
+      choice: "checkbox",
+      checked: grid.rulerGuides,
+      hint: "|",
+      separator: true,
+      run: () => changeGrid({ ...grid, rulerGuides: !grid.rulerGuides }),
+    },
+    ...allGuidesItems(),
+    { label: t("draw.rulers.hide"), hint: displayBinding(RULERS_BINDING), separator: true, run: () => changeGrid({ ...grid, rulers: false }) },
+  ];
 
   /// «Adatta la pagina al disegno»: la pagina va attorno a tutto il disegno,
   /// livelli bloccati e nascosti compresi, con un margine. È un passo di
@@ -5482,14 +6117,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     if (commit("draw.action.fit_page", { op: "page", viewBox }) === null) return;
     const page = scene.root.page;
-    if (page !== null) announce(t("draw.page.fitted", { width: numberText(page.width), height: numberText(page.height) }));
+    if (page !== null) announce(t("draw.page.fitted", { width: lengthSpoken(page.width), height: lengthSpoken(page.height) }));
   }
 
-  /// Le voci di «Pagina e griglia»: la griglia, il suo passo, le guide
-  /// intelligenti, e la pagina, ciascuna se il livello la offre. Adattare la
+  /// Le voci di «Pagina e griglia»: la griglia, il suo passo nell'unità del
+  /// documento, le guide intelligenti, i righelli con le loro guide e
+  /// l'unità, e la pagina, ciascuna se il livello la offre. Adattare la
   /// pagina si spegne, e dice perché, quando non cambierebbe niente.
   const pageItems = (): MenuItem[] => {
-    const steps = GRID_STEPS.includes(grid.step) ? GRID_STEPS : [...GRID_STEPS, grid.step].sort((a, b) => a - b);
+    const unit = docUnit();
+    const step = stepNow();
+    const offered = unitSteps(unit);
+    const steps = offered.some((each) => sameStep(each, step)) ? offered : [...offered, step].sort((a, b) => a - b);
     const extent = engine.model === null ? null : indexer.extent(engine.model);
     const viewBox = fittedPage(scene.root.page, extent);
     const fitItem: MenuItem = { label: t("draw.page.fit"), separator: true, disabled: !editable() || viewBox === null, run: () => fitPage() };
@@ -5503,7 +6142,34 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       description: t("draw.guides.hint", { key: modifierName("Mod") ?? "Ctrl" }),
       run: () => changeGrid({ ...grid, guides: !grid.guides }),
     };
-    if (!has("grid")) return has("guides") ? [guidesItem] : [];
+    const rulersItems: MenuItem[] = has("rulers")
+      ? [
+          {
+            label: t("draw.rulers.show"),
+            choice: "checkbox",
+            checked: grid.rulers,
+            hint: displayBinding(RULERS_BINDING),
+            separator: true,
+            run: () => changeGrid({ ...grid, rulers: !grid.rulers }),
+          },
+          {
+            label: t("draw.rulers.guides.show"),
+            choice: "checkbox",
+            checked: grid.rulerGuides,
+            hint: "|",
+            description: t("draw.rulers.guides.hint"),
+            run: () => changeGrid({ ...grid, rulerGuides: !grid.rulerGuides }),
+          },
+          { label: t("draw.guides.dialog"), disabled: !editable(), run: () => void editGuides(null) },
+          {
+            label: t("draw.units.item", { unit: t(UNIT_NAMES[unit]) }),
+            description: t("draw.units.hint"),
+            disabled: !editable(),
+            run: () => openMenu(pageButton, unitItems()),
+          },
+        ]
+      : [];
+    if (!has("grid")) return [...(has("guides") ? [guidesItem] : []), ...rulersItems];
     return [
       { label: t("draw.grid.show"), choice: "checkbox", checked: grid.shown, hint: "#", run: () => changeGrid({ ...grid, shown: !grid.shown }) },
       {
@@ -5514,14 +6180,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         description: t("draw.grid.snap.free", { key: modifierName("Mod") ?? "Ctrl" }),
         run: () => changeGrid({ ...grid, snap: !grid.snap }),
       },
-      ...steps.map((step, at): MenuItem => ({
-        label: t("draw.grid.step", { step: numberText(step) }),
+      ...steps.map((each, at): MenuItem => ({
+        label: t("draw.grid.step", { step: lengthText(each) }),
         choice: "radio",
-        checked: step === grid.step,
+        checked: sameStep(each, step),
         separator: at === 0,
-        run: () => changeGrid({ ...grid, step }),
+        run: () => changeGrid(withStep(grid, unit, each)),
       })),
       ...(has("guides") ? [guidesItem] : []),
+      ...rulersItems,
       fitItem,
     ];
   };
@@ -5664,17 +6331,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (before === null) return;
     const w = before.max[0] - before.min[0];
     const h = before.max[1] - before.min[1];
-    const shown = [before.min[0], before.min[1], w, h].map((value) => formatNumber(value, PLACES));
-    const answer = await promptForm({
-      title: t("draw.properties.selection"),
-      fields: [
-        { id: "x", label: "X", value: shown[0]!, kind: "number" },
-        { id: "y", label: "Y", value: shown[1]!, kind: "number" },
-        // Un lato più corto di un centesimo non ha una misura da scrivere.
-        { id: "w", label: t("draw.field.width"), value: shown[2]!, kind: "number", min: 0.01, disabled: w < 0.01 },
-        { id: "h", label: t("draw.field.height"), value: shown[3]!, kind: "number", min: 0.01, disabled: h < 0.01 },
-      ],
-    });
+    const fields = [
+      lengthField("x", "X", before.min[0]),
+      lengthField("y", "Y", before.min[1]),
+      // Un lato più corto di un centesimo non ha una misura da scrivere.
+      { ...lengthField("w", t("draw.field.width"), w, 0.01), disabled: w < 0.01 },
+      { ...lengthField("h", t("draw.field.height"), h, 0.01), disabled: h < 0.01 },
+    ];
+    const shown = fields.map((field) => field.value);
+    const answer = await promptForm({ title: t("draw.properties.selection"), fields });
     if (answer === null || disposed || !editable()) return;
     // Mentre la finestra era aperta il disegno può essere cambiato: valgono
     // gli oggetti scelti adesso, e i campi non toccati restano esatti.
@@ -5682,14 +6347,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const from = boundsOf(units);
     if (from === null) return;
     const exact = [from.min[0], from.min[1], from.max[0] - from.min[0], from.max[1] - from.min[1]];
-    const value = (id: string, at: number): number => (answer[id] === undefined || answer[id] === shown[at] ? exact[at]! : Number(answer[id]));
+    const value = (id: string, at: number): number => (answer[id] === undefined || answer[id] === shown[at] ? exact[at]! : fieldValue(answer[id]));
     const [x, y, width, height] = [value("x", 0), value("y", 1), value("w", 2), value("h", 3)];
     if (width === exact[2] && height === exact[3]) {
       moveSelection(units, x - from.min[0], y - from.min[1]);
       return;
     }
     if (placeSelection(units, from, { min: [x, y], max: [x + width, y + height] })) {
-      announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+      announce(t("draw.resized", { width: lengthSpoken(width), height: lengthSpoken(height) }));
     }
   };
 
@@ -5699,21 +6364,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const placeNodesDialog = async (): Promise<void> => {
     const before = editing === null ? null : nodesBox(editing);
     if (before === null) return;
-    const shown = [before.min[0], before.min[1]].map((value) => formatNumber(value, PLACES));
-    const answer = await promptForm({
-      title: t("draw.nodes.place"),
-      fields: [
-        { id: "x", label: "X", value: shown[0]!, kind: "number" },
-        { id: "y", label: "Y", value: shown[1]!, kind: "number" },
-      ],
-    });
+    const fields = [lengthField("x", "X", before.min[0]), lengthField("y", "Y", before.min[1])];
+    const shown = fields.map((field) => field.value);
+    const answer = await promptForm({ title: t("draw.nodes.place"), fields });
     if (answer === null || disposed || !editable()) return;
     // Mentre la finestra era aperta il disegno può essere cambiato: valgono
     // i nodi scelti adesso.
     const now = editing;
     const from = now === null ? null : nodesBox(now);
     if (now === null || from === null) return;
-    const value = (id: string, at: number): number => (answer[id] === undefined || answer[id] === shown[at] ? from.min[at]! : Number(answer[id]));
+    const value = (id: string, at: number): number => (answer[id] === undefined || answer[id] === shown[at] ? from.min[at]! : fieldValue(answer[id]));
     const delta: Point = [value("x", 0) - from.min[0], value("y", 1) - from.min[1]];
     if (delta[0] === 0 && delta[1] === 0) return;
     moveSelectedNodes(now, delta);
@@ -5727,13 +6387,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       { id: "title", label: t("draw.field.title"), value: title, kind: "text" },
       { id: "desc", label: t("draw.field.desc"), value: desc, kind: "multiline" },
     ];
-    const size = page === null ? null : [formatNumber(page.width, PLACES), formatNumber(page.height, PLACES)];
-    if (size !== null) {
-      fields.push(
-        { id: "w", label: t("draw.field.page_width"), value: size[0]!, kind: "number", min: 1 },
-        { id: "h", label: t("draw.field.page_height"), value: size[1]!, kind: "number", min: 1 },
-      );
-    }
+    const sizeFields = page === null ? null : [lengthField("w", t("draw.field.page_width"), page.width, 1), lengthField("h", t("draw.field.page_height"), page.height, 1)];
+    const size = sizeFields?.map((field) => field.value) ?? null;
+    if (sizeFields !== null) fields.push(...sizeFields);
     const answer = await promptForm({ title: t("draw.properties.document"), fields });
     if (answer === null || disposed || !editable()) return;
     const ops: Op[] = [];
@@ -5745,8 +6401,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (Object.keys(meta).length > 0) ops.push({ op: "meta", ...meta });
     const now = scene.root.page;
     if (now !== null && size !== null && (answer.w !== size[0] || answer.h !== size[1])) {
-      const width = answer.w === size[0] ? now.width : Number(answer.w);
-      const height = answer.h === size[1] ? now.height : Number(answer.h);
+      const width = answer.w === size[0] ? now.width : fieldValue(answer.w ?? "");
+      const height = answer.h === size[1] ? now.height : fieldValue(answer.h ?? "");
       ops.push({ op: "page", viewBox: [now.x, now.y, width, height].map((v) => formatNumber(v, PLACES)).join(" ") });
     }
     commit("draw.properties.document", asGesture(ops));
@@ -5799,6 +6455,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
             rows: [
               ["Mod", t("draw.keys.guides.free")],
               ["Alt", t("draw.keys.guides.measure")],
+            ],
+          },
+        ]
+      : [];
+
+  /// I tasti dei righelli, se le parti `at` li offrono.
+  const rulersKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("rulers")
+      ? [
+          {
+            title: t("draw.keys.rulers"),
+            rows: [
+              [RULERS_BINDING, t("draw.keys.rulers.show")],
+              ["|", t("draw.keys.rulers.guides")],
+              ["Mod", t("draw.keys.rulers.free")],
             ],
           },
         ]
@@ -5912,6 +6583,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...textKeys(at),
     ...gridKeys(at),
     ...guidesKeys(at),
+    ...rulersKeys(at),
     ...attributeKeys(at),
     {
       title: t("draw.view"),
@@ -5979,10 +6651,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const sizeText = (bytes: number): string =>
     bytes < 1024 * 1024 ? `${numberText(bytes / 1024)} KiB` : `${numberText(bytes / (1024 * 1024))} MiB`;
 
-  /// Ciò che si vede del foglio, nella scena.
+  /// Ciò che si vede del foglio, nella scena: fuori dai righelli.
   const viewBounds = (): Bounds => {
-    const a = screenToWorld(camera, { x: 0, y: 0 });
-    const b = screenToWorld(camera, { x: surface.clientWidth, y: surface.clientHeight });
+    const area = viewArea();
+    const a = screenToWorld(camera, { x: area.x, y: area.y });
+    const b = screenToWorld(camera, { x: area.x + area.w, y: area.y + area.h });
     return { min: [a.x, a.y], max: [b.x, b.y] };
   };
 
@@ -6113,7 +6786,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const inView = at !== null && at[0] >= view.min[0] && at[0] <= view.max[0] && at[1] >= view.min[1] && at[1] <= view.max[1];
     const base: Point = inView ? at : [(view.min[0] + view.max[0]) / 2, (view.min[1] + view.max[1]) / 2];
     const distance = COPY_STEP_PX / camera.scale;
-    const step = gridOn() ? wholeSteps(distance, grid.step) : distance;
+    const step = gridOn() ? wholeSteps(distance, stepNow()) : distance;
     // La scala del livello: una unità della scena vale `1 / k` unità sue.
     const k = Math.sqrt(Math.abs(to.matrix[0] * to.matrix[3] - to.matrix[1] * to.matrix[2]));
     const ops: Op[] = [...to.prelude];
@@ -6124,7 +6797,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       let box = placeImage(picture.width, picture.height, view, [base[0] + i * step, base[1] + i * step]);
       // Con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più
       // vicino.
-      if (gridOn()) box = translated(box, ...snapDelta(box.min, 0, 0, grid.step))!;
+      if (gridOn()) box = translated(box, ...snapDelta(box.min, 0, 0, stepNow()))!;
       const [cx, cy] = apply(to.inverse, [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2]);
       const w = (box.max[0] - box.min[0]) / k;
       const h = (box.max[1] - box.min[1]) / k;
@@ -6301,6 +6974,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
       if (event.key === "#") changeGrid({ ...grid, shown: !grid.shown });
       else changeGrid({ ...grid, snap: !grid.snap });
+      event.preventDefault();
+      return;
+    }
+    // Maiusc+R mostra e nasconde i righelli; «|», come si scrive, le loro
+    // guide.
+    if (has("rulers") && !mod && !event.altKey && event.shiftKey && event.key.toLowerCase() === "r") {
+      changeGrid({ ...grid, rulers: !grid.rulers });
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "|" && (altGraph || !mod) && has("rulers")) {
+      changeGrid({ ...grid, rulerGuides: !grid.rulerGuides });
       event.preventDefault();
       return;
     }
@@ -6485,6 +7170,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (disposed) return;
       grid = checkedGrid(next, grid);
       showGrid();
+      showGuideLines();
+      showHandles();
     },
     setEngine(next) {
       if (disposed) return;

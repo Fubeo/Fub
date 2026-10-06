@@ -34,15 +34,14 @@ quelle dell'altra.
   il byte esatto, BOM compreso. Un riferimento a un'entità mai dichiarata rende
   il file malformato. Le entità interne si espandono fino a 16 livelli e 1 MiB
   di testo; oltre, il file è malformato.
-- **Terminatori di riga:** la superficie calcola le modifiche sul testo
-  normalizzato a LF e le riporta sugli offset del testo grezzo: i terminatori
-  non toccati restano identici, anche misti, e le righe nuove usano il
-  prevalente.
+- **Terminatori di riga:** quelli non toccati restano identici, anche misti,
+  e le righe nuove usano il prevalente (operazioni sulla scena, §6).
 - **Disegno ed estraneo:** un documento **FubDraw** ha sulla radice
   `fub:version="1"`. Senza quell'attributo il documento è **estraneo**: la
   superficie lo mostra come immagine inerte, con il comando «Modifica» che lo
   adotta aggiungendo `xmlns:fub` e `fub:version` alla radice.
-- **Unità:** un'unità utente vale un pixel CSS a zoom 100%.
+- **Unità:** un'unità utente vale un pixel CSS a zoom 100%. L'unità mostrata
+  e le guide sono `fub:units` e `fub:guides`: [unità e guide](scene-format-rulers.md).
 
 Radice di un documento nuovo:
 
@@ -510,6 +509,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | S008 | info | `<!DOCTYPE>` presente: sola lettura |
 | S009 | info | contrasto fra un tratto e la carta sotto 3:1; non vale per l'evidenziatore |
 | S010 | info | canali d'inchiostro sconosciuti |
+| S011 | info | `fub:units` o `fub:guides` fuori grammatica: si ignorano e restano nel file |
 
 - **S001:** vale anche per un titolo vuoto e per un file troncato.
 - **S002:** uno per blocco estraneo, con il suo span. La dichiarazione

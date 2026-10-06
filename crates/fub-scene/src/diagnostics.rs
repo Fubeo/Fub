@@ -29,6 +29,8 @@ pub enum Code {
     S009,
     /// Canali d'inchiostro sconosciuti.
     S010,
+    /// `fub:units` o `fub:guides` fuori grammatica: si ignorano e restano.
+    S011,
 }
 
 /// La gravità di una diagnostica.
@@ -46,7 +48,9 @@ impl Code {
         match self {
             Code::S003 | Code::S004 => Severity::Error,
             Code::S001 | Code::S005 | Code::S006 => Severity::Warning,
-            Code::S002 | Code::S007 | Code::S008 | Code::S009 | Code::S010 => Severity::Info,
+            Code::S002 | Code::S007 | Code::S008 | Code::S009 | Code::S010 | Code::S011 => {
+                Severity::Info
+            }
         }
     }
 
@@ -63,6 +67,7 @@ impl Code {
             Code::S008 => "il documento ha un DOCTYPE: sola lettura",
             Code::S009 => "il tratto contrasta con la carta meno di 3:1",
             Code::S010 => "canali d'inchiostro sconosciuti: il tratto non si ridisegna",
+            Code::S011 => "unità o guide del documento non valide: si ignorano e restano nel file",
         }
     }
 }

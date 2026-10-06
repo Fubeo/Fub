@@ -33,6 +33,10 @@ entrano nel file del [disegno](drawing.md)
   fermano in linea con gli oggetti, con la pagina e coi nodi già posati, anche
   prima del tocco, nel segmento che verrebbe.
 
+Anche le guide tirate dai righelli sono bersagli, finché si vedono, e
+agganciano pure con le guide intelligenti spente: [Disegni, righelli e
+guide](drawing-rulers.md).
+
 I bersagli sono la pagina e gli oggetti che si vedono nella vista, anche
 quelli dei livelli bloccati, che non si scelgono ma si guardano; quelli dei
 livelli nascosti no, e nemmeno ciò che sta fuori dalla vista. Un valore si

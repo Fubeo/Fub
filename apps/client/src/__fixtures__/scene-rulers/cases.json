@@ -1,0 +1,58 @@
+{
+  "units": [
+    { "value": "px", "unit": "px" },
+    { "value": "mm", "unit": "mm" },
+    { "value": "cm", "unit": "cm" },
+    { "value": "in", "unit": "in" },
+    { "value": "pt", "unit": "pt" },
+    { "value": "", "unit": null },
+    { "value": "MM", "unit": null },
+    { "value": " mm", "unit": null },
+    { "value": "pc", "unit": null },
+    { "value": "em", "unit": null },
+    { "value": "%", "unit": null }
+  ],
+  "guides": [
+    { "value": "", "guides": [] },
+    { "value": " \n\t ", "guides": [] },
+    { "value": "x 120", "guides": [{ "axis": "x", "at": 120, "locked": false }] },
+    {
+      "value": "x 120; y 340.5 locked",
+      "guides": [
+        { "axis": "x", "at": 120, "locked": false },
+        { "axis": "y", "at": 340.5, "locked": true }
+      ]
+    },
+    {
+      "value": "\n y\t-12.25 ;x 1e2 locked ; x .5 ",
+      "guides": [
+        { "axis": "y", "at": -12.25, "locked": false },
+        { "axis": "x", "at": 100, "locked": true },
+        { "axis": "x", "at": 0.5, "locked": false }
+      ]
+    },
+    { "value": "y -0", "guides": [{ "axis": "y", "at": 0, "locked": false }] },
+    {
+      "value": "x 10; x 10",
+      "guides": [
+        { "axis": "x", "at": 10, "locked": false },
+        { "axis": "x", "at": 10, "locked": false }
+      ]
+    },
+    { "value": "x 120;", "guides": null },
+    { "value": ";x 120", "guides": null },
+    { "value": "x 1;;y 2", "guides": null },
+    { "value": "x", "guides": null },
+    { "value": "x1", "guides": null },
+    { "value": "X 1", "guides": null },
+    { "value": "z 1", "guides": null },
+    { "value": "x 1 2", "guides": null },
+    { "value": "x 1px", "guides": null },
+    { "value": "x 1.", "guides": null },
+    { "value": "x NaN", "guides": null },
+    { "value": "x 1e39", "guides": null },
+    { "value": "x 1 Locked", "guides": null },
+    { "value": "x 1 locked locked", "guides": null },
+    { "value": "x 1, y 2", "guides": null }
+  ]
+}

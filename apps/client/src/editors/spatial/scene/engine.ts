@@ -68,6 +68,7 @@ import {
   type Target,
 } from "./ops";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, openSource, readScene, type ReadOnly, type Status } from "./read";
+import { parseGuides, parseUnits } from "./rulers";
 import {
   attributeName,
   attributesOf,
@@ -371,6 +372,42 @@ function reindent(raw: string, scope: NamespaceScope, underRoot: boolean, depth:
     at = start + from.length;
   }
   return out + raw.slice(at);
+}
+
+/// Un attributo che un `set` cambia: la chiave scritta nell'operazione, il
+/// nome espanso, il nome col prefisso del documento e il valore nuovo, `null`
+/// per toglierlo.
+interface Change {
+  readonly key: string;
+  readonly uri: string;
+  readonly local: string;
+  readonly name: string;
+  readonly value: string | null;
+}
+
+/// Gli attributi scritti con i cambiamenti di `changes`, per nome espanso
+/// (`"<uri> <local>"`): un valore nuovo prende il posto del vecchio, `null` lo
+/// toglie, un attributo che non c'era va in fondo.
+function changed(changes: ReadonlyMap<string, Change>): (attrs: OutAttr[]) => OutAttr[] {
+  return (attrs) => {
+    const out: OutAttr[] = [];
+    const done = new Set<string>();
+    for (const attr of attrs) {
+      const expanded = `${attr.uri} ${attr.local}`;
+      const change = changes.get(expanded);
+      if (change === undefined) {
+        out.push(attr);
+        continue;
+      }
+      done.add(expanded);
+      if (change.value !== null) out.push({ ...attr, text: escapeAttribute(change.value) });
+    }
+    for (const [expanded, change] of changes) {
+      if (done.has(expanded) || change.value === null) continue;
+      out.push({ name: change.name, uri: change.uri, local: change.local, text: escapeAttribute(change.value) });
+    }
+    return out;
+  };
 }
 
 /// Il motore di un documento aperto.
@@ -1183,17 +1220,11 @@ export class SceneEngine {
 
   private set(op: Record<string, unknown>): Op {
     if (typeof op.id !== "string" || !isRecord(op.attrs)) reject("invalid-elem", "set non valido");
+    if (op.id === ROOT) return this.setRoot(op.attrs);
     const node = this.target(op.id);
     this.guard(node, true);
     const { fragment, element, scope } = this.reread(node);
     const doc = fragment.doc;
-    interface Change {
-      readonly key: string;
-      readonly uri: string;
-      readonly local: string;
-      readonly name: string;
-      readonly value: string | null;
-    }
     const changes = new Map<string, Change>();
     for (const [key, value] of Object.entries(op.attrs)) {
       if (value !== null && typeof value !== "string") reject("invalid-elem", `valore non valido per ${key}`);
@@ -1227,25 +1258,7 @@ export class SceneEngine {
     // L'inversa: i valori di prima delle chiavi che cambiano.
     const previous: Record<string, string | null> = {};
     for (const change of changes.values()) previous[change.key] = written(change.uri, change.local)?.value ?? null;
-    const edit = (attrs: OutAttr[]): OutAttr[] => {
-      const out: OutAttr[] = [];
-      const done = new Set<string>();
-      for (const attr of attrs) {
-        const expanded = `${attr.uri} ${attr.local}`;
-        const change = changes.get(expanded);
-        if (change === undefined) {
-          out.push(attr);
-          continue;
-        }
-        done.add(expanded);
-        if (change.value !== null) out.push({ ...attr, text: escapeAttribute(change.value) });
-      }
-      for (const [expanded, change] of changes) {
-        if (done.has(expanded) || change.value === null) continue;
-        out.push({ name: change.name, uri: change.uri, local: change.local, text: escapeAttribute(change.value) });
-      }
-      return out;
-    };
+    const edit = changed(changes);
 
     if (node.kind === "container") {
       // Si riscrive solo il tag, perché i figli non cambiano; un `<g/>` si
@@ -1269,6 +1282,38 @@ export class SceneEngine {
     // Un gruppo cambia anche come si vedono i suoi figli.
     this.touch(node);
     return { op: "set", id: op.id, attrs: previous };
+  }
+
+  /// `set` sulla radice: soltanto l'unità e le guide del documento, coi
+  /// valori nella loro grammatica (formato della scena, unità e guide). Il
+  /// resto della radice cambia con `page` e `adopt`. Nessun elemento cambia
+  /// aspetto, e nessun id è toccato.
+  private setRoot(attrs: Record<string, unknown>): Op {
+    const root = this.t.model.root;
+    const { fragment, element, scope } = this.reread(root);
+    const changes = new Map<string, Change>();
+    for (const [key, value] of Object.entries(attrs)) {
+      if (value !== null && typeof value !== "string") reject("invalid-elem", `valore non valido per ${key}`);
+      const name = elemGuard(() => attributeName(key, scope));
+      if (name.uri !== FUB_NS || (name.local !== "units" && name.local !== "guides")) {
+        reject("invalid-elem", `sulla radice set cambia soltanto fub:units e fub:guides: ${key}`);
+      }
+      if (value !== null) {
+        this.checkValue("svg", name.uri, name.local, value);
+        if ((name.local === "units" ? parseUnits(value) : parseGuides(value)) === null) {
+          reject("invalid-elem", `${key} fuori grammatica: ${JSON.stringify(value)}`);
+        }
+      }
+      const expanded = `${name.uri} ${name.local}`;
+      if (changes.has(expanded)) reject("invalid-elem", `attributo ripetuto: ${key}`);
+      changes.set(expanded, { key, ...name, value });
+    }
+    const previous: Record<string, string | null> = {};
+    for (const change of changes.values()) {
+      previous[change.key] = element.attrs.find((a) => fragment.doc.namespaces[a.ns] === FUB_NS && a.local === change.local)?.value ?? null;
+    }
+    this.rewriteHead(root, changed(changes), root.tail === null);
+    return { op: "set", id: ROOT, attrs: previous };
   }
 
   private text_(op: Record<string, unknown>): Op {

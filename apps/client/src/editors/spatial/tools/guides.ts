@@ -6,9 +6,10 @@
 // - **I bersagli** si prendono all'inizio del gesto: i bordi e i centri dei
 //   riquadri della geometria, senza contorno, degli oggetti che si vedono
 //   nella vista, bloccati compresi, e della pagina; mentre si modificano i
-//   nodi o si posa la penna di Bézier, anche i nodi del tracciato. Per ogni
-//   asse i valori stanno in un elenco ordinato, dove il più vicino si trova
-//   per bisezione.
+//   nodi o si posa la penna di Bézier, anche i nodi del tracciato. Le guide
+//   dei righelli sono bersagli lungo il loro asse soltanto. Per ogni asse i
+//   valori stanno in un elenco ordinato, dove il più vicino si trova per
+//   bisezione.
 // - **La soglia** è in pixel dello schermo, uguale a ogni zoom
 //   ([`GUIDE_PX`]). Un bordo o il centro di ciò che si muove, entro la soglia
 //   da un bersaglio, ci va sopra; il più vicino vince, anche contro la
@@ -38,16 +39,22 @@ export const ON_GUIDE = 0.006;
 /// alto di un riquadro, o un punto.
 export type Edge = "min" | "mid" | "max" | "point";
 
-/// Un oggetto, la pagina, o un nodo del tracciato che si modifica.
-export type TargetKind = "object" | "page" | "node";
+/// Un oggetto, la pagina, un nodo del tracciato che si modifica, o una guida
+/// dei righelli.
+export type TargetKind = "object" | "page" | "node" | "guide";
 
 /// Ciò su cui ci si allinea.
 export interface GuideTarget {
   readonly kind: TargetKind;
-  /// Il riquadro della geometria nella scena; per un nodo, il punto.
+  /// Il riquadro della geometria nella scena; per un nodo, il punto; per una
+  /// guida, un punto che ha la sua posizione su tutti e due gli assi.
   readonly box: Bounds;
-  /// La chiave dell'oggetto; vuota per la pagina e per i nodi.
+  /// La chiave dell'oggetto; vuota per la pagina e per i nodi; per una guida
+  /// il suo posto fra le guide del documento.
   readonly key: string;
+  /// L'asse lungo cui una guida è un bersaglio: 0 per una guida verticale,
+  /// che sta su un valore di x, 1 per una orizzontale.
+  readonly axis?: Axis;
 }
 
 /// Un valore di ciò che si muove, lungo un asse, e dove sta.
@@ -157,7 +164,8 @@ export class GuideIndex {
       const from = new Uint32Array(targets.length * 3);
       let n = 0;
       targets.forEach((target, i) => {
-        const anchors: readonly Anchor[] = target.kind === "node" ? [{ value: target.box.min[axis], edge: "point" }] : anchorsOf(target.box, axis);
+        if (target.kind === "guide" && target.axis !== axis) return;
+        const anchors: readonly Anchor[] = target.kind === "node" || target.kind === "guide" ? [{ value: target.box.min[axis], edge: "point" }] : anchorsOf(target.box, axis);
         for (const { value, edge } of anchors) {
           if (!Number.isFinite(value)) continue;
           raw[n] = value;
@@ -224,15 +232,18 @@ export class GuideIndex {
         seen.add(owner);
         const target = this.targets[owner >>> 2]!;
         const edge = EDGES[owner & 3]!;
-        marks.push(...this.marksOf(target.box, other, edge));
-        // Prima gli oggetti, poi la pagina, che li contiene tutti.
-        const distance = (target.kind === "page" ? 1e12 : 0) + apart(box.min[other], box.max[other], target.box.min[other], target.box.max[other]);
+        // Una guida attraversa tutta la vista: la linea è la sua.
+        if (target.kind !== "guide") marks.push(...this.marksOf(target.box, other, edge));
+        // Prima gli oggetti, poi le guide, poi la pagina, che li contiene
+        // tutti.
+        const rank = target.kind === "page" ? 2e12 : target.kind === "guide" ? 1e12 : 0;
+        const distance = rank + (target.kind === "guide" ? 0 : apart(box.min[other], box.max[other], target.box.min[other], target.box.max[other]));
         if (best === null || distance < best.distance) best = { target, edge, distance };
       }
       if (best === null) continue;
       const { target } = best;
       let gap: readonly [number, number] | null = null;
-      if (target.kind !== "page") {
+      if (target.kind !== "page" && target.kind !== "guide") {
         if (target.box.max[other] < box.min[other]) gap = [target.box.max[other], box.min[other]];
         else if (target.box.min[other] > box.max[other]) gap = [box.max[other], target.box.min[other]];
       }

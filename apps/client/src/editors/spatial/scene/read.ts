@@ -13,6 +13,7 @@
 import { index as analyzeIndex, truncatedSummary, type Index, type Summary } from "./analysis";
 import { classifyDocument, type Item } from "./classify";
 import { diagnostic, sortDiagnostics, type Diagnostic } from "./diagnostics";
+import { parseGuides, parseUnits } from "./rulers";
 import { bomUnits, lineBreakOf, lineEndingOf, SourceText, type LineEnding } from "./text";
 import { isSvg, NS_FUB, NS_NONE, parseXml, valueOf, XML_ERROR_MESSAGES, XmlError, type XmlDocument, type XmlErrorKind } from "./xml";
 
@@ -124,7 +125,7 @@ export interface Opened {
   readonly truncated: boolean;
   /// Il file ha più di [`MAX_ELEMENTS`] elementi.
   readonly tooMany: boolean;
-  /// S003, S007 e S008, non ancora ordinate.
+  /// S003, S007, S008 e S011, non ancora ordinate.
   readonly diagnostics: Diagnostic[];
 }
 
@@ -177,6 +178,12 @@ export function openSource(source: string): Opened {
     readOnly.add("future-version");
     diagnostics.push(diagnostic("S007", null, String(version)));
   }
+  // L'unità e le guide fuori grammatica non si usano, e restano (formato della
+  // scena, unità e guide, §3).
+  const units = valueOf(root, NS_FUB, "units");
+  if (units !== undefined && parseUnits(units) === null) diagnostics.push(diagnostic("S011", null, "fub:units"));
+  const guides = valueOf(root, NS_FUB, "guides");
+  if (guides !== undefined && parseGuides(guides) === null) diagnostics.push(diagnostic("S011", null, "fub:guides"));
   if (duplicateIds(doc, diagnostics)) readOnly.add("duplicate-id");
   if (truncated) readOnly.add("too-large");
   const tooMany = doc.elements > MAX_ELEMENTS;

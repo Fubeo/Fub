@@ -1056,7 +1056,7 @@ describe("i livelli, dal livello Standard", () => {
 
 describe("la griglia e la pagina, dal livello Standard", () => {
   /// La griglia con l'aggancio acceso, al passo di partenza.
-  const SNAP = { shown: false, snap: true, step: 20, guides: false } as const;
+  const SNAP = { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } as const;
   /// Un quadrato pieno senza contorno, fuori dalla griglia, in una pagina
   /// che lo lascia muovere: il riquadro è quello scritto.
   const OFF = doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="13" y="7" width="40" height="40" fill="#000000"/></g>`).replace(
@@ -1113,6 +1113,10 @@ describe("la griglia e la pagina, dal livello Standard", () => {
       ["menuitemradio", "Passo di 50", "false", null],
       ["menuitemradio", "Passo di 100", "false", null],
       ["menuitemcheckbox", "Guide intelligenti", "true", null],
+      ["menuitemcheckbox", "Mostra i righelli", "false", "Shift+R"],
+      ["menuitemcheckbox", "Mostra le guide", "true", "|"],
+      ["menuitem", "Guide…", null, null],
+      ["menuitem", "Unità: Pixel…", null, null],
       ["menuitem", "Adatta la pagina al disegno", null, null],
     ]);
     expect(entry("Aggancia alla griglia").querySelector(".menu-description")!.textContent).toBe("Tieni premuto Ctrl mentre trascini per posare libero.");
@@ -1133,11 +1137,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(entry("Mostra la griglia").getAttribute("aria-checked")).toBe("true");
     entry("Aggancia alla griglia").click();
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
-    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true });
+    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true });
     expect(grids).toEqual([
-      { shown: true, snap: false, step: 20, guides: true },
-      { shown: true, snap: false, step: 50, guides: true },
-      { shown: true, snap: true, step: 50, guides: true },
+      { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true },
+      { shown: true, snap: false, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true },
+      { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true },
     ]);
 
     // Sotto lo Standard non si vede e non aggancia, ma resta com'era.
@@ -1152,11 +1156,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
 
   it("`setGrid` la cambia senza dirlo; un passo fuori dai limiti resta quello di prima, e uno insolito entra nel menu", () => {
     const grids: unknown[] = [];
-    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false }, onGridChange: (grid) => grids.push(grid) });
-    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false });
-    editor.setGrid({ shown: true, snap: true, step: 25, guides: false });
-    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false });
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false });
+    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false, steps: {}, rulers: false, rulerGuides: true }, onGridChange: (grid) => grids.push(grid) });
+    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true });
+    editor.setGrid({ shown: true, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true });
+    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false, steps: {}, rulers: false, rulerGuides: true });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true });
     expect(spoken()).toBe("");
     expect(grids).toEqual([]);
     pageButton().click();
@@ -1179,11 +1183,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
     expect(altGraph("#").defaultPrevented).toBe(true);
     expect(spoken()).toBe("Griglia nascosta.");
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true });
     expect(key("#", { ctrlKey: true }).defaultPrevented).toBe(false);
     editor.setLevel("essential");
     expect(key("%", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true });
     // Nel titolo si scrivono.
     editor.setLevel("standard");
     const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
@@ -1448,7 +1452,7 @@ describe("le guide intelligenti, dal livello Standard", () => {
   });
 
   it("con la griglia vince il più vicino fra la riga e il bersaglio", () => {
-    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true } });
+    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true } });
     editor.setTool("select");
     // In alto a 53: il bordo del rettangolo, a 50, è più vicino della riga a 60.
     drag([[40, 220], [41, 150], [43, 73]]);
@@ -1547,8 +1551,8 @@ describe("le guide intelligenti, dal livello Standard", () => {
     );
     item.click();
     expect(spoken()).toBe("Guide intelligenti spente.");
-    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false });
-    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false }]);
+    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true });
+    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true }]);
     editor.setTool("select");
     drag([[40, 220], [41, 150], [43, 73]]);
     expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
@@ -1603,6 +1607,292 @@ describe("le guide intelligenti, dal livello Standard", () => {
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
     // La finestra chiusa rende il fuoco dopo.
     await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+});
+
+describe("i righelli e le guide del documento, dal livello Standard", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  /// Un disegno in una pagina larga, con gli attributi `root` sulla radice:
+  /// un quadrato blu da (20, 200) a (60, 240) e un rettangolo arancione da
+  /// (200, 50) a (260, 80), lontani dalle guide delle prove.
+  const sheet = (root = ""): string =>
+    doc(`<title>Prova</title>${LAYER}<rect id="${A}" x="20" y="200" width="40" height="40" fill="#0072b2"/><rect id="${B}" x="200" y="50" width="60" height="30" fill="#e69f00"/></g>`).replace(
+      'viewBox="0 0 100 100"',
+      `viewBox="0 0 400 400"${root}`,
+    );
+
+  const stage = (): HTMLElement => host.querySelector<HTMLElement>(".draw-stage")!;
+  const rulers = (): SVGSVGElement => host.querySelector<SVGSVGElement>(".draw-rulers")!;
+  const corner = (): string => rulers().querySelector('[data-part="unit"]')!.textContent ?? "";
+  const guidesOf = (): string | null => editor.engine.text.match(/fub:guides="([^"]*)"/)?.[1] ?? null;
+  const transformOf = (id: string): string | null => editor.engine.text.match(new RegExp(`id="${id}"[^>]*? transform="([^"]*)"`))?.[1] ?? null;
+  const hover = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const shift = (name: string): KeyboardEvent => key(name, { shiftKey: true });
+  const pageButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const entry = (label: string): HTMLButtonElement => menu().find((one) => labelOf(one) === label)!;
+  const rightClick = (x: number, y: number): MouseEvent => {
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y });
+    surface().dispatchEvent(event);
+    return event;
+  };
+  /// Monta il disegno al livello Standard, col foglio di 400 per 300 e i
+  /// righelli accesi: la camera resta l'identità, e i punti dello schermo
+  /// sono quelli della scena.
+  const withRulers = (source: string, options: DrawEditorOptions = {}): void => {
+    mount(source, { level: "standard", ...options });
+    size(400, 300);
+    shift("R");
+  };
+
+  // Un menu rimasto aperto va chiuso davvero: tolto e basta, terrebbe il
+  // fuoco anche nella prova dopo.
+  afterEach(() => {
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("Maiusc+R mostra e nasconde i righelli, «|» le guide; l'Essenziale non li ha, e chi monta l'editor lo sa", () => {
+    const grids: unknown[] = [];
+    mount(sheet(), { onGridChange: (grid) => grids.push(grid) });
+    size(400, 300);
+    shift("R");
+    expect(editor.grid.rulers).toBe(false);
+    expect(rulers().style.display).toBe("none");
+
+    editor.setLevel("standard");
+    expect(shift("R").defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Righelli visibili.");
+    expect(editor.grid.rulers).toBe(true);
+    expect(stage().hasAttribute("data-rulers")).toBe(true);
+    expect(rulers().style.display).toBe("");
+    expect(rulers().getAttribute("aria-hidden")).toBe("true");
+    expect(corner()).toBe("px");
+    // Un numero ogni cento pixel; lo zero sta sotto l'angolo.
+    const labels = [...rulers().querySelectorAll('[data-ruler="x"] [data-part="labels"] text')].map((text) => text.textContent);
+    expect(labels).toContain("100");
+    expect(labels).not.toContain("0");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    key("|");
+    expect(spoken()).toBe("Guide nascoste.");
+    expect(editor.grid.rulerGuides).toBe(false);
+    shift("R");
+    expect(spoken()).toBe("Righelli nascosti.");
+    expect(stage().hasAttribute("data-rulers")).toBe(false);
+    expect(rulers().style.display).toBe("none");
+    expect(grids).toEqual([
+      expect.objectContaining({ rulers: true, rulerGuides: true }),
+      expect.objectContaining({ rulers: true, rulerGuides: false }),
+      expect.objectContaining({ rulers: false, rulerGuides: false }),
+    ]);
+  });
+
+  it("una guida si tira da un righello, con qualunque strumento: orizzontale da quello in alto, verticale da quello a sinistra, un passo di annulla ciascuna", () => {
+    // Due gesti di fila, ma non così vicini da fondersi in un passo.
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    withRulers(sheet());
+    editor.setTool("pen");
+    drag([[100, 10], [100, 60], [100, 120]]);
+    expect(guidesOf()).toBe("y 120");
+    expect(spoken()).toBe("Guida orizzontale aggiunta a 120.");
+    now.mockReturnValue(MERGE_MS + 1);
+    drag([[10, 100], [60, 100], [150.4, 100]]);
+    expect(guidesOf()).toBe("y 120; x 150.4");
+    expect(spoken()).toBe("Guida verticale aggiunta a 150,4.");
+    // La penna non ha disegnato niente.
+    expect(editor.engine.text).not.toContain('fub:tool="pen"');
+    editor.undo();
+    expect(guidesOf()).toBe("y 120");
+    editor.undo();
+    expect(guidesOf()).toBeNull();
+    // Rilasciata sopra un righello, o senza averla mossa, non c'è.
+    drag([[100, 10], [100, 60], [100, 12]]);
+    drag([[100, 10], [100, 10]]);
+    expect(guidesOf()).toBeNull();
+    // Dall'angolo non se ne tira nessuna.
+    drag([[10, 10], [100, 100]]);
+    expect(guidesOf()).toBeNull();
+  });
+
+  it("si aggancia alla griglia e agli oggetti, finché Ctrl o ⌘ non è tenuto", () => {
+    withRulers(sheet(), { grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true } });
+    drag([[10, 100], [50, 100], [93, 100]]);
+    expect(guidesOf()).toBe("x 100");
+    editor.undo();
+    drag([[10, 100], [50, 100], [93, 100]], { ctrlKey: true });
+    expect(guidesOf()).toBe("x 93");
+    editor.undo();
+    // Il bordo destro del quadrato, a 60, è più vicino della riga a 80.
+    drag([[10, 100], [50, 100], [63, 100]]);
+    expect(guidesOf()).toBe("x 60");
+  });
+
+  it("con Selezione una guida si sposta e, rilasciata su un righello, se ne va; una bloccata si attraversa", () => {
+    withRulers(sheet(' fub:guides="x 200; y 150 locked"'));
+    editor.setTool("select");
+    hover(201, 280);
+    expect(surface().dataset.grip).toBe("ew");
+    hover(300, 151);
+    expect(surface().dataset.grip).toBeUndefined();
+    hover(100, 10);
+    expect(surface().dataset.ruler).toBe("top");
+    hover(10, 10);
+    expect(surface().dataset.ruler).toBe("corner");
+
+    drag([[201, 280], [230, 280], [251, 280]]);
+    expect(guidesOf()).toBe("x 250; y 150 locked");
+    expect(spoken()).toBe("Guida verticale spostata a 250.");
+    expect(editor.selection).toEqual([]);
+    // Sulla guida bloccata il gesto è della selezione: un riquadro sul vuoto.
+    drag([[300, 151], [330, 170], [390, 290]]);
+    expect(guidesOf()).toBe("x 250; y 150 locked");
+    drag([[250, 280], [100, 280], [10, 280]]);
+    expect(guidesOf()).toBe("y 150 locked");
+    expect(spoken()).toBe("Guida verticale eliminata.");
+    editor.undo();
+    expect(guidesOf()).toBe("x 250; y 150 locked");
+  });
+
+  it("gli oggetti si agganciano alle guide finché si vedono, e lo si dice", () => {
+    withRulers(sheet(' fub:guides="x 100"'));
+    editor.setTool("select");
+    // Il bordo destro arriva a 97, a 3 dalla guida: ci va sopra. Il bordo in
+    // alto resta sul centro della pagina, dov'era.
+    drag([[40, 220], [60, 220], [77, 220]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 40 0)");
+    expect(spoken()).toBe("1 oggetto spostato. Agganciato: il bordo destro in linea con una guida; il bordo superiore in linea con il centro verticale della pagina.");
+    editor.undo();
+    key("|");
+    drag([[40, 220], [60, 220], [77, 220]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 37 0)");
+    expect(spoken()).toBe("1 oggetto spostato. Agganciato: il bordo superiore in linea con il centro verticale della pagina.");
+  });
+
+  it("il tasto destro su una guida apre il suo menu, anche per una bloccata; sull'angolo, quello dei righelli", () => {
+    withRulers(sheet(' fub:guides="x 200; y 150 locked"'));
+    expect(rightClick(300, 280).defaultPrevented).toBe(false);
+    expect(document.querySelector(".context-menu")).toBeNull();
+
+    expect(rightClick(202, 280).defaultPrevented).toBe(true);
+    expect(menu().map(labelOf)).toEqual(["Blocca la guida", "Elimina la guida", "Guide…", "Blocca tutte le guide", "Elimina tutte le guide"]);
+    entry("Blocca la guida").click();
+    expect(guidesOf()).toBe("x 200 locked; y 150 locked");
+    expect(spoken()).toBe("Guida bloccata.");
+    rightClick(300, 151);
+    expect(menu().map(labelOf)).toEqual(["Sblocca la guida", "Elimina la guida", "Guide…", "Sblocca tutte le guide", "Elimina tutte le guide"]);
+    entry("Sblocca tutte le guide").click();
+    expect(guidesOf()).toBe("x 200; y 150");
+    expect(spoken()).toBe("Guide sbloccate.");
+
+    surface().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 10, clientY: 10 }));
+    expect(menu().map((one) => [labelOf(one), one.getAttribute("aria-checked")])).toEqual([
+      ["Pixel", "true"],
+      ["Millimetri", "false"],
+      ["Centimetri", "false"],
+      ["Pollici", "false"],
+      ["Punti", "false"],
+      ["Mostra le guide", "true"],
+      ["Guide…", null],
+      ["Blocca tutte le guide", null],
+      ["Elimina tutte le guide", null],
+      ["Nascondi i righelli", null],
+    ]);
+    entry("Elimina tutte le guide").click();
+    expect(guidesOf()).toBeNull();
+    expect(spoken()).toBe("2 guide eliminate.");
+    rightClick(100, 10);
+    entry("Nascondi i righelli").click();
+    expect(editor.grid.rulers).toBe(false);
+  });
+
+  it("l'unità del documento si sceglie dall'angolo dei righelli, in un passo che si annulla, e il disegno non cambia", () => {
+    withRulers(sheet());
+    const before = editor.engine.text;
+    surface().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 10, clientY: 10 }));
+    entry("Millimetri").click();
+    expect(spoken()).toBe("Il documento ora misura in millimetri.");
+    expect(editor.engine.text).toBe(before.replace('viewBox="0 0 400 400"', 'viewBox="0 0 400 400" fub:units="mm"'));
+    expect(corner()).toBe("mm");
+    pageButton().click();
+    expect(entry("Unità: Millimetri…")).toBeDefined();
+    closeContextMenu();
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(corner()).toBe("px");
+  });
+
+  it("nell'unità del documento: il passo della griglia, le misure dette e i campi; il passo di ogni unità si ricorda", async () => {
+    mount(sheet(' fub:units="mm"'), { level: "standard" });
+    size(400, 300);
+    pageButton().click();
+    expect(menu().filter((one) => one.getAttribute("role") === "menuitemradio").map((one) => [labelOf(one), one.getAttribute("aria-checked")])).toEqual([
+      ["Passo di 1 mm", "false"],
+      ["Passo di 2 mm", "false"],
+      ["Passo di 5 mm", "true"],
+      ["Passo di 10 mm", "false"],
+      ["Passo di 20 mm", "false"],
+    ]);
+    entry("Passo di 10 mm").click();
+    expect(spoken()).toBe("Passo della griglia: 10 millimetri.");
+    expect(editor.grid.step).toBe(20);
+    expect(editor.grid.steps.mm).toBeCloseTo(37.795, 3);
+
+    editor.select([A]);
+    editor.focus();
+    key("Enter");
+    expect([...dialog().querySelectorAll(".palette-label")].map((label) => label.textContent)).toEqual(["X (mm)", "Y (mm)", "Larghezza (mm)", "Altezza (mm)"]);
+    expect(["x", "y", "w", "h"].map((name) => field(name).value)).toEqual(["5.292", "52.917", "10.583", "10.583"]);
+    field("w").value = "20";
+    await submit();
+    expect(spoken()).toBe("Misure: 20 millimetri × 10,6 millimetri.");
+    expect(transformOf(A)).toBe("matrix(1.8898 0 0 1 -17.795 0)");
+  });
+
+  it("«Guide…» le scrive coi numeri, in un passo, e un doppio clic su una guida apre la sua riga", async () => {
+    withRulers(sheet(' fub:guides="x 200"'));
+    pageButton().click();
+    entry("Guide…").click();
+    expect(dialog().querySelector("h2")!.textContent).toBe("Guide");
+    const buttons = (): HTMLButtonElement[] => [...dialog().querySelectorAll<HTMLButtonElement>(".draw-guides-tools button")];
+    buttons().find((one) => one.textContent === "Aggiungi un’orizzontale")!.click();
+    const positions = (): HTMLInputElement[] => [...dialog().querySelectorAll<HTMLInputElement>('input[type="number"]')];
+    // Al centro di ciò che si vede, fuori dai righelli.
+    expect(positions().map((input) => input.value)).toEqual(["200", "162"]);
+    positions()[1]!.value = "75.5";
+    await submit();
+    expect(guidesOf()).toBe("x 200; y 75.5");
+    expect(spoken()).toBe("Guide aggiornate.");
+    editor.undo();
+    expect(guidesOf()).toBe("x 200");
+
+    editor.setTool("select");
+    drag([[200, 280], [200, 280]]);
+    drag([[200, 280], [200, 280]]);
+    expect(dialog().querySelector("h2")!.textContent).toBe("Guide");
+    expect(document.activeElement).toBe(positions()[0]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions button:not(.primary)")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(guidesOf()).toBe("x 200");
+  });
+
+  it("i tasti dei righelli stanno nell'elenco dei tasti", () => {
+    mount(sheet(), { level: "standard" });
+    shift("?");
+    const table = [...dialog().querySelectorAll("table")].find((one) => one.querySelector("caption")!.textContent === "Righelli e guide")!;
+    expect([...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent])).toEqual([
+      ["Shift+R", "Mostra o nasconde i righelli"],
+      ["|", "Mostra o nasconde le guide"],
+      ["Ctrl", "Tenuto mentre si tira una guida: posa libero, senza agganciarsi"],
+    ]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -1769,7 +2059,7 @@ describe("il testo, dal livello Standard", () => {
   });
 
   it("Spazio scrive dov'è il cursore, e con l'aggancio la linea di base va sulla griglia", () => {
-    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false } });
+    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
     size(200, 100);
     editor.setTool("text");
     surface().focus();
@@ -2187,6 +2477,7 @@ describe("da tastiera", () => {
       "Testo · dal livello Standard",
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
+      "Righelli e guide · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
@@ -2384,7 +2675,7 @@ describe("la cornice di trasformazione", () => {
   });
 
   it("con la griglia il bordo va sulla riga, e Ctrl o ⌘ lo lascia libero", () => {
-    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false } });
+    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
     drag([[204, 125], [220, 125], [237, 125]]);
     expect(transformOf(A)).toBe("matrix(1.4 0 0 1 -40 0)");
     editor.undo();
@@ -3717,7 +4008,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
   /// Un disegno vuoto all'Esperto, con la penna di Bézier.
   /// La penna, senza le guide intelligenti, che hanno i loro casi.
   const drawing = (source = EMPTY): void => {
-    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false } });
+    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
     editor.focus();
     key("b");
   };
@@ -3846,7 +4137,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M100 0 C120.1 0 148.3 12.94 148.3 12.94");
     editor.undo();
-    editor.setGrid({ shown: false, snap: true, step: 10, guides: false });
+    editor.setGrid({ shown: false, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true });
     tap(1, 2);
     drag([[38, 41], [44, 47], [52, 49]]);
     // Ctrl lascia il punto libero.
@@ -3854,7 +4145,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M0 0 C0 0 30 30 40 40 C50 50 73 77 73 77");
     // Due nodi sullo stesso incrocio non fanno un tracciato.
-    editor.setGrid({ shown: false, snap: true, step: 50, guides: false });
+    editor.setGrid({ shown: false, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true });
     tap(0, 0);
     tap(20, 0);
     expect(spoken()).toBe("Nodo 2, spigolo: x 0, y 0.");
@@ -4222,7 +4513,7 @@ describe("le immagini incollate", () => {
   });
 
   it("con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più vicino, e le immagini si scostano di passi interi", async () => {
-    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false } });
+    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
     size(1000, 500);
     editor.setTool("select");
     surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
@@ -4810,13 +5101,14 @@ describe("il livello Personalizzato", () => {
       "Disponi · dal livello Standard",
       "Testo · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
+      "Righelli e guide · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[4]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[5]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

@@ -46,6 +46,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello |
 | Pagina e griglia | Standard | il pulsante «Pagina e griglia», `#` e `%` |
 | Guide intelligenti | Standard | l'aggancio agli altri oggetti e alla pagina, la loro casella in «Pagina e griglia», e le misure con `Alt` |
+| Righelli e guide | Standard | i righelli (`Maiusc+R`), le guide del documento (`\|`), «Guide…» e l'unità del documento |
 | Collegamenti alle note | Standard | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
 | Nodi, Bézier | Esperto | lo strumento (`N`, `B`) |

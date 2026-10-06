@@ -92,6 +92,24 @@ describe("gli strati vivi", () => {
     expect(scene.root.attrs).toEqual([["fill", "#0072b2"], ["font-size", "14"]]);
     expect(scene.root.page).toEqual({ x: 0, y: 0, width: 100, height: 100 });
   });
+
+  it("leggono dalla radice l'unità e le guide dei righelli; quelle fuori grammatica non si leggono", () => {
+    const body = `${LAYER}<rect width="1" height="1"/></g></svg>`;
+    const plain = sceneOf(`${HEAD}${body}`);
+    expect(plain.root.units).toBe("px");
+    expect(plain.root.guides).toEqual([]);
+    const ruled = sceneOf(`${HEAD.replace(">", ' fub:units="mm" fub:guides="x 10; y 20.5 locked">')}${body}`);
+    expect(ruled.root.units).toBe("mm");
+    expect(ruled.root.guides).toEqual([
+      { axis: "x", at: 10, locked: false },
+      { axis: "y", at: 20.5, locked: true },
+    ]);
+    // Un'unità sconosciuta vale i pixel; guide illeggibili restano scritte,
+    // ma l'editor non le tocca.
+    const odd = sceneOf(`${HEAD.replace(">", ' fub:units="furlong" fub:guides="z 10">')}${body}`);
+    expect(odd.root.units).toBe("px");
+    expect(odd.root.guides).toBeNull();
+  });
 });
 
 describe("gli strati immagine", () => {

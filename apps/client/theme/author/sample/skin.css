@@ -2123,6 +2123,40 @@ progress::-moz-progress-bar {
   stroke: rgb(128 128 128 / 0.5);
 }
 
+/* Le guide del documento: un azzurro che non è quello della selezione né
+   quello delle guide intelligenti, e che si legge, almeno tre a uno, sulla
+   carta bianca come sul tavolo scuro. */
+.draw-guides path {
+  stroke: rgb(11 132 216);
+}
+
+/* I righelli: il fondo della barra, tacche e numeri attenuati, un filo verso
+   il foglio. Una fascia grigia dice dove sta la pagina, una d'accento dove
+   sta la selezione; una linea segue il puntatore. */
+.draw-rulers [data-part="bg"],
+.draw-rulers [data-part="corner"] {
+  fill: var(--bg-elev);
+}
+.draw-rulers [data-part="ticks"] {
+  stroke: var(--muted);
+}
+.draw-rulers text {
+  fill: var(--muted);
+}
+.draw-rulers [data-part="edge"] {
+  stroke: var(--border);
+}
+.draw-rulers [data-part="page"] {
+  fill: rgb(128 128 128 / 0.18);
+}
+.draw-rulers [data-part="selection"] {
+  fill: var(--accent);
+  opacity: 0.35;
+}
+.draw-rulers [data-part="pointer"] {
+  stroke: var(--text);
+}
+
 /* La barra della selezione galleggia sul disegno: il fondo della barra in
    cima, un filo e un'ombra che la staccano da ciò che copre. */
 .draw-arrange {
@@ -3078,6 +3112,88 @@ progress::-moz-progress-bar {
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* La finestra «Guide»: le righe in una tabella che scorre, coi titoli delle
+   colonne fermi in cima; sotto, i pulsanti che aggiungono una guida o le
+   tolgono tutte, sempre in vista. Ogni comando misura almeno 44 px. */
+.modale .draw-guides-message {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .draw-guides-scroll {
+  max-height: min(45vh, 24rem);
+  overflow: auto;
+}
+.modale .draw-guides-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.modale .draw-guides-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0 var(--space-2) var(--space-2) 0;
+  background: var(--elevation-dialog-surface);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: start;
+}
+.modale .draw-guides-table td {
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  vertical-align: middle;
+}
+.modale .draw-guides-table select,
+.modale .draw-guides-table input[type="number"] {
+  min-width: 7rem;
+  min-height: 44px;
+}
+.modale .palette-form .draw-guides-check {
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.modale .draw-guides-remove,
+.modale .draw-guides-tools button {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.modale .draw-guides-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+.modale .draw-guides-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.modale .draw-guides-tools button {
+  padding: var(--space-2) var(--space-4);
+}
+.modale .draw-guides-tools button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.modale .draw-guides-tools .draw-guides-clear {
+  margin-inline-start: auto;
+  color: var(--danger);
+}
+.modale .draw-guides-remove:hover,
+.modale .draw-guides-tools .draw-guides-clear:not(:disabled):hover {
+  border-color: var(--danger);
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
 .modale .palette-actions .keys-show-all {
   margin-inline-end: auto;
 }

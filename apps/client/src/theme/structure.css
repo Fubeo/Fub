@@ -1284,6 +1284,14 @@ html, body, #app {
 .draw-surface[data-grip="rotating"] {
   cursor: grabbing;
 }
+/* Sopra un righello il cursore è la freccia, anche sopra una maniglia che
+   il righello copre; l'angolo fra i due apre un menu. */
+.draw-surface[data-ruler] {
+  cursor: default;
+}
+.draw-surface[data-ruler="corner"] {
+  cursor: pointer;
+}
 .draw-page {
   position: absolute;
   top: 0;
@@ -1316,6 +1324,54 @@ html, body, #app {
   stroke: currentColor;
   stroke-width: 1px;
   shape-rendering: crispEdges;
+}
+/* Le guide del documento attraversano il foglio sopra il disegno, linee di
+   un pixel a metà dei pixel. Quella sotto il puntatore, o che si tira, è
+   più spessa; una bloccata è tratteggiata, e una che rilasciata se ne va è
+   tratteggiata e sbiadita: lo stato si legge dalla forma, non dal colore. */
+.draw-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-guides path {
+  fill: none;
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+}
+.draw-guides [data-hot] {
+  stroke-width: 2px;
+}
+.draw-guides [data-locked] {
+  stroke-dasharray: 6 4;
+}
+.draw-guides [data-away] {
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+}
+/* I righelli, in alto e a sinistra, coprono il bordo del foglio senza
+   spostare il disegno: sopra ogni cosa del foglio, sotto le barre che
+   galleggiano. Le tacche cadono a metà dei pixel; i numeri sono piccoli e
+   a cifre di pari larghezza, che non ballano quando la vista scorre. */
+.draw-rulers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-rulers path {
+  fill: none;
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+}
+.draw-rulers text {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 /* Il cursore del foglio, che la tastiera muove: un punto senza misura, e il
    segno attorno lo disegna la pelle. */
@@ -1433,6 +1489,19 @@ html, body, #app {
   box-sizing: border-box;
   max-width: calc(100% - 16px);
   transform: translateX(-50%);
+}
+/* Coi righelli, la barra sta al centro di ciò che si vede, sotto il
+   righello in alto, e i campi di testo e i segni dei collegamenti non
+   escono sopra i righelli. Un righello è largo 24 px, `RULER_PX` di
+   `tools/rulers.ts`. */
+.draw-stage[data-rulers] > .draw-arrange {
+  top: 32px;
+  left: calc(50% + 12px);
+  max-width: calc(100% - 40px);
+}
+.draw-stage[data-rulers] > .draw-text-layer,
+.draw-stage[data-rulers] > .draw-link-layer {
+  clip-path: inset(24px 0 0 24px);
 }
 /* Il foglio e, accanto, i pannelli: l'albero degli oggetti e, sotto, gli
    attributi. Su un riquadro stretto i pannelli vanno sotto il foglio. Una
@@ -1706,6 +1775,34 @@ textarea.draw-inspector-input {
     border: 1px solid ButtonText;
     background: ButtonFace;
     color: ButtonText;
+  }
+  /* Il tratto e il riempimento dell'SVG non si forzano da soli: le guide
+     prendono il colore dei collegamenti, distinto da quello della
+     selezione, e i righelli quelli della pagina. La pelle viene dopo questo
+     foglio e colora gli stessi selettori, quindi il pavimento vince con
+     `!important`. */
+  .draw-guides path {
+    stroke: LinkText !important;
+  }
+  .draw-rulers [data-part="bg"],
+  .draw-rulers [data-part="corner"] {
+    fill: Canvas !important;
+  }
+  .draw-rulers [data-part="ticks"],
+  .draw-rulers [data-part="edge"],
+  .draw-rulers [data-part="pointer"] {
+    stroke: CanvasText !important;
+  }
+  .draw-rulers text {
+    fill: CanvasText !important;
+  }
+  .draw-rulers [data-part="page"] {
+    fill: GrayText !important;
+    opacity: 0.3 !important;
+  }
+  .draw-rulers [data-part="selection"] {
+    fill: Highlight !important;
+    opacity: 0.5 !important;
   }
 }
 .base-search { min-width: 8rem; flex: 1; }

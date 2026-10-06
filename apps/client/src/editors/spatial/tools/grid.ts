@@ -15,32 +15,53 @@
 //   porta sull'incrocio più vicino l'angolo della geometria scelto
 //   all'inizio del gesto. Il contorno resta fuori, perché esce dalla griglia
 //   anche in una forma disegnata agganciata.
+// - **Nell'unità del documento.** Ogni unità ha i suoi passi, e ricorda
+//   quello scelto: un documento in millimetri ha la griglia in millimetri, e
+//   quello in pixel accanto resta com'era.
 
 import type { Camera } from "../../../spatial/camera";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
+import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";
 
-/// La griglia, e le guide intelligenti che stanno con lei nel menu «Pagina
-/// e griglia» e si ricordano con lei.
+/// La griglia, e ciò che sta con lei nel menu «Pagina e griglia» e si
+/// ricorda con lei: le guide intelligenti, i righelli e le loro guide.
 export interface Grid {
   /// La griglia si vede.
   readonly shown: boolean;
   /// I punti si agganciano alla griglia.
   readonly snap: boolean;
-  /// Il passo, in unità della scena.
+  /// Il passo dei documenti in pixel, in unità della scena.
   readonly step: number;
+  /// Il passo dei documenti nelle altre unità, in unità della scena: ogni
+  /// unità ricorda il suo, e una che manca ha quello di serie.
+  readonly steps: Readonly<Partial<Record<LengthUnit, number>>>;
   /// Le guide intelligenti agganciano agli altri oggetti e alla pagina
   /// (`guides.ts`).
   readonly guides: boolean;
+  /// I righelli si vedono (`rulers.ts`).
+  readonly rulers: boolean;
+  /// Le guide dei righelli, scritte nel documento, si vedono e agganciano.
+  readonly rulerGuides: boolean;
 }
 
-/// I passi fra cui si sceglie: dividono tutti la pagina di un documento
-/// nuovo, 1600 per 1000.
-export const GRID_STEPS: readonly number[] = [5, 10, 20, 50, 100];
+/// I passi fra cui si sceglie, nell'unità: in pixel dividono tutti la
+/// pagina di un documento nuovo, 1600 per 1000; nelle altre unità il
+/// centimetro, il pollice e il punto tipografico.
+export const GRID_STEPS: Readonly<Record<LengthUnit, readonly number[]>> = {
+  px: [5, 10, 20, 50, 100],
+  mm: [1, 2, 5, 10, 20],
+  cm: [0.2, 0.5, 1, 2, 5],
+  in: [0.0625, 0.125, 0.25, 0.5, 1],
+  pt: [6, 12, 18, 36, 72],
+};
 
-/// La prima volta la griglia è spenta e le guide sono accese, come nei
-/// programmi di disegno che chi disegna conosce già.
-export const DEFAULT_GRID: Grid = { shown: false, snap: false, step: 20, guides: true };
+/// Il passo di un'unità che nessuno ha ancora scelto, nell'unità.
+export const UNIT_STEP: Readonly<Record<LengthUnit, number>> = { px: 20, mm: 5, cm: 0.5, in: 0.25, pt: 12 };
+
+/// La prima volta la griglia e i righelli sono spenti, le guide accese, come
+/// nei programmi di disegno che chi disegna conosce già.
+export const DEFAULT_GRID: Grid = { shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true };
 
 /// I limiti del passo, in unità della scena.
 export const MIN_GRID_STEP = 1;
@@ -64,6 +85,40 @@ function clean(value: number): number {
 /// Vero se `step` è un passo che la griglia accetta.
 export function validStep(step: number): boolean {
   return Number.isFinite(step) && step >= MIN_GRID_STEP && step <= MAX_GRID_STEP;
+}
+
+/// I passi fra cui si sceglie in `unit`, in unità della scena.
+export function unitSteps(unit: LengthUnit): number[] {
+  return GRID_STEPS[unit].map((step) => step * UNIT_SIZE[unit]);
+}
+
+/// Il passo della griglia di `grid` per un documento in `unit`, in unità
+/// della scena.
+export function gridStep(grid: Grid, unit: LengthUnit): number {
+  return unit === "px" ? grid.step : (grid.steps[unit] ?? UNIT_STEP[unit] * UNIT_SIZE[unit]);
+}
+
+/// `grid` col passo `step` per i documenti in `unit`.
+export function withStep(grid: Grid, unit: LengthUnit, step: number): Grid {
+  return unit === "px" ? { ...grid, step } : { ...grid, steps: { ...grid.steps, [unit]: step } };
+}
+
+/// I passi ricordati di `value` che la griglia accetta, per le unità che
+/// conosce: il resto non conta.
+export function validSteps(value: unknown): Partial<Record<LengthUnit, number>> {
+  const steps: Partial<Record<LengthUnit, number>> = {};
+  if (typeof value !== "object" || value === null) return steps;
+  for (const unit of UNITS) {
+    const step = (value as Record<string, unknown>)[unit];
+    if (unit !== "px" && typeof step === "number" && validStep(step)) steps[unit] = step;
+  }
+  return steps;
+}
+
+/// Vero se due passi sono lo stesso, a meno della virgola mobile di una
+/// conversione d'unità.
+export function sameStep(a: number, b: number): boolean {
+  return Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b));
 }
 
 /// `value` sulla riga più vicina.

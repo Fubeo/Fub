@@ -6,6 +6,7 @@ import { anchorsOf, GuideIndex, measure, nearer, type GuideTarget } from "./guid
 const box = (x: number, y: number, width: number, height: number): Bounds => ({ min: [x, y], max: [x + width, y + height] });
 const object = (key: string, b: Bounds): GuideTarget => ({ kind: "object", box: b, key });
 const PAGE: GuideTarget = { kind: "page", box: box(0, 0, 1600, 1000), key: "" };
+const guide = (axis: 0 | 1, at: number, key = "0"): GuideTarget => ({ kind: "guide", box: { min: [at, at], max: [at, at] }, key, axis });
 
 describe("i bersagli", () => {
   const index = new GuideIndex([object("a", box(100, 100, 50, 20)), object("b", box(300, 400, 10, 10)), PAGE]);
@@ -33,6 +34,14 @@ describe("i bersagli", () => {
       { value: 55, edge: "mid" },
       { value: 60, edge: "max" },
     ]);
+  });
+
+  it("una guida dei righelli è un bersaglio lungo il suo asse soltanto", () => {
+    const ruled = new GuideIndex([guide(0, 120), guide(1, 340.5, "1")]);
+    expect(ruled.nearest(0, 118, 5)).toBe(120);
+    expect(ruled.nearest(1, 118, 5)).toBeNull();
+    expect(ruled.nearest(1, 343, 5)).toBe(340.5);
+    expect(ruled.nearest(0, 343, 5)).toBeNull();
   });
 
   it("lo scarto più piccolo fra le àncore vince", () => {
@@ -80,6 +89,18 @@ describe("le linee", () => {
     const [line] = index.lines(0, moving, anchorsOf(moving, 0));
     expect(line).toMatchObject({ value: 0, edge: "min", gap: null, from: 0, to: 1000 });
     expect(line!.target.kind).toBe("page");
+  });
+
+  it("una guida dei righelli non ha segni suoi, e viene dopo gli oggetti e prima della pagina", () => {
+    const moving = box(0, 300, 40, 40);
+    const [alone] = new GuideIndex([guide(0, 40, "3")]).lines(0, moving, anchorsOf(moving, 0));
+    expect(alone).toMatchObject({ value: 40, source: "max", edge: "point", gap: null, from: 300, to: 340 });
+    expect(alone!.target).toMatchObject({ kind: "guide", key: "3" });
+    const [first] = new GuideIndex([PAGE, guide(0, 0)]).lines(0, moving, anchorsOf(moving, 0));
+    expect(first!.target.kind).toBe("guide");
+    const [object0] = new GuideIndex([guide(0, 0), object("sotto", box(0, 600, 10, 10))]).lines(0, moving, anchorsOf(moving, 0));
+    expect(object0!.target.key).toBe("sotto");
+    expect(object0!.gap).toEqual([340, 600]);
   });
 
   it("valgono entro mezzo centesimo, la geometria scritta a due decimali", () => {
@@ -160,6 +181,11 @@ describe("le distanze uguali", () => {
     expect(index.spaceSnap(0, box(183, 10, 30, 20), 5)).toBe(-3);
     // Fuori dalla fila, sotto, non ci sono spazi.
     expect(index.spaceSnap(0, box(183, 300, 30, 20), 5)).toBeNull();
+  });
+
+  it("le guide dei righelli non sono vicini di una fila", () => {
+    const index = new GuideIndex([object("a", box(0, 0, 10, 10)), guide(0, 30), object("c", box(60, 0, 10, 10))]);
+    expect(index.spaceSnap(0, box(31, 0, 10, 10), 5)).toBe(-1);
   });
 
   it("spazi diversi non sono distanze uguali", () => {

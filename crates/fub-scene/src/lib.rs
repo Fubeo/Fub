@@ -14,7 +14,8 @@
 //!
 //! [`Ink`] e [`Brush`] sono il codec di `fub:ink` e la lettura di `fub:brush`
 //! (§5): la scena li usa per dire se un tratto si ridisegna, e chi scrive un
-//! tratto li usa per quantizzarlo.
+//! tratto li usa per quantizzarlo. [`rulers`] legge l'unità e le guide del
+//! documento (formato della scena, unità e guide).
 //!
 //! Il crate è puro. Non dipende dall'ABI di Fub né dal kernel, non fa I/O e
 //! compila per `wasm32-wasip2`: `crates/fub-abi/tests/dependency_invariant.rs`
@@ -30,6 +31,7 @@ mod classify;
 mod diagnostics;
 mod geometry;
 pub mod ink;
+pub mod rulers;
 pub mod text;
 mod values;
 mod xml;
@@ -231,6 +233,29 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
     if let Some(v) = version.filter(|&v| v > SUPPORTED_VERSION) {
         read_only.push(ReadOnly::FutureVersion);
         diagnostics.push(Diagnostic::new(Code::S007, None, Some(v.to_string())));
+    }
+
+    // L'unità e le guide fuori grammatica non si usano, e restano (formato
+    // della scena, unità e guide, §3).
+    if root
+        .value(NS_FUB, "units")
+        .is_some_and(|units| rulers::Unit::parse(units).is_none())
+    {
+        diagnostics.push(Diagnostic::new(
+            Code::S011,
+            None,
+            Some("fub:units".to_owned()),
+        ));
+    }
+    if root
+        .value(NS_FUB, "guides")
+        .is_some_and(|guides| rulers::parse_guides(guides).is_none())
+    {
+        diagnostics.push(Diagnostic::new(
+            Code::S011,
+            None,
+            Some("fub:guides".to_owned()),
+        ));
     }
 
     if duplicate_ids(&doc, &map, &mut diagnostics) {

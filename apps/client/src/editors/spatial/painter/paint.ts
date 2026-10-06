@@ -43,10 +43,12 @@ import {
   type Part,
   type SceneNode,
 } from "../scene/model";
+import { parseGuides, parseUnits, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { escapeAttribute, NamespaceScope } from "../scene/serialize";
 import { SourceText } from "../scene/text";
 import { href as hrefKind, length, numberList } from "../scene/values";
 import {
+  NS_FUB,
   NS_NONE,
   NS_SVG,
   NS_XLINK,
@@ -163,12 +165,17 @@ export interface Page {
   readonly height: number;
 }
 
-/// Ciò che la radice dà agli strati vivi.
+/// Ciò che la radice dà agli strati vivi, e alla superficie.
 export interface PaintRoot {
   /// Gli attributi di presentazione della radice che varrebbero su un `g`:
   /// gli strati vivi li ereditano come il documento.
   readonly attrs: readonly PaintAttr[];
   readonly page: Page | null;
+  /// L'unità del documento: `px` se non la dice, o se non si legge.
+  readonly units: LengthUnit;
+  /// Le guide dei righelli; `null` se `fub:guides` è fuori grammatica, e
+  /// allora la superficie non le tocca.
+  readonly guides: readonly RulerGuide[] | null;
 }
 
 /// Una scena da disegnare.
@@ -774,7 +781,7 @@ export class PaintBuilder {
       head: node.head,
       tail: node.tail,
       prolog,
-      root: { attrs, page: pageOf(element) },
+      root: { attrs, page: pageOf(element), units: parseUnits(valueOf(element, NS_FUB, "units") ?? "") ?? "px", guides: guidesOf(element) },
       image: imageRootOf(element),
       prologText: prologText(prolog),
     };
@@ -807,6 +814,12 @@ function pageOf(element: ElementNode): Page | null {
   const width = length(valueOf(element, NS_NONE, "width") ?? "");
   const height = length(valueOf(element, NS_NONE, "height") ?? "");
   return width !== null && height !== null && width > 0 && height > 0 ? { x: 0, y: 0, width, height } : null;
+}
+
+/// Le guide della radice: nessuna se non ce ne sono.
+function guidesOf(element: ElementNode): readonly RulerGuide[] | null {
+  const value = valueOf(element, NS_FUB, "guides");
+  return value === undefined ? [] : parseGuides(value);
 }
 
 /// La radice di un'immagine, dagli attributi della radice letta.
