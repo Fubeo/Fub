@@ -208,6 +208,11 @@ lo decide la superficie, come per le guide bloccate.
 | Valore di un attributo | 512 KiB; per l'`href` di un'immagine 7 MiB |
 | Annidamento di gruppi | 32 livelli |
 
+Il limite delle operazioni di un `batch` vale per ciò che arriva al motore.
+L'inversa che il motore stesso calcola non lo conta: quella di un `add` con
+una sequenza lunga toglie gli elementi uno per uno, e un annulla deve
+riuscire anche così.
+
 ## 6. Dall'operazione alla `TextOperation`
 
 La `DocumentSession` accetta solo `SurfaceEdit { text, operation }` e verifica

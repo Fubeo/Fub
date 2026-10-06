@@ -773,6 +773,20 @@ describe("add con raw", () => {
     const raw = `<rect style="x" data-n="${"x".repeat(MAX_VALUE_BYTES + 1)}"/>`;
     expect(apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }).text).toContain(raw);
   });
+
+  it(`l'inversa di una sequenza lunga si applica anche oltre ${MAX_BATCH} operazioni`, () => {
+    const engine = SceneEngine.open(BASE);
+    const ids = Array.from({ length: MAX_BATCH + 1 }, (_, i) => `o${i.toString(36).padStart(8, "0")}`);
+    const raw = ids.map((id) => `<rect id="${id}" x="0" y="0" width="1" height="1"/>`).join("\n    ");
+    const added = applied(engine.apply({ op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }));
+    // Un'altra modifica in mezzo: l'annulla non è più esatto, e passa
+    // dall'inversa.
+    applied(engine.apply({ op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } }));
+    applied(engine.undo(added.undo));
+    expect(engine.text).toBe(BASE.replace('fill="none"', 'fill="#000000"'));
+    // Ciò che arriva resta nel limite.
+    rejects(BASE, added.undo.inverse, "limit");
+  });
 });
 
 describe("i nomi", () => {

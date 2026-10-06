@@ -270,7 +270,7 @@ const ROOT_VIEW: ReadonlySet<string> = new Set(["x", "y", "width", "height", "vi
 
 /// Gli elementi SVG che non disegnano niente da soli: risorse, stili,
 /// metadati. Un elemento di un altro namespace non disegna mai.
-const NON_RENDERING: ReadonlySet<string> = new Set([
+export const NON_RENDERING: ReadonlySet<string> = new Set([
   "defs",
   "style",
   "script",

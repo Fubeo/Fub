@@ -619,10 +619,18 @@ export function deepest(node: ElementPart): number {
 
 /// Tutti gli elementi del sottoalbero di `node`, lui compreso, coi loro id.
 export function idsIn(node: ElementPart): string[] {
-  if (node.kind === "leaf") return [...node.ids];
-  const out: string[] = node.facts.id === null ? [] : [node.facts.id];
-  for (const part of node.parts) if (typeof part !== "string" && part.kind !== "other") out.push(...idsIn(part));
+  const out: string[] = [];
+  collectIds(node, out);
   return out;
+}
+
+function collectIds(node: ElementPart, out: string[]): void {
+  if (node.kind === "leaf") {
+    for (const id of node.ids) out.push(id);
+    return;
+  }
+  if (node.facts.id !== null) out.push(node.facts.id);
+  for (const part of node.parts) if (typeof part !== "string" && part.kind !== "other") collectIds(part, out);
 }
 
 /// Quanti elementi ha il sottoalbero di `node`, lui compreso.

@@ -333,7 +333,7 @@ function attributeSpan(doc: XmlDocument, element: ElementNode, attr: Attr): [num
 /// valori o il contenuto estraneo. Se anche una sola riga non comincia con
 /// `from`, il rientro del file non è regolare e l'elemento resta com'è: così
 /// la stessa regola, applicata all'indietro, rimette i byte di prima.
-function reindent(raw: string, scope: NamespaceScope, underRoot: boolean, depth: number, from: string, to: string): string {
+export function reindent(raw: string, scope: NamespaceScope, underRoot: boolean, depth: number, from: string, to: string): string {
   if (from === to || raw.includes("xml:space")) return raw;
   const fragment = parseFragment(raw, scope);
   if (fragment === null) return raw;
@@ -431,6 +431,10 @@ export class SceneEngine {
   // Lo stato di un'applicazione in corso.
   private touched = new Set<string>();
   private duplicate = false;
+  /// Vero mentre si applica un'inversa del motore: il limite delle
+  /// operazioni di un `batch` vale per ciò che arriva, e l'inversa di un
+  /// `add` grande toglie i suoi elementi uno per uno.
+  private inverse = false;
 
   private constructor(source: string) {
     const opened = openSource(source);
@@ -525,7 +529,12 @@ export class SceneEngine {
       tree.undo(exact.entries);
       return this.commit(tree.take(mark), undo.inverse, undo.forward, undo.touched, false, exact.before);
     }
-    return this.apply(undo.inverse);
+    this.inverse = true;
+    try {
+      return this.apply(undo.inverse);
+    } finally {
+      this.inverse = false;
+    }
   }
 
   /// Chiude un'applicazione: il testo nuovo, la `TextOperation` e l'undo.
@@ -612,7 +621,7 @@ export class SceneEngine {
         (sum, inner) => sum + (isRecord(inner) && inner.op === "batch" && Array.isArray(inner.ops) ? count(inner.ops) : 1),
         0,
       );
-    if (count(ops) > MAX_BATCH) reject("limit", `batch oltre ${MAX_BATCH} operazioni`);
+    if (!this.inverse && count(ops) > MAX_BATCH) reject("limit", `batch oltre ${MAX_BATCH} operazioni`);
     const inverses: Op[] = [];
     for (let i = 0; i < ops.length; i++) {
       try {
@@ -749,7 +758,7 @@ export class SceneEngine {
 
   /// Mette nel punto, preceduti da `gap`, un elemento o pezzi che
   /// cominciano e finiscono con un elemento.
-  private insertAt(point: Point, gap: string, ...parts: Part[]): void {
+  private insertAt(point: Point, gap: string, parts: readonly Part[]): void {
     const { owner, index, split } = point;
     const there = owner.parts[index];
     if (typeof there === "string" && split > 0) {
@@ -899,9 +908,9 @@ export class SceneEngine {
 
   /// Mette in `to` un elemento, o pezzi che cominciano e finiscono con un
   /// elemento.
-  private place(to: Destination, ...parts: Part[]): void {
+  private place(to: Destination, parts: readonly Part[]): void {
     if (to.kind === "point") {
-      this.insertAt(to.point, to.gap, ...parts);
+      this.insertAt(to.point, to.gap, parts);
       return;
     }
     // Un genitore vuoto si riscrive in forma aperta, col figlio dentro (§6).
@@ -1125,7 +1134,7 @@ export class SceneEngine {
     const problem = this.problem(node);
     if (problem !== null) reject("invalid-elem", problem);
     this.checkNesting(node, parent);
-    this.place(to, node);
+    this.place(to, [node]);
     this.touch(node);
     return { op: "remove", target: this.targetOf(node) };
   }
@@ -1143,7 +1152,13 @@ export class SceneEngine {
     let parts = buildSequence(sequence, parent);
     const edits = this.checkSequence(sequence, parts, parent);
     if (edits.length > 0) {
-      for (const [from, to, value] of edits.reverse()) text = text.slice(0, from) + value + text.slice(to);
+      let rewritten = "";
+      let at = 0;
+      for (const [from, to, value] of edits) {
+        rewritten += text.slice(at, from) + value;
+        at = to;
+      }
+      text = rewritten + text.slice(at);
       sequence = parseSequence(text, scope);
       if (sequence === null) reject("invalid-elem", "il contorno riscritto non si legge");
       parts = buildSequence(sequence, parent);
@@ -1153,9 +1168,15 @@ export class SceneEngine {
       const problem = this.rawProblem(node);
       if (problem !== null) reject("invalid-elem", problem);
     }
-    const ids = nodes.flatMap(idsIn);
-    const repeated = ids.find((id, i) => ids.indexOf(id) !== i);
-    if (repeated !== undefined) reject("duplicate-id", `id ripetuto: ${repeated}`);
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const node of nodes) {
+      for (const id of idsIn(node)) {
+        if (seen.has(id)) reject("duplicate-id", `id ripetuto: ${id}`);
+        seen.add(id);
+        ids.push(id);
+      }
+    }
     // Un `add` ripetuto dalla rete è un doppione, non un errore (§8).
     const same = (node: ElementPart): boolean => {
       const existing = node.facts.id === null ? null : this.t.element(node.facts.id);
@@ -1169,7 +1190,7 @@ export class SceneEngine {
     if (taken !== undefined) reject("duplicate-id", `id già usato: ${taken}`);
     const to = this.destination(parent, pos);
     for (const node of nodes) this.checkNesting(node, parent);
-    this.place(to, ...parts);
+    this.place(to, parts);
     for (const node of nodes) this.touch(node);
     // Dall'ultimo al primo: togliere un elemento non sposta i percorsi di
     // quelli che lo precedono.
@@ -1284,7 +1305,7 @@ export class SceneEngine {
     if (node === null) reject("invalid-elem", "l'elemento da rimettere non si legge");
     const taken = idsIn(node).find((id) => this.t.has(id));
     if (taken !== undefined) reject("duplicate-id", `id già usato: ${taken}`);
-    this.insertAt(this.pointOf(anchor), op.gap, node);
+    this.insertAt(this.pointOf(anchor), op.gap, [node]);
     this.touch(node);
     return { op: "remove", target: this.targetOf(node) };
   }
@@ -1352,7 +1373,7 @@ export class SceneEngine {
       }
     }
     if (roleOf(built) !== roleOf(node)) reject("invalid-elem", "lo spostamento cambierebbe il ruolo dell'elemento");
-    this.place(to, built);
+    this.place(to, [built]);
     return { op: "move", target: this.targetOf(built), slot: this.slotOf(anchor), gap };
   }
 
@@ -1689,7 +1710,7 @@ export class SceneEngine {
       }
       const node = this.build(this.eolOf(writeElement(out, this.indentFor(to))), root);
       if (node === null || node.details === null) reject("invalid-elem", `${field} non rientra nel formato`);
-      this.place(to, node);
+      this.place(to, [node]);
     }
     return inverse;
   }

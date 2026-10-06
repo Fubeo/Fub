@@ -218,7 +218,7 @@ export function readScene(source: string): Scene {
     summary = truncatedSummary(status === "foreign", version);
   } else {
     const classified = classifyDocument(doc, !tooMany);
-    diagnostics.push(...classified.diagnostics);
+    for (const found of classified.diagnostics) diagnostics.push(found);
     summary = classified.tally.finish(status === "foreign", version, diagnostics);
     items = classified.items;
   }
