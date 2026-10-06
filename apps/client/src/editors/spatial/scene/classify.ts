@@ -86,6 +86,10 @@ export interface ElementItem extends Span {
   readonly stroke?: Stroke;
   /// `x1 y1 x2 y2` di una freccia.
   readonly arrow?: readonly [number, number, number, number];
+  /// Il testo del primo `title` figlio di un livello o di un oggetto, coi
+  /// riferimenti risolti e gli spazi com'erano: il nome che qualcuno gli ha
+  /// dato.
+  readonly title?: string;
   /// Il testo di un `title` o di un `desc`, coi riferimenti risolti e gli
   /// spazi com'erano: è ciò che l'operazione `meta` sostituisce.
   readonly text?: string;
@@ -263,13 +267,22 @@ function characterDataOnly(doc: XmlDocument, element: ElementNode): boolean {
 }
 
 /// Il testo di un elemento che contiene solo dati di carattere.
-function characterData(doc: XmlDocument, id: NodeId): string {
+export function characterData(doc: XmlDocument, id: NodeId): string {
   let text = "";
   for (const child of doc.children(id)) {
     const node = doc.nodes[child]!;
     if (node.kind === "text") text += node.value;
   }
   return text;
+}
+
+/// Il testo del primo `title` figlio di `element`; `null` se non ne ha.
+export function firstTitle(doc: XmlDocument, element: ElementNode): string | null {
+  for (const child of element.children) {
+    const node = doc.element(child);
+    if (node !== null && isSvg(node, "title")) return characterData(doc, child);
+  }
+  return null;
 }
 
 /// Vero se `id` è un `title`, `desc` o, dentro un `text`, un `tspan`
@@ -369,6 +382,10 @@ export interface Details {
   readonly hidden?: true;
   readonly stroke?: Stroke;
   readonly arrow?: readonly [number, number, number, number];
+  /// Il nome di un'unità, come [`ElementItem.title`]. Quello di un
+  /// contenitore viene dai figli, e lo aggiunge chi li ha: la lettura intera
+  /// e il modello, che riscrive il tag d'apertura senza rileggere i figli.
+  readonly title?: string;
   readonly text?: string;
   readonly lines?: readonly string[];
 }
@@ -444,6 +461,8 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     if (valueOf(element, NS_FUB, "locked") === "true") details.locked = true;
     const display = valueOf(element, NS_NONE, "display");
     if (display !== undefined && trim(display) === "none") details.hidden = true;
+    const title = isContainer(role) ? null : firstTitle(doc, element);
+    if (title !== null) details.title = title;
   }
   if (role === "stroke") {
     const read = readStroke(element);
@@ -483,6 +502,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.hidden !== undefined) item.hidden = details.hidden;
   if (details.stroke !== undefined) item.stroke = details.stroke;
   if (details.arrow !== undefined) item.arrow = details.arrow;
+  if (details.title !== undefined) item.title = details.title;
   if (details.text !== undefined) item.text = details.text;
   if (details.lines !== undefined) item.lines = details.lines;
   return item;
@@ -577,8 +597,10 @@ class Builder {
     const doc = this.doc;
     const element = doc.element(id)!;
     const span = doc.source.span(element.start, element.end);
-    const { details, problems } = describe(doc, id, tag, role);
-    for (const [code, detail] of problems) this.diagnostics.push(diagnostic(code, span, detail));
+    const described = describe(doc, id, tag, role);
+    const title = isContainer(role) ? firstTitle(doc, element) : null;
+    const details = title === null ? described.details : { ...described.details, title };
+    for (const [code, detail] of described.problems) this.diagnostics.push(diagnostic(code, span, detail));
     this.tally.element(doc, element, role, context, span, details.stroke ?? null);
     if (!this.keep) return;
     this.items.push(elementItem(details, path, span, doc.source.indent(element.start), isContainer(role) ? this.tags(id) : null));

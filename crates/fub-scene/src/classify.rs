@@ -151,6 +151,11 @@ pub struct ElementItem {
     /// `x1 y1 x2 y2` di una freccia.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arrow: Option<[f64; 4]>,
+    /// Il testo del primo `title` figlio di un livello o di un oggetto, coi
+    /// riferimenti risolti e gli spazi com'erano: il nome che qualcuno gli ha
+    /// dato.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// Il testo di un `title` o di un `desc`, coi riferimenti risolti e gli
     /// spazi com'erano: è ciò che l'operazione `meta` sostituisce.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -336,6 +341,15 @@ fn character_data(doc: &Document<'_>, id: NodeId) -> String {
             _ => None,
         })
         .collect()
+}
+
+/// Il testo del primo `title` figlio di `element`; `None` se non ne ha.
+fn first_title(doc: &Document<'_>, element: &Element<'_>) -> Option<String> {
+    element
+        .children
+        .iter()
+        .find(|&&child| doc.element(child).is_some_and(|e| e.is_svg("title")))
+        .map(|&child| character_data(doc, child))
 }
 
 /// Vero se `id` è un `title`, `desc` o, dentro un `text`, un `tspan`
@@ -628,6 +642,7 @@ impl Builder<'_, '_> {
             arrow: (role == Role::Arrow)
                 .then(|| arrow_geometry(element))
                 .flatten(),
+            title: object.then(|| first_title(doc, element)).flatten(),
             text: matches!(role, Role::Title | Role::Desc).then(|| character_data(doc, id)),
             lines: (role == Role::Text).then(|| {
                 element

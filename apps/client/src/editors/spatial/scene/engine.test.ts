@@ -669,3 +669,31 @@ describe("i terminatori", () => {
     expect(out.text).toBe([ROOT, PAPER, L1, '    <g id="o6f7g8h9i" opacity="0.5">', "    </g>", END_G, END, ""].join("\r\n"));
   });
 });
+
+describe("i nomi", () => {
+  it("il nome di un oggetto segue il suo primo `title`, anche quando il tag del contenitore si riscrive", () => {
+    const engine = SceneEngine.open(BASE);
+    const named = (id: string): string | undefined => {
+      const item = engine.scene().find((entry) => entry.kind === "element" && entry.id === id);
+      return item?.kind === "element" ? item.title : undefined;
+    };
+    apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { first: true }, elem: { tag: "title", attrs: {}, text: "Sfondo" } });
+    expect(named("l3f8a0c2d")).toBe("Sfondo");
+    // Il tag d'apertura si riscrive senza rileggere i figli: il nome resta.
+    apply(engine, { op: "set", id: "l3f8a0c2d", attrs: { "fub:layer": "Primo" } });
+    expect(named("l3f8a0c2d")).toBe("Sfondo");
+    apply(engine, {
+      op: "add",
+      parent: "l3f8a0c2d",
+      pos: { last: true },
+      elem: { tag: "g", attrs: { id: "o9g8f7e6d" }, children: [{ tag: "title", attrs: {}, text: "Casa" }, { ...R4_ELEM, children: [{ tag: "title", attrs: {}, text: "Tetto" }] }] },
+    });
+    expect(named("o9g8f7e6d")).toBe("Casa");
+    expect(named("o4d5e6f7g")).toBe("Tetto");
+    apply(engine, { op: "set", id: "o9g8f7e6d", attrs: { opacity: "0.5" } });
+    expect(named("o9g8f7e6d")).toBe("Casa");
+    apply(engine, { op: "remove", target: { path: [2, 0], tag: "title" } });
+    expect(named("l3f8a0c2d")).toBeUndefined();
+    expect(named("o1a2b3c4d")).toBeUndefined();
+  });
+});
