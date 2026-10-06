@@ -1,6 +1,6 @@
 // Lo strato sopra la scena: l'inchiostro mentre si scrive, le maniglie
-// della selezione e i nodi del tracciato che si modifica, su un canvas 2D
-// grande quanto la vista.
+// della selezione, i nodi del tracciato che si modifica, le linee delle guide
+// e le misure, su un canvas 2D grande quanto la vista.
 //
 // Non entra mai nel documento: è ciò che la superficie mostra fra un
 // evento e l'operazione che lo registrerà. L'inchiostro in corso si riempie
@@ -52,7 +52,15 @@ export type OverlayHandle =
   /// il tipo, e un nodo scelto è pieno.
   | { readonly kind: "node"; readonly x: number; readonly y: number; readonly shape: NodeShape; readonly selected: boolean }
   /// La maniglia di un nodo: un punto, legato al nodo da una linea.
-  | { readonly kind: "control"; readonly x: number; readonly y: number; readonly node: Point };
+  | { readonly kind: "control"; readonly x: number; readonly y: number; readonly node: Point }
+  /// Una linea delle guide fra due punti: piena, o tratteggiata quando
+  /// prolunga un bordo fino a una misura.
+  | { readonly kind: "guide"; readonly from: Point; readonly to: Point; readonly dashed: boolean }
+  /// Il segno a croce dove una guida passa per un bordo o per un centro.
+  | { readonly kind: "cross"; readonly x: number; readonly y: number }
+  /// Una misura: la linea fra due punti, con le stanghette ai capi, e la
+  /// distanza scritta a metà.
+  | { readonly kind: "measure"; readonly from: Point; readonly to: Point; readonly text: string };
 
 /// La forma di un nodo: un rombo per lo spigolo, un quadrato per il nodo
 /// liscio, un cerchio per quello simmetrico.
@@ -85,6 +93,11 @@ const ROTOR = 10;
 const LABEL_SIZE = 12;
 const LABEL_PAD = 4;
 const LABEL_GAP = 12;
+
+/// Mezzo braccio del segno a croce, e mezza stanghetta di una misura, in
+/// pixel CSS.
+const CROSS = 3;
+const TICK = 4;
 
 /// Monta lo strato dentro `host`, sopra ciò che c'è.
 export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay {
@@ -142,9 +155,9 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     return value === "" ? "HighlightText" : value;
   };
 
-  /// Una scritta centrata sotto `x`, `y` sullo schermo, sul colore della
-  /// linea; nel carattere dell'interfaccia, che lo strato non eredita.
-  const drawLabel = (ctx: CanvasRenderingContext2D, x: number, y: number, text: string, line: string): void => {
+  /// Una scritta sotto `x`, `y` sullo schermo, o centrata lì, sul colore
+  /// della linea; nel carattere dell'interfaccia, che lo strato non eredita.
+  const drawLabel = (ctx: CanvasRenderingContext2D, x: number, y: number, text: string, line: string, place: "below" | "center"): void => {
     const family = getComputedStyle(host).fontFamily;
     ctx.font = `${LABEL_SIZE}px ${family === "" ? "sans-serif" : family}`;
     ctx.textAlign = "center";
@@ -153,7 +166,7 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     const h = LABEL_SIZE + 2 * LABEL_PAD;
     // Dentro la vista, anche vicino a un bordo.
     const left = Math.max(0, Math.min(Math.round(x - w / 2), width - w));
-    const top = Math.max(0, Math.min(Math.round(y + LABEL_GAP), height - h));
+    const top = Math.max(0, Math.min(Math.round(place === "below" ? y + LABEL_GAP : y - h / 2), height - h));
     ctx.fillStyle = line;
     ctx.beginPath();
     if (typeof ctx.roundRect === "function") ctx.roundRect(left, top, w, h, 3);
@@ -165,6 +178,13 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
 
   /// Un punto della scena sullo schermo, in pixel CSS.
   const screen = (x: number, y: number): Point => [x * view.scale + view.tx, y * view.scale + view.ty];
+
+  /// Come `screen`, sul mezzo pixel: una linea dritta di un pixel resta
+  /// netta.
+  const crisp = ([x, y]: Point): Point => {
+    const [px, py] = screen(x, y);
+    return [Math.round(px - 0.5) + 0.5, Math.round(py - 0.5) + 0.5];
+  };
 
   const drawInk = (ctx: CanvasRenderingContext2D, ink: InkPreview): void => {
     const points = ink.outline;
@@ -293,6 +313,37 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.moveTo(...screen(handle.stem[0], handle.stem[1]));
         ctx.lineTo(...screen(handle.x, handle.y));
         ctx.stroke();
+      } else if (handle.kind === "guide") {
+        ctx.setLineDash(handle.dashed ? [4, 3] : []);
+        ctx.beginPath();
+        ctx.moveTo(...crisp(handle.from));
+        ctx.lineTo(...crisp(handle.to));
+        ctx.stroke();
+      } else if (handle.kind === "cross") {
+        ctx.setLineDash([]);
+        const [px, py] = screen(handle.x, handle.y);
+        ctx.beginPath();
+        ctx.moveTo(px - CROSS, py - CROSS);
+        ctx.lineTo(px + CROSS, py + CROSS);
+        ctx.moveTo(px + CROSS, py - CROSS);
+        ctx.lineTo(px - CROSS, py + CROSS);
+        ctx.stroke();
+      } else if (handle.kind === "measure") {
+        ctx.setLineDash([]);
+        const [ax, ay] = crisp(handle.from);
+        const [bx, by] = crisp(handle.to);
+        const length = Math.hypot(bx - ax, by - ay);
+        // Le stanghette di traverso alla linea.
+        const nx = length > 0 ? ((ay - by) / length) * TICK : 0;
+        const ny = length > 0 ? ((bx - ax) / length) * TICK : TICK;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.moveTo(ax - nx, ay - ny);
+        ctx.lineTo(ax + nx, ay + ny);
+        ctx.moveTo(bx - nx, by - ny);
+        ctx.lineTo(bx + nx, by + ny);
+        ctx.stroke();
       }
     }
     ctx.setLineDash([]);
@@ -322,9 +373,13 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
       drawNode(ctx, px, py, handle.shape);
     }
     for (const handle of handles) {
-      if (handle.kind !== "label") continue;
-      const [px, py] = screen(handle.x, handle.y);
-      drawLabel(ctx, px, py, handle.text, line);
+      if (handle.kind === "label") {
+        const [px, py] = screen(handle.x, handle.y);
+        drawLabel(ctx, px, py, handle.text, line, "below");
+      } else if (handle.kind === "measure") {
+        const [px, py] = screen((handle.from[0] + handle.to[0]) / 2, (handle.from[1] + handle.to[1]) / 2);
+        drawLabel(ctx, px, py, handle.text, line, "center");
+      }
     }
   };
 

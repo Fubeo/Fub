@@ -20,6 +20,8 @@ import type { Camera } from "../../../spatial/camera";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 
+/// La griglia, e le guide intelligenti che stanno con lei nel menu «Pagina
+/// e griglia» e si ricordano con lei.
 export interface Grid {
   /// La griglia si vede.
   readonly shown: boolean;
@@ -27,13 +29,18 @@ export interface Grid {
   readonly snap: boolean;
   /// Il passo, in unità della scena.
   readonly step: number;
+  /// Le guide intelligenti agganciano agli altri oggetti e alla pagina
+  /// (`guides.ts`).
+  readonly guides: boolean;
 }
 
 /// I passi fra cui si sceglie: dividono tutti la pagina di un documento
 /// nuovo, 1600 per 1000.
 export const GRID_STEPS: readonly number[] = [5, 10, 20, 50, 100];
 
-export const DEFAULT_GRID: Grid = { shown: false, snap: false, step: 20 };
+/// La prima volta la griglia è spenta e le guide sono accese, come nei
+/// programmi di disegno che chi disegna conosce già.
+export const DEFAULT_GRID: Grid = { shown: false, snap: false, step: 20, guides: true };
 
 /// I limiti del passo, in unità della scena.
 export const MIN_GRID_STEP = 1;

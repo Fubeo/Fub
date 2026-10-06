@@ -321,4 +321,63 @@ describe("lo strato sopra la scena", () => {
     expect(cancelled).toEqual([1, 2]);
     expect(host.querySelector("canvas")).toBeNull();
   });
+
+  it("disegna le guide nette sul mezzo pixel, le croci, e le misure con la scritta in mezzo, che resta nella vista", () => {
+    const calls: Array<readonly [string, ...unknown[]]> = [];
+    const context = new Proxy({} as Record<string | symbol, unknown>, {
+      get: (target, name) => {
+        if (name in target) return target[name];
+        if (name === "measureText") return () => ({ width: 12 });
+        return (...args: unknown[]) => void calls.push([String(name), ...args]);
+      },
+      set: (target, name, value) => {
+        target[name] = value;
+        return true;
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 1);
+    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const overlay = createOverlay(host, owner);
+    overlay.setView({ scale: 2, tx: 10, ty: 0 });
+    overlay.setHandles([
+      { kind: "guide", from: [0, 0], to: [0, 50], dashed: false },
+      { kind: "guide", from: [0, 0], to: [10, 0], dashed: true },
+      { kind: "cross", x: 5, y: 5 },
+      { kind: "measure", from: [0, 10], to: [30, 10], text: "30" },
+    ]);
+    overlay.flush();
+    const lines = (): unknown[] => calls.filter(([name]) => name === "setLineDash" || name === "moveTo" || name === "lineTo");
+    const texts = (): unknown[] => calls.filter(([name]) => name === "fillText");
+    expect(lines()).toEqual([
+      ["setLineDash", []],
+      ["moveTo", 10.5, 0.5],
+      ["lineTo", 10.5, 100.5],
+      ["setLineDash", [4, 3]],
+      ["moveTo", 10.5, 0.5],
+      ["lineTo", 30.5, 0.5],
+      // La croce, centrata sul punto.
+      ["setLineDash", []],
+      ["moveTo", 17, 7],
+      ["lineTo", 23, 13],
+      ["moveTo", 23, 7],
+      ["lineTo", 17, 13],
+      // La misura, con le stanghette di traverso ai due capi.
+      ["setLineDash", []],
+      ["moveTo", 10.5, 20.5],
+      ["lineTo", 70.5, 20.5],
+      ["moveTo", 10.5, 16.5],
+      ["lineTo", 10.5, 24.5],
+      ["moveTo", 70.5, 16.5],
+      ["lineTo", 70.5, 24.5],
+      ["setLineDash", []],
+    ]);
+    expect(texts()).toEqual([["fillText", "30", 40, 20.5]]);
+
+    // Accanto all'angolo della vista, 800 per 600, la scritta ci resta dentro.
+    calls.length = 0;
+    overlay.setHandles([{ kind: "measure", from: [390, 298], to: [395, 298], text: "5" }]);
+    overlay.flush();
+    expect(texts()).toEqual([["fillText", "5", 790, 590.5]]);
+  });
 });

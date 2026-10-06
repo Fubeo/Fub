@@ -164,6 +164,7 @@ import {
   angleOf,
   FRAME_PX,
   frameCenter,
+  frameGuides,
   frameSize,
   frameView,
   gridSnap,
@@ -173,15 +174,30 @@ import {
   MAGNET_DEGREES,
   movedFrame,
   normalized,
+  pull,
   resized,
   resizeMatrix,
   rotation,
   rotationMatrix,
+  upright,
+  type Axis as FrameAxis,
   type Frame,
   type FrameView,
   type Grip,
   type GripCursor,
 } from "./frame";
+import {
+  anchorsOf,
+  GUIDE_PX,
+  GuideIndex,
+  measure as measureBetween,
+  nearer,
+  ON_GUIDE,
+  type Edge as GuideEdge,
+  type GuideLine,
+  type GuideTarget,
+  type Spacing,
+} from "./guides";
 import { applyOps } from "./apply";
 import { pathOps } from "./topath";
 import type { BooleanKind } from "./boolean";
@@ -898,8 +914,26 @@ function layerRefusal(layer: LayerInfo): DrawKey | null {
 
 /// `next` come griglia, col passo di `before` se il suo è fuori dai limiti.
 function checkedGrid(next: Grid, before: Grid): Grid {
-  return { shown: next.shown, snap: next.snap, step: validStep(next.step) ? next.step : before.step };
+  return {
+    shown: next.shown,
+    snap: next.snap,
+    step: validStep(next.step) ? next.step : before.step,
+    guides: typeof next.guides === "boolean" ? next.guides : before.guides,
+  };
 }
+
+/// Ciò che le guide intelligenti mostrano: le linee su cui sta ciò che si
+/// muove, e le distanze uguali.
+interface GuideView {
+  readonly lines: readonly GuideLine[];
+  readonly spacings: readonly Spacing[];
+}
+
+/// I nomi dei bordi e dei centri da dire, per asse.
+const EDGE_NAMES: readonly [Readonly<Record<GuideEdge, DrawKey>>, Readonly<Record<GuideEdge, DrawKey>>] = [
+  { min: "draw.guides.edge.left", mid: "draw.guides.edge.center_x", max: "draw.guides.edge.right", point: "draw.guides.edge.point" },
+  { min: "draw.guides.edge.top", mid: "draw.guides.edge.center_y", max: "draw.guides.edge.bottom", point: "draw.guides.edge.point" },
+];
 
 /// Il verso di una freccia su un asse.
 function sign(value: number): 1 | -1 {
@@ -982,7 +1016,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// tasto giù l'aggancio aspetta.
   let grid: Grid = options.grid === undefined ? DEFAULT_GRID : checkedGrid(options.grid, DEFAULT_GRID);
   let free = false;
-  /// Alt tenuto durante un gesto del puntatore: la cornice scala dal centro.
+  /// Alt tenuto: durante un gesto del puntatore la cornice scala dal centro;
+  /// senza gesto, con una selezione, le guide misurano.
   let alt = false;
   /// La cornice di più oggetti dopo che la si è ruotata, ridimensionata o
   /// spostata: resta com'è diventata finché la selezione e il disegno non
@@ -1816,6 +1851,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const [x2, y2] = lasso.end;
       handles.push({ kind: "lasso", points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] });
     }
+    // Le guide e le misure stanno sopra a tutto.
+    const guides = guideHandles();
+    const measures = measureHandles();
+    guiding = guides.length > 0;
+    measured = measures.length > 0;
+    handles.push(...guides, ...measures);
     overlay.setHandles(handles);
     showLinks(delta);
     const keys = selection.join("\n");
@@ -2295,7 +2336,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     redoButton.disabled = !canEdit || !redoable();
     deleteButton.disabled = !canEdit || selection.length === 0;
     propertiesButton.disabled = !canEdit;
-    pageButton.hidden = !has("grid");
+    pageButton.hidden = !has("grid") && !has("guides");
     insertGroup.hidden = !insertsImages(features);
     imageButton.disabled = !canEdit;
     attributesButton.hidden = !has("attributes");
@@ -2422,8 +2463,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   /// Sposta gli oggetti scelti e ne tiene la selezione: un oggetto senza id
-  /// lo riceve, e la sua chiave diventa quella.
-  const moveSelection = (units: readonly Unit[], dx: number, dy: number): void => {
+  /// lo riceve, e la sua chiave diventa quella. `note` dice, dopo, a che cosa
+  /// lo spostamento si è agganciato.
+  const moveSelection = (units: readonly Unit[], dx: number, dy: number, note = ""): void => {
     if (units.length === 0 || (dx === 0 && dy === 0)) return;
     // La cornice che più oggetti tengono si sposta con loro.
     const frame = units.length > 1 ? frameOf(units) : null;
@@ -2438,7 +2480,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (frame !== null && frame.matrix !== IDENTITY) kept = { index: currentIndex(), keys: selection.join("\n"), frame: movedFrame(frame, translate(dx, dy)) };
     syncControls();
     showHandles();
-    announce(plural(units.length, "draw.moved.one", "draw.moved.other"));
+    announce(noted(plural(units.length, "draw.moved.one", "draw.moved.other"), note));
   };
 
   function select(keys: readonly string[]): void {
@@ -2653,6 +2695,270 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// aggancia e Ctrl o ⌘ non è tenuto.
   const snapped = (p: Point): Point => (gridOn() && !free ? snapPoint(p, grid.step) : p);
 
+  // --- Le guide intelligenti -------------------------------------------------
+
+  /// Le guide agganciano: se il livello le offre, accese. `at` sono le parti
+  /// da guardare, di solito quelle di adesso.
+  const guidesOn = (at: ReadonlySet<Feature> = features): boolean => at.has("guides") && grid.guides;
+
+  /// La soglia delle guide nella scena, per il puntatore `pointer`.
+  const guideReach = (pointer: InkPointerType): number => GUIDE_PX[pointer] / camera.scale;
+
+  /// La pagina nella scena, se c'è.
+  const pageBox = (): Bounds | null => {
+    const page = scene.root.page;
+    return page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
+  };
+
+  /// Gli oggetti che si vedono nel disegno di adesso, anche nei livelli
+  /// bloccati, ricalcolati quando la scena cambia.
+  let seenCache: { readonly index: SceneIndex; readonly units: readonly Unit[] } | null = null;
+  const seenUnits = (): readonly Unit[] => {
+    const index = currentIndex();
+    if (seenCache?.index !== index) seenCache = { index, units: engine.model === null ? [] : indexer.seen(engine.model) };
+    return seenCache.units;
+  };
+
+  /// I bersagli di `owner`, un gesto o i nodi della penna di Bézier, presi la
+  /// prima volta che servono e tenuti finché la scena e la vista restano
+  /// quelle: gli oggetti che si vedono nella vista, tranne quelli di chiave
+  /// `skip`, la pagina, e i punti `points`. Ci si allinea a ciò che si
+  /// guarda; un foglio non ancora disposto, senza misure, vede tutto.
+  let guideCache: { readonly owner: object; readonly index: SceneIndex; readonly view: Camera; readonly guides: GuideIndex } | null = null;
+  const guidesFor = (owner: object, skip: readonly string[], points: () => readonly Point[] = () => []): GuideIndex => {
+    const index = currentIndex();
+    if (guideCache !== null && guideCache.owner === owner && guideCache.index === index && guideCache.view === camera) return guideCache.guides;
+    const skipped = new Set(skip);
+    const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
+    const targets: GuideTarget[] = [];
+    for (const unit of seenUnits()) {
+      const box = unit.geometry ?? unit.bounds;
+      if (box === null || skipped.has(unit.key)) continue;
+      if (view !== null && (box.max[0] < view.min[0] || box.min[0] > view.max[0] || box.max[1] < view.min[1] || box.min[1] > view.max[1])) continue;
+      targets.push({ kind: "object", box, key: unit.key });
+    }
+    const page = pageBox();
+    if (page !== null) targets.push({ kind: "page", box: page, key: "" });
+    for (const p of points()) targets.push({ kind: "node", box: { min: p, max: p }, key: "" });
+    const guides = new GuideIndex(targets);
+    guideCache = { owner, index, view: camera, guides };
+    return guides;
+  };
+
+  /// Un punto di un gesto, con la griglia e con le guide di `guides`: lungo
+  /// ciascun asse sulla riga o sul bersaglio più vicino, a pari distanza sul
+  /// bersaglio, finché Ctrl o ⌘ non è tenuto.
+  const guided = (p: Point, guides: () => GuideIndex, pointer: InkPointerType): Point => {
+    if (free) return p;
+    const line = gridOn() ? snapPoint(p, grid.step) : null;
+    if (!guidesOn()) return line ?? p;
+    const index = guides();
+    const reach = guideReach(pointer);
+    const along = (axis: FrameAxis): number => nearer(p[axis], index.nearest(axis, p[axis], reach), line === null ? null : line[axis]);
+    return [along(0), along(1)];
+  };
+
+  /// I nodi del tracciato `now` che restano fermi mentre si muovono quelli di
+  /// `moving`, nella scena: bersagli delle guide.
+  const fixedNodes = (now: Editing, moving: ReadonlySet<NodeKey>): Point[] => {
+    const out: Point[] = [];
+    now.subs.forEach((sub, s) => {
+      sub.nodes.forEach((node, at) => {
+        if (!moving.has(nodeKey(s, at))) out.push(apply(now.matrix, node));
+      });
+    });
+    return out;
+  };
+
+  /// Dove il trascinamento `g` porta il nodo o la maniglia presi, con la
+  /// griglia e con le guide: un nodo si allinea agli altri oggetti e ai nodi
+  /// che restano fermi, una maniglia anche al suo nodo.
+  const nodeDragTo = (g: NodesGesture, now: Editing, grab: Extract<NodeGrab, { readonly origin: Point }>): Point => {
+    const p: Point = [grab.origin[0] + g.end![0] - g.from![0], grab.origin[1] + g.end![1] - g.from![1]];
+    const moving: ReadonlySet<NodeKey> = grab.kind === "node" ? nodeSelection : new Set();
+    return guided(p, () => guidesFor(g, [now.unit.key], () => fixedNodes(now, moving)), g.pointer);
+  };
+
+  /// I nodi della penna di Bézier, finché il tracciato non ne ha.
+  const noNodes: readonly PenNode[] = [];
+
+  /// I bersagli della penna di Bézier: gli oggetti e i nodi già posati.
+  const bezierGuides = (): GuideIndex => {
+    const nodes = drafting?.nodes ?? noNodes;
+    return guidesFor(nodes, [], () => nodes.map((node) => node.at));
+  };
+
+  /// Ciò che le guide mostrano adesso: le linee del gesto in corso, o del
+  /// punto che la penna di Bézier poserebbe; per uno spostamento anche le
+  /// distanze uguali. `null` se le guide non agganciano.
+  const guideView = (): GuideView | null => {
+    if (free || !guidesOn()) return null;
+    const point = (index: GuideIndex, p: Point): GuideView => {
+      const box: Bounds = { min: p, max: p };
+      return { lines: [...index.lines(0, box, [{ value: p[0], edge: "point" }]), ...index.lines(1, box, [{ value: p[1], edge: "point" }])], spacings: [] };
+    };
+    const g = current;
+    if (g?.kind === "select" && g.mode === "move") {
+      const box = geometryOf(g.units);
+      if (box === null) return null;
+      const moved = translated(box, ...moveDelta(g))!;
+      const index = guidesFor(g, g.units.map((unit) => unit.key));
+      const lines: GuideLine[] = [];
+      const spacings: Spacing[] = [];
+      for (const axis of [0, 1] as const) {
+        lines.push(...index.lines(axis, moved, anchorsOf(moved, axis)));
+        const spacing = index.spacing(axis, moved);
+        if (spacing !== null) spacings.push(spacing);
+      }
+      return { lines, spacings };
+    }
+    if (g?.kind === "select" && g.mode === "resize" && g.grip !== null && g.matrix !== null) {
+      const { grip, frame } = g.grip;
+      if (grip === "rotate" || !upright(frame.matrix)) return null;
+      // La geometria dopo il ridimensionamento, e i bordi tirati.
+      const m = compose(g.matrix, frame.matrix);
+      const a = apply(m, frame.geometry.min);
+      const b = apply(m, frame.geometry.max);
+      const box: Bounds = { min: [Math.min(a[0], b[0]), Math.min(a[1], b[1])], max: [Math.max(a[0], b[0]), Math.max(a[1], b[1])] };
+      const index = guidesFor(g, g.units.map((unit) => unit.key));
+      const lines: GuideLine[] = [];
+      for (const axis of [0, 1] as const) {
+        const direction = pull(grip, axis);
+        if (direction === 0) continue;
+        const value = (direction > 0 ? b : a)[axis];
+        const edge: GuideEdge = Math.abs(value - box.min[axis]) <= Math.abs(value - box.max[axis]) ? "min" : "max";
+        lines.push(...index.lines(axis, box, [{ value, edge }]));
+      }
+      return { lines, spacings: [] };
+    }
+    if (g?.kind === "shape") {
+      const ends = shapeEnds(g, g.to);
+      return ends === null ? null : point(guidesFor(g, []), apply(g.to.matrix, ends[1]));
+    }
+    if (g?.kind === "nodes" && g.dragging && g.from !== null && g.end !== null && editing !== null) {
+      const grab = g.grab;
+      if (grab?.kind !== "node" && grab?.kind !== "handle") return null;
+      const now = editing;
+      const moving: ReadonlySet<NodeKey> = grab.kind === "node" ? nodeSelection : new Set();
+      return point(guidesFor(g, [now.unit.key], () => fixedNodes(now, moving)), nodeDragTo(g, now, grab));
+    }
+    if (g?.kind === "bezier" && g.mode !== null) {
+      const p = g.dragging ? bezierHandle(g) : g.mode === "add" ? g.at : null;
+      return p === null ? null : point(bezierGuides(), p);
+    }
+    if (g === null && tool === "bezier" && hover !== null && drawing() !== null) return point(bezierGuides(), bezierPoint(hover.at, hover.pointer));
+    return null;
+  };
+
+  /// Le guide si vedono, e le misure con Alt: col gesto che finisce, o col
+  /// tasto lasciato, vanno tolte.
+  let guiding = false;
+  let measured = false;
+
+  /// Le linee delle guide, coi segni e le distanze, e gli spazi uguali. La
+  /// distanza da un oggetto in linea si scrive una volta, sulla linea dei
+  /// centri se c'è, e non se la scrivono già le distanze uguali.
+  const guideHandles = (): OverlayHandle[] => {
+    const view = guideView();
+    if (view === null) return [];
+    const out: OverlayHandle[] = [];
+    const along = (line: GuideLine, value: number): Point => (line.axis === 0 ? [line.value, value] : [value, line.value]);
+    for (const line of view.lines) {
+      out.push({ kind: "guide", from: along(line, line.from), to: along(line, line.to), dashed: false });
+      for (const mark of line.marks) {
+        const [x, y] = along(line, mark);
+        out.push({ kind: "cross", x, y });
+      }
+    }
+    const written = new Set<string>();
+    const spaced = (axis: FrameAxis, [from, to]: readonly [number, number]): boolean =>
+      view.spacings.some((spacing) => spacing.axis === axis && spacing.gaps.some((gap) => Math.abs(gap.from - from) <= ON_GUIDE && Math.abs(gap.to - to) <= ON_GUIDE));
+    const middleFirst = [...view.lines].sort((a, b) => Number(b.source === "mid") - Number(a.source === "mid"));
+    for (const line of middleFirst) {
+      if (line.gap === null) continue;
+      const key = `${line.axis} ${line.gap[0]} ${line.gap[1]}`;
+      if (written.has(key) || spaced(line.axis === 0 ? 1 : 0, line.gap)) continue;
+      written.add(key);
+      out.push({ kind: "measure", from: along(line, line.gap[0]), to: along(line, line.gap[1]), text: numberText(line.gap[1] - line.gap[0]) });
+    }
+    for (const { axis, gap, gaps } of view.spacings) {
+      for (const { from, to, across } of gaps) {
+        const at = (along: number): Point => (axis === 0 ? [along, across] : [across, along]);
+        out.push({ kind: "measure", from: at(from), to: at(to), text: numberText(gap) });
+      }
+    }
+    return out;
+  };
+
+  /// Una linea a parole: quale bordo o centro di ciò che si è mosso sta in
+  /// linea con quale dell'oggetto, della pagina o del nodo.
+  const lineText = ({ axis, source, target, edge }: GuideLine): string => {
+    const names = EDGE_NAMES[axis];
+    const from = t(names[source]);
+    if (target.kind === "node") return t("draw.guides.node", { source: from });
+    const same = source === edge;
+    if (target.kind === "page") return same ? t("draw.guides.page.same", { source: from }) : t("draw.guides.page", { source: from, edge: t(names[edge]) });
+    const unit = seenUnits().find((each) => each.key === target.key);
+    const name = unit === undefined ? target.key : labelOf(unit);
+    return same ? t("draw.guides.object.same", { source: from, name }) : t("draw.guides.object", { source: from, edge: t(names[edge]), name });
+  };
+
+  /// A che cosa si è agganciato il gesto di adesso, a parole, da dire alla
+  /// fine: per ciascun asse le distanze uguali, o una linea, prima con un
+  /// oggetto che con la pagina. Vuoto se niente.
+  const snapNote = (): string => {
+    const view = guideView();
+    if (view === null) return "";
+    const parts: string[] = [];
+    for (const axis of [0, 1] as const) {
+      const spacing = view.spacings.find((each) => each.axis === axis);
+      if (spacing !== undefined) {
+        parts.push(t(axis === 0 ? "draw.guides.spaced.x" : "draw.guides.spaced.y", { gap: numberText(spacing.gap) }));
+        continue;
+      }
+      const lines = view.lines.filter((line) => line.axis === axis);
+      const line = lines.find((each) => each.target.kind !== "page") ?? lines[0];
+      if (line !== undefined) parts.push(lineText(line));
+    }
+    return parts.length === 0 ? "" : t("draw.guides.snapped", { parts: parts.join("; ") });
+  };
+
+  /// `text` e, dopo, la nota delle guide, se c'è.
+  const noted = (text: string, note: string): string => (note === "" ? text : `${text} ${note}`);
+
+  /// Dove sta il puntatore che passa sul foglio: le misure con Alt partono
+  /// da lì.
+  let pointerAt: { readonly at: Point; readonly pointer: InkPointerType } | null = null;
+
+  /// Con Alt e una selezione, le distanze fra la sua geometria e quella
+  /// dell'oggetto sotto il puntatore, bloccati compresi, o della pagina, se
+  /// il puntatore ci sta sopra fuori dagli oggetti. Il riquadro misurato si
+  /// vede tratteggiato.
+  const measureHandles = (): OverlayHandle[] => {
+    if (!alt || current !== null || pressed !== null || pointerAt === null || tool !== "select" || !has("guides") || selection.length === 0) return [];
+    const a = geometryOf(selectedUnits());
+    if (a === null) return [];
+    const { at: p, pointer } = pointerAt;
+    const chosen = new Set(selection);
+    const tolerance = HIT_PX[pointer] / camera.scale;
+    const units = seenUnits();
+    let b: Bounds | null = null;
+    for (let i = units.length - 1; i >= 0 && b === null; i--) {
+      const unit = units[i]!;
+      if (!chosen.has(unit.key) && unit.hits(p, tolerance)) b = unit.geometry ?? unit.bounds;
+    }
+    const page = pageBox();
+    if (b === null && page !== null && p[0] >= page.min[0] && p[0] <= page.max[0] && p[1] >= page.min[1] && p[1] <= page.max[1]) b = page;
+    if (b === null) return [];
+    const { measures, extensions } = measureBetween(a, b);
+    const corners: Point[] = [b.min, [b.max[0], b.min[1]], b.max, [b.min[0], b.max[1]]];
+    return [
+      ...corners.map((corner, i): OverlayHandle => ({ kind: "guide", from: corner, to: corners[(i + 1) % 4]!, dashed: true })),
+      ...extensions.map(([from, to]): OverlayHandle => ({ kind: "guide", from, to, dashed: true })),
+      ...measures.map(({ from, to, value }): OverlayHandle => ({ kind: "measure", from, to, text: numberText(value) })),
+    ];
+  };
+
   const begin = (start: StrokeStart): Gesture => {
     const base = { stroke: start.id, pointer: start.pointerType };
     if (!editable()) return { ...base, kind: "refused" };
@@ -2736,7 +3042,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const shapeEnds = (g: ShapeGesture, to: Destination): [Point, Point] | null => {
     if (g.from === null || g.end === null) return null;
     const from = apply(to.inverse, g.from);
-    const end = apply(to.inverse, snapped(g.end));
+    const end = apply(to.inverse, guided(g.end, () => guidesFor(g, []), g.pointer));
     return [from, shift ? constrainEnd(g.tool, from, end) : end];
   };
 
@@ -2749,20 +3055,44 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const ends = shapeEnds(g, g.to);
     const elem = ends === null ? null : shapeElem(g.tool, "preview", ends[0], ends[1], { color: g.color, width: g.width }, minimumFor(g.to));
     showShape(elem, g.to.matrix);
+    // Le guide seguono il punto che si tira.
+    if (guidesOn() || guiding) showHandles();
   };
 
+  /// Lo spostamento del gesto `g`. Con la griglia l'angolo preso va
+  /// sull'incrocio; con le guide, lungo ciascun asse, un bordo o il centro
+  /// della geometria scelta va sul bersaglio più vicino, o dove le distanze
+  /// sono uguali; fra la griglia e le guide vince il più vicino. Ctrl o ⌘ lo
+  /// lascia libero.
   const moveDelta = (g: SelectGesture): [number, number] => {
     if (g.from === null || g.end === null) return [0, 0];
     const dx = g.end[0] - g.from[0];
     const dy = g.end[1] - g.from[1];
-    if (gridOn() && !free && g.source !== null) return snapDelta(g.source, dx, dy, grid.step);
-    return [roundDelta(dx), roundDelta(dy)];
+    if (free) return [roundDelta(dx), roundDelta(dy)];
+    const line = gridOn() && g.source !== null ? snapDelta(g.source, dx, dy, grid.step) : null;
+    const box = guidesOn() ? geometryOf(g.units) : null;
+    if (box === null) return line ?? [roundDelta(dx), roundDelta(dy)];
+    const index = guidesFor(g, g.units.map((unit) => unit.key));
+    const reach = guideReach(g.pointer);
+    const moved = translated(box, dx, dy)!;
+    const raw = [dx, dy] as const;
+    const along = (axis: FrameAxis): number => {
+      // In linea vince, a pari scarto, sulle distanze uguali.
+      const align = index.snap(axis, anchorsOf(moved, axis).map((anchor) => anchor.value), reach);
+      const space = index.spaceSnap(axis, moved, reach);
+      const offset = align !== null && (space === null || Math.abs(align) <= Math.abs(space)) ? align : space;
+      const value = nearer(raw[axis], offset === null ? null : raw[axis] + offset, line === null ? null : line[axis]);
+      return line !== null && value === line[axis] ? value : roundDelta(value);
+    };
+    return [along(0), along(1)];
   };
 
   /// La trasformazione della scena del ridimensionamento in corso. Gli
   /// angoli tengono le proporzioni degli oggetti che, deformati, non sono più
   /// loro, e Maiusc inverte la scelta; Alt tiene fermo il centro. Con la
-  /// griglia, a cornice dritta, si tira la geometria, senza il contorno.
+  /// griglia o con le guide, a cornice dritta, si tira la geometria, senza il
+  /// contorno, e il bordo tirato si ferma sulla riga o sul bersaglio più
+  /// vicino.
   const resizeNow = (g: SelectGesture): Matrix | null => {
     if (g.grip === null || g.grip.grip === "rotate" || g.from === null || g.end === null) return null;
     const { grip, frame } = g.grip;
@@ -2771,11 +3101,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const [a, b, c, d] = inverse;
     const delta = apply([a, b, c, d, 0, 0], [roundDelta(g.end[0] - g.from[0]), roundDelta(g.end[1] - g.from[1])]);
     const snap = gridOn() && !free ? gridSnap(frame.matrix, grid.step) : null;
-    const work = snap === null ? frame.box : frame.geometry;
+    const guides = guidesOn() && !free ? frameGuides(guidesFor(g, g.units.map((unit) => unit.key)), frame.matrix, GUIDE_PX[g.pointer], camera.scale) : null;
+    const work = snap === null && guides === null ? frame.box : frame.geometry;
     const [m0, m1, m2, m3] = frame.matrix;
     const minimum: [number, number] = [MIN_SIZE / Math.hypot(m0, m1), MIN_SIZE / Math.hypot(m2, m3)];
     const ratio = isCorner(grip) && g.units.some((unit) => RATIO_ROLES.has(unit.role)) !== shift;
-    return resizeMatrix(frame, work, resized(work, grip, delta, { ratio, fromCenter: alt, minimum, snap }));
+    return resizeMatrix(frame, work, resized(work, grip, delta, { ratio, fromCenter: alt, minimum, snap, guides }));
   };
 
   /// La trasformazione della scena della rotazione in corso, attorno al
@@ -2790,9 +3121,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Scrive `m`, la trasformazione della cornice `frame`, in un passo, e lo
-  /// dice: le misure di dopo o, per una rotazione di `turn` gradi, di
-  /// quanto. Più oggetti tengono la cornice com'è diventata.
-  const applyFrame = (units: readonly Unit[], frame: Frame, m: Matrix, turn: number | null): void => {
+  /// dice: le misure di dopo, e `note`, a che cosa si è agganciato, o, per
+  /// una rotazione di `turn` gradi, di quanto. Più oggetti tengono la
+  /// cornice com'è diventata.
+  const applyFrame = (units: readonly Unit[], frame: Frame, m: Matrix, turn: number | null, note = ""): void => {
     const transformed = numericOps(units, m, newIds());
     if (transformed === null) {
       announce(t("draw.transform.unwritable"));
@@ -2805,7 +3137,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showHandles();
     if (turn === null) {
       const [width, height] = frameSize(after);
-      announce(t("draw.resized", { width: numberText(width), height: numberText(height) }));
+      announce(noted(t("draw.resized", { width: numberText(width), height: numberText(height) }), note));
     } else {
       announce(t(turn > 0 ? "draw.rotated.clockwise" : "draw.rotated.counter", { angle: degreesText(Math.abs(turn)) }));
     }
@@ -2897,18 +3229,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Un tocco su una maniglia, senza tirarla, non cambia niente.
       lastTap = null;
       painter.setDraft(null);
+      const note = g.mode === "resize" ? snapNote() : "";
       current = null;
       showGrip(null);
-      if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null);
+      if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null, note);
       showHandles();
       return;
     }
     if (g.mode === "move") {
       lastTap = null;
       const [dx, dy] = moveDelta(g);
+      const note = snapNote();
       painter.setDraft(null);
       current = null;
-      moveSelection(g.units, dx, dy);
+      moveSelection(g.units, dx, dy, note);
       showHandles();
       return;
     }
@@ -3092,7 +3426,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (grab.kind === "segment") {
       g.draft = bend(now.subs, grab.sub, grab.link, grab.t, localDelta(now, g.from, g.end), kinds);
     } else {
-      const to = snapped([grab.origin[0] + g.end[0] - g.from[0], grab.origin[1] + g.end[1] - g.from[1]]);
+      const to = nodeDragTo(g, now, grab);
       g.draft = grab.kind === "node"
         ? moveNodes(now.subs, nodeSelection, localDelta(now, grab.origin, to), kinds)
         : moveHandle(now.subs, grab.handle, apply(now.inverse, to), kinds);
@@ -3105,6 +3439,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// sceglie i suoi due nodi, e il doppio tocco ci aggiunge un nodo; uno sul
   /// vuoto toglie la scelta dei nodi, poi quella dell'oggetto.
   const nodesEnd = (g: NodesGesture, time: number): void => {
+    const note = snapNote();
     current = null;
     const grab: NodeGrab = g.grab ?? { kind: "none" };
     if (g.dragging) {
@@ -3122,8 +3457,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       const label: DrawKey = grab.kind === "node" ? "draw.action.nodes_move" : grab.kind === "handle" ? "draw.action.handle" : "draw.action.bend";
       if (writeEdit(label, draft, nodeSelection, nodeKinds) !== true) return;
-      if (grab.kind === "node") announceMoved();
-      else announce(t(grab.kind === "handle" ? "draw.nodes.handle_moved" : "draw.nodes.bent"));
+      if (grab.kind === "node") announceMoved(note);
+      else announce(noted(t(grab.kind === "handle" ? "draw.nodes.handle_moved" : "draw.nodes.bent"), note));
       return;
     }
     const now = editing;
@@ -3216,7 +3551,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
   };
 
-  const finishShape = (g: ShapeGesture): void => {
+  /// La forma del gesto `g` entra nel disegno, e lo si dice, con `note`, a
+  /// che cosa si è agganciata.
+  const finishShape = (g: ShapeGesture, note = ""): void => {
     // Il livello di adesso: mentre il gesto durava, il disegno può essere
     // cambiato.
     const to = target(g.ids);
@@ -3228,7 +3565,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const ops: Op[] = [...to.prelude, addOp(to, elem)];
     const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
     if (page !== null) ops.push({ op: "page", viewBox: page });
-    if (commit(toolSpec(g.tool).label, asGesture(ops)) !== null) announce(`${t(ADDED[g.tool])} ${objects()}`);
+    if (commit(toolSpec(g.tool).label, asGesture(ops)) !== null) announce(noted(`${t(ADDED[g.tool])} ${objects()}`, note));
   };
 
   // --- La penna di Bézier ------------------------------------------------------
@@ -3261,21 +3598,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return closes ? "close" : ends ? "last" : "add";
   };
 
-  /// Dove va un nodo nuovo puntato in `p`: sull'incrocio della griglia, e con
-  /// Maiusc a passi di 15° dall'ultimo nodo, come una linea.
-  const bezierPoint = (p: Point): Point => {
-    const point = snapped(p);
+  /// Dove va un nodo nuovo puntato in `p` col puntatore `pointer`:
+  /// sull'incrocio della griglia o in linea con gli oggetti e coi nodi già
+  /// posati, e con Maiusc a passi di 15° dall'ultimo nodo, come una linea.
+  const bezierPoint = (p: Point, pointer: InkPointerType): Point => {
+    const point = guided(p, bezierGuides, pointer);
     const nodes = drafting?.nodes ?? [];
     const last = nodes[nodes.length - 1];
     return shift && last !== undefined ? constrainEnd("line", last.at, point) : point;
   };
 
   /// La maniglia che il trascinamento di `g` tira dal suo nodo: sulla
-  /// griglia, e con Maiusc a passi di 15°. `null` per un tocco, o se torna
-  /// sul nodo.
+  /// griglia o in linea con gli oggetti e coi nodi, e con Maiusc a passi di
+  /// 15°. `null` per un tocco, o se torna sul nodo.
   const bezierHandle = (g: BezierGesture): Point | null => {
     if (!g.dragging || g.at === null || g.end === null) return null;
-    const point = snapped(g.end);
+    const point = guided(g.end, bezierGuides, g.pointer);
     const handle = shift ? constrainEnd("line", g.at, point) : point;
     return Math.hypot(handle[0] - g.at[0], handle[1] - g.at[1]) * camera.scale <= DRAG_PX[g.pointer] ? null : handle;
   };
@@ -3325,7 +3663,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const out: OverlayHandle[] = [];
     const aim = g === null && hover !== null ? bezierTarget(hover.at, hover.pointer) : null;
     if (aim === "add" || aim === "close") {
-      const next = aim === "close" ? nodes[0]! : penNode(bezierPoint(hover!.at), null);
+      const next = aim === "close" ? nodes[0]! : penNode(bezierPoint(hover!.at, hover!.pointer), null);
       const identity: Matrix = [1, 0, 0, 1, 0, 0];
       out.push({ kind: "outline", segments: writeNodes([penPath([last, next], false, identity)]), matrix: identity });
     }
@@ -3360,7 +3698,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     g.from = p;
     g.mode = bezierTarget(p, g.pointer);
     const nodes = drafting?.nodes ?? [];
-    g.at = g.mode === "add" ? bezierPoint(p) : g.mode === "close" ? nodes[0]!.at : nodes[nodes.length - 1]!.at;
+    g.at = g.mode === "add" ? bezierPoint(p, g.pointer) : g.mode === "close" ? nodes[0]!.at : nodes[nodes.length - 1]!.at;
     hover = null;
   };
 
@@ -3381,6 +3719,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// La fine di un gesto della penna: il nodo entra nel tracciato, o il
   /// tracciato si chiude o si conclude.
   const bezierEnd = (g: BezierGesture): void => {
+    const note = snapNote();
     current = null;
     if (g.mode === null) return;
     if (g.mode === "last" && !g.dragging) {
@@ -3399,7 +3738,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     drafting = draft;
     showBezier();
     syncControls();
-    announce(bezierNodeText(nodes, nodes.length - 1));
+    announce(noted(bezierNodeText(nodes, nodes.length - 1), note));
   };
 
   /// Il tracciato della penna non c'è più, né la sua anteprima. `false` se
@@ -3534,23 +3873,30 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     (event) => {
       readModifiers(event);
       followPointer(event);
+      const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+      const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
+      pointerAt = { at: [point.x, point.y], pointer };
       // Sopra il foglio, la penna di Bézier mostra il segmento che verrebbe.
       if (drawing() !== null && current === null && pressed === null) {
-        const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
-        const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
         hover = { at: [point.x, point.y], pointer };
         showBezier();
       }
       // Sopra una maniglia della cornice, il cursore dice che cosa fa.
       if (current === null && pressed === null) hoverGrip(event);
+      // Con Alt, le misure seguono il puntatore.
+      if (current === null && pressed === null && (alt || measured)) showHandles();
     },
     { capture: true },
   );
   life.listen(surface, "pointerleave", () => {
     if (current === null) showGrip(null);
-    if (hover === null) return;
-    hover = null;
-    showBezier();
+    pointerAt = null;
+    if (hover !== null) {
+      hover = null;
+      showBezier();
+    } else if (measured) {
+      showHandles();
+    }
   });
 
   // I gestori della pipeline, che riceve anche il cursore del foglio.
@@ -3579,7 +3925,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "shape":
           // Il primo punto si aggancia subito, l'ultimo a ogni disegno:
           // Ctrl o ⌘ può cambiare a metà gesto.
-          g.from ??= snapped(toPoint(samples[0]!));
+          g.from ??= guided(toPoint(samples[0]!), () => guidesFor(g, []), g.pointer);
           g.end = toPoint(samples[samples.length - 1]!);
           drawShape(g);
           break;
@@ -3629,11 +3975,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           overlay.setInk(INK_KEY, null);
           overlay.flush();
           return;
-        case "shape":
+        case "shape": {
+          const note = snapNote();
           current = null;
-          finishShape(g);
+          finishShape(g, note);
           showShape(null, g.to.matrix);
+          if (guiding) showHandles();
           return;
+        }
         case "select":
           selectEnd(g, stroke.timeStamp);
           return;
@@ -4754,15 +5103,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return editing;
   };
 
-  /// Dice che i nodi scelti si sono spostati: dove, se è uno solo.
-  const announceMoved = (): void => {
+  /// Dice che i nodi scelti si sono spostati: dove, se è uno solo, e `note`,
+  /// a che cosa si sono agganciati.
+  const announceMoved = (note = ""): void => {
     const now = editing;
     if (now !== null && nodeSelection.size === 1) {
       const [x, y] = nodePoint(now, [...nodeSelection][0]!);
-      announce(t("draw.nodes.moved.at", { x: numberText(x), y: numberText(y) }));
+      announce(noted(t("draw.nodes.moved.at", { x: numberText(x), y: numberText(y) }), note));
       return;
     }
-    announce(plural(nodeSelection.size, "draw.nodes.moved.one", "draw.nodes.moved.other"));
+    announce(noted(plural(nodeSelection.size, "draw.nodes.moved.one", "draw.nodes.moved.other"), note));
   };
 
   /// Insert, o «Aggiungi nodi»: un nodo a metà di ogni segmento fra due nodi
@@ -5113,6 +5463,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (grid.shown !== before.shown) announce(t(grid.shown ? "draw.grid.shown" : "draw.grid.hidden"));
     else if (grid.snap !== before.snap) announce(t(grid.snap ? "draw.grid.snap.on" : "draw.grid.snap.off"));
     else if (grid.step !== before.step) announce(t("draw.grid.stepped", { step: numberText(grid.step) }));
+    else if (grid.guides !== before.guides) announce(t(grid.guides ? "draw.guides.on" : "draw.guides.off"));
     else return;
     options.onGridChange?.(grid);
   };
@@ -5134,9 +5485,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (page !== null) announce(t("draw.page.fitted", { width: numberText(page.width), height: numberText(page.height) }));
   }
 
-  /// Le voci di «Pagina e griglia»: la griglia, il suo passo, e la pagina.
-  /// Adattare la pagina si spegne, e dice perché, quando non cambierebbe
-  /// niente.
+  /// Le voci di «Pagina e griglia»: la griglia, il suo passo, le guide
+  /// intelligenti, e la pagina, ciascuna se il livello la offre. Adattare la
+  /// pagina si spegne, e dice perché, quando non cambierebbe niente.
   const pageItems = (): MenuItem[] => {
     const steps = GRID_STEPS.includes(grid.step) ? GRID_STEPS : [...GRID_STEPS, grid.step].sort((a, b) => a - b);
     const extent = engine.model === null ? null : indexer.extent(engine.model);
@@ -5144,6 +5495,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const fitItem: MenuItem = { label: t("draw.page.fit"), separator: true, disabled: !editable() || viewBox === null, run: () => fitPage() };
     if (extent === null) fitItem.description = t("draw.page.fit.empty");
     else if (viewBox === null) fitItem.description = t("draw.page.fit.already");
+    const guidesItem: MenuItem = {
+      label: t("draw.feature.guides"),
+      choice: "checkbox",
+      checked: grid.guides,
+      separator: has("grid"),
+      description: t("draw.guides.hint", { key: modifierName("Mod") ?? "Ctrl" }),
+      run: () => changeGrid({ ...grid, guides: !grid.guides }),
+    };
+    if (!has("grid")) return has("guides") ? [guidesItem] : [];
     return [
       { label: t("draw.grid.show"), choice: "checkbox", checked: grid.shown, hint: "#", run: () => changeGrid({ ...grid, shown: !grid.shown }) },
       {
@@ -5161,6 +5521,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         separator: at === 0,
         run: () => changeGrid({ ...grid, step }),
       })),
+      ...(has("guides") ? [guidesItem] : []),
       fitItem,
     ];
   };
@@ -5429,6 +5790,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti delle guide intelligenti, se le parti `at` le offrono.
+  const guidesKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("guides")
+      ? [
+          {
+            title: t("draw.keys.guides"),
+            rows: [
+              ["Mod", t("draw.keys.guides.free")],
+              ["Alt", t("draw.keys.guides.measure")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti degli attributi, se le parti `at` li offrono.
   const attributeKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("attributes")
@@ -5536,6 +5911,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...bezierKeys(at),
     ...textKeys(at),
     ...gridKeys(at),
+    ...guidesKeys(at),
     ...attributeKeys(at),
     {
       title: t("draw.view"),
@@ -5886,6 +6262,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);
     else if (hover !== null && drawing() !== null) showBezier();
+    else if (current === null && (alt || measured)) showHandles();
   };
 
   life.listen(root, "keyup", onModifiers);

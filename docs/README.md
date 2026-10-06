@@ -34,6 +34,7 @@ flowchart LR
 - [Editor e anteprima](product/editor-and-preview.md)
 - [Disegni](product/drawing.md)
 - [Disegni, trasformare](product/drawing-transform.md)
+- [Disegni, guide intelligenti](product/drawing-guides.md)
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)

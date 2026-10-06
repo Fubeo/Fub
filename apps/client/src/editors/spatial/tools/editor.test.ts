@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { closeContextMenu } from "../../../ui/menu";
 import { decodeInk } from "../ink/codec";
 import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
@@ -1055,7 +1056,7 @@ describe("i livelli, dal livello Standard", () => {
 
 describe("la griglia e la pagina, dal livello Standard", () => {
   /// La griglia con l'aggancio acceso, al passo di partenza.
-  const SNAP = { shown: false, snap: true, step: 20 } as const;
+  const SNAP = { shown: false, snap: true, step: 20, guides: false } as const;
   /// Un quadrato pieno senza contorno, fuori dalla griglia, in una pagina
   /// che lo lascia muovere: il riquadro è quello scritto.
   const OFF = doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="13" y="7" width="40" height="40" fill="#000000"/></g>`).replace(
@@ -1111,6 +1112,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
       ["menuitemradio", "Passo di 20", "true", null],
       ["menuitemradio", "Passo di 50", "false", null],
       ["menuitemradio", "Passo di 100", "false", null],
+      ["menuitemcheckbox", "Guide intelligenti", "true", null],
       ["menuitem", "Adatta la pagina al disegno", null, null],
     ]);
     expect(entry("Aggancia alla griglia").querySelector(".menu-description")!.textContent).toBe("Tieni premuto Ctrl mentre trascini per posare libero.");
@@ -1131,11 +1133,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(entry("Mostra la griglia").getAttribute("aria-checked")).toBe("true");
     entry("Aggancia alla griglia").click();
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
-    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50 });
+    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true });
     expect(grids).toEqual([
-      { shown: true, snap: false, step: 20 },
-      { shown: true, snap: false, step: 50 },
-      { shown: true, snap: true, step: 50 },
+      { shown: true, snap: false, step: 20, guides: true },
+      { shown: true, snap: false, step: 50, guides: true },
+      { shown: true, snap: true, step: 50, guides: true },
     ]);
 
     // Sotto lo Standard non si vede e non aggancia, ma resta com'era.
@@ -1150,11 +1152,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
 
   it("`setGrid` la cambia senza dirlo; un passo fuori dai limiti resta quello di prima, e uno insolito entra nel menu", () => {
     const grids: unknown[] = [];
-    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0 }, onGridChange: (grid) => grids.push(grid) });
-    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20 });
-    editor.setGrid({ shown: true, snap: true, step: 25 });
-    editor.setGrid({ shown: false, snap: true, step: 5000 });
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25 });
+    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false }, onGridChange: (grid) => grids.push(grid) });
+    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false });
+    editor.setGrid({ shown: true, snap: true, step: 25, guides: false });
+    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false });
     expect(spoken()).toBe("");
     expect(grids).toEqual([]);
     pageButton().click();
@@ -1177,11 +1179,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
     expect(altGraph("#").defaultPrevented).toBe(true);
     expect(spoken()).toBe("Griglia nascosta.");
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20 });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true });
     expect(key("#", { ctrlKey: true }).defaultPrevented).toBe(false);
     editor.setLevel("essential");
     expect(key("%", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20 });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true });
     // Nel titolo si scrivono.
     editor.setLevel("standard");
     const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
@@ -1341,6 +1343,266 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(rows()).toContainEqual(["←↑→↓", "Sposta la selezione alla riga seguente della griglia, a cinque righe con Maiusc"]);
     expect(rows()).toContainEqual(["Ctrl+←↑→↓", "Ridimensiona la selezione fino alla riga seguente della griglia, a cinque righe con Maiusc"]);
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
+describe("le guide intelligenti, dal livello Standard", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  /// Un disegno in una pagina larga, perché i suoi bordi e il suo centro
+  /// restino lontani da ciò che si sposta.
+  const wide = (body: string): string => doc(`<title>Prova</title>${body}`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 400"');
+  /// Un quadrato blu da spostare, da (20, 200) a (60, 240), e un rettangolo
+  /// arancione, da (200, 50) a (260, 80).
+  const APART = wide(
+    `${LAYER}<rect id="${A}" x="20" y="200" width="40" height="40" fill="#0072b2"/><rect id="${B}" x="200" y="50" width="60" height="30" fill="#e69f00"/></g>`,
+  );
+  /// Il quadrato blu, e due quadrati in fila a 60 l'uno dall'altro.
+  const ROW = wide(
+    `${LAYER}<rect id="${A}" x="20" y="300" width="40" height="40" fill="#0072b2"/>` +
+      `<rect id="${B}" x="100" y="100" width="40" height="40" fill="#e69f00"/><rect id="${C}" x="200" y="100" width="40" height="40" fill="#009e73"/></g>`,
+  );
+
+  const transformOf = (id: string): string | null => editor.engine.text.match(new RegExp(`id="${id}"[^>]*? transform="([^"]*)"`))?.[1] ?? null;
+  const hover = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const pageButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const entry = (label: string): HTMLButtonElement => menu().find((one) => labelOf(one) === label)!;
+
+  /// Lo strato sopra con un contesto che registra ciò che disegna, e i
+  /// fotogrammi, che partono quando li si chiede. Va preparato prima di
+  /// montare l'editor.
+  const recording = (): { readonly frame: () => void; readonly texts: () => string[] } => {
+    const calls: Array<readonly [string, ...unknown[]]> = [];
+    const context = new Proxy({} as Record<string | symbol, unknown>, {
+      get: (target, name) => {
+        if (name in target) return target[name];
+        if (name === "measureText") return () => ({ width: 10 });
+        return (...args: unknown[]) => void calls.push([String(name), ...args]);
+      },
+      set: (target, name, value) => {
+        target[name] = value;
+        return true;
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
+    return {
+      frame: () => {
+        for (const callback of frames.splice(0)) callback(0);
+      },
+      // Le scritte dell'ultimo disegno, che comincia pulendo.
+      texts: () =>
+        calls
+          .slice(calls.map(([name]) => name).lastIndexOf("clearRect"))
+          .filter(([name]) => name === "fillText")
+          .map(([, text]) => String(text)),
+    };
+  };
+
+  // Un menu rimasto aperto va chiuso davvero: tolto e basta, terrebbe il
+  // fuoco anche nella prova dopo.
+  afterEach(() => {
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("spostando, un bordo si ferma in linea con quello di un altro oggetto, e lo si dice; Ctrl o ⌘ lascia libero, e le frecce non agganciano", () => {
+    mount(APART, { level: "standard" });
+    editor.setTool("select");
+    // Il bordo in alto arriva a 53, a 3 da quello del rettangolo: ci va sopra.
+    drag([[40, 220], [41, 150], [43, 73]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -150)");
+    expect(spoken()).toBe("1 oggetto spostato. Agganciato: il bordo superiore in linea con quello di Rettangolo, Arancione.");
+    editor.undo();
+    drag([[40, 220], [41, 150], [43, 73]], { ctrlKey: true });
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
+    expect(spoken()).toBe("1 oggetto spostato.");
+    key("ArrowUp");
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -148)");
+  });
+
+  it("spostando, si ferma alla distanza che c'è fra due oggetti della fila, e mentre si trascina la mostra", () => {
+    const layer = recording();
+    mount(ROW, { level: "standard" });
+    editor.setTool("select");
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 40, clientY: 320, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 323, clientY: 122, timeStamp: (clock += 8) }));
+    layer.frame();
+    // Le due distanze uguali; quella dal quadrato in linea non si ripete.
+    expect(layer.texts()).toEqual(["60", "60"]);
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 323, clientY: 122, timeStamp: (clock += 8) }));
+    layer.frame();
+    expect(layer.texts()).toEqual([]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 280 -200)");
+    expect(spoken()).toBe("1 oggetto spostato. Agganciato: a distanze uguali in orizzontale, 60; il bordo superiore in linea con quello di Rettangolo, Verde.");
+  });
+
+  it("con la griglia vince il più vicino fra la riga e il bersaglio", () => {
+    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true } });
+    editor.setTool("select");
+    // In alto a 53: il bordo del rettangolo, a 50, è più vicino della riga a 60.
+    drag([[40, 220], [41, 150], [43, 73]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -150)");
+    editor.undo();
+    // A 56 la riga è più vicina.
+    drag([[40, 220], [41, 150], [43, 76]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -140)");
+  });
+
+  it("si allineano agli oggetti dei livelli bloccati, non a quelli dei livelli nascosti", () => {
+    mount(
+      wide(
+        `<g id="l1" fub:layer="Sfondo" fub:locked="true"><rect id="${B}" x="200" y="50" width="60" height="30" fill="#e69f00"/></g>` +
+          `<g id="l2" fub:layer="Note" display="none"><rect x="200" y="55" width="60" height="30" fill="#000000"/></g>` +
+          `<g id="l3" fub:layer="Disegno"><rect id="${A}" x="20" y="200" width="40" height="40" fill="#0072b2"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    editor.setTool("select");
+    drag([[40, 220], [41, 150], [43, 73]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -150)");
+  });
+
+  it("si allineano a ciò che si vede nella vista", () => {
+    mount(
+      wide(`${LAYER}<rect id="${A}" x="20" y="100" width="40" height="40" fill="#0072b2"/><rect id="${B}" x="200" y="60" width="40" height="40" fill="#e69f00"/></g>`),
+      { level: "standard" },
+    );
+    editor.setTool("select");
+    size(150, 150);
+    drag([[40, 120], [40, 100], [40, 83]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -37)");
+    editor.undo();
+    size(300, 300);
+    drag([[40, 120], [40, 100], [40, 83]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -40)");
+  });
+
+  it("ridimensionando, il bordo tirato si ferma in linea con un altro oggetto", () => {
+    mount(
+      wide(`${LAYER}<rect id="${A}" x="100" y="100" width="100" height="50" fill="#000000"/><rect id="${B}" x="236" y="20" width="20" height="20" fill="#e69f00"/></g>`),
+      { level: "standard" },
+    );
+    editor.setTool("select");
+    editor.select([A]);
+    // Il lato destro, preso a 204, arriva a 232: il bordo dell'altro è a 236.
+    drag([[204, 125], [220, 125], [236, 125]]);
+    expect(transformOf(A)).toBe("matrix(1.36 0 0 1 -36 0)");
+    expect(spoken()).toBe("Misure: 136 × 50. Agganciato: il bordo destro in linea con il bordo sinistro di Rettangolo, Arancione.");
+    editor.undo();
+    drag([[204, 125], [220, 125], [236, 125]], { ctrlKey: true });
+    expect(transformOf(A)).toBe("matrix(1.32 0 0 1 -32 0)");
+  });
+
+  it("disegnando una forma, il punto tirato si ferma in linea con gli oggetti", () => {
+    mount(APART, { level: "standard" });
+    editor.setTool("rect");
+    drag([[103, 303], [150, 320], [197, 348]]);
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="103" y="303" width="97" height="45" fill="none"/);
+    expect(spoken()).toBe("Rettangolo aggiunto. Il disegno ha 3 oggetti. Agganciato: il punto in linea con il bordo sinistro di Rettangolo, Arancione.");
+  });
+
+  it("modificando i nodi, il nodo trascinato si ferma in linea con gli altri nodi del tracciato", () => {
+    const P = "op3p3p3p3";
+    mount(wide(`${LAYER}<path id="${P}" d="M10 10 L150 10 L150 150" fill="none" stroke="#000000" stroke-width="2"/></g>`), { level: "expert" });
+    editor.select([P]);
+    editor.focus();
+    key("n");
+    drag([[150, 150], [100, 150], [13, 153]]);
+    expect(editor.engine.text).toContain('d="M10 10 L150 10 L10 153"');
+    expect(spoken()).toBe("Nodo spostato: x 10, y 153. Agganciato: il punto in linea con un nodo.");
+  });
+
+  it("con la penna di Bézier, il nodo nuovo si ferma in linea con quelli già posati e con la pagina", () => {
+    mount(doc(`<title>Prova</title>${LAYER}</g>`), { level: "expert" });
+    editor.focus();
+    key("b");
+    drag([[10, 10]]);
+    expect(spoken()).toBe("Nodo 1, spigolo: x 10, y 10.");
+    drag([[52, 12]]);
+    expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 10. Agganciato: il punto in linea con il centro orizzontale della pagina; il punto in linea con un nodo.");
+    drag([[73, 12]], { ctrlKey: true });
+    expect(spoken()).toBe("Nodo 3, spigolo: x 73, y 12.");
+  });
+
+  it("«Pagina e griglia» le spegne e le riaccende, e chi monta l'editor lo sa", () => {
+    const grids: unknown[] = [];
+    mount(APART, { level: "standard", onGridChange: (grid) => grids.push(grid) });
+    pageButton().click();
+    const item = entry("Guide intelligenti");
+    expect(item.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(item.getAttribute("aria-checked")).toBe("true");
+    expect(item.querySelector(".menu-description")!.textContent).toBe(
+      "Allinea ai bordi e ai centri degli altri oggetti e della pagina. Tieni premuto Ctrl mentre trascini per posare libero.",
+    );
+    item.click();
+    expect(spoken()).toBe("Guide intelligenti spente.");
+    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false });
+    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false }]);
+    editor.setTool("select");
+    drag([[40, 220], [41, 150], [43, 73]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
+    pageButton().click();
+    entry("Guide intelligenti").click();
+    expect(spoken()).toBe("Guide intelligenti accese.");
+    expect(grids).toHaveLength(2);
+  });
+
+  it("nel Personalizzato ci sono anche senza la griglia, sole nel menu; all'Essenziale no", () => {
+    mount(APART, { level: "custom", custom: ["pen", "eraser", "rect", "ellipse", "line", "arrow", "guides"] });
+    expect(pageButton().hidden).toBe(false);
+    pageButton().click();
+    expect(menu().map(labelOf)).toEqual(["Guide intelligenti"]);
+    editor.setLevel("essential");
+    expect(pageButton().hidden).toBe(true);
+    editor.setTool("select");
+    drag([[40, 220], [41, 150], [43, 73]]);
+    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
+  });
+
+  it("con Alt e una selezione, misurano le distanze dall'oggetto sotto il puntatore, o dalla pagina", () => {
+    const layer = recording();
+    mount(APART, { level: "standard" });
+    editor.setTool("select");
+    hover(230, 65, { altKey: true });
+    layer.frame();
+    expect(layer.texts(), "senza selezione niente").toEqual([]);
+    editor.select([A]);
+    hover(230, 65, { altKey: true });
+    layer.frame();
+    expect(layer.texts()).toEqual(["140", "120"]);
+    // Fuori dagli oggetti, dalla pagina.
+    hover(300, 300, { altKey: true });
+    layer.frame();
+    expect(layer.texts()).toEqual(["20", "340", "200", "160"]);
+    // Lasciato Alt, le misure se ne vanno.
+    surface().dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
+    layer.frame();
+    expect(layer.texts()).toEqual([]);
+    expect(changes).toEqual([]);
+  });
+
+  it("«?» elenca i loro tasti", async () => {
+    mount(SOURCE, { level: "standard" });
+    key("?", { shiftKey: true });
+    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
+    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Guide intelligenti");
+    expect(rows).toContainEqual(["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"]);
+    expect(rows).toContainEqual(["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+    // La finestra chiusa rende il fuoco dopo.
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 });
 
@@ -1507,7 +1769,7 @@ describe("il testo, dal livello Standard", () => {
   });
 
   it("Spazio scrive dov'è il cursore, e con l'aggancio la linea di base va sulla griglia", () => {
-    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20 } });
+    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false } });
     size(200, 100);
     editor.setTool("text");
     surface().focus();
@@ -1924,6 +2186,7 @@ describe("da tastiera", () => {
       "Disponi · dal livello Standard",
       "Testo · dal livello Standard",
       "Griglia · dal livello Standard",
+      "Guide intelligenti · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
@@ -1934,6 +2197,10 @@ describe("da tastiera", () => {
     expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
     expect(tables[1]!.rows).toContainEqual(["Ctrl+D", "Duplica"]);
     expect(tables[3]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[4]!.rows).toEqual([
+      ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
+      ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
+    ]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -2117,7 +2384,7 @@ describe("la cornice di trasformazione", () => {
   });
 
   it("con la griglia il bordo va sulla riga, e Ctrl o ⌘ lo lascia libero", () => {
-    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20 } });
+    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false } });
     drag([[204, 125], [220, 125], [237, 125]]);
     expect(transformOf(A)).toBe("matrix(1.4 0 0 1 -40 0)");
     editor.undo();
@@ -3448,8 +3715,9 @@ describe("la penna di Bézier, dal livello Esperto", () => {
   });
 
   /// Un disegno vuoto all'Esperto, con la penna di Bézier.
+  /// La penna, senza le guide intelligenti, che hanno i loro casi.
   const drawing = (source = EMPTY): void => {
-    mount(source, { level: "expert" });
+    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false } });
     editor.focus();
     key("b");
   };
@@ -3578,7 +3846,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M100 0 C120.1 0 148.3 12.94 148.3 12.94");
     editor.undo();
-    editor.setGrid({ shown: false, snap: true, step: 10 });
+    editor.setGrid({ shown: false, snap: true, step: 10, guides: false });
     tap(1, 2);
     drag([[38, 41], [44, 47], [52, 49]]);
     // Ctrl lascia il punto libero.
@@ -3586,7 +3854,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M0 0 C0 0 30 30 40 40 C50 50 73 77 73 77");
     // Due nodi sullo stesso incrocio non fanno un tracciato.
-    editor.setGrid({ shown: false, snap: true, step: 50 });
+    editor.setGrid({ shown: false, snap: true, step: 50, guides: false });
     tap(0, 0);
     tap(20, 0);
     expect(spoken()).toBe("Nodo 2, spigolo: x 0, y 0.");
@@ -3954,7 +4222,7 @@ describe("le immagini incollate", () => {
   });
 
   it("con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più vicino, e le immagini si scostano di passi interi", async () => {
-    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20 } });
+    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false } });
     size(1000, 500);
     editor.setTool("select");
     surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
@@ -4541,13 +4809,14 @@ describe("il livello Personalizzato", () => {
       "Strumenti · dal livello Standard",
       "Disponi · dal livello Standard",
       "Testo · dal livello Standard",
+      "Guide intelligenti · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[3]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[4]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

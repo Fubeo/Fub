@@ -305,6 +305,14 @@ export class SceneIndexer {
     return units;
   }
 
+  /// Gli oggetti di `model` che si vedono, anche quelli dei livelli bloccati
+  /// che l'indice non tocca: ciò su cui le guide intelligenti si allineano.
+  seen(model: DocumentModel): Unit[] {
+    const units: Unit[] = [];
+    this.walk(model, (layer) => !layer.hidden, [], (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style, units));
+    return units;
+  }
+
   /// Il riquadro di tutto ciò che `model` disegna, contorno compreso: anche
   /// gli oggetti dei livelli bloccati o nascosti, che l'indice non tocca ma
   /// che restano nel disegno. `null` se non disegna niente.
