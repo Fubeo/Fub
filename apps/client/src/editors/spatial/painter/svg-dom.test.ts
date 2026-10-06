@@ -215,6 +215,50 @@ describe("l'anteprima degli strumenti", () => {
     expect(a.style.visibility).toBe("");
   });
 
+  it("attenua ciò che sta fuori dal gruppo isolato, carta esclusa, anche dopo una scena nuova", async () => {
+    const engine = SceneEngine.open(doc(
+      '<rect id="fub-paper" fub:role="paper" x="0" y="0" width="100" height="100" fill="#ffffff"/>'
+        + `${LAYER}<rect id="a" width="4" height="4" opacity="0.5"/>`
+        + '<g id="g"><rect id="b" width="1" height="1"/><g id="inner"><rect id="c" width="1" height="1"/></g></g>'
+        + '<rect id="d" width="2" height="2"/></g><rect id="loose" width="3" height="3"/><use href="#a"/>',
+    ));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const node = (id: string): SVGElement => host.querySelector(`[data-scene-id="${id}"]`)!;
+    const chain = ["l1", "g"].map((id) => engine.holder(id)!);
+    painter.setFocus(chain);
+    expect(node("fub-paper").style.opacity).toBe("");
+    expect(node("a").style.opacity).toBe("0.2");
+    expect(node("d").style.opacity).toBe("0.4");
+    expect(node("loose").style.opacity).toBe("0.4");
+    expect(host.querySelector<HTMLElement>("img")!.style.opacity).toBe("0.4");
+    // Dentro il gruppo isolato niente si attenua, nemmeno più dentro.
+    for (const id of ["l1", "g", "b", "inner", "c"]) expect(node(id).style.opacity, id).toBe("");
+    // La gomma sbiadisce dentro, e tolta l'anteprima l'attenuazione resta.
+    const [paintB] = builder.paintsOf(engine.holder("b")!);
+    const [paintA] = builder.paintsOf(engine.holder("a")!);
+    painter.setDraft({ faded: new Set([paintB!, paintA!]) });
+    expect(node("b").style.opacity).toBe("0.25");
+    painter.setDraft(null);
+    expect(node("b").style.opacity).toBe("");
+    expect(node("a").style.opacity).toBe("0.2");
+    // Una scena nuova: i nodi nuovi si attenuano come i vecchi.
+    expect(engine.apply({ op: "add", parent: "l1", pos: { last: true }, elem: { tag: "rect", attrs: { id: "o1a2b3c4d", width: "1", height: "1" } } }).outcome).toBe("applied");
+    painter.update(sceneOf(engine, builder));
+    expect(node("o1a2b3c4d").style.opacity).toBe("0.4");
+    expect(node("c").style.opacity).toBe("");
+    // Isolato il gruppo più dentro, si attenuano anche i fratelli di prima.
+    painter.setFocus([...chain, engine.holder("inner")!]);
+    expect(node("b").style.opacity).toBe("0.4");
+    expect(node("c").style.opacity).toBe("");
+    painter.setFocus(null);
+    for (const id of ["a", "b", "d", "o1a2b3c4d", "loose"]) expect(node(id).style.opacity, id).toBe("");
+    expect(host.querySelector<HTMLElement>("img")!.style.opacity).toBe("");
+    painter.dispose();
+  });
+
   it("mostra un altro `d` per un tracciato, e lo riporta a quello dipinto", async () => {
     const engine = SceneEngine.open(doc(`${LAYER}<path id="p" d="M0 0 L4 0" stroke="#000000"/><rect id="r" width="4" height="4"/></g>`));
     const builder = new PaintBuilder();

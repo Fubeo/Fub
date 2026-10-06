@@ -7,8 +7,14 @@
 // ricco resta intatto anche qui, dove al massimo si sposta o si elimina
 // intero. Un gruppo o un collegamento si sceglie con tutto ciò che contiene.
 // Gli oggetti di un livello bloccato o nascosto non si toccano, e nemmeno
-// quelli nascosti con `display="none"`. Un blocco estraneo non è un oggetto:
-// si vede come immagine e resta com'è.
+// quelli bloccati con `fub:locked="true"` o nascosti con `display="none"`.
+// Un blocco estraneo non è un oggetto: si vede come immagine e resta com'è.
+//
+// Dentro un gruppo o un collegamento si sceglie anche un oggetto solo: con
+// Ctrl o ⌘ col clic, o isolando il gruppo, che diventa l'unico posto dove si
+// sceglie. L'indice dà gli oggetti in cima, quelli del gruppo isolato se ce
+// n'è uno, e trova quelli più dentro quando servono, con le stesse regole:
+// niente dentro un gruppo bloccato o nascosto.
 //
 // La geometria è quella che il painter disegna: gli attributi dipinti della
 // stessa `PaintScene` (`PaintBuilder.shape` e `headInfo`), con le
@@ -22,7 +28,7 @@ import type { Role } from "../scene/analysis";
 import { BoundsBuilder, fmin, parsePath, rectPath, type Bounds, type Segment } from "../scene/geometry";
 import { arcCenter, onEllipse } from "../scene/curves";
 import { apply, compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
-import { tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { elementChildren, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { length, nonNegativeLength, points as parsePoints, transform as parseTransform } from "../scene/values";
@@ -131,6 +137,10 @@ export class Unit {
     /// la griglia aggancia.
     readonly geometry: Bounds | null,
     private readonly parts: readonly Part[],
+    /// L'elemento.
+    readonly node: ElementPart,
+    /// Lo stile che trasmette ai figli.
+    readonly inner: Style,
     /// Come si vede, se è un testo.
     readonly look: TextLook | null = null,
   ) {}
@@ -208,22 +218,128 @@ export class Unit {
     if (!near(this.bounds, a, b, tolerance)) return false;
     return this.parts.some((part) => partTouches(part, a, b, tolerance));
   }
+
+  /// Vero se l'oggetto sta tutto dentro il lazo `lasso`, contorno compreso:
+  /// nessun contorno arriva a un lato del lazo, e ogni forma comincia dentro.
+  inside(lasso: Lasso): boolean {
+    const bounds = this.bounds;
+    if (bounds === null || !holds(lasso.bounds, bounds)) return false;
+    const edges = lasso.edgesNear(bounds);
+    // Un riquadro che nessun lato attraversa sta tutto da una parte.
+    if (edges.length === 0) return lasso.contains(bounds.min);
+    for (const part of this.parts) {
+      const flat = flatten(part);
+      const first = flat.runs[0];
+      if (first === undefined) continue;
+      const reach = flat.radius;
+      const crosses = forEachEdge(flat, part.fill, (ax, ay, bx, by) => {
+        for (let i = 0; i < edges.length; i += 4) {
+          if (segmentDistance(ax, ay, bx, by, edges[i]!, edges[i + 1]!, edges[i + 2]!, edges[i + 3]!) <= reach) return true;
+        }
+        return false;
+      });
+      if (crosses || !lasso.contains([first.points[0]!, first.points[1]!])) return false;
+    }
+    return true;
+  }
+}
+
+/// Un lazo: un poligono della scena chiuso dall'ultimo punto al primo, che
+/// contiene i punti con la regola non zero, come un riempimento. Un giro che
+/// si chiude ripassando sull'inizio non lascia buchi.
+class Lasso {
+  readonly bounds: Bounds;
+  private readonly flat: Flat;
+
+  constructor(points: readonly Point[]) {
+    const out = new BoundsBuilder();
+    const coords = new Float64Array(points.length * 2);
+    points.forEach((p, i) => {
+      coords[2 * i] = p[0];
+      coords[2 * i + 1] = p[1];
+      out.include(p);
+    });
+    this.bounds = out.finish()!;
+    this.flat = { runs: [{ points: coords, closed: true }], radius: 0 };
+  }
+
+  contains(p: Point): boolean {
+    return winding(this.flat, p) !== 0;
+  }
+
+  /// I lati il cui riquadro incontra `bounds`, quattro numeri per lato.
+  edgesNear(bounds: Bounds): number[] {
+    const out: number[] = [];
+    forEachEdge(this.flat, true, (ax, ay, bx, by) => {
+      if (Math.max(ax, bx) >= bounds.min[0] && Math.min(ax, bx) <= bounds.max[0] && Math.max(ay, by) >= bounds.min[1] && Math.min(ay, by) <= bounds.max[1]) {
+        out.push(ax, ay, bx, by);
+      }
+      return false;
+    });
+    return out;
+  }
+}
+
+/// Come l'indice trova gli oggetti dentro i gruppi.
+interface Nested {
+  /// L'oggetto di chiave `key` dove si sceglie, a qualunque profondità;
+  /// `null` se non c'è.
+  resolve(key: string): Unit | null;
+  /// Gli oggetti che si scelgono fra i figli di `container`.
+  childrenOf(container: ContainerNode): Unit[];
 }
 
 /// L'indice degli oggetti di una scena, in ordine di documento: l'ultimo è
-/// quello che si vede sopra.
+/// quello che si vede sopra. Gli oggetti dell'indice sono quelli in cima, o
+/// quelli del gruppo isolato; quelli più dentro si trovano con `get`,
+/// `children` e `deepAt`.
 export class SceneIndex {
-  private readonly byKey: Map<string, Unit>;
+  private readonly byKey: Map<string, Unit | null>;
+  private readonly top: ReadonlySet<Unit>;
 
   constructor(
     readonly units: readonly Unit[],
     readonly layers: readonly LayerInfo[],
+    private readonly nested: Nested | null = null,
   ) {
     this.byKey = new Map(units.map((unit) => [unit.key, unit]));
+    this.top = new Set(units);
   }
 
+  /// L'oggetto di chiave `key`, anche dentro un gruppo; `null` se non si
+  /// sceglie: se non c'è, se è bloccato o nascosto, se lo è un gruppo che lo
+  /// contiene, o se sta fuori dal gruppo isolato.
   get(key: string): Unit | null {
-    return this.byKey.get(key) ?? null;
+    let unit = this.byKey.get(key);
+    if (unit === undefined) {
+      unit = this.nested?.resolve(key) ?? null;
+      this.byKey.set(key, unit);
+    }
+    return unit;
+  }
+
+  /// Gli oggetti che si scelgono fra i figli di `unit`, se è un gruppo o un
+  /// collegamento, in ordine di documento.
+  children(unit: Unit): Unit[] {
+    if (unit.node.kind !== "container" || this.nested === null) return [];
+    return this.nested.childrenOf(unit.node).map((child) => this.keep(child));
+  }
+
+  /// Gli oggetti che si scelgono accanto a `unit`, nello stesso genitore, lui
+  /// compreso, in ordine di documento.
+  siblings(unit: Unit): Unit[] {
+    const parent = unit.node.parent;
+    if (this.top.has(unit) || parent === null || this.nested === null) return this.units.filter((each) => each.node.parent === parent);
+    return this.nested.childrenOf(parent).map((child) => this.keep(child));
+  }
+
+  /// Lo stesso oggetto di prima, se l'indice l'ha già dato: così una chiave
+  /// dà sempre lo stesso oggetto.
+  private keep(unit: Unit): Unit {
+    const known = this.byKey.get(unit.key);
+    if (known !== undefined && known !== null && known.node === unit.node) return known;
+    this.byKey.set(unit.key, unit);
+    return unit;
   }
 
   /// L'oggetto più in alto sotto `p`.
@@ -235,9 +351,32 @@ export class SceneIndex {
     return null;
   }
 
+  /// L'oggetto più dentro sotto `p`: in quello più in alto, il figlio più in
+  /// alto che `p` tocca, e così via finché non ci sono figli da scegliere.
+  deepAt(p: Point, tolerance: number): Unit | null {
+    let unit = this.at(p, tolerance);
+    while (unit !== null) {
+      const children = this.children(unit);
+      let inner: Unit | null = null;
+      for (let i = children.length - 1; i >= 0 && inner === null; i--) if (children[i]!.hits(p, tolerance)) inner = children[i]!;
+      if (inner === null) return unit;
+      unit = inner;
+    }
+    return null;
+  }
+
   /// Gli oggetti che il segmento da `a` a `b` tocca, in ordine di documento.
   along(a: Point, b: Point, tolerance: number): Unit[] {
     return this.units.filter((unit) => unit.touches(a, b, tolerance));
+  }
+
+  /// Gli oggetti che stanno interi dentro il lazo `points`, un poligono della
+  /// scena chiuso dall'ultimo punto al primo: la stessa regola del riquadro
+  /// di selezione.
+  inside(points: readonly Point[]): Unit[] {
+    if (points.length < 3) return [];
+    const lasso = new Lasso(points);
+    return this.units.filter((unit) => unit.inside(lasso));
   }
 
   /// Gli oggetti che stanno interi dentro `area`, un rettangolo della scena.
@@ -274,12 +413,32 @@ export class SceneIndexer {
 
   constructor(private readonly builder: PaintBuilder) {}
 
-  /// L'indice di `model`, che il `PaintBuilder` ha appena disegnato.
-  index(model: DocumentModel): SceneIndex {
+  /// L'indice di `model`, che il `PaintBuilder` ha appena disegnato. Con
+  /// `scope`, un gruppo o un collegamento isolato, gli oggetti sono i suoi
+  /// figli, e fuori non si sceglie niente.
+  index(model: DocumentModel, scope: ContainerNode | null = null): SceneIndex {
     const units: Unit[] = [];
     const layers: LayerInfo[] = [];
-    this.walk(model, (layer) => !layer.locked && !layer.hidden, layers, (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style, units));
-    return new SceneIndex(units, layers);
+    const nested = new Lookup(model, scope, this.rootStyle(model), (node) => this.attrsOf(node), (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style));
+    if (scope === null) {
+      this.walk(model, (layer) => !layer.locked && !layer.hidden, layers, (node, path, layer, parent, style) => {
+        if (node.details!.locked === true) return;
+        push(units, this.unit(node, path, layer, parent, style));
+      });
+    } else {
+      this.walk(model, () => false, layers, () => {});
+      units.push(...nested.childrenOf(scope));
+    }
+    return new SceneIndex(units, layers, nested);
+  }
+
+  /// Vero se dentro `container`, un gruppo o un collegamento di `model`, si
+  /// sceglie: se sta nel documento, e né lui né chi lo contiene è bloccato o
+  /// nascosto.
+  opens(model: DocumentModel, container: ContainerNode): boolean {
+    const role = container.details?.role;
+    if (role !== "group" && role !== "link") return false;
+    return new Lookup(model, null, this.rootStyle(model), (node) => this.attrsOf(node), () => null).contextOf(container) !== null;
   }
 
   /// I collegamenti di `model` che si vedono, a ogni profondità: anche
@@ -291,7 +450,7 @@ export class SceneIndexer {
     const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style): void => {
       if (node.details === null) return;
       if (node.details.role === "link") {
-        this.unit(node, path, layer, parent, style, units);
+        push(units, this.unit(node, path, layer, parent, style));
         return;
       }
       if (node.kind !== "container") return;
@@ -305,11 +464,26 @@ export class SceneIndexer {
     return units;
   }
 
-  /// Gli oggetti di `model` che si vedono, anche quelli dei livelli bloccati
-  /// che l'indice non tocca: ciò su cui le guide intelligenti si allineano.
-  seen(model: DocumentModel): Unit[] {
+  /// Gli oggetti di `model` che si vedono, anche quelli bloccati che
+  /// l'indice non tocca: ciò su cui le guide intelligenti si allineano. Dei
+  /// contenitori `open`, il gruppo isolato e quelli da cui si sposta un
+  /// oggetto, i figli uno per uno al posto del tutto.
+  seen(model: DocumentModel, open: ReadonlySet<ContainerNode> = new Set()): Unit[] {
     const units: Unit[] = [];
-    this.walk(model, (layer) => !layer.hidden, [], (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style, units));
+    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style): void => {
+      if (node.kind !== "container" || !open.has(node)) {
+        push(units, this.unit(node, path, layer, parent, style));
+        return;
+      }
+      const attrs = this.attrsOf(node);
+      if (attrs === null || hidden(attrs)) return;
+      const matrix = compose(parent, transformOf(attrs));
+      const inner = styleOf(style, attrs);
+      childLoop(node, (child, index) => {
+        if (pickable(child)) visit(child, [...path, index], layer, matrix, inner);
+      });
+    };
+    this.walk(model, (layer) => !layer.hidden, [], visit);
     return units;
   }
 
@@ -318,7 +492,7 @@ export class SceneIndexer {
   /// che restano nel disegno. `null` se non disegna niente.
   extent(model: DocumentModel): Bounds | null {
     const units: Unit[] = [];
-    this.walk(model, () => true, [], (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style, units));
+    this.walk(model, () => true, [], (node, path, layer, parent, style) => push(units, this.unit(node, path, layer, parent, style)));
     const out = new BoundsBuilder();
     for (const unit of units) {
       if (unit.bounds === null) continue;
@@ -332,7 +506,7 @@ export class SceneIndexer {
   /// oggetti nei livelli, solo quelli dei livelli che `enters` accetta.
   private walk(model: DocumentModel, enters: (layer: LayerInfo) => boolean, layers: LayerInfo[], visit: Visit): void {
     const root = model.root;
-    const rootStyle = styleOf(INITIAL, this.builder.headInfo(root).attrs);
+    const rootStyle = this.rootStyle(model);
     childLoop(root, (child, index) => {
       if (child.kind === "leaf") {
         if (child.details === null) return;
@@ -360,14 +534,20 @@ export class SceneIndexer {
     });
   }
 
-  /// Aggiunge a `out` l'oggetto `node`, se si vede.
-  private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, out: Unit[]): void {
+  /// Lo stile che la radice di `model` trasmette ai figli.
+  private rootStyle(model: DocumentModel): Style {
+    return styleOf(INITIAL, this.builder.headInfo(model.root).attrs);
+  }
+
+  /// L'oggetto `node`, se si vede.
+  private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style): Unit | null {
     const attrs = this.attrsOf(node);
-    if (attrs === null || hidden(attrs)) return;
+    if (attrs === null || hidden(attrs)) return null;
     const own = transformOf(attrs);
     const matrix = compose(parent, own);
+    const inner = styleOf(style, attrs);
     const parts: Part[] = [];
-    this.collect(node, matrix, IDENTITY, styleOf(style, attrs), parts);
+    this.collect(node, matrix, IDENTITY, inner, parts);
     const scene = new BoundsBuilder();
     const geometry = new BoundsBuilder();
     for (const part of parts) {
@@ -378,8 +558,8 @@ export class SceneIndexer {
     }
     const id = node.facts.id;
     const tag = tagName(node);
-    const look = node.kind === "leaf" && node.details!.role === "text" ? textLook(this.builder.shape(node), styleOf(style, attrs)) : null;
-    out.push(new Unit(
+    const look = node.kind === "leaf" && node.details!.role === "text" ? textLook(this.builder.shape(node), inner) : null;
+    return new Unit(
       id ?? `@${path.join(".")}`,
       id ?? { path, tag },
       id,
@@ -393,8 +573,10 @@ export class SceneIndexer {
       scene.finish(),
       geometry.finish(),
       parts,
+      node,
+      inner,
       look,
-    ));
+    );
   }
 
   /// Gli attributi dipinti di un elemento; `null` se non disegna.
@@ -452,6 +634,132 @@ export class SceneIndexer {
     if (cache !== null) cache.scene = { matrix: part.matrix, bounds };
     return bounds;
   }
+}
+
+/// Dove stanno i figli di un contenitore: il suo percorso, il livello, la
+/// matrice dalle sue coordinate a quelle della scena e lo stile che
+/// trasmette.
+interface Context {
+  readonly path: readonly number[];
+  readonly layer: string | null;
+  readonly matrix: Matrix;
+  readonly style: Style;
+}
+
+type MakeUnit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style) => Unit | null;
+
+/// Trova gli oggetti dentro i gruppi di un documento, per un indice: con
+/// `scope` solo quelli dentro il gruppo isolato.
+class Lookup implements Nested {
+  private ids: Map<string, ElementPart> | null = null;
+  private readonly contexts = new Map<ContainerNode, Context | null>();
+
+  constructor(
+    private readonly model: DocumentModel,
+    private readonly scope: ContainerNode | null,
+    private readonly rootStyle: Style,
+    private readonly attrsOf: (node: ElementPart) => readonly PaintAttr[] | null,
+    private readonly make: MakeUnit,
+  ) {}
+
+  resolve(key: string): Unit | null {
+    const node = key.startsWith("@") ? this.byPath(key.slice(1)) : this.byId(key);
+    if (node === null || !pickable(node) || node.details!.locked === true) return null;
+    const parent = node.parent;
+    if (parent === null || (this.scope !== null && !within(node, this.scope))) return null;
+    const context = this.contextOf(parent);
+    if (context === null) return null;
+    const index = elementChildren(parent).indexOf(node);
+    if (index < 0) return null;
+    const unit = this.make(node, [...context.path, index], context.layer, context.matrix, context.style);
+    return unit !== null && unit.key === key ? unit : null;
+  }
+
+  childrenOf(container: ContainerNode): Unit[] {
+    const role = container.details?.role;
+    if (role !== "group" && role !== "link") return [];
+    if (this.scope !== null && container !== this.scope && !within(container, this.scope)) return [];
+    const context = this.contextOf(container);
+    if (context === null) return [];
+    const out: Unit[] = [];
+    childLoop(container, (child, index) => {
+      if (pickable(child) && child.details!.locked !== true) push(out, this.make(child, [...context.path, index], context.layer, context.matrix, context.style));
+    });
+    return out;
+  }
+
+  /// Dove stanno i figli di `container`; `null` se lì non si sceglie: se il
+  /// contenitore non sta nel documento, o se lui o uno che lo contiene è
+  /// bloccato o nascosto.
+  contextOf(container: ContainerNode): Context | null {
+    let context = this.contexts.get(container);
+    if (context === undefined) {
+      context = this.compute(container);
+      this.contexts.set(container, context);
+    }
+    return context;
+  }
+
+  private compute(container: ContainerNode): Context | null {
+    if (container === this.model.root) return { path: [], layer: null, matrix: IDENTITY, style: this.rootStyle };
+    const parent = container.parent;
+    const details = container.details;
+    if (parent === null || details === null || details.locked === true) return null;
+    const isLayer = details.role === "layer";
+    if (isLayer ? parent !== this.model.root : details.role !== "group" && details.role !== "link") return null;
+    const index = elementChildren(parent).indexOf(container);
+    const outer = index < 0 ? null : this.contextOf(parent);
+    const attrs = this.attrsOf(container);
+    if (outer === null || attrs === null || hidden(attrs)) return null;
+    return {
+      path: [...outer.path, index],
+      layer: isLayer ? container.facts.id : outer.layer,
+      matrix: compose(outer.matrix, transformOf(attrs)),
+      style: styleOf(outer.style, attrs),
+    };
+  }
+
+  private byPath(text: string): ElementPart | null {
+    if (!/^\d+(\.\d+)*$/.test(text)) return null;
+    let node: ElementPart = this.model.root;
+    for (const step of text.split(".")) {
+      if (node.kind !== "container") return null;
+      const child: ElementPart | undefined = elementChildren(node)[Number(step)];
+      if (child === undefined) return null;
+      node = child;
+    }
+    return node;
+  }
+
+  private byId(id: string): ElementPart | null {
+    if (this.ids === null) {
+      const ids = new Map<string, ElementPart>();
+      const visit = (container: ContainerNode): void => childLoop(container, (child) => {
+        if (child.facts.id !== null && !ids.has(child.facts.id)) ids.set(child.facts.id, child);
+        if (child.kind === "container") visit(child);
+      });
+      visit(this.model.root);
+      this.ids = ids;
+    }
+    return this.ids.get(id) ?? null;
+  }
+}
+
+/// Vero se `node` è un oggetto, nel posto dove sta: non la carta, il titolo,
+/// la descrizione, un livello o un blocco estraneo.
+function pickable(node: ElementPart): boolean {
+  const role = node.details?.role;
+  return role !== undefined && role !== "paper" && role !== "title" && role !== "desc" && role !== "layer";
+}
+
+/// Vero se `node` sta dentro `container`, a qualunque profondità.
+function within(node: ElementPart, container: ContainerNode): boolean {
+  for (let current = node.parent; current !== null; current = current.parent) if (current === container) return true;
+  return false;
+}
+
+function push(out: Unit[], unit: Unit | null): void {
+  if (unit !== null) out.push(unit);
 }
 
 // ---------------------------------------------------------------------------
@@ -693,6 +1001,11 @@ function localBounds(part: Part): Bounds | null {
   const cache = part.cache!;
   if (cache.local === undefined) cache.local = transformedBounds(part.segments, IDENTITY);
   return cache.local;
+}
+
+/// Vero se `inner` sta tutto dentro `outer`.
+function holds(outer: Bounds, inner: Bounds): boolean {
+  return inner.min[0] >= outer.min[0] && inner.max[0] <= outer.max[0] && inner.min[1] >= outer.min[1] && inner.max[1] <= outer.max[1];
 }
 
 function includeInflated(out: BoundsBuilder, bounds: Bounds, by: number): void {

@@ -139,7 +139,7 @@ Altri dettagli:
 | `missing-anchor` | l'`after` non esiste, non è figlio del genitore, o è l'elemento stesso |
 | `duplicate-id` | `add` con un id già presente e un elemento diverso (§8) |
 | `invalid-elem` | tag, attributo o valore fuori dal formato, oppure `fub:ink` non conforme |
-| `locked` | il bersaglio o il genitore stanno in un livello bloccato, oppure il bersaglio è la carta, che cambia solo con `page` |
+| `locked` | il bersaglio o il genitore stanno in un elemento bloccato (`fub:locked="true"`), oppure il bersaglio è la carta, che cambia solo con `page` |
 | `foreign` | `set`, `text` o `add` dentro un nodo estraneo |
 | `cycle` | `move` dentro un discendente dell'elemento stesso |
 | `limit` | operazione oltre i limiti (§5) |
@@ -148,8 +148,11 @@ Altri dettagli:
 In un `batch`, se un'operazione è rifiutata si rifiuta tutto il batch, con
 l'indice dell'operazione che ha fallito.
 
-Un livello bloccato non sta dentro sé stesso: si cambia, si sposta e si
-toglie, ed è con un `set` che si sblocca. È bloccato solo ciò che contiene.
+Un elemento bloccato non sta dentro sé stesso: si cambia, si sposta e si
+toglie, ed è con un `set` che si sblocca. È bloccato solo ciò che contiene: un
+livello, un gruppo o un collegamento bloccati tengono fermi i loro figli, e una
+forma bloccata si cambia ancora con le operazioni. Che non si prenda sul foglio
+lo decide la superficie, come per le guide bloccate.
 
 ## 4. Validazione
 
@@ -352,6 +355,9 @@ devono verificare renderebbe il test circolare.
 | 37 | `root-guides-invalid` | guide fuori grammatica: rifiuto `invalid-elem` |
 | 38 | `root-units-other-prefix` | l'unità col prefisso che il documento lega al namespace di FubDraw |
 | 39 | `root-other-attr` | sulla radice un attributo che cambia con `page`: rifiuto `invalid-elem` |
+| 40 | `locked-group` | un oggetto dentro un gruppo bloccato non cambia: rifiuto `locked` |
+| 41 | `locked-group-add` | dentro un gruppo bloccato non si aggiunge niente: rifiuto `locked` |
+| 42 | `locked-object-unlock` | una forma bloccata si cambia ancora: un `set` la sblocca |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

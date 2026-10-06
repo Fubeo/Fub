@@ -39,9 +39,11 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Parte | Livello | Che cosa porta |
 | --- | --- | --- |
 | Penna, Gomma, Rettangolo, Ellisse, Linea, Freccia | Essenziale | lo strumento, col suo tasto |
+| Lazo | Standard | lo strumento (`Q`) |
 | Evidenziatore | Standard | lo strumento (`H`) |
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
 | Colori personalizzati | Standard | «Altro colore…» e il campione in più |
+| Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |
 | Duplica, raggruppa, ordina, allinea e distribuisci | Standard | questi comandi della barra «Disponi», coi loro tasti |
 | Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello |
 | Pagina e griglia | Standard | il pulsante «Pagina e griglia», `#` e `%` |
@@ -71,8 +73,10 @@ sorgente».
 
 Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
 basso: chi aveva in mano il suo strumento riprende la penna, o il primo
-strumento che c'è, o la Selezione; un tracciato di Bézier a metà si conclude
-com'è; un colore a piacere torna al colore di partenza. Il disegno non cambia.
+strumento che c'è, o la Selezione; chi sceglieva, col Lazo o coi Nodi,
+riprende la Selezione; un tracciato di Bézier a metà si conclude com'è; un
+colore a piacere torna al colore di partenza; da un gruppo isolato si esce.
+Il disegno non cambia.
 
 `?` elenca i tasti delle parti scelte, e **Mostra tutto** aggiunge in fondo
 quelli delle parti che mancano, ciascuno col livello da cui viene e con una

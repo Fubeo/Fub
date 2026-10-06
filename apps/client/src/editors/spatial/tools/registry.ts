@@ -22,7 +22,7 @@ export type Level = Preset | "custom";
 
 const LEVEL_ORDER: readonly Preset[] = ["essential", "standard", "expert"];
 
-export type ToolId = "select" | "nodes" | "pen" | "highlighter" | "eraser" | "rect" | "ellipse" | "line" | "arrow" | "bezier" | "text";
+export type ToolId = "select" | "lasso" | "nodes" | "pen" | "highlighter" | "eraser" | "rect" | "ellipse" | "line" | "arrow" | "bezier" | "text";
 
 /// Come la barra raggruppa gli strumenti: scegliere, scrivere a mano, forme,
 /// testo.
@@ -42,6 +42,8 @@ export interface ToolSpec {
 
 export const TOOLS: readonly ToolSpec[] = [
   { id: "select", level: "essential", group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
+  // Lo stesso tasto di Illustrator.
+  { id: "lasso", level: "standard", group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
   // Lo stesso tasto di Inkscape.
   { id: "nodes", level: "expert", group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "n" },
   { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
@@ -65,6 +67,7 @@ export const DEFAULT_TOOL: ToolId = "pen";
 export type Feature =
   | Exclude<ToolId, "select">
   | "colors"
+  | "selection"
   | "arrange"
   | "layers"
   | "grid"
@@ -91,6 +94,7 @@ export interface FeatureSpec {
 /// dell'Esperto.
 const COMMANDS: readonly FeatureSpec[] = [
   { id: "colors", level: "standard", label: "draw.feature.colors" },
+  { id: "selection", level: "standard", label: "draw.feature.selection" },
   { id: "arrange", level: "standard", label: "draw.feature.arrange" },
   { id: "layers", level: "standard", label: "draw.feature.layers" },
   { id: "grid", level: "standard", label: "draw.feature.grid" },
@@ -167,6 +171,14 @@ export function toolsFor(level: Preset): readonly ToolSpec[] {
 export function startTool(tools: readonly ToolSpec[]): ToolId {
   if (tools.some((tool) => tool.id === DEFAULT_TOOL)) return DEFAULT_TOOL;
   return tools.find((tool) => tool.group !== "pick")?.id ?? "select";
+}
+
+/// Lo strumento che prende il posto di `lost` quando se ne va, fra `tools`:
+/// dopo uno strumento che sceglie, il Lazo o i Nodi, la Selezione, così chi
+/// sceglieva non si ritrova a disegnare; dopo gli altri, quello con cui si
+/// comincia.
+export function toolAfter(tools: readonly ToolSpec[], lost: ToolId): ToolId {
+  return toolSpec(lost).group === "pick" ? "select" : startTool(tools);
 }
 
 export function toolSpec(id: ToolId): ToolSpec {

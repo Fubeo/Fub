@@ -137,6 +137,15 @@ pub struct ElementItem {
     pub tags: Option<Tags>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<Layer>,
+    /// `fub:locked="true"` su un livello, un gruppo, un collegamento o una
+    /// forma (§3): non si sceglie sul foglio, e ciò che contiene non cambia.
+    /// Su un livello ripete `layer`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
+    /// `display="none"` su un livello, un gruppo, un collegamento o una
+    /// forma: non si vede. Su un livello ripete `layer`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stroke: Option<Stroke>,
     /// `x1 y1 x2 y2` di una freccia.
@@ -593,6 +602,9 @@ impl Builder<'_, '_> {
         });
         let span = self.map.span(node.start, node.end);
         let stroke = (role == Role::Stroke).then(|| self.stroke(element, span));
+        // Si bloccano e si nascondono i livelli e ciò che si disegna, non il
+        // titolo, la descrizione o la carta.
+        let object = !matches!(role, Role::Title | Role::Desc | Role::Paper);
         self.tally
             .element(doc, element, role, context, span, stroke.as_ref());
         if !self.keep {
@@ -607,6 +619,11 @@ impl Builder<'_, '_> {
             indent: self.lines.indent(node.start).to_owned(),
             tags: role.is_container().then(|| self.tags(id)),
             layer,
+            locked: object && element.value(NS_FUB, "locked") == Some("true"),
+            hidden: object
+                && element
+                    .value(NS_NONE, "display")
+                    .is_some_and(|d| crate::values::trim(d) == "none"),
             stroke,
             arrow: (role == Role::Arrow)
                 .then(|| arrow_geometry(element))

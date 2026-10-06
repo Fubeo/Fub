@@ -130,6 +130,8 @@ export interface DescribeOptions {
   readonly color?: string | null;
   /// Dice quanti oggetti contiene un gruppo, per chi non ne mostra i figli.
   readonly parts?: boolean;
+  /// Dice se è bloccato o nascosto; sì, se non si dice altro.
+  readonly state?: boolean;
 }
 
 /// Il nome di un oggetto a parole: «Rettangolo», «Testo «Cucina»», «Livello
@@ -140,8 +142,8 @@ export function describe(node: OutlineNode, options: DescribeOptions = {}): stri
   const kind = t(item.role === "stroke" && item.stroke?.tool === "highlighter" ? "draw.kind.highlighter" : KINDS[role]);
   const named = node.name === null ? kind : t("draw.describe.named", { kind, name: node.name });
   const parts = [node.target === null ? named : t("draw.describe.link", { link: named, note: linkName(node.target) })];
-  if (item.layer?.locked) parts.push(t("draw.state.locked"));
-  if (item.layer?.hidden) parts.push(t("draw.state.hidden"));
+  if (item.locked && options.state !== false) parts.push(t("draw.state.locked"));
+  if (item.hidden && options.state !== false) parts.push(t("draw.state.hidden"));
   if (options.color) parts.push(options.color);
   if (options.parts && (item.role === "group" || item.role === "link")) {
     parts.push(plural(node.children.length, "draw.describe.parts.one", "draw.describe.parts.other"));

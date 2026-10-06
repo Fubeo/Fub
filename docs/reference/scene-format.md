@@ -64,12 +64,12 @@ Radice di un documento nuovo:
 
 ## 3. Livelli e gruppi
 
-- **Livello:** un `<g>` figlio della radice con `fub:layer="Nome"`, nome lungo
-  al massimo 80 caratteri, e id che inizia con `l`.
-  - Bloccato: `fub:locked="true"`. Nascosto: `display="none"`, così resta
-    nascosto anche negli altri visualizzatori.
-  - Un documento nuovo ha un livello, «Livello 1».
+- **Livello:** un `<g>` figlio della radice con `fub:layer="Nome"` (al massimo
+  80 caratteri) e id che inizia con `l`; un documento nuovo ha «Livello 1».
 - **Gruppo:** un `<g>` senza `fub:layer`, dentro un livello o un altro gruppo.
+- **Blocco e visibilità:** livelli, gruppi, collegamenti e forme si bloccano
+  con `fub:locked="true"`, che li toglie dalla scelta sul foglio e ferma ciò
+  che contengono; `display="none"` li nasconde, anche negli altri programmi.
 - **Elementi fuori da ogni livello**, come negli SVG estranei adottati:
   appartengono a un livello implicito alla radice e non si spostano da soli.
 

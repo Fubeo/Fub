@@ -1510,6 +1510,50 @@ html, body, #app {
 .draw-arrange[data-gesture] {
   visibility: hidden;
 }
+/* La barra del gruppo isolato, in basso a sinistra del foglio: il pulsante
+   che esce e il percorso dal livello al gruppo. Un percorso lungo va a capo
+   verso l'alto, e un nome lungo finisce coi puntini; coi righelli la barra
+   non copre quello a sinistra. */
+.draw-isolation {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.draw-stage[data-rulers] > .draw-isolation {
+  left: 32px;
+  max-width: calc(100% - 40px);
+}
+.draw-isolation-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draw-isolation-path > li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.draw-isolation-crumb {
+  display: block;
+  max-width: 12rem;
+  min-height: 44px;
+  overflow: hidden;
+  line-height: 44px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-isolation-sep {
+  flex: none;
+}
 .draw-stage[data-rulers] > .draw-text-layer,
 .draw-stage[data-rulers] > .draw-link-layer {
   clip-path: inset(24px 0 0 24px);
@@ -1592,8 +1636,15 @@ html, body, #app {
   right: 0;
   left: 0;
 }
-.draw-object[aria-level="2"] {
-  padding-inline-start: 1.75em;
+/* Una riga rientra di un passo per ogni livello sopra di lei
+   (`--draw-depth`, scritto dall'albero). La freccia che apre e chiude ha il
+   suo posto anche dove non c'è, perché i nomi dello stesso livello stiano in
+   colonna. */
+.draw-object-twisty {
+  flex: none;
+  width: 1.25em;
+  margin-inline-start: calc(var(--draw-depth, 0) * 1.25em);
+  text-align: center;
 }
 .draw-object-mark {
   flex: none;
@@ -1606,6 +1657,37 @@ html, body, #app {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Il lucchetto e l'occhio sbarrato, in fondo alla riga: si vedono quando
+   l'oggetto è bloccato o nascosto, e il nome lo dice anche a parole. Su una
+   riga che li cambia, col puntatore sopra o quando è la riga attiva, gli
+   altri si vedono appena e si toccano; altrove non si toccano per sbaglio.
+   Ogni segno è un bersaglio da 24 px. */
+.draw-object-signs {
+  display: flex;
+  flex: none;
+}
+.draw-object-sign {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
+}
+.draw-object-sign[data-on] {
+  opacity: 1;
+}
+.draw-object[data-toggles] .draw-object-sign[data-on],
+.draw-object[data-toggles]:hover .draw-object-sign,
+.draw-object[data-toggles][data-active] .draw-object-sign {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.draw-object[data-toggles]:hover .draw-object-sign:not([data-on]),
+.draw-object[data-toggles][data-active] .draw-object-sign:not([data-on]) {
+  opacity: 0.45;
 }
 /* Gli attributi: una tabella col nome, il valore e il pulsante che lo
    toglie. Il nome va a capo dove serve; il valore prende il resto, e il campo

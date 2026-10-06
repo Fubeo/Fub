@@ -10,7 +10,8 @@
 //!
 //! - `sparse`: un disegno FubDraw in forma canonica (§7), con ogni ruolo di
 //!   §4, tratti che si ridisegnano e tratti che no, un blocco estraneo dentro
-//!   un gruppo e un livello bloccato e nascosto. Una lunghezza in pollici
+//!   un gruppo, un livello bloccato e nascosto, e dentro un livello un gruppo
+//!   bloccato con una forma nascosta. Una lunghezza in pollici
 //!   resta com'è, come FubDraw copia i valori che non tocca;
 //! - `foreign`: un SVG di un altro programma, senza `fub:version`, con un
 //!   esempio di ogni motivo per cui un elemento è estraneo, contenuto attivo,
@@ -345,6 +346,7 @@ fn sparse() -> String {
         .collect();
     let group = El::new("g")
         .a("id", "o00000010")
+        .a("fub:locked", "true")
         .a("transform", "matrix(0.866 0.5 -0.5 0.866 40 -20)")
         .child(
             El::new("rect")
@@ -388,7 +390,8 @@ fn sparse() -> String {
                 .a("id", "o00000015")
                 .a("points", "1100 300 1160 340 1080 360")
                 .a("fill", "#d55e00")
-                .a("opacity", "0.8"),
+                .a("opacity", "0.8")
+                .a("display", "none"),
         )
         .child(
             El::new("path")

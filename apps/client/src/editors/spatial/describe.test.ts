@@ -53,6 +53,23 @@ group("l'albero degli oggetti", () => {
     expect(countObjects([])).toBe(0);
   });
 
+  it("dice anche di un gruppo o di una forma se sono bloccati o nascosti", () => {
+    const source = doc(
+      '<g id="l1" fub:layer="Disegno">' +
+        '<g id="g1" fub:locked="true"><rect id="o1" width="1" height="1" display="none"/></g>' +
+        '<circle id="o2" r="1" fub:locked="true" display=" none "/>' +
+        '<line id="o3" x2="1" fub:locked="false" display="inline"/>' +
+        "</g>",
+    );
+    expect(labels(outline(readScene(source).items))).toEqual([
+      "Livello «Disegno»",
+      "  Gruppo, bloccato, 1 oggetto",
+      "    Rettangolo, nascosto",
+      "  Cerchio, bloccato, nascosto",
+      "  Linea",
+    ]);
+  });
+
   it("aggiunge il colore quando chi descrive lo sa", () => {
     const rect = tree()[1]!.children[0]!;
     expect(describe(rect, { color: "Blu" })).toBe("Rettangolo, Blu");

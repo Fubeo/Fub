@@ -76,6 +76,13 @@ export interface ElementItem extends Span {
   /// I tag di livelli, gruppi e collegamenti.
   readonly tags?: Tags;
   readonly layer?: Layer;
+  /// `fub:locked="true"` su un livello, un gruppo, un collegamento o una
+  /// forma (§3): non si sceglie sul foglio, e ciò che contiene non cambia.
+  /// Su un livello ripete `layer`.
+  readonly locked?: true;
+  /// `display="none"` su un livello, un gruppo, un collegamento o una forma:
+  /// non si vede. Su un livello ripete `layer`.
+  readonly hidden?: true;
   readonly stroke?: Stroke;
   /// `x1 y1 x2 y2` di una freccia.
   readonly arrow?: readonly [number, number, number, number];
@@ -357,6 +364,9 @@ export interface Details {
   readonly role: Role;
   readonly id: string | null;
   readonly layer?: Layer;
+  /// `fub:locked="true"` e `display="none"`, anche fuori dai livelli (§3).
+  readonly locked?: true;
+  readonly hidden?: true;
   readonly stroke?: Stroke;
   readonly arrow?: readonly [number, number, number, number];
   readonly text?: string;
@@ -428,6 +438,13 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
       hidden: display !== undefined && trim(display) === "none",
     };
   }
+  // Si bloccano e si nascondono i livelli e ciò che si disegna, non il
+  // titolo, la descrizione o la carta.
+  if (role !== "title" && role !== "desc" && role !== "paper") {
+    if (valueOf(element, NS_FUB, "locked") === "true") details.locked = true;
+    const display = valueOf(element, NS_NONE, "display");
+    if (display !== undefined && trim(display) === "none") details.hidden = true;
+  }
   if (role === "stroke") {
     const read = readStroke(element);
     details.stroke = read.stroke;
@@ -462,6 +479,8 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   };
   if (tags !== null) item.tags = tags;
   if (details.layer !== undefined) item.layer = details.layer;
+  if (details.locked !== undefined) item.locked = details.locked;
+  if (details.hidden !== undefined) item.hidden = details.hidden;
   if (details.stroke !== undefined) item.stroke = details.stroke;
   if (details.arrow !== undefined) item.arrow = details.arrow;
   if (details.text !== undefined) item.text = details.text;

@@ -87,6 +87,13 @@
 //   ogni livello un segno sull'angolo di ogni collegamento ne apre la nota,
 //   con lo strumento Selezione o quando il disegno non si scrive, e Alt+Invio
 //   apre quella del collegamento scelto.
+// - **Selezione avanzata.** Dal livello Standard il Lazo (`q`) sceglie ciò
+//   che racchiude per intero; Ctrl o ⌘ col clic sceglie dentro i gruppi, e
+//   il doppio clic su un gruppo lo isola: il resto si attenua e non si
+//   sceglie, una barra in fondo al foglio dice dove si è ed Esc esce, un
+//   gruppo alla volta. Isolare non cambia il file. Un menu, anche col tasto
+//   destro, sceglie i simili, inverte la selezione, blocca e nasconde gli
+//   oggetti uno per uno, e li sblocca e li mostra tutti (`selecting.ts`).
 //
 // La superficie che lo monta nella shell gli passa il motore del
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
@@ -110,7 +117,7 @@ import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInput
 import type { TouchPolicy } from "../pen/roles";
 import { BoundsBuilder, parsePath, type Bounds } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren, pathOf, tagName, type LeafNode } from "../scene/model";
+import { elementChildren, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
@@ -129,6 +136,7 @@ import {
   boxMatrix,
   destination,
   destinationIn,
+  destinationInto,
   fittedPage,
   gesture as asGesture,
   mappedBounds,
@@ -335,6 +343,7 @@ import {
   featuresFor,
   levelsAbove,
   startTool,
+  toolAfter,
   toolForKey,
   TOOLS,
   toolsOf,
@@ -344,6 +353,7 @@ import {
   type ToolId,
   type ToolSpec,
 } from "./registry";
+import { flagged, flagOps, hasLikeness, inverseOf, nodesOf, similarTo, type Flag, type Likeness } from "./selecting";
 import { constrainEnd, shapeElem, type ShapeTool } from "./shapes";
 import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
@@ -479,6 +489,12 @@ const ERASER_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 8, 
 /// Oltre questo spostamento, in pixel, un tocco su un oggetto diventa un
 /// trascinamento.
 const DRAG_PX: Readonly<Record<InkPointerType, number>> = { pen: 3, mouse: 3, touch: 8 };
+
+/// Il Lazo tiene un punto ogni tanti pixel dello schermo, e al massimo
+/// tanti punti: oltre, ne lascia uno ogni due, e il lazo resta lo stesso a
+/// occhio.
+const LASSO_STEP_PX = 2;
+const LASSO_MAX_POINTS = 512;
 
 /// Sotto questa misura, in pixel, una forma è un tocco e non si scrive.
 const MIN_SHAPE_PX = 4;
@@ -642,12 +658,39 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-segment-curve": ["M3 17h4v4H3z", "M17 3h4v4h-4z", "M7 19c7 0 12-5 12-12"],
   "draw-node-break": ["M2 12h6", "M16 12h6", "M8 10h3v4H8z", "M13 10h3v4h-3z"],
   "draw-node-join": ["M2 12h4", "M18 12h4", "M10.5 10.5h3v3h-3z", "M6 9l3 3-3 3", "M18 9l-3 3 3 3"],
+  "draw-lasso": ["M3.5 9.5a8.5 5.5 0 1 0 17 0a8.5 5.5 0 1 0-17 0", "M8 14.5c-2 1.5-2 4 0 4.5s3.5 0 3.5 2.5"],
+  "draw-selection": ["M4 7V4h3", "M10 4h4", "M17 4h3v3", "M20 10v4", "M20 17v3h-3", "M14 20h-4", "M7 20H4v-3", "M4 14v-4"],
+  "draw-back": ["M10 6l-6 6 6 6", "M4 12h16"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
 /// shell vive, come quelle di serie.
 function ensureIcons(): void {
   for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+}
+
+/// Il nodo di `model` al percorso `path`; `null` se lì non c'è.
+function nodeAtPath(model: DocumentModel, path: readonly number[]): ElementPart | null {
+  let node: ElementPart = model.root;
+  for (const at of path) {
+    if (node.kind !== "container") return null;
+    const next: ElementPart | undefined = elementChildren(node)[at];
+    if (next === undefined) return null;
+    node = next;
+  }
+  return node;
+}
+
+/// L'ordine di documento di due percorsi: chi contiene prima di ciò che
+/// contiene.
+function comparePaths(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i]! - b[i]!;
+  return a.length - b.length;
+}
+
+/// Vero se il percorso `outer` contiene `inner`, a qualunque profondità.
+function holdsPath(outer: readonly number[], inner: readonly number[]): boolean {
+  return inner.length > outer.length && outer.every((step, at) => inner[at] === step);
 }
 
 /// Un collegamento che si vede, col suo segno sul foglio.
@@ -659,7 +702,7 @@ interface LinkMark {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | NodesGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
+type Gesture = InkGesture | ShapeGesture | SelectGesture | LassoGesture | NodesGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -715,6 +758,17 @@ interface SelectGesture extends GestureBase {
   /// rotazione.
   matrix: Matrix | null;
   angle: number;
+}
+
+/// Un gesto del Lazo: i punti che segue, nella scena, e la selezione di
+/// partenza, che Maiusc allarga e Alt riduce.
+interface LassoGesture extends GestureBase {
+  readonly kind: "lasso";
+  readonly points: Point[];
+  readonly base: readonly string[];
+  readonly mode: "replace" | "add" | "remove";
+  /// Oltre la soglia del trascinamento: prima, è un tocco.
+  dragging: boolean;
 }
 
 /// Che cosa ha preso il primo punto di un gesto dei nodi: un nodo, una
@@ -1110,6 +1164,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let closedTyping = false;
   /// L'ultimo tocco della selezione su un oggetto, per il doppio tocco.
   let lastTap: { readonly key: string; readonly time: number; readonly at: Point } | null = null;
+  /// Il gruppo, o il collegamento, isolato: si sceglie solo lì dentro, e il
+  /// resto si attenua. La chiave, e il posto e il tag con cui ritrovarlo
+  /// quando un'operazione gli dà un id o lo rifà; `null` quando si sceglie in
+  /// tutto il disegno. Isolare non scrive niente nel file.
+  let isolation: { readonly key: string; readonly path: readonly number[]; readonly tag: string } | null = null;
+  /// Il nodo isolato nel modello di adesso, cercato una volta per modello.
+  let isolatedFor: { readonly model: DocumentModel; readonly node: ContainerNode | null } | null = null;
   /// Lo strumento Nodi: il tracciato che modifica, o perché l'oggetto
   /// scelto non ne ha uno; i nodi scelti; il tipo che chi modifica ha dato
   /// a un nodo, che il file non scrive e che vale finché il tracciato ha gli
@@ -1318,6 +1379,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   redoButton.setAttribute("aria-keyshortcuts", "Control+Shift+Z Control+Y");
   const deleteButton = button(editGroup, "draw-button", () => t("draw.delete"), "trash", () => deleteSelection());
   deleteButton.setAttribute("aria-keyshortcuts", "Delete");
+  // La selezione avanzata, dal livello Standard: un menu, lo stesso del tasto
+  // destro sul foglio.
+  const selectionButton = button(editGroup, "draw-button", () => t("draw.selection.menu"), "draw-selection", () => openMenu(selectionButton, selectionItems()));
+  selectionButton.id = identifier("draw-selection-button");
+  selectionButton.setAttribute("aria-haspopup", "menu");
+  selectionButton.setAttribute("aria-expanded", "false");
   // «Proprietà» apre e chiude il pannello, dal livello che lo offre; senza,
   // apre la finestra.
   const propertiesButton = button(editGroup, "draw-button", () => t("draw.properties"), "properties", () => {
@@ -1349,6 +1416,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     onActivate: () => void properties(),
     onDelete: () => deleteSelection(),
     onLeave: () => surface.focus({ preventScroll: true }),
+    onToggle: (key, what) => toggleRow(key, what === "lock" ? "locked" : "hidden"),
   });
   tree.element.hidden = true;
   relabels.push(() => tree.relabel());
@@ -1535,8 +1603,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const curvesButton = nodesButton("draw.nodes.curve", "draw-segment-curve", "Shift-u", () => linkSelectedNodes("curve"));
   const breakButton = nodesButton("draw.nodes.break", "draw-node-break", "Shift-b", () => breakSelectedNodes());
   const joinButton = nodesButton("draw.nodes.join", "draw-node-join", "Shift-j", () => joinSelectedNodes());
+  // Il gruppo isolato: una barra in fondo al foglio dice dove si è, dal
+  // livello, o dal disegno, al gruppo; il pulsante ne esce di un gruppo, e
+  // un gruppo del percorso ci riporta.
+  const isolationBar = document.createElement("nav");
+  isolationBar.className = "draw-isolation";
+  isolationBar.hidden = true;
+  const isolationBack = document.createElement("button");
+  isolationBack.type = "button";
+  isolationBack.className = "draw-button";
+  isolationBack.setAttribute("aria-keyshortcuts", "Escape");
+  const backIcon = iconEl("draw-back");
+  if (backIcon !== null) isolationBack.append(backIcon);
+  life.listen(isolationBack, "click", () => leaveIsolation(false));
+  const isolationPath = document.createElement("ol");
+  isolationPath.className = "draw-isolation-path";
+  isolationBar.append(isolationBack, isolationPath);
+  life.listen(isolationPath, "click", (event) => {
+    const crumb = event.target instanceof Element ? event.target.closest<HTMLElement>(".draw-isolation-crumb") : null;
+    if (crumb instanceof HTMLButtonElement) isolateAt(Number(crumb.dataset.depth));
+  });
+  relabels.push(() => {
+    isolationBar.setAttribute("aria-label", t("draw.isolation"));
+    const text = t("draw.isolate.exit");
+    isolationBack.setAttribute("aria-label", text);
+    isolationBack.title = `${text} (Esc)`;
+    isolationShown = null;
+    showIsolation();
+  });
+
   // Esc in una barra torna al foglio, con la selezione com'era.
-  for (const bar of [arrangeBar, nodesBar]) {
+  for (const bar of [arrangeBar, nodesBar, isolationBar]) {
     life.listen(bar, "keydown", (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -1582,7 +1679,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // oggetti e, sotto, gli attributi.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
@@ -1651,8 +1748,45 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const editable = (): boolean => !locked && engine.status === "fubdraw" && engine.model !== null;
 
+  /// Il gruppo isolato nel disegno di adesso; `null` se non ce n'è, se non
+  /// c'è più, o se dentro non si sceglie più: bloccato, nascosto, o dentro
+  /// uno che lo è. Si cerca per id, poi al suo posto, dove un oggetto con un
+  /// altro id non è lui.
+  const isolatedNode = (): ContainerNode | null => {
+    const model = engine.model;
+    if (isolation === null || model === null) return null;
+    if (isolatedFor?.model === model) return isolatedFor.node;
+    const wanted = isolation;
+    const fits = (node: ElementPart | null): node is ContainerNode =>
+      node !== null && node.kind === "container" && tagName(node) === wanted.tag && indexer.opens(model, node);
+    let node: ElementPart | null = wanted.key.startsWith("@") ? null : engine.holder(wanted.key);
+    if (!fits(node)) {
+      node = nodeAtPath(model, wanted.path);
+      if (node !== null && node.facts.id !== null && node.facts.id !== wanted.key) node = null;
+    }
+    const found = fits(node) ? node : null;
+    isolatedFor = { model, node: found };
+    if (found !== null) {
+      const path = pathOf(found);
+      isolation = { key: keyOf({ id: found.facts.id, path }), path, tag: wanted.tag };
+    }
+    return found;
+  };
+
+  /// Il gruppo isolato e chi lo contiene, dal figlio della radice in giù:
+  /// ciò che il painter non attenua.
+  const isolationChain = (): ContainerNode[] | null => {
+    const node = isolatedNode();
+    if (node === null) return null;
+    const chain: ContainerNode[] = [];
+    for (let at: ContainerNode | null = node; at !== null && at.parent !== null; at = at.parent) chain.unshift(at);
+    return chain;
+  };
+
+  /// Gli oggetti che si scelgono: quelli in cima, o i figli del gruppo
+  /// isolato.
   const currentIndex = (): SceneIndex => {
-    if (index === null) index = engine.model === null ? EMPTY : indexer.index(engine.model);
+    if (index === null) index = engine.model === null ? EMPTY : indexer.index(engine.model, isolatedNode());
     return index;
   };
 
@@ -1923,7 +2057,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function fit(): void {
     const page = scene.root.page;
     let bounds: Bounds | null = page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
-    for (const unit of currentIndex().units) bounds = union(bounds, unit.bounds);
+    // Con un gruppo isolato si inquadra lo stesso tutto il disegno.
+    for (const unit of isolation === null ? currentIndex().units : seenUnits()) bounds = union(bounds, unit.bounds);
     const area = viewArea();
     if (area.w === 0 || area.h === 0) return;
     placed = true;
@@ -1950,16 +2085,30 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Selezione e anteprime ----------------------------------------------
 
-  const selectedUnits = (): Unit[] => {
-    const keys = new Set(selection);
-    return currentIndex().units.filter((unit) => keys.has(unit.key));
+  /// Gli oggetti di `keys` che si scelgono adesso, anche dentro i gruppi,
+  /// una volta sola e in ordine di documento; di un gruppo scelto non anche
+  /// ciò che contiene, che si muove già con lui.
+  const unitsOf = (keys: Iterable<string>): Unit[] => {
+    const index = currentIndex();
+    const found = new Map<string, Unit>();
+    for (const key of keys) {
+      const unit = index.get(key);
+      if (unit !== null) found.set(unit.key, unit);
+    }
+    const out: Unit[] = [];
+    // In ordine di documento chi contiene viene subito prima di ciò che
+    // contiene: basta guardare l'ultimo tenuto.
+    for (const unit of [...found.values()].sort((a, b) => comparePaths(a.path, b.path))) {
+      const last = out[out.length - 1];
+      if (last === undefined || !holdsPath(last.path, unit.path)) out.push(unit);
+    }
+    return out;
   };
 
-  /// Le chiavi di `keys` che sono oggetti adesso, in ordine di documento.
-  const inOrder = (keys: Iterable<string>): string[] => {
-    const wanted = new Set(keys);
-    return currentIndex().units.filter((unit) => wanted.has(unit.key)).map((unit) => unit.key);
-  };
+  const selectedUnits = (): Unit[] => unitsOf(selection);
+
+  /// Le chiavi di `keys` che sono oggetti adesso, come [`unitsOf`].
+  const inOrder = (keys: Iterable<string>): string[] => unitsOf(keys).map((unit) => unit.key);
 
   // --- I nodi -------------------------------------------------------------
 
@@ -2177,6 +2326,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const [x2, y2] = lasso.end;
       handles.push({ kind: "lasso", points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] });
     }
+    if (current?.kind === "lasso" && current.dragging) handles.push({ kind: "lasso", points: [...current.points] });
     // Le guide e le misure stanno sopra a tutto.
     const guides = guideHandles();
     const measures = measureHandles();
@@ -2313,17 +2463,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return outlined;
   };
 
-  /// Il nome del colore di un oggetto, se è uno della tavolozza: il
-  /// contorno, o il riempimento se non ne ha.
-  const colorOf = (unit: Unit | undefined): string | null => {
-    const attrs = new Map(unit?.paints[0]?.attrs ?? []);
+  /// Il nome del colore di ciò che `paints` dipinge, se è uno della
+  /// tavolozza: il contorno, o il riempimento se non ne ha.
+  const colorOf = (paints: readonly PaintNode[]): string | null => {
+    const attrs = new Map(paints[0]?.attrs ?? []);
     const stroke = attrs.get("stroke");
     const value = stroke !== undefined && stroke !== "none" ? stroke : attrs.get("fill");
     const swatch = value === undefined ? null : swatchOf(value);
     return swatch === null ? null : t(swatch.label);
   };
 
-  const describeNode = (node: OutlineNode, unit: Unit | undefined): string => describe(node, { parts: true, color: colorOf(unit) });
+  /// Il nome di un oggetto col suo colore. Uno che non si sceglie, bloccato
+  /// o in un livello bloccato, prende il colore da ciò che si dipinge.
+  const describeNode = (node: OutlineNode, unit: Unit | undefined, state = true): string => {
+    const model = engine.model;
+    const paints = unit?.paints ?? (model === null ? [] : builder.paintsOf(nodeOf(model, node.item)));
+    return describe(node, { parts: true, color: colorOf(paints), state });
+  };
 
   /// Il nome a parole di un oggetto che si sceglie.
   const labelOf = (unit: Unit): string => {
@@ -2332,24 +2488,39 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Le voci dell'albero; il livello di chiave `current` dice che è quello
-  /// corrente.
-  const entriesOf = (nodes: readonly OutlineNode[], index: SceneIndex, current: string | null): TreeEntry[] =>
+  /// corrente. Con la selezione avanzata i gruppi e i collegamenti mostrano
+  /// i loro figli. I segni bloccano e nascondono, nel disegno che si scrive:
+  /// un livello coi livelli, un oggetto con la selezione avanzata, se niente
+  /// che lo contiene è bloccato (`under`).
+  const entriesOf = (nodes: readonly OutlineNode[], index: SceneIndex, current: string | null, under: boolean): TreeEntry[] =>
     nodes.map((node) => {
       const unit = index.get(node.key) ?? undefined;
       const layer = node.item.role === "layer";
+      const holds = node.item.role === "group" || node.item.role === "link";
+      const locked = node.item.locked === true;
       const mark = layer && node.key === current ? `, ${t("draw.state.current")}` : "";
       return {
         key: node.key,
         layer,
         selectable: unit !== undefined,
-        children: layer ? entriesOf(node.children, index, current) : [],
+        locked,
+        hidden: node.item.hidden === true,
+        toggles: editable() && (layer ? has("layers") : has("selection") && !under),
+        children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, under || locked) : [],
         label: () => `${describeNode(node, unit)}${mark}`,
       };
     });
 
   /// Le voci dell'albero per l'indice e il livello corrente di adesso, e la
   /// selezione mostrata.
-  let treeShown: { readonly index: SceneIndex; readonly layer: string | null; readonly entries: TreeEntry[]; readonly count: number; keys: string } | null = null;
+  let treeShown: {
+    readonly index: SceneIndex;
+    readonly layer: string | null;
+    readonly mode: string;
+    readonly entries: TreeEntry[];
+    readonly count: number;
+    keys: string;
+  } | null = null;
 
   /// Porta l'albero, se è aperto, alla scena e alla selezione di adesso.
   function syncTree(): void {
@@ -2358,9 +2529,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const keys = selection.join("\n");
     const layer = has("layers") ? currentLayer() : null;
     const current = layer === null ? null : keyOf(layer);
-    if (treeShown?.index !== index || treeShown.layer !== current) {
+    // Le voci dipendono anche da ciò che il livello offre e dal disegno che
+    // si scrive.
+    const mode = `${editable()} ${has("layers")} ${has("selection")}`;
+    if (treeShown?.index !== index || treeShown.layer !== current || treeShown.mode !== mode) {
       const nodes = outlineNow().nodes;
-      treeShown = { index, layer: current, entries: entriesOf(nodes, index, current), count: countObjects(nodes), keys: "" };
+      treeShown = { index, layer: current, mode, entries: entriesOf(nodes, index, current, false), count: countObjects(nodes), keys: "" };
     } else if (treeShown.keys === keys) {
       return;
     }
@@ -3096,6 +3270,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     undoButton.disabled = !canEdit || !undoable();
     redoButton.disabled = !canEdit || !redoable();
     deleteButton.disabled = !canEdit || selection.length === 0;
+    selectionButton.hidden = !has("selection");
+    // Senza la selezione avanzata non si isola: si torna a tutto il disegno.
+    if (isolation !== null && !has("selection")) {
+      isolation = null;
+      rescope(selection);
+      return;
+    }
     // Col pannello, «Proprietà» lo apre e lo chiude anche in sola lettura: il
     // pannello mostra com'è il disegno. Senza, apre una finestra per cambiare.
     const panelled = has("properties");
@@ -3130,6 +3311,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     scene = builder.build(engine);
     painter.setDraft(null);
     painter.update(scene);
+    // Il gruppo isolato si ritrova nel disegno nuovo; se non c'è più, o lì
+    // dentro non si sceglie più, si sceglie di nuovo in tutto il disegno.
+    if (isolation !== null && isolatedNode() === null) isolation = null;
+    painter.setFocus(isolationChain());
+    showIsolation();
     showPage();
     // L'unità può essere cambiata, e con lei il passo della griglia.
     showGrid();
@@ -3270,6 +3456,137 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showHandles();
   }
 
+  // --- Il gruppo isolato -----------------------------------------------------
+
+  /// La chiave di un contenitore del modello, come quella della selezione.
+  const keyOfNode = (node: ElementPart): string => keyOf({ id: node.facts.id, path: pathOf(node) });
+
+  /// Il nome a parole di un contenitore del modello, come nell'albero.
+  const nameOfNode = (node: ElementPart): string => {
+    const outlined = outlineNow().byKey.get(keyOfNode(node));
+    return outlined === undefined ? tagName(node) : describe(outlined, { parts: true });
+  };
+
+  /// Il percorso che la barra mostra adesso, per non rifarla uguale.
+  let isolationShown: string | null = null;
+
+  /// La barra del gruppo isolato: il livello, o il disegno, e i gruppi fino
+  /// a quello isolato, che è dove si è. Un gruppo del percorso è un pulsante
+  /// che lo isola; il primo esce del tutto. Se la barra perde il pulsante che
+  /// aveva il fuoco, il fuoco torna al foglio.
+  function showIsolation(): void {
+    const chain = isolationChain();
+    const focused = isolationBar.contains(document.activeElement);
+    isolationBar.hidden = chain === null;
+    if (chain === null) {
+      isolationShown = null;
+      isolationPath.replaceChildren();
+      if (focused) surface.focus({ preventScroll: true });
+      return;
+    }
+    const crumbs = chain.map((node, depth) => ({ depth: node.details?.role === "layer" ? -1 : depth, text: nameOfNode(node) }));
+    if (chain[0]!.details?.role !== "layer") crumbs.unshift({ depth: -1, text: t("draw.isolation.drawing") });
+    const shown = crumbs.map((crumb) => `${crumb.depth}\t${crumb.text}`).join("\n");
+    if (shown === isolationShown) return;
+    isolationShown = shown;
+    isolationPath.replaceChildren(...crumbs.map((crumb, at) => {
+      const item = document.createElement("li");
+      if (at > 0) {
+        const separator = document.createElement("span");
+        separator.className = "draw-isolation-sep";
+        separator.setAttribute("aria-hidden", "true");
+        separator.textContent = "›";
+        item.append(separator);
+      }
+      const last = at === crumbs.length - 1;
+      const element = document.createElement(last ? "span" : "button");
+      element.className = "draw-isolation-crumb";
+      element.textContent = crumb.text;
+      if (element instanceof HTMLButtonElement) {
+        element.type = "button";
+        element.dataset.depth = String(crumb.depth);
+      } else {
+        element.setAttribute("aria-current", "location");
+      }
+      item.append(element);
+      return item;
+    }));
+    if (focused && !isolationBar.contains(document.activeElement)) surface.focus({ preventScroll: true });
+  }
+
+  /// Si sceglie in un altro posto: l'indice, l'attenuazione, la barra e
+  /// l'albero lo seguono, e la selezione diventa `keys`.
+  const rescope = (keys: readonly string[]): void => {
+    isolatedFor = null;
+    index = null;
+    kept = null;
+    lastTap = null;
+    painter.setFocus(isolationChain());
+    showIsolation();
+    selection = inOrder(keys);
+    syncControls();
+    showHandles();
+    syncTree();
+  };
+
+  /// Isola `unit`, un gruppo o un collegamento in cui si sceglie: dentro si
+  /// sceglie l'oggetto sotto `at`, se c'è, o con `at` nullo il primo, e lo
+  /// si dice.
+  const isolate = (unit: Unit, at: Point | null, pointer: InkPointerType = "mouse"): boolean => {
+    const model = engine.model;
+    if (!has("selection") || model === null || unit.node.kind !== "container" || !indexer.opens(model, unit.node)) return false;
+    cancelGesture();
+    isolation = { key: unit.key, path: unit.path, tag: unit.tag };
+    isolatedFor = null;
+    index = null;
+    const inside = currentIndex();
+    const pick = at === null ? inside.units[0] ?? null : inside.at(at, HIT_PX[pointer] / camera.scale);
+    rescope(pick === null ? [] : [pick.key]);
+    const name = t("draw.isolated", { name: nameOfNode(unit.node) });
+    announce(pick === null ? name : `${name} ${t("draw.walk", { object: labelOf(pick), index: inside.units.indexOf(pick) + 1, count: inside.units.length })}`);
+    return true;
+  };
+
+  /// Esce dal gruppo isolato: verso il gruppo che lo contiene, se ce n'è
+  /// uno, o con `all` del tutto. Resta scelto il gruppo da cui si esce.
+  function leaveIsolation(all: boolean): boolean {
+    const node = isolatedNode();
+    if (node === null) return false;
+    const parent = node.parent;
+    const role = parent?.details?.role;
+    isolation = !all && parent !== null && (role === "group" || role === "link")
+      ? { key: keyOfNode(parent), path: pathOf(parent), tag: tagName(parent) }
+      : null;
+    rescope([keyOfNode(node)]);
+    const now = isolatedNode();
+    announce(now === null ? t("draw.isolation.left") : t("draw.isolated", { name: nameOfNode(now) }));
+    return true;
+  }
+
+  /// Un gruppo del percorso della barra: isola il contenitore a profondità
+  /// `depth`, o con -1 esce del tutto. Resta scelto il gruppo da cui si
+  /// esce, il primo del percorso dentro quello a cui si torna.
+  function isolateAt(depth: number): void {
+    const chain = isolationChain();
+    if (chain === null) return;
+    const node = depth < 0 ? null : chain[depth];
+    if (node === undefined) return;
+    const left = node === null ? chain.find((each) => each.details?.role !== "layer") : chain[depth + 1];
+    isolation = node === null ? null : { key: keyOfNode(node), path: pathOf(node), tag: tagName(node) };
+    rescope(left === undefined ? [] : [keyOfNode(left)]);
+    surface.focus({ preventScroll: true });
+    const now = isolatedNode();
+    announce(now === null ? t("draw.isolation.left") : t("draw.isolated", { name: nameOfNode(now) }));
+  }
+
+  /// Mod+Invio, o «Isola il gruppo»: il gruppo, o il collegamento, scelto
+  /// da solo.
+  const isolateSelection = (): void => {
+    const units = selectedUnits();
+    const unit = units.length === 1 && (units[0]!.role === "group" || units[0]!.role === "link") ? units[0]! : null;
+    if (unit === null || !isolate(unit, null)) announce(t("draw.isolate.none"));
+  };
+
   /// Porta `bounds` in vista: resta dov'è se si vede già intero, va al
   /// centro se ci sta allo zoom di adesso, altrimenti si inquadra.
   const frameBounds = (bounds: Bounds | null): void => {
@@ -3359,7 +3676,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     tools = toolsOf(features);
     if (!tools.some((spec) => spec.id === tool)) {
       cancelGesture();
-      tool = startTool(tools);
+      tool = toolAfter(tools, tool);
     }
     // Senza i colori a piacere la barra non ha un campione per uno di loro:
     // chi lo usava riparte dai colori di partenza, che la barra mostra.
@@ -3456,6 +3773,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// livelli; senza, il più alto che si vede e non è bloccato. Se non c'è o
   /// non riceve, lo si dice, e il gesto non scrive.
   const target = (ids: NewIds): Destination | null => {
+    // Con un gruppo isolato, ciò che si disegna entra lì, in cima.
+    const group = isolatedUnit();
+    if (group !== null) {
+      const to = destinationInto(group, ids);
+      if (to === null) announce(t("draw.layer.flat", { name: nameOfNode(group.node) }));
+      return to;
+    }
     const layer = has("layers") ? currentLayer() : null;
     if (layer === null) {
       const to = destination(currentIndex(), ids);
@@ -3505,12 +3829,40 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Gli oggetti che si vedono nel disegno di adesso, anche nei livelli
-  /// bloccati, ricalcolati quando la scena cambia.
+  /// bloccati. Del gruppo isolato e dei contenitori `open` i figli uno per
+  /// uno; quelli senza `open` si tengono finché la scena non cambia.
   let seenCache: { readonly index: SceneIndex; readonly units: readonly Unit[] } | null = null;
-  const seenUnits = (): readonly Unit[] => {
+  const seenUnits = (open: readonly ContainerNode[] = []): readonly Unit[] => {
     const index = currentIndex();
-    if (seenCache?.index !== index) seenCache = { index, units: engine.model === null ? [] : indexer.seen(engine.model) };
+    const model = engine.model;
+    if (model === null) return [];
+    const opened = new Set([...(isolationChain() ?? []), ...open]);
+    if (open.length > 0) return indexer.seen(model, opened);
+    if (seenCache?.index !== index) seenCache = { index, units: indexer.seen(model, opened) };
     return seenCache.units;
+  };
+
+  /// I gruppi che contengono gli oggetti di chiave `keys`, fino al livello:
+  /// chi si sposta da dentro un gruppo si allinea ai suoi fratelli, e non al
+  /// gruppo che lo contiene.
+  const openedBy = (keys: readonly string[]): ContainerNode[] => {
+    const index = currentIndex();
+    const out: ContainerNode[] = [];
+    for (const key of keys) {
+      for (let at = index.get(key)?.node.parent ?? null; at !== null && at.parent !== null && at.details?.role !== "layer"; at = at.parent) out.push(at);
+    }
+    return out;
+  };
+
+  /// Il gruppo isolato come oggetto, che riceve ciò che si disegna; `null`
+  /// senza gruppo isolato.
+  let isolatedUnitFor: { readonly model: DocumentModel; readonly unit: Unit | null } | null = null;
+  const isolatedUnit = (): Unit | null => {
+    const node = isolatedNode();
+    const model = engine.model;
+    if (node === null || model === null) return null;
+    if (isolatedUnitFor?.model !== model) isolatedUnitFor = { model, unit: indexer.index(model).get(keyOfNode(node)) };
+    return isolatedUnitFor.unit;
   };
 
   /// I bersagli di `owner`, un gesto o i nodi della penna di Bézier, presi la
@@ -3528,7 +3880,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (smartOn()) {
       const skipped = new Set(skip);
       const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
-      for (const unit of seenUnits()) {
+      for (const unit of seenUnits(openedBy(skip))) {
         const box = unit.geometry ?? unit.bounds;
         if (box === null || skipped.has(unit.key)) continue;
         if (view !== null && (box.max[0] < view.min[0] || box.min[0] > view.max[0] || box.max[1] < view.min[1] || box.min[1] > view.max[1])) continue;
@@ -4016,6 +4368,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           matrix: null,
           angle: 0,
         };
+      case "lasso":
+        return { ...base, kind: "lasso", points: [], base: [...selection], mode: shift ? "add" : alt ? "remove" : "replace", dragging: false };
       case "nodes":
         return { ...base, kind: "nodes", from: null, end: null, grab: null, dragging: false, nodes: new Set(nodeSelection), selection: [...selection], draft: null };
       case "text":
@@ -4167,7 +4521,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       g.units = selectedUnits();
       return;
     }
-    const hit = currentIndex().at(p, HIT_PX[g.pointer] / camera.scale);
+    // Con Ctrl o ⌘ si sceglie dentro i gruppi: l'oggetto più dentro sotto il
+    // puntatore.
+    const index = currentIndex();
+    const tolerance = HIT_PX[g.pointer] / camera.scale;
+    let hit = free && has("selection") ? index.deepAt(p, tolerance) : index.at(p, tolerance);
+    // Sopra un oggetto scelto dentro un gruppo, il gesto prende lui: si
+    // trascina senza il gruppo, e Maiusc lo toglie.
+    if (hit !== null && !selection.includes(hit.key) && has("selection")) {
+      const top = hit;
+      const deep = index.deepAt(p, tolerance);
+      const inner = deep === null ? undefined : selectedUnits().find((unit) => holdsPath(top.path, unit.path) && (unit.key === deep.key || holdsPath(unit.path, deep.path)));
+      if (inner !== undefined) hit = inner;
+    }
     g.hit = hit?.key ?? null;
     if (hit === null) {
       g.mode = "marquee";
@@ -4177,8 +4543,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const chosen = selection.includes(hit.key);
     if (shift) {
+      // Aggiunto un oggetto, il gruppo scelto che lo contiene lo lascia.
       if (chosen) g.release = hit.key;
-      else select([...selection, hit.key]);
+      else select([...selectedUnits().filter((unit) => !holdsPath(unit.path, hit.path)).map((unit) => unit.key), hit.key]);
     } else if (!chosen) {
       select([hit.key]);
     }
@@ -4250,18 +4617,76 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     current = null;
     if (g.mode === "pending" && g.release !== null) select(selection.filter((key) => key !== g.release));
-    // Due tocchi sullo stesso testo lo aprono.
-    const tap = g.mode === "pending" && g.release === null && !shift && g.hit !== null && g.from !== null ? { key: g.hit, time, at: g.from } : null;
+    // Due tocchi sullo stesso testo lo aprono, su un gruppo o un collegamento
+    // lo isolano, e sul vuoto escono dal gruppo isolato.
+    const still = g.from !== null && g.end !== null && Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale <= DRAG_PX[g.pointer];
+    const tap = g.mode === "pending" && g.release === null && !shift && g.hit !== null && g.from !== null
+      ? { key: g.hit, time, at: g.from }
+      : g.mode === "marquee" && still && !shift && isolation !== null ? { key: "", time, at: g.from! } : null;
     const previous = lastTap;
     lastTap = tap;
     if (tap !== null && previous !== null && previous.key === tap.key && tap.time - previous.time <= DOUBLE_TAP_MS) {
       const apart = Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * camera.scale;
-      const unit = apart <= DOUBLE_TAP_PX[g.pointer] ? currentIndex().get(tap.key) : null;
+      const near = apart <= DOUBLE_TAP_PX[g.pointer];
+      if (near && tap.key === "" && leaveIsolation(false)) {
+        lastTap = null;
+        return;
+      }
+      const unit = near && tap.key !== "" ? currentIndex().get(tap.key) : null;
       if (unit !== null && unit.look !== null && has("text") && editable()) {
         lastTap = null;
         editText(unit);
         return;
       }
+      if (unit !== null && (unit.role === "group" || unit.role === "link") && isolate(unit, tap.at, g.pointer)) {
+        lastTap = null;
+        return;
+      }
+    }
+    showHandles();
+    announceSelection();
+  };
+
+  // --- Il Lazo -----------------------------------------------------------------
+
+  /// Il punto `p` entra nel lazo se è abbastanza lontano dall'ultimo; oltre
+  /// i punti che il lazo tiene, ne resta uno ogni due.
+  const lassoAdd = (g: LassoGesture, p: Point): void => {
+    const last = g.points[g.points.length - 1];
+    if (last !== undefined && Math.hypot(p[0] - last[0], p[1] - last[1]) * camera.scale < LASSO_STEP_PX) return;
+    g.points.push(p);
+    if (g.points.length > LASSO_MAX_POINTS) {
+      const kept = g.points.filter((_, at) => at % 2 === 0 || at === g.points.length - 1);
+      g.points.splice(0, g.points.length, ...kept);
+    }
+    const first = g.points[0]!;
+    if (!g.dragging && Math.hypot(p[0] - first[0], p[1] - first[1]) * camera.scale > DRAG_PX[g.pointer]) g.dragging = true;
+  };
+
+  /// La selezione mentre il lazo si tira: ciò che racchiude per intero, al
+  /// posto di quella di prima, o aggiunto con Maiusc, o tolto con Alt.
+  const lassoUpdate = (g: LassoGesture): void => {
+    if (!g.dragging) return;
+    const inside = new Set(currentIndex().inside(g.points).map((unit) => unit.key));
+    selection = inOrder(g.mode === "replace" ? inside : g.mode === "add" ? [...g.base, ...inside] : g.base.filter((key) => !inside.has(key)));
+    syncControls();
+    showHandles();
+  };
+
+  /// Il lazo si chiude: la selezione resta quella che ha fatto. Un tocco
+  /// sceglie l'oggetto sotto, o con Maiusc lo aggiunge o lo toglie, o con
+  /// Alt lo toglie.
+  const lassoEnd = (g: LassoGesture): void => {
+    current = null;
+    const first = g.points[0];
+    if (!g.dragging && first !== undefined) {
+      const hit = currentIndex().at(first, HIT_PX[g.pointer] / camera.scale);
+      const key = hit?.key ?? null;
+      if (g.mode === "replace") select(key === null ? [] : [key]);
+      else if (key !== null && (g.mode === "remove" || g.base.includes(key))) select(g.base.filter((each) => each !== key));
+      else if (key !== null) select([...g.base, key]);
+    } else {
+      lassoUpdate(g);
     }
     showHandles();
     announceSelection();
@@ -4924,21 +5349,40 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // guida bloccata, che solo da qui si sblocca col puntatore. Altrove il
   // foglio resta com'è.
   life.listen(surface, "contextmenu", (event) => {
+    // Il menu aperto dalla tastiera non si apre una seconda volta: l'evento
+    // che il tasto manda dietro si consuma, uno solo.
+    if (event.timeStamp - keyedMenu < KEYED_MENU_MS) {
+      keyedMenu = -Infinity;
+      event.preventDefault();
+      return;
+    }
     const local = localPoint(event.clientX, event.clientY);
     const p: Point = [local.x, local.y];
+    const touch = "pointerType" in event && (event as PointerEvent).pointerType === "touch";
     let items: MenuItem[] | null = null;
     if (rulerAt(p) !== null) items = rulerItems();
     else if (guidesShown() && scene.root.guides !== null) {
-      const touch = "pointerType" in event && (event as PointerEvent).pointerType === "touch";
       const index = guideAt(scene.root.guides, camera, p, GUIDE_HIT_PX[touch ? "touch" : "mouse"], false);
       if (index !== null) items = guideItems(index);
     }
-    if (items === null || items.length === 0) return;
+    // Altrove, con gli strumenti che scelgono, il menu della selezione: sopra
+    // un oggetto che non è scelto, prima lo sceglie. Un tocco lungo che non
+    // ha ancora mosso niente lo apre anche lui.
+    const still = current === null || (current.kind === "select" && current.mode === "pending") || (current.kind === "lasso" && !current.dragging);
+    const selecting = items === null && has("selection") && (tool === "select" || tool === "lasso") && pressed === null && still;
+    if (!selecting && (items === null || items.length === 0)) return;
     // Il tocco lungo che apre il menu non tira anche una guida.
-    if (current !== null && current.kind !== "guide") return;
+    if (!selecting && current !== null && current.kind !== "guide") return;
     event.preventDefault();
     if (current !== null) cancelGesture();
-    showContextMenu(event, items);
+    if (!selecting) {
+      showContextMenu(event, items!);
+      return;
+    }
+    const world = screenToWorld(camera, local);
+    const hit = currentIndex().at([world.x, world.y], HIT_PX[touch ? "touch" : "mouse"] / camera.scale);
+    if (hit !== null && !selectedUnits().some((unit) => unit.key === hit.key || holdsPath(hit.path, unit.path))) select([hit.key]);
+    showContextMenu(event, selectionItems(), { labelledBy: selectionButton.id });
   });
   // L'angolo fra i righelli apre il loro menu: l'unità, le guide, e
   // nasconderli.
@@ -4998,6 +5442,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           g.end = toPoint(samples[samples.length - 1]!);
           selectUpdate(g);
           break;
+        case "lasso":
+          for (const sample of samples) lassoAdd(g, toPoint(sample));
+          lassoUpdate(g);
+          break;
         case "nodes":
           if (g.from === null) nodesStart(g, toPoint(samples[0]!));
           g.end = toPoint(samples[samples.length - 1]!);
@@ -5053,6 +5501,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "select":
           selectEnd(g, stroke.timeStamp);
           return;
+        case "lasso":
+          lassoEnd(g);
+          return;
         case "nodes":
           nodesEnd(g, stroke.timeStamp);
           return;
@@ -5079,7 +5530,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const g = current;
       if (g === null || g.stroke !== id) return;
       current = null;
-      if (g.kind === "select" && g.mode === "marquee") select(g.base);
+      if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso") select(g.base);
       if (g.kind === "select" || g.kind === "guide") showGrip(null);
       // I nodi tornano com'erano, e l'oggetto con loro.
       if (g.kind === "nodes") {
@@ -5953,6 +6404,162 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return items;
   };
 
+  // --- La selezione avanzata -------------------------------------------------
+
+  /// Quando il menu della selezione si è aperto dalla tastiera.
+  let keyedMenu = -Infinity;
+
+  /// Dove si apre dalla tastiera il menu della selezione: sotto la
+  /// selezione, o al cursore del foglio, dentro il foglio.
+  const menuPoint = (): MouseEvent => {
+    const rect = surface.getBoundingClientRect();
+    const bounds = boundsOf(selectedUnits());
+    const at: Point = bounds === null ? cursorPoint() : [bounds.min[0], bounds.max[1]];
+    const x = Math.min(Math.max(camera.tx + camera.scale * at[0], 0), rect.width);
+    const y = Math.min(Math.max(camera.ty + camera.scale * at[1], 0), rect.height);
+    return new MouseEvent("contextmenu", { clientX: rect.left + x, clientY: rect.top + y });
+  };
+
+  /// Sceglie tutto ciò che si sceglie: nel gruppo isolato, o in cima.
+  const selectAll = (): void => {
+    cancelGesture();
+    select(currentIndex().units.map((unit) => unit.key));
+    announceSelection();
+  };
+
+  /// Sceglie tutto il resto: di un gruppo con un oggetto scelto, gli altri.
+  const invertSelection = (): void => {
+    cancelGesture();
+    select(inverseOf(currentIndex(), selectedUnits()).map((unit) => unit.key));
+    announceSelection();
+  };
+
+  /// Sceglie gli oggetti simili a quelli scelti per `by`, a ogni profondità.
+  const selectSimilar = (by: Likeness): void => {
+    const model = engine.model;
+    const similar = model === null ? null : similarTo(model, currentIndex(), selectedUnits(), by);
+    if (similar === null) {
+      announce(t(selection.length === 0 ? "draw.selection.empty" : by === "tool" ? "draw.select.same_tool.none" : "draw.select.same.missing"));
+      return;
+    }
+    cancelGesture();
+    select(similar.map((unit) => unit.key));
+    announceSelection();
+  };
+
+  /// Blocca o nasconde gli oggetti scelti, in un passo: non si scelgono più,
+  /// o non si vedono più, e la selezione si svuota.
+  const flagSelection = (flag: Flag): void => {
+    const units = arranging("selection");
+    if (units === null) return;
+    const model = engine.model!;
+    const arranged = flagOps(model, nodesOf(model, units), flag, true, newIds());
+    if (arrange(flag === "locked" ? "draw.action.lock" : "draw.action.hide", arranged)) {
+      const count = arranged.keys.length;
+      announce(flag === "locked" ? plural(count, "draw.locked.one", "draw.locked.other") : plural(count, "draw.hidden.one", "draw.hidden.other"));
+    }
+  };
+
+  /// «Sblocca tutto» e «Mostra tutto»: gli oggetti bloccati, o nascosti, che
+  /// si vedono e si cambiano, nel gruppo isolato o in tutto il disegno; poi
+  /// sono loro la selezione, quelli che si scelgono.
+  const unflagAll = (flag: Flag): void => {
+    const model = engine.model;
+    if (!has("selection") || !editable() || model === null) return;
+    const nodes = flagged(model, isolatedNode(), flag);
+    if (nodes.length === 0) {
+      announce(t(flag === "locked" ? "draw.unlocked.none" : "draw.shown.none"));
+      return;
+    }
+    cancelGesture();
+    if (arrange(flag === "locked" ? "draw.action.unlock" : "draw.action.show", flagOps(model, nodes, flag, false, newIds()))) {
+      announce(flag === "locked" ? plural(nodes.length, "draw.unlocked.one", "draw.unlocked.other") : plural(nodes.length, "draw.shown.one", "draw.shown.other"));
+    }
+  };
+
+  /// Un segno dell'albero, o Ctrl+Maiusc+L e H sulla sua riga attiva: blocca
+  /// o sblocca, nasconde o mostra il livello o l'oggetto di chiave `key`. La
+  /// selezione resta, meno ciò che non si sceglie più.
+  const toggleRow = (key: string, flag: Flag): void => {
+    const model = engine.model;
+    const outlined = outlineNow().byKey.get(key);
+    if (model === null || outlined === undefined || !editable()) return;
+    if (outlined.item.role === "layer") {
+      const layer = currentIndex().layers.find((each) => keyOf(each) === key);
+      if (layer === undefined || !has("layers")) return;
+      const on = flag === "locked" ? !layer.locked : !layer.hidden;
+      cancelGesture();
+      const arranged = flag === "locked" ? lockLayerOps(model, layer, on, newIds()) : hideLayerOps(model, layer, on, newIds());
+      const label: DrawKey = flag === "locked" ? (on ? "draw.action.layer_lock" : "draw.action.layer_unlock") : on ? "draw.action.layer_hide" : "draw.action.layer_show";
+      const said: DrawKey = flag === "locked" ? (on ? "draw.layer.locked" : "draw.layer.unlocked") : on ? "draw.layer.hidden" : "draw.layer.shown";
+      if (writeLayers(label, arranged, null)) announce(t(said, { name: layerTitle(layer) }));
+      return;
+    }
+    if (!has("selection")) return;
+    const node = nodeOf(model, outlined.item);
+    const on = node.details?.[flag] !== true;
+    // Il nome senza lo stato di prima: lo stato nuovo lo dice l'annuncio.
+    const name = describeNode(outlined, currentIndex().get(key) ?? undefined, false);
+    cancelGesture();
+    const label: DrawKey = flag === "locked" ? (on ? "draw.action.lock" : "draw.action.unlock") : on ? "draw.action.hide" : "draw.action.show";
+    const said: DrawKey = flag === "locked" ? (on ? "draw.object.locked" : "draw.object.unlocked") : on ? "draw.object.hidden" : "draw.object.shown";
+    if (commit(label, asGesture(flagOps(model, [node], flag, on, newIds()).ops)) !== null) announce(t(said, { name }));
+  };
+
+  /// Le voci della selezione avanzata: scegliere tutto e il resto, i simili,
+  /// bloccare e nascondere, sbloccare e mostrare tutto, isolare. Una voce che
+  /// adesso non serve è spenta e dice perché.
+  const selectionItems = (): MenuItem[] => {
+    const model = engine.model;
+    const index = currentIndex();
+    const units = selectedUnits();
+    const canEdit = editable();
+    const none = units.length === 0;
+    const empty = index.units.length === 0;
+    const items: MenuItem[] = [
+      { label: t("draw.select.all"), hint: displayBinding("Mod-a"), disabled: empty, run: () => selectAll() },
+      { label: t("draw.select.invert"), disabled: empty, run: () => invertSelection() },
+    ];
+    const likenesses = LIKENESSES.filter(({ by }) => by !== "layer" || has("layers"));
+    likenesses.forEach(({ by, label }, at) => {
+      const usable = model !== null && !none && hasLikeness(model, index, units, by);
+      const why: DrawKey = none ? "draw.selection.empty" : by === "tool" ? "draw.select.same_tool.none" : "draw.select.same.missing";
+      items.push({ label: t(label), separator: at === 0, disabled: !usable, ...(usable ? {} : { description: t(why) }), run: () => selectSimilar(by) });
+    });
+    const unlockable = canEdit && model !== null && flagged(model, isolatedNode(), "locked").length > 0;
+    const showable = canEdit && model !== null && flagged(model, isolatedNode(), "hidden").length > 0;
+    items.push(
+      {
+        label: t("draw.lock"),
+        separator: true,
+        hint: displayBinding("Mod-Shift-l"),
+        disabled: !canEdit || none,
+        ...(canEdit && none ? { description: t("draw.selection.empty") } : {}),
+        run: () => flagSelection("locked"),
+      },
+      {
+        label: t("draw.hide"),
+        hint: displayBinding("Mod-Shift-h"),
+        disabled: !canEdit || none,
+        ...(canEdit && none ? { description: t("draw.selection.empty") } : {}),
+        run: () => flagSelection("hidden"),
+      },
+      { label: t("draw.unlock_all"), disabled: !unlockable, ...(canEdit && !unlockable ? { description: t("draw.unlocked.none") } : {}), run: () => unflagAll("locked") },
+      { label: t("draw.show_all"), disabled: !showable, ...(canEdit && !showable ? { description: t("draw.shown.none") } : {}), run: () => unflagAll("hidden") },
+    );
+    const single = units.length === 1 && (units[0]!.role === "group" || units[0]!.role === "link");
+    items.push({
+      label: t("draw.isolate"),
+      separator: true,
+      hint: displayBinding("Mod-Enter"),
+      disabled: !single,
+      ...(single ? {} : { description: t("draw.isolate.none") }),
+      run: () => isolateSelection(),
+    });
+    if (isolatedNode() !== null) items.push({ label: t("draw.isolate.exit"), hint: "Esc", run: () => leaveIsolation(false) });
+    return items;
+  };
+
   /// Dà `change` ai contorni scelti, e dice quanti ne ha cambiati col nome
   /// della scelta.
   function outlineSelection(change: OutlineChange, style: string): void {
@@ -6774,8 +7381,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Sceglie l'oggetto `at` in ordine di documento, lo porta in vista e lo
   /// dice. `false` se non c'è.
-  const visit = (at: number): boolean => {
-    const units = currentIndex().units;
+  const visit = (units: readonly Unit[], at: number): boolean => {
     const unit = units[at];
     if (unit === undefined) return false;
     cancelGesture();
@@ -6816,9 +7422,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const walk = (step: 1 | -1): boolean => {
     if (nodeKeysOn() && walkNodes(step)) return true;
     if (selection.length === 0 || pressed !== null) return false;
-    const anchor = step > 0 ? selection[selection.length - 1] : selection[0];
-    const at = currentIndex().units.findIndex((unit) => unit.key === anchor);
-    return at >= 0 && visit(at + step);
+    const anchor = currentIndex().get(step > 0 ? selection[selection.length - 1]! : selection[0]!);
+    const units = walkList(anchor);
+    const at = anchor === null ? -1 : units.indexOf(anchor);
+    return at >= 0 && visit(units, at + step);
+  };
+
+  /// Gli oggetti fra cui passano Tab, Inizio e Fine: quelli che si scelgono
+  /// o, per un oggetto scelto dentro un gruppo, i suoi fratelli.
+  const walkList = (anchor: Unit | null): readonly Unit[] => {
+    const index = currentIndex();
+    return anchor === null || index.units.includes(anchor) ? index.units : index.siblings(anchor);
   };
 
   /// Invio: le proprietà della selezione, o del disegno. Col pannello, il
@@ -7092,6 +7706,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       : [];
 
   /// L'elenco dei tasti delle parti `at`, nei gruppi in cui si usano.
+  /// I tasti della selezione avanzata.
+  const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("selection")
+      ? [
+          {
+            title: t("draw.selection.menu"),
+            rows: [
+              ["Mod", t("draw.keys.deep")],
+              ["Mod-Enter", t("draw.keys.isolate")],
+              ["Escape", t("draw.keys.isolate.exit")],
+              ["Mod-Shift-l", t("draw.keys.lock")],
+              ["Mod-Shift-h", t("draw.keys.hide")],
+              ["Shift-F10", t("draw.keys.menu")],
+            ],
+          },
+        ]
+      : [];
+
   const keyGroups = (at: ReadonlySet<Feature>): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: toolsOf(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
     {
@@ -7118,6 +7750,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ],
     },
     ...arrangeKeys(at),
+    ...selectionKeys(at),
     ...nodeToolKeys(at),
     ...bezierKeys(at),
     ...textKeys(at),
@@ -7496,6 +8129,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const onSurface = event.target === surface;
     const inNodesBar = event.target instanceof Node && nodesBar.contains(event.target);
+    const inTree = event.target instanceof Node && tree.element.contains(event.target);
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
       return;
@@ -7575,6 +8209,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (bracket !== 0 && arranges("arrange")) {
         if (bracket > 0) orderSelection(event.shiftKey ? "front" : "forward");
         else orderSelection(event.shiftKey ? "back" : "backward");
+      } else if (key === "enter" && !event.shiftKey && has("selection") && selection.length > 0) {
+        if (pressed !== null || current !== null) return;
+        isolateSelection();
+      } else if ((key === "l" || key === "h") && event.shiftKey && arranges("selection") && !inTree) {
+        flagSelection(key === "l" ? "locked" : "hidden");
       } else {
         return;
       }
@@ -7591,6 +8230,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       event.preventDefault();
       return;
     }
+    // Maiusc+F10, o il tasto del menu: il menu della selezione, sotto la
+    // selezione o al cursore.
+    if (onSurface && (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) && has("selection")) {
+      if (current !== null || pressed !== null) return;
+      event.preventDefault();
+      keyedMenu = event.timeStamp;
+      showContextMenu(menuPoint(), selectionItems(), { labelledBy: selectionButton.id });
+      return;
+    }
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
     } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && arranges("arrange")) {
@@ -7600,7 +8248,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } else if (onSurface && (event.key === "Home" || event.key === "End") && nodeKeysOn()) {
       visitNode(event.key === "Home" ? 0 : nodeCount(editing!.subs) - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End")) {
-      if (pressed !== null || !visit(event.key === "Home" ? 0 : currentIndex().units.length - 1)) return;
+      const units = walkList(selection.length === 0 ? null : currentIndex().get(selection[0]!));
+      if (pressed !== null || !visit(units, event.key === "Home" ? 0 : units.length - 1)) return;
     } else if (onSurface && event.key === " ") {
       if (event.repeat) {
         // Tenuto giù: un tasto, un passo.
@@ -7642,6 +8291,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (tool === "nodes" && nodeSelection.size > 0) {
         setNodes([]);
         announceNodes();
+      } else if (leaveIsolation(false)) {
+        // Fuori di un gruppo, scelto quello da cui si è usciti.
       } else if (selection.length > 0) {
         select([]);
         announceSelection();
@@ -7746,6 +8397,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       history.clear();
       selection = [];
       chosen = null;
+      isolation = null;
       cursor = null;
       cursorMark.hidden = true;
       refresh();
@@ -7784,6 +8436,20 @@ const REASONS: Readonly<Record<Reason, DrawKey>> = {
   limit: "draw.reason.limit",
   "read-only": "draw.reason.read_only",
 };
+
+/// Le voci di «Seleziona simili», nell'ordine del menu.
+const LIKENESSES: ReadonlyArray<{ readonly by: Likeness; readonly label: DrawKey }> = [
+  { by: "fill", label: "draw.select.same_fill" },
+  { by: "stroke", label: "draw.select.same_stroke" },
+  { by: "width", label: "draw.select.same_width" },
+  { by: "kind", label: "draw.select.same_kind" },
+  { by: "tool", label: "draw.select.same_tool" },
+  { by: "layer", label: "draw.select.same_layer" },
+];
+
+/// Dopo il menu aperto dalla tastiera, per tanti millisecondi il tasto del
+/// menu non ne apre un altro.
+const KEYED_MENU_MS = 1000;
 
 /// Le voci dell'ordine, dalla cima al fondo, con le loro scorciatoie.
 const ORDERS: ReadonlyArray<{ readonly order: Order; readonly label: DrawKey; readonly binding: string }> = [

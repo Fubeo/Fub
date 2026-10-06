@@ -61,14 +61,15 @@ export class NewIds {
 
 /// Dove uno strumento scrive un oggetto nuovo.
 export interface Destination {
-  /// Il genitore dell'`add`: l'id del livello, o `#root`.
+  /// Il genitore dell'`add`: l'id del livello o del gruppo isolato, o
+  /// `#root`.
   readonly parent: string;
   /// Dalle coordinate del livello a quelle della scena.
   readonly matrix: Matrix;
   /// Dalla scena alle coordinate del livello.
   readonly inverse: Matrix;
   /// Ciò che va fatto prima, nello stesso `batch`: l'`ident` di un livello
-  /// senza id.
+  /// o di un gruppo senza id.
   readonly prelude: readonly Op[];
 }
 
@@ -94,6 +95,18 @@ export function destinationIn(layer: LayerInfo, ids: NewIds): Destination | null
   if (layer.id !== null) return { parent: layer.id, matrix: layer.matrix, inverse, prelude: [] };
   const id = ids.next("layer");
   return { parent: id, matrix: layer.matrix, inverse, prelude: [{ op: "ident", path: layer.path, tag: "g", id }] };
+}
+
+/// Il gruppo o il collegamento isolato `group` come destinazione: ciò che si
+/// disegna entra lì, in cima. `null` se lo schiaccia una trasformazione che
+/// non si inverte.
+export function destinationInto(group: Unit, ids: NewIds): Destination | null {
+  const matrix = group.matrix;
+  const inverse = invert(matrix);
+  if (inverse === null) return null;
+  if (group.id !== null) return { parent: group.id, matrix, inverse, prelude: [] };
+  const id = ids.next("object");
+  return { parent: id, matrix, inverse, prelude: [{ op: "ident", path: group.path, tag: group.tag, id }] };
 }
 
 /// Un'operazione per un gesto: quella sola, o un `batch` di tutte.

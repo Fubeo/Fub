@@ -289,7 +289,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -2757,6 +2757,7 @@ describe("da tastiera", () => {
     expect(tables.map((table) => table.caption)).toEqual([
       "Strumenti · dal livello Standard",
       "Disponi · dal livello Standard",
+      "Selezione avanzata · dal livello Standard",
       "Testo · dal livello Standard",
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
@@ -2769,10 +2770,18 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
     expect(tables[1]!.rows).toContainEqual(["Ctrl+D", "Duplica"]);
-    expect(tables[3]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[4]!.rows).toEqual([
+    expect(tables[2]!.rows).toEqual([
+      ["Ctrl", "Tenuto col clic, sceglie l’oggetto dentro il gruppo"],
+      ["Ctrl+Enter", "Isola il gruppo scelto"],
+      ["Esc", "Esce dal gruppo isolato, un gruppo alla volta"],
+      ["Ctrl+Shift+L", "Blocca la selezione; nell’albero blocca o sblocca la riga"],
+      ["Ctrl+Shift+H", "Nasconde la selezione; nell’albero nasconde o mostra la riga"],
+      ["Shift+F10", "Apre il menu della selezione"],
+    ]);
+    expect(tables[4]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[5]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
@@ -3181,6 +3190,398 @@ describe("l'albero degli oggetti", () => {
     dialog().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     tree().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
+  });
+});
+
+describe("la selezione avanzata, dal livello Standard", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  const D = "od4d4d4d4";
+  const E = "oe5e5e5e5";
+  const G = "og1g1g1g1";
+  const H = "oh2h2h2h2";
+  /// Due rettangoli blu in alto; sotto, un gruppo con un rettangolo arancione
+  /// e un gruppo di due neri. I riempimenti si toccano, e la camera resta
+  /// l'identità.
+  const SET = doc(
+    `<title>Prova</title>${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2"/>` +
+      `<rect id="${B}" x="50" y="10" width="20" height="20" fill="#0072b2"/>` +
+      `<g id="${G}"><rect id="${C}" x="10" y="60" width="20" height="20" fill="#d55e00"/>` +
+      `<g id="${H}"><rect id="${D}" x="50" y="60" width="20" height="20" fill="#000000"/>` +
+      `<rect id="${E}" x="90" y="60" width="20" height="20" fill="#000000"/></g></g></g>`,
+  );
+
+  const selectionButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
+  const rightClick = (x: number, y: number): MouseEvent => {
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y });
+    surface().dispatchEvent(event);
+    return event;
+  };
+  const isolation = (): HTMLElement => host.querySelector<HTMLElement>(".draw-isolation")!;
+  const crumbs = (): string[] => [...isolation().querySelectorAll(".draw-isolation-crumb")].map((crumb) => crumb.textContent ?? "");
+  const painted = (id: string): SVGElement => host.querySelector<SVGElement>(`[data-scene-id="${id}"]`)!;
+  /// Un lazo col mouse lungo i lati del poligono `corners`, chiuso.
+  const lasso = (corners: readonly (readonly [number, number])[], init: Init = {}): void => {
+    const points: [number, number][] = [];
+    corners.forEach((corner, at) => {
+      const next = corners[(at + 1) % corners.length]!;
+      for (let step = 0; step < 4; step++) points.push([corner[0] + ((next[0] - corner[0]) * step) / 4, corner[1] + ((next[1] - corner[1]) * step) / 4]);
+    });
+    drag(points, init);
+  };
+  /// Un tocco, lontano nel tempo dal precedente: non fa un doppio tocco.
+  const tap = (x: number, y: number, init: Init = {}): void => {
+    clock += 1000;
+    drag([[x, y]], init);
+  };
+  const doubleTap = (x: number, y: number): void => {
+    clock += 1000;
+    drag([[x, y]]);
+    drag([[x, y]]);
+  };
+
+  afterEach(() => {
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("all'Essenziale non c'è: niente Lazo, niente menu, e i tasti restano a chi li aveva", () => {
+    mount(SET);
+    editor.setTool("select");
+    expect(key("q").defaultPrevented).toBe(false);
+    expect(editor.tool).toBe("select");
+    expect(selectionButton().hidden).toBe(true);
+    editor.select([A]);
+    expect(key("L", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    editor.select([G]);
+    expect(key("Enter", { ctrlKey: true }).defaultPrevented).toBe(false);
+    doubleTap(20, 70);
+    expect(isolation().hidden).toBe(true);
+    tap(20, 70, { ctrlKey: true });
+    expect(editor.selection).toEqual([G]);
+    expect(rightClick(20, 70).defaultPrevented).toBe(false);
+    expect(editor.engine.text).toBe(SET);
+  });
+
+  it("il Lazo, col tasto Q, sceglie ciò che racchiude per intero; Maiusc aggiunge, Alt toglie, un tocco sceglie", () => {
+    mount(SET, { level: "standard" });
+    key("q");
+    expect(editor.tool).toBe("lasso");
+    lasso([[5, 5], [75, 5], [75, 35], [5, 35]]);
+    expect(editor.selection).toEqual([A, B]);
+    expect(spoken()).toBe("2 oggetti scelti.");
+    // Un gruppo si sceglie solo intero.
+    lasso([[5, 55], [35, 55], [35, 85], [5, 85]]);
+    expect(editor.selection).toEqual([]);
+    editor.select([A]);
+    lasso([[5, 55], [115, 55], [115, 85], [5, 85]], { shiftKey: true });
+    expect(editor.selection).toEqual([A, G]);
+    lasso([[5, 5], [35, 5], [35, 35], [5, 35]], { altKey: true });
+    expect(editor.selection).toEqual([G]);
+    tap(60, 20);
+    expect(editor.selection).toEqual([B]);
+    tap(20, 20, { shiftKey: true });
+    expect(editor.selection).toEqual([A, B]);
+    tap(60, 20, { shiftKey: true });
+    expect(editor.selection).toEqual([A]);
+    tap(150, 150);
+    expect(editor.selection).toEqual([]);
+    // Senza il Lazo, chi lo aveva in mano riprende la Selezione, non la penna.
+    editor.setLevel("essential");
+    expect(editor.tool).toBe("select");
+    expect(changes).toEqual([]);
+  });
+
+  it("il Lazo si tira anche dalla tastiera: Spazio lo comincia, le frecce lo tirano, Spazio lo chiude", () => {
+    mount(SET, { level: "standard" });
+    // Il cursore parte dal centro della vista, (40, 40). Spazio due volte,
+    // senza frecce, sceglie ciò che è sotto il cursore.
+    size(80, 80);
+    key("q");
+    for (let step = 0; step < 2; step++) key("ArrowLeft");
+    for (let step = 0; step < 3; step++) key("ArrowDown");
+    key(" ");
+    key(" ");
+    expect(editor.selection).toEqual([G]);
+    // Senza selezione le frecce muovono il cursore. Da (0, 0), il lazo gira
+    // attorno al primo rettangolo.
+    key("Escape");
+    for (let step = 0; step < 2; step++) key("ArrowLeft");
+    key("ArrowUp", { shiftKey: true });
+    for (let step = 0; step < 2; step++) key("ArrowUp");
+    expect(spoken()).toBe("x 0, y 0");
+    key(" ");
+    for (let step = 0; step < 4; step++) key("ArrowRight");
+    for (let step = 0; step < 4; step++) key("ArrowDown");
+    for (let step = 0; step < 4; step++) key("ArrowLeft");
+    key(" ");
+    expect(editor.selection).toEqual([A]);
+    expect(spoken()).toBe("1 oggetto scelto.");
+    expect(changes).toEqual([]);
+  });
+
+  it("con Ctrl o ⌘ un clic sceglie l'oggetto dentro il gruppo, Maiusc lo aggiunge, e lo si sposta da solo", () => {
+    mount(SET, { level: "standard" });
+    editor.setTool("select");
+    tap(20, 70);
+    expect(editor.selection).toEqual([G]);
+    tap(20, 70, { ctrlKey: true });
+    expect(editor.selection).toEqual([C]);
+    tap(60, 70, { ctrlKey: true, shiftKey: true });
+    expect(editor.selection).toEqual([C, D]);
+    tap(150, 150);
+    tap(20, 70, { ctrlKey: true });
+    expect(editor.selection).toEqual([C]);
+    clock += 1000;
+    drag([[20, 70], [30, 70], [40, 70]]);
+    expect(editor.engine.text).toContain(`<rect id="${C}" x="10" y="60" width="20" height="20" fill="#d55e00" transform="matrix(1 0 0 1 20 0)"/>`);
+    expect(editor.engine.text).toContain(`<g id="${G}">`);
+    expect(editor.selection).toEqual([C]);
+    // Maiusc su un oggetto scelto dentro il gruppo lo toglie.
+    tap(40, 70, { shiftKey: true });
+    expect(editor.selection).toEqual([]);
+  });
+
+  it("due tocchi su un gruppo lo isolano: il resto si attenua e non si sceglie, la barra dice dove si è, Esc esce; il file non cambia", () => {
+    mount(SET, { level: "standard" });
+    editor.setTool("select");
+    expect(isolation().hidden).toBe(true);
+    doubleTap(20, 70);
+    expect(editor.selection).toEqual([C]);
+    expect(spoken()).toBe("Gruppo isolato: Gruppo, 2 oggetti. Si sceglie solo qui dentro; Esc esce. Rettangolo, Vermiglio, 1 di 2.");
+    expect(isolation().hidden).toBe(false);
+    expect(isolation().getAttribute("aria-label")).toBe("Gruppo isolato");
+    expect(crumbs()).toEqual(["Livello «Livello 1»", "Gruppo, 2 oggetti"]);
+    expect(painted(A).style.opacity).toBe("0.4");
+    expect(painted(C).style.opacity).toBe("");
+    expect(painted(D).style.opacity).toBe("");
+    // Fuori dal gruppo non si sceglie niente; Ctrl+A sceglie ciò che c'è dentro.
+    tap(20, 20);
+    expect(editor.selection).toEqual([]);
+    key("a", { ctrlKey: true });
+    expect(editor.selection).toEqual([C, H]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    key("Escape");
+    expect(editor.selection).toEqual([G]);
+    expect(spoken()).toBe("Fuori dal gruppo: si sceglie in tutto il disegno.");
+    expect(isolation().hidden).toBe(true);
+    expect(painted(A).style.opacity).toBe("");
+    key("Escape");
+    expect(editor.selection).toEqual([]);
+    // Due tocchi sul vuoto escono anche loro.
+    doubleTap(20, 70);
+    expect(isolation().hidden).toBe(false);
+    doubleTap(150, 150);
+    expect(isolation().hidden).toBe(true);
+    expect(changes).toEqual([]);
+    expect(editor.engine.text).toBe(SET);
+  });
+
+  it("Ctrl+Invio isola il gruppo scelto; dentro, un gruppo si isola ancora, e la barra riporta a ogni gruppo del percorso", () => {
+    mount(SET, { level: "standard" });
+    editor.setTool("select");
+    editor.select([A]);
+    key("Enter", { ctrlKey: true });
+    expect(spoken()).toBe("Scegli un gruppo solo, o un collegamento, per isolarlo.");
+    expect(isolation().hidden).toBe(true);
+    editor.select([G]);
+    key("Enter", { ctrlKey: true });
+    expect(editor.selection).toEqual([C]);
+    editor.select([H]);
+    key("Enter", { ctrlKey: true });
+    expect(editor.selection).toEqual([D]);
+    expect(crumbs()).toEqual(["Livello «Livello 1»", "Gruppo, 2 oggetti", "Gruppo, 2 oggetti"]);
+    expect(isolation().querySelector('[aria-current="location"]')!.textContent).toBe(crumbs()[2]);
+    expect(painted(C).style.opacity).toBe("0.4");
+    isolation().querySelector<HTMLButtonElement>('button.draw-isolation-crumb[data-depth="1"]')!.click();
+    expect(editor.selection).toEqual([H]);
+    expect(document.activeElement).toBe(surface());
+    expect(crumbs()).toHaveLength(2);
+    // Esc in un gruppo dentro un altro torna a quello di fuori.
+    editor.select([H]);
+    key("Enter", { ctrlKey: true });
+    key("Escape");
+    expect(editor.selection).toEqual([H]);
+    expect(crumbs()).toHaveLength(2);
+    isolation().querySelector<HTMLButtonElement>("button.draw-isolation-crumb")!.click();
+    expect(isolation().hidden).toBe(true);
+    expect(editor.selection).toEqual([G]);
+    // Il pulsante della barra esce di un gruppo.
+    key("Enter", { ctrlKey: true });
+    isolation().querySelector<HTMLButtonElement>('button[aria-label="Esci dal gruppo"]')!.click();
+    expect(isolation().hidden).toBe(true);
+    expect(editor.selection).toEqual([G]);
+  });
+
+  it("con un gruppo isolato ciò che si disegna entra nel gruppo, in cima, e il gruppo resta isolato", () => {
+    mount(SET, { level: "standard" });
+    editor.select([G]);
+    key("Enter", { ctrlKey: true });
+    editor.setTool("rect");
+    drag([[120, 100], [140, 120]]);
+    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${E}"[^>]*/>\\s*</g>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>\\s*</g>`));
+    expect(isolation().hidden).toBe(false);
+    editor.undo();
+    expect(editor.engine.text).toBe(SET);
+  });
+
+  it("Ctrl+Maiusc+L blocca e Ctrl+Maiusc+H nasconde gli oggetti scelti, in un passo; «Sblocca tutto» e «Mostra tutto» li riportano", () => {
+    mount(SET, { level: "standard" });
+    editor.setTool("select");
+    editor.select([A]);
+    key("L", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toContain(`<rect id="${A}" fub:locked="true" x="10" y="10" width="20" height="20" fill="#0072b2"/>`);
+    expect(editor.selection).toEqual([]);
+    expect(spoken()).toBe("1 oggetto bloccato: non si sceglie finché non lo sblocchi.");
+    tap(20, 20);
+    expect(editor.selection).toEqual([]);
+    editor.select([B, G]);
+    key("H", { ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("2 oggetti nascosti: non si vedono finché non li mostri.");
+    expect(editor.engine.text).toContain(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="#0072b2" display="none"/>`);
+    expect(editor.engine.text).toContain(`<g id="${G}" display="none">`);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Oggetti nascosti.");
+    editor.redo();
+    selectionButton().click();
+    item("Sblocca tutto").click();
+    expect(spoken()).toBe("1 oggetto sbloccato.");
+    expect(editor.selection).toEqual([A]);
+    selectionButton().click();
+    item("Mostra tutto").click();
+    expect(spoken()).toBe("2 oggetti di nuovo visibili.");
+    expect(editor.selection).toEqual([B, G]);
+    expect(editor.engine.text).toBe(SET);
+    selectionButton().click();
+    expect(item("Sblocca tutto").getAttribute("aria-disabled")).toBe("true");
+    expect(item("Sblocca tutto").querySelector(".menu-description")!.textContent).toBe("Non c’è niente da sbloccare.");
+    expect(item("Mostra tutto").querySelector(".menu-description")!.textContent).toBe("Non c’è niente di nascosto.");
+  });
+
+  it("il menu sceglie i simili, a ogni profondità, e il resto; le voci che adesso non servono dicono perché", () => {
+    mount(SET, { level: "standard" });
+    editor.setTool("select");
+    selectionButton().click();
+    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled")])).toEqual([
+      ["Seleziona tutto", null],
+      ["Inverti la selezione", null],
+      ["Stesso riempimento", "true"],
+      ["Stesso colore del contorno", "true"],
+      ["Stesso spessore del contorno", "true"],
+      ["Stesso tipo di oggetto", "true"],
+      ["Stesso strumento", "true"],
+      ["Stesso livello", "true"],
+      ["Blocca", "true"],
+      ["Nascondi", "true"],
+      ["Sblocca tutto", "true"],
+      ["Mostra tutto", "true"],
+      ["Isola il gruppo", "true"],
+    ]);
+    expect(item("Stesso riempimento").querySelector(".menu-description")!.textContent).toBe("Scegli prima degli oggetti.");
+    item("Seleziona tutto").click();
+    expect(editor.selection).toEqual([A, B, G]);
+    editor.select([A]);
+    selectionButton().click();
+    item("Stesso riempimento").click();
+    expect(editor.selection).toEqual([A, B]);
+    expect(spoken()).toBe("2 oggetti scelti.");
+    selectionButton().click();
+    item("Inverti la selezione").click();
+    expect(editor.selection).toEqual([G]);
+    // Dentro un gruppo, il resto è anche ciò che sta fuori dal gruppo.
+    tap(60, 70, { ctrlKey: true });
+    expect(editor.selection).toEqual([D]);
+    selectionButton().click();
+    item("Inverti la selezione").click();
+    expect(editor.selection).toEqual([A, B, C, E]);
+    tap(150, 150);
+    tap(60, 70, { ctrlKey: true });
+    selectionButton().click();
+    item("Stesso riempimento").click();
+    expect(editor.selection).toEqual([D, E]);
+    editor.select([A]);
+    selectionButton().click();
+    item("Stesso tipo di oggetto").click();
+    expect(editor.selection).toEqual([A, B, C, D, E]);
+    selectionButton().click();
+    expect(item("Stesso strumento").getAttribute("aria-disabled")).toBe("true");
+    expect(item("Stesso strumento").querySelector(".menu-description")!.textContent).toBe(
+      "Vale per i tratti a mano libera: la stessa penna, o lo stesso evidenziatore, con la stessa punta.",
+    );
+    expect(changes).toEqual([]);
+  });
+
+  it("il tasto destro su un oggetto lo sceglie e apre il menu della selezione; Maiusc+F10 lo apre dalla tastiera", () => {
+    mount(SET, { level: "standard" });
+    editor.setTool("select");
+    expect(rightClick(60, 20).defaultPrevented).toBe(true);
+    expect(editor.selection).toEqual([B]);
+    expect(document.querySelector(".context-menu")!.getAttribute("aria-labelledby")).toBe(selectionButton().id);
+    closeContextMenu();
+    // Su un oggetto già scelto la selezione resta com'è.
+    editor.select([A, B]);
+    rightClick(60, 20);
+    expect(editor.selection).toEqual([A, B]);
+    closeContextMenu();
+    // Con la penna il tasto destro resta al browser.
+    editor.setTool("pen");
+    expect(rightClick(60, 20).defaultPrevented).toBe(false);
+    editor.setTool("select");
+    surface().focus();
+    expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(menu().map(labelOf)).toContain("Isola il gruppo");
+    // L'evento che il tasto manda dietro non apre un secondo menu; il tasto
+    // destro dopo sì.
+    expect(rightClick(60, 20).defaultPrevented).toBe(true);
+    expect(document.querySelectorAll(".context-menu")).toHaveLength(1);
+    closeContextMenu();
+    expect(key("ContextMenu").defaultPrevented).toBe(true);
+    closeContextMenu();
+  });
+
+  it("l'albero mostra il blocco e la visibilità con un segno e a parole, e li cambia dal segno o coi tasti", () => {
+    const flagged = SET.replace(`fill="#0072b2"/>`, `fill="#0072b2" fub:locked="true"/>`).replace(`<g id="${H}">`, `<g id="${H}" display="none">`);
+    mount(flagged, { level: "standard" });
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    const row = (key: string): HTMLElement => host.querySelector<HTMLElement>(`.draw-object[data-key="${key}"]`)!;
+    const sign = (key: string, what: "lock" | "hide"): HTMLElement => row(key).querySelector<HTMLElement>(`.draw-object-sign[data-sign="${what}"]`)!;
+    expect([...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent)).toEqual([
+      "Livello «Livello 1», corrente",
+      "Rettangolo, bloccato, Blu",
+      "Rettangolo, Blu",
+      "Gruppo, 2 oggetti",
+    ]);
+    expect(sign(A, "lock").hasAttribute("data-on")).toBe(true);
+    expect(sign(A, "lock").title).toBe("Sblocca");
+    expect(sign(B, "lock").hasAttribute("data-on")).toBe(false);
+    expect(row(A).hasAttribute("data-toggles")).toBe(true);
+    sign(A, "lock").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2"/>`);
+    expect(spoken()).toBe("Rettangolo, Blu: sbloccato.");
+    // Ctrl+Maiusc+H sulla riga attiva la nasconde, e lo stesso tasto la mostra.
+    const tree = host.querySelector<HTMLElement>('[role="tree"]')!;
+    tree.focus();
+    tree.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
+    tree.dispatchEvent(new KeyboardEvent("keydown", { key: "H", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+    expect(editor.engine.text).toContain(`<g id="${G}" display="none">`);
+    expect(spoken()).toBe("Gruppo, 2 oggetti: nascosto.");
+    tree.dispatchEvent(new KeyboardEvent("keydown", { key: "H", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+    expect(editor.engine.text).toContain(`<g id="${G}">`);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("«?» elenca i tasti della selezione avanzata", () => {
+    mount(SET, { level: "standard" });
+    key("?", { shiftKey: true });
+    expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toContain("Selezione avanzata");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -5462,6 +5863,7 @@ describe("il livello Personalizzato", () => {
     expect(tables.map((table) => table.caption)).toEqual([
       "Strumenti · dal livello Standard",
       "Disponi · dal livello Standard",
+      "Selezione avanzata · dal livello Standard",
       "Testo · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
@@ -5471,8 +5873,8 @@ describe("il livello Personalizzato", () => {
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[6]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
+    expect(tables[7]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
