@@ -5358,6 +5358,7 @@ describe("i nodi, dal livello Esperto", () => {
       ["Segmenti in curve", "Shift+U"],
       ["Spezza ai nodi", "Shift+B"],
       ["Unisci i capi", "Shift+J"],
+      ["Allinea i nodi", null],
     ]);
     expect(command("Nodi a spigolo").title).toBe("Nodi a spigolo (Shift+C)");
     // Canc elimina i nodi: il pulsante che elimina l'oggetto non lo dichiara.
@@ -5376,7 +5377,7 @@ describe("i nodi, dal livello Esperto", () => {
     expect(changes).toEqual([]);
   });
 
-  it("dice quando l'oggetto scelto non ha nodi, o gli oggetti sono più d'uno", () => {
+  it("dice quando l'oggetto scelto non ha nodi, e di quanti oggetti si modificano i nodi", () => {
     const T = "ot3t3t3t3";
     const TEXT = `<text id="${T}" x="300" y="300" fill="#000000" font-family="Inter, sans-serif" font-size="20"><tspan x="300" dy="0">Ciao</tspan></text>`;
     mount(doc(`${LAYER}${PATH}${CURVE}${RECT}${TEXT}</g>`), { level: "expert" });
@@ -5389,9 +5390,11 @@ describe("i nodi, dal livello Esperto", () => {
     // Le frecce non spostano mai l'oggetto, con lo strumento Nodi.
     key("ArrowRight");
     expect(changes).toEqual([]);
+    // Con più oggetti scelti si modificano i nodi di tutti.
     editor.select([P, R]);
     editor.setTool("nodes");
-    expect(spoken()).toBe("Strumento: Nodi. Scegli un oggetto solo per modificarne i nodi.");
+    expect(spoken()).toBe("Strumento: Nodi. 2 oggetti: 7 nodi da modificare.");
+    expect(nodesBar().hidden).toBe(false);
     editor.select([]);
     editor.setTool("nodes");
     expect(spoken()).toBe("Strumento: Nodi.");
@@ -5403,17 +5406,18 @@ describe("i nodi, dal livello Esperto", () => {
     tap(310, 292);
     expect(editor.selection).toEqual([T]);
     expect(spoken()).toBe("Un testo non ha nodi: si modifica scrivendo.");
-    // Senza nodi il riquadro sceglie gli oggetti, con Maiusc in aggiunta, e
-    // il vuoto toglie la scelta.
+    // Il riquadro sceglie i nodi che racchiude, coi loro oggetti, e con
+    // Maiusc in aggiunta; il vuoto toglie la scelta dei nodi, poi quella
+    // degli oggetti.
     drag([[0, 0], [60, 60]], { shiftKey: true });
     expect(editor.selection).toEqual([P, T]);
-    expect(spoken()).toBe("Scegli un oggetto solo per modificarne i nodi.");
+    expect(spoken()).toBe("Tracciato, Nero: 3 nodi da modificare. 3 nodi scelti.");
+    tap(120, 300);
+    expect(spoken()).toBe("Nessun nodo scelto.");
+    expect(editor.selection).toEqual([P, T]);
     tap(120, 300);
     expect(editor.selection).toEqual([]);
     expect(spoken()).toBe("Nessun oggetto scelto.");
-    drag([[0, 0], [60, 60]]);
-    expect(editor.selection).toEqual([P]);
-    expect(spoken()).toBe("Tracciato, Nero: 3 nodi da modificare.");
     expect(changes).toEqual([]);
   });
 
@@ -5472,7 +5476,7 @@ describe("i nodi, dal livello Esperto", () => {
     drag([[30, 10], [31, 10]]);
     expect(spoken()).toBe("2 nodi scelti.");
     // Un segmento che è già una linea non diventa una linea.
-    expect(enabled()).toEqual(["Aggiungi nodi", "Elimina nodi", "Nodi a spigolo", "Nodi lisci", "Nodi simmetrici", "Segmenti in curve", "Spezza ai nodi"]);
+    expect(enabled()).toEqual(["Aggiungi nodi", "Elimina nodi", "Nodi a spigolo", "Nodi lisci", "Nodi simmetrici", "Segmenti in curve", "Spezza ai nodi", "Allinea i nodi"]);
     tap(30, 10);
     expect(d()).toBe("M10 10 L30 10 L50 10 L50 50");
     expect(spoken()).toBe("1 nodo aggiunto.");
@@ -5617,7 +5621,7 @@ describe("i nodi, dal livello Esperto", () => {
     key("a", { ctrlKey: true });
     key("Backspace");
     expect(editor.engine.text).not.toContain(`id="${P}"`);
-    expect(spoken()).toBe("Senza nodi il tracciato non c’è più: eliminato. Il disegno ha 2 oggetti.");
+    expect(spoken()).toBe("Senza nodi la forma non c’è più: eliminata. Il disegno ha 2 oggetti.");
     expect(editor.selection).toEqual([]);
     expect(changes).toHaveLength(4);
     editor.undo();
@@ -5628,8 +5632,8 @@ describe("i nodi, dal livello Esperto", () => {
   it("Maiusc e una lettera, o la barra, cambiano tipo dei nodi e dei segmenti, spezzano e uniscono", () => {
     editing();
     key("Home");
-    // Un capo si elimina soltanto.
-    expect(enabled()).toEqual(["Elimina nodi"]);
+    // Un capo si elimina soltanto, o si allinea.
+    expect(enabled()).toEqual(["Elimina nodi", "Allinea i nodi"]);
     key("C", { shiftKey: true });
     expect(spoken()).toBe("Il tipo è dei nodi in mezzo al tracciato: i capi di un tracciato aperto non ne hanno.");
     key("Tab");
@@ -5705,7 +5709,7 @@ describe("i nodi, dal livello Esperto", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
-  it("dentro un gruppo, la forma toccata è quella di cui si modificano i nodi, e il gruppo resta scelto", () => {
+  it("dentro un gruppo si vedono i nodi di tutte le forme, e la forma toccata resta quella di cui si modificano, col gruppo scelto", () => {
     const G = "og4g4g4g4";
     const A = "oa4a4a4a4";
     const B = "ob4b4b4b4";
@@ -5717,7 +5721,7 @@ describe("i nodi, dal livello Esperto", () => {
     editor.select([G]);
     editor.focus();
     key("n");
-    expect(spoken()).toBe("Strumento: Nodi. Gruppo, 2 oggetti: 2 nodi da modificare.");
+    expect(spoken()).toBe("Strumento: Nodi. Gruppo, 2 oggetti: 5 nodi da modificare.");
     tap(30, 50);
     expect(spoken()).toBe("Gruppo, 2 oggetti: 3 nodi da modificare. 2 nodi scelti.");
     drag([[50, 90], [60, 90], [70, 90]]);
@@ -5727,6 +5731,78 @@ describe("i nodi, dal livello Esperto", () => {
     // La forma resta quella anche dopo la modifica.
     key("Home");
     expect(spoken()).toBe("Nodo 1 di 3, capo: x 10, y 50.");
+  });
+
+  it("i capi di due linee scelti col riquadro si allineano in un passo, che un annulla toglie, e si dice di quanti oggetti sono", () => {
+    const L = "ol5l5l5l5";
+    const M = "om5m5m5m5";
+    const LINES = `<line id="${L}" x1="10" y1="10" x2="50" y2="20" stroke="#000000" stroke-width="2"/>`
+      + `<line id="${M}" x1="10" y1="60" x2="60" y2="70" stroke="#000000" stroke-width="2"/>`;
+    mount(doc(`${LAYER}${LINES}${RECT}</g>`), { level: "expert" });
+    editor.focus();
+    key("n");
+    expect(spoken()).toBe("Strumento: Nodi.");
+    // Il riquadro prende i capi a destra delle due linee, e i loro oggetti.
+    drag([[40, 0], [80, 40], [80, 80]]);
+    expect(editor.selection).toEqual([L, M]);
+    expect(spoken()).toBe("2 oggetti: 4 nodi da modificare. 2 nodi scelti in 2 oggetti.");
+    expect(changes).toEqual([]);
+    command("Allinea i nodi").click();
+    const open = [...document.querySelectorAll<HTMLElement>(".context-menu")].pop()!;
+    const entries = [...open.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    expect(entries.map((entry) => entry.querySelector(".menu-label")!.textContent)).toEqual([
+      "Allinea a sinistra",
+      "Allinea al centro",
+      "Allinea a destra",
+      "Allinea in alto",
+      "Allinea in mezzo",
+      "Allinea in basso",
+    ]);
+    entries[1]!.click();
+    expect(editor.engine.text).toContain(`<line id="${L}" x1="10" y1="10" x2="55" y2="20" stroke="#000000" stroke-width="2"/>`);
+    expect(editor.engine.text).toContain(`<line id="${M}" x1="10" y1="60" x2="55" y2="70" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("2 nodi allineati.");
+    expect(changes).toHaveLength(1);
+    // Maiusc+Tab va al nodo prima, anche di un'altra forma, e dice di quale.
+    key("Tab", { shiftKey: true });
+    expect(spoken()).toBe("Linea, Nero, nodo 1 di 2, capo: x 10, y 10.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Allineamento di nodi.");
+    expect(editor.engine.text).toContain(LINES);
+    for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
+  });
+
+  it("con Maiusc si aggiungono i nodi di un altro oggetto, che si trascinano insieme; Ctrl+A sceglie le forme, poi il disegno", () => {
+    editing();
+    tap(50, 50);
+    expect(spoken()).toBe("Nodo 3 di 3, capo: x 50, y 50.");
+    tap(100, 100, { shiftKey: true });
+    expect(editor.selection).toEqual([P, C]);
+    expect(spoken()).toBe("2 oggetti: 5 nodi da modificare. 2 nodi scelti in 2 oggetti.");
+    // Un nodo si trascina con tutti quelli scelti, di ogni forma, in un passo.
+    drag([[100, 100], [105, 100], [110, 110]]);
+    expect(d()).toBe("M10 10 L50 10 L60 60");
+    expect(d(C)).toBe("M110 110 C130 90 140 80 160 100");
+    expect(spoken()).toBe("2 nodi spostati.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(d()).toBe("M10 10 L50 10 L50 50");
+    expect(d(C)).toBe("M100 100 C120 80 140 80 160 100");
+    // Un tocco senza Maiusc su un nodo scelto lascia scelto soltanto lui, e
+    // la sua forma.
+    tap(100, 100);
+    expect(editor.selection).toEqual([C]);
+    expect(spoken()).toBe("Tracciato, Nero: 2 nodi da modificare. Nodo 1 di 2, capo: x 100, y 100.");
+    key("a", { ctrlKey: true });
+    expect(spoken()).toBe("2 nodi scelti.");
+    key("a", { ctrlKey: true });
+    expect(editor.selection).toEqual([P, C, R]);
+    expect(spoken()).toBe("9 nodi scelti in 3 oggetti.");
+    key("Escape");
+    expect(spoken()).toBe("Nessun nodo scelto.");
+    expect(editor.selection).toEqual([P, C, R]);
+    // Il trascinamento e il suo annulla.
+    expect(changes).toHaveLength(2);
   });
 
   it("un rettangolo ha i suoi quattro nodi: portati tutti resta un rettangolo, uno solo lo fa tracciato", () => {
