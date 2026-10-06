@@ -106,9 +106,10 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   non mentre lo si fa.
 - **I tasti del foglio non partono dal pannello**: un `?` o un `Canc` scritti
   in un campo restano lì. Fuori da un campo di testo `Ctrl+Z` annulla come
-  sul foglio. I pulsanti del pannello non prendono il fuoco al clic, come
-  quelli della barra: dopo «Allinea a sinistra» `Canc` elimina ancora; dalla
-  tastiera una fila di pulsanti si percorre con le frecce.
+  sul foglio, e `Ctrl+G` e `Ctrl+Maiusc+G` raggruppano e separano. I pulsanti
+  del pannello non prendono il fuoco al clic, come quelli della barra: dopo
+  «Allinea a sinistra» `Canc` elimina ancora; dalla tastiera una fila di
+  pulsanti si percorre con le frecce.
 
 Un documento in sola lettura ha il pannello per leggere: i campi si leggono e
 non si scrivono.

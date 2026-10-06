@@ -130,8 +130,8 @@ comando è un passo di annulla, e la selezione segue ciò che ha fatto.
   posto del più alto; un oggetto di un livello trasformato vi entra con la
   trasformazione che lo lascia dov'era. **Separa** (`Ctrl+Maiusc+G`) porta i
   figli al posto del gruppo, ciascuno con la trasformazione del gruppo, con lo
-  stile che ne ereditava e con l'opacità moltiplicata dalla sua. Il titolo e
-  la descrizione del gruppo se ne vanno con lui.
+  stile che ne ereditava e con l'opacità moltiplicata dalla sua; titolo e
+  descrizione del gruppo se ne vanno con lui. Senza selezione i tasti lo dicono.
 - **Ordine** porta in primo piano (`Ctrl+Maiusc+]`), avanti di un posto
   (`Ctrl+]`), indietro di un posto (`Ctrl+[`) o in secondo piano
   (`Ctrl+Maiusc+[`), nel livello di ciascun oggetto. Sul foglio fanno lo
@@ -144,9 +144,9 @@ comando è un passo di annulla, e la selezione segue ciò che ha fatto.
 
 Ordine, gruppi e separazione spostano gli elementi come sono scritti, e
 riscrivono solo ciò che cambia davvero. Una parte che FubDraw non sa scrivere,
-come un `<use>` estraneo, non si copia, e un gruppo che la contiene si separa
-solo se non ha niente da portarle; né si fa un comando che cambierebbe lo
-stile dato da un foglio del disegno ([Disegni, appunti](drawing-clipboard.md)).
+come un `<use>` estraneo, si sposta com'è e riceve ciò che il gruppo le dava;
+se un foglio del disegno sceglierebbe altri elementi, a chi cambierebbe
+aspetto si scrive lo stile di prima ([Disegni, appunti](drawing-clipboard.md)).
 
 ## Livelli
 
@@ -177,8 +177,8 @@ rende corrente quel livello, e l'albero degli oggetti dice qual è: «Livello
 «Note», corrente».
 
 Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in
-cima a un altro livello, nell'ordine in cui stavano e con la trasformazione
-che li lascia dove si vedevano. Il menu spegne il livello che li ha già tutti e
+cima a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo
+stile che ereditavano. Il menu spegne il livello che li ha già tutti e
 quelli nascosti o bloccati; il pulsante non c'è quando il disegno ha un livello
 solo che ha già tutto.
 
@@ -306,8 +306,8 @@ Dal livello Standard, nella barra «Disponi»:
   scelta riscrive soltanto l'`href`, insieme a un `xlink:href` accanto.
 - **Togli il collegamento** (`Ctrl+Maiusc+K`) porta gli oggetti al posto del
   collegamento, dove si vedevano e con lo stile che ne ereditavano, e la
-  selezione passa a loro. Come per Separa, un collegamento con parti che
-  FubDraw non sa scrivere si toglie solo se non ha niente da portare loro.
+  selezione passa a loro. Come per Separa, le parti che FubDraw non sa
+  scrivere si spostano come sono, con ciò che il collegamento dava loro.
 
 Ognuno è un passo di annulla. L'`href` è relativo alla cartella del disegno e
 si scrive come lo scrive Fub quando un documento cambia nome: le lettere

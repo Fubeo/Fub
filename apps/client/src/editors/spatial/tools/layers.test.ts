@@ -207,6 +207,14 @@ describe("portare gli oggetti in un livello", () => {
     expect(opened.engine.text).toContain('<rect id="oaaaaaaaa" x="5" y="0" width="10" height="10" transform="matrix(2 0 0 2 -10 0)"/>');
   });
 
+  it("un oggetto tiene lo stile che ereditava, e un livello che dà lo stesso non chiede niente", () => {
+    const opened = open(doc(`<g id="laaaaaaaa" fub:layer="A" fill="#d55e00" stroke-width="3">${RECT("oaaaaaaaa", 0)}</g><g id="lbbbbbbbb" fub:layer="B" stroke-width="3" stroke="#0072b2"></g>`));
+    const arranged = intoLayerOps(opened.engine.model!, opened.index.units, opened.index.layers[1]!, ids(opened))!;
+    expect(arranged.ops[0]).toEqual({ op: "set", id: "oaaaaaaaa", attrs: { fill: "#d55e00", stroke: "none" } });
+    applied(opened, arranged);
+    expect(opened.engine.text).toContain('<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="#d55e00" stroke="none"/>');
+  });
+
   it("porta dentro anche gli oggetti alla radice, e dà loro un id", () => {
     const opened = open(doc(`<rect x="0" y="0" width="10" height="10"/><g id="laaaaaaaa" fub:layer="A"></g>`));
     const arranged = intoLayerOps(opened.engine.model!, opened.index.units, opened.index.layers[0]!, ids(opened))!;

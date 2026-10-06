@@ -57,6 +57,36 @@ export function inheritedFor(node: ElementPart): readonly string[] {
   return inheritedBy(node.facts.local, node.kind === "container");
 }
 
+/// Gli attributi ereditati che `node` si scrive per vedersi uguale fra i
+/// figli di `parent`: quelli che riceveva dal suo contenitore e che `parent`
+/// darebbe diversi, col valore di partenza dove nessuno li scriveva. Gli
+/// attributi di un elemento si leggono con `attrsOf`.
+export function carriedTo(
+  node: ElementPart,
+  parent: ContainerNode,
+  attrsOf: (node: ElementPart) => ReadonlyMap<string, string> = plainAttributes,
+): Record<string, string> {
+  /// Il valore di `name` che ricevono i figli di `container`: il suo, o
+  /// quello di chi lo contiene; `null` se nessuno lo scrive.
+  const inherited = (container: ContainerNode, name: string): string | null => {
+    for (let at: ContainerNode | null = container; at !== null; at = at.parent) {
+      const value = attrsOf(at).get(name);
+      if (value !== undefined) return value;
+    }
+    return null;
+  };
+  const own = attrsOf(node);
+  const out: Record<string, string> = {};
+  for (const name of inheritedFor(node)) {
+    if (own.has(name)) continue;
+    const before = inherited(node.parent!, name);
+    if (before === inherited(parent, name)) continue;
+    const value = before ?? INITIAL[name];
+    if (value !== undefined) out[name] = value;
+  }
+  return out;
+}
+
 /// Gli attributi ereditati che contano per un elemento `local`, contenitore
 /// o no.
 export function inheritedBy(local: string, container: boolean): readonly string[] {
@@ -158,16 +188,6 @@ export function placeOps(model: DocumentModel, moving: readonly ElementPart[], p
     }
     return matrix;
   };
-  /// Il valore di `name` che ricevono i figli di `container`: il suo, o
-  /// quello di chi lo contiene; `null` se nessuno lo scrive.
-  const inherited = (container: ContainerNode, name: string): string | null => {
-    for (let node: ContainerNode | null = container; node !== null; node = node.parent) {
-      const value = attrsOf(node).get(name);
-      if (value !== undefined) return value;
-    }
-    return null;
-  };
-
   const target = matrixOf(parent);
   const inverse = invert(target);
   /// Ciò che `node` scrive su di sé per vedersi uguale in `parent`; `null`
@@ -181,13 +201,7 @@ export function placeOps(model: DocumentModel, moving: readonly ElementPart[], p
       const value = transformValue(compose(inverse, compose(was, parseTransform(own.get("transform") ?? "") ?? IDENTITY)));
       if (value !== (own.get("transform") ?? null)) change.transform = value;
     }
-    for (const name of inheritedFor(node)) {
-      if (own.has(name)) continue;
-      const before = inherited(node.parent!, name);
-      if (before === inherited(parent, name)) continue;
-      const value = before ?? INITIAL[name];
-      if (value !== undefined) change[name] = value;
-    }
+    Object.assign(change, carriedTo(node, parent, attrsOf));
     return change;
   };
 

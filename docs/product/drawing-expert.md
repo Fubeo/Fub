@@ -64,7 +64,7 @@ in `apps/client/src/editors/spatial/tools/inspector.ts`.
 - **I tasti del foglio non partono dal pannello**: un `?` o un `Canc` scritti
   in un valore restano lì, e `Canc` sul pulsante che toglie un attributo non
   toglie l'oggetto. Fuori da un campo di testo `Ctrl+Z` annulla come sul
-  foglio.
+  foglio, e `Ctrl+G` e `Ctrl+Maiusc+G` raggruppano e separano.
 
 Un documento in sola lettura si legge tutto e non si scrive. Scendendo
 dall'Esperto la sezione se ne va dal pannello delle proprietà.
