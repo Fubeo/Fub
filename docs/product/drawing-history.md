@@ -38,8 +38,9 @@ ripetono.
   mille passi. Il salto si dice: «Indietro fino a «Spostamento»: 3 passi
   annullati.», «Avanti fino al segno «Bozza»: 2 passi ripetuti.».
 - **Col mouse o con la penna**, tenendo premuto e scorrendo sull'elenco, il
-  disegno segue la riga sotto il puntatore, avanti e indietro nel tempo. Col
-  dito l'elenco scorre, e un tocco porta alla riga.
+  disegno segue la riga sotto il puntatore, avanti e indietro nel tempo; oltre
+  il bordo l'elenco scorre col puntatore. Col dito l'elenco scorre, e un tocco
+  porta alla riga.
 - Da lì si continua: `Ctrl+Z` e `Ctrl+Y` vanno di un passo, e un gesto nuovo
   toglie i passi da ripetere, come dopo un annulla.
 - La selezione segue l'ultimo passo annullato o ripetuto, come dopo un

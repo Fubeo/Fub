@@ -264,6 +264,27 @@ describe("il puntatore", () => {
     expect(current()).toEqual([row("p4")]);
   });
 
+  it("oltre il bordo dell'elenco lo fa scorrere, e il disegno segue", () => {
+    mount({ steps: stepsOf(100), done: 100 });
+    const scroller = host.querySelector<HTMLElement>(".draw-history-scroll")!;
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 10 * ROW_PX });
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event("scroll"));
+    // L'elenco scorso in cima comincia in cima allo schermo.
+    vi.spyOn(list(), "getBoundingClientRect").mockImplementation(
+      () => ({ x: 0, y: -scroller.scrollTop, left: 0, top: -scroller.scrollTop, width: 240, height: 0, right: 240, bottom: 0, toJSON: () => ({}) }) as DOMRect,
+    );
+    pointer("pointerdown", row("p5"), 5 * ROW_PX + 5);
+    // Due righe sotto il bordo: la riga 11 viene in vista.
+    pointer("pointermove", list(), 11 * ROW_PX + 5);
+    expect(calls).toEqual(["go 5", "go 11"]);
+    expect(scroller.scrollTop).toBe(2 * ROW_PX);
+    // Lo stesso punto dello schermo, adesso, è due righe più in là.
+    pointer("pointermove", list(), 11 * ROW_PX + 5);
+    expect(calls).toEqual(["go 5", "go 11", "go 13"]);
+    expect(scroller.scrollTop).toBe(4 * ROW_PX);
+  });
+
   it("uno scorrimento senza il rilascio finisce al primo passaggio senza tasti", () => {
     mount();
     placeList();
@@ -390,6 +411,29 @@ describe("i segni", () => {
     expect(panel.rename(9)).toBe(false);
     expect(panel.rename(1)).toBe(true);
     expect(field()!.value).toBe("Bozza");
+  });
+
+  it("la riga col campo del nome non si sposta mentre l'elenco scorre", () => {
+    mount({ steps: stepsOf(200), done: 200, marks: [{ id: 1, name: "Bozza", at: 5 }] });
+    const scroller = host.querySelector<HTMLElement>(".draw-history-scroll")!;
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 10 * ROW_PX });
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event("scroll"));
+    panel.rename(1);
+    const item = row("m1");
+    const placed = vi.spyOn(list(), "insertBefore");
+    // Fuori dalla finestra la riga va in fondo; tornando, le righe rimaste le
+    // stanno dopo, e sono loro a spostarsi.
+    for (const top of [100, 0, 28, 0, 30, 3]) {
+      scroller.scrollTop = top * ROW_PX;
+      scroller.dispatchEvent(new Event("scroll"));
+    }
+    expect(placed.mock.calls.length).toBeGreaterThan(0);
+    expect(placed.mock.calls.map(([node]) => node)).not.toContain(item);
+    expect(field()!.closest('[data-key="m1"]')).toBe(item);
+    // E le righe che si vedono sono in ordine.
+    const shown = [...list().children].filter((child) => child !== item).map((child) => Number((child as HTMLElement).dataset.index));
+    expect(shown).toEqual([...shown].sort((a, b) => a - b));
   });
 
   it("un segno che se ne va da fuori chiude il suo campo, e il fuoco torna all'elenco", () => {

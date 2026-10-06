@@ -16,8 +16,9 @@
 //   dice a parole; un segno ha la sua bandierina, e il nome dice che è un
 //   segno.
 // - **Scorrere col puntatore.** Col mouse o con la penna, premuto su una riga
-//   e trascinato, il disegno segue la riga sotto il puntatore. Il dito scorre
-//   l'elenco, e un tocco porta alla riga.
+//   e trascinato, il disegno segue la riga sotto il puntatore, anche oltre i
+//   bordi dell'elenco, che scorre con lui. Il dito scorre l'elenco, e un
+//   tocco porta alla riga.
 // - **I segni si rinominano e si tolgono qui.** F2, o un doppio clic sul
 //   nome, apre il campo: Invio lo scrive, Esc lo lascia com'era, e uscire dal
 //   campo lo scrive anche lui. Canc toglie il segno, e col puntatore la croce
@@ -310,9 +311,20 @@ export function createHistoryPanel(life: Lifetime, options: HistoryPanelOptions)
     });
     for (const [key, item] of rendered) if (!next.has(key)) item.remove();
     rendered = next;
-    nodes.forEach((node, index) => {
-      if (list.children[index] !== node) list.insertBefore(node, list.children[index] ?? null);
-    });
+    // Le righe nell'ordine dell'elenco, spostando quelle fuori posto. Quella
+    // col campo del nome resta dov'è: spostata, il campo perderebbe il fuoco
+    // e scriverebbe il nome a metà.
+    const still = renaming !== null && field.isConnected ? next.get(renaming) : undefined;
+    let cursor = list.firstElementChild;
+    for (const node of nodes) {
+      if (node === still) continue;
+      if (cursor === still) cursor = cursor?.nextElementSibling ?? null;
+      if (cursor === node) {
+        cursor = node.nextElementSibling;
+        continue;
+      }
+      list.insertBefore(node, cursor);
+    }
     if (active === null) list.removeAttribute("aria-activedescendant");
     else list.setAttribute("aria-activedescendant", rowId(active));
     if (revealSoon) {
@@ -496,6 +508,9 @@ export function createHistoryPanel(life: Lifetime, options: HistoryPanelOptions)
     if (row === undefined || row.key === scrubbing.key) return;
     scrubbing.key = row.key;
     go(row.key);
+    // Oltre il bordo dell'elenco la riga sotto il puntatore non si vede: la
+    // si porta in vista, e l'elenco scorre col puntatore che va più in là.
+    reveal();
   });
   const endScrub = (event: PointerEvent): void => {
     if (scrubbing === null || event.pointerId !== scrubbing.pointer) return;
