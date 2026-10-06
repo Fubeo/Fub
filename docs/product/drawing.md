@@ -141,11 +141,11 @@ comando è un passo di annulla, e la selezione segue ciò che ha fatto.
   suo riquadro, o alla pagina se l'oggetto è uno solo; distribuire lascia
   fermi il primo e l'ultimo e mette spazi uguali fra tre o più oggetti.
 
-Ordine, gruppi e separazione spostano gli elementi del file come sono
-scritti; solo ciò che cambia davvero, come la trasformazione di un figlio,
-si riscrive. Una parte che FubDraw non sa scrivere, come un `<use>` di un
-altro programma, non si copia, e un gruppo che la contiene si separa solo se
-non ha niente da portarle.
+Ordine, gruppi e separazione spostano gli elementi come sono scritti, e
+riscrivono solo ciò che cambia davvero. Una parte che FubDraw non sa scrivere,
+come un `<use>` estraneo, non si copia, e un gruppo che la contiene si separa
+solo se non ha niente da portarle; né si fa un comando che cambierebbe lo
+stile dato da un foglio del disegno ([Disegni, appunti](drawing-clipboard.md)).
 
 ## Livelli
 

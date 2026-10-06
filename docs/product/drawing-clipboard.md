@@ -63,11 +63,19 @@ e le immagini lasciate con loro entrano dopo, coi loro byte
 ([Disegni, immagini](drawing-images.md)).
 
 Un foglio di stile dell'SVG vale soltanto dentro il suo gruppo e non si
-interpreta, e nessuna risorsa esterna si carica. Script e gestori di eventi
+riscrive, e nessuna risorsa esterna si carica. Script e gestori di eventi
 restano testo del file: non eseguono niente, né sul foglio né in Lettura, e
 la diagnostica li segnala (S005). Le entità di un `DOCTYPE` si sostituiscono
 col loro testo. Un SVG malformato, senza niente da incollare o più grande di un
 disegno modificabile non entra, e lo si dice.
+
+I comandi che spostano gli elementi non riscrivono i fogli di stile del
+disegno, incollati o già nel file. Se dopo un comando un foglio sceglierebbe
+altri elementi, e qualcosa cambierebbe aspetto, il comando non si fa e lo si
+dice: succede per esempio separando un diagramma di Mermaid, il cui foglio dà
+lo stile alle forme passando dal gruppo che le contiene. Vale per i gruppi,
+l'ordine, i collegamenti, i livelli e gli spostamenti in «Oggetti»; un foglio
+che sceglie per classe, come quelli di Illustrator, non li ferma.
 
 ## Incolli grandi
 

@@ -663,6 +663,40 @@ describe("disporre, dal livello Standard", () => {
     expect(spoken()).toContain("Non duplicato");
   });
 
+  it("un gruppo per cui passa il foglio di stile del disegno non si separa, come in Mermaid, e lo dice", () => {
+    const source = doc(
+      "<style>#m .node rect{fill:#ececff;stroke:#9370db}#m .edge{stroke:#333;fill:none}</style>"
+        + `${LAYER}<g id="m"><g class="node"><rect x="10" y="50" width="90" height="40"/></g><path class="edge" d="M 100 70 L 140 70"/></g></g>`,
+    );
+    mount(source, { level: "standard" });
+    editor.select(["m"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(editor.selection).toEqual(["m"]);
+    expect(spoken()).toBe("Non separato: il foglio di stile del disegno dà lo stile a ciò che il gruppo contiene passando da lui, e senza il gruppo cambierebbe aspetto.");
+  });
+
+  it("non raggruppa né riordina ciò a cui il foglio di stile del disegno darebbe un altro stile", () => {
+    const source = doc(`<style>g g rect{fill:#d55e00}rect:last-child{stroke:#000}</style>${LAYER}<rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g>`);
+    mount(source, { level: "standard" });
+    editor.select([A, B]);
+    key("g", { ctrlKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(spoken()).toBe("Non raggruppato: in un gruppo il foglio di stile del disegno darebbe un altro stile agli oggetti.");
+    editor.select([A]);
+    key("]", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(spoken()).toBe("Ordine invariato: il foglio di stile del disegno sceglie gli oggetti per posizione, e darebbe loro un altro stile.");
+  });
+
+  it("un foglio di stile che sceglie per classe, come quelli di Illustrator, lascia separare", () => {
+    mount(doc(`<style>.st0{fill:#d55e00}</style>${LAYER}<g id="og1g1g1g1"><rect id="${A}" class="st0" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`), { level: "standard" });
+    editor.select(["og1g1g1g1"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("1 gruppo separato.");
+    expect(editor.engine.text).not.toContain("og1g1g1g1");
+  });
+
   it("«?» elenca anche i tasti per disporre", () => {
     mount(ROW, { level: "standard" });
     key("?", { shiftKey: true });
@@ -4064,6 +4098,23 @@ describe("spostare dall'albero, dal livello Standard", () => {
     expect(spoken()).toBe("Lì non va: quel livello è bloccato.");
     expect(parentOf("oc3c3c3c3")).toBe("l2");
     expect(changes).toHaveLength(2);
+  });
+
+  it("un oggetto non va dove il foglio di stile del disegno gli darebbe un altro stile", () => {
+    const source = doc(
+      `<style>#l2 rect{fill:#d55e00}</style>${LAYER}<rect id="oe5e5e5e5" width="10" height="10"/></g>`
+        + `<g id="l2" fub:layer="Sopra"><rect id="oc3c3c3c3" width="10" height="10"/></g>`,
+    );
+    mount(source, { level: "standard" });
+    button().click();
+    expect(keys()).toEqual(["l2", "oc3c3c3c3", "l1", "oe5e5e5e5"]);
+    inTree("Home");
+    inTree("ArrowDown");
+    expect(activeKey()).toBe("oc3c3c3c3");
+    inTree("ArrowDown", { altKey: true });
+    expect(spoken()).toBe("Lì non va: il foglio di stile del disegno darebbe un altro stile a ciò che si sposta.");
+    expect(editor.engine.text).toBe(source);
+    expect(changes).toHaveLength(0);
   });
 
   it("un collegamento non entra in un altro collegamento: Alt lo porta oltre", () => {

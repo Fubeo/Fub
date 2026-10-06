@@ -394,6 +394,7 @@ import { flagged, flagOps, hasLikeness, inverseOf, nodesOf, similarTo, type Flag
 import { constrainEnd, polygonCount, POLYGON_TOOL, shapeElem, stepRatio, withCount, type PolygonTool, type ShapeStyle, type ShapeTool } from "./shapes";
 import { centerOf, heldShape, mapped, regular, shapeOfRecognized, similar, starOf, type Recognized } from "./recognize";
 import { heldShapeOps, inkShapeOps, isPenStroke } from "./inkshape";
+import { restyles } from "./styled";
 import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -3168,6 +3169,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     // Lasciato dov'era: niente da scrivere, e niente da dire.
     if (arranged.ops.length === 0) return arranged.keys;
+    if (restyles(engine.text, arranged.ops)) {
+      announce(t("draw.move.styled"));
+      return null;
+    }
     if (plan.layers) {
       // Il livello corrente resta lui, anche se riceve un id.
       const current = currentLayer();
@@ -7560,10 +7565,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Scrive `arranged` col nome `label`, e la selezione diventa la sua; la
   /// pagina cresce se `extent` ne esce. `false` se non c'era niente da
-  /// cambiare, e lo si dice, o se il motore ha rifiutato.
-  const arrange = (label: DrawKey, arranged: Arranged, extent: Bounds | null = null): boolean => {
+  /// cambiare, e lo si dice, o se il motore ha rifiutato. Con `styled`, un
+  /// comando che sposta gli elementi senza cambiarli: se un foglio di stile
+  /// del disegno sceglierebbe altro, non si fa e si dice `styled`.
+  const arrange = (label: DrawKey, arranged: Arranged, extent: Bounds | null = null, styled: string | null = null): boolean => {
     if (arranged.ops.length === 0) {
       announce(t("draw.unchanged"));
+      return false;
+    }
+    if (styled !== null && restyles(engine.text, arranged.ops)) {
+      announce(styled);
       return false;
     }
     const ops: Op[] = [...arranged.ops];
@@ -7603,7 +7614,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function orderSelection(order: Order): void {
     const units = arranging("arrange");
     if (units === null) return;
-    if (arrange("draw.action.order", orderOps(engine.model!, currentIndex(), units, order, newIds()))) announce(t(ORDERED[order]));
+    if (arrange("draw.action.order", orderOps(engine.model!, currentIndex(), units, order, newIds()), null, t("draw.order.styled"))) announce(t(ORDERED[order]));
   }
 
   function groupSelection(): void {
@@ -7618,7 +7629,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
       return;
     }
-    if (arrange("draw.action.group", arranged)) announce(t("draw.grouped", { count: units.length }));
+    if (arrange("draw.action.group", arranged, null, t("draw.group.styled"))) announce(t("draw.grouped", { count: units.length }));
   }
 
   function ungroupSelection(): void {
@@ -7634,7 +7645,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.ungroup.foreign"));
       return;
     }
-    if (arrange("draw.action.ungroup", arranged)) announce(plural(groups, "draw.ungrouped.one", "draw.ungrouped.other"));
+    if (arrange("draw.action.ungroup", arranged, null, t("draw.ungroup.styled"))) announce(plural(groups, "draw.ungrouped.one", "draw.ungrouped.other"));
   }
 
   /// Il collegamento scelto da solo, se c'è.
@@ -7685,7 +7696,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
       return;
     }
-    if (arrange("draw.action.link", arranged)) announce(t("draw.linked", { note: linkName(href) }));
+    if (arrange("draw.action.link", arranged, null, t("draw.link.styled"))) announce(t("draw.linked", { note: linkName(href) }));
   }
 
   /// Ctrl+Maiusc+K, o «Togli il collegamento»: gli oggetti dei collegamenti
@@ -7703,7 +7714,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.unlink.foreign"));
       return;
     }
-    if (arrange("draw.action.unlink", arranged)) announce(plural(count, "draw.unlinked.one", "draw.unlinked.other"));
+    if (arrange("draw.action.unlink", arranged, null, t("draw.unlink.styled"))) announce(plural(count, "draw.unlinked.one", "draw.unlinked.other"));
   }
 
   /// Alt+Invio, o «Apri»: la nota del collegamento scelto da solo, a ogni
@@ -8386,7 +8397,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const moving = units.filter((unit) => !inLayer(unit, layer)).length;
-    if (!arrange("draw.action.into_layer", arranged)) return;
+    if (!arrange("draw.action.into_layer", arranged, null, t("draw.layer.styled", { name }))) return;
     // La selezione ha le stesse chiavi, ma sta nel livello nuovo.
     followSelection();
     announce(plural(moving, "draw.moved_to_layer.one", "draw.moved_to_layer.other", { name }));
@@ -8512,6 +8523,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const at = layers.findIndex((other) => other.path[0] === layer.path[0]);
     const other = layers[shift === "up" ? at + 1 : at - 1];
     const arranged = shiftLayerOps(engine.model!, layers, layer, shift, newIds());
+    if (restyles(engine.text, arranged.ops)) {
+      announce(t("draw.order.styled"));
+      return;
+    }
     if (writeLayers("draw.action.layer_order", arranged, arranged.keys[0] ?? null) && other !== undefined) {
       announce(t(shift === "up" ? "draw.layer.moved_up" : "draw.layer.moved_down", { name: layerTitle(layer), other: layerTitle(other) }));
     }
