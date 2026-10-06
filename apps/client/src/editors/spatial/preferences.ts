@@ -22,7 +22,7 @@ import { settings } from "../../host/query";
 import { t } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { notify } from "../../ui/notify";
-import { DEFAULT_GRID, validStep, validSteps, type Grid } from "./tools/grid";
+import { DEFAULT_GRID, validClosed, validStep, validSteps, type Grid } from "./tools/grid";
 import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
 
 /// Il bundle che dichiara il livello.
@@ -124,14 +124,19 @@ export function watchLevel(apply: (level: Level, custom: readonly string[]) => v
 
 /// `value` come griglia, se lo è. Ciò che una griglia ricordata prima non
 /// aveva vale come la prima volta: le guide intelligenti accese, i righelli
-/// spenti e le loro guide accese, e in ogni unità il passo di serie. Un
-/// passo ricordato che la griglia non accetta non conta.
+/// spenti e le loro guide accese, in ogni unità il passo di serie, il
+/// pannello delle proprietà come lo vuole la larghezza dell'editor e la barra
+/// accanto alla selezione. Un passo ricordato che la griglia non accetta non
+/// conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, guides, rulers, rulerGuides } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, closed } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  for (const flag of [guides, rulers, rulerGuides]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  for (const flag of [guides, rulers, rulerGuides, bar]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
   if (steps !== undefined && (typeof steps !== "object" || steps === null)) return null;
+  const sections = closed === undefined ? DEFAULT_GRID.closed : validClosed(closed);
+  if (sections === null) return null;
   return {
     shown,
     snap,
@@ -140,6 +145,9 @@ function gridOf(value: unknown): Grid | null {
     guides: (guides as boolean | undefined) ?? DEFAULT_GRID.guides,
     rulers: (rulers as boolean | undefined) ?? DEFAULT_GRID.rulers,
     rulerGuides: (rulerGuides as boolean | undefined) ?? DEFAULT_GRID.rulerGuides,
+    panel: (panel as boolean | null | undefined) ?? DEFAULT_GRID.panel,
+    bar: (bar as boolean | undefined) ?? DEFAULT_GRID.bar,
+    closed: sections,
   };
 }
 

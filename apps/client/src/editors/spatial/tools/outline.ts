@@ -61,7 +61,7 @@ export function dashValue(dash: Dash, width: number, cap: Cap): string {
 
 /// `stroke-dasharray` come lo scrive FubDraw: le lunghezze con due decimali,
 /// separate da uno spazio. `null` se non si legge.
-function writtenDashes(value: string): string | null {
+export function writtenDashes(value: string): string | null {
   const text = value.trim();
   if (text === "none") return "none";
   const parts = text.split(/[\t\n\f\r ,]+/).filter((part) => part !== "");
@@ -128,8 +128,9 @@ export function inheritedBy(node: ElementPart): Inherited {
 const capOf = (value: string | undefined): Cap => (value !== undefined && keyword("stroke-linecap", value) ? (value as Cap) : "butt");
 const joinOf = (value: string | undefined): Join => (value !== undefined && keyword("stroke-linejoin", value) ? (value as Join) : "miter");
 
-function outlineOf(node: ElementPart, from: Inherited): Outline | null {
-  const own = plainAttributes(node);
+/// Il contorno di `node` che eredita `from`, coi suoi attributi `own`;
+/// `null` se non si vede.
+export function outlineOf(node: ElementPart, from: Inherited, own: ReadonlyMap<string, string> = plainAttributes(node)): Outline | null {
   const value = (name: string): string => own.get(name) ?? from.get(name)!;
   if (value("stroke").trim() === "none") return null;
   const width = nonNegativeLength(value("stroke-width")) ?? 1;

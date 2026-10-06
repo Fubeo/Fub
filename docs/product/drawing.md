@@ -68,11 +68,11 @@ L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, lo
 Standard, che aggiunge strumenti alla stessa barra, e l'Esperto, che mostra il
 file sotto il disegno (vedi «Il livello Esperto»); il Personalizzato ha le
 parti che si scelgono una per una da tutti e tre (vedi «Il livello
-Personalizzato»). Si sceglie nelle
-Impostazioni, nel gruppo «Disegni», con «Livello d'interfaccia»: è
-un'impostazione del vault, `draw.level`, che vale per chiunque lo apra e che un
-plugin o una macro non cambiano. Il livello filtra soltanto ciò che si offre:
-un disegno si apre uguale a ogni livello, e cambiare livello non lo modifica.
+Personalizzato»). Si sceglie nelle Impostazioni, nel gruppo «Disegni», con
+«Livello d'interfaccia»: è un'impostazione del vault, `draw.level`, che vale
+per chiunque lo apra e che un plugin o una macro non cambiano. Il livello
+filtra soltanto ciò che si offre: un disegno si apre uguale a ogni livello, e
+cambiare livello non lo modifica.
 Cambia dal vivo, anche nei disegni aperti, senza riaprirli e senza perdere la
 selezione o la cronologia; chi monta l'editor lo sceglie con `level` e
 `setLevel` (`apps/client/src/editors/spatial/tools/editor.ts`).
@@ -95,7 +95,9 @@ Lo Standard aggiunge:
   se sulla carta bianca sta sotto il contrasto 3:1, il nome lo dice;
 - **«Immagine dal vault…»** (`Ctrl+I`), nel gruppo «Inserisci» dopo gli
   strumenti: mette nel disegno un'immagine che è già nel vault (vedi
-  [Disegni, immagini](drawing-images.md)).
+  [Disegni, immagini](drawing-images.md));
+- il pannello delle **«Proprietà»**, accanto al foglio, per scrivere coi
+  numeri com'è fatta la selezione: [Disegni, proprietà](drawing-properties.md).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore riprende la penna, e un colore a piacere
@@ -103,10 +105,10 @@ torna al colore di partenza.
 
 ## Disporre
 
-Dal livello Standard, finché c'è qualcosa di scelto, in cima al foglio
-galleggia la barra «Disponi»: compare senza spostare il foglio, `Alt+F10` ci
-porta il fuoco ed `Esc` lo riporta al foglio. Ogni comando è un passo di
-annulla, e la selezione segue ciò che ha fatto.
+Dal livello Standard, finché c'è qualcosa di scelto, accanto alla selezione
+galleggia la barra «Disponi», o in cima al foglio se lo si sceglie nelle
+proprietà: `Alt+F10` ci porta il fuoco ed `Esc` lo riporta al foglio. Ogni
+comando è un passo di annulla, e la selezione segue ciò che ha fatto.
 
 - **Duplica** (`Ctrl+D`) mette le copie sopra gli originali, 24 pixel più in
   basso a destra, con id nuovi; la selezione passa alle copie, e un secondo
@@ -156,10 +158,10 @@ sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
   voce spenta dice perché.
 
 Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
-livello corrente.
-Se è nascosto o bloccato il gesto non scrive, e un annuncio dice perché e che
-cosa fare. Scegliere oggetti che stanno tutti in un livello rende corrente quel
-livello, e l'albero degli oggetti dice qual è: «Livello «Note», corrente».
+livello corrente. Se è nascosto o bloccato il gesto non scrive, e un annuncio
+dice perché e che cosa fare. Scegliere oggetti che stanno tutti in un livello
+rende corrente quel livello, e l'albero degli oggetti dice qual è: «Livello
+«Note», corrente».
 
 Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in
 cima a un altro livello, nell'ordine in cui stavano e con la trasformazione
@@ -168,8 +170,8 @@ quelli nascosti o bloccati; il pulsante non c'è quando il disegno ha un livello
 solo che ha già tutto.
 
 Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
-che ha toccato, se c'è ancora. All'Essenziale il pulsante non c'è, e il disegno va nel
-livello più alto che si vede e non è bloccato.
+che ha toccato, se c'è ancora. All'Essenziale il pulsante non c'è, e il
+disegno va nel livello più alto che si vede e non è bloccato.
 
 ## Griglia e pagina
 
@@ -353,14 +355,13 @@ si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu».
 Con una selezione le frecce la spostano di 1, 10 con `Maiusc`, e con `Ctrl` o
 `⌘` la ridimensionano dall'angolo in alto a sinistra; con l'aggancio alla
 griglia vanno di riga in riga, come dice «Griglia e pagina». `[` e `]` la
-ruotano di 15°, `{` e `}` di 90°. `Tab` e
-`Maiusc+Tab` passano all'oggetto dopo e a quello prima, e lo dicono col nome e
-la posizione; oltre l'ultimo il fuoco esce dal foglio, che non lo trattiene
-mai.
-`Home` e `Fine` scelgono il primo e l'ultimo oggetto. `Invio` apre posizione e
-misure della selezione, da scrivere coi numeri; senza selezione apre le
-proprietà del disegno: titolo, descrizione e misure della pagina. `?` elenca
-i tasti del livello di adesso, e «Mostra tutto» quelli dei livelli sopra.
+ruotano di 15°, `{` e `}` di 90°. `Tab` e `Maiusc+Tab` passano all'oggetto
+dopo e a quello prima, e lo dicono col nome e la posizione; oltre l'ultimo il
+fuoco esce dal foglio, che non lo trattiene mai. `Home` e `Fine` scelgono il
+primo e l'ultimo oggetto. `Invio` porta al pannello delle proprietà;
+all'Essenziale apre posizione e misure della selezione, o senza selezione
+titolo, descrizione e pagina. `?` elenca i tasti del livello di adesso, e
+«Mostra tutto» quelli dei livelli sopra.
 
 Ridimensionare scrive un `transform`: anche lo spessore del contorno segue la
 scala, e il riquadro che si chiede è quello che l'oggetto occupa.

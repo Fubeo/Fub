@@ -37,6 +37,12 @@ export interface NumericTransform {
 /// finestra.
 export const UNCHANGED: NumericTransform = { rotate: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 };
 
+/// I limiti dei campi di «Trasforma»: una scala fino a mille volte, in
+/// percentuale, e un'inclinazione che non arriva all'angolo retto, dove non
+/// ha misura.
+export const MAX_SCALE_PERCENT = 100_000;
+export const MAX_SKEW = 89;
+
 /// La matrice della scena di `transform` attorno a `center`.
 export function numericMatrix(transform: NumericTransform, center: Point): Matrix {
   const scale: Matrix = [transform.scaleX, 0, 0, transform.scaleY, 0, 0];

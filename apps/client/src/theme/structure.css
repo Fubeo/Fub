@@ -1499,14 +1499,25 @@ html, body, #app {
   left: calc(50% + 12px);
   max-width: calc(100% - 40px);
 }
+/* Accanto alla selezione, la barra parte dall'angolo del foglio e l'editor
+   la sposta dove va (`tools/bar.ts`). Durante un gesto non si vede, ma
+   tiene il suo posto e le sue misure. */
+.draw-stage > .draw-arrange[data-beside],
+.draw-stage[data-rulers] > .draw-arrange[data-beside] {
+  top: 0;
+  left: 0;
+}
+.draw-arrange[data-gesture] {
+  visibility: hidden;
+}
 .draw-stage[data-rulers] > .draw-text-layer,
 .draw-stage[data-rulers] > .draw-link-layer {
   clip-path: inset(24px 0 0 24px);
 }
-/* Il foglio e, accanto, i pannelli: l'albero degli oggetti e, sotto, gli
-   attributi. Su un riquadro stretto i pannelli vanno sotto il foglio. Una
-   riga dell'albero misura almeno 44 px: è un bersaglio come gli altri, e
-   l'albero virtualizzato conta su quell'altezza. */
+/* Il foglio e, accanto, i pannelli: l'albero degli oggetti, le proprietà e
+   gli attributi, uno sotto l'altro. Su un riquadro stretto i pannelli vanno
+   sotto il foglio. Una riga dell'albero misura almeno 44 px: è un bersaglio
+   come gli altri, e l'albero virtualizzato conta su quell'altezza. */
 .draw-body {
   display: flex;
   flex: 1;
@@ -1515,7 +1526,8 @@ html, body, #app {
 }
 /* Il lato del bordo segue la disposizione, che è della struttura; il colore
    e il tratto sono della pelle. Gli attributi vogliono più spazio dei nomi
-   dell'albero: con loro il pannello si allarga. */
+   dell'albero: con loro il pannello si allarga (`data-wide`, che l'editor
+   mette quando si vedono). */
 .draw-dock {
   display: flex;
   flex-direction: column;
@@ -1525,11 +1537,13 @@ html, body, #app {
   border-width: 0;
   border-inline-start-width: 1px;
 }
-.draw-dock:has(> .draw-inspector:not([hidden])) {
+.draw-dock[data-wide] {
   flex-basis: min(26rem, 45%);
 }
-/* Due pannelli aperti si dividono l'altezza, con un filo fra loro. */
+/* I pannelli aperti si dividono l'altezza, con un filo fra loro; le
+   proprietà, che hanno più da mostrare, ne prendono il doppio. */
 .draw-objects,
+.draw-properties,
 .draw-inspector {
   display: flex;
   flex-direction: column;
@@ -1538,7 +1552,10 @@ html, body, #app {
   min-height: 0;
   border-width: 0;
 }
-.draw-objects:not([hidden]) + .draw-inspector {
+.draw-properties {
+  flex-grow: 2;
+}
+.draw-dock > :not([hidden]) ~ :not([hidden]) {
   border-block-start-width: 1px;
 }
 .draw-objects-header {
@@ -1671,12 +1688,157 @@ textarea.draw-inspector-input {
 .draw-inspector-add-value {
   display: flex;
 }
+/* Il pannello delle proprietà: il titolo e, sotto, le sezioni che
+   scorrono. L'intestazione di una sezione è un pulsante largo quanto il
+   pannello, con la freccia che dice se è aperta. I campi stanno in due
+   colonne, con accanto la colonna stretta di un pulsante: X e Y, Larghezza e
+   Altezza col lucchetto; ciò che vuole spazio prende la riga. */
+.draw-properties-header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+.draw-properties-title,
+.draw-properties-subject,
+.draw-properties-heading,
+.draw-properties-note,
+.draw-properties-error {
+  margin: 0;
+}
+.draw-properties-subject,
+.draw-properties-label,
+.draw-properties-note,
+.draw-properties-error {
+  overflow-wrap: anywhere;
+}
+.draw-properties-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-properties-toggle {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  text-align: start;
+}
+.draw-properties-toggle-text {
+  flex: 1;
+  min-width: 0;
+}
+.draw-properties-toggle > svg {
+  flex: none;
+}
+.draw-properties-toggle[aria-expanded="false"] > svg {
+  transform: rotate(-90deg);
+}
+.draw-properties-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  align-items: end;
+}
+.draw-properties-body[hidden] {
+  display: none;
+}
+.draw-properties-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-properties-field[data-column="1"] {
+  grid-column: 1;
+}
+.draw-properties-field[data-column="2"] {
+  grid-column: 2;
+}
+.draw-properties-field[data-column="3"] {
+  grid-column: 3;
+}
+.draw-properties-field[data-column="all"],
+.draw-properties-actions,
+.draw-properties-body > .draw-inspector {
+  grid-column: 1 / -1;
+}
+.draw-properties-apply {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+.draw-properties-number,
+.draw-properties-paint {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.draw-properties-input {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+textarea.draw-properties-input {
+  resize: vertical;
+}
+.draw-properties-unit {
+  flex: none;
+}
+.draw-properties-picker {
+  flex: none;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.draw-properties-switch {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.draw-properties-check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.draw-properties-actions {
+  display: flex;
+  flex-direction: column;
+}
+.draw-properties-bar {
+  display: flex;
+  flex-wrap: wrap;
+}
+.draw-properties-bar[hidden] {
+  display: none;
+}
+/* Un colore misto è un tondo a righe, che non è un colore della tavolozza:
+   la pelle dà i colori della tessera. */
+.draw-swatch-frame[data-shape="mixed"],
+.draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
+  clip-path: circle(50%);
+}
+.draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
+  background-size: 6px 6px;
+}
+/* Gli attributi, come sezione delle proprietà, scorrono con loro e non
+   hanno un titolo loro. */
+.draw-inspector[data-nested] {
+  flex: none;
+}
+.draw-inspector[data-nested] > .draw-inspector-scroll {
+  flex: none;
+  overflow: visible;
+}
 @container (max-width: 36rem) {
   .draw-body {
     flex-direction: column;
   }
   .draw-dock,
-  .draw-dock:has(> .draw-inspector:not([hidden])) {
+  .draw-dock[data-wide] {
     flex: 0 0 40%;
     border-inline-start-width: 0;
     border-block-start-width: 1px;
