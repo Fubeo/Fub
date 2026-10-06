@@ -1728,7 +1728,8 @@ html, body, #app {
    proprietà, che hanno più da mostrare, ne prendono il doppio. */
 .draw-objects,
 .draw-properties,
-.draw-inspector {
+.draw-inspector,
+.draw-history {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
@@ -1917,6 +1918,98 @@ html, body, #app {
 .draw-objects-tree[data-dragging][data-refused],
 .draw-objects-tree[data-dragging][data-refused] * {
   cursor: no-drop;
+}
+/* La cronologia: il titolo col conteggio e, in fondo alla stessa riga,
+   «Segna questo punto»; sotto, l'elenco dei passi, che scorre. Le righe hanno tutte la stessa altezza, scritta
+   dal pannello, e stanno al loro posto nell'elenco alto quanto tutte: il
+   pannello ne disegna solo quelle che si vedono. In fondo alla riga di
+   adesso c'è la parola «adesso»; in fondo a quella di un segno, la croce che
+   lo toglie, che si vede e si tocca sulla riga col puntatore sopra e su
+   quella attiva: altrove non si tocca per sbaglio. */
+.draw-history-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.draw-history-title {
+  margin: 0;
+}
+.draw-history-action {
+  margin-inline-start: auto;
+}
+.draw-history-note,
+.draw-history-empty {
+  flex: none;
+  margin: 0;
+}
+.draw-history-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-history-list {
+  position: relative;
+}
+.draw-history-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.draw-history-glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+}
+.draw-history-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il campo del nome prende il posto del nome, prima della parola «adesso» e
+   della croce. */
+.draw-history-now,
+.draw-history-remove {
+  flex: none;
+  order: 1;
+}
+.draw-history-row[data-renaming] > .draw-history-label {
+  display: none;
+}
+.draw-history-rename {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+}
+.draw-history-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
+}
+.draw-history-row:hover > .draw-history-remove,
+.draw-history-row[data-active] > .draw-history-remove {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.draw-history-list[aria-disabled="true"] > .draw-history-row {
+  cursor: default;
 }
 .draw-objects-ghost {
   position: fixed;

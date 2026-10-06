@@ -96,6 +96,7 @@ export type Feature =
   | "images"
   | "properties"
   | "style"
+  | "history"
   | "attributes"
   | "outline"
   | "transform"
@@ -126,6 +127,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "images", level: "standard", label: "draw.feature.images" },
   { id: "properties", level: "standard", label: "draw.feature.properties" },
   { id: "style", level: "standard", label: "draw.feature.style" },
+  { id: "history", level: "standard", label: "draw.feature.history" },
   { id: "attributes", level: "expert", label: "draw.feature.attributes" },
   { id: "outline", level: "expert", label: "draw.feature.outline" },
   { id: "transform", level: "expert", label: "draw.feature.transform" },

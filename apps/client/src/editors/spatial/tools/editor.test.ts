@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
+import { applyOperation } from "../../core/text-operation";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
 import { decodeInk } from "../ink/codec";
@@ -3295,6 +3296,7 @@ describe("da tastiera", () => {
       "Proprietà · dal livello Standard",
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
+      "Cronologia · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
@@ -3337,6 +3339,8 @@ describe("da tastiera", () => {
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
+    // La cronologia, tutta dallo Standard.
+    expect(tables[13]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -6542,6 +6546,214 @@ describe("annulla e ripeti", () => {
   });
 });
 
+describe("la cronologia, dal livello Standard", () => {
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Cronologia"]')!;
+  const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-history")!;
+  const list = (): HTMLElement => panel().querySelector<HTMLElement>('[role="listbox"]')!;
+  const row = (key: string): HTMLElement => panel().querySelector<HTMLElement>(`[role="option"][data-key="${key}"]`)!;
+  /// Le righe, dall'alto: il nome, e `*` su quella di adesso, `~` su quelle
+  /// da ripetere.
+  const rows = (): string[] =>
+    [...panel().querySelectorAll<HTMLElement>('[role="option"]')]
+      .sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index))
+      .map((item) => `${item.querySelector(".draw-history-label")!.textContent}${item.getAttribute("aria-current") === "step" ? " *" : ""}${item.hasAttribute("data-ahead") ? " ~" : ""}`);
+
+  /// Tre rettangoli, uno dopo l'altro: i testi dopo ciascuno, dal disegno
+  /// aperto.
+  function three(): string[] {
+    const texts = [editor.engine.text];
+    editor.setTool("rect");
+    for (const y of [100, 150, 200]) {
+      drag([[10, y], [40, y + 30]]);
+      texts.push(editor.engine.text);
+    }
+    return texts;
+  }
+
+  it("c'è dal livello Standard: il pulsante la apre a destra del foglio, e aperta prende il fuoco", () => {
+    mount();
+    expect(button().hidden).toBe(true);
+    editor.setLevel("standard");
+    expect(button().hidden).toBe(false);
+    expect(panel().hidden).toBe(true);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(button().getAttribute("aria-controls")).toBe(panel().id);
+    button().click();
+    expect(panel().hidden).toBe(false);
+    expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(false);
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(list());
+    expect(rows()).toEqual(["Disegno aperto *"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Esc torna al foglio, e la cronologia resta aperta.
+    key("Escape", {}, list());
+    expect(document.activeElement).toBe(surface());
+    expect(panel().hidden).toBe(false);
+    button().click();
+    expect(panel().hidden).toBe(true);
+    expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(true);
+    // Sotto il livello Standard si chiude.
+    button().click();
+    editor.setLevel("essential");
+    expect(button().hidden).toBe(true);
+    expect(panel().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("ogni gesto è un passo; un clic su un passo ci torna in un colpo, con un cambiamento solo e gli stessi byte", () => {
+    mount(SOURCE, { level: "standard" });
+    button().click();
+    const texts = three();
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo", "Rettangolo", "Rettangolo *"]);
+    const drawn = changes.length;
+
+    row("p1").click();
+    expect(editor.engine.text).toBe(texts[1]);
+    expect(changes).toHaveLength(drawn + 1);
+    expect(changes[drawn]!.origin).toBe("undo");
+    expect(changes[drawn]!.text).toBe(texts[1]);
+    expect(applyOperation(texts[3]!, changes[drawn]!.operation)).toBe(texts[1]);
+    expect(spoken()).toBe("Indietro fino a «Rettangolo»: 2 passi annullati.");
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo *", "Rettangolo ~", "Rettangolo ~"]);
+    expect(editor.canRedo).toBe(true);
+
+    row("p3").click();
+    expect(editor.engine.text).toBe(texts[3]);
+    expect(changes).toHaveLength(drawn + 2);
+    expect(changes[drawn + 1]!.origin).toBe("redo");
+    expect(applyOperation(texts[1]!, changes[drawn + 1]!.operation)).toBe(texts[3]);
+    expect(spoken()).toBe("Avanti fino a «Rettangolo»: 2 passi ripetuti.");
+    // La selezione segue l'ultimo passo del salto, come dopo un ripeti.
+    const third = [...texts[3]!.matchAll(/<rect id="([^"]+)"/g)].map((match) => match[1]!).find((id) => !texts[2]!.includes(id))!;
+    expect(editor.selection).toEqual([third]);
+
+    row("p0").click();
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(spoken()).toBe("Indietro fino all’apertura del disegno: 3 passi annullati.");
+    // Annulla e ripeti continuano da lì, e la cronologia li segue.
+    key("y", { ctrlKey: true });
+    expect(editor.engine.text).toBe(texts[1]);
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo *", "Rettangolo ~", "Rettangolo ~"]);
+    // Un gesto nuovo toglie i passi da ripetere.
+    drag([[100, 10], [130, 40]]);
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo", "Rettangolo *"]);
+  });
+
+  it("dalla tastiera: le frecce scelgono la riga, Invio ci va", () => {
+    mount(SOURCE, { level: "standard" });
+    const texts = three();
+    button().click();
+    key("ArrowUp", {}, list());
+    key("ArrowUp", {}, list());
+    expect(editor.engine.text).toBe(texts[3]);
+    key("Enter", {}, list());
+    expect(editor.engine.text).toBe(texts[1]);
+    // Ctrl+Z, dall'elenco, è l'annulla di sempre.
+    key("z", { ctrlKey: true }, list());
+    expect(editor.engine.text).toBe(SOURCE);
+    expect(rows()[0]).toBe("Disegno aperto *");
+  });
+
+  it("si ferma al passo che non si annulla più, che esce dalla cronologia, e lo dice", () => {
+    mount(SOURCE, { level: "standard" });
+    const texts = three();
+    button().click();
+    // Il secondo rettangolo, altrove, se n'è andato.
+    const second = [...texts[2]!.matchAll(/<rect id="([^"]+)"[^>]*\/>/g)].find((match) => !texts[1]!.includes(match[1]!))!;
+    const first = [...texts[1]!.matchAll(/<rect id="([^"]+)"/g)].find((match) => !SOURCE.includes(match[1]!))![1]!;
+    editor.setEngine(SceneEngine.open(texts[3]!.replace(second[0], "")));
+    row("p0").click();
+    expect(spoken()).toBe("Indietro fino a «Rettangolo»: un passo annullato. Impossibile annullare «Rettangolo»: il disegno è cambiato nel frattempo.");
+    // Il primo rettangolo resta: il salto si è fermato prima.
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo *", "Rettangolo ~"]);
+    expect(editor.engine.text).toContain(first);
+    expect(editor.engine.text).not.toContain(second[1]!);
+    row("p0").click();
+    expect(editor.engine.text).not.toContain(first);
+    expect(rows()).toEqual(["Disegno aperto *", "Rettangolo ~", "Rettangolo ~"]);
+  });
+
+  it("un segno: «Segna questo punto» lo mette dove si è, col nome da scrivere, e ci si torna", () => {
+    mount(SOURCE, { level: "standard" });
+    const texts = three();
+    button().click();
+    row("p2").click();
+    panel().querySelector<HTMLButtonElement>(".draw-history-action")!.click();
+    const input = panel().querySelector<HTMLInputElement>(".draw-history-rename")!;
+    expect(input.value).toBe("Segno 1");
+    expect(document.activeElement).toBe(input);
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo", "Rettangolo *", "Segno 1", "Rettangolo ~"]);
+    input.value = "Due rettangoli";
+    key("Enter", {}, input);
+    expect(spoken()).toBe("Ora il segno si chiama «Due rettangoli».");
+    expect(document.activeElement).toBe(list());
+    // Il segno è della sessione: il documento non cambia.
+    expect(editor.engine.text).toBe(texts[2]);
+
+    row("p0").click();
+    row("m1").click();
+    expect(editor.engine.text).toBe(texts[2]);
+    expect(spoken()).toBe("Avanti fino al segno «Due rettangoli»: 2 passi ripetuti.");
+
+    // Il prossimo segno ha il numero dopo; Canc lo toglie.
+    panel().querySelector<HTMLButtonElement>(".draw-history-action")!.click();
+    expect(panel().querySelector<HTMLInputElement>(".draw-history-rename")!.value).toBe("Segno 2");
+    key("Escape", {}, panel().querySelector<HTMLInputElement>(".draw-history-rename")!);
+    key("Delete", {}, list());
+    expect(spoken()).toBe("Segno «Segno 2» tolto.");
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo", "Rettangolo *", "Due rettangoli", "Rettangolo ~"]);
+
+    // Un gesto nuovo, prima del segno, lo toglie con i passi da ripetere.
+    key("z", { ctrlKey: true });
+    drag([[100, 10], [130, 40]]);
+    expect(rows()).toEqual(["Disegno aperto", "Rettangolo", "Rettangolo *"]);
+  });
+
+  it("in sola lettura si guarda soltanto", () => {
+    mount(SOURCE, { level: "standard" });
+    const texts = three();
+    button().click();
+    editor.setReadOnly(true);
+    expect(list().getAttribute("aria-disabled")).toBe("true");
+    expect(panel().querySelector<HTMLButtonElement>(".draw-history-action")!.disabled).toBe(true);
+    const before = changes.length;
+    row("p1").click();
+    key("Enter", {}, list());
+    expect(editor.engine.text).toBe(texts[3]);
+    expect(changes).toHaveLength(before);
+    editor.setReadOnly(false);
+    row("p1").click();
+    expect(editor.engine.text).toBe(texts[1]);
+  });
+
+  it("un altro disegno ricomincia da capo, senza segni", () => {
+    mount(SOURCE, { level: "standard" });
+    three();
+    button().click();
+    panel().querySelector<HTMLButtonElement>(".draw-history-action")!.click();
+    editor.load(SceneEngine.open(SOURCE));
+    expect(rows()).toEqual(["Disegno aperto *"]);
+    expect(panel().querySelector(".draw-history-count")!.textContent).toBe("0 passi");
+  });
+
+  it("«?» elenca i tasti della cronologia", () => {
+    mount(SOURCE, { level: "standard" });
+    key("?", { shiftKey: true });
+    const tables = [...dialog().querySelectorAll(".keys-list > table")].map((table) => ({
+      caption: table.querySelector("caption")!.textContent,
+      rows: [...table.querySelectorAll("tr")].map((one) => [one.querySelector("th")!.textContent, one.querySelector("td")!.textContent]),
+    }));
+    expect(tables.find((table) => table.caption === "Cronologia")?.rows).toEqual([
+      ["Enter o Space", "Nella cronologia, torna o va avanti fino alla riga"],
+      ["F2", "Nella cronologia, cambia il nome del segno"],
+      ["Del", "Nella cronologia, toglie il segno"],
+      ["Esc", "Dalla cronologia torna al foglio"],
+    ]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
 describe("il titolo", () => {
   it("si scrive con un `meta`, e vuoto si toglie", () => {
     mount();
@@ -6818,13 +7030,14 @@ describe("il livello Personalizzato", () => {
       "Proprietà · dal livello Standard",
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
+      "Cronologia · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[12]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[13]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

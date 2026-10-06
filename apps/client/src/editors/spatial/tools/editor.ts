@@ -319,7 +319,8 @@ import {
   type View,
 } from "../view";
 import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
-import { History, type Replay } from "./history";
+import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
+import { createHistoryPanel } from "./history-panel";
 import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "./clipboard";
 import {
   browserCodec,
@@ -829,6 +830,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-lasso": ["M3.5 9.5a8.5 5.5 0 1 0 17 0a8.5 5.5 0 1 0-17 0", "M8 14.5c-2 1.5-2 4 0 4.5s3.5 0 3.5 2.5"],
   "draw-selection": ["M4 7V4h3", "M10 4h4", "M17 4h3v3", "M20 10v4", "M20 17v3h-3", "M14 20h-4", "M7 20H4v-3", "M4 14v-4"],
   "draw-back": ["M10 6l-6 6 6 6", "M4 12h16"],
+  "draw-history": ["M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5", "M3.5 4v4.5H8", "M12 7.5V12l3 2"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -1704,6 +1706,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   tree.element.hidden = true;
   relabels.push(() => tree.relabel());
 
+  // La cronologia, dal livello Standard: i passi del disegno, per tornare a
+  // uno qualsiasi in un colpo, e i segni. Ciò che mostra: la revisione della
+  // pila e se si poteva cambiare.
+  let historyShown: { readonly revision: number; readonly editable: boolean } | null = null;
+  const historyPanel = createHistoryPanel(life, {
+    onGo: (at, mark) => goToPoint(at, mark),
+    onMark: () => markHere(),
+    onRename: (id, name) => renameMark(id, name),
+    onUnmark: (id) => unmark(id),
+    onLeave: () => surface.focus({ preventScroll: true }),
+  });
+  historyPanel.element.hidden = true;
+  relabels.push(() => {
+    historyPanel.relabel();
+    historyShown = null;
+    syncHistory();
+  });
+
   // Gli attributi dell'oggetto scelto, dal livello Esperto: chiusi finché
   // qualcuno non li apre, sotto l'albero se è aperto anche quello.
   const inspector = createInspector(life, {
@@ -1779,6 +1799,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
+  const historyButton = button(viewGroup, "draw-button", () => t("draw.history"), "draw-history", () => showHistory(historyPanel.element.hidden));
+  historyButton.setAttribute("aria-expanded", "false");
+  historyButton.setAttribute("aria-controls", historyPanel.element.id);
   // Gli attributi, dal livello Esperto.
   const attributesButton = button(viewGroup, "draw-button", () => t("draw.attributes"), "draw-attributes", () => showAttributes(inspector.element.hidden));
   attributesButton.setAttribute("aria-expanded", "false");
@@ -1991,14 +2014,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   });
 
   // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
-  // oggetti e, sotto, gli attributi.
+  // oggetti, le proprietà, gli attributi e, in fondo, la cronologia.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
   stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(tree.element, panel.element, inspector.element);
+  dock.append(tree.element, panel.element, inspector.element, historyPanel.element);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, dock);
@@ -3208,6 +3231,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     tree.rename(units[0]!.key);
   }
 
+  /// Apre o chiude la cronologia; aperta, il fuoco ci va.
+  function showHistory(open: boolean): void {
+    if (open && !has("history")) return;
+    if (!open && historyPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    historyPanel.element.hidden = !open;
+    historyButton.setAttribute("aria-expanded", String(open));
+    syncDock();
+    if (open) {
+      historyShown = null;
+      syncHistory();
+      historyPanel.focus();
+    }
+  }
+
+  /// Porta la cronologia, se è aperta, alla pila di adesso.
+  function syncHistory(): void {
+    if (historyPanel.element.hidden) return;
+    const canEdit = editable();
+    if (historyShown !== null && historyShown.revision === history.revision && historyShown.editable === canEdit) return;
+    historyShown = { revision: history.revision, editable: canEdit };
+    historyPanel.update({
+      steps: history.steps(),
+      done: history.done,
+      start: history.start,
+      trimmed: history.trimmed,
+      limit: HISTORY_LIMIT,
+      marks: history.marks,
+      editable: canEdit,
+    });
+  }
+
   /// Apre o chiude l'albero; aperto, il fuoco ci va.
   function showObjects(open: boolean): void {
     if (!open && tree.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
@@ -3305,7 +3359,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// attributi, che vogliono più spazio.
   function syncDock(): void {
     const nested = nestedNow();
-    dock.hidden = tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden);
+    dock.hidden = tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden;
     dock.toggleAttribute("data-wide", nested ? !panel.element.hidden : !inspector.element.hidden);
   }
 
@@ -3315,7 +3369,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (nested === nestedNow()) return;
     if (inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     if (nested) panel.attributes.append(inspector.element);
-    else dock.append(inspector.element);
+    else dock.insertBefore(inspector.element, historyPanel.element);
     inspector.nest(nested);
     inspector.element.hidden = !nested;
     attributesButton.setAttribute("aria-expanded", "false");
@@ -3990,6 +4044,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     nestInspector(panelled && has("attributes"));
     attributesButton.hidden = !has("attributes") || nestedNow();
     if (attributesButton.hidden && !nestedNow() && !inspector.element.hidden) showAttributes(false);
+    historyButton.hidden = !has("history");
+    if (historyButton.hidden && !historyPanel.element.hidden) showHistory(false);
+    syncHistory();
     syncInspector();
     syncProperties();
     titleInput.disabled = !canEdit;
@@ -4032,7 +4089,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- Operazioni -----------------------------------------------------------
 
-  const emit = (applied: Applied, origin: DrawChange["origin"]): void => {
+  const emit = (applied: Pick<Applied, "text" | "operation" | "duplicate">, origin: DrawChange["origin"]): void => {
     if (applied.duplicate) return;
     options.onChange?.({ text: applied.text, operation: applied.operation, origin });
   };
@@ -4060,6 +4117,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return null;
   };
 
+  /// La superficie dopo un annulla, un ripeti o un salto nella cronologia:
+  /// la scena nuova, e la selezione che segue ciò che l'ultimo passo ha
+  /// toccato e che c'è ancora, e così il livello corrente.
+  const landed = (ids: readonly string[]): void => {
+    refresh();
+    const touched = inOrder(ids);
+    if (touched.length > 0) selection = touched;
+    const layer = has("layers") ? currentIndex().layers.find((other) => other.id !== null && ids.includes(other.id)) : undefined;
+    if (layer !== undefined) choose(layer);
+    else if (touched.length > 0) followSelection();
+    syncControls();
+    showHandles();
+  };
+
   const replay = (step: Replay | null, origin: "undo" | "redo"): void => {
     if (step === null) return;
     const action = t(step.step.label);
@@ -4068,20 +4139,72 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t(origin === "undo" ? "draw.undo.failed" : "draw.redo.failed", { action }));
       return;
     }
-    const applied = step.outcome;
-    refresh();
-    // La selezione segue ciò che il passo ha toccato e che c'è ancora, e
-    // così il livello corrente.
-    const touched = inOrder(applied.touched);
-    if (touched.length > 0) selection = touched;
-    const layer = has("layers") ? currentIndex().layers.find((other) => other.id !== null && applied.touched.includes(other.id)) : undefined;
-    if (layer !== undefined) choose(layer);
-    else if (touched.length > 0) followSelection();
-    syncControls();
-    showHandles();
-    emit(applied, origin);
+    landed(step.outcome.touched);
+    emit(step.outcome, origin);
     announce(t(origin === "undo" ? "draw.undone" : "draw.redone", { action }));
   };
+
+  /// Dove si è nella cronologia, a parole, per dire dove ha portato un
+  /// salto: al segno `mark`, se il salto è arrivato al suo punto.
+  const whereNow = (mark: Mark | null): string => {
+    const at = history.position;
+    if (mark !== null && mark.at === at) return t("draw.history.where.mark", { name: mark.name });
+    if (at === history.start) return t(history.trimmed ? "draw.history.where.start" : "draw.history.where.opened");
+    const step = history.steps()[history.done - 1]!;
+    return t("draw.history.where.step", { action: t(step.label) });
+  };
+
+  /// Va al punto `at` della cronologia in un colpo, dal suo pannello: i
+  /// passi in mezzo si annullano o si ripetono insieme, e il documento cambia
+  /// una volta sola. Ciò che si sta scrivendo o tracciando si conclude prima,
+  /// come cambiando strumento. `mark` è il segno da cui ci si va, per dirlo.
+  function goToPoint(at: number, mark: Mark | null): void {
+    if (!editable()) return;
+    finishText();
+    cancelGesture();
+    finishBezier(false, true);
+    const jump = history.goTo(engine, at);
+    if (jump === null) {
+      syncControls();
+      return;
+    }
+    const said: string[] = [];
+    const undos = jump.replayed.undos;
+    if (undos.length > 0) {
+      // La selezione segue l'ultimo passo, quello accanto al punto d'arrivo:
+      // come un annulla o un ripeti, che ne sono il salto più corto.
+      landed(undos[undos.length - 1]!.touched);
+      emit({ ...jump.replayed, duplicate: false }, jump.direction);
+      const back = jump.direction === "undo";
+      said.push(plural(undos.length, back ? "draw.history.back.one" : "draw.history.forward.one", back ? "draw.history.back.other" : "draw.history.forward.other", { where: whereNow(mark) }));
+    } else {
+      syncControls();
+    }
+    if (jump.failed !== null) said.push(t(jump.direction === "undo" ? "draw.undo.failed" : "draw.redo.failed", { action: t(jump.failed.label) }));
+    announce(said.join(" "));
+  }
+
+  /// «Segna questo punto»: un segno dove si è adesso, col nome di partenza,
+  /// e il suo campo del nome aperto.
+  function markHere(): void {
+    if (!editable()) return;
+    const sign = history.mark(t("draw.history.mark.name", { number: history.marked + 1 }));
+    syncHistory();
+    historyPanel.rename(sign.id);
+  }
+
+  function renameMark(id: number, name: string): void {
+    if (!history.rename(id, name)) return;
+    syncHistory();
+    announce(t("draw.history.renamed", { name }));
+  }
+
+  function unmark(id: number): void {
+    const sign = history.marks.find((each) => each.id === id);
+    if (sign === undefined || !history.unmark(id)) return;
+    syncHistory();
+    announce(t("draw.history.unmarked", { name: sign.name }));
+  }
 
   function undo(): void {
     if (!editable()) return;
@@ -9079,6 +9202,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const recognizeKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("recognize") ? [{ title: t("draw.feature.recognize"), rows: [["Shift", t("draw.keys.recognize.regular")]] }] : [];
 
+  /// I tasti della cronologia, se le parti `at` la offrono.
+  const historyKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("history")
+      ? [
+          {
+            title: t("draw.history"),
+            rows: [
+              ["Enter Space", t("draw.keys.history.go")],
+              ["F2", t("draw.keys.history.rename")],
+              ["Delete", t("draw.keys.history.unmark")],
+              ["Escape", t("draw.keys.history.leave")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti della selezione avanzata.
   const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("selection")
@@ -9164,6 +9303,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["?", t("draw.keys")],
       ],
     },
+    ...historyKeys(at),
   ];
 
   /// I tasti che i livelli sopra quello di adesso aggiungono, col livello da
@@ -9929,7 +10069,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // sul pulsante che toglie un attributo non toglie l'oggetto. Passano i
     // tasti che portano agli attributi e a «Trasforma» e, fuori da un campo
     // di testo, annulla e ripeti.
-    const treeField = (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) && tree.element.contains(event.target);
+    const treeField =
+      (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
+      (tree.element.contains(event.target) || historyPanel.element.contains(event.target));
     if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
