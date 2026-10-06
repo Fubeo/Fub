@@ -47,6 +47,7 @@ import { parseGuides, parseUnits, type LengthUnit, type RulerGuide } from "../sc
 import { escapeAttribute, NamespaceScope } from "../scene/serialize";
 import { SourceText } from "../scene/text";
 import { href as hrefKind, length, numberList } from "../scene/values";
+import { viewMatrix } from "../view";
 import {
   NS_FUB,
   NS_NONE,
@@ -198,6 +199,11 @@ export interface PaintSource {
 
 /// La vista in cui si disegna uno strato immagine: il rettangolo della scena
 /// che copre e la sua dimensione in pixel CSS.
+///
+/// Con `angle` il rettangolo è girato come la vista: (`x`, `y`) è il punto
+/// della scena nell'angolo in alto a sinistra dell'immagine, e `width` e
+/// `height` sono le misure lungo i suoi lati. L'immagine resta allineata ai
+/// pixel dello schermo, e il disegno vi entra già girato.
 export interface ImageFrame {
   readonly x: number;
   readonly y: number;
@@ -205,6 +211,8 @@ export interface ImageFrame {
   readonly height: number;
   readonly pixelWidth: number;
   readonly pixelHeight: number;
+  /// Gradi in senso orario, come `rotate()`; assente è 0.
+  readonly angle?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1178,14 +1186,42 @@ function svgPrefix(rootName: string): string {
 // ---------------------------------------------------------------------------
 
 /// Il documento SVG di uno strato immagine per `frame`.
+///
+/// Girato, la radice dello strato diventa un `svg` annidato, con la vista
+/// della scena che copre il rettangolo, dentro un `svg` grande quanto
+/// l'immagine che lo gira: il browser disegna le forme già girate, nitide
+/// sui pixel dello schermo, invece di girare un'immagine già fatta. Lo
+/// `style` della radice va anche sull'`svg` esterno, che è quello che dipinge
+/// lo sfondo. Una regola di stile del file che chiede la radice come genitore
+/// diretto (`:root > g`) lì non vale più.
 export function imageDocument(layer: ImageLayer, frame: ImageFrame): string {
   const { root } = layer;
   const own = root.style === null ? "" : root.style;
   const style = layer.transparent ? `${own}${own === "" ? "" : ";"}background:none!important` : own;
-  return `${layer.prolog}<${root.name}${root.attrs}`
-    + ` width="${num(frame.pixelWidth)}" height="${num(frame.pixelHeight)}"`
-    + ` viewBox="${num(frame.x)} ${num(frame.y)} ${num(frame.width)} ${num(frame.height)}"`
-    + ` preserveAspectRatio="none"${style === "" ? "" : ` style="${escapeAttribute(style)}"`}>${layer.body}`;
+  const styled = style === "" ? "" : ` style="${escapeAttribute(style)}"`;
+  const size = ` width="${num(frame.pixelWidth)}" height="${num(frame.pixelHeight)}"`;
+  const angle = frame.angle ?? 0;
+  if (angle === 0) {
+    return `${layer.prolog}<${root.name}${root.attrs}${size}`
+      + ` viewBox="${num(frame.x)} ${num(frame.y)} ${num(frame.width)} ${num(frame.height)}"`
+      + ` preserveAspectRatio="none"${styled}>${layer.body}`;
+  }
+  // Il riquadro della scena attorno al rettangolo girato, largo due pixel in
+  // più per lato: il bordo della vista annidata non sfuma gli angoli.
+  const [cos, sin] = viewMatrix({ scale: 1, angle, tx: 0, ty: 0 });
+  const xs = [0, frame.width * cos, frame.height * sin, frame.width * cos + frame.height * sin];
+  const ys = [0, -frame.width * sin, frame.height * cos, frame.height * cos - frame.width * sin];
+  const pad = (2 * frame.width) / Math.max(1, frame.pixelWidth);
+  const bx = frame.x + Math.min(...xs) - pad;
+  const by = frame.y + Math.min(...ys) - pad;
+  const bw = Math.max(...xs) - Math.min(...xs) + 2 * pad;
+  const bh = Math.max(...ys) - Math.min(...ys) + 2 * pad;
+  const box = `${num(bx)} ${num(by)} ${num(bw)} ${num(bh)}`;
+  return `${layer.prolog}<svg xmlns="${SVG_NS}"${size} viewBox="0 0 ${num(frame.width)} ${num(frame.height)}"`
+    + ` preserveAspectRatio="none"${styled}>`
+    + `<g transform="rotate(${num(angle)}) translate(${num(-frame.x)} ${num(-frame.y)})">`
+    + `<${root.name}${root.attrs} x="${num(bx)}" y="${num(by)}" width="${num(bw)}" height="${num(bh)}"`
+    + ` viewBox="${box}"${styled}>${layer.body}</g></svg>`;
 }
 
 /// Lo strato immagine di un documento intero: un SVG estraneo prima di

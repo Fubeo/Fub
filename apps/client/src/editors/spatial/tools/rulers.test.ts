@@ -19,7 +19,7 @@ import {
   toUnit,
 } from "./rulers";
 
-const camera = (scale: number, tx = 0, ty = 0) => ({ scale, tx, ty });
+const camera = (scale: number, tx = 0, ty = 0, angle = 0) => ({ scale, angle, tx, ty });
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -207,5 +207,50 @@ describe("le viste", () => {
     expect(hot!.hasAttribute("data-away")).toBe(true);
     lines.show(null);
     expect(lines.element.style.display).toBe("none");
+  });
+
+  it("sul foglio girato le guide girano con lui, e si prendono di traverso", () => {
+    const lines = createGuideLines(host());
+    const guides = [
+      { axis: "x" as const, at: 100, locked: false },
+      { axis: "y" as const, at: 50, locked: true },
+      { axis: "x" as const, at: 2000, locked: false },
+    ];
+    // Girato di 90°: la x 100 della scena è una riga orizzontale, la y 50 una
+    // verticale a destra, e la x 2000 non si vede.
+    const turned = camera(1, 640, 0, 90);
+    lines.show({ camera: turned, width: 640, height: 480, guides, hot: null, hidden: null, moving: null });
+    const [free, locked] = [...lines.element.querySelectorAll("path")];
+    expect(free!.getAttribute("d")).toBe("M640 100.5L0 100.5");
+    expect(locked!.getAttribute("d")).toBe("M590.5 0L590.5 480");
+    expect(lines.element.hasAttribute("data-slanted")).toBe(false);
+    expect(guideAt(guides, turned, [300, 101], 4, false)).toBe(0);
+    expect(guideAt(guides, turned, [588, 7], 4, false)).toBe(1);
+    expect(guideAt(guides, turned, [100, 300], 4, false)).toBeNull();
+    // Di sbieco, oblique e senza i bordi netti.
+    lines.show({ camera: camera(1, 0, 0, 30), width: 640, height: 480, guides, hot: null, hidden: null, moving: null });
+    expect(lines.element.hasAttribute("data-slanted")).toBe(true);
+    const [, ax, ay, bx, by] = /M([-\d.]+) ([-\d.]+)L([-\d.]+) ([-\d.]+)/.exec(free!.getAttribute("d")!)!.map(Number);
+    expect((Math.atan2(by! - ay!, bx! - ax!) * 180) / Math.PI).toBeCloseTo(120, 1);
+  });
+
+  it("sul foglio girato i righelli non segnano niente, e l'angolo mostra l'alto del foglio", () => {
+    const rulers = createRulers(host(), (value) => String(value), (unit) => `[${unit}]`);
+    rulers.show({ ...view, camera: camera(1, 20, 30, 30) });
+    const top = rulers.element.querySelector('[data-ruler="x"]')!;
+    expect(top.querySelector('[data-part="ticks"]')!.getAttribute("d")).toBe("");
+    expect(top.querySelectorAll('[data-part="labels"] text')).toHaveLength(0);
+    expect(top.querySelector('[data-part="page"]')!.getAttribute("display")).toBe("none");
+    expect(top.querySelector('[data-part="selection"]')!.getAttribute("display")).toBe("none");
+    expect(top.querySelector('[data-part="pointer"]')!.getAttribute("d")).toBe("");
+    const north = rulers.element.querySelector('[data-part="north"]')!;
+    expect(rulers.element.querySelector('[data-part="unit"]')!.getAttribute("display")).toBe("none");
+    expect(north.hasAttribute("display")).toBe(false);
+    expect(north.getAttribute("transform")).toBe(`translate(${RULER_PX / 2} ${RULER_PX / 2}) rotate(30)`);
+    // Diritto, tornano le tacche e l'unità.
+    rulers.show(view);
+    expect(top.querySelectorAll('[data-part="labels"] text').length).toBeGreaterThan(0);
+    expect(rulers.element.querySelector('[data-part="unit"]')!.hasAttribute("display")).toBe(false);
+    expect(north.getAttribute("display")).toBe("none");
   });
 });

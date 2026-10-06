@@ -19,14 +19,18 @@
 //   tema. Una guida bloccata è tratteggiata, così si riconosce anche senza
 //   il colore; quella sotto il puntatore, o che si trascina, ha il colore
 //   della linea.
+// - **Il foglio girato:** le guide girano con lui, perché sono della scena.
+//   I righelli no: misurano lungo i bordi dello schermo, che sul foglio
+//   girato non seguono più un asse. Restano senza tacche, e nell'angolo una
+//   freccia mostra dove sta l'alto del foglio.
 
-import type { Camera } from "../../../spatial/camera";
 import { formatNumber } from "../number";
 import type { InkPointerType } from "../pen/pen-input";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { SVG_NS } from "../scene/xml";
+import { sceneBox, toScene, toScreen, type View } from "../view";
 
 /// Lo spessore di un righello, in pixel CSS: un bersaglio da 24 pixel, da
 /// cui si tira una guida anche col dito.
@@ -157,13 +161,18 @@ export function rulerTicks(offset: number, scale: number, length: number, unit: 
 /// La guida di `guides` sotto il punto `p` dello schermo, entro `reach`
 /// pixel: la più vicina, e a pari distanza l'ultima, che si vede sopra le
 /// altre. `null` se non ce n'è. `unlocked` lascia fuori le bloccate.
-export function guideAt(guides: readonly RulerGuide[], view: Camera, p: Point, reach: number, unlocked: boolean): number | null {
+export function guideAt(guides: readonly RulerGuide[], view: View, p: Point, reach: number, unlocked: boolean): number | null {
   let best: number | null = null;
   let distance = reach;
+  // Su un foglio girato la distanza si misura nella scena, di traverso alla
+  // guida, e si riporta in pixel.
+  const q = view.angle === 0 ? null : toScene(view, p);
   guides.forEach((guide, i) => {
     if (unlocked && guide.locked) return;
-    const at = guide.axis === "x" ? view.tx + view.scale * guide.at : view.ty + view.scale * guide.at;
-    const apart = Math.abs(at - (guide.axis === "x" ? p[0] : p[1]));
+    const axis = guide.axis === "x" ? 0 : 1;
+    const apart = q !== null
+      ? Math.abs(q[axis] - guide.at) * view.scale
+      : Math.abs((axis === 0 ? view.tx : view.ty) + view.scale * guide.at - p[axis]);
     if (apart <= distance) {
       best = i;
       distance = apart;
@@ -177,9 +186,25 @@ function crisp(at: number): number {
   return Math.round(at - 0.5) + 0.5;
 }
 
+/// La guida `axis` a `value` sul foglio girato, attraverso `box`, il
+/// riquadro della scena che si vede: girata di un angolo retto resta sul
+/// mezzo pixel, di sbieco a due decimali. Vuota se non si vede.
+function turnedLine(view: View, box: Bounds, axis: "x" | "y", value: number): string {
+  const i = axis === "x" ? 0 : 1;
+  if (!Number.isFinite(value) || value < box.min[i] || value > box.max[i]) return "";
+  const square = view.angle % 90 === 0;
+  let [ax, ay] = toScreen(view, axis === "x" ? [value, box.min[1]] : [box.min[0], value]);
+  let [bx, by] = toScreen(view, axis === "x" ? [value, box.max[1]] : [box.max[0], value]);
+  const round = (at: number): number => Math.round(at * 100) / 100;
+  if (square && Math.abs(ax - bx) < 1e-6) ax = bx = crisp(ax);
+  else if (square) ay = by = crisp(ay);
+  else [ax, ay, bx, by] = [round(ax), round(ay), round(bx), round(by)];
+  return `M${ax} ${ay}L${bx} ${by}`;
+}
+
 /// Ciò che i righelli mostrano.
 export interface RulerView {
-  readonly camera: Camera;
+  readonly camera: View;
   /// La misura del foglio, in pixel.
   readonly width: number;
   readonly height: number;
@@ -229,6 +254,10 @@ export function createRulers(host: HTMLElement, label: (value: number, places: n
   const left = ruler("y");
   const corner = part("rect", "corner", svg);
   const cornerText = part("text", "unit", svg);
+  // La freccia verso l'alto del foglio girato, al posto dell'unità.
+  const north = part("path", "north", svg);
+  north.setAttribute("d", "M0 7V-7M-4 -3L0 -7L4 -3");
+  north.setAttribute("display", "none");
   corner.setAttribute("width", String(RULER_PX));
   corner.setAttribute("height", String(RULER_PX));
   cornerText.setAttribute("x", String(RULER_PX / 2));
@@ -258,12 +287,13 @@ export function createRulers(host: HTMLElement, label: (value: number, places: n
   let drawn = "";
   const drawTicks = (view: RulerView): void => {
     const { camera, width, height, unit } = view;
-    const key = `${camera.scale} ${camera.tx} ${camera.ty} ${width} ${height} ${unit}`;
+    const turned = camera.angle !== 0;
+    const key = `${camera.scale} ${camera.angle} ${camera.tx} ${camera.ty} ${width} ${height} ${unit}`;
     if (key === drawn) return;
     drawn = key;
     for (const [axis, r, length] of [["x", top, width], ["y", left, height]] as const) {
       const offset = axis === "x" ? camera.tx : camera.ty;
-      const { ticks, places } = rulerTicks(offset, camera.scale, length, unit);
+      const { ticks, places } = turned ? { ticks: [], places: 0 } : rulerTicks(offset, camera.scale, length, unit);
       let d = "";
       let used = 0;
       for (const tick of ticks) {
@@ -296,6 +326,14 @@ export function createRulers(host: HTMLElement, label: (value: number, places: n
       r.edge.setAttribute("d", axis === "x" ? `M${RULER_PX} ${RULER_PX - 0.5}H${length}` : `M${RULER_PX - 0.5} ${RULER_PX}V${length}`);
     }
     cornerText.textContent = unitName(unit);
+    if (turned) {
+      cornerText.setAttribute("display", "none");
+      north.removeAttribute("display");
+    } else {
+      cornerText.removeAttribute("display");
+      north.setAttribute("display", "none");
+    }
+    north.setAttribute("transform", `translate(${RULER_PX / 2} ${RULER_PX / 2}) rotate(${camera.angle})`);
   };
 
   return {
@@ -307,7 +345,12 @@ export function createRulers(host: HTMLElement, label: (value: number, places: n
         return;
       }
       drawTicks(view);
-      const { camera, page, selection, pointer } = view;
+      const { camera } = view;
+      // Sul foglio girato i righelli non segnano niente.
+      const turned = camera.angle !== 0;
+      const page = turned ? null : view.page;
+      const selection = turned ? null : view.selection;
+      const pointer = turned ? null : view.pointer;
       for (const [axis, r, length] of [["x", top, view.width], ["y", left, view.height]] as const) {
         const i = axis === "x" ? 0 : 1;
         const screen = (value: number): number => (axis === "x" ? camera.tx : camera.ty) + camera.scale * value;
@@ -330,7 +373,7 @@ export interface MovingGuide {
 
 /// Ciò che le linee delle guide mostrano.
 export interface GuideView {
-  readonly camera: Camera;
+  readonly camera: View;
   readonly width: number;
   readonly height: number;
   readonly guides: readonly RulerGuide[];
@@ -366,7 +409,12 @@ export function createGuideLines(host: HTMLElement): GuideLines {
       svg.style.display = view === null ? "none" : "";
       if (view === null) return;
       const { camera, width, height } = view;
+      svg.toggleAttribute("data-slanted", camera.angle % 90 !== 0);
+      // Sul foglio girato una guida va da un bordo all'altro del riquadro
+      // della scena che si vede.
+      const box = camera.angle === 0 ? null : sceneBox(camera, { x: 0, y: 0, w: width, h: height });
       const line = (axis: "x" | "y", value: number): string => {
+        if (box !== null) return turnedLine(camera, box, axis, value);
         const at = crisp(axis === "x" ? camera.tx + camera.scale * value : camera.ty + camera.scale * value);
         if (!Number.isFinite(at) || at < 0 || at > (axis === "x" ? width : height)) return "";
         return axis === "x" ? `M${at} 0V${height}` : `M0 ${at}H${width}`;

@@ -247,7 +247,16 @@ export function gripAt(view: FrameView, p: Point, scale: number, pointer: InkPoi
 /// passi di 45°, o la rotazione.
 export type GripCursor = "ew" | "ns" | "nwse" | "nesw" | "rotate";
 
-export function gripCursor(frame: Frame, grip: Grip): GripCursor {
+/// Il cursore che tira lungo la direzione `degrees` dello schermo, in senso
+/// orario dall'asse x: il più vicino dei quattro.
+export function directionCursor(degrees: number): Exclude<GripCursor, "rotate"> {
+  const turn = ((degrees % 180) + 180) % 180;
+  return (["ew", "nwse", "ns", "nesw"] as const)[Math.round(turn / 45) % 4]!;
+}
+
+/// Il cursore della maniglia `grip` di `frame`, su un foglio girato di
+/// `turn` gradi.
+export function gripCursor(frame: Frame, grip: Grip, turn = 0): GripCursor {
   if (grip === "rotate") return "rotate";
   const m = frame.matrix;
   const lx = unitLength(m, 0) || 1;
@@ -258,8 +267,7 @@ export function gripCursor(frame: Frame, grip: Grip): GripCursor {
   const py = pull(grip, 1);
   const dx = (px * m[0]) / lx + (py * m[2]) / ly;
   const dy = (px * m[1]) / lx + (py * m[3]) / ly;
-  const degrees = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 180;
-  return (["ew", "nwse", "ns", "nesw"] as const)[Math.round(degrees / 45) % 4]!;
+  return directionCursor((Math.atan2(dy, dx) * 180) / Math.PI + turn);
 }
 
 /// La griglia vista dalla cornice: porta un bordo, in unità della cornice,

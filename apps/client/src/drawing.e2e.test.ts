@@ -12,6 +12,7 @@ import type { SettingEntry } from "./host/contract";
 import type { FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
+import { DEFAULT_CURVE } from "./editors/spatial/pen/pressure";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -568,7 +569,7 @@ describe("il livello e la griglia del disegno", () => {
     press("#");
     expect(gridShown()).toBe(true);
     await waitFor("la griglia si ricorda", () => host.atGate("setViewState").some((call) => call.args[0] === "draw.grid"));
-    expect(await host.module.api.viewState("draw.grid")).toEqual({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    expect(await host.module.api.viewState("draw.grid")).toEqual({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
 
     await open("albero.svg");
     expect(await activeTab()).toMatchObject({ k: "doc", doc: "albero.svg" });

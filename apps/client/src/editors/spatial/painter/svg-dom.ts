@@ -10,9 +10,11 @@
 //   nodo DOM.
 // - **Strati immagine:** un `<img>` da blob, disegnato per il rettangolo della
 //   vista più un margine. Mentre la camera si muove l'immagine segue con una
-//   trasformazione CSS; quando si ferma si ridisegna alla nuova scala, e la
-//   nuova immagine prende il posto della vecchia solo dopo la decodifica,
-//   senza lampi. Ogni URL di blob si revoca quando l'immagine lascia il DOM.
+//   trasformazione CSS; quando si ferma si ridisegna alla nuova scala e al
+//   nuovo angolo, e la nuova immagine prende il posto della vecchia solo dopo
+//   la decodifica, senza lampi. Ogni URL di blob si revoca quando l'immagine
+//   lascia il DOM. Con la vista girata l'immagine resta allineata ai pixel
+//   dello schermo, e il disegno vi entra già girato.
 // - **Immagini del vault:** un'`image` viva con un percorso del vault chiede
 //   l'URL a chi monta il painter, con una vita sua che si chiude quando
 //   l'elemento esce dalla scena. Un'immagine che non si risolve, e ogni URL
@@ -39,7 +41,8 @@
 // sua vita, e la vita di chi lo monta la chiude.
 
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import type { Matrix } from "../scene/matrix";
+import { compose, invert, type Matrix } from "../scene/matrix";
+import { toScene, viewMatrix, viewTransform, type View } from "../view";
 import {
   IMAGE_PLACEHOLDER,
   imageDocument,
@@ -57,13 +60,9 @@ import {
 const SVG = "http://www.w3.org/2000/svg";
 const XML = "http://www.w3.org/XML/1998/namespace";
 
-/// La camera come la legge il painter: punto dello schermo = punto della
-/// scena × `scale` + (`tx`, `ty`), in pixel CSS dall'angolo dell'elemento.
-export interface PainterView {
-  readonly scale: number;
-  readonly tx: number;
-  readonly ty: number;
-}
+/// La camera come la legge il painter: la vista del disegno (`../view`), in
+/// pixel CSS dall'angolo dell'elemento.
+export type PainterView = View;
 
 export interface PainterOptions {
   /// L'URL di un'immagine del vault, aperto nella vita che riceve: `null`
@@ -202,7 +201,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   root.setAttribute("aria-hidden", "true");
   host.append(root);
 
-  let view: PainterView = { scale: 1, tx: 0, ty: 0 };
+  let view: PainterView = { scale: 1, angle: 0, tx: 0, ty: 0 };
   let width = host.clientWidth;
   let height = host.clientHeight;
   let layers: LayerRecord[] = [];
@@ -503,7 +502,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   // --- strati vivi ------------------------------------------------------------
 
-  const cameraTransform = (): string => `matrix(${view.scale} 0 0 ${view.scale} ${view.tx} ${view.ty})`;
+  const cameraTransform = (): string => viewTransform(view);
 
   const createLive = (layer: LiveLayer, rootAttrs: readonly PaintAttr[]): LiveRecord => {
     const el = document.createElementNS(SVG, "svg");
@@ -541,6 +540,13 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     const top = -Math.round(height * MARGIN);
     const pixelWidth = width - 2 * left;
     const pixelHeight = height - 2 * top;
+    if (view.angle !== 0) {
+      // Girata, l'immagine copre lo stesso rettangolo dello schermo, e il
+      // suo angolo in alto a sinistra è un punto della scena.
+      const [x, y] = toScene(view, [left, top]);
+      const frame = { x, y, width: pixelWidth / view.scale, height: pixelHeight / view.scale, pixelWidth, pixelHeight, angle: view.angle };
+      return { left, top, frame };
+    }
     return {
       left,
       top,
@@ -560,7 +566,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   const stale = (record: ImageRecord): boolean => {
     const shown = record.pending ?? record.shown;
     if (shown === null) return true;
-    if (shown.view.scale !== view.scale) return true;
+    if (shown.view.scale !== view.scale || shown.view.angle !== view.angle) return true;
     const dx = view.tx - shown.view.tx;
     const dy = view.ty - shown.view.ty;
     const slackX = -shown.left / 2;
@@ -573,6 +579,10 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   /// la vista con cui è stata disegnata, portata a quella di adesso, e
   /// spostata come la scena se l'anteprima la sposta.
   const position = (rendered: Rendered): void => {
+    if (view.angle !== 0 || rendered.view.angle !== 0) {
+      turned(rendered);
+      return;
+    }
     const k = view.scale / rendered.view.scale;
     const m = rendered.carried;
     if (m === null) {
@@ -589,6 +599,27 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     const x = k * (a * u + c * v) + view.scale * e + view.tx;
     const y = k * (b * u + d * v) + view.scale * f + view.ty;
     rendered.img.style.transform = `matrix(${k * a}, ${k * b}, ${k * c}, ${k * d}, ${x}, ${y})`;
+  };
+
+  /// `position` quando una delle due viste è girata: il pixel `p`
+  /// dell'immagine è il punto `p + (left, top)` dello schermo della vista con
+  /// cui è stata disegnata; da lì torna nella scena, segue lo spostamento
+  /// dell'anteprima e va sullo schermo con la vista di adesso.
+  const turned = (rendered: Rendered): void => {
+    if (rendered.carried === null && rendered.view.scale === view.scale && rendered.view.angle === view.angle) {
+      // Allo stesso angolo e alla stessa scala la vista si è solo spostata:
+      // l'immagine resta sui pixel interi, senza il rumore dei conti.
+      const x = rendered.left + view.tx - rendered.view.tx;
+      const y = rendered.top + view.ty - rendered.view.ty;
+      rendered.img.style.transform = `translate(${x}px, ${y}px)`;
+      return;
+    }
+    const back = invert(viewMatrix(rendered.view));
+    if (back === null) return;
+    const shown = compose(back, [1, 0, 0, 1, rendered.left, rendered.top]);
+    const moved = rendered.carried === null ? shown : compose(rendered.carried, shown);
+    const [a, b, c, d, e, f] = compose(viewMatrix(view), moved);
+    rendered.img.style.transform = `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`;
   };
 
   const revoke = (rendered: Rendered | null): void => {
@@ -765,8 +796,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const setView = (next: PainterView): void => {
     if (disposed) return;
-    if (next.scale === view.scale && next.tx === view.tx && next.ty === view.ty) return;
-    view = { scale: next.scale, tx: next.tx, ty: next.ty };
+    if (next.scale === view.scale && next.angle === view.angle && next.tx === view.tx && next.ty === view.ty) return;
+    view = { scale: next.scale, angle: next.angle, tx: next.tx, ty: next.ty };
     const transform = cameraTransform();
     for (const record of layers) {
       if (record.kind === "live") record.camera.setAttribute("transform", transform);

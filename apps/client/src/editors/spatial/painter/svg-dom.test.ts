@@ -97,7 +97,7 @@ describe("il documento vivo", () => {
     const painter = createSvgPainter(host, owner, { settleMs: 100 });
     painter.update(sceneOf(SceneEngine.open(HOSTILE), new PaintBuilder()));
     await decoded();
-    painter.setView({ scale: 2, tx: 10, ty: -20 });
+    painter.setView({ scale: 2, angle: 0, tx: 10, ty: -20 });
     for (const g of host.querySelectorAll(".spatial-layer > g")) expect(g.getAttribute("transform")).toBe("matrix(2 0 0 2 10 -20)");
     const img = host.querySelector("img")!;
     // Disegnata per la scala 1 con il margine a (-100, -75): ora è al doppio.
@@ -111,10 +111,42 @@ describe("il documento vivo", () => {
     expect(next.style.transform).toBe("translate(-100px, -75px)");
     expect(live).toEqual(new Set(["blob:scena-2"]));
     // Una panoramica piccola alla stessa scala non ridisegna.
-    painter.setView({ scale: 2, tx: 30, ty: -20 });
+    painter.setView({ scale: 2, angle: 0, tx: 30, ty: -20 });
     painter.settle();
     expect(urls).toBe(2);
     expect(next.style.transform).toBe("translate(-80px, -75px)");
+  });
+
+  it("gira la camera, e ridisegna l'immagine già girata sui pixel dello schermo", async () => {
+    vi.useFakeTimers();
+    const painter = createSvgPainter(host, owner, { settleMs: 100 });
+    painter.update(sceneOf(SceneEngine.open(HOSTILE), new PaintBuilder()));
+    await decoded();
+    painter.setView({ scale: 2, angle: 90, tx: 10, ty: -20 });
+    for (const g of host.querySelectorAll(".spatial-layer > g")) expect(g.getAttribute("transform")).toBe("matrix(0 2 -2 0 10 -20)");
+    // Mentre la vista gira, l'immagine diritta gira con lei.
+    const img = host.querySelector("img")!;
+    expect(img.style.transform).toBe("matrix(0, 2, -2, 0, 160, -220)");
+    vi.advanceTimersByTime(100);
+    expect(urls).toBe(2);
+    await decoded();
+    const next = host.querySelector("img")!;
+    expect(next).not.toBe(img);
+    // Grande quanto prima, dritta sullo schermo: è il disegno a entrarci
+    // girato, dall'angolo in alto a sinistra (-27.5, 55) della scena.
+    expect(next.style.transform).toBe("translate(-100px, -75px)");
+    const text = await blobs.get(next.getAttribute("src")!)!.text();
+    expect(text).toContain('width="1000" height="750" viewBox="0 0 500 375"');
+    expect(text).toContain('<g transform="rotate(90) translate(27.5 -55)">');
+    // Allo stesso angolo una panoramica sposta e basta.
+    painter.setView({ scale: 2, angle: 90, tx: 30, ty: -20 });
+    painter.settle();
+    expect(urls).toBe(2);
+    expect(next.style.transform).toBe("translate(-80px, -75px)");
+    // Tornata diritta, ridisegna diritta.
+    painter.setView({ scale: 2, angle: 0, tx: 30, ty: -20 });
+    painter.settle();
+    expect(urls).toBe(3);
   });
 
   it("riusa i nodi di ciò che non cambia", async () => {
@@ -340,7 +372,7 @@ describe("l'anteprima degli strumenti", () => {
       // Disegnata col margine a (-100, -75): il gruppo la porta di (10, 5).
       expect(inside!.style.transform).toBe("matrix(1, 0, 0, 1, -90, -70)");
       expect(outside!.style.transform).toBe("translate(-100px, -75px)");
-      painter.setView({ scale: 2, tx: 10, ty: -20 });
+      painter.setView({ scale: 2, angle: 0, tx: 10, ty: -20 });
       expect(inside!.style.transform).toBe("matrix(2, 0, 0, 2, -170, -160)");
       // Ridisegnata alla scala nuova, la segue ancora.
       vi.advanceTimersByTime(100);
@@ -474,7 +506,7 @@ describe("lo smontaggio", () => {
     vi.useFakeTimers();
     const painter: ScenePainter = createSvgPainter(host, owner, { settleMs: 50 });
     painter.update(sceneOf(SceneEngine.open(HOSTILE), new PaintBuilder()));
-    painter.setView({ scale: 3, tx: 0, ty: 0 });
+    painter.setView({ scale: 3, angle: 0, tx: 0, ty: 0 });
     vi.advanceTimersByTime(50);
     // Una decodifica ancora in corso quando la vita si chiude.
     expect(urls).toBe(2);
@@ -484,7 +516,7 @@ describe("lo smontaggio", () => {
     expect(host.children).toHaveLength(0);
     // Dopo, non apre più niente.
     painter.update(sceneOf(SceneEngine.open(HOSTILE), new PaintBuilder()));
-    painter.setView({ scale: 1, tx: 0, ty: 0 });
+    painter.setView({ scale: 1, angle: 0, tx: 0, ty: 0 });
     vi.advanceTimersByTime(1000);
     expect(urls).toBe(2);
   });
@@ -559,7 +591,7 @@ describe("lo strato sopra la scena", () => {
     vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 1);
     vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation(() => undefined);
     const overlay = createOverlay(host, owner);
-    overlay.setView({ scale: 2, tx: 10, ty: 0 });
+    overlay.setView({ scale: 2, angle: 0, tx: 10, ty: 0 });
     overlay.setHandles([
       { kind: "guide", from: [0, 0], to: [0, 50], dashed: false },
       { kind: "guide", from: [0, 0], to: [10, 0], dashed: true },

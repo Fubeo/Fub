@@ -91,6 +91,7 @@ export type Feature =
   | "guides"
   | "rulers"
   | "recognize"
+  | "gestures"
   | "links"
   | "images"
   | "properties"
@@ -120,6 +121,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "guides", level: "standard", label: "draw.feature.guides" },
   { id: "rulers", level: "standard", label: "draw.feature.rulers" },
   { id: "recognize", level: "standard", label: "draw.feature.recognize" },
+  { id: "gestures", level: "standard", label: "draw.feature.gestures" },
   { id: "links", level: "standard", label: "draw.feature.links" },
   { id: "images", level: "standard", label: "draw.feature.images" },
   { id: "properties", level: "standard", label: "draw.feature.properties" },

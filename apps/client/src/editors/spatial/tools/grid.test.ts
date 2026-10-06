@@ -25,6 +25,7 @@ import {
   wholeSteps,
   withStep,
 } from "./grid";
+import { DEFAULT_CURVE } from "../pen/pressure";
 
 /// Le coordinate delle righe di un `d`, in ordine.
 const coordinates = (d: string, axis: "x" | "y"): number[] =>
@@ -32,7 +33,7 @@ const coordinates = (d: string, axis: "x" | "y"): number[] =>
 
 describe("la griglia", () => {
   it("parte spenta, con un passo che divide la pagina di un documento nuovo", () => {
-    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
+    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
     for (const step of GRID_STEPS.px) {
       expect(1600 % step).toBe(0);
       expect(1000 % step).toBe(0);
@@ -120,7 +121,7 @@ describe("la griglia", () => {
   });
 
   it("disegna le righe che si vedono, nitide, con una ogni cinque marcata", () => {
-    const lines = gridLines({ scale: 1, tx: 0, ty: 0 }, 100, 50, 10);
+    const lines = gridLines({ scale: 1, angle: 0, tx: 0, ty: 0 }, 100, 50, 10);
     expect(coordinates(lines.major, "x")).toEqual([0.5, 50.5, 100.5]);
     expect(coordinates(lines.minor, "x")).toEqual([10.5, 20.5, 30.5, 40.5, 60.5, 70.5, 80.5, 90.5]);
     expect(coordinates(lines.major, "y")).toEqual([0.5, 50.5]);
@@ -130,7 +131,7 @@ describe("la griglia", () => {
   });
 
   it("segue la camera: le righe restano sui multipli del passo nella scena", () => {
-    const lines = gridLines({ scale: 2, tx: -35, ty: 13 }, 60, 40, 10);
+    const lines = gridLines({ scale: 2, angle: 0, tx: -35, ty: 13 }, 60, 40, 10);
     // Scena x = (schermo - tx) / scale: le righe a 20, 30, 40 della scena.
     expect(coordinates(lines.minor, "x")).toEqual([5.5, 25.5, 45.5]);
     expect(coordinates(lines.major, "x")).toEqual([]);
@@ -140,22 +141,40 @@ describe("la griglia", () => {
 
   it("si dirada quando le righe si avvicinano, ma non sotto il passo", () => {
     // Passo 5 a zoom 1: 5 pixel sono troppo pochi, si vede una riga ogni 25.
-    const sparse = gridLines({ scale: 1, tx: 0, ty: 0 }, 300, 10, 5);
+    const sparse = gridLines({ scale: 1, angle: 0, tx: 0, ty: 0 }, 300, 10, 5);
     expect(coordinates(sparse.minor, "x")).toEqual([25.5, 50.5, 75.5, 100.5, 150.5, 175.5, 200.5, 225.5, 275.5, 300.5]);
     expect(coordinates(sparse.major, "x")).toEqual([0.5, 125.5, 250.5]);
     // Al decimo, il passo 20 diventa 100 e poi 500 unità: 10 e 50 pixel.
-    const far = gridLines({ scale: 0.1, tx: 0, ty: 0 }, 60, 10, 20);
+    const far = gridLines({ scale: 0.1, angle: 0, tx: 0, ty: 0 }, 60, 10, 20);
     expect(coordinates(far.minor, "x")).toEqual([10.5, 20.5, 30.5, 40.5, 60.5]);
     expect(coordinates(far.major, "x")).toEqual([0.5, 50.5]);
     for (const x of coordinates(far.minor, "x")) expect(x - 0.5).toBeGreaterThanOrEqual(GRID_MIN_PX);
     // Ingrandita, la griglia resta al suo passo.
-    const near = gridLines({ scale: 4, tx: 0, ty: 0 }, 100, 10, 5);
+    const near = gridLines({ scale: 4, angle: 0, tx: 0, ty: 0 }, 100, 10, 5);
     expect(coordinates(near.minor, "x")).toEqual([20.5, 40.5, 60.5, 80.5]);
   });
 
+  it("gira con il foglio: di un angolo retto resta nitida, di sbieco è obliqua", () => {
+    const turned = gridLines({ scale: 1, angle: 90, tx: 100, ty: 0 }, 100, 50, 10);
+    // Le righe x della scena sono orizzontali sullo schermo, le y verticali,
+    // e la y 0 della scena è a destra.
+    expect(turned.major).toContain("M100 0.5L0 0.5");
+    expect(turned.major).toContain("M100 50.5L0 50.5");
+    expect(turned.major).toContain("M100.5 0L100.5 50");
+    expect(turned.major).toContain("M50.5 0L50.5 50");
+    expect(turned.minor).toContain("M90.5 0L90.5 50");
+    const slanted = gridLines({ scale: 1, angle: 30, tx: 0, ty: 0 }, 100, 100, 10);
+    const segments = [...slanted.minor.matchAll(/M([-\d.]+) ([-\d.]+)L([-\d.]+) ([-\d.]+)/g)];
+    expect(segments.length).toBeGreaterThan(10);
+    for (const [, ax, ay, bx, by] of segments) {
+      const slope = (Math.atan2(Number(by) - Number(ay), Number(bx) - Number(ax)) * 180) / Math.PI;
+      expect([30, 120].some((a) => Math.abs(slope - a) < 0.1), `${slope}`).toBe(true);
+    }
+  });
+
   it("non disegna niente senza un foglio, una camera o un passo validi", () => {
-    expect(gridLines({ scale: 1, tx: 0, ty: 0 }, 0, 100, 20)).toEqual({ minor: "", major: "" });
-    expect(gridLines({ scale: 0, tx: 0, ty: 0 }, 100, 100, 20)).toEqual({ minor: "", major: "" });
-    expect(gridLines({ scale: 1, tx: 0, ty: 0 }, 100, 100, 0)).toEqual({ minor: "", major: "" });
+    expect(gridLines({ scale: 1, angle: 0, tx: 0, ty: 0 }, 0, 100, 20)).toEqual({ minor: "", major: "" });
+    expect(gridLines({ scale: 0, angle: 0, tx: 0, ty: 0 }, 100, 100, 20)).toEqual({ minor: "", major: "" });
+    expect(gridLines({ scale: 1, angle: 0, tx: 0, ty: 0 }, 100, 100, 0)).toEqual({ minor: "", major: "" });
   });
 });
