@@ -58,8 +58,8 @@ import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } fro
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
 import { createDrawEditor, type DrawEditor, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
-import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages, type ImageRef } from "./read-images";
-import { appFonts, withStyle, type FontSheets } from "./picture";
+import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
+import { appFonts, picture, type FontSheets } from "./picture";
 
 type VectorMode = "draw" | "read";
 
@@ -456,15 +456,9 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   const fonts = options.fonts ?? appFonts;
 
   /// Ciò che l'immagine mostra di `shown`: coi caratteri che nomina, se già
-  /// letti, e con le immagini lette. Lo stile va subito dopo l'apertura della
-  /// radice, prima di ogni immagine: gli indici di `refs` si spostano di
-  /// quanto è lungo.
-  const picture = (shown: string, refs: readonly ImageRef[]): string => {
-    const styled = withStyle(shown, fonts.now(shown) ?? "");
-    const shift = styled.length - shown.length;
-    const moved = shift === 0 ? refs : refs.map((ref) => ({ ...ref, start: ref.start + shift, end: ref.end + shift }));
-    return withImages(styled, moved, imageSources());
-  };
+  /// letti, e con le immagini lette.
+  const shownPicture = (shown: string, refs: readonly ImageRef[]): string =>
+    picture(shown, fonts.now(shown) ?? "", refs, imageSources());
 
   /// Legge i caratteri che `shown` nomina, e mostra di nuovo l'immagine se è
   /// ancora quella di `shown`.
@@ -472,7 +466,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     if (fonts.now(shown) !== null) return;
     await fonts.load(shown);
     if (life.closed || shownText !== shown || view === null || fonts.now(shown) === null) return;
-    display(picture(shown, refs));
+    display(shownPicture(shown, refs));
   };
 
   /// Mostra `source`, il testo di adesso con le immagini al loro posto. La
@@ -524,7 +518,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       added = true;
     }
     if (!added || life.closed || round !== imagesRound || shownText !== shown || view === null) return;
-    display(picture(shown, refs));
+    display(shownPicture(shown, refs));
   };
 
   const showImage = (): void => {
@@ -540,7 +534,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const kept = new Set(refs.map((ref) => ref.path));
     for (const path of [...readImages.keys()]) if (!kept.has(path)) readImages.delete(path);
     shownText = text;
-    display(picture(text, refs));
+    display(shownPicture(text, refs));
     showAbout();
     void readFonts(text, refs);
     void readVaultImages(text, refs);

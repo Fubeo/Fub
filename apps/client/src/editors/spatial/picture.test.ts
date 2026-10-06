@@ -1,7 +1,9 @@
+// @vitest-environment happy-dom
 // Il disegno come immagine che si vede da sola: i caratteri dell'app dentro
 // la copia che va nell'immagine, letti una volta, col loro tetto.
 
 import { describe, expect, it, vi } from "vitest";
+import { IMAGE_PLACEHOLDER } from "./painter/paint";
 import { FONT_FILES } from "./tools/text";
 
 /// I file veri dei caratteri, come data URI.
@@ -68,5 +70,24 @@ describe("i caratteri dentro l'SVG", () => {
     expect(css.length).toBeLessThanOrEqual(MAX_FONT_SHEET_BYTES);
     // Il tetto non è largo per niente: i file veri ci arrivano vicino.
     expect(css.length).toBeGreaterThan(MAX_FONT_SHEET_BYTES * 0.9);
+  });
+});
+
+describe("un disegno che si vede da solo, in un colpo", () => {
+  it("porta le immagini del vault finché stanno nel tetto, e i caratteri che nomina", async () => {
+    const { selfContained } = await import("./picture");
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><image href="a.png"/><image href="b.png"/><image href="a.png"/><text font-family="Inter">x</text></svg>';
+    const limits: number[] = [];
+    const read = async (path: string, limit: number): Promise<Blob> => {
+      limits.push(limit);
+      return new Blob([path === "a.png" ? "AAAA" : "BBBBBB"], { type: "image/png" });
+    };
+    const fonts = { now: () => null, load: async () => "@font-face{}" };
+    const shown = await selfContained(svg, read, 8, fonts);
+    // La stessa immagine si legge una volta; la seconda non ci sta più.
+    expect(limits).toEqual([8, 4]);
+    expect(shown).toBe('<svg xmlns="http://www.w3.org/2000/svg"><style>@font-face{}</style>'
+      + `<image href="data:image/png;base64,QUFBQQ=="/><image href="${IMAGE_PLACEHOLDER}"/><image href="data:image/png;base64,QUFBQQ=="/>`
+      + '<text font-family="Inter">x</text></svg>');
   });
 });

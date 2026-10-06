@@ -11,7 +11,8 @@ import { t } from "../../../../i18n/strings";
 import type { LinkTarget } from "../../../../host/contract";
 import { api } from "../../../../host/ipc";
 import { resolvedReference } from "../../../../host/query";
-import { mediaKindOfId } from "../../../media/media-types";
+import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
+import { openResourcePort, type ResourceTransport } from "../../../media/resource-port";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Expected } from "../../../../ui/race";
 import { VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
@@ -23,7 +24,17 @@ export interface MediaPort {
   close(handle: string): void;
   /// L'URL `fub-asset:` di un lease aperto: la forma è dell'host.
   url(handle: string): string;
+  /// I byte del documento `id`, col loro tipo; `null` se pesa più di `limit`
+  /// byte, che allora non si leggono. Senza, un disegno si mostra dal file.
+  read?(id: string, limit: number): Promise<Blob | null>;
 }
+
+/// I byte dei file del vault, per chi li legge interi.
+const transport: ResourceTransport = {
+  open: (id, vault) => api.resourceOpen(id, vault ?? null),
+  read_chunk: api.resourceReadChunk,
+  close: api.resourceClose,
+};
 
 const hostPort: MediaPort = {
   resolve: async (target, from) => (await resolvedReference(target, from))?.doc ?? null,
@@ -32,7 +43,50 @@ const hostPort: MediaPort = {
     void api.resourceClose(handle).catch(() => {});
   },
   url: (handle) => api.assetUrl(handle),
+  read: async (id, limit) => {
+    const port = await openResourcePort(transport, id);
+    try {
+      if (port.descriptor.len > limit) return null;
+      return new Blob([(await port.readAll()) as BlobPart], { type: port.descriptor.mime });
+    } finally {
+      await port.close();
+    }
+  },
 };
+
+/// Quanti byte pesa al più un disegno che una nota mostra coi caratteri e le
+/// immagini dentro, e quanti byte di immagini del vault vi entrano al più:
+/// oltre, il disegno si mostra dal file, o le immagini che restano sono
+/// segnaposti.
+export const EMBED_DRAWING_BYTES = 16 * 1024 * 1024;
+export const EMBED_IMAGE_BYTES = 16 * 1024 * 1024;
+
+/// Un disegno del vault come lo mostra la Lettura: dentro un `img` il
+/// browser non carica né i caratteri dell'app né le immagini del vault, e
+/// una copia del disegno li porta dentro, da un blob che vive quanto la resa.
+/// Il file non cambia. `null` per un file che non è un disegno, o che non si
+/// legge: si mostra il file.
+async function drawingPicture(port: MediaPort, id: string, life: Lifetime): Promise<string | null> {
+  const read = port.read;
+  if (read === undefined || mimeOfId(id) !== "image/svg+xml") return null;
+  try {
+    const file = await read(id, EMBED_DRAWING_BYTES);
+    if (file === null || life.closed) return null;
+    const text = await file.text();
+    // Il modulo dei disegni arriva solo con un disegno da mostrare.
+    const { selfContained } = await import("../../../spatial/picture");
+    const shown = await selfContained(text, async (path, limit) => {
+      const target = await port.resolve({ kind: "path", value: path }, id).catch(() => null);
+      return target === null || mediaKindOfId(target) !== "image" ? null : read(target, limit);
+    }, EMBED_IMAGE_BYTES);
+    if (life.closed) return null;
+    const url = URL.createObjectURL(new Blob([shown], { type: "image/svg+xml" }));
+    life.add(() => URL.revokeObjectURL(url));
+    return url;
+  } catch {
+    return null;
+  }
+}
 
 /// Un `src` che è già un URL (schema, `//host`, frammento) non è del vault.
 export function isVaultPath(src: string): boolean {
@@ -135,12 +189,14 @@ export async function hydrateVaultMedia(
         showMissingImage(img, raw);
         return;
       }
+      const drawing = await drawingPicture(port, id, life);
+      if (life.closed) return;
       img.dataset.vaultMedia = "loaded";
       img.dataset.vaultId = id;
       // Un file che c'è ma non si decodifica è un'immagine rotta anche lui:
       // il segnaposto dice quale, invece dell'icona del browser.
       life.listen(img, "error", () => showMissingImage(img, raw), { once: true });
-      img.src = url;
+      img.src = drawing ?? url;
     }),
     ...embeds.map(async (slot) => {
       const page = slot.dataset.embedPage!;
@@ -164,7 +220,9 @@ export async function hydrateVaultMedia(
         slot.classList.add("unresolved");
         return;
       }
-      showEmbeddedMedia(container, slot, id, url, page);
+      const drawing = await drawingPicture(port, id, life);
+      if (life.closed) return;
+      showEmbeddedMedia(container, slot, id, drawing ?? url, page);
     }),
     ...placed.map(async (slot) => {
       const path = slot.dataset.embedPath!;
@@ -178,7 +236,9 @@ export async function hydrateVaultMedia(
         slot.classList.add("unresolved");
         return;
       }
-      showEmbeddedMedia(container, slot, id, url, label);
+      const drawing = await drawingPicture(port, id, life);
+      if (life.closed) return;
+      showEmbeddedMedia(container, slot, id, drawing ?? url, label);
     }),
   ]);
 }

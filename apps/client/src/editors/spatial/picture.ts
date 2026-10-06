@@ -12,6 +12,7 @@
 // - **Un tetto.** I caratteri insieme pesano al più [`MAX_FONT_SHEET_BYTES`]:
 //   tanto in più tiene in memoria ogni immagine che li porta tutti.
 
+import { imageDataUri, imageRefs, withImages, type ImageRef } from "./read-images";
 import { SourceText } from "./scene/text";
 import { isSvg, parseXml } from "./scene/xml";
 import { FONT_FILES, FONT_RANGE } from "./tools/text";
@@ -122,6 +123,43 @@ export function withStyle(svg: string, css: string): string {
     return svg;
   }
   return `${svg.slice(0, at)}<${name}>${css}</${name}>${svg.slice(at)}`;
+}
+
+/// `svg` col foglio `css` e con le immagini di `refs`, i suoi `href` che un
+/// `img` non vedrebbe, al loro posto: il data URI che `sources` dà per il
+/// percorso, o il segnaposto. Lo stile va subito dopo l'apertura della
+/// radice, prima di ogni immagine: gli indici di `refs` si spostano di quanto
+/// è lungo.
+export function picture(svg: string, css: string, refs: readonly ImageRef[], sources: ReadonlyMap<string, string>): string {
+  const styled = withStyle(svg, css);
+  const shift = styled.length - svg.length;
+  const moved = shift === 0 ? refs : refs.map((ref) => ({ ...ref, start: ref.start + shift, end: ref.end + shift }));
+  return withImages(styled, moved, sources);
+}
+
+/// `svg`, un disegno, come immagine che si vede da sola, in un colpo: le
+/// immagini del vault coi loro byte, una alla volta finché stanno in
+/// `budget` byte, e i caratteri dell'app. `read` legge un'immagine del vault
+/// per il suo `href`, senza leggerla se pesa più del tetto che riceve.
+export async function selfContained(
+  svg: string,
+  read: (path: string, limit: number) => Promise<Blob | null>,
+  budget: number,
+  fonts: FontSheets = appFonts,
+): Promise<string> {
+  const refs = imageRefs(svg);
+  const sources = new Map<string, string>();
+  let spent = 0;
+  for (const path of new Set(refs.flatMap((ref) => (ref.path === null ? [] : [ref.path])))) {
+    const room = budget - spent;
+    if (room <= 0) break;
+    const blob = await read(path, room).catch(() => null);
+    const uri = blob === null || blob.size > room ? null : await imageDataUri(blob);
+    if (uri === null) continue;
+    sources.set(path, uri);
+    spent += blob!.size;
+  }
+  return picture(svg, fonts.now(svg) ?? (await fonts.load(svg)), refs, sources);
 }
 
 /// Il nome di un `<style>` SVG figlio di una radice che si chiama `root`:
