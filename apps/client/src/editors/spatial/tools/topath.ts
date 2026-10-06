@@ -57,7 +57,7 @@ const samePlace = (a: readonly [number, number], b: readonly [number, number]): 
 
 /// `segments` senza le linee che, scritte, non vanno da nessuna parte: gli
 /// angoli di un rettangolo arrotondato fino a metà lato.
-function withoutStill(segments: readonly Segment[]): Segment[] {
+export function withoutStill(segments: readonly Segment[]): Segment[] {
   const out: Segment[] = [];
   let current: readonly [number, number] = [0, 0];
   for (const segment of segments) {

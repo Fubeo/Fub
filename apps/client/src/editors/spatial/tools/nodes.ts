@@ -491,6 +491,12 @@ class Builder {
   }
 }
 
+/// `subs` con ogni arco fatto delle cubiche che lo approssimano: i nodi di
+/// una forma, con le maniglie che un arco non ha.
+export function arcsAsCubics(subs: readonly Subpath[]): Subpath[] {
+  return subs.map((sub) => (sub.links.some((link) => link.kind === "arc") ? cubics(sub, (link) => sub.links[link]!.kind === "arc").sub : sub));
+}
+
 /// `sub` coi segmenti `which` fatti cubiche che si vedono uguali: un arco può
 /// diventarne più d'una, con i nodi fra loro. `map` porta ogni nodo vecchio
 /// al nuovo.
