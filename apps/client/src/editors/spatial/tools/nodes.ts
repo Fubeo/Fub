@@ -18,6 +18,11 @@
 // - **Ciò che si vede resta, dove si può.** «In curva» fa di una linea una
 //   cubica dritta e di un arco le cubiche che lo approssimano; eliminare un
 //   nodo unisce i suoi segmenti in una curva che passa vicino a dov'erano.
+// - **Ogni nodo ha le sue maniglie**, come nella Selezione diretta di
+//   Illustrator: una linea ha quelle della cubica dritta che è, un arco
+//   quelle delle cubiche che lo approssimano, e una maniglia ritirata sul
+//   nodo si mostra accanto. Trascinarne una fa prima del segmento quelle
+//   cubiche, che si vedono uguali; un nodo aperto tira fuori le sue due.
 
 import { arcCenter, arcToCubics, derivativeAt, lineToCubic, pointAt, quadToCubic, reversed, splitAt, tangentAt, type Curve } from "../scene/curves";
 import { remEuclid, type Segment } from "../scene/geometry";
@@ -206,27 +211,79 @@ export function handleNode(sub: Subpath, handle: HandleRef): number {
   return handle.which === "c2" ? endOf(sub, handle.link) : startOf(sub, handle.link);
 }
 
-/// Dove sta la maniglia `handle`, o `null` se il segmento non la ha.
-export function handlePoint(subs: readonly Subpath[], handle: HandleRef): Point | null {
-  const link = subs[handle.sub]?.links[handle.link];
-  if (link === undefined) return null;
-  if (link.kind === "cubic" && handle.which !== "control") return link[handle.which];
-  if (link.kind === "quad" && handle.which === "control") return link.control;
-  return null;
-}
-
-/// Le maniglie che si vedono con i nodi `selected`: quelle dei segmenti che
-/// toccano un nodo scelto.
+/// Le maniglie che si vedono con i nodi `selected`, come nella Selezione
+/// diretta di Illustrator: quelle dei segmenti che toccano un nodo scelto,
+/// anche dell'altro nodo, e di un arco come delle cubiche che lo
+/// approssimano. Di una linea, e di una maniglia ritirata sul suo nodo,
+/// soltanto quelle dei nodi scelti: lì non c'è una maniglia da vedere, ma
+/// una da tirare fuori ([`handleSpot`]).
 export function handlesFor(subs: readonly Subpath[], selected: ReadonlySet<NodeKey>): HandleRef[] {
   const out: HandleRef[] = [];
   subs.forEach((sub, s) => {
     sub.links.forEach((link, i) => {
-      if (!selected.has(nodeKey(s, startOf(sub, i))) && !selected.has(nodeKey(s, endOf(sub, i)))) return;
-      if (link.kind === "cubic") out.push({ sub: s, link: i, which: "c1" }, { sub: s, link: i, which: "c2" });
-      else if (link.kind === "quad") out.push({ sub: s, link: i, which: "control" });
+      const first = selected.has(nodeKey(s, startOf(sub, i)));
+      const last = selected.has(nodeKey(s, endOf(sub, i)));
+      if (!first && !last) return;
+      if (link.kind === "quad") {
+        out.push({ sub: s, link: i, which: "control" });
+        return;
+      }
+      for (const which of ["c1", "c2"] as const) {
+        const own = which === "c1" ? first : last;
+        const node = sub.nodes[which === "c1" ? startOf(sub, i) : endOf(sub, i)]!;
+        const there = link.kind === "arc" || (link.kind === "cubic" && !samePlace(link[which], node));
+        if (own || there) out.push({ sub: s, link: i, which });
+      }
     });
   });
   return out;
+}
+
+/// Una maniglia come si vede: dove sta, e se è ritirata sul suo nodo e la si
+/// mostra accanto, per tirarla fuori.
+export interface HandleSpot {
+  readonly point: Point;
+  readonly folded: boolean;
+}
+
+/// La curva `curve` da `from` come cubiche che si vedono uguali: una linea è
+/// la cubica dritta che è, una quadratica la cubica che è, un arco le
+/// cubiche che lo approssimano, o una linea ferma se non disegna niente.
+function asCubics(from: Point, curve: Curve): Cubic[] {
+  if (curve.kind === "cubic") return [curve];
+  if (curve.kind === "quad") return [quadToCubic(from, curve) as Cubic];
+  if (curve.kind === "line") return [lineToCubic(from, curve.to) as Cubic];
+  const pieces = arcToCubics(from, curve);
+  return pieces.length > 0 && pieces.every((piece) => piece.kind === "cubic") ? (pieces as Cubic[]) : [lineToCubic(from, curve.to) as Cubic];
+}
+
+/// Dove si vede la maniglia `handle`, o `null` se lì non ce n'è una. Quella
+/// di una cubica o di una quadratica sta dov'è. Una linea ha quelle della
+/// cubica dritta che è, a un terzo e a due terzi; un arco quelle della prima
+/// e dell'ultima cubica che lo approssimano. Una maniglia ritirata sul suo
+/// nodo si mostra accanto, sul verso in cui il segmento parte, lunga
+/// `stub(verso)` ma non oltre un terzo del segmento: trascinarla la tira
+/// fuori. Tutte, tranne quest'ultima, sono già dove il segmento le vuole:
+/// prenderle non lo cambia.
+export function handleSpot(subs: readonly Subpath[], handle: HandleRef, stub: (direction: Point) => number): HandleSpot | null {
+  const sub = subs[handle.sub];
+  const link = sub?.links[handle.link];
+  if (sub === undefined || link === undefined) return null;
+  if (handle.which === "control" || link.kind === "quad") return handle.which === "control" && link.kind === "quad" ? { point: link.control, folded: false } : null;
+  const first = handle.which === "c1";
+  const node = sub.nodes[handleNode(sub, handle)]!;
+  const { from, curve } = curveAt(sub, handle.link);
+  if (link.kind === "cubic" && samePlace(link[handle.which], node)) {
+    const along = tangentAt(from, curve, !first);
+    if (along === null) return null;
+    const direction = first ? along : times(along, -1);
+    const chord = distance(from, curve.to);
+    const size = chord > 0 ? Math.min(stub(direction), chord / 3) : stub(direction);
+    return size > 0 ? { point: plus(node, times(direction, size)), folded: true } : null;
+  }
+  const pieces = asCubics(from, curve);
+  const point = first ? pieces[0]!.c1 : pieces[pieces.length - 1]!.c2;
+  return samePlace(point, node) ? null : { point, folded: false };
 }
 
 /// Quanto arriva al nodo `at` il lato `side`: la lunghezza della maniglia,
@@ -497,9 +554,9 @@ export function arcsAsCubics(subs: readonly Subpath[]): Subpath[] {
   return subs.map((sub) => (sub.links.some((link) => link.kind === "arc") ? cubics(sub, (link) => sub.links[link]!.kind === "arc").sub : sub));
 }
 
-/// `sub` coi segmenti `which` fatti cubiche che si vedono uguali: un arco può
-/// diventarne più d'una, con i nodi fra loro. `map` porta ogni nodo vecchio
-/// al nuovo.
+/// `sub` coi segmenti `which` fatti cubiche che si vedono uguali
+/// ([`asCubics`]): un arco può diventarne più d'una, con i nodi fra loro.
+/// `map` porta ogni nodo vecchio al nuovo.
 function cubics(sub: Subpath, which: (link: number) => boolean): { readonly sub: Subpath; readonly map: ReadonlyMap<number, number>; readonly added: readonly number[] } {
   const b = new Builder();
   const added: number[] = [];
@@ -508,20 +565,113 @@ function cubics(sub: Subpath, which: (link: number) => boolean): { readonly sub:
     b.node(sub.nodes[at]!, at);
     if (at >= sub.links.length) break;
     const { from, curve } = curveAt(sub, at);
-    let pieces: Curve[] = [curve];
-    if (which(at)) {
-      if (curve.kind === "line") pieces = [lineToCubic(from, curve.to)];
-      else if (curve.kind === "quad") pieces = [quadToCubic(from, curve)];
-      else if (curve.kind === "arc") pieces = arcToCubics(from, curve);
-      // Un arco che non disegna niente diventa una linea ferma.
-      if (pieces.length === 0) pieces = [lineToCubic(from, curve.to)];
-    }
+    const pieces: Curve[] = which(at) ? asCubics(from, curve) : [curve];
     pieces.forEach((piece, i) => {
       b.links.push(linkOf(piece));
       if (i < pieces.length - 1) added.push(b.node(piece.to, null));
     });
   }
   return { sub: { nodes: b.nodes, links: b.links, closed: sub.closed }, map: b.map, added };
+}
+
+/// `subs` coi segmenti `which` del sottotracciato `s` fatti cubiche
+/// ([`cubics`]): `map` porta ogni suo nodo vecchio al nuovo, e `moved`
+/// ogni nodo dove è finito, se se ne sono aggiunti.
+function converting(subs: readonly Subpath[], s: number, which: ReadonlySet<number>): {
+  readonly subs: Subpath[];
+  readonly map: (at: number) => number;
+  readonly moved: ReadonlyMap<NodeKey, NodeKey> | null;
+} {
+  const sub = subs[s]!;
+  if (which.size === 0) return { subs: subs.slice(), map: (at) => at, moved: null };
+  const converted = cubics(sub, (link) => which.has(link));
+  const out = subs.slice();
+  out[s] = converted.sub;
+  if (converted.sub.nodes.length === sub.nodes.length) return { subs: out, map: (at) => converted.map.get(at)!, moved: null };
+  const moved = new Map<NodeKey, NodeKey>();
+  subs.forEach((each, index) => {
+    each.nodes.forEach((_, at) => moved.set(nodeKey(index, at), nodeKey(index, index === s ? converted.map.get(at)! : at)));
+  });
+  return { subs: out, map: (at) => converted.map.get(at)!, moved };
+}
+
+/// La maniglia `handle` di `subs` resa vera, per trascinarla: una linea
+/// diventa la cubica dritta che è, un arco le cubiche che lo approssimano,
+/// coi nodi fra loro. Con `opposite` anche un arco dall'altra parte del suo
+/// nodo diventa cubiche, perché la sua maniglia giri con questa come fra due
+/// cubiche. Ciò che si vede non cambia. Torna la maniglia nei sottotracciati
+/// nuovi e, se si sono aggiunti nodi, dove è finito ogni nodo.
+export function realizeHandle(subs: readonly Subpath[], handle: HandleRef, opposite: boolean): {
+  readonly subs: Subpath[];
+  readonly handle: HandleRef;
+  readonly moved: ReadonlyMap<NodeKey, NodeKey> | null;
+} {
+  const sub = subs[handle.sub]!;
+  if (handle.which === "control") return { subs: subs.slice(), handle, moved: null };
+  const at = handleNode(sub, handle);
+  const which = new Set<number>();
+  const own = sub.links[handle.link]!.kind;
+  if (own === "line" || own === "arc") which.add(handle.link);
+  const other = handle.which === "c1" ? incoming(sub, at) : outgoing(sub, at);
+  if (opposite && other !== null && other !== handle.link && sub.links[other]!.kind === "arc") which.add(other);
+  const done = converting(subs, handle.sub, which);
+  const node = done.map(at);
+  const link = handle.which === "c1" ? node : incoming(done.subs[handle.sub]!, node)!;
+  return { subs: done.subs, handle: { ...handle, link }, moved: done.moved };
+}
+
+/// I segmenti ai due lati del nodo `key` fatti cubiche che si vedono uguali,
+/// per tirarne fuori le maniglie ([`pullHandles`]). Torna il nodo nei
+/// sottotracciati nuovi e, se si sono aggiunti nodi, dove è finito ogni nodo.
+export function openNode(subs: readonly Subpath[], key: NodeKey): {
+  readonly subs: Subpath[];
+  readonly key: NodeKey;
+  readonly moved: ReadonlyMap<NodeKey, NodeKey> | null;
+} {
+  const [s, at] = parseKey(key);
+  const sub = subs[s]!;
+  const which = new Set<number>();
+  for (const side of [incoming(sub, at), outgoing(sub, at)]) if (side !== null && sub.links[side]!.kind !== "cubic") which.add(side);
+  const done = converting(subs, s, which);
+  return { subs: done.subs, key: nodeKey(s, done.map(at)), moved: done.moved };
+}
+
+/// Il lato del nodo `key` di cui si tira la maniglia verso `direction`:
+/// quello il cui segmento parte dal nodo più vicino a quel verso, così la
+/// maniglia sotto il puntatore è dalla parte del segmento che curva. Un capo
+/// ha un lato solo; `null` un nodo senza segmenti.
+export function pullSide(subs: readonly Subpath[], key: NodeKey, direction: Point): "in" | "out" | null {
+  const [s, at] = parseKey(key);
+  const sub = subs[s]!;
+  const before = incoming(sub, at);
+  const after = outgoing(sub, at);
+  if (after === null) return before === null ? null : "in";
+  if (before === null || before === after) return "out";
+  const ahead = travel(sub, at, "out");
+  const back = travel(sub, at, "in");
+  if (ahead === null || back === null) return "out";
+  return dot(direction, ahead) >= -dot(direction, back) ? "out" : "in";
+}
+
+/// `subs` con le maniglie del nodo `key` tirate fuori, come con lo strumento
+/// Punto di ancoraggio di Illustrator: quella del lato `side` in `to`, e
+/// quella dell'altro lato, se c'è, all'opposto e lunga uguale, così il nodo
+/// è simmetrico. I segmenti ai suoi lati sono già cubiche ([`openNode`]).
+export function pullHandles(subs: readonly Subpath[], key: NodeKey, side: "in" | "out", to: Point): Subpath[] {
+  const [s, at] = parseKey(key);
+  const sub = subs[s]!;
+  const node = sub.nodes[at]!;
+  const opposite = minus(times(node, 2), to);
+  let next = sub;
+  const place = (index: number | null, which: "c1" | "c2", point: Point): void => {
+    const link = index === null ? undefined : next.links[index];
+    if (link?.kind === "cubic") next = withLink(next, index!, which === "c1" ? { ...link, c1: point } : { ...link, c2: point });
+  };
+  place(outgoing(sub, at), "c1", side === "out" ? to : opposite);
+  place(incoming(sub, at), "c2", side === "in" ? to : opposite);
+  const out = subs.slice();
+  out[s] = next;
+  return out;
 }
 
 /// Vero se il nodo `at` ha un segmento da tutti e due i lati.
@@ -975,16 +1125,15 @@ export function nodeAt(subs: readonly Subpath[], m: Matrix, p: Point, tolerance:
   return best;
 }
 
-/// La maniglia di `handles` più vicina a `p`, entro `tolerance`.
-export function handleAt(subs: readonly Subpath[], handles: readonly HandleRef[], m: Matrix, p: Point, tolerance: number): HandleRef | null {
-  let best: HandleRef | null = null;
+/// La maniglia di `spots` più vicina a `p`, entro `tolerance`: ognuna col
+/// punto dove si vede ([`handleSpot`]).
+export function handleAt<T extends { readonly point: Point }>(spots: readonly T[], m: Matrix, p: Point, tolerance: number): T | null {
+  let best: T | null = null;
   let nearest = tolerance;
-  for (const handle of handles) {
-    const point = handlePoint(subs, handle);
-    if (point === null) continue;
-    const d = distance(apply(m, point), p);
+  for (const spot of spots) {
+    const d = distance(apply(m, spot.point), p);
     if (d <= nearest) {
-      best = handle;
+      best = spot;
       nearest = d;
     }
   }

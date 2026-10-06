@@ -284,6 +284,22 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
 - **Passando col puntatore**, senza premere, la forma sotto mostra il suo
   contorno e i suoi nodi, più piccoli e più tenui di quelli che si
   modificano: si vede dove sono prima di toccarli.
+- **Ogni nodo scelto mostra le sue maniglie**, come nella Selezione diretta
+  di Illustrator, anche dove il segmento non ne scrive: una linea ha quelle
+  della cubica dritta che è, a un terzo e a due terzi, e un arco quelle delle
+  cubiche che lo approssimano. Una maniglia ritirata sul suo nodo, come
+  quelle della penna di Bézier accanto a uno spigolo, si vede accanto al
+  nodo, con la linea tratteggiata. Trascinarne una curva il segmento, che
+  prima diventa le cubiche che si vedono uguali; un tocco sulla maniglia di
+  una linea vale come sulla linea. Su un lato molto corto la maniglia
+  coprirebbe il nodo, e si vede ingrandendo; l'asta di una freccia non ne ha.
+- **Con `Alt`** trascinare un nodo ne tira fuori le maniglie, come con lo
+  strumento Punto di ancoraggio di Illustrator: quella sotto il puntatore è
+  del lato verso cui si comincia, l'altra le sta opposta, e il nodo diventa
+  simmetrico; un capo ne ha una sola. Trascinare una maniglia con `Alt` la
+  sposta da sola, e il suo nodo diventa uno spigolo. Col dito, o dalla
+  tastiera, «Nodi lisci» e «Nodi simmetrici» tirano fuori le maniglie di uno
+  spigolo.
 - **La barra dei nodi** prende il posto di quella della selezione, coi tasti
   di Inkscape: «Aggiungi nodi» (`Ins`) a metà dei segmenti fra due nodi
   scelti, «Elimina nodi» (`Canc`), «Nodi a spigolo», «Nodi lisci» e «Nodi
@@ -311,8 +327,9 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
   scriverlo: liscio se i due segmenti vi passano allineati, simmetrico se
   anche le maniglie sono lunghe uguali, spigolo altrimenti. Un nodo liscio
   resta liscio mentre si trascinano lui, i vicini o le sue maniglie. Il tipo
-  scelto con la barra vale finché il tracciato resta scelto; i capi di un
-  tracciato aperto non ne hanno.
+  scelto con la barra, o con `Alt`, vale finché il tracciato resta scelto, e
+  annullare o ripetere lo riporta com'era; i capi di un tracciato aperto non
+  ne hanno.
 - **Eliminare un nodo** unisce i suoi segmenti: due linee in una linea, se
   no in una curva che passa vicino a dov'erano e tiene i versi ai capi, così
   un nodo liscio accanto resta liscio. Ai capi di un tracciato aperto il

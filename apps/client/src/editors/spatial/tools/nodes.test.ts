@@ -14,6 +14,7 @@ import {
   deleteNodes,
   handlesFor,
   handleAt,
+  handleSpot,
   inferred,
   insertNode,
   insertNodes,
@@ -24,7 +25,11 @@ import {
   moveNodes,
   nodeAt,
   nodesWithin,
+  openNode,
+  pullHandles,
+  pullSide,
   readNodes,
+  realizeHandle,
   setKind,
   setLinks,
   writeNodes,
@@ -189,7 +194,12 @@ describe("spostare nodi e maniglie", () => {
       { sub: 0, link: 0, which: "c2" },
       { sub: 0, link: 1, which: "control" },
     ]);
-    expect(handlesFor(subs, keys("0:3"))).toEqual([{ sub: 0, link: 3, which: "c1" }, { sub: 0, link: 3, which: "c2" }]);
+    // La linea che arriva al nodo ha la maniglia sua, sulla linea.
+    expect(handlesFor(subs, keys("0:3"))).toEqual([
+      { sub: 0, link: 2, which: "c2" },
+      { sub: 0, link: 3, which: "c1" },
+      { sub: 0, link: 3, which: "c2" },
+    ]);
   });
 
   it("tiene sulla retta di una linea la maniglia di un nodo liscio, mai dietro il nodo", () => {
@@ -209,6 +219,120 @@ describe("spostare nodi e maniglie", () => {
     const moved = moveHandle(subs, { sub: 0, link: 0, which: "control" }, [5, 5], inferred(subs));
     expect(moved[0]!.links[0]).toEqual({ kind: "quad", control: [5, 5] });
     expect(kindOf(moved[0]!, 1)).toBe("smooth");
+  });
+});
+
+describe("le maniglie di ogni nodo", () => {
+  // Una linea, mezzo giro d'arco, una cubica con la prima maniglia ritirata
+  // sul suo nodo, e una quadratica.
+  const subs = read("M0 0 L30 0 A15 15 0 0 1 60 0 C60 0 90 30 90 0 Q100 10 110 0");
+  const kappa = (4 / 3) * Math.tan(Math.PI / 8);
+  const stub = (size: number) => (): number => size;
+
+  it("mostra le maniglie di ogni nodo scelto: della linea e della maniglia ritirata solo le sue", () => {
+    expect(handlesFor(subs, keys("0:0"))).toEqual([{ sub: 0, link: 0, which: "c1" }]);
+    expect(handlesFor(subs, keys("0:1"))).toEqual([
+      { sub: 0, link: 0, which: "c2" },
+      { sub: 0, link: 1, which: "c1" },
+      { sub: 0, link: 1, which: "c2" },
+    ]);
+    expect(handlesFor(subs, keys("0:2"))).toEqual([
+      { sub: 0, link: 1, which: "c1" },
+      { sub: 0, link: 1, which: "c2" },
+      { sub: 0, link: 2, which: "c1" },
+      { sub: 0, link: 2, which: "c2" },
+    ]);
+    // La maniglia ritirata è del nodo prima, che non è scelto.
+    expect(handlesFor(subs, keys("0:3"))).toEqual([{ sub: 0, link: 2, which: "c2" }, { sub: 0, link: 3, which: "control" }]);
+  });
+
+  it("le mostra dove il segmento le vuole: sulla linea a un terzo, sull'arco come sulle cubiche che lo approssimano", () => {
+    expect(handleSpot(subs, { sub: 0, link: 0, which: "c1" }, stub(5))).toEqual({ point: [10, 0], folded: false });
+    expect(handleSpot(subs, { sub: 0, link: 0, which: "c2" }, stub(5))).toEqual({ point: [20, 0], folded: false });
+    const first = handleSpot(subs, { sub: 0, link: 1, which: "c1" }, stub(5))!;
+    near(first.point, [30, -15 * kappa], 1e-9);
+    expect(first.folded).toBe(false);
+    near(handleSpot(subs, { sub: 0, link: 1, which: "c2" }, stub(5))!.point, [60, -15 * kappa], 1e-9);
+    expect(handleSpot(subs, { sub: 0, link: 2, which: "c2" }, stub(5))).toEqual({ point: [90, 30], folded: false });
+    expect(handleSpot(subs, { sub: 0, link: 3, which: "control" }, stub(5))).toEqual({ point: [100, 10], folded: false });
+    expect(handleSpot(subs, { sub: 0, link: 3, which: "c1" }, stub(5))).toBeNull();
+    // Una linea che non va da nessuna parte non ha maniglie.
+    expect(handleSpot(read("M5 5 L5 5"), { sub: 0, link: 0, which: "c1" }, stub(5))).toBeNull();
+  });
+
+  it("mostra accanto al nodo la maniglia ritirata, sul verso del segmento e mai oltre un terzo", () => {
+    const folded = handleSpot(subs, { sub: 0, link: 2, which: "c1" }, stub(5))!;
+    expect(folded.folded).toBe(true);
+    near(folded.point, [60 + 5 * Math.SQRT1_2, 5 * Math.SQRT1_2], 1e-9);
+    near(handleSpot(subs, { sub: 0, link: 2, which: "c1" }, stub(50))!.point, [60 + 10 * Math.SQRT1_2, 10 * Math.SQRT1_2], 1e-9);
+    // Ritirata all'arrivo: verso il segmento, all'indietro.
+    const back = read("M0 0 C0 30 30 0 30 0");
+    near(handleSpot(back, { sub: 0, link: 0, which: "c2" }, stub(5))!.point, [30 - 5 * Math.SQRT1_2, 5 * Math.SQRT1_2], 1e-9);
+  });
+
+  it("fa vera la maniglia di una linea, una cubica dritta che si vede uguale", () => {
+    const line = read("M0 0 L30 0 L30 30");
+    const real = realizeHandle(line, { sub: 0, link: 0, which: "c2" }, true);
+    expect(write(real.subs)).toBe("M0 0 C10 0 20 0 30 0 L30 30");
+    expect(real.handle).toEqual({ sub: 0, link: 0, which: "c2" });
+    expect(real.moved).toBeNull();
+    // Una cubica resta com'è.
+    const curve = realizeHandle(subs, { sub: 0, link: 2, which: "c2" }, true);
+    expect(write(curve.subs)).toBe(write(subs));
+    expect(curve.moved).toBeNull();
+  });
+
+  it("fa vera la maniglia di un arco con le cubiche che lo approssimano, e porta i nodi dove vanno", () => {
+    const real = realizeHandle(subs, { sub: 0, link: 1, which: "c2" }, false);
+    expect(real.subs[0]!.nodes).toHaveLength(subs[0]!.nodes.length + 1);
+    expect(real.handle).toEqual({ sub: 0, link: 2, which: "c2" });
+    expect(real.moved!.get("0:1")).toBe("0:1");
+    expect(real.moved!.get("0:2")).toBe("0:3");
+    expect(real.moved!.get("0:4")).toBe("0:5");
+    sameLook(subs, real.subs, 15 * 3e-4 + 1e-4);
+    // La maniglia sta dove si vedeva.
+    const link = real.subs[0]!.links[2]!;
+    near(link.kind === "cubic" ? link.c2 : [NaN, NaN], [60, -15 * kappa], 1e-9);
+  });
+
+  it("fa cubiche anche l'arco dall'altra parte del nodo, se la sua maniglia deve girare", () => {
+    const after = read("M0 0 A15 15 0 0 1 30 0 C40 0 50 10 60 0");
+    const handle = { sub: 0, link: 1, which: "c1" } as const;
+    expect(realizeHandle(after, handle, false).subs[0]!.links.map((link) => link.kind)).toEqual(["arc", "cubic"]);
+    const turned = realizeHandle(after, handle, true);
+    expect(turned.subs[0]!.links.map((link) => link.kind)).toEqual(["cubic", "cubic", "cubic"]);
+    expect(turned.handle).toEqual({ sub: 0, link: 2, which: "c1" });
+    expect(turned.moved!.get("0:1")).toBe("0:2");
+    sameLook(after, turned.subs, 15 * 3e-4 + 1e-4);
+  });
+
+  it("apre un nodo: i segmenti ai suoi lati diventano cubiche che si vedono uguali", () => {
+    const corner = read("M0 0 L100 0 L100 100");
+    const opened = openNode(corner, "0:1");
+    expect(write(opened.subs)).toBe("M0 0 C33.33 0 66.67 0 100 0 C100 33.33 100 66.67 100 100");
+    expect(opened.key).toBe("0:1");
+    expect(opened.moved).toBeNull();
+    const arc = openNode(read("M0 0 A15 15 0 0 1 30 0 L60 0"), "0:1");
+    expect(arc.key).toBe("0:2");
+    expect(arc.moved!.get("0:2")).toBe("0:3");
+  });
+
+  it("tira le maniglie dal lato verso cui si trascina, e fa il nodo simmetrico", () => {
+    const corner = read("M0 0 L100 0 L100 100");
+    expect(pullSide(corner, "0:1", [0.2, 1])).toBe("out");
+    expect(pullSide(corner, "0:1", [-1, 0.2])).toBe("in");
+    expect(pullSide(corner, "0:0", [-1, 0])).toBe("out");
+    expect(pullSide(corner, "0:2", [1, 0])).toBe("in");
+    expect(pullSide(read("M0 0"), "0:0", [1, 0])).toBeNull();
+    const opened = openNode(corner, "0:1");
+    const pulled = pullHandles(opened.subs, opened.key, "out", [130, 20]);
+    expect(write(pulled)).toBe("M0 0 C33.33 0 70 -20 100 0 C130 20 100 66.67 100 100");
+    expect(kindOf(pulled[0]!, 1)).toBe("symmetric");
+    const inward = pullHandles(opened.subs, opened.key, "in", [70, -20]);
+    expect(write(inward)).toBe(write(pulled));
+    // Un capo ha una maniglia sola.
+    const end = openNode(corner, "0:0");
+    expect(write(pullHandles(end.subs, end.key, "out", [10, 10]))).toBe("M0 0 C10 10 66.67 0 100 0 L100 100");
   });
 });
 
@@ -487,8 +611,12 @@ describe("che cosa sta sotto il puntatore", () => {
   it("trova il nodo e la maniglia più vicini, nella scena", () => {
     expect(nodeAt(subs, m, [120, 1], 3)).toBe("0:1");
     expect(nodeAt(subs, m, [120, 5], 3)).toBeNull();
-    const handles = [{ sub: 0, link: 0, which: "c1" }, { sub: 0, link: 0, which: "c2" }] as const;
-    expect(handleAt(subs, handles, m, [119, 21], 3)).toEqual(handles[1]);
+    const spots = [
+      { handle: { sub: 0, link: 0, which: "c1" }, point: [0, 10] },
+      { handle: { sub: 0, link: 0, which: "c2" }, point: [10, 10] },
+    ] as const;
+    expect(handleAt(spots, m, [119, 21], 3)).toBe(spots[1]);
+    expect(handleAt(spots, m, [119, 30], 3)).toBeNull();
     expect(nodesWithin(subs, m, { min: [110, -1], max: [150, 1] })).toEqual(["0:1", "0:2"]);
     expect(nodesWithin(subs, m, { min: [90, 1], max: [150, 30] })).toEqual([]);
   });
