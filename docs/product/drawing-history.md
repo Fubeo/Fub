@@ -53,7 +53,7 @@ ripetono.
 
 ## I segni
 
-- **«Segna questo punto»**, in cima al pannello, mette un segno dove si è
+- **«Segna»**, accanto al titolo del pannello, mette un segno dove si è
   adesso, con la bandierina, e apre il suo nome: di partenza «Segno 1»,
   «Segno 2» e così via. `Invio` lo scrive, `Esc` lo lascia com'è, e uscire
   dal campo lo scrive anche lui.
