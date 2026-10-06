@@ -92,8 +92,10 @@ angoli, e ogni cambio riscrive il `d` da lì:
 ```
 
 Spostare, scalare e ruotare cambiano soltanto `transform`, come per gli altri
-oggetti. «Oggetto in tracciato», all'[Esperto](drawing-expert.md), toglie i
-parametri e lascia il `d`: da lì la forma si cambia coi Nodi, nodo per nodo.
+oggetti. All'[Esperto](drawing-expert.md) lo strumento Nodi mostra i vertici:
+portarli tutti insieme sposta la forma, che resta un poligono o una stella;
+spostarne uno ne fa un tracciato. «Oggetto in tracciato» toglie i parametri e
+lascia il `d`.
 La grammatica è in [Formato della scena, poligoni e stelle](../reference/scene-format-shapes.md).
 
 ## Chi monta l'editor
