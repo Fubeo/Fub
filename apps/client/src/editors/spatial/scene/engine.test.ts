@@ -366,6 +366,43 @@ describe("l'undo", () => {
     );
   });
 
+  it("annulla una fila di undo con un cambiamento solo, gli stessi byte di uno per volta", () => {
+    const engine = SceneEngine.open(BASE);
+    const steps = [
+      apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } }),
+      apply(engine, { op: "remove", target: "o2b3c4d5e" }),
+      apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { first: true }, elem: R4_ELEM }),
+    ];
+    const end = engine.normalized;
+    const back = engine.undoAll(steps.map((step) => step.undo).reverse());
+    expect(back.rejected).toBeNull();
+    expect(back.text).toBe(BASE);
+    expect(tryApplyOperation(end, back.operation)).toEqual({ kind: "applied", text: BASE });
+    expect(back.touched).toEqual(["o4d5e6f7g", "o2b3c4d5e", "o1a2b3c4d"]);
+    expect(engine.scene()).toEqual(readScene(BASE).items);
+    // Gli undo della fila la ripetono, ed esatti: i byte tornano quelli di
+    // prima, e un passo per volta va come la fila.
+    const again = engine.undoAll(back.undos.slice().reverse());
+    expect(again.text).toBe(end);
+    expect(applied(engine.undo(again.undos[2]!)).text).toBe(steps[1]!.text);
+  });
+
+  it("ferma la fila al primo undo rifiutato e tiene quelli prima", () => {
+    const engine = SceneEngine.open(BASE);
+    const added = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: R4_ELEM });
+    const black = apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } });
+    const grey = apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#111111" } });
+    // Da fuori il rettangolo aggiunto se ne va: il suo undo non vale più.
+    apply(engine, { op: "remove", target: "o4d5e6f7g" });
+    const before = engine.normalized;
+    const run = engine.undoAll([grey.undo, black.undo, added.undo]);
+    expect(run.undos).toHaveLength(2);
+    expect(run.rejected).toMatchObject({ outcome: "rejected", reason: "missing-target" });
+    expect(run.text).toBe(BASE);
+    expect(tryApplyOperation(before, run.operation)).toEqual({ kind: "applied", text: BASE });
+    expect(engine.undoAll([])).toMatchObject({ undos: [], rejected: null, text: BASE, operation: { edits: [] } });
+  });
+
   it("riporta l'indice esterno di un batch annidato", () => {
     const nested: Op = {
       op: "batch",
