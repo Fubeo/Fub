@@ -59,6 +59,7 @@ import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
 import { createDrawEditor, type DrawEditor, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages, type ImageRef } from "./read-images";
+import { appFonts, withStyle, type FontSheets } from "./picture";
 
 type VectorMode = "draw" | "read";
 
@@ -74,6 +75,9 @@ export interface VectorSurfaceOptions {
   onPickLink?(current: string | null): Promise<string | null>;
   /// Le immagini del vault, che la shell risolve dal disegno.
   images?: VectorImages;
+  /// I caratteri dell'app per la Lettura, che da un `img` non li caricherebbe;
+  /// di partenza quelli dell'app stessa.
+  fonts?: FontSheets;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -449,6 +453,28 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   const imageSources = (): Map<string, string> => new Map([...readImages].map(([path, entry]) => [path, entry.uri]));
 
+  const fonts = options.fonts ?? appFonts;
+
+  /// Ciò che l'immagine mostra di `shown`: coi caratteri che nomina, se già
+  /// letti, e con le immagini lette. Lo stile va subito dopo l'apertura della
+  /// radice, prima di ogni immagine: gli indici di `refs` si spostano di
+  /// quanto è lungo.
+  const picture = (shown: string, refs: readonly ImageRef[]): string => {
+    const styled = withStyle(shown, fonts.now(shown) ?? "");
+    const shift = styled.length - shown.length;
+    const moved = shift === 0 ? refs : refs.map((ref) => ({ ...ref, start: ref.start + shift, end: ref.end + shift }));
+    return withImages(styled, moved, imageSources());
+  };
+
+  /// Legge i caratteri che `shown` nomina, e mostra di nuovo l'immagine se è
+  /// ancora quella di `shown`.
+  const readFonts = async (shown: string, refs: readonly ImageRef[]): Promise<void> => {
+    if (fonts.now(shown) !== null) return;
+    await fonts.load(shown);
+    if (life.closed || shownText !== shown || view === null || fonts.now(shown) === null) return;
+    display(picture(shown, refs));
+  };
+
   /// Mostra `source`, il testo di adesso con le immagini al loro posto. La
   /// riga sotto dice il peso del file, non quello delle immagini.
   const display = (source: string): void => {
@@ -498,7 +524,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       added = true;
     }
     if (!added || life.closed || round !== imagesRound || shownText !== shown || view === null) return;
-    display(withImages(shown, refs, imageSources()));
+    display(picture(shown, refs));
   };
 
   const showImage = (): void => {
@@ -514,8 +540,9 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const kept = new Set(refs.map((ref) => ref.path));
     for (const path of [...readImages.keys()]) if (!kept.has(path)) readImages.delete(path);
     shownText = text;
-    display(withImages(text, refs, imageSources()));
+    display(picture(text, refs));
     showAbout();
+    void readFonts(text, refs);
     void readVaultImages(text, refs);
   };
 

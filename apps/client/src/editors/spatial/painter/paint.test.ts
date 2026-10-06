@@ -238,6 +238,20 @@ describe("gli strati immagine", () => {
     expect(open).toContain('style="background:#000;background:none!important"');
   });
 
+  it("portano un foglio di stile come primo figlio dell'svg più esterno", () => {
+    const scene = sceneOf(HEAD + `${LAYER}<use href="#x"/></g></svg>`);
+    const flat = imageDocument(image(scene, 0), { x: 0, y: 0, width: 100, height: 50, pixelWidth: 200, pixelHeight: 100 }, "@font-face{}");
+    expect(flat).toMatch(/^<svg [^>]*><style>@font-face\{\}<\/style>/);
+    const turned = imageDocument(image(scene, 0), { x: 0, y: 0, width: 100, height: 50, pixelWidth: 200, pixelHeight: 100, angle: 30 }, "@font-face{}");
+    expect(turned).toMatch(/^<svg [^>]*><style>@font-face\{\}<\/style><g transform="rotate\(30\)/);
+    expect(turned.match(/<style>/g)).toHaveLength(1);
+    for (const text of [flat, turned]) {
+      const parsed = parseXml(new SourceText(text), false);
+      expect(parsed.element(parsed.root)?.ns).toBe(NS_SVG);
+    }
+    expect(imageDocument(image(scene, 0), { x: 0, y: 0, width: 100, height: 50, pixelWidth: 200, pixelHeight: 100 })).not.toContain("<style>");
+  });
+
   it("girate, annidano la radice in un svg che le gira, allineato ai pixel", () => {
     const source = HEAD.replace(">", ' style="background:#000" fill="red">') + `${LAYER}<use href="#x"/></g></svg>`;
     const scene = sceneOf(source);

@@ -3,17 +3,13 @@
 //
 // - **Si vede tutto.** Dentro un'immagine il browser non carica niente da
 //   fuori: le immagini del vault vi entrano coi loro byte, come in Lettura
-//   (`read-images.ts`), e i caratteri dell'app in un foglio di stile, coi
-//   loro file come data URI, solo quelli che un testo nomina.
+//   (`read-images.ts`), e i caratteri dell'app come in ogni immagine del
+//   disegno (`picture.ts`).
 // - **Doppia densità**: due pixel per ogni pixel CSS, finché il lato e
 //   l'area restano quelli che ogni browser disegna in un canvas; oltre, la
 //   densità scende quanto serve.
 // - **La misura vera.** Il PNG dice la sua densità (`pHYs`): chi lo mette in
 //   un documento lo fa grande quanto il disegno.
-
-import { SourceText } from "../scene/text";
-import { isSvg, parseXml } from "../scene/xml";
-import { FONT_FILES, FONT_RANGE } from "./text";
 
 /// I pixel per pixel CSS di un PNG copiato.
 export const PNG_SCALE = 2;
@@ -95,65 +91,6 @@ export function withDensity(png: Uint8Array, scale: number): Uint8Array {
   out.set(chunk, end);
   out.set(png.subarray(end), end + chunk.length);
   return out;
-}
-
-/// Il data URI dei byte `blob`, col tipo `type`.
-function blobUri(blob: Blob, type: string): Promise<string | null> {
-  return blob.arrayBuffer().then(
-    (buffer) => {
-      const bytes = new Uint8Array(buffer);
-      const parts: string[] = [];
-      for (let i = 0; i < bytes.length; i += 0x8000) parts.push(String.fromCharCode(...bytes.subarray(i, i + 0x8000)));
-      return `data:${type};base64,${btoa(parts.join(""))}`;
-    },
-    () => null,
-  );
-}
-
-/// I file dei caratteri già letti, per indirizzo.
-const fontUris = new Map<string, Promise<string | null>>();
-
-/// Il foglio di stile coi caratteri dell'app che `svg` nomina in un
-/// `font-family`, i file come data URI; `""` se non ne nomina. `read`
-/// legge un file dell'app.
-export async function fontFaces(svg: string, read: (url: string) => Promise<Blob | null>): Promise<string> {
-  const rules: string[] = [];
-  for (const [family, url, weight] of FONT_FILES) {
-    const named = new RegExp(`font-family\\s*[:=]\\s*(?:"[^"]*|'[^']*|[^;"'>]*)${family.replace(/ /g, "\\s+")}`, "i");
-    if (!named.test(svg)) continue;
-    let uri = fontUris.get(url);
-    if (uri === undefined) {
-      uri = read(url).then((blob) => (blob === null ? null : blobUri(blob, "font/woff2")), () => null);
-      fontUris.set(url, uri);
-    }
-    const data = await uri;
-    if (data === null) {
-      // Riprova la prossima volta.
-      fontUris.delete(url);
-      continue;
-    }
-    rules.push(`@font-face{font-family:"${family}";src:url(${data}) format("woff2");font-weight:${weight};unicode-range:${FONT_RANGE}}`);
-  }
-  return rules.join("\n");
-}
-
-/// `svg` con il foglio di stile `css`, che non ha marcatura, come primo
-/// figlio della radice; com'è se `css` è vuoto o se non si legge.
-export function withStyle(svg: string, css: string): string {
-  if (css === "") return svg;
-  let at: number;
-  let name: string;
-  try {
-    const doc = parseXml(new SourceText(svg), false);
-    const root = doc.element(doc.root)!;
-    if (!isSvg(root, "svg") || root.closeStart === null) return svg;
-    at = root.openEnd;
-    const colon = root.name.indexOf(":");
-    name = colon < 0 ? "style" : `${root.name.slice(0, colon)}:style`;
-  } catch {
-    return svg;
-  }
-  return `${svg.slice(0, at)}<${name}>${css}</${name}>${svg.slice(at)}`;
 }
 
 /// Il PNG di `svg`, un documento SVG che si vede da solo, alla misura in

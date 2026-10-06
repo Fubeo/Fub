@@ -70,6 +70,51 @@ async function decoded(): Promise<void> {
 }
 
 describe("il documento vivo", () => {
+  it("dà a uno strato immagine i caratteri dell'app che nomina, appena arrivano", async () => {
+    const SHEET = '@font-face{font-family:"Inter";src:url(data:font/woff2;base64,SQ==)}';
+    let ready = false;
+    let arrive = (): void => {};
+    const fonts = {
+      now: vi.fn((svg: string) => (!svg.includes("Inter") ? "" : ready ? SHEET : null)),
+      load: vi.fn(() => new Promise<string>((resolve) => {
+        arrive = () => {
+          ready = true;
+          resolve(SHEET);
+        };
+      })),
+    };
+    const painter = createSvgPainter(host, owner, { fonts });
+    const source = HOSTILE.replace('<script>', '<text font-family="Inter" x="1" y="20">Ciao</text><script>');
+    painter.update(sceneOf(SceneEngine.open(source), new PaintBuilder()));
+    await decoded();
+    const shown = async (): Promise<string> => blobs.get(host.querySelector("img")!.getAttribute("src")!)!.text();
+    // Subito coi caratteri del sistema, invece di aspettare.
+    expect(await shown()).not.toContain("@font-face");
+    expect(fonts.load).toHaveBeenCalledTimes(1);
+    arrive();
+    await decoded();
+    await decoded();
+    const text = await shown();
+    expect(text).toContain(`<style>${SHEET}</style>`);
+    expect(text.indexOf("<style>")).toBeLessThan(text.indexOf("Ciao"));
+    // La prima immagine se n'è andata.
+    expect(live.size).toBe(1);
+    // Già letti, i caratteri entrano dal primo disegno.
+    painter.update(sceneOf(SceneEngine.open(source.replace("Ciao", "Ciao!")), new PaintBuilder()));
+    await decoded();
+    expect(await shown()).toContain(`<style>${SHEET}</style>`);
+    expect(fonts.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("non chiede caratteri per uno strato che non ne nomina", async () => {
+    const fonts = { now: vi.fn(() => ""), load: vi.fn(async () => "") };
+    const painter = createSvgPainter(host, owner, { fonts });
+    painter.update(sceneOf(SceneEngine.open(HOSTILE), new PaintBuilder()));
+    await decoded();
+    expect(fonts.load).not.toHaveBeenCalled();
+    expect(await blobs.get(host.querySelector("img")!.getAttribute("src")!)!.text()).not.toContain("<style>");
+  });
+
   it("non riceve niente di estraneo, nessun id e nessun collegamento", async () => {
     const painter = createSvgPainter(host, owner);
     painter.update(sceneOf(SceneEngine.open(HOSTILE), new PaintBuilder()));

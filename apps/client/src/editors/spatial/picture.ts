@@ -1,0 +1,132 @@
+// Il disegno come immagine che si vede da sola. Dentro un `<img>`, da un blob
+// o da un file, il browser non carica niente da fuori: né i caratteri
+// dell'app, né le immagini del vault. Qui i caratteri entrano nella copia del
+// documento che va nell'immagine, in un foglio di stile coi loro file come
+// data URI, solo quelli che un testo nomina: la Lettura, gli strati immagine
+// del foglio, gli embed delle note e il PNG copiato scrivono così con gli
+// stessi caratteri del foglio. Il file non cambia.
+//
+// - **Una lettura per sessione.** Ogni file si legge una volta, e chi disegna
+//   subito trova pronti quelli già letti; uno che non si legge si riprova la
+//   volta dopo.
+// - **Un tetto.** I caratteri insieme pesano al più [`MAX_FONT_SHEET_BYTES`]:
+//   tanto in più tiene in memoria ogni immagine che li porta tutti.
+
+import { SourceText } from "./scene/text";
+import { isSvg, parseXml } from "./scene/xml";
+import { FONT_FILES, FONT_RANGE } from "./tools/text";
+
+/// Il foglio dei caratteri più grande, coi tre caratteri dell'app: misurato
+/// sui loro file, 189 KB, con un margine.
+export const MAX_FONT_SHEET_BYTES = 192 * 1024;
+
+/// Chi dà i caratteri a un'immagine: subito, se sono già letti, o quando
+/// arrivano.
+export interface FontSheets {
+  /// Il foglio dei caratteri che `svg` nomina, se sono tutti già letti: `""`
+  /// se non ne nomina; `null` se qualcuno manca ancora.
+  now(svg: string): string | null;
+  /// Legge i caratteri che `svg` nomina e dà il loro foglio, senza quelli
+  /// che non si leggono.
+  load(svg: string): Promise<string>;
+}
+
+/// I file dei caratteri in lettura o letti, per indirizzo.
+const fontUris = new Map<string, Promise<string | null>>();
+/// I file dei caratteri già letti, per indirizzo.
+const fontData = new Map<string, string>();
+
+/// I caratteri dell'app che `svg` nomina in un `font-family`.
+function namedFonts(svg: string): typeof FONT_FILES {
+  if (!/font-family/i.test(svg)) return [];
+  return FONT_FILES.filter(([family]) =>
+    new RegExp(`font-family\\s*[:=]\\s*(?:"[^"]*|'[^']*|[^;"'>]*)${family.replace(/ /g, "\\s+")}`, "i").test(svg));
+}
+
+const fontRule = (family: string, data: string, weight: string): string =>
+  `@font-face{font-family:"${family}";src:url(${data}) format("woff2");font-weight:${weight};unicode-range:${FONT_RANGE}}`;
+
+/// Il data URI dei byte `blob`, col tipo `type`.
+function blobUri(blob: Blob, type: string): Promise<string | null> {
+  return blob.arrayBuffer().then(
+    (buffer) => {
+      const bytes = new Uint8Array(buffer);
+      const parts: string[] = [];
+      for (let i = 0; i < bytes.length; i += 0x8000) parts.push(String.fromCharCode(...bytes.subarray(i, i + 0x8000)));
+      return `data:${type};base64,${btoa(parts.join(""))}`;
+    },
+    () => null,
+  );
+}
+
+/// Un file dell'app; `null` se non si legge.
+export const appFile = (url: string): Promise<Blob | null> =>
+  fetch(url)
+    .then((response) => (response.ok ? response.blob() : null))
+    .catch(() => null);
+
+/// Il foglio di stile coi caratteri dell'app che `svg` nomina in un
+/// `font-family`, i file come data URI; `""` se non ne nomina. `read`
+/// legge un file dell'app.
+export async function fontFaces(svg: string, read: (url: string) => Promise<Blob | null> = appFile): Promise<string> {
+  const rules: string[] = [];
+  for (const [family, url, weight] of namedFonts(svg)) {
+    let uri = fontUris.get(url);
+    if (uri === undefined) {
+      uri = read(url).then((blob) => (blob === null ? null : blobUri(blob, "font/woff2")), () => null);
+      fontUris.set(url, uri);
+    }
+    const data = await uri;
+    if (data === null) {
+      // Riprova la prossima volta.
+      if (fontUris.get(url) === uri) fontUris.delete(url);
+      continue;
+    }
+    fontData.set(url, data);
+    rules.push(fontRule(family, data, weight));
+  }
+  return rules.join("\n");
+}
+
+/// Il foglio di [`fontFaces`], se i caratteri che `svg` nomina sono tutti già
+/// letti; `null` se qualcuno manca.
+export function fontFacesNow(svg: string): string | null {
+  const rules: string[] = [];
+  for (const [family, url, weight] of namedFonts(svg)) {
+    const data = fontData.get(url);
+    if (data === undefined) return null;
+    rules.push(fontRule(family, data, weight));
+  }
+  return rules.join("\n");
+}
+
+/// I caratteri dell'app, letti coi file dell'app.
+export const appFonts: FontSheets = {
+  now: fontFacesNow,
+  load: (svg) => fontFaces(svg, appFile),
+};
+
+/// `svg` con il foglio di stile `css`, che non ha marcatura, come primo
+/// figlio della radice; com'è se `css` è vuoto o se non si legge.
+export function withStyle(svg: string, css: string): string {
+  if (css === "") return svg;
+  let at: number;
+  let name: string;
+  try {
+    const doc = parseXml(new SourceText(svg), false);
+    const root = doc.element(doc.root)!;
+    if (!isSvg(root, "svg") || root.closeStart === null) return svg;
+    at = root.openEnd;
+    name = styleName(root.name);
+  } catch {
+    return svg;
+  }
+  return `${svg.slice(0, at)}<${name}>${css}</${name}>${svg.slice(at)}`;
+}
+
+/// Il nome di un `<style>` SVG figlio di una radice che si chiama `root`:
+/// col suo prefisso, se ne ha uno.
+export function styleName(root: string): string {
+  const colon = root.indexOf(":");
+  return colon < 0 ? "style" : `${root.slice(0, colon)}:style`;
+}

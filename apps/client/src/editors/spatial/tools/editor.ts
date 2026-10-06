@@ -113,6 +113,7 @@ import { countObjects, describe, keyOf, linkName, outline, polygonalKind, type O
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages } from "../read-images";
+import { appFonts, fontFaces, withStyle } from "../picture";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
 import { formatNumber } from "../number";
 import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInputOptions, type StrokeStart } from "../pen/pen-input";
@@ -197,7 +198,7 @@ import {
   type SelectionFacts,
 } from "./fields";
 import { lookOf as selectionLook, lookOps, styleOf, styleOps, type Style } from "./look";
-import { fontFaces, rasterize, withStyle } from "./png";
+import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
   angleOf,
@@ -2047,7 +2048,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   gridMark.append(gridMinor, gridMajor);
   surface.append(gridMark);
   const images = options.images;
-  const painter = createSvgPainter(surface, life, images === undefined ? {} : { images: (href, owner) => images.url(href, owner) });
+  const painter = createSvgPainter(surface, life, {
+    fonts: appFonts,
+    ...(images === undefined ? {} : { images: (href: string, owner: Lifetime) => images.url(href, owner) }),
+  });
   const preview = document.createElementNS(SVG_NS, "svg");
   preview.setAttribute("class", "draw-preview");
   preview.setAttribute("aria-hidden", "true");
