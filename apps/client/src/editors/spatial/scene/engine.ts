@@ -138,6 +138,23 @@ export interface Rejected {
 
 export type Outcome = Applied | Rejected;
 
+/// Una fila di undo applicati uno dopo l'altro (`SceneEngine.undoAll`), con
+/// un solo cambiamento del testo, quello di tutta la fila.
+export interface Replayed {
+  /// L'undo di ogni undo applicato, in ordine: rimette il suo passo.
+  readonly undos: readonly Undo[];
+  /// Il rifiuto che ha fermato la fila, all'undo di indice `undos.length`;
+  /// `null` se la fila è arrivata in fondo.
+  readonly rejected: Rejected | null;
+  /// Gli id toccati dalla fila, ciascuno una volta, nell'ordine in cui la
+  /// fila li ha toccati.
+  readonly touched: readonly string[];
+  /// Le modifiche di tutta la fila sul testo a LF di prima (§6).
+  readonly operation: TextOperation;
+  /// Il testo grezzo di dopo.
+  readonly text: string;
+}
+
 /// L'undo di un'operazione applicata: l'inversa, e l'operazione che l'undo
 /// annulla, che è l'inversa dell'undo stesso (il redo).
 export class Undo {
@@ -435,6 +452,9 @@ export class SceneEngine {
   /// operazioni di un `batch` vale per ciò che arriva, e l'inversa di un
   /// `add` grande toglie i suoi elementi uno per uno.
   private inverse = false;
+  /// Vero mentre `undoAll` applica la sua fila: il testo si scrive una volta,
+  /// alla fine.
+  private quiet = false;
 
   private constructor(source: string) {
     const opened = openSource(source);
@@ -537,9 +557,41 @@ export class SceneEngine {
     }
   }
 
+  /// Annulla gli undo di `undos`, uno dopo l'altro, come `undo`, e si ferma
+  /// al primo rifiutato. Il testo si scrive una volta sola, alla fine: mille
+  /// passi costano poco più di uno, e il cambiamento è uno, dal testo di
+  /// prima a quello di dopo (§7).
+  undoAll(undos: readonly Undo[]): Replayed {
+    const before = this.lf;
+    const done: Undo[] = [];
+    const touched = new Set<string>();
+    let rejected: Rejected | null = null;
+    this.quiet = true;
+    try {
+      for (const undo of undos) {
+        const outcome = this.undo(undo);
+        if (outcome.outcome === "rejected") {
+          rejected = outcome;
+          break;
+        }
+        done.push(outcome.undo);
+        for (const id of outcome.touched) touched.add(id);
+      }
+    } finally {
+      this.quiet = false;
+      if (done.length > 0) {
+        this.raw = materialize(this.tree!.model);
+        this.lf = normalizeEol(this.raw);
+      }
+    }
+    return { undos: done, rejected, touched: [...touched], operation: sceneOperation(before, this.lf), text: this.raw };
+  }
+
   /// Chiude un'applicazione: il testo nuovo, la `TextOperation` e l'undo.
   /// `target` è la scena a cui riporta un undo esatto; `null` per una scena
-  /// nuova, che deve stare nei limiti.
+  /// nuova, che deve stare nei limiti. Nella fila di `undoAll` il testo
+  /// resta indietro, e lo scrive lei alla fine: un undo esatto non lo
+  /// guarda nemmeno, l'inversa solo per i limiti.
   private commit(
     entries: Entry[],
     forward: Op,
@@ -552,8 +604,8 @@ export class SceneEngine {
     const before = this.state;
     let operation: TextOperation = { beforeLength: this.lf.length, afterLength: this.lf.length, edits: [] };
     if (entries.length > 0) {
-      const raw = materialize(tree.model);
-      if (target === null && (utf8Length(raw) > MAX_EDIT_BYTES || tree.elements > MAX_ELEMENTS)) {
+      const raw = this.quiet && target !== null ? null : materialize(tree.model);
+      if (raw !== null && target === null && (utf8Length(raw) > MAX_EDIT_BYTES || tree.elements > MAX_ELEMENTS)) {
         const mark = tree.mark();
         tree.undo(entries);
         tree.take(mark);
@@ -563,10 +615,12 @@ export class SceneEngine {
           detail: `il documento supererebbe ${MAX_EDIT_BYTES} byte o ${MAX_ELEMENTS} elementi`,
         };
       }
-      const lf = normalizeEol(raw);
-      operation = sceneOperation(this.lf, lf);
-      this.raw = raw;
-      this.lf = lf;
+      if (raw !== null && !this.quiet) {
+        const lf = normalizeEol(raw);
+        operation = sceneOperation(this.lf, lf);
+        this.raw = raw;
+        this.lf = lf;
+      }
       this.items = null;
       this.state = target ?? ++this.counter;
     }

@@ -297,7 +297,13 @@ così com'è.
   spostamenti, o tre colori provati di fila, si annullano in un passo. Dopo
   un annulla o un ripeti la voce in cima non si fonde più.
 - **Selezione:** dopo annulla o ripeti, la selezione sono gli oggetti che il
-  passo ha toccato e che ci sono ancora.
+  passo ha toccato e che ci sono ancora; dopo un salto, quelli dell'ultimo
+  passo del salto.
+- **Salti:** la pila si percorre anche a salti, fino a un passo qualsiasi: i
+  passi in mezzo si annullano, o si ripetono, in fila, e la superficie emette
+  una `TextOperation` sola per tutto il salto, con l'origine `undo` o `redo`.
+  Il salto si ferma al primo passo che non si annulla, o non si ripete, che
+  si scarta come sotto; quelli prima restano fatti.
 - **Undo esatto:** se l'undo arriva sulla scena lasciata dall'operazione,
   rimette i nodi di prima e il file torna identico byte per byte, anche dove
   l'inversa riscriverebbe in forma canonica (un `<g/>` riaperto, per esempio).
