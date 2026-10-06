@@ -46,6 +46,9 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   testo o un'immagine, che deformati non sarebbero più loro, e aperto per le
   sole forme; aperto o chiuso a mano, resta così finché la selezione non
   cambia. Il lato di una linea dritta, alto zero, si legge e non si scrive.
+- **Forma**, per poligoni, stelle e rettangoli: Tipo, Lati o Punte, Raggio
+  interno di una stella e Raggio degli angoli; senza selezione, col Poligono
+  in mano, quelli dello strumento ([Disegni, poligoni e stelle](drawing-shapes.md)).
 - **Aspetto.** Riempimento e Contorno, con la parte «Colori personalizzati»;
   Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
   Angoli, come il menu «Contorno» di [Disegni, livello

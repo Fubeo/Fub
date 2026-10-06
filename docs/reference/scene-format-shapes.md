@@ -12,7 +12,8 @@
 Due forme sintetiche del [formato della scena](scene-format.md), §6: un
 `path` con `fub:shape` e `fub:geom`, e il suo `d` calcolato dalla geometria.
 Un altro programma vede un tracciato qualunque e lo disegna uguale; FubDraw
-ne legge i parametri, e cambiare i lati, le punte o gli angoli riscrive `d`.
+ne legge i parametri, e cambiare i lati, le punte o gli angoli riscrive `d`;
+come si disegnano è in [Disegni, poligoni e stelle](../product/drawing-shapes.md).
 Le sezioni del formato si citano come «formato della scena, §N».
 
 ```xml

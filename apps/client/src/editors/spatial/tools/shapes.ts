@@ -1,17 +1,58 @@
-// Le forme dell'Essenziale: rettangolo, ellisse, linea e freccia, da due
-// punti di un trascinamento (formato della scena, §4 e §6).
+// Le forme: rettangolo, ellisse, linea e freccia dell'Essenziale, da due
+// punti di un trascinamento, e poligono e stella dello Standard, dal centro
+// e da un vertice (formato della scena, §4 e §6).
 //
 // Gli elementi sono quelli che l'operazione `add` scrive: geometria con al
 // più due decimali, contorno del colore scelto, nessun riempimento. La
-// freccia è un `path` con `fub:shape="arrow"` e `fub:geom`, e il suo `d` si
-// calcola dalla geometria già arrotondata, così chi lo rigenera da
-// `fub:geom` ottiene lo stesso testo.
+// freccia, il poligono e la stella sono `path` con `fub:shape` e
+// `fub:geom`, e il loro `d` si calcola dalla geometria già arrotondata, così
+// chi lo rigenera da `fub:geom` ottiene lo stesso testo.
 
 import { formatNumber } from "../number";
 import type { Point } from "../scene/matrix";
+import { MAX_COUNT, MIN_COUNT, polygonalAttrs, STAR_RATIO, type Polygonal, type PolygonalShape } from "../scene/parametric";
 import { pathData, type Elem } from "../scene/serialize";
 
-export type ShapeTool = "rect" | "ellipse" | "line" | "arrow";
+export type ShapeTool = "rect" | "ellipse" | "line" | "arrow" | "polygon";
+
+/// Come disegna lo strumento Poligono: la forma, i lati del poligono e le
+/// punte della stella, ciascuno il suo, il rapporto interno della stella e
+/// il raggio degli angoli.
+export interface PolygonTool {
+  readonly shape: PolygonalShape;
+  readonly sides: number;
+  readonly points: number;
+  readonly ratio: number;
+  readonly corner: number;
+}
+
+/// Lo strumento Poligono com'è all'inizio: un esagono, e una stella a cinque
+/// punte coi lati in linea a due a due.
+export const POLYGON_TOOL: PolygonTool = { shape: "polygon", sides: 6, points: 5, ratio: STAR_RATIO, corner: 0 };
+
+/// Il rapporto interno più piccolo che lo strumento propone: sotto, le punte
+/// sono aghi.
+export const MIN_RATIO = 0.01;
+
+/// I lati, o le punte, che lo strumento disegna adesso.
+export function polygonCount(tool: PolygonTool): number {
+  return tool.shape === "star" ? tool.points : tool.sides;
+}
+
+/// Lo strumento con `count` lati, o punte, fra 3 e 1000.
+export function withCount(tool: PolygonTool, count: number): PolygonTool {
+  const value = Math.min(MAX_COUNT, Math.max(MIN_COUNT, Math.round(count)));
+  return tool.shape === "star" ? { ...tool, points: value } : { ...tool, sides: value };
+}
+
+/// Il rapporto interno un passo più su (`step` 1) o più giù (-1): i passi
+/// vanno ai multipli di 0,05, fra 0,01 e 1, così da 0,382 si va a 0,4 o a
+/// 0,35.
+export function stepRatio(ratio: number, step: 1 | -1): number {
+  const at = ratio / 0.05;
+  const next = step > 0 ? Math.floor(at + 1e-9) + 1 : Math.ceil(at - 1e-9) - 1;
+  return Math.min(1, Math.max(MIN_RATIO, Number((next * 0.05).toFixed(2))));
+}
 
 export interface ShapeStyle {
   /// `#rrggbb`.
@@ -36,8 +77,10 @@ function text(value: number): string {
 }
 
 /// La fine del trascinamento con Maiusc: un quadrato o un cerchio per
-/// rettangolo ed ellisse, un angolo multiplo di 15° per linea e freccia.
+/// rettangolo ed ellisse, un angolo multiplo di 15° per linea e freccia. Un
+/// poligono la lascia dov'è: Maiusc ne tiene diritta la rotazione.
 export function constrainEnd(tool: ShapeTool, from: Point, to: Point): Point {
+  if (tool === "polygon") return to;
   const dx = to[0] - from[0];
   const dy = to[1] - from[1];
   if (tool === "rect" || tool === "ellipse") {
@@ -68,10 +111,39 @@ export function arrowPath(x1: number, y1: number, x2: number, y2: number, stroke
   ]);
 }
 
+/// Il poligono, o la stella, trascinato dal centro `center` a `to`: il
+/// raggio è la distanza, e il puntatore tiene il vertice, o la punta, più
+/// vicino a dove la forma diritta ne ha uno. Così la rotazione è la più
+/// piccola, fra mezzo lato indietro e mezzo avanti; `straight` la tiene a 0.
+/// `null` se `to` è sul centro.
+export function polygonDrag(center: Point, to: Point, tool: PolygonTool, straight: boolean): Polygonal | null {
+  const r = Math.hypot(to[0] - center[0], to[1] - center[1]);
+  if (!(r > 0)) return null;
+  const count = polygonCount(tool);
+  const step = 360 / count;
+  // Dove la forma diritta ha il vertice 0: a sinistra del lato in basso per
+  // un poligono, in alto per la stella (formato della scena, poligoni e
+  // stelle, §1 e §2).
+  const first = tool.shape === "star" ? 270 : 90 + 180 / count;
+  const turned = (Math.atan2(to[1] - center[1], to[0] - center[0]) * 180) / Math.PI - first;
+  const rotation = straight ? 0 : turned - step * Math.round(turned / step);
+  return {
+    shape: tool.shape,
+    cx: center[0],
+    cy: center[1],
+    r,
+    count,
+    ratio: tool.shape === "star" ? tool.ratio : null,
+    rotation: rotation === 0 ? 0 : rotation,
+    corner: tool.corner,
+  };
+}
+
 /// L'elemento di una forma trascinata da `from` a `to`, nelle coordinate del
-/// livello che la riceve. `null` se è più piccola di `minimum` (un tocco, non
-/// un trascinamento) o se, arrotondata, non si disegnerebbe: SVG non disegna
-/// un rettangolo o un'ellisse con un lato nullo.
+/// livello che la riceve: per il poligono e la stella `from` è il centro, e
+/// `polygon` dice come disegnarli. `null` se è più piccola di `minimum` (un
+/// tocco, non un trascinamento) o se, arrotondata, non si disegnerebbe: SVG
+/// non disegna un rettangolo o un'ellisse con un lato nullo.
 export function shapeElem(
   tool: ShapeTool,
   id: string,
@@ -79,8 +151,16 @@ export function shapeElem(
   to: Point,
   style: ShapeStyle,
   minimum: number,
+  polygon: PolygonTool & { readonly straight: boolean } = { ...POLYGON_TOOL, straight: false },
 ): Elem | null {
   const stroke = { stroke: style.color, "stroke-width": text(style.width) };
+  if (tool === "polygon") {
+    const shape = polygonDrag(from, to, polygon, polygon.straight);
+    if (shape === null || shape.r < minimum) return null;
+    const written = polygonalAttrs(shape);
+    if (written === null) return null;
+    return { tag: "path", attrs: { id, ...written, fill: "none", ...stroke } };
+  }
   if (tool === "rect" || tool === "ellipse") {
     const x1 = round(Math.min(from[0], to[0]));
     const y1 = round(Math.min(from[1], to[1]));

@@ -18,10 +18,15 @@
 // - **Ciò che il livello non offre non c'è**: i colori a piacere, gli estremi
 //   e gli angoli del contorno, «Disponi», «Trasforma», la griglia, le guide e
 //   i righelli. Il tratteggio c'è dallo Standard, accanto allo spessore.
+// - **La forma dei poligoni, delle stelle e dei rettangoli**: il tipo, i
+//   lati o le punte, il raggio interno di una stella e il raggio degli
+//   angoli, nella scena come la larghezza (`reshape.ts`).
 // - **Senza selezione, il disegno**: la pagina, l'unità, la descrizione, e
-//   come si vede il foglio. Il titolo resta nella barra.
+//   come si vede il foglio. Il titolo resta nella barra. Con lo strumento
+//   Poligono, prima, la forma che disegna.
 
 import { apply } from "../scene/matrix";
+import { MAX_COUNT, MIN_COUNT, type PolygonalShape } from "../scene/parametric";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { t, type DrawKey } from "../strings";
 import type { Axis, Edge, Order } from "./arrange";
@@ -41,7 +46,9 @@ import {
 } from "./properties";
 import { ANGLE_UNITS, lengthUnits, PERCENT_UNITS } from "./quantity";
 import type { Feature } from "./registry";
+import type { ShapeChange, ShapeFacts } from "./reshape";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
+import { MIN_RATIO } from "./shapes";
 import { TEXT_FAMILIES } from "./text";
 import { MAX_SCALE_PERCENT, MAX_SKEW } from "./transform";
 
@@ -79,6 +86,20 @@ const ANCHOR_LABELS: Readonly<Record<Anchor, DrawKey>> = {
   start: "draw.properties.anchor.start",
   middle: "draw.properties.anchor.middle",
   end: "draw.properties.anchor.end",
+};
+
+/// I tipi di forma di un poligono, coi nomi e le icone degli strumenti.
+const SHAPE_KINDS: ReadonlyArray<{ readonly value: PolygonalShape; readonly label: DrawKey; readonly icon: string }> = [
+  { value: "polygon", label: "draw.tool.polygon", icon: "draw-polygon" },
+  { value: "star", label: "draw.tool.star", icon: "draw-star" },
+];
+
+/// Il nome del passo di annulla di ogni campo di «Forma».
+export const SHAPE_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
+  shape: "draw.action.shape_kind",
+  count: "draw.action.count",
+  inner: "draw.action.inner",
+  corner: "draw.action.corner",
 };
 
 /// Che cosa fa un comando di «Disponi».
@@ -139,6 +160,8 @@ export interface SelectionFacts {
   readonly drawn: number;
   /// Gli spostamenti nell'ordine che cambierebbero qualcosa.
   readonly orders: ReadonlySet<Order>;
+  /// I poligoni, le stelle e i rettangoli scelti; `null` se non ce ne sono.
+  readonly shape: ShapeFacts | null;
 }
 
 /// Il disegno, quando non c'è niente di scelto.
@@ -162,6 +185,9 @@ export interface FieldsInput {
   readonly bar: boolean;
   /// Vero se il pannello ospita gli attributi.
   readonly attributes: boolean;
+  /// La forma che disegna lo strumento Poligono, se è lo strumento di
+  /// adesso: senza selezione il pannello la mostra.
+  readonly tool: ShapeFacts | null;
 }
 
 /// Un campo di una lunghezza, `value` in unità della scena, mostrata in
@@ -188,6 +214,49 @@ const degreesField = (label: string, value: number | null, extra: Partial<Number
   places: 2,
   ...extra,
 });
+
+/// I campi di «Forma» di `facts`, con le lunghezze in `unit`; `note` sotto il
+/// primo.
+function shapeFields(fields: Partial<Record<FieldId, FieldState>>, facts: ShapeFacts, unit: LengthUnit, note: string | null): void {
+  const noted = note === null ? {} : { note };
+  if (facts.shape.count > 0) {
+    fields.shape = {
+      kind: "segment",
+      label: t("draw.properties.shape_kind"),
+      value: facts.shape.value,
+      options: SHAPE_KINDS.map((kind) => ({ value: kind.value, label: t(kind.label), icon: kind.icon })),
+      ...noted,
+    };
+    const counted = facts.shape.value === "star" ? "draw.properties.points" : facts.shape.value === "polygon" ? "draw.properties.sides" : "draw.properties.count";
+    fields.count = { kind: "number", label: t(counted), value: facts.count.value, unit: "", units: {}, relative: false, places: 0, min: MIN_COUNT, max: MAX_COUNT };
+  }
+  if (facts.ratio.count > 0) {
+    fields.inner = {
+      kind: "number",
+      label: t("draw.properties.inner"),
+      value: facts.ratio.value === null ? null : facts.ratio.value * 100,
+      unit: "%",
+      units: PERCENT_UNITS,
+      relative: false,
+      places: 1,
+      min: MIN_RATIO * 100,
+      max: 100,
+    };
+  }
+  if (facts.corner.count > 0) {
+    fields.corner = {
+      kind: "number",
+      label: t("draw.properties.corner"),
+      value: facts.corner.value === null ? null : toUnit(facts.corner.value, unit),
+      unit,
+      units: lengthUnits(unit),
+      relative: true,
+      places: FIELD_PLACES[unit],
+      min: 0,
+      ...(facts.shape.count > 0 ? {} : noted),
+    };
+  }
+}
 
 /// Il nome di un carattere: la famiglia prima del ripiego.
 const familyName = (family: string): string => family.split(",")[0]!.trim();
@@ -217,6 +286,9 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       fields.ratio = { kind: "press", label: t("draw.properties.ratio"), on: selection.ratio, ...(scales(frame, 0) && scales(frame, 1) ? {} : { disabled: true }) };
       fields.rotation = degreesField(t("draw.properties.rotation"), angleOf(frame.matrix));
     }
+
+    // --- Forma, con lo strumento che la disegna ---
+    if (has("polygon") && selection.shape !== null) shapeFields(fields, selection.shape, unit, null);
 
     // --- Aspetto ---
     const { look, outline } = selection;
@@ -327,6 +399,9 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       fields.skewY = degreesField(t("draw.properties.skew_y"), 0, { min: -MAX_SKEW, max: MAX_SKEW });
     }
   } else {
+    // --- Forma, dello strumento ---
+    if (input.tool !== null) shapeFields(fields, input.tool, unit, t("draw.properties.shape_tool"));
+
     // --- Documento ---
     const { page, desc } = input.document;
     if (page !== null) {
@@ -354,7 +429,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
   return {
     // Un'unità nuova lascia cadere i valori scritti a metà, come una
     // selezione nuova.
-    key: selection === null ? `document\n${unit}` : `selection\n${unit}\n${selection.keys}`,
+    key: selection === null ? `document\n${unit}${input.tool === null ? "" : `\n${input.tool.shape.value}`}` : `selection\n${unit}\n${selection.keys}`,
     subject: selection === null ? t("draw.properties.drawing") : selection.subject,
     editable: input.editable,
     fields,
@@ -382,6 +457,24 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
       return typeof value === "number" ? { size: fromUnit(value, lookUnit(unit)) } : null;
     case "anchor":
       return (ANCHORS as readonly unknown[]).includes(value) ? { anchor: value as Anchor } : null;
+    default:
+      return null;
+  }
+}
+
+/// Il cambio di «Forma» che scrive il campo `id` col valore `value`, con le
+/// lunghezze in `unit`; `null` se il campo non è della forma, o il valore non
+/// è suo.
+export function shapeChange(id: FieldId, value: number | string | boolean, unit: LengthUnit): ShapeChange | null {
+  switch (id) {
+    case "shape":
+      return value === "polygon" || value === "star" ? { shape: value } : null;
+    case "count":
+      return typeof value === "number" ? { count: value } : null;
+    case "inner":
+      return typeof value === "number" ? { ratio: value / 100 } : null;
+    case "corner":
+      return typeof value === "number" ? { corner: fromUnit(value, unit) } : null;
     default:
       return null;
   }

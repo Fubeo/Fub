@@ -83,6 +83,10 @@ export interface PainterDraft {
   /// Il `d` da mostrare al posto di quello dipinto: un tracciato i cui nodi
   /// si stanno spostando. Anche questo è il valore che si scriverà.
   readonly paths?: ReadonlyMap<PaintNode, string>;
+  /// I raggi degli angoli da mostrare al posto di quelli dipinti, `rx` e
+  /// `ry`: un rettangolo mentre la maniglia lo arrotonda; `null` ne toglie
+  /// uno. Gli altri nomi non contano.
+  readonly radii?: ReadonlyMap<PaintNode, Readonly<Record<string, string | null>>>;
   /// I nodi che la gomma sta per togliere: si vedono sbiaditi.
   readonly faded?: ReadonlySet<PaintNode>;
   /// I nodi che non si vedono: un testo mentre lo si scrive sul posto, che
@@ -97,6 +101,10 @@ export interface PainterDraft {
   /// immagine che sta tutto dentro uno di loro si vede sbiadito.
   readonly fadedContainers?: ReadonlySet<object>;
 }
+
+/// Gli attributi che un'anteprima cambia, e che toglierla riporta a com'erano
+/// dipinti.
+const DRAFTED = ["transform", "d", "rx", "ry"] as const;
 
 /// L'opacità di un nodo sbiadito dalla gomma.
 export const FADED_OPACITY = "0.25";
@@ -323,7 +331,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   /// Riporta un nodo a ciò che la sua scena dipinge, attenuato se sta fuori
   /// dal gruppo isolato.
   const restore = (record: NodeRecord): void => {
-    for (const name of ["transform", "d"]) {
+    for (const name of DRAFTED) {
       const painted = record.paint.attrs.find(([key]) => key === name);
       if (painted === undefined) record.el.removeAttribute(name);
       else if (record.el.getAttribute(name) !== painted[1]) record.el.setAttribute(name, painted[1]);
@@ -396,6 +404,17 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     for (const [paint, d] of draft.paths ?? []) {
       for (const record of recordsOf(paint)) {
         record.el.setAttribute("d", d);
+        touched.add(record);
+      }
+    }
+    for (const [paint, radii] of draft.radii ?? []) {
+      for (const record of recordsOf(paint)) {
+        for (const name of ["rx", "ry"]) {
+          const value = radii[name];
+          if (value === undefined) continue;
+          if (value === null) record.el.removeAttribute(name);
+          else record.el.setAttribute(name, value);
+        }
         touched.add(record);
       }
     }

@@ -41,6 +41,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Penna, Gomma, Rettangolo, Ellisse, Linea, Freccia | Essenziale | lo strumento, col suo tasto |
 | Lazo | Standard | lo strumento (`Q`) |
 | Evidenziatore | Standard | lo strumento (`H`) |
+| Poligono | Standard | lo strumento (`Y`), per poligoni e stelle; la sezione «Forma» delle proprietà e la maniglia degli angoli arrotondati |
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
 | Colori personalizzati | Standard | «Altro colore…» e il campione in più |
 | Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |

@@ -5,8 +5,9 @@
 // - **Ciò che si vede resta.** Rettangoli, ellissi, cerchi, linee, spezzate
 //   e poligoni diventano il tracciato con cui SVG 2 li definisce: stesso
 //   punto di partenza e stesso verso, così anche un tratteggio comincia dove
-//   cominciava. Una freccia perde `fub:shape` e `fub:geom`, un tratto a penna
-//   l'inchiostro e il pennello: resta il `d` che si vedeva.
+//   cominciava. Una freccia, un poligono regolare e una stella perdono
+//   `fub:shape` e `fub:geom`, un tratto a penna l'inchiostro e il pennello:
+//   resta il `d` che si vedeva.
 // - **L'oggetto resta lui.** Stesso id, stesso posto fra i fratelli, stessi
 //   attributi tranne la geometria che `d` sostituisce: colori, contorno,
 //   trasformazione, titolo e gli attributi di altri programmi.
