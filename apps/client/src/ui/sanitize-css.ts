@@ -294,16 +294,24 @@ function uniqueInOrder(values: readonly string[]): string[] {
   });
 }
 
+/// Dove comincia ogni riga dell'ultimo foglio letto. Un foglio ha migliaia di
+/// nodi, e contare le righe da capo per ciascuno renderebbe la convalida
+/// quadratica nella misura del foglio: la pelle di serie ci metteva mezzo
+/// secondo. Così le righe si contano una volta per foglio.
+let lineStarts: { readonly source: string; readonly starts: readonly number[] } | null = null;
+
+function startsOf(source: string): readonly number[] {
+  if (lineStarts?.source === source) return lineStarts.starts;
+  const starts = [0];
+  for (let next = source.indexOf("\n"); next >= 0; next = source.indexOf("\n", next + 1)) starts.push(next + 1);
+  lineStarts = { source, starts };
+  return starts;
+}
+
 function indexAt(source: string, line: number, column: number): number {
-  let index = 0;
-  let current = 1;
-  while (current < line && index < source.length) {
-    const next = source.indexOf("\n", index);
-    if (next < 0) return source.length;
-    index = next + 1;
-    current += 1;
-  }
-  return Math.min(source.length, index + Math.max(0, column - 1));
+  const starts = startsOf(source);
+  if (line > starts.length) return source.length;
+  return Math.min(source.length, starts[Math.max(1, line) - 1]! + Math.max(0, column - 1));
 }
 
 function nodeIndex(source: string, node: ChildNode | Root): number {
@@ -312,9 +320,17 @@ function nodeIndex(source: string, node: ChildNode | Root): number {
 }
 
 function location(source: string, index: number): Pick<ThemeCssViolation, "line" | "column"> {
-  const before = source.slice(0, Math.max(0, Math.min(index, source.length)));
-  const lines = before.split("\n");
-  return { line: lines.length, column: (lines[lines.length - 1]?.length ?? 0) + 1 };
+  const at = Math.max(0, Math.min(index, source.length));
+  const starts = startsOf(source);
+  // L'ultima riga che comincia prima di `at`, o proprio lì.
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (starts[middle]! <= at) low = middle;
+    else high = middle - 1;
+  }
+  return { line: low + 1, column: at - starts[low]! + 1 };
 }
 
 function violation(
