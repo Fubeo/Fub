@@ -178,7 +178,11 @@ Gli appunti passano da una porta sola (`platform/clipboard.ts`): di serie sono
 quelli della webview, e una shell che ne ha di propri li dichiara con
 `declareClipboard`. `writeClipboardText` non lancia mai in modo sincrono, e
 l'assenza degli appunti è un errore tipizzato (`ClipboardUnavailable`), non un
-controllo ripetuto in ogni pannello.
+controllo ripetuto in ogni pannello. Il disegno scrive più tipi insieme, l'SVG
+e il suo PNG, con `writeClipboardData`, dopo aver chiesto a
+`clipboardSupports` se servono, e dal menu legge gli appunti con
+`readClipboard`; una shell che dichiara i suoi appunti dichiara anche questi,
+o il disegno resta agli eventi di copia e incolla del browser.
 
 ## Superfici di editing
 
@@ -190,7 +194,7 @@ CodeMirror e al suo guard, sono in [Superfici dell'editor](editor-surfaces.md).
 Oltre al confine di CodeMirror, i guard del frontend impediscono:
 
 - nuovi import Tauri fuori dal seam;
-- scritture negli appunti della webview fuori da `platform/clipboard.ts`;
+- usi degli appunti della webview fuori da `platform/clipboard.ts`;
 - listener globali senza owner;
 - attese concorrenti senza il primitivo di cancellazione;
 - mirror TypeScript non aggiornati.
