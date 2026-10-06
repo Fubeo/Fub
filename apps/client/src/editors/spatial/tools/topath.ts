@@ -86,28 +86,33 @@ export function replaceWithPath(plan: Plan, node: ElementPart, d: string): boole
   const elem = elemOf(node);
   if (elem === null) return false;
   const attrs: Record<string, string> = {};
-  for (const [name, value] of Object.entries(elem.attrs)) if (!geometry.includes(name)) attrs[name] = value;
-  // Un id che nessuno ha ancora, finché il vecchio elemento c'è; poi il
-  // tracciato prende il suo, al suo posto.
+  for (const [name, value] of Object.entries(elem.attrs)) if (name !== "id" && !geometry.includes(name)) attrs[name] = value;
+  const path: Elem = elem.children === undefined ? { tag: "path", attrs: { ...attrs, d } } : { tag: "path", attrs: { ...attrs, d }, children: elem.children };
+  return replaceElem(plan, node, path);
+}
+
+/// Mette `elem`, senza id, al posto di `node`: prende il suo id e il suo
+/// posto fra i fratelli. Falso, senza operazioni, se `elem` ha nomi che
+/// un'operazione non sa scrivere.
+export function replaceElem(plan: Plan, node: ElementPart, elem: Elem): boolean {
+  // Un id che nessuno ha ancora, finché il vecchio elemento c'è; poi
+  // l'elemento nuovo prende il suo, al suo posto.
   const id = plan.idOf(node);
-  const stand = plan.ids.next("object");
-  const path: Elem = elem.children === undefined
-    ? { tag: "path", attrs: { ...attrs, id: stand, d } }
-    : { tag: "path", attrs: { ...attrs, id: stand, d }, children: elem.children };
+  const stand: Elem = { ...elem, attrs: { ...elem.attrs, id: plan.ids.next("object") } };
   // Un'operazione non dichiara namespace: un attributo di un altro
   // programma col prefisso dichiarato sull'elemento stesso non si
   // riscrive, e l'elemento resta com'è.
   try {
-    elemToOut(path, scopeOf(node.parent!));
+    elemToOut(stand, scopeOf(node.parent!));
   } catch {
     return false;
   }
   const at = pathOf(node);
   plan.ops.push(
-    { op: "add", parent: plan.parentOf(node), pos: { after: id }, elem: path },
+    { op: "add", parent: plan.parentOf(node), pos: { after: id }, elem: stand },
     { op: "remove", target: id },
-    { op: "ident", path: at, tag: "path", id: null },
-    { op: "ident", path: at, tag: "path", id },
+    { op: "ident", path: at, tag: elem.tag, id: null },
+    { op: "ident", path: at, tag: elem.tag, id },
   );
   return true;
 }
