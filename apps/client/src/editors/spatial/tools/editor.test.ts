@@ -222,6 +222,30 @@ describe("gli strumenti", () => {
     expect(spoken()).toBe("1 oggetto spostato.");
   });
 
+  it("un gruppo di disegni estranei si prende dove si vede, e la sua immagine lo segue mentre lo si trascina", async () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:scena");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.spyOn(HTMLImageElement.prototype, "decode").mockImplementation(() => Promise.resolve());
+    mount(doc(`<title>Prova</title>${LAYER}<g id="w"><rect class="logo" x="60" y="60" width="20" height="20"/></g></g>`));
+    await Promise.resolve();
+    editor.setTool("select");
+    const image = (): HTMLElement => host.querySelector<HTMLElement>(".spatial-image")!;
+    expect(image().style.transform).toBe("translate(-100px, -75px)");
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 70, clientY: 70, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 90, clientY: 75, timeStamp: (clock += 8) }));
+    expect(image().style.transform).toBe("matrix(1, 0, 0, 1, -80, -70)");
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 90, clientY: 75, timeStamp: (clock += 8) }));
+    expect(editor.selection).toEqual(["w"]);
+    expect(editor.engine.text).toContain('<g id="w" transform="matrix(1 0 0 1 20 5)">');
+    expect(spoken()).toBe("1 oggetto spostato.");
+    for (let i = 0; i < 3; i++) await Promise.resolve();
+    // L'immagine nuova ha già il gruppo spostato.
+    expect(image().style.transform).toBe("translate(-100px, -75px)");
+  });
+
   it("un tocco sul vuoto toglie la selezione, un riquadro sceglie ciò che contiene", () => {
     mount();
     editor.setTool("select");

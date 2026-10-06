@@ -325,6 +325,94 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  describe("uno strato immagine dentro un gruppo", () => {
+    const CARRIED = doc(`${LAYER}<g id="w"><rect id="a" width="4" height="4"/><use href="#a" x="10"/></g><use href="#a" x="50"/></g>`);
+    const images = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>("img")];
+
+    it("segue il gruppo che si sposta, anche quando la camera si muove", async () => {
+      vi.useFakeTimers();
+      const engine = SceneEngine.open(CARRIED);
+      const painter = createSvgPainter(host, owner, { settleMs: 100 });
+      painter.update(sceneOf(engine, new PaintBuilder()));
+      await decoded();
+      const [inside, outside] = images();
+      painter.setDraft({ carried: new Map([[engine.holder("w")!, [1, 0, 0, 1, 10, 5]]]) });
+      // Disegnata col margine a (-100, -75): il gruppo la porta di (10, 5).
+      expect(inside!.style.transform).toBe("matrix(1, 0, 0, 1, -90, -70)");
+      expect(outside!.style.transform).toBe("translate(-100px, -75px)");
+      painter.setView({ scale: 2, tx: 10, ty: -20 });
+      expect(inside!.style.transform).toBe("matrix(2, 0, 0, 2, -170, -160)");
+      // Ridisegnata alla scala nuova, la segue ancora.
+      vi.advanceTimersByTime(100);
+      await decoded();
+      const [redrawn] = images();
+      expect(redrawn).not.toBe(inside);
+      expect(redrawn!.style.transform).toBe("matrix(1, 0, 0, 1, -80, -65)");
+      painter.dispose();
+    });
+
+    it("torna al suo posto se l'anteprima se ne va senza una scena nuova", async () => {
+      const engine = SceneEngine.open(CARRIED);
+      const painter = createSvgPainter(host, owner);
+      painter.update(sceneOf(engine, new PaintBuilder()));
+      await decoded();
+      const [inside] = images();
+      painter.setDraft({ carried: new Map([[engine.holder("w")!, [1, 0, 0, 1, 10, 5]]]) });
+      painter.setDraft(null);
+      // Finché l'operazione può ancora arrivare, resta dov'è.
+      expect(inside!.style.transform).toBe("matrix(1, 0, 0, 1, -90, -70)");
+      await Promise.resolve();
+      expect(inside!.style.transform).toBe("translate(-100px, -75px)");
+      painter.dispose();
+    });
+
+    it("dopo l'operazione resta dove l'ha portata finché l'immagine nuova non è pronta", async () => {
+      const engine = SceneEngine.open(CARRIED);
+      const builder = new PaintBuilder();
+      const painter = createSvgPainter(host, owner);
+      painter.update(sceneOf(engine, builder));
+      await decoded();
+      const [inside, outside] = images();
+      painter.setDraft({ carried: new Map([[engine.holder("w")!, [1, 0, 0, 1, 10, 5]]]) });
+      painter.setDraft(null);
+      let ready = (): void => {};
+      vi.spyOn(HTMLImageElement.prototype, "decode").mockImplementation(() => new Promise<void>((resolve) => (ready = resolve)));
+      expect(engine.apply({ op: "set", id: "w", attrs: { transform: "matrix(1 0 0 1 10 5)" } }).outcome).toBe("applied");
+      painter.update(sceneOf(engine, builder));
+      await decoded();
+      expect(images()[0]).toBe(inside);
+      expect(inside!.style.transform).toBe("matrix(1, 0, 0, 1, -90, -70)");
+      ready();
+      await decoded();
+      const [moved, same] = images();
+      expect(moved).not.toBe(inside);
+      expect(moved!.style.transform).toBe("translate(-100px, -75px)");
+      // Lo strato fuori dal gruppo non è cambiato.
+      expect(same).toBe(outside);
+      expect(live.has(inside!.getAttribute("src")!)).toBe(false);
+      painter.dispose();
+    });
+
+    it("non si attenua se sta nel gruppo isolato, e sbiadisce con lui", async () => {
+      const engine = SceneEngine.open(CARRIED);
+      const painter = createSvgPainter(host, owner);
+      painter.update(sceneOf(engine, new PaintBuilder()));
+      await decoded();
+      const [inside, outside] = images();
+      const group = engine.holder("w")!;
+      painter.setFocus([engine.holder("l1")!, group]);
+      expect(inside!.style.opacity).toBe("");
+      expect(outside!.style.opacity).toBe("0.4");
+      painter.setDraft({ fadedContainers: new Set([group]) });
+      expect(inside!.style.opacity).toBe("0.25");
+      expect(outside!.style.opacity).toBe("0.4");
+      painter.setDraft(null);
+      expect(inside!.style.opacity).toBe("");
+      expect(outside!.style.opacity).toBe("0.4");
+      painter.dispose();
+    });
+  });
+
   it("mostra un altro `d` per un tracciato, e lo riporta a quello dipinto", async () => {
     const engine = SceneEngine.open(doc(`${LAYER}<path id="p" d="M0 0 L4 0" stroke="#000000"/><rect id="r" width="4" height="4"/></g>`));
     const builder = new PaintBuilder();

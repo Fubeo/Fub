@@ -1791,7 +1791,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const rulers = createRulers(surface, tickText, (unit) => unit);
 
   const builder = new PaintBuilder();
-  const indexer = new SceneIndexer(builder);
+  const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
   let scene: PaintScene = builder.build(engine);
   let index: SceneIndex | null = null;
   const EMPTY = new SceneIndex([], []);
@@ -4864,6 +4864,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     g.source = geometry === null ? null : nearestCorner(geometry, p);
   };
 
+  /// Porta in `moved` lo spostamento della scena che il `transform` `next`
+  /// dà a `unit`, se è un contenitore: i suoi strati immagine lo seguono
+  /// nell'anteprima.
+  const followImages = (moved: Map<object, Matrix>, unit: Unit, next: Matrix): void => {
+    if (unit.node.kind !== "container") return;
+    const before = invert(unit.matrix);
+    if (before !== null) moved.set(unit.node, compose(compose(unit.parent, next), before));
+  };
+
   const selectUpdate = (g: SelectGesture): void => {
     if (g.from === null || g.end === null) return;
     if (g.mode === "pending") {
@@ -4876,23 +4885,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (g.mode === "resize" || g.mode === "rotate") {
       g.matrix = g.mode === "resize" ? resizeNow(g) : rotateNow(g);
       const transforms = new Map<PaintNode, string | null>();
+      const carried = new Map<object, Matrix>();
       for (const unit of g.matrix === null ? [] : g.units) {
         const next = transformedMatrix(unit, g.matrix!);
         if (next === null) continue;
         const value = transformValue(next);
         for (const paint of unit.paints) transforms.set(paint, value);
+        followImages(carried, unit, next);
       }
-      painter.setDraft({ transforms });
+      painter.setDraft({ transforms, carried });
     } else if (g.mode === "move") {
       const [dx, dy] = moveDelta(g);
       const transforms = new Map<PaintNode, string | null>();
+      const carried = new Map<object, Matrix>();
       for (const unit of g.units) {
         const moved = movedMatrix(unit, dx, dy);
         if (moved === null) continue;
         const value = transformValue(moved);
         for (const paint of unit.paints) transforms.set(paint, value);
+        followImages(carried, unit, moved);
       }
-      painter.setDraft({ transforms });
+      painter.setDraft({ transforms, carried });
     } else {
       const [x1, y1] = g.from;
       const [x2, y2] = g.end;
@@ -5253,8 +5266,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const showErased = (g: EraseGesture): void => {
     const faded = new Set<PaintNode>();
-    for (const unit of g.marked.values()) for (const paint of unit.paints) faded.add(paint);
-    painter.setDraft(faded.size === 0 ? null : { faded });
+    const fadedContainers = new Set<object>();
+    for (const unit of g.marked.values()) {
+      for (const paint of unit.paints) faded.add(paint);
+      if (unit.node.kind === "container") fadedContainers.add(unit.node);
+    }
+    painter.setDraft(faded.size === 0 && fadedContainers.size === 0 ? null : { faded, fadedContainers });
   };
 
   const finishInk = (g: InkGesture, stroke: FinishedStroke): void => {

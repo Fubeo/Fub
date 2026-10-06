@@ -22,7 +22,10 @@
 //   sbiadisce, e cambia il `d` di un tracciato i cui nodi si spostano, senza
 //   ricrearli e senza toccare la scena; l'operazione scritta
 //   alla fine porta la scena nuova. Un testo che si scrive sul posto si
-//   nasconde allo stesso modo.
+//   nasconde allo stesso modo. Uno strato immagine che sta tutto dentro un
+//   gruppo che si sposta segue il gruppo con una trasformazione CSS, e dopo
+//   l'operazione resta dove l'ha portato finché la sua immagine nuova non è
+//   pronta.
 // - **Isolamento:** con un gruppo isolato, `setFocus` attenua tutto ciò che
 //   gli sta fuori, carta esclusa, con l'opacità degli elementi; il disegno
 //   non cambia.
@@ -36,6 +39,7 @@
 // sua vita, e la vita di chi lo monta la chiude.
 
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import type { Matrix } from "../scene/matrix";
 import {
   IMAGE_PLACEHOLDER,
   imageDocument,
@@ -84,6 +88,14 @@ export interface PainterDraft {
   /// I nodi che non si vedono: un testo mentre lo si scrive sul posto, che
   /// l'editor mostra al suo posto.
   readonly hidden?: ReadonlySet<PaintNode>;
+  /// Come si spostano i contenitori che si trasformano, per chiave
+  /// (`PaintGroup.key`): la trasformazione della scena da dove sono a dove
+  /// si mostrano. Uno strato immagine che sta tutto dentro uno di loro la
+  /// segue; dentro più d'uno, segue il più esterno.
+  readonly carried?: ReadonlyMap<object, Matrix>;
+  /// I contenitori che la gomma sta per togliere, per chiave: uno strato
+  /// immagine che sta tutto dentro uno di loro si vede sbiadito.
+  readonly fadedContainers?: ReadonlySet<object>;
 }
 
 /// L'opacità di un nodo sbiadito dalla gomma.
@@ -151,6 +163,8 @@ interface Rendered {
   readonly view: PainterView;
   readonly left: number;
   readonly top: number;
+  /// Lo spostamento della scena con cui si mostra; `null` se nessuno.
+  carried: Matrix | null;
 }
 
 interface ImageRecord {
@@ -164,6 +178,8 @@ interface ImageRecord {
   /// Cresce a ogni richiesta di ridisegno: una decodifica arrivata tardi non
   /// sostituisce un'immagine più nuova.
   generation: number;
+  /// Lo spostamento che l'anteprima dà allo strato; `null` se nessuno.
+  carried: Matrix | null;
 }
 
 type LayerRecord = LiveRecord | ImageRecord;
@@ -318,9 +334,53 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     record.el.style.removeProperty("visibility");
   };
 
+  /// Gli strati immagine che l'anteprima sposta, e quelli che sbiadisce.
+  let carriedImages: ImageRecord[] = [];
+  let fadedImages: ImageRecord[] = [];
+  /// Gli strati immagine che un'anteprima appena tolta spostava: restano
+  /// dove sono finché non si sa se la scena cambia. Se la scena nuova li
+  /// ridisegna, l'immagine vecchia resta spostata finché la nuova non è
+  /// pronta, così niente torna indietro per un attimo; altrimenti tornano al
+  /// loro posto subito dopo.
+  const frozen = new Set<ImageRecord>();
+  let releasing = false;
+
+  /// Mostra lo strato `record` spostato di `matrix`, anche l'immagine in
+  /// decodifica.
+  const carry = (record: ImageRecord, matrix: Matrix | null): void => {
+    record.carried = matrix;
+    if (record.pending !== null) record.pending.carried = matrix;
+    if (record.shown !== null) {
+      record.shown.carried = matrix;
+      position(record.shown);
+    }
+  };
+
+  const releaseFrozen = (): void => {
+    releasing = false;
+    if (disposed) return;
+    for (const record of frozen) carry(record, null);
+    frozen.clear();
+  };
+
   const clearDraft = (): void => {
     for (const record of drafted) restore(record);
     drafted = [];
+    for (const record of carriedImages) {
+      record.carried = null;
+      frozen.add(record);
+    }
+    carriedImages = [];
+    if (frozen.size > 0 && !releasing) {
+      releasing = true;
+      queueMicrotask(releaseFrozen);
+    }
+    for (const record of fadedImages) {
+      const dim = dimmed.get(record.el);
+      if (dim === undefined) record.el.style.removeProperty("opacity");
+      else record.el.style.setProperty("opacity", dim);
+    }
+    fadedImages = [];
   };
 
   const applyDraft = (): void => {
@@ -352,6 +412,22 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       }
     }
     drafted = [...touched];
+    const { carried, fadedContainers } = draft;
+    if (carried === undefined && fadedContainers === undefined) return;
+    for (const record of layers) {
+      if (record.kind !== "image") continue;
+      const containers = record.layer.containers;
+      const key = carried === undefined ? undefined : containers.find((container) => carried.has(container));
+      if (key !== undefined) {
+        frozen.delete(record);
+        carry(record, carried!.get(key)!);
+        carriedImages.push(record);
+      }
+      if (fadedContainers !== undefined && containers.some((container) => fadedContainers.has(container))) {
+        record.el.style.setProperty("opacity", FADED_OPACITY);
+        fadedImages.push(record);
+      }
+    }
   };
 
   const setDraft = (next: PainterDraft | null): void => {
@@ -395,7 +471,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     };
     for (const layer of layers) {
       if (layer.kind === "live") visit(layer.children, 0);
-      else dim(layer.el, undefined);
+      else if (!inside(layer.layer.containers, chain)) dim(layer.el, undefined);
     }
   };
 
@@ -475,12 +551,25 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
 
   /// Mette `rendered` dove sta per la vista corrente: la sua posizione per
-  /// la vista con cui è stata disegnata, portata a quella di adesso.
+  /// la vista con cui è stata disegnata, portata a quella di adesso, e
+  /// spostata come la scena se l'anteprima la sposta.
   const position = (rendered: Rendered): void => {
     const k = view.scale / rendered.view.scale;
-    const x = rendered.left * k + view.tx - rendered.view.tx * k;
-    const y = rendered.top * k + view.ty - rendered.view.ty * k;
-    rendered.img.style.transform = k === 1 ? `translate(${x}px, ${y}px)` : `matrix(${k}, 0, 0, ${k}, ${x}, ${y})`;
+    const m = rendered.carried;
+    if (m === null) {
+      const x = rendered.left * k + view.tx - rendered.view.tx * k;
+      const y = rendered.top * k + view.ty - rendered.view.ty * k;
+      rendered.img.style.transform = k === 1 ? `translate(${x}px, ${y}px)` : `matrix(${k}, 0, 0, ${k}, ${x}, ${y})`;
+      return;
+    }
+    // Il pixel `p` dell'immagine mostra il punto (p + left - t₀) / s₀ della
+    // scena, che va in `m` e poi sullo schermo con la vista di adesso.
+    const [a, b, c, d, e, f] = m;
+    const u = rendered.left - rendered.view.tx;
+    const v = rendered.top - rendered.view.ty;
+    const x = k * (a * u + c * v) + view.scale * e + view.tx;
+    const y = k * (b * u + d * v) + view.scale * f + view.ty;
+    rendered.img.style.transform = `matrix(${k * a}, ${k * b}, ${k * c}, ${k * d}, ${x}, ${y})`;
   };
 
   const revoke = (rendered: Rendered | null): void => {
@@ -505,7 +594,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     img.height = target.frame.pixelHeight;
     img.style.width = `${target.frame.pixelWidth}px`;
     img.style.height = `${target.frame.pixelHeight}px`;
-    const rendered: Rendered = { img, url, frame: target.frame, view, left: target.left, top: target.top };
+    const rendered: Rendered = { img, url, frame: target.frame, view, left: target.left, top: target.top, carried: record.carried };
     record.pending = rendered;
     img.src = url;
     const swap = (): void => {
@@ -533,7 +622,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     else swap();
   };
 
-  /// Mette `el` al posto dell'elemento di `record`, attenuato come lui.
+  /// Mette `el` al posto dell'elemento di `record`, attenuato e sbiadito
+  /// come lui.
   const swapped = (record: ImageRecord, el: HTMLElement): void => {
     const dim = dimmed.get(record.el);
     if (dim !== undefined) {
@@ -541,6 +631,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       el.style.setProperty("opacity", dim);
       dimmed.set(el, dim);
     }
+    if (fadedImages.includes(record)) el.style.setProperty("opacity", FADED_OPACITY);
     record.el = el;
   };
 
@@ -551,7 +642,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
 
   const createImage = (layer: ImageLayer): ImageRecord => {
-    const record: ImageRecord = { kind: "image", layer, el: emptySlot(), shown: null, pending: null, generation: 0 };
+    const record: ImageRecord = { kind: "image", layer, el: emptySlot(), shown: null, pending: null, generation: 0, carried: null };
     render(record);
     return record;
   };
@@ -588,6 +679,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     clearDraft();
     clearFocus();
     byPaint = null;
+    const generations = new Map<ImageRecord, number>();
+    for (const record of frozen) generations.set(record, record.generation);
     const rootAttrs = scene.root.attrs;
     const lives = layers.filter((r): r is LiveRecord => r.kind === "live");
     const images = layers.filter((r): r is ImageRecord => r.kind === "image");
@@ -636,6 +729,11 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     place(root, layers.map((record) => record.el));
     applyFocus();
     applyDraft();
+    // Uno strato che la scena ridisegna tiene spostata l'immagine vecchia
+    // finché la nuova non la sostituisce; gli altri tornano al loro posto.
+    for (const [record, generation] of generations) {
+      if (frozen.delete(record) && record.generation === generation) carry(record, null);
+    }
   };
 
   // --- vista ----------------------------------------------------------------------
@@ -677,6 +775,9 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     disposed = true;
     draft = null;
     drafted = [];
+    carriedImages = [];
+    fadedImages = [];
+    frozen.clear();
     focus = null;
     dimmed.clear();
     byPaint = null;
@@ -688,6 +789,12 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   owner.add(dispose);
 
   return { update, setDraft, setFocus, setView, settle, dispose };
+}
+
+/// Vero se lo strato racchiuso da `containers` sta dentro l'ultimo dei
+/// contenitori `chain`: `chain` comincia come `containers`.
+function inside(containers: readonly object[], chain: readonly object[]): boolean {
+  return chain.length <= containers.length && chain.every((key, i) => containers[i] === key);
 }
 
 /// L'opacità che un attributo `opacity` dipinge: un numero o una
