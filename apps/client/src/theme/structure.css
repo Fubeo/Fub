@@ -1261,8 +1261,14 @@ html, body, #app {
 }
 .draw-surface[data-tool="select"],
 .draw-surface[data-tool="nodes"],
+.draw-surface[data-tool="builder"],
 .draw-editor[data-readonly] .draw-surface {
   cursor: default;
+}
+/* Col Costruttore di forme, sopra una regione: il tocco e il trascinamento
+   uniscono. */
+.draw-surface[data-tool="builder"][data-region] {
+  cursor: copy;
 }
 /* Sopra una maniglia della cornice, e mentre la si tira: la direzione in cui
    ridimensiona, o la presa che ruota. */

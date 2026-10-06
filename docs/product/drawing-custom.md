@@ -58,7 +58,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
 | Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 | Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
-| Nodi, Bézier | Esperto | lo strumento (`N`, `B`) |
+| Nodi, Costruttore di forme, Bézier | Esperto | lo strumento (`N`, `M`, `B`) |
 | Attributi | Esperto | la loro sezione nelle proprietà, o senza il pannello «Attributi» (`Ctrl+Maiusc+X`) |
 | Contorno: tratteggio, estremi e angoli | Esperto | «Contorno» |
 | Trasforma: rotazione, scala e inclinazione | Esperto | «Trasforma…» (`Ctrl+Maiusc+M`) e la sua sezione nelle proprietà |
@@ -79,11 +79,11 @@ col suo segno, e «Apri come sorgente».
 
 Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
 basso: chi aveva in mano il suo strumento riprende la penna, o il primo
-strumento che c'è, o la Selezione; chi sceglieva, col Lazo o coi Nodi,
-riprende la Selezione; un tracciato di Bézier a metà si conclude com'è; un
-colore a piacere torna al colore di partenza; da un gruppo isolato si esce;
-la vista girata si raddrizza; la cronologia si chiude, e la si ritrova
-riaprendola.
+strumento che c'è, o la Selezione; chi sceglieva, col Lazo, coi Nodi o col
+Costruttore di forme, riprende la Selezione; un tracciato di Bézier a metà si
+conclude com'è; un colore a piacere torna al colore di partenza; da un gruppo
+isolato si esce; la vista girata si raddrizza; la cronologia si chiude, e la
+si ritrova riaprendola.
 Il disegno non cambia.
 
 `?` elenca i tasti delle parti scelte, e **Mostra tutto** aggiunge in fondo

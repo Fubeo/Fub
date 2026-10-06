@@ -16,7 +16,7 @@
 // I ridisegni si raccolgono in un fotogramma; `flush` disegna subito.
 
 import { arcToCubics } from "../scene/curves";
-import type { Segment } from "../scene/geometry";
+import type { Bounds, Segment } from "../scene/geometry";
 import { compose, type Matrix, type Point } from "../scene/matrix";
 import type { OutlinePoint } from "../ink/pf1";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -52,6 +52,13 @@ export type OverlayHandle =
   | { readonly kind: "label"; readonly x: number; readonly y: number; readonly text: string }
   /// Il contorno di una selezione a mano libera, tratteggiato.
   | { readonly kind: "lasso"; readonly points: readonly Point[] }
+  /// La scia di un trascinamento, aperta: per dove è passato il puntatore.
+  | { readonly kind: "trail"; readonly points: readonly Point[] }
+  /// Una regione del Costruttore di forme: i segmenti nelle coordinate delle
+  /// forme, portati nella scena da `matrix`. Il tono dice che cosa ne sarà
+  /// (vedi [`RegionTone`]); `active` è quella a cui è arrivata la tastiera,
+  /// col bordo spesso.
+  | { readonly kind: "region"; readonly segments: readonly Segment[]; readonly matrix: Matrix; readonly tone: RegionTone; readonly active?: boolean }
   /// Il contorno di un tracciato di cui si modificano i nodi: i segmenti
   /// nelle coordinate del tracciato, portati nella scena da `matrix`. Un
   /// `hint` è il contorno dell'oggetto sotto il puntatore, più tenue.
@@ -72,6 +79,12 @@ export type OverlayHandle =
   /// Una misura: la linea fra due punti, con le stanghette ai capi, e la
   /// distanza scritta a metà.
   | { readonly kind: "measure"; readonly from: Point; readonly to: Point; readonly text: string };
+
+/// Come si vede una regione del Costruttore: `plain` col solo bordo, tenue;
+/// `hover` sotto il puntatore, appena colorata; `chosen` scelta, che si
+/// unirà, più colorata; `erase`, che si toglierà, a righe oblique e col bordo
+/// tratteggiato, perché non lo dica il solo colore.
+export type RegionTone = "plain" | "hover" | "chosen" | "erase";
 
 /// La forma di un nodo: un rombo per lo spigolo, un quadrato per il nodo
 /// liscio, un cerchio per quello simmetrico.
@@ -100,6 +113,12 @@ const CONTROL = 6;
 /// contorno: si vedono, senza confondersi con quelli che si modificano.
 const HINT_NODE = 7;
 const HINT_ALPHA = 0.6;
+
+/// Quanto è colorata una regione sotto il puntatore e una scelta, e quanto
+/// distano le righe di una che si toglie, in pixel CSS.
+const REGION_HOVER_ALPHA = 0.16;
+const REGION_CHOSEN_ALPHA = 0.32;
+const REGION_HATCH = 6;
 
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
@@ -236,11 +255,19 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.fill("nonzero");
   };
 
-  /// Il contorno di un tracciato, nella scena: gli archi come le cubiche
-  /// che li approssimano, che `matrix` porta come porta l'arco.
-  const traceOutline = (ctx: CanvasRenderingContext2D, segments: readonly Segment[], matrix: Matrix): void => {
+  /// Il contorno di un tracciato sullo schermo, da riempire o da tracciare:
+  /// gli archi come le cubiche che li approssimano, che `matrix` porta come
+  /// porta l'arco. Torna il riquadro dei punti sullo schermo, maniglie
+  /// comprese: contiene il tracciato.
+  const tracePath = (ctx: CanvasRenderingContext2D, segments: readonly Segment[], matrix: Matrix): Bounds => {
     const [a, b, c, d, e, f] = matrix;
-    const at = ([x, y]: Point): Point => screen(a * x + c * y + e, b * x + d * y + f);
+    const box = { min: [Infinity, Infinity] as Point, max: [-Infinity, -Infinity] as Point };
+    const at = ([x, y]: Point): Point => {
+      const p = screen(a * x + c * y + e, b * x + d * y + f);
+      box.min = [Math.min(box.min[0], p[0]), Math.min(box.min[1], p[1])];
+      box.max = [Math.max(box.max[0], p[0]), Math.max(box.max[1], p[1])];
+      return p;
+    };
     let current: Point = [0, 0];
     let start: Point = [0, 0];
     ctx.beginPath();
@@ -272,7 +299,50 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
       }
       current = segment.to;
     }
+    return box;
+  };
+
+  /// Il contorno di un tracciato, nella scena.
+  const traceOutline = (ctx: CanvasRenderingContext2D, segments: readonly Segment[], matrix: Matrix): void => {
+    tracePath(ctx, segments, matrix);
     ctx.stroke();
+  };
+
+  /// Una regione del Costruttore, col suo tono, nel colore `line`.
+  const drawRegion = (ctx: CanvasRenderingContext2D, region: Extract<OverlayHandle, { kind: "region" }>, line: string): void => {
+    const box = tracePath(ctx, region.segments, region.matrix);
+    // I bordi delle regioni non si incrociano: pari e dispari riconosce i
+    // buchi in qualunque verso girino.
+    if (region.tone === "hover" || region.tone === "chosen") {
+      ctx.fillStyle = line;
+      ctx.globalAlpha = region.tone === "hover" ? REGION_HOVER_ALPHA : REGION_CHOSEN_ALPHA;
+      ctx.fill("evenodd");
+    } else if (region.tone === "erase") {
+      ctx.save();
+      ctx.clip("evenodd");
+      ctx.globalAlpha = HINT_ALPHA;
+      ctx.beginPath();
+      // Le righe solo dove si vedono, anche da molto vicino.
+      const left = Math.max(box.min[0], 0);
+      const right = Math.min(box.max[0], width);
+      const top = Math.max(box.min[1], 0);
+      const bottom = Math.min(box.max[1], height);
+      const span = bottom - top;
+      for (let x = left - span; x < right; x += REGION_HATCH) {
+        ctx.moveTo(x, bottom);
+        ctx.lineTo(x + span, top);
+      }
+      ctx.stroke();
+      ctx.restore();
+      tracePath(ctx, region.segments, region.matrix);
+    }
+    ctx.globalAlpha = region.tone === "plain" && region.active !== true ? HINT_ALPHA : 1;
+    ctx.setLineDash(region.tone === "erase" ? [4, 3] : []);
+    ctx.lineWidth = region.active === true ? 3 : region.tone === "plain" ? 1 : 2;
+    ctx.stroke();
+    if (region.tone === "erase") ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
   };
 
   /// Un nodo in `x`, `y` sullo schermo, largo `size`.
@@ -302,6 +372,8 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     const line = accent();
     ctx.strokeStyle = line;
     ctx.lineWidth = 1;
+    // Le regioni sotto ogni altra cosa.
+    for (const handle of handles) if (handle.kind === "region") drawRegion(ctx, handle, line);
     for (const handle of handles) {
       if (handle.kind === "box") {
         const [a, b, c, d, e, f] = handle.matrix;
@@ -324,6 +396,22 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         });
         ctx.closePath();
         ctx.stroke();
+      } else if (handle.kind === "trail") {
+        if (handle.points.length < 2) continue;
+        ctx.setLineDash([]);
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        handle.points.forEach(([x, y], i) => {
+          const [px, py] = screen(x, y);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.lineJoin = "miter";
+        ctx.lineCap = "butt";
       } else if (handle.kind === "outline") {
         ctx.setLineDash([]);
         ctx.globalAlpha = handle.hint === true ? HINT_ALPHA : 1;

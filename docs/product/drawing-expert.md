@@ -366,6 +366,38 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
   allunga, con la pressione vera, arrivano campioni in mezzo. Il tratto
   resta uno e aperto: non si spezza e non si chiude.
 
+## Costruttore di forme
+
+Il Costruttore di forme (`M`), come il Generatore forme di Illustrator, unisce,
+toglie e separa le regioni delle forme scelte: i pezzi in cui i loro contorni
+si dividono a vicenda. Le regole stanno in
+`apps/client/src/editors/spatial/tools/builder.ts`, e il calcolo in
+`boolean.ts`, accanto, con le operazioni booleane.
+
+- **Le regioni** sono i pezzi dentro almeno una forma; una forma che non si
+  riempie e non ha contorni chiusi, come una linea, taglia soltanto. Gruppi,
+  testi e immagini scelti restano come sono, e lo si dice. Ogni regione ha un
+  contorno tenue, e quella sotto il puntatore si colora.
+- **Trascinare attraverso le regioni** le unisce in una forma sola, subito
+  sopra la forma più in alto che copre la prima e col suo stile; con `Alt` le
+  toglie, e si vedono tratteggiate. Un tocco su una regione ne fa una forma a
+  sé, e con `Alt` la toglie. Fuori dalle regioni, o con `Maiusc`, si scelgono
+  le forme come con la Selezione.
+- **Le forme che coprivano le regioni le perdono**: diventano tracciati, con
+  le loro curve dove restano, e quella rimasta vuota se ne va. Una forma che
+  finisce tutta nell'unione la diventa, con lo stesso id e lo stesso posto.
+- **Dalla tastiera** `Tab` e `Maiusc+Tab` passano di regione in regione, e
+  `Home` e `Fine` vanno alla prima e all'ultima; ognuna si dice col numero e
+  le forme che la coprono, «Regione 2 di 3, di Rettangolo, Blu e Rettangolo,
+  Vermiglio.» `Spazio` la sceglie, `Invio` unisce quelle scelte, o separa
+  quella a cui si è, e `Canc` le toglie; `Esc` lascia le regioni scelte, poi
+  la selezione.
+- **È un passo solo**, «Unione di regioni», «Separazione di una regione» o
+  «Eliminazione di regioni», e dopo restano scelti gli oggetti di prima che
+  ci sono ancora, con la forma nuova. Le regioni si rifanno a ogni scelta: su
+  forme troppe o troppo complesse, come centinaia di cerchi sovrapposti, il
+  Costruttore lo dice e non le calcola.
+
 ## Bézier
 
 La penna di Bézier (`B`, come in Inkscape), nella barra dopo le forme,
