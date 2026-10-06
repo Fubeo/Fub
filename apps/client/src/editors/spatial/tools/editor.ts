@@ -100,6 +100,7 @@
 // un'altra superficie arriva con `setEngine`, e annulla e ripeti restano.
 
 import { onLanguage, resolvedLanguage } from "../../../i18n/strings";
+import { clipboardSupports, readClipboard, writeClipboardData, type ClipboardEntry } from "../../../platform/clipboard";
 import { identifier } from "../../../ui/a11y";
 import { ariaBinding, displayBinding, modifierName } from "../../../ui/commands";
 import { promptForm, showKeys, type FormField, type KeyGroup, type MoreKeys } from "../../../ui/form-dialog";
@@ -111,6 +112,7 @@ import type { TextOperation } from "../../core/text-operation";
 import { countObjects, describe, keyOf, linkName, outline, type OutlineNode } from "../describe";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
+import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages } from "../read-images";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
 import { formatNumber } from "../number";
 import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInputOptions, type StrokeStart } from "../pen/pen-input";
@@ -191,7 +193,8 @@ import {
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { lookOf as selectionLook, lookOps } from "./look";
+import { lookOf as selectionLook, lookOps, styleOf, styleOps, type Style } from "./look";
+import { fontFaces, rasterize, withStyle } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
   angleOf,
@@ -291,6 +294,7 @@ import { guideDialog, unitSuffix } from "./guide-dialog";
 import { createGuideLines, createRulers, fieldMin, fieldText, fromUnit, GUIDE_HIT_PX, guideAt, RULER_PX, toUnit, UNIT_PLACES } from "./rulers";
 import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, type Replay } from "./history";
+import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "./clipboard";
 import {
   browserCodec,
   budgetFor,
@@ -304,6 +308,7 @@ import {
   placeImage,
   reduce,
   sniffRaster,
+  svgFiles,
   type Decoded,
   type Encoded,
   type ImageCodec,
@@ -398,6 +403,17 @@ export interface DrawImages {
   choose?(): Promise<string | null>;
 }
 
+/// Dove sta il disegno nel vault, per gli `href` che passano da un disegno
+/// all'altro con gli appunti. Senza, un `href` incollato resta come era
+/// scritto.
+export interface DrawPlace {
+  /// Il documento del vault a cui porta `href`, com'è scritto nel disegno;
+  /// `null` se non porta a un documento del vault.
+  locate(href: string): string | null;
+  /// L'`href` con cui il disegno porta al documento `doc` del vault.
+  refer(doc: string): string;
+}
+
 export interface DrawEditorOptions {
   /// Il livello degli strumenti (default `essential`); cambia con
   /// `setLevel`.
@@ -416,6 +432,7 @@ export interface DrawEditorOptions {
   /// Chi disegna ha cambiato la griglia, dal menu o coi tasti.
   readonly onGridChange?: (grid: Grid) => void;
   readonly links?: DrawLinks;
+  readonly place?: DrawPlace;
   readonly onChange?: (change: DrawChange) => void;
   /// La selezione è cambiata: altri oggetti, o gli stessi con chiavi nuove.
   readonly onSelectionChange?: () => void;
@@ -584,6 +601,74 @@ const IMAGE_BINDING = "Mod-i";
 /// Lo scarto di una copia dal suo originale, e fra due immagini incollate
 /// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
 const COPY_STEP_PX = 24;
+
+/// Un incolla lavora a fette di tanti millisecondi, e fra una e l'altra la
+/// pagina risponde; la sua barra si vede se dura più di tanto, o subito se
+/// porta almeno tanti caratteri.
+const SLICE_MS = 12;
+const PROGRESS_DELAY_MS = 200;
+const BIG_PASTE = 1024 * 1024;
+
+/// Fra Ctrl+Maiusc+V e l'incolla che il browser manda dietro, al più tanti
+/// millisecondi.
+const IN_PLACE_MS = 1000;
+
+/// «Copia lo stile» e «Incolla lo stile», dal livello Standard: i tasti di
+/// Inkscape.
+const COPY_STYLE_BINDING = "Mod-Alt-c";
+const PASTE_STYLE_BINDING = "Mod-Alt-v";
+
+/// L'ultima copia degli editor della pagina: il testo scritto negli appunti
+/// e dove porta il disegno da cui viene, così un incolla in un altro disegno
+/// riscrive i suoi `href` del vault dal posto nuovo. Un testo che arriva da
+/// fuori resta com'è.
+let lastCopy: { readonly text: string; readonly place: DrawPlace | null } | null = null;
+
+/// Lo stile copiato, uno per la pagina come gli appunti.
+let copiedStyle: Style | null = null;
+
+/// Cresce a ogni copia nella pagina, di un editor o no: il PNG di una copia
+/// che arriva dopo un'altra non la sovrascrive. `copyEvent` è l'ultima
+/// copia di un editor, che per gli altri editor non è un'altra copia.
+let copyRound = 0;
+let copyEvent: Event | null = null;
+
+/// Due testi degli appunti uguali, a parte i terminatori di riga, che il
+/// sistema può cambiare.
+const sameClip = (a: string, b: string): boolean => a === b || a.replace(/\r\n?/g, "\n") === b.replace(/\r\n?/g, "\n");
+
+/// Fa i passi di `run` a fette di [`SLICE_MS`], e fra una fetta e l'altra
+/// aspetta `breathe`, che lascia respirare la pagina; `progress` riceve la
+/// parte fatta. `null` se `stop` dice di smettere.
+async function sliced<T>(run: Generator<number, T>, progress: (done: number) => void, stop: () => boolean, breathe: () => Promise<void>): Promise<T | null> {
+  for (;;) {
+    const end = performance.now() + SLICE_MS;
+    for (;;) {
+      const next = run.next();
+      if (next.done === true) return next.value;
+      progress(next.value);
+      if (performance.now() >= end) break;
+    }
+    await breathe();
+    if (stop()) return null;
+  }
+}
+
+/// I byte di un file dell'app, come li scarica il browser; `null` se non
+/// arrivano.
+const fetchBlob = (url: string): Promise<Blob | null> =>
+  fetch(url)
+    .then((response) => (response.ok ? response.blob() : null))
+    .catch(() => null);
+
+/// Perché un SVG non si incolla, a parole.
+const PASTE_PROBLEMS: Readonly<Record<PasteProblem, DrawKey>> = {
+  "too-large": "draw.paste.too_large",
+  malformed: "draw.paste.malformed",
+  "not-svg": "draw.paste.not_svg",
+  empty: "draw.paste.empty",
+  entities: "draw.paste.entities",
+};
 
 const INK_KEY = "pen";
 
@@ -1725,11 +1810,33 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   linkLayer.className = "draw-link-layer";
   linkLayer.hidden = options.links === undefined;
 
+  // Un incolla lungo: in alto sul foglio, che cosa sta facendo, quanto ne ha
+  // fatto e il pulsante che lo interrompe, come Esc.
+  const progressBar = document.createElement("div");
+  progressBar.className = "draw-progress";
+  progressBar.hidden = true;
+  const progressLabel = document.createElement("span");
+  progressLabel.className = "draw-progress-label";
+  progressLabel.id = identifier("draw-progress");
+  const progressMeter = document.createElement("progress");
+  progressMeter.className = "draw-progress-meter";
+  progressMeter.setAttribute("aria-labelledby", progressLabel.id);
+  const progressStop = document.createElement("button");
+  progressStop.type = "button";
+  progressStop.className = "draw-progress-stop";
+  progressStop.setAttribute("aria-keyshortcuts", "Escape");
+  progressBar.append(progressLabel, progressMeter, progressStop);
+  relabels.push(() => {
+    const text = t("draw.paste.stop");
+    progressStop.textContent = text;
+    progressStop.title = `${text} (Esc)`;
+  });
+
   // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
   // oggetti e, sotto, gli attributi.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
@@ -6833,9 +6940,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (commit(label, asGesture(flagOps(model, [node], flag, on, newIds()).ops)) !== null) announce(t(said, { name }));
   };
 
-  /// Le voci della selezione avanzata: scegliere tutto e il resto, i simili,
-  /// bloccare e nascondere, sbloccare e mostrare tutto, isolare. Una voce che
-  /// adesso non serve è spenta e dice perché.
+  /// Le voci della selezione avanzata: gli appunti e lo stile, scegliere
+  /// tutto e il resto, i simili, bloccare e nascondere, sbloccare e mostrare
+  /// tutto, isolare. Una voce che adesso non serve è spenta e dice perché.
   const selectionItems = (): MenuItem[] => {
     const model = engine.model;
     const index = currentIndex();
@@ -6843,10 +6950,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const canEdit = editable();
     const none = units.length === 0;
     const empty = index.units.length === 0;
+    const unselected = none ? { description: t("draw.selection.empty") } : {};
     const items: MenuItem[] = [
-      { label: t("draw.select.all"), hint: displayBinding("Mod-a"), disabled: empty, run: () => selectAll() },
-      { label: t("draw.select.invert"), disabled: empty, run: () => invertSelection() },
+      { label: t("draw.cut"), hint: displayBinding("Mod-x"), disabled: !canEdit || none, ...(canEdit ? unselected : {}), run: () => clipboardCommand("cut") },
+      { label: t("draw.copy"), hint: displayBinding("Mod-c"), disabled: none, ...unselected, run: () => clipboardCommand("copy") },
+      { label: t("draw.paste"), hint: displayBinding("Mod-v"), disabled: !canEdit, run: () => void pasteFromMenu(false) },
+      { label: t("draw.paste.in_place"), hint: displayBinding("Mod-Shift-v"), disabled: !canEdit, run: () => void pasteFromMenu(true) },
     ];
+    if (has("style")) {
+      const pastable = canEdit && !none && copiedStyle !== null;
+      const why = copiedStyle === null ? t("draw.style.empty", { key: displayBinding(COPY_STYLE_BINDING) }) : t("draw.selection.empty");
+      items.push(
+        { label: t("draw.style.copy"), separator: true, hint: displayBinding(COPY_STYLE_BINDING), disabled: none, ...unselected, run: () => copyStyle() },
+        { label: t("draw.style.paste"), hint: displayBinding(PASTE_STYLE_BINDING), disabled: !pastable, ...(canEdit && !pastable ? { description: why } : {}), run: () => pasteStyle() },
+      );
+    }
+    items.push(
+      { label: t("draw.select.all"), separator: true, hint: displayBinding("Mod-a"), disabled: empty, run: () => selectAll() },
+      { label: t("draw.select.invert"), disabled: empty, run: () => invertSelection() },
+    );
     const likenesses = LIKENESSES.filter(({ by }) => by !== "layer" || has("layers"));
     likenesses.forEach(({ by, label }, at) => {
       const usable = model !== null && !none && hasLikeness(model, index, units, by);
@@ -8116,7 +8238,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       rows: [
         ["Mod-z", t("draw.undo")],
         ["Mod-Shift-z Mod-y", t("draw.redo")],
+        ["Mod-x", t("draw.cut")],
+        ["Mod-c", t("draw.copy")],
         ["Mod-v", t("draw.keys.paste")],
+        ["Mod-Shift-v", t("draw.paste.in_place")],
+        ...(at.has("style") ? ([[COPY_STYLE_BINDING, t("draw.style.copy")], [PASTE_STYLE_BINDING, t("draw.style.paste")]] as const) : []),
         ...(insertsImages(at) ? [[IMAGE_BINDING, t("draw.image.vault")] as const] : []),
         ["?", t("draw.keys")],
       ],
@@ -8348,6 +8474,428 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     announce(`${added}${now} ${objects()}`);
   };
 
+  // --- Gli appunti --------------------------------------------------------------
+
+  /// Il comando degli appunti che un menu ha chiesto: la copia che il browser
+  /// manda col comando è la sua, anche col fuoco nel menu.
+  let commanded: "copy" | "cut" | null = null;
+  /// Fino a quando l'incolla dei tasti va nello stesso punto: Ctrl+Maiusc+V
+  /// lo chiede, e l'evento del browser arriva subito dietro.
+  let inPlaceUntil = -Infinity;
+  /// L'ultimo incolla al cursore: lo stesso testo allo stesso punto si
+  /// scosta di un passo in più, come le copie di Ctrl+D.
+  let series: { readonly text: string; readonly at: Point; readonly count: number } | null = null;
+  /// L'incolla in corso, che Esc e «Interrompi» fermano fra una fetta e
+  /// l'altra.
+  let pasting: { stopped: boolean } | null = null;
+
+  /// La pausa dell'incolla fra due fette, una alla volta. Smontato l'editor
+  /// finisce subito, e l'incolla vede che l'editor non c'è più.
+  let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+  let pauseFrame = 0;
+  let pauseDone: (() => void) | null = null;
+  const endPause = (): void => {
+    clearTimeout(pauseTimer);
+    cancelAnimationFrame(pauseFrame);
+    const done = pauseDone;
+    pauseDone = null;
+    done?.();
+  };
+  life.add(endPause);
+  /// La pagina respira: gli eventi in attesa passano; con `frame`, prima si
+  /// ridisegna, e ciò che si è appena mostrato si vede.
+  const pause = (frame: boolean): Promise<void> =>
+    new Promise((resolve) => {
+      pauseDone = resolve;
+      const breathe = (): void => {
+        pauseTimer = setTimeout(endPause, 0);
+      };
+      if (frame) pauseFrame = requestAnimationFrame(breathe);
+      else breathe();
+    });
+
+  /// Un evento degli appunti è dell'editor: il fuoco è qui, o non è da
+  /// nessuna parte e l'evento arriva qui; un campo tiene i suoi. Fuori dal
+  /// foglio, una copia lascia al browser il testo che si è scelto.
+  const ownsClipboard = (event: ClipboardEvent): boolean => {
+    const active = document.activeElement;
+    const focused = active !== null && active !== document.body && active !== document.documentElement;
+    const node = focused ? active : event.target;
+    if (!(node instanceof Element) || !root.contains(node)) return false;
+    if (node.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') !== null) return false;
+    return event.type === "paste" || node === surface || document.getSelection()?.type !== "Range";
+  };
+
+  /// La selezione come SVG, nel riquadro di ciò che se ne vede; `null` se
+  /// non si scrive.
+  const selectionSvg = (units: readonly Unit[]): string | null => {
+    const bounds = boundsOf(units);
+    return bounds === null ? null : copySvg({ text: engine.text, paths: units.map((unit) => unit.path), bounds });
+  };
+
+  /// Il PNG di `svg`: le immagini del vault coi loro byte, fino al tetto
+  /// della Lettura, e i caratteri dell'app che un testo nomina.
+  const pngOf = async (svg: string): Promise<Blob | null> => {
+    const refs = imageRefs(svg);
+    const sources = new Map<string, string>();
+    const port = options.images;
+    if (port !== undefined) {
+      let spent = 0;
+      for (const path of new Set(refs.flatMap((ref) => (ref.path === null ? [] : [ref.path])))) {
+        const blob = await port.read(path).catch(() => null);
+        if (blob === null || blob.size > READ_IMAGE_BYTES - spent) continue;
+        const uri = await imageDataUri(blob);
+        if (uri === null) continue;
+        sources.set(path, uri);
+        spent += blob.size;
+      }
+    }
+    const shown = withImages(svg, refs, sources);
+    return rasterize(withStyle(shown, await fontFaces(shown, fetchBlob)));
+  };
+
+  /// Scrive `svg` negli appunti di `data`, come testo e come SVG; poi, dove
+  /// la shell lo lascia fare, di nuovo col PNG accanto, quando è pronto.
+  /// Il PNG di una copia superata, o pronto quando la pagina non ha più il
+  /// fuoco, non scrive niente: resta ciò che c'è.
+  const writeClipboard = (data: DataTransfer, svg: string): void => {
+    data.setData("text/plain", svg);
+    data.setData(SVG_TYPE, svg);
+    const round = ++copyRound;
+    if (!clipboardSupports("image/png")) return;
+    const png = pngOf(svg).then((blob) => {
+      if (blob === null || round !== copyRound || !document.hasFocus()) throw new Error("PNG superato");
+      return blob;
+    });
+    png.catch(() => undefined);
+    const content: Record<string, Blob | Promise<Blob>> = { "text/plain": new Blob([svg], { type: "text/plain" }), "image/png": png };
+    if (clipboardSupports(SVG_TYPE)) content[SVG_TYPE] = new Blob([svg], { type: SVG_TYPE });
+    // Se non scrive, resta ciò che la copia ha scritto subito.
+    writeClipboardData(content).catch(() => undefined);
+  };
+
+  /// Copia e taglia: la selezione negli appunti, come SVG e come PNG, e
+  /// tagliare poi la toglie dal disegno, in un passo. Copiare si può anche in
+  /// sola lettura.
+  const onCopy = (event: ClipboardEvent): void => {
+    const kind = commanded ?? (event.type === "cut" ? "cut" : "copy");
+    if (commanded === null && !ownsClipboard(event)) {
+      if (event !== copyEvent) copyRound++;
+      return;
+    }
+    const data = event.clipboardData;
+    if (data === null) return;
+    const units = selectedUnits();
+    if (units.length === 0) {
+      announce(t("draw.selected.none"));
+      return;
+    }
+    if (kind === "cut" && !editable()) return;
+    event.preventDefault();
+    const svg = selectionSvg(units);
+    if (svg === null) {
+      announce(t("draw.copy.failed"));
+      return;
+    }
+    copyEvent = event;
+    writeClipboard(data, svg);
+    lastCopy = { text: svg, place: options.place ?? null };
+    series = null;
+    if (kind === "copy") {
+      announce(plural(units.length, "draw.copied.one", "draw.copied.other"));
+      return;
+    }
+    cancelGesture();
+    if (commit("draw.action.cut", asGesture(removeOps(units))) === null) return;
+    selection = [];
+    syncControls();
+    showHandles();
+    announce(`${plural(units.length, "draw.cut.one", "draw.cut.other")} ${objects()}`);
+  };
+
+  /// «Copia» e «Taglia» dal menu: la copia che il browser manda col comando.
+  /// Dove non la manda, si dice di usare i tasti.
+  const clipboardCommand = (kind: "copy" | "cut"): void => {
+    commanded = kind;
+    let sent: boolean;
+    try {
+      sent = document.execCommand("copy");
+    } catch {
+      sent = false;
+    } finally {
+      commanded = null;
+    }
+    if (!sent) announce(t("draw.copy.keys", { key: displayBinding(kind === "copy" ? "Mod-c" : "Mod-x") }));
+  };
+
+  /// Ciò che un incolla o un rilascio porta al disegno: un SVG scritto come
+  /// testo, file SVG, immagini raster.
+  interface Carried {
+    readonly text: string | null;
+    readonly svgs: readonly File[];
+    readonly images: readonly File[];
+  }
+
+  /// Ciò che `data` porta al disegno; `null` se niente. Un SVG scritto come
+  /// testo vince sul resto: con lui, da una copia, arriva il suo PNG.
+  const carriedBy = (data: DataTransfer | null): Carried | null => {
+    if (data === null) return null;
+    const plain = data.getData("text/plain");
+    const typed = looksLikeSvg(plain) ? plain : data.getData(SVG_TYPE);
+    if (looksLikeSvg(typed)) return { text: typed, svgs: [], images: [] };
+    const svgs = svgFiles(data);
+    const images = imageFiles(data);
+    return svgs.length === 0 && images.length === 0 ? null : { text: null, svgs, images };
+  };
+
+  /// Porta `carried` sul foglio: gli SVG in un passo, poi le immagini nel
+  /// loro. Un file più grande di un disegno modificabile non si legge.
+  async function pasteCarried(carried: Carried, at: Point | null, inPlace: boolean): Promise<void> {
+    if (carried.text !== null) {
+      await pasteSvgs([{ text: carried.text, name: null }], at, inPlace);
+      return;
+    }
+    if (carried.svgs.length > 0) {
+      const texts = await Promise.all(
+        carried.svgs.map(async (file) => ({ text: file.size > MAX_EDIT_BYTES ? null : await file.text().catch(() => ""), name: file.name })),
+      );
+      await pasteSvgs(texts, at, inPlace);
+    }
+    if (carried.images.length > 0) await addImages(carried.images, at);
+  }
+
+  /// Il contenitore del modello che `to` nomina.
+  const containerOf = (model: DocumentModel, to: Destination): ContainerNode | null => {
+    const ident = to.prelude.find((op) => op.op === "ident");
+    const node = ident?.op === "ident" ? nodeAtPath(model, ident.path) : to.parent === ROOT ? model.root : engine.holder(to.parent);
+    return node?.kind === "container" ? node : null;
+  };
+
+  /// Come cambia un `href` del vault incollato da `text`: se `text` è
+  /// l'ultima copia della pagina, da dove portava nel disegno da cui viene a
+  /// come ci porta questo, col frammento che aveva. Un `href` dalla radice
+  /// del vault, o che porta già allo stesso documento, resta.
+  const rebaseFor = (text: string): ((href: string) => string | null) => {
+    const from = lastCopy !== null && sameClip(lastCopy.text, text) ? lastCopy.place : null;
+    const here = options.place;
+    if (from === null || here === undefined) return () => null;
+    return (href) => {
+      if (/^[/\\]/.test(href.trim())) return null;
+      const doc = from.locate(href);
+      if (doc === null || here.locate(href) === doc) return null;
+      const hash = href.indexOf("#");
+      return here.refer(doc) + (hash < 0 ? "" : href.slice(hash));
+    };
+  };
+
+  /// Gli SVG di `texts` nel livello che riceve, in un passo solo: al cursore
+  /// se si vede, o al centro della vista, uno accanto all'altro, scelti e con
+  /// lo strumento della selezione; con `inPlace`, dove dicono le loro
+  /// coordinate. Un testo `null` è più grande di un disegno modificabile.
+  /// Un incolla lungo mostra la sua barra, e Esc lo interrompe.
+  async function pasteSvgs(texts: ReadonlyArray<{ readonly text: string | null; readonly name: string | null }>, at: Point | null, inPlace: boolean): Promise<void> {
+    if (asking || disposed || texts.length === 0 || !editable()) return;
+    finishText();
+    cancelGesture();
+    asking = true;
+    const run = { stopped: false };
+    pasting = run;
+    const loaded = loads;
+    const before = engine.text;
+    const started = performance.now();
+    let shown = false;
+    /// La barra, con `label` e la parte fatta; senza, aspetta.
+    const show = (label: DrawKey, value: number | null): void => {
+      if (!shown) announce(t(label));
+      shown = true;
+      progressLabel.textContent = t(label);
+      if (value === null) {
+        progressMeter.removeAttribute("value");
+      } else {
+        progressMeter.setAttribute("max", "1");
+        progressMeter.setAttribute("value", String(value));
+      }
+      progressBar.hidden = false;
+    };
+    const gone = (): boolean => disposed || run.stopped || loads !== loaded || !editable() || engine.text !== before;
+    /// Smette, e dice perché se è chi disegna a saperlo.
+    const quit = (): void => {
+      if (disposed || loads !== loaded) return;
+      if (run.stopped) announce(t("draw.paste.stopped"));
+      else if (engine.text !== before) announce(t("draw.paste.changed"));
+    };
+    try {
+      if (texts.reduce((sum, each) => sum + (each.text?.length ?? 0), 0) >= BIG_PASTE) {
+        show("draw.paste.reading", null);
+        await pause(true);
+        if (gone()) return quit();
+      }
+      const sources: Array<{ readonly source: PasteSource; readonly text: string }> = [];
+      let problem: PasteProblem | null = null;
+      for (const { text, name } of texts) {
+        const source = text === null ? "too-large" : readPaste(text, name);
+        if (typeof source === "string") problem ??= source;
+        else sources.push({ source, text: text! });
+      }
+      const said = problem === null ? "" : t(PASTE_PROBLEMS[problem], { limit: sizeText(MAX_EDIT_BYTES) });
+      if (sources.length === 0) {
+        announce(said);
+        return;
+      }
+      const ids = newIds();
+      const to = target(ids);
+      const model = engine.model;
+      const container = to === null || model === null ? null : containerOf(model, to);
+      if (to === null || model === null || container === null) return;
+      const view = viewBounds();
+      const inView = at !== null && at[0] >= view.min[0] && at[0] <= view.max[0] && at[1] >= view.min[1] && at[1] <= view.max[1];
+      const base: Point = inView ? at : [(view.min[0] + view.max[0]) / 2, (view.min[1] + view.max[1]) / 2];
+      const distance = COPY_STEP_PX / camera.scale;
+      const step = gridOn() ? wholeSteps(distance, stepNow()) : roundDelta(distance);
+      const lone = !inPlace && sources.length === 1 ? sources[0]!.text : null;
+      const again = lone !== null && series !== null && series.text === lone && series.at[0] === base[0] && series.at[1] === base[1];
+      const first = again ? series!.count + 1 : 0;
+      const ops: Op[] = [];
+      const keys: string[] = [];
+      let bounds: Bounds | null = null;
+      for (const [i, { source, text }] of sources.entries()) {
+        let delta: Point = [0, 0];
+        if (!inPlace) {
+          // Il centro dell'SVG va sul punto, e con l'aggancio il suo angolo
+          // in alto a sinistra sull'incrocio più vicino.
+          const frame = pasteFrame(source, model);
+          const offset = (first + i) * step;
+          delta = [roundDelta(base[0] + offset - (frame.min[0] + frame.max[0]) / 2), roundDelta(base[1] + offset - (frame.min[1] + frame.max[1]) / 2)];
+          if (gridOn()) {
+            const [sx, sy] = snapDelta(translated(frame, delta[0], delta[1])!.min, 0, 0, stepNow());
+            delta = [delta[0] + sx, delta[1] + sy];
+          }
+        }
+        const steps = planPaste(source, { model, container, to: i === 0 ? to : { ...to, prelude: [] }, ids, delta, href: rebaseFor(text) });
+        const plan = await sliced(
+          steps,
+          (done) => {
+            if (shown || performance.now() - started >= PROGRESS_DELAY_MS) show("draw.paste.running", (i + done) / sources.length);
+          },
+          gone,
+          () => pause(false),
+        );
+        if (plan === null) return quit();
+        ops.push(...plan.ops);
+        keys.push(...plan.keys);
+        bounds = union(bounds, plan.bounds);
+      }
+      if (shown) {
+        show("draw.paste.writing", null);
+        await pause(true);
+      }
+      if (gone()) return quit();
+      const page = pageFor(scene.root.page, bounds);
+      if (page !== null) ops.push({ op: "page", viewBox: page });
+      if (commit("draw.action.paste", asGesture(ops)) === null) return;
+      series = lone === null ? null : { text: lone, at: base, count: first };
+      const switched = tool !== "select" && tools.some((spec) => spec.id === "select");
+      if (switched) {
+        tool = "select";
+        syncControls();
+      }
+      select(keys);
+      const now = switched ? ` ${t("draw.announce.tool", { tool: t(toolSpec("select").label) })}` : "";
+      announce(`${plural(keys.length, "draw.pasted.one", "draw.pasted.other")}${now} ${objects()}${said === "" ? "" : ` ${said}`}`);
+    } finally {
+      if (pasting === run) pasting = null;
+      asking = false;
+      if (progressBar.contains(document.activeElement)) surface.focus({ preventScroll: true });
+      progressBar.hidden = true;
+    }
+  }
+
+  /// «Incolla» e «Incolla nello stesso punto» dal menu: gli appunti letti
+  /// dalla shell, se lo lascia fare; altrimenti si dice di usare i tasti.
+  async function pasteFromMenu(inPlace: boolean): Promise<void> {
+    const at = cursor;
+    let items: readonly ClipboardEntry[];
+    try {
+      items = await readClipboard();
+    } catch {
+      if (!disposed) announce(t("draw.paste.keys", { key: displayBinding(inPlace ? "Mod-Shift-v" : "Mod-v") }));
+      return;
+    }
+    // Un tipo che non arriva, come il PNG di una copia superata, non c'è.
+    const read = (item: ClipboardEntry, type: string): Promise<Blob | null> => item.getType(type).catch(() => null);
+    let svg: string | null = null;
+    const images: File[] = [];
+    for (const item of items) {
+      for (const type of ["text/plain", SVG_TYPE]) {
+        if (svg !== null || !item.types.includes(type)) continue;
+        const text = (await (await read(item, type))?.text().catch(() => null)) ?? "";
+        if (looksLikeSvg(text)) svg = text;
+      }
+      const raster = item.types.find((type) => type.startsWith("image/") && type !== SVG_TYPE);
+      const blob = svg === null && raster !== undefined ? await read(item, raster) : null;
+      if (blob !== null) images.push(new File([blob], "image", { type: raster }));
+    }
+    if (disposed) return;
+    if (svg === null && images.length === 0) {
+      announce(t("draw.paste.nothing"));
+      return;
+    }
+    await pasteCarried({ text: svg, svgs: [], images: svg === null ? images : [] }, at, inPlace);
+  }
+
+  life.listen(document, "copy", onCopy);
+  life.listen(document, "cut", onCopy);
+  // Un incolla che porta un SVG o immagini non va oltre; uno di solo testo,
+  // o in un campo, segue la sua strada.
+  life.listen(document, "paste", (event) => {
+    const inPlace = event.timeStamp <= inPlaceUntil;
+    inPlaceUntil = -Infinity;
+    if (!ownsClipboard(event)) return;
+    const carried = carriedBy(event.clipboardData);
+    if (carried === null) {
+      announce(t("draw.paste.nothing"));
+      return;
+    }
+    event.preventDefault();
+    void pasteCarried(carried, cursor, inPlace);
+  });
+  life.listen(progressStop, "click", () => {
+    if (pasting !== null) pasting.stopped = true;
+  });
+
+  // --- Lo stile copiato -------------------------------------------------------
+
+  /// «Copia lo stile»: quello del primo oggetto scelto, per ogni disegno
+  /// della pagina. Si copia anche in sola lettura.
+  function copyStyle(): void {
+    if (!has("style") || engine.model === null) return;
+    const units = selectedUnits();
+    if (units.length === 0) {
+      announce(t("draw.selected.none"));
+      return;
+    }
+    const style = styleOf(engine.model, units[0]!);
+    if (style === null) {
+      announce(t("draw.style.none"));
+      return;
+    }
+    copiedStyle = style;
+    announce(t("draw.style.copied"));
+  }
+
+  /// «Incolla lo stile»: lo stile copiato sugli oggetti scelti, in un passo.
+  function pasteStyle(): void {
+    const units = arranging("style");
+    if (units === null) return;
+    if (copiedStyle === null) {
+      announce(t("draw.style.empty", { key: displayBinding(COPY_STYLE_BINDING) }));
+      return;
+    }
+    if (arrange("draw.action.paste_style", styleOps(engine.model!, units, copiedStyle, newIds()))) {
+      announce(plural(units.length, "draw.restyled.one", "draw.restyled.other"));
+    }
+  }
+
   // --- Le immagini del vault --------------------------------------------------
 
   /// Con le parti `at` l'editor inserisce immagini del vault: se le offrono,
@@ -8405,16 +8953,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
   }
 
-  // Un incolla che porta immagini non va oltre; uno di solo testo, o in un
-  // campo, segue la sua strada.
-  life.listen(root, "paste", (event) => {
-    const origin = event.target;
-    if (origin instanceof Element && origin.closest("input, textarea, [contenteditable=true]")) return;
-    const files = imageFiles(event.clipboardData);
-    if (files.length === 0) return;
-    event.preventDefault();
-    void addImages(files, cursor);
-  });
   const onDragOver = (event: DragEvent): void => {
     if (!editable() || !carriesFiles(event.dataTransfer)) return;
     event.preventDefault();
@@ -8425,13 +8963,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Un file lasciato qui non apre una pagina al posto della shell.
     event.preventDefault();
     if (!editable()) return;
-    const files = imageFiles(event.dataTransfer);
-    if (files.length === 0) {
-      announce(t("draw.image.unreadable"));
+    const carried = carriedBy(event.dataTransfer);
+    if (carried === null) {
+      announce(t("draw.drop.unreadable"));
       return;
     }
     const world = screenToWorld(camera, localPoint(event.clientX, event.clientY));
-    void addImages(files, [world.x, world.y]);
+    void pasteCarried(carried, [world.x, world.y], false);
   };
   // Anche sul campo del testo, che sta sopra il foglio: un'immagine lasciata
   // lì conclude il testo ed entra nel disegno.
@@ -8459,6 +8997,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
     if (event.defaultPrevented || event.target === titleInput || event.target === textInput) return;
+    // Esc ferma l'incolla in corso, da ogni parte dell'editor.
+    if (event.key === "Escape" && pasting !== null) {
+      pasting.stopped = true;
+      event.preventDefault();
+      return;
+    }
     // I pannelli delle proprietà e degli attributi, e i campi dell'albero (la
     // ricerca, il tipo e il nome), tengono i loro tasti: un `?` o un Canc
     // scritti in un valore restano lì, le frecce cambiano un numero, e un Canc
@@ -8515,8 +9059,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // restano a chi li aveva.
     const arranges = (feature: Feature): boolean => has(feature) && selection.length > 0 && editable();
     if (mod) {
+      // Lo stile si copia e si incolla con Alt, la lettera per la sua
+      // posizione dove Alt ne scrive un'altra (⌥C è «ç»).
+      const letter = /^[a-z]$/i.test(event.key) ? event.key.toLowerCase() : event.code === "KeyC" ? "c" : event.code === "KeyV" ? "v" : "";
+      if (event.altKey && !event.shiftKey && (letter === "c" || letter === "v") && has("style")) {
+        if (letter === "c") copyStyle();
+        else pasteStyle();
+        event.preventDefault();
+        return;
+      }
       if (event.altKey) return;
       const key = event.key.toLowerCase();
+      // Ctrl+C, Ctrl+X e Ctrl+V sono del browser, che manda gli eventi degli
+      // appunti; Ctrl+Maiusc+V chiede che l'incolla vada nello stesso punto.
+      if (key === "v") inPlaceUntil = event.shiftKey ? event.timeStamp + IN_PLACE_MS : -Infinity;
       // Le parentesi quadre per posizione, dove le ha una tastiera americana:
       // su quella italiana sono «è» e «+», che si premono senza AltGr.
       const bracket = event.code === "BracketRight" || key === "]" || key === "}" ? 1 : event.code === "BracketLeft" || key === "[" || key === "{" ? -1 : 0;

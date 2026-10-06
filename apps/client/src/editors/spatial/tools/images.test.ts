@@ -17,6 +17,7 @@ import {
   reduce,
   roomFor,
   sniffRaster,
+  svgFiles,
   type Decoded,
   type EncodeType,
 } from "./images";
@@ -84,14 +85,17 @@ describe("il tipo e i file", () => {
     expect(jpegOrientation(PNG)).toBe(1);
   });
 
-  it("prende i file che possono essere immagini, ma non un SVG", () => {
+  it("prende i file che possono essere immagini, e a parte gli SVG", () => {
     const data = new DataTransfer();
     data.items.add(new File([PNG], "a.png", { type: "image/png" }));
     data.items.add(new File(["<svg/>"], "b.svg", { type: "image/svg+xml" }));
     data.items.add(new File(["x"], "c.txt", { type: "text/plain" }));
     data.items.add(new File([PNG], "d", { type: "" }));
+    data.items.add(new File(["<svg/>"], "E.SVG", { type: "" }));
     expect(imageFiles(data).map((file) => file.name)).toEqual(["a.png", "d"]);
+    expect(svgFiles(data).map((file) => file.name)).toEqual(["b.svg", "E.SVG"]);
     expect(imageFiles(null)).toEqual([]);
+    expect(svgFiles(null)).toEqual([]);
     expect(carriesFiles(data)).toBe(true);
     const text = new DataTransfer();
     text.setData("text/plain", "ciao");

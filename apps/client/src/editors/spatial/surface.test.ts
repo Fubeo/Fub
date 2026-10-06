@@ -433,6 +433,34 @@ describe("i collegamenti", () => {
     expect(opened).toEqual([NOTE]);
   });
 
+  it("copiati in un disegno di un'altra cartella, portano dove portavano", async () => {
+    mount(LINKED);
+    const there = document.createElement("div");
+    document.body.append(there);
+    try {
+      const changes: EditorChange[] = [];
+      const surface = mountVectorSurface(
+        { paneId: "p2", documentId: "altro/piano/pianta.svg", parent: there },
+        { onChange: (change) => changes.push(change), onSelectionChange: () => undefined },
+      );
+      surface.buffer!.setDoc(SOURCE);
+      mounted.push({ surface, changes, selections: { count: 0 }, parent: there });
+      const clip = (at: HTMLElement, type: string, data: DataTransfer): void => {
+        at.querySelector(".draw-surface")!.dispatchEvent(new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: data }));
+      };
+      key(parent, { key: "a", ctrlKey: true });
+      const data = new DataTransfer();
+      clip(parent, "copy", data);
+      clip(there, "paste", data);
+      for (let i = 0; i < 6; i++) await settle();
+      expect(changes).toHaveLength(1);
+      const hrefs = [...surface.buffer!.getDoc().matchAll(/ href="([^"]*)"/g)].map((match) => match[1]);
+      expect(hrefs).toEqual(["../../Note/Ciclo%20dell'acqua.md", "../../disegni/pianta.svg", "../../Note/Ciclo%20dell'acqua.md"]);
+    } finally {
+      there.remove();
+    }
+  });
+
   it("senza una shell che le apre, niente segni né riga", () => {
     const { surface } = mount(LINKED);
     expect(parent.querySelector<HTMLElement>(".draw-link-layer")!.hidden).toBe(true);

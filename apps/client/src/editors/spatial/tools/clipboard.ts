@@ -1,4 +1,4 @@
-// Gli appunti (livello Standard): la selezione come documento SVG, e un SVG
+// Gli appunti, a ogni livello: la selezione come documento SVG, e un SVG
 // incollato come elementi del disegno.
 //
 // - **Copiare** scrive un SVG completo, che si apre anche da solo: la radice
@@ -484,7 +484,8 @@ interface Rules {
   /// I fogli di stile: l'id del gruppo che li chiude, `null` per rinominare
   /// soltanto, `undefined` se restano come sono.
   readonly sheets: string | null | undefined;
-  /// Il nuovo `href` di un'immagine del vault; `null` lo lascia.
+  /// Il nuovo `href` di un'immagine o di un collegamento del vault; `null`
+  /// lo lascia.
   readonly href: (value: string) => string | null;
 }
 
@@ -654,7 +655,7 @@ class Rewriter {
         const to = rename(name.replace(/\\(.)/g, "$1"));
         return to === null ? whole : `${lead}${space}${to}.`;
       });
-    } else if (attr.local === "href" && (attr.ns === NS_NONE || attr.ns === NS_XLINK) && isSvg(element, "image") && hrefKind(next).kind === "vault") {
+    } else if (attr.local === "href" && (attr.ns === NS_NONE || attr.ns === NS_XLINK) && (isSvg(element, "image") || isSvg(element, "a")) && hrefKind(next).kind === "vault") {
       next = this.rules.href(next) ?? next;
     }
     return next;
@@ -978,8 +979,8 @@ export interface PasteTarget {
   readonly ids: NewIds;
   /// Lo spostamento nella scena: zero per incollare nello stesso punto.
   readonly delta: Point;
-  /// L'`href` di un'immagine del vault visto dal disegno che riceve; `null`
-  /// lo lascia com'è.
+  /// L'`href` di un'immagine o di un collegamento del vault visto dal
+  /// disegno che riceve; `null` lo lascia com'è.
   readonly href: (value: string) => string | null;
 }
 

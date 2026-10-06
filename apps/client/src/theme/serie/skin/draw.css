@@ -182,6 +182,27 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
 }
 
+/* La barra di un incolla lungo, come quella del gruppo isolato; il suo
+   pulsante come «Applica» delle proprietà. */
+.draw-progress {
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
+}
+.draw-progress-label {
+  color: var(--text);
+}
+.draw-progress-stop {
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
 /* Il segno di un collegamento: un tondo col fondo della barra, che si vede
    sulla carta e sul tavolo di ogni tema, e che col puntatore sopra prende il
    fondo attivo quando si può toccare. */

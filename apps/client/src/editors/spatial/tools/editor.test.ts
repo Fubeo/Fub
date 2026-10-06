@@ -9,11 +9,19 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
 import { decodeInk } from "../ink/codec";
 import { SceneEngine } from "../scene/engine";
+import { readScene } from "../scene/read";
 import { doc } from "../scene/test-support";
-import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages } from "./editor";
+import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages, type DrawPlace } from "./editor";
 import { MERGE_MS } from "./history";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
+import { rasterize } from "./png";
 import { LAYER } from "./test-support";
+
+// happy-dom non disegna: il PNG degli appunti è il testo che riceve.
+vi.mock("./png", async (real) => ({
+  ...(await real<typeof import("./png")>()),
+  rasterize: vi.fn(async (svg: string) => new Blob([svg], { type: "image/png" })),
+}));
 
 const SOURCE = doc(
   `<title>Prova</title>${LAYER}<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`,
@@ -2793,6 +2801,7 @@ describe("da tastiera", () => {
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
+      "Modifica · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
@@ -2820,6 +2829,11 @@ describe("da tastiera", () => {
     expect(tables[6]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
+    ]);
+    // Copiare e incollare ci sono già; lo stile, dallo Standard.
+    expect(tables[9]!.rows).toEqual([
+      ["Ctrl+Alt+C", "Copia lo stile"],
+      ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
@@ -3882,6 +3896,12 @@ describe("la selezione avanzata, dal livello Standard", () => {
     editor.setTool("select");
     selectionButton().click();
     expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled")])).toEqual([
+      ["Taglia", "true"],
+      ["Copia", "true"],
+      ["Incolla", null],
+      ["Incolla nello stesso punto", null],
+      ["Copia lo stile", "true"],
+      ["Incolla lo stile", "true"],
       ["Seleziona tutto", null],
       ["Inverti la selezione", null],
       ["Stesso riempimento", "true"],
@@ -5762,7 +5782,7 @@ describe("le immagini incollate", () => {
     expect(imageLine()).toMatch(/ x="50" y="70" width="200" height="100" /);
     const note = drop([file(Uint8Array.from([65]), "nota.txt", "text/plain")], 10, 10);
     expect(note.defaultPrevented).toBe(true);
-    expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere.");
+    expect(spoken()).toBe("Non è un’immagine o un SVG che il disegno sa leggere.");
   });
 
   it("un'immagine che non si legge, un documento in sola lettura e il titolo non scrivono", async () => {
@@ -6287,15 +6307,427 @@ describe("il livello Personalizzato", () => {
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
+      "Modifica · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[8]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[9]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
+describe("gli appunti", () => {
+  const ID = "o1a2b3c4d";
+
+  /// Gli appunti di sistema, che il `navigator` dei test non ha: ciò che vi
+  /// si scrive si rilegge.
+  let system: ClipboardItem[];
+  let clipboard: { read: () => Promise<ClipboardItem[]>; write: (items: ClipboardItem[]) => Promise<void> };
+  beforeEach(() => {
+    system = [];
+    clipboard = {
+      read: async () => system,
+      write: async (items) => {
+        system = [...items];
+      },
+    };
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+  });
+  afterEach(() => {
+    delete (navigator as { clipboard?: unknown }).clipboard;
+  });
+
+  /// Un evento degli appunti, sul foglio se non si dice dove.
+  function clip(type: "copy" | "cut" | "paste", data = new DataTransfer(), target: EventTarget = surface()): ClipboardEvent {
+    const event = new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: data });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  /// Appunti che portano `text` come `type`.
+  function holding(text: string, type = "text/plain"): DataTransfer {
+    const data = new DataTransfer();
+    data.setData(type, text);
+    return data;
+  }
+
+  /// Copia la selezione col tasto, e rende il testo negli appunti.
+  function copied(): string {
+    const data = new DataTransfer();
+    clip("copy", data);
+    return data.getData("text/plain");
+  }
+
+  /// Un rilascio sul foglio: happy-dom non ha `DragEvent`.
+  function drop(files: readonly File[], x: number, y: number): MouseEvent {
+    const data = new DataTransfer();
+    for (const one of files) data.items.add(one);
+    const event = new MouseEvent("drop", { bubbles: true, cancelable: true, clientX: x, clientY: y });
+    Object.defineProperty(event, "dataTransfer", { value: data });
+    surface().dispatchEvent(event);
+    return event;
+  }
+
+  /// Aspetta che l'incolla finisca di entrare.
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  const hover = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y }));
+  };
+  const rects = (): string[] => editor.engine.text.match(/<rect [^>]*\/>/g) ?? [];
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-progress")!;
+
+  /// Un SVG di `count` quadratini con un nome di 4 KiB ciascuno: pesa
+  /// tanto e si disegna in fretta.
+  function heavy(count: number): string {
+    const name = "x".repeat(4096);
+    const squares = Array.from({ length: count }, (_, i) => `<rect x="${i % 50}" y="${Math.floor(i / 50)}" width="1" height="1"><title>${name}</title></rect>`);
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="60">${squares.join("")}</svg>`;
+  }
+
+  it("copiare scrive la selezione come SVG, anche in sola lettura; tagliare la toglie, in un passo", () => {
+    mount();
+    editor.select([ID]);
+    const data = new DataTransfer();
+    expect(clip("copy", data).defaultPrevented).toBe(true);
+    const svg = data.getData("text/plain");
+    expect(data.getData("image/svg+xml")).toBe(svg);
+    expect(svg).toMatch(/^<svg [^>]*viewBox="59 59 22 22"/);
+    expect(svg).toContain('<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>');
+    expect(spoken()).toBe("1 oggetto copiato.");
+    expect(changes).toEqual([]);
+    editor.setReadOnly(true);
+    expect(clip("copy").defaultPrevented).toBe(true);
+    expect(clip("cut").defaultPrevented).toBe(false);
+    expect(rects()).toHaveLength(1);
+    editor.setReadOnly(false);
+    const cut = new DataTransfer();
+    expect(clip("cut", cut).defaultPrevented).toBe(true);
+    expect(cut.getData("text/plain")).toBe(svg);
+    expect(rects()).toEqual([]);
+    expect(editor.selection).toEqual([]);
+    expect(spoken()).toBe("1 oggetto tagliato. Il disegno ha 0 oggetti.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("senza selezione lo si dice; un campo, e il resto della pagina, tengono i loro appunti", () => {
+    mount();
+    expect(clip("copy").defaultPrevented).toBe(false);
+    expect(spoken()).toBe("Nessun oggetto scelto.");
+    editor.select([ID]);
+    const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
+    title.focus();
+    expect(clip("copy", new DataTransfer(), title).defaultPrevented).toBe(false);
+    expect(clip("paste", holding(SOURCE), title).defaultPrevented).toBe(false);
+    title.blur();
+    const outside = document.createElement("p");
+    document.body.append(outside);
+    expect(clip("copy", new DataTransfer(), outside).defaultPrevented).toBe(false);
+    outside.remove();
+    expect(changes).toEqual([]);
+  });
+
+  it("incollato torna com'era, con un id nuovo: al cursore, scelto, in un passo", async () => {
+    mount();
+    size(1000, 500);
+    editor.select([ID]);
+    const svg = copied();
+    hover(300, 300);
+    editor.setTool("rect");
+    expect(clip("paste", holding(svg)).defaultPrevented).toBe(true);
+    await settle();
+    const [id] = editor.selection;
+    expect(id).not.toBe(ID);
+    expect(rects()).toEqual([
+      '<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>',
+      `<rect id="${id}" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2" transform="matrix(1 0 0 1 230 230)"/>`,
+    ]);
+    expect(editor.tool).toBe("select");
+    expect(spoken()).toBe("1 oggetto incollato. Strumento: Selezione. Il disegno ha 2 oggetti.");
+    expect(changes).toHaveLength(1);
+    // Di nuovo allo stesso punto, un passo più in là, come una copia.
+    clip("paste", holding(svg));
+    await settle();
+    expect(rects()[2]).toMatch(/ transform="matrix\(1 0 0 1 254 254\)"\/>$/);
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("senza il cursore va al centro della vista; Ctrl+Maiusc+V nello stesso punto", async () => {
+    mount();
+    size(1000, 500);
+    editor.setTool("select");
+    editor.select([ID]);
+    const svg = copied();
+    clip("paste", holding(svg));
+    await settle();
+    expect(rects()[1]).toMatch(/ transform="matrix\(1 0 0 1 430 180\)"\/>$/);
+    expect(key("V", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    clip("paste", holding(svg));
+    await settle();
+    const [id] = editor.selection;
+    expect(rects()[2]).toBe(`<rect id="${id}" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>`);
+    // Il tasto vale per l'incolla che lo segue, non per i prossimi.
+    clip("paste", holding(svg));
+    await settle();
+    expect(rects()[3]).toMatch(/ transform="matrix\(1 0 0 1 430 180\)"\/>$/);
+  });
+
+  it("un SVG di fuori entra in un gruppo, senza eseguire niente; uno che non si legge lo si dice", async () => {
+    mount();
+    size(1000, 500);
+    const active =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" onload="globalThis.attivato = 1"><script>globalThis.attivato = 2</script>' +
+      '<image href="nessuna.png" width="1" height="1" onerror="globalThis.attivato = 3"/><rect width="10" height="10" onclick="globalThis.attivato = 4"/></svg>';
+    clip("paste", holding(active));
+    await settle();
+    expect(editor.selection).toHaveLength(1);
+    expect(readScene(editor.engine.text).diagnostics.filter((d) => d.code === "S005").map((d) => d.detail)).toEqual(["onload", "script", "onerror", "onclick"]);
+    surface().click();
+    expect("attivato" in globalThis).toBe(false);
+    expect(host.querySelector("script, [onload], [onerror], [onclick]")).toBeNull();
+    const before = editor.engine.text;
+    clip("paste", holding('<svg xmlns="http://www.w3.org/2000/svg"><rect></svg>'));
+    await settle();
+    expect(spoken()).toBe("Non è un SVG ben formato: non si incolla.");
+    // Un testo che non è un SVG resta a chi lo vuole.
+    expect(clip("paste", holding("ciao")).defaultPrevented).toBe(false);
+    expect(spoken()).toBe("Negli appunti non c’è niente che il disegno sappia incollare.");
+    editor.setReadOnly(true);
+    clip("paste", holding(active));
+    await settle();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("un file .svg lasciato sul foglio va dove cade, col suo nome; due sono un passo", async () => {
+    mount();
+    size(1000, 500);
+    const svg = (fill: string): string => `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="${fill}"/></svg>`;
+    expect(drop([new File([svg("#336699")], "Logo.svg", { type: "image/svg+xml" })], 150, 120).defaultPrevented).toBe(true);
+    await settle();
+    const [logo] = editor.selection;
+    expect(spoken()).toBe("1 oggetto incollato. Strumento: Selezione. Il disegno ha 2 oggetti.");
+    expect(editor.engine.text).toContain(`<g id="${logo}" transform="matrix(1 0 0 1 130 110)">`);
+    expect(editor.engine.text).toContain("<title>Logo</title>");
+    // Un file senza tipo vale per il suo nome.
+    drop([new File([svg("#d55e00")], "uno.svg", { type: "image/svg+xml" }), new File([svg("#000000")], "DUE.SVG")], 400, 300);
+    await settle();
+    expect(editor.selection).toHaveLength(2);
+    expect(changes).toHaveLength(2);
+    expect(spoken()).toBe("2 oggetti incollati. Il disegno ha 4 oggetti.");
+  });
+
+  it("le immagini e i collegamenti del vault seguono il disegno in cui vanno; ciò che viene da fuori resta", async () => {
+    /// I documenti di una cartella, come li trova e li nomina la shell.
+    const placeIn = (folder: string): DrawPlace => ({ locate: (href) => `${folder}/${href.split("#")[0]}`, refer: (path) => `../${path}` });
+    const linked = doc(
+      `<title>Prova</title>${LAYER}<image id="oiiiiiiii" href="foto.png" x="0" y="0" width="10" height="10"/>` +
+        '<a id="oaaaaaaaa" href="Note/Pioggia.md#Nuvole"><rect id="orrrrrrrr" x="20" y="0" width="5" height="5"/></a>' +
+        '<image id="ojjjjjjjj" href="/Sfondi/mare.png" x="30" y="0" width="10" height="10"/></g>',
+    );
+    mount(linked, { place: placeIn("Disegni") });
+    editor.select(["oiiiiiiii", "oaaaaaaaa", "ojjjjjjjj"]);
+    const svg = copied();
+    editor.dispose();
+    mount(SOURCE, { place: placeIn("Altro") });
+    clip("paste", holding(svg));
+    await settle();
+    expect(editor.engine.text).toContain(' href="../Disegni/foto.png"');
+    expect(editor.engine.text).toContain(' href="../Disegni/Note/Pioggia.md#Nuvole"');
+    expect(editor.engine.text).toContain(' href="/Sfondi/mare.png"');
+    editor.undo();
+    // Lo stesso testo scritto altrove non dice da dove viene.
+    clip("paste", holding(svg.replace("<svg ", "<svg  ")));
+    await settle();
+    expect(editor.engine.text).toContain(' href="foto.png"');
+  });
+
+  it("un incolla grande mostra la sua barra e resta un passo", async () => {
+    mount();
+    size(1000, 500);
+    editor.setTool("select");
+    const svg = heavy(2560);
+    expect(svg.length).toBeGreaterThan(10 * 1024 * 1024);
+    clip("paste", holding(svg));
+    expect(bar().hidden).toBe(false);
+    expect(spoken()).toBe("Lettura dell’SVG…");
+    expect(formatIssues(checkAccessibility(bar()))).toBe("");
+    const labels: string[] = [];
+    const values: number[] = [];
+    while (!bar().hidden) {
+      const label = bar().querySelector(".draw-progress-label")!.textContent!;
+      if (labels[labels.length - 1] !== label) labels.push(label);
+      const value = bar().querySelector("progress")!.getAttribute("value");
+      if (value !== null) values.push(Number(value));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(labels).toEqual(["Lettura dell’SVG…", "Inserimento dell’SVG…", "Scrittura nel disegno…"]);
+    expect(values.length).toBeGreaterThan(1);
+    expect(values.every((value, i) => value > 0 && value <= 1 && (i === 0 || value >= values[i - 1]!))).toBe(true);
+    expect(spoken()).toBe("1 oggetto incollato. Il disegno ha 2 oggetti.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("Esc e «Interrompi» fermano l'incolla, e il disegno non cambia", async () => {
+    mount();
+    const svg = heavy(256);
+    clip("paste", holding(svg));
+    expect(key("Escape").defaultPrevented).toBe(true);
+    await settle();
+    expect(spoken()).toBe("Incolla interrotto: il disegno non è cambiato.");
+    expect(bar().hidden).toBe(true);
+    clip("paste", holding(svg));
+    const stop = bar().querySelector<HTMLButtonElement>(".draw-progress-stop")!;
+    expect(stop.textContent).toBe("Interrompi");
+    expect(stop.getAttribute("aria-keyshortcuts")).toBe("Escape");
+    stop.focus();
+    stop.click();
+    await settle();
+    expect(spoken()).toBe("Incolla interrotto: il disegno non è cambiato.");
+    // Il fuoco torna sul foglio, non resta su un pulsante nascosto.
+    expect(document.activeElement).toBe(surface());
+    expect(changes).toEqual([]);
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("dal menu: copia col comando del browser, incolla dagli appunti che legge; dove non può lo dice", async () => {
+    mount(SOURCE, { level: "standard" });
+    size(1000, 500);
+    editor.setTool("select");
+    editor.select([ID]);
+    const menu = (): HTMLButtonElement[] => {
+      const open = document.querySelectorAll<HTMLElement>(".context-menu");
+      return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    };
+    const item = (label: string): HTMLButtonElement => {
+      host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!.click();
+      return menu().find((entry) => entry.querySelector(".menu-label")!.textContent === label)!;
+    };
+    // happy-dom non ha `execCommand`: come un browser che non lo lascia fare.
+    item("Copia").click();
+    expect(spoken()).toBe("Da qui il browser non lascia scrivere negli appunti: usa Ctrl+C.");
+    const sent: DataTransfer[] = [];
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: (command: string) => {
+        const data = new DataTransfer();
+        sent.push(data);
+        document.body.dispatchEvent(new ClipboardEvent(command, { bubbles: true, cancelable: true, clipboardData: data }));
+        return true;
+      },
+    });
+    try {
+      item("Copia").click();
+    } finally {
+      delete (document as { execCommand?: unknown }).execCommand;
+    }
+    expect(spoken()).toBe("1 oggetto copiato.");
+    const svg = sent[0]!.getData("text/plain");
+    expect(svg).toContain('<rect id="o1a2b3c4d"');
+    // Il PNG di una copia superata non arriva: l'SVG accanto sì.
+    const late = Promise.reject(new Error("superato"));
+    late.catch(() => undefined);
+    await clipboard.write([new ClipboardItem({ "text/plain": new Blob([svg], { type: "text/plain" }), "image/png": late })]);
+    item("Incolla nello stesso punto").click();
+    await settle();
+    const [id] = editor.selection;
+    expect(rects()[1]).toBe(`<rect id="${id}" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>`);
+    item("Incolla").click();
+    await settle();
+    expect(rects()[2]).toMatch(/ transform="matrix\(1 0 0 1 430 180\)"\/>$/);
+    clipboard.read = async () => [new ClipboardItem({ "image/png": late })];
+    item("Incolla").click();
+    await settle();
+    expect(spoken()).toBe("Negli appunti non c’è niente che il disegno sappia incollare.");
+    clipboard.read = () => Promise.reject(new DOMException("negato", "NotAllowedError"));
+    item("Incolla").click();
+    await settle();
+    expect(spoken()).toBe("Da qui il browser non lascia leggere gli appunti: incolla con Ctrl+V.");
+    expect(changes).toHaveLength(2);
+  });
+
+  it("dove il browser lo lascia fare, la copia scrive anche il PNG; quello di una copia superata no", async () => {
+    mount();
+    editor.select([ID]);
+    const written: ClipboardItem[][] = [];
+    clipboard.write = async (items) => {
+      written.push([...items]);
+    };
+    const svg = copied();
+    await settle();
+    expect(written[0]!.map((item) => item.types)).toEqual([["text/plain", "image/png"]]);
+    expect(await (await written[0]![0]!.getType("text/plain")).text()).toBe(svg);
+    const png = await written[0]![0]!.getType("image/png");
+    expect(png.type).toBe("image/png");
+    // Il disegno passa a chi disegna con le dimensioni dell'SVG copiato.
+    expect(await png.text()).toContain('viewBox="59 59 22 22"');
+    expect(vi.mocked(rasterize)).toHaveBeenCalled();
+    // Dove si può, anche l'SVG va negli appunti di sistema.
+    Object.defineProperty(ClipboardItem, "supports", { configurable: true, value: (type: string) => type === "image/svg+xml" });
+    try {
+      copied();
+      copied();
+    } finally {
+      delete (ClipboardItem as { supports?: unknown }).supports;
+    }
+    expect(written[2]![0]!.types).toEqual(["text/plain", "image/png", "image/svg+xml"]);
+    await expect(written[1]![0]!.getType("image/png")).rejects.toThrow();
+    await expect(written[2]![0]!.getType("image/png")).resolves.toBeInstanceOf(Blob);
+    // Una copia d'altro, nella pagina, supera quella del disegno; un altro
+    // disegno che la sente passare no.
+    const other = document.createElement("div");
+    document.body.append(other);
+    try {
+      createDrawEditor(other, SceneEngine.open(SOURCE), owner, {});
+      copied();
+      document.body.dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: new DataTransfer() }));
+      copied();
+      await settle();
+      await expect(written[3]![0]!.getType("image/png")).rejects.toThrow();
+      await expect(written[4]![0]!.getType("image/png")).resolves.toBeInstanceOf(Blob);
+    } finally {
+      other.remove();
+    }
+  });
+
+  it("lo stile si copia e si incolla con Ctrl+Alt+C e Ctrl+Alt+V, dal livello Standard, in un passo", () => {
+    const A = "oa1a1a1a1";
+    const B = "ob2b2b2b2";
+    const PAIR = doc(
+      `<title>Prova</title>${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2" stroke="#d55e00" stroke-width="4" stroke-dasharray="4 2" opacity="0.5"/>` +
+        `<rect id="${B}" x="50" y="10" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`,
+    );
+    mount(PAIR);
+    editor.select([A]);
+    expect(key("c", { ctrlKey: true, altKey: true }).defaultPrevented).toBe(false);
+    editor.dispose();
+    mount(PAIR, { level: "standard" });
+    editor.select([B]);
+    // Lo stile copiato è della pagina: finché nessuno lo copia, non c'è.
+    expect(key("v", { ctrlKey: true, altKey: true }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Non c’è uno stile da incollare: prima copialo con Ctrl+Alt+C.");
+    editor.select([A]);
+    // Su un Mac ⌥C scrive «ç»: vale il tasto.
+    expect(key("ç", { metaKey: true, altKey: true, code: "KeyC" }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Stile copiato.");
+    editor.select([B]);
+    key("v", { ctrlKey: true, altKey: true });
+    expect(spoken()).toBe("Stile incollato su 1 oggetto.");
+    expect(rects()[1]).toBe(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="#0072b2" stroke="#d55e00" stroke-width="4" stroke-dasharray="4 2" opacity="0.5"/>`);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(PAIR);
   });
 });
 

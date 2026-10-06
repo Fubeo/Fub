@@ -135,11 +135,20 @@ export function jpegOrientation(bytes: Uint8Array): number {
   return 1;
 }
 
+/// Un file SVG: dal tipo o, se il tipo manca, dal nome.
+const isSvgFile = (file: File): boolean => file.type === "image/svg+xml" || (file.type === "" && /\.svg$/i.test(file.name));
+
 /// I file di `data` che possono essere immagini: un SVG no, perché non è
-/// raster e non si incorpora (formato della scena).
+/// raster e non si incorpora (formato della scena); entra come disegno.
 export function imageFiles(data: DataTransfer | null): File[] {
   if (data === null) return [];
-  return Array.from(data.files).filter((file) => file.type === "" || (file.type.startsWith("image/") && file.type !== "image/svg+xml"));
+  return Array.from(data.files).filter((file) => !isSvgFile(file) && (file.type === "" || file.type.startsWith("image/")));
+}
+
+/// I file SVG di `data`, che entrano come disegni (`clipboard.ts`).
+export function svgFiles(data: DataTransfer | null): File[] {
+  if (data === null) return [];
+  return Array.from(data.files).filter(isSvgFile);
 }
 
 /// `data` porta dei file: per sapere, durante un trascinamento, se il

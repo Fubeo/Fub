@@ -51,6 +51,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Righelli e guide | Standard | i righelli (`Maiusc+R`), le guide del documento (`\|`), «Guide…» e l'unità del documento |
 | Collegamenti alle note | Standard | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
+| Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 | Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
 | Nodi, Bézier | Esperto | lo strumento (`N`, `B`) |
 | Attributi | Esperto | la loro sezione nelle proprietà, o senza il pannello «Attributi» (`Ctrl+Maiusc+X`) |
@@ -65,9 +66,9 @@ bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la
 selezione, ha almeno un comando delle parti scelte, e sta accanto alla
 selezione; senza il pannello delle proprietà, la casella che la riporta in
 cima al foglio è in «Pagina e griglia». Ci sono a ogni livello,
-anche senza nessuna parte: la Selezione, le immagini incollate, l'albero degli
-oggetti, aprire un collegamento con `Alt+Invio` o col suo segno, e «Apri come
-sorgente».
+anche senza nessuna parte: la Selezione, copia, taglia e incolla, le immagini
+incollate, l'albero degli oggetti, aprire un collegamento con `Alt+Invio` o
+col suo segno, e «Apri come sorgente».
 
 ## Quando una parte se ne va
 

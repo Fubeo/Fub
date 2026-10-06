@@ -30,7 +30,13 @@ function copy(opened: Opened, keys: readonly string[], bounds?: Bounds): string 
 
 /// Il piano dell'incolla di `text` nel primo livello di `opened`, spostato di
 /// `delta`, e le parti fatte che ha reso.
-function plan(opened: Opened, text: string, file: string | null = null, delta: readonly [number, number] = [0, 0]): { plan: PastePlan; steps: number[] } {
+function plan(
+  opened: Opened,
+  text: string,
+  file: string | null = null,
+  delta: readonly [number, number] = [0, 0],
+  href: (value: string) => string | null = () => null,
+): { plan: PastePlan; steps: number[] } {
   const source = readPaste(text, file);
   if (typeof source === "string") throw new Error(`non si incolla: ${source}`);
   const ids = new NewIds((id) => opened.engine.holder(id) !== null);
@@ -42,7 +48,7 @@ function plan(opened: Opened, text: string, file: string | null = null, delta: r
     to: destinationIn(layer, ids)!,
     ids,
     delta: [delta[0], delta[1]] as const,
-    href: () => null,
+    href,
   };
   const run = planPaste(source, target);
   const steps: number[] = [];
@@ -55,8 +61,14 @@ function plan(opened: Opened, text: string, file: string | null = null, delta: r
 
 /// Incolla `text` nel primo livello di `opened`, in un `batch` solo, e
 /// verifica che un annulla riporti il testo di prima.
-function paste(opened: Opened, text: string, file: string | null = null, delta: readonly [number, number] = [0, 0]): PastePlan {
-  const { plan: out } = plan(opened, text, file, delta);
+function paste(
+  opened: Opened,
+  text: string,
+  file: string | null = null,
+  delta: readonly [number, number] = [0, 0],
+  href?: (value: string) => string | null,
+): PastePlan {
+  const { plan: out } = plan(opened, text, file, delta, href);
   const before = opened.engine.text;
   const op: Op = { op: "batch", ops: out.ops };
   const outcome = opened.engine.apply(op);
@@ -235,6 +247,29 @@ describe("un giro di copia e incolla", () => {
     const back = open(doc(`${LAYER}</g>`).replace('viewBox="0 0 100 100"', 'width="10cm" height="10cm" viewBox="0 0 100 100"'));
     const again = paste(back, svg);
     expect(anonymous(rawOf(node(back, again.keys[0]!)))).toBe('<rect id="ID" x="10" y="10" width="20" height="20"/>');
+  });
+
+  it("le immagini e i collegamenti del vault cambiano riferimento, gli altri restano", () => {
+    const source = open(
+      doc(
+        `${LAYER}<image id="oiiiiiiii" href="foto.png" x="0" y="0" width="10" height="10"/>` +
+          '<a id="oaaaaaaaa" href="Note/Pioggia.md#Nuvole"><rect id="orrrrrrrr" x="20" y="0" width="5" height="5"/></a>' +
+          '<a id="obbbbbbbb" href="https://example.org"><rect id="ossssssss" x="30" y="0" width="5" height="5"/></a></g>',
+      ),
+    );
+    const svg = copy(source, ["oiiiiiiii", "oaaaaaaaa", "obbbbbbbb"]);
+    const seen: string[] = [];
+    const target = open(TARGET);
+    const out = paste(target, svg, null, [0, 0], (value) => {
+      seen.push(value);
+      return `../${value}`;
+    });
+    expect(seen).toEqual(["foto.png", "Note/Pioggia.md#Nuvole"]);
+    expect(out.keys.map((key) => anonymous(rawOf(node(target, key))))).toEqual([
+      '<image id="ID" href="../foto.png" x="0" y="0" width="10" height="10"/>',
+      '<a id="ID" href="../Note/Pioggia.md#Nuvole"><rect id="ID" x="20" y="0" width="5" height="5"/></a>',
+      '<a id="ID" href="https://example.org"><rect id="ID" x="30" y="0" width="5" height="5"/></a>',
+    ]);
   });
 
   it("spostato di `delta`, e il riquadro segue", () => {

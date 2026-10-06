@@ -85,6 +85,74 @@ export function relativeRef(from: string, to: string): string {
   return out;
 }
 
+/// Gli spazi che Rust toglie da un `str::trim`: la proprietà Unicode
+/// `White_Space`, che non è quella di `String.prototype.trim` (NEL sì, BOM
+/// no).
+const EDGE_SPACE = /^\p{White_Space}+|\p{White_Space}+$/gu;
+
+function hexValue(byte: number): number | null {
+  if (byte >= 0x30 && byte <= 0x39) return byte - 0x30;
+  if (byte >= 0x61 && byte <= 0x66) return byte - 0x61 + 10;
+  if (byte >= 0x41 && byte <= 0x46) return byte - 0x41 + 10;
+  return null;
+}
+
+/// Le sequenze `%XX` decodificate. Una sequenza che non è esadecimale o è
+/// troncata resta com'era; se i byte che escono non sono UTF-8, torna `s`.
+///
+/// Gemella di `fub_abi::rules::path::percent_decode`.
+function percentDecode(s: string): string {
+  if (!s.includes("%")) return s;
+  const bytes = new TextEncoder().encode(s);
+  const out: number[] = [];
+  for (let at = 0; at < bytes.length; ) {
+    if (bytes[at] === 0x25 && at + 2 < bytes.length) {
+      const high = hexValue(bytes[at + 1]!);
+      const low = hexValue(bytes[at + 2]!);
+      if (high !== null && low !== null) {
+        out.push(high * 16 + low);
+        at += 3;
+        continue;
+      }
+    }
+    out.push(bytes[at]!);
+    at++;
+  }
+  try {
+    // Il BOM in testa resta, come in Rust.
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(new Uint8Array(out));
+  } catch {
+    return s;
+  }
+}
+
+/// Il path del vault a cui porta `raw` scritto dentro `src`, letterale come
+/// l'ha scritto chi l'ha scritto; `null` se non porta a una risorsa del
+/// vault: un frammento solo, un path vuoto, un `..` che esce dalla radice.
+/// Un path che comincia con `/` parte dalla radice del vault.
+///
+/// Gemella di `fub_abi::rules::path::resolve_against`: la shell la usa per
+/// riscrivere le immagini e i collegamenti di un disegno incollati in un
+/// disegno di un'altra cartella.
+export function resolveAgainst(src: string, raw: string): string | null {
+  const hash = raw.indexOf("#");
+  const path = percentDecode((hash < 0 ? raw : raw.slice(0, hash)).replace(EDGE_SPACE, ""));
+  if (path === "") return null;
+  const absolute = path.startsWith("/");
+  const cut = src.lastIndexOf("/");
+  const segments = absolute ? [] : src.slice(0, Math.max(cut, 0)).split("/").filter((part) => part !== "");
+  for (const segment of (absolute ? path.slice(1) : path).split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      // Fuori dal vault non c'è niente.
+      if (segments.pop() === undefined) return null;
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments.length === 0 ? null : segments.join("/");
+}
+
 // --- la politica dei nomi (§15.5) -------------------------------------------
 
 /// Quale domanda si sta ponendo su un nome. Gemella di

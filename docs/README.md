@@ -40,6 +40,7 @@ flowchart LR
 - [Disegni, righelli e guide](product/drawing-rulers.md)
 - [Disegni, proprietà](product/drawing-properties.md)
 - [Disegni, immagini](product/drawing-images.md)
+- [Disegni, appunti](product/drawing-clipboard.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
