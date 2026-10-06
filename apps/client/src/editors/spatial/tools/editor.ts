@@ -123,14 +123,14 @@ import { MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
 import type { Role, Tool } from "../scene/analysis";
-import type { Item } from "../scene/classify";
+import type { ElementItem, Item } from "../scene/classify";
 import { ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle } from "../painter/overlay";
-import { PaintBuilder, type PaintNode, type PaintScene } from "../painter/paint";
-import { createSvgPainter } from "../painter/svg-dom";
+import { PaintBuilder, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
+import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
   addOp,
   boxMatrix,
@@ -157,6 +157,7 @@ import {
   distributeOps,
   duplicateOps,
   groupOps,
+  holdsLink,
   holdsLinks,
   isGroup,
   isLink,
@@ -323,7 +324,9 @@ import {
   type Shift,
 } from "./layers";
 import { createInspector } from "./inspector";
-import { createObjectTree, type TreeEntry } from "./objects";
+import { cleanName, nameable, nameOps } from "./naming";
+import { createObjectTree, type TreeDrop, type TreeEntry, type TreeKind, type TreeThumbnail } from "./objects";
+import { placeOps, type Place } from "./place";
 import {
   customColor,
   DEFAULT_COLOR,
@@ -997,6 +1000,29 @@ function matrixText(m: Matrix): string {
 /// il resto, come «su» e «giù», deve restare in vista.
 const LAYER_IN_COMMAND = 24;
 
+/// Perché una voce dell'albero non si rinomina e non si sposta: è bloccata,
+/// o lo è ciò che la contiene, o il suo livello.
+type Refusal = "locked" | "container_locked" | "layer_locked";
+
+/// Uno spostamento dall'albero, pronto: i nodi che vanno, il contenitore
+/// che li riceve, il posto fra i suoi figli e se sono livelli.
+interface Placing {
+  readonly moving: readonly ElementPart[];
+  readonly parent: ContainerNode;
+  readonly at: Place;
+  readonly layers: boolean;
+}
+
+/// Fino a quante forme una miniatura è viva, con le immagini del vault; fino
+/// a quante è un'immagine ferma. Oltre, la riga non ne ha.
+const THUMB_LIVE_SHAPES = 200;
+const THUMB_PICTURE_SHAPES = 5000;
+
+/// Il riquadro di una miniatura da quello di un oggetto.
+function miniatureBox(bounds: Bounds | null): MiniatureBox | null {
+  return bounds === null ? null : { x: bounds.min[0], y: bounds.min[1], width: bounds.max[0] - bounds.min[0], height: bounds.max[1] - bounds.min[1] };
+}
+
 /// Il nome di un livello come si mostra: gli spazi raccolti e, oltre `max`
 /// caratteri, tagliato coi puntini. Un livello senza nome lo dice.
 function layerTitle(layer: LayerInfo, max = MAX_LAYER_NAME): string {
@@ -1004,6 +1030,22 @@ function layerTitle(layer: LayerInfo, max = MAX_LAYER_NAME): string {
   if (name === "") return t("draw.layer.unnamed");
   const chars = Array.from(name);
   return chars.length <= max ? name : `${chars.slice(0, max - 1).join("").trimEnd()}…`;
+}
+
+/// Il tipo di un oggetto per il filtro dell'albero: le forme, i tracciati e
+/// le frecce sono «Forme».
+function treeKind(role: Role): TreeKind {
+  switch (role) {
+    case "layer":
+    case "group":
+    case "link":
+    case "stroke":
+    case "text":
+    case "image":
+      return role;
+    default:
+      return "shape";
+  }
 }
 
 /// Lo stato di un livello a parole, come nell'albero degli oggetti: vuoto se
@@ -1417,6 +1459,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     onDelete: () => deleteSelection(),
     onLeave: () => surface.focus({ preventScroll: true }),
     onToggle: (key, what) => toggleRow(key, what === "lock" ? "locked" : "hidden"),
+    canRename: (key) => canRename(key),
+    onRename: (key, name) => renameRow(key, name),
+    canMove: (keys, drop) => {
+      const plan = placing(keys, drop);
+      return plan !== null && typeof plan !== "string";
+    },
+    onMove: (keys, drop) => moveRows(keys, drop),
+    onEdge: (key, front) => announce(t(outlineNow().byKey.get(key)?.item.role === "layer" ? (front ? "draw.layer.edge.top" : "draw.layer.edge.bottom") : front ? "draw.move.edge.front" : "draw.move.edge.back")),
   });
   tree.element.hidden = true;
   relabels.push(() => tree.relabel());
@@ -2491,25 +2541,84 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// corrente. Con la selezione avanzata i gruppi e i collegamenti mostrano
   /// i loro figli. I segni bloccano e nascondono, nel disegno che si scrive:
   /// un livello coi livelli, un oggetto con la selezione avanzata, se niente
-  /// che lo contiene è bloccato (`under`).
-  const entriesOf = (nodes: readonly OutlineNode[], index: SceneIndex, current: string | null, under: boolean): TreeEntry[] =>
+  /// che lo contiene è bloccato (`under` dice che cosa). Coi livelli ogni
+  /// voce si rinomina e si sposta, e ha la sua miniatura: un oggetto
+  /// bloccato, o dentro qualcosa di bloccato, lascia in `refusals` il perché
+  /// no.
+  const entriesOf = (
+    nodes: readonly OutlineNode[],
+    index: SceneIndex,
+    current: string | null,
+    under: Refusal | null,
+    refusals: Map<string, Refusal>,
+  ): TreeEntry[] =>
     nodes.map((node) => {
       const unit = index.get(node.key) ?? undefined;
       const layer = node.item.role === "layer";
       const holds = node.item.role === "group" || node.item.role === "link";
       const locked = node.item.locked === true;
       const mark = layer && node.key === current ? `, ${t("draw.state.current")}` : "";
+      const refusal = layer ? null : locked ? "locked" : under;
+      if (refusal !== null) refusals.set(node.key, refusal);
+      const inner = under ?? (!locked ? null : layer ? "layer_locked" : "container_locked");
+      const title = layer ? node.name : cleanName(node.item.title ?? "");
       return {
         key: node.key,
         layer,
         selectable: unit !== undefined,
         locked,
         hidden: node.item.hidden === true,
-        toggles: editable() && (layer ? has("layers") : has("selection") && !under),
-        children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, under || locked) : [],
+        toggles: editable() && (layer ? has("layers") : has("selection") && under === null),
+        name: title === null || title === "" ? null : title,
+        renames: editable() && has("layers"),
+        moves: editable() && has("layers"),
+        ...(has("layers") ? { thumbnail: () => thumbnailOf(node.item) } : {}),
+        kind: treeKind(node.item.role),
+        children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, inner, refusals) : [],
         label: () => `${describeNode(node, unit)}${mark}`,
       };
     });
+
+  /// Il riquadro delle miniature dei livelli, lo stesso per tutti perché si
+  /// veda dove sta ciascuno: la pagina, o senza pagina tutto il disegno.
+  let sheet: { readonly scene: PaintScene; readonly box: MiniatureBox | null } | null = null;
+  const sheetOf = (model: DocumentModel): MiniatureBox | null => {
+    if (sheet?.scene !== scene) sheet = { scene, box: scene.root.page ?? miniatureBox(indexer.extent(model)) };
+    return sheet.box;
+  };
+
+  /// La miniatura di una voce dell'albero: ciò che il disegno dipinge per
+  /// lei, dentro gli stili di chi la contiene; un oggetto inquadrato sul suo
+  /// riquadro, un livello sul foglio. La chiave cambia quando cambia ciò che
+  /// si vede: la voce, il testo dei tag di chi la contiene, che resta anche
+  /// quando il contenitore si rifà, la radice e il foglio.
+  const thumbnailOf = (item: ElementItem): TreeThumbnail | null => {
+    const model = engine.model;
+    if (model === null) return null;
+    const node = nodeOf(model, item);
+    const paints = builder.paintsOf(node);
+    if (paints.length === 0) return null;
+    const heads: HeadInfo[] = [];
+    for (let at = node.parent; at !== null && at !== model.root; at = at.parent) heads.unshift(builder.headInfo(at));
+    const root = scene.root;
+    const layer = item.role === "layer";
+    const box = layer ? sheetOf(model) : null;
+    if (layer && box === null) return null;
+    const frame = box === null ? "" : `|${box.x} ${box.y} ${box.width} ${box.height}`;
+    return {
+      key: `${builder.serialOf(root)}|${heads.map((head) => head.head + (head.tail ?? "")).join("")}|${paints.map((paint) => builder.serialOf(paint)).join(" ")}${frame}`,
+      draw: (owner) => {
+        const count = shapeCount(paints, THUMB_PICTURE_SHAPES);
+        if (count > THUMB_PICTURE_SHAPES) return null;
+        const framed = box ?? miniatureBox(indexer.frameOf(model, node));
+        if (framed === null) return null;
+        const live = count <= THUMB_LIVE_SHAPES;
+        const resolve = live && images !== undefined ? (href: string, life: Lifetime) => images.url(href, life) : undefined;
+        const svg = paintMiniature(paints, [root.attrs, ...heads.map((head) => head.attrs)], framed, owner, resolve);
+        return live ? svg : miniaturePicture(svg, owner);
+      },
+    };
+  };
 
   /// Le voci dell'albero per l'indice e il livello corrente di adesso, e la
   /// selezione mostrata.
@@ -2518,6 +2627,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly layer: string | null;
     readonly mode: string;
     readonly entries: TreeEntry[];
+    /// Perché una voce non si rinomina e non si sposta.
+    readonly refusals: ReadonlyMap<string, Refusal>;
     readonly count: number;
     keys: string;
   } | null = null;
@@ -2534,12 +2645,211 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const mode = `${editable()} ${has("layers")} ${has("selection")}`;
     if (treeShown?.index !== index || treeShown.layer !== current || treeShown.mode !== mode) {
       const nodes = outlineNow().nodes;
-      treeShown = { index, layer: current, mode, entries: entriesOf(nodes, index, current, false), count: countObjects(nodes), keys: "" };
+      const refusals = new Map<string, Refusal>();
+      const entries = entriesOf(nodes, index, current, null, refusals);
+      treeShown = { index, layer: current, mode, entries, refusals, count: countObjects(nodes), keys: "" };
     } else if (treeShown.keys === keys) {
       return;
     }
     treeShown.keys = keys;
+    // Il filtro e i nomi vengono coi livelli.
+    tree.setFiltering(has("layers"));
     tree.update(treeShown.entries, selection, treeShown.count);
+  }
+
+  /// Vero se la voce `key` si rinomina adesso; se no, lo dice e dice perché.
+  /// Un oggetto che il disegno non sa riscrivere lo dice prima che si scriva
+  /// il nome.
+  function canRename(key: string): boolean {
+    const model = engine.model;
+    const outlined = outlineNow().byKey.get(key);
+    if (model === null || outlined === undefined || !editable() || !has("layers")) return false;
+    const refusal = treeShown?.refusals.get(key);
+    if (refusal !== undefined) {
+      announce(t(`draw.rename.${refusal}`));
+      return false;
+    }
+    if (outlined.item.role !== "layer" && !nameable(model, outlined.item)) {
+      announce(t("draw.rename.foreign"));
+      return false;
+    }
+    return true;
+  }
+
+  /// Dà alla voce `key` il nome `name`, già ripulito: un livello il suo nome,
+  /// mai vuoto; un oggetto il suo primo `title`, che un nome vuoto toglie. La
+  /// chiave di dopo, che cambia se l'oggetto riceve un id.
+  function renameRow(key: string, name: string): string | null {
+    const model = engine.model;
+    const outlined = outlineNow().byKey.get(key);
+    if (model === null || outlined === undefined || !editable() || !has("layers")) return null;
+    cancelGesture();
+    if (outlined.item.role === "layer") {
+      const layer = currentIndex().layers.find((each) => keyOf(each) === key);
+      if (layer === undefined) return null;
+      const next = layerName(name);
+      if (next === "") {
+        announce(t("draw.layer.name.required"));
+        return null;
+      }
+      const arranged = renameLayerOps(model, layer, next, newIds());
+      const now = arranged.keys[0] ?? key;
+      // Il livello corrente resta lui anche se riceve un id.
+      const before = currentLayer();
+      const isCurrent = before !== null && keyOf(before) === key;
+      if (!writeLayers("draw.action.layer_rename", arranged, isCurrent ? now : null)) return null;
+      announce(t("draw.layer.renamed", { name: layerTitle({ ...layer, name: next }) }));
+      return now;
+    }
+    const change = nameOps(model, outlined.item, name, newIds());
+    if (change === "foreign") {
+      announce(t("draw.rename.foreign"));
+      return null;
+    }
+    if (change.ops.length === 0) return key;
+    const now = change.keys[0] ?? key;
+    const before = selection;
+    if (commit("draw.action.name", asGesture(change.ops)) === null) return null;
+    // Scelto prima, scelto dopo, anche con l'id nuovo.
+    if (now !== key && before.includes(key)) select(before.map((each) => (each === key ? now : each)));
+    const after = outlineNow().byKey.get(now);
+    announce(name !== "" ? t("draw.named", { name }) : t("draw.unnamed", { name: after === undefined ? "" : describeNode(after, currentIndex().get(now) ?? undefined, false) }));
+    return now;
+  }
+
+  /// Dove `drop` porta le voci `keys` dell'albero: i loro nodi, il
+  /// contenitore che le riceve, il posto fra i suoi figli e se sono livelli;
+  /// o perché no, a parole. `null` se non c'è niente da dire: il disegno non
+  /// si scrive, o le voci non ci sono più.
+  const placing = (keys: readonly string[], drop: TreeDrop): Placing | DrawKey | null => {
+    const model = engine.model;
+    if (model === null || !editable() || !has("layers") || keys.length === 0) return null;
+    const outlined = outlineNow();
+    const host = outlined.byKey.get(drop.key);
+    if (host === undefined) return null;
+    const items: OutlineNode[] = [];
+    for (const key of keys) {
+      const item = outlined.byKey.get(key);
+      if (item === undefined) return null;
+      const refusal = treeShown?.refusals.get(key);
+      if (refusal !== undefined) return `draw.move.${refusal}`;
+      items.push(item);
+    }
+    // Un livello va solo fra i livelli, e da solo; un oggetto non va fra i
+    // livelli, ma dentro.
+    const layers = items[0]!.item.role === "layer";
+    const inside = drop.place === "top" || drop.place === "bottom";
+    if (items.some((item) => (item.item.role === "layer") !== layers) || (host.item.role === "layer" ? inside === layers : layers)) return "draw.move.layers";
+    const target = nodeOf(model, host.item);
+    const parent = inside ? target : target.parent;
+    if (parent === null || parent.kind !== "container") return null;
+    const moving = items.map((item) => nodeOf(model, item.item));
+    // Né dentro sé stesso, né dentro qualcosa di bloccato, né un
+    // collegamento dentro un altro.
+    let linked = false;
+    for (let at: ContainerNode | null = parent; at !== null && at !== model.root; at = at.parent) {
+      if (moving.includes(at)) return "draw.move.inside";
+      if (at.details?.locked === true) return at.details.role === "layer" ? "draw.move.into_layer_locked" : "draw.move.into_locked";
+      if (at.details?.role === "link") linked = true;
+    }
+    if (linked && moving.some((node) => holdsLink(node))) return "draw.move.link";
+    let at: Place;
+    if (drop.place === "top") at = "last";
+    else if (drop.place === "bottom") at = "first";
+    else if (drop.place === "before") at = { after: target };
+    else {
+      // Dietro a lui: dopo ciò che gli sta subito dietro.
+      const siblings = elementChildren(parent);
+      const behind = siblings[siblings.indexOf(target) - 1];
+      at = behind === undefined ? "first" : { after: behind };
+    }
+    return { moving, parent, at, layers };
+  };
+
+  /// Porta le voci `keys` dell'albero in `drop`, in un passo della
+  /// cronologia, e lo dice; la selezione le segue. Le chiavi di dopo, nello
+  /// stesso ordine; `null` se non si sono spostate, e si dice perché.
+  function moveRows(keys: readonly string[], drop: TreeDrop): readonly string[] | null {
+    const model = engine.model;
+    const plan = placing(keys, drop);
+    if (model === null || plan === null) return null;
+    if (typeof plan === "string") {
+      announce(t(plan));
+      return null;
+    }
+    cancelGesture();
+    const arranged = placeOps(model, plan.moving, plan.parent, plan.at, newIds());
+    if (arranged === null) {
+      announce(t("draw.move.flat"));
+      return null;
+    }
+    // Lasciato dov'era: niente da scrivere, e niente da dire.
+    if (arranged.ops.length === 0) return arranged.keys;
+    if (plan.layers) {
+      // Il livello corrente resta lui, anche se riceve un id.
+      const current = currentLayer();
+      const at = current === null ? -1 : keys.indexOf(keyOf(current));
+      if (!writeLayers("draw.action.layer_order", arranged, at < 0 ? null : arranged.keys[at] ?? null)) return null;
+    } else {
+      if (commit("draw.action.place", asGesture(arranged.ops)) === null) return null;
+      select(arranged.keys);
+    }
+    announceMove(arranged.keys);
+    return arranged.keys;
+  }
+
+  /// Dice dove sono arrivate le voci `keys`: un livello a che posto dalla
+  /// cima, un oggetto dentro che cosa e a che posto dal davanti.
+  const announceMove = (keys: readonly string[]): void => {
+    const outlined = outlineNow();
+    const first = outlined.byKey.get(keys[0] ?? "");
+    if (first === undefined) return;
+    const find = (list: readonly OutlineNode[], parent: OutlineNode | null): { readonly parent: OutlineNode | null; readonly list: readonly OutlineNode[] } | null => {
+      for (const node of list) {
+        if (node === first) return { parent, list };
+        const inner = find(node.children, node);
+        if (inner !== null) return inner;
+      }
+      return null;
+    };
+    const spot = find(outlined.nodes, null);
+    if (spot === null) return;
+    if (first.item.role === "layer") {
+      const layers = spot.list.filter((node) => node.item.role === "layer");
+      const layer = currentIndex().layers.find((each) => keyOf(each) === first.key);
+      const name = layer === undefined ? first.name ?? "" : layerTitle(layer);
+      announce(t("draw.layer.placed", { name, position: layers.length - layers.indexOf(first), total: layers.length }));
+      return;
+    }
+    const index = currentIndex();
+    const parent = spot.parent;
+    const layer = parent?.item.role === "layer" ? index.layers.find((each) => keyOf(each) === parent.key) : undefined;
+    const where = parent === null
+      ? t("draw.where.root")
+      : layer !== undefined
+        ? t("draw.where.layer", { name: layerTitle(layer) })
+        : t("draw.where.group", { name: describeNode(parent, index.get(parent.key) ?? undefined, false) });
+    // I posti si contano dal davanti, come le righe; più oggetti stanno
+    // vicini, dal più avanti.
+    const total = spot.list.length;
+    const front = outlined.byKey.get(keys[keys.length - 1] ?? "") ?? first;
+    const from = total - spot.list.indexOf(front);
+    announce(keys.length === 1
+      ? t("draw.placed", { name: describeNode(first, index.get(first.key) ?? undefined, false), where, position: from, total })
+      : plural(keys.length, "draw.placed.one", "draw.placed.other", { where, from, to: from + keys.length - 1, total }));
+  };
+
+  /// «Rinomina», e F2 sul foglio su un oggetto che non è un testo: il campo
+  /// del nome nell'albero, che si apre.
+  function renameSelection(): void {
+    if (!has("layers") || !editable()) return;
+    const units = selectedUnits();
+    if (units.length !== 1) {
+      announce(t("draw.rename.none"));
+      return;
+    }
+    if (tree.element.hidden) showObjects(true);
+    tree.rename(units[0]!.key);
   }
 
   /// Apre o chiude l'albero; aperto, il fuoco ci va.
@@ -6526,6 +6836,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const why: DrawKey = none ? "draw.selection.empty" : by === "tool" ? "draw.select.same_tool.none" : "draw.select.same.missing";
       items.push({ label: t(label), separator: at === 0, disabled: !usable, ...(usable ? {} : { description: t(why) }), run: () => selectSimilar(by) });
     });
+    if (has("layers")) {
+      // F2 sul foglio scrive un testo: per lui il tasto non vale.
+      const lone = units.length === 1;
+      const text = lone && units[0]!.look !== null && has("text");
+      items.push({
+        label: t("draw.rename"),
+        separator: true,
+        ...(lone && !text ? { hint: displayBinding("F2") } : {}),
+        disabled: !canEdit || !lone,
+        ...(canEdit && !lone ? { description: t("draw.rename.none") } : {}),
+        run: () => renameSelection(),
+      });
+    }
     const unlockable = canEdit && model !== null && flagged(model, isolatedNode(), "locked").length > 0;
     const showable = canEdit && model !== null && flagged(model, isolatedNode(), "hidden").length > 0;
     items.push(
@@ -7705,7 +8028,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// L'elenco dei tasti delle parti `at`, nei gruppi in cui si usano.
   /// I tasti della selezione avanzata.
   const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("selection")
@@ -7724,6 +8046,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// L'elenco dei tasti delle parti `at`, nei gruppi in cui si usano.
   const keyGroups = (at: ReadonlySet<Feature>): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: toolsOf(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
     {
@@ -7747,6 +8070,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["Delete", t("draw.delete")],
         ["Mod-a", t("draw.keys.all")],
         ["Escape", t("draw.keys.deselect")],
+        ...(at.has("layers")
+          ? [["F2", t("draw.keys.rename")] as const, ["Mod-f", t("draw.keys.filter")] as const, ["Alt-ArrowUp Alt-ArrowDown", t("draw.keys.step")] as const]
+          : []),
       ],
     },
     ...arrangeKeys(at),
@@ -8116,12 +8442,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
     if (event.defaultPrevented || event.target === titleInput || event.target === textInput) return;
-    // I pannelli delle proprietà e degli attributi tengono i loro tasti: un
-    // `?` o un Canc scritti in un valore restano lì, le frecce cambiano un
-    // numero, e un Canc sul pulsante che toglie un attributo non toglie
-    // l'oggetto. Passano i tasti che portano agli attributi e a «Trasforma»
-    // e, fuori da un campo di testo, annulla e ripeti.
-    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target))) {
+    // I pannelli delle proprietà e degli attributi, e i campi dell'albero (la
+    // ricerca, il tipo e il nome), tengono i loro tasti: un `?` o un Canc
+    // scritti in un valore restano lì, le frecce cambiano un numero, e un Canc
+    // sul pulsante che toglie un attributo non toglie l'oggetto. Passano i
+    // tasti che portano agli attributi e a «Trasforma» e, fuori da un campo
+    // di testo, annulla e ripeti.
+    const treeField = (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) && tree.element.contains(event.target);
+    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
       const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
@@ -8256,9 +8584,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (pressed === null && tool === "text") openText(cursorPoint(), "mouse");
       else if (pressed === null) press(event.timeStamp);
       else release();
-    } else if (onSurface && event.key === "F2" && has("text")) {
+    } else if (onSurface && event.key === "F2" && (has("text") || has("layers"))) {
       if (pressed !== null) return;
-      editSelectedText();
+      // Un testo si scrive; un altro oggetto, coi livelli, si rinomina.
+      const units = selectedUnits();
+      const text = units.length === 1 && units[0]!.look !== null;
+      if (has("layers") && editable() && !(text && has("text"))) renameSelection();
+      else editSelectedText();
     } else if (onSurface && event.key === "Enter") {
       if (pressed !== null) release();
       else if (drawing() !== null) {

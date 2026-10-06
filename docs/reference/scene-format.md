@@ -89,7 +89,7 @@ Radice di un documento nuovo:
 | `image` | `x y width height href preserveAspectRatio` | immagine incorporata o del vault |
 | `g` | — | livello o gruppo |
 | `a` | `href` | collegamento a un documento del vault |
-| `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto |
+| `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto; il primo `title` di un oggetto è il suo nome |
 
 **Attributi di presentazione ammessi:**
 

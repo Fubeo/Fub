@@ -4,8 +4,8 @@
 // Il dato è quello della scena, le voci in ordine di documento che il lettore
 // ricava dal testo: lo stesso per l'editor e per un documento che si guarda
 // soltanto, e nessun secondo calcolo. Un nome dice che cosa è l'oggetto e,
-// quando lo sa, come si chiama: il `title` di un gruppo, le parole di un
-// testo, il nome di un livello. Un collegamento dice anche dove porta, col
+// quando lo sa, come si chiama: il suo `title`, o le parole di un testo, o
+// il nome di un livello. Un collegamento dice anche dove porta, col
 // nome della nota. Lo stato di un livello è una parola, non un colore. Il
 // colore di un oggetto lo aggiunge chi lo conosce: l'editor, che ha il
 // painter.
@@ -24,8 +24,8 @@ export interface OutlineNode {
   readonly item: ElementItem;
   /// La chiave con cui l'editor sceglie l'oggetto: l'id, o `@` e il percorso.
   readonly key: string;
-  /// Il nome proprio: il `title` dell'oggetto, il testo, il nome del livello;
-  /// `null` se non ne ha.
+  /// Il nome proprio: il nome del livello, il `title` dell'oggetto, le parole
+  /// di un testo; `null` se non ne ha.
   readonly name: string | null;
   /// Dove porta un collegamento: il percorso del vault com'è scritto nel suo
   /// `href`. `null` per ogni altro oggetto, e per un collegamento che non
@@ -96,15 +96,16 @@ function nameOf(text: string): string | null {
 interface Building {
   readonly item: ElementItem;
   readonly key: string;
-  name: string | null;
+  readonly name: string | null;
   readonly target: string | null;
   readonly children: Building[];
 }
 
 /// Gli oggetti di `items` in albero: i figli della radice in cima, e sotto
 /// ciascun contenitore i suoi. Titolo, descrizione e carta non sono oggetti:
-/// il `title` di un contenitore ne diventa il nome. `targets` dice dove
-/// portano i collegamenti.
+/// il primo `title` di un oggetto ne è il nome, anche al posto delle parole
+/// di un testo, perché è il nome che qualcuno gli ha dato; un livello tiene
+/// il suo, se ne ha uno. `targets` dice dove portano i collegamenti.
 export function outline(items: readonly Item[], targets: LinkTargets = () => null): OutlineNode[] {
   const top: Building[] = [];
   const byPath = new Map<string, Building>();
@@ -112,13 +113,12 @@ export function outline(items: readonly Item[], targets: LinkTargets = () => nul
     if (item.kind !== "element" || item.path.length === 0) continue;
     const parent = item.path.length === 1 ? null : byPath.get(item.path.slice(0, -1).join("."));
     if (item.path.length > 1 && parent === undefined) continue;
-    if (NOT_OBJECTS.has(item.role)) {
-      if (item.role === "title" && parent !== null && parent !== undefined && parent.name === null) parent.name = nameOf(item.text ?? "");
-      continue;
-    }
-    const node: Building = { item, key: keyOf(item), name: null, target: item.role === "link" ? targets(item) : null, children: [] };
-    if (item.role === "layer") node.name = nameOf(item.layer?.name ?? "");
-    else if (item.role === "text") node.name = nameOf((item.lines ?? []).join(" "));
+    if (NOT_OBJECTS.has(item.role)) continue;
+    const title = nameOf(item.title ?? "");
+    const name = item.role === "layer"
+      ? nameOf(item.layer?.name ?? "") ?? title
+      : title ?? (item.role === "text" ? nameOf((item.lines ?? []).join(" ")) : null);
+    const node: Building = { item, key: keyOf(item), name, target: item.role === "link" ? targets(item) : null, children: [] };
     byPath.set(item.path.join("."), node);
     (parent?.children ?? top).push(node);
   }

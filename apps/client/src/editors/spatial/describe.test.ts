@@ -75,6 +75,24 @@ group("l'albero degli oggetti", () => {
     expect(describe(rect, { color: "Blu" })).toBe("Rettangolo, Blu");
   });
 
+  it("nomina un oggetto col suo primo `title`, anche al posto delle parole di un testo", () => {
+    const source = doc(
+      '<g id="l1" fub:layer="Disegno"><title>Ignorato</title>' +
+        '<rect id="o1" width="1" height="1"><title>Tetto</title><title>Secondo</title></rect>' +
+        '<text id="t1"><title>Insegna</title><tspan>Bar</tspan></text>' +
+        '<text id="t2"><title> </title><tspan>Bar</tspan></text>' +
+        "</g>" +
+        '<g id="l2" fub:layer=""><title>Appunti</title></g>',
+    );
+    expect(labels(outline(readScene(source).items))).toEqual([
+      "Livello «Disegno»",
+      "  Rettangolo «Tetto»",
+      "  Testo «Insegna»",
+      "  Testo «Bar»",
+      "Livello «Appunti»",
+    ]);
+  });
+
   it("taglia un testo lungo con i puntini", () => {
     const long = "parola ".repeat(20);
     const node = outline(readScene(doc(`<text><tspan>${long}</tspan></text>`)).items)[0]!;

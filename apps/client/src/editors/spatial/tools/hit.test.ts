@@ -89,6 +89,32 @@ describe("il riquadro di tutto il disegno", () => {
   });
 });
 
+describe("il riquadro di una miniatura", () => {
+  const FRAMED = doc(
+    '<g id="l1" fub:layer="Nascosto" transform="translate(100 0)" display="none">'
+      + '<g id="g" transform="scale(2)" stroke="#000000" stroke-width="2" display="none">'
+      + '<rect id="r" x="0" y="0" width="10" height="10"/><rect id="off" x="50" y="50" width="5" height="5" display="none"/></g>'
+      + '<g id="odd" visibility="hidden"><rect id="inner" x="0" y="0" width="5" height="5"/></g></g>',
+  );
+
+  it("è ciò che l'oggetto disegna nella scena, contorno compreso, anche se lui o chi lo contiene è nascosto", () => {
+    const opened = open(FRAMED);
+    expect(opened.frame("r")).toEqual({ min: [98, -2], max: [122, 22] });
+    expect(opened.frame("off")).toEqual({ min: [198, 98], max: [212, 112] });
+  });
+
+  it("non conta ciò che è nascosto dentro di lui", () => {
+    const opened = open(FRAMED);
+    expect(opened.frame("g")).toEqual({ min: [98, -2], max: [122, 22] });
+    // Il livello ha dentro solo il gruppo nascosto, e ciò che non sa leggere.
+    expect(opened.frame("l1")).toBeNull();
+  });
+
+  it("non c'è per ciò che il disegno non sa leggere", () => {
+    expect(open(FRAMED).frame("inner")).toBeNull();
+  });
+});
+
 describe("i collegamenti che si vedono", () => {
   it("ci sono a ogni profondità e anche nei livelli bloccati, ma non in ciò che è nascosto", () => {
     const opened = open(doc(

@@ -1612,8 +1612,30 @@ html, body, #app {
 .draw-objects-title {
   margin: 0;
 }
-.draw-objects-empty {
+.draw-objects-empty,
+.draw-objects-status {
+  flex: none;
   margin: 0;
+}
+/* Il filtro, sotto il titolo: la ricerca prende il posto che resta, il tipo
+   quello che gli serve, e ciascuno è un bersaglio da 44 px. */
+.draw-objects-filter {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.draw-objects-search,
+.draw-objects-kind {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-objects-search {
+  flex: 1;
+}
+.draw-objects-kind {
+  flex: none;
+  max-width: 50%;
 }
 .draw-objects-scroll {
   flex: 1;
@@ -1625,11 +1647,14 @@ html, body, #app {
   position: relative;
 }
 .draw-object {
+  position: relative;
   display: flex;
   align-items: center;
   box-sizing: border-box;
   min-height: 44px;
   cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 .draw-objects-tree[data-virtual] > .draw-object {
   position: absolute;
@@ -1651,6 +1676,28 @@ html, body, #app {
   width: 1.75em;
   text-align: center;
 }
+/* La miniatura, fra il segno della scelta e il nome: un quadrato con
+   dentro, intero, ciò che la riga disegna. Una riga senza miniatura ne tiene
+   il posto, perché i nomi stiano in colonna. I colori sono quelli del
+   disegno, anche coi colori forzati. */
+.draw-object-thumb {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  forced-color-adjust: none;
+}
+.draw-object-thumb > svg,
+.draw-object-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 .draw-object-label {
   flex: 1;
   min-width: 0;
@@ -1666,6 +1713,18 @@ html, body, #app {
 .draw-object-signs {
   display: flex;
   flex: none;
+  order: 1;
+}
+/* Il campo del nome prende il posto del nome, prima dei segni: sta in fondo
+   alla riga per l'albero, che ne tiene ferme le prime parti. */
+.draw-object[data-renaming] > .draw-object-label {
+  display: none;
+}
+.draw-object-rename {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
 }
 .draw-object-sign {
   display: flex;
@@ -1688,6 +1747,47 @@ html, body, #app {
 .draw-object[data-toggles]:hover .draw-object-sign:not([data-on]),
 .draw-object[data-toggles][data-active] .draw-object-sign:not([data-on]) {
   opacity: 0.45;
+}
+/* Trascinando, dove andrebbe ciò che si sposta: una linea fra due righe,
+   rientrata quanto il contenitore che lo riceve (`--draw-drop-depth`,
+   scritto dall'albero), o la riga che lo accoglie, contornata. Le righe che
+   si spostano restano al loro posto, sbiadite; accanto al puntatore, il
+   loro nome. */
+.draw-object[data-drop="before"]::before,
+.draw-object[data-drop="after"]::after {
+  position: absolute;
+  inset-inline: calc(var(--draw-drop-depth, 0) * 1.25em) 0;
+  height: 2px;
+  content: "";
+  pointer-events: none;
+}
+.draw-object[data-drop="before"]::before {
+  top: -1px;
+}
+.draw-object[data-drop="after"]::after {
+  bottom: -1px;
+}
+.draw-object[data-moving] {
+  opacity: 0.5;
+}
+.draw-objects-tree[data-dragging],
+.draw-objects-tree[data-dragging] * {
+  cursor: grabbing;
+}
+.draw-objects-tree[data-dragging][data-refused],
+.draw-objects-tree[data-dragging][data-refused] * {
+  cursor: no-drop;
+}
+.draw-objects-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-menu);
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 /* Gli attributi: una tabella col nome, il valore e il pulsante che lo
    toglie. Il nome va a capo dove serve; il valore prende il resto, e il campo
@@ -2019,6 +2119,23 @@ textarea.draw-properties-input {
     border: 1px solid ButtonText;
     background: ButtonFace;
     color: ButtonText;
+  }
+  /* La miniatura tiene i colori del disegno, ma il suo bordo è quello del
+     testo; la linea di dove va ciò che si trascina, quella della scelta. */
+  .draw-object-thumb:not([data-empty]) {
+    border: 1px solid CanvasText;
+  }
+  .draw-object[data-drop="before"]::before,
+  .draw-object[data-drop="after"]::after {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+  .draw-object[data-drop="inside"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .draw-objects-ghost {
+    border: 1px solid CanvasText;
   }
   /* Il tratto e il riempimento dell'SVG non si forzano da soli: le guide
      prendono il colore dei collegamenti, distinto da quello della

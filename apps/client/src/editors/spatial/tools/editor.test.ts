@@ -42,7 +42,9 @@ function mount(source = SOURCE, options: DrawEditorOptions = {}): DrawEditor {
 }
 
 const surface = (): HTMLElement => host.querySelector<HTMLElement>(".draw-surface")!;
-const spoken = (): string => (host.querySelector('[role="status"]')?.textContent ?? "").trim();
+/// Ciò che l'editor ha detto per ultimo, dalla sua regione viva: l'albero ha
+/// la sua riga di stato.
+const spoken = (): string => (host.querySelector('.sr-only[role="status"]')?.textContent ?? "").trim();
 
 /// Un trascinamento col mouse, sullo schermo: la camera parte dall'identità,
 /// quindi i punti sono anche quelli della scena.
@@ -824,8 +826,8 @@ describe("i collegamenti a una nota", () => {
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     expect([...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent)).toEqual([
       "Livello «Livello 1»",
-      "Collegamento a «Ciclo dell'acqua», 1 oggetto",
       "Rettangolo, Nero",
+      "Collegamento a «Ciclo dell'acqua», 1 oggetto",
     ]);
   });
 
@@ -914,17 +916,18 @@ describe("i livelli, dal livello Standard", () => {
     mount(TWO, { level: "standard" });
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     const labels = (): string[] => [...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent ?? "");
-    expect(labels()).toEqual(["Livello «Sfondo»", "Rettangolo, Blu", "Livello «Note», corrente", "Rettangolo, Nero"]);
+    // Dal davanti: il livello sopra è in cima.
+    expect(labels()).toEqual(["Livello «Note», corrente", "Rettangolo, Nero", "Livello «Sfondo»", "Rettangolo, Blu"]);
     editor.select([A]);
     expect(shownName()).toBe("Sfondo");
-    expect(labels()).toEqual(["Livello «Sfondo», corrente", "Rettangolo, Blu", "Livello «Note»", "Rettangolo, Nero"]);
+    expect(labels()).toEqual(["Livello «Note»", "Rettangolo, Nero", "Livello «Sfondo», corrente", "Rettangolo, Blu"]);
     // Oggetti di due livelli non cambiano il livello corrente.
     editor.select([A, B]);
     expect(shownName()).toBe("Sfondo");
     editor.select([B]);
     expect(shownName()).toBe("Note");
     editor.setLevel("essential");
-    expect(labels()).toEqual(["Livello «Sfondo»", "Rettangolo, Blu", "Livello «Note»", "Rettangolo, Nero"]);
+    expect(labels()).toEqual(["Livello «Note»", "Rettangolo, Nero", "Livello «Sfondo»", "Rettangolo, Blu"]);
   });
 
   it("un livello nuovo sopra quello corrente, rinominato, nascosto e mostrato: un passo di annulla ciascuno", async () => {
@@ -2072,9 +2075,11 @@ describe("il testo, dal livello Standard", () => {
     key("Escape", {}, input());
     editor.select(["oa1a1a1a1"]);
     expect(edit.hidden).toBe(true);
+    // Su un oggetto che non è un testo, F2 apre il suo nome nell'albero.
     key("F2");
     expect(layer().hidden).toBe(true);
-    expect(spoken()).toBe("Scegli un testo da modificare.");
+    expect(document.activeElement).toBe(host.querySelector(".draw-object-rename"));
+    key("Escape", {}, document.activeElement as HTMLElement);
     expect(changes).toEqual([]);
     editor.setLevel("essential");
     editor.select([T]);
@@ -2756,6 +2761,7 @@ describe("da tastiera", () => {
     }));
     expect(tables.map((table) => table.caption)).toEqual([
       "Strumenti · dal livello Standard",
+      "Oggetti · dal livello Standard",
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
       "Testo · dal livello Standard",
@@ -2771,8 +2777,14 @@ describe("da tastiera", () => {
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[1]!.rows).toContainEqual(["Ctrl+D", "Duplica"]);
-    expect(tables[2]!.rows).toEqual([
+    // Dell'albero, il nome, la ricerca e il passo.
+    expect(tables[1]!.rows).toEqual([
+      ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
+      ["Ctrl+F", "Nell’albero, porta alla ricerca fra gli oggetti"],
+      ["Alt+↑ o Alt+↓", "Nell’albero porta la riga di un passo, davanti o dietro, dentro o fuori da un gruppo"],
+    ]);
+    expect(tables[2]!.rows).toContainEqual(["Ctrl+D", "Duplica"]);
+    expect(tables[3]!.rows).toEqual([
       ["Ctrl", "Tenuto col clic, sceglie l’oggetto dentro il gruppo"],
       ["Ctrl+Enter", "Isola il gruppo scelto"],
       ["Esc", "Esce dal gruppo isolato, un gruppo alla volta"],
@@ -2780,8 +2792,8 @@ describe("da tastiera", () => {
       ["Ctrl+Shift+H", "Nasconde la selezione; nell’albero nasconde o mostra la riga"],
       ["Shift+F10", "Apre il menu della selezione"],
     ]);
-    expect(tables[4]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[5]!.rows).toEqual([
+    expect(tables[5]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[6]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
@@ -3175,7 +3187,7 @@ describe("l'albero degli oggetti", () => {
     button().click();
     editor.setTool("ellipse");
     drag([[10, 10], [50, 30]]);
-    expect(labels()).toEqual(["Livello «Livello 1»", "Rettangolo, Nero", "Ellisse, Nero"]);
+    expect(labels()).toEqual(["Livello «Livello 1»", "Ellisse, Nero", "Rettangolo, Nero"]);
     editor.select(["o1a2b3c4d"]);
     editor.deleteSelection();
     expect(labels()).toEqual(["Livello «Livello 1»", "Ellisse, Nero"]);
@@ -3190,6 +3202,382 @@ describe("l'albero degli oggetti", () => {
     dialog().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     tree().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
+  });
+});
+
+describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
+  const NAMED = doc(`${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/><rect x="40" y="10" width="20" height="20" fill="#0072b2"/></g>`);
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!;
+  const tree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
+  const labels = (): string[] => [...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent ?? "");
+  const field = (): HTMLInputElement | null => host.querySelector<HTMLInputElement>(".draw-object-rename");
+  const inTree = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, tree());
+  const activeKey = (): string | undefined => document.getElementById(tree().getAttribute("aria-activedescendant") ?? "")?.dataset.key;
+
+  /// Scrive `text` nel campo del nome aperto e lo conferma con Invio.
+  function rename(text: string): void {
+    const input = field()!;
+    input.value = text;
+    key("Enter", {}, input);
+  }
+
+  it("F2 sulla riga dà all'oggetto il suo nome, il primo `title`, in un passo che si annulla; vuoto lo toglie", () => {
+    mount(NAMED, { level: "standard" });
+    button().click();
+    // Dal davanti: in cima il rettangolo che il documento ha per ultimo.
+    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Rettangolo, Blu", "Rettangolo, Nero"]);
+    inTree("End");
+    expect(editor.selection).toEqual(["oa1a1a1a1"]);
+    expect(inTree("F2").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(field());
+    expect(field()!.value).toBe("");
+    expect(field()!.getAttribute("aria-label")).toBe("Nome di Rettangolo, Nero");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    rename("  Tetto ");
+    expect(editor.engine.text).toMatch(/<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000">\s*<title>Tetto<\/title>\s*<\/rect>/);
+    expect(spoken()).toBe("Ora si chiama «Tetto».");
+    expect(labels()[2]).toBe("Rettangolo «Tetto», Nero");
+    expect(document.activeElement).toBe(tree());
+    expect(activeKey()).toBe("oa1a1a1a1");
+    expect(editor.selection).toEqual(["oa1a1a1a1"]);
+    editor.undo();
+    expect(editor.engine.text).toBe(NAMED);
+    expect(spoken()).toBe("Annullato: Nome.");
+    editor.redo();
+    tree().focus();
+    inTree("F2");
+    expect(field()!.value).toBe("Tetto");
+    rename("");
+    // Il rettangolo torna com'era, su una riga sua come ogni elemento riscritto.
+    expect(editor.engine.text).toContain('<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/>');
+    expect(editor.engine.text).not.toContain("<title>");
+    expect(spoken()).toBe("Nome tolto: ora è Rettangolo, Nero.");
+    expect(changes.map((change) => change.origin)).toEqual(["input", "undo", "redo", "input"]);
+  });
+
+  it("un oggetto senza id ne riceve uno, e resta scelto e sulla riga attiva", () => {
+    mount(NAMED, { level: "standard" });
+    button().click();
+    inTree("ArrowDown");
+    expect(editor.selection[0]).toMatch(/^@/);
+    inTree("F2");
+    rename("Finestra");
+    const [now] = editor.selection;
+    expect(now).toMatch(/^o[a-z0-9]{8}$/);
+    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${now}" x="40" y="10" width="20" height="20" fill="#0072b2">\\s*<title>Finestra</title>`));
+    expect(activeKey()).toBe(now);
+  });
+
+  it("un livello si rinomina da qui, e non resta senza nome", () => {
+    mount(NAMED, { level: "standard" });
+    button().click();
+    inTree("F2");
+    expect(field()!.value).toBe("Livello 1");
+    expect(field()!.maxLength).toBe(80);
+    rename("Disegno");
+    expect(editor.engine.text).toContain('<g id="l1" fub:layer="Disegno">');
+    expect(spoken()).toBe("Il livello ora si chiama «Disegno».");
+    expect(labels()[0]).toBe("Livello «Disegno», corrente");
+    inTree("F2");
+    rename("   ");
+    expect(spoken()).toBe("Un livello ha sempre un nome: resta quello di prima.");
+    expect(editor.engine.text).toContain('<g id="l1" fub:layer="Disegno">');
+    // Esc lascia il nome com'era.
+    inTree("F2");
+    field()!.value = "Altro";
+    key("Escape", {}, field()!);
+    expect(editor.engine.text).toContain('<g id="l1" fub:layer="Disegno">');
+    expect(document.activeElement).toBe(tree());
+  });
+
+  it("dice perché non rinomina un oggetto bloccato, dentro qualcosa di bloccato o in un livello bloccato, o che non sa riscrivere", () => {
+    const INKSCAPE = "http://www.inkscape.org/namespaces/inkscape";
+    mount(
+      doc(
+        `${LAYER}<rect id="oa1a1a1a1" width="10" height="10" fub:locked="true"/>` +
+          `<g id="og1g1g1g1" fub:locked="true"><rect id="ob2b2b2b2" width="10" height="10"/></g>` +
+          `<rect id="oc3c3c3c3" xmlns:inkscape="${INKSCAPE}" inkscape:label="Tetto" width="10" height="10"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    button().click();
+    inTree("ArrowDown");
+    expect(activeKey()).toBe("oc3c3c3c3");
+    inTree("F2");
+    expect(field()).toBeNull();
+    expect(spoken()).toBe("Ha parti che il disegno non sa riscrivere: il suo nome resta com’è.");
+    inTree("ArrowDown");
+    inTree("F2");
+    expect(spoken()).toBe("È bloccato: sbloccalo per cambiargli il nome.");
+    inTree("ArrowRight");
+    inTree("ArrowRight");
+    expect(activeKey()).toBe("ob2b2b2b2");
+    inTree("F2");
+    expect(spoken()).toBe("Ciò che lo contiene è bloccato: sbloccalo prima di cambiargli il nome.");
+    inTree("End");
+    inTree("F2");
+    expect(spoken()).toBe("È bloccato: sbloccalo per cambiargli il nome.");
+    expect(field()).toBeNull();
+    expect(changes).toEqual([]);
+
+    editor.dispose();
+    mount(doc(`${LAYER.replace(">", ' fub:locked="true">')}<rect id="oa1a1a1a1" width="10" height="10"/></g>`), { level: "standard" });
+    button().click();
+    inTree("ArrowDown");
+    inTree("F2");
+    expect(spoken()).toBe("Il suo livello è bloccato: sblocca il livello per cambiargli il nome.");
+    // Il livello bloccato, lui, si rinomina.
+    inTree("Home");
+    inTree("F2");
+    expect(field()!.value).toBe("Livello 1");
+  });
+
+  it("F2 sul foglio e «Rinomina» nel menu della selezione aprono il nome nell'albero", () => {
+    mount(NAMED, { level: "standard" });
+    editor.select(["oa1a1a1a1"]);
+    surface().focus();
+    expect(key("F2").defaultPrevented).toBe(true);
+    expect(host.querySelector<HTMLElement>(".draw-objects")!.hidden).toBe(false);
+    expect(document.activeElement).toBe(field());
+    expect(field()!.closest('[data-key="oa1a1a1a1"]')).not.toBeNull();
+    key("Escape", {}, field()!);
+    surface().focus();
+    key("a", { ctrlKey: true });
+    key("F2");
+    expect(spoken()).toBe("Scegli un oggetto solo per cambiargli il nome.");
+    expect(field()).toBeNull();
+    editor.select(["oa1a1a1a1"]);
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!.click();
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    const rename = [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === "Rinomina")!;
+    expect(rename.querySelector(".menu-hint")?.textContent).toBe("F2");
+    rename.click();
+    expect(document.activeElement).toBe(field());
+    expect(changes).toEqual([]);
+  });
+
+  it("il filtro c'è coi livelli, e scriverci non comanda il foglio", () => {
+    mount(NAMED, { level: "standard" });
+    button().click();
+    const filter = host.querySelector<HTMLElement>(".draw-objects-filter")!;
+    const search = host.querySelector<HTMLInputElement>(".draw-objects-search")!;
+    expect(filter.hidden).toBe(false);
+    const tool = editor.tool;
+    search.focus();
+    expect(key("r", {}, search).defaultPrevented).toBe(false);
+    expect(key("Delete", {}, search).defaultPrevented).toBe(false);
+    expect(editor.tool).toBe(tool);
+    search.value = "blu";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Rettangolo, Blu"]);
+    expect(host.querySelector(".draw-objects-status")!.textContent).toBe("1 oggetto trovato.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Un oggetto nuovo che il filtro trova ci entra.
+    editor.setTool("rect");
+    drag([[100, 100], [120, 120]]);
+    expect(host.querySelector(".draw-objects-status")!.textContent).toBe("1 oggetto trovato.");
+    editor.setLevel("essential");
+    expect(filter.hidden).toBe(true);
+    expect(search.value).toBe("");
+    expect(labels()).toHaveLength(4);
+    // Senza i livelli niente nomi: F2 nell'albero passa.
+    tree().focus();
+    expect(inTree("F2").defaultPrevented).toBe(false);
+    expect(changes.map((change) => change.origin)).toEqual(["input"]);
+  });
+});
+
+describe("spostare dall'albero, dal livello Standard", () => {
+  // Dal davanti: «Sopra» col cerchio, poi «Livello 1» con c, il gruppo g
+  // (chiuso, con b) e a.
+  const STACKED = doc(
+    `${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/>`
+      + '<g id="og1g1g1g1" transform="translate(50 0)"><rect id="ob2b2b2b2" x="0" y="0" width="10" height="10" fill="#000000"/></g>'
+      + '<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#0072b2"/></g>'
+      + '<g id="l2" fub:layer="Sopra"><circle id="od4d4d4d4" cx="5" cy="5" r="4" fill="#000000"/></g>',
+  );
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!;
+  const tree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
+  const keys = (): string[] => [...host.querySelectorAll<HTMLElement>(".draw-object")].map((row) => row.dataset.key ?? "");
+  const inTree = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, tree());
+  const activeKey = (): string | undefined => document.getElementById(tree().getAttribute("aria-activedescendant") ?? "")?.dataset.key;
+  /// Gli id degli elementi del disegno, in ordine di documento.
+  const order = (): string[] => [...editor.engine.text.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]!);
+  const parentOf = (id: string): string | null => editor.engine.holder(id)?.parent?.facts.id ?? null;
+
+  /// Apre l'albero con la riga `key` attiva e scelta.
+  function openAt(id: string): void {
+    button().click();
+    (document.activeElement as HTMLElement).blur();
+    editor.select([id]);
+    tree().focus();
+    expect(activeKey()).toBe(id);
+  }
+
+  it("Alt+↓ porta l'oggetto dietro a ciò che ha dietro, in un passo che si annulla, e dice dove è arrivato", () => {
+    mount(STACKED, { level: "standard" });
+    openAt("oc3c3c3c3");
+    expect(keys()).toEqual(["l2", "od4d4d4d4", "l1", "oc3c3c3c3", "og1g1g1g1", "oa1a1a1a1"]);
+    expect(inTree("ArrowDown", { altKey: true }).defaultPrevented).toBe(true);
+    // Oltre il gruppo chiuso: fra a e il gruppo.
+    expect(order()).toEqual(["l1", "oa1a1a1a1", "oc3c3c3c3", "og1g1g1g1", "ob2b2b2b2", "l2", "od4d4d4d4"]);
+    expect(spoken()).toBe("Rettangolo, Blu nel livello «Livello 1», al posto 2 di 3 dal davanti.");
+    expect(keys()).toEqual(["l2", "od4d4d4d4", "l1", "og1g1g1g1", "oc3c3c3c3", "oa1a1a1a1"]);
+    expect(editor.selection).toEqual(["oc3c3c3c3"]);
+    expect(activeKey()).toBe("oc3c3c3c3");
+    expect(document.activeElement).toBe(tree());
+    editor.undo();
+    expect(editor.engine.text).toBe(STACKED);
+    expect(spoken()).toBe("Annullato: Riordino.");
+    editor.redo();
+    expect(order()).toEqual(["l1", "oa1a1a1a1", "oc3c3c3c3", "og1g1g1g1", "ob2b2b2b2", "l2", "od4d4d4d4"]);
+    expect(changes.map((change) => change.origin)).toEqual(["input", "undo", "redo"]);
+  });
+
+  it("entra in un gruppo aperto restando dov'era sul foglio, ne esce, e passa al livello accanto", () => {
+    mount(STACKED, { level: "standard" });
+    openAt("oc3c3c3c3");
+    inTree("ArrowDown");
+    inTree("ArrowRight");
+    inTree("ArrowUp");
+    expect(activeKey()).toBe("oc3c3c3c3");
+    inTree("ArrowDown", { altKey: true });
+    expect(parentOf("oc3c3c3c3")).toBe("og1g1g1g1");
+    // Il gruppo è spostato di 50: il rettangolo lo compensa.
+    expect(editor.engine.text).toContain('<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#0072b2" transform="matrix(1 0 0 1 -50 0)"/>');
+    expect(spoken()).toMatch(/^Rettangolo, Blu dentro Gruppo.*, al posto 1 di 2 dal davanti\.$/);
+    expect(activeKey()).toBe("oc3c3c3c3");
+    // Davanti a tutto nel gruppo: Alt+↑ lo porta fuori, davanti al gruppo.
+    inTree("ArrowUp", { altKey: true });
+    expect(parentOf("oc3c3c3c3")).toBe("l1");
+    expect(order().slice(0, 5)).toEqual(["l1", "oa1a1a1a1", "og1g1g1g1", "ob2b2b2b2", "oc3c3c3c3"]);
+    expect(editor.engine.text).toContain('<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#0072b2"/>');
+    // Davanti a tutto nel livello: nel livello sopra, dietro a ciò che c'è.
+    inTree("ArrowUp", { altKey: true });
+    expect(parentOf("oc3c3c3c3")).toBe("l2");
+    expect(order()).toEqual(["l1", "oa1a1a1a1", "og1g1g1g1", "ob2b2b2b2", "l2", "oc3c3c3c3", "od4d4d4d4"]);
+    expect(spoken()).toBe("Rettangolo, Blu nel livello «Sopra», al posto 2 di 2 dal davanti.");
+    inTree("ArrowUp", { altKey: true });
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("È già davanti a tutto.");
+    expect(changes).toHaveLength(4);
+  });
+
+  it("un livello va sopra o sotto gli altri, e resta il livello corrente", () => {
+    mount(STACKED, { level: "standard" });
+    button().click();
+    inTree("Home");
+    expect(activeKey()).toBe("l2");
+    const current = host.querySelector(".draw-layer-button")?.textContent;
+    inTree("ArrowDown", { altKey: true });
+    expect(order()).toEqual(["l2", "od4d4d4d4", "l1", "oa1a1a1a1", "og1g1g1g1", "ob2b2b2b2", "oc3c3c3c3"]);
+    expect(spoken()).toBe("«Sopra» ora è al posto 2 di 2 dall’alto.");
+    expect(keys().filter((each) => each.startsWith("l"))).toEqual(["l1", "l2"]);
+    expect(activeKey()).toBe("l2");
+    expect(host.querySelector(".draw-layer-button")?.textContent).toBe(current);
+    inTree("ArrowDown", { altKey: true });
+    expect(spoken()).toBe("È già l’ultimo livello.");
+    editor.undo();
+    expect(editor.engine.text).toBe(STACKED);
+    expect(spoken()).toBe("Annullato: Ordine dei livelli.");
+  });
+
+  it("dice perché non sposta ciò che è bloccato, o dentro qualcosa di bloccato; non entra in un livello bloccato", () => {
+    mount(
+      doc(
+        `${LAYER.replace(">", ' fub:locked="true">')}<rect id="oe5e5e5e5" width="10" height="10"/></g>`
+          + `<g id="l2" fub:layer="Sopra"><rect id="oa1a1a1a1" width="10" height="10" fub:locked="true"/>`
+          + `<g id="og1g1g1g1" fub:locked="true"><rect id="ob2b2b2b2" width="10" height="10"/></g>`
+          + `<rect id="oc3c3c3c3" width="10" height="10"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    button().click();
+    expect(keys()).toEqual(["l2", "oc3c3c3c3", "og1g1g1g1", "oa1a1a1a1", "l1", "oe5e5e5e5"]);
+    inTree("End");
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("Il suo livello è bloccato: sblocca il livello per spostarlo.");
+    inTree("ArrowUp");
+    inTree("ArrowUp");
+    expect(activeKey()).toBe("oa1a1a1a1");
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("È bloccato: sbloccalo per spostarlo.");
+    inTree("ArrowUp");
+    inTree("ArrowRight");
+    inTree("ArrowRight");
+    expect(activeKey()).toBe("ob2b2b2b2");
+    inTree("ArrowUp", { altKey: true });
+    expect(spoken()).toBe("Ciò che lo contiene è bloccato: sbloccalo prima di spostarlo.");
+    inTree("Home");
+    inTree("ArrowDown");
+    expect(activeKey()).toBe("oc3c3c3c3");
+    // Davanti a tutto, sopra non c'è niente; il gruppo bloccato si scavalca.
+    inTree("ArrowDown", { altKey: true });
+    expect(order().indexOf("oc3c3c3c3")).toBeLessThan(order().indexOf("og1g1g1g1"));
+    expect(parentOf("oc3c3c3c3")).toBe("l2");
+    inTree("ArrowDown", { altKey: true });
+    inTree("ArrowDown", { altKey: true });
+    expect(spoken()).toBe("Lì non va: quel livello è bloccato.");
+    expect(parentOf("oc3c3c3c3")).toBe("l2");
+    expect(changes).toHaveLength(2);
+  });
+
+  it("un collegamento non entra in un altro collegamento: Alt lo porta oltre", () => {
+    mount(
+      doc(
+        `${LAYER}<a id="ol1l1l1l1" href="Note/uno.md"><rect id="oa1a1a1a1" width="10" height="10"/></a>`
+          + `<a id="ol2l2l2l2" href="Note/due.md"><rect id="ob2b2b2b2" width="10" height="10"/></a></g>`,
+      ),
+      { level: "standard" },
+    );
+    openAt("ol2l2l2l2");
+    inTree("ArrowDown");
+    inTree("ArrowRight");
+    expect(activeKey()).toBe("ol1l1l1l1");
+    expect(keys()).toEqual(["l1", "ol2l2l2l2", "ol1l1l1l1", "oa1a1a1a1"]);
+    inTree("ArrowUp");
+    expect(activeKey()).toBe("ol2l2l2l2");
+    inTree("ArrowDown", { altKey: true });
+    expect(parentOf("ol2l2l2l2")).toBe("l1");
+    expect(order()).toEqual(["l1", "ol2l2l2l2", "ob2b2b2b2", "ol1l1l1l1", "oa1a1a1a1"]);
+  });
+
+  it("le righe hanno la miniatura di ciò che disegnano, e la rifanno quando cambia", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const frame = (): void => {
+      for (const callback of frames.splice(0)) callback(0);
+    };
+    mount(STACKED, { level: "standard" });
+    openAt("oc3c3c3c3");
+    frame();
+    const thumb = (id: string): Element | null => host.querySelector(`.draw-object[data-key="${id}"] .draw-object-thumb > svg`);
+    // Un oggetto inquadrato su di sé, un livello sulla pagina.
+    const viewBox = (id: string): number[] => thumb(id)!.getAttribute("viewBox")!.split(" ").map(Number);
+    viewBox("oc3c3c3c3").forEach((value, at) => expect(value).toBeCloseTo([68.8, 8.8, 22.4, 22.4][at]!, 9));
+    viewBox("l1").forEach((value, at) => expect(value).toBeCloseTo([-6, -6, 112, 112][at]!, 9));
+    expect(thumb("oc3c3c3c3")!.querySelector("rect")!.getAttribute("fill")).toBe("#0072b2");
+    expect(thumb("og1g1g1g1")!.querySelectorAll("rect")).toHaveLength(1);
+    const before = thumb("og1g1g1g1");
+    inTree("ArrowDown");
+    inTree("ArrowRight");
+    inTree("ArrowUp");
+    inTree("ArrowDown", { altKey: true });
+    frame();
+    expect(thumb("og1g1g1g1")).not.toBe(before);
+    expect(thumb("og1g1g1g1")!.querySelectorAll("rect")).toHaveLength(2);
+    expect(host.querySelector(".draw-object-thumb > svg [data-scene-id]")).toBeNull();
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("all'Essenziale l'albero non sposta e non ha miniature", () => {
+    mount(STACKED);
+    openAt("oc3c3c3c3");
+    inTree("ArrowDown", { altKey: true });
+    expect(editor.engine.text).toBe(STACKED);
+    expect(activeKey()).toBe("og1g1g1g1");
+    expect([...host.querySelectorAll<HTMLElement>(".draw-object-thumb")].every((holder) => holder.hidden)).toBe(true);
   });
 });
 
@@ -3478,6 +3866,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
       ["Stesso tipo di oggetto", "true"],
       ["Stesso strumento", "true"],
       ["Stesso livello", "true"],
+      ["Rinomina", "true"],
       ["Blocca", "true"],
       ["Nascondi", "true"],
       ["Sblocca tutto", "true"],
@@ -3485,6 +3874,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
       ["Isola il gruppo", "true"],
     ]);
     expect(item("Stesso riempimento").querySelector(".menu-description")!.textContent).toBe("Scegli prima degli oggetti.");
+    expect(item("Rinomina").querySelector(".menu-description")!.textContent).toBe("Scegli un oggetto solo per cambiargli il nome.");
     item("Seleziona tutto").click();
     expect(editor.selection).toEqual([A, B, G]);
     editor.select([A]);
@@ -3554,9 +3944,9 @@ describe("la selezione avanzata, dal livello Standard", () => {
     const sign = (key: string, what: "lock" | "hide"): HTMLElement => row(key).querySelector<HTMLElement>(`.draw-object-sign[data-sign="${what}"]`)!;
     expect([...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent)).toEqual([
       "Livello «Livello 1», corrente",
-      "Rettangolo, bloccato, Blu",
-      "Rettangolo, Blu",
       "Gruppo, 2 oggetti",
+      "Rettangolo, Blu",
+      "Rettangolo, bloccato, Blu",
     ]);
     expect(sign(A, "lock").hasAttribute("data-on")).toBe(true);
     expect(sign(A, "lock").title).toBe("Sblocca");
@@ -3568,7 +3958,8 @@ describe("la selezione avanzata, dal livello Standard", () => {
     // Ctrl+Maiusc+H sulla riga attiva la nasconde, e lo stesso tasto la mostra.
     const tree = host.querySelector<HTMLElement>('[role="tree"]')!;
     tree.focus();
-    tree.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
+    tree.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true }));
+    tree.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
     tree.dispatchEvent(new KeyboardEvent("keydown", { key: "H", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
     expect(editor.engine.text).toContain(`<g id="${G}" display="none">`);
     expect(spoken()).toBe("Gruppo, 2 oggetti: nascosto.");
@@ -5797,10 +6188,13 @@ describe("il livello Personalizzato", () => {
     expect(key("M", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
     expect(hint()).toContain("Alt+F10");
     expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Un testo scelto da solo non si modifica senza la parte del testo.
+    // Un testo scelto da solo non si modifica senza la parte del testo: coi
+    // livelli, F2 ne apre il nome.
     editor.select([T]);
     expect(barButtons()).toEqual(["Sposta in un livello", "Operazioni booleane"]);
-    expect(key("F2").defaultPrevented).toBe(false);
+    expect(key("F2").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(host.querySelector(".draw-object-rename"));
+    key("Escape", {}, document.activeElement as HTMLElement);
     expect(changes).toEqual([]);
   });
 
@@ -5862,6 +6256,7 @@ describe("il livello Personalizzato", () => {
     }));
     expect(tables.map((table) => table.caption)).toEqual([
       "Strumenti · dal livello Standard",
+      "Oggetti · dal livello Standard",
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
       "Testo · dal livello Standard",
@@ -5874,7 +6269,7 @@ describe("il livello Personalizzato", () => {
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[7]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[8]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

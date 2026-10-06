@@ -23,7 +23,9 @@
     </g>
     <a id="o00000020" href="note/acqua.md">
       <title>Il ciclo nella nota</title>
-      <rect id="o00000021" x="1400" y="800" width="120" height="60" fill="#56b4e9"/>
+      <rect id="o00000021" x="1400" y="800" width="120" height="60" fill="#56b4e9">
+        <title>Nuvola</title>
+      </rect>
     </a>
   </g>
   <g id="l9z8y7x6w" fub:layer="Appunti" fub:locked="true" display="none">

@@ -502,6 +502,33 @@ export class SceneIndexer {
     return out.finish();
   }
 
+  /// Il riquadro nella scena di `node`, un elemento di `model`, contorno
+  /// compreso, come se né lui né chi lo contiene fosse nascosto: ciò che la
+  /// sua miniatura inquadra. Ciò che è nascosto dentro di lui non conta.
+  /// `null` se non disegna niente, o se non è del disegno.
+  frameOf(model: DocumentModel, node: ElementPart): Bounds | null {
+    if (node.kind === "leaf" && node.details === null) return null;
+    const chain: ContainerNode[] = [];
+    for (let at = node.parent; at !== null && at !== model.root; at = at.parent) chain.unshift(at);
+    let matrix = IDENTITY;
+    let style = this.rootStyle(model);
+    for (const container of chain) {
+      const attrs = this.builder.headInfo(container).attrs;
+      matrix = compose(matrix, transformOf(attrs));
+      style = styleOf(style, attrs);
+    }
+    const attrs = this.attrsOf(node);
+    if (attrs === null) return null;
+    const parts: Part[] = [];
+    this.collect(node, compose(matrix, transformOf(attrs)), IDENTITY, styleOf(style, attrs), parts);
+    const scene = new BoundsBuilder();
+    for (const part of parts) {
+      const bounds = this.sceneBounds(part);
+      if (bounds !== null) includeInflated(scene, bounds, part.radius * scaleOf(part.matrix));
+    }
+    return scene.finish();
+  }
+
   /// I livelli di `model` in `layers`, e i suoi oggetti a `visit`: degli
   /// oggetti nei livelli, solo quelli dei livelli che `enters` accetta.
   private walk(model: DocumentModel, enters: (layer: LayerInfo) => boolean, layers: LayerInfo[], visit: Visit): void {

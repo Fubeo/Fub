@@ -97,7 +97,9 @@ Lo Standard aggiunge:
   strumenti: mette nel disegno un'immagine che è già nel vault (vedi
   [Disegni, immagini](drawing-images.md));
 - il pannello delle **«Proprietà»**, accanto al foglio, per scrivere coi
-  numeri com'è fatta la selezione: [Disegni, proprietà](drawing-properties.md).
+  numeri com'è fatta la selezione: [Disegni, proprietà](drawing-properties.md);
+- l'albero degli oggetti come **pannello dei livelli**: i nomi, il filtro, le
+  miniature e le righe da trascinare ([Disegni, pannello dei livelli](drawing-layers.md)).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore riprende la penna, chi aveva il Lazo la
@@ -247,9 +249,8 @@ colore, il suo allineamento e la sua trasformazione, anche ruotato o
 ingrandito, e il testo sotto si nasconde finché si scrive. `Invio` va a capo;
 `Esc`, `Tab` e `Ctrl+Invio` o `⌘Invio` concludono, e così un tocco sul
 foglio, il fuoco che va altrove o un altro strumento. Il tocco che conclude
-non apre un altro testo. Ciò che si è scritto entra nel file in un
-solo passo di annulla, mentre dentro il campo `Ctrl+Z` o `⌘Z` annulla la
-scrittura.
+non apre un altro testo. Ciò che si è scritto entra nel file in un solo passo
+di annulla, mentre dentro il campo `Ctrl+Z` o `⌘Z` annulla la scrittura.
 
 Un testo nuovo è in Inter, il carattere dell'interfaccia, col colore della
 penna e una delle tre dimensioni che, con lo strumento Testo, prendono il
@@ -376,8 +377,7 @@ nascosto. Oltre 500 righe l'albero disegna soltanto quelle che si vedono.
 
 La scelta non si legge mai dal solo colore: lo strumento, il colore e lo
 spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
-si anima: ogni inquadratura è subito quella nuova, quindi non c'è moto da
-ridurre.
+si anima: ogni inquadratura è subito quella nuova, e non c'è moto da ridurre.
 
 ## Immagini
 

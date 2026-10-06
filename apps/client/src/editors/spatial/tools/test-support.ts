@@ -23,6 +23,8 @@ export interface Opened {
   extent(): Bounds | null;
   /// I collegamenti che si vedono adesso, a ogni profondità.
   links(): Unit[];
+  /// Il riquadro della miniatura dell'elemento di id `id`, adesso.
+  frame(id: string): Bounds | null;
 }
 
 export function open(source: string): Opened {
@@ -49,5 +51,11 @@ export function open(source: string): Opened {
     builder.build(engine);
     return indexer.links(engine.model!);
   };
-  return { engine, index: reindex(), reindex, seen, opens, extent, links };
+  const frame = (id: string): Bounds | null => {
+    builder.build(engine);
+    const node = engine.holder(id);
+    if (node === null) throw new Error(`nessun elemento ${id}`);
+    return indexer.frameOf(engine.model!, node);
+  };
+  return { engine, index: reindex(), reindex, seen, opens, extent, links, frame };
 }

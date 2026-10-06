@@ -18,7 +18,7 @@
 // e prende il terminatore prevalente quando entra nell'albero.
 
 import { isContainer } from "./analysis";
-import { classifyChild, describe, elementItem, type Details, type Item, type StrokeProblem, type Tags } from "./classify";
+import { characterData, classifyChild, describe, elementItem, type Details, type Item, type StrokeProblem, type Tags } from "./classify";
 import { escapeAttribute, NamespaceScope } from "./serialize";
 import { SourceText, type Span } from "./text";
 import {
@@ -586,6 +586,18 @@ export function isSvgElement(node: ElementPart, local: string): boolean {
 // Voci.
 // ---------------------------------------------------------------------------
 
+/// Il testo del primo `title` fra i figli di `container`, come lo legge la
+/// lettura intera; `null` se non ne ha. Un `title` estraneo si rilegge.
+function titleOf(container: ContainerNode): string | null {
+  for (const part of container.parts) {
+    if (typeof part === "string" || part.kind === "other" || !isSvgElement(part, "title")) continue;
+    if (part.details?.text !== undefined) return part.details.text;
+    const fragment = part.kind === "leaf" ? parseFragment(part.raw, scopeOf(container)) : null;
+    return fragment === null ? "" : characterData(fragment.doc, fragment.id);
+  }
+  return null;
+}
+
 interface Pending {
   start: number;
   end: number;
@@ -635,8 +647,15 @@ export function deriveItems(model: DocumentModel, source: SourceText): Item[] {
       pending = null;
       const childPath = [...path, index];
       const span = source.span(part.start, part.end);
-      items.push(elementItem(part.details, childPath, span, source.indent(part.start), part.kind === "container" ? tags(part) : null));
-      if (part.kind === "container") walk(part, childPath);
+      if (part.kind === "container") {
+        // Il nome di un contenitore viene dai figli di adesso.
+        const title = titleOf(part);
+        const details = title === null ? part.details : { ...part.details, title };
+        items.push(elementItem(details, childPath, span, source.indent(part.start), tags(part)));
+        walk(part, childPath);
+      } else {
+        items.push(elementItem(part.details, childPath, span, source.indent(part.start), null));
+      }
     }
     flush(pending, path);
   };

@@ -2267,6 +2267,8 @@ button.draw-isolation-crumb:hover {
   border-color: var(--border);
 }
 .draw-objects-header,
+.draw-objects-filter,
+.draw-objects-status,
 .draw-objects-empty {
   padding: 0 var(--space-4);
 }
@@ -2278,8 +2280,24 @@ button.draw-isolation-crumb:hover {
   font-weight: var(--weight-bold);
 }
 .draw-objects-count,
+.draw-objects-status,
 .draw-objects-empty {
   color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* La ricerca, il tipo e il campo del nome come i campi delle proprietà. */
+.draw-objects-filter {
+  gap: var(--space-2);
+}
+.draw-objects-search,
+.draw-objects-kind {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.draw-object-rename {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
 }
 .draw-objects-tree:focus-visible {
@@ -2303,6 +2321,11 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
   font-style: italic;
 }
+/* Col filtro, una riga che c'è per ciò che contiene è in grigio: la sua
+   freccia aperta dice che i trovati sono sotto. */
+.draw-object[data-context] {
+  color: var(--muted);
+}
 .draw-objects-tree:focus-visible > .draw-object[data-active] {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: calc(-1 * var(--focus-ring-width));
@@ -2321,6 +2344,40 @@ button.draw-isolation-crumb:hover {
 }
 .draw-object[data-toggles] .draw-object-sign:hover {
   background: var(--overlay-hover);
+}
+/* La miniatura su carta bianca, come il foglio, con il filo dei pannelli, e
+   col nero che sulla carta ha ogni lettore di SVG, non il testo del tema; una
+   riga che non ne ha tiene il posto vuoto. */
+.draw-object-thumb {
+  margin-inline-end: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: #000000;
+}
+.draw-object-thumb[data-empty] {
+  border-color: transparent;
+  background: none;
+}
+/* Dove va ciò che si trascina, nel colore d'accento: la linea parte dalla
+   freccia del contenitore che lo riceve. */
+.draw-object[data-drop="before"]::before,
+.draw-object[data-drop="after"]::after {
+  margin-inline-start: var(--space-3);
+  border-radius: 1px;
+  background: var(--accent);
+}
+.draw-object[data-drop="inside"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.draw-objects-ghost {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: var(--text-sm);
 }
 
 /* Gli attributi: nomi e valori come li scrive il file, in monospazio. Un

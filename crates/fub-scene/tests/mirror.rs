@@ -11,7 +11,8 @@
 //! - `sparse`: un disegno FubDraw in forma canonica (§7), con ogni ruolo di
 //!   §4, tratti che si ridisegnano e tratti che no, un blocco estraneo dentro
 //!   un gruppo, un livello bloccato e nascosto, e dentro un livello un gruppo
-//!   bloccato con una forma nascosta. Una lunghezza in pollici
+//!   bloccato con una forma nascosta, un collegamento e una forma col loro
+//!   `title`. Una lunghezza in pollici
 //!   resta com'è, come FubDraw copia i valori che non tocca;
 //! - `foreign`: un SVG di un altro programma, senza `fub:version`, con un
 //!   esempio di ogni motivo per cui un elemento è estraneo, contenuto attivo,
@@ -484,7 +485,8 @@ fn sparse() -> String {
                         .a("y", 800)
                         .a("width", 120)
                         .a("height", 60)
-                        .a("fill", "#56b4e9"),
+                        .a("fill", "#56b4e9")
+                        .child(El::new("title").text("Nuvola")),
                 ),
         );
     let notes = layer("l9z8y7x6w", "Appunti")

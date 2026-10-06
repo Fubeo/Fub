@@ -46,7 +46,7 @@ export type Axis = "x" | "y";
 
 /// Gli attributi che i figli ereditano da un gruppo e che, separandolo, si
 /// portano su ciascuno che non li ha già.
-const INHERITED: readonly string[] = [
+export const INHERITED: readonly string[] = [
   "fill",
   "fill-opacity",
   "stroke",
@@ -480,7 +480,7 @@ export function isLink(unit: Unit): boolean {
 }
 
 /// Vero se `node` è un `a` o ne contiene uno.
-function holdsLink(node: ElementPart): boolean {
+export function holdsLink(node: ElementPart): boolean {
   if (node.facts.uri === SVG_NS && node.facts.local === "a") return true;
   return node.kind === "container" && elementChildren(node).some(holdsLink);
 }

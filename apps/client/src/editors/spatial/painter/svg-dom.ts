@@ -27,6 +27,11 @@
 //   gli sta fuori, carta esclusa, con l'opacità degli elementi; il disegno
 //   non cambia.
 //
+// - **Miniature:** `paintMiniature` disegna alcuni nodi della scena in un
+//   `svg` a sé, con gli stessi elementi e gli stessi attributi, dentro gli
+//   stili di chi li contiene: l'albero degli oggetti le mostra accanto ai
+//   nomi.
+//
 // Tutto ciò che il painter apre (timer, osservatori, lease) appartiene alla
 // sua vita, e la vita di chi lo monta la chiude.
 
@@ -188,72 +193,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   // --- forme ------------------------------------------------------------------
 
-  const setPainted = (el: SVGElement, attrs: readonly PaintAttr[], previous: readonly PaintAttr[]): void => {
-    if (attrs === previous) return;
-    const next = new Set<string>();
-    for (const [name, value] of attrs) {
-      // La scena porta solo nomi dipinti; il controllo resta qui perché è il
-      // DOM a non doverne ricevere altri.
-      if (!PAINTED_ATTRIBUTES.has(name)) continue;
-      next.add(name);
-      if (el.getAttribute(name) !== value) el.setAttribute(name, value);
-    }
-    for (const [name] of previous) if (!next.has(name)) el.removeAttribute(name);
-  };
-
-  const setCommon = (el: SVGElement, id: string | null, space: string | null): void => {
-    if (id === null) el.removeAttribute("data-scene-id");
-    else el.setAttribute("data-scene-id", id);
-    if (space === null) el.removeAttributeNS(XML, "space");
-    else el.setAttributeNS(XML, "xml:space", space);
-  };
-
-  const showVaultImage = (el: SVGElement, path: string, imageLife: Lifetime): void => {
-    const resolve = options.images;
-    if (resolve === undefined) {
-      el.setAttribute("href", IMAGE_PLACEHOLDER);
-      return;
-    }
-    resolve(path, imageLife).then(
-      (url) => {
-        if (imageLife.closed) return;
-        el.setAttribute("href", url ?? IMAGE_PLACEHOLDER);
-      },
-      () => {
-        if (!imageLife.closed) el.setAttribute("href", IMAGE_PLACEHOLDER);
-      },
-    );
-  };
-
   const createShape = (shape: PaintShape): NodeRecord => {
-    const el = document.createElementNS(SVG, shape.tag);
-    setPainted(el, shape.attrs, []);
-    setCommon(el, shape.id, shape.space);
-    let imageLife: Lifetime | null = null;
-    if (shape.runs !== undefined) {
-      for (const run of shape.runs) {
-        if (run.kind === "space") {
-          el.append(document.createTextNode(run.text));
-          continue;
-        }
-        const span = document.createElementNS(SVG, "tspan");
-        setPainted(span, run.attrs, []);
-        if (run.space !== null) span.setAttributeNS(XML, "xml:space", run.space);
-        span.textContent = run.text;
-        el.append(span);
-      }
-    }
-    const image = shape.image;
-    if (image !== undefined) {
-      if (image.kind === "data") {
-        el.setAttribute("href", image.url);
-      } else if (image.kind === "remote") {
-        el.setAttribute("href", IMAGE_PLACEHOLDER);
-      } else {
-        imageLife = openLifetime();
-        showVaultImage(el, image.path, imageLife);
-      }
-    }
+    const { el, life: imageLife } = shapeElement(shape, shape.id, options.images, null);
     return { paint: shape, el, life: imageLife, children: [] };
   };
 
@@ -751,6 +692,170 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
 /// L'opacità che un attributo `opacity` dipinge: un numero o una
 /// percentuale, fra 0 e 1; 1 se manca o non si legge.
+// --- forme -------------------------------------------------------------------
+
+function setPainted(el: SVGElement, attrs: readonly PaintAttr[], previous: readonly PaintAttr[]): void {
+  if (attrs === previous) return;
+  const next = new Set<string>();
+  for (const [name, value] of attrs) {
+    // La scena porta solo nomi dipinti; il controllo resta qui perché è il
+    // DOM a non doverne ricevere altri.
+    if (!PAINTED_ATTRIBUTES.has(name)) continue;
+    next.add(name);
+    if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+  }
+  for (const [name] of previous) if (!next.has(name)) el.removeAttribute(name);
+}
+
+function setCommon(el: SVGElement, id: string | null, space: string | null): void {
+  if (id === null) el.removeAttribute("data-scene-id");
+  else el.setAttribute("data-scene-id", id);
+  if (space === null) el.removeAttributeNS(XML, "space");
+  else el.setAttributeNS(XML, "xml:space", space);
+}
+
+function showVaultImage(el: SVGElement, path: string, resolve: PainterOptions["images"], imageLife: Lifetime): void {
+  if (resolve === undefined) {
+    el.setAttribute("href", IMAGE_PLACEHOLDER);
+    return;
+  }
+  resolve(path, imageLife).then(
+    (url) => {
+      if (imageLife.closed) return;
+      el.setAttribute("href", url ?? IMAGE_PLACEHOLDER);
+    },
+    () => {
+      if (!imageLife.closed) el.setAttribute("href", IMAGE_PLACEHOLDER);
+    },
+  );
+}
+
+/// L'elemento di `shape`, con `id` in `data-scene-id`: le righe di un testo,
+/// l'URL di un'immagine. Un'immagine del vault lo chiede a `resolve` nella
+/// vita `life`, o in una sua se è `null`; la vita che torna è quella.
+function shapeElement(
+  shape: PaintShape,
+  id: string | null,
+  resolve: PainterOptions["images"],
+  life: Lifetime | null,
+): { readonly el: SVGElement; readonly life: Lifetime | null } {
+  const el = document.createElementNS(SVG, shape.tag);
+  setPainted(el, shape.attrs, []);
+  setCommon(el, id, shape.space);
+  let imageLife: Lifetime | null = null;
+  if (shape.runs !== undefined) {
+    for (const run of shape.runs) {
+      if (run.kind === "space") {
+        el.append(document.createTextNode(run.text));
+        continue;
+      }
+      const span = document.createElementNS(SVG, "tspan");
+      setPainted(span, run.attrs, []);
+      if (run.space !== null) span.setAttributeNS(XML, "xml:space", run.space);
+      span.textContent = run.text;
+      el.append(span);
+    }
+  }
+  const image = shape.image;
+  if (image !== undefined) {
+    if (image.kind === "data") {
+      el.setAttribute("href", image.url);
+    } else if (image.kind === "remote") {
+      el.setAttribute("href", IMAGE_PLACEHOLDER);
+    } else {
+      imageLife = life ?? openLifetime();
+      showVaultImage(el, image.path, resolve, imageLife);
+    }
+  }
+  return { el, life: imageLife };
+}
+
+// --- miniature ----------------------------------------------------------------
+
+/// Gli attributi che nascondono: una miniatura mostra anche ciò che il
+/// disegno nasconde.
+const HIDING: ReadonlySet<string> = new Set(["display", "visibility"]);
+
+/// Il riquadro che una miniatura inquadra, in unità della scena.
+export interface MiniatureBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/// Il margine di una miniatura attorno al suo riquadro, in frazioni del lato
+/// più lungo.
+const MINIATURE_MARGIN = 0.06;
+
+/// Una miniatura dei nodi `nodes`: un `svg` che inquadra `box`, con dentro un
+/// `g` per ogni contenitore di `chain`, dal più esterno, che porta i suoi
+/// attributi dipinti. Né i nodi né chi li contiene sono nascosti; ciò che è
+/// nascosto dentro di loro sì. Nessun `data-scene-id`: la miniatura non è
+/// la scena. Le immagini del vault le chiede a `resolve` nella vita `life`.
+export function paintMiniature(
+  nodes: readonly PaintNode[],
+  chain: readonly (readonly PaintAttr[])[],
+  box: MiniatureBox,
+  life: Lifetime,
+  resolve?: PainterOptions["images"],
+): SVGSVGElement {
+  const visible = (attrs: readonly PaintAttr[]): readonly PaintAttr[] => attrs.filter(([name]) => !HIDING.has(name));
+  const svg = document.createElementNS(SVG, "svg");
+  const pad = Math.max(box.width, box.height) * MINIATURE_MARGIN || 1;
+  svg.setAttribute("viewBox", `${box.x - pad} ${box.y - pad} ${box.width + 2 * pad} ${box.height + 2 * pad}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.setAttribute("focusable", "false");
+  let parent: SVGElement = svg;
+  for (const attrs of chain) {
+    const g = document.createElementNS(SVG, "g");
+    setPainted(g, visible(attrs), []);
+    parent.append(g);
+    parent = g;
+  }
+  const copy = (node: PaintNode, top: boolean): SVGElement => {
+    if (node.kind === "shape") {
+      const { el } = shapeElement(node, null, resolve, life);
+      if (top) for (const name of HIDING) el.removeAttribute(name);
+      return el;
+    }
+    const el = document.createElementNS(SVG, "g");
+    setPainted(el, top ? visible(node.attrs) : node.attrs, []);
+    setCommon(el, null, node.space);
+    for (const child of node.children) el.append(copy(child, false));
+    return el;
+  };
+  for (const node of nodes) parent.append(copy(node, true));
+  return svg;
+}
+
+/// La miniatura `svg` come immagine ferma: un `img` solo al posto di tante
+/// forme vive. Le immagini del vault non ci sono, perché un'immagine non ne
+/// carica altre. L'URL si revoca quando si chiude `life`.
+export function miniaturePicture(svg: SVGSVGElement, life: Lifetime): HTMLImageElement {
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
+  life.add(() => URL.revokeObjectURL(url));
+  const img = document.createElement("img");
+  img.alt = "";
+  img.decoding = "async";
+  img.src = url;
+  return img;
+}
+
+/// Quante forme ha `nodes`, contando fino a `limit`: oltre, `limit + 1`.
+export function shapeCount(nodes: readonly PaintNode[], limit: number): number {
+  let count = 0;
+  const visit = (list: readonly PaintNode[]): void => {
+    for (const node of list) {
+      if (count > limit) return;
+      if (node.kind === "shape") count++;
+      else visit(node.children);
+    }
+  };
+  visit(nodes);
+  return Math.min(count, limit + 1);
+}
+
 function opacityOf(value: string | undefined): number {
   if (value === undefined) return 1;
   const text = value.trim();

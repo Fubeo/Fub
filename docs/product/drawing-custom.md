@@ -45,7 +45,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Colori personalizzati | Standard | «Altro colore…» e il campione in più |
 | Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |
 | Duplica, raggruppa, ordina, allinea e distribuisci | Standard | questi comandi della barra «Disponi», coi loro tasti |
-| Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello |
+| Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello; nell'albero i nomi, il filtro, le miniature e le righe da trascinare |
 | Pagina e griglia | Standard | il pulsante «Pagina e griglia», `#` e `%` |
 | Guide intelligenti | Standard | l'aggancio agli altri oggetti e alla pagina, la loro casella in «Pagina e griglia», e le misure con `Alt` |
 | Righelli e guide | Standard | i righelli (`Maiusc+R`), le guide del documento (`\|`), «Guide…» e l'unità del documento |

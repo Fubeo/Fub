@@ -6,10 +6,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
-import { elementChildren, type ContainerNode } from "../scene/model";
+import { elementChildren, type ContainerNode, type ElementPart } from "../scene/model";
 import { doc } from "../scene/test-support";
 import { IMAGE_PLACEHOLDER, PaintBuilder, wholeDocumentLayer, type PaintScene } from "./paint";
-import { createSvgPainter, type ScenePainter } from "./svg-dom";
+import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
 import { createOverlay } from "./overlay";
 
 const LAYER = '<g id="l1" fub:layer="Livello 1">';
@@ -165,6 +165,72 @@ describe("il documento vivo", () => {
     expect(lives[1]!.closed).toBe(false);
     painter.dispose();
     expect(lives[1]!.closed).toBe(true);
+  });
+});
+
+describe("le miniature", () => {
+  const PICTURE = doc(
+    '<g id="l1" fub:layer="Nascosto" fill="#00ff00" transform="translate(10 0)" display="none">'
+      + '<g id="g" opacity="0.5" display="none"><rect id="r" x="0" y="0" width="50" height="10"/>'
+      + '<rect id="h" x="30" y="0" width="5" height="5" display="none"/></g>'
+      + '<image id="i" href="foto.png" width="4" height="4"/></g>',
+  );
+
+  function opened(): { readonly engine: SceneEngine; readonly builder: PaintBuilder; readonly scene: PaintScene; readonly node: (id: string) => ElementPart } {
+    const engine = SceneEngine.open(PICTURE);
+    const builder = new PaintBuilder();
+    const scene = builder.build(engine);
+    return { engine, builder, scene, node: (id) => engine.holder(id)! };
+  }
+
+  it("disegnano ciò che l'oggetto dipinge, dentro gli stili di chi lo contiene, visibile anche se è nascosto", () => {
+    const { builder, scene, node } = opened();
+    const chain = [scene.root.attrs, builder.headInfo(node("l1") as ContainerNode).attrs];
+    const svg = paintMiniature(builder.paintsOf(node("g")), chain, { x: 10, y: 0, width: 50, height: 10 }, owner);
+    // Inquadrata sul riquadro, con un margine.
+    svg.getAttribute("viewBox")!.split(" ").map(Number).forEach((value, at) => expect(value).toBeCloseTo([7, -3, 56, 16][at]!, 9));
+    expect(svg.getAttribute("preserveAspectRatio")).toBe("xMidYMid meet");
+    expect(svg.getAttribute("focusable")).toBe("false");
+    const layer = svg.firstElementChild!.firstElementChild!;
+    expect([layer.getAttribute("fill"), layer.getAttribute("transform"), layer.hasAttribute("display")]).toEqual(["#00ff00", "translate(10 0)", false]);
+    const group = layer.firstElementChild!;
+    expect([group.getAttribute("opacity"), group.hasAttribute("display")]).toEqual(["0.5", false]);
+    // Ciò che è nascosto dentro resta nascosto.
+    expect([...group.children].map((child) => [child.tagName.toLowerCase(), child.getAttribute("display")])).toEqual([["rect", null], ["rect", "none"]]);
+    expect(svg.querySelectorAll("[data-scene-id]")).toHaveLength(0);
+  });
+
+  it("chiedono le immagini del vault nella vita della miniatura, o mostrano il segnaposto", async () => {
+    const { builder, scene, node } = opened();
+    const lives: Lifetime[] = [];
+    const life = openLifetime();
+    const box = { x: 10, y: 0, width: 4, height: 4 };
+    const svg = paintMiniature(builder.paintsOf(node("i")), [scene.root.attrs], box, life, async (_path, imageLife) => {
+      lives.push(imageLife);
+      return "fub-asset://lease/1";
+    });
+    await decoded();
+    expect(svg.querySelector("image")!.getAttribute("href")).toBe("fub-asset://lease/1");
+    life.close();
+    expect(lives.every((each) => each.closed)).toBe(true);
+    const still = paintMiniature(builder.paintsOf(node("i")), [scene.root.attrs], box, owner);
+    expect(still.querySelector("image")!.getAttribute("href")).toBe(IMAGE_PLACEHOLDER);
+  });
+
+  it("contano le forme fino a un limite, e diventano un'immagine ferma che si revoca con la vita", async () => {
+    const { builder, scene, node } = opened();
+    const paints = builder.paintsOf(node("l1"));
+    expect(shapeCount(paints, 10)).toBe(3);
+    expect(shapeCount(paints, 1)).toBe(2);
+    const life = openLifetime();
+    const img = miniaturePicture(paintMiniature(paints, [scene.root.attrs], { x: 0, y: 0, width: 60, height: 10 }, life), life);
+    expect(img.getAttribute("alt")).toBe("");
+    const url = img.getAttribute("src")!;
+    expect(blobs.get(url)!.type).toBe("image/svg+xml");
+    expect(await blobs.get(url)!.text()).toContain('<rect x="0" y="0" width="50" height="10"');
+    expect(live.has(url)).toBe(true);
+    life.close();
+    expect(live.has(url)).toBe(false);
   });
 });
 
