@@ -77,6 +77,19 @@ describe("l'aspetto della selezione", () => {
     expect(seen.width).toEqual({ count: 2, value: 2 });
   });
 
+  it("dà a un poligono regolare e a una stella riempimento e contorno", () => {
+    const opened = open(
+      doc(
+        `${LAYER}<path id="opolygon0" fub:shape="polygon" fub:geom="0 0 10 4 0 0" d="M-7.07 7.07 L-7.07 -7.07 L7.07 -7.07 L7.07 7.07 Z" fill="#0072b2" stroke="#000000" stroke-width="2"/>` +
+          `<path id="ostar0000" fub:shape="star" fub:geom="0 0 10 3 0.5 0 0" d="M0 -10 L4.33 -2.5 L8.66 5 L0 5 L-8.66 5 L-4.33 -2.5 Z" fill="#0072b2" stroke="#000000" stroke-width="2"/></g>`,
+      ),
+    );
+    const seen = look(opened);
+    expect(seen.fill).toEqual({ count: 2, value: "#0072b2" });
+    expect(seen.stroke).toEqual({ count: 2, value: "#000000" });
+    expect(seen.width).toEqual({ count: 2, value: 2 });
+  });
+
   it("conta lo spessore solo dei contorni che si vedono", () => {
     const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#000000"')}${RECT("obbbbbbbb")}</g>`));
     const seen = look(opened);

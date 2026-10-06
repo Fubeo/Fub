@@ -79,8 +79,8 @@ pub struct Index {
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Counts {
     pub strokes: usize,
-    /// Frecce, tracciati, rettangoli, ellissi, cerchi, linee, polilinee e
-    /// poligoni; la carta no.
+    /// Frecce, poligoni regolari, stelle, tracciati, rettangoli, ellissi,
+    /// cerchi, linee, polilinee e poligoni; la carta no.
     pub shapes: usize,
     pub texts: usize,
     pub images: usize,
@@ -251,6 +251,8 @@ impl Tally {
                 }
             }
             Role::Arrow
+            | Role::Ngon
+            | Role::Star
             | Role::Path
             | Role::Rect
             | Role::Ellipse
@@ -403,7 +405,7 @@ fn bounds(
 ) {
     let at = |name: &str| len(element, name).unwrap_or(0.0);
     match role {
-        Role::Stroke | Role::Arrow | Role::Path => {
+        Role::Stroke | Role::Arrow | Role::Ngon | Role::Star | Role::Path => {
             if let Some(segments) = element.value(NS_NONE, "d").and_then(parse_path) {
                 out.path(&segments, m);
             }

@@ -706,7 +706,7 @@ fn arrows_need_four_numbers_and_unknown_shapes_are_paths() {
         r#"<path fub:shape="arrow" fub:geom="10 20 30" d="M0 0"/>"#,
         r#"<path fub:shape="arrow" fub:geom="1 2 3 4 5" d="M0 0"/>"#,
         r#"<path fub:shape="arrow" fub:geom="1 2 3 4px" d="M0 0"/>"#,
-        r#"<path fub:shape="star" fub:geom="1 2 3 4" d="M0 0"/>"#,
+        r#"<path fub:shape="hexagon" fub:geom="1 2 3 4" d="M0 0"/>"#,
         r#"<path fub:shape="arrow" d="M0 0"/>"#,
     ));
     let scene = load(&source);
@@ -716,6 +716,38 @@ fn arrows_need_four_numbers_and_unknown_shapes_are_paths() {
     for index in 1..6 {
         assert_eq!(role(&scene, &[index]), Some(Role::Path), "{index}");
         assert_eq!(at(&scene, &[index]).unwrap().arrow, None);
+    }
+}
+
+#[test]
+fn polygons_and_stars_need_their_whole_grammar_or_are_paths() {
+    let cases = common::shape_cases();
+    for case in cases["read"].as_array().unwrap() {
+        let shape = case["shape"].as_str().unwrap();
+        let geom = case["geom"].as_str().unwrap();
+        let source = doc(&format!(
+            r#"<path fub:shape="{shape}" fub:geom="{geom}" d="M0 0 L10 0 L5 5 Z"/>"#
+        ));
+        let item = at(&load(&source), &[0]).unwrap().clone();
+        let expected = &case["polygonal"];
+        if expected.is_null() {
+            assert_eq!(item.role, Role::Path, "{geom:?}");
+            assert_eq!(item.polygonal, None, "{geom:?}");
+        } else {
+            let role = if shape == "star" {
+                Role::Star
+            } else {
+                Role::Ngon
+            };
+            assert_eq!(item.role, role, "{geom:?}");
+            let mut want = expected.clone();
+            want["shape"] = shape.into();
+            assert_eq!(
+                common::as_floats(serde_json::to_value(item.polygonal).unwrap()),
+                common::as_floats(want),
+                "{geom:?}"
+            );
+        }
     }
 }
 

@@ -31,6 +31,7 @@ mod classify;
 mod diagnostics;
 mod geometry;
 pub mod ink;
+pub mod parametric;
 pub mod rulers;
 pub mod text;
 mod values;

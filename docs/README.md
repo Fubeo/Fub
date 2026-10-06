@@ -75,6 +75,7 @@ flowchart LR
 - [Permessi e sicurezza](reference/permissions-and-security.md)
 - [Formato della scena](reference/scene-format.md)
 - [Formato della scena, unità e guide](reference/scene-format-rulers.md)
+- [Formato della scena, poligoni e stelle](reference/scene-format-shapes.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 
 ## Vedere stato e direzione

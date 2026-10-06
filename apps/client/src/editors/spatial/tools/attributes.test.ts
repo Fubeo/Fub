@@ -98,7 +98,7 @@ describe("le righe", () => {
     expect(image.addable).toEqual(["x", "y", "opacity", "display", "preserveAspectRatio", "transform"]);
   });
 
-  it("una freccia ha il d dalla sua geometria, e niente riempimento da aggiungere", () => {
+  it("una freccia e un poligono regolare hanno il d dalla loro geometria; la freccia, niente riempimento", () => {
     const arrow = `<path id="oaaaaaaaa" fub:shape="arrow" fub:geom="0 0 100 0" d="${arrowPath(0, 0, 100, 0, 2)}" fill="none" stroke="#000000" stroke-width="2"/>`;
     const subject = first(open(doc(`${LAYER}${arrow}</g>`)));
     expect(subject.arrow).toEqual([0, 0, 100, 0]);
@@ -107,6 +107,11 @@ describe("le righe", () => {
     // Una freccia con una geometria che non si legge è un tracciato.
     const plain = first(open(doc(`${LAYER}${arrow.replace("0 0 100 0", "0 0 100")}</g>`)));
     expect(plain).toMatchObject({ role: "path", arrow: null });
+    // Il `d` di un poligono regolare viene dai suoi parametri.
+    const square = first(open(doc(`${LAYER}<path id="oaaaaaaaa" fub:shape="polygon" fub:geom="0 0 10 4 0 0" d="M-7.07 7.07 L-7.07 -7.07 L7.07 -7.07 L7.07 7.07 Z"/></g>`)));
+    expect(square.role).toBe("ngon");
+    expect(square.rows.find((row) => row.key === "d")!.note).toBe("shape");
+    expect(square.addable).toContain("fill");
     expect(plain.rows.find((row) => row.key === "d")!.note).toBeNull();
   });
 

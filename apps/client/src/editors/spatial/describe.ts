@@ -14,6 +14,7 @@ import { pageName } from "../../rules/mirrored";
 import { plural, t, type DrawKey } from "./strings";
 import type { Role } from "./scene/analysis";
 import type { ElementItem, Item } from "./scene/classify";
+import type { Polygonal } from "./scene/parametric";
 import type { Scene } from "./scene/read";
 
 /// Quanti caratteri di un testo entrano nel nome di un oggetto.
@@ -73,6 +74,10 @@ const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper">, DrawKey>
   link: "draw.kind.link",
   stroke: "draw.kind.stroke",
   arrow: "draw.tool.arrow",
+  // Un poligono regolare e una stella hanno sempre la geometria, che dà il
+  // nome: questi due valgono soltanto da ripiego.
+  ngon: "draw.tool.polygon",
+  star: "draw.tool.star",
   path: "draw.kind.path",
   rect: "draw.tool.rect",
   ellipse: "draw.tool.ellipse",
@@ -83,6 +88,36 @@ const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper">, DrawKey>
   text: "draw.kind.text",
   image: "draw.kind.image",
 };
+
+/// I poligoni regolari che hanno un nome, per numero di lati.
+const NGONS: ReadonlyMap<number, DrawKey> = new Map<number, DrawKey>([
+  [3, "draw.kind.ngon.3"],
+  [4, "draw.kind.ngon.4"],
+  [5, "draw.kind.ngon.5"],
+  [6, "draw.kind.ngon.6"],
+  [7, "draw.kind.ngon.7"],
+  [8, "draw.kind.ngon.8"],
+  [9, "draw.kind.ngon.9"],
+  [10, "draw.kind.ngon.10"],
+  [11, "draw.kind.ngon.11"],
+  [12, "draw.kind.ngon.12"],
+]);
+
+/// Il nome di un poligono regolare o di una stella: «Esagono», «Poligono di
+/// 20 lati», «Stella a 5 punte».
+export function polygonalKind(polygonal: Pick<Polygonal, "shape" | "count">): string {
+  const { shape, count } = polygonal;
+  if (shape === "star") return t("draw.kind.star", { count });
+  const named = NGONS.get(count);
+  return named === undefined ? t("draw.kind.ngon", { count }) : t(named);
+}
+
+/// Che cosa è `item`, a parole: «Rettangolo», «Evidenziatura», «Esagono».
+export function kindOf(item: ElementItem): string {
+  if (item.role === "stroke" && item.stroke?.tool === "highlighter") return t("draw.kind.highlighter");
+  if (item.polygonal !== undefined) return polygonalKind(item.polygonal);
+  return t(KINDS[item.role as keyof typeof KINDS]);
+}
 
 /// Un testo come nome: gli spazi raccolti, e tagliato con i puntini oltre
 /// [`NAME_CHARS`] caratteri.
@@ -138,8 +173,7 @@ export interface DescribeOptions {
 /// «Sfondo», bloccato», «Collegamento a «Pioggia»».
 export function describe(node: OutlineNode, options: DescribeOptions = {}): string {
   const item = node.item;
-  const role = item.role as keyof typeof KINDS;
-  const kind = t(item.role === "stroke" && item.stroke?.tool === "highlighter" ? "draw.kind.highlighter" : KINDS[role]);
+  const kind = kindOf(item);
   const named = node.name === null ? kind : t("draw.describe.named", { kind, name: node.name });
   const parts = [node.target === null ? named : t("draw.describe.link", { link: named, note: linkName(node.target) })];
   if (item.locked && options.state !== false) parts.push(t("draw.state.locked"));

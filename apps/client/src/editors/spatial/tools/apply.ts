@@ -8,9 +8,11 @@
 //   traslazione. Percorsi, linee, spezzate, poligoni e frecce prendono
 //   tutto; rettangoli, ellissi e immagini senza proporzioni la scala lungo i
 //   loro assi; cerchi e immagini con le proporzioni una scala uguale nei due
-//   versi. Senza tratteggio rettangoli, ellissi e cerchi prendono anche i
-//   ribaltamenti e i quarti di giro che li lasciano uguali; con il
-//   tratteggio no, perché comincerebbe altrove.
+//   versi; poligoni regolari e stelle le rotazioni e una scala uguale nei due
+//   versi, che diventano centro, raggio, rotazione e raggio degli angoli.
+//   Senza tratteggio rettangoli, ellissi, cerchi, poligoni regolari e stelle
+//   prendono anche i ribaltamenti e i quarti di giro che li lasciano uguali;
+//   con il tratteggio no, perché comincerebbe altrove.
 // - **Un tratto a penna** prende la trasformazione se non lo deforma:
 //   rotazioni, ribaltamenti e scale uguali nei due versi. L'inchiostro e il
 //   pennello si riscrivono, l'azimut della penna gira con il tratto, e il
@@ -37,6 +39,7 @@ import { svgAttribute } from "../scene/classify";
 import { parsePath, type Segment } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, toRadians, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { polygonalAttrs } from "../scene/parametric";
 import { pathData } from "../scene/serialize";
 import { length, nonNegativeLength, points as parsePoints, transform as parseTransform } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
@@ -57,7 +60,7 @@ const ZERO: ReadonlySet<string> = new Set(["x", "y", "cx", "cy", "x1", "y1", "x2
 
 /// I ruoli che SVG disegna con un contorno: un'immagine e un testo non
 /// cambiano il loro.
-const STROKED: ReadonlySet<string> = new Set(["arrow", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "stroke"]);
+const STROKED: ReadonlySet<string> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "stroke"]);
 
 /// Un numero della geometria come lo scrive il file.
 const place = (value: number): string => formatNumber(value, 2);
@@ -367,6 +370,25 @@ function reshape(node: ElementPart, own: ReadonlyMap<string, string>, m: Matrix,
       if (parts === null) return null;
       const [cx, cy] = apply(parts.geometry, [at("cx"), at("cy")]);
       Object.assign(attrs, { cx: place(cx), cy: place(cy), r: place(at("r") * Math.sqrt(Math.abs(determinant(parts.taken)))) });
+      return { ...parts, attrs };
+    }
+    case "ngon":
+    case "star": {
+      const shape = details.polygonal;
+      if (shape === undefined) return null;
+      const similarity = similar(m);
+      const taken = similarity !== null && !(dashed && determinant(similarity) < 0) ? similarity : uniformScale(m);
+      const parts = split(m, taken);
+      if (parts === null) return null;
+      const [cx, cy] = apply(parts.geometry, [shape.cx, shape.cy]);
+      const k = Math.sqrt(Math.abs(determinant(taken)));
+      const turn = (Math.atan2(taken[1], taken[0]) * 180) / Math.PI;
+      // Un ribaltamento porta l'angolo φ in -φ: la forma resta regolare, con
+      // la rotazione -180 - a, poi gira con il resto.
+      const rotation = determinant(taken) > 0 ? shape.rotation + turn : turn - 180 - shape.rotation;
+      const written = polygonalAttrs({ ...shape, cx, cy, r: shape.r * k, rotation, corner: shape.corner * k });
+      if (written === null) return null;
+      Object.assign(attrs, { "fub:geom": written["fub:geom"], d: written.d });
       return { ...parts, attrs };
     }
     case "stroke": {

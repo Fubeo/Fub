@@ -9,10 +9,10 @@
 //! In `apps/client/src/__fixtures__/scene/`:
 //!
 //! - `sparse`: un disegno FubDraw in forma canonica (§7), con ogni ruolo di
-//!   §4, tratti che si ridisegnano e tratti che no, un blocco estraneo dentro
-//!   un gruppo, un livello bloccato e nascosto, e dentro un livello un gruppo
-//!   bloccato con una forma nascosta, un collegamento e una forma col loro
-//!   `title`. Una lunghezza in pollici
+//!   §4 e ogni forma sintetica di §6, tratti che si ridisegnano e tratti che
+//!   no, un blocco estraneo dentro un gruppo, un livello bloccato e nascosto,
+//!   e dentro un livello un gruppo bloccato con una forma nascosta, un
+//!   collegamento e una forma col loro `title`. Una lunghezza in pollici
 //!   resta com'è, come FubDraw copia i valori che non tocca;
 //! - `foreign`: un SVG di un altro programma, senza `fub:version`, con un
 //!   esempio di ogni motivo per cui un elemento è estraneo, contenuto attivo,
@@ -488,6 +488,33 @@ fn sparse() -> String {
                         .a("fill", "#56b4e9")
                         .child(El::new("title").text("Nuvola")),
                 ),
+        )
+        .child(
+            El::new("path")
+                .a("id", "o00000022")
+                .a("fub:shape", "polygon")
+                .a("fub:geom", "1300 560 80 6 0 8")
+                .a(
+                    "d",
+                    "M1264.62 629.28 A8 8 0 0 1 1257.69 625.28 L1222.31 564 A8 8 0 0 1 1222.31 556 \
+                     L1257.69 494.72 A8 8 0 0 1 1264.62 490.72 L1335.38 490.72 A8 8 0 0 1 1342.31 494.72 \
+                     L1377.69 556 A8 8 0 0 1 1377.69 564 L1342.31 625.28 A8 8 0 0 1 1335.38 629.28 Z",
+                )
+                .a("fill", "none")
+                .a("stroke", "#0072b2")
+                .a("stroke-width", 4),
+        )
+        .child(
+            El::new("path")
+                .a("id", "o00000023")
+                .a("fub:shape", "star")
+                .a("fub:geom", "1100 820 70 5 0.382 0 0")
+                .a(
+                    "d",
+                    "M1100 750 L1115.72 798.37 L1166.57 798.37 L1125.43 828.26 L1141.14 876.63 \
+                     L1100 846.74 L1058.86 876.63 L1074.57 828.26 L1033.43 798.37 L1084.28 798.37 Z",
+                )
+                .a("fill", "#009e73"),
         );
     let notes = layer("l9z8y7x6w", "Appunti")
         .a("fub:locked", "true")
@@ -685,7 +712,7 @@ fn sparse_is_a_complete_drawing() {
             summary.counts.shapes,
             summary.counts.foreign
         ),
-        (5, 9, 1)
+        (5, 11, 1)
     );
     let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
     use fub_scene::Code::*;

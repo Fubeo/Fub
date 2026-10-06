@@ -28,7 +28,7 @@ import { shapeSegments, type Unit } from "./hit";
 import { GEOMETRY, replaceWithPath, syntheticNulls } from "./topath";
 
 /// I ruoli delle forme su cui le operazioni lavorano.
-const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "arrow", "stroke"]);
+const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "arrow", "ngon", "star", "stroke"]);
 
 /// Un'operazione booleana pronta: le operazioni, e quanti tracciati ne
 /// escono.

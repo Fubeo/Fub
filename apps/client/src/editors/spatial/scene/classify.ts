@@ -18,6 +18,7 @@ import { InkError } from "../ink/sample";
 import { Context, isContainer, Tally, type Role, type Stroke, type Tool } from "./analysis";
 import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
 import { parsePath } from "./geometry";
+import { readPolygonal, type Polygonal } from "./parametric";
 import type { Span } from "./text";
 import {
   dasharray,
@@ -86,6 +87,8 @@ export interface ElementItem extends Span {
   readonly stroke?: Stroke;
   /// `x1 y1 x2 y2` di una freccia.
   readonly arrow?: readonly [number, number, number, number];
+  /// La geometria di un poligono regolare o di una stella: `fub:geom` letto.
+  readonly polygonal?: Polygonal;
   /// Il testo del primo `title` figlio di un livello o di un oggetto, coi
   /// riferimenti risolti e gli spazi com'erano: il nome che qualcuno gli ha
   /// dato.
@@ -357,8 +360,18 @@ function pathRole(element: ElementNode): Role {
   if (tool === "pen" || tool === "highlighter") return "stroke";
   // Uno strumento sconosciuto, o una forma sconosciuta, lasciano un
   // tracciato: la geometria si legge da `d` (§6).
-  if (valueOf(element, NS_FUB, "shape") === "arrow" && arrowGeometry(element) !== null) return "arrow";
+  const shape = valueOf(element, NS_FUB, "shape");
+  if (shape === "arrow" && arrowGeometry(element) !== null) return "arrow";
+  if (polygonalGeometry(element) !== null) return shape === "star" ? "star" : "ngon";
   return "path";
+}
+
+/// `fub:geom` di un poligono regolare o di una stella, se si legge.
+function polygonalGeometry(element: ElementNode): Polygonal | null {
+  const shape = valueOf(element, NS_FUB, "shape");
+  const geom = valueOf(element, NS_FUB, "geom");
+  if (geom === undefined || (shape !== "polygon" && shape !== "star")) return null;
+  return readPolygonal(shape, geom);
 }
 
 /// `fub:geom` di una freccia: quattro numeri SVG.
@@ -382,6 +395,7 @@ export interface Details {
   readonly hidden?: true;
   readonly stroke?: Stroke;
   readonly arrow?: readonly [number, number, number, number];
+  readonly polygonal?: Polygonal;
   /// Il nome di un'unità, come [`ElementItem.title`]. Quello di un
   /// contenitore viene dai figli, e lo aggiunge chi li ha: la lettura intera
   /// e il modello, che riscrive il tag d'apertura senza rileggere i figli.
@@ -473,6 +487,10 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     const arrow = arrowGeometry(element);
     if (arrow !== null) details.arrow = arrow;
   }
+  if (role === "ngon" || role === "star") {
+    const polygonal = polygonalGeometry(element);
+    if (polygonal !== null) details.polygonal = polygonal;
+  }
   if (role === "title" || role === "desc") details.text = characterData(doc, id);
   if (role === "text") {
     details.lines = element.children
@@ -502,6 +520,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.hidden !== undefined) item.hidden = details.hidden;
   if (details.stroke !== undefined) item.stroke = details.stroke;
   if (details.arrow !== undefined) item.arrow = details.arrow;
+  if (details.polygonal !== undefined) item.polygonal = details.polygonal;
   if (details.title !== undefined) item.title = details.title;
   if (details.text !== undefined) item.text = details.text;
   if (details.lines !== undefined) item.lines = details.lines;

@@ -36,7 +36,9 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 /// Il contrasto minimo fra un tratto e la carta (§12).
 export const MIN_CONTRAST = 3;
 
-/// Che cosa rappresenta un elemento modificabile (§4).
+/// Che cosa rappresenta un elemento modificabile (§4). `ngon` e `star` sono il
+/// poligono regolare e la stella sintetici, un `path` con `fub:shape` (§6);
+/// `polygon` è l'elemento `polygon`.
 export type Role =
   | "title"
   | "desc"
@@ -46,6 +48,8 @@ export type Role =
   | "link"
   | "stroke"
   | "arrow"
+  | "ngon"
+  | "star"
   | "path"
   | "rect"
   | "ellipse"
@@ -113,8 +117,8 @@ export interface Index {
 /// Quanti oggetti modificabili ha la scena, per tipo.
 export interface Counts {
   strokes: number;
-  /// Frecce, tracciati, rettangoli, ellissi, cerchi, linee, polilinee e
-  /// poligoni; la carta no.
+  /// Frecce, poligoni regolari, stelle, tracciati, rettangoli, ellissi,
+  /// cerchi, linee, polilinee e poligoni; la carta no.
   shapes: number;
   texts: number;
   images: number;
@@ -321,6 +325,8 @@ export class Tally {
         }
         break;
       case "arrow":
+      case "ngon":
+      case "star":
       case "path":
       case "rect":
       case "ellipse":
@@ -421,6 +427,8 @@ function bounds(doc: XmlDocument, element: ElementNode, role: Role, m: Matrix, o
   switch (role) {
     case "stroke":
     case "arrow":
+    case "ngon":
+    case "star":
     case "path": {
       const d = valueOf(element, NS_NONE, "d");
       const segments = d === undefined ? null : parsePath(d);

@@ -38,6 +38,8 @@ export const GEOMETRY: Readonly<Record<string, readonly string[]>> = {
 /// (formato della scena, §5 e §6).
 const SYNTHETIC: Readonly<Record<string, readonly string[]>> = {
   arrow: ["shape", "geom"],
+  ngon: ["shape", "geom"],
+  star: ["shape", "geom"],
   stroke: ["tool", "ink", "brush", "at"],
 };
 
@@ -138,6 +140,8 @@ export function pathOps(model: DocumentModel, units: readonly Unit[], ids: NewId
       case "path":
         return;
       case "arrow":
+      case "ngon":
+      case "star":
       case "stroke":
         plan.ops.push({ op: "set", id: plan.idOf(node), attrs: syntheticNulls(node) });
         changed++;
