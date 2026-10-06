@@ -258,26 +258,29 @@ forme scelte, come il menu Tracciato di Inkscape. Le regole stanno in
 
 ## Nodi
 
-Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi dell'oggetto
-scelto: i punti per cui passa, i segmenti fra loro e le maniglie delle curve.
-Come con la Selezione diretta di Illustrator, ogni forma ha i suoi nodi: un
-tracciato, un rettangolo, un'ellisse, un cerchio, una linea, una spezzata, un
-poligono, una stella, una freccia e un tratto a penna. Un testo e
-un'immagine non ne hanno, e nemmeno una parte di un altro programma, che
-FubDraw lascia com'è: lo strumento dice perché. Si sceglie un oggetto solo.
-Le regole stanno in `apps/client/src/editors/spatial/tools/nodes.ts` e, per
+Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi degli oggetti
+scelti: i punti per cui passano, i segmenti fra loro e le maniglie delle
+curve. Come con la Selezione diretta di Illustrator, ogni forma ha i suoi
+nodi: un tracciato, un rettangolo, un'ellisse, un cerchio, una linea, una
+spezzata, un poligono, una stella, una freccia e un tratto a penna. Un testo
+e un'immagine non ne hanno, e nemmeno una parte di un altro programma, che
+FubDraw lascia com'è: lo strumento dice perché. I nodi di più oggetti si
+modificano insieme; di un gruppo si vedono quelli di tutte le sue forme,
+finché se ne tocca una. Le regole stanno in `apps/client/src/editors/spatial/tools/nodes.ts` e, per
 le forme che non sono tracciati, in `nodable.ts` accanto.
 
-- **Col puntatore** si trascina un nodo, coi nodi scelti insieme a lui, una
-  maniglia o un punto di un segmento, che si piega. Dentro la forma, lontano
-  da nodi e segmenti, si prendono tutti i suoi nodi, che si trascinano
-  insieme. Un tocco su un nodo lo sceglie, con `Maiusc` lo aggiunge o lo
-  toglie; un tocco su un segmento sceglie i suoi due nodi, e due tocchi ci
-  aggiungono un nodo. Un trascinamento sul vuoto sceglie i nodi nel
-  riquadro; un tocco sul vuoto toglie la scelta dei nodi, poi quella
-  dell'oggetto. Su un altro oggetto, o su un'altra forma dello stesso
-  gruppo, il punto passa a quella e prende subito ciò che tocca: un suo nodo
-  si trascina in un gesto solo.
+- **Col puntatore** si trascina un nodo, coi nodi scelti insieme a lui anche
+  di altre forme, una maniglia o un punto di un segmento, che si piega.
+  Dentro una forma, lontano da nodi e segmenti, si prendono tutti i suoi
+  nodi, che si trascinano insieme. Un tocco su un nodo lo sceglie da solo,
+  con la sua forma; con `Maiusc` lo aggiunge o lo toglie. Un tocco su un
+  segmento sceglie i suoi due nodi, e due tocchi ci aggiungono un nodo. Un
+  trascinamento sul vuoto sceglie i nodi nel riquadro, di tutte le forme del
+  disegno, coi loro oggetti, e gli oggetti senza nodi che racchiude interi;
+  con `Maiusc` li aggiunge. Un tocco sul vuoto toglie la scelta dei nodi,
+  poi quella degli oggetti. Su un altro oggetto, o su un'altra forma dello
+  stesso gruppo, il punto passa a quella, o con `Maiusc` la aggiunge, e
+  prende subito ciò che tocca: un suo nodo si trascina in un gesto solo.
 - **Passando col puntatore**, senza premere, la forma sotto mostra il suo
   contorno e i suoi nodi, più piccoli e più tenui di quelli che si
   modificano: si vede dove sono prima di toccarli.
@@ -285,13 +288,17 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
   di Inkscape: «Aggiungi nodi» (`Ins`) a metà dei segmenti fra due nodi
   scelti, «Elimina nodi» (`Canc`), «Nodi a spigolo», «Nodi lisci» e «Nodi
   simmetrici» (`Maiusc+C`, `S`, `Y`), «Segmenti in linee» e «Segmenti in
-  curve» (`Maiusc+L` e `U`), «Spezza ai nodi» (`Maiusc+B`) e «Unisci i capi»
-  (`Maiusc+J`). `Alt+F10` ci va, ed `Esc` torna al foglio.
-- **Dalla tastiera** `Tab` e `Maiusc+Tab` passano di nodo in nodo, e oltre
-  l'ultimo all'oggetto dopo; `Home` e `Fine` vanno al primo e all'ultimo
-  nodo, `Ctrl+A` li sceglie tutti ed `Esc` toglie la scelta dei nodi, poi
-  quella dell'oggetto. Ogni nodo si dice col numero, il tipo e la posizione:
-  «Nodo 2 di 3, spigolo: x 50, y 10». Le frecce spostano i nodi scelti di 1,
+  curve» (`Maiusc+L` e `U`), «Spezza ai nodi» (`Maiusc+B`), «Unisci i capi»
+  (`Maiusc+J`) e «Allinea i nodi», sul bordo o sul centro del loro riquadro,
+  o della pagina per un nodo solo. `Alt+F10` ci va, ed `Esc` torna al foglio.
+- **Dalla tastiera** `Tab` e `Maiusc+Tab` passano di nodo in nodo, anche da
+  una forma all'altra, e oltre l'ultimo all'oggetto dopo; `Home` e `Fine`
+  vanno al primo e all'ultimo nodo. `Ctrl+A` sceglie tutti i nodi delle
+  forme, e la seconda volta tutti gli oggetti coi loro nodi; `Esc` toglie la
+  scelta dei nodi, poi quella degli oggetti. Ogni nodo si dice col numero, il
+  tipo e la posizione, «Nodo 2 di 3, spigolo: x 50, y 10», e con più forme
+  prima la sua; i nodi scelti di più oggetti si contano: «2 nodi scelti in 2
+  oggetti». Le frecce spostano i nodi scelti di 1,
   10 con `Maiusc` e un pixel dello schermo con `Ctrl` o `⌘`, di riga in riga
   con l'aggancio alla griglia; senza nodi scelti muovono il cursore, mai
   l'oggetto. `Invio` apre la posizione dei nodi scelti, da scrivere coi
@@ -309,7 +316,7 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
 - **Eliminare un nodo** unisce i suoi segmenti: due linee in una linea, se
   no in una curva che passa vicino a dov'erano e tiene i versi ai capi, così
   un nodo liscio accanto resta liscio. Ai capi di un tracciato aperto il
-  segmento se ne va. Un tracciato rimasto senza nodi se ne va con loro, e
+  segmento se ne va. Una forma rimasta senza nodi se ne va con loro, e
   `Canc` non elimina mai l'oggetto: lo fa «Elimina la selezione».
 - **Spezzare** fa di un nodo due nodi nello stesso punto, scelti: un
   tracciato chiuso si apre, uno aperto si divide. **Unire** due capi scelti
@@ -318,6 +325,11 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
 - **Ogni modifica riscrive il `d` intero**, in coordinate assolute con due
   decimali, in un passo che si annulla col suo nome; il resto del tracciato
   non si tocca. La pagina si allarga se il tracciato ne esce.
+- **Più forme cambiano in un passo solo**, che un annulla toglie: un
+  trascinamento, le frecce, la posizione e i comandi della barra valgono per
+  i nodi scelti di ogni forma. Se una forma non può prendere la modifica, le
+  altre la prendono e lo strumento dice perché. Si uniscono due capi della
+  stessa forma, non di due.
 - **Una forma resta la sua finché i nodi la disegnano.** Un rettangolo coi
   lati ancora dritti e in squadra, anche più largo o più alto, una linea, una
   spezzata o un poligono coi segmenti dritti riscrivono solo i loro
