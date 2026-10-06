@@ -198,6 +198,11 @@ export class Unit {
     return out.finish();
   }
 
+  /// Vero se una delle forme che lo disegnano si riempie.
+  get filled(): boolean {
+    return this.parts.some((part) => part.fill);
+  }
+
   /// Le forme che disegnano l'oggetto, in ordine di documento: l'elemento,
   /// e la matrice dalle sue coordinate a quelle della scena.
   shapes(): Array<{ readonly leaf: LeafNode; readonly matrix: Matrix }> {

@@ -79,6 +79,29 @@ export function syntheticNulls(node: ElementPart): Record<string, null> {
   return attrs;
 }
 
+/// Scrive `d` come geometria della forma `node`: un tracciato cambia
+/// soltanto `d`, se cambia, e perde ciò che lo faceva freccia, poligono,
+/// stella o tratto; un'altra forma diventa un tracciato. Falso, senza
+/// operazioni, se `node` ha parti che un'operazione non sa scrivere.
+export function rewriteShape(plan: Plan, node: ElementPart, d: string): boolean {
+  if (node.details!.tag !== "path") return replaceWithPath(plan, node, d);
+  // Un tracciato che resta com'era non si riscrive.
+  const attrs: Record<string, string | null> = syntheticNulls(node);
+  if (plainAttributes(node).get("d") !== d) attrs.d = d;
+  if (Object.keys(attrs).length > 0) plan.ops.push({ op: "set", id: plan.idOf(node), attrs });
+  return true;
+}
+
+/// Gli attributi della forma `node` senza la sua geometria: lo stile e la
+/// trasformazione di un tracciato nuovo che le sta accanto. L'id e il `d`
+/// sono da dare.
+export function lookOf(node: ElementPart): Record<string, string> {
+  const skipped = new Set(GEOMETRY[node.details!.tag] ?? []);
+  const look: Record<string, string> = {};
+  for (const [name, value] of plainAttributes(node)) if (!skipped.has(name)) look[name] = value;
+  return look;
+}
+
 /// Mette al posto della forma `node`, che non è un `path`, un `path` che
 /// disegna `d`: stesso id, stesso posto fra i fratelli, stessi attributi
 /// tranne la geometria che `d` sostituisce, stessi figli. Falso, senza

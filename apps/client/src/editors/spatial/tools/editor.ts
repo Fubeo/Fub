@@ -133,7 +133,7 @@ import { ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
-import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle } from "../painter/overlay";
+import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
 import { PaintBuilder, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
 import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
@@ -245,6 +245,7 @@ import { applyOps } from "./apply";
 import { pathOps } from "./topath";
 import type { BooleanKind } from "./boolean";
 import { combineOps, isShape, type Refused } from "./combine";
+import { builderOf, buildOps, type Builder, type BuildRefused } from "./builder";
 import {
   bend,
   breakNodes,
@@ -564,6 +565,10 @@ const HOLD_PX: Readonly<Record<InkPointerType, number>> = { pen: 4, mouse: 3, to
 const LASSO_STEP_PX = 2;
 const LASSO_MAX_POINTS = 512;
 
+/// Il Costruttore guarda il tratto del puntatore fra un campione e l'altro a
+/// passi di tanti pixel dello schermo: una regione stretta non si salta.
+const BUILDER_STEP_PX = 3;
+
 /// Sotto questa misura, in pixel, una forma è un tocco e non si scrive.
 const MIN_SHAPE_PX = 4;
 
@@ -598,7 +603,7 @@ const RECENT_MAX = 6;
 
 /// Gli strumenti che il menu radiale offre quando chi disegna ne ha usati
 /// meno di tre: prima quelli che si alternano di più alla penna.
-const FILL_TOOLS: readonly ToolId[] = ["pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "nodes"];
+const FILL_TOOLS: readonly ToolId[] = ["pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "nodes", "builder"];
 
 /// La lettera dei pulsanti delle dimensioni del testo, in pixel.
 const SIZE_GLYPH_PX: readonly number[] = [12, 16, 22];
@@ -840,6 +845,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-to-shape": ["M3 19c2-3 3.5 0 5.5-2.5S12 16 14 13", "M13 3h8v8h-8z"],
   "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
+  "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
   "draw-bezier": ["M12 21L7 12l3-8h4l3 8z", "M12 21v-7.5", "M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-node-add": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M12 3v6", "M9 6h6"],
   "draw-node-delete": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M9 6h6"],
@@ -908,7 +914,7 @@ interface LinkMark {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | LassoGesture | NodesGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
+type Gesture = InkGesture | ShapeGesture | SelectGesture | LassoGesture | NodesGesture | BuilderGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -1004,6 +1010,30 @@ interface LassoGesture extends GestureBase {
   readonly points: Point[];
   readonly base: readonly string[];
   readonly mode: "replace" | "add" | "remove";
+  /// Oltre la soglia del trascinamento: prima, è un tocco.
+  dragging: boolean;
+}
+
+/// Un gesto del Costruttore di forme. Cominciato su una regione, senza
+/// Maiusc, prende le regioni che attraversa, da unire o, con Alt, da
+/// togliere; un tocco ne prende una. Altrimenti sceglie gli oggetti come la
+/// Selezione: un tocco quello sotto, un riquadro quelli dentro.
+interface BuilderGesture extends GestureBase {
+  readonly kind: "builder";
+  /// Dove è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// Che cosa fa il gesto, deciso dal primo punto.
+  mode: "regions" | "objects" | null;
+  /// Maiusc al primo punto: il tocco e il riquadro aggiungono alla
+  /// selezione, e il tocco su un oggetto scelto lo toglie.
+  additive: boolean;
+  /// Le regioni attraversate, nell'ordine: la prima dà lo stile all'unione.
+  readonly crossed: number[];
+  /// La scia del puntatore sulle regioni, nella scena.
+  readonly trail: Point[];
+  /// La selezione di partenza, che un gesto annullato ripristina.
+  readonly base: readonly string[];
   /// Oltre la soglia del trascinamento: prima, è un tocco.
   dragging: boolean;
 }
@@ -1603,6 +1633,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly subs: readonly Subpath[] | null;
     readonly matrix: Matrix;
   } | null = null;
+  /// Il Costruttore di forme sugli oggetti scelti, per la scena e la
+  /// selezione in cui lo si è fatto; dalla scena alle coordinate delle sue
+  /// regioni. `builder` è `null` se non c'è niente di scelto o se il calcolo
+  /// non riesce, e `complex` dice se è per le forme troppo complesse.
+  let building: {
+    readonly index: SceneIndex;
+    readonly keys: string;
+    readonly builder: Builder | null;
+    readonly complex: boolean;
+    readonly inverse: Matrix | null;
+  } | null = null;
+  /// La regione del Costruttore sotto il puntatore che passa, e quella a cui
+  /// si è arrivati con Tab; -1 per nessuna. Le regioni scelte con Spazio,
+  /// nell'ordine: la prima dà lo stile all'unione.
+  let regionHover = -1;
+  let regionActive = -1;
+  let regionsChosen: number[] = [];
   /// L'ultimo tocco su un segmento, per il doppio tocco che aggiunge un nodo.
   let lastSegmentTap: { readonly shape: string; readonly sub: number; readonly link: number; readonly time: number; readonly at: Point } | null = null;
   /// Il tracciato che la penna di Bézier sta disegnando: i nodi nella scena,
@@ -3092,6 +3139,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const shaping = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current.matrix : null;
     let band: Bounds | null = null;
     const edited = new Set(editedUnits());
+    // Col Costruttore le forme si vedono nelle loro regioni; mentre si
+    // scelgono gli oggetti, e per una forma che taglia soltanto, la cornice.
+    const builder = current?.kind === "builder" && current.mode === "objects" ? null : builderNow();
+    const built = new Set(builder === null ? [] : builder.shapes.filter((_, k) => !builder.cuts[k]).map((unit) => unit.key));
     for (const unit of selectedUnits()) {
       const frame = unit.frame();
       if (frame === null) continue;
@@ -3109,7 +3160,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       // Un oggetto di cui si modificano i nodi mostra i nodi, non la
       // cornice.
-      if (edited.has(unit.key)) continue;
+      if (edited.has(unit.key) || built.has(unit.key)) continue;
       // Il margine è lo stesso sullo schermo lungo i due assi, anche per un
       // oggetto scalato più in un verso che nell'altro.
       const sx = Math.hypot(matrix[0], matrix[1]) * camera.scale;
@@ -3127,11 +3178,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     handles.push(...frameHandles());
     handles.push(...hoverHandles());
+    handles.push(...regionHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
     const lasso = current?.kind === "select" && current.mode === "marquee"
       ? current
-      : current?.kind === "nodes" && current.dragging && current.grab?.kind === "marquee" ? current : null;
+      : (current?.kind === "nodes" && current.dragging && current.grab?.kind === "marquee") || (current?.kind === "builder" && current.mode === "objects" && current.dragging)
+        ? current
+        : null;
     if (lasso !== null && lasso.from !== null && lasso.end !== null) {
       const [x1, y1] = lasso.from;
       const [x2, y2] = lasso.end;
@@ -3139,6 +3193,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       handles.push({ kind: "lasso", points: slanted === null ? [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] : [...slanted.corners] });
     }
     if (current?.kind === "lasso" && current.dragging) handles.push({ kind: "lasso", points: [...current.points] });
+    if (current?.kind === "builder" && current.mode === "regions" && current.dragging) handles.push({ kind: "trail", points: [...current.trail] });
+    // Sopra una regione, il cursore dice che il tocco e il trascinamento
+    // uniscono; con Alt, che tolgono, lo dice il tratteggio.
+    surface.toggleAttribute("data-region", tool === "builder" && !alt && (current?.kind === "builder" ? current.mode === "regions" : regionHover >= 0));
     // Le guide e le misure stanno sopra a tutto.
     const guides = guideHandles();
     const measures = measureHandles();
@@ -5244,6 +5302,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       finishBezier(false, true);
       if (live.textContent !== before) finished = (live.textContent ?? "").trim();
       recentTools = [tool, ...recentTools.filter((each) => each !== tool && each !== id)].slice(0, RECENT_MAX);
+      forgetBuilder();
     }
     tool = id;
     syncControls();
@@ -5251,8 +5310,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showHandles();
     showGrip(null);
     const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
-    // Con lo strumento Nodi, anche di che cosa si modificano i nodi.
-    const target = id === "nodes" ? targetText() : "";
+    // Con lo strumento Nodi, anche di che cosa si modificano i nodi; col
+    // Costruttore, su quante regioni lavora.
+    const target = id === "nodes" ? targetText() : id === "builder" ? builderText() : "";
     announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
@@ -5988,6 +6048,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           reshaped: null,
           missed: null,
         };
+      case "builder":
+        return { ...base, kind: "builder", from: null, end: null, mode: null, additive: false, crossed: [], trail: [], base: [...selection], dragging: false };
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
         return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
@@ -6420,6 +6482,260 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     showHandles();
     announceSelection();
+  };
+
+  // --- Il Costruttore di forme -------------------------------------------------
+
+  /// Il Costruttore sugli oggetti scelti, rifatto quando cambiano la scena o
+  /// la selezione: allora la regione sotto il puntatore, quella a cui si è
+  /// arrivati e quelle scelte si perdono. `null` se lo strumento non è lui,
+  /// se non c'è niente di scelto o se il calcolo non riesce.
+  const builderNow = (): Builder | null => {
+    const model = engine.model;
+    if (tool !== "builder" || !has("builder") || !editable() || model === null) return null;
+    const index = currentIndex();
+    const keys = selection.join("\n");
+    if (building === null || building.index !== index || building.keys !== keys) {
+      const units = selectedUnits();
+      const found = units.length === 0 ? null : builderOf(model, units);
+      const builder = found === "complex" ? null : found;
+      building = { index, keys, builder, complex: found === "complex", inverse: builder === null ? null : invert(builder.matrix) };
+      regionHover = -1;
+      regionActive = -1;
+      regionsChosen = [];
+    }
+    return building.builder;
+  };
+
+  /// Il Costruttore si rifà da capo: lo strumento è cambiato.
+  const forgetBuilder = (): void => {
+    building = null;
+    regionHover = -1;
+    regionActive = -1;
+    regionsChosen = [];
+  };
+
+  /// La regione del Costruttore nel punto `p` della scena, o -1.
+  const regionAt = (p: Point): number => {
+    const builder = builderNow();
+    const inverse = building?.inverse ?? null;
+    return builder === null || inverse === null ? -1 : builder.regions.at(apply(inverse, p));
+  };
+
+  /// Su che cosa lavora il Costruttore, a parole: quante regioni hanno le
+  /// forme scelte, e quanti oggetti scelti non sono forme; o perché niente.
+  const builderText = (): string => {
+    if (!has("builder") || !editable()) return "";
+    if (selection.length === 0) return t("draw.builder.none");
+    const builder = builderNow();
+    if (builder === null) return t(building?.complex === true ? "draw.builder.complex" : "draw.builder.failed");
+    const parts: string[] = [];
+    const count = builder.regions.regions.length;
+    const shapes = builder.shapes.length;
+    if (shapes > 0 && count === 0) parts.push(t("draw.builder.empty"));
+    else if (shapes === 1) parts.push(plural(count, "draw.builder.regions.single.one", "draw.builder.regions.single.other"));
+    else if (shapes > 1) parts.push(plural(count, "draw.builder.regions.one", "draw.builder.regions.other", { shapes }));
+    const others = builder.selected.length - shapes;
+    if (others > 0) parts.push(plural(others, "draw.builder.not_shapes.one", "draw.builder.not_shapes.other"));
+    return parts.join(" ");
+  };
+
+  /// La selezione e, col Costruttore, su che cosa lavora.
+  const announcePicked = (): void => {
+    const picked = selection.length === 0 ? "" : plural(selection.length, "draw.selected.one", "draw.selected.other");
+    announce([picked, builderText()].filter((part) => part !== "").join(" "));
+  };
+
+  /// La regione `at` di `builder` a parole: quale, di quante, e le forme che
+  /// la coprono, dalla più in alto, che le dà lo stile se la si unisce.
+  const regionText = (builder: Builder, at: number): string => {
+    const names = [...builder.regions.regions[at]!.cover].reverse().map((k) => labelOf(builder.shapes[k]!));
+    const values = {
+      index: at + 1,
+      total: builder.regions.regions.length,
+      shapes: new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(names),
+    };
+    return t(regionsChosen.includes(at) ? "draw.builder.region.chosen" : "draw.builder.region", values);
+  };
+
+  /// Le regioni del Costruttore, appena segnate. Quella sotto il puntatore
+  /// si accende; quelle che il gesto prende e quelle scelte si riempiono, o
+  /// con Alt si tratteggiano, perché si tolgono; quella a cui si è arrivati
+  /// con Tab ha il bordo spesso. Mentre si scelgono gli oggetti, nessuna.
+  const regionHandles = (): OverlayHandle[] => {
+    const g = current?.kind === "builder" ? current : null;
+    if (g?.mode === "objects") return [];
+    const builder = builderNow();
+    if (builder === null) return [];
+    const taken = new Set(g === null ? regionsChosen : g.dragging ? g.crossed : g.crossed.slice(0, 1));
+    return builder.regions.regions.map((region, r): OverlayHandle => {
+      const tone: RegionTone = taken.has(r)
+        ? g !== null && alt ? "erase" : "chosen"
+        : g === null && r === regionHover ? (alt ? "erase" : "hover") : "plain";
+      return { kind: "region", segments: region.segments, matrix: builder.matrix, tone, active: r === regionActive };
+    });
+  };
+
+  /// Il puntatore passa sopra `p` senza premere: col Costruttore la regione
+  /// sotto si accende. Il dito non passa: tocca.
+  const hoverRegion = (p: Point | null, pointer: InkPointerType): void => {
+    const next = p !== null && pointer !== "touch" ? regionAt(p) : -1;
+    if (next === regionHover) return;
+    regionHover = next;
+    showHandles();
+  };
+
+  /// Unisce le regioni `chosen` del Costruttore in una forma, con lo stile
+  /// della prima, o con `erase` le toglie, in un passo di annulla; e dice
+  /// che cosa resta.
+  const build = (chosen: readonly number[], erase: boolean): void => {
+    const builder = builderNow();
+    const model = engine.model;
+    if (builder === null || model === null || chosen.length === 0) return;
+    const built = buildOps(model, builder, chosen, erase, newIds());
+    if ("reason" in built) {
+      announce(t(BUILD_REFUSALS[built.reason]));
+      return;
+    }
+    const label: DrawKey = erase ? "draw.action.build_erase" : chosen.length === 1 ? "draw.action.build_separate" : "draw.action.build_merge";
+    if (arrange(label, built) === null) return;
+    const done = erase
+      ? plural(chosen.length, "draw.builder.erased.one", "draw.builder.erased.other")
+      : chosen.length === 1 ? t("draw.builder.separated") : plural(chosen.length, "draw.builder.merged.one", "draw.builder.merged.other");
+    const removed = built.removed === 0 ? "" : plural(built.removed, "draw.builder.removed.one", "draw.builder.removed.other");
+    announce([done, removed, builderText()].filter((part) => part !== "").join(" "));
+  };
+
+  /// Il punto `p` del gesto del Costruttore. Il primo decide che cosa fa il
+  /// gesto: le regioni, se cade su una senza Maiusc, o gli oggetti. Poi le
+  /// regioni che il tratto attraversa si aggiungono, guardate a passi sullo
+  /// schermo, e la scia lo segue.
+  const builderAdd = (g: BuilderGesture, p: Point): void => {
+    if (g.from === null || g.end === null) {
+      g.from = p;
+      g.end = p;
+      g.additive = shift;
+      const at = shift ? -1 : regionAt(p);
+      g.mode = at >= 0 ? "regions" : "objects";
+      if (at >= 0) {
+        g.crossed.push(at);
+        g.trail.push(p);
+      }
+      return;
+    }
+    const last = g.end;
+    g.end = p;
+    if (!g.dragging && Math.hypot(p[0] - g.from[0], p[1] - g.from[1]) * camera.scale > DRAG_PX[g.pointer]) g.dragging = true;
+    if (g.mode !== "regions") return;
+    const steps = Math.max(1, Math.ceil((Math.hypot(p[0] - last[0], p[1] - last[1]) * camera.scale) / BUILDER_STEP_PX));
+    for (let i = 1; i <= steps; i++) {
+      const at = regionAt([last[0] + ((p[0] - last[0]) * i) / steps, last[1] + ((p[1] - last[1]) * i) / steps]);
+      if (at >= 0 && !g.crossed.includes(at)) g.crossed.push(at);
+    }
+    const tail = g.trail[g.trail.length - 1]!;
+    if (Math.hypot(p[0] - tail[0], p[1] - tail[1]) * camera.scale < LASSO_STEP_PX) return;
+    g.trail.push(p);
+    if (g.trail.length > LASSO_MAX_POINTS) {
+      const kept = g.trail.filter((_, at) => at % 2 === 0 || at === g.trail.length - 1);
+      g.trail.splice(0, g.trail.length, ...kept);
+    }
+  };
+
+  /// Il riquadro del Costruttore sceglie gli oggetti dentro, come quello
+  /// della Selezione; con Maiusc li aggiunge a quelli di prima.
+  const builderMarquee = (g: BuilderGesture): void => {
+    if (g.from === null || g.end === null) return;
+    selection = inOrder([...(g.additive ? g.base : []), ...marqueed(g.from, g.end).map((unit) => unit.key)]);
+    syncControls();
+  };
+
+  const builderUpdate = (g: BuilderGesture): void => {
+    if (g.mode === "objects" && g.dragging) builderMarquee(g);
+    showHandles();
+  };
+
+  /// Il gesto del Costruttore finisce. Sulle regioni un trascinamento unisce
+  /// quelle attraversate e un tocco separa la sua, o con Alt le toglie. Sugli
+  /// oggetti il riquadro resta, e un tocco sceglie l'oggetto sotto, o il
+  /// vuoto; uno già scelto tiene la selezione com'è, e con Maiusc lo si
+  /// toglie.
+  const builderEnd = (g: BuilderGesture): void => {
+    current = null;
+    if (g.mode === "regions") {
+      showHandles();
+      build(g.dragging ? g.crossed : g.crossed.slice(0, 1), alt);
+      return;
+    }
+    if (g.mode === null || g.from === null) {
+      showHandles();
+      return;
+    }
+    if (g.dragging) {
+      builderMarquee(g);
+    } else {
+      const key = currentIndex().at(g.from, HIT_PX[g.pointer] / camera.scale)?.key ?? null;
+      if (g.additive) {
+        if (key !== null) select(g.base.includes(key) ? g.base.filter((each) => each !== key) : [...g.base, key]);
+      } else if (key === null || !g.base.includes(key)) {
+        select(key === null ? [] : [key]);
+      }
+    }
+    showHandles();
+    announcePicked();
+  };
+
+  /// Vero se i tasti valgono per le regioni: il Costruttore ne ha, e la
+  /// tastiera non sta premendo.
+  const builderKeysOn = (): boolean => tool === "builder" && pressed === null && (builderNow()?.regions.regions.length ?? 0) > 0;
+
+  /// Porta alla regione `at` del Costruttore: la segna col bordo spesso, la
+  /// porta in vista e la dice. `false` se non c'è.
+  const visitRegion = (at: number): boolean => {
+    cancelGesture();
+    const builder = builderNow();
+    const region = builder?.regions.regions[at];
+    if (builder === null || region === undefined) return false;
+    regionActive = at;
+    frameBounds(mappedBounds({ min: region.min, max: region.max }, builder.matrix));
+    showHandles();
+    announce(regionText(builder, at));
+    return true;
+  };
+
+  /// Tab col Costruttore: la regione dopo quella a cui si è, o con Maiusc
+  /// quella prima; da nessuna, la prima o l'ultima. Oltre le estremità,
+  /// `false`: il Tab esce dal foglio.
+  const walkRegions = (step: 1 | -1): boolean => {
+    const total = builderNow()?.regions.regions.length ?? 0;
+    return visitRegion(regionActive < 0 ? (step > 0 ? 0 : total - 1) : regionActive + step);
+  };
+
+  /// Spazio col Costruttore: sceglie la regione a cui si è arrivati, o
+  /// quella sotto il cursore, o la lascia se era scelta.
+  const pickRegion = (): void => {
+    const builder = builderNow();
+    if (builder === null) return;
+    const at = regionActive >= 0 ? regionActive : regionAt(cursorPoint());
+    if (at < 0) {
+      announce(t("draw.builder.nowhere"));
+      return;
+    }
+    const lead = at === regionActive ? "" : `${regionText(builder, at)} `;
+    regionActive = at;
+    const was = regionsChosen.includes(at);
+    regionsChosen = was ? regionsChosen.filter((r) => r !== at) : [...regionsChosen, at];
+    showHandles();
+    announce(`${lead}${t(was ? "draw.builder.unpicked" : "draw.builder.picked", { count: regionsChosen.length })}`);
+  };
+
+  /// Invio o Canc col Costruttore: unisce le regioni scelte, o con `erase` le
+  /// toglie; senza, fa lo stesso con quella a cui si è arrivati. `false` se
+  /// non ce n'è nessuna.
+  const buildChosen = (erase: boolean): boolean => {
+    const chosen = regionsChosen.length > 0 ? [...regionsChosen] : regionActive >= 0 ? [regionActive] : [];
+    if (chosen.length === 0) return false;
+    build(chosen, erase);
+    return true;
   };
 
   // --- I gesti dei nodi --------------------------------------------------------
@@ -7498,11 +7814,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         showBezier();
       }
       // Sopra una maniglia della cornice o una guida, il cursore dice che
-      // cosa fa; con lo strumento Nodi, la forma sotto mostra i suoi nodi.
+      // cosa fa; con lo strumento Nodi, la forma sotto mostra i suoi nodi,
+      // e col Costruttore la regione sotto si accende.
       if (current === null && pressed === null) {
         hoverGrip(event);
         hoverGuide(event);
         hoverNodes(event.buttons === 0 ? point : null, pointer);
+        hoverRegion(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -7606,6 +7924,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     pointerAt = null;
     if (rulersShown()) showRulers();
     hoverNodes(null, "mouse");
+    hoverRegion(null, "mouse");
     if (hover !== null) {
       hover = null;
       showBezier();
@@ -7679,6 +7998,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           g.end = toPoint(samples[samples.length - 1]!);
           nodesUpdate(g);
           break;
+        case "builder":
+          for (const sample of samples) builderAdd(g, toPoint(sample));
+          builderUpdate(g);
+          break;
         case "bezier":
           if (g.from === null) bezierStart(g, toPoint(samples[0]!));
           g.end = toPoint(samples[samples.length - 1]!);
@@ -7743,6 +8066,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "nodes":
           nodesEnd(g, stroke.timeStamp);
           return;
+        case "builder":
+          builderEnd(g);
+          return;
         case "bezier":
           bezierEnd(g);
           return;
@@ -7767,7 +8093,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (g === null || g.stroke !== id) return;
       current = null;
       if (g.kind === "ink") clearTimeout(holdTimer);
-      if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso") select(g.base);
+      if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso" || (g.kind === "builder" && g.mode === "objects")) select(g.base);
       if (g.kind === "select" || g.kind === "guide") showGrip(null);
       // I nodi tornano com'erano, e le forme e gli oggetti con loro.
       if (g.kind === "nodes") {
@@ -10158,8 +10484,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Tab con una selezione: l'oggetto dopo l'ultimo scelto, o con Maiusc
   /// quello prima del primo. Oltre le estremità il Tab esce dal foglio. Con
   /// lo strumento Nodi passa prima di nodo in nodo, e oltre l'ultimo
-  /// all'oggetto dopo.
+  /// all'oggetto dopo; col Costruttore, di regione in regione.
   const walk = (step: 1 | -1): boolean => {
+    if (builderKeysOn()) return walkRegions(step);
     if (nodeKeysOn() && walkNodes(step)) return true;
     if (selection.length === 0 || pressed !== null) return false;
     const anchor = currentIndex().get(step > 0 ? selection[selection.length - 1]! : selection[0]!);
@@ -10431,6 +10758,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti del Costruttore di forme, se le parti `at` lo offrono.
+  const builderKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("builder")
+      ? [
+          {
+            title: t("draw.tool.builder"),
+            rows: [
+              ["Tab Shift-Tab", t("draw.keys.builder.walk")],
+              ["Home End", t("draw.keys.builder.ends")],
+              ["Space", t("draw.keys.builder.pick")],
+              ["Enter", t("draw.keys.builder.merge")],
+              ["Delete", t("draw.keys.builder.erase")],
+              ["Alt", t("draw.keys.builder.alt")],
+              ["Shift", t("draw.keys.builder.shift")],
+              ["Escape", t("draw.keys.builder.clear")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti della penna di Bézier, se le parti `at` la offrono.
   const bezierKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("bezier")
@@ -10549,6 +10896,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...arrangeKeys(at),
     ...selectionKeys(at),
     ...nodeToolKeys(at),
+    ...builderKeys(at),
     ...polygonKeys(at),
     ...recognizeKeys(at),
     ...bezierKeys(at),
@@ -11333,6 +11681,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);
     else if (hover !== null && drawing() !== null) showBezier();
+    else if (current?.kind === "builder" || (current === null && regionHover >= 0)) showHandles();
     else if (current === null && (alt || measured)) showHandles();
   };
 
@@ -11512,6 +11861,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       else orderSelection(event.shiftKey ? "back" : "backward");
     } else if (onSurface && (event.key === "Home" || event.key === "End") && nodeKeysOn()) {
       visitNode(event.key === "Home" ? 0 : nodeList().length - 1);
+    } else if (onSurface && (event.key === "Home" || event.key === "End") && builderKeysOn()) {
+      visitRegion(event.key === "Home" ? 0 : builderNow()!.regions.regions.length - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End")) {
       const units = walkList(selection.length === 0 ? null : currentIndex().get(selection[0]!));
       if (pressed !== null || !visit(units, event.key === "Home" ? 0 : units.length - 1)) return;
@@ -11519,6 +11870,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (event.repeat) {
         // Tenuto giù: un tasto, un passo.
       } else if (pressed === null && tool === "text") openText(cursorPoint(), "mouse");
+      else if (builderKeysOn()) pickRegion();
       else if (pressed === null) press(event.timeStamp);
       else release();
     } else if (onSurface && event.key === "F2" && (has("text") || has("layers"))) {
@@ -11534,9 +11886,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         // A metà gesto il tracciato aspetta che il gesto finisca, come per
         // Canc.
         if (current === null) finishBezier(false);
+      } else if (builderKeysOn() && buildChosen(false)) {
+        // Col Costruttore, le regioni scelte si uniscono.
       } else void properties();
     } else if (event.key === "?") {
       void keys();
+    } else if ((event.key === "Delete" || event.key === "Backspace") && builderKeysOn() && buildChosen(true)) {
+      // Col Costruttore Canc toglie le regioni scelte; senza, l'oggetto.
     } else if ((event.key === "Delete" || event.key === "Backspace") && nodeKeysOn()) {
       // Con lo strumento Nodi Canc elimina i nodi, mai l'oggetto.
       deleteSelectedNodes();
@@ -11560,6 +11916,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (tool === "nodes" && chosenCount() > 0) {
         setNodes(new Map());
         announceNodes();
+      } else if (builderNow() !== null && (regionsChosen.length > 0 || regionActive >= 0)) {
+        regionsChosen = [];
+        regionActive = -1;
+        showHandles();
+        announce(t("draw.builder.cleared"));
       } else if (leaveIsolation(false)) {
         // Fuori di un gruppo, scelto quello da cui si è usciti.
       } else if (selection.length > 0) {
@@ -11774,6 +12135,13 @@ const REFUSALS: Readonly<Record<Exclude<Refused["reason"], "not_shapes">, DrawKe
   whole: "draw.boolean.whole",
   foreign: "draw.boolean.foreign",
   failed: "draw.boolean.failed",
+};
+
+/// Che cosa si dice quando il Costruttore non fa un'operazione.
+const BUILD_REFUSALS: Readonly<Record<BuildRefused["reason"], DrawKey>> = {
+  whole: "draw.builder.whole",
+  foreign: "draw.builder.foreign",
+  failed: "draw.builder.unsolved",
 };
 
 /// Perché un oggetto non ha nodi da modificare, a parole.

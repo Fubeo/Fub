@@ -1,12 +1,13 @@
 // Le operazioni booleane fra forme: i casi che due forme disegnate
-// incontrano di continuo, e sulle aree le identità d'insieme.
+// incontrano di continuo, e sulle aree le identità d'insieme, anche per le
+// regioni del Costruttore di forme.
 
 import { describe, expect, it } from "vitest";
 import { pointAt } from "../scene/curves";
 import { parsePath, type Segment } from "../scene/geometry";
 import type { Matrix, Point } from "../scene/matrix";
 import { pathData } from "../scene/serialize";
-import { combine, mapped, type BooleanKind, type Shape } from "./boolean";
+import { combine, mapped, regionsOf, type BooleanKind, type Regions, type Shape } from "./boolean";
 
 const shape = (d: string, evenOdd = false, written = true): Shape => ({ segments: parsePath(d)!, evenOdd, written });
 
@@ -470,6 +471,31 @@ describe("le identità delle aree", () => {
       expect(intersection).toBeGreaterThan(0);
       expect(results[4]!.length).toBeGreaterThan(1);
     }
+    regionIdentities(A, B, sizeA, sizeB, union!);
+  };
+
+  /// Le stesse identità sulle regioni: quelle coperte da una forma fanno la
+  /// forma, tutte insieme l'unione; una regione unita da sola ha la sua area,
+  /// e la forma che la perde ha la sua area di meno.
+  const regionIdentities = (A: Shape, B: Shape, sizeA: number, sizeB: number, union: number): void => {
+    const found = regionsOf([A, B], [false, false]) as Regions | null;
+    expect(found).not.toBeNull();
+    const { regions } = found!;
+    const tolerance = 5e-4 * (sizeA + sizeB);
+    const areas = regions.map((region) => area(region.segments));
+    regions.forEach((region, r) => expect(Math.abs(region.area - areas[r]!)).toBeLessThan(tolerance));
+    const covered = (k: number): number => areas.reduce((sum, size, r) => (regions[r]!.cover.includes(k) ? sum + size : sum), 0);
+    expect(Math.abs(covered(0) - sizeA)).toBeLessThan(tolerance);
+    expect(Math.abs(covered(1) - sizeB)).toBeLessThan(tolerance);
+    expect(Math.abs(areas.reduce((sum, size) => sum + size, 0) - union)).toBeLessThan(tolerance);
+    regions.forEach((region, r) => {
+      const top = region.cover[region.cover.length - 1]!;
+      expect(Math.abs(area(found!.path((other) => other === r, null, top)!) - areas[r]!)).toBeLessThan(tolerance);
+      for (const k of region.cover) {
+        const rest = found!.path((other) => other !== r, k, k)!;
+        expect(Math.abs(area(rest) - ((k === 0 ? sizeA : sizeB) - areas[r]!))).toBeLessThan(tolerance);
+      }
+    });
   };
 
   for (const [name, a, b] of PAIRS) {
@@ -525,5 +551,86 @@ describe("le forme trasformate", () => {
     );
     const turn: Matrix = [0, 1, -1, 0, 5, 5];
     expect(pathData(mapped(parsePath("M0 0 L10 0 Q10 10 0 10 C-5 10 -5 0 0 0 Z")!, turn))).toBe("M5 5 L5 15 Q-5 15 -5 5 C-5 0 5 0 5 5 Z");
+  });
+});
+
+describe("le regioni", () => {
+  const OTHER = "M5 5 L15 5 L15 15 L5 15 Z";
+  const regions = (cuts: boolean[], ...ds: string[]) => regionsOf(ds.map((d) => shape(d)), cuts) as Regions;
+  const outlines = (found: ReturnType<typeof regions>): string[] => found.regions.map((region) => pathData(region.segments));
+  const thousandth = (value: number): number => Math.round(value * 1000) / 1000;
+
+  it("con un limite ai pezzi delle spezzate, rinunciano quando li passano, anche dopo gli incroci", () => {
+    const shapes = [shape(SQUARE), shape("M5.3 5.3 L15.3 5.3 L15.3 15.3 L5.3 15.3 Z")];
+    // I lati dei due quadrati fanno 336 pezzi; i due incroci, ciascuno a
+    // metà di due pezzi, li portano a 340.
+    expect(regionsOf(shapes, [false, false], 335)).toBe("complex");
+    expect(regionsOf(shapes, [false, false], 336)).toBe("complex");
+    expect((regionsOf(shapes, [false, false], 340) as Regions).regions).toHaveLength(3);
+  });
+
+  it("due quadrati fanno tre regioni, da sinistra, ciascuna con le forme che la coprono", () => {
+    const found = regions([], SQUARE, OTHER);
+    expect(outlines(found)).toEqual(["M0 0 L10 0 L10 5 L5 5 L5 10 L0 10 Z", "M10 10 L5 10 L5 5 L10 5 Z", "M10 10 L10 5 L15 5 L15 15 L5 15 L5 10 Z"]);
+    expect(found.regions.map((region) => region.cover)).toEqual([[0], [0, 1], [1]]);
+    expect(found.regions.map((region) => thousandth(region.area))).toEqual([75, 25, 75]);
+    expect([found.at([2, 2]), found.at([7, 7]), found.at([12, 12]), found.at([20, 20])]).toEqual([0, 1, 2, -1]);
+  });
+
+  it("unire, togliere e separare sono tracciati delle regioni", () => {
+    const found = regions([], SQUARE, OTHER);
+    expect(pathData(found.path(() => true, null, 0)!)).toBe("M0 0 L10 0 L10 5 L15 5 L15 15 L5 15 L5 10 L0 10 Z");
+    expect(pathData(found.path((r) => r <= 1, null, 0)!)).toBe(SQUARE);
+    // La forma 1 senza la regione in comune.
+    expect(pathData(found.path((r) => r !== 1, 1, 1)!)).toBe("M10 10 L10 5 L15 5 L15 15 L5 15 L5 10 Z");
+    // Una forma che perde tutte le sue regioni non ha più niente.
+    expect(found.path((r) => r === 2, 0, 0)).toEqual([]);
+  });
+
+  it("le curve restano curve", () => {
+    const found = regions([], circle(10, 10, 6), SQUARE);
+    expect(outlines(found)).toEqual([
+      "M4 10 L0 10 L0 0 L10 0 L10 4 A6 6 0 0 0 4 10 Z",
+      "M4 10 A6 6 0 0 1 10 4 L10 10 Z",
+      "M16 10 A6 6 0 0 1 10 16 A6 6 0 0 1 4 10 L10 10 L10 4 A6 6 0 0 1 16 10 Z",
+    ]);
+    expect(found.regions.map((region) => region.cover)).toEqual([[1], [0, 1], [0]]);
+  });
+
+  it("una linea che attraversa una forma la divide, e resta fuori dalle regioni", () => {
+    const found = regions([false, true], SQUARE, "M-5 5 L15 5");
+    expect(outlines(found)).toEqual(["M0 0 L10 0 L10 5 L0 5 Z", "M10 10 L0 10 L0 5 L10 5 Z"]);
+    expect(found.regions.map((region) => region.cover)).toEqual([[0], [0]]);
+    // Una che entra e si ferma non divide niente.
+    expect(outlines(regions([false, true], SQUARE, "M-5 5 L5 5"))).toEqual([SQUARE]);
+  });
+
+  it("i casi difficili: forme uguali, contatti, tangenze e intrecci", () => {
+    // Due forme uguali sono una regione coperta da tutte e due.
+    expect(regions([], SQUARE, SQUARE).regions.map((region) => region.cover)).toEqual([[0, 1]]);
+    // Due quadrati che si toccano in un vertice, due cerchi tangenti.
+    expect(regions([], SQUARE, "M10 10 L20 10 L20 20 L10 20 Z").regions.map((region) => thousandth(region.area))).toEqual([100, 100]);
+    expect(regions([], circle(0, 0, 5), circle(10, 0, 5)).regions).toHaveLength(2);
+    // Una forma che si intreccia: il fiocco fa due triangoli, la stella le
+    // sue punte e il pentagono in mezzo.
+    expect(outlines(regions([], "M0 0 L20 20 L20 0 L0 20 Z"))).toEqual(["M0 0 L10 10 L0 20 Z", "M20 20 L10 10 L20 0 Z"]);
+    expect(regions([], "M50 0 L79 90 L2 35 L98 35 L21 90 Z").regions).toHaveLength(6);
+    // Tre cerchi fanno le sette regioni del diagramma di Venn.
+    const venn = regions([], circle(0, 0, 10), circle(12, 0, 10), circle(6, 10, 10));
+    expect(venn.regions.map((region) => region.cover.length).sort()).toEqual([1, 1, 1, 2, 2, 2, 3]);
+  });
+
+  it("una faccia troppo sottile per vedersi va con la regione accanto", () => {
+    const found = regions([], SQUARE, "M0 0 L10.02 0 L10.02 10 L0 10 Z");
+    expect(found.regions).toHaveLength(1);
+    expect(found.regions[0]!.cover).toEqual([0, 1]);
+    expect(pathData(found.path(() => true, null, 0)!)).toBe("M0 0 L10.02 0 L10.02 10 L0 10 Z");
+    // La forma che la perde non ne tiene un filo.
+    expect(found.path(() => false, 1, 1)).toEqual([]);
+  });
+
+  it("senza forme non ci sono regioni", () => {
+    expect(regions([]).regions).toEqual([]);
+    expect(regions([true], "M0 0 L10 10").regions).toEqual([]);
   });
 });

@@ -26,6 +26,7 @@ export type ToolId =
   | "select"
   | "lasso"
   | "nodes"
+  | "builder"
   | "pen"
   | "highlighter"
   | "eraser"
@@ -59,6 +60,9 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "lasso", level: "standard", group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
   // Lo stesso tasto di Inkscape.
   { id: "nodes", level: "expert", group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "n" },
+  // La lettera di Illustrator, che la vuole con Maiusc: qui, come per gli
+  // altri strumenti, da sola.
+  { id: "builder", level: "expert", group: "pick", icon: "draw-builder", label: "draw.tool.builder", description: "draw.tool.builder.hint", shortcut: "m" },
   { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
   { id: "highlighter", level: "standard", group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
   { id: "eraser", level: "essential", group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },
@@ -201,9 +205,9 @@ export function startTool(tools: readonly ToolSpec[]): ToolId {
 }
 
 /// Lo strumento che prende il posto di `lost` quando se ne va, fra `tools`:
-/// dopo uno strumento che sceglie, il Lazo o i Nodi, la Selezione, così chi
-/// sceglieva non si ritrova a disegnare; dopo gli altri, quello con cui si
-/// comincia.
+/// dopo uno strumento che sceglie, il Lazo, i Nodi o il Costruttore, la
+/// Selezione, così chi sceglieva non si ritrova a disegnare; dopo gli altri,
+/// quello con cui si comincia.
 export function toolAfter(tools: readonly ToolSpec[], lost: ToolId): ToolId {
   return toolSpec(lost).group === "pick" ? "select" : startTool(tools);
 }

@@ -3379,6 +3379,7 @@ describe("da tastiera", () => {
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
+      "Costruttore di forme · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
@@ -3441,7 +3442,7 @@ describe("da tastiera", () => {
       rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
     }));
     expect(tables).toEqual([
-      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["B", "Bézier"]] },
+      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["M", "Costruttore di forme"], ["B", "Bézier"]] },
       { caption: "Disponi · dal livello Esperto", rows: [["Ctrl+Shift+M", "Trasforma…"]] },
       {
         caption: "Nodi · dal livello Esperto",
@@ -3463,6 +3464,19 @@ describe("da tastiera", () => {
           ["Alt", "Tenuto, un nodo trascinato tira fuori le sue maniglie, e una maniglia trascinata si sposta da sola"],
           ["Esc", "Toglie la scelta dei nodi, poi quella dell’oggetto"],
           ["Alt+F10", "Va alla barra dei nodi"],
+        ],
+      },
+      {
+        caption: "Costruttore di forme · dal livello Esperto",
+        rows: [
+          ["Tab o Shift+Tab", "La regione dopo o prima"],
+          ["Home o End", "La prima o l’ultima regione"],
+          ["Space", "Sceglie la regione, o la lascia"],
+          ["Enter", "Unisce le regioni scelte; senza, separa quella a cui si è"],
+          ["Del", "Toglie le regioni scelte, o quella a cui si è"],
+          ["Alt", "Tenuto, il trascinamento e il tocco tolgono le regioni invece di unirle"],
+          ["Shift", "Tenuto, il tocco e il riquadro scelgono le forme invece delle regioni"],
+          ["Esc", "Lascia le regioni scelte, poi la selezione"],
         ],
       },
       {
@@ -6251,6 +6265,215 @@ describe("i nodi, dal livello Esperto", () => {
   });
 });
 
+describe("il Costruttore di forme, dal livello Esperto", () => {
+  const A = "oa7a7a7a7";
+  const B = "ob7b7b7b7";
+  const T = "ot7t7t7t7";
+  const SHAPES = doc(
+    `${LAYER}<rect id="${A}" x="0" y="0" width="40" height="40" fill="#d55e00"/>`
+      + `<rect id="${B}" x="20" y="20" width="40" height="40" fill="#0072b2"/>`
+      + `<text id="${T}" x="0" y="200"><tspan x="0" dy="0">Ciao</tspan></text></g>`,
+  );
+  /// Il `d` del tracciato `id`, com'è adesso.
+  const d = (id: string): string | null => new RegExp(`<path id="${id}" d="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
+  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
+  const hover = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const builderTool = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-tool[aria-label="Costruttore di forme"]')!;
+
+  /// Gli oggetti `ids` scelti, col Costruttore.
+  const building = (...ids: string[]): void => {
+    mount(SHAPES, { level: "expert" });
+    editor.select(ids);
+    editor.focus();
+    key("m");
+  };
+
+  it("c'è solo all'Esperto, col tasto M, e dice su quante regioni lavora", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select([A, B]);
+    editor.focus();
+    expect(builderTool().hidden).toBe(true);
+    key("m");
+    expect(editor.tool).not.toBe("builder");
+    editor.setLevel("expert");
+    expect(builderTool().hidden).toBe(false);
+    expect(builderTool().title).toBe("Costruttore di forme (M)");
+    key("m");
+    expect(editor.tool).toBe("builder");
+    expect(surface().dataset.tool).toBe("builder");
+    expect(spoken()).toBe("Strumento: Costruttore di forme. 3 regioni in 2 forme.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    editor.select([A, B, T]);
+    editor.setTool("builder");
+    expect(spoken()).toBe("Strumento: Costruttore di forme. 3 regioni in 2 forme. 1 oggetto scelto non è una forma e resta com’è.");
+    editor.select([A]);
+    editor.setTool("builder");
+    expect(spoken()).toBe("Strumento: Costruttore di forme. 1 regione nella forma scelta.");
+    editor.select([]);
+    editor.setTool("builder");
+    expect(spoken()).toBe("Strumento: Costruttore di forme. Scegli le forme da unire o separare: tocca una forma, o tira un riquadro attorno a più forme.");
+    expect(changes).toEqual([]);
+  });
+
+  it("su forme troppe o troppo complesse lo dice, senza regioni, e sceglie le forme come la Selezione", () => {
+    const ids = Array.from({ length: 300 }, (_, i) => `oc${i}`);
+    const circles = ids.map((id, i) => `<circle id="${id}" cx="${(i % 20) * 7}" cy="${Math.floor(i / 20) * 7}" r="60" fill="#0072b2"/>`).join("");
+    mount(doc(`${LAYER}${circles}</g>`), { level: "expert" });
+    editor.select(ids);
+    editor.focus();
+    key("m");
+    expect(spoken()).toBe("Strumento: Costruttore di forme. Le forme scelte sono troppe, o troppo complesse, per il Costruttore: scegline meno.");
+    hover(70, 50);
+    expect(surface().hasAttribute("data-region")).toBe(false);
+    tap(300, 300);
+    expect(editor.selection).toEqual([]);
+    tap(70, 50);
+    expect(editor.selection).toHaveLength(1);
+    expect(spoken()).toBe("1 oggetto scelto. 1 regione nella forma scelta.");
+    expect(changes).toEqual([]);
+  });
+
+  it("trascinare attraverso le regioni le unisce, con lo stile della prima, in un passo che si annulla", () => {
+    building(A, B);
+    drag([[10, 10], [30, 30], [50, 50]]);
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L40 0 L40 20 L60 20 L60 60 L20 60 L20 40 L0 40 Z" fill="#d55e00"/>`);
+    expect(editor.engine.text).not.toContain(B);
+    expect(spoken()).toBe("3 regioni unite in una forma. 1 forma, rimasta vuota, se ne va. 1 regione nella forma scelta.");
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Unione di regioni.");
+    // La prima regione dà lo stile: da quella di B, l'unione è B, che resta
+    // com'è, e A perde ciò che ne copriva.
+    drag([[50, 50], [30, 30]]);
+    expect(editor.engine.text).toContain(`<rect id="${B}" x="20" y="20" width="40" height="40" fill="#0072b2"/>`);
+    expect(d(A)).toBe("M0 0 L40 0 L40 20 L20 20 L20 40 L0 40 Z");
+    expect(spoken()).toBe("2 regioni unite in una forma. 2 regioni in 2 forme.");
+  });
+
+  it("un tocco separa la regione, con Alt la toglie; una forma intera resta com'è", () => {
+    building(A, B);
+    tap(30, 30);
+    const piece = editor.selection.find((key) => key !== A && key !== B)!;
+    expect(editor.selection).toEqual([A, B, piece]);
+    expect(d(piece)).toBe("M40 40 L20 40 L20 20 L40 20 Z");
+    expect(editor.engine.text).toContain(`d="M40 40 L20 40 L20 20 L40 20 Z" fill="#0072b2"/>`);
+    expect(spoken()).toBe("La regione diventa una forma a sé. 3 regioni in 3 forme.");
+    editor.undo();
+    tap(30, 30, { altKey: true });
+    expect(d(A)).toBe("M0 0 L40 0 L40 20 L20 20 L20 40 L0 40 Z");
+    expect(d(B)).toBe("M40 40 L40 20 L60 20 L60 60 L20 60 L20 40 Z");
+    expect(spoken()).toBe("1 regione tolta. 2 regioni in 2 forme.");
+    // Il tocco, l'annulla e il tocco con Alt.
+    expect(changes).toHaveLength(3);
+    editor.select([A]);
+    tap(10, 10);
+    expect(spoken()).toBe("La regione è già una forma intera: niente è cambiato.");
+    expect(changes).toHaveLength(3);
+  });
+
+  it("fuori dalle regioni, o con Maiusc, sceglie gli oggetti come la Selezione", () => {
+    building(A);
+    // B non è scelto: le sue regioni non ci sono, e il tocco lo sceglie.
+    tap(50, 50);
+    expect(editor.selection).toEqual([B]);
+    expect(spoken()).toBe("1 oggetto scelto. 1 regione nella forma scelta.");
+    tap(10, 10, { shiftKey: true });
+    expect(editor.selection).toEqual([A, B]);
+    expect(spoken()).toBe("2 oggetti scelti. 3 regioni in 2 forme.");
+    // Con Maiusc il tocco su un oggetto scelto lo toglie, anche su una
+    // regione.
+    tap(10, 10, { shiftKey: true });
+    expect(editor.selection).toEqual([B]);
+    tap(150, 150);
+    expect(editor.selection).toEqual([]);
+    expect(spoken()).toBe("Scegli le forme da unire o separare: tocca una forma, o tira un riquadro attorno a più forme.");
+    drag([[-5, -5], [30, 30], [70, 70]]);
+    expect(editor.selection).toEqual([A, B]);
+    expect(spoken()).toBe("2 oggetti scelti. 3 regioni in 2 forme.");
+    expect(changes).toEqual([]);
+  });
+
+  it("la regione sotto il puntatore si accende, e con Alt si tratteggia", () => {
+    const layer = recording();
+    building(A, B);
+    const drawn = (): { readonly filled: number; readonly hatched: number } => {
+      layer.frame();
+      const calls = layer.calls();
+      return {
+        filled: calls.filter((call) => call[0] === "fill" && call[1] === "evenodd").length,
+        hatched: calls.filter((call) => call[0] === "clip" && call[1] === "evenodd").length,
+      };
+    };
+    expect(drawn()).toEqual({ filled: 0, hatched: 0 });
+    hover(30, 30);
+    expect(drawn()).toEqual({ filled: 1, hatched: 0 });
+    expect(surface().hasAttribute("data-region")).toBe(true);
+    hover(31, 31, { altKey: true });
+    key("Alt", { altKey: true });
+    expect(drawn()).toEqual({ filled: 0, hatched: 1 });
+    expect(surface().hasAttribute("data-region")).toBe(false);
+    hover(150, 150);
+    expect(drawn()).toEqual({ filled: 0, hatched: 0 });
+    expect(surface().hasAttribute("data-region")).toBe(false);
+  });
+
+  it("dalla tastiera Tab passa fra le regioni, Spazio le sceglie, Invio le unisce, Canc le toglie, Esc le lascia", () => {
+    building(A, B);
+    size(400, 400);
+    expect(key("Tab").defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Regione 1 di 3, di Rettangolo, Vermiglio.");
+    key("Tab");
+    // Le forme che coprono la regione, dalla più in alto.
+    expect(spoken()).toBe("Regione 2 di 3, di Rettangolo, Blu e Rettangolo, Vermiglio.");
+    key(" ");
+    expect(spoken()).toBe("Regione scelta: 1 in tutto.");
+    key("Tab", { shiftKey: true });
+    expect(spoken()).toBe("Regione 1 di 3, di Rettangolo, Vermiglio.");
+    key("Tab");
+    expect(spoken()).toBe("Regione 2 di 3, di Rettangolo, Blu e Rettangolo, Vermiglio, scelta.");
+    key("End");
+    expect(spoken()).toBe("Regione 3 di 3, di Rettangolo, Blu.");
+    // Oltre l'ultima, il Tab esce dal foglio.
+    expect(key("Tab").defaultPrevented).toBe(false);
+    key(" ");
+    expect(spoken()).toBe("Regione scelta: 2 in tutto.");
+    key(" ");
+    expect(spoken()).toBe("Regione lasciata: 1 in tutto.");
+    key(" ");
+    key("Enter");
+    // La prima scelta, di A e di B, è di B, la più in alto: l'unione è B.
+    expect(editor.engine.text).toContain(`<rect id="${B}" x="20" y="20" width="40" height="40" fill="#0072b2"/>`);
+    expect(d(A)).toBe("M0 0 L40 0 L40 20 L20 20 L20 40 L0 40 Z");
+    expect(spoken()).toBe("2 regioni unite in una forma. 2 regioni in 2 forme.");
+    // L'annulla sceglie ciò che ha cambiato: si torna a scegliere tutte e due.
+    editor.undo();
+    editor.select([A, B]);
+    key("Home");
+    expect(spoken()).toBe("Regione 1 di 3, di Rettangolo, Vermiglio.");
+    key("Delete");
+    expect(d(A)).toBe("M40 40 L20 40 L20 20 L40 20 Z");
+    expect(editor.engine.text).toContain(B);
+    expect(spoken()).toBe("1 regione tolta. 2 regioni in 2 forme.");
+    editor.undo();
+    editor.select([A, B]);
+    key("Tab");
+    key(" ");
+    key("Escape");
+    expect(spoken()).toBe("Nessuna regione scelta.");
+    // Senza una regione, Spazio prende quella sotto il cursore, al centro
+    // della vista: qui non ce n'è.
+    key(" ");
+    expect(spoken()).toBe("Qui non c’è una regione: Tab passa fra le regioni.");
+    key("Escape");
+    expect(editor.selection).toEqual([]);
+    expect(changes).toHaveLength(4);
+  });
+});
+
 describe("la penna di Bézier, dal livello Esperto", () => {
   const EMPTY = doc(`${LAYER}</g>`);
   const R = "or3r3r3r3";
@@ -7915,11 +8138,12 @@ describe("il livello Personalizzato", () => {
       "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
+      "Costruttore di forme · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[14]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[14]!.rows).toEqual([["M", "Costruttore di forme"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

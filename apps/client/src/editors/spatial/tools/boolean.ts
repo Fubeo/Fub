@@ -20,6 +20,10 @@
 //   il metodo di Newton ritrova. Dove due forme coincidono vale la curva di
 //   quella più in basso, e ogni anello comincia da un nodo, se può: di
 //   quella più in basso prima che delle altre.
+// - **Le regioni**, per il Costruttore di forme, sono le facce dentro almeno
+//   una forma: ognuna sa quali forme la coprono, e un insieme qualsiasi di
+//   regioni si ricostruisce come il risultato di un'operazione, con le
+//   curve delle forme.
 
 import { arcCenter, derivativeAt, pointAt, reversed, splitAt, type Curve } from "../scene/curves";
 import { roundHalfUp } from "../number";
@@ -98,7 +102,7 @@ interface Source {
   readonly shape: number;
   readonly from: Point;
   readonly curve: Curve;
-  /// Vero per le curve che tagliano, nella divisione: non racchiudono niente.
+  /// Vero per le curve che tagliano soltanto: non racchiudono niente.
   readonly cut: boolean;
 }
 
@@ -110,13 +114,13 @@ function drawn(from: Point, curve: Curve): Curve {
 }
 
 /// Le curve delle forme, in ordine. Un sottotracciato aperto si riempie come
-/// se una linea lo chiudesse, e quella linea è una curva anche lei; nella
-/// divisione le forme sopra la prima tagliano e basta, e un loro
-/// sottotracciato aperto resta aperto.
-function sourcesOf(shapes: readonly Shape[], division: boolean): Source[] {
+/// se una linea lo chiudesse, e quella linea è una curva anche lei; le forme
+/// per cui `cuts` è vero, come nella divisione quelle sopra la prima,
+/// tagliano e basta, e un loro sottotracciato aperto resta aperto.
+function sourcesOf(shapes: readonly Shape[], cuts: (k: number) => boolean): Source[] {
   const out: Source[] = [];
   shapes.forEach((shape, k) => {
-    const cut = division && k > 0;
+    const cut = cuts(k);
     const add = (from: Point, segment: Curve): void => {
       out.push({ shape: k, from, curve: drawn(from, segment), cut });
     };
@@ -242,6 +246,12 @@ class Net {
   /// Le coppie di vertici da fondere al prossimo giro, anche se più lontani
   /// di `EPSILON`.
   private joins: [number, number][] = [];
+  /// I vertici prima di questo sono già fusi: due di loro stanno più lontani
+  /// di `EPSILON`.
+  private known = 0;
+  /// 1 per i pezzi nuovi o cambiati dall'ultimo controllo degli incroci: una
+  /// coppia di pezzi vecchi non ha niente da dire.
+  private fresh: number[] = [];
 
   constructor(readonly sources: readonly Source[]) {
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -287,22 +297,27 @@ class Net {
     this.src.push(src);
     this.ta.push(ta);
     this.tb.push(tb);
+    this.fresh.push(1);
   }
 
   /// Vero quando nessun pezzo ne attraversa un altro e nessun vertice sta
-  /// troppo vicino a un pezzo che non tocca; falso se non ci arriva.
-  planar(): boolean {
+  /// troppo vicino a un pezzo che non tocca; falso se non ci arriva, o se i
+  /// pezzi diventano più di `limit`.
+  planar(limit: number): boolean {
     for (let round = 0; round <= MAX_ROUNDS; round++) {
       this.merge();
       const cuts = this.cuts();
       if (cuts.size === 0 && this.joins.length === 0) return true;
       this.split(cuts);
+      if (this.a.length > limit) return false;
     }
     return false;
   }
 
   /// Fonde i vertici più vicini di `EPSILON` e le coppie di `joins`, e i
-  /// pezzi rimasti in un punto se ne vanno.
+  /// pezzi rimasti in un punto se ne vanno. Ogni gruppo prende il vertice
+  /// che conta di più, qualunque sia l'ordine dei confronti; e i vertici già
+  /// fusi a un giro di prima si confrontano soltanto con quelli nuovi.
   private merge(): void {
     const n = this.x.length;
     const parent = Int32Array.from({ length: n }, (_, i) => i);
@@ -314,44 +329,54 @@ class Net {
       return v;
     };
     const better = (u: number, v: number): boolean => this.rank[u]! < this.rank[v]! || (this.rank[u] === this.rank[v] && u < v);
-    const grid = new Map<number, number[]>();
+    const unite = (v: number, w: number): void => {
+      const [rv, rw] = [find(v), find(w)];
+      if (rv === rw) return;
+      if (better(rv, rw)) parent[rw] = rv;
+      else parent[rv] = rw;
+    };
     const live: number[] = [];
     const seen = new Uint8Array(n);
-    for (const v of [...this.a, ...this.b]) {
-      if (seen[v] === 1) continue;
-      seen[v] = 1;
-      live.push(v);
-      const cx = Math.floor((this.x[v]! - this.min[0]) / EPSILON);
-      const cy = Math.floor((this.y[v]! - this.min[1]) / EPSILON);
+    for (const ends of [this.a, this.b]) {
+      for (const v of ends) {
+        if (seen[v] === 1) continue;
+        seen[v] = 1;
+        live.push(v);
+      }
+    }
+    // La griglia dei vertici nuovi, con celle larghe `EPSILON`.
+    const grid = new Map<number, number[]>();
+    const cellOf = (v: number): [number, number] => [Math.floor((this.x[v]! - this.min[0]) / EPSILON), Math.floor((this.y[v]! - this.min[1]) / EPSILON)];
+    const meet = (v: number): void => {
+      const [cx, cy] = cellOf(v);
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
           for (const w of grid.get((cx + dx) * 1e8 + cy + dy) ?? []) {
-            if (Math.hypot(this.x[v]! - this.x[w]!, this.y[v]! - this.y[w]!) > EPSILON) continue;
-            const [rv, rw] = [find(v), find(w)];
-            if (rv === rw) continue;
-            if (better(rv, rw)) parent[rw] = rv;
-            else parent[rv] = rw;
+            if (w !== v && Math.hypot(this.x[v]! - this.x[w]!, this.y[v]! - this.y[w]!) <= EPSILON) unite(v, w);
           }
         }
       }
+    };
+    for (const v of live) {
+      if (v < this.known) continue;
+      meet(v);
+      const [cx, cy] = cellOf(v);
       const key = cx * 1e8 + cy;
       const bucket = grid.get(key);
       if (bucket === undefined) grid.set(key, [v]);
       else bucket.push(v);
     }
-    for (const [v, w] of this.joins) {
-      const [rv, rw] = [find(v), find(w)];
-      if (rv === rw) continue;
-      if (better(rv, rw)) parent[rw] = rv;
-      else parent[rv] = rw;
-    }
+    if (grid.size > 0) for (const v of live) if (v < this.known) meet(v);
+    for (const [v, w] of this.joins) unite(v, w);
     this.joins = [];
+    this.known = n;
     for (const v of live) {
       const root = find(v);
       if (root !== v) this.first[root] = Math.min(this.first[root]!, this.first[v]!);
     }
     const keep = (i: number): boolean => find(this.a[i]!) !== find(this.b[i]!);
     const kept = this.a.map((_, i) => i).filter(keep);
+    this.fresh = kept.map((i) => (this.fresh[i] === 1 || find(this.a[i]!) !== this.a[i] || find(this.b[i]!) !== this.b[i] ? 1 : 0));
     this.a = kept.map((i) => find(this.a[i]!));
     this.b = kept.map((i) => find(this.b[i]!));
     this.src = kept.map((i) => this.src[i]!);
@@ -361,12 +386,14 @@ class Net {
 
   /// Dove spezzare i pezzi in questo giro: dove uno ne attraversa un altro,
   /// e dove un vertice sta più vicino di `EPSILON` a un pezzo che non tocca.
+  /// Si guardano soltanto le coppie con un pezzo nuovo: le altre sono già
+  /// state viste, e nell'ordine di sempre.
   /// Un vertice che sul pezzo cadrebbe a meno di `EPSILON` da un capo va
   /// invece in `joins` con quel capo: spezzarlo lascerebbe un pezzo più
   /// corto della tolleranza, e due pezzi così corti si spezzerebbero a
   /// vicenda senza fine.
   private cuts(): Map<number, Cut[]> {
-    const { x, y, a, b } = this;
+    const { x, y, a, b, fresh } = this;
     const count = a.length;
     const box = new Int32Array(count * 4);
     const grid = new Map<number, number[]>();
@@ -408,11 +435,13 @@ class Net {
     };
     const orient = (p: number, q: number, r: number): number => (x[q]! - x[p]!) * (y[r]! - y[p]!) - (y[q]! - y[p]!) * (x[r]! - x[p]!);
     for (const [key, list] of grid) {
+      if (!list.some((i) => fresh[i] === 1)) continue;
       const cx = Math.floor(key / this.rows);
       const cy = key - cx * this.rows;
       for (let i = 0; i < list.length; i++) {
         for (let j = i + 1; j < list.length; j++) {
           const [p, q] = [list[i]!, list[j]!];
+          if (fresh[p] === 0 && fresh[q] === 0) continue;
           // Ogni coppia una volta sola: nella prima cella che hanno in comune.
           if (Math.max(box[p * 4]!, box[q * 4]!) !== cx || Math.max(box[p * 4 + 1]!, box[q * 4 + 1]!) !== cy) continue;
           const [a1, b1, a2, b2] = [a[p]!, b[p]!, a[q]!, b[q]!];
@@ -446,6 +475,7 @@ class Net {
     const src: number[] = [];
     const ta: number[] = [];
     const tb: number[] = [];
+    const fresh: number[] = [];
     for (let i = 0; i < this.a.length; i++) {
       const list = cuts.get(i);
       let from = this.a[i]!;
@@ -458,6 +488,7 @@ class Net {
           src.push(this.src[i]!);
           ta.push(t);
           tb.push(at);
+          fresh.push(1);
           from = v;
           t = at;
         }
@@ -467,8 +498,9 @@ class Net {
       src.push(this.src[i]!);
       ta.push(t);
       tb.push(this.tb[i]!);
+      fresh.push(list === undefined ? 0 : 1);
     }
-    Object.assign(this, { a, b, src, ta, tb });
+    Object.assign(this, { a, b, src, ta, tb, fresh });
   }
 }
 
@@ -485,20 +517,21 @@ interface Along {
 }
 
 /// Un lato del grafo, da `a` a `b` con `a < b`: le curve che ci passano, di
-/// quanto cambia l'avvolgimento di ogni forma attraversandolo da destra a
+/// quanto cambia l'avvolgimento delle forme attraversandolo da destra a
 /// sinistra, e se taglia.
 interface Edge {
   readonly a: number;
   readonly b: number;
   readonly along: Along[];
-  readonly delta: Int32Array;
+  /// Le forme di cui cambia l'avvolgimento, e di quanto; per le altre zero.
+  readonly delta: Array<[shape: number, change: number]>;
   cut: boolean;
 }
 
 /// I lati del grafo: i pezzi fra gli stessi due vertici diventano uno.
 /// Restano quelli che cambiano un avvolgimento o tagliano: una linea che
 /// torna su se stessa non separa niente.
-function edgesOf(net: Net, shapes: number): Edge[] {
+function edgesOf(net: Net): Edge[] {
   const n = net.x.length;
   const byKey = new Map<number, Edge>();
   for (let i = 0; i < net.a.length; i++) {
@@ -507,16 +540,21 @@ function edgesOf(net: Net, shapes: number): Edge[] {
     const key = forward ? p * n + q : q * n + p;
     let edge = byKey.get(key);
     if (edge === undefined) {
-      edge = { a: Math.min(p, q), b: Math.max(p, q), along: [], delta: new Int32Array(shapes), cut: false };
+      edge = { a: Math.min(p, q), b: Math.max(p, q), along: [], delta: [], cut: false };
       byKey.set(key, edge);
     }
     const src = net.src[i]!;
     edge.along.push(forward ? { src, ta: net.ta[i]!, tb: net.tb[i]! } : { src, ta: net.tb[i]!, tb: net.ta[i]! });
     const source = net.sources[src]!;
-    if (source.cut) edge.cut = true;
-    else edge.delta[source.shape]! += forward ? 1 : -1;
+    if (source.cut) {
+      edge.cut = true;
+      continue;
+    }
+    const entry = edge.delta.find(([shape]) => shape === source.shape);
+    if (entry === undefined) edge.delta.push([source.shape, forward ? 1 : -1]);
+    else entry[1] += forward ? 1 : -1;
   }
-  return [...byKey.values()].filter((edge) => edge.cut || edge.delta.some((d) => d !== 0));
+  return [...byKey.values()].filter((edge) => edge.cut || edge.delta.some(([, change]) => change !== 0));
 }
 
 /// Un anello del risultato: il pezzo a cui appartiene, e i suoi mezzi lati.
@@ -624,6 +662,17 @@ class Graph {
       if (rf !== rg) faces[Math.max(rf, rg)] = Math.min(rf, rg);
     };
     const partOfEdge = edges.map((edge) => partOf(edge.a));
+    // I lati per bande orizzontali: un raggio guarda soltanto quelli della
+    // sua, nell'ordine di sempre.
+    let [y0, y1] = [Infinity, -Infinity];
+    for (const v of this.around.keys()) [y0, y1] = [Math.min(y0, net.y[v]!), Math.max(y1, net.y[v]!)];
+    const bands = leftmost.size > 1 ? Math.ceil(Math.sqrt(edges.length)) : 1;
+    const band = (y: number): number => Math.min(bands - 1, Math.max(0, Math.floor(((y - y0) / (y1 - y0 || 1)) * bands)));
+    const banded: number[][] = Array.from({ length: bands }, () => []);
+    edges.forEach((edge, e) => {
+      const [ya, yb] = [net.y[edge.a]!, net.y[edge.b]!];
+      for (let k = band(Math.min(ya, yb)); k <= band(Math.max(ya, yb)); k++) banded[k]!.push(e);
+    });
     for (const [root, v] of leftmost) {
       // Il ciclo di fuori del pezzo passa per il mezzo lato che parte più in
       // alto dal vertice: alla sua sinistra c'è tutto il resto.
@@ -636,20 +685,21 @@ class Graph {
       let hit = -1;
       let hitX = -Infinity;
       let hitSlope = -Infinity;
-      edges.forEach((edge, e) => {
-        if (partOfEdge[e] === root) return;
+      for (const e of banded[band(net.y[v]!)]!) {
+        const edge = edges[e]!;
+        if (partOfEdge[e] === root) continue;
         let [lo, hi] = [edge.a, edge.b];
         if (net.y[lo]! > net.y[hi]!) [lo, hi] = [hi, lo];
-        if (!(net.y[lo]! <= vy && vy < net.y[hi]!)) return;
+        if (!(net.y[lo]! <= vy && vy < net.y[hi]!)) continue;
         const slope = (net.x[hi]! - net.x[lo]!) / (net.y[hi]! - net.y[lo]!);
         const cx = net.x[lo]! + (vy - net.y[lo]!) * slope;
-        if (!(cx < vx)) return;
+        if (!(cx < vx)) continue;
         if (cx > hitX || (cx === hitX && slope > hitSlope)) {
           hit = e;
           hitX = cx;
           hitSlope = slope;
         }
-      });
+      }
       if (hit === -1) unite(outer, cycles);
       else unite(outer, cycle[net.y[edges[hit]!.a]! > net.y[edges[hit]!.b]! ? 2 * hit : 2 * hit + 1]!);
     }
@@ -686,14 +736,23 @@ class Graph {
         const g = this.face[h ^ 1]!;
         const delta = this.edges[h >> 1]!.delta;
         const sign = h & 1 ? -1 : 1;
-        const there = known.map((w, k) => w - sign * delta[k]!);
         const seen = out[g];
-        if (seen === null) {
-          out[g] = there;
-          queue.push(g);
-        } else if (seen.some((w, k) => w !== there[k])) {
-          return null;
+        // Con la stessa faccia ai due lati, il lato non può cambiare niente.
+        if (seen === known) {
+          if (delta.some(([, change]) => change !== 0)) return null;
+          continue;
         }
+        // Gli avvolgimenti di là, il tempo di guardarli.
+        for (const [k, change] of delta) known[k]! -= sign * change;
+        let differs = false;
+        if (seen === null) {
+          out[g] = known.slice();
+          queue.push(g);
+        } else {
+          for (let k = 0; k < shapes && !differs; k++) differs = seen[k] !== known[k];
+        }
+        for (const [k, change] of delta) known[k]! += sign * change;
+        if (differs) return null;
       }
     }
     return out.every((w) => w !== null) ? (out as Int32Array[]) : null;
@@ -884,6 +943,260 @@ interface Stretch {
 }
 
 // ---------------------------------------------------------------------------
+// L'arrangiamento.
+// ---------------------------------------------------------------------------
+
+/// L'arrangiamento planare delle forme: il grafo, le sue facce e
+/// l'avvolgimento di ognuna per ogni forma.
+class Arrangement {
+  constructor(
+    readonly shapes: readonly Shape[],
+    readonly sources: readonly Source[],
+    readonly net: Net,
+    readonly edges: readonly Edge[],
+    readonly graph: Graph,
+    readonly windings: readonly Int32Array[],
+  ) {}
+
+  /// Vero se la faccia `f` sta dentro la forma `k`: avvolgimento non nullo,
+  /// o dispari con `fill-rule="evenodd"`.
+  inside(f: number, k: number): boolean {
+    const w = this.windings[f]![k]!;
+    return this.shapes[k]!.evenOdd ? (w & 1) !== 0 : w !== 0;
+  }
+
+  /// Gli anelli dei pezzi: `piece[f]` è il pezzo della faccia `f`, -1 per
+  /// quelle fuori. Gli anelli di un pezzo girano come la forma `like(pezzo)`:
+  /// quelli di fuori nel suo verso, i buchi al contrario. `null` se un anello
+  /// non si chiude.
+  build(piece: Int32Array, like: (piece: number) => number): Map<number, Built[]> | null {
+    const { shapes, sources, net, edges, graph } = this;
+    const loops = graph.loops(piece);
+    if (loops === null) return null;
+
+    // --- Le curve dei lati -----------------------------------------------------
+
+    const curvePoint = (src: number, t: number): Point => pointAt(sources[src]!.from, sources[src]!.curve, t);
+    /// Vero se il passo `q` continua la curva del passo `p` senza salti: dallo
+    /// stesso parametro, o da uno vicino quando il pezzo in mezzo è rimasto
+    /// tutto nel vertice.
+    const continues = (p: Step, q: Step): boolean => {
+      if (p.src !== q.src) return false;
+      const up = p.to > p.from;
+      if (up !== (q.to > q.from)) return false;
+      // Dallo stesso parametro la curva continua anche dove il vertice, fuso
+      // con altri vicini, è finito più in là della tolleranza.
+      if (p.to === q.from) return true;
+      if (up ? q.from < p.to : q.from > p.to) return false;
+      const v = net.at(graph.target(p.h));
+      return [p.to, (p.to + q.from) / 2, q.from].every((t) => distance(curvePoint(p.src, t), v) <= 2 * EPSILON);
+    };
+    /// I passi di un anello: per ogni mezzo lato, la curva che vi passa.
+    /// Dove ne passano più d'una vale quella che il passo prima continua, o
+    /// quella che continua nel passo dopo, come un cerchio che sfiora un lato;
+    /// altrimenti quella della forma più in basso.
+    const stepsOfLoop = (half: readonly number[]): Step[] => {
+      const n = half.length;
+      const step = (h: number, along: Along): Step => (h & 1 ? { h, src: along.src, from: along.tb, to: along.ta } : { h, src: along.src, from: along.ta, to: along.tb });
+      const out = half.map((h) => step(h, edges[h >> 1]!.along.reduce((best, along) => (along.src < best.src ? along : best))));
+      // Deciso: un passo con una curva sola, o che ne continua uno deciso.
+      const settled = Uint8Array.from(half, (h) => (edges[h >> 1]!.along.length === 1 ? 1 : 0));
+      for (const forward of [true, false]) {
+        for (let k = 1; k < 2 * n; k++) {
+          const i = forward ? k % n : (2 * n - 1 - k) % n;
+          const j = forward ? (i - 1 + n) % n : (i + 1) % n;
+          if (settled[i] === 1 || settled[j] === 0) continue;
+          const same = edges[half[i]! >> 1]!.along.find((along) => along.src === out[j]!.src);
+          if (same === undefined) continue;
+          out[i] = step(half[i]!, same);
+          settled[i] = 1;
+        }
+      }
+      return out;
+    };
+
+    // Dove sta davvero un vertice dove il risultato cambia curva: un nodo
+    // resta dov'è; un incrocio va dove due curve che vi passano si incrociano
+    // davvero: le prime, dalla forma in basso, che si incrociano lì, o, se
+    // nessuna coppia si incrocia lì, quelle che vi arrivano correndo fuse,
+    // come in una tangenza. Un altro punto va sulla curva.
+    const places = new Map<number, Point>();
+    const placeOf = (v: number): Point => {
+      const known = places.get(v);
+      if (known !== undefined) return known;
+      let p = net.at(v);
+      if (net.rank[v] !== 0) {
+        const through = new Map<number, number>();
+        for (const h of graph.around.get(v) ?? []) {
+          for (const along of edges[h >> 1]!.along) if (!through.has(along.src)) through.set(along.src, h & 1 ? along.tb : along.ta);
+        }
+        const list = [...through].sort((m, n) => m[0] - n[0]);
+        let q: Point | null = null;
+        let far = Infinity;
+        for (const [one, other] of list.flatMap((one, i) => list.slice(i + 1).map((other) => [one, other] as const))) {
+          const [first, second] = [sources[one[0]]!, sources[other[0]]!];
+          const found = crossing(first, one[1], second, other[1]);
+          if (found === null) continue;
+          const d = distance(found.point, p);
+          if (d <= 2 * EPSILON) {
+            q = found.point;
+            break;
+          }
+          if (d < far && alongside(first, one[1], found.s, second, other[1])) [far, q] = [d, found.point];
+        }
+        const one = list[0];
+        if (q === null && one !== undefined) {
+          const on = curvePoint(one[0], project(sources[one[0]]!, p, one[1]));
+          if (distance(on, p) <= 2 * EPSILON) q = on;
+        }
+        if (q !== null) p = q;
+      }
+      places.set(v, p);
+      return p;
+    };
+    /// Il parametro di `src` nel vertice `v`, sul punto dove il vertice sta
+    /// davvero.
+    const paramAt = (v: number, src: number, t: number): number => project(sources[src]!, placeOf(v), t);
+
+    const rebuild = (loop: Loop): Stretch[] => {
+      const steps = stepsOfLoop(loop.half);
+      // Comincia dove la curva cambia: c'è sempre, perché una curva intera
+      // finisce dove comincia solo passando da 1 a 0.
+      let begin = steps.findIndex((step, i) => !continues(steps[(i - 1 + steps.length) % steps.length]!, step));
+      if (begin === -1) begin = 0;
+      const order = [...steps.slice(begin), ...steps.slice(0, begin)];
+      const stretches: Stretch[] = [];
+      for (let i = 0; i < order.length; ) {
+        let j = i + 1;
+        while (j < order.length && continues(order[j - 1]!, order[j]!)) j++;
+        const { src, from } = order[i]!;
+        const { to } = order[j - 1]!;
+        const [v0, v1] = [graph.origin(order[i]!.h), graph.target(order[j - 1]!.h)];
+        const [start, end] = [placeOf(v0), placeOf(v1)];
+        const source = sources[src]!;
+        const t0 = paramAt(v0, src, from);
+        const t1 = paramAt(v1, src, to);
+        // Una curva scritta che passa intera, coi capi dov'erano, resta com'è.
+        const forward = t0 === 0 && t1 === 1;
+        const backward = t0 === 1 && t1 === 0;
+        const [first, last] = forward ? [source.from, source.curve.to] : [source.curve.to, source.from];
+        if ((forward || backward) && shapes[source.shape]!.written && same(start, first) && same(end, last)) {
+          stretches.push({ start, curve: forward ? source.curve : reversed(source.from, source.curve), shape: source.shape, vertex: v0 });
+        } else if (t0 === t1) {
+          stretches.push({ start, curve: { kind: "line", to: end }, shape: source.shape, vertex: v0 });
+        } else {
+          const part = pieceOf(source, t0, t1);
+          quarters(start, moved(part.from, part.curve, start, end)).forEach((curve, k, all) => {
+            const at = k === 0 ? start : all[k - 1]!.to;
+            stretches.push({ start: at, curve, shape: source.shape, vertex: k === 0 ? v0 : null });
+          });
+        }
+        i = j;
+      }
+      // Un tratto che comincia e finisce nello stesso punto non disegna niente:
+      // succede dove due vertici vanno insieme sul punto di una tangenza.
+      for (let i = stretches.length - 1; i >= 0 && stretches.length > 1; i--) {
+        const stretch = stretches[i]!;
+        if (stretch.curve.kind === "line" && same(stretch.start, stretch.curve.to)) stretches.splice(i, 1);
+      }
+      // Due linee dritte una dopo l'altra diventano una, se il nodo in mezzo
+      // non è un nodo che una forma aveva fra due suoi lati.
+      const straight = (previous: Stretch, current: Stretch): boolean => {
+        if (previous.curve.kind !== "line" || current.curve.kind !== "line") return false;
+        if (previous.shape === current.shape && current.vertex !== null && net.rank[current.vertex] === 0) return false;
+        const [p, q, node] = [previous.start, current.curve.to, current.start];
+        const [dx, dy] = [q[0] - p[0], q[1] - p[1]];
+        const u = ((node[0] - p[0]) * dx + (node[1] - p[1]) * dy) / (dx * dx + dy * dy);
+        return u > 0 && u < 1 && Math.hypot(p[0] + u * dx - node[0], p[1] + u * dy - node[1]) <= COLLINEAR;
+      };
+      for (let i = 0; stretches.length > 2 && i < stretches.length; i++) {
+        const at = (i - 1 + stretches.length) % stretches.length;
+        const [previous, current] = [stretches[at]!, stretches[i]!];
+        if (!straight(previous, current)) continue;
+        stretches[at] = { ...previous, curve: current.curve, shape: current.shape };
+        stretches.splice(i, 1);
+        i = -1;
+      }
+      // Comincia dal nodo che le forme hanno prima, dalla più in basso; se
+      // l'anello non ne ha, dall'incrocio più a sinistra.
+      const keyOf = (stretch: Stretch): number => (stretch.vertex === null ? Infinity : net.first[stretch.vertex]!);
+      let head = 0;
+      stretches.forEach((stretch, i) => {
+        const [best, key] = [stretches[head]!, keyOf(stretch)];
+        if (key < keyOf(best) || (key === keyOf(best) && leftward(stretch.start, best.start) < 0)) head = i;
+      });
+      return [...stretches.slice(head), ...stretches.slice(0, head)];
+    };
+
+    const turns = new Map<number, number>();
+    const turnOf = (k: number): number => {
+      let turn = turns.get(k);
+      if (turn === undefined) {
+        turn = turning(sources.filter((source) => source.shape === k));
+        turns.set(k, turn);
+      }
+      return turn;
+    };
+    const pieces = new Map<number, Built[]>();
+    for (const loop of loops) {
+      const stretches = rebuild(loop);
+      const area = turning(stretches.map((stretch) => ({ from: stretch.start, curve: stretch.curve }))) / 2;
+      // Un anello che non racchiude niente che si veda resta fuori.
+      if (Math.abs(area) <= (EPSILON * EPSILON) / 4) continue;
+      const start = stretches[0]!.start;
+      const curves = turnOf(like(loop.piece)) >= 0 ? stretches.map((stretch) => stretch.curve) : stretches.map((stretch) => reversed(stretch.start, stretch.curve)).reverse();
+      const segments: Segment[] = [{ kind: "move", to: start }, ...curves];
+      if (segments[segments.length - 1]!.kind === "line") segments.pop();
+      segments.push({ kind: "close" });
+      const vertex = stretches[0]!.vertex;
+      const built = { key: vertex === null ? Infinity : net.first[vertex]!, start, segments };
+      const list = pieces.get(loop.piece);
+      if (list === undefined) pieces.set(loop.piece, [built]);
+      else list.push(built);
+    }
+    return pieces;
+  }
+}
+
+/// L'arrangiamento di `shapes`, dove le forme per cui `cuts` è vero tagliano
+/// soltanto. `"empty"` se non ha lati; `"complex"` se le spezzate passano
+/// `limit` pezzi; `null` se il calcolo non riesce.
+function arrange(shapes: readonly Shape[], cuts: (k: number) => boolean, limit = Infinity): Arrangement | "empty" | "complex" | null {
+  const sources = sourcesOf(shapes, cuts);
+  if (sources.length === 0) return "empty";
+  const net = new Net(sources);
+  if (net.a.length > limit) return "complex";
+  if (!net.planar(limit)) return net.a.length > limit ? "complex" : null;
+  const edges = edgesOf(net);
+  if (edges.length === 0) return "empty";
+  const graph = new Graph(net, edges);
+  if (!graph.trace()) return null;
+  const windings = graph.windings(shapes.length);
+  if (windings === null) return null;
+  return new Arrangement(shapes, sources, net, edges, graph, windings);
+}
+
+/// Un anello pronto: dove comincia, la prima delle curve delle forme che
+/// cominciano lì, `Infinity` per un incrocio, e i segmenti.
+interface Built {
+  readonly key: number;
+  readonly start: Point;
+  readonly segments: Segment[];
+}
+
+/// Gli anelli nell'ordine dei nodi da cui cominciano: prima quelli della
+/// forma più in basso, poi quelli delle forme sopra, ciascuna nell'ordine
+/// dei suoi nodi; per ultimi quelli che cominciano da un incrocio, da
+/// sinistra.
+function builtOrder(m: Built, n: Built): number {
+  if (m.key !== n.key) return m.key < n.key ? -1 : 1;
+  return leftward(m.start, n.start);
+}
+
+/// Gli anelli di un pezzo in un tracciato solo, in ordine.
+const joined = (list: readonly Built[]): Segment[] => [...list].sort(builtOrder).flatMap((loop) => loop.segments);
+
+// ---------------------------------------------------------------------------
 // L'operazione.
 // ---------------------------------------------------------------------------
 
@@ -892,22 +1205,15 @@ interface Stretch {
 /// l'esclusione, uno per pezzo nella divisione; nessuno se il risultato è
 /// vuoto. `null` se il calcolo non riesce.
 export function combine(kind: BooleanKind, shapes: readonly Shape[]): Segment[][] | null {
-  const sources = sourcesOf(shapes, kind === "division");
-  if (sources.length === 0) return [];
-  const net = new Net(sources);
-  if (!net.planar()) return null;
-  const edges = edgesOf(net, shapes.length);
-  if (edges.length === 0) return [];
-  const graph = new Graph(net, edges);
-  if (!graph.trace()) return null;
-  const windings = graph.windings(shapes.length);
-  if (windings === null) return null;
+  const arrangement = arrange(shapes, (k) => kind === "division" && k > 0);
+  if (arrangement === null || arrangement === "complex") return null;
+  if (arrangement === "empty") return [];
+  const { graph, edges } = arrangement;
 
   // Le facce dentro il risultato: per la divisione, il pezzo a cui
   // appartengono; altrimenti 0, e -1 quelle fuori.
-  const inside = (w: Int32Array, k: number): boolean => (shapes[k]!.evenOdd ? (w[k]! & 1) !== 0 : w[k] !== 0);
-  const kept = windings.map((w): boolean => {
-    const within = shapes.map((_, k) => inside(w, k));
+  const kept = arrangement.windings.map((_, f): boolean => {
+    const within = shapes.map((_, k) => arrangement.inside(f, k));
     switch (kind) {
       case "union":
         return within.some(Boolean);
@@ -940,202 +1246,223 @@ export function combine(kind: BooleanKind, shapes: readonly Shape[]): Segment[][
       if (p >= 0) piece[f] = find(f);
     });
   }
-  const loops = graph.loops(piece);
-  if (loops === null) return null;
-
-  // --- Le curve dei lati -----------------------------------------------------
-
-  const curvePoint = (src: number, t: number): Point => pointAt(sources[src]!.from, sources[src]!.curve, t);
-  /// Vero se il passo `q` continua la curva del passo `p` senza salti: dallo
-  /// stesso parametro, o da uno vicino quando il pezzo in mezzo è rimasto
-  /// tutto nel vertice.
-  const continues = (p: Step, q: Step): boolean => {
-    if (p.src !== q.src) return false;
-    const up = p.to > p.from;
-    if (up !== (q.to > q.from)) return false;
-    // Dallo stesso parametro la curva continua anche dove il vertice, fuso
-    // con altri vicini, è finito più in là della tolleranza.
-    if (p.to === q.from) return true;
-    if (up ? q.from < p.to : q.from > p.to) return false;
-    const v = net.at(graph.target(p.h));
-    return [p.to, (p.to + q.from) / 2, q.from].every((t) => distance(curvePoint(p.src, t), v) <= 2 * EPSILON);
-  };
-  /// I passi di un anello: per ogni mezzo lato, la curva che vi passa.
-  /// Dove ne passano più d'una vale quella che il passo prima continua, o
-  /// quella che continua nel passo dopo, come un cerchio che sfiora un lato;
-  /// altrimenti quella della forma più in basso.
-  const stepsOfLoop = (half: readonly number[]): Step[] => {
-    const n = half.length;
-    const step = (h: number, along: Along): Step => (h & 1 ? { h, src: along.src, from: along.tb, to: along.ta } : { h, src: along.src, from: along.ta, to: along.tb });
-    const out = half.map((h) => step(h, edges[h >> 1]!.along.reduce((best, along) => (along.src < best.src ? along : best))));
-    // Deciso: un passo con una curva sola, o che ne continua uno deciso.
-    const settled = Uint8Array.from(half, (h) => (edges[h >> 1]!.along.length === 1 ? 1 : 0));
-    for (const forward of [true, false]) {
-      for (let k = 1; k < 2 * n; k++) {
-        const i = forward ? k % n : (2 * n - 1 - k) % n;
-        const j = forward ? (i - 1 + n) % n : (i + 1) % n;
-        if (settled[i] === 1 || settled[j] === 0) continue;
-        const same = edges[half[i]! >> 1]!.along.find((along) => along.src === out[j]!.src);
-        if (same === undefined) continue;
-        out[i] = step(half[i]!, same);
-        settled[i] = 1;
-      }
-    }
-    return out;
-  };
-
-  // Dove sta davvero un vertice dove il risultato cambia curva: un nodo
-  // resta dov'è; un incrocio va dove due curve che vi passano si incrociano
-  // davvero: le prime, dalla forma in basso, che si incrociano lì, o, se
-  // nessuna coppia si incrocia lì, quelle che vi arrivano correndo fuse,
-  // come in una tangenza. Un altro punto va sulla curva.
-  const places = new Map<number, Point>();
-  const placeOf = (v: number): Point => {
-    const known = places.get(v);
-    if (known !== undefined) return known;
-    let p = net.at(v);
-    if (net.rank[v] !== 0) {
-      const through = new Map<number, number>();
-      for (const h of graph.around.get(v) ?? []) {
-        for (const along of edges[h >> 1]!.along) if (!through.has(along.src)) through.set(along.src, h & 1 ? along.tb : along.ta);
-      }
-      const list = [...through].sort((m, n) => m[0] - n[0]);
-      let q: Point | null = null;
-      let far = Infinity;
-      for (const [one, other] of list.flatMap((one, i) => list.slice(i + 1).map((other) => [one, other] as const))) {
-        const [first, second] = [sources[one[0]]!, sources[other[0]]!];
-        const found = crossing(first, one[1], second, other[1]);
-        if (found === null) continue;
-        const d = distance(found.point, p);
-        if (d <= 2 * EPSILON) {
-          q = found.point;
-          break;
-        }
-        if (d < far && alongside(first, one[1], found.s, second, other[1])) [far, q] = [d, found.point];
-      }
-      const one = list[0];
-      if (q === null && one !== undefined) {
-        const on = curvePoint(one[0], project(sources[one[0]]!, p, one[1]));
-        if (distance(on, p) <= 2 * EPSILON) q = on;
-      }
-      if (q !== null) p = q;
-    }
-    places.set(v, p);
-    return p;
-  };
-  /// Il parametro di `src` nel vertice `v`, sul punto dove il vertice sta
-  /// davvero.
-  const paramAt = (v: number, src: number, t: number): number => project(sources[src]!, placeOf(v), t);
-
-  const rebuild = (loop: Loop): Stretch[] => {
-    const steps = stepsOfLoop(loop.half);
-    // Comincia dove la curva cambia: c'è sempre, perché una curva intera
-    // finisce dove comincia solo passando da 1 a 0.
-    let begin = steps.findIndex((step, i) => !continues(steps[(i - 1 + steps.length) % steps.length]!, step));
-    if (begin === -1) begin = 0;
-    const order = [...steps.slice(begin), ...steps.slice(0, begin)];
-    const stretches: Stretch[] = [];
-    for (let i = 0; i < order.length; ) {
-      let j = i + 1;
-      while (j < order.length && continues(order[j - 1]!, order[j]!)) j++;
-      const { src, from } = order[i]!;
-      const { to } = order[j - 1]!;
-      const [v0, v1] = [graph.origin(order[i]!.h), graph.target(order[j - 1]!.h)];
-      const [start, end] = [placeOf(v0), placeOf(v1)];
-      const source = sources[src]!;
-      const t0 = paramAt(v0, src, from);
-      const t1 = paramAt(v1, src, to);
-      // Una curva scritta che passa intera, coi capi dov'erano, resta com'è.
-      const forward = t0 === 0 && t1 === 1;
-      const backward = t0 === 1 && t1 === 0;
-      const [first, last] = forward ? [source.from, source.curve.to] : [source.curve.to, source.from];
-      if ((forward || backward) && shapes[source.shape]!.written && same(start, first) && same(end, last)) {
-        stretches.push({ start, curve: forward ? source.curve : reversed(source.from, source.curve), shape: source.shape, vertex: v0 });
-      } else if (t0 === t1) {
-        stretches.push({ start, curve: { kind: "line", to: end }, shape: source.shape, vertex: v0 });
-      } else {
-        const part = pieceOf(source, t0, t1);
-        quarters(start, moved(part.from, part.curve, start, end)).forEach((curve, k, all) => {
-          const at = k === 0 ? start : all[k - 1]!.to;
-          stretches.push({ start: at, curve, shape: source.shape, vertex: k === 0 ? v0 : null });
-        });
-      }
-      i = j;
-    }
-    // Un tratto che comincia e finisce nello stesso punto non disegna niente:
-    // succede dove due vertici vanno insieme sul punto di una tangenza.
-    for (let i = stretches.length - 1; i >= 0 && stretches.length > 1; i--) {
-      const stretch = stretches[i]!;
-      if (stretch.curve.kind === "line" && same(stretch.start, stretch.curve.to)) stretches.splice(i, 1);
-    }
-    // Due linee dritte una dopo l'altra diventano una, se il nodo in mezzo
-    // non è un nodo che una forma aveva fra due suoi lati.
-    const straight = (previous: Stretch, current: Stretch): boolean => {
-      if (previous.curve.kind !== "line" || current.curve.kind !== "line") return false;
-      if (previous.shape === current.shape && current.vertex !== null && net.rank[current.vertex] === 0) return false;
-      const [p, q, node] = [previous.start, current.curve.to, current.start];
-      const [dx, dy] = [q[0] - p[0], q[1] - p[1]];
-      const u = ((node[0] - p[0]) * dx + (node[1] - p[1]) * dy) / (dx * dx + dy * dy);
-      return u > 0 && u < 1 && Math.hypot(p[0] + u * dx - node[0], p[1] + u * dy - node[1]) <= COLLINEAR;
-    };
-    for (let i = 0; stretches.length > 2 && i < stretches.length; i++) {
-      const at = (i - 1 + stretches.length) % stretches.length;
-      const [previous, current] = [stretches[at]!, stretches[i]!];
-      if (!straight(previous, current)) continue;
-      stretches[at] = { ...previous, curve: current.curve, shape: current.shape };
-      stretches.splice(i, 1);
-      i = -1;
-    }
-    // Comincia dal nodo che le forme hanno prima, dalla più in basso; se
-    // l'anello non ne ha, dall'incrocio più a sinistra.
-    const keyOf = (stretch: Stretch): number => (stretch.vertex === null ? Infinity : net.first[stretch.vertex]!);
-    let head = 0;
-    stretches.forEach((stretch, i) => {
-      const [best, key] = [stretches[head]!, keyOf(stretch)];
-      if (key < keyOf(best) || (key === keyOf(best) && leftward(stretch.start, best.start) < 0)) head = i;
-    });
-    return [...stretches.slice(head), ...stretches.slice(0, head)];
-  };
-
-  // Il risultato gira come la forma in basso: i suoi anelli di fuori nel
-  // suo verso, i buchi al contrario.
-  const turn = turning(sources.filter((source) => source.shape === 0));
-  const pieces = new Map<number, Built[]>();
-  for (const loop of loops) {
-    const stretches = rebuild(loop);
-    const area = turning(stretches.map((stretch) => ({ from: stretch.start, curve: stretch.curve }))) / 2;
-    // Un anello che non racchiude niente che si veda resta fuori.
-    if (Math.abs(area) <= (EPSILON * EPSILON) / 4) continue;
-    const start = stretches[0]!.start;
-    const curves = turn >= 0 ? stretches.map((stretch) => stretch.curve) : stretches.map((stretch) => reversed(stretch.start, stretch.curve)).reverse();
-    const segments: Segment[] = [{ kind: "move", to: start }, ...curves];
-    if (segments[segments.length - 1]!.kind === "line") segments.pop();
-    segments.push({ kind: "close" });
-    const vertex = stretches[0]!.vertex;
-    const built = { key: vertex === null ? Infinity : net.first[vertex]!, start, segments };
-    const list = pieces.get(loop.piece);
-    if (list === undefined) pieces.set(loop.piece, [built]);
-    else list.push(built);
-  }
+  // Il risultato gira come la forma in basso.
+  const pieces = arrangement.build(piece, () => 0);
+  if (pieces === null) return null;
   return [...pieces.values()]
     .map((list) => list.sort(builtOrder))
     .sort((m, n) => builtOrder(m[0]!, n[0]!))
     .map((list) => list.flatMap((loop) => loop.segments));
 }
 
-/// Un anello pronto: dove comincia, la prima delle curve delle forme che
-/// cominciano lì, `Infinity` per un incrocio, e i segmenti.
-interface Built {
-  readonly key: number;
-  readonly start: Point;
-  readonly segments: Segment[];
+// ---------------------------------------------------------------------------
+// Le regioni.
+// ---------------------------------------------------------------------------
+
+/// Più sottile di così, in media, una faccia non si vede né si tocca: va con
+/// la regione accanto con cui ha più bordo.
+const THIN = 2 * EPSILON;
+
+/// Una regione dell'arrangiamento: una faccia dentro almeno una forma, con
+/// le facce troppo sottili che le stanno accanto.
+export interface Region {
+  /// Le forme che la coprono, dalla più in basso.
+  readonly cover: readonly number[];
+  /// Il contorno, con le curve delle forme.
+  readonly segments: readonly Segment[];
+  readonly area: number;
+  /// Il baricentro, che può cadere fuori, come in una mezzaluna.
+  readonly center: Point;
+  readonly min: Point;
+  readonly max: Point;
 }
 
-/// Gli anelli nell'ordine dei nodi da cui cominciano: prima quelli della
-/// forma più in basso, poi quelli delle forme sopra, ciascuna nell'ordine
-/// dei suoi nodi; per ultimi quelli che cominciano da un incrocio, da
-/// sinistra.
-function builtOrder(m: Built, n: Built): number {
-  if (m.key !== n.key) return m.key < n.key ? -1 : 1;
-  return leftward(m.start, n.start);
+/// Le regioni delle forme, da sinistra a destra e dall'alto in basso.
+export class Regions {
+  /// I lati del bordo di ogni regione, quattro numeri per lato, per dire
+  /// se un punto ci sta dentro.
+  private readonly borders: Float64Array[];
+
+  constructor(
+    private readonly arrangement: Arrangement | null,
+    readonly regions: readonly Region[],
+    /// La regione di ogni faccia, -1 fuori e per le facce sottili sole.
+    private readonly region: Int32Array,
+    /// Vero per le facce dentro almeno una forma.
+    private readonly covered: Uint8Array,
+  ) {
+    const lists: number[][] = regions.map(() => []);
+    if (arrangement !== null) {
+      const { net, edges, graph } = arrangement;
+      edges.forEach((edge, e) => {
+        const [one, other] = [region[graph.face[2 * e]!]!, region[graph.face[2 * e + 1]!]!];
+        if (one === other) return;
+        for (const r of [one, other]) if (r >= 0) lists[r]!.push(net.x[edge.a]!, net.y[edge.a]!, net.x[edge.b]!, net.y[edge.b]!);
+      });
+    }
+    this.borders = lists.map((list) => Float64Array.from(list));
+  }
+
+  /// Vero se il punto `p` sta nella regione `r`.
+  contains(r: number, p: Point): boolean {
+    const { min, max } = this.regions[r]!;
+    const [px, py] = p;
+    if (px < min[0] || px > max[0] || py < min[1] || py > max[1]) return false;
+    const border = this.borders[r]!;
+    let inside = false;
+    for (let i = 0; i < border.length; i += 4) {
+      const [ax, ay, bx, by] = [border[i]!, border[i + 1]!, border[i + 2]!, border[i + 3]!];
+      if (ay > py !== by > py && px < ax + ((py - ay) * (bx - ax)) / (by - ay)) inside = !inside;
+    }
+    return inside;
+  }
+
+  /// La regione nel punto `p`, o -1.
+  at(p: Point): number {
+    for (let r = 0; r < this.regions.length; r++) if (this.contains(r, p)) return r;
+    return -1;
+  }
+
+  /// Il tracciato delle facce delle regioni per cui `chosen` è vero, con
+  /// -1 per le facce sottili rimaste sole: di tutte quelle dentro una forma,
+  /// o, con `within`, di quelle dentro la forma `within`. Gli anelli girano
+  /// come la forma `like`. Vuoto se non resta niente; `null` se il calcolo
+  /// non riesce.
+  path(chosen: (region: number) => boolean, within: number | null, like: number): Segment[] | null {
+    const arrangement = this.arrangement;
+    if (arrangement === null) return [];
+    const piece = new Int32Array(arrangement.graph.faces);
+    for (let f = 0; f < piece.length; f++) {
+      const inside = within === null ? this.covered[f] === 1 : arrangement.inside(f, within);
+      piece[f] = inside && chosen(this.region[f]!) ? 0 : -1;
+    }
+    const built = arrangement.build(piece, () => like);
+    return built === null ? null : joined(built.get(0) ?? []);
+  }
+}
+
+/// Le regioni di `shapes`, dalla più in basso; le forme per cui `cuts` è
+/// vero tagliano soltanto. `"complex"` se le spezzate delle curve passano
+/// `limit` pezzi; `null` se il calcolo non riesce.
+export function regionsOf(shapes: readonly Shape[], cuts: readonly boolean[], limit = Infinity): Regions | "complex" | null {
+  const arrangement = arrange(shapes, (k) => cuts[k] === true, limit);
+  if (arrangement === null || arrangement === "complex") return arrangement;
+  if (arrangement === "empty") return new Regions(null, [], new Int32Array(0), new Uint8Array(0));
+  const { net, edges, graph } = arrangement;
+  const faces = graph.faces;
+  const covered = Uint8Array.from({ length: faces }, (_, f) => (shapes.some((_, k) => arrangement.inside(f, k)) ? 1 : 0));
+
+  // Area, momenti e bordo di ogni faccia, dai suoi mezzi lati: ognuno ha la
+  // faccia a sinistra, e un lato con la stessa faccia ai due lati non conta.
+  const twice = new Float64Array(faces);
+  const mx = new Float64Array(faces);
+  const my = new Float64Array(faces);
+  const rim = new Float64Array(faces);
+  for (let h = 0; h < graph.face.length; h++) {
+    const f = graph.face[h]!;
+    if (covered[f] === 0) continue;
+    const [p, q] = [graph.origin(h), graph.target(h)];
+    const [ax, ay, bx, by] = [net.x[p]!, net.y[p]!, net.x[q]!, net.y[q]!];
+    const cross = ax * by - bx * ay;
+    twice[f]! += cross;
+    mx[f]! += (ax + bx) * cross;
+    my[f]! += (ay + by) * cross;
+    if (graph.face[h ^ 1] !== f) rim[f]! += Math.hypot(bx - ax, by - ay);
+  }
+  const thin = (f: number): boolean => !(Math.abs(twice[f]!) >= THIN * rim[f]!);
+
+  // Le facce che si vedono sono regioni; quelle sottili vanno con la vicina
+  // con cui hanno più bordo, finché ne trovano una.
+  const region = new Int32Array(faces).fill(-1);
+  let count = 0;
+  for (let f = 0; f < faces; f++) if (covered[f] === 1 && !thin(f)) region[f] = count++;
+  for (let changed = true; changed; ) {
+    changed = false;
+    const shared = new Map<number, Map<number, number>>();
+    edges.forEach((edge, e) => {
+      const [f, g] = [graph.face[2 * e]!, graph.face[2 * e + 1]!];
+      if (f === g) return;
+      const length = Math.hypot(net.x[edge.b]! - net.x[edge.a]!, net.y[edge.b]! - net.y[edge.a]!);
+      for (const [one, other] of [
+        [f, g],
+        [g, f],
+      ] as const) {
+        if (covered[one] === 0 || region[one] !== -1 || region[other] === -1) continue;
+        const sums = shared.get(one) ?? new Map<number, number>();
+        sums.set(region[other]!, (sums.get(region[other]!) ?? 0) + length);
+        shared.set(one, sums);
+      }
+    });
+    for (const [f, sums] of shared) {
+      let best = -1;
+      for (const [r, length] of sums) if (best === -1 || length > sums.get(best)! || (length === sums.get(best) && r < best)) best = r;
+      region[f] = best;
+      changed = true;
+    }
+  }
+
+  // Il contorno di ogni regione, coi suoi anelli che girano come la forma
+  // più in alto che la copre.
+  const main = new Int32Array(count).fill(-1);
+  for (let f = 0; f < faces; f++) if (region[f]! >= 0 && !thin(f) && main[region[f]!] === -1) main[region[f]!] = f;
+  const coverOf = (r: number): number[] => shapes.flatMap((_, k) => (arrangement.inside(main[r]!, k) ? [k] : []));
+  const covers = Array.from({ length: count }, (_, r) => coverOf(r));
+  const outlines = arrangement.build(region, (r) => covers[r]![covers[r]!.length - 1]!);
+  if (outlines === null) return null;
+
+  // L'area, i momenti e il riquadro di ogni regione, in un giro sulle
+  // facce e uno sui lati del bordo.
+  const sum = new Float64Array(count);
+  const sx = new Float64Array(count);
+  const sy = new Float64Array(count);
+  for (let f = 0; f < faces; f++) {
+    const r = region[f]!;
+    if (r < 0) continue;
+    sum[r]! += twice[f]!;
+    sx[r]! += mx[f]!;
+    sy[r]! += my[f]!;
+  }
+  const box = new Float64Array(4 * count);
+  for (let r = 0; r < count; r++) box.set([Infinity, Infinity, -Infinity, -Infinity], 4 * r);
+  edges.forEach((edge, e) => {
+    const [one, other] = [region[graph.face[2 * e]!]!, region[graph.face[2 * e + 1]!]!];
+    if (one === other) return;
+    for (const r of [one, other]) {
+      if (r < 0) continue;
+      for (const v of [edge.a, edge.b]) {
+        box[4 * r] = Math.min(box[4 * r]!, net.x[v]!);
+        box[4 * r + 1] = Math.min(box[4 * r + 1]!, net.y[v]!);
+        box[4 * r + 2] = Math.max(box[4 * r + 2]!, net.x[v]!);
+        box[4 * r + 3] = Math.max(box[4 * r + 3]!, net.y[v]!);
+      }
+    }
+  });
+  const found: Array<{ readonly old: number; readonly region: Region }> = [];
+  for (let r = 0; r < count; r++) {
+    const list = outlines.get(r);
+    if (list === undefined) continue;
+    const [area, cx, cy] = [sum[r]!, sx[r]!, sy[r]!];
+    found.push({
+      old: r,
+      region: {
+        cover: covers[r]!,
+        segments: joined(list),
+        area: Math.abs(area) / 2,
+        center: [cx / (3 * area), cy / (3 * area)],
+        min: [box[4 * r]!, box[4 * r + 1]!],
+        max: [box[4 * r + 2]!, box[4 * r + 3]!],
+      },
+    });
+  }
+  // Da sinistra a destra, poi dall'alto in basso, come si scrivono i punti.
+  found.sort((m, n) => leftward(m.region.center, n.region.center) || m.old - n.old);
+  const renamed = new Int32Array(count).fill(-1);
+  found.forEach(({ old }, r) => (renamed[old] = r));
+  const final = region.map((r) => (r >= 0 ? renamed[r]! : -1));
+  return new Regions(
+    arrangement,
+    found.map(({ region }) => region),
+    final,
+    covered,
+  );
 }
