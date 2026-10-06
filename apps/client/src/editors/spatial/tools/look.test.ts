@@ -213,8 +213,9 @@ describe("mille oggetti scelti", () => {
     }
     expect(warm).toBeLessThan(16);
     // La prima lettura legge anche gli attributi di ogni parte e costa dieci
-    // volte tanto: resta comunque sotto la soglia di un ritardo percepibile,
-    // con il margine per una macchina lenta.
-    expect(cold).toBeLessThan(100);
+    // volte tanto, una trentina di millisecondi. La soglia guarda che non
+    // cresca col quadrato degli oggetti, che sarebbero secondi, con il
+    // margine per una macchina lenta o carica di altri test.
+    expect(cold).toBeLessThan(250);
   });
 });

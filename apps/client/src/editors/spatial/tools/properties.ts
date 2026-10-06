@@ -199,6 +199,9 @@ export interface Properties {
   focus(): void;
   /// Apre la sezione `id` e le dà il fuoco. Falso se la sezione non c'è.
   focusSection(id: SectionId): boolean;
+  /// Chiude le sezioni `ids` e apre le altre, come le ricorda l'editor,
+  /// senza dirglielo.
+  setClosed(ids: readonly SectionId[]): void;
   /// Riscrive i testi nella lingua di adesso: quelli dei campi arrivano con
   /// la vista dopo.
   relabel(): void;
@@ -272,7 +275,7 @@ const TRANSFORM_IDS: readonly TransformId[] = ["turn", "scaleX", "scaleY", "skew
 
 /// I nomi dei comandi prima che l'editor dica i suoi: un pulsante ha sempre
 /// un nome, anche nascosto.
-const ACTION_LABELS: Readonly<Record<ActionId, DrawKey>> = {
+export const ACTION_LABELS: Readonly<Record<ActionId, DrawKey>> = {
   "align-left": "draw.align.left",
   "align-center": "draw.align.center",
   "align-right": "draw.align.right",
@@ -1257,9 +1260,11 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   });
 
   // Un pulsante preso col puntatore non prende il fuoco: resta al foglio,
-  // con le sue scorciatoie, o al campo in cui si scrive.
+  // con le sue scorciatoie, o al campo in cui si scrive. Gli attributi,
+  // ospiti del pannello, fanno come sempre.
   life.listen(element, "mousedown", (event) => {
-    if ((event.target as Element | null)?.closest("button:not(.draw-properties-toggle)")) event.preventDefault();
+    const pressed = (event.target as Element | null)?.closest("button:not(.draw-properties-toggle)");
+    if (pressed && !attributes.contains(pressed)) event.preventDefault();
   });
 
   // --- Il pannello ------------------------------------------------------------
@@ -1366,6 +1371,16 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       section.root.scrollIntoView?.({ block: "nearest" });
       (firstIn(section) ?? section.toggle).focus({ preventScroll: true });
       return true;
+    },
+    setClosed(ids) {
+      const shut = new Set(ids);
+      for (const section of sections.values()) {
+        const open = !shut.has(section.id);
+        if (section.open === open) continue;
+        if (!open && section.body.contains(document.activeElement)) section.toggle.focus({ preventScroll: true });
+        section.open = open;
+        showOpen(section);
+      }
     },
     relabel,
   };

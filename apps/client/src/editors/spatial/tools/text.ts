@@ -17,8 +17,8 @@
 // - **Solo ciò che XML ammette.** I caratteri di controllo e i surrogati
 //   spaiati di un testo incollato restano fuori: il file resta ben formato.
 // - **Il carattere** è Inter, quello dell'interfaccia, col ripiego generico;
-//   dal livello Esperto anche Literata o JetBrains Mono, gli altri due che il
-//   file scrive. L'editor li registra coi nomi che il file scrive, dai file
+//   dalle proprietà (livello Standard) e dagli attributi anche Literata o
+//   JetBrains Mono, gli altri due che il file scrive. L'editor li registra coi nomi che il file scrive, dai file
 //   che l'app porta già, così il foglio mostra il testo come lo esporta
 //   l'export. Dentro un `<img>`, come in Lettura, vale il ripiego.
 

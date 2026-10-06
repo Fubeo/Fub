@@ -88,6 +88,10 @@ const CONTROL = 6;
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
 
+/// Quanto una maniglia sporge dal suo punto, in pixel CSS: la metà della più
+/// grande, quella che ruota.
+export const HANDLE_REACH_PX = Math.max(GRIP, ROTOR) / 2;
+
 /// La scritta: il corpo, il margine attorno, e la distanza dal punto, in
 /// pixel CSS.
 const LABEL_SIZE = 12;

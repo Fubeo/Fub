@@ -82,6 +82,25 @@ async function submit(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/// Il pannello delle proprietà, un suo campo e ciò che vi si scrive.
+const properties = (): HTMLElement => host.querySelector<HTMLElement>(".draw-properties")!;
+const property = (id: string): HTMLElement => properties().querySelector<HTMLElement>(`.draw-properties-field[data-field="${id}"]`)!;
+const propertyInput = (id: string): HTMLInputElement => property(id).querySelector<HTMLInputElement>(".draw-properties-input")!;
+const propertyLabel = (id: string): string => property(id).querySelector("label")!.textContent ?? "";
+
+/// Scrive `text` nel campo, come chi lo digita.
+function typeIn(target: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  target.focus();
+  target.value = text;
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/// Scrive `text` nel campo e lo fa partire con Invio.
+function enter(target: HTMLInputElement, text: string): void {
+  typeIn(target, text);
+  key("Enter", {}, target);
+}
+
 beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
@@ -92,6 +111,7 @@ beforeEach(() => {
 afterEach(() => {
   owner.close();
   host.remove();
+  vi.unstubAllGlobals();
   // Le finestre chiuse escono con un'animazione, che happy-dom non finisce.
   for (const modal of document.querySelectorAll(".modale")) modal.remove();
   vi.restoreAllMocks();
@@ -1056,7 +1076,7 @@ describe("i livelli, dal livello Standard", () => {
 
 describe("la griglia e la pagina, dal livello Standard", () => {
   /// La griglia con l'aggancio acceso, al passo di partenza.
-  const SNAP = { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } as const;
+  const SNAP = { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] } as const;
   /// Un quadrato pieno senza contorno, fuori dalla griglia, in una pagina
   /// che lo lascia muovere: il riquadro è quello scritto.
   const OFF = doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="13" y="7" width="40" height="40" fill="#000000"/></g>`).replace(
@@ -1117,6 +1137,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
       ["menuitemcheckbox", "Mostra le guide", "true", "|"],
       ["menuitem", "Guide…", null, null],
       ["menuitem", "Unità: Pixel…", null, null],
+      ["menuitemcheckbox", "Barra accanto alla selezione", "true", null],
       ["menuitem", "Adatta la pagina al disegno", null, null],
     ]);
     expect(entry("Aggancia alla griglia").querySelector(".menu-description")!.textContent).toBe("Tieni premuto Ctrl mentre trascini per posare libero.");
@@ -1137,11 +1158,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(entry("Mostra la griglia").getAttribute("aria-checked")).toBe("true");
     entry("Aggancia alla griglia").click();
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
-    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true });
+    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
     expect(grids).toEqual([
-      { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true },
-      { shown: true, snap: false, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true },
-      { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true },
+      { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] },
+      { shown: true, snap: false, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] },
+      { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] },
     ]);
 
     // Sotto lo Standard non si vede e non aggancia, ma resta com'era.
@@ -1156,11 +1177,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
 
   it("`setGrid` la cambia senza dirlo; un passo fuori dai limiti resta quello di prima, e uno insolito entra nel menu", () => {
     const grids: unknown[] = [];
-    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false, steps: {}, rulers: false, rulerGuides: true }, onGridChange: (grid) => grids.push(grid) });
-    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true });
-    editor.setGrid({ shown: true, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true });
-    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false, steps: {}, rulers: false, rulerGuides: true });
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true });
+    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] }, onGridChange: (grid) => grids.push(grid) });
+    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    editor.setGrid({ shown: true, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
     expect(spoken()).toBe("");
     expect(grids).toEqual([]);
     pageButton().click();
@@ -1183,11 +1204,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
     expect(altGraph("#").defaultPrevented).toBe(true);
     expect(spoken()).toBe("Griglia nascosta.");
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
     expect(key("#", { ctrlKey: true }).defaultPrevented).toBe(false);
     editor.setLevel("essential");
     expect(key("%", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
     // Nel titolo si scrivono.
     editor.setLevel("standard");
     const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
@@ -1452,7 +1473,7 @@ describe("le guide intelligenti, dal livello Standard", () => {
   });
 
   it("con la griglia vince il più vicino fra la riga e il bersaglio", () => {
-    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true } });
+    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] } });
     editor.setTool("select");
     // In alto a 53: il bordo del rettangolo, a 50, è più vicino della riga a 60.
     drag([[40, 220], [41, 150], [43, 73]]);
@@ -1551,8 +1572,8 @@ describe("le guide intelligenti, dal livello Standard", () => {
     );
     item.click();
     expect(spoken()).toBe("Guide intelligenti spente.");
-    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true });
-    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true }]);
+    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] }]);
     editor.setTool("select");
     drag([[40, 220], [41, 150], [43, 73]]);
     expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
@@ -1723,7 +1744,7 @@ describe("i righelli e le guide del documento, dal livello Standard", () => {
   });
 
   it("si aggancia alla griglia e agli oggetti, finché Ctrl o ⌘ non è tenuto", () => {
-    withRulers(sheet(), { grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true } });
+    withRulers(sheet(), { grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] } });
     drag([[10, 100], [50, 100], [93, 100]]);
     expect(guidesOf()).toBe("x 100");
     editor.undo();
@@ -1829,7 +1850,7 @@ describe("i righelli e le guide del documento, dal livello Standard", () => {
     expect(corner()).toBe("px");
   });
 
-  it("nell'unità del documento: il passo della griglia, le misure dette e i campi; il passo di ogni unità si ricorda", async () => {
+  it("nell'unità del documento: il passo della griglia, le misure dette e i campi; il passo di ogni unità si ricorda", () => {
     mount(sheet(' fub:units="mm"'), { level: "standard" });
     size(400, 300);
     pageButton().click();
@@ -1848,12 +1869,15 @@ describe("i righelli e le guide del documento, dal livello Standard", () => {
     editor.select([A]);
     editor.focus();
     key("Enter");
-    expect([...dialog().querySelectorAll(".palette-label")].map((label) => label.textContent)).toEqual(["X (mm)", "Y (mm)", "Larghezza (mm)", "Altezza (mm)"]);
-    expect(["x", "y", "w", "h"].map((name) => field(name).value)).toEqual(["5.292", "52.917", "10.583", "10.583"]);
-    field("w").value = "20";
-    await submit();
-    expect(spoken()).toBe("Misure: 20 millimetri × 10,6 millimetri.");
-    expect(transformOf(A)).toBe("matrix(1.8898 0 0 1 -17.795 0)");
+    expect(["x", "y", "width", "height"].map((id) => [propertyLabel(id), propertyInput(id).value])).toEqual([
+      ["X (mm)", "5,292"],
+      ["Y (mm)", "52,917"],
+      ["Larghezza (mm)", "10,583"],
+      ["Altezza (mm)", "10,583"],
+    ]);
+    enter(propertyInput("width"), "20");
+    expect(transformOf(A)).toBe("matrix(1.8898 0 0 1 -17.7953 0)");
+    expect(propertyInput("width").value).toBe("20");
   });
 
   it("«Guide…» le scrive coi numeri, in un passo, e un doppio clic su una guida apre la sua riga", async () => {
@@ -2059,7 +2083,7 @@ describe("il testo, dal livello Standard", () => {
   });
 
   it("Spazio scrive dov'è il cursore, e con l'aggancio la linea di base va sulla griglia", () => {
-    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
+    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] } });
     size(200, 100);
     editor.setTool("text");
     surface().focus();
@@ -2192,6 +2216,265 @@ describe("il testo, dal livello Standard", () => {
     expect(rows).toContainEqual(["Esc o Tab o Ctrl+Enter", "Conclude il testo, mentre si scrive"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
+describe("il pannello delle proprietà, dal livello Standard", () => {
+  const A = "o1a2b3c4d";
+  const B = "ob2b2b2b2";
+  const TWO = doc(
+    `${LAYER}<rect id="${A}" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/><rect id="${B}" x="10" y="20" width="10" height="10" fill="#000000"/></g>`,
+  );
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
+  const dock = (): HTMLElement => host.querySelector<HTMLElement>(".draw-dock")!;
+  const choose = (id: string, value: string): void => {
+    const select = property(id).querySelector("select")!;
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const flip = (id: string): void => property(id).querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+
+  it("«Proprietà» lo apre e lo chiude accanto al foglio, e chi monta l'editor lo sa", () => {
+    const panels: (boolean | null)[] = [];
+    mount(SOURCE, { level: "standard", onGridChange: (grid) => panels.push(grid.panel) });
+    expect(button().hasAttribute("aria-haspopup")).toBe(false);
+    expect(button().getAttribute("aria-controls")).toBe(properties().id);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    button().click();
+    expect(properties().hidden).toBe(false);
+    expect(dock().hidden).toBe(false);
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    expect(properties().querySelector(".draw-properties-subject")!.textContent).toBe("Il disegno");
+    expect(properties().contains(document.activeElement)).toBe(true);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    button().click();
+    expect(properties().hidden).toBe(true);
+    expect(dock().hidden).toBe(true);
+    expect(document.activeElement).toBe(surface());
+    expect(panels).toEqual([true, false]);
+    // Senza il pannello, all'Essenziale, il pulsante apre una finestra.
+    editor.setLevel("essential");
+    expect(button().getAttribute("aria-haspopup")).toBe("dialog");
+    expect(button().hasAttribute("aria-expanded")).toBe(false);
+  });
+
+  it("si apre da sé se l'editor ha posto accanto al foglio, o come l'ha lasciato chi disegna", () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          observers.push(callback);
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+    const measured = (width: number): void => {
+      Object.defineProperty(host.querySelector(".draw-editor")!, "clientWidth", { configurable: true, value: width });
+      for (const callback of observers.splice(0)) callback([], {} as ResizeObserver);
+    };
+    mount(SOURCE, { level: "standard" });
+    // Finché l'editor non ha una misura, il pannello aspetta di saperla.
+    expect(properties().hidden).toBe(true);
+    measured(1000);
+    expect(properties().hidden).toBe(false);
+    // Aprirsi da sé non è una scelta di chi disegna: non si ricorda.
+    expect(editor.grid.panel).toBeNull();
+    editor.dispose();
+
+    mount(SOURCE, { level: "standard" });
+    measured(400);
+    expect(properties().hidden).toBe(true);
+    editor.dispose();
+
+    mount(SOURCE, { level: "standard", grid: { ...editor.grid, panel: false } });
+    measured(1000);
+    expect(properties().hidden).toBe(true);
+    // Chi monta l'editor lo riapre come l'aveva lasciato chi disegna.
+    editor.setGrid({ ...editor.grid, panel: true });
+    expect(properties().hidden).toBe(false);
+    expect(document.activeElement).not.toBe(propertyInput("pageWidth"));
+  });
+
+  it("Invio ci porta; posizione e misure si scrivono, ciascuna in un passo che si annulla col suo nome", () => {
+    mount(TWO, { level: "standard" });
+    editor.select([A]);
+    editor.focus();
+    key("Enter");
+    expect(document.activeElement).toBe(propertyInput("x"));
+    expect(properties().querySelector(".draw-properties-subject")!.textContent).toBe("Rettangolo, Nero");
+    // La cornice comprende il contorno, come quella sul foglio.
+    expect(["x", "y", "width", "height", "rotation"].map((id) => propertyInput(id).value)).toEqual(["59", "59", "22", "22", "0"]);
+    enter(propertyInput("x"), "100");
+    // La pagina cresce, come per ogni spostamento che ne esce.
+    expect(editor.engine.text).toContain(`stroke-width="2" transform="matrix(1 0 0 1 41 0)"/>`);
+    expect(propertyInput("x").value).toBe("100");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Spostamento.");
+    expect(propertyInput("x").value).toBe("59");
+    enter(propertyInput("rotation"), "90");
+    expect(propertyInput("rotation").value).toBe("90");
+    expect(editor.selection).toEqual([A]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Rotazione.");
+    enter(propertyInput("width"), "44");
+    expect(["width", "height"].map((id) => propertyInput(id).value)).toEqual(["44", "22"]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Ridimensionamento.");
+    expect(editor.engine.text).toBe(TWO);
+  });
+
+  it("il lucchetto tiene le proporzioni, finché chi disegna non lo riapre", () => {
+    mount(TWO, { level: "standard" });
+    editor.select([A]);
+    key("Enter");
+    const lock = (): HTMLButtonElement => property("ratio").querySelector<HTMLButtonElement>("button")!;
+    expect(lock().getAttribute("aria-pressed")).toBe("false");
+    lock().click();
+    expect(lock().getAttribute("aria-pressed")).toBe("true");
+    enter(propertyInput("width"), "44");
+    expect(["width", "height"].map((id) => propertyInput(id).value)).toEqual(["44", "44"]);
+    expect(lock().getAttribute("aria-pressed")).toBe("true");
+    // Un'altra selezione parte col suo lucchetto.
+    editor.select([B]);
+    expect(lock().getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("l'aspetto: il riempimento, lo spessore in punti e l'opacità", () => {
+    mount(TWO, { level: "standard" });
+    editor.select([A]);
+    key("Enter");
+    // In un documento in pixel lo spessore è in pixel; negli altri, in punti.
+    expect(propertyLabel("strokeWidth")).toBe("Spessore (px)");
+    expect(propertyInput("strokeWidth").value).toBe("2");
+    enter(propertyInput("strokeWidth"), "4");
+    expect(editor.engine.text).toContain('stroke-width="4"');
+    enter(propertyInput("fill"), "#e69f00");
+    expect(editor.engine.text).toContain('fill="#e69f00"');
+    enter(propertyInput("opacity"), "50");
+    expect(editor.engine.text).toContain('opacity="0.5"');
+    expect(changes).toHaveLength(3);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Opacità.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Riempimento.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Spessore del contorno.");
+    expect(editor.engine.text).toBe(TWO);
+  });
+
+  it("«Disponi» ha i comandi della barra, che dicono quando non servono", () => {
+    mount(TWO, { level: "standard" });
+    editor.select([A, B]);
+    key("Enter");
+    expect(properties().querySelector(".draw-properties-subject")!.textContent).toBe("2 oggetti");
+    const action = (id: string): HTMLButtonElement => properties().querySelector<HTMLButtonElement>(`[data-action="${id}"]`)!;
+    expect(action("distribute-x").getAttribute("aria-disabled")).toBe("true");
+    action("align-left").click();
+    // Il bordo del contorno va a 10, dove comincia l'altro.
+    expect(editor.engine.text).toContain(`stroke-width="2" transform="matrix(1 0 0 1 -49 0)"/>`);
+    expect(changes).toHaveLength(1);
+    expect(editor.selection).toEqual([A, B]);
+  });
+
+  it("senza selezione: la pagina, l'unità, la descrizione e la vista", () => {
+    const grids: (readonly [boolean | null, boolean])[] = [];
+    mount(TWO, { level: "standard", onGridChange: (grid) => grids.push([grid.panel, grid.shown]) });
+    key("Enter");
+    expect(propertyInput("pageWidth").value).toBe("100");
+    enter(propertyInput("pageWidth"), "200");
+    expect(editor.engine.text).toContain('viewBox="0 0 200 100"');
+    choose("unit", "mm");
+    expect(spoken()).toBe("Il documento ora misura in millimetri.");
+    expect(editor.engine.text).toContain('fub:units="mm"');
+    expect(propertyLabel("pageWidth")).toBe("Larghezza della pagina (mm)");
+    expect(propertyInput("pageWidth").value).toBe("52,917");
+    const desc = property("desc").querySelector("textarea")!;
+    typeIn(desc, "Una prova");
+    key("Enter", { ctrlKey: true }, desc);
+    expect(editor.engine.text).toContain("<desc>Una prova</desc>");
+    flip("grid");
+    expect(editor.grid.shown).toBe(true);
+    expect(spoken()).toBe("Griglia visibile.");
+    // Il pannello aperto da chi disegna si ricorda, come la griglia.
+    expect(grids).toEqual([
+      [true, false],
+      [true, true],
+    ]);
+    expect(changes).toHaveLength(3);
+  });
+
+  it("in un documento che si legge soltanto mostra, e non scrive", () => {
+    mount(TWO, { level: "standard" });
+    editor.select([A]);
+    key("Enter");
+    editor.setReadOnly(true);
+    expect(propertyInput("x").readOnly).toBe(true);
+    expect(button().disabled).toBe(false);
+    enter(propertyInput("x"), "100");
+    expect(changes).toEqual([]);
+    editor.setReadOnly(false);
+    expect(propertyInput("x").readOnly).toBe(false);
+  });
+});
+
+describe("la barra accanto alla selezione, dal livello Standard", () => {
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const spot = (): readonly number[] => /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(bar().style.transform)!.slice(1).map(Number);
+
+  it("sta sotto la selezione, oltre le maniglie; in cima al foglio se chi disegna lo sceglie", () => {
+    mount(SOURCE, { level: "standard" });
+    size(800, 600);
+    editor.select(["o1a2b3c4d"]);
+    expect(bar().hidden).toBe(false);
+    expect(bar().hasAttribute("data-beside")).toBe(true);
+    // Il rettangolo va da 59 a 81 col contorno: la barra, larga zero in
+    // happy-dom, sta al suo centro e sotto le maniglie.
+    const [x, y] = spot();
+    expect(x).toBe(70);
+    expect(y).toBeGreaterThan(81 + 12);
+    editor.select([]);
+    key("Enter");
+    property("bar").querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    expect(spoken()).toBe("La barra della selezione sta in cima al foglio.");
+    expect(editor.grid.bar).toBe(false);
+    editor.select(["o1a2b3c4d"]);
+    expect(bar().hasAttribute("data-beside")).toBe(false);
+    expect(bar().style.transform).toBe("");
+  });
+
+  it("durante un gesto non si vede, e dopo segue la selezione", () => {
+    mount(doc(`${LAYER}<rect id="oa1a1a1a1" x="10" y="20" width="10" height="10" fill="#000000"/></g>`), { level: "standard" });
+    size(800, 600);
+    editor.setTool("select");
+    editor.select(["oa1a1a1a1"]);
+    expect(spot()[0]).toBe(15);
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 15, clientY: 25, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 115, clientY: 25, timeStamp: (clock += 8) }));
+    expect(bar().hasAttribute("data-gesture")).toBe(true);
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 115, clientY: 25, timeStamp: (clock += 8) }));
+    expect(bar().hasAttribute("data-gesture")).toBe(false);
+    expect(spot()[0]).toBe(115);
+  });
+
+  it("senza il pannello delle proprietà, si sceglie in «Pagina e griglia»", () => {
+    mount(SOURCE, { level: "custom", custom: ["arrange", "grid"] });
+    size(800, 600);
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!.click();
+    const item = [...document.querySelectorAll<HTMLElement>(".context-menu button")].find(
+      (one) => one.querySelector(".menu-label")?.textContent === "Barra accanto alla selezione",
+    )!;
+    expect(item.getAttribute("aria-checked")).toBe("true");
+    item.click();
+    expect(spoken()).toBe("La barra della selezione sta in cima al foglio.");
+    expect(editor.grid.bar).toBe(false);
+    editor.select(["o1a2b3c4d"]);
+    expect(bar().hidden).toBe(false);
+    expect(bar().hasAttribute("data-beside")).toBe(false);
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
   });
 });
 
@@ -2478,6 +2761,7 @@ describe("da tastiera", () => {
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
+      "Proprietà · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
@@ -2548,7 +2832,7 @@ describe("da tastiera", () => {
       {
         caption: "Attributi · dal livello Esperto",
         rows: [
-          ["Ctrl+Shift+X", "Mostra o nasconde gli attributi dell’oggetto scelto"],
+          ["Ctrl+Shift+X", "Va agli attributi, nel pannello delle proprietà"],
           ["Enter", "Applica il valore scritto"],
           ["Shift+Enter", "Va a capo, nei punti e nei percorsi"],
           ["Esc", "Riporta il valore com’era; di nuovo, torna al foglio"],
@@ -2675,7 +2959,7 @@ describe("la cornice di trasformazione", () => {
   });
 
   it("con la griglia il bordo va sulla riga, e Ctrl o ⌘ lo lascia libero", () => {
-    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
+    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] } });
     drag([[204, 125], [220, 125], [237, 125]]);
     expect(transformOf(A)).toBe("matrix(1.4 0 0 1 -40 0)");
     editor.undo();
@@ -2908,16 +3192,48 @@ describe("gli attributi, dal livello Esperto", () => {
   const control = (name: string): HTMLInputElement => row(name).querySelector<HTMLInputElement>(".draw-inspector-input")!;
   const keysOf = (): string[] => [...panel().querySelectorAll<HTMLTableRowElement>("tbody tr")].map((tr) => tr.dataset.key!);
 
-  function write(target: HTMLInputElement, text: string): void {
-    target.focus();
-    target.value = text;
-    target.dispatchEvent(new Event("input", { bubbles: true }));
-  }
+  const write = typeIn;
+  /// Gli attributi senza il pannello delle proprietà, in un livello
+  /// Personalizzato: un pannello da sé, accanto al foglio.
+  const ALONE = ["pen", "attributes"];
 
-  it("il pulsante c'è solo all'Esperto; apre il pannello accanto al foglio, e il fuoco ci va", () => {
+  /// Il fuoco agli attributi, come lo porta il tasto.
+  const open = (): void => {
+    key("X", { ctrlKey: true, shiftKey: true });
+  };
+
+  it("dall'Esperto sono una sezione del pannello delle proprietà, e il tasto ci porta e ne torna", () => {
     mount(SOURCE, { level: "standard" });
-    expect(button().hidden).toBe(true);
     editor.setLevel("expert");
+    expect(button().hidden).toBe(true);
+    expect(properties().contains(panel())).toBe(true);
+    expect(panel().hidden).toBe(false);
+    expect(panel().hasAttribute("aria-labelledby")).toBe(false);
+    // Senza un oggetto solo, il tasto dice perché non ci porta.
+    open();
+    expect(spoken()).toBe("Scegli un oggetto per vederne gli attributi.");
+    expect(properties().hidden).toBe(true);
+    editor.select(["o1a2b3c4d"]);
+    open();
+    expect(properties().hidden).toBe(false);
+    expect(properties().querySelector<HTMLElement>('[data-section="attributes"]')!.hidden).toBe(false);
+    expect(keysOf()).toEqual(["id", "x", "y", "width", "height", "fill", "stroke", "stroke-width"]);
+    expect(panel().contains(document.activeElement)).toBe(true);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Di nuovo, anche da un campo, il fuoco torna al foglio.
+    key("X", { ctrlKey: true, shiftKey: true }, control("fill"));
+    expect(document.activeElement).toBe(surface());
+    // Scesi dall'Esperto, gli attributi escono dal pannello, chiusi.
+    editor.setLevel("standard");
+    expect(properties().contains(panel())).toBe(false);
+    expect(panel().hidden).toBe(true);
+    expect(panel().getAttribute("aria-labelledby")).not.toBeNull();
+  });
+
+  it("senza il pannello delle proprietà il pulsante li apre accanto al foglio, e il fuoco ci va", () => {
+    mount(SOURCE, { level: "custom", custom: ["pen"] });
+    expect(button().hidden).toBe(true);
+    editor.setLevel("custom", ALONE);
     expect(button().hidden).toBe(false);
     expect(button().title).toBe("Attributi (Ctrl+Shift+X)");
     expect(button().getAttribute("aria-keyshortcuts")).toBe("Control+Shift+X");
@@ -2942,17 +3258,17 @@ describe("gli attributi, dal livello Esperto", () => {
     key("X", { ctrlKey: true, shiftKey: true });
     expect(panel().hidden).toBe(false);
     expect(document.activeElement).toBe(control("id"));
-    // Scesi dall'Esperto, il pannello si chiude e il pulsante sparisce.
-    editor.setLevel("standard");
+    // Senza gli attributi, il pannello si chiude e il pulsante sparisce.
+    editor.setLevel("custom", ["pen"]);
     expect(panel().hidden).toBe(true);
     expect(button().hidden).toBe(true);
   });
 
   it("l'albero e gli attributi stanno uno sotto l'altro", () => {
-    mount(SOURCE, { level: "expert" });
+    mount(SOURCE, { level: "custom", custom: ALONE });
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     button().click();
-    expect([...dock().children].map((child) => child.className)).toEqual(["draw-objects", "draw-inspector"]);
+    expect([...dock().children].filter((child) => !(child as HTMLElement).hidden).map((child) => child.className)).toEqual(["draw-objects", "draw-inspector"]);
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     expect(dock().hidden).toBe(false);
     button().click();
@@ -2962,7 +3278,7 @@ describe("gli attributi, dal livello Esperto", () => {
   it("un valore cambiato è un passo, che si annulla col suo nome", () => {
     mount(SOURCE, { level: "expert" });
     editor.select(["o1a2b3c4d"]);
-    button().click();
+    open();
     write(control("stroke-width"), "4");
     key("Enter", {}, control("stroke-width"));
     expect(editor.engine.text).toContain('stroke-width="4"');
@@ -2980,7 +3296,7 @@ describe("gli attributi, dal livello Esperto", () => {
   it("un oggetto senza id lo riceve, e resta scelto col campo che si stava usando", () => {
     mount(doc(`${LAYER}<rect x="0" y="0" width="20" height="20" fill="#000000"/></g>`), { level: "expert" });
     editor.select(["@0.0"]);
-    button().click();
+    open();
     expect(control("id").value).toBe("");
     // Un valore che non è partito, in un'altra riga, resta com'era scritto.
     write(control("x"), "dieci");
@@ -3001,7 +3317,7 @@ describe("gli attributi, dal livello Esperto", () => {
   it("l'id si cambia, e resta scelto l'oggetto col nome nuovo", () => {
     mount(SOURCE, { level: "expert" });
     editor.select(["o1a2b3c4d"]);
-    button().click();
+    open();
     write(control("id"), "Quadrato");
     key("Enter", {}, control("id"));
     expect(editor.engine.text).toContain('<rect id="Quadrato"');
@@ -3018,7 +3334,7 @@ describe("gli attributi, dal livello Esperto", () => {
     );
     mount(source, { level: "expert" });
     editor.select(["o1a2b3c4d"]);
-    button().click();
+    open();
     write(control("id"), "Quadrato");
     key("Enter", {}, control("id"));
     expect(editor.engine.text).toBe(source);
@@ -3030,7 +3346,7 @@ describe("gli attributi, dal livello Esperto", () => {
   it("i tasti del foglio non partono dal pannello", () => {
     mount(SOURCE, { level: "expert" });
     editor.select(["o1a2b3c4d"]);
-    button().click();
+    open();
     write(control("fill"), "#00");
     for (const name of ["Delete", "Backspace", "?", "r", "#", "Escape"]) key(name, {}, control("fill"));
     expect(editor.engine.text).toContain("o1a2b3c4d");
@@ -3053,7 +3369,7 @@ describe("gli attributi, dal livello Esperto", () => {
   it("un documento in sola lettura si legge e non si scrive, e torna a scriversi dal vivo", () => {
     mount(SOURCE, { level: "expert" });
     editor.select(["o1a2b3c4d"]);
-    button().click();
+    open();
     editor.setReadOnly(true);
     expect(control("fill").readOnly).toBe(true);
     expect(panel().querySelector<HTMLElement>(".draw-inspector-add")!.hidden).toBe(true);
@@ -3178,19 +3494,90 @@ describe("trasformare con i numeri, dal livello Esperto", () => {
   const SHAPES = doc(`${LAYER}${RECT_A}${RECT_B}</g>`);
 
   const transform = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Trasforma…"]')!;
+  const apply = (): HTMLButtonElement => properties().querySelector<HTMLButtonElement>(".draw-properties-apply")!;
+  /// Senza il pannello delle proprietà, «Trasforma…» apre una finestra.
+  const DIALOG: DrawEditorOptions = { level: "custom", custom: ["rect", "transform"] };
 
-  it("c'è solo all'Esperto, col suo tasto, e apre una finestra che parte da niente da cambiare", () => {
+  it("c'è solo all'Esperto, col suo tasto, e porta ai campi di «Trasforma» nel pannello", () => {
     mount(SHAPES, { level: "standard" });
     editor.select([A]);
     editor.focus();
     expect(transform().hidden).toBe(true);
     // Sotto l'Esperto il tasto resta a chi lo aveva.
     expect(key("m", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
-    expect(document.querySelectorAll(".modale")).toHaveLength(0);
     editor.setLevel("expert");
     expect(transform().hidden).toBe(false);
-    expect(transform().getAttribute("aria-haspopup")).toBe("dialog");
+    expect(transform().hasAttribute("aria-haspopup")).toBe(false);
     expect(transform().getAttribute("aria-keyshortcuts")).toBe("Control+Shift+M");
+    expect(key("m", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+    expect(properties().hidden).toBe(false);
+    expect(document.activeElement).toBe(propertyInput("turn"));
+    expect(["turn", "scaleX", "scaleY", "skewX", "skewY"].map((id) => [propertyLabel(id), propertyInput(id).value])).toEqual([
+      ["Rotazione oraria (°)", "0"],
+      ["Scala orizzontale (%)", "100"],
+      ["Scala verticale (%)", "100"],
+      ["Inclinazione orizzontale (°)", "0"],
+      ["Inclinazione verticale (°)", "0"],
+    ]);
+    expect(apply().textContent).toBe("Applica");
+    expect(document.querySelectorAll(".modale")).toHaveLength(0);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Il pulsante della barra porta allo stesso posto.
+    surface().focus();
+    transform().click();
+    expect(document.activeElement).toBe(propertyInput("turn"));
+    expect(changes).toEqual([]);
+  });
+
+  it("ruota attorno al centro, in un passo che si annulla, e la pagina cresce se l'oggetto ne esce", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    transform().click();
+    enter(propertyInput("turn"), "90");
+    // Il centro è (10, 5): in senso orario la destra va in basso.
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(0 1 -1 0 15 -5)"/>`);
+    expect(editor.engine.text).toContain('viewBox="0 -256 100 356"');
+    expect(spoken()).toBe("1 oggetto trasformato.");
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toHaveLength(1);
+    // I valori restano scritti: «Applica» di nuovo ruota ancora.
+    expect(propertyInput("turn").value).toBe("90");
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Trasformazione.");
+  });
+
+  it("trasforma la selezione come un insieme: una scala negativa la rispecchia attorno al suo centro", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A, B]);
+    transform().click();
+    typeIn(propertyInput("scaleX"), "-100");
+    apply().click();
+    // Il riquadro va da 0 a 50: ogni oggetto passa dall'altra parte.
+    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
+    expect(editor.engine.text).toContain(`<rect id="${B}" x="40" y="0" width="10" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
+    expect(spoken()).toBe("2 oggetti trasformati.");
+    expect(editor.selection).toEqual([A, B]);
+  });
+
+  it("non scrive una scala dello zero, o niente se non cambia niente", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    transform().click();
+    enter(propertyInput("scaleX"), "0");
+    expect(spoken()).toBe("Una scala dello zero per cento schiaccerebbe gli oggetti: scrivi un valore diverso da zero.");
+    typeIn(propertyInput("scaleX"), "100");
+    enter(propertyInput("turn"), "360");
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(changes).toEqual([]);
+  });
+
+  it("senza il pannello delle proprietà apre una finestra, che parte da niente da cambiare", () => {
+    mount(SHAPES, DIALOG);
+    editor.select([A]);
+    editor.focus();
+    expect(transform().hidden).toBe(false);
+    expect(transform().getAttribute("aria-haspopup")).toBe("dialog");
     key("m", { ctrlKey: true, shiftKey: true });
     expect(dialog().querySelector("h2")!.textContent).toBe("Trasforma");
     expect(document.getElementById(dialog().getAttribute("aria-describedby")!)!.textContent).toBe(
@@ -3214,55 +3601,31 @@ describe("trasformare con i numeri, dal livello Esperto", () => {
     expect(changes).toEqual([]);
   });
 
-  it("ruota attorno al centro, in un passo che si annulla, e la pagina cresce se l'oggetto ne esce", async () => {
-    mount(SHAPES, { level: "expert" });
+  it("la finestra scrive in un passo; non scrive ciò che il file perderebbe, né niente se intanto la trasformazione se n'è andata", async () => {
+    mount(SHAPES, DIALOG);
     editor.select([A]);
     transform().click();
     field("rotate").value = "90";
     await submit();
-    // Il centro è (10, 5): in senso orario la destra va in basso.
     expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(0 1 -1 0 15 -5)"/>`);
-    expect(editor.engine.text).toContain('viewBox="0 -256 100 356"');
     expect(spoken()).toBe("1 oggetto trasformato.");
-    expect(editor.selection).toEqual([A]);
     expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Trasformazione.");
-  });
-
-  it("trasforma la selezione come un insieme: una scala negativa la rispecchia attorno al suo centro", async () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A, B]);
     transform().click();
-    field("scaleX").value = "-100";
+    field("rotate").value = "360";
     await submit();
-    // Il riquadro va da 0 a 50: ogni oggetto passa dall'altra parte.
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
-    expect(editor.engine.text).toContain(`<rect id="${B}" x="40" y="0" width="10" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
-    expect(spoken()).toBe("2 oggetti trasformati.");
-    expect(editor.selection).toEqual([A, B]);
-  });
-
-  it("non scrive una trasformazione che il file perderebbe, e non scrive niente se non cambia niente", async () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A]);
+    expect(spoken()).toBe("È già così: niente da cambiare.");
     transform().click();
     field("scaleX").value = "0.001";
     field("scaleY").value = "0.001";
     await submit();
     expect(spoken()).toBe("Un oggetto diventerebbe troppo piccolo per scriverne la trasformazione: niente è cambiato.");
-    transform().click();
-    field("rotate").value = "360";
-    await submit();
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    // Scendendo dall'Esperto mentre la finestra è aperta, la risposta non
-    // scrive niente.
+    // Togliendo la trasformazione mentre la finestra è aperta, la risposta
+    // non scrive niente.
     transform().click();
     field("rotate").value = "45";
-    editor.setLevel("standard");
+    editor.setLevel("custom", ["rect"]);
     await submit();
-    expect(changes).toEqual([]);
+    expect(changes).toHaveLength(1);
   });
 
   it("l'elenco dei tasti lo nomina all'Esperto", () => {
@@ -4008,7 +4371,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
   /// Un disegno vuoto all'Esperto, con la penna di Bézier.
   /// La penna, senza le guide intelligenti, che hanno i loro casi.
   const drawing = (source = EMPTY): void => {
-    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
+    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] } });
     editor.focus();
     key("b");
   };
@@ -4137,7 +4500,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M100 0 C120.1 0 148.3 12.94 148.3 12.94");
     editor.undo();
-    editor.setGrid({ shown: false, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true });
+    editor.setGrid({ shown: false, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
     tap(1, 2);
     drag([[38, 41], [44, 47], [52, 49]]);
     // Ctrl lascia il punto libero.
@@ -4145,7 +4508,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("Enter");
     expect(written()).toBe("M0 0 C0 0 30 30 40 40 C50 50 73 77 73 77");
     // Due nodi sullo stesso incrocio non fanno un tracciato.
-    editor.setGrid({ shown: false, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true });
+    editor.setGrid({ shown: false, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
     tap(0, 0);
     tap(20, 0);
     expect(spoken()).toBe("Nodo 2, spigolo: x 0, y 0.");
@@ -4513,7 +4876,7 @@ describe("le immagini incollate", () => {
   });
 
   it("con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più vicino, e le immagini si scostano di passi interi", async () => {
-    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true } });
+    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] } });
     size(1000, 500);
     editor.setTool("select");
     surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
@@ -5102,13 +5465,14 @@ describe("il livello Personalizzato", () => {
       "Testo · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
+      "Proprietà · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["H", "Evidenziatore"], ["T", "Testo"]]);
-    expect(tables[5]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[6]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

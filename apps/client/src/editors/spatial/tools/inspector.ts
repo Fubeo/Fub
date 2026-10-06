@@ -78,6 +78,10 @@ export interface Inspector {
   update(view: InspectorView): void;
   /// Il fuoco al primo campo, o al pannello se non ce n'è.
   focus(): void;
+  /// Vero se il pannello sta dentro quello delle proprietà, come una sua
+  /// sezione: il titolo è della sezione, e il pannello non è più una regione
+  /// della pagina.
+  nest(nested: boolean): void;
   /// Riscrive i testi nella lingua di adesso.
   relabel(): void;
 }
@@ -658,6 +662,12 @@ export function createInspector(life: Lifetime, options: InspectorOptions): Insp
       const first = lines.get(ID_KEY)?.control;
       if (first !== undefined && !scroller.hidden) first.focus({ preventScroll: true });
       else element.focus({ preventScroll: true });
+    },
+    nest(nested) {
+      element.toggleAttribute("data-nested", nested);
+      heading.hidden = nested;
+      if (nested) element.removeAttribute("aria-labelledby");
+      else element.setAttribute("aria-labelledby", heading.id);
     },
     relabel,
   };

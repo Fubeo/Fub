@@ -25,7 +25,8 @@ import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";
 
 /// La griglia, e ciò che sta con lei nel menu «Pagina e griglia» e si
-/// ricorda con lei: le guide intelligenti, i righelli e le loro guide.
+/// ricorda con lei: le guide intelligenti, i righelli e le loro guide; e come
+/// si presentano il pannello delle proprietà e la barra della selezione.
 export interface Grid {
   /// La griglia si vede.
   readonly shown: boolean;
@@ -43,6 +44,14 @@ export interface Grid {
   readonly rulers: boolean;
   /// Le guide dei righelli, scritte nel documento, si vedono e agganciano.
   readonly rulerGuides: boolean;
+  /// Il pannello delle proprietà è aperto. `null` finché nessuno l'ha aperto
+  /// o chiuso: si apre da sé in un editor abbastanza largo da tenerlo.
+  readonly panel: boolean | null;
+  /// La barra della selezione sta accanto alla selezione, e non in cima al
+  /// foglio.
+  readonly bar: boolean;
+  /// Le sezioni del pannello delle proprietà che sono chiuse.
+  readonly closed: readonly string[];
 }
 
 /// I passi fra cui si sceglie, nell'unità: in pixel dividono tutti la
@@ -60,8 +69,33 @@ export const GRID_STEPS: Readonly<Record<LengthUnit, readonly number[]>> = {
 export const UNIT_STEP: Readonly<Record<LengthUnit, number>> = { px: 20, mm: 5, cm: 0.5, in: 0.25, pt: 12 };
 
 /// La prima volta la griglia e i righelli sono spenti, le guide accese, come
-/// nei programmi di disegno che chi disegna conosce già.
-export const DEFAULT_GRID: Grid = { shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true };
+/// nei programmi di disegno che chi disegna conosce già. Il pannello si apre
+/// da sé se c'è posto, con «Trasforma» e gli attributi chiusi, e la barra
+/// sta accanto alla selezione.
+export const DEFAULT_GRID: Grid = {
+  shown: false,
+  snap: false,
+  step: 20,
+  steps: {},
+  guides: true,
+  rulers: false,
+  rulerGuides: true,
+  panel: null,
+  bar: true,
+  closed: ["transform", "attributes"],
+};
+
+/// Quante sezioni chiuse si ricordano, e quanto è lungo il nome di una: più
+/// di quante il pannello ne ha, e di quanto è lungo il nome di ciascuna.
+export const MAX_CLOSED = 16;
+export const MAX_SECTION_NAME = 32;
+
+/// `value` come elenco delle sezioni chiuse, se lo è.
+export function validClosed(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value) || value.length > MAX_CLOSED) return null;
+  if (!value.every((name) => typeof name === "string" && name.length > 0 && name.length <= MAX_SECTION_NAME)) return null;
+  return [...new Set(value as string[])];
+}
 
 /// I limiti del passo, in unità della scena.
 export const MIN_GRID_STEP = 1;

@@ -105,6 +105,10 @@ export const OUTSIDE_PX: Readonly<Record<InkPointerType, number>> = { mouse: 8, 
 /// retto, in gradi.
 export const MAGNET_DEGREES = 1.5;
 
+/// La misura più piccola a cui le frecce, la cornice o un campo riducono un
+/// lato della selezione, in unità della scena.
+export const MIN_SIZE = 1;
+
 const RESIZE_GRIPS: readonly ResizeGrip[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
 /// Il verso in cui una maniglia tira un asse: -1 il bordo più piccolo, 1

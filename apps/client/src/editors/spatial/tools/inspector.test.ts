@@ -139,6 +139,20 @@ describe("le righe", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
+  it("in un altro pannello, come sua sezione, il titolo è della sezione", () => {
+    mount();
+    const title = host.querySelector<HTMLElement>(".draw-inspector-title")!;
+    expect(inspector.element.getAttribute("aria-labelledby")).toBe(title.id);
+    inspector.nest(true);
+    expect(inspector.element.hasAttribute("data-nested")).toBe(true);
+    expect(title.hidden).toBe(true);
+    expect(inspector.element.hasAttribute("aria-labelledby")).toBe(false);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    inspector.nest(false);
+    expect(title.hidden).toBe(false);
+    expect(inspector.element.getAttribute("aria-labelledby")).toBe(title.id);
+  });
+
   it("ciò che ha un padrone si legge soltanto, con la ragione accanto", () => {
     const ink = "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8";
     const brush = "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0";

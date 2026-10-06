@@ -15,8 +15,11 @@ import {
   snapDelta,
   snapPoint,
   snapValue,
+  MAX_CLOSED,
+  MAX_SECTION_NAME,
   UNIT_STEP,
   unitSteps,
+  validClosed,
   validStep,
   validSteps,
   wholeSteps,
@@ -29,12 +32,22 @@ const coordinates = (d: string, axis: "x" | "y"): number[] =>
 
 describe("la griglia", () => {
   it("parte spenta, con un passo che divide la pagina di un documento nuovo", () => {
-    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true });
+    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
     for (const step of GRID_STEPS.px) {
       expect(1600 % step).toBe(0);
       expect(1000 % step).toBe(0);
     }
     expect(GRID_STEPS.px).toContain(DEFAULT_GRID.step);
+  });
+
+  it("ricorda le sezioni chiuse del pannello delle proprietà per nome, senza doppioni", () => {
+    expect(validClosed(["look", "transform", "look"])).toEqual(["look", "transform"]);
+    expect(validClosed([])).toEqual([]);
+    // I nomi che non conosce restano: un'altra versione può averli.
+    expect(validClosed(["futuro"])).toEqual(["futuro"]);
+    for (const broken of ["look", null, [1], [""], ["x".repeat(MAX_SECTION_NAME + 1)], Array.from({ length: MAX_CLOSED + 1 }, (_, i) => `s${i}`)]) {
+      expect(validClosed(broken), JSON.stringify(broken)).toBeNull();
+    }
   });
 
   it("ogni unità ha i suoi passi, che la griglia accetta, e ricorda il suo", () => {

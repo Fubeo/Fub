@@ -121,7 +121,7 @@ import { ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
-import { createOverlay, type NodeShape, type OverlayHandle } from "../painter/overlay";
+import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle } from "../painter/overlay";
 import { PaintBuilder, type PaintNode, type PaintScene } from "../painter/paint";
 import { createSvgPainter } from "../painter/svg-dom";
 import {
@@ -167,8 +167,23 @@ import {
   type Order,
 } from "./arrange";
 import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
-import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, type Cap, type Dash, type Join, type OutlineChange } from "./outline";
-import { boundsAfter, numericMatrix, numericOps } from "./transform";
+import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, type OutlineChange } from "./outline";
+import { boundsAfter, MAX_SCALE_PERCENT, MAX_SKEW, numericMatrix, numericOps } from "./transform";
+import { barSpot, type ScreenBox } from "./bar";
+import {
+  ACTION_COMMANDS,
+  CAP_LABELS,
+  DASH_LABELS,
+  JOIN_LABELS,
+  LOOK_ACTIONS,
+  lookChange,
+  outlineChange,
+  propertiesView,
+  UNIT_NAMES,
+  type SelectionFacts,
+} from "./fields";
+import { lookOf as selectionLook, lookOps } from "./look";
+import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
   angleOf,
   FRAME_PX,
@@ -181,6 +196,7 @@ import {
   gripCursor,
   isCorner,
   MAGNET_DEGREES,
+  MIN_SIZE,
   movedFrame,
   normalized,
   pull,
@@ -188,6 +204,7 @@ import {
   resizeMatrix,
   rotation,
   rotationMatrix,
+  scales,
   upright,
   type Axis as FrameAxis,
   type Frame,
@@ -254,6 +271,7 @@ import {
   snapPoint,
   snapValue,
   unitSteps,
+  validClosed,
   validStep,
   validSteps,
   wholeSteps,
@@ -476,10 +494,6 @@ const FIT_PAD = 0.08;
 const NUDGE = 1;
 const NUDGE_SHIFT = 10;
 
-/// La misura più piccola a cui le frecce, o la cornice, riducono un lato
-/// della selezione.
-const MIN_SIZE = 1;
-
 /// Il passo di `[` e `]`, e della rotazione con Maiusc, in gradi; con Maiusc
 /// i tasti girano di un angolo retto.
 const ROTATE_STEP = 15;
@@ -531,6 +545,11 @@ const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
 /// Le parti che hanno un pulsante nella barra della selezione.
 const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "transform", "apply", "path", "boolean", "outline"];
 
+/// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
+/// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
+/// foglio (`structure.css`).
+const PANEL_ROOM_REM = 36;
+
 /// Il tasto che mostra e nasconde gli attributi, dal livello Esperto: lo
 /// stesso dell'editor XML di Inkscape.
 const ATTRIBUTES_BINDING = "Mod-Shift-x";
@@ -542,11 +561,6 @@ const TRANSFORM_BINDING = "Mod-Shift-m";
 /// «Immagine dal vault…», dal livello Standard: il tasto con cui Inkscape
 /// importa.
 const IMAGE_BINDING = "Mod-i";
-
-/// I limiti dei campi di «Trasforma»: una scala fino a mille volte, e
-/// un'inclinazione che non arriva all'angolo retto, dove non ha misura.
-const MAX_SCALE_PERCENT = 100_000;
-const MAX_SKEW = 89;
 
 /// Lo scarto di una copia dal suo originale, e fra due immagini incollate
 /// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
@@ -964,17 +978,11 @@ function checkedGrid(next: Grid, before: Grid): Grid {
     guides: flag(next.guides, before.guides),
     rulers: flag(next.rulers, before.rulers),
     rulerGuides: flag(next.rulerGuides, before.rulerGuides),
+    panel: next.panel === null || typeof next.panel === "boolean" ? next.panel : before.panel,
+    bar: flag(next.bar, before.bar),
+    closed: validClosed(next.closed) ?? before.closed,
   };
 }
-
-/// Il nome di ogni unità, come lo dicono i menu.
-const UNIT_NAMES: Readonly<Record<LengthUnit, DrawKey>> = {
-  px: "draw.unit.px",
-  mm: "draw.unit.mm",
-  cm: "draw.unit.cm",
-  in: "draw.unit.in",
-  pt: "draw.unit.pt",
-};
 
 /// Le unità come le conosce `Intl`, che le scrive e le dice nella lingua di
 /// adesso; il punto tipografico non è fra le sue.
@@ -1310,9 +1318,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   redoButton.setAttribute("aria-keyshortcuts", "Control+Shift+Z Control+Y");
   const deleteButton = button(editGroup, "draw-button", () => t("draw.delete"), "trash", () => deleteSelection());
   deleteButton.setAttribute("aria-keyshortcuts", "Delete");
-  const propertiesButton = button(editGroup, "draw-button", () => t("draw.properties"), "properties", () => void properties());
+  // «Proprietà» apre e chiude il pannello, dal livello che lo offre; senza,
+  // apre la finestra.
+  const propertiesButton = button(editGroup, "draw-button", () => t("draw.properties"), "properties", () => {
+    if (has("properties")) showPanel(panel.element.hidden);
+    else void properties();
+  });
   propertiesButton.setAttribute("aria-keyshortcuts", "Enter");
-  propertiesButton.setAttribute("aria-haspopup", "dialog");
 
   // I livelli, dal livello Standard: il pulsante dice dove si disegna e apre
   // il menu che li sceglie e li cambia.
@@ -1356,6 +1368,43 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   });
   inspector.element.hidden = true;
   relabels.push(() => inspector.relabel());
+
+  // Le proprietà della selezione, o del disegno, dal livello Standard: un
+  // pannello accanto al foglio, che si apre da sé se c'è posto. Al livello
+  // Esperto ospita gli attributi, come una sua sezione.
+  const panel = createProperties(life, {
+    closed: grid.closed as readonly SectionId[],
+    onChange: (id, value) => changeField(id, value),
+    onAction: (id) => runAction(id),
+    onTransform: (values) => transformFields(values),
+    onSection: (id, open) => {
+      const closed = grid.closed.filter((each) => each !== id);
+      changeGrid({ ...grid, closed: open ? closed : [...closed, id] });
+    },
+    announce: (text) => announce(text),
+    onLeave: () => surface.focus({ preventScroll: true }),
+  });
+  panel.element.hidden = true;
+  /// Ciò che il pannello mostra: si ridisegna quando cambia il disegno, la
+  /// selezione, la vista o il livello.
+  let panelShown: {
+    readonly index: SceneIndex;
+    readonly keys: string;
+    readonly unit: LengthUnit;
+    readonly editable: boolean;
+    readonly grid: Grid;
+    readonly features: ReadonlySet<Feature>;
+    readonly ratio: unknown;
+    readonly kept: unknown;
+  } | null = null;
+  /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
+  /// per la selezione di chiavi `keys`.
+  let ratioLock: { readonly keys: string; readonly on: boolean } | null = null;
+  relabels.push(() => {
+    panel.relabel();
+    panelShown = null;
+    syncProperties();
+  });
 
   const viewGroup = group("draw.view", false);
   button(viewGroup, "draw-button", () => t("draw.zoom_out"), "draw-zoom-out", () => zoomBy(1 / ZOOM_STEP));
@@ -1447,8 +1496,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const intoButton = arrangeButton("draw.into_layer", "draw-into-layer", null, () => openMenu(intoButton, intoItems()));
   const alignButton = arrangeButton("draw.align", "draw-align", null, () => openMenu(alignButton, alignItems()));
   // Dal livello Esperto: ruotare, scalare e inclinare di quanto si scrive.
-  const transformButton = arrangeButton("draw.transform", "draw-transform", TRANSFORM_BINDING, () => void transformDialog());
-  transformButton.setAttribute("aria-haspopup", "dialog");
+  // Col pannello delle proprietà, porta ai campi di «Trasforma».
+  const transformButton = arrangeButton("draw.transform", "draw-transform", TRANSFORM_BINDING, () => {
+    if (!focusTransform()) void transformDialog();
+  });
   // Dal livello Esperto: la trasformazione passa nella geometria.
   const applyButton = arrangeButton("draw.apply_transform", "draw-apply-transform", null, () => applySelection());
   const pathButton = arrangeButton("draw.to_path", "draw-to-path", null, () => traceSelection());
@@ -1535,7 +1586,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(tree.element, inspector.element);
+  dock.append(tree.element, panel.element, inspector.element);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, dock);
@@ -1890,6 +1941,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       showGrid();
       showGuideLines();
       showRulers();
+      placeBar();
+      if (panelPending && root.clientWidth > 0) showPanelByDefault();
     });
     sizeObserver.observe(surface);
     life.add(() => sizeObserver.disconnect());
@@ -2133,6 +2186,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     overlay.setHandles(handles);
     selectionBand = band;
     showRulers();
+    placeBar();
     showLinks(delta);
     const keys = selection.join("\n");
     if (keys !== noticed) {
@@ -2140,6 +2194,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       followSelection();
       syncTree();
       syncInspector();
+      syncProperties();
       options.onSelectionChange?.();
     }
   };
@@ -2318,7 +2373,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (!open && tree.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     tree.element.hidden = !open;
     objectsButton.setAttribute("aria-expanded", String(open));
-    dock.hidden = tree.element.hidden && inspector.element.hidden;
+    syncDock();
     if (open) {
       treeShown = null;
       syncTree();
@@ -2345,7 +2400,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Porta il pannello degli attributi, se è aperto, all'oggetto scelto.
   function syncInspector(): void {
-    if (inspector.element.hidden || changing) return;
+    if (inspector.element.hidden || changing || (nestedNow() && panel.element.hidden)) return;
     const units = selectedUnits();
     const unit = units.length === 1 ? units[0]! : null;
     const model = engine.model;
@@ -2364,10 +2419,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// scritto a metà parte prima, come lasciando il campo.
   function showAttributes(open: boolean): void {
     if (open && !has("attributes")) return;
+    // Nel pannello delle proprietà gli attributi sono una sua sezione.
+    if (nestedNow()) {
+      if (open) focusAttributes();
+      return;
+    }
     if (!open && inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     inspector.element.hidden = !open;
     attributesButton.setAttribute("aria-expanded", String(open));
-    dock.hidden = tree.element.hidden && inspector.element.hidden;
+    syncDock();
     if (open) {
       inspectorShown = null;
       syncInspector();
@@ -2393,6 +2453,427 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     carried = { unit: id, key: before };
     select([id]);
     return null;
+  }
+
+  // --- Il pannello delle proprietà ---------------------------------------------
+
+  /// Vero se gli attributi stanno nel pannello delle proprietà, come una sua
+  /// sezione: quando il livello offre l'uno e l'altro.
+  const nestedNow = (): boolean => inspector.element.parentElement === panel.attributes;
+
+  /// Il dock c'è se c'è un pannello aperto; è largo quando ci sono gli
+  /// attributi, che vogliono più spazio.
+  function syncDock(): void {
+    const nested = nestedNow();
+    dock.hidden = tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden);
+    dock.toggleAttribute("data-wide", nested ? !panel.element.hidden : !inspector.element.hidden);
+  }
+
+  /// Mette gli attributi nel pannello delle proprietà, come una sua sezione,
+  /// o li riporta nel dock, chiusi.
+  function nestInspector(nested: boolean): void {
+    if (nested === nestedNow()) return;
+    if (inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    if (nested) panel.attributes.append(inspector.element);
+    else dock.append(inspector.element);
+    inspector.nest(nested);
+    inspector.element.hidden = !nested;
+    attributesButton.setAttribute("aria-expanded", "false");
+    inspectorShown = null;
+    panelShown = null;
+    syncDock();
+  }
+
+  /// Apre o chiude il pannello delle proprietà. Aperto, il fuoco ci va se
+  /// `focus`; chiuso, un valore scritto a metà parte prima, come lasciando il
+  /// campo. Se `remember`, è una scelta di chi disegna, e si ricorda.
+  function showPanel(open: boolean, focus = open, remember = true): void {
+    if (open && !has("properties")) return;
+    if (!open && panel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    panel.element.hidden = !open;
+    propertiesButton.setAttribute("aria-expanded", String(open));
+    syncDock();
+    if (open) {
+      panelShown = null;
+      syncProperties();
+      syncInspector();
+      if (focus) panel.focus();
+    }
+    if (remember && grid.panel !== open) changeGrid({ ...grid, panel: open });
+  }
+
+  /// Vero finché il pannello aspetta che l'editor abbia una misura per
+  /// sapere se aprirsi.
+  let panelPending = false;
+
+  /// Il pannello come lo vuole chi disegna: aperto o chiuso come l'ha
+  /// lasciato; se non l'ha mai toccato, aperto quando l'editor è abbastanza
+  /// largo da tenerlo accanto al foglio. Finché l'editor non ha una misura,
+  /// la scelta aspetta la prima; senza modo di saperla, il pannello si apre.
+  function showPanelByDefault(): void {
+    panelPending = false;
+    if (!has("properties") || !panel.element.hidden) return;
+    if (grid.panel !== null) {
+      if (grid.panel) showPanel(true, false, false);
+      return;
+    }
+    const width = root.clientWidth;
+    if (width === 0 && typeof ResizeObserver !== "undefined") {
+      panelPending = true;
+      return;
+    }
+    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    if (width === 0 || width >= PANEL_ROOM_REM * rem) showPanel(true, false, false);
+  }
+
+  /// Il lucchetto delle proporzioni: chiuso per gli oggetti che la cornice
+  /// ridimensiona dagli angoli tenendo le proporzioni, o come l'ha lasciato
+  /// chi l'ha toccato, per la stessa selezione.
+  const ratioOn = (units: readonly Unit[]): boolean =>
+    ratioLock !== null && ratioLock.keys === selection.join("\n") ? ratioLock.on : units.some((unit) => RATIO_ROLES.has(unit.role));
+
+  /// La selezione come la legge il pannello.
+  const selectionFacts = (units: readonly Unit[]): SelectionFacts => {
+    const model = engine.model!;
+    const index = currentIndex();
+    const outlines = outlinesOf(model, units);
+    return {
+      keys: selection.join("\n"),
+      subject: units.length === 1 ? labelOf(units[0]!) : plural(units.length, "draw.describe.parts.one", "draw.describe.parts.other"),
+      count: units.length,
+      frame: frameOf(units),
+      ratio: ratioOn(units),
+      look: selectionLook(model, units),
+      outline: outlines.length === 0 ? null : outlineLook(outlines),
+      alignable: alignReference(units) !== null,
+      drawn: drawn(units),
+      orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => orderOps(model, index, units, order, newIds()).ops.length > 0) : []),
+    };
+  };
+
+  /// Porta il pannello, se è aperto, al disegno e alla selezione di adesso.
+  function syncProperties(): void {
+    // Mentre gli attributi cambiano un oggetto, la selezione lo ritrova solo
+    // dopo: il pannello aspetta lei.
+    if (panel.element.hidden || changing) return;
+    const index = currentIndex();
+    const keys = selection.join("\n");
+    const unit = docUnit();
+    const canEdit = editable();
+    const last = panelShown;
+    if (
+      last !== null &&
+      last.index === index &&
+      last.keys === keys &&
+      last.unit === unit &&
+      last.editable === canEdit &&
+      last.grid === grid &&
+      last.features === features &&
+      last.ratio === ratioLock &&
+      last.kept === kept
+    ) {
+      return;
+    }
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept };
+    const units = selection.length === 0 || engine.model === null ? [] : selectedUnits();
+    panel.update(
+      propertiesView({
+        features,
+        unit,
+        editable: canEdit,
+        selection: units.length === 0 ? null : selectionFacts(units),
+        document: { page: scene.root.page, desc: rootText("desc") },
+        grid,
+        bar: BAR_FEATURES.some(has),
+        attributes: nestedNow() && units.length === 1,
+      }),
+    );
+  }
+
+  /// Invio e Ctrl+Maiusc+X con gli attributi nel pannello: il fuoco va alla
+  /// loro sezione, se c'è un oggetto solo di cui mostrarli.
+  function focusAttributes(): void {
+    const count = selectedUnits().length;
+    if (count !== 1) {
+      announce(count === 0 ? t("draw.attributes.none") : t("draw.attributes.many", { count: String(count) }));
+      return;
+    }
+    showPanel(true, false);
+    panel.focusSection("attributes");
+  }
+
+  /// Ctrl+Maiusc+M e «Trasforma…» col pannello: il fuoco va ai campi di
+  /// «Trasforma». Falso se il pannello non li ha.
+  const focusTransform = (): boolean => {
+    if (!has("properties")) return false;
+    showPanel(true, false);
+    return panel.focusSection("transform");
+  };
+
+  /// Scrive `ops`, un cambio chiesto dal pannello, col nome `label`; la
+  /// selezione diventa `keys`, se ci sono, e la pagina cresce se `extent` ne
+  /// esce. `null` se il disegno l'ha accettato, o se non c'era niente da
+  /// cambiare; altrimenti la ragione per cui no, che il campo mostra.
+  const changeFromPanel = (label: DrawKey, ops: readonly Op[], keys: readonly string[] | null, extent: Bounds | null = null): string | null => {
+    if (!editable()) return t("draw.rejected", { reason: t("draw.reason.read_only") });
+    if (ops.length === 0) return null;
+    cancelGesture();
+    const all: Op[] = [...ops];
+    const page = pageFor(scene.root.page, extent);
+    if (page !== null) all.push({ op: "page", viewBox: page });
+    const before = selection;
+    const lock = ratioLock !== null && ratioLock.keys === before.join("\n") ? ratioLock.on : null;
+    // La selezione è già quella di dopo quando l'editor si rinfresca, come
+    // per i comandi di «Disponi».
+    if (keys !== null) selection = [...keys];
+    const outcome = attempt(label, asGesture(all));
+    if (outcome === null || typeof outcome === "string") {
+      selection = before;
+      return t("draw.rejected", { reason: outcome ?? t("draw.reason.read_only") });
+    }
+    if (keys !== null) select(keys);
+    // Il lucchetto resta com'era anche se gli oggetti hanno appena ricevuto
+    // un id.
+    if (lock !== null) ratioLock = { keys: selection.join("\n"), on: lock };
+    return null;
+  };
+
+  /// Più oggetti tengono la cornice `frame`, com'è diventata.
+  const keepFrame = (frame: Frame): void => {
+    kept = { index: currentIndex(), keys: selection.join("\n"), frame };
+    showHandles();
+  };
+
+  /// La selezione si sposta lungo `axis` finché l'angolo in alto a sinistra
+  /// della cornice non sta a `value`, nell'unità del documento.
+  const moveFromPanel = (axis: FrameAxis, value: number): string | null => {
+    const units = selectedUnits();
+    const frame = frameOf(units);
+    if (frame === null) return null;
+    const delta = roundDelta(fromUnit(value, docUnit()) - apply(frame.matrix, frame.box.min)[axis]);
+    if (delta === 0) return null;
+    const dx = axis === 0 ? delta : 0;
+    const dy = axis === 1 ? delta : 0;
+    const moved = moveOps(units, dx, dy, newIds());
+    let bounds: Bounds | null = null;
+    for (const unit of units) bounds = union(bounds, translated(unit.bounds, dx, dy));
+    const outcome = changeFromPanel("draw.action.move", moved.ops, moved.keys, bounds);
+    // La cornice che più oggetti tengono si sposta con loro.
+    if (outcome === null && units.length > 1 && frame.matrix !== IDENTITY) keepFrame(movedFrame(frame, translate(dx, dy)));
+    return outcome;
+  };
+
+  /// Applica `m`, una trasformazione della cornice `frame`, dal pannello.
+  const transformFromPanel = (units: readonly Unit[], frame: Frame, m: Matrix, label: DrawKey): string | null => {
+    const transformed = numericOps(units, m, newIds());
+    if (transformed === null) return t("draw.transform.unwritable");
+    const outcome = changeFromPanel(label, transformed.ops, transformed.keys, boundsAfter(units, m));
+    if (outcome === null && transformed.changed > 0) {
+      if (units.length > 1) keepFrame(movedFrame(frame, m));
+      else kept = null;
+    }
+    return outcome;
+  };
+
+  /// Il lato `axis` della cornice misura `value`, nell'unità del documento,
+  /// fermo l'angolo in alto a sinistra; col lucchetto chiuso l'altro lato lo
+  /// segue.
+  const resizeFromPanel = (axis: FrameAxis, value: number): string | null => {
+    const units = selectedUnits();
+    const frame = frameOf(units);
+    if (frame === null || !scales(frame, axis)) return null;
+    const ratio = fromUnit(value, docUnit()) / frameSize(frame)[axis];
+    if (!Number.isFinite(ratio) || ratio <= 0) return null;
+    const both = ratioOn(units) && scales(frame, axis === 0 ? 1 : 0);
+    const { min, max } = frame.box;
+    const kx = axis === 0 || both ? ratio : 1;
+    const ky = axis === 1 || both ? ratio : 1;
+    const m = resizeMatrix(frame, frame.box, { min, max: [min[0] + (max[0] - min[0]) * kx, min[1] + (max[1] - min[1]) * ky] });
+    if (m === null) return t("draw.transform.unwritable");
+    return transformFromPanel(units, frame, m, "draw.action.resize");
+  };
+
+  /// La cornice ruota attorno al suo centro finché il suo lato in alto non
+  /// ha l'angolo `value`.
+  const rotateFromPanel = (value: number): string | null => {
+    const units = selectedUnits();
+    const frame = frameOf(units);
+    if (frame === null) return null;
+    const turn = normalized(value - angleOf(frame.matrix));
+    if (Math.abs(turn) < 1e-9) return null;
+    return transformFromPanel(units, frame, rotationMatrix(frameCenter(frame), turn), "draw.action.rotate");
+  };
+
+  /// L'aspetto o il contorno degli oggetti scelti, da un campo del pannello.
+  const styleFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    const look = lookChange(id, value, docUnit());
+    if (look !== null) {
+      const restyled = lookOps(model, units, look, newIds());
+      return changeFromPanel(LOOK_ACTIONS[id]!, restyled.ops, restyled.keys);
+    }
+    const change = outlineChange(id, value);
+    if (change === null) return null;
+    const outlined = outlineOps(model, units, change, newIds());
+    return changeFromPanel("dash" in change ? "draw.action.dash" : "cap" in change ? "draw.action.cap" : "draw.action.join", outlined.ops, outlined.keys);
+  };
+
+  /// Un lato della pagina, nell'unità del documento.
+  const pageFromPanel = (id: "pageWidth" | "pageHeight", value: number): string | null => {
+    const page = scene.root.page;
+    if (page === null) return null;
+    const size = fromUnit(value, docUnit());
+    const viewBox = (box: readonly number[]): string => box.map((each) => formatNumber(each, PLACES)).join(" ");
+    const next = viewBox([page.x, page.y, id === "pageWidth" ? size : page.width, id === "pageHeight" ? size : page.height]);
+    if (next === viewBox([page.x, page.y, page.width, page.height])) return null;
+    return changeFromPanel("draw.action.page_size", [{ op: "page", viewBox: next }], null);
+  };
+
+  const descFromPanel = (value: string): string | null => {
+    const next = value.trim();
+    if (next === rootText("desc").trim()) return null;
+    return changeFromPanel("draw.action.desc", [{ op: "meta", desc: next === "" ? null : next }], null);
+  };
+
+  /// L'unità del documento, dal pannello: come dal menu, si dice.
+  const unitFromPanel = (value: number | string | boolean): string | null => {
+    const unit = UNITS.find((each) => each === value);
+    if (unit === undefined || unit === docUnit()) return null;
+    const outcome = changeFromPanel("draw.action.units", [{ op: "set", id: ROOT, attrs: { "fub:units": unit === "px" ? null : unit } }], null);
+    if (outcome === null) announce(t(UNITS_NOW[unit]));
+    return outcome;
+  };
+
+  /// Scrive il valore di un campo del pannello: `null` se il disegno l'ha
+  /// accettato, altrimenti la ragione per cui no. Dopo, il pannello mostra
+  /// com'è il disegno, anche quando il valore scritto non cambiava niente.
+  function changeField(id: FieldId, value: number | string | boolean): string | null {
+    const on = value === true;
+    const number = typeof value === "number" ? value : Number.NaN;
+    let outcome: string | null = null;
+    switch (id) {
+      case "grid":
+        changeGrid({ ...grid, shown: on });
+        break;
+      case "snap":
+        changeGrid({ ...grid, snap: on });
+        break;
+      case "guides":
+        changeGrid({ ...grid, guides: on });
+        break;
+      case "rulers":
+        changeGrid({ ...grid, rulers: on });
+        break;
+      case "rulerGuides":
+        changeGrid({ ...grid, rulerGuides: on });
+        break;
+      case "bar":
+        changeGrid({ ...grid, bar: on });
+        break;
+      case "ratio":
+        ratioLock = { keys: selection.join("\n"), on };
+        break;
+      case "unit":
+        outcome = unitFromPanel(value);
+        break;
+      case "desc":
+        outcome = descFromPanel(String(value));
+        break;
+      case "pageWidth":
+      case "pageHeight":
+        if (Number.isFinite(number)) outcome = pageFromPanel(id, number);
+        break;
+      case "x":
+      case "y":
+        if (Number.isFinite(number)) outcome = moveFromPanel(id === "x" ? 0 : 1, number);
+        break;
+      case "width":
+      case "height":
+        if (Number.isFinite(number)) outcome = resizeFromPanel(id === "width" ? 0 : 1, number);
+        break;
+      case "rotation":
+        if (Number.isFinite(number)) outcome = rotateFromPanel(number);
+        break;
+      default:
+        outcome = styleFromPanel(id, value);
+    }
+    panelShown = null;
+    syncProperties();
+    return outcome;
+  }
+
+  /// Un comando di «Disponi» del pannello, come dalla barra.
+  function runAction(id: ActionId): void {
+    const command = ACTION_COMMANDS[id];
+    if (command.kind === "align") alignSelection(command.edge);
+    else if (command.kind === "distribute") distributeSelection(command.axis);
+    else orderSelection(command.order);
+  }
+
+  /// «Applica» di «Trasforma»: come la finestra, attorno al centro del
+  /// riquadro degli oggetti scelti.
+  function transformFields(values: Readonly<Record<TransformId, number>>): string | null {
+    if (values.scaleX === 0 || values.scaleY === 0) return t("draw.properties.zero_scale");
+    const units = arranging("transform");
+    const from = units === null ? null : boundsOf(units);
+    if (units === null || from === null) return null;
+    const m = numericMatrix(
+      { rotate: values.turn, scaleX: values.scaleX / 100, scaleY: values.scaleY / 100, skewX: values.skewX, skewY: values.skewY },
+      [(from.min[0] + from.max[0]) / 2, (from.min[1] + from.max[1]) / 2],
+    );
+    const transformed = numericOps(units, m, newIds());
+    if (transformed === null) return t("draw.transform.unwritable");
+    if (arrange("draw.action.transform", transformed, boundsAfter(units, m))) {
+      announce(plural(transformed.changed, "draw.transformed.one", "draw.transformed.other"));
+    }
+    return null;
+  }
+
+  // --- La barra accanto alla selezione ---------------------------------------
+
+  /// Le misure della barra della selezione, finché non cambiano i suoi
+  /// pulsanti o la lingua: leggerle costa un layout.
+  let barSize: { readonly signature: string; readonly w: number; readonly h: number } | null = null;
+  relabels.push(() => {
+    barSize = null;
+  });
+
+  /// Il riquadro sullo schermo della selezione con la cornice e le maniglie,
+  /// che la barra non copre.
+  const selectionBox = (): ScreenBox | null => {
+    let band = selectionBand;
+    const view = frameNow();
+    if (view !== null) for (const { at } of view.spots) band = union(band, { min: at, max: at });
+    if (band === null) return null;
+    const { scale, tx, ty } = camera;
+    const pad = FRAME_PX + HANDLE_REACH_PX;
+    return {
+      x: tx + scale * band.min[0] - pad,
+      y: ty + scale * band.min[1] - pad,
+      w: scale * (band.max[0] - band.min[0]) + 2 * pad,
+      h: scale * (band.max[1] - band.min[1]) + 2 * pad,
+    };
+  };
+
+  /// La barra della selezione accanto alla selezione, se chi disegna la
+  /// vuole lì (`bar.ts`): sotto la cornice, o sopra se sotto non c'è posto.
+  /// Durante un gesto non si vede, perché non copra ciò che si muove.
+  function placeBar(): void {
+    const beside = grid.bar && !arrangeBar.hidden;
+    arrangeBar.toggleAttribute("data-beside", beside);
+    arrangeBar.toggleAttribute("data-gesture", beside && (current !== null || pressed !== null));
+    if (!beside) {
+      arrangeBar.style.removeProperty("transform");
+      return;
+    }
+    const signature = arrangeButtons.map((control) => (control.hidden ? "0" : "1")).join("");
+    if (barSize === null || barSize.signature !== signature || barSize.w === 0) {
+      barSize = { signature, w: arrangeBar.offsetWidth, h: arrangeBar.offsetHeight };
+    }
+    const spot = barSpot(selectionBox(), barSize, viewArea());
+    arrangeBar.style.transform = `translate(${spot.x}px, ${spot.y}px)`;
   }
 
   /// Vero se una parte estranea del disegno cita `id`: cambiarlo romperebbe
@@ -2557,6 +3038,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const layers = currentIndex().layers;
     intoButton.hidden = !has("layers") || layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
     transformButton.hidden = !has("transform");
+    // Col pannello, «Trasforma…» porta ai suoi campi; senza, apre la finestra.
+    if (has("properties")) transformButton.removeAttribute("aria-haspopup");
+    else transformButton.setAttribute("aria-haspopup", "dialog");
     applyButton.hidden = !has("apply");
     pathButton.hidden = !has("path");
     booleanButton.hidden = !has("boolean");
@@ -2564,6 +3048,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     arrangeBar.hidden = units.length === 0 || arrangeButtons.every((control) => control.hidden);
     arrangeFocus.sync(null);
     syncNodesBar();
+    placeBar();
     if (!focused) return;
     const active = document.activeElement;
     for (const bar of [arrangeBar, nodesBar]) {
@@ -2611,13 +3096,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     undoButton.disabled = !canEdit || !undoable();
     redoButton.disabled = !canEdit || !redoable();
     deleteButton.disabled = !canEdit || selection.length === 0;
-    propertiesButton.disabled = !canEdit;
+    // Col pannello, «Proprietà» lo apre e lo chiude anche in sola lettura: il
+    // pannello mostra com'è il disegno. Senza, apre una finestra per cambiare.
+    const panelled = has("properties");
+    propertiesButton.disabled = !panelled && !canEdit;
+    if (panelled) {
+      propertiesButton.removeAttribute("aria-haspopup");
+      propertiesButton.setAttribute("aria-controls", panel.element.id);
+      propertiesButton.setAttribute("aria-expanded", String(!panel.element.hidden));
+    } else {
+      propertiesButton.setAttribute("aria-haspopup", "dialog");
+      propertiesButton.removeAttribute("aria-controls");
+      propertiesButton.removeAttribute("aria-expanded");
+      if (!panel.element.hidden) showPanel(false, false, false);
+    }
     pageButton.hidden = !has("grid") && !has("guides") && !has("rulers");
     insertGroup.hidden = !insertsImages(features);
     imageButton.disabled = !canEdit;
-    attributesButton.hidden = !has("attributes");
-    if (attributesButton.hidden && !inspector.element.hidden) showAttributes(false);
+    nestInspector(panelled && has("attributes"));
+    attributesButton.hidden = !has("attributes") || nestedNow();
+    if (attributesButton.hidden && !nestedNow() && !inspector.element.hidden) showAttributes(false);
     syncInspector();
+    syncProperties();
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
     syncLayers();
@@ -2648,6 +3148,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showHandles();
     syncTree();
     syncInspector();
+    syncProperties();
   };
 
   // --- Operazioni -----------------------------------------------------------
@@ -2852,6 +3353,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       cancelGesture();
       finishBezier(false, true);
     }
+    const hadPanel = has("properties");
     level = next;
     features = offered;
     tools = toolsOf(features);
@@ -2869,6 +3371,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showGrid();
     showGuideLines();
     syncControls();
+    // Il pannello arriva come lo vuole chi disegna.
+    if (!hadPanel && has("properties")) showPanelByDefault();
     // I righelli vanno e vengono col livello, e la cornice con loro.
     showHandles();
   }
@@ -6036,7 +6540,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (grid.guides !== before.guides) announce(t(grid.guides ? "draw.guides.on" : "draw.guides.off"));
     else if (grid.rulers !== before.rulers) announce(t(grid.rulers ? "draw.rulers.shown" : "draw.rulers.hidden"));
     else if (grid.rulerGuides !== before.rulerGuides) announce(t(grid.rulerGuides ? "draw.rulers.guides.shown" : "draw.rulers.guides.hidden"));
-    else return;
+    else if (grid.bar !== before.bar) announce(t(grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));
+    // Il pannello aperto o chiuso, e le sue sezioni, si ricordano in silenzio:
+    // lo si vede, e il pulsante lo dice.
+    else if (grid.panel === before.panel && grid.closed.join("\n") === before.closed.join("\n")) return;
+    syncProperties();
     options.onGridChange?.(grid);
   };
 
@@ -6122,8 +6630,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Le voci di «Pagina e griglia»: la griglia, il suo passo nell'unità del
   /// documento, le guide intelligenti, i righelli con le loro guide e
-  /// l'unità, e la pagina, ciascuna se il livello la offre. Adattare la
-  /// pagina si spegne, e dice perché, quando non cambierebbe niente.
+  /// l'unità, dove sta la barra della selezione, e la pagina, ciascuna se il
+  /// livello la offre. Adattare la pagina si spegne, e dice perché, quando
+  /// non cambierebbe niente.
   const pageItems = (): MenuItem[] => {
     const unit = docUnit();
     const step = stepNow();
@@ -6169,7 +6678,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           },
         ]
       : [];
-    if (!has("grid")) return [...(has("guides") ? [guidesItem] : []), ...rulersItems];
+    const barItems: MenuItem[] = BAR_FEATURES.some(has)
+      ? [{ label: t("draw.bar.beside"), choice: "checkbox", checked: grid.bar, separator: true, run: () => changeGrid({ ...grid, bar: !grid.bar }) }]
+      : [];
+    if (!has("grid")) return [...(has("guides") ? [guidesItem] : []), ...rulersItems, ...barItems];
     return [
       { label: t("draw.grid.show"), choice: "checkbox", checked: grid.shown, hint: "#", run: () => changeGrid({ ...grid, shown: !grid.shown }) },
       {
@@ -6189,6 +6701,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       })),
       ...(has("guides") ? [guidesItem] : []),
       ...rulersItems,
+      ...barItems,
       fitItem,
     ];
   };
@@ -6308,15 +6821,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return at >= 0 && visit(at + step);
   };
 
-  /// Invio: posizione e misure della selezione, o le proprietà del disegno.
-  /// Il fuoco torna dov'era, come da ogni finestra.
+  /// Invio: le proprietà della selezione, o del disegno. Col pannello, il
+  /// fuoco va al pannello, che le mostra anche in sola lettura; senza, una
+  /// finestra le chiede, e il fuoco torna dov'era. I nodi scelti si
+  /// misurano sempre nella loro finestra.
   async function properties(): Promise<void> {
-    if (asking || !editable()) return;
+    if (asking) return;
+    const nodes = tool === "nodes" && nodeSelection.size > 0 && editing !== null;
+    if (has("properties") && !nodes) {
+      finishText();
+      cancelGesture();
+      showPanel(true);
+      return;
+    }
+    if (!editable()) return;
     finishText();
     asking = true;
     cancelGesture();
     try {
-      if (tool === "nodes" && nodeSelection.size > 0 && editing !== null) await placeNodesDialog();
+      if (nodes) await placeNodesDialog();
       else if (selection.length > 0) await placeDialog();
       else await documentDialog();
     } finally {
@@ -6475,14 +6998,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
-  /// I tasti degli attributi, se le parti `at` li offrono.
+  /// I tasti del pannello delle proprietà, se le parti `at` lo offrono.
+  const propertiesKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("properties")
+      ? [
+          {
+            title: t("draw.properties"),
+            rows: [
+              ["Enter", t("draw.keys.properties.apply")],
+              ["↑↓", t("draw.keys.properties.step")],
+              ["Mod-Enter", t("draw.keys.properties.text")],
+              ["Escape", t("draw.keys.properties.revert")],
+            ],
+          },
+        ]
+      : [];
+
+  /// I tasti degli attributi, se le parti `at` li offrono: col pannello
+  /// delle proprietà sono una sua sezione.
   const attributeKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("attributes")
       ? [
           {
             title: t("draw.attributes"),
             rows: [
-              [ATTRIBUTES_BINDING, t("draw.keys.attributes.toggle")],
+              [ATTRIBUTES_BINDING, t(at.has("properties") ? "draw.keys.attributes.focus" : "draw.keys.attributes.toggle")],
               ["Enter", t("draw.keys.attributes.apply")],
               ["Shift-Enter", t("draw.keys.attributes.newline")],
               ["Escape", t("draw.keys.attributes.revert")],
@@ -6570,7 +7110,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["[ ]", t("draw.keys.rotate")],
         ["Tab Shift-Tab", t("draw.keys.walk")],
         ["Home End", t("draw.keys.ends")],
-        ["Enter", t("draw.properties")],
+        ["Enter", t(at.has("properties") ? "draw.keys.properties.panel" : "draw.properties")],
         ...(options.links === undefined ? [] : [["Alt-Enter", t("draw.keys.link.open")] as const]),
         ["Delete", t("draw.delete")],
         ["Mod-a", t("draw.keys.all")],
@@ -6584,6 +7124,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...gridKeys(at),
     ...guidesKeys(at),
     ...rulersKeys(at),
+    ...propertiesKeys(at),
     ...attributeKeys(at),
     {
       title: t("draw.view"),
@@ -6942,15 +7483,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
     if (event.defaultPrevented || event.target === titleInput || event.target === textInput) return;
-    // Il pannello degli attributi tiene i suoi tasti: un `?` o un Canc
-    // scritti in un valore restano lì, e un Canc sul pulsante che toglie un
-    // attributo non toglie l'oggetto. Passano il tasto che lo chiude e, fuori
-    // da un campo di testo, annulla e ripeti.
-    if (event.target instanceof Node && inspector.element.contains(event.target)) {
+    // I pannelli delle proprietà e degli attributi tengono i loro tasti: un
+    // `?` o un Canc scritti in un valore restano lì, le frecce cambiano un
+    // numero, e un Canc sul pulsante che toglie un attributo non toglie
+    // l'oggetto. Passano i tasti che portano agli attributi e a «Trasforma»
+    // e, fuori da un campo di testo, annulla e ripeti.
+    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target))) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
       const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
-      if (!(mod && ((key === "x" && event.shiftKey) || (!field && (key === "z" || (key === "y" && !event.shiftKey)))))) return;
+      if (!(mod && (((key === "x" || key === "m") && event.shiftKey) || (!field && (key === "z" || (key === "y" && !event.shiftKey)))))) return;
     }
     const onSurface = event.target === surface;
     const inNodesBar = event.target instanceof Node && nodesBar.contains(event.target);
@@ -7013,9 +7555,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           announceSelection();
         }
       } else if (key === "x" && event.shiftKey && has("attributes")) {
-        showAttributes(inspector.element.hidden);
+        // Nel pannello, il tasto porta agli attributi e, da lì, torna al
+        // foglio.
+        if (!nestedNow()) showAttributes(inspector.element.hidden);
+        else if (inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+        else focusAttributes();
       } else if (key === "m" && event.shiftKey && arranges("transform")) {
-        void transformDialog();
+        if (!focusTransform()) void transformDialog();
       } else if (key === "d" && !event.shiftKey && arranges("arrange")) {
         duplicateSelection();
       } else if (key === "g" && arranges("arrange")) {
@@ -7125,6 +7671,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.add(onLanguage(relabel));
   setCamera(camera);
   refresh();
+  showPanelByDefault();
 
   const dispose = (): void => {
     if (disposed) return;
@@ -7172,6 +7719,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       showGrid();
       showGuideLines();
       showHandles();
+      panel.setClosed(grid.closed as readonly SectionId[]);
+      if (grid.panel !== null && has("properties") && grid.panel === panel.element.hidden) showPanel(grid.panel, false, false);
+      syncProperties();
     },
     setEngine(next) {
       if (disposed) return;
@@ -7284,26 +7834,6 @@ const REFUSALS: Readonly<Record<Exclude<Refused["reason"], "not_shapes">, DrawKe
   whole: "draw.boolean.whole",
   foreign: "draw.boolean.foreign",
   failed: "draw.boolean.failed",
-};
-
-/// I nomi delle voci del contorno.
-const DASH_LABELS: Readonly<Record<Dash, DrawKey>> = {
-  solid: "draw.outline.solid",
-  dashed: "draw.outline.dashed",
-  dotted: "draw.outline.dotted",
-  dashdot: "draw.outline.dashdot",
-};
-
-const CAP_LABELS: Readonly<Record<Cap, DrawKey>> = {
-  butt: "draw.outline.butt",
-  round: "draw.outline.round_cap",
-  square: "draw.outline.square",
-};
-
-const JOIN_LABELS: Readonly<Record<Join, DrawKey>> = {
-  miter: "draw.outline.miter",
-  round: "draw.outline.round_join",
-  bevel: "draw.outline.bevel",
 };
 
 /// I comandi dei nodi di Maiusc e una lettera, quelli di Inkscape.
