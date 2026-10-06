@@ -98,7 +98,9 @@ Radice di un documento nuovo:
 - visibilità e trasformazione: `opacity`, `display`, `transform`;
 - testo: `font-family`, `font-size`, `font-weight`, `text-anchor`, e `dy` sui
   `tspan`;
-- identità: `id`, più gli attributi `fub:*` di questa pagina.
+- identità: `id`, più gli attributi `fub:*` di questa pagina;
+- accessibilità: `aria-hidden` su `image`, `true` o `false`; con `true`
+  l'immagine è decorativa ([accessibilità](scene-format-accessibility.md)).
 
 **Valori:**
 
@@ -507,11 +509,14 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | S006 | avviso | immagine incorporata oltre il limite |
 | S007 | info | versione del formato più recente di quella supportata |
 | S008 | info | `<!DOCTYPE>` presente: sola lettura |
-| S009 | info | contrasto fra un tratto e la carta sotto 3:1; non vale per l'evidenziatore |
+| S009 | info | un testo o un tratto a penna contrasta poco col fondo: sotto 4,5:1 un testo, 3:1 un testo grande o un tratto |
 | S010 | info | canali d'inchiostro sconosciuti |
 | S011 | info | `fub:units` o `fub:guides` fuori grammatica: si ignorano e restano nel file |
+| S012 | avviso | immagine senza `title` né `desc`, e non decorativa |
+| S013 | info | testo sotto i 12 px a grandezza naturale |
 
-- **S001:** vale anche per un titolo vuoto e per un file troncato.
+- **S001, S009, S012, S013:** come si misurano sta in
+  [accessibilità](scene-format-accessibility.md).
 - **S002:** uno per blocco estraneo, con il suo span. La dichiarazione
   `<?xml?>` e il resto del prologo formano un blocco.
 - **S003:** confronta l'attributo `id` senza prefisso di tutti gli elementi,
@@ -522,11 +527,6 @@ descrizione e riepilogo, con `truncated: true` (§11).
   imposta un `set` o un `animate`.
 - **S006:** la dimensione decodificata del data URI, su ogni `image`, anche
   estranea.
-- **S009:** compone `fill`, `fill-opacity` e le opacità dei gruppi in sRGB, con
-  i canali arrotondati a interi; ignora il CSS e l'opacità della radice; senza
-  carta il fondo è bianco; il dettaglio porta il rapporto troncato a due
-  decimali. Il controllo serve la tavolozza Okabe–Ito, leggibile anche da chi
-  non distingue alcuni colori.
 
 ## 13. Esempio completo
 

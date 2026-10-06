@@ -728,6 +728,18 @@
         2148
       ],
       "detail": "script"
+    },
+    {
+      "code": "S012",
+      "severity": "warning",
+      "bytes": [
+        1753,
+        1835
+      ],
+      "utf16": [
+        1753,
+        1835
+      ]
     }
   ]
 }

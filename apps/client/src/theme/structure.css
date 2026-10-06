@@ -1694,6 +1694,37 @@ html, body, #app {
   flex: none;
   min-height: 44px;
 }
+/* La descrizione di un'immagine appena entrata: in fondo al foglio, al
+   centro; sopra la barra del gruppo isolato quando c'è. */
+.draw-describe {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: min(36rem, calc(100% - 16px));
+  transform: translateX(-50%);
+}
+.draw-isolation:not([hidden]) ~ .draw-describe {
+  bottom: 72px;
+}
+.draw-describe-label {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.draw-describe-input {
+  box-sizing: border-box;
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-describe-action {
+  flex: none;
+  min-height: 44px;
+}
 .draw-stage[data-rulers] > .draw-text-layer,
 .draw-stage[data-rulers] > .draw-link-layer {
   clip-path: inset(24px 0 0 24px);
@@ -1729,7 +1760,8 @@ html, body, #app {
 .draw-objects,
 .draw-properties,
 .draw-inspector,
-.draw-history {
+.draw-history,
+.draw-access {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
@@ -2010,6 +2042,119 @@ html, body, #app {
 }
 .draw-history-list[aria-disabled="true"] > .draw-history-row {
   cursor: default;
+}
+
+/* La verifica dell'accessibilità scorre tutta insieme, con l'intestazione
+   ferma in cima: due sezioni che si chiudono, i problemi e l'ordine di
+   lettura. Un problema è una riga: il segno della gravità, il titolo col
+   dettaglio sotto e i pulsanti, che vanno a capo quando il pannello è
+   stretto. L'ordine di lettura scorre per conto suo e disegna solo le righe
+   che si vedono, come la cronologia. */
+.draw-access {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.draw-access-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.draw-access-title {
+  margin: 0;
+}
+.draw-access-count {
+  margin-inline-start: auto;
+}
+.draw-access-section {
+  flex: none;
+}
+.draw-access-summary {
+  line-height: 44px;
+  cursor: pointer;
+}
+.draw-access-note,
+.draw-access-empty,
+.draw-access-warning {
+  margin: 0;
+}
+.draw-access-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draw-access-problem {
+  display: grid;
+  grid-template-columns: 1.75em minmax(0, 1fr);
+  align-items: start;
+}
+.draw-access-glyph {
+  display: flex;
+  grid-row: 1 / span 2;
+  align-items: center;
+  justify-content: center;
+}
+.draw-access-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 2;
+  min-width: 0;
+}
+.draw-access-action {
+  max-width: 100%;
+}
+.draw-access-object {
+  display: inline-block;
+  overflow: hidden;
+  line-height: 42px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-access-swatch {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  width: 1em;
+  height: 1em;
+}
+.draw-access-describe {
+  box-sizing: border-box;
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-access-scroll {
+  max-height: min(22rem, 50vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-access-tree {
+  position: relative;
+}
+.draw-access-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 44px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.draw-access-moves {
+  display: flex;
+  flex-wrap: wrap;
 }
 .draw-objects-ghost {
   position: fixed;

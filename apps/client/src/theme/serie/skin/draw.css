@@ -254,6 +254,33 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-sm);
 }
 
+/* La descrizione di un'immagine appena entrata, come la barra di un incolla
+   lungo; il campo come quello della verifica, i pulsanti come «Interrompi». */
+.draw-describe {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
+}
+.draw-describe-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.draw-describe-input {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.draw-describe-action {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
 /* Il segno di un collegamento: un tondo col fondo della barra, che si vede
    sulla carta e sul tavolo di ogni tema, e che col puntatore sopra prende il
    fondo attivo quando si può toccare. */
@@ -316,7 +343,8 @@ button.draw-isolation-crumb:hover {
 .draw-objects,
 .draw-properties,
 .draw-inspector,
-.draw-history {
+.draw-history,
+.draw-access {
   gap: var(--space-2);
   padding: var(--space-2) 0;
   border-style: solid;
@@ -516,6 +544,136 @@ button.draw-isolation-crumb:hover {
 .draw-history-rename {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+/* La verifica dell'accessibilità: la gravità è un segno e una parola, mai
+   il solo colore; il triangolo dell'avviso ha il colore degli avvisi, il
+   cerchio della nota quello dell'informazione. Il nome dell'oggetto è
+   sottolineato come un collegamento, e porta all'oggetto; il pulsante che
+   corregge un colore ne mostra il campione. L'avviso di uno spostamento ha il
+   fondo e il filo degli avvisi. */
+.draw-access-header,
+.draw-access-summary,
+.draw-access-note,
+.draw-access-empty,
+.draw-access-moves {
+  padding: 0 var(--space-4);
+}
+.draw-access-header {
+  gap: var(--space-1) var(--space-3);
+  padding-block: var(--space-1);
+  background: var(--bg-elev);
+}
+.draw-access-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-access-count,
+.draw-access-note,
+.draw-access-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-access-summary {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.draw-access-summary:hover {
+  background: var(--overlay-hover);
+}
+.draw-access-summary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-access-problem {
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-access-glyph {
+  color: var(--warning);
+}
+.draw-access-problem[data-severity="info"] > .draw-access-glyph {
+  color: var(--info);
+}
+.draw-access-what {
+  font-weight: var(--weight-medium);
+}
+.draw-access-severity {
+  font-weight: var(--weight-bold);
+}
+.draw-access-detail {
+  color: var(--muted);
+}
+.draw-access-actions {
+  gap: var(--space-1) var(--space-2);
+  padding-block-start: var(--space-1);
+}
+.draw-access-action {
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-access-object {
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.draw-access-swatch {
+  border: 1px solid var(--text);
+  border-radius: var(--radius-xs);
+}
+.draw-access-describe {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.draw-access-more {
+  margin: 0 var(--space-4);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-access-tree:focus-visible {
+  outline: none;
+}
+.draw-access-row {
+  padding-inline-end: var(--space-3);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-access-row:hover {
+  background: var(--overlay-hover);
+}
+.draw-access-row[aria-selected="true"] {
+  background: var(--bg-active);
+}
+.draw-access-tree:focus-visible > .draw-access-row[data-active] {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-access-warning {
+  margin: 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--warning-wash);
+  border-left: 3px solid var(--warning);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-access-moves {
+  gap: var(--space-2);
+}
+.draw-access-moves > .draw-button {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  color: var(--text);
   font-size: var(--text-sm);
 }
 

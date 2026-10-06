@@ -5,7 +5,20 @@
 import type { Span } from "./text";
 
 /// Un codice di §12.
-export type Code = "S001" | "S002" | "S003" | "S004" | "S005" | "S006" | "S007" | "S008" | "S009" | "S010" | "S011";
+export type Code =
+  | "S001"
+  | "S002"
+  | "S003"
+  | "S004"
+  | "S005"
+  | "S006"
+  | "S007"
+  | "S008"
+  | "S009"
+  | "S010"
+  | "S011"
+  | "S012"
+  | "S013";
 
 /// La gravità di una diagnostica.
 export type Severity = "error" | "warning" | "info";
@@ -19,6 +32,7 @@ export function severityOf(code: Code): Severity {
     case "S001":
     case "S005":
     case "S006":
+    case "S012":
       return "warning";
     default:
       return "info";
@@ -35,9 +49,11 @@ export const CODE_MESSAGES: Readonly<Record<Code, string>> = {
   S006: "immagine incorporata oltre 5 MiB",
   S007: "versione del formato più recente di quella supportata: sola lettura",
   S008: "il documento ha un DOCTYPE: sola lettura",
-  S009: "il tratto contrasta con la carta meno di 3:1",
+  S009: "contrasta poco con ciò che ha sotto: un tratto o un testo grande vogliono 3:1, un testo 4,5:1",
   S010: "canali d'inchiostro sconosciuti: il tratto non si ridisegna",
   S011: "unità o guide del documento non valide: si ignorano e restano nel file",
+  S012: "immagine senza descrizione: chi non la vede non sa che cosa mostra",
+  S013: "testo sotto i 12 px a grandezza naturale",
 };
 
 /// Una diagnostica: il codice, la sua gravità, l'elemento o il blocco a cui
@@ -49,7 +65,7 @@ export interface Diagnostic {
   readonly bytes?: readonly [number, number];
   readonly utf16?: readonly [number, number];
   /// Il dettaglio: l'id ripetuto, l'errore dell'inchiostro, il contrasto
-  /// misurato.
+  /// misurato, la grandezza del testo.
   readonly detail?: string;
 }
 

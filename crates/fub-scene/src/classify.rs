@@ -323,6 +323,8 @@ fn geometry_attribute(tag: Tag, name: &str, value: &str) -> bool {
         (Polyline | Polygon, "points") => points(value).is_some(),
         (Path, "d") => parse_path(value).is_some(),
         (Image, "preserveAspectRatio") => preserve_aspect_ratio(value),
+        // Un'immagine decorativa: S012 non la chiede descritta.
+        (Image, "aria-hidden") => matches!(crate::values::trim(value), "true" | "false"),
         (A, "href") => matches!(href(value), Href::Vault(_)),
         (Image, "href") => matches!(
             href(value),

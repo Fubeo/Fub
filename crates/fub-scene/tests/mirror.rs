@@ -515,7 +515,17 @@ fn sparse() -> String {
                      L1100 846.74 L1058.86 876.63 L1074.57 828.26 L1033.43 798.37 L1084.28 798.37 Z",
                 )
                 .a("fill", "#009e73"),
-        );
+        )
+        // Un arancione sulla carta bianca: S009.
+        .child(drawn(
+            "o00000032",
+            "pen",
+            "2026-10-01T09:21:02.000Z",
+            &format!("{BRUSH} sim=1"),
+            &highlighter,
+            Scale::S100,
+            "#e69f00",
+        ));
     let notes = layer("l9z8y7x6w", "Appunti")
         .a("fub:locked", "true")
         .a("display", "none")
@@ -538,16 +548,6 @@ fn sparse() -> String {
             "1 s10 cxytq 1000,1000,0,5 10,5,8,-5",
             "M100 100 L101 100.5 Z",
             "#000000",
-        ))
-        // Un arancione sulla carta bianca: S009.
-        .child(drawn(
-            "o00000032",
-            "pen",
-            "2026-10-01T09:21:02.000Z",
-            &format!("{BRUSH} sim=1"),
-            &highlighter,
-            Scale::S100,
-            "#e69f00",
         ))
         .child(
             El::new("image")
@@ -716,7 +716,8 @@ fn sparse_is_a_complete_drawing() {
     );
     let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
     use fub_scene::Code::*;
-    assert_eq!(codes, [S002, S004, S009, S010]);
+    // L'immagine del vault nel gruppo non ha descrizione: S012.
+    assert_eq!(codes, [S002, S004, S009, S010, S012]);
     assert_eq!(scene.index.links.len(), 1);
     assert_eq!(scene.index.embeds.len(), 1);
 }

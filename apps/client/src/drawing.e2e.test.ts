@@ -619,6 +619,13 @@ describe("le immagini del vault nel disegno", () => {
       expect(written(host, "casa.svg")[0]).toMatch(/<image id="[^"]+" x="[^"]+" y="[^"]+" width="64" height="48" href="immagini\/gatto\.jpg"\/>/);
       // Il vault non cambia: l'immagine c'era già.
       expect(host.atGate("resourceWrite")).toEqual([]);
+      // Entrata, l'immagine chiede che cosa mostra, col fuoco nel campo: Invio
+      // scrive la descrizione in un passo suo, e il fuoco torna al foglio.
+      await waitFor("la barra chiede la descrizione", () => document.activeElement?.classList.contains("draw-describe-input") === true);
+      (document.activeElement as HTMLInputElement).value = "Un gatto sul divano";
+      press("Enter");
+      await waitFor("la descrizione arriva al disco", () => written(host, "casa.svg").length === 2);
+      expect(written(host, "casa.svg")[1]).toMatch(/<image [^>]*href="immagini\/gatto\.jpg"[^>]*>\s*<title>Un gatto sul divano<\/title>\s*<\/image>/);
       await waitFor("il fuoco torna al foglio", () => document.activeElement === sheet);
       // Il foglio la mostra dal vault.
       await waitFor("il foglio apre l'immagine", () => {

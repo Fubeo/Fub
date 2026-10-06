@@ -6,18 +6,20 @@
 //! span; un disegno di Inkscape si cerca per i suoi testi anche se FubDraw
 //! non li modifica. Trova anche S001, S005 e S006. [`Tally`] invece segue la
 //! classificazione, che gli passa ogni elemento modificabile con il contesto
-//! ereditato dai contenitori: ne escono il riepilogo di `fub.scene.summary` e
-//! S009, che riguardano la scena come la modifica FubDraw.
+//! ereditato dai contenitori: ne escono il riepilogo di `fub.scene.summary` e,
+//! con [`Legibility`], i controlli su come il disegno si legge (S009, S012,
+//! S013), che riguardano la scena come la modifica FubDraw.
 
 use serde::Serialize;
 
-use crate::classify::{Role, Stroke, Tool};
+use crate::accessibility::Legibility;
+use crate::classify::{Role, Stroke};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::{parse_path, rect_path, BoundsBuilder, Matrix};
 use crate::text::{Span, Utf16Map};
 use crate::values::{
-    href, is_javascript, length, opacity, paint, points, transform, trim, url_text, Href, Paint,
-    Rgb,
+    href, is_javascript, keyword, length, non_negative_length, opacity, paint, points, transform,
+    trim, url_text, Href, Paint, Rgb,
 };
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XHTML, NS_XLINK};
 use crate::Status;
@@ -25,8 +27,25 @@ use crate::Status;
 /// Quanti byte decodificati può avere un'immagine incorporata (§11).
 pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
-/// Il contrasto minimo fra un tratto e la carta (§12).
+/// Il contrasto minimo fra un tratto, o un testo grande, e ciò che ha sotto
+/// (§12).
 pub const MIN_CONTRAST: f64 = 3.0;
+
+/// Il contrasto minimo fra un testo e ciò che ha sotto (§12).
+pub const MIN_TEXT_CONTRAST: f64 = 4.5;
+
+/// Da quanti pixel a grandezza naturale un testo è grande, e gli basta
+/// [`MIN_CONTRAST`]: 18 punti, come in WCAG.
+pub const LARGE_TEXT: f64 = 24.0;
+
+/// Da quanti pixel un testo in grassetto è grande: 14 punti.
+pub const LARGE_BOLD_TEXT: f64 = 14.0 * 96.0 / 72.0;
+
+/// La grandezza minima di un testo a grandezza naturale, in pixel (§12).
+pub const MIN_TEXT_SIZE: f64 = 12.0;
+
+/// La grandezza di un testo che non la dice, come nei browser.
+pub(crate) const DEFAULT_FONT_SIZE: f64 = 16.0;
 
 /// Un testo della scena e l'elemento da cui viene.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -140,6 +159,11 @@ pub(crate) struct Context {
     /// Il prodotto delle `opacity` dei contenitori: l'opacità di gruppo
     /// compone come una moltiplicazione.
     opacity: f64,
+    /// Il `font-size` in vigore, in unità utente; `None` se la radice ne ha
+    /// uno che §4 non legge.
+    font_size: Option<f64>,
+    /// Il `font-weight` in vigore è da grassetto: `bold` o da 700 in su.
+    bold: bool,
 }
 
 impl Context {
@@ -157,6 +181,10 @@ impl Context {
                 .value(NS_NONE, "fill-opacity")
                 .map_or(Some(1.0), opacity),
             opacity: 1.0,
+            font_size: root
+                .value(NS_NONE, "font-size")
+                .map_or(Some(DEFAULT_FONT_SIZE), non_negative_length),
+            bold: root.value(NS_NONE, "font-weight").is_some_and(bold),
         }
     }
 
@@ -180,15 +208,52 @@ impl Context {
         if let Some(alpha) = value("opacity").and_then(opacity) {
             context.opacity *= alpha;
         }
+        if let Some(size) = value("font-size") {
+            context.font_size = non_negative_length(size);
+        }
+        if let Some(weight) = value("font-weight") {
+            context.bold = bold(weight);
+        }
         context
+    }
+
+    /// Il contesto di una riga di `text`, un `tspan`: come [`Context::child`],
+    /// ma senza `transform`, che SVG non applica a un `tspan`.
+    pub fn line(&self, tspan: &Element<'_>) -> Context {
+        Context {
+            matrix: self.matrix,
+            ..self.child(tspan)
+        }
+    }
+
+    pub fn matrix(&self) -> &Matrix {
+        &self.matrix
+    }
+
+    pub fn hidden(&self) -> bool {
+        self.hidden
+    }
+
+    pub fn font_size(&self) -> Option<f64> {
+        self.font_size
+    }
+
+    pub fn bold(&self) -> bool {
+        self.bold
     }
 
     /// Il colore del riempimento con la sua opacità totale; `None` se non si
     /// sa o se è `none`.
-    fn fill(&self) -> Option<(Rgb, f64)> {
+    pub fn fill(&self) -> Option<(Rgb, f64)> {
+        self.fill_paint().flatten()
+    }
+
+    /// Il riempimento in vigore, distinguendo ciò che non si sa: `None` se
+    /// non si sa, `Some(None)` se è `none`.
+    pub fn fill_paint(&self) -> Option<Option<(Rgb, f64)>> {
         match (self.fill?, self.fill_opacity?) {
-            (Paint::Color(rgb), alpha) => Some((rgb, alpha * self.opacity)),
-            (Paint::None, _) => None,
+            (Paint::Color(rgb), alpha) => Some(Some((rgb, alpha * self.opacity))),
+            (Paint::None, _) => Some(None),
         }
     }
 }
@@ -202,9 +267,9 @@ pub(crate) struct Tally {
     bounds: BoundsBuilder,
     /// Il colore della prima carta; dentro `None` se non si sa.
     paper: Option<Option<Rgb>>,
-    /// I tratti a penna col loro colore, da confrontare con la carta alla
-    /// fine: la carta può venire dopo.
-    pens: Vec<(Span, (Rgb, f64))>,
+    /// I controlli su come il disegno si legge, da chiudere alla fine: la
+    /// carta può venire dopo.
+    legibility: Legibility,
 }
 
 impl Tally {
@@ -243,11 +308,6 @@ impl Tally {
                     self.ink.samples += stroke.samples.unwrap_or(0) as u64;
                     let duration = stroke.duration.unwrap_or(0).max(0);
                     self.ink.duration = self.ink.duration.saturating_add(duration);
-                    if stroke.tool == Tool::Pen {
-                        if let Some(fill) = context.fill() {
-                            self.pens.push((span, fill));
-                        }
-                    }
                 }
             }
             Role::Arrow
@@ -267,11 +327,13 @@ impl Tally {
         }
         if !context.hidden {
             bounds(doc, element, role, &context.matrix, &mut self.bounds);
+            self.legibility
+                .element(doc, element, role, context, span, stroke);
         }
     }
 
-    /// Chiude il conteggio: il riepilogo, più S009 per ogni tratto a penna
-    /// che contrasta poco con la carta.
+    /// Chiude il conteggio: il riepilogo, più i controlli su come il disegno
+    /// si legge.
     pub fn finish(
         self,
         status: Status,
@@ -279,20 +341,8 @@ impl Tally {
         diagnostics: &mut Vec<Diagnostic>,
     ) -> Summary {
         // Senza carta il disegno sta sul bianco della superficie (§12).
-        if let Some(paper) = self.paper.unwrap_or(Some(WHITE)) {
-            for (span, (rgb, alpha)) in self.pens {
-                let ratio = contrast(over(rgb, alpha, paper), paper);
-                if ratio < MIN_CONTRAST {
-                    // Troncato, non arrotondato: 2,996 non deve leggersi «3.00».
-                    let shown = (ratio * 100.0).floor() / 100.0;
-                    diagnostics.push(Diagnostic::new(
-                        Code::S009,
-                        Some(span),
-                        Some(format!("{shown:.2}")),
-                    ));
-                }
-            }
-        }
+        self.legibility
+            .finish(self.paper.unwrap_or(Some(WHITE)), diagnostics);
         Summary {
             version,
             foreign: status == Status::Foreign,
@@ -337,7 +387,12 @@ fn hundredths(v: f64) -> f64 {
     (v * 100.0 + 0.5).floor()
 }
 
-const WHITE: Rgb = [255, 255, 255];
+pub(crate) const WHITE: Rgb = [255, 255, 255];
+
+/// Vero per un `font-weight` da grassetto: `bold` o da 700 in su.
+fn bold(weight: &str) -> bool {
+    keyword("font-weight", weight) && matches!(trim(weight), "bold" | "700" | "800" | "900")
+}
 
 /// Il colore della carta sul bianco della superficie; `None` se non si sa.
 fn paper_color(context: &Context) -> Option<Rgb> {
@@ -352,7 +407,7 @@ fn paper_color(context: &Context) -> Option<Rgb> {
 
 /// `rgb` con opacità `alpha` composto su `under`, in sRGB come fanno i
 /// browser, arrotondato al canale intero.
-fn over(rgb: Rgb, alpha: f64, under: Rgb) -> Rgb {
+pub(crate) fn over(rgb: Rgb, alpha: f64, under: Rgb) -> Rgb {
     let mix = |i: usize| {
         let v = alpha * f64::from(rgb[i]) + (1.0 - alpha) * f64::from(under[i]);
         v.round().clamp(0.0, 255.0) as u8
@@ -380,13 +435,13 @@ pub(crate) fn contrast(a: Rgb, b: Rgb) -> f64 {
 }
 
 /// Una lunghezza di `element`, già validata da §4.
-fn len(element: &Element<'_>, name: &str) -> Option<f64> {
+pub(crate) fn len(element: &Element<'_>, name: &str) -> Option<f64> {
     element.value(NS_NONE, name).and_then(length)
 }
 
 /// I raggi di un'ellisse o degli angoli di un rettangolo: in SVG 2 un raggio
 /// assente vale l'altro.
-fn radii(element: &Element<'_>) -> [f64; 2] {
+pub(crate) fn radii(element: &Element<'_>) -> [f64; 2] {
     match (len(element, "rx"), len(element, "ry")) {
         (Some(rx), Some(ry)) => [rx, ry],
         (Some(r), None) | (None, Some(r)) => [r, r],
@@ -463,7 +518,7 @@ fn unrendered(element: &Element<'_>) -> bool {
 /// Accoda a `out` il testo di `id` e dei suoi discendenti, in ordine:
 /// dati di carattere, CDATA e le entità che sono testo semplice. Una pila,
 /// non la ricorsione: un `tspan` può annidarne centomila.
-fn text_content(doc: &Document<'_>, id: NodeId, out: &mut String) {
+pub(crate) fn text_content(doc: &Document<'_>, id: NodeId, out: &mut String) {
     let mut stack = vec![(id, 0)];
     while let Some((node, next)) = stack.last_mut() {
         let children = doc.children(*node);
@@ -483,7 +538,7 @@ fn text_content(doc: &Document<'_>, id: NodeId, out: &mut String) {
 }
 
 /// Riduce ogni sequenza di spazi XML a uno spazio e toglie quelli ai bordi.
-fn collapse(text: &str) -> String {
+pub(crate) fn collapse(text: &str) -> String {
     text.split([' ', '\t', '\n', '\r'])
         .filter(|word| !word.is_empty())
         .collect::<Vec<_>>()

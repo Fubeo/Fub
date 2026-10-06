@@ -25,6 +25,7 @@ use std::fmt;
 
 use serde::Serialize;
 
+mod accessibility;
 mod analysis;
 mod brush;
 mod classify;
@@ -38,7 +39,8 @@ mod values;
 mod xml;
 
 pub use analysis::{
-    BBox, Counts, Excerpt, Index, InkTotals, Reference, Summary, MAX_IMAGE_BYTES, MIN_CONTRAST,
+    BBox, Counts, Excerpt, Index, InkTotals, Reference, Summary, LARGE_BOLD_TEXT, LARGE_TEXT,
+    MAX_IMAGE_BYTES, MIN_CONTRAST, MIN_TEXT_CONTRAST, MIN_TEXT_SIZE,
 };
 pub use brush::{Brush, BrushError, PF1, PF1_KEYS};
 pub use classify::{ElementItem, ForeignItem, Item, Layer, Role, RootItem, Stroke, Tags, Tool};

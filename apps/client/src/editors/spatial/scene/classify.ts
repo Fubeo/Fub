@@ -252,6 +252,9 @@ function geometryAttribute(tag: Tag, name: string, value: string): boolean {
       return is("path") && parsePath(value) !== null;
     case "preserveAspectRatio":
       return is("image") && preserveAspectRatio(value);
+    case "aria-hidden":
+      // Un'immagine decorativa: S012 non la chiede descritta.
+      return is("image") && (trim(value) === "true" || trim(value) === "false");
     case "href": {
       if (tag === "a") return href(value).kind === "vault";
       if (tag !== "image") return false;

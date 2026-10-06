@@ -5,7 +5,8 @@
     "fnv1a": "0f64f632",
     "items": 42458,
     "diagnostics": {
-      "S002": 3105
+      "S002": 3105,
+      "S009": 998
     },
     "summary": {
       "version": 1,

@@ -32,8 +32,7 @@ Il disegno offre due modalità:
   Proietta su `reading`, e `Mod-E` passa dall'una all'altra.
 
 Il ruolo `source` non c'è: il testo del disegno si apre con «Apri come
-sorgente». Il riquadro ricorda la modalità del disegno come quella di ogni
-altra famiglia.
+sorgente». Il riquadro ricorda la modalità, come per ogni altra famiglia.
 
 In Lettura il file non entra mai nel DOM della shell: è un `<img>` da un blob,
 che non esegue script e non carica risorse; i caratteri dell'app e le
@@ -108,7 +107,9 @@ Lo Standard aggiunge:
 - la **vista ruotata**, i **gesti** delle dita, il **menu radiale** e la curva
   della penna ([Disegni, vista ruotata, gesti e menu radiale](drawing-view.md));
 - la **«Cronologia»**, accanto al foglio: i passi, per tornare a uno qualsiasi
-  in un colpo, e i segni ([Disegni, cronologia](drawing-history.md)).
+  in un colpo, e i segni ([Disegni, cronologia](drawing-history.md));
+- la verifica dell'**«Accessibilità»**, accanto al foglio: i problemi, ognuno
+  con la sua correzione, e l'ordine di lettura ([Disegni, accessibilità](drawing-accessibility.md)).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
@@ -228,8 +229,7 @@ Con l'aggancio:
   pixel;
 - **Duplica** scosta le copie di un numero intero di passi, e un'immagine
   incollata ha l'angolo in alto a sinistra sull'incrocio più vicino;
-- la prima linea di base di un testo nuovo comincia sull'incrocio più
-  vicino.
+- la prima linea di base di un testo nuovo comincia sull'incrocio più vicino.
 
 Nello stesso menu, la casella **Guide intelligenti** fa fermare ciò che si
 muove in linea con gli altri oggetti e con la pagina ([Disegni, guide

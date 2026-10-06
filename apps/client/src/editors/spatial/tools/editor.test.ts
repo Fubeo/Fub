@@ -3330,6 +3330,7 @@ describe("da tastiera", () => {
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
       "Cronologia · dal livello Standard",
+      "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Nodi · dal livello Esperto",
@@ -6832,6 +6833,118 @@ describe("le immagini incollate", () => {
     expect(spoken()).toBe("Il disegno è vicino al limite di 20 MiB: un’altra immagine non ci sta.");
     expect(changes).toEqual([]);
   });
+
+  describe("la descrizione, dal livello Standard", () => {
+    const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-describe")!;
+    const input = (): HTMLInputElement => bar().querySelector<HTMLInputElement>(".draw-describe-input")!;
+    const label = (): string => bar().querySelector("label")!.textContent!;
+    const act = (action: string): HTMLButtonElement => bar().querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+    const ids = (): string[] => [...editor.engine.text.matchAll(/<image id="([^"]+)"/g)].map((found) => found[1]!);
+
+    it("entrata un'immagine, la barra la chiede col fuoco nel campo; Invio la scrive in un passo suo", async () => {
+      mount(SOURCE, { imageCodec: codec(200, 100), level: "standard" });
+      size(1000, 500);
+      expect(bar().hidden).toBe(true);
+      paste([file(PNG)]);
+      await settle();
+      expect(bar().hidden).toBe(false);
+      expect(label()).toBe("Descrivi l’immagine appena aggiunta");
+      expect(document.activeElement).toBe(input());
+      expect(input().placeholder).toBe("Che cosa mostra l’immagine?");
+      expect(formatIssues(checkAccessibility(host))).toBe("");
+      // Nel campo le lettere si scrivono: non cambiano lo strumento.
+      const tool = editor.tool;
+      expect(key("p", {}, input()).defaultPrevented).toBe(false);
+      expect(editor.tool).toBe(tool);
+      const [id] = editor.selection;
+      input().value = "  Il molo   al tramonto ";
+      key("Enter", {}, input());
+      expect(changes).toHaveLength(2);
+      expect(editor.engine.text).toContain("<title>Il molo al tramonto</title>");
+      expect(spoken()).toBe("Descrizione scritta: «Il molo al tramonto».");
+      expect(bar().hidden).toBe(true);
+      expect(document.activeElement).toBe(surface());
+      expect(editor.selection).toEqual([id]);
+      // Due passi: l'annulla toglie prima la descrizione, poi l'immagine.
+      editor.undo();
+      expect(editor.engine.text).not.toContain("<title>Il molo");
+      expect(images()).toHaveLength(1);
+      editor.undo();
+      expect(images()).toEqual([]);
+    });
+
+    it("più immagini, una alla volta e scelta; «Decorativa» e «Salta» passano alla prossima, e alla fine tornano scelte tutte", async () => {
+      mount(SOURCE, { imageCodec: codec(100, 50), level: "standard" });
+      size(1000, 500);
+      paste([file(PNG), file(PNG, "due.png"), file(PNG, "tre.png")]);
+      await settle();
+      const [first, second, third] = ids();
+      expect(label()).toBe("Descrivi l’immagine 1 delle 3 appena aggiunte");
+      expect(editor.selection).toEqual([first]);
+      act("decorative").click();
+      expect(editor.engine.text).toMatch(new RegExp(`<image id="${first}"[^>]* aria-hidden="true"/>`));
+      expect(label()).toBe("Descrivi l’immagine 2 delle 3 appena aggiunte");
+      expect(editor.selection).toEqual([second]);
+      expect(document.activeElement).toBe(input());
+      act("skip").click();
+      expect(label()).toBe("Descrivi l’immagine 3 delle 3 appena aggiunte");
+      expect(editor.selection).toEqual([third]);
+      input().value = "Barche";
+      act("write").click();
+      expect(bar().hidden).toBe(true);
+      expect(editor.selection).toEqual([first, second, third]);
+      expect(document.activeElement).toBe(surface());
+      // L'immagine, la decorativa e la descrizione: tre passi.
+      expect(changes).toHaveLength(3);
+    });
+
+    it("un campo vuoto non scrive niente e lo dice; Esc chiude, e la verifica elenca l'immagine", async () => {
+      mount(SOURCE, { imageCodec: codec(100, 50), level: "standard" });
+      size(1000, 500);
+      paste([file(PNG)]);
+      await settle();
+      key("Enter", {}, input());
+      expect(spoken()).toBe("Scrivi prima che cosa mostra l’immagine, oppure scegli «Decorativa» o «Salta».");
+      expect(bar().hidden).toBe(false);
+      expect(document.activeElement).toBe(input());
+      key("Escape", {}, input());
+      expect(bar().hidden).toBe(true);
+      expect(document.activeElement).toBe(surface());
+      expect(changes).toHaveLength(1);
+      host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Accessibilità"]')!.click();
+      expect([...host.querySelectorAll(".draw-access-what")].map((what) => what.textContent)).toContain("Avviso: Un’immagine non ha una descrizione");
+    });
+
+    it("si chiude quando l'immagine se ne va, quando il disegno non si scrive più, e con un altro disegno", async () => {
+      mount(SOURCE, { imageCodec: codec(100, 50), level: "standard" });
+      size(1000, 500);
+      paste([file(PNG)]);
+      await settle();
+      editor.undo();
+      expect(bar().hidden).toBe(true);
+      expect(document.activeElement).toBe(surface());
+      paste([file(PNG)]);
+      await settle();
+      editor.setReadOnly(true);
+      expect(bar().hidden).toBe(true);
+      editor.setReadOnly(false);
+      paste([file(PNG)]);
+      await settle();
+      expect(bar().hidden).toBe(false);
+      editor.load(SceneEngine.open(SOURCE));
+      expect(bar().hidden).toBe(true);
+    });
+
+    it("all'Essenziale non c'è: l'immagine entra e il fuoco resta sul foglio", async () => {
+      mount(SOURCE, { imageCodec: codec(100, 50) });
+      size(1000, 500);
+      surface().focus();
+      paste([file(PNG)]);
+      await settle();
+      expect(bar().hidden).toBe(true);
+      expect(document.activeElement).toBe(surface());
+    });
+  });
 });
 
 describe("le immagini del vault, dal livello Standard", () => {
@@ -6930,6 +7043,9 @@ describe("le immagini del vault, dal livello Standard", () => {
     await settle();
     expect(imageLine()).toContain(`href="${HREF}"`);
     expect(changes).toHaveLength(1);
+    // Come ogni immagine che entra, chiede la sua descrizione.
+    expect(host.querySelector<HTMLElement>(".draw-describe")!.hidden).toBe(false);
+    expect(document.activeElement).toBe(host.querySelector(".draw-describe-input"));
     // In sola lettura il pulsante si spegne, e Ctrl+I non chiede niente.
     editor.setReadOnly(true);
     expect(imageButton().disabled).toBe(true);
@@ -7260,6 +7376,211 @@ describe("la cronologia, dal livello Standard", () => {
   });
 });
 
+describe("la verifica dell'accessibilità, dal livello Standard", () => {
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Accessibilità"]')!;
+  const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-access")!;
+  const rows = (): HTMLElement[] => [...panel().querySelectorAll<HTMLElement>(".draw-access-problem")];
+  /// I problemi, dall'alto, come si leggono.
+  const problems = (): string[] => rows().map((row) => row.querySelector(".draw-access-what")!.textContent!);
+  const action = (at: number, name: string): HTMLButtonElement => rows()[at]!.querySelector<HTMLButtonElement>(`[data-action="${name}"]`)!;
+  const tree = (): HTMLElement => panel().querySelector<HTMLElement>('[role="tree"]')!;
+  const item = (name: string): HTMLElement => [...tree().querySelectorAll<HTMLElement>('[role="treeitem"]')].find((each) => each.textContent === name)!;
+  const active = (): string | null => document.getElementById(tree().getAttribute("aria-activedescendant") ?? "")?.textContent ?? null;
+  const warning = (): HTMLElement => panel().querySelector<HTMLElement>(".draw-access-warning")!;
+  const ids = (): string[] => [...editor.engine.text.matchAll(/<(?:rect|text|image) id="([^"]+)"/g)].map((found) => found[1]!);
+
+  /// Un testo giallo su bianco, scritto come lo scrive l'editor, e
+  /// un'immagine senza descrizione, in un disegno senza titolo.
+  const SUN = `<text id="o1a1a1a1a" x="10" y="20" fill="#f0e442">\n  <tspan x="10" dy="0">Sole</tspan>\n</text>`;
+  const PHOTO = `<image id="o2b2b2b2b" x="0" y="30" width="10" height="10" href="foto.png"/>`;
+  const POOR = doc(`${LAYER}${SUN}${PHOTO}</g>`);
+  /// Due quadrati che si sovrappongono e uno lontano, in un disegno che si
+  /// legge.
+  const STACK = doc(
+    `<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="0" y="0" width="20" height="20"/><rect id="ob2b2b2b2" x="10" y="10" width="20" height="20"/>` +
+      `<rect id="oc3c3c3c3" x="100" y="100" width="20" height="20"/></g>`,
+  );
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it("c'è dal livello Standard: il pulsante la apre a destra del foglio, e aperta legge il disegno e prende il fuoco", () => {
+    mount(POOR);
+    expect(button().hidden).toBe(true);
+    editor.setLevel("standard");
+    expect(button().hidden).toBe(false);
+    expect(panel().hidden).toBe(true);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(button().getAttribute("aria-controls")).toBe(panel().id);
+    button().click();
+    expect(panel().hidden).toBe(false);
+    expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(false);
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    expect(problems()).toEqual(["Avviso: Il disegno non ha un titolo", "Nota: Un testo si legge poco", "Avviso: Un’immagine non ha una descrizione"]);
+    expect(panel().querySelector(".draw-access-count")!.textContent).toBe("3 problemi");
+    expect(document.activeElement).toBe(action(0, "fix"));
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Esc torna al foglio, e la verifica resta aperta.
+    key("Escape", {}, action(0, "fix"));
+    expect(document.activeElement).toBe(surface());
+    expect(panel().hidden).toBe(false);
+    button().click();
+    expect(panel().hidden).toBe(true);
+    expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(true);
+    // Sotto il livello Standard si chiude.
+    button().click();
+    editor.setLevel("essential");
+    expect(button().hidden).toBe(true);
+    expect(panel().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("un colore che si legge si mette in un passo; il fuoco passa al problema dopo, e un annulla lo riporta", () => {
+    mount(POOR, { level: "standard" });
+    button().click();
+    const color = action(1, "fix");
+    expect(color.textContent).toMatch(/^Usa #[0-9a-f]{6} \(4,\d\d:1\)$/);
+    const chosen = color.textContent!.slice(4, 11);
+    color.focus();
+    color.click();
+    expect(changes).toHaveLength(1);
+    expect(editor.engine.text).toBe(POOR.replace('fill="#f0e442"', `fill="${chosen}"`));
+    expect(spoken()).toMatch(new RegExp(`ora usa ${chosen}: contrasto 4,\\d\\d:1\\.$`));
+    expect(problems()).toEqual(["Avviso: Il disegno non ha un titolo", "Avviso: Un’immagine non ha una descrizione"]);
+    expect(document.activeElement).toBe(action(1, "describe"));
+    // L'annulla di sempre; la verifica rilegge il disegno un momento dopo.
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(POOR);
+    expect(problems()).toHaveLength(2);
+    vi.advanceTimersByTime(250);
+    expect(problems()).toHaveLength(3);
+  });
+
+  it("una correzione su un disegno che intanto è cambiato si rilegge: se il problema non c'è più, non fa niente", () => {
+    mount(POOR, { level: "standard" });
+    button().click();
+    editor.setEngine(SceneEngine.open(POOR.replace('fill="#f0e442"', 'fill="#222222"')));
+    // Il disegno nuovo non si è ancora riletto: la riga c'è ancora.
+    expect(problems()).toHaveLength(3);
+    const before = changes.length;
+    action(1, "fix").click();
+    expect(changes).toHaveLength(before);
+    expect(editor.engine.text).toContain('fill="#222222"');
+    expect(problems()).toEqual(["Avviso: Il disegno non ha un titolo", "Avviso: Un’immagine non ha una descrizione"]);
+  });
+
+  it("«Scrivi il titolo» porta al campo del titolo", () => {
+    mount(POOR, { level: "standard" });
+    button().click();
+    action(0, "fix").click();
+    const input = host.querySelector<HTMLInputElement>(".draw-title-input")!;
+    expect(document.activeElement).toBe(input);
+    input.value = "Il porto";
+    input.dispatchEvent(new Event("change"));
+    vi.advanceTimersByTime(250);
+    expect(problems()).toEqual(["Nota: Un testo si legge poco", "Avviso: Un’immagine non ha una descrizione"]);
+  });
+
+  it("un'immagine si descrive nella riga, o si dichiara decorativa, ciascuna in un passo", () => {
+    mount(POOR, { level: "standard" });
+    button().click();
+    action(2, "describe").click();
+    const field = panel().querySelector<HTMLInputElement>(".draw-access-describe")!;
+    expect(document.activeElement).toBe(field);
+    field.value = "Il porto al tramonto";
+    key("Enter", {}, field);
+    expect(changes).toHaveLength(1);
+    expect(editor.engine.text).toContain("Il porto al tramonto");
+    expect(spoken()).toBe("Descrizione scritta: «Il porto al tramonto».");
+    expect(problems()).toEqual(["Avviso: Il disegno non ha un titolo", "Nota: Un testo si legge poco"]);
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(POOR);
+    vi.advanceTimersByTime(250);
+    action(2, "decorative").click();
+    expect(editor.engine.text).toBe(POOR.replace('href="foto.png"/>', 'href="foto.png" aria-hidden="true"/>'));
+    expect(spoken()).toMatch(/è decorativa: lo screen reader la salta\.$/);
+    expect(problems()).toHaveLength(2);
+  });
+
+  it("un oggetto bloccato non si corregge da qui: ci si va, e si dice perché", () => {
+    mount(POOR.replace('<text id="o1a1a1a1a"', '<text id="o1a1a1a1a" fub:locked="true"'), { level: "standard" });
+    button().click();
+    expect(action(1, "fix")).toBeNull();
+    action(1, "go").click();
+    expect(spoken()).toMatch(/non si sceglie: è bloccato, nascosto o fuori dal gruppo isolato\.$/);
+    expect(editor.selection).toEqual([]);
+  });
+
+  it("in sola lettura i problemi si guardano soltanto", () => {
+    mount(POOR, { level: "standard" });
+    button().click();
+    editor.setReadOnly(true);
+    expect(panel().querySelector<HTMLElement>(".draw-access-note")!.hidden).toBe(false);
+    expect(rows().map((row) => row.querySelectorAll('[data-action]:not([data-action="go"])').length)).toEqual([0, 0, 0]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("l'ordine di lettura: un clic sceglie l'oggetto, Alt+↓ lo sposta, e se passerebbe sopra un vicino che copre prima lo dice", () => {
+    mount(STACK, { level: "standard" });
+    button().click();
+    expect(panel().querySelector(".draw-access-count")!.textContent).toBe("nessun problema");
+    expect(document.activeElement).toBe(tree());
+    const [first, second, third] = ["oa1a1a1a1", "ob2b2b2b2", "oc3c3c3c3"];
+    const name = (key: string): string => [...tree().querySelectorAll<HTMLElement>('[role="treeitem"]')].find((each) => each.id.endsWith(key))!.textContent!;
+    const firstName = name(first!);
+    item(firstName).click();
+    expect(editor.selection).toEqual([first]);
+    expect(active()).toBe(firstName);
+    expect(document.activeElement).toBe(tree());
+    key("ArrowDown", { altKey: true }, tree());
+    expect(warning().hidden).toBe(false);
+    expect(warning().textContent).toMatch(/passerebbe sopra .*, che copre in parte: ripeti per spostarlo lo stesso\.$/);
+    expect(changes).toEqual([]);
+    key("ArrowDown", { altKey: true }, tree());
+    expect(ids()).toEqual([second, first, third]);
+    expect(changes).toHaveLength(1);
+    expect(warning().hidden).toBe(true);
+    expect(spoken()).toMatch(/ora si legge dopo /);
+    expect(active()).toBe(firstName);
+    // Il vicino lontano non copre niente: si passa subito.
+    key("ArrowDown", { altKey: true }, tree());
+    expect(ids()).toEqual([second, third, first]);
+    // L'ultimo fra i vicini non va oltre; «Leggi prima» lo riporta.
+    const [earlier, later] = [...panel().querySelectorAll<HTMLButtonElement>(".draw-access-moves > button")];
+    expect(later!.disabled).toBe(true);
+    earlier!.click();
+    expect(ids()).toEqual([second, first, third]);
+    // Ogni spostamento è un passo.
+    key("z", { ctrlKey: true });
+    key("z", { ctrlKey: true });
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(STACK);
+  });
+
+  it("«?» elenca i tasti della verifica", () => {
+    mount(SOURCE, { level: "standard" });
+    key("?", { shiftKey: true });
+    const tables = [...dialog().querySelectorAll(".keys-list > table")].map((table) => ({
+      caption: table.querySelector("caption")!.textContent,
+      rows: [...table.querySelectorAll("tr")].map((one) => [one.querySelector("th")!.textContent, one.querySelector("td")!.textContent]),
+    }));
+    expect(tables.find((table) => table.caption === "Accessibilità")?.rows).toEqual([
+      ["↑ o ↓ o Home o End", "Nell’ordine di lettura, l’oggetto prima o dopo, il primo o l’ultimo"],
+      ["Enter o Space", "Nell’ordine di lettura, sceglie l’oggetto e lo mostra"],
+      ["Alt+↑ o Alt+↓", "Nell’ordine di lettura, sposta l’oggetto prima o dopo il suo vicino"],
+      ["Esc", "Dalla verifica torna al foglio"],
+    ]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
 describe("il titolo", () => {
   it("si scrive con un `meta`, e vuoto si toglie", () => {
     mount();
@@ -7537,13 +7858,14 @@ describe("il livello Personalizzato", () => {
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
       "Cronologia · dal livello Standard",
+      "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[13]!.rows).toEqual([["B", "Bézier"]]);
+    expect(tables[14]!.rows).toEqual([["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

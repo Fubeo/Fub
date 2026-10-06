@@ -10,6 +10,7 @@
 // Niente qui tocca il DOM: la sorgente si legge con lo scanner di `xml.ts`, e
 // della sorgente non arriva al documento vivo nemmeno un nodo.
 
+import type { Measures } from "./accessibility";
 import { index as analyzeIndex, truncatedSummary, type Index, type Summary } from "./analysis";
 import { classifyDocument, type Item } from "./classify";
 import { diagnostic, sortDiagnostics, type Diagnostic } from "./diagnostics";
@@ -207,6 +208,20 @@ export function openSource(source: string): Opened {
 /// radice che non è `title` o `desc`: abbastanza per titolo e riepilogo, con
 /// `truncated: true`.
 export function readScene(source: string): Scene {
+  return auditScene(source).scene;
+}
+
+/// Una scena letta e ciò che i controlli su come il disegno si legge hanno
+/// misurato.
+export interface Audit {
+  readonly scene: Scene;
+  readonly measures: Measures;
+}
+
+/// Legge una scena come [`readScene`], con ciò che S009 e S013 hanno
+/// misurato: l'editor ci propone le correzioni. Il lato Rust non ne ha
+/// bisogno, e la scena è la stessa.
+export function auditScene(source: string): Audit {
   const { doc, status, readOnly, version, truncated, tooMany, diagnostics } = openSource(source);
 
   // Le voci di un documento enorme costerebbero più del documento: non
@@ -214,17 +229,19 @@ export function readScene(source: string): Scene {
   // riepilogo e la diagnostica; di un file troncato c'è solo la testa.
   let items: readonly Item[] = [];
   let summary: Summary;
+  let measures: Measures = { contrasts: [], sizes: [] };
   if (truncated) {
     summary = truncatedSummary(status === "foreign", version);
   } else {
     const classified = classifyDocument(doc, !tooMany);
     for (const found of classified.diagnostics) diagnostics.push(found);
     summary = classified.tally.finish(status === "foreign", version, diagnostics);
+    measures = classified.tally.measures;
     items = classified.items;
   }
   const index = analyzeIndex(doc, diagnostics);
   sortDiagnostics(diagnostics);
-  return {
+  const scene: Scene = {
     status,
     readOnly,
     version,
@@ -237,6 +254,7 @@ export function readScene(source: string): Scene {
     summary,
     diagnostics,
   };
+  return { scene, measures };
 }
 
 /// `to_ascii_lowercase` di Rust.

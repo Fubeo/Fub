@@ -443,39 +443,13 @@ export class BoundsBuilder {
   ): void {
     // Estremi uguali: l'arco non si disegna (F.6.2).
     if (from[0] === to[0] && from[1] === to[1]) return;
-    let rx = Math.abs(radii[0]);
-    let ry = Math.abs(radii[1]);
-    if (rx === 0 || ry === 0) {
+    const arc = centerArc(from, radii, rotation, large, sweep, to);
+    if (arc === null) {
       this.include(apply(m, from));
       this.include(apply(m, to));
       return;
     }
-    const radians = toRadians(rotation);
-    const sin = Math.sin(radians);
-    const cos = Math.cos(radians);
-    const dx = (from[0] - to[0]) / 2;
-    const dy = (from[1] - to[1]) / 2;
-    const x1 = cos * dx + sin * dy;
-    const y1 = -sin * dx + cos * dy;
-    const lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
-    if (lambda > 1) {
-      rx *= Math.sqrt(lambda);
-      ry *= Math.sqrt(lambda);
-    }
-    const numerator = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
-    const denominator = rx * rx * y1 * y1 + ry * ry * x1 * x1;
-    let coefficient = Math.sqrt(fmax(numerator / denominator, 0));
-    if (large === sweep) coefficient = -coefficient;
-    const cx1 = (coefficient * rx * y1) / ry;
-    const cy1 = (-coefficient * ry * x1) / rx;
-    const center: Point = [
-      cos * cx1 - sin * cy1 + (from[0] + to[0]) / 2,
-      sin * cx1 + cos * cy1 + (from[1] + to[1]) / 2,
-    ];
-    const theta1 = Math.atan2((y1 - cy1) / ry, (x1 - cx1) / rx);
-    const theta2 = Math.atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx);
-    let delta = remEuclid(theta2 - theta1, TAU);
-    if (!sweep && delta > 0) delta -= TAU;
+    const { center, radii: [rx, ry], sin, cos, theta1, delta } = arc;
     // P(θ) = M·c + A·(cos θ, sin θ), con A = lineare(M) · R(φ) · diag(rx, ry).
     const [a, b, c, d] = m;
     const linear = compose(compose([a, b, c, d, 0, 0], [cos, sin, -sin, cos, 0, 0]), [rx, 0, 0, ry, 0, 0]);
@@ -507,6 +481,198 @@ export class BoundsBuilder {
     this.include([o[0] - half[0], o[1] - half[1]]);
     this.include([o[0] + half[0], o[1] + half[1]]);
   }
+}
+
+/// Un arco ellittico in forma di centro, con la conversione delle note
+/// d'implementazione di SVG (F.6.5): i raggi già ingranditi se non bastavano a
+/// unire gli estremi, la rotazione dell'asse x, l'angolo d'inizio e l'ampiezza
+/// con il segno del verso.
+export interface CenterArc {
+  readonly center: Point;
+  readonly radii: Point;
+  readonly sin: number;
+  readonly cos: number;
+  readonly theta1: number;
+  readonly delta: number;
+}
+
+/// L'arco da `from` a `to`; `null` se un raggio è nullo, e allora l'arco è il
+/// segmento fra gli estremi (F.6.2). Gli estremi uguali, per cui l'arco non si
+/// disegna, li esclude chi chiama.
+export function centerArc(
+  from: Point,
+  radii: Point,
+  rotation: number,
+  large: boolean,
+  sweep: boolean,
+  to: Point,
+): CenterArc | null {
+  let rx = Math.abs(radii[0]);
+  let ry = Math.abs(radii[1]);
+  if (rx === 0 || ry === 0) return null;
+  const radians = toRadians(rotation);
+  const sin = Math.sin(radians);
+  const cos = Math.cos(radians);
+  const dx = (from[0] - to[0]) / 2;
+  const dy = (from[1] - to[1]) / 2;
+  const x1 = cos * dx + sin * dy;
+  const y1 = -sin * dx + cos * dy;
+  const lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
+  if (lambda > 1) {
+    rx *= Math.sqrt(lambda);
+    ry *= Math.sqrt(lambda);
+  }
+  const numerator = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
+  const denominator = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+  let coefficient = Math.sqrt(fmax(numerator / denominator, 0));
+  if (large === sweep) coefficient = -coefficient;
+  const cx1 = (coefficient * rx * y1) / ry;
+  const cy1 = (-coefficient * ry * x1) / rx;
+  const center: Point = [
+    cos * cx1 - sin * cy1 + (from[0] + to[0]) / 2,
+    sin * cx1 + cos * cy1 + (from[1] + to[1]) / 2,
+  ];
+  const theta1 = Math.atan2((y1 - cy1) / ry, (x1 - cx1) / rx);
+  const theta2 = Math.atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx);
+  let delta = remEuclid(theta2 - theta1, TAU);
+  if (!sweep && delta > 0) delta -= TAU;
+  return { center, radii: [rx, ry], sin, cos, theta1, delta };
+}
+
+/// Il punto dell'arco all'angolo `theta`, nelle coordinate del path.
+export function arcPoint(arc: CenterArc, theta: number): Point {
+  const s = Math.sin(theta);
+  const c = Math.cos(theta);
+  const [rx, ry] = arc.radii;
+  return [
+    arc.center[0] + arc.cos * rx * c - arc.sin * ry * s,
+    arc.center[1] + arc.sin * rx * c + arc.cos * ry * s,
+  ];
+}
+
+/// In quante corde [`flatten`] divide una curva o un arco.
+export const CURVE_STEPS = 16;
+
+/// I sottotracciati di un path come poligoni, nelle coordinate di `m`: ogni
+/// curva e ogni arco diventano [`CURVE_STEPS`] corde. Un poligono si intende
+/// chiuso, come un sottotracciato quando lo si riempie. Serve a dire se un
+/// punto sta dentro una figura piena, non a disegnarla: la corda di un quarto
+/// d'ellisse in sedici parti si scosta dall'arco di meno di due millesimi del
+/// raggio.
+export function flatten(segments: readonly Segment[], m: Matrix): Point[][] {
+  const polygons: Point[][] = [];
+  let polygon: Point[] = [];
+  let current: Point = [0, 0];
+  let start: Point = [0, 0];
+  const close = (): void => {
+    if (polygon.length > 2) polygons.push(polygon);
+    polygon = [];
+  };
+  const steps: number[] = [];
+  for (let k = 1; k <= CURVE_STEPS; k++) steps.push(k / CURVE_STEPS);
+  for (const segment of segments) {
+    if (polygon.length === 0 && segment.kind !== "move") polygon.push(apply(m, current));
+    switch (segment.kind) {
+      case "move":
+        close();
+        polygon.push(apply(m, segment.to));
+        current = segment.to;
+        start = segment.to;
+        break;
+      case "line":
+        polygon.push(apply(m, segment.to));
+        current = segment.to;
+        break;
+      case "quad": {
+        const [c, p] = [segment.control, segment.to];
+        for (const t of steps) {
+          const u = 1 - t;
+          polygon.push(apply(m, [
+            u * u * current[0] + 2 * u * t * c[0] + t * t * p[0],
+            u * u * current[1] + 2 * u * t * c[1] + t * t * p[1],
+          ]));
+        }
+        current = p;
+        break;
+      }
+      case "cubic": {
+        const { c1, c2, to: p } = segment;
+        for (const t of steps) {
+          const u = 1 - t;
+          const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+          polygon.push(apply(m, [
+            a * current[0] + b * c1[0] + c * c2[0] + d * p[0],
+            a * current[1] + b * c1[1] + c * c2[1] + d * p[1],
+          ]));
+        }
+        current = p;
+        break;
+      }
+      case "arc": {
+        const to = segment.to;
+        if (current[0] !== to[0] || current[1] !== to[1]) {
+          const arc = centerArc(current, segment.radii, segment.rotation, segment.large, segment.sweep, to);
+          if (arc === null) {
+            polygon.push(apply(m, to));
+          } else {
+            for (const t of steps) polygon.push(apply(m, arcPoint(arc, arc.theta1 + arc.delta * t)));
+          }
+        }
+        current = to;
+        break;
+      }
+      case "close":
+        close();
+        current = start;
+        break;
+    }
+  }
+  close();
+  return polygons;
+}
+
+/// Il numero di avvolgimento di `p` intorno ai poligoni: diverso da zero se
+/// `p` sta dentro con la regola `nonzero`, quella di SVG quando `fill-rule`
+/// manca, e §4 non lo ammette. Un lato conta se attraversa l'orizzontale di
+/// `p` salendo o scendendo, con l'estremo basso compreso e l'alto escluso:
+/// così un vertice sull'orizzontale conta una volta sola.
+export function winding(polygons: readonly (readonly Point[])[], p: Point): number {
+  let winding = 0;
+  for (const polygon of polygons) {
+    for (let i = 0; i < polygon.length; i++) {
+      const a = polygon[i]!;
+      const b = polygon[(i + 1) % polygon.length]!;
+      const side = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
+      if (a[1] <= p[1]) {
+        if (b[1] > p[1] && side > 0) winding++;
+      } else if (b[1] <= p[1] && side < 0) {
+        winding--;
+      }
+    }
+  }
+  return winding;
+}
+
+/// I segmenti di un'ellisse di centro `center` e raggi `radii`: quattro archi
+/// a partire dal punto a destra del centro, nel verso di SVG.
+export function ellipsePath([cx, cy]: Point, [rx, ry]: Point): Segment[] {
+  const arc = (to: Point): Segment => ({ kind: "arc", radii: [rx, ry], rotation: 0, large: false, sweep: true, to });
+  return [
+    { kind: "move", to: [cx + rx, cy] },
+    arc([cx, cy + ry]),
+    arc([cx - rx, cy]),
+    arc([cx, cy - ry]),
+    arc([cx + rx, cy]),
+    { kind: "close" },
+  ];
+}
+
+/// I segmenti di un poligono o di una polilinea: SVG riempie anche la
+/// polilinea, come se fosse chiusa.
+export function pointsPath(points: readonly Point[]): Segment[] {
+  const segments: Segment[] = points.map((to, i) => ({ kind: i === 0 ? "move" : "line", to }));
+  if (segments.length > 0) segments.push({ kind: "close" });
+  return segments;
 }
 
 /// I segmenti di un rettangolo, con gli angoli arrotondati da `rx` e `ry`
