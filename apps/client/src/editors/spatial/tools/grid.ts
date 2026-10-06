@@ -25,8 +25,9 @@ import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";
 
 /// La griglia, e ciò che sta con lei nel menu «Pagina e griglia» e si
-/// ricorda con lei: le guide intelligenti, i righelli e le loro guide; e come
-/// si presentano il pannello delle proprietà e la barra della selezione.
+/// ricorda con lei: le guide intelligenti, i righelli e le loro guide, le
+/// forme dal tratto; e come si presentano il pannello delle proprietà e la
+/// barra della selezione.
 export interface Grid {
   /// La griglia si vede.
   readonly shown: boolean;
@@ -50,6 +51,9 @@ export interface Grid {
   /// La barra della selezione sta accanto alla selezione, e non in cima al
   /// foglio.
   readonly bar: boolean;
+  /// Un tratto a penna tenuto fermo alla fine diventa la forma a cui
+  /// somiglia (`recognize.ts`).
+  readonly shapes: boolean;
   /// Le sezioni del pannello delle proprietà che sono chiuse.
   readonly closed: readonly string[];
 }
@@ -68,10 +72,10 @@ export const GRID_STEPS: Readonly<Record<LengthUnit, readonly number[]>> = {
 /// Il passo di un'unità che nessuno ha ancora scelto, nell'unità.
 export const UNIT_STEP: Readonly<Record<LengthUnit, number>> = { px: 20, mm: 5, cm: 0.5, in: 0.25, pt: 12 };
 
-/// La prima volta la griglia e i righelli sono spenti, le guide accese, come
-/// nei programmi di disegno che chi disegna conosce già. Il pannello si apre
-/// da sé se c'è posto, con «Trasforma» e gli attributi chiusi, e la barra
-/// sta accanto alla selezione.
+/// La prima volta la griglia e i righelli sono spenti, le guide e le forme dal
+/// tratto accese, come nei programmi di disegno che chi disegna conosce già.
+/// Il pannello si apre da sé se c'è posto, con «Trasforma» e gli attributi
+/// chiusi, e la barra sta accanto alla selezione.
 export const DEFAULT_GRID: Grid = {
   shown: false,
   snap: false,
@@ -82,6 +86,7 @@ export const DEFAULT_GRID: Grid = {
   rulerGuides: true,
   panel: null,
   bar: true,
+  shapes: true,
   closed: ["transform", "attributes"],
 };
 

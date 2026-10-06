@@ -365,7 +365,9 @@ import {
 } from "./registry";
 import { cornerAttrs, cornerCursor, cornerDrag, cornerGrip, cornerSpot, shapeFacts, shapeOps, toolFacts, toolWith, type CornerGrip } from "./reshape";
 import { flagged, flagOps, hasLikeness, inverseOf, nodesOf, similarTo, type Flag, type Likeness } from "./selecting";
-import { constrainEnd, polygonCount, POLYGON_TOOL, shapeElem, stepRatio, withCount, type PolygonTool, type ShapeTool } from "./shapes";
+import { constrainEnd, polygonCount, POLYGON_TOOL, shapeElem, stepRatio, withCount, type PolygonTool, type ShapeStyle, type ShapeTool } from "./shapes";
+import { centerOf, heldShape, mapped, regular, shapeOfRecognized, similar, starOf, type Recognized } from "./recognize";
+import { heldShapeOps, inkShapeOps, isPenStroke } from "./inkshape";
 import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -513,6 +515,14 @@ const ERASER_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 8, 
 /// trascinamento.
 const DRAG_PX: Readonly<Record<InkPointerType, number>> = { pen: 3, mouse: 3, touch: 8 };
 
+/// Quanto resta fermo il puntatore alla fine di un tratto a penna perché il
+/// tratto diventi una forma, in millisecondi.
+const HOLD_MS = 500;
+
+/// Quanto può tremare il puntatore che sta fermo, in pixel: la penna e il
+/// dito non stanno mai fermi del tutto, il mouse sì.
+const HOLD_PX: Readonly<Record<InkPointerType, number>> = { pen: 4, mouse: 3, touch: 8 };
+
 /// Il Lazo tiene un punto ogni tanti pixel dello schermo, e al massimo
 /// tanti punti: oltre, ne lascia uno ogni due, e il lazo resta lo stesso a
 /// occhio.
@@ -582,7 +592,7 @@ const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
 };
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "transform", "apply", "path", "boolean", "outline"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline"];
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -748,6 +758,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-transform": ["M4 10h10v10H4z", "M10 4a10 10 0 0 1 10 10", "M16.5 11.5L20 14l2.5-3.5"],
   "draw-apply-transform": ["M2 17L6 5h9l-4 12z", "M15 16.5l2.5 2.5L22 14"],
   "draw-to-path": ["M5 19C5 11 11 5 19 5", "M3 17h4v4H3z", "M17 3h4v4h-4z"],
+  "draw-to-shape": ["M3 19c2-3 3.5 0 5.5-2.5S12 16 14 13", "M13 3h8v8h-8z"],
   "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
   "draw-bezier": ["M12 21L7 12l3-8h4l3 8z", "M12 21v-7.5", "M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
@@ -824,6 +835,26 @@ interface InkGesture extends GestureBase {
   readonly scene: InkSample[];
   readonly local: InkSample[];
   predicted: readonly InkSample[];
+  /// Quando è cominciato, sull'orologio di `performance.now()`.
+  readonly began: number;
+  /// Il tratto può diventare una forma tenendolo fermo alla fine: è a
+  /// penna, viene dal puntatore e non continua uno chiuso al limite.
+  readonly holds: boolean;
+  /// Dove il puntatore si è fermato, nella scena: i campioni dopo non se ne
+  /// sono allontanati.
+  still: Point | null;
+  /// La forma che il tratto è diventato; `null` finché è inchiostro.
+  held: Held | null;
+}
+
+/// Un tratto a penna diventato forma, tenuto fermo alla fine: la forma
+/// riconosciuta, nelle coordinate del livello; dove il puntatore si era
+/// fermato e dov'è, nella scena; e se si è mosso abbastanza da regolarla.
+interface Held {
+  readonly shape: Recognized;
+  readonly from: Point;
+  end: Point;
+  moved: boolean;
 }
 
 interface ShapeGesture extends GestureBase {
@@ -1187,6 +1218,7 @@ function checkedGrid(next: Grid, before: Grid): Grid {
     panel: next.panel === null || typeof next.panel === "boolean" ? next.panel : before.panel,
     bar: flag(next.bar, before.bar),
     closed: validClosed(next.closed) ?? before.closed,
+    shapes: flag(next.shapes, before.shapes),
   };
 }
 
@@ -1749,6 +1781,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const orderButton = arrangeButton("draw.order", "draw-order", null, () => openMenu(orderButton, orderItems()));
   const intoButton = arrangeButton("draw.into_layer", "draw-into-layer", null, () => openMenu(intoButton, intoItems()));
   const alignButton = arrangeButton("draw.align", "draw-align", null, () => openMenu(alignButton, alignItems()));
+  // Dal livello Standard: i tratti a penna scelti diventano le forme a cui
+  // somigliano. C'è solo quando ce n'è uno.
+  const shapeButton = arrangeButton("draw.to_shape", "draw-to-shape", null, () => shapeSelectedInk());
   // Dal livello Esperto: ruotare, scalare e inclinare di quanto si scrive.
   // Col pannello delle proprietà, porta ai campi di «Trasforma».
   const transformButton = arrangeButton("draw.transform", "draw-transform", TRANSFORM_BINDING, () => {
@@ -3750,6 +3785,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (has("properties")) transformButton.removeAttribute("aria-haspopup");
     else transformButton.setAttribute("aria-haspopup", "dialog");
     applyButton.hidden = !has("apply");
+    shapeButton.hidden = !has("recognize") || !units.some(holdsPenStroke);
     pathButton.hidden = !has("path");
     booleanButton.hidden = !has("boolean");
     outlineButton.hidden = !has("outline");
@@ -3825,7 +3861,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       propertiesButton.removeAttribute("aria-expanded");
       if (!panel.element.hidden) showPanel(false, false, false);
     }
-    pageButton.hidden = !has("grid") && !has("guides") && !has("rulers");
+    pageButton.hidden = !has("grid") && !has("guides") && !has("rulers") && !has("recognize");
     insertGroup.hidden = !insertsImages(features);
     imageButton.disabled = !canEdit;
     nestInspector(panelled && has("attributes"));
@@ -4888,7 +4924,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         // Il seguito di un tratto chiuso al limite non si assottiglia alla
         // giunzione.
         if (start.continued) brush = { ...brush, taperStart: 0 };
-        return { ...base, kind: "ink", tool, color, brush, to, ids, scene: [], local: [], predicted: [] };
+        return {
+          ...base,
+          kind: "ink",
+          tool,
+          color,
+          brush,
+          to,
+          ids,
+          scene: [],
+          local: [],
+          predicted: [],
+          began: start.timeStamp,
+          holds: tool === "pen" && start.id >= 0 && !start.continued,
+          still: null,
+          held: null,
+        };
       }
       case "rect":
       case "ellipse":
@@ -5603,14 +5654,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     painter.setDraft(faded.size === 0 && fadedContainers.size === 0 ? null : { faded, fadedContainers });
   };
 
-  const finishInk = (g: InkGesture, stroke: FinishedStroke): void => {
+  /// Il tratto del gesto `g` entra nel disegno, sottile alla fine se non
+  /// continua in un altro. Torna il suo id e il livello che l'ha ricevuto;
+  /// `null` se non è entrato.
+  const writeInk = (g: InkGesture, split: boolean): { readonly id: string; readonly to: Destination } | null => {
     // Il livello di adesso: mentre il gesto durava, il disegno può essere
     // cambiato.
     const to = target(g.ids);
-    if (to === null) return;
+    if (to === null) return null;
     const local = sameDestination(to, g.to) ? g.local : g.scene.map((sample) => toLocal(sample, to.inverse));
     let brush = g.brush;
-    if (stroke.split) brush = { ...brush, taperEnd: 0 };
+    if (split) brush = { ...brush, taperEnd: 0 };
     let ink;
     let outline;
     try {
@@ -5618,20 +5672,158 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       outline = pf1Outline(ink, brush);
     } catch {
       announce(t("draw.ink_failed"));
-      return;
+      return null;
     }
-    if (outline.length === 0) return;
+    if (outline.length === 0) return null;
     const bounds = new BoundsBuilder();
     for (const point of outline) bounds.include(apply(to.matrix, point));
     const id = g.ids.next("object");
-    const at = new Date(performance.timeOrigin + stroke.timeStamp).toISOString();
+    const at = new Date(performance.timeOrigin + g.began).toISOString();
     const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, g.color, brush, ink, at, g.tool))];
     const page = pageFor(scene.root.page, bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });
-    const marker = g.tool === "highlighter";
-    if (commit(marker ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) !== null) {
-      announce(`${t(marker ? "draw.added.highlight" : "draw.added.stroke")} ${objects()}`);
+    return commit(g.tool === "highlighter" ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) === null ? null : { id, to };
+  };
+
+  const finishInk = (g: InkGesture, stroke: FinishedStroke): void => {
+    if (writeInk(g, stroke.split) !== null) announce(`${t(g.tool === "highlighter" ? "draw.added.highlight" : "draw.added.stroke")} ${objects()}`);
+  };
+
+  // --- Le forme dal tratto ---------------------------------------------------
+  //
+  // Un tratto a penna tenuto fermo alla fine per mezzo secondo diventa la
+  // forma a cui somiglia (`recognize.ts`), e lo si dice. Finché il puntatore
+  // resta giù, muoverlo regola la forma: la fine di una linea lo segue, una
+  // forma chiusa gira e cresce attorno al suo centro; Maiusc la tiene
+  // regolare. Alzato il puntatore, il tratto entra nel disegno e la forma
+  // prende il suo posto: due passi, e annulla riporta l'inchiostro. Esc
+  // lascia tutto, come per ogni tratto.
+
+  /// Il mezzo secondo della tenuta ferma: uno solo, perché il gesto è uno.
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  life.add(() => clearTimeout(holdTimer));
+
+  /// Vero se un tratto a penna tenuto fermo diventa una forma.
+  const shapesOn = (): boolean => has("recognize") && grid.shapes;
+
+  /// Segue i campioni nuovi di `g`: ogni volta che il puntatore esce dal
+  /// punto fermo, il punto fermo diventa lui, e il mezzo secondo riparte.
+  const watchStill = (g: InkGesture, samples: readonly InkSample[]): void => {
+    if (!g.holds || !shapesOn()) return;
+    let restart = false;
+    for (const sample of samples) {
+      if (g.still !== null && Math.hypot(sample.x - g.still[0], sample.y - g.still[1]) * camera.scale <= HOLD_PX[g.pointer]) continue;
+      g.still = [sample.x, sample.y];
+      restart = true;
     }
+    if (!restart) return;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => holdStroke(g), HOLD_MS);
+  };
+
+  /// La forma a cui somiglia il tratto `g`, nelle coordinate del suo
+  /// livello: riconosciuta nella scena, com'è sullo schermo, o nel livello
+  /// se il livello deforma. `null` per un tratto piccolo quanto la
+  /// scrittura, o che non somiglia a una forma.
+  const strokeShapeOf = (g: InkGesture): Recognized | null => {
+    const still = HOLD_PX[g.pointer];
+    const seen = heldShape(g.scene.map((sample): Point => [sample.x, sample.y]), camera.scale, still);
+    if (seen === null) return null;
+    return mapped(seen, g.to.inverse) ?? heldShape(g.local.map((sample): Point => [sample.x, sample.y]), camera.scale * scaleOf(g.to.matrix), still);
+  };
+
+  /// Il mezzo secondo fermo è passato: il tratto diventa la sua forma, se
+  /// ne ha una; se no resta inchiostro, e si continua a disegnare.
+  const holdStroke = (g: InkGesture): void => {
+    if (current !== g || g.held !== null || g.still === null || !shapesOn()) return;
+    const shape = strokeShapeOf(g);
+    if (shape === null) return;
+    g.held = { shape, from: g.still, end: g.still, moved: false };
+    g.predicted = [];
+    overlay.setInk(INK_KEY, null);
+    overlay.flush();
+    drawHeld(g);
+    announce(t("draw.recognize.said", { kind: shapeSaid(heldNow(g)) }));
+  };
+
+  /// La forma del tratto `g` adesso: regolata dal puntatore, e regolare con
+  /// Maiusc.
+  const heldNow = (g: InkGesture): Recognized => {
+    const held = g.held!;
+    let shape = held.shape;
+    if (held.moved) {
+      const from = apply(g.to.inverse, held.from);
+      const end = apply(g.to.inverse, held.end);
+      if (shape.kind === "line" || shape.kind === "arrow") {
+        shape = { ...shape, to: [shape.to[0] + end[0] - from[0], shape.to[1] + end[1] - from[1]] };
+      } else {
+        const c = centerOf(shape);
+        const before = Math.hypot(from[0] - c[0], from[1] - c[1]);
+        if (before > 0) {
+          const turn = ((Math.atan2(end[1] - c[1], end[0] - c[0]) - Math.atan2(from[1] - c[1], from[0] - c[0])) * 180) / Math.PI;
+          shape = similar(shape, c, Math.hypot(end[0] - c[0], end[1] - c[1]) / before, turn);
+        }
+      }
+    }
+    return shift ? regular(shape) : shape;
+  };
+
+  const heldStyle = (g: InkGesture): ShapeStyle => ({ color: g.color, width: g.brush.size });
+
+  const drawHeld = (g: InkGesture): void => {
+    showShape(shapeOfRecognized(heldNow(g), "preview", heldStyle(g)), g.to.matrix);
+  };
+
+  /// Il puntatore del tratto diventato forma è in `p`: oltre il tremito
+  /// della mano ferma, la forma lo segue.
+  const moveHeld = (g: InkGesture, p: Point): void => {
+    const held = g.held!;
+    held.end = p;
+    if (!held.moved && Math.hypot(p[0] - held.from[0], p[1] - held.from[1]) * camera.scale > HOLD_PX[g.pointer]) held.moved = true;
+    if (held.moved) drawHeld(g);
+  };
+
+  /// Che cosa è una forma riconosciuta, a parole: «Rettangolo», «Quadrato»,
+  /// «Quadrilatero», «Esagono», «Stella a 5 punte».
+  const shapeSaid = (shape: Recognized): string => {
+    switch (shape.kind) {
+      case "line":
+        return t("draw.tool.line");
+      case "arrow":
+        return t("draw.tool.arrow");
+      case "rect":
+        return t(shape.width === shape.height ? "draw.kind.ngon.4" : "draw.tool.rect");
+      case "ellipse":
+        return t(shape.rx === shape.ry ? "draw.kind.circle" : "draw.tool.ellipse");
+      case "regular":
+        return polygonalKind({ shape: shape.ratio === null ? "polygon" : "star", count: shape.count });
+      case "polygon": {
+        const star = starOf(shape.points);
+        if (star !== null) return polygonalKind({ shape: "star", count: star.count });
+        return shape.points.length === 4 ? t("draw.kind.quad") : polygonalKind({ shape: "polygon", count: shape.points.length });
+      }
+    }
+  };
+
+  /// Il tratto tenuto fermo entra nel disegno, poi la sua forma ne prende il
+  /// posto: due passi, così annulla riporta l'inchiostro. Una forma che non
+  /// si disegna più, schiacciata dal puntatore, lascia il tratto.
+  const finishHeld = (g: InkGesture): void => {
+    const written = writeInk(g, false);
+    if (written === null) return;
+    let shape: Recognized | null = heldNow(g);
+    // Il livello di adesso, se mentre il gesto durava è cambiato.
+    if (!sameDestination(written.to, g.to)) shape = mapped(shape, compose(written.to.inverse, g.to.matrix));
+    const unit = shape === null ? null : currentIndex().get(written.id);
+    const shaped = unit === null || shape === null ? null : heldShapeOps(engine.model!, unit, shape, g.ids);
+    if (shaped === null) {
+      announce(`${t("draw.added.stroke")} ${objects()}`);
+      return;
+    }
+    const ops: Op[] = [...shaped.ops];
+    const page = pageFor(scene.root.page, shaped.extent);
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    if (commit("draw.action.to_shape", asGesture(ops)) !== null) announce(`${t("draw.shaped.held", { kind: shapeSaid(shape!) })} ${objects()}`);
   };
 
   /// La forma del gesto `g` entra nel disegno, e lo si dice, con `note`, a
@@ -6075,8 +6267,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     toScene: (clientX, clientY) => screenToWorld(camera, localPoint(clientX, clientY)),
     onStart(start) {
       // Un gesto lungo che la pipeline divide al limite dei campioni
-      // continua nel tratto nuovo; il tratto a penna si scrive a pezzi.
-      if (start.continued && current !== null && current.kind !== "ink" && current.kind !== "refused") {
+      // continua nel tratto nuovo; il tratto a penna si scrive a pezzi,
+      // tranne quello diventato forma, che è ormai un gesto solo.
+      if (start.continued && current !== null && current.kind !== "refused" && (current.kind !== "ink" || current.held !== null)) {
         current.stroke = start.id;
         return;
       }
@@ -6087,11 +6280,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (g === null || g.stroke !== id || samples.length === 0) return;
       switch (g.kind) {
         case "ink":
+          if (g.held !== null) {
+            moveHeld(g, toPoint(samples[samples.length - 1]!));
+            break;
+          }
           for (const sample of samples) {
             g.scene.push(sample);
             g.local.push(toLocal(sample, g.to.inverse));
           }
           drawInk(g);
+          watchStill(g, samples);
           break;
         case "shape":
           // Il primo punto si aggancia subito, l'ultimo a ogni disegno:
@@ -6135,17 +6333,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     onPredicted(id, samples) {
       const g = current;
-      if (g === null || g.stroke !== id || g.kind !== "ink") return;
+      if (g === null || g.stroke !== id || g.kind !== "ink" || g.held !== null) return;
       g.predicted = samples.map((sample) => toLocal(sample, g.to.inverse));
       drawInk(g);
     },
     onEnd(stroke) {
       const g = current;
       if (g === null || g.stroke !== stroke.id) return;
-      if (stroke.split && g.kind !== "ink") return;
+      if (stroke.split && (g.kind !== "ink" || g.held !== null)) return;
       switch (g.kind) {
         case "ink":
           current = null;
+          clearTimeout(holdTimer);
+          if (g.held !== null) {
+            // La forma è già a schermo al posto del tratto: la scena la
+            // disegna nello stesso gestore.
+            finishHeld(g);
+            showShape(null, g.to.matrix);
+            return;
+          }
           // Prima il tratto nella scena, poi via quello in corso: nello
           // stesso gestore, quindi a schermo non c'è un fotogramma senza
           // nessuno dei due.
@@ -6193,6 +6399,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const g = current;
       if (g === null || g.stroke !== id) return;
       current = null;
+      if (g.kind === "ink") clearTimeout(holdTimer);
       if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso") select(g.base);
       if (g.kind === "select" || g.kind === "guide") showGrip(null);
       // I nodi tornano com'erano, e l'oggetto con loro.
@@ -7378,6 +7585,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange("draw.action.to_path", traced)) announce(`${plural(traced.changed, "draw.traced.one", "draw.traced.other")}${refused}`);
   }
 
+  /// Vero se `unit` è un tratto a penna, o ne contiene uno che non è
+  /// bloccato.
+  function holdsPenStroke(unit: Unit): boolean {
+    if (unit.role === "group" || unit.role === "link") return currentIndex().children(unit).some(holdsPenStroke);
+    return isPenStroke(unit.node);
+  }
+
+  /// «Rendi forma», dal livello Standard: ogni tratto a penna scelto diventa
+  /// la forma a cui somiglia, in un passo di annulla. Quelli che non
+  /// somigliano a una forma restano inchiostro, e lo si dice.
+  function shapeSelectedInk(): void {
+    const units = arranging("recognize");
+    if (units === null) return;
+    const shaped = inkShapeOps(engine.model!, currentIndex(), units, newIds());
+    const refused = shaped.refused === 0 ? "" : ` ${plural(shaped.refused, "draw.shaped.refused.one", "draw.shaped.refused.other")}`;
+    if (shaped.ops.length === 0) {
+      announce(`${t("draw.unchanged")}${refused}`);
+      return;
+    }
+    if (arrange("draw.action.to_shape", shaped, shaped.extent)) announce(`${plural(shaped.changed, "draw.shaped.one", "draw.shaped.other")}${refused}`);
+  }
+
   /// Perché un'operazione booleana non si fa, a parole.
   const refusal = (refused: Refused): string =>
     refused.reason === "not_shapes" ? plural(refused.count, "draw.boolean.not_shapes.one", "draw.boolean.not_shapes.other") : t(REFUSALS[refused.reason]);
@@ -7838,6 +8067,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (grid.guides !== before.guides) announce(t(grid.guides ? "draw.guides.on" : "draw.guides.off"));
     else if (grid.rulers !== before.rulers) announce(t(grid.rulers ? "draw.rulers.shown" : "draw.rulers.hidden"));
     else if (grid.rulerGuides !== before.rulerGuides) announce(t(grid.rulerGuides ? "draw.rulers.guides.shown" : "draw.rulers.guides.hidden"));
+    else if (grid.shapes !== before.shapes) announce(t(grid.shapes ? "draw.recognize.on" : "draw.recognize.off"));
     else if (grid.bar !== before.bar) announce(t(grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));
     // Il pannello aperto o chiuso, e le sue sezioni, si ricordano in silenzio:
     // lo si vede, e il pulsante lo dice.
@@ -7927,9 +8157,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   /// Le voci di «Pagina e griglia»: la griglia, il suo passo nell'unità del
-  /// documento, le guide intelligenti, i righelli con le loro guide e
-  /// l'unità, dove sta la barra della selezione, e la pagina, ciascuna se il
-  /// livello la offre. Adattare la pagina si spegne, e dice perché, quando
+  /// documento, le guide intelligenti, le forme dal tratto, i righelli con le
+  /// loro guide e l'unità, dove sta la barra della selezione, e la pagina,
+  /// ciascuna se il livello la offre. Adattare la pagina si spegne, e dice perché, quando
   /// non cambierebbe niente.
   const pageItems = (): MenuItem[] => {
     const unit = docUnit();
@@ -7976,10 +8206,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           },
         ]
       : [];
+    // Accanto alle guide intelligenti: anche lei aiuta mentre si disegna.
+    const recognizeItems: MenuItem[] = has("recognize")
+      ? [
+          {
+            label: t("draw.feature.recognize"),
+            choice: "checkbox",
+            checked: grid.shapes,
+            separator: has("grid") && !has("guides"),
+            description: t("draw.recognize.hint"),
+            run: () => changeGrid({ ...grid, shapes: !grid.shapes }),
+          },
+        ]
+      : [];
     const barItems: MenuItem[] = BAR_FEATURES.some(has)
       ? [{ label: t("draw.bar.beside"), choice: "checkbox", checked: grid.bar, separator: true, run: () => changeGrid({ ...grid, bar: !grid.bar }) }]
       : [];
-    if (!has("grid")) return [...(has("guides") ? [guidesItem] : []), ...rulersItems, ...barItems];
+    if (!has("grid")) return [...(has("guides") ? [guidesItem] : []), ...recognizeItems, ...rulersItems, ...barItems];
     return [
       { label: t("draw.grid.show"), choice: "checkbox", checked: grid.shown, hint: "#", run: () => changeGrid({ ...grid, shown: !grid.shown }) },
       {
@@ -7998,6 +8241,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         run: () => changeGrid(withStep(grid, unit, each)),
       })),
       ...(has("guides") ? [guidesItem] : []),
+      ...recognizeItems,
       ...rulersItems,
       ...barItems,
       fitItem,
@@ -8412,6 +8656,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti delle forme dal tratto, se le parti `at` le offrono.
+  const recognizeKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("recognize") ? [{ title: t("draw.feature.recognize"), rows: [["Shift", t("draw.keys.recognize.regular")]] }] : [];
+
   /// I tasti della selezione avanzata.
   const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("selection")
@@ -8463,6 +8711,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...selectionKeys(at),
     ...nodeToolKeys(at),
     ...polygonKeys(at),
+    ...recognizeKeys(at),
     ...bezierKeys(at),
     ...textKeys(at),
     ...gridKeys(at),
@@ -9232,6 +9481,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (event.key === "Alt") alt = event.type === "keydown";
     else return;
     if (current?.kind === "shape") drawShape(current);
+    else if (current?.kind === "ink" && current.held !== null && event.key === "Shift") drawHeld(current);
     else if (current?.kind === "select" && (current.mode === "move" || current.mode === "resize" || current.mode === "rotate")) selectUpdate(current);
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);

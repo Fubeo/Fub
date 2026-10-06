@@ -568,7 +568,7 @@ describe("il livello e la griglia del disegno", () => {
     press("#");
     expect(gridShown()).toBe(true);
     await waitFor("la griglia si ricorda", () => host.atGate("setViewState").some((call) => call.args[0] === "draw.grid"));
-    expect(await host.module.api.viewState("draw.grid")).toEqual({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    expect(await host.module.api.viewState("draw.grid")).toEqual({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
 
     await open("albero.svg");
     expect(await activeTab()).toMatchObject({ k: "doc", doc: "albero.svg" });

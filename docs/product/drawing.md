@@ -14,8 +14,7 @@ testo con l'anteprima accanto, come descrive
 
 Il codice dell'editor si scarica la prima volta che un disegno si apre, e non
 pesa su chi non ne apre. Se non arriva, il riquadro lo dice, e «Apri come
-sorgente» mostra comunque il testo
-(`apps/client/src/editors/spatial/lazy.ts`).
+sorgente» mostra comunque il testo (`apps/client/src/editors/spatial/lazy.ts`).
 
 Il file resta un SVG che qualunque browser o editor apre. I dati che servono a
 Fub stanno in pochi attributi del namespace `fub`; la forma esatta è nel
@@ -87,6 +86,8 @@ Lo Standard aggiunge:
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
   e spessori suoi, 8, 16 e 24 unità, e la penna ritrova i propri quando torna;
+- le **forme dal tratto**: un tratto a penna tenuto fermo alla fine diventa
+  una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md));
 - il **Poligono** (`Y`), dopo la freccia: poligoni regolari e stelle che si
   cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md));
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
@@ -363,10 +364,9 @@ fuoco esce dal foglio, che non lo trattiene mai. `Home` e `Fine` scelgono il
 primo e l'ultimo oggetto. `Invio` porta al pannello delle proprietà;
 all'Essenziale apre posizione e misure della selezione, o senza selezione
 titolo, descrizione e pagina. `?` elenca i tasti del livello di adesso, e
-«Mostra tutto» quelli dei livelli sopra.
-
-Ridimensionare scrive un `transform`: anche lo spessore del contorno segue la
-scala, e il riquadro che si chiede è quello che l'oggetto occupa.
+«Mostra tutto» quelli dei livelli sopra. Ridimensionare scrive un
+`transform`: anche lo spessore del contorno segue la scala, e il riquadro che
+si chiede è quello che l'oggetto occupa.
 
 «Oggetti», nella barra, apre accanto al foglio l'albero degli oggetti: i
 livelli e i loro oggetti, con la stessa selezione del foglio. Le frecce

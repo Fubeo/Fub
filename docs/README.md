@@ -42,6 +42,7 @@ flowchart LR
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, appunti](product/drawing-clipboard.md)
 - [Disegni, poligoni e stelle](product/drawing-shapes.md)
+- [Disegni, forme dal tratto](product/drawing-ink-shapes.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)

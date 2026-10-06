@@ -236,11 +236,11 @@ describe("la griglia ricordata", () => {
   it("si legge dallo stato di vista, e ciò che non è una griglia vale quella di serie", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid } = await boot(host);
-    const standard = { shown: false, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] };
+    const standard = { shown: false, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] };
     expect(currentGrid()).toEqual(standard);
     expect(await readGrid(), "niente di ricordato").toEqual(standard);
 
-    const chosen = { shown: true, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] };
+    const chosen = { shown: true, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] };
     await host.module.api.setViewState(GRID_KEY, chosen);
     expect(await readGrid()).toEqual(chosen);
     expect(currentGrid()).toEqual(chosen);
@@ -258,6 +258,7 @@ describe("la griglia ricordata", () => {
       { shown: true, snap: true, step: 50, steps: "mm" },
       { shown: true, snap: true, step: 50, panel: "sì" },
       { shown: true, snap: true, step: 50, bar: 1 },
+      { shown: true, snap: true, step: 50, shapes: "sì" },
       { shown: true, snap: true, step: 50, closed: "look" },
       { shown: true, snap: true, step: 50, closed: [7] },
     ]) {
@@ -266,10 +267,10 @@ describe("la griglia ricordata", () => {
     }
   });
 
-  it("ricorda il pannello delle proprietà, la barra e le sezioni chiuse", async () => {
+  it("ricorda il pannello delle proprietà, la barra, le forme dal tratto e le sezioni chiuse", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
-    const chosen = { shown: false, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: false, bar: false, closed: ["look", "look"] };
+    const chosen = { shown: false, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: false, bar: false, shapes: false, closed: ["look", "look"] };
     await host.module.api.setViewState(GRID_KEY, chosen);
     expect(await readGrid()).toEqual({ ...chosen, closed: ["look"] });
   });
@@ -278,23 +279,23 @@ describe("la griglia ricordata", () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
     await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10 });
-    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
   });
 
   it("una griglia ricordata prima dei righelli li ha spenti, e dei passi delle unità tiene quelli buoni", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
     await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, guides: false });
-    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
     const steps = { mm: 18.9, cm: 0, in: "24", pt: 5000, px: 40, km: 10 };
     await host.module.api.setViewState(GRID_KEY, { shown: false, snap: true, step: 20, steps, guides: true, rulers: true, rulerGuides: false });
-    expect(await readGrid()).toEqual({ shown: false, snap: true, step: 20, steps: { mm: 18.9 }, guides: true, rulers: true, rulerGuides: false, panel: null, bar: true, closed: ["transform", "attributes"] });
+    expect(await readGrid()).toEqual({ shown: false, snap: true, step: 20, steps: { mm: 18.9 }, guides: true, rulers: true, rulerGuides: false, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
   });
 
   it("se lo stato di vista non si legge, resta l'ultima griglia", async () => {
     const host = createFakeHost();
     const { readGrid, saveGrid } = await boot(host);
-    const chosen = { shown: true, snap: false, step: 10, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] };
+    const chosen = { shown: true, snap: false, step: 10, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] };
     saveGrid(chosen);
     await settle();
     const heal = host.fault("viewState");
@@ -305,8 +306,8 @@ describe("la griglia ricordata", () => {
   it("si ricorda nell'ordine delle scelte, e la lettura aspetta le scritture", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid, saveGrid } = await boot(host);
-    const shown = { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] };
-    const snapped = { shown: true, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] };
+    const shown = { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] };
+    const snapped = { shown: true, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] };
 
     const release = host.throttle("setViewState");
     saveGrid(shown);
@@ -328,12 +329,12 @@ describe("la griglia ricordata", () => {
   it("una scelta fatta mentre si legge vale più di ciò che si legge", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid, saveGrid } = await boot(host);
-    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
 
     const release = host.throttle("viewState");
     const reading = readGrid();
     await settle();
-    const chosen = { shown: false, snap: false, step: 5, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] };
+    const chosen = { shown: false, snap: false, step: 5, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] };
     saveGrid(chosen);
     release();
     expect(await reading).toEqual(chosen);
@@ -346,14 +347,14 @@ describe("la griglia ricordata", () => {
     clearHistory();
 
     const heal = host.fault("setViewState", "disco pieno");
-    saveGrid({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] });
+    saveGrid({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] });
     await settle();
     expect(recentNotices().map(({ text, tone }) => ({ text, tone }))).toEqual([
       { text: "Non riesco a ricordare la griglia per i prossimi disegni: disco pieno", tone: "guasto" },
     ]);
     heal();
 
-    const next = { shown: true, snap: true, step: 100, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, closed: ["transform", "attributes"] };
+    const next = { shown: true, snap: true, step: 100, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"] };
     saveGrid(next);
     await settle();
     expect(await host.module.api.viewState(GRID_KEY)).toEqual(next);
