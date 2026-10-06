@@ -1612,8 +1612,30 @@ html, body, #app {
 .draw-objects-title {
   margin: 0;
 }
-.draw-objects-empty {
+.draw-objects-empty,
+.draw-objects-status {
+  flex: none;
   margin: 0;
+}
+/* Il filtro, sotto il titolo: la ricerca prende il posto che resta, il tipo
+   quello che gli serve, e ciascuno è un bersaglio da 44 px. */
+.draw-objects-filter {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.draw-objects-search,
+.draw-objects-kind {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-objects-search {
+  flex: 1;
+}
+.draw-objects-kind {
+  flex: none;
+  max-width: 50%;
 }
 .draw-objects-scroll {
   flex: 1;
@@ -1666,6 +1688,18 @@ html, body, #app {
 .draw-object-signs {
   display: flex;
   flex: none;
+  order: 1;
+}
+/* Il campo del nome prende il posto del nome, prima dei segni: sta in fondo
+   alla riga per l'albero, che ne tiene ferme le prime parti. */
+.draw-object[data-renaming] > .draw-object-label {
+  display: none;
+}
+.draw-object-rename {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
 }
 .draw-object-sign {
   display: flex;
