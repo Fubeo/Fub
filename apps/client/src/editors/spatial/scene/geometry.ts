@@ -745,6 +745,28 @@ export class Track {
     }
     return null;
   }
+
+  /// La distanza dall'inizio del punto del tracciato più vicino a `p`: il
+  /// primo, se due sono vicini uguali. 0 per un tracciato lungo zero.
+  nearest(p: Point): number {
+    let best = Infinity;
+    let found = 0;
+    let before = 0;
+    for (let i = 0; i < this.parts.length; i++) {
+      const [a, b] = this.parts[i]!;
+      const l = this.lengths[i]!;
+      const t = Math.min(Math.max(((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (l * l), 0), 1);
+      const dx = a[0] + (b[0] - a[0]) * t - p[0];
+      const dy = a[1] + (b[1] - a[1]) * t - p[1];
+      const d = dx * dx + dy * dy;
+      if (d < best) {
+        best = d;
+        found = before + t * l;
+      }
+      before += l;
+    }
+    return found;
+  }
 }
 
 /// Il numero di avvolgimento di `p` intorno ai poligoni: diverso da zero se

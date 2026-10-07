@@ -428,6 +428,7 @@ import { browserMeasure, estimate, type Measure } from "./measure";
 import { editableRich, JOIN, lineRuns, lineText as richLineText, newLeading, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich, type RichChange } from "./rich";
 import { ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
 import { createTextField, LINES_FORM, type FieldForm } from "./text-field";
+import { flipOps, isAlongPath, pairOf, putOnPathOps, releaseOps, type TextPathRefused } from "./text-path";
 import { unwrap, WRAP, wrapParagraphs, wrapValue } from "./wrap";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -727,7 +728,7 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "trace"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "trace", "typeset"];
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -931,6 +932,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
   // Un'immagine coi suoi monti, e sotto il tracciato che se ne ricava.
   "draw-trace-image": ["M3 3h11v9H3z", "M3 10l3-3 3 3 2-2 3 3", "M6 21c3 0 4-5 7.5-5s4 3 6.5 3", "M19.5 17.5h3v3h-3z"],
+  "draw-text-path": ["M3 20C6 12 18 12 21 20", "M7 4h10", "M12 4v9"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
   "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
   // Due anelli in basso, e le lame che si incrociano verso l'alto.
@@ -2380,7 +2382,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
   // pieni, regolati in una barra con l'anteprima.
   const traceButton = arrangeButton("draw.trace_image", "draw-trace-image", null, () => void openTracing());
-  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, outlineButton]) {
+  // Dal livello Esperto, con un testo scelto: metterlo su una forma,
+  // toglierlo dal suo tracciato e rovesciarlo, in un menu.
+  const textPathButton = arrangeButton("draw.text_path", "draw-text-path", null, () => openMenu(textPathButton, textPathItems()));
+  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, outlineButton, textPathButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -5188,6 +5193,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     booleanButton.hidden = !has("boolean");
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
+    textPathButton.hidden = !has("typeset") || !units.some((unit) => unit.role === "text");
     arrangeBar.hidden = units.length === 0 || arrangeButtons.every((control) => control.hidden);
     arrangeFocus.sync(null);
     syncNodesBar();
@@ -11819,6 +11825,64 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         : units.length < (kind === "union" ? 1 : 2) ? refusal({ reason: "few" }) : null;
       return { label: t(label), disabled: reason !== null, ...(reason === null ? {} : { description: reason }), run: () => combineSelection(kind) };
     });
+  };
+
+  /// Perché un comando del testo su tracciato non si fa, a parole.
+  const textPathRefusal = (refused: TextPathRefused): string => t(`draw.text_path.${refused.reason}` as const);
+
+  /// «Metti sul tracciato», dal livello Esperto: la forma scelta col testo
+  /// diventa il suo tracciato, e il testo ci scorre sopra.
+  function putOnPath(): void {
+    const units = arranging("typeset");
+    if (units === null) return;
+    const done = putOnPathOps(engine.model!, units, measureText, newIds());
+    if ("reason" in done) {
+      announce(textPathRefusal(done));
+      return;
+    }
+    if (arrange("draw.text_path.put", done) !== null) announce(t("draw.text_path.put.done"));
+  }
+
+  /// «Togli dal tracciato», dal livello Esperto: i testi su tracciato scelti
+  /// tornano righe dritte.
+  function releaseFromPath(): void {
+    const units = arranging("typeset");
+    if (units === null) return;
+    const done = releaseOps(engine.model!, units, newIds());
+    if ("reason" in done) {
+      announce(textPathRefusal(done));
+      return;
+    }
+    const count = units.filter(isAlongPath).length;
+    if (arrange("draw.text_path.release", done) !== null) announce(plural(count, "draw.text_path.released.one", "draw.text_path.released.other"));
+  }
+
+  /// «Rovescia sul tracciato», dal livello Esperto: i testi su tracciato
+  /// scelti passano dall'altra parte, dove erano lungo il tracciato.
+  function flipOnPath(): void {
+    const units = arranging("typeset");
+    if (units === null) return;
+    const done = flipOps(engine.model!, units, measureText, newIds());
+    if ("reason" in done) {
+      announce(textPathRefusal(done));
+      return;
+    }
+    const count = units.filter(isAlongPath).length;
+    if (arrange("draw.text_path.flip", done) !== null) announce(plural(count, "draw.text_path.flipped.one", "draw.text_path.flipped.other"));
+  }
+
+  /// Le voci del menu Testo su tracciato: spente, e dicono perché, quando
+  /// gli oggetti scelti non servono.
+  const textPathItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const pair = pairOf(units);
+    const along = units.some(isAlongPath);
+    const none = t("draw.text_path.none");
+    return [
+      { label: t("draw.text_path.put"), ...("reason" in pair ? { disabled: true, description: textPathRefusal(pair) } : { disabled: false }), run: () => putOnPath() },
+      { label: t("draw.text_path.release"), ...(along ? { disabled: false } : { disabled: true, description: none }), run: () => releaseFromPath() },
+      { label: t("draw.text_path.flip"), ...(along ? { disabled: false } : { disabled: true, description: none }), run: () => flipOnPath() },
+    ];
   };
 
   // --- I comandi dei nodi -----------------------------------------------------

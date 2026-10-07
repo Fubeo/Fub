@@ -2525,6 +2525,76 @@ describe("il testo in area e su tracciato, dal livello Esperto", () => {
   });
 });
 
+describe("il testo su tracciato, dal menu", () => {
+  const T = "ot4t4t4t4";
+  const R = "or4r4r4r4";
+  const PAIR = doc(
+    `<title>Prova</title>${LAYER}<text id="${T}" x="20" y="40" font-size="10"><tspan x="20" dy="0">Sul colle</tspan></text>` +
+      `<rect id="${R}" x="0" y="50" width="200" height="40" fill="none" stroke="#000000"/></g>`,
+  );
+
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const button = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Testo su tracciato"]')!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  /// Le voci, col nome, se sono spente e che cosa dicono.
+  const entries = (): (string | boolean | null)[][] =>
+    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
+  const closeMenus = (): void => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  };
+  /// La voce `label` del menu, sugli oggetti `keys`.
+  const run = (keys: string[], label: string): void => {
+    editor.select(keys);
+    button().click();
+    menu().find((entry) => labelOf(entry) === label)!.click();
+    closeMenus();
+  };
+
+  afterEach(closeMenus);
+
+  it("c'è dall'Esperto con un testo scelto; le voci dicono perché sono spente", () => {
+    mount(PAIR, { level: "standard" });
+    editor.select([T, R]);
+    expect(button().hidden).toBe(true);
+    editor.setLevel("expert");
+    expect(button().hidden).toBe(false);
+    expect(button().getAttribute("aria-haspopup")).toBe("menu");
+    editor.select([R]);
+    expect(button().hidden).toBe(true);
+    editor.select([T]);
+    button().click();
+    expect(entries()).toEqual([
+      ["Metti sul tracciato", true, "Scegli un testo e la forma che deve seguire, e nient’altro."],
+      ["Togli dal tracciato", true, "Fra gli oggetti scelti non c’è un testo su tracciato."],
+      ["Rovescia sul tracciato", true, "Fra gli oggetti scelti non c’è un testo su tracciato."],
+    ]);
+  });
+
+  it("mette il testo sul rettangolo, lo rovescia e lo toglie, un passo di annulla ciascuno", () => {
+    mount(PAIR, { level: "expert" });
+    run([T, R], "Metti sul tracciato");
+    expect(spoken()).toBe("Il testo segue il tracciato.");
+    expect(editor.selection).toEqual([T]);
+    expect(editor.engine.text).not.toContain(R);
+    const href = /<textPath startOffset="20" href="#(r[a-z0-9]{8})">Sul colle<\/textPath>/.exec(editor.engine.text)![1]!;
+    expect(editor.engine.text).toContain(`<path id="${href}" fub:role="private" d="M0 50 L200 50 L200 90 L0 90 Z"/>`);
+    run([T], "Rovescia sul tracciato");
+    expect(spoken()).toBe("1 testo è passato dall’altra parte del tracciato.");
+    expect(editor.engine.text).toContain(`d="M0 50 L0 90 L200 90 L200 50 L0 50 Z"`);
+    run([T], "Togli dal tracciato");
+    expect(spoken()).toBe("1 testo è tornato una riga dritta.");
+    expect(editor.engine.text).toMatch(new RegExp(`<text id="${T}" x="[0-9.]+" y="[0-9.]+" font-size="10">`));
+    expect(editor.engine.text).not.toContain("<textPath");
+    expect(changes).toHaveLength(3);
+    for (let i = 0; i < 3; i++) editor.undo();
+    expect(editor.engine.text).toBe(PAIR);
+  });
+});
+
 describe("i poligoni e le stelle, dal livello Standard", () => {
   const A = "o1a2b3c4d";
   const H = "oh1h1h1h1";
