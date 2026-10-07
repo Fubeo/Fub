@@ -88,6 +88,8 @@ Lo Standard aggiunge:
 
 - il **Lazo** (`Q`), dopo la Selezione, e la **«Selezione avanzata»**: i
   simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
+- la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del
+  disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
@@ -117,8 +119,8 @@ Lo Standard aggiunge:
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
-il Lazo la Selezione, un colore a piacere torna al colore di partenza e la
-vista girata si raddrizza.
+il Lazo o la Tavola la Selezione, un colore a piacere torna al colore di
+partenza e la vista girata si raddrizza.
 
 ## Disporre
 
@@ -180,11 +182,10 @@ dice perché e che cosa fare. Scegliere oggetti che stanno tutti in un livello
 rende corrente quel livello, e l'albero degli oggetti dice qual è: «Livello
 «Note», corrente».
 
-Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in
-cima a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo
-stile che ereditavano. Il menu spegne il livello che li ha già tutti e
-quelli nascosti o bloccati; il pulsante non c'è quando il disegno ha un livello
-solo che ha già tutto.
+Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
+a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile
+che ereditavano. Il menu spegne il livello che li ha già tutti e quelli nascosti
+o bloccati; senza un altro livello dove portarli il pulsante non c'è.
 
 Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
 che ha toccato, se c'è ancora. All'Essenziale il pulsante non c'è, e il
@@ -413,9 +414,8 @@ documento come testo SVG, con l'anteprima accanto. È la stessa sessione: le
 modifiche non salvate restano e il disco non si rilegge. «Chiudi la vista
 sorgente» torna al disegno.
 
-La scelta è della linguetta. Resta salvata con il layout dopo un riavvio, e non
-passa alle altre linguette: un altro disegno aperto nello stesso riquadro si
-apre come disegno.
+La scelta è della linguetta. Resta col layout dopo un riavvio, e non passa alle
+altre linguette: un altro disegno nello stesso riquadro si apre come disegno.
 
 «Apri come sorgente accanto», negli stessi due posti, apre il testo in un
 riquadro nuovo a destra e lascia il disegno dov'è: ogni gesto si legge subito

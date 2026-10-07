@@ -14,8 +14,9 @@ Una parte del [formato della scena](scene-format.md), §2. Una tavola è una
 pagina dentro il disegno, col suo nome e la sua carta: un disegno ne può
 avere più d'una, da incorporare in una nota una per una. Si scrive con `view`
 di SVG, così `disegno.svg#id` mostra quella tavola anche in un browser. Un
-disegno senza tavole è una pagina sola, come sempre. Le sezioni del formato
-si citano come «formato della scena, §N»; quelle di questa pagina col solo
+disegno senza tavole è una pagina sola, come sempre. Come si usano sta in
+[Disegni, tavole](../product/drawing-boards.md). Le sezioni del formato si
+citano come «formato della scena, §N»; quelle di questa pagina col solo
 numero.
 
 ```xml
@@ -86,10 +87,12 @@ Due tavole A4 orizzontali, una accanto all'altra con 80 unità in mezzo:
   rettangolo sulla tela. Ciò che sta fuori da ogni tavola resta nel file e
   nel disegno intero, non nell'immagine di una tavola.
 - **La prima tavola nasce dalla pagina:** in un disegno che ha la sola carta
-  della pagina, la prima tavola ha la geometria della carta, e la carta
-  riceve `fub:board` e diventa la sua. Togliere l'ultima tavola fa il
-  contrario: la carta perde `fub:board` e torna la carta della pagina, che
-  `page` riporta sul `viewBox` della radice.
+  della pagina, la prima tavola ha la geometria della pagina, il `viewBox`
+  della radice, e la carta riceve `fub:board`, e quella geometria se non
+  l'aveva, e diventa la sua. Togliere l'ultima tavola fa il contrario: la
+  carta perde `fub:board` e torna la carta della pagina, che `page` riporta
+  sul `viewBox` della radice; FubDraw lo porta sul rettangolo della tavola,
+  allargato a passi finché copre il disegno.
 
 ## 4. La scrittura
 

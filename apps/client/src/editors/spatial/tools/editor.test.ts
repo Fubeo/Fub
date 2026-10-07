@@ -1524,6 +1524,26 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(changes).toEqual([]);
   });
 
+  it("un disegno con le sole tavole porta la pagina attorno alle tavole", () => {
+    mount(
+      doc(
+        '<rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="400" height="200" fill="#fafafa"/>' +
+          '<rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="480" y="0" width="400" height="200" fill="#fafafa"/>' +
+          '<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><title>Copertina</title></view>' +
+          '<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>' +
+          `${LAYER}</g>`,
+      ),
+      { level: "standard" },
+    );
+    pageButton().click();
+    const fit = entry("Adatta la pagina al disegno");
+    expect(fit.hasAttribute("aria-disabled")).toBe(false);
+    expect(fit.querySelector(".menu-description")).toBeNull();
+    fit.click();
+    expect(editor.engine.text).toContain('viewBox="-20 -20 920 240"');
+    expect(spoken()).toBe("Pagina adattata: 920 × 240.");
+  });
+
   it("«?» elenca i tasti della griglia, e le frecce dicono dove vanno con l'aggancio", async () => {
     mount(SOURCE, { level: "standard" });
     const rows = (): (string | null)[][] => [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
