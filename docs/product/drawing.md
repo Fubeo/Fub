@@ -340,7 +340,7 @@ non ha segni né «Collega a una nota…», e un collegamento si toglie lo stess
 
 L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
-«Oggetto in tracciato», le operazioni booleane, il Costruttore di forme, lo
+il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
 strumento Nodi, che modifica ogni forma nodo per nodo, e la penna di Bézier,
 che ne disegna uno: [Disegni, livello Esperto](drawing-expert.md).
 

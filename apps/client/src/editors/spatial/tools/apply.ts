@@ -37,7 +37,7 @@ import { createInk, decodeInk, encodeInk, INK_MAX_BYTES } from "../ink/codec";
 import { quantizeAzimuth, quantizeCoordinate } from "../ink/sample";
 import { svgAttribute } from "../scene/classify";
 import { parsePath, type Segment } from "../scene/geometry";
-import { apply, compose, IDENTITY, invert, toRadians, type Matrix, type Point } from "../scene/matrix";
+import { apply, compose, IDENTITY, invert, mappedEllipse, toRadians, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { polygonalAttrs } from "../scene/parametric";
 import { pathData } from "../scene/serialize";
@@ -145,33 +145,6 @@ function similar(m: Matrix): Matrix | null {
 // ---------------------------------------------------------------------------
 // La geometria dopo.
 // ---------------------------------------------------------------------------
-
-/// L'ellisse di raggi `rx` e `ry`, ruotata di `degrees`, dopo la parte
-/// lineare di `m`: i suoi raggi e la sua rotazione, dalla decomposizione ai
-/// valori singolari di L · R(φ) · diag(rx, ry).
-export function mappedEllipse(m: Matrix, rx: number, ry: number, degrees: number): { readonly radii: Point; readonly rotation: number } {
-  const angle = toRadians(degrees);
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  const [a, b, c, d] = m;
-  // La matrice per righe: [[p, q], [r, s]].
-  const p = (a * cos + c * sin) * rx;
-  const q = (c * cos - a * sin) * ry;
-  const r = (b * cos + d * sin) * rx;
-  const s = (d * cos - b * sin) * ry;
-  const e = (p + s) / 2;
-  const f = (p - s) / 2;
-  const g = (r + q) / 2;
-  const h = (r - q) / 2;
-  const outer = Math.hypot(e, h);
-  const inner = Math.hypot(f, g);
-  const radii: Point = [outer + inner, Math.abs(outer - inner)];
-  // Un cerchio non ha rotazione; un'ellisse la ha fra 0 e 180 gradi.
-  if (place(radii[0]) === place(radii[1])) return { radii, rotation: 0 };
-  const turned = (((Math.atan2(g, f) + Math.atan2(h, e)) / 2) * 180) / Math.PI;
-  const rotation = ((turned % 180) + 180) % 180;
-  return { radii, rotation: place(rotation) === "180" ? 0 : rotation };
-}
 
 /// Quanto un arco da `from` a `to` riempie l'ellisse dei suoi raggi: 1 se va
 /// da un capo all'altro, di più se i raggi sono troppo piccoli e SVG li

@@ -281,6 +281,41 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-sm);
 }
 
+/* Lo scostamento e la semplificazione, come la descrizione delle immagini:
+   i campi come il suo, ciò che succederà più tenue. */
+.draw-paths {
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
+}
+.draw-paths-title {
+  color: var(--text);
+  font-weight: 600;
+}
+.draw-paths-field {
+  gap: var(--space-2);
+  color: var(--text);
+}
+.draw-paths-field input[type="number"],
+.draw-paths-field select {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.draw-paths-status {
+  color: var(--muted);
+}
+.draw-paths-action {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
 /* Il segno di un collegamento: un tondo col fondo della barra, che si vede
    sulla carta e sul tavolo di ogni tema, e che col puntatore sopra prende il
    fondo attivo quando si può toccare. */

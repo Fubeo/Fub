@@ -63,7 +63,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Contorno: tratteggio, estremi e angoli | Esperto | «Contorno» |
 | Trasforma: rotazione, scala e inclinazione | Esperto | «Trasforma…» (`Ctrl+Maiusc+M`) e la sua sezione nelle proprietà |
 | Applica trasformazione | Esperto | «Applica trasformazione» |
-| Oggetto in tracciato | Esperto | «Oggetto in tracciato» |
+| Tracciato: oggetti, contorni e inchiostro in tracciato, scostamento, semplifica | Esperto | il menu «Tracciato»: «Oggetto in tracciato», «Contorno in tracciato», «Inchiostro in tracciato», «Scostamento…» e «Semplifica…» |
 | Operazioni booleane | Esperto | «Operazioni booleane» |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è

@@ -28,8 +28,7 @@
 import { arcCenter, derivativeAt, pointAt, reversed, splitAt, type Curve } from "../scene/curves";
 import { roundHalfUp } from "../number";
 import type { Segment } from "../scene/geometry";
-import { apply, type Matrix, type Point } from "../scene/matrix";
-import { mappedEllipse } from "./apply";
+import { apply, mappedEllipse, type Matrix, type Point } from "../scene/matrix";
 
 /// Le operazioni. La forma più in basso è la prima: la differenza le toglie
 /// le altre, e la divisione la taglia lungo i loro contorni.
@@ -37,11 +36,15 @@ export type BooleanKind = "union" | "difference" | "intersection" | "exclusion" 
 
 /// Una forma: i segmenti nelle coordinate comuni, la regola con cui si
 /// riempie, e se i segmenti sono quelli scritti, senza trasformazione: una
-/// sua curva che passa intera nel risultato si riscrive com'era.
+/// sua curva che passa intera nel risultato si riscrive com'era. Una forma
+/// `built` è fatta per il calcolo, come le fasce di uno scostamento: i suoi
+/// nodi non sono di nessuno, e dove due linee proseguono dritte non
+/// restano.
 export interface Shape {
   readonly segments: readonly Segment[];
   readonly evenOdd: boolean;
   readonly written: boolean;
+  readonly built?: boolean;
 }
 
 /// I punti più vicini di così si fondono, e un punto così vicino a un lato
@@ -151,10 +154,9 @@ function sourcesOf(shapes: readonly Shape[], cuts: (k: number) => boolean): Sour
   return out;
 }
 
-/// I passi della spezzata di `source`: abbastanza da starle a `FLATNESS`, e
-/// da non superare `span` l'uno; non così tanti che due punti vicini si
-/// fondano.
-function stepsOf(source: Source, span: number): number {
+/// I passi che bastano alla spezzata di `source` per starle a `FLATNESS`, e
+/// quanto è lunga al più.
+function naturalOf(source: Source): { readonly steps: number; readonly length: number } {
   const { from, curve } = source;
   let steps: number;
   let length: number;
@@ -190,7 +192,15 @@ function stepsOf(source: Source, span: number): number {
       break;
     }
   }
-  steps = Math.max(Math.min(steps, Math.floor(length / (2 * EPSILON))), Math.ceil(length / span), 1);
+  return { steps, length };
+}
+
+/// I passi della spezzata di `source`: abbastanza da starle a `FLATNESS`, e
+/// da non superare `span` l'uno; non così tanti che due punti vicini si
+/// fondano.
+function stepsOf(source: Source, span: number, natural = naturalOf(source)): number {
+  const { length } = natural;
+  const steps = Math.max(Math.min(natural.steps, Math.floor(length / (2 * EPSILON))), Math.ceil(length / span), 1);
   return Number.isFinite(steps) ? Math.min(steps, MAX_STEPS) : 1;
 }
 
@@ -265,10 +275,22 @@ class Net {
     }
     // Un margine, perché le celle non escano mai dal riquadro.
     this.min = [x0 - 1, y0 - 1];
-    this.cell = Math.max(Math.max(x1 - x0, y1 - y0) / 64, 16 * EPSILON);
+    // Le celle della griglia: larghe quattro passi medi della spezzata,
+    // perché in ognuna ne cadano pochi anche dove molte curve si
+    // affollano; non più di un sessantaquattresimo del riquadro, né meno di
+    // sedici tolleranze. Un passo non è più lungo di una cella.
+    const naturals = sources.map(naturalOf);
+    let [count, total] = [0, 0];
+    sources.forEach((source, i) => {
+      count += stepsOf(source, Infinity, naturals[i]);
+      total += naturals[i]!.length;
+    });
+    const coarse = Math.max(x1 - x0, y1 - y0) / 64;
+    const fine = (4 * total) / count;
+    this.cell = Math.max(Number.isFinite(fine) ? Math.min(coarse, fine) : coarse, 16 * EPSILON);
     this.rows = Math.ceil((y1 - y0 + 2) / this.cell) + 2;
     sources.forEach((source, i) => {
-      const steps = stepsOf(source, this.cell);
+      const steps = stepsOf(source, this.cell, naturals[i]);
       let previous = this.vertex(source.from, 0, i);
       for (let k = 1; k <= steps; k++) {
         const t = k / steps;
@@ -1100,10 +1122,10 @@ class Arrangement {
         if (stretch.curve.kind === "line" && same(stretch.start, stretch.curve.to)) stretches.splice(i, 1);
       }
       // Due linee dritte una dopo l'altra diventano una, se il nodo in mezzo
-      // non è un nodo che una forma aveva fra due suoi lati.
+      // non è un nodo che una forma scritta aveva fra due suoi lati.
       const straight = (previous: Stretch, current: Stretch): boolean => {
         if (previous.curve.kind !== "line" || current.curve.kind !== "line") return false;
-        if (previous.shape === current.shape && current.vertex !== null && net.rank[current.vertex] === 0) return false;
+        if (previous.shape === current.shape && current.vertex !== null && net.rank[current.vertex] === 0 && shapes[current.shape]!.built !== true) return false;
         const [p, q, node] = [previous.start, current.curve.to, current.start];
         const [dx, dy] = [q[0] - p[0], q[1] - p[1]];
         const u = ((node[0] - p[0]) * dx + (node[1] - p[1]) * dy) / (dx * dx + dy * dy);
@@ -1203,10 +1225,13 @@ const joined = (list: readonly Built[]): Segment[] => [...list].sort(builtOrder)
 /// `kind` sulle forme `shapes`, dalla più in basso: i tracciati del
 /// risultato, uno per l'unione, la differenza, l'intersezione e
 /// l'esclusione, uno per pezzo nella divisione; nessuno se il risultato è
-/// vuoto. `null` se il calcolo non riesce.
-export function combine(kind: BooleanKind, shapes: readonly Shape[]): Segment[][] | null {
-  const arrangement = arrange(shapes, (k) => kind === "division" && k > 0);
-  if (arrangement === null || arrangement === "complex") return null;
+/// vuoto. `null` se il calcolo non riesce; `"complex"` se le spezzate
+/// passano `limit` pezzi.
+export function combine(kind: BooleanKind, shapes: readonly Shape[]): Segment[][] | null;
+export function combine(kind: BooleanKind, shapes: readonly Shape[], limit: number): Segment[][] | "complex" | null;
+export function combine(kind: BooleanKind, shapes: readonly Shape[], limit = Infinity): Segment[][] | "complex" | null {
+  const arrangement = arrange(shapes, (k) => kind === "division" && k > 0, limit);
+  if (arrangement === null || arrangement === "complex") return arrangement;
   if (arrangement === "empty") return [];
   const { graph, edges } = arrangement;
 

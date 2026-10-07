@@ -89,9 +89,10 @@ export default defineConfig({
             return "drawing-scene";
           }
           // La geometria dei disegni senza DOM: i nodi dei tracciati, la
-          // spina dei tratti, le forme e il loro riconoscimento. Dipendono
-          // soltanto dal formato, e gli strumenti dell'editor le usano.
-          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|shapes|recognize)\.ts$/.test(id)) {
+          // spina dei tratti, le forme e il loro riconoscimento, le aree
+          // booleane, lo scostamento e la semplificazione. Dipendono soltanto
+          // dal formato, e gli strumenti dell'editor le usano.
+          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|fit|shapes|recognize|boolean|offset|simplify)\.ts$/.test(id)) {
             return "drawing-geometry";
           }
           // I fogli di stile dei disegni: leggerli, la loro cascata e lo stile
