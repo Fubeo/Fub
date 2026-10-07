@@ -94,14 +94,15 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 | `page` | `viewBox` (`"x y w h"`) | cambia insieme `viewBox`, `width` e `height` della radice e la geometria della carta della pagina, non quella delle carte delle tavole | `page` con i valori precedenti |
 | `meta` | `title`, `desc` (una stringa, oppure `null` per togliere) | crea, cambia o toglie titolo e descrizione della radice | `meta` con i valori precedenti |
 | `adopt` | `undo` facoltativo | «Modifica»: aggiunge `xmlns:fub` e `fub:version="1"` alla radice di un documento estraneo | `adopt` con `undo: true`, che li toglie |
+| `anchor` | `digest`, `pages` (almeno uno dei due) | scrive impronta e numero di pagine sulla radice di [annotazioni PDF](annotation-format.md) | `anchor` con `previous` |
 | `batch` | `ops`, `label` facoltativo | applica tutte le operazioni oppure nessuna | `batch` con le inverse in ordine inverso |
 
 L'inversa si calcola **quando l'operazione si applica**, leggendo lo stato che
 sta per cambiare. Per questo è sempre esatta rispetto alla scena su cui è stata
 calcolata.
 
-Tre inverse hanno una forma che scrive soltanto il motore e che la rete non
-accetta:
+Quattro inverse hanno una forma che scrive soltanto il motore e che la rete
+non accetta:
 
 - **`remove`:** l'inversa è `add` con `slot`, `gap` e `raw`. `raw` è
   l'elemento tolto così come era scritto, anche estraneo; `gap` sono gli spazi
@@ -111,6 +112,10 @@ accetta:
   punto esatto da cui è partito.
 - **`page`:** l'inversa porta `previous`, i valori di prima di `viewBox`,
   `width`, `height` e della carta, compresi quelli assenti.
+- **`anchor`:** l'inversa porta `previous`, i valori di prima di `fub:digest`
+  e `fub:pages` così come erano scritti, anche fuori grammatica, oppure
+  `null` per un attributo assente. Li rimette entrambi; `null` toglie
+  l'attributo con il suo spazio.
 
 Altri dettagli:
 
@@ -188,6 +193,16 @@ Altri dettagli:
   è rifiutato con `invalid-elem`, perché il resto della radice cambia con
   `page` e `adopt`. L'inversa è un `set` su `#root` coi valori di prima;
   nessun id è toccato.
+- **`anchor`:**
+  - `digest` è `sha256:` seguito da 64 cifre esadecimali minuscole; `pages` è
+    un intero JSON da 1 a 2³²−1. Quello che manca resta com'è scritto.
+  - Di un attributo presente si cambia solo il valore, con le sue virgolette.
+    Un attributo assente si aggiunge in coda al tag della radice, l'impronta
+    prima delle pagine. Il resto della radice resta identico byte per byte,
+    come in `adopt`.
+  - È rifiutato con `invalid-elem` per un'impronta o un numero fuori
+    grammatica, senza nessuno dei due, o su una radice che non dichiara il
+    namespace `fub`; con `foreign` su un documento estraneo.
 
 ## 3. Esiti e precondizioni
 
@@ -237,6 +252,13 @@ lo decide la superficie, come per le guide bloccate.
   tocca `fub:ink`, `fub:brush`, `fub:tool` o `d`. Con canali d'inchiostro
   sconosciuti (S010) il contorno non si calcola: un `add` tiene il `d`
   ricevuto, un `set` è rifiutato con `invalid-elem`.
+- Il gruppo di una pagina di annotazioni PDF è un `g` figlio della radice con
+  un `fub:page` valido, aggiunto con `add` o che riceve l'id con `ident`. Il
+  suo id è `p` seguito dal numero su almeno quattro cifre (`p0003`,
+  `p12345`); un altro id è `invalid-elem`. Non è casuale perché una pagina ha
+  un gruppo solo: se due mani annotano la stessa pagina per la prima volta,
+  scrivono lo stesso id, e la sessione live vede un `duplicate-id` invece di
+  due gruppi.
 - I valori nuovi si scrivono come arrivano, senza normalizzarli: li giudica la
   classificazione del formato della scena (§4), sull'elemento già scritto.
 
@@ -470,6 +492,8 @@ devono verificare renderebbe il test circolare.
 | 71 | `board-remove-last` | togliere l'ultima tavola: la carta perde `fub:board` e `page` la riporta sulla pagina |
 | 72 | `page-skips-board-papers` | `page` in un disegno con le tavole cambia soltanto la radice |
 | 73 | `board-free-paper` | una tavola nuova accanto alla carta della pagina: rifiuto `invalid-elem` |
+| 74 | `anchor-pdf` | impronta e pagine in coda alla radice di annotazioni che non le avevano; l'inversa le toglie |
+| 75 | `add-page-group` | la prima annotazione di una pagina nasce in un `batch` col suo gruppo `p0003`, dopo `p0001` e prima di `p0005` |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

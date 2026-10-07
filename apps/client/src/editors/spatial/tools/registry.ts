@@ -3,13 +3,22 @@
 // descrizione per lo screen reader, e i livelli filtrano: la barra e i tasti
 // di un livello sono i suoi strumenti e quelli dei livelli sotto.
 //
+// Il livello minimo dipende dal profilo, perché profili e livelli sono
+// indipendenti: un disegno (`vector`) ha all'Essenziale la penna, la gomma e
+// le forme; le annotazioni di un PDF (`pdf`) hanno all'Essenziale penna,
+// evidenziatore e gomma, e allo Standard le note, le forme e la copertura.
+// Uno strumento senza livello per un profilo non c'è.
+//
 // Il registro elenca anche le parti che un livello offre o no, strumenti e
 // comandi (`FEATURES`): un livello pronto ha quelle del suo livello e dei
 // livelli sotto, il Personalizzato quelle scelte una per una. La Selezione
 // c'è sempre, come i colori della tavolozza, gli spessori, annulla e la vista.
+// Le annotazioni di un PDF hanno i loro strumenti e nessuno dei comandi: le
+// parti dei livelli sono quelle del disegno.
 //
 // Le scorciatoie sono una lettera senza modificatori, quelle che chi disegna
 // conosce già da altri programmi, e valgono solo col fuoco sulla superficie.
+// Una lettera nomina uno strumento solo in ogni profilo.
 
 import type { DrawKey } from "../strings";
 
@@ -33,13 +42,19 @@ export type ToolId =
   | "pen"
   | "highlighter"
   | "eraser"
+  | "note"
   | "rect"
   | "ellipse"
   | "line"
   | "arrow"
+  | "cover"
   | "polygon"
   | "bezier"
   | "text";
+
+/// I profili della famiglia `canvas` che hanno strumenti: il disegno e le
+/// annotazioni di un PDF.
+export type ToolProfile = "vector" | "pdf";
 
 /// Come la barra raggruppa gli strumenti: scegliere, scrivere a mano, forme,
 /// testo.
@@ -47,7 +62,8 @@ export type ToolGroup = "pick" | "ink" | "shape" | "text";
 
 export interface ToolSpec {
   readonly id: ToolId;
-  readonly level: Preset;
+  /// Il livello minimo per profilo; un profilo che manca non lo offre.
+  readonly levels: Readonly<Partial<Record<ToolProfile, Preset>>>;
   readonly group: ToolGroup;
   /// Il nome di un'icona registrata (`ui/icons.ts`).
   readonly icon: string;
@@ -57,42 +73,55 @@ export interface ToolSpec {
   readonly shortcut: string;
 }
 
+const BOTH = { vector: "essential", pdf: "essential" } as const;
+const SHAPE = { vector: "essential", pdf: "standard" } as const;
+
+/// Nell'ordine della barra.
 export const TOOLS: readonly ToolSpec[] = [
-  { id: "select", level: "essential", group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
+  { id: "select", levels: BOTH, group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
   // Lo stesso tasto di Illustrator.
-  { id: "lasso", level: "standard", group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
+  { id: "lasso", levels: { vector: "standard" }, group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
   // Lo stesso tasto di Inkscape.
-  { id: "nodes", level: "expert", group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "n" },
+  { id: "nodes", levels: { vector: "expert" }, group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "n" },
   // La lettera di Illustrator, che la vuole con Maiusc: qui, come per gli
   // altri strumenti, da sola.
-  { id: "builder", level: "expert", group: "pick", icon: "draw-builder", label: "draw.tool.builder", description: "draw.tool.builder.hint", shortcut: "m" },
+  { id: "builder", levels: { vector: "expert" }, group: "pick", icon: "draw-builder", label: "draw.tool.builder", description: "draw.tool.builder.hint", shortcut: "m" },
   // La lettera di Illustrator. Un tocco taglia, un trascinamento è il
   // Coltello, che in Illustrator è uno strumento a parte.
-  { id: "scissors", level: "expert", group: "pick", icon: "draw-scissors", label: "draw.tool.scissors", description: "draw.tool.scissors.hint", shortcut: "c" },
+  { id: "scissors", levels: { vector: "expert" }, group: "pick", icon: "draw-scissors", label: "draw.tool.scissors", description: "draw.tool.scissors.hint", shortcut: "c" },
   // La lettera di Illustrator, che la vuole con Maiusc.
-  { id: "width", level: "expert", group: "pick", icon: "draw-width", label: "draw.tool.width", description: "draw.tool.width.hint", shortcut: "w" },
+  { id: "width", levels: { vector: "expert" }, group: "pick", icon: "draw-width", label: "draw.tool.width", description: "draw.tool.width.hint", shortcut: "w" },
   // La lettera del Frame di Figma, dove le cornici sono le tavole: quella di
   // Illustrator è la «O» con Maiusc, e qui la «O» è dell'ellisse.
-  { id: "board", level: "standard", group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
-  { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
-  { id: "highlighter", level: "standard", group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
-  { id: "eraser", level: "essential", group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },
-  { id: "rect", level: "essential", group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r" },
-  { id: "ellipse", level: "essential", group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
-  { id: "line", level: "essential", group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
-  { id: "arrow", level: "essential", group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "a" },
+  { id: "board", levels: { vector: "standard" }, group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
+  { id: "pen", levels: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
+  { id: "highlighter", levels: { vector: "standard", pdf: "essential" }, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
+  { id: "eraser", levels: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },
+  // Le note sono del PDF: nel disegno la «N» è dei Nodi.
+  { id: "note", levels: { pdf: "standard" }, group: "ink", icon: "draw-note", label: "draw.tool.note", description: "draw.tool.note.hint", shortcut: "n" },
+  { id: "rect", levels: SHAPE, group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r" },
+  { id: "ellipse", levels: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
+  { id: "line", levels: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
+  { id: "arrow", levels: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "a" },
+  // La copertura è del PDF: nel disegno la «C» è delle Forbici.
+  { id: "cover", levels: { pdf: "standard" }, group: "shape", icon: "draw-cover", label: "draw.tool.cover", description: "draw.tool.cover.hint", shortcut: "c" },
   // Lo stesso tasto di CorelDRAW. Premuto di nuovo, lo strumento passa dal
   // poligono alla stella e ritorno: etichetta e icona sono quelle del
   // poligono, l'editor le cambia per la stella.
-  { id: "polygon", level: "standard", group: "shape", icon: "draw-polygon", label: "draw.tool.polygon", description: "draw.tool.polygon.hint", shortcut: "y" },
+  { id: "polygon", levels: { vector: "standard" }, group: "shape", icon: "draw-polygon", label: "draw.tool.polygon", description: "draw.tool.polygon.hint", shortcut: "y" },
   // Lo stesso tasto di Inkscape, dove la penna di Bézier è «B».
-  { id: "bezier", level: "expert", group: "shape", icon: "draw-bezier", label: "draw.tool.bezier", description: "draw.tool.bezier.hint", shortcut: "b" },
-  { id: "text", level: "standard", group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t" },
+  { id: "bezier", levels: { vector: "expert" }, group: "shape", icon: "draw-bezier", label: "draw.tool.bezier", description: "draw.tool.bezier.hint", shortcut: "b" },
+  { id: "text", levels: { vector: "standard" }, group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t" },
 ];
 
 /// Lo strumento con cui si apre un disegno: la penna, perché un disegno si
 /// apre per disegnare.
 export const DEFAULT_TOOL: ToolId = "pen";
+
+/// Lo strumento con cui si apre un profilo: un PDF si apre per evidenziare.
+export function defaultTool(profile: ToolProfile): ToolId {
+  return profile === "pdf" ? "highlighter" : DEFAULT_TOOL;
+}
 
 /// Una parte che un livello offre o no: uno strumento, tranne la Selezione,
 /// o un comando con i suoi tasti.
@@ -157,10 +186,11 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "typeset", level: "expert", label: "draw.feature.typeset" },
 ];
 
-/// Tutte le parti, per livello, e in un livello prima gli strumenti
-/// nell'ordine della barra: l'ordine in cui il Personalizzato le propone.
+/// Tutte le parti del disegno, per livello, e in un livello prima gli
+/// strumenti nell'ordine della barra: l'ordine in cui il Personalizzato le
+/// propone.
 export const FEATURES: readonly FeatureSpec[] = LEVEL_ORDER.flatMap((level) => [
-  ...TOOLS.filter((tool) => tool.id !== "select" && tool.level === level).map(
+  ...TOOLS.filter((tool) => tool.id !== "select" && tool.levels.vector === level).map(
     (tool): FeatureSpec => ({ id: tool.id as Feature, level, label: tool.label }),
   ),
   ...COMMANDS.filter((command) => command.level === level),
@@ -191,11 +221,20 @@ export function levelsAbove(level: Level): readonly Preset[] {
   return level === "custom" ? LEVEL_ORDER : LEVEL_ORDER.slice(LEVEL_ORDER.indexOf(level) + 1);
 }
 
-/// Le parti che l'editor offre al livello `level`: per un livello pronto le
-/// sue e quelle dei livelli sotto, per il Personalizzato quelle di `custom`
-/// che l'editor conosce. Un nome che non conosce, di una versione più nuova o
-/// scritto a mano, non conta.
-export function featuresFor(level: Level, custom: readonly unknown[] = CUSTOM_DEFAULT): ReadonlySet<Feature> {
+/// Le parti che l'editor offre al livello `level` nel profilo `profile`:
+/// per un livello pronto le sue e quelle dei livelli sotto, per il
+/// Personalizzato quelle di `custom` che l'editor conosce. Un nome che non
+/// conosce, di una versione più nuova o scritto a mano, non conta.
+///
+/// Le annotazioni di un PDF hanno solo i loro strumenti, e il Personalizzato
+/// vale per loro come lo Standard, che li ha già tutti.
+export function featuresFor(level: Level, custom: readonly unknown[] = CUSTOM_DEFAULT, profile: ToolProfile = "vector"): ReadonlySet<Feature> {
+  if (profile === "pdf") {
+    const preset = level === "custom" ? "standard" : level;
+    return new Set(
+      TOOLS.filter((tool) => tool.id !== "select" && tool.levels.pdf !== undefined && reaches(preset, tool.levels.pdf)).map((tool) => tool.id as Feature),
+    );
+  }
   if (level === "custom") return new Set(custom.filter(isFeature));
   return new Set(FEATURES.filter((feature) => reaches(level, feature.level)).map((feature) => feature.id));
 }
@@ -206,16 +245,18 @@ export function toolsOf(features: ReadonlySet<Feature>): readonly ToolSpec[] {
   return TOOLS.filter((tool) => tool.id === "select" || features.has(tool.id));
 }
 
-/// Gli strumenti di un livello pronto: i suoi e quelli dei livelli sotto.
-export function toolsFor(level: Preset): readonly ToolSpec[] {
-  return toolsOf(featuresFor(level));
+/// Gli strumenti di un livello pronto in un profilo: i suoi e quelli dei
+/// livelli sotto.
+export function toolsFor(level: Preset, profile: ToolProfile = "vector"): readonly ToolSpec[] {
+  return toolsOf(featuresFor(level, CUSTOM_DEFAULT, profile));
 }
 
-/// Lo strumento con cui si comincia fra `tools`: la penna, se c'è; altrimenti
-/// il primo con cui si disegna, nell'ordine della barra; altrimenti la
-/// Selezione.
-export function startTool(tools: readonly ToolSpec[]): ToolId {
-  if (tools.some((tool) => tool.id === DEFAULT_TOOL)) return DEFAULT_TOOL;
+/// Lo strumento con cui si comincia fra `tools`: quello con cui si apre il
+/// profilo, se c'è; altrimenti il primo con cui si disegna, nell'ordine della
+/// barra; altrimenti la Selezione.
+export function startTool(tools: readonly ToolSpec[], profile: ToolProfile = "vector"): ToolId {
+  const first = defaultTool(profile);
+  if (tools.some((tool) => tool.id === first)) return first;
   return tools.find((tool) => tool.group !== "pick")?.id ?? "select";
 }
 
@@ -223,8 +264,8 @@ export function startTool(tools: readonly ToolSpec[]): ToolId {
 /// dopo uno strumento che sceglie, il Lazo, i Nodi o il Costruttore, la
 /// Selezione, così chi sceglieva non si ritrova a disegnare; dopo gli altri,
 /// quello con cui si comincia.
-export function toolAfter(tools: readonly ToolSpec[], lost: ToolId): ToolId {
-  return toolSpec(lost).group === "pick" ? "select" : startTool(tools);
+export function toolAfter(tools: readonly ToolSpec[], lost: ToolId, profile: ToolProfile = "vector"): ToolId {
+  return toolSpec(lost).group === "pick" ? "select" : startTool(tools, profile);
 }
 
 export function toolSpec(id: ToolId): ToolSpec {

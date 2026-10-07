@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import { PF1_DEFAULTS } from "../ink/brush";
 import { quantizeInk, type InkSample } from "../ink/sample";
 import { compose, IDENTITY, rotate, translate } from "../scene/matrix";
-import type { ContainerNode } from "../scene/model";
 import { doc } from "../scene/test-support";
 import { strokeElem } from "./edit";
-import { elemBounds, linesBounds } from "./hit";
+import { PaintBuilder } from "../painter/paint";
+import { SceneEngine } from "../scene/engine";
+import { elementChildren, type ContainerNode } from "../scene/model";
+import { elemBounds, linesBounds, SceneIndexer } from "./hit";
 import { LAYER, open } from "./test-support";
 
 const SHAPES = doc(
@@ -521,5 +523,36 @@ describe("un blocco estraneo dentro un oggetto", () => {
     const index = opened.reindex();
     expect(index.get("w")?.bounds).toEqual({ min: [100, 8], max: [182, 60] });
     expect(index.at([120, 15], 0.5)?.key).toBe("w");
+  });
+});
+
+describe("sulle pagine di un PDF", () => {
+  it("gli oggetti sono solo quelli dei gruppi della pagina, trattati come livelli", () => {
+    const engine = SceneEngine.open(
+      doc('<g id="p0001" fub:page="1"><rect id="a" x="0" y="0" width="5" height="5"/></g><g id="p0002" fub:page="2"><rect id="b" x="0" y="0" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></g><rect id="c" x="0" y="0" width="5" height="5"/>'),
+    );
+    const builder = new PaintBuilder();
+    builder.build(engine);
+    const pages = elementChildren(engine.model!.root).filter((child): child is ContainerNode => child.kind === "container");
+    const index = new SceneIndexer(builder, null, () => [pages[1]!]).index(engine.model!);
+    expect(index.units.map((unit) => [unit.key, unit.layer])).toEqual([["b", "p0002"], ["@1.1", "p0002"]]);
+    expect(index.layers.map((layer) => [layer.id, layer.path, layer.locked, layer.hidden])).toEqual([["p0002", [1], false, false]]);
+    // Un oggetto di un'altra pagina, o fuori dalle pagine, non si trova.
+    expect(index.get("a")).toBeNull();
+    expect(index.get("c")).toBeNull();
+    expect(new SceneIndexer(builder, null, () => []).index(engine.model!).units).toEqual([]);
+  });
+});
+
+describe("l'evidenziatore", () => {
+  it("scrive il tratto col suo strumento e trasparente, il resto come la penna", () => {
+    const samples: InkSample[] = [{ x: 10, y: 50, p: 0.5, t: 0 }, { x: 40, y: 50, p: 0.5, t: 16 }];
+    const brush = { ...PF1_DEFAULTS, size: 16, thinning: 0 };
+    const pen = strokeElem("o1", "#f0e442", brush, quantizeInk(samples), null);
+    const marker = strokeElem("o1", "#f0e442", brush, quantizeInk(samples), null, "highlighter");
+    expect(pen.attrs["fub:tool"]).toBe("pen");
+    expect(pen.attrs["fill-opacity"]).toBeUndefined();
+    expect(marker.attrs).toEqual({ ...pen.attrs, "fub:tool": "highlighter", "fill-opacity": "0.4" });
+    expect(Object.keys(marker.attrs)).toEqual(["id", "fub:tool", "fub:brush", "fill", "fill-opacity", "fub:ink"]);
   });
 });

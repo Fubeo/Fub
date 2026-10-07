@@ -5,8 +5,9 @@
 //! model_fixtures`. Senza la variabile il test confronta i file e fallisce
 //! alla prima differenza.
 //!
-//! In `tests/fixtures/`, ogni `<nome>.svg` ha accanto `<nome>.model.json`: il
-//! [`DocumentModel`] serializzato, con due spazi di rientro e un a capo finale.
+//! In `tests/fixtures/`, ogni `<nome>.svg` e ogni `<nome>.fubann` ha accanto
+//! `<nome>.model.json`: il [`DocumentModel`] serializzato, con due spazi di
+//! rientro e un a capo finale.
 //!
 //! - `drawing`: un disegno FubDraw canonico, con titolo, descrizione, testi su
 //!   più righe, un collegamento attorno a un testo, uno attorno a un'immagine
@@ -18,14 +19,18 @@
 //!   del vault;
 //! - `boards`: un disegno FubDraw con quattro tavole e le loro carte: una col
 //!   nome su più righe, una senza titolo, che si chiama col suo id, e una con
-//!   il nome di una tavola prima.
+//!   il nome di una tavola prima;
+//! - `annotations`: le annotazioni di `atti/Bando di gara.pdf`, con impronta e
+//!   numero di pagine, due pagine, un evidenziatore, una copertura, una nota
+//!   con testo e corpo su più righe, una nota senza testo, un collegamento in
+//!   una pagina e un testo estraneo, senza `id`, fuori dalle pagine.
 
 use std::path::PathBuf;
 
 use fub_abi::format::{DocumentSource, ParseContext};
-use fub_abi::model::DocumentModel;
+use fub_abi::model::{Block, DocumentModel};
 use fub_abi::FormatProvider;
-use fub_format_svg::SvgProvider;
+use fub_format_svg::{FubannProvider, SvgProvider, ANNOTATIONS_KIND, NOTE_KIND, PAGE_KIND};
 
 const REGENERATE: &str =
     "rigenera con UPDATE_MIRROR=1 cargo test -p fub-format-svg --test model_fixtures";
@@ -34,12 +39,27 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
+/// La sorgente e il modello della fixture `name`: un disegno, o le
+/// annotazioni di `atti/Bando di gara.pdf` se `name` è `annotations`.
 fn model_of(name: &str) -> (String, DocumentModel) {
-    let source = std::fs::read_to_string(fixtures().join(format!("{name}.svg"))).unwrap();
-    let model = SvgProvider
+    let (file, id, provider): (_, _, &dyn FormatProvider) = if name == "annotations" {
+        (
+            format!("{name}.fubann"),
+            "atti/Bando di gara.pdf.fubann".to_owned(),
+            &FubannProvider,
+        )
+    } else {
+        (
+            format!("{name}.svg"),
+            format!("disegni/{name}.svg"),
+            &SvgProvider,
+        )
+    };
+    let source = std::fs::read_to_string(fixtures().join(file)).unwrap();
+    let model = provider
         .parse(
             &DocumentSource::Text(source.clone()),
-            &ParseContext::obsidian(format!("disegni/{name}.svg")),
+            &ParseContext::obsidian(id),
         )
         .unwrap();
     (source, model)
@@ -86,6 +106,11 @@ fn the_foreign_model_is_the_fixture() {
 #[test]
 fn the_boards_model_is_the_fixture() {
     check("boards");
+}
+
+#[test]
+fn the_annotations_model_is_the_fixture() {
+    check("annotations");
 }
 
 /// Le fixture dicono ciò che devono: senza questi controlli un modello
@@ -160,4 +185,91 @@ fn the_fixtures_say_what_they_claim() {
         model.text,
         "Quaderno di viaggio\nQuattro tavole\nCopertina\nMappa del porto\nb00000003\nCopertina\nPartenza\nIl porto"
     );
+}
+
+/// Le annotazioni dicono ciò che devono: il PDF è il primo collegamento, le
+/// pagine sono due blocchi con le loro annotazioni, e note e testi si cercano.
+#[test]
+fn the_annotations_fixture_says_what_it_claims() {
+    let (source, model) = model_of("annotations");
+    assert_eq!(model.outline[0].text, "Revisione del bando");
+    for text in [
+        "ufficio gare & contratti",
+        "Importo da rivedere",
+        "L'importo a base d'asta è cambiato.",
+        "Chiedere conferma all'ufficio <gare>.",
+        "Manca la firma del RUP",
+        "Vedi il verbale",
+        "Fuori dalle pagine",
+    ] {
+        assert!(model.text.contains(text), "{text}");
+    }
+    let links: Vec<_> = model
+        .links
+        .iter()
+        .map(|link| {
+            (
+                format!("{:?}", link.target),
+                &source[link.span.start..link.span.end],
+            )
+        })
+        .collect();
+    assert_eq!(
+        links[0],
+        (
+            r#"Path("Bando%20di%20gara.pdf")"#.to_owned(),
+            "Bando%20di%20gara.pdf"
+        )
+    );
+    assert_eq!(links[1].0, r#"Path("../Verbali/Verbale%2012.md")"#);
+    assert_eq!(links.len(), 2);
+    assert!(model.links[0]
+        .context
+        .as_deref()
+        .unwrap()
+        .starts_with("Le correzioni"));
+
+    let Block::Custom {
+        custom_kind,
+        attrs,
+        blocks,
+        ..
+    } = &model.body[0]
+    else {
+        panic!("{:?}", model.body);
+    };
+    assert_eq!(custom_kind, ANNOTATIONS_KIND);
+    assert_eq!(attrs["annotates"], "Bando%20di%20gara.pdf");
+    assert_eq!(attrs["pages"], 12);
+    assert_eq!(
+        attrs["sections"],
+        serde_json::json!(["Revisione del bando", "page=1", "page=3"])
+    );
+    let pages: Vec<_> = blocks
+        .iter()
+        .filter_map(|block| match block {
+            Block::Custom {
+                custom_kind,
+                attrs,
+                blocks,
+                ..
+            } if custom_kind == PAGE_KIND => Some((attrs["page"].clone(), blocks.len())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        pages,
+        [(serde_json::json!(1), 1), (serde_json::json!(3), 2)]
+    );
+    let notes = blocks
+        .iter()
+        .flat_map(|block| match block {
+            Block::Custom { blocks, .. } => blocks.as_slice(),
+            _ => &[],
+        })
+        .filter(
+            |block| matches!(block, Block::Custom { custom_kind, .. } if custom_kind == NOTE_KIND),
+        )
+        .count();
+    assert_eq!(notes, 2);
 }

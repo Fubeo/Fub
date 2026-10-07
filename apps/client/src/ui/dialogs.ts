@@ -27,7 +27,7 @@ let dialogCount = 0;
 
 /// Apre la forma comune delle domande: `onDismiss` quando l'utente la chiude
 /// con Esc o col clic fuori. Per i moduli che fanno domande loro, come le
-/// proprietà di un disegno.
+/// proprietà di un disegno o la nota delle annotazioni.
 export function openFrame(title: string, onDismiss: () => void): Frame {
   const life = openLifetime();
   const overlay = document.createElement("div");

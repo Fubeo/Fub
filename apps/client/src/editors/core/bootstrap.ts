@@ -288,6 +288,9 @@ export function createDocumentSurfaceRegistry(
             : undefined,
           media: options.canvasMedia,
           attachments: options.canvasAttachments,
+          // Le annotazioni leggono il PDF come il visore: stessi byte, stesso
+          // pdf.js.
+          pdf: options.media ? { transport: options.media.transport, loader: options.media.pdfLoader ?? loadPdf } : undefined,
         });
       },
     },

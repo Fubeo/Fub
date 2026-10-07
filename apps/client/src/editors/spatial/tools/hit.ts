@@ -439,7 +439,15 @@ export class SceneIndexer {
 
   /// `holder` trova gli elementi a cui i blocchi estranei rimandano; senza,
   /// un `use` vede solo il blocco in cui sta.
-  constructor(private readonly builder: PaintBuilder, holder: Holder | null = null) {
+  ///
+  /// `pages`, nelle annotazioni di un PDF, dà i gruppi della pagina che si
+  /// annota: sono i soli figli della radice che contano, trattati come
+  /// livelli che si scrivono, per l'indice e per ogni altra ricerca.
+  constructor(
+    private readonly builder: PaintBuilder,
+    holder: Holder | null = null,
+    private readonly pages: ((model: DocumentModel) => readonly ContainerNode[]) | null = null,
+  ) {
     this.foreign = new ForeignShapes(builder, holder);
   }
 
@@ -449,7 +457,7 @@ export class SceneIndexer {
   index(model: DocumentModel, scope: ContainerNode | null = null): SceneIndex {
     const units: Unit[] = [];
     const layers: LayerInfo[] = [];
-    const nested = new Lookup(model, scope, this.rootStyle(model), (node) => this.attrsOf(node), (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style));
+    const nested = new Lookup(model, scope, this.rootStyle(model), (node) => this.attrsOf(node), (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style), this.pagesOf(model));
     if (scope === null) {
       this.walk(model, (layer) => !layer.locked && !layer.hidden, layers, (node, path, layer, parent, style) => {
         if (node.details!.locked === true) return;
@@ -468,7 +476,7 @@ export class SceneIndexer {
   opens(model: DocumentModel, container: ContainerNode): boolean {
     const role = container.details?.role;
     if (role !== "group" && role !== "link") return false;
-    return new Lookup(model, null, this.rootStyle(model), (node) => this.attrsOf(node), () => null).contextOf(container) !== null;
+    return new Lookup(model, null, this.rootStyle(model), (node) => this.attrsOf(node), () => null, this.pagesOf(model)).contextOf(container) !== null;
   }
 
   /// I collegamenti di `model` che si vedono, a ogni profondità: anche
@@ -595,7 +603,12 @@ export class SceneIndexer {
   ): void {
     const root = model.root;
     const rootStyle = this.rootStyle(model);
+    const pages = this.pagesOf(model);
     childLoop(root, (child, index) => {
+      if (pages !== null) {
+        if (child.kind === "container" && pages.includes(child)) this.walkLayer(child, [index], "", false, false, rootStyle, enters, layers, visit, foreign);
+        return;
+      }
       if (child.kind === "leaf") {
         if (child.details === null) {
           foreign?.(child, IDENTITY, rootStyle);
@@ -613,24 +626,46 @@ export class SceneIndexer {
         visit(child, [index], null, IDENTITY, rootStyle);
         return;
       }
-      const head = this.builder.headInfo(child);
-      const matrix = compose(IDENTITY, transformOf(head.attrs));
       const layer = child.details!.layer!;
-      const info: LayerInfo = { id: child.facts.id, path: [index], name: layer.name, locked: layer.locked, hidden: layer.hidden || head.hidden, matrix };
-      layers.push(info);
-      if (!enters(info)) return;
-      const style = styleOf(rootStyle, head.attrs);
-      childLoop(child, (grandchild, inner) => {
-        if (grandchild.kind === "leaf") {
-          if (grandchild.details === null) {
-            foreign?.(grandchild, matrix, style);
-            return;
-          }
-          if (grandchild.details.role === "title" || grandchild.details.role === "desc") return;
-        }
-        visit(grandchild, [index, inner], info.id, matrix, style);
-      });
+      this.walkLayer(child, [index], layer.name, layer.locked, layer.hidden, rootStyle, enters, layers, visit, foreign);
     });
+  }
+
+  /// Un livello, o un gruppo di una pagina che ne fa le veci: in `layers`, e
+  /// i suoi figli a `visit` se `enters` lo accetta.
+  private walkLayer(
+    child: ContainerNode,
+    path: number[],
+    name: string,
+    locked: boolean,
+    hidden: boolean,
+    rootStyle: Style,
+    enters: (layer: LayerInfo) => boolean,
+    layers: LayerInfo[],
+    visit: Visit,
+    foreign: ((leaf: LeafNode, parent: Matrix, style: Style) => void) | null,
+  ): void {
+    const head = this.builder.headInfo(child);
+    const matrix = compose(IDENTITY, transformOf(head.attrs));
+    const info: LayerInfo = { id: child.facts.id, path, name, locked, hidden: hidden || head.hidden, matrix };
+    layers.push(info);
+    if (!enters(info)) return;
+    const style = styleOf(rootStyle, head.attrs);
+    childLoop(child, (grandchild, inner) => {
+      if (grandchild.kind === "leaf") {
+        if (grandchild.details === null) {
+          foreign?.(grandchild, matrix, style);
+          return;
+        }
+        if (grandchild.details.role === "title" || grandchild.details.role === "desc") return;
+      }
+      visit(grandchild, [...path, inner], info.id, matrix, style);
+    });
+  }
+
+  /// I gruppi della pagina che si annota; `null` per un disegno.
+  private pagesOf(model: DocumentModel): readonly ContainerNode[] | null {
+    return this.pages === null ? null : this.pages(model);
   }
 
   /// Lo stile che la radice di `model` trasmette ai figli.
@@ -806,6 +841,8 @@ class Lookup implements Nested {
     private readonly rootStyle: Style,
     private readonly attrsOf: (node: ElementPart) => readonly PaintAttr[] | null,
     private readonly make: MakeUnit,
+    /// Le pagine che si annotano: gli altri figli della radice non ci sono.
+    private readonly pages: readonly ContainerNode[] | null = null,
   ) {}
 
   resolve(key: string): Unit | null {
@@ -813,6 +850,8 @@ class Lookup implements Nested {
     if (node === null || !pickable(node) || node.details!.locked === true) return null;
     const parent = node.parent;
     if (parent === null || (this.scope !== null && !within(node, this.scope))) return null;
+    // Sulle pagine di un PDF un figlio della radice non è un oggetto.
+    if (this.pages !== null && parent === this.model.root) return null;
     const context = this.contextOf(parent);
     if (context === null) return null;
     const index = elementChildren(parent).indexOf(node);
@@ -851,7 +890,11 @@ class Lookup implements Nested {
     const parent = container.parent;
     const details = container.details;
     if (parent === null || details === null || details.locked === true) return null;
-    const isLayer = details.role === "layer";
+    // Sulle pagine di un PDF i gruppi della pagina fanno da livelli, e gli
+    // altri figli della radice non ci sono.
+    const page = this.pages !== null && parent === this.model.root;
+    if (page && !this.pages!.includes(container)) return null;
+    const isLayer = page || details.role === "layer";
     if (isLayer ? parent !== this.model.root : details.role !== "group" && details.role !== "link") return null;
     const index = elementChildren(parent).indexOf(container);
     const outer = index < 0 ? null : this.contextOf(parent);

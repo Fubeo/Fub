@@ -77,6 +77,10 @@ export const HIGHLIGHTER_COLOR = "#f0e442";
 export const HIGHLIGHTER_WIDTH = 16;
 export const HIGHLIGHTER_OPACITY = "0.4";
 
+/// La copertura delle annotazioni di un PDF parte nera, col suo colore, che
+/// non cambia quello della penna.
+export const COVER_COLOR = "#000000";
+
 /// Il campione di un colore scritto nel file, se è della tavolozza.
 export function swatchOf(color: string): Swatch | null {
   const lower = color.toLowerCase();

@@ -728,7 +728,7 @@ pub(crate) fn followed<'p>(
 /// sono un'altra. Le righe si uniscono con uno spazio, tranne in un testo in
 /// area quelle che continuano una parola dopo la prima, con
 /// `fub:join="word"`, che si uniscono senza (formato della scena, testo).
-fn paragraph(doc: &Document<'_>, id: NodeId) -> String {
+pub(crate) fn paragraph(doc: &Document<'_>, id: NodeId) -> String {
     let area = doc
         .element(id)
         .and_then(|text| text.value(NS_FUB, "wrap"))

@@ -3037,6 +3037,50 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
 }
 
+/* Le annotazioni di un PDF. La carta resta bianca sotto la pagina, che la
+   copre quando arriva; l'elenco della Lettura è una colonna del tavolo, col
+   filo che la stacca dal foglio, e le note hanno il corpo nel colore del
+   testo. */
+.pdf-notice-messages {
+  gap: var(--space-1);
+}
+.pdf-pages {
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.pdf-page-input {
+  padding: 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.pdf-list {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.pdf-list-page {
+  padding: 0 var(--space-2);
+  font-weight: 600;
+}
+.pdf-list-page[aria-current="page"] {
+  background: var(--bg-active);
+  box-shadow: var(--shadow-sm);
+}
+.pdf-list-body,
+.pdf-list-marks {
+  margin: var(--space-1) 0 var(--space-3);
+  color: var(--muted);
+}
+@media (max-width: 40rem) {
+  .pdf-list {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
 /* ── skin/base.css ──────────────────────────────────────────────────────── */
 
 /* Le viste Base consumano ruoli del tema; layout e dimensioni stanno nella struttura. */

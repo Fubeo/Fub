@@ -156,8 +156,10 @@ export interface Options {
   /// altri, e le porte risorsa li servono davvero, a fette.
   resources?: Record<string, FakeResource>;
   /// La feature `draw` del kernel: accesa, un `.svg` ha il formato `svg` e si
-  /// apre come disegno. Spenta come nel kernel di default: un `.svg` resta un
-  /// file senza formato, testo con l'anteprima accanto.
+  /// apre come disegno, un `.fubann` ha il formato `fubann` e si apre come
+  /// annotazioni, c'è `pdf.annotate` ed `export.run` accetta i target
+  /// `draw.*`. Spenta come nel kernel di default: un `.svg` resta un file senza
+  /// formato, testo con l'anteprima accanto.
   draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
@@ -289,6 +291,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// non inventa byte.
   const leases = new Map<string, Lease>();
   let nextLease = 0;
+  let nextJob = 0;
 
   function write(id: string, text: string): string {
     revision += 1;
@@ -328,6 +331,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
     if (options.draw === true && id.toLowerCase().endsWith(".svg")) return "svg";
+    if (options.draw === true && id.toLowerCase().endsWith(".fubann")) return "fubann";
     return null;
   }
 
@@ -691,6 +695,37 @@ export function createFakeHost(options: Options = {}): FakeHost {
           partial: null,
         };
       }
+      case "pdf.annotate": {
+        // Come il comando della feature `draw`: le annotazioni accanto al
+        // PDF, nate dal modello del provider la prima volta e aperte dopo.
+        if (options.draw !== true) throw new Error("host fake: pdf.annotate senza la feature draw");
+        const pdf = String(args?.pdf);
+        const doc = `${pdf}.fubann`;
+        if (docs.has(doc)) return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+        const name = pdf.split("/").pop()!;
+        const escaped = name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const href = encodeURI(name).replace(/[#?]/g, encodeURIComponent).replace(/&/g, "&amp;");
+        // Il nome della radice sta in una costante: il controllo delle icone
+        // non vuole tag SVG scritti fuori da `ui/icons.ts`, e questo non è
+        // un'icona ma un documento del vault.
+        const root = "svg";
+        write(
+          doc,
+          `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="${href}">\n  <title>${escaped}</title>\n</${root}>\n`,
+        );
+        emit({ type: "document_changed", id: doc });
+        return { notify: `Create le annotazioni «${doc}»`, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+      }
+      case "export.run": {
+        // Come il comando del kernel: un target che non è registrato si
+        // rifiuta, gli altri accodano il lavoro e lo dicono, in inglese. Qui il
+        // lavoro non gira, e il file non arriva.
+        const request = JSON.parse(String(args?.request_json)) as { target?: unknown };
+        const drawTarget = typeof request.target === "string" && request.target.startsWith("draw.");
+        if (!drawTarget || options.draw !== true) throw new Error(`host fake: unknown export target \`${String(request.target)}\``);
+        nextJob += 1;
+        return { notify: `export.run queued (job ${nextJob})`, effect: { kind: "done" as const }, undo: null, partial: null };
+      }
       case "folder.create": {
         const path = String(args?.path ?? "");
         const taken =
@@ -732,7 +767,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg"] : [])];
+        const extensions = ["md", "markdown", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },

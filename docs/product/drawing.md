@@ -16,7 +16,11 @@ Il codice dell'editor si scarica la prima volta che un disegno si apre, e non
 pesa su chi non ne apre. Se non arriva, il riquadro lo dice, e «Apri come
 sorgente» mostra comunque il testo (`apps/client/src/editors/spatial/lazy.ts`).
 
-Il file resta un SVG che qualunque browser o editor apre. I dati che servono a
+Le annotazioni di un PDF usano lo stesso editor, con le pagine del PDF sotto:
+le descrive [Annotazioni dei PDF](pdf-annotations.md).
+
+Il file resta un SVG che qualunque browser o editor apre, e «Esporta…» ne fa
+un PNG o un PDF ([Disegni, esportare](drawing-export.md)). I dati che servono a
 Fub stanno in pochi attributi del namespace `fub`; la forma esatta è nel
 [formato della scena](../reference/scene-format.md), le modifiche che il
 disegno ci scrive nelle [operazioni sulla scena](../reference/scene-operations.md),
@@ -178,11 +182,10 @@ dice perché e che cosa fare. Scegliere oggetti che stanno tutti in un livello
 rende corrente quel livello, e l'albero degli oggetti dice qual è: «Livello
 «Note», corrente».
 
-Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in
-cima a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo
-stile che ereditavano. Il menu spegne il livello che li ha già tutti e
-quelli nascosti o bloccati; il pulsante non c'è quando il disegno ha un livello
-solo che ha già tutto.
+Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
+a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile
+che ereditavano. Il menu spegne il livello che li ha già tutti e quelli nascosti
+o bloccati; senza un altro livello dove portarli il pulsante non c'è.
 
 Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
 che ha toccato, se c'è ancora. All'Essenziale il pulsante non c'è, e il
@@ -309,23 +312,21 @@ Dal livello Standard, nella barra «Disponi»:
   selezione passa a loro. Come per Separa, le parti che FubDraw non sa
   scrivere si spostano come sono, con ciò che il collegamento dava loro.
 
-Ognuno è un passo di annulla. L'`href` è relativo alla cartella del disegno e
-si scrive come lo scrive Fub quando un documento cambia nome: le lettere
-accentate restano, gli spazi e gli altri caratteri che un URL non ammette
-diventano codici `%`, per esempio `../Note/Perché%20piove.md`, e un nome il
-cui primo segmento sembra uno schema (`nota:1.md`) prende `./` davanti.
-Quando il documento cambia nome o cartella, Fub riscrive il collegamento del
-disegno come quelli delle note
+Ognuno è un passo di annulla. L'`href` è relativo alla cartella del disegno e si
+scrive come lo scrive Fub quando un documento cambia nome: le lettere accentate
+restano, gli spazi e gli altri caratteri che un URL non ammette diventano codici
+`%`, per esempio `../Note/Perché%20piove.md`, e un nome il cui primo segmento
+sembra uno schema (`nota:1.md`) prende `./` davanti. Quando il documento cambia
+nome o cartella, Fub riscrive il collegamento del disegno come quelli delle note
 ([formato della scena](../reference/scene-format.md), §9).
 
-A ogni livello, ogni collegamento che si vede ha un segno sopra l'angolo in
-alto a destra, anche dentro un gruppo o in un livello bloccato. Con la
-Selezione, o in un disegno che non si modifica, un tocco sul segno apre il
-documento; con gli altri strumenti il segno si vede soltanto, e il foglio
-resta di chi disegna. `Alt+Invio` apre il documento del collegamento scelto
-da solo, e nella barra «Disponi» lo fa «Apri», col suo nome. L'albero degli
-oggetti dice dove porta un collegamento: «Collegamento a «Ciclo dell'acqua»,
-2 oggetti».
+A ogni livello, ogni collegamento che si vede ha un segno sopra l'angolo in alto
+a destra, anche dentro un gruppo o in un livello bloccato. Con la Selezione, o
+in un disegno che non si modifica, un tocco sul segno apre il documento; con gli
+altri strumenti il segno si vede soltanto, e il foglio resta di chi disegna.
+`Alt+Invio` apre il documento del collegamento scelto da solo, e nella barra
+«Disponi» lo fa «Apri», col suo nome. L'albero degli oggetti dice dove porta un
+collegamento: «Collegamento a «Ciclo dell'acqua», 2 oggetti».
 
 In Lettura l'immagine non si tocca: sotto la descrizione la riga «Collegamenti» ha
 un pulsante per ogni documento a cui il disegno porta, col suo nome. Un indirizzo
@@ -413,9 +414,8 @@ documento come testo SVG, con l'anteprima accanto. È la stessa sessione: le
 modifiche non salvate restano e il disco non si rilegge. «Chiudi la vista
 sorgente» torna al disegno.
 
-La scelta è della linguetta. Resta salvata con il layout dopo un riavvio, e non
-passa alle altre linguette: un altro disegno aperto nello stesso riquadro si
-apre come disegno.
+La scelta è della linguetta. Resta col layout dopo un riavvio, e non passa alle
+altre linguette: un altro disegno nello stesso riquadro si apre come disegno.
 
 «Apri come sorgente accanto», negli stessi due posti, apre il testo in un
 riquadro nuovo a destra e lascia il disegno dov'è: ogni gesto si legge subito

@@ -47,22 +47,21 @@ L'override dell'utente è della scheda: `Tab.override` in
 monta la superficie della scheda attiva. È opt-in della superficie: una
 registrazione dichiara in `sourceViews`, per profilo, la vista sorgente del
 documento, cioè famiglia e profilo che mostrano lo stesso documento come testo.
-La dichiara il profilo `vector` della tela, i disegni dell'
-[ADR 0203](../decisions/0203-superfici-spaziali.md), verso
+La dichiarano i profili `vector` e `pdf` della tela, i disegni dell' [ADR
+0203](../decisions/0203-superfici-spaziali.md) e le annotazioni dei PDF, verso
 `{ family: "text", profile: "svg" }`; le altre famiglie della shell non ne
-dichiarano. Il registro
-rifiuta una vista di un profilo non registrato, senza famiglia o uguale al
-profilo stesso; `sourceView(request)` la risolve dalla superficie naturale del
-documento, con il profilo esplicito, e restituisce `null` finché la famiglia
-indicata non è registrata o non ha quel profilo.
+dichiarano. Il registro rifiuta una vista di un profilo non registrato, senza
+famiglia o uguale al profilo stesso; `sourceView(request)` la risolve dalla
+superficie naturale del documento, con il profilo esplicito, e restituisce
+`null` finché la famiglia indicata non è registrata o non ha quel profilo.
 
-Il montaggio resta sincrono anche quando il codice della superficie arriva
-dopo. Il disegno monta subito un involucro con i modi e il contratto della
-superficie vera (`apps/client/src/editors/spatial/lazy.ts`): finché
-`import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
-rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un
-`reveal` in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è
-quello della shell. Un caricamento fallito lascia il testo alla sessione.
+Il montaggio resta sincrono anche quando il codice della superficie arriva dopo.
+Il disegno, e così le annotazioni, monta subito un involucro con i modi e il
+contratto della superficie vera (`apps/client/src/editors/spatial/lazy.ts`):
+finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
+rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
+in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
+shell. Un caricamento fallito lascia il testo alla sessione.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -115,6 +114,10 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `mountPresentation` monta la resa da presentare come slide;
 - `printable` dichiara una resa di stampa del provider del formato
   (`IndexQuery::RenderPrint`);
+- `exports` dichiara gli export registrati che valgono per il documento: il
+  disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
+  Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,
+  salva ciò che è in attesa, chiede `export.run` e apre il centro attività;
 - `selections()` dà le selezioni del testo in offset byte UTF-8 del buffer; il
   disegno dà gli intervalli degli elementi degli oggetti scelti;
   `selectedText()` è di chi sceglie elementi che non sono intervalli del
@@ -153,8 +156,7 @@ corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
 sincronizzazione del documento, selezioni e offset byte UTF-8, terminatori di
 riga, focus, reveal, tema, sola lettura, undo/redo e `destroy()`. Il seam
 `extensions` monta la configurazione di un profilo; `reconfigure()` sostituisce
-le estensioni senza ricostruire vista, documento, selezione, tema o history
-nativa.
+le estensioni senza rifare vista, documento, selezione, tema o history nativa.
 
 Ogni `TextEngine` monta `history({ minDepth: 100, newGroupDelay: 500 })` nel
 proprio `historyCompartment`. CodeMirror possiede quindi i due rami per
@@ -170,10 +172,9 @@ Una modifica locale diventa un evento della history nativa della superficie.
 `TextEngine.syncDoc()` costruisce la transazione dal risultato effettivo di
 `EditorState.update()`, con `filter: false`,
 `Transaction.addToHistory.of(false)` e `Transaction.remote.of(true)`. I filtri
-del profilo regolano l'input locale e non possono riscrivere il testo
-autorevole della sessione. Prima del dispatch il motore verifica testo e
-annotazioni. Il cambio esterno aggiorna i due rami senza aggiungere un evento
-locale.
+del profilo regolano l'input locale e non possono riscrivere il testo autorevole
+della sessione. Prima del dispatch il motore verifica testo e annotazioni. Il
+cambio esterno aggiorna i due rami senza aggiungere un evento locale.
 
 Prima di inviare un cambio esterno, `HistoryFootprints` conserva al massimo 512
 intervalli non vuoti e anchor di cancellazione, soltanto come coordinate UTF-16:
@@ -231,8 +232,7 @@ e il confine di sicurezza della history nativa è precisato in
 [0199](../decisions/0199-history-nativa-e-gate-di-overlap.md); 0199 completa
 0190 senza sostituirla.
 
-I profili condividono lo stesso motore e aggiungono soltanto semantica di
-dominio:
+I profili condividono il motore e aggiungono soltanto semantica di dominio:
 
 | Profilo | Responsabilità corrente |
 |---|---|
@@ -293,12 +293,12 @@ percorsi il frontend invia `LinkTarget::Path`.
 Ogni superficie dichiara almeno una `SurfaceMode`: id estensibile, etichetta,
 presentazione editabile o resa e proiezione sul `PaneMode` ABI. `PaneMode` non
 nomina le modalità di un formato: è la classe di vista che un provider può
-conoscere, cioè il documento com'è salvato (`source`), una resa in cui si
-scrive (`live_preview`) o una resa da leggere senza cursore (`reading`). La tela
-e il foglio proiettano la loro vista principale su `live_preview`, il sorgente
-JSON della tela su `source`, visori e superficie d'errore su `reading`. Il
-disegno proietta Disegno (`draw`) su `live_preview` e Lettura (`read`) su
-`reading`.
+conoscere, cioè il documento com'è salvato (`source`), una resa in cui si scrive
+(`live_preview`) o una resa da leggere senza cursore (`reading`). La tela e il
+foglio proiettano la loro vista principale su `live_preview`, il sorgente JSON
+della tela su `source`, visori e superficie d'errore su `reading`. Il disegno
+proietta Disegno (`draw`) su `live_preview` e Lettura (`read`) su `reading`; le
+annotazioni di un PDF fanno lo stesso con Annota, che ha l'id `draw`, e Lettura.
 
 Gli id valgono dentro la famiglia della superficie: il layout ricorda una
 modalità per famiglia in ogni riquadro (`PaneState.modes`), e il `source` del

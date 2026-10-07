@@ -7,11 +7,12 @@
 
 Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore, con
 pochi attributi in più nel namespace `fub`. È il contratto comune di
-`fub-scene`, del provider `svg` e della superficie TypeScript della shell; il
-perché sta nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). Come la
-superficie cambia un disegno sta nelle [operazioni](scene-operations.md). I `§`
-dei commenti nel codice sono le sezioni di questa pagina, tranne nel motore
-delle operazioni, che cita quelle dell'altra.
+`fub-scene`, del provider `svg`, della superficie TypeScript della shell e delle
+[annotazioni PDF](annotation-format.md); il perché sta
+nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). Come la superficie
+cambia un disegno sta nelle [operazioni](scene-operations.md). I `§` dei
+commenti nel codice sono le sezioni di questa pagina, tranne nel motore delle
+operazioni, che cita quelle dell'altra.
 
 ## 1. Principi
 
@@ -273,8 +274,7 @@ passata a `getStroke` è `p / 255`.
   Una chiave nota assente prende il valore predefinito di `getStroke`:
   `size=16`, `thinning=0.5`, `smoothing=0.5`, `streamline=0.5`,
   `taperStart=0`, `taperEnd=0`, `capStart=1`, `capEnd=1`, `sim=1`.
-- **Chiavi sconosciute:** si conservano nell'ordine, anche ripetute, e si
-  ignorano.
+- **Chiavi sconosciute:** si tengono in ordine, anche ripetute, e si ignorano.
 - **Pennello non valido:** un `fub:brush` che non comincia con `pf1`, una
   chiave nota ripetuta o con un valore fuori dall'intervallo producono S004
   come l'inchiostro non valido: il tratto non si ridisegna.
@@ -294,8 +294,7 @@ passata a `getStroke` è `p / 255`.
   documento, e nessuno confronta i `d` calcolati da motori diversi.
 
 Chi non conosce l'algoritmo usa `d` così com'è. `d` si riscrive solo quando
-cambiano `fub:ink` o `fub:brush`: spostare, scalare o ruotare cambia solo
-`transform`.
+cambiano `fub:ink` o `fub:brush`: spostare, scalare o ruotare tocca `transform`.
 
 ### `fub:at`
 
@@ -436,10 +435,9 @@ immagini li porta come etichetta; uno dentro un `text` sta nel paragrafo di
 quel testo. Oltre 128 livelli di elementi indicizzati annidati, i più profondi
 si appendono al 128º senza perdersi.
 
-**Collegamenti.** Il percorso è il testo dell'URL: valore dell'attributo con
-gli spazi ai bordi tolti, frammento compreso. Il contesto di un backlink è
-l'etichetta del collegamento o, senza etichetta, il testo che lo contiene,
-fino a 220 caratteri.
+**Collegamenti.** Il percorso è il testo dell'URL: valore dell'attributo senza
+gli spazi ai bordi, frammento compreso. Il contesto di un backlink è l'etichetta
+del collegamento o, senza, il testo che lo contiene, fino a 220 caratteri.
 
 **Errori.** Un file che non è una scena (§2) non si legge: il provider
 restituisce l'errore con il byte, e l'apertura del vault lo mette fra gli
@@ -470,6 +468,8 @@ descrizione e riepilogo, con `truncated: true` (§11).
   disegno, con il frammento, già escapato per stare fra virgolette doppie. Un
   `image` si scrive come un `a`, e l'etichetta non conta. Wikilink e URL non si
   scrivono in un disegno; un percorso fuori dal vault è un errore.
+- **Export** in PNG e PDF (`fub.draw`): immagini raster in data URI e del vault,
+  queste fino a 64 MiB, e caratteri di Fub; il resto resta fuori, nel log.
 
 ## 10. Versioni e compatibilità
 

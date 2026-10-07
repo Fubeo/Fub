@@ -3,9 +3,11 @@
 //!
 //! Un riferimento è il valore di un `href` (o di un `xlink:href`) su un `a` o
 //! su un `image`: un percorso del vault relativo al disegno, o dalla radice se
-//! comincia con `/` (§4). La riscrittura tocca **solo i byte del valore**,
-//! virgolette escluse: il resto del tag, gli altri attributi, i terminatori di
-//! riga e il BOM restano identici (§7, punto 7).
+//! comincia con `/` (§4). Un `.fubann` ne ha uno in più, il valore di
+//! `fub:annotates` sulla radice, che segue la stessa regola. La riscrittura
+//! tocca **solo i byte del valore**, virgolette escluse: il resto del tag, gli
+//! altri attributi, i terminatori di riga e il BOM restano identici (§7,
+//! punto 7).
 //!
 //! Ogni valore scritto si rilegge con `fub-scene` prima di uscire da qui: deve
 //! dare esattamente il percorso chiesto. È l'unico modo di non avere due idee
@@ -16,7 +18,7 @@ use fub_abi::format::{LinkInsert, LinkRewrite, ParseContext};
 use fub_abi::model::{DocId, LinkTarget, Span};
 use fub_abi::rules::path::{relative_ref, resolve_against, split_fragment};
 use fub_abi::{FormatError, TextEdit};
-use fub_scene::{Reference, SVG_NS};
+use fub_scene::{Reference, Scene, SVG_NS};
 
 use crate::escape;
 
@@ -36,17 +38,69 @@ pub(crate) fn rewrite(
         return Ok(Vec::new());
     }
     let scene = fub_scene::read(source).map_err(|error| FormatError::Parse(error.to_string()))?;
-    let references: Vec<&Reference> = scene
+    apply(source, rewrites, &references_of(&scene))
+}
+
+/// Come [`rewrite`], per un `.fubann`: i riferimenti sono quelli della scena
+/// e il PDF annotato, che il modello nomina con lo span del valore di
+/// `fub:annotates`. Quando il PDF cambia nome si riscrive quel valore, e le
+/// annotazioni seguono il documento.
+pub(crate) fn rewrite_annotations(
+    source: &str,
+    rewrites: &[LinkRewrite],
+) -> Result<Vec<TextEdit>, FormatError> {
+    if rewrites.is_empty() {
+        return Ok(Vec::new());
+    }
+    let annotations = fub_scene::read_annotations(source)
+        .map_err(|error| FormatError::Parse(error.to_string()))?;
+    let mut references = references_of(&annotations.scene);
+    references.extend(annotations.annotates.iter().map(|annotated| Rewritable {
+        span: annotated.value,
+        path: &annotated.path,
+        values: vec![annotated.value],
+    }));
+    apply(source, rewrites, &references)
+}
+
+/// Un riferimento che si riscrive: lo span con cui il modello lo nomina, il
+/// percorso letto e i valori grezzi che lo portano.
+struct Rewritable<'s> {
+    span: fub_scene::Span,
+    path: &'s str,
+    values: Vec<fub_scene::Span>,
+}
+
+/// I collegamenti e le immagini del vault di una scena. Un `xlink:href` che
+/// ripete lo stesso URL accanto a `href` è un secondo valore dello stesso
+/// riferimento.
+fn references_of(scene: &Scene) -> Vec<Rewritable<'_>> {
+    scene
         .index
         .links
         .iter()
         .chain(&scene.index.embeds)
-        .collect();
+        .map(|reference: &Reference| Rewritable {
+            span: reference.span,
+            path: &reference.path,
+            values: std::iter::once(reference.href)
+                .chain(reference.shadowed)
+                .collect(),
+        })
+        .collect()
+}
+
+/// Le patch di `rewrites` su `references`.
+fn apply(
+    source: &str,
+    rewrites: &[LinkRewrite],
+    references: &[Rewritable<'_>],
+) -> Result<Vec<TextEdit>, FormatError> {
     let mut edits = Vec::with_capacity(rewrites.len());
     for rewrite in rewrites {
         let LinkTarget::Path(expected) = &rewrite.target else {
             return Err(FormatError::Parse(format!(
-                "un disegno ha solo riferimenti per percorso, non {:?}",
+                "un disegno o un `.fubann` ha solo riferimenti per percorso, non {:?}",
                 rewrite.target
             )));
         };
@@ -54,15 +108,15 @@ pub(crate) fn rewrite(
             .iter()
             .find(|reference| {
                 reference.span.bytes == [rewrite.span.start, rewrite.span.end]
-                    && &reference.path == expected
+                    && reference.path == expected
             })
             .ok_or_else(|| {
                 FormatError::Parse(format!(
-                    "nessun collegamento del disegno in {}..{} porta a «{expected}»",
+                    "nessun riferimento della sorgente in {}..{} porta a «{expected}»",
                     rewrite.span.start, rewrite.span.end
                 ))
             })?;
-        for raw in std::iter::once(reference.href).chain(reference.shadowed) {
+        for raw in &reference.values {
             let span = Span::new(raw.bytes[0], raw.bytes[1]);
             let quote = quote_before(source, span.start)?;
             edits.push(TextEdit::replace(
@@ -127,7 +181,7 @@ fn quote_before(source: &str, start: usize) -> Result<char, FormatError> {
 /// Prima così com'è; se il lettore non lo prende per un percorso del vault,
 /// perché il primo segmento sembra uno schema (`nota:1.md`), con `./` davanti,
 /// che non cambia la destinazione. Se nemmeno così si rilegge, è un errore.
-fn attribute_value(target: &str, quote: char) -> Result<String, FormatError> {
+pub(crate) fn attribute_value(target: &str, quote: char) -> Result<String, FormatError> {
     if !target.trim().is_empty() {
         let candidates = [
             Some(target.to_owned()),
