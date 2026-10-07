@@ -102,6 +102,10 @@ export interface RemoveOp {
 export interface SetOp {
   readonly op: "set";
   readonly id: string;
+  /// Su una risorsa, una sua parte, come il punto di una sfumatura: gli
+  /// indici dei figli elemento dalla risorsa in giù. Senza, la risorsa
+  /// stessa.
+  readonly part?: readonly number[];
   readonly attrs: Readonly<Record<string, string | null>>;
 }
 

@@ -87,7 +87,7 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 |---|---|---|---|
 | `add` | `parent`, `pos`, `elem` oppure `raw` | inserisce l'elemento | `remove` con lo stesso `id`, o col percorso |
 | `remove` | `target` | elimina l'elemento con i suoi figli | `add` con l'elemento tolto e il suo posto |
-| `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere) | cambia attributi | `set` con i valori precedenti |
+| `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere); `part` facoltativo, su una risorsa | cambia attributi; con `part`, quelli di una parte della risorsa | `set` con i valori precedenti, e lo stesso `part` |
 | `text` | `id`, `lines` (una riga è una stringa, o la lista del suo testo e dei suoi [pezzi](scene-format-text.md)), `joins` facoltativo | sostituisce le righe di un `text` | `text` con le righe precedenti, pezzi compresi, e i `joins` di prima se l'operazione ne aveva o una riga aveva un `fub:join` |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
 | `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
@@ -159,6 +159,14 @@ Altri dettagli:
   risorsa viene prima di chi la usa, togliere una risorsa usata è `in-use`, e
   le risorse di FubDraw che un'operazione lascia senza riferimenti se ne
   vanno con lei: [risorse](scene-format-resources.md), §9.
+- **`set` con `part`:** cambia una parte di una risorsa, come il punto di
+  una sfumatura o di un campione, senza toglierla a chi la usa. `part` sono
+  gli indici dei figli elemento dalla risorsa in giù, come il percorso di un
+  bersaglio: `[0]` è il primo figlio, anche un `title`. La risorsa si
+  riscrive intera in forma canonica e deve restare modificabile; l'`id` di
+  una parte non cambia. Su ciò che non è una risorsa, o con un `part` che non
+  è una lista di indici, è `invalid-elem`; una parte che non c'è, anche
+  dentro il testo di un titolo, è `missing-target`.
 - **Tavole:** una tavola cambia insieme alla sua carta, in un `batch`. Alla
   fine di ogni operazione le tavole e le carte che ha toccato vanno insieme,
   altrimenti è `invalid-elem`; un `add` oltre 1 000 tavole è `limit`:
@@ -355,8 +363,8 @@ così com'è.
   solo `set` di `transform` alla fine del gesto. Gli stati intermedi non si
   registrano.
 - **Fusione:** due voci consecutive con lo stesso nome, fatte di `set` sulle
-  stesse chiavi degli stessi elementi, o di due `batch` di quei `set` nello
-  stesso ordine, a meno di 500 ms l'una dall'altra e senza altri cambiamenti
+  stesse chiavi degli stessi elementi, e delle stesse parti, o di due `batch`
+  di quei `set` nello stesso ordine, a meno di 500 ms l'una dall'altra e senza altri cambiamenti
   in mezzo, diventano una voce sola: resta la prima inversa e l'ultima
   operazione in avanti, e l'undo resta esatto. Così una serie di piccoli
   spostamenti, o tre colori provati di fila, si annullano in un passo. Dopo
@@ -494,6 +502,8 @@ devono verificare renderebbe il test circolare.
 | 73 | `board-free-paper` | una tavola nuova accanto alla carta della pagina: rifiuto `invalid-elem` |
 | 74 | `anchor-pdf` | impronta e pagine in coda alla radice di annotazioni che non le avevano; l'inversa le toglie |
 | 75 | `add-page-group` | la prima annotazione di una pagina nasce in un `batch` col suo gruppo `p0003`, dopo `p0001` e prima di `p0005` |
+| 76 | `set-swatch-stop` | un `batch` cambia col `part` il punto di un campione e il ripiego di chi lo usa; chi sta in un livello bloccato tiene il suo |
+| 77 | `set-part-not-resource` | `set` con `part` su un oggetto: rifiuto `invalid-elem` |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le
