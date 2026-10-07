@@ -1,0 +1,614 @@
+[
+  {
+    "name": "drawing-unchanged",
+    "description": "il disegno intero con la carta: il testo non cambia",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "drawing-no-paper",
+    "description": "il disegno intero senza sfondo: la carta della pagina se ne va con lo spazio che la precede",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "background": "none",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "board-crop",
+    "description": "una tavola: la radice prende il suo rettangolo, il resto resta",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 880 300\" width=\"880\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b2"
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"480 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "board-root-without-size",
+    "description": "una tavola in un disegno la cui radice non ha width e height: si aggiungono in fondo al tag d'apertura",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 880 300\">\n  <title>Prova</title>\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b1"
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "board-root-without-anything",
+    "description": "una radice senza viewBox, width e height, con uno spazio prima della chiusura del tag",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" >\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b1"
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\" >\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "root-single-quotes",
+    "description": "una radice con virgolette semplici e spazi attorno all'uguale: i valori cambiano dentro le loro virgolette",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox = '0 0 880 300' width='880'\n     height = '300'>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"480 0 400 300\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b1"
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox = '480 0 400 300' width='400'\n     height = '300'>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"480 0 400 300\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-root-without-viewbox",
+    "description": "una radice con width e height ma senza viewBox: il viewBox si aggiunge dopo l'ultimo attributo",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" width=\"800\" height=\"600\">\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        10,
+        10,
+        100,
+        50
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" width=\"100\" height=\"50\" viewBox=\"10 10 100 50\">\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "board-no-paper",
+    "description": "una tavola senza sfondo: se ne vanno tutte le carte, anche quelle delle altre tavole",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 880 300\" width=\"880\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b1"
+    },
+    "background": "none",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "board-unknown",
+    "description": "una tavola che il disegno non ha",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 880 300\" width=\"880\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"p1\" fub:role=\"paper\" fub:board=\"b1\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <rect id=\"p2\" fub:role=\"paper\" fub:board=\"b2\" x=\"480\" y=\"0\" width=\"400\" height=\"300\" fill=\"#fff8e7\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\">\n    <title>Copertina</title>\n  </view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"480 0 400 300\">\n    <title>Evaporazione</title>\n  </view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b9"
+    },
+    "background": "paper",
+    "expect": {
+      "error": "unknown-board",
+      "id": "b9"
+    }
+  },
+  {
+    "name": "board-foreign-view",
+    "description": "un view con fub:role board ma con style è estraneo, non una tavola",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\" style=\"x\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b1"
+    },
+    "background": "paper",
+    "expect": {
+      "error": "unknown-board",
+      "id": "b1"
+    }
+  },
+  {
+    "name": "board-decimals",
+    "description": "i numeri del viewBox della tavola si riscrivono a 2 decimali",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0.125 1e1 400.004 299.995\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b1"
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0.13 10 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0.125 1e1 400.004 299.995\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-one",
+    "description": "un oggetto: gli altri del suo livello e l'altro livello se ne vanno, la carta resta",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n  <g id=\"l2\" fub:layer=\"Livello 2\">\n    <path id=\"o3\" d=\"M400 400 L500 450\" stroke=\"#000000\" stroke-width=\"4\" fill=\"none\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o2"
+      ],
+      "box": [
+        258,
+        168,
+        84,
+        64
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"258 168 84 64\" width=\"84\" height=\"64\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-one-no-paper",
+    "description": "un oggetto senza sfondo",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n  <g id=\"l2\" fub:layer=\"Livello 2\">\n    <path id=\"o3\" d=\"M400 400 L500 450\" stroke=\"#000000\" stroke-width=\"4\" fill=\"none\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o2"
+      ],
+      "box": [
+        258,
+        168,
+        84,
+        64
+      ]
+    },
+    "background": "none",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"258 168 84 64\" width=\"84\" height=\"64\">\n  <title>Prova</title>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-two-layers",
+    "description": "due oggetti in due livelli",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n  <g id=\"l2\" fub:layer=\"Livello 2\">\n    <path id=\"o3\" d=\"M400 400 L500 450\" stroke=\"#000000\" stroke-width=\"4\" fill=\"none\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o3",
+        "o1"
+      ],
+      "box": [
+        8,
+        8,
+        494,
+        444
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"8 8 494 444\" width=\"494\" height=\"444\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n  </g>\n  <g id=\"l2\" fub:layer=\"Livello 2\">\n    <path id=\"o3\" d=\"M400 400 L500 450\" stroke=\"#000000\" stroke-width=\"4\" fill=\"none\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-in-group",
+    "description": "un cerchio dentro un gruppo: il gruppo resta col suo titolo, l'altro cerchio se ne va",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <g id=\"g1\">\n      <title>Nuvola</title>\n      <circle id=\"c1\" cx=\"50\" cy=\"50\" r=\"20\" fill=\"#56b4e9\"/>\n      <circle id=\"c2\" cx=\"80\" cy=\"50\" r=\"25\" fill=\"#56b4e9\"/>\n    </g>\n    <rect id=\"o4\" x=\"200\" y=\"200\" width=\"20\" height=\"20\" fill=\"#000000\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "c2"
+      ],
+      "box": [
+        55,
+        25,
+        50,
+        50
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"55 25 50 50\" width=\"50\" height=\"50\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <g id=\"g1\">\n      <title>Nuvola</title>\n      <circle id=\"c2\" cx=\"80\" cy=\"50\" r=\"25\" fill=\"#56b4e9\"/>\n    </g>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-whole-group",
+    "description": "un gruppo scelto resta con tutto ciò che contiene",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <g id=\"g1\">\n      <title>Nuvola</title>\n      <circle id=\"c1\" cx=\"50\" cy=\"50\" r=\"20\" fill=\"#56b4e9\"/>\n      <circle id=\"c2\" cx=\"80\" cy=\"50\" r=\"25\" fill=\"#56b4e9\"/>\n    </g>\n    <rect id=\"o4\" x=\"200\" y=\"200\" width=\"20\" height=\"20\" fill=\"#000000\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "g1"
+      ],
+      "box": [
+        30,
+        25,
+        75,
+        50
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"30 25 75 50\" width=\"75\" height=\"50\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <g id=\"g1\">\n      <title>Nuvola</title>\n      <circle id=\"c1\" cx=\"50\" cy=\"50\" r=\"20\" fill=\"#56b4e9\"/>\n      <circle id=\"c2\" cx=\"80\" cy=\"50\" r=\"25\" fill=\"#56b4e9\"/>\n    </g>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-nested",
+    "description": "un gruppo e un suo cerchio scelti insieme: il gruppo resta intero",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <g id=\"g1\">\n      <title>Nuvola</title>\n      <circle id=\"c1\" cx=\"50\" cy=\"50\" r=\"20\" fill=\"#56b4e9\"/>\n      <circle id=\"c2\" cx=\"80\" cy=\"50\" r=\"25\" fill=\"#56b4e9\"/>\n    </g>\n    <rect id=\"o4\" x=\"200\" y=\"200\" width=\"20\" height=\"20\" fill=\"#000000\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "c1",
+        "g1"
+      ],
+      "box": [
+        30,
+        25,
+        75,
+        50
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"30 25 75 50\" width=\"75\" height=\"50\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <g id=\"g1\">\n      <title>Nuvola</title>\n      <circle id=\"c1\" cx=\"50\" cy=\"50\" r=\"20\" fill=\"#56b4e9\"/>\n      <circle id=\"c2\" cx=\"80\" cy=\"50\" r=\"25\" fill=\"#56b4e9\"/>\n    </g>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-keeps-defs-and-style",
+    "description": "defs, style e title restano: non sono elementi grafici",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <defs>\n    <linearGradient id=\"r1\"><stop offset=\"0\" stop-color=\"#ffffff\"/><stop offset=\"1\" stop-color=\"#000000\"/></linearGradient>\n  </defs>\n  <style>.k { fill: red; }</style>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n  <g id=\"l2\" fub:layer=\"Livello 2\">\n    <path id=\"o3\" d=\"M400 400 L500 450\" stroke=\"#000000\" stroke-width=\"4\" fill=\"none\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        10,
+        10,
+        100,
+        50
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"10 10 100 50\" width=\"100\" height=\"50\">\n  <title>Prova</title>\n  <defs>\n    <linearGradient id=\"r1\"><stop offset=\"0\" stop-color=\"#ffffff\"/><stop offset=\"1\" stop-color=\"#000000\"/></linearGradient>\n  </defs>\n  <style>.k { fill: red; }</style>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-duplicate-ids",
+    "description": "un id ripetuto vale una volta",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1",
+        "o1"
+      ],
+      "box": [
+        10,
+        10,
+        100,
+        50
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"10 10 100 50\" width=\"100\" height=\"50\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-unknown",
+    "description": "un id che il disegno non ha",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o9"
+      ],
+      "box": [
+        0,
+        0,
+        10,
+        10
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "error": "unknown-object",
+      "id": "o9"
+    }
+  },
+  {
+    "name": "selection-resource",
+    "description": "una risorsa dentro defs non è un oggetto",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <defs>\n    <linearGradient id=\"r1\"><stop offset=\"0\" stop-color=\"#ffffff\"/><stop offset=\"1\" stop-color=\"#000000\"/></linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "r1"
+      ],
+      "box": [
+        0,
+        0,
+        10,
+        10
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "error": "unknown-object",
+      "id": "r1"
+    }
+  },
+  {
+    "name": "selection-paper",
+    "description": "la carta non è un oggetto",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "fub-paper"
+      ],
+      "box": [
+        0,
+        0,
+        800,
+        600
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "error": "unknown-object",
+      "id": "fub-paper"
+    }
+  },
+  {
+    "name": "selection-empty",
+    "description": "una selezione vuota",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [],
+      "box": [
+        0,
+        0,
+        10,
+        10
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "error": "empty-selection"
+    }
+  },
+  {
+    "name": "selection-zero-box",
+    "description": "un riquadro largo 0",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        10,
+        10,
+        0,
+        50
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "error": "bad-box"
+    }
+  },
+  {
+    "name": "selection-tiny-box",
+    "description": "un riquadro alto meno di mezzo centesimo, che a 2 decimali è 0",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        10,
+        10,
+        100,
+        0.004
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "error": "bad-box"
+    }
+  },
+  {
+    "name": "selection-box-decimals",
+    "description": "il riquadro si scrive a 2 decimali, coi mezzi verso l'alto",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n    <ellipse id=\"o2\" cx=\"300\" cy=\"200\" rx=\"40\" ry=\"30\" fill=\"#d55e00\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        9.995,
+        -0.005,
+        100.123456,
+        50.5
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"9.99 0 100.12 50.5\" width=\"100.12\" height=\"50.5\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"#0072b2\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-first-of-same-id",
+    "description": "di due oggetti con lo stesso id vale il primo",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"0\" y=\"0\" width=\"10\" height=\"10\"/>\n    <rect id=\"o1\" x=\"50\" y=\"0\" width=\"10\" height=\"10\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        0,
+        0,
+        10,
+        10
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"0\" y=\"0\" width=\"10\" height=\"10\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-foreign",
+    "description": "un disegno estraneo: si sceglie anche fuori dai livelli, passando solo per elementi grafici",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <a href=\"#x\"><rect id=\"a1\" width=\"10\" height=\"10\"/><rect id=\"a2\" x=\"20\" width=\"10\" height=\"10\"/></a>\n  <!-- un commento -->\n  <circle id=\"a3\" cx=\"50\" cy=\"50\" r=\"5\"/><switch><rect id=\"a4\" width=\"1\" height=\"1\"/></switch>\n  <text id=\"a5\" x=\"0\" y=\"90\">ciao<tspan id=\"t1\">!</tspan></text>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "a2"
+      ],
+      "box": [
+        20,
+        0,
+        10,
+        10
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"20 0 10 10\" width=\"10\" height=\"10\">\n  <a href=\"#x\"><rect id=\"a2\" x=\"20\" width=\"10\" height=\"10\"/></a>\n  <!-- un commento -->\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-tspan",
+    "description": "un tspan non è un oggetto: sta dentro un testo",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <text id=\"a5\" x=\"0\" y=\"90\">ciao<tspan id=\"t1\">!</tspan></text>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "t1"
+      ],
+      "box": [
+        0,
+        80,
+        20,
+        10
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "error": "unknown-object",
+      "id": "t1"
+    }
+  },
+  {
+    "name": "selection-no-whitespace",
+    "description": "un elemento senza spazio prima, o con un commento prima, se ne va da solo",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect id=\"a1\" width=\"10\" height=\"10\"/><rect id=\"a2\" x=\"20\" width=\"10\" height=\"10\"/><!-- c --><rect id=\"a3\" x=\"40\" width=\"10\" height=\"10\"/></svg>",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "a1"
+      ],
+      "box": [
+        0,
+        0,
+        10,
+        10
+      ]
+    },
+    "background": "paper",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\"><rect id=\"a1\" width=\"10\" height=\"10\"/><!-- c --></svg>"
+    }
+  },
+  {
+    "name": "unicode-and-crlf",
+    "description": "caratteri fuori dall'ASCII prima dei cambi, e righe CRLF",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\r\n  <title>Ciclo dell’acqua 🌊</title>\r\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\r\n  <g id=\"l1\" fub:layer=\"Livello 1\">\r\n    <text id=\"o1\" x=\"10\" y=\"20\">Città – 水 🌧️</text>\r\n    <rect id=\"o2\" x=\"0\" y=\"0\" width=\"5\" height=\"5\"/>\r\n  </g>\r\n</svg>\r\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        10,
+        5,
+        80,
+        20
+      ]
+    },
+    "background": "none",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"10 5 80 20\" width=\"80\" height=\"20\">\r\n  <title>Ciclo dell’acqua 🌊</title>\r\n  <g id=\"l1\" fub:layer=\"Livello 1\">\r\n    <text id=\"o1\" x=\"10\" y=\"20\">Città – 水 🌧️</text>\r\n  </g>\r\n</svg>\r\n"
+    }
+  },
+  {
+    "name": "none-nested-paper",
+    "description": "sfondo none: si tolgono solo le carte figlie della radice",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"5\" height=\"5\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "background": "none",
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"5\" height=\"5\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "not-svg",
+    "description": "una radice che non è svg",
+    "input": "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body/></html>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "background": "paper",
+    "expect": {
+      "error": "not-svg"
+    }
+  },
+  {
+    "name": "malformed",
+    "description": "un testo che non è XML ben formato",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g></svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "background": "paper",
+    "expect": {
+      "error": "malformed"
+    }
+  }
+]
