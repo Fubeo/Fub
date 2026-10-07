@@ -90,6 +90,8 @@ Lo Standard aggiunge:
   simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
 - la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del
   disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
+- **«Presenta»** (`F5`), dopo «Tavole»: le tavole a schermo intero, una alla
+  volta, col laser e l'inchiostro ([Disegni, presentare](drawing-present.md));
 - il **Contagocce** (`I`), dopo la Tavola, e nelle «Proprietà» i **colori del
   documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
 - la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
