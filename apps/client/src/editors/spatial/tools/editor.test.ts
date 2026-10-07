@@ -2057,14 +2057,17 @@ describe("il testo, dal livello Standard", () => {
   );
   const EMPTY = doc(`<title>Prova</title>${LAYER}</g>`);
 
-  const input = (): HTMLTextAreaElement => host.querySelector<HTMLTextAreaElement>(".draw-text-input")!;
+  const input = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-input")!;
+  /// Le righe del campo, come le mostra.
+  const rows = (): HTMLElement[] => [...input().querySelectorAll<HTMLElement>(".draw-text-line")];
+  const shown = (): string => rows().map((row) => row.textContent).join("\n");
   const layer = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-layer")!;
   const painted = (): SVGElement => host.querySelector<SVGElement>(".spatial-painter text")!;
   /// Un tocco col mouse in (`x`, `y`).
   const tap = (x: number, y: number): void => drag([[x, y]]);
-  /// Scrive `value` nel campo, come la tastiera.
+  /// Mette `value` nel campo, come il browser che lo cambia da sé.
   const type = (value: string): void => {
-    input().value = value;
+    input().textContent = value;
     input().dispatchEvent(new Event("input", { bubbles: true }));
   };
   /// Le righe del testo `id`, come le scrive il file.
@@ -2085,10 +2088,13 @@ describe("il testo, dal livello Standard", () => {
     expect(layer().hidden).toBe(false);
     expect(document.activeElement).toBe(input());
     expect(input().getAttribute("aria-label")).toBe("Testo nuovo");
-    expect(document.getElementById(input().getAttribute("aria-describedby")!)?.textContent).toBe("Invio va a capo; Esc, Tab o Ctrl+Invio concludono.");
+    expect(document.getElementById(input().getAttribute("aria-describedby")!)?.textContent).toBe("Invio va a capo; Ctrl+B, I e U formattano; Esc, Tab o Ctrl+Invio concludono.");
     expect(input().style.fontFamily).toBe("Inter, sans-serif");
     expect(input().style.fontSize).toBe("32px");
-    expect(input().style.lineHeight).toBe("40px");
+    expect(input().style.lineHeight).toBe("1.25");
+    expect(input().getAttribute("contenteditable")).toBe("true");
+    expect(input().getAttribute("role")).toBe("textbox");
+    expect(input().getAttribute("aria-multiline")).toBe("true");
     expect(formatIssues(checkAccessibility(host))).toBe("");
     expect(changes).toEqual([]);
 
@@ -2117,11 +2123,13 @@ describe("il testo, dal livello Standard", () => {
     mount(TEXT, { level: "standard" });
     editor.setTool("text");
     tap(20, 35);
-    expect(input().value).toBe("Uno\nDue");
+    expect(shown()).toBe("Uno\nDue");
     expect(input().getAttribute("aria-label")).toBe("Testo");
     expect(input().style.fontSize).toBe("20px");
-    expect(input().style.lineHeight).toBe("25px");
-    expect(input().style.textAlign).toBe("left");
+    expect(rows().map((row) => [row.style.textAlign, row.style.marginTop])).toEqual([
+      ["left", ""],
+      ["left", "0px"],
+    ]);
     // Il testo sotto il campo non si vede, finché il campo è aperto.
     expect(painted().style.visibility).toBe("hidden");
     expect(formatIssues(checkAccessibility(host))).toBe("");
@@ -2209,6 +2217,48 @@ describe("il testo, dal livello Standard", () => {
     editor.select([T]);
     expect(key("F2").defaultPrevented).toBe(false);
     expect(layer().hidden).toBe(true);
+  });
+
+  it("Ctrl+B su una parola la scrive in un pezzo, con l'operazione text; il campo riapre il testo coi suoi pezzi", () => {
+    mount(TEXT, { level: "standard" });
+    editor.setTool("text");
+    tap(20, 35);
+    const two = rows()[1]!.firstChild!;
+    document.getSelection()!.setBaseAndExtent(two, 0, two, 3);
+    expect(key("b", { ctrlKey: true }, input()).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Grassetto attivato.");
+    key("Escape", {}, input());
+    expect(editor.engine.text).toContain('<tspan x="10" dy="0">Uno</tspan>\n  <tspan x="10" dy="25"><tspan font-weight="bold">Due</tspan></tspan>');
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("Testo modificato.");
+
+    tap(20, 35);
+    const piece = rows()[1]!.querySelector<HTMLElement>(".draw-text-piece")!;
+    expect(piece.textContent).toBe("Due");
+    expect(piece.style.fontWeight).toBe("bold");
+    key("Escape", {}, input());
+    expect(changes).toHaveLength(1);
+    key("z", { ctrlKey: true });
+    expect(lines(T)).toEqual(["Uno", "Due"]);
+  });
+
+  it("una riga spezzata sopra una che scrive il suo aspetto riscrive il testo intero, con lo stesso nome, in un passo", () => {
+    mount(TEXT.replace('<tspan x="10" dy="25">Due', '<tspan x="10" dy="25" font-style="italic">Due'), { level: "standard" });
+    editor.setTool("text");
+    tap(20, 35);
+    const one = rows()[0]!.firstChild!;
+    document.getSelection()!.setBaseAndExtent(one, 1, one, 1);
+    const split = new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true });
+    input().dispatchEvent(split);
+    expect(split.defaultPrevented).toBe(true);
+    expect(shown()).toBe("U\nno\nDue");
+    key("Escape", {}, input());
+    expect(editor.engine.text).toContain(`<text id="${T}" x="10" y="40" fill="#0072b2" font-family="Inter, sans-serif" font-size="20">`);
+    expect(editor.engine.text).toContain('<tspan x="10" dy="0">U</tspan>\n  <tspan x="10" dy="25">no</tspan>\n  <tspan x="10" dy="25" font-style="italic">Due</tspan>');
+    expect(changes).toHaveLength(1);
+    expect(editor.selection).toEqual([T]);
+    key("z", { ctrlKey: true });
+    expect(lines(T)).toEqual(["Uno", "Due"]);
   });
 
   it("Spazio scrive dov'è il cursore, e con l'aggancio la linea di base va sulla griglia", () => {
@@ -2305,7 +2355,6 @@ describe("il testo, dal livello Standard", () => {
     sizes[2]!.click();
     expect(editor.width).toBe(48);
     expect(input().style.fontSize).toBe("48px");
-    expect(input().style.lineHeight).toBe("60px");
     editor.setColor("#009e73");
     expect(input().style.color).toMatch(/^(#009e73|rgb\(0, 158, 115\))$/);
     key("Escape", {}, input());
@@ -2970,6 +3019,53 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     editor.undo();
     expect(spoken()).toBe("Annullato: Spessore del contorno.");
     expect(editor.engine.text).toBe(TWO);
+  });
+
+  it("il testo: lo stile, il peso, l'enfasi, l'interlinea e la spaziatura valgono per il testo intero", () => {
+    const T = "ot1t1t1t1";
+    const TEXT = doc(
+      `${LAYER}<text id="${T}" x="10" y="40" fill="#000000" font-family="Inter, sans-serif" font-size="32">` +
+        `<tspan x="10" dy="0">Uno</tspan><tspan x="10" dy="40">Due <tspan font-weight="bold">tre</tspan></tspan></text></g>`,
+    );
+    mount(TEXT, { level: "standard" });
+    editor.select([T]);
+    key("Enter");
+    const toggle = (label: string): HTMLButtonElement => property("emphasis").querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    const opening = (): string => /<text [^>]*>/.exec(editor.engine.text)![0];
+    // Il grassetto di una parola rende misti il peso e lo stile.
+    expect(property("preset").querySelector("select")!.value).toBe("");
+    expect(property("weight").querySelector("select")!.value).toBe("");
+    expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("mixed");
+    expect(toggle("Corsivo").getAttribute("aria-pressed")).toBe("false");
+    expect(propertyInput("leading").value).toBe("125");
+    expect(propertyInput("spacing").value).toBe("0");
+    toggle("Grassetto").click();
+    expect(opening()).toContain('font-size="32" font-weight="bold">');
+    expect(editor.engine.text).toContain('<tspan x="10" dy="40">Due tre</tspan>');
+    expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("true");
+    choose("preset", "title");
+    expect(opening()).toContain('font-size="64" font-weight="bold">');
+    // L'interlinea segue il corpo.
+    expect(editor.engine.text).toContain('<tspan x="10" dy="80">');
+    enter(propertyInput("leading"), "150");
+    expect(editor.engine.text).toContain('<tspan x="10" dy="96">');
+    enter(propertyInput("spacing"), "5");
+    expect(opening()).toContain('letter-spacing="3.2"');
+    toggle("Corsivo").click();
+    expect(opening()).toContain('font-style="italic"');
+    expect(changes).toHaveLength(5);
+    const undone = [1, 2, 3, 4, 5].map(() => {
+      editor.undo();
+      return spoken();
+    });
+    expect(undone).toEqual([
+      "Annullato: Corsivo.",
+      "Annullato: Spaziatura delle lettere.",
+      "Annullato: Interlinea.",
+      "Annullato: Stile del testo.",
+      "Annullato: Grassetto.",
+    ]);
+    expect(editor.engine.text).toBe(TEXT);
   });
 
   it("«Disponi» ha i comandi della barra, che dicono quando non servono", () => {

@@ -22,8 +22,8 @@ use crate::ink::{Ink, InkError};
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
-    dasharray, href, keyword, length, non_negative_length, number_list, opacity, paint, points,
-    preserve_aspect_ratio, transform, Href,
+    dasharray, href, keyword, length, letter_spacing, non_negative_length, number_list, opacity,
+    paint, points, preserve_aspect_ratio, text_decoration, transform, Href,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -176,8 +176,9 @@ pub struct ElementItem {
     /// spazi com'erano: è ciò che l'operazione `meta` sostituisce.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    /// Le righe di un `text`, una per `tspan`, coi riferimenti risolti e gli
-    /// spazi com'erano: è ciò che l'operazione `text` sostituisce.
+    /// Le righe di un `text`, una per `tspan` coi suoi pezzi, coi riferimenti
+    /// risolti e gli spazi com'erano: è il testo che l'operazione `text`
+    /// sostituisce.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lines: Option<Vec<String>>,
 }
@@ -306,8 +307,12 @@ fn svg_attribute(tag: Tag, name: &str, value: &str) -> bool {
         "fill" | "stroke" => paint(value).is_some(),
         "fill-opacity" | "stroke-opacity" | "opacity" => opacity(value).is_some(),
         "stroke-width" | "font-size" => non_negative_length(value).is_some(),
-        "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight" | "text-anchor" => {
-            keyword(name, value)
+        "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight" | "font-style"
+        | "text-anchor" => keyword(name, value),
+        "letter-spacing" => letter_spacing(value).is_some(),
+        // Non si eredita: vale soltanto dove si scrive il testo.
+        "text-decoration" => {
+            matches!(tag, Tag::Text | Tag::Tspan) && text_decoration(value).is_some()
         }
         "stroke-dasharray" => dasharray(value),
         "transform" => transform(value).is_some(),
@@ -370,8 +375,35 @@ fn first_title(doc: &Document<'_>, element: &Element<'_>) -> Option<String> {
         .map(|&child| character_data(doc, child))
 }
 
-/// Vero se `id` è un `title`, `desc` o, dentro un `text`, un `tspan`
-/// modificabile: attributi ammessi e solo testo dentro.
+/// Gli attributi che un pezzo di riga non ha: un pezzo continua la riga,
+/// non la sposta, non la nasconde e non ha un nome suo. SVG non dà a un
+/// `tspan` né opacità né trasformazione.
+const NOT_IN_PIECE: [&str; 7] = [
+    "id",
+    "x",
+    "dy",
+    "text-anchor",
+    "display",
+    "opacity",
+    "transform",
+];
+
+/// Vero se `id` è un pezzo di riga modificabile: un `tspan` con attributi da
+/// pezzo e solo testo dentro.
+fn allowed_piece(doc: &Document<'_>, id: NodeId) -> bool {
+    let Some(element) = doc.element(id).filter(|e| Tag::of(e) == Some(Tag::Tspan)) else {
+        return false;
+    };
+    let placed = element
+        .attrs
+        .iter()
+        .any(|attr| attr.ns == NS_NONE && NOT_IN_PIECE.contains(&attr.local));
+    !placed && attributes_allowed(element, Tag::Tspan) && character_data_only(doc, element)
+}
+
+/// Vero se `id` è un `title`, `desc` o, dentro un `text`, una riga
+/// modificabile: attributi ammessi e dentro solo testo, e per una riga anche
+/// pezzi.
 fn allowed_part(doc: &Document<'_>, id: NodeId, inside_text: bool) -> bool {
     let Some(element) = doc.element(id) else {
         return false;
@@ -381,7 +413,32 @@ fn allowed_part(doc: &Document<'_>, id: NodeId, inside_text: bool) -> bool {
         Some(Tag::Tspan) if inside_text => Some(Tag::Tspan),
         _ => None,
     };
-    allowed.is_some_and(|tag| attributes_allowed(element, tag) && character_data_only(doc, element))
+    let Some(tag) = allowed.filter(|&tag| attributes_allowed(element, tag)) else {
+        return false;
+    };
+    if tag != Tag::Tspan {
+        return character_data_only(doc, element);
+    }
+    element
+        .children
+        .iter()
+        .all(|&child| match doc.nodes[child].kind {
+            Kind::Text { .. } => true,
+            Kind::Element(_) => allowed_piece(doc, child),
+            _ => false,
+        })
+}
+
+/// Il testo di una riga modificabile, coi suoi pezzi.
+fn line_text(doc: &Document<'_>, id: NodeId) -> String {
+    doc.children(id)
+        .iter()
+        .map(|&child| match &doc.nodes[child].kind {
+            Kind::Text { value, .. } => value.to_string(),
+            Kind::Element(_) => character_data(doc, child),
+            _ => String::new(),
+        })
+        .collect()
 }
 
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
@@ -685,7 +742,7 @@ impl Builder<'_, '_> {
                     .children
                     .iter()
                     .filter(|&&child| doc.element(child).is_some_and(|e| e.is_svg("tspan")))
-                    .map(|&child| character_data(doc, child))
+                    .map(|&child| line_text(doc, child))
                     .collect()
             }),
         };

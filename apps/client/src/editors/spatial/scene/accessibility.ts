@@ -18,7 +18,9 @@
 // - **un testo**, una volta per riga: nel punto d'inizio del `tspan`, alzato
 //   di 0,35 volte la grandezza dei caratteri, a metà dell'occhio delle
 //   minuscole. Senza i caratteri la larghezza della riga non si sa, e
-//   l'inizio sta sempre sul testo, qualunque sia `text-anchor`;
+//   l'inizio sta sempre sul testo, qualunque sia `text-anchor`. Un pezzo
+//   della riga con un colore, un corpo o un peso suoi si guarda nello stesso
+//   punto, col suo aspetto;
 // - **un tratto a penna**, in sedici punti del contorno presi a distanze
 //   uguali fra i suoi vertici. Conta il contrasto mediano, quello che il
 //   tratto ha per gran parte della sua lunghezza: un tratto che attraversa
@@ -82,8 +84,8 @@ export interface Contrast {
   readonly color: Color;
   readonly under: Rgb;
   readonly threshold: number;
-  /// Vero se il colore è quello di una riga, scritto sul suo `tspan`: il
-  /// colore del testo non lo cambia.
+  /// Vero se il colore è quello di una riga o di un pezzo, scritto sul suo
+  /// `tspan`: il colore del testo non lo cambia.
   readonly line: boolean;
 }
 
@@ -93,8 +95,8 @@ export interface Smallness {
   /// Quanto la matrice allunga il verticale: il corpo a grandezza naturale
   /// è il corpo scritto per questo.
   readonly scale: number;
-  /// Vero se la riga più piccola ha un corpo suo, scritto sul suo `tspan`:
-  /// il corpo del testo non lo cambia.
+  /// Vero se la riga o il pezzo più piccolo ha un corpo suo, scritto sul
+  /// suo `tspan`: il corpo del testo non lo cambia.
   readonly line: boolean;
 }
 
@@ -140,7 +142,7 @@ interface Line {
   /// Il contrasto che le basta: [`MIN_CONTRAST`] per un testo grande,
   /// [`MIN_TEXT_CONTRAST`] per gli altri.
   readonly threshold: number;
-  /// Il `tspan` scrive il suo colore.
+  /// La riga o il pezzo scrive il suo colore.
   readonly own: boolean;
 }
 
@@ -267,24 +269,43 @@ export class Legibility {
       if (tspan === null || !isSvg(tspan, "tspan")) continue;
       y += len(tspan, "dy") ?? 0;
       const line = context.line(tspan);
-      const words: string[] = [];
-      textContent(doc, child, words);
-      if (line.hidden || collapse(words.join("")) === "") continue;
-      const size = line.fontSize === null ? null : line.fontSize * scale;
-      if (size !== null && (smallest === null || size < smallest)) {
-        smallest = size;
-        ownSize = valueOf(tspan, NS_NONE, "font-size") !== undefined;
-      }
-      // Un testo di grandezza ignota conta come un testo normale.
-      const large = size !== null && (size >= LARGE_TEXT || (line.bold && size >= LARGE_BOLD_TEXT));
+      if (line.hidden) continue;
       const lift = LINE_PROBE * (line.fontSize ?? DEFAULT_FONT_SIZE);
-      const fill = line.fillPaint();
-      lines.push({
-        at: apply(m, [len(tspan, "x") ?? x, y - lift]),
-        color: fill === "none" ? null : fill,
-        threshold: large ? MIN_CONTRAST : MIN_TEXT_CONTRAST,
-        own: valueOf(tspan, NS_NONE, "fill") !== undefined,
-      });
+      const at = apply(m, [len(tspan, "x") ?? x, y - lift]);
+      const lineFill = valueOf(tspan, NS_NONE, "fill") !== undefined;
+      const lineSize = valueOf(tspan, NS_NONE, "font-size") !== undefined;
+      // Il testo della riga e ogni pezzo, ciascuno col suo aspetto: senza i
+      // caratteri non si sa dove cade un pezzo, e lo si guarda dove comincia
+      // la riga.
+      const words: string[] = [];
+      const runs: Array<{ readonly look: Context; readonly words: string; readonly fill: boolean; readonly size: boolean }> = [];
+      for (const part of doc.children(child)) {
+        const node = doc.nodes[part]!;
+        if (node.kind === "text") words.push(node.value);
+        if (node.kind !== "element") continue;
+        const piece: string[] = [];
+        textContent(doc, part, piece);
+        runs.push({
+          look: line.line(node),
+          words: piece.join(""),
+          fill: lineFill || valueOf(node, NS_NONE, "fill") !== undefined,
+          size: lineSize || valueOf(node, NS_NONE, "font-size") !== undefined,
+        });
+      }
+      runs.unshift({ look: line, words: words.join(""), fill: lineFill, size: lineSize });
+      for (const run of runs) {
+        const look = run.look;
+        if (look.hidden || collapse(run.words) === "") continue;
+        const size = look.fontSize === null ? null : look.fontSize * scale;
+        if (size !== null && (smallest === null || size < smallest)) {
+          smallest = size;
+          ownSize = run.size;
+        }
+        // Un testo di grandezza ignota conta come un testo normale.
+        const large = size !== null && (size >= LARGE_TEXT || (look.bold && size >= LARGE_BOLD_TEXT));
+        const fill = look.fillPaint();
+        lines.push({ at, color: fill === "none" ? null : fill, threshold: large ? MIN_CONTRAST : MIN_TEXT_CONTRAST, own: run.fill });
+      }
     }
     if (smallest !== null && smallest < MIN_TEXT_SIZE) {
       this.found.push(diagnostic("S013", span, shown(smallest)));

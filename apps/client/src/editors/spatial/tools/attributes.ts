@@ -33,10 +33,12 @@ import {
   keyword,
   keywords,
   length,
+  letterSpacing,
   nonNegativeLength,
   opacity,
   points,
   preserveAspectRatio,
+  textDecoration,
   transform,
   trim,
 } from "../scene/values";
@@ -75,6 +77,8 @@ export type Kind =
   | "opacity"
   | "dashes"
   | "keyword"
+  | "spacing"
+  | "decoration"
   | "family"
   | "transform"
   | "points"
@@ -108,6 +112,9 @@ const KINDS: ReadonlyMap<string, Kind> = new Map(Object.entries({
   "stroke-linejoin": "keyword",
   display: "keyword",
   "font-weight": "keyword",
+  "font-style": "keyword",
+  "letter-spacing": "spacing",
+  "text-decoration": "decoration",
   "text-anchor": "keyword",
   "font-family": "family",
   transform: "transform",
@@ -184,7 +191,10 @@ export interface Subject {
 const PAINT = ["fill", "fill-opacity"];
 const OUTLINE = ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "stroke-dasharray"];
 const COMMON = ["opacity", "display", "transform"];
-const TYPE = ["font-family", "font-size", "font-weight", "text-anchor"];
+const TYPE = ["font-family", "font-size", "font-weight", "font-style", "letter-spacing", "text-anchor"];
+
+/// Le linee del testo, che non si ereditano: solo di un testo.
+const TEXT_TYPE = ["font-family", "font-size", "font-weight", "font-style", "letter-spacing", "text-decoration", "text-anchor"];
 
 const GEOMETRY: Readonly<Partial<Record<Role, readonly string[]>>> = {
   rect: ["x", "y", "width", "height", "rx", "ry"],
@@ -214,7 +224,7 @@ function offered(role: Role): readonly string[] {
     case "image":
       return [...geometry, ...COMMON];
     case "text":
-      return [...geometry, ...PAINT, ...OUTLINE, ...COMMON, ...TYPE];
+      return [...geometry, ...PAINT, ...OUTLINE, ...COMMON, ...TEXT_TYPE];
     case "group":
     case "link":
       return [...PAINT, ...OUTLINE, ...COMMON, ...TYPE];
@@ -333,6 +343,10 @@ export function initialValue(key: string): string {
       return "0";
     case "dashes":
       return "none";
+    case "spacing":
+      return "normal";
+    case "decoration":
+      return "none";
     case "keyword":
       return keywords(key)[key === "display" ? 1 : 0] ?? "";
     case "family":
@@ -389,6 +403,12 @@ function written(kind: Kind, key: string, text: string): string | null | undefin
     }
     case "keyword":
       return keyword(key, text) ? text : undefined;
+    case "spacing":
+      return trim(text) === "normal" ? "normal" : place(letterSpacing(text));
+    case "decoration": {
+      const lines = textDecoration(text);
+      return lines === null ? undefined : lines.length === 0 ? "none" : lines.join(" ");
+    }
     case "family":
       return TEXT_FAMILIES.includes(text) ? text : undefined;
     case "transform": {

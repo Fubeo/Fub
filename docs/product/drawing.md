@@ -263,10 +263,9 @@ di annulla, mentre dentro il campo `Ctrl+Z` o `⌘Z` annulla la scrittura.
 
 Un testo nuovo è in Inter, il carattere dell'interfaccia, col colore della
 penna e una delle tre dimensioni che, con lo strumento Testo, prendono il
-posto degli spessori: Piccolo, Medio e Grande, 24, 32 e 48 unità. Colore e
-dimensione scelti mentre si scrive valgono per il testo nuovo nel campo. Nel
-file è un `text` col punto d'ancoraggio, una riga per `tspan`, a
-un'interlinea di 1,25 volte il corpo:
+posto degli spessori: Piccolo, Medio e Grande, 24, 32 e 48 unità. Nel file è
+un `text` col punto d'ancoraggio, una riga per `tspan`, a un'interlinea di
+1,25 volte il corpo:
 
 ```xml
 <text id="o5e6f7g8h" x="120" y="300" fill="#000000" font-family="Inter, sans-serif" font-size="32">
@@ -280,12 +279,13 @@ bordi di una riga niente; le righe vuote in testa e in coda non ci sono, e
 una vuota fra due scritte resta, come uno spazio indivisibile. Un testo nuovo
 vuoto non si scrive, e uno svuotato si elimina. In Lettura e in una nota,
 dove il disegno è un'immagine, il testo ha i caratteri del foglio: l'immagine
-li porta dentro, fino a 192 KB, e il file non cambia.
+li porta dentro, fino a 384 KB, e il file non cambia.
 
 Cambiare un testo che c'è riscrive solo le sue righe, e il resto resta come
 l'ha scritto chi l'ha fatto, anche in un altro programma: una riga nuova
-copia la precedente e ne prende l'interlinea. Si cambia sul posto un testo di
-righe semplici, un `tspan` per riga, che non sta in un gruppo.
+copia la precedente e ne prende l'interlinea. Si cambia sul posto un testo che
+non sta in un gruppo, un `tspan` per riga coi suoi pezzi: grassetto, corsivo,
+colori e il resto sono in [Disegni, tipografia](drawing-typography.md).
 
 ## Collegamenti
 

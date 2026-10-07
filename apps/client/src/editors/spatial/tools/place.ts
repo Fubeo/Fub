@@ -47,6 +47,8 @@ export const INITIAL: Readonly<Record<string, string>> = {
   "stroke-dasharray": "none",
   "font-size": "16",
   "font-weight": "normal",
+  "font-style": "normal",
+  "letter-spacing": "normal",
   "text-anchor": "start",
 };
 
@@ -92,7 +94,7 @@ export function carriedTo(
 export function inheritedBy(local: string, container: boolean): readonly string[] {
   if (container || local === "text") return INHERITED;
   if (local === "image") return [];
-  return INHERITED.filter((name) => !name.startsWith("font-") && name !== "text-anchor");
+  return INHERITED.filter((name) => !name.startsWith("font-") && name !== "letter-spacing" && name !== "text-anchor");
 }
 
 /// Vero se `node` sta fra i figli di `parent` prima di ciò che va «per

@@ -5,8 +5,9 @@
 //
 // `?variant=` mette apposta una differenza in una strada sola, perché il
 // banco dimostri di vederla: `colore` cambia un colore nella Lettura,
-// `carattere` toglie i caratteri dell'app alla Lettura, `tratteggio` toglie i
-// tratteggi all'export.
+// `carattere` toglie i caratteri dell'app alla Lettura, `corsivo` le toglie
+// i soli corsivi, che il browser fa allora inclinando il tondo, `tratteggio`
+// toglie i tratteggi all'export.
 
 // Gli strati del foglio stanno uno sopra l'altro con le regole del tema, come
 // nell'app.
@@ -26,6 +27,10 @@ const variant = params.get("variant");
 document.documentElement.dataset.scenes = FIDELITY.map((scene) => scene.id).join(" ");
 
 const NO_FONTS: FontSheets = { now: () => "", load: async () => "" };
+const UPRIGHT: FontSheets = {
+  now: () => null,
+  load: async (svg) => (await appFonts.load(svg)).split("\n").filter((rule) => !rule.includes("font-style:italic")).join("\n"),
+};
 
 const frame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -41,7 +46,7 @@ async function picture(id: string, blob: Blob): Promise<void> {
 async function main(): Promise<void> {
   if (found === undefined) return;
   ensureTextFont();
-  await Promise.all(FONT_FILES.map(([family]) => document.fonts.load(`16px "${family}"`)));
+  await Promise.all(FONT_FILES.map(([family, , , style]) => document.fonts.load(`${style} 16px "${family}"`)));
   await appFonts.load(found.text);
 
   const host = document.getElementById("surface")!;
@@ -50,7 +55,7 @@ async function main(): Promise<void> {
   painter.update(new PaintBuilder().build(SceneEngine.open(found.text)));
 
   const read = variant === "colore" ? found.text.replace("#2b6cb0", "#4a90d9") : found.text;
-  const shown = await selfContained(read, async () => null, 0, variant === "carattere" ? NO_FONTS : appFonts);
+  const shown = await selfContained(read, async () => null, 0, variant === "carattere" ? NO_FONTS : variant === "corsivo" ? UPRIGHT : appFonts);
   await picture("read", new Blob([shown], { type: "image/svg+xml" }));
 
   const out = variant === "tratteggio" ? found.text.replace(/ ?stroke-dasharray(="[^"]*"|:[^;"]*;?)/g, "") : found.text;

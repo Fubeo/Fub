@@ -254,6 +254,16 @@ describe("la diagnostica (§12)", () => {
         '<text x="20" y="50"><tspan x="20" dy="0">Uno</tspan><tspan x="20" dy="20" fill="#f0e442">Due</tspan></text>',
         "1.32",
       ],
+      // Così un pezzo della riga col suo colore; uno vuoto non si legge.
+      [
+        '<text x="20" y="50"><tspan x="20" dy="0">Uno <tspan fill="#f0e442">due</tspan><tspan fill="#ffffff"> </tspan></tspan></text>',
+        "1.32",
+      ],
+      // Il verde vuole 4,5:1 nel pezzo piccolo, anche se la riga è grande.
+      [
+        '<text x="20" y="50" fill="#009e73"><tspan x="20" dy="0" font-size="30">Grande <tspan font-size="12">piccolo</tspan></tspan></text>',
+        "3.42",
+      ],
       // Fuori dall'ellisse, anche se dentro il suo rettangolo.
       [
         '<ellipse cx="60" cy="60" rx="60" ry="60" fill="#000000"/>'
@@ -291,6 +301,10 @@ describe("la diagnostica (§12)", () => {
       label('fill="#ffffff" display="none"', "Via"),
       label('fill="none"', "Vuoto"),
       label('fill="#ffffff"', " "),
+      // Un pezzo grande, o in grassetto e abbastanza grande, vuole 3:1.
+      label("", 'Nero <tspan fill="#009e73" font-size="24">titolo</tspan><tspan fill="#009e73" font-size="19" font-weight="bold">forte</tspan>'),
+      // Un pezzo nascosto o senza riempimento non si legge.
+      label("", 'Nero <tspan fill="#ffffff" display="none">via</tspan><tspan fill="none">vuoto</tspan>'),
     ]) {
       expect(of(onPaper("#ffffff", body), "S009"), body).toEqual([]);
     }
@@ -392,6 +406,8 @@ describe("la diagnostica (§12)", () => {
         '<text x="0" y="20"><tspan x="0" dy="0">Grande</tspan><tspan x="0" dy="20" font-size="9">piccolo</tspan></text>',
         "9.00",
       ],
+      // E il pezzo più piccolo di una riga.
+      [label('font-size="20"', 'Grande <tspan font-size="10.5">piccolo</tspan>'), "10.50"],
     ];
     for (const [body, detail] of small) {
       const found = of(load(titled(body)), "S013");
@@ -406,6 +422,8 @@ describe("la diagnostica (§12)", () => {
       `<g transform="scale(2)">${label('font-size="8"', "Ingrandito")}</g>`,
       label('font-size="9" display="none"', "Nascosto"),
       label('font-size="9"', "  "),
+      // Un pezzo piccolo nascosto o vuoto non conta.
+      label("", 'Testo <tspan font-size="9" display="none">via</tspan><tspan font-size="9"> </tspan>'),
     ]) {
       expect(of(load(titled(body)), "S013"), body).toEqual([]);
     }

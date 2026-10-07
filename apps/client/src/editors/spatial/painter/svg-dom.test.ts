@@ -194,6 +194,24 @@ describe("il documento vivo", () => {
     expect(urls).toBe(3);
   });
 
+  it("scrive i pezzi di una riga come tspan dentro la riga", async () => {
+    const painter = createSvgPainter(host, owner);
+    const source = doc(
+      `${LAYER}<text id="t" x="10" y="20"><tspan x="10" dy="0">a <tspan font-weight="bold" fill="#0072b2" xml:space="preserve">b  c</tspan>!</tspan></text></g>`,
+    );
+    painter.update(sceneOf(SceneEngine.open(source), new PaintBuilder()));
+    await decoded();
+    const line = host.querySelector('[data-scene-id="t"] > tspan')!;
+    expect(line.getAttribute("dy")).toBe("0");
+    expect(line.textContent).toBe("a b  c!");
+    expect([...line.childNodes].map((node) => node.nodeName.toLowerCase())).toEqual(["#text", "tspan", "#text"]);
+    const piece = line.querySelector("tspan")!;
+    expect(piece.getAttribute("font-weight")).toBe("bold");
+    expect(piece.getAttribute("fill")).toBe("#0072b2");
+    expect(piece.getAttributeNS("http://www.w3.org/XML/1998/namespace", "space")).toBe("preserve");
+    expect(piece.textContent).toBe("b  c");
+  });
+
   it("riusa i nodi di ciò che non cambia", async () => {
     const engine = SceneEngine.open(HOSTILE);
     const builder = new PaintBuilder();

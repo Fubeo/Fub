@@ -47,6 +47,10 @@ sta nell'involucro del messaggio live, non nella singola operazione.
 - **`children`:** per `g`, `a` e `text`; `title` e `desc` sono figli ammessi
   di qualunque elemento.
 - **`text`:** solo per `tspan`, `title` e `desc`.
+- **`runs`:** al posto di `text`, per un `tspan` che è una riga di un `text`:
+  il testo della riga e i suoi pezzi, nella forma dell'operazione `text`
+  ([testo](scene-format-text.md), §5). Tutti e due insieme sono
+  `invalid-elem`.
 
 ### Posizione (`Pos`)
 
@@ -81,7 +85,7 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 | `add` | `parent`, `pos`, `elem` oppure `raw` | inserisce l'elemento | `remove` con lo stesso `id`, o col percorso |
 | `remove` | `target` | elimina l'elemento con i suoi figli | `add` con l'elemento tolto e il suo posto |
 | `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere) | cambia attributi | `set` con i valori precedenti |
-| `text` | `id`, `lines` (lista di stringhe) | sostituisce le righe di un `text` | `text` con le righe precedenti |
+| `text` | `id`, `lines` (una riga è una stringa, o la lista del suo testo e dei suoi [pezzi](scene-format-text.md)) | sostituisce le righe di un `text` | `text` con le righe precedenti, pezzi compresi |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
 | `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
 | `page` | `viewBox` (`"x y w h"`) | cambia insieme `viewBox`, `width` e `height` della radice e la geometria della carta | `page` con i valori precedenti |
@@ -249,7 +253,8 @@ tiene, per ogni elemento:
   precedente tranne `id` e `dy`. Il `dy` è quello dell'ultimo `tspan` dopo il
   primo che lo scrive; se non c'è, è 1,25 volte il corpo con cui si vede
   l'ultima riga: il primo `font-size` che si incontra salendo dal suo `tspan`
-  al `text` e ai contenitori, 16 se nessuno lo scrive.
+  al `text` e ai contenitori, 16 se nessuno lo scrive. I pezzi della riga
+  prima non si copiano.
 - **`move`:** una cancellazione e un inserimento, calcolati sul testo di
   partenza, ordinati e non sovrapposti. Le righe interne dell'elemento
   spostato prendono il rientro della nuova profondità, ma solo se cominciano
@@ -398,6 +403,10 @@ devono verificare renderebbe il test circolare.
 | 43 | `add-raw-foreign` | `add` con `raw` scrive l'elemento estraneo così com'è, e l'inversa lo toglie col percorso |
 | 44 | `add-raw-sequence` | un `raw` con un elemento del formato e uno estraneo; l'inversa è un `batch` che li toglie dall'ultimo al primo |
 | 45 | `add-raw-duplicate-id` | un `raw` con dentro un id già presente: rifiuto `duplicate-id` |
+| 46 | `text-runs` | una riga coi pezzi, sulla stessa riga del file e con gli attributi in ordine canonico |
+| 47 | `text-runs-canonical` | i pezzi in forma canonica; l'inversa riporta i pezzi di prima |
+| 48 | `text-runs-foreign-piece` | un pezzo con un attributo della riga: rifiuto `invalid-elem` |
+| 49 | `add-text-runs` | `add` di un testo coi pezzi e la tipografia nuova, come lo scrive un duplicato |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

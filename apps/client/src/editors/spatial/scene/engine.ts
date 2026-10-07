@@ -69,6 +69,7 @@ import {
   type Reason,
   type Slot,
   type Target,
+  type TextLine,
 } from "./ops";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, openSource, readScene, type ReadOnly, type Status } from "./read";
 import { parseGuides, parseUnits } from "./rulers";
@@ -76,19 +77,23 @@ import {
   attributeName,
   attributesOf,
   canonicalOrder,
+  canonicalRuns,
   ElemError,
   elemToOut,
   elementToOut,
   escapeAttribute,
   escapeText,
   isXmlText,
+  lineContent,
   NamespaceScope,
+  readRuns,
   rootOrder,
   writeElement,
   writeOpenTag,
   type Elem,
   type OutAttr,
   type OutElement,
+  type Run,
 } from "./serialize";
 import { lineBreakOf, newline, normalizeEol, SourceText, utf8Length } from "./text";
 import { Tree, type Entry, type HeadState } from "./tree";
@@ -1116,6 +1121,9 @@ export class SceneEngine {
         out.children = value.children.map((child) => visit(child, false));
       }
       if (value.text !== undefined) out.text = value.text as string | null;
+      // I pezzi di una riga: la forma la controlla la scrittura, i valori la
+      // classificazione.
+      if (value.runs !== undefined) out.runs = value.runs as Run[];
       return out;
     };
     return visit(elem, true);
@@ -1535,16 +1543,29 @@ export class SceneEngine {
 
   private text_(op: Record<string, unknown>): Op {
     if (typeof op.id !== "string" || !Array.isArray(op.lines)) reject("invalid-elem", "text non valido");
-    const lines: string[] = [];
+    // Una riga è testo, o le sue parti: quelle senza niente da dire si
+    // tolgono, e una riga che resta senza pezzi è testo.
+    const lines: TextLine[] = [];
     for (const line of op.lines as unknown[]) {
-      if (typeof line !== "string" || !isXmlText(line) || /[\r\n]/.test(line)) reject("invalid-elem", "riga non valida");
-      lines.push(line);
+      if (typeof line === "string") {
+        if (!isXmlText(line) || /[\r\n]/.test(line)) reject("invalid-elem", "riga non valida");
+        lines.push(line);
+        continue;
+      }
+      const runs = elemGuard(() => canonicalRuns(line));
+      lines.push(runs.every((run) => typeof run === "string") ? runs.join("") : runs);
     }
     const node = this.target(op.id);
     this.guard(node, true);
     if (roleOf(node) !== "text") reject("invalid-elem", `${op.id} non è un testo`);
-    const previous = [...(node.details!.lines ?? [])];
-    this.rewriteLeaf(node, (out, { fragment, element, scope }) => {
+    const before = this.reread(node);
+    const previous: TextLine[] = [];
+    for (const child of before.element.children) {
+      const tspan = before.fragment.doc.element(child);
+      if (tspan === null || !isSvg(tspan, "tspan")) continue;
+      previous.push(readRuns(before.fragment.doc, tspan) ?? node.details!.lines![previous.length]!);
+    }
+    const built = this.rewriteLeaf(node, (out, { fragment, element, scope }) => {
       const doc = fragment.doc;
       const others: OutElement[] = [];
       const tspans: ElementNode[] = [];
@@ -1576,10 +1597,16 @@ export class SceneEngine {
             : attributesOf(doc, element).filter((a) => a.uri === "" && a.local === "x");
           attrs = canonicalOrder([...base, dy]);
         }
-        written.push({ name, group: false, attrs, children: [], text: escapeText(lines[i]!) });
+        const line = lines[i]!;
+        const text = typeof line === "string" ? escapeText(line) : elemGuard(() => lineContent(line, scope));
+        written.push({ name, group: false, attrs, children: [], text });
       }
       return { ...out, children: [...others, ...written] };
     });
+    // Un pezzo con un attributo che il formato non gli dà renderebbe
+    // estraneo il testo.
+    const problem = this.problem(built);
+    if (problem !== null) reject("invalid-elem", problem);
     this.touched.add(op.id);
     return { op: "text", id: op.id, lines: previous };
   }

@@ -130,6 +130,8 @@ const VALUE_PROBLEMS: Readonly<Record<ValueProblem, DrawKey>> = {
   opacity: "draw.attributes.problem.opacity",
   dashes: "draw.attributes.problem.dashes",
   keyword: "draw.attributes.problem.keyword",
+  spacing: "draw.attributes.problem.spacing",
+  decoration: "draw.attributes.problem.decoration",
   family: "draw.attributes.problem.family",
   transform: "draw.attributes.problem.transform",
   points: "draw.attributes.problem.points",

@@ -36,6 +36,8 @@ let state: {
   fill: string | null;
   dash: string | null;
   anchor: string | null;
+  bold: boolean | null;
+  italic: boolean | null;
   ratio: boolean;
   grid: boolean;
   desc: string;
@@ -81,6 +83,14 @@ function view(): PropertiesView {
         { value: "end", label: "A destra", icon: "draw-anchor-end" },
       ],
     },
+    emphasis: {
+      kind: "toggles",
+      label: "Enfasi",
+      options: [
+        { value: "bold", label: "Grassetto", icon: "draw-text-bold", on: state.bold },
+        { value: "italic", label: "Corsivo", icon: "draw-text-italic", on: state.italic },
+      ],
+    },
     grid: { kind: "switch", label: "Mostra la griglia", on: state.grid, note: "Le righe si vedono soltanto qui." },
     desc: { kind: "text", label: "Descrizione", value: state.desc },
   };
@@ -108,6 +118,10 @@ function change(id: FieldId, value: number | string | boolean): string | null {
   else if (id === "fill") state.fill = value as string;
   else if (id === "dash") state.dash = value as string;
   else if (id === "anchor") state.anchor = value as string;
+  else if (id === "emphasis") {
+    const [which, on] = (value as string).split(":");
+    state[which as "bold" | "italic"] = on === "true";
+  }
   else if (id === "ratio") state.ratio = value as boolean;
   else if (id === "grid") state.grid = value as boolean;
   else if (id === "desc") state.desc = value as string;
@@ -171,6 +185,8 @@ beforeEach(() => {
     fill: "#0072b2",
     dash: "solid",
     anchor: "start",
+    bold: null,
+    italic: false,
     ratio: false,
     grid: false,
     desc: "",
@@ -458,6 +474,21 @@ describe("le scelte e i pulsanti", () => {
     buttons[1]!.click();
     expect(calls).toEqual(["anchor=middle"]);
     expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "true", "false"]);
+  });
+
+  it("l'enfasi è una barra di interruttori: uno misto si accende, uno acceso si spegne", () => {
+    mount();
+    const buttons = [...field("emphasis").querySelectorAll<HTMLButtonElement>("button")];
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["Grassetto", "Corsivo"]);
+    expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(["mixed", "false"]);
+    expect(field("emphasis").querySelector("[role=toolbar]")!.getAttribute("aria-labelledby")).toBe(field("emphasis").querySelector(".draw-properties-label")!.id);
+    buttons[0]!.click();
+    expect(buttons[0]!.getAttribute("aria-pressed")).toBe("true");
+    buttons[0]!.click();
+    buttons[1]!.click();
+    expect(calls).toEqual(["emphasis=bold:true", "emphasis=bold:false", "emphasis=italic:true"]);
+    expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
   it("i comandi partono; uno che adesso non si usa resta raggiungibile e dice perché", () => {

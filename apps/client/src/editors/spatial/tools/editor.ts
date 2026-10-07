@@ -167,6 +167,7 @@ import {
   groupOps,
   holdsLink,
   holdsLinks,
+  elemOf,
   isGroup,
   isLink,
   linkOps,
@@ -191,7 +192,7 @@ import {
   CAP_LABELS,
   DASH_LABELS,
   JOIN_LABELS,
-  LOOK_ACTIONS,
+  lookAction,
   lookChange,
   outlineChange,
   propertiesView,
@@ -200,7 +201,7 @@ import {
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { lookOf as selectionLook, lookOps, styleOf, styleOps, type LookChange, type Style } from "./look";
+import { initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
@@ -245,7 +246,7 @@ import {
   type Spacing,
 } from "./guides";
 import { applyOps } from "./apply";
-import { pathOps } from "./topath";
+import { pathOps, replaceElem } from "./topath";
 import type { Join } from "./offset";
 import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps, strokeFill } from "./paths";
 import { movedPoint, presetOf, PRESETS, profileWidth, rightOf, SpineMeasure, widthOutline, withoutPoint, withPoint, withWidths, type Preset, type WidthShape } from "./profile";
@@ -422,7 +423,9 @@ import type { Traced } from "./trace";
 import { imageWindow, traceOps, tracedGroup, traceSource, weightOf, type TraceSource } from "./trace-ops";
 import { inlineTracer, workerTracer, type Tracer, type TracerFactory } from "./trace-runner";
 import { MAX_COLORS, MAX_SHAPES, MIN_COLORS, TRACE_PRESETS, type TracePreset, type TraceSettings } from "./trace-settings";
-import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
+import { editableRich, lineRuns, lineText as richLineText, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich } from "./rich";
+import { ensureTextFont, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
+import { createTextField } from "./text-field";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
 /// `EditorChange` (operazioni sulla scena, §6).
@@ -883,13 +886,6 @@ const PREVIEW_NODES = 2_000;
 /// e quella sotto del carattere. Il browser la misura; dove non sa, vale
 /// quella di Inter.
 const BASELINE_EM = 0.363;
-
-/// Lo spazio del cursore di testo in fondo alla riga più lunga, in pixel.
-const CARET_PX = 2;
-
-/// Quanto è largo un carattere, in volte il corpo, dove il browser non
-/// misura il campo: una stima.
-const CHAR_EM = 0.6;
 
 /// Le icone della barra, col costrutto di `ui/icons.ts`.
 const ICONS: Readonly<Record<string, readonly string[]>> = {
@@ -1360,7 +1356,11 @@ interface Typing {
   /// La chiave del testo che si cambia; `null` per uno nuovo.
   readonly key: string | null;
   /// Il testo del campo all'apertura: se non cambia, non si scrive niente.
-  readonly before: string;
+  readonly before: Rich;
+  /// Il testo com'è scritto nel file, con cui si confronta quello nuovo;
+  /// `null` per uno nuovo, o per uno che un'operazione non sa riscrivere
+  /// intero, che cambia soltanto le righe.
+  readonly file: Rich | null;
   /// Come si vede il testo che si cambia; `null` per uno nuovo, che ha il
   /// colore e la dimensione dello strumento.
   readonly look: TextLook | null;
@@ -2445,12 +2445,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const textLayer = document.createElement("div");
   textLayer.className = "draw-text-layer";
   textLayer.hidden = true;
-  const textInput = document.createElement("textarea");
-  textInput.className = "draw-text-input";
-  textInput.wrap = "off";
-  textInput.rows = 1;
-  textInput.autocomplete = "off";
-  textInput.spellcheck = true;
+  const field = createTextField(life, {
+    onChange: () => placeText(),
+    onFinish: () => finishText(),
+    announce: (text) => announce(text),
+  });
+  const textInput = field.element;
   const textHint = document.createElement("span");
   textHint.className = "sr-only";
   textHint.id = identifier("draw-text-hint");
@@ -4801,7 +4801,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const look = lookChange(id, value, docUnit());
     if (look !== null) {
       const restyled = lookOps(model, units, look, newIds());
-      return changeFromPanel(LOOK_ACTIONS[id]!, restyled.ops, restyled.keys);
+      return changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
     }
     const change = outlineChange(id, value);
     if (change === null) return null;
@@ -5764,9 +5764,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (before !== code) recentColors = [before, ...recentColors.filter((each) => each !== before && each !== code)].slice(0, RECENT_MAX);
     style().color = code;
     syncControls();
-    // Un testo nuovo cambia colore mentre lo si scrive, e così il tracciato
-    // della penna.
-    placeText();
+    // Mentre si scrive, il colore va a ciò che è scelto nel campo, o a ciò
+    // che si scriverà; e così il tracciato della penna.
+    restyleTyping("fill", code);
     if (drafting !== null) showBezier();
   }
 
@@ -5774,8 +5774,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (!widthsNow().some((option) => option.value === value)) return;
     style().width = value;
     syncControls();
-    placeText();
+    if (tool === "text") restyleTyping("font-size", formatNumber(value, 2));
     if (drafting !== null) showBezier();
+  }
+
+  /// Il colore o il corpo che la barra dà mentre si scrive: a ciò che è
+  /// scelto nel campo; senza scelta, a tutto un testo nuovo, che è della
+  /// barra, e a ciò che si scriverà in uno che c'era.
+  function restyleTyping(name: "fill" | "font-size", value: string): void {
+    if (typing === null) return;
+    if (typing.key === null) field.restyleWhole(name, value);
+    else field.restyle(name, value);
+    placeText();
   }
 
   /// «Altro colore…»: il codice, o il selettore del sistema. Un colore della
@@ -9571,23 +9581,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // --- Il testo ------------------------------------------------------------------
   //
   // Il campo prende il posto del testo che si scrive: il testo che c'è si
-  // nasconde, e il campo ha il suo carattere, il suo corpo, il suo colore e
-  // la sua trasformazione, così le righe stanno dove resteranno. Si scrive
-  // quando il campo si chiude, in un passo di annulla solo.
+  // nasconde, e il campo ha le sue righe e i suoi pezzi, coi loro caratteri,
+  // corpi, colori e linee, e la sua trasformazione, così le righe stanno
+  // dove resteranno (`text-field.ts`). Si scrive quando il campo si chiude,
+  // in un passo di annulla solo.
 
-  /// Come si vede il testo che si scrive: quello che c'è, o uno nuovo col
-  /// colore e la dimensione dello strumento.
-  const lookOf = (now: Typing): TextLook =>
-    now.look ?? {
-      x: now.at[0],
-      y: now.at[1],
-      size: textStyle.width,
-      leading: textStyle.width * LINE_SPACING,
-      anchor: "start",
-      family: TEXT_FAMILY,
-      weight: null,
-      color: textStyle.color,
-    };
+  /// Dove comincia il testo che si scrive: quello che c'è, o uno nuovo dal
+  /// punto del tocco.
+  const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor"> => now.look ?? { x: now.at[0], y: now.at[1], anchor: "start" };
+
+  /// Gli attributi di un testo nuovo: il colore e la dimensione dello
+  /// strumento.
+  const newTextAttrs = (): Record<string, string> => ({ fill: textStyle.color, "font-family": TEXT_FAMILY, "font-size": formatNumber(textStyle.width, 2) });
 
   /// Il contesto con cui il browser misura un carattere; `null` dove non sa.
   let probe: CanvasRenderingContext2D | null | undefined;
@@ -9610,7 +9615,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function placeText(): void {
     const now = typing;
     if (now === null) return;
-    const look = lookOf(now);
+    const look = placeOf(now);
     // Dalle coordinate del testo a quelle dello strato, che copre il foglio.
     const [va, vb, vc, vd, ve, vf] = viewMatrix(camera);
     const view: Matrix = [va, vb, vc, vd, ve + surface.offsetLeft + surface.clientLeft, vf + surface.offsetTop + surface.clientTop];
@@ -9620,30 +9625,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Un testo schiacciato su una linea non ha un campo da mostrare.
     style.visibility = k > 0 && Number.isFinite(k) ? "" : "hidden";
     if (style.visibility === "hidden") return;
-    const size = look.size * k;
-    const leading = look.leading * k;
-    style.fontFamily = look.family ?? "";
-    style.fontWeight = look.weight ?? "";
-    style.fontSize = `${size}px`;
-    style.lineHeight = `${leading}px`;
-    // Un colore che il campo non sa mostrare, come un gradiente, lascia il
-    // nero, il colore di un testo che non ne scrive uno.
-    style.color = "#000000";
-    if (look.color !== null) style.color = look.color;
-    style.textAlign = look.anchor === "middle" ? "center" : look.anchor === "end" ? "right" : "left";
-    const rows = textInput.value.split("\n");
-    style.height = `${rows.length * leading}px`;
-    style.width = "0px";
-    const longest = Math.max(...rows.map((row) => [...row].length));
-    const width = Math.ceil(textInput.scrollWidth || longest * CHAR_EM * size) + CARET_PX;
-    style.width = `${width}px`;
-    const computed = getComputedStyle(textInput);
-    const baseline = baselineOf(computed.fontStyle, computed.fontWeight, computed.fontFamily);
+    const { width, baseline } = field.layout(k, baselineOf);
     const left = look.x * k - (look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0);
-    const top = look.y * k - leading / 2 - baseline * size;
+    const top = look.y * k - baseline;
     style.transform = `matrix(${m[0] / k}, ${m[1] / k}, ${m[2] / k}, ${m[3] / k}, ${m[4]}, ${m[5]}) translate(${left}px, ${top}px)`;
-    textInput.scrollLeft = 0;
-    textInput.scrollTop = 0;
   }
 
   /// Il testo che si cambia resta nascosto sotto il campo anche quando il
@@ -9655,29 +9640,34 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     placeText();
   }
 
-  /// Apre il campo con `text`, e il fuoco ci va. Il testo di prima si
-  /// conclude.
-  const startTyping = (next: Typing, text: string): void => {
+  /// Apre il campo col testo di `next`, col cursore alla fine, e il fuoco
+  /// ci va. Il testo di prima si conclude.
+  const startTyping = (next: Typing): void => {
     finishText();
     cancelGesture();
     typing = next;
-    textInput.value = text;
+    field.open(next.before);
     labelText();
     textLayer.hidden = false;
     cursorMark.hidden = true;
     select([]);
     showTyping();
     textInput.focus({ preventScroll: true });
-    textInput.setSelectionRange(text.length, text.length);
+    field.toEnd();
   };
 
-  /// Apre il campo su `unit`, un testo che c'è.
+  /// Apre il campo su `unit`, un testo che c'è, coi suoi pezzi. Un testo che
+  /// un'operazione non sa scrivere intero si apre con le sue righe.
   const editText = (unit: Unit): void => {
     const look = unit.look;
     const model = engine.model;
     if (look === null || model === null || !editable() || !has("text")) return;
-    const text = editableText(nodeOf(model, unit).details?.lines ?? []);
-    startTyping({ key: unit.key, before: text, look, at: [look.x, look.y], matrix: unit.matrix }, text);
+    const node = nodeOf(model, unit);
+    const elem = elemOf(node);
+    const inherited = textInherited(node);
+    const file = elem === null ? null : richOf(elem, inherited);
+    const plain: Rich = { attrs: {}, inherited, lines: (node.details?.lines ?? [""]).map((line) => richLine({}, line)) };
+    startTyping({ key: unit.key, before: editableRich(file ?? plain), file, look, at: [look.x, look.y], matrix: unit.matrix });
   };
 
   /// F2, o «Modifica il testo»: il testo scelto, se è solo.
@@ -9706,7 +9696,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const local = apply(to.inverse, p);
     const below = baselineOf("normal", "400", TEXT_FAMILY) * textStyle.width;
     const base = snapped(apply(to.matrix, [local[0], local[1] + below]));
-    startTyping({ key: null, before: "", look: null, at: apply(to.inverse, base), matrix: to.matrix }, "");
+    const before: Rich = { attrs: newTextAttrs(), inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
+    startTyping({ key: null, before, file: null, look: null, at: apply(to.inverse, base), matrix: to.matrix });
   };
 
   /// Chiude il campo; con `write` scrive ciò che è cambiato, in un passo di
@@ -9716,16 +9707,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const now = typing;
     if (now === null) return;
     typing = null;
-    const value = textInput.value;
+    const draft = field.rich;
     // Il fuoco torna al foglio prima che il campo sparisca: altrimenti
     // andrebbe alla pagina, e i tasti del disegno non varrebbero più.
     if (document.activeElement === textInput) surface.focus({ preventScroll: true });
     textLayer.hidden = true;
-    textInput.value = "";
+    field.close();
     painter.setDraft(null);
     const unit = now.key === null ? null : currentIndex().get(now.key);
-    const lines = textLines(value);
-    if (!write || value === now.before || !editable() || (now.key === null && lines.length === 0)) {
+    const tidy = tidyRich(draft);
+    const lines = tidy.lines.map(lineRuns);
+    if (!write || sameRich(draft, now.before) || !editable() || (now.key === null && lines.length === 0)) {
       if (unit !== null) select([unit.key]);
       else syncControls();
       return;
@@ -9738,7 +9730,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return;
       }
       const id = ids.next("object");
-      const elem = textElem(id, apply(to.inverse, apply(now.matrix, now.at)), lines, { color: textStyle.color, size: textStyle.width });
+      // Il testo come l'ha lasciato il campo, nel punto dove si è aperto;
+      // ogni riga comincia dalla stessa `x`.
+      const at = apply(to.inverse, apply(now.matrix, now.at));
+      const x = formatNumber(at[0], 2);
+      const placed: Rich = {
+        ...tidy,
+        attrs: { id, x, y: formatNumber(at[1], 2), ...tidy.attrs },
+        lines: tidy.lines.map((line) => ({ ...line, attrs: { x, ...line.attrs } })),
+      };
+      const elem = richElem({ tag: "text", attrs: {} }, placed);
       const ops: Op[] = [...to.prelude, addOp(to, elem)];
       const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
       if (page !== null) ops.push({ op: "page", viewBox: page });
@@ -9760,30 +9761,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const node = nodeOf(model, unit);
-    const old = node.details?.lines ?? [];
-    if (old.length === lines.length && old.every((line, i) => line === lines[i])) {
+    const change = now.file === null ? { kind: "lines" as const, lines } : richChange(now.file, tidy);
+    if (change.kind === "none") {
       select([unit.key]);
       return;
     }
     const plan = new Plan(model, newIds());
     const id = plan.idOf(node);
-    plan.ops.push({ op: "text", id, lines });
+    const old = change.kind === "elem" ? elemOf(node) : null;
+    if (change.kind === "lines") plan.ops.push({ op: "text", id, lines: change.lines });
+    else if (old === null || !replaceElem(plan, node, richElem(old, change.rich))) {
+      announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
+      select([unit.key]);
+      return;
+    }
     const ops: Op[] = [...plan.finish([id]).ops];
-    const page = pageFor(scene.root.page, linesBounds(unit.look ?? now.look!, lines, unit.matrix));
+    const page = pageFor(scene.root.page, linesBounds(unit.look ?? now.look!, tidy.lines.map(richLineText), unit.matrix));
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.text_edit", asGesture(ops)) === null) return;
     select([id]);
     announce(t("draw.text.edited"));
   }
 
-  life.listen(textInput, "input", () => placeText());
-  life.listen(textInput, "keydown", (event) => {
-    if (event.isComposing) return;
-    if (event.key === "Escape" || event.key === "Tab" || (event.key === "Enter" && (event.ctrlKey || event.metaKey))) {
-      event.preventDefault();
-      finishText();
-    }
-  });
   // Il fuoco che va altrove conclude il testo. Una finestra dell'editor, come
   // «Altro colore…», lo ridà al campo quando si chiude, e così la finestra
   // del browser quando ci si torna.
@@ -12967,6 +12966,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ["F2", t("draw.keys.text.edit")],
               ["Enter", t("draw.keys.text.newline")],
               ["Escape Tab Mod-Enter", t("draw.keys.text.finish")],
+              ["Mod-b", t("draw.keys.text.bold")],
+              ["Mod-i", t("draw.keys.text.italic")],
+              ["Mod-u", t("draw.keys.text.underline")],
+              ["Mod-Shift-x", t("draw.keys.text.strike")],
             ],
           },
         ]

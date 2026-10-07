@@ -53,8 +53,10 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
   Angoli, come il menu «Contorno» di [Disegni, livello
   Esperto](drawing-expert.md).
-- **Testo.** Carattere, fra Inter, Literata e JetBrains Mono, Dimensione e
-  Allineamento.
+- **Testo.** Stile, Carattere, fra Inter, Literata e JetBrains Mono,
+  Dimensione, Peso, l'Enfasi (grassetto, corsivo, sottolineato e barrato),
+  Interlinea, Spaziatura e Allineamento, per tutto il testo anche quando le
+  sue parole sono diverse ([Disegni, tipografia](drawing-typography.md)).
 - **Disponi.** Allineare i bordi e i centri, distribuire in orizzontale e in
   verticale, e l'ordine, come la barra «Disponi» di [Disegni](drawing.md). Un
   comando che adesso non serve resta raggiungibile, sbiadito, e dice perché.

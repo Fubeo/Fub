@@ -24,6 +24,7 @@
 
 import { formatNumber } from "../number";
 import type { Point } from "../scene/matrix";
+import type { TextLine } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import type { Width } from "./palette";
 
@@ -54,6 +55,9 @@ export const BLANK_LINE = "\u00a0";
 /// Ciò che XML 1.0 non ammette in un testo: i caratteri di controllo tranne
 /// tabulazione e a capo, U+FFFE e U+FFFF, i surrogati spaiati.
 const NOT_XML = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
+/// `text` senza ciò che XML non ammette.
+export const xmlText = (text: string): string => text.replace(NOT_XML, "");
 
 /// Vero se `line` non ha niente da leggere.
 const blank = (line: string): boolean => line.trim() === "";
@@ -89,23 +93,29 @@ export interface TextStyle {
 /// L'elemento di un testo nuovo con le righe `lines`, ancorato in `at` nelle
 /// coordinate del livello che lo riceve: la linea di base della prima riga
 /// comincia lì.
-export function textElem(id: string, at: Point, lines: readonly string[], style: TextStyle): Elem {
+export function textElem(id: string, at: Point, lines: readonly TextLine[], style: TextStyle): Elem {
   const x = formatNumber(at[0], 2);
   const spacing = formatNumber(style.size * LINE_SPACING, 2);
   return {
     tag: "text",
     attrs: { id, x, y: formatNumber(at[1], 2), fill: style.color, "font-family": TEXT_FAMILY, "font-size": formatNumber(style.size, 2) },
-    children: lines.map((line, i) => ({ tag: "tspan", attrs: { x, dy: i === 0 ? "0" : spacing }, text: line })),
+    children: lines.map((line, i) => {
+      const attrs = { x, dy: i === 0 ? "0" : spacing };
+      return typeof line === "string" ? { tag: "tspan", attrs, text: line } : { tag: "tspan", attrs, runs: line };
+    }),
   };
 }
 
-/// I file dei caratteri che l'app porta per l'interfaccia, coi nomi che il
-/// file del disegno scrive, e i caratteri che coprono: quelli di
-/// `theme/serie/fonts.css`.
-export const FONT_FILES: ReadonlyArray<readonly [family: string, url: string, weight: string]> = [
-  ["Inter", "/fonts/inter-latin-wght-normal.woff2", "100 900"],
-  ["Literata", "/fonts/literata-latin-wght-normal.woff2", "200 900"],
-  ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-normal.woff2", "100 800"],
+/// I file dei caratteri che l'app porta, coi nomi che il file del disegno
+/// scrive, i pesi e lo stile che coprono: quelli di `theme/serie/fonts.css`,
+/// e il corsivo vero di ciascuno, che un testo del disegno può chiedere.
+export const FONT_FILES: ReadonlyArray<readonly [family: string, url: string, weight: string, style: "normal" | "italic"]> = [
+  ["Inter", "/fonts/inter-latin-wght-normal.woff2", "100 900", "normal"],
+  ["Inter", "/fonts/inter-latin-wght-italic.woff2", "100 900", "italic"],
+  ["Literata", "/fonts/literata-latin-wght-normal.woff2", "200 900", "normal"],
+  ["Literata", "/fonts/literata-latin-wght-italic.woff2", "200 900", "italic"],
+  ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-normal.woff2", "100 800", "normal"],
+  ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-italic.woff2", "100 800", "italic"],
 ];
 export const FONT_RANGE =
   "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
@@ -118,9 +128,9 @@ let registered = false;
 export function ensureTextFont(): void {
   if (registered || typeof FontFace === "undefined" || typeof document === "undefined" || document.fonts === undefined) return;
   registered = true;
-  for (const [family, url, weight] of FONT_FILES) {
+  for (const [family, url, weight, style] of FONT_FILES) {
     try {
-      document.fonts.add(new FontFace(family, `url("${url}") format("woff2")`, { style: "normal", weight, display: "swap", unicodeRange: FONT_RANGE }));
+      document.fonts.add(new FontFace(family, `url("${url}") format("woff2")`, { style, weight, display: "swap", unicodeRange: FONT_RANGE }));
     } catch {
       // Un carattere che non si registra lascia il ripiego.
     }

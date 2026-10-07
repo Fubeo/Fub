@@ -314,6 +314,18 @@ fn s009_a_text_that_fades_into_what_lies_under_it() {
                 .to_owned(),
             "1.32",
         ),
+        // Così un pezzo della riga col suo colore; uno vuoto non si legge.
+        (
+            r##"<text x="20" y="50"><tspan x="20" dy="0">Uno <tspan fill="#f0e442">due</tspan><tspan fill="#ffffff"> </tspan></tspan></text>"##
+                .to_owned(),
+            "1.32",
+        ),
+        // Il verde vuole 4,5:1 nel pezzo piccolo, anche se la riga è grande.
+        (
+            r##"<text x="20" y="50" fill="#009e73"><tspan x="20" dy="0" font-size="30">Grande <tspan font-size="12">piccolo</tspan></tspan></text>"##
+                .to_owned(),
+            "3.42",
+        ),
         // Fuori dall'ellisse, anche se dentro il suo rettangolo.
         (
             format!(
@@ -368,6 +380,16 @@ fn s009_a_text_that_fades_into_what_lies_under_it() {
         label(r##"fill="#ffffff" display="none""##, "Via"),
         label(r#"fill="none""#, "Vuoto"),
         label(r##"fill="#ffffff""##, " "),
+        // Un pezzo grande, o in grassetto e abbastanza grande, vuole 3:1.
+        label(
+            "",
+            r##"Nero <tspan fill="#009e73" font-size="24">titolo</tspan><tspan fill="#009e73" font-size="19" font-weight="bold">forte</tspan>"##,
+        ),
+        // Un pezzo nascosto o senza riempimento non si legge.
+        label(
+            "",
+            r##"Nero <tspan fill="#ffffff" display="none">via</tspan><tspan fill="none">vuoto</tspan>"##,
+        ),
     ] {
         assert!(of(&on_paper("#ffffff", &body), Code::S009).is_empty(), "{body}");
     }
@@ -491,6 +513,11 @@ fn s013_a_text_too_small_at_full_size() {
                 .to_owned(),
             "9.00",
         ),
+        // E il pezzo più piccolo di una riga.
+        (
+            label(r#"font-size="20""#, r#"Grande <tspan font-size="10.5">piccolo</tspan>"#),
+            "10.50",
+        ),
     ] {
         let scene = load(&titled(&body));
         let found = of(&scene, Code::S013);
@@ -511,6 +538,11 @@ fn s013_a_text_too_small_at_full_size() {
         ),
         label(r#"font-size="9" display="none""#, "Nascosto"),
         label(r#"font-size="9""#, "  "),
+        // Un pezzo piccolo nascosto o vuoto non conta.
+        label(
+            "",
+            r#"Testo <tspan font-size="9" display="none">via</tspan><tspan font-size="9"> </tspan>"#,
+        ),
     ] {
         assert!(of(&load(&titled(&body)), Code::S013).is_empty(), "{body}");
     }

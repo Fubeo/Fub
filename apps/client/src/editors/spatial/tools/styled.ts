@@ -280,11 +280,16 @@ function attrOf(name: string, value: string): StyleAttr {
   return { uri: PREFIXES.get(prefix) ?? `urn:prefix:${prefix}`, local: name.slice(colon + 1), value };
 }
 
-/// L'elemento di un'operazione `add`.
+/// L'elemento di un'operazione `add`. I pezzi di una riga sono i suoi figli.
 function nodeOf(elem: Elem, parent: Node): Node {
-  const node = new Node(SVG_NS, elem.tag, Object.entries(elem.attrs).map(([name, value]) => attrOf(name, value)), (elem.text ?? "") !== "", null);
+  const runs = elem.runs ?? [];
+  const text = (elem.text ?? "") !== "" || runs.some((run) => typeof run === "string" && run !== "");
+  const node = new Node(SVG_NS, elem.tag, Object.entries(elem.attrs).map(([name, value]) => attrOf(name, value)), text, null);
   node.parent = parent;
-  node.children = (elem.children ?? []).map((child) => nodeOf(child, node));
+  node.children = [
+    ...(elem.children ?? []).map((child) => nodeOf(child, node)),
+    ...runs.flatMap((run) => (typeof run === "string" ? [] : [nodeOf({ tag: "tspan", attrs: run.attrs, text: run.text }, node)])),
+  ];
   return node;
 }
 

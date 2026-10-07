@@ -131,6 +131,11 @@
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
+
+  [aria-pressed="mixed"] {
+    outline: 2px dashed Highlight;
+    outline-offset: -2px;
+  }
 }
 
 /* Il fuoco si vede, ovunque e per costruzione (§12.4).
@@ -1569,7 +1574,6 @@ html, body, #app {
   border: 0;
   border-radius: 0;
   overflow: hidden;
-  resize: none;
   background: transparent;
   font-style: normal;
   letter-spacing: normal;
@@ -1580,8 +1584,21 @@ html, body, #app {
   overflow-wrap: normal;
   transform-origin: 0 0;
   transition: none;
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
   pointer-events: auto;
   forced-color-adjust: none;
+}
+/* Una riga del campo e un pezzo con un aspetto suo. La distanza fra le righe
+   e l'aspetto dei pezzi li dà l'editor; i pezzi stanno nella riga. */
+.draw-text-line {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+.draw-text-piece {
+  display: inline;
 }
 /* Il foglio e la sua barra: la barra della selezione galleggia in cima al
    foglio, al centro, così quando compare il foglio non si sposta. Va a capo

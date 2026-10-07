@@ -31,6 +31,25 @@ describe("i caratteri dentro l'SVG", () => {
     expect(await fontFaces("<svg><text>Inter</text></svg>", read)).toBe("");
   });
 
+  it("il corsivo di un carattere entra soltanto se un testo lo chiede", async () => {
+    vi.resetModules();
+    const { fontFaces } = await import("./picture");
+    const read = vi.fn(async (url: string) => new Blob([url.includes("italic") ? "C" : "T"]));
+    const upright = await fontFaces('<svg><text font-family="Inter">a</text></svg>', read);
+    expect(upright.match(/@font-face/g)).toHaveLength(1);
+    expect(upright).not.toContain("font-style");
+    const slanted = await fontFaces('<svg><text font-family="Inter"><tspan font-style="italic">a</tspan></text></svg>', read);
+    expect(slanted).toContain('font-family:"Inter";src:url(data:font/woff2;base64,Qw==) format("woff2");font-weight:100 900;font-style:italic;unicode-range:');
+    expect(slanted).not.toContain("Literata");
+    expect(await fontFaces('<svg><text style="font-family: Literata; font-style: oblique">a</text></svg>', read)).toContain("font-style:italic");
+    expect(read.mock.calls.map(([url]) => url)).toEqual([
+      "/fonts/inter-latin-wght-normal.woff2",
+      "/fonts/inter-latin-wght-italic.woff2",
+      "/fonts/literata-latin-wght-normal.woff2",
+      "/fonts/literata-latin-wght-italic.woff2",
+    ]);
+  });
+
   it("un file che non si legge non entra, e si riprova la volta dopo", async () => {
     vi.resetModules();
     const { fontFaces } = await import("./picture");
@@ -60,12 +79,12 @@ describe("i caratteri dentro l'SVG", () => {
     expect(withStyle("<svg", "x{}")).toBe("<svg");
   });
 
-  it("tutti e tre i caratteri veri stanno sotto il tetto di ogni immagine", async () => {
+  it("tutti e tre i caratteri veri, in tondo e in corsivo, stanno sotto il tetto di ogni immagine", async () => {
     vi.resetModules();
     const { fontFaces, MAX_FONT_SHEET_BYTES } = await import("./picture");
-    const svg = `<svg>${FONT_FILES.map(([family]) => `<text font-family="${family}">a</text>`).join("")}</svg>`;
+    const svg = `<svg>${FONT_FILES.map(([family, , , style]) => `<text font-family="${family}" font-style="${style}">a</text>`).join("")}</svg>`;
     const css = await fontFaces(svg, async (url) => fontFile(url));
-    expect(css.match(/@font-face/g)).toHaveLength(3);
+    expect(css.match(/@font-face/g)).toHaveLength(6);
     expect(fontFile(FONT_FILES[0]![1]).size).toBeGreaterThan(40_000);
     expect(css.length).toBeLessThanOrEqual(MAX_FONT_SHEET_BYTES);
     // Il tetto non è largo per niente: i file veri ci arrivano vicino.

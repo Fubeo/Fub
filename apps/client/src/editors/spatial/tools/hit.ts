@@ -37,9 +37,9 @@ import { apply, compose, IDENTITY, translate, type Matrix, type Point } from "..
 import { elementChildren, parseFragment, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Fragment, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { length, nonNegativeLength, numberList, points as parsePoints, transform as parseTransform } from "../scene/values";
+import { length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, transform as parseTransform } from "../scene/values";
 import { NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
-import type { PaintAttr, PaintBuilder, PaintNode, PaintShape, TextRun } from "../painter/paint";
+import type { PaintAttr, PaintBuilder, PaintNode, PaintShape, TextPiece, TextRun } from "../painter/paint";
 
 /// L'errore massimo dell'appiattimento, in unità della scena.
 export const FLATNESS = 0.05;
@@ -406,6 +406,8 @@ interface Style {
   readonly stroke: boolean;
   readonly strokeWidth: number;
   readonly fontSize: number;
+  /// `letter-spacing`, in unità utente.
+  readonly spacing: number;
   readonly anchor: string;
   readonly family: string | null;
   readonly weight: string | null;
@@ -416,7 +418,7 @@ interface Style {
 /// livello, la matrice e lo stile del genitore.
 type Visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style) => void;
 
-const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, anchor: "start", family: null, weight: null, color: null };
+const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, spacing: 0, anchor: "start", family: null, weight: null, color: null };
 
 /// L'elemento che porta un id nel documento indicizzato, o il blocco
 /// estraneo che lo contiene: ciò a cui rimanda un `use` estraneo.
@@ -891,7 +893,8 @@ function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
   const anchor = attr(attrs, "text-anchor");
   const family = attr(attrs, "font-family");
   const weight = attr(attrs, "font-weight");
-  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined && family === undefined && weight === undefined) {
+  const spacing = attr(attrs, "letter-spacing");
+  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined && family === undefined && weight === undefined && spacing === undefined) {
     return parent;
   }
   return {
@@ -899,6 +902,7 @@ function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
     stroke: stroke === undefined ? parent.stroke : stroke.trim() !== "none",
     strokeWidth: width === undefined ? parent.strokeWidth : Math.max(0, length(width) ?? parent.strokeWidth),
     fontSize: size === undefined ? parent.fontSize : nonNegativeLength(size) ?? parent.fontSize,
+    spacing: spacing === undefined ? parent.spacing : letterSpacing(spacing) ?? parent.spacing,
     anchor: anchor === undefined ? parent.anchor : anchor.trim(),
     family: family === undefined ? parent.family : family.trim(),
     weight: weight === undefined ? parent.weight : weight.trim(),
@@ -995,8 +999,37 @@ function readable(text: string): number {
   return [...text.replace(/\s+/g, " ").trim()].length;
 }
 
+/// La spaziatura delle lettere che scrive `attrs`, o quella che eredita.
+function spacingOf(attrs: readonly PaintAttr[], inherited: number): number {
+  const value = attr(attrs, "letter-spacing");
+  return value === undefined ? inherited : letterSpacing(value) ?? inherited;
+}
+
+/// Quanto è larga e alta una riga di `chars` caratteri da leggere, a stima:
+/// 0,6 em per carattere più la spaziatura delle lettere, col corpo e la
+/// spaziatura di ogni pezzo per la sua parte di riga; l'altezza è quella del
+/// corpo più grande.
+function lineMeasure(parts: readonly (string | TextPiece)[], chars: number, size: number, spacing: number): { width: number; size: number } {
+  let width = 0;
+  let count = 0;
+  let tallest = 0;
+  for (const part of parts) {
+    const text = typeof part === "string" ? part : part.text;
+    const n = [...text.replace(/\s+/g, " ")].length;
+    if (n === 0) continue;
+    const own = typeof part === "string" ? null : part.attrs;
+    const partSize = own === null ? size : len(own, "font-size") ?? size;
+    width += n * (CHAR_EM * partSize + (own === null ? spacing : spacingOf(own, spacing)));
+    count += n;
+    tallest = Math.max(tallest, partSize);
+  }
+  // Gli spazi che SVG toglie si tolgono in proporzione.
+  return count === 0 ? { width: 0, size } : { width: (width * chars) / count, size: tallest };
+}
+
 /// Le righe di un testo come rettangoli: l'altezza va da 0,8 em sopra la
-/// linea di base a 0,25 em sotto, la larghezza è 0,6 em per carattere.
+/// linea di base a 0,25 em sotto, la larghezza è 0,6 em per carattere più
+/// la spaziatura delle lettere.
 function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], style: Style): Segment[] {
   const x = len(attrs, "x") ?? 0;
   let y = len(attrs, "y") ?? 0;
@@ -1008,9 +1041,9 @@ function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], sty
     const lineX = len(run.attrs, "x") ?? x;
     const chars = readable(run.text);
     if (chars === 0) continue;
-    const width = CHAR_EM * size * chars;
+    const line = lineMeasure(run.parts ?? [run.text], chars, size, spacingOf(run.attrs, style.spacing));
     const anchor = attr(run.attrs, "text-anchor")?.trim() ?? style.anchor;
-    segments.push(...rectPath(lineStart(lineX, width, anchor), y - ASCENT_EM * size, width, (ASCENT_EM + DESCENT_EM) * size, 0, 0));
+    segments.push(...rectPath(lineStart(lineX, line.width, anchor), y - ASCENT_EM * line.size, line.width, (ASCENT_EM + DESCENT_EM) * line.size, 0, 0));
   }
   return segments;
 }
@@ -1056,6 +1089,15 @@ export function linesBounds(look: TextLook, lines: readonly string[], matrix: Ma
   return out.finish();
 }
 
+/// Una riga di un testo che uno strumento sta per scrivere, come la legge il
+/// painter.
+function elemLine(child: Elem): TextRun {
+  const attrs: PaintAttr[] = Object.entries(child.attrs);
+  if (child.runs === undefined) return { kind: "span", attrs, space: null, text: child.text ?? "" };
+  const parts = child.runs.map((run): string | TextPiece => (typeof run === "string" ? run : { attrs: Object.entries(run.attrs), space: null, text: run.text }));
+  return { kind: "span", attrs, space: null, text: parts.map((part) => (typeof part === "string" ? part : part.text)).join(""), parts };
+}
+
 /// Il riquadro nella scena di una forma che uno strumento sta per scrivere,
 /// contorno compreso: la stessa geometria con cui poi la si tocca. `matrix`
 /// porta le coordinate del livello nella scena.
@@ -1063,7 +1105,7 @@ export function elemBounds(elem: Elem, matrix: Matrix): Bounds | null {
   const attrs: PaintAttr[] = Object.entries(elem.attrs);
   const style = styleOf(INITIAL, attrs);
   const segments = elem.tag === "text"
-    ? textSegments(attrs, (elem.children ?? []).map((child): TextRun => ({ kind: "span", attrs: Object.entries(child.attrs), space: null, text: child.text ?? "" })), style)
+    ? textSegments(attrs, (elem.children ?? []).map(elemLine), style)
     : shapeSegments(elem.tag, attrs);
   const bounds = transformedBounds(segments, matrix);
   if (bounds === null) return null;

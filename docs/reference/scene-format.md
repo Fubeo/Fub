@@ -85,7 +85,7 @@ Radice di un documento nuovo:
 | `circle` | `cx cy r` | letto e modificato; la superficie crea ellissi |
 | `line` | `x1 y1 x2 y2` | linea |
 | `polyline`, `polygon` | `points` | letti e modificati |
-| `text` con figli `tspan` | `x y`; ogni riga è un `tspan` con `x` e `dy` | testo |
+| `text` con figli `tspan` | `x y`; ogni riga è un `tspan` con `x` e `dy`, e i suoi [pezzi](scene-format-text.md) | testo |
 | `image` | `x y width height href preserveAspectRatio` | immagine incorporata o del vault |
 | `g` | — | livello o gruppo |
 | `a` | `href` | collegamento a un documento del vault |
@@ -96,8 +96,8 @@ Radice di un documento nuovo:
 - riempimento e contorno: `fill`, `fill-opacity`, `stroke`, `stroke-width`,
   `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`;
 - visibilità e trasformazione: `opacity`, `display`, `transform`;
-- testo: `font-family`, `font-size`, `font-weight`, `text-anchor`, e `dy` sui
-  `tspan`;
+- testo: `font-family`, `font-size`, `font-weight`, `font-style`, `letter-spacing`,
+  `text-decoration`, `text-anchor`, e `dy` sui `tspan` ([testo](scene-format-text.md));
 - identità: `id`, più gli attributi `fub:*` di questa pagina;
 - accessibilità: `aria-hidden` su `image`, `true` o `false`; con `true`
   l'immagine è decorativa ([accessibilità](scene-format-accessibility.md)).
@@ -131,8 +131,8 @@ Radice di un documento nuovo:
 - **Opacità:** un numero SVG da 0 a 1, senza percentuale.
 - **Parole chiave:** `display` ammette `none` e `inline`; `stroke-linecap`
   `butt`, `round` e `square`; `stroke-linejoin` `miter`, `round` e `bevel`;
-  `font-weight` `normal`, `bold` e le centinaia da `100` a `900`;
-  `text-anchor` `start`, `middle` e `end`; `preserveAspectRatio` la grammatica
+  `font-weight` `normal`, `bold` e le centinaia da `100` a `900`; `font-style`
+  `normal`, `italic` e `oblique`; `text-anchor` `start`, `middle` e `end`; `preserveAspectRatio` la grammatica
   di SVG (`none`, oppure un allineamento come `xMidYMid` seguito
   facoltativamente da `meet` o `slice`). Ogni altro valore, compreso
   `inherit`, rende l'elemento estraneo.
@@ -165,7 +165,7 @@ e valori rientrano in questa sezione, e se nessun valore contiene `url(`.
   un figlio estraneo resta un livello modificabile che contiene un blocco
   estraneo.
 - Per gli altri elementi l'elemento è un'unità con i suoi figli. Un `text` è
-  modificabile solo se tutti i suoi figli sono `tspan` ammessi.
+  modificabile solo se tutti i suoi figli sono `tspan` ammessi ([testo](scene-format-text.md)).
 - `title` e `desc` sono figli ammessi di qualunque elemento modificabile.
 - I nodi di testo fatti solo di spazi fra gli elementi non sono né modificabili
   né estranei: si conservano e non contano per la classificazione.
@@ -340,15 +340,15 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
 1. **Righe:** un elemento per riga. Un elemento senza figli si chiude con
    `/>`, salvo gruppi e livelli, che restano in forma aperta; i figli stanno
    nelle righe seguenti, rientrati di due spazi in più. Il testo dei `tspan`
-   sta sulla stessa riga del tag.
+   sta sulla stessa riga del tag, coi pezzi della riga.
 2. **Ordine degli attributi:**
    1. `id`;
    2. `fub:layer`, `fub:role`, `fub:tool`, `fub:shape`, `fub:geom`,
       `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d`;
-   4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity
-      stroke-linecap stroke-linejoin stroke-dasharray opacity display
-      font-family font-size font-weight text-anchor preserveAspectRatio`;
+   4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
+      stroke-linejoin stroke-dasharray opacity display font-family font-size font-weight
+      font-style letter-spacing text-decoration text-anchor preserveAspectRatio`;
    5. `transform`, poi `href`;
    6. gli attributi `fub:*` sconosciuti e quelli di altri namespace,
       nell'ordine originale;
@@ -408,8 +408,8 @@ L'indice legge il documento intero, contenuto estraneo compreso: un disegno di
 Inkscape o un diagramma di sequenza di Mermaid si cercano per i loro testi.
 Sono testi solo gli elementi `text` di SVG: le etichette XHTML dentro
 `foreignObject`, come quelle dei diagrammi di flusso di Mermaid, non entrano
-nell'indice. In un `text` ogni figlio elemento è una riga, quindi i `tspan` di
-un carattere ciascuno, come li scrive Illustrator, escono separati da spazi.
+nell'indice. In un `text` ogni figlio elemento è una riga, e i pezzi ne fanno parte; i `tspan`
+di un carattere ciascuno, come li scrive Illustrator, escono separati da spazi.
 Gli spazi XML di titolo, descrizione e testi si riducono a uno.
 
 Il blocco `fub.scene.summary` porta in `attrs`:

@@ -121,6 +121,8 @@ struct El {
     name: &'static str,
     attrs: Vec<(&'static str, String)>,
     text: Option<String>,
+    /// Il contenuto già scritto, sulla riga del tag: i pezzi di una riga.
+    markup: Option<String>,
     children: Vec<Node>,
 }
 
@@ -130,6 +132,7 @@ impl El {
             name,
             attrs: Vec::new(),
             text: None,
+            markup: None,
             children: Vec::new(),
         }
     }
@@ -141,6 +144,11 @@ impl El {
 
     fn text(mut self, text: &str) -> El {
         self.text = Some(text.to_owned());
+        self
+    }
+
+    fn markup(mut self, markup: &str) -> El {
+        self.markup = Some(markup.to_owned());
         self
     }
 
@@ -171,6 +179,10 @@ impl El {
         if let Some(text) = &self.text {
             out.push('>');
             escape(text, false, out);
+            out.push_str(&format!("</{}>", self.name));
+        } else if let Some(markup) = &self.markup {
+            out.push('>');
+            out.push_str(markup);
             out.push_str(&format!("</{}>", self.name));
         } else if self.children.is_empty() && self.name != "g" {
             out.push_str("/>");
@@ -425,7 +437,17 @@ fn sparse() -> String {
         .a("font-family", "Inter, sans-serif")
         .a("font-size", 32)
         .child(El::new("tspan").a("x", 720).a("dy", 0).text("Evaporazione"))
-        .child(El::new("tspan").a("x", 720).a("dy", 40).text("& condensa"));
+        .child(El::new("tspan").a("x", 720).a("dy", 40).text("& condensa"))
+        // Una riga coi pezzi e la tipografia: corsivo, spaziatura, colore,
+        // grassetto e sottolineato in un pezzo.
+        .child(
+            El::new("tspan")
+                .a("x", 720)
+                .a("dy", 40)
+                .a("font-style", "italic")
+                .a("letter-spacing", 1.5)
+                .markup(r##"in <tspan fill="#0072b2" font-weight="bold" text-decoration="underline">pioggia</tspan>"##),
+        );
     let first = layer("l3f8a0c2d", "Livello 1")
         .child(
             El::new("ellipse")
@@ -629,7 +651,15 @@ fn foreign() -> String {
                 .raw(r#"<text x="10" y="100" font-size="4.2333px">Scuola</text>"#)
                 .raw(r#"<text x="10" y="110"><tspan x="10" dy="0">Parco</tspan></text>"#)
                 .raw(r#"<a href="javascript:alert(1)"><text x="10" y="120">Clicca</text></a>"#)
-                .raw(r#"<a xlink:href="quartiere/parco.md"><rect x="150" y="100" width="20" height="10"/></a>"#),
+                .raw(r#"<a xlink:href="quartiere/parco.md"><rect x="150" y="100" width="20" height="10"/></a>"#)
+                // Pezzi fuori da §4: un pezzo dentro un pezzo, un pezzo con la
+                // sua `x`, una sottolineatura su un gruppo, un corsivo e una
+                // spaziatura che §4 non legge.
+                .raw(r#"<text x="10" y="114"><tspan x="10" dy="0">a<tspan>b<tspan>c</tspan></tspan></tspan></text>"#)
+                .raw(r#"<text x="10" y="116"><tspan x="10" dy="0">a<tspan x="20">b</tspan></tspan></text>"#)
+                .raw(r#"<g text-decoration="underline"><rect width="1" height="1"/></g>"#)
+                .raw(r#"<text x="10" y="118" font-style="slanted"><tspan x="10" dy="0">c</tspan></text>"#)
+                .raw(r#"<text x="10" y="119" letter-spacing="10%"><tspan x="10" dy="0">d</tspan></text>"#),
         )
         .raw(r#"<image x="150" y="10" width="40" height="30" href="https://example.org/foto.jpg"/>"#)
         .raw(r#"<image x="150" y="50" width="10" height="10" href="data:image/svg+xml,%3Csvg%2F%3E"/>"#)
@@ -736,6 +766,25 @@ fn sparse_is_a_complete_drawing() {
     assert_eq!(codes, [S002, S004, S009, S010, S012]);
     assert_eq!(scene.index.links.len(), 1);
     assert_eq!(scene.index.embeds.len(), 1);
+    // La riga coi pezzi si legge intera.
+    let Some(Item::Element(text)) = scene
+        .items
+        .iter()
+        .find(|item| matches!(item, Item::Element(e) if e.role == Role::Text))
+    else {
+        panic!("manca il testo")
+    };
+    assert_eq!(
+        text.lines.as_deref(),
+        Some(
+            [
+                "Evaporazione".to_owned(),
+                "& condensa".to_owned(),
+                "in pioggia".to_owned()
+            ]
+            .as_slice()
+        )
+    );
 }
 
 #[test]
@@ -759,8 +808,15 @@ fn foreign_has_one_case_per_rule() {
     // pure.
     assert!(editable.contains(&(vec![6], Role::Image)));
     assert!(editable.contains(&(vec![12], Role::Polyline)));
-    // Prologo, blocchi ed epilogo: nove blocchi estranei.
-    assert_eq!(scene.summary.counts.foreign, 9);
+    // I pezzi fuori da §4, dopo il collegamento: estranei tutti e cinque.
+    for at in 5..10 {
+        assert!(
+            !editable.iter().any(|(path, _)| path.starts_with(&[5, at])),
+            "{at}"
+        );
+    }
+    // Prologo, blocchi ed epilogo: dieci blocchi estranei.
+    assert_eq!(scene.summary.counts.foreign, 10);
     let s005 = scene
         .diagnostics
         .iter()

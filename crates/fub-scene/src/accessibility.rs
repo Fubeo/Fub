@@ -16,7 +16,9 @@
 //! - **un testo**, una volta per riga: nel punto d'inizio del `tspan`, alzato
 //!   di 0,35 volte la grandezza dei caratteri, a metà dell'occhio delle
 //!   minuscole. Senza i caratteri la larghezza della riga non si sa, e
-//!   l'inizio sta sempre sul testo, qualunque sia `text-anchor`;
+//!   l'inizio sta sempre sul testo, qualunque sia `text-anchor`. Un pezzo
+//!   della riga con un colore, un corpo o un peso suoi si guarda nello stesso
+//!   punto, col suo aspetto;
 //! - **un tratto a penna**, in sedici punti del contorno presi a distanze
 //!   uguali fra i suoi vertici. Conta il contrasto mediano, quello che il
 //!   tratto ha per gran parte della sua lunghezza: un tratto che attraversa
@@ -36,7 +38,7 @@ use crate::geometry::{
 };
 use crate::text::Span;
 use crate::values::{points, trim, Rgb};
-use crate::xml::{Document, Element, NS_NONE};
+use crate::xml::{Document, Element, Kind, NS_NONE};
 
 /// In quanti punti del contorno si misura un tratto a penna.
 const STROKE_PROBES: usize = 16;
@@ -222,28 +224,50 @@ impl Legibility {
             };
             y += len(tspan, "dy").unwrap_or(0.0);
             let line = context.line(tspan);
-            let mut words = String::new();
-            text_content(doc, child, &mut words);
-            if line.hidden() || collapse(&words).is_empty() {
+            if line.hidden() {
                 continue;
             }
-            let size = line.font_size().map(|size| size * scale);
-            if let Some(size) = size {
-                smallest = Some(smallest.map_or(size, |s: f64| s.min(size)));
-            }
-            // Un testo di grandezza ignota conta come un testo normale.
-            let large =
-                size.is_some_and(|s| s >= LARGE_TEXT || (line.bold() && s >= LARGE_BOLD_TEXT));
             let lift = LINE_PROBE * line.font_size().unwrap_or(DEFAULT_FONT_SIZE);
-            lines.push(Line {
-                at: m.apply([len(tspan, "x").unwrap_or(x), y - lift]),
-                color: line.fill_paint().flatten(),
-                threshold: if large {
-                    MIN_CONTRAST
-                } else {
-                    MIN_TEXT_CONTRAST
-                },
-            });
+            let at = m.apply([len(tspan, "x").unwrap_or(x), y - lift]);
+            // Il testo della riga e ogni pezzo, ciascuno col suo aspetto:
+            // senza i caratteri non si sa dove cade un pezzo, e lo si guarda
+            // dove comincia la riga.
+            let mut words = String::new();
+            let mut pieces = Vec::new();
+            for &part in doc.children(child) {
+                match &doc.nodes[part].kind {
+                    Kind::Element(piece) => pieces.push((line.line(piece), part)),
+                    Kind::Text { value, .. } => words.push_str(value),
+                    _ => {}
+                }
+            }
+            let runs =
+                std::iter::once((line, words)).chain(pieces.into_iter().map(|(piece, part)| {
+                    let mut words = String::new();
+                    text_content(doc, part, &mut words);
+                    (piece, words)
+                }));
+            for (look, words) in runs {
+                if look.hidden() || collapse(&words).is_empty() {
+                    continue;
+                }
+                let size = look.font_size().map(|size| size * scale);
+                if let Some(size) = size {
+                    smallest = Some(smallest.map_or(size, |s: f64| s.min(size)));
+                }
+                // Un testo di grandezza ignota conta come un testo normale.
+                let large =
+                    size.is_some_and(|s| s >= LARGE_TEXT || (look.bold() && s >= LARGE_BOLD_TEXT));
+                lines.push(Line {
+                    at,
+                    color: look.fill_paint().flatten(),
+                    threshold: if large {
+                        MIN_CONTRAST
+                    } else {
+                        MIN_TEXT_CONTRAST
+                    },
+                });
+            }
         }
         if let Some(size) = smallest.filter(|&size| size < MIN_TEXT_SIZE) {
             self.found

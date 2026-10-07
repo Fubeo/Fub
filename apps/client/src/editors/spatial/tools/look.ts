@@ -23,9 +23,16 @@
 //   si toglie invece di scriversi.
 // - **Il tratteggio si misura in spessori** (`outline.ts`): con lo spessore
 //   cambia anche lui, e una freccia ridisegna la punta.
+// - **Il testo si legge intero**, righe e pezzi compresi (`rich.ts`): un
+//   testo con una parola blu ha il colore misto, e uno con una riga in
+//   corsivo il corsivo misto. Un valore dato dal pannello va al testo
+//   intero, e le righe e i pezzi che ne scrivevano un altro lo lasciano.
 // - **Il corpo porta l'interlinea con sé.** Ogni riga di un testo scende di
 //   un'interlinea scritta nel suo `tspan`: cambiando il corpo cambia nella
-//   stessa proporzione, così le righe non si accavallano.
+//   stessa proporzione, così le righe non si accavallano; e così la
+//   spaziatura delle lettere. Interlinea e spaziatura si leggono e si
+//   scrivono in volte il corpo, come le misurano i programmi di
+//   impaginazione.
 // - **L'allineamento resta sul punto d'ancoraggio**, come il testo a punto
 //   dei programmi di disegno: le righe si allineano attorno al punto dove il
 //   testo è nato, ed è esatto, senza stimare la larghezza delle lettere.
@@ -42,9 +49,8 @@ import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
-import type { Elem } from "../scene/serialize";
 import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
-import { keyword, length, nonNegativeLength, opacity as parseOpacity, trim } from "../scene/values";
+import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, textDecoration, trim } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { Unit } from "./hit";
@@ -52,6 +58,27 @@ import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outli
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
 import { arrowPath } from "./shapes";
+import {
+  anchorsOf,
+  emphasisOf,
+  emphasizeWhole,
+  INHERITED,
+  leadingOf,
+  linesOf,
+  restyleWhole,
+  richElem,
+  richOf,
+  sameRich,
+  seenIn,
+  seenValues,
+  sizeIn,
+  spacingsOf,
+  weightOf,
+  withLeading,
+  withSpacing,
+  type Emphasis,
+  type Rich,
+} from "./rich";
 import { replaceElem } from "./topath";
 
 /// Dove un testo si allinea al suo punto d'ancoraggio.
@@ -80,6 +107,16 @@ export interface Look {
   readonly family: Shared<string>;
   /// Il corpo dei testi, nelle loro coordinate.
   readonly size: Shared<number>;
+  /// Il peso dei testi, da 1 a 1000: 400 è il normale, 700 il grassetto.
+  readonly weight: Shared<number>;
+  readonly italic: Shared<boolean>;
+  readonly underline: Shared<boolean>;
+  readonly strike: Shared<boolean>;
+  /// L'interlinea dei testi di più righe, in volte il corpo più grande di
+  /// due righe vicine.
+  readonly leading: Shared<number>;
+  /// La spaziatura delle lettere, in volte il corpo.
+  readonly spacing: Shared<number>;
   readonly anchor: Shared<Anchor>;
 }
 
@@ -95,6 +132,8 @@ const INITIAL: Inherited = new Map([
   ["font-family", ""],
   ["font-size", "16"],
   ["font-weight", "normal"],
+  ["font-style", "normal"],
+  ["letter-spacing", "normal"],
   ["text-anchor", "start"],
 ]);
 
@@ -152,6 +191,25 @@ function passedBy(node: ElementPart | null): Inherited {
   const passed = out ?? from;
   passes.set(node, { from, out: passed });
   return passed;
+}
+
+/// Ciò che il testo `node` eredita da chi lo contiene, per gli attributi
+/// del testo, coi valori iniziali di SVG dove nessuno li scrive.
+export function textInherited(node: ElementPart): Record<string, string> {
+  const passed = passedBy(node.parent);
+  const out: Record<string, string> = {};
+  for (const name of [...INHERITED, "text-anchor"]) {
+    const value = passed.get(name);
+    if (value !== undefined) out[name] = value;
+  }
+  return out;
+}
+
+/// Ciò che eredita un testo nuovo in un livello che non scrive niente.
+export function initialText(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of [...INHERITED, "text-anchor"]) out[name] = INITIAL.get(name)!;
+  return out;
 }
 
 /// Una parte della selezione: l'elemento, i suoi attributi e ciò che
@@ -249,25 +307,97 @@ const widthOf = (part: Part): number => Number(place(profileWidth(part.node.deta
 /// Il corpo che `part` vede, o `null` se non si legge come una lunghezza.
 const sizeOf = (part: Part): number | null => nonNegativeLength(seen(part, "font-size"));
 
-const anchorOf = (part: Part): Anchor => {
-  const value = trim(seen(part, "text-anchor"));
-  return keyword("text-anchor", value) && (ANCHORS as readonly string[]).includes(value) ? (value as Anchor) : "start";
+/// Un allineamento come lo scrive il file; quello di SVG se non si legge.
+const anchorIn = (value: string): Anchor => {
+  const text = trim(value);
+  return keyword("text-anchor", text) && (ANCHORS as readonly string[]).includes(text) ? (text as Anchor) : "start";
 };
+
+const riches = new WeakMap<ElementPart, { readonly from: Inherited; readonly rich: Rich | null }>();
+
+/// Il testo `part` con le sue righe e i suoi pezzi, letto una volta finché
+/// né lui né ciò che eredita cambiano; `null` se un'operazione non saprebbe
+/// riscriverlo.
+function richOfPart(part: Part): Rich | null {
+  const known = riches.get(part.node);
+  if (known !== undefined && known.from === part.inherited) return known.rich;
+  const elem = elemOf(part.node);
+  let rich: Rich | null = null;
+  if (elem !== null) {
+    const inherited: Record<string, string> = {};
+    for (const name of [...INHERITED, "text-anchor"]) inherited[name] = part.inherited.get(name)!;
+    rich = richOf(elem, inherited);
+  }
+  riches.set(part.node, { from: part.inherited, rich });
+  return rich;
+}
+
+/// Il valore che hanno tutti `values`, o `null` se sono diversi o non ce
+/// n'è uno.
+function one<T>(values: readonly (T | null)[]): T | null {
+  const first = values[0] ?? null;
+  return first !== null && values.every((value) => value === first) ? first : null;
+}
+
+/// Il valore di `name` che vedono i caratteri del testo `part`, letto da
+/// `read`; `null` se è misto.
+function textOne<T>(part: Part, name: string, read: (value: string) => T | null): T | null {
+  const rich = richOfPart(part);
+  return one((rich === null ? [seen(part, name)] : seenValues(rich, name)).map(read));
+}
+
+/// Un numero che due letture confrontano: a quattro decimali.
+const ratio = (value: number): number => Math.round(value * 1e4) / 1e4;
+
+/// Vero se il testo `part` ha la linea `which` dappertutto, falso se da
+/// nessuna parte, `null` se è misto.
+function lineOf(part: Part, which: Emphasis): boolean | null {
+  const rich = richOfPart(part);
+  if (rich !== null) return emphasisOf(rich, which);
+  const lines = textDecoration(part.own.get("text-decoration") ?? "none") ?? [];
+  return lines.includes(which === "underline" ? "underline" : "line-through");
+}
 
 /// L'aspetto di `units`.
 export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
   const parts = partsOf(model, units);
+  const lengthIn = (value: string): number | null => {
+    const size = nonNegativeLength(value);
+    return size === null ? null : Number(place(size));
+  };
+  const several = parts.texts.filter((part) => (richOfPart(part)?.lines.length ?? 0) > 1);
   return {
-    fill: shared(parts.fills.map((part) => paintText(seen(part, "fill")))),
+    fill: shared(parts.fills.map((part) => (part.role === "text" ? textOne(part, "fill", paintText) : paintText(seen(part, "fill"))))),
     stroke: shared(parts.strokes.map((part) => paintText(seen(part, INKED.has(part.role) ? "fill" : "stroke")))),
     width: shared([...parts.outlines.map(({ outline }) => outline.width), ...parts.widths.map(widthOf)]),
     opacity: shared(parts.chosen.map((part) => {
       const written = part.own.get("opacity");
       return written === undefined ? 1 : parseOpacity(written);
     })),
-    family: shared(parts.texts.map((part) => trim(seen(part, "font-family")))),
-    size: shared(parts.texts.map(sizeOf)),
-    anchor: shared(parts.texts.map(anchorOf)),
+    family: shared(parts.texts.map((part) => textOne(part, "font-family", trim))),
+    size: shared(parts.texts.map((part) => textOne(part, "font-size", lengthIn))),
+    weight: shared(parts.texts.map((part) => textOne(part, "font-weight", weightOf))),
+    italic: shared(parts.texts.map((part) => textOne(part, "font-style", (value) => trim(value) !== "normal"))),
+    underline: shared(parts.texts.map((part) => lineOf(part, "underline"))),
+    strike: shared(parts.texts.map((part) => lineOf(part, "strike"))),
+    leading: shared(several.map((part) => {
+      const rich = richOfPart(part)!;
+      return one(rich.lines.slice(1).map((_, i) => {
+        const value = leadingOf(rich, i + 1);
+        return value === null ? null : ratio(value);
+      }));
+    })),
+    spacing: shared(parts.texts.map((part) => {
+      const rich = richOfPart(part);
+      if (rich !== null) return one(spacingsOf(rich));
+      const size = sizeOf(part);
+      const gap = letterSpacing(seen(part, "letter-spacing"));
+      return size === null || gap === null || size <= 0 ? null : ratio(gap / size);
+    })),
+    anchor: shared(parts.texts.map((part) => {
+      const rich = richOfPart(part);
+      return one(rich === null ? [anchorIn(seen(part, "text-anchor"))] : anchorsOf(rich).map(anchorIn));
+    })),
   };
 }
 
@@ -283,6 +413,15 @@ export type LookChange =
   | { readonly opacity: number }
   | { readonly family: string }
   | { readonly size: number }
+  | { readonly weight: number }
+  | { readonly italic: boolean }
+  | { readonly underline: boolean }
+  | { readonly strike: boolean }
+  /// In volte il corpo, come in [`Look`].
+  | { readonly leading: number }
+  | { readonly spacing: number }
+  /// Uno stile del testo: il corpo e il peso insieme.
+  | { readonly preset: { readonly size: number; readonly weight: number } }
   | { readonly anchor: Anchor };
 
 /// Un cambio pronto, e quante parti cambia.
@@ -304,10 +443,32 @@ const sameLength: Same = (a, b) => {
   return p !== null && q !== null && place(p) === place(q);
 };
 const sameDashes: Same = (a, b) => (writtenDashes(a) ?? a) === (writtenDashes(b) ?? b);
+const sameWeight: Same = (a, b) => weightOf(a) === weightOf(b);
+const sameSpacing: Same = (a, b) => {
+  const p = letterSpacing(a);
+  const q = letterSpacing(b);
+  return p !== null && q !== null && place(p) === place(q);
+};
+
+/// Un peso come lo scrive il file: le parole per il normale e il grassetto.
+export const weightText = (weight: number): string => (weight === 400 ? "normal" : weight === 700 ? "bold" : String(Math.round(weight)));
+
+/// Come `name` confronta due valori scritti.
+const SAME: Readonly<Record<string, Same>> = {
+  fill: samePaint,
+  "font-family": sameText,
+  "font-size": sameLength,
+  "font-weight": sameWeight,
+  "font-style": sameText,
+  "letter-spacing": sameSpacing,
+  "text-anchor": sameText,
+};
 
 /// I cambi di un comando, parte per parte, e le operazioni che li scrivono.
 class Changes {
   private readonly attrs = new Map<ElementPart, Record<string, string | null>>();
+  /// I testi che cambiano interi, com'erano e come diventano.
+  private readonly texts = new Map<ElementPart, { readonly part: Part; readonly before: Rich; now: Rich }>();
   private replaced = 0;
 
   constructor(
@@ -383,25 +544,67 @@ class Changes {
     this.of(part).d = arrowPath(x1, y1, x2, y2, width === null ? nonNegativeLength(part.inherited.get("stroke-width")!) ?? 1 : Number(width));
   }
 
-  /// Il corpo `size` del testo `part`, con le righe che scendono nella
-  /// stessa proporzione. Va per ultimo: il testo si riscrive coi cambi
-  /// che ha già.
-  size(part: Part, size: number): void {
-    const before = sizeOf(part);
-    this.write(part, "font-size", place(size), sameLength);
-    const attrs = this.attrs.get(part.node);
-    if (attrs === undefined || before === null || before <= 0) return;
-    const elem = respaced(part.node, attrs, size / before);
-    if (elem === null) return;
-    // Le righe si riscrivono con l'elemento: il resto passa da lui.
-    if (replaceElem(this.plan, part.node, elem)) {
-      this.attrs.delete(part.node);
-      this.replaced++;
+  /// Cambia il testo `part` intero con `edit`. Falso se il testo non si
+  /// legge coi suoi pezzi, e non cambia.
+  text(part: Part, edit: (rich: Rich) => Rich): boolean {
+    let entry = this.texts.get(part.node);
+    if (entry === undefined) {
+      const rich = richOfPart(part);
+      if (rich === null) return false;
+      entry = { part, before: rich, now: rich };
+      this.texts.set(part.node, entry);
+    }
+    entry.now = edit(entry.now);
+    return true;
+  }
+
+  /// `value` in `name` sul testo `part` intero, che il file scrive corto:
+  /// senza, se il testo lo vede comunque da chi lo contiene, e com'era
+  /// scritto, se si vede uguale.
+  textWrite(part: Part, name: string, value: string): void {
+    if (!this.text(part, (rich) => shorter(part, restyleWhole(rich, name, value), name))) this.write(part, name, value, SAME[name] ?? sameText);
+  }
+
+  /// L'enfasi `which` accesa o spenta sul testo `part` intero.
+  textEmphasis(part: Part, which: Emphasis, on: boolean): void {
+    if (which === "bold" || which === "italic") {
+      this.textWrite(part, which === "bold" ? "font-weight" : "font-style", which === "bold" ? (on ? "bold" : "normal") : on ? "italic" : "normal");
+      return;
+    }
+    this.text(part, (rich) => emphasizeWhole(rich, which, on));
+  }
+
+  /// I testi che cambiano: un'operazione `set` se cambia soltanto il
+  /// `text`, e il testo riscritto intero, coi cambi che ha già, se cambiano
+  /// le righe o i pezzi.
+  private finishTexts(): void {
+    for (const { part, before, now } of this.texts.values()) {
+      if (sameRich(before, now)) continue;
+      if (sameRich({ ...before, attrs: {} }, { ...now, attrs: {} })) {
+        const attrs = this.of(part);
+        for (const name of new Set([...Object.keys(before.attrs), ...Object.keys(now.attrs)])) {
+          if (before.attrs[name] !== now.attrs[name] && attrs[name] === undefined) attrs[name] = now.attrs[name] ?? null;
+        }
+        continue;
+      }
+      const old = elemOf(part.node);
+      if (old === null) continue;
+      const merged: Record<string, string> = { ...now.attrs };
+      for (const [name, value] of Object.entries(this.attrs.get(part.node) ?? {})) {
+        if (value === null) delete merged[name];
+        else merged[name] = value;
+      }
+      // Le righe si riscrivono con l'elemento: il resto passa da lui.
+      if (replaceElem(this.plan, part.node, richElem(old, { ...now, attrs: merged }))) {
+        this.attrs.delete(part.node);
+        this.replaced++;
+      }
     }
   }
 
   /// Le operazioni, con le chiavi di `units` dopo.
   finish(units: readonly Unit[]): Restyled {
+    this.finishTexts();
     for (const [node, attrs] of this.attrs) {
       if (Object.keys(attrs).length === 0) continue;
       this.plan.ops.push({ op: "set", id: this.plan.idOf(node), attrs } satisfies Op);
@@ -413,6 +616,20 @@ class Changes {
   }
 }
 
+/// Il testo `rich` di `part` col valore di `name` scritto corto: senza, se il
+/// testo lo vede comunque da chi lo contiene, e com'era scritto prima, se si
+/// vede uguale.
+function shorter(part: Part, rich: Rich, name: string): Rich {
+  const value = rich.attrs[name];
+  if (value === undefined) return rich;
+  const same = SAME[name] ?? sameText;
+  const own = part.own.get(name);
+  const attrs: Record<string, string> = { ...rich.attrs };
+  if (same(value, part.inherited.get(name)!)) delete attrs[name];
+  else if (own !== undefined && same(own, value)) attrs[name] = own;
+  return { ...rich, attrs };
+}
+
 /// Le operazioni che danno `change` a `units`. La selezione resta la
 /// stessa; un elemento che cambia senza id ne riceve uno.
 export function lookOps(model: DocumentModel, units: readonly Unit[], change: LookChange, ids: NewIds): Restyled {
@@ -420,7 +637,10 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
   const parts = partsOf(model, units);
 
   if ("fill" in change) {
-    for (const part of parts.fills) changes.write(part, "fill", change.fill, samePaint);
+    for (const part of parts.fills) {
+      if (part.role === "text") changes.textWrite(part, "fill", change.fill);
+      else changes.write(part, "fill", change.fill, samePaint);
+    }
   } else if ("stroke" in change) {
     for (const part of parts.strokes) changes.write(part, INKED.has(part.role) ? "fill" : "stroke", change.stroke, samePaint);
   } else if ("width" in change) {
@@ -437,11 +657,31 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
   } else if ("opacity" in change) {
     for (const part of parts.chosen) changes.opacity(part, change.opacity);
   } else if ("family" in change) {
-    for (const part of parts.texts) changes.write(part, "font-family", change.family, sameText);
+    for (const part of parts.texts) changes.textWrite(part, "font-family", change.family);
   } else if ("anchor" in change) {
-    for (const part of parts.texts) changes.write(part, "text-anchor", change.anchor, sameText);
+    for (const part of parts.texts) changes.textWrite(part, "text-anchor", change.anchor);
+  } else if ("size" in change) {
+    for (const part of parts.texts) changes.textWrite(part, "font-size", place(change.size));
+  } else if ("weight" in change) {
+    for (const part of parts.texts) changes.textWrite(part, "font-weight", weightText(change.weight));
+  } else if ("preset" in change) {
+    for (const part of parts.texts) {
+      changes.textWrite(part, "font-size", place(change.preset.size));
+      changes.textWrite(part, "font-weight", weightText(change.preset.weight));
+    }
+  } else if ("leading" in change) {
+    for (const part of parts.texts) changes.text(part, (rich) => withLeading(rich, change.leading));
+  } else if ("spacing" in change) {
+    for (const part of parts.texts) {
+      if (!changes.text(part, (rich) => shorter(part, withSpacing(rich, change.spacing), "letter-spacing"))) {
+        const size = sizeOf(part);
+        if (size !== null) changes.write(part, "letter-spacing", change.spacing === 0 ? "0" : place(change.spacing * size), sameSpacing);
+      }
+    }
   } else {
-    for (const part of parts.texts) changes.size(part, change.size);
+    const which: Emphasis = "italic" in change ? "italic" : "underline" in change ? "underline" : "strike";
+    const on = "italic" in change ? change.italic : "underline" in change ? change.underline : change.strike;
+    for (const part of parts.texts) changes.textEmphasis(part, which, on);
   }
   return changes.finish(units);
 }
@@ -458,11 +698,21 @@ export interface StyleOutline {
   readonly join: string;
 }
 
-/// Il carattere di uno stile: `family` è `""` se nessuno lo scrive.
+/// Il carattere di uno stile, quello del primo carattere del testo:
+/// `family` è `""` se nessuno lo scrive.
 export interface StyleFont {
   readonly family: string;
   readonly size: number;
   readonly weight: string;
+  /// Il corsivo, come lo scrive il file.
+  readonly style: string;
+  /// La spaziatura delle lettere, in volte il corpo.
+  readonly spacing: number;
+  readonly underline: boolean;
+  readonly strike: boolean;
+  /// L'interlinea della seconda riga, in volte il corpo; `null` per un testo
+  /// di una riga, e chi la riceve tiene la sua.
+  readonly leading: number | null;
 }
 
 /// Lo stile di un oggetto, per «Copia stile» e «Incolla stile»: ciò che
@@ -517,7 +767,28 @@ export function styleOf(model: DocumentModel, unit: Unit): Style | null {
         ? { width: place(profileWidth(part.node.details.varwidth.profile)), dashes: "none", cap: part.node.details.varwidth.cap, join: part.node.details.varwidth.join }
         : null,
     opacity,
-    font: part.role === "text" && size !== null ? { family: trim(seen(part, "font-family")), size, weight: trim(seen(part, "font-weight")) } : null,
+    font: part.role === "text" && size !== null ? fontOf(part, size) : null,
+  };
+}
+
+/// Il carattere del testo `part`, come lo vede il suo primo carattere.
+function fontOf(part: Part, size: number): StyleFont {
+  const rich = richOfPart(part);
+  const line = rich?.lines.find((each) => each.spans.some((span) => span.text.trim() !== ""));
+  const span = line?.spans.find((each) => each.text.trim() !== "") ?? null;
+  const read = (name: string): string => (rich === null || line === undefined ? seen(part, name) : (seenIn(rich, line, span, name) ?? seen(part, name)));
+  const own = rich === null || line === undefined ? size : sizeIn(rich, line, span);
+  const lines = rich === null || line === undefined ? new Set(textDecoration(part.own.get("text-decoration") ?? "none") ?? []) : linesOf(rich, line, span);
+  const leading = rich === null ? null : leadingOf(rich, 1);
+  return {
+    family: trim(read("font-family")),
+    size: Number(place(own)),
+    weight: trim(read("font-weight")),
+    style: trim(read("font-style")),
+    spacing: own > 0 ? ratio((letterSpacing(read("letter-spacing")) ?? 0) / own) : 0,
+    underline: lines.has("underline"),
+    strike: lines.has("line-through"),
+    leading: leading === null ? null : ratio(leading),
   };
 }
 
@@ -559,32 +830,17 @@ export function styleOps(model: DocumentModel, units: readonly Unit[], style: St
   const font = style.font;
   if (font !== null) {
     for (const part of parts.texts) {
-      changes.write(part, "font-family", font.family, sameText);
-      changes.write(part, "font-weight", font.weight, sameText);
-      changes.size(part, font.size);
+      changes.textWrite(part, "font-family", font.family);
+      changes.textWrite(part, "font-weight", font.weight);
+      changes.textWrite(part, "font-style", font.style);
+      // Il corpo prima della spaziatura e dell'interlinea, che si misurano
+      // su di lui.
+      changes.textWrite(part, "font-size", place(font.size));
+      if (!changes.text(part, (rich) => shorter(part, withSpacing(rich, font.spacing), "letter-spacing"))) changes.write(part, "letter-spacing", place(font.spacing * font.size), sameSpacing);
+      changes.textEmphasis(part, "underline", font.underline);
+      changes.textEmphasis(part, "strike", font.strike);
+      if (font.leading !== null) changes.text(part, (rich) => (rich.lines.length > 1 ? withLeading(rich, font.leading!) : rich));
     }
   }
   return changes.finish(units);
-}
-
-/// Il testo `node` con gli attributi `attrs` cambiati e le righe che
-/// scendono `ratio` volte quanto scendevano; `null` se non ha una riga che
-/// scende, e basta cambiare il `text`, o se ha parti che un'operazione non
-/// sa scrivere.
-function respaced(node: ElementPart, attrs: Readonly<Record<string, string | null>>, ratio: number): Elem | null {
-  const elem = elemOf(node);
-  if (elem === null || elem.children === undefined) return null;
-  let moved = false;
-  const children = elem.children.map((child) => {
-    const dy = child.tag === "tspan" ? child.attrs.dy : undefined;
-    const step = dy === undefined ? null : length(dy);
-    if (step === null || step === 0) return child;
-    moved = true;
-    return { ...child, attrs: { ...child.attrs, dy: place(step * ratio) } };
-  });
-  if (!moved) return null;
-  const next: Record<string, string> = {};
-  for (const [name, value] of Object.entries(elem.attrs)) if (name !== "id" && !(name in attrs)) next[name] = value;
-  for (const [name, value] of Object.entries(attrs)) if (value !== null) next[name] = value;
-  return { tag: elem.tag, attrs: next, children };
 }

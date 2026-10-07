@@ -85,11 +85,26 @@ export type ImageSource =
   /// Un URL remoto, che non si carica mai: al suo posto il segnaposto.
   | { readonly kind: "remote" };
 
+/// Un pezzo di una riga di testo: un `tspan` dentro la riga, col suo stile e
+/// solo testo.
+export interface TextPiece {
+  readonly attrs: readonly PaintAttr[];
+  readonly space: string | null;
+  readonly text: string;
+}
+
 /// Un pezzo di un `text`: gli spazi fra i `tspan` contano nella resa, e
-/// restano dove sono.
+/// restano dove sono. Una riga ha tutto il suo testo in `text`, e quella con
+/// dei pezzi anche `parts`, il testo della riga e i pezzi in ordine.
 export type TextRun =
   | { readonly kind: "space"; readonly text: string }
-  | { readonly kind: "span"; readonly attrs: readonly PaintAttr[]; readonly space: string | null; readonly text: string };
+  | {
+      readonly kind: "span";
+      readonly attrs: readonly PaintAttr[];
+      readonly space: string | null;
+      readonly text: string;
+      readonly parts?: readonly (string | TextPiece)[];
+    };
 
 /// Un elemento modificabile che si disegna da solo.
 export interface PaintShape {
@@ -239,6 +254,9 @@ export const PAINTED_ATTRIBUTES: ReadonlySet<string> = new Set([
   "font-family",
   "font-size",
   "font-weight",
+  "font-style",
+  "letter-spacing",
+  "text-decoration",
   "text-anchor",
   "x",
   "y",
@@ -376,7 +394,18 @@ function shapeOf(leaf: LeafNode, scope: NamespaceScope): PaintShape | null {
         runs.push({ kind: "space", text: node.value });
       } else if (node.kind === "element" && node.ns === NS_SVG && node.local === "tspan") {
         const span = paintedAttributes(node);
-        runs.push({ kind: "span", attrs: span.attrs, space: span.space, text: characters(doc, node) });
+        const parts: (string | TextPiece)[] = [];
+        let pieces = false;
+        for (const part of node.children) {
+          const inner = doc.nodes[part]!;
+          if (inner.kind === "text") parts.push(inner.value);
+          else if (inner.kind === "element") {
+            pieces = true;
+            parts.push({ ...paintedAttributes(inner), text: characters(doc, inner) });
+          }
+        }
+        const text = parts.map((part) => (typeof part === "string" ? part : part.text)).join("");
+        runs.push(pieces ? { kind: "span", attrs: span.attrs, space: span.space, text, parts } : { kind: "span", attrs: span.attrs, space: span.space, text });
       }
     }
     shape.runs = runs;
