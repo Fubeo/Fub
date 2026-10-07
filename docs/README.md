@@ -95,6 +95,7 @@ flowchart LR
 - [Formato della scena, accessibilità](reference/scene-format-accessibility.md)
 - [Formato della scena, risorse](reference/scene-format-resources.md)
 - [Formato della scena, tavole](reference/scene-format-boards.md)
+- [Formato della scena, export](reference/scene-format-export.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 - [Formato delle annotazioni PDF](reference/annotation-format.md)
 

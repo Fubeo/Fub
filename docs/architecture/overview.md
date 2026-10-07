@@ -113,12 +113,13 @@ deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
 `draw`: l'arco `host --> svg` è una dipendenza facoltativa, fuori dal
 `default`. La stessa feature accende in `fub-features` l'export dei disegni in
-PNG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati, e il
-comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
+PNG, JPEG, SVG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati,
+e il comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
 provider: per questo anche `features --> svg` è un arco facoltativo, come
-`features --> base` per le basi. Con la stessa feature `fub-features` legge
-con `fub-scene` le annotazioni dei PDF, per esportarle nel PDF annotato e nel
-PDF redatto: anche `features --> scene` è facoltativo.
+`features --> base` per le basi. Con la stessa feature `fub-features` usa
+`fub-scene` per derivare dal disegno le tavole o la selezione da esportare, e
+per leggere le annotazioni dei PDF, da esportare nel PDF annotato e nel PDF
+redatto: anche `features --> scene` è facoltativo.
 
 ## Flusso di un comando
 
