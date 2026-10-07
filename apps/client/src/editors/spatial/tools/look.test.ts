@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
 import { lookOf, lookOps, paintText, styleOf, styleOps, type LookChange, type Restyled, type Style } from "./look";
+import { estimate } from "./measure";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
 
@@ -23,7 +24,7 @@ const TEXT = (id: string, lines: readonly string[], extra = ' font-family="Inter
 
 /// Il cambio su tutti gli oggetti del disegno.
 function restyled(opened: Opened, change: LookChange): Restyled {
-  return lookOps(opened.engine.model!, opened.index.units, change, ids(opened));
+  return lookOps(opened.engine.model!, opened.index.units, change, estimate, ids(opened));
 }
 
 /// Applica `change`, verifica che un annulla riporti il testo di prima, e
@@ -303,7 +304,7 @@ describe("lo stile copiato e incollato", () => {
   const copied = (opened: Opened, key: string): Style | null => styleOf(opened.engine.model!, opened.index.get(key)!);
   /// `style` incollato sugli oggetti di chiave `keys`.
   const pasted = (opened: Opened, keys: readonly string[], style: Style): Restyled =>
-    styleOps(opened.engine.model!, keys.map((key) => opened.index.get(key)!), style, ids(opened));
+    styleOps(opened.engine.model!, keys.map((key) => opened.index.get(key)!), style, estimate, ids(opened));
 
   it("copia ciò che si vede, anche ciò che viene dal gruppo", () => {
     const opened = open(doc(`${LAYER}<g id="ogroup000" stroke="#e69f00" stroke-dasharray="8 6" opacity="0.5">${RECT("oaaaaaaaa", ' fill="#0072b2" stroke-width="4" stroke-linecap="round"')}</g></g>`));
@@ -389,6 +390,67 @@ describe("lo stile copiato e incollato", () => {
     expect(after).toContain('<g id="ogroup000" opacity="0.5">');
     expect(after).toContain('<rect id="obbbbbbbb" x="0" y="0" width="10" height="10" fill="#cc79a7"/>');
     expect(after).toContain('<rect id="occcccccc" x="0" y="0" width="10" height="10" fill="#000000" fub:locked="true"/>');
+  });
+});
+
+describe("il testo in area", () => {
+  // Corpo 10, a stima: ogni carattere largo 6, dieci per riga.
+  const AREA = (extra = ""): string =>
+    `<text id="oaaaaaaaa" fub:wrap="60" x="20" y="40" font-size="10"${extra}><tspan x="20" dy="0">Il testo</tspan><tspan fub:join="space" x="20" dy="12.5">va a capo</tspan></text>`;
+  /// Il testo di `text` senza gli a capo e i rientri.
+  const flat = (text: string): string => text.replace(/\n\s*/g, "");
+
+  it("si legge col suo tipo e la larghezza del riquadro; un testo su tracciato non ha né l'uno né l'altra", () => {
+    const opened = open(
+      doc(
+        '<defs id="fub-defs"><path id="rpppppppp" fub:role="private" d="M 0 50 L 200 50"/></defs>' +
+          `${LAYER}${AREA()}${TEXT("obbbbbbbb", ["Uno"])}<text id="occcccccc"><textPath href="#rpppppppp">Lungo</textPath></text></g>`,
+      ),
+    );
+    expect(look(opened).form).toEqual({ count: 2, value: null });
+    expect(look(opened).wrap).toEqual({ count: 1, value: 60 });
+  });
+
+  it("va di nuovo a capo quando cambia il carattere, e lo dice se un carattere non ci sta", () => {
+    const opened = open(doc(`${LAYER}${AREA()}</g>`));
+    const after = flat(applied(opened, restyled(opened, { size: 20 })));
+    expect(after).toContain(
+      '<tspan x="20" dy="0">Il</tspan><tspan fub:join="space" x="20" dy="25">testo</tspan><tspan fub:join="space" x="20" dy="25">va a</tspan><tspan fub:join="space" x="20" dy="25">capo</tspan>',
+    );
+    expect(restyled(opened, { size: 20 }).overflow).toBe(false);
+    expect(restyled(open(doc(`${LAYER}${AREA()}</g>`)), { size: 120 }).overflow).toBe(true);
+  });
+
+  it("un colore o una linea non rifanno gli a capo che il file ha", () => {
+    // Una riga sola più larga del riquadro, come l'ha scritta un altro.
+    const opened = open(doc(`${LAYER}${AREA().replace(/<tspan fub:join="space" x="20" dy="12.5">va a capo<\/tspan>/, "").replace("Il testo", "Il testo va a capo")}</g>`));
+    const after = flat(applied(opened, restyled(opened, { fill: "#0072b2" })));
+    expect(after).toContain('<tspan x="20" dy="0">Il testo va a capo</tspan></text>');
+    const lined = open(after);
+    expect(flat(applied(lined, restyled(lined, { underline: true })))).toContain(">Il testo va a capo</tspan></text>");
+  });
+
+  it("con l'allineamento e la larghezza il riquadro tiene il bordo sinistro", () => {
+    const opened = open(doc(`${LAYER}${AREA()}</g>`));
+    // Al centro: x va a metà del riquadro, e le righe con lei.
+    const centered = flat(applied(opened, restyled(opened, { anchor: "middle" })));
+    expect(centered).toMatch(/<text id="oaaaaaaaa" fub:wrap="60" x="50" y="40" font-size="10" text-anchor="middle"><tspan x="50" dy="0">Il testo<\/tspan><tspan fub:join="space" x="50" dy="12.5">/);
+    // Allineato a destra e largo 100: x è il bordo destro, da -40 a 60, e
+    // le righe vanno di nuovo a capo.
+    const ended = open(doc(`${LAYER}${AREA(' text-anchor="end"').replace(/x="20"/g, 'x="20"')}</g>`));
+    const wider = flat(applied(ended, restyled(ended, { wrap: 100 })));
+    expect(wider).toContain('fub:wrap="100" x="60"');
+    expect(wider).toContain('<tspan x="60" dy="0">Il testo va a</tspan><tspan fub:join="space" x="60" dy="12.5">capo</tspan>');
+  });
+
+  it("un testo da punto diventa in area largo quanto la riga più larga, e torna da punto, senza muoversi", () => {
+    const opened = open(doc(`${LAYER}<text id="oaaaaaaaa" x="20" y="40" font-size="10"><tspan x="20" dy="0">Sul colle</tspan><tspan x="20" dy="12.5">e oltre</tspan></text></g>`));
+    const area = flat(applied(opened, restyled(opened, { form: "area" })));
+    expect(area).toContain('<text id="oaaaaaaaa" fub:wrap="54" x="20" y="40" font-size="10"><tspan x="20" dy="0">Sul colle</tspan><tspan x="20" dy="12.5">e oltre</tspan></text>');
+    expect(look(open(area)).form).toEqual({ count: 1, value: "area" });
+    const back = open(doc(`${LAYER}${AREA()}</g>`));
+    const point = flat(applied(back, restyled(back, { form: "point" })));
+    expect(point).toContain('<text id="oaaaaaaaa" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan x="20" dy="12.5">va a capo</tspan></text>');
   });
 });
 

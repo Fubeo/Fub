@@ -32,7 +32,7 @@ import { t, type DrawKey } from "../strings";
 import type { Axis, Edge, Order } from "./arrange";
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
 import type { Grid } from "./grid";
-import { ANCHORS, type Anchor, type Look, type LookChange } from "./look";
+import { ANCHORS, TEXT_FORMS, type Anchor, type Look, type LookChange, type TextForm } from "./look";
 import { CAPS, DASHES, JOINS, type Cap, type Dash, type Join, type OutlineChange, type OutlineLook } from "./outline";
 import {
   ACTION_LABELS,
@@ -87,6 +87,12 @@ const ANCHOR_LABELS: Readonly<Record<Anchor, DrawKey>> = {
   start: "draw.properties.anchor.start",
   middle: "draw.properties.anchor.middle",
   end: "draw.properties.anchor.end",
+};
+
+/// I nomi dei tipi di testo, e le loro icone.
+const FORM_LABELS: Readonly<Record<TextForm, DrawKey>> = {
+  point: "draw.properties.text_form.point",
+  area: "draw.properties.text_form.area",
 };
 
 /// Gli stili del testo, dal più grande: il corpo, in unità della scena, e il
@@ -173,6 +179,8 @@ export const LOOK_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
   leading: "draw.action.leading",
   spacing: "draw.action.letter_spacing",
   anchor: "draw.action.text_align",
+  textForm: "draw.action.text_form",
+  wrap: "draw.action.text_frame",
 };
 
 /// Il nome del passo di annulla del campo dell'aspetto `id` scritto con
@@ -454,6 +462,22 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         options: ANCHORS.map((anchor) => ({ value: anchor, label: t(ANCHOR_LABELS[anchor]), icon: `draw-anchor-${anchor}` })),
       };
     }
+    // Il tipo di testo e il riquadro, col testo in area.
+    if (has("typeset") && look.form.count > 0) {
+      fields.textForm = {
+        kind: "segment",
+        label: t("draw.properties.text_form"),
+        value: look.form.value,
+        options: TEXT_FORMS.map((form) => ({ value: form, label: t(FORM_LABELS[form]), icon: `draw-text-${form}` })),
+      };
+    }
+    if (has("typeset") && look.wrap.count > 0) {
+      const wrap = look.wrap.value;
+      fields.wrap = {
+        ...lengthField(t("draw.properties.text_frame"), wrap ?? 0, unit, true, { min: fieldMin(Math.min(wrap ?? MIN_SIZE, MIN_SIZE), unit) }),
+        value: wrap === null ? null : toUnit(wrap, unit),
+      };
+    }
 
     // --- Disponi ---
     if (has("arrange")) {
@@ -571,6 +595,10 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
       return typeof value === "number" ? { spacing: value / 100 } : null;
     case "anchor":
       return (ANCHORS as readonly unknown[]).includes(value) ? { anchor: value as Anchor } : null;
+    case "textForm":
+      return (TEXT_FORMS as readonly unknown[]).includes(value) ? { form: value as TextForm } : null;
+    case "wrap":
+      return typeof value === "number" && value > 0 ? { wrap: fromUnit(value, unit) } : null;
     default:
       return null;
   }

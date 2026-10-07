@@ -16,7 +16,7 @@
 //   `id`, e scende dell'interlinea del testo.
 
 import { formatNumber } from "../number";
-import { letterSpacing, nonNegativeLength } from "../scene/values";
+import { length, letterSpacing, nonNegativeLength, wrapWidth } from "../scene/values";
 import { graphemes, type Font, type Measure } from "./measure";
 import { canonicalSpans, JOIN, lineText, newLeading, seenIn, withoutJoin, type Attrs, type Caret, type Rich, type RichLine, type Span } from "./rich";
 
@@ -306,3 +306,88 @@ export function reflow(rich: Rich, width: number, measure: Measure): Reflowed {
 
 /// La larghezza di un riquadro, come la scrive il file.
 export const wrapValue = (width: number): string => formatNumber(width, 2);
+
+/// La larghezza del riquadro di `rich`; `null` se è un testo da punto.
+export function wrapOf(rich: Rich): number | null {
+  const value = rich.attrs[WRAP];
+  return value === undefined ? null : wrapWidth(value);
+}
+
+/// Quanto è larga la riga `line` di `rich`, senza gli spazi in fondo, come
+/// la misura chi va a capo.
+export function lineWidth(rich: Rich, line: RichLine, measure: Measure): number {
+  const spans = [...line.spans];
+  while (spans.length > 0) {
+    const last = spans[spans.length - 1]!;
+    const text = last.text.replace(/[ \t]+$/, "");
+    if (text !== "") {
+      spans[spans.length - 1] = { text, attrs: last.attrs };
+      break;
+    }
+    spans.pop();
+  }
+  return spans.reduce((sum, span) => sum + measure(span.text, fontIn(rich, line, span)), 0);
+}
+
+/// Vero se ogni tratto di `a` si vede col carattere del tratto di `b` al suo
+/// posto: gli a capo sarebbero gli stessi.
+export function sameFonts(a: Rich, b: Rich): boolean {
+  const fonts = (rich: Rich): string => JSON.stringify(rich.lines.map((line) => [fontIn(rich, line, null), ...line.spans.map((span) => fontIn(rich, line, span))]));
+  return fonts(a) === fonts(b);
+}
+
+/// `rich`, un testo da punto, fatto testo in area: il riquadro è largo
+/// quanto la riga più larga, almeno quanto il corpo, e ogni riga è un
+/// paragrafo che cominciano tutti dalla `x` del testo. Le righe restano
+/// dove si vedevano.
+export function areaText(rich: Rich, measure: Measure): Rich {
+  if (wrapOf(rich) !== null) return rich;
+  const widest = Math.max(fontIn(rich, rich.lines[0] ?? { attrs: {}, spans: [] }, null).size, ...rich.lines.map((line) => lineWidth(rich, line, measure)));
+  // Arrotondato in su: la riga più larga ci sta.
+  const written = Number(wrapValue(widest));
+  const width = written >= widest ? written : written + 0.01;
+  const x = rich.attrs.x;
+  return {
+    ...rich,
+    attrs: { ...rich.attrs, [WRAP]: wrapValue(width) },
+    lines: rich.lines.map((line) => {
+      const attrs: Record<string, string> = { ...withoutJoin(line.attrs) };
+      if (x !== undefined && attrs.x !== undefined) attrs.x = x;
+      return { attrs, spans: line.spans };
+    }),
+  };
+}
+
+/// `rich`, un testo in area, fatto testo da punto: ogni riga che si vede
+/// resta una riga, al suo posto.
+export function pointText(rich: Rich): Rich {
+  if (rich.attrs[WRAP] === undefined) return rich;
+  const attrs: Record<string, string> = { ...rich.attrs };
+  delete attrs[WRAP];
+  return { ...rich, attrs, lines: rich.lines.map((line) => ({ attrs: withoutJoin(line.attrs), spans: line.spans })) };
+}
+
+/// Quanto del riquadro sta prima di `x`, in volte la sua larghezza, con
+/// ogni allineamento del testo.
+const BEFORE_X: Readonly<Record<string, number>> = { start: 0, middle: 0.5, end: 1 };
+
+/// La `x` del testo in area `rich`, che era `before`, perché il bordo
+/// sinistro del riquadro resti dov'era: cambiano l'allineamento o la
+/// larghezza, il riquadro no. Si spostano con lei le righe.
+export function keepBox(before: Rich, rich: Rich): Rich {
+  const was = wrapOf(before);
+  const is = wrapOf(rich);
+  if (was === null || is === null) return rich;
+  const share = (of: Rich): number => BEFORE_X[(of.attrs["text-anchor"] ?? of.inherited["text-anchor"] ?? "start").trim()] ?? 0;
+  const by = share(rich) * is - share(before) * was;
+  if (Math.abs(by) < 1e-9) return rich;
+  const moved = (value: string | undefined): string | undefined => {
+    const x = value === undefined ? 0 : length(value);
+    return x === null ? value : formatNumber(x + by, 2);
+  };
+  return {
+    ...rich,
+    attrs: { ...rich.attrs, x: moved(rich.attrs.x)! },
+    lines: rich.lines.map((line) => (line.attrs.x === undefined ? line : { attrs: { ...line.attrs, x: moved(line.attrs.x)! }, spans: line.spans })),
+  };
+}

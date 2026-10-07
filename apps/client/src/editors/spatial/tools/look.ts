@@ -36,6 +36,14 @@
 // - **L'allineamento resta sul punto d'ancoraggio**, come il testo a punto
 //   dei programmi di disegno: le righe si allineano attorno al punto dove il
 //   testo è nato, ed è esatto, senza stimare la larghezza delle lettere.
+// - **Un testo in area tiene il suo riquadro** (livello Esperto): con
+//   l'allineamento o la larghezza il bordo sinistro resta dov'era, e le
+//   righe si allineano dentro. Un attributo del carattere che cambia, o la
+//   larghezza, rifanno gli a capo, misurati come li misura l'export; un
+//   colore o una linea no. Un testo da punto diventa in area con un
+//   riquadro largo quanto la riga più larga, ogni riga un paragrafo, e un
+//   testo in area torna da punto con le righe che mostrava: nessuno dei due
+//   si muove.
 // - **Lo stile si copia e si incolla** (livello Standard): il riempimento,
 //   il contorno col suo spessore, tratteggio, estremi e angoli, l'opacità e
 //   il carattere di un oggetto vanno sugli oggetti scelti in un passo, a
@@ -81,11 +89,20 @@ import {
   type Rich,
 } from "./rich";
 import { replaceElem } from "./topath";
+import type { Measure } from "./measure";
+import { areaText, keepBox, pointText, reflow, sameFonts, WRAP, wrapOf, wrapValue } from "./wrap";
 
 /// Dove un testo si allinea al suo punto d'ancoraggio.
 export type Anchor = "start" | "middle" | "end";
 
 export const ANCHORS: readonly Anchor[] = ["start", "middle", "end"];
+
+/// Il tipo di un testo che non segue un tracciato: da punto, con le righe
+/// che si scrivono, o in area, che va a capo da solo (formato della scena,
+/// testo).
+export type TextForm = "point" | "area";
+
+export const TEXT_FORMS: readonly TextForm[] = ["point", "area"];
 
 /// Un valore della selezione: quante parti lo hanno, e il valore se è lo
 /// stesso per tutte; `null` se è misto, o se nessuna lo ha.
@@ -122,6 +139,10 @@ export interface Look {
   /// La spaziatura delle lettere, in volte il corpo.
   readonly spacing: Shared<number>;
   readonly anchor: Shared<Anchor>;
+  /// Il tipo dei testi che non seguono un tracciato.
+  readonly form: Shared<TextForm>;
+  /// La larghezza del riquadro dei testi in area, nelle loro coordinate.
+  readonly wrap: Shared<number>;
 }
 
 /// Ciò che una parte eredita, coi valori iniziali di SVG: i colori, il
@@ -416,6 +437,8 @@ export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
       const rich = richOfPart(part);
       return one(rich === null ? [anchorIn(seen(part, "text-anchor"))] : anchorsOf(rich).map(anchorIn));
     })),
+    form: shared(parts.texts.filter((part) => part.node.details?.textPath === undefined).map((part): TextForm => (part.node.details?.wrap === undefined ? "point" : "area"))),
+    wrap: shared(parts.texts.flatMap((part) => (part.node.details?.wrap === undefined ? [] : [Number(place(part.node.details.wrap))]))),
   };
 }
 
@@ -440,11 +463,18 @@ export type LookChange =
   | { readonly spacing: number }
   /// Uno stile del testo: il corpo e il peso insieme.
   | { readonly preset: { readonly size: number; readonly weight: number } }
-  | { readonly anchor: Anchor };
+  | { readonly anchor: Anchor }
+  /// La larghezza del riquadro dei testi in area, nelle loro coordinate.
+  | { readonly wrap: number }
+  /// Il tipo dei testi che non seguono un tracciato.
+  | { readonly form: TextForm };
 
 /// Un cambio pronto, e quante parti cambia.
 export interface Restyled extends Arranged {
   readonly changed: number;
+  /// Vero se un testo in area, andato di nuovo a capo, ha una riga più larga
+  /// del riquadro.
+  readonly overflow: boolean;
 }
 
 /// Un numero come lo scrive il file.
@@ -488,10 +518,12 @@ class Changes {
   /// I testi che cambiano interi, com'erano e come diventano.
   private readonly texts = new Map<ElementPart, { readonly part: Part; readonly before: Rich; now: Rich }>();
   private replaced = 0;
+  private overflow = false;
 
   constructor(
     private readonly plan: Plan,
     private readonly model: DocumentModel,
+    private readonly measure: Measure,
   ) {}
 
   of(part: Part): Record<string, string | null> {
@@ -596,7 +628,8 @@ class Changes {
   /// `text`, e il testo riscritto intero, coi cambi che ha già, se cambiano
   /// le righe o i pezzi.
   private finishTexts(): void {
-    for (const { part, before, now } of this.texts.values()) {
+    for (const { part, before, now: changed } of this.texts.values()) {
+      const now = part.node.details?.textPath === undefined ? this.area(before, changed) : changed;
       if (sameRich(before, now)) continue;
       if (sameRich({ ...before, attrs: {} }, { ...now, attrs: {} })) {
         const attrs = this.of(part);
@@ -620,6 +653,20 @@ class Changes {
     }
   }
 
+  /// Il testo in area `now`, che era `before`: il riquadro resta dov'era, e
+  /// le righe vanno di nuovo a capo se cambia la larghezza o il carattere di
+  /// un tratto.
+  private area(before: Rich, now: Rich): Rich {
+    const was = wrapOf(before);
+    const is = wrapOf(now);
+    if (was === null || is === null) return now;
+    const kept = keepBox(before, now);
+    if (was === is && sameFonts(before, kept)) return kept;
+    const flowed = reflow(kept, is, this.measure);
+    this.overflow ||= flowed.overflow;
+    return flowed.rich;
+  }
+
   /// Le operazioni, con le chiavi di `units` dopo.
   finish(units: readonly Unit[]): Restyled {
     this.finishTexts();
@@ -630,7 +677,7 @@ class Changes {
     const nodes = nodesOf(this.model, units);
     const keys = units.map((unit, at) => this.plan.keyOf(nodes[at]!, unit.key));
     const changed = [...this.attrs.values()].filter((attrs) => Object.keys(attrs).length > 0).length + this.replaced;
-    return { ...this.plan.finish(keys), changed };
+    return { ...this.plan.finish(keys), changed, overflow: this.overflow };
   }
 }
 
@@ -650,8 +697,8 @@ function shorter(part: Part, rich: Rich, name: string): Rich {
 
 /// Le operazioni che danno `change` a `units`. La selezione resta la
 /// stessa; un elemento che cambia senza id ne riceve uno.
-export function lookOps(model: DocumentModel, units: readonly Unit[], change: LookChange, ids: NewIds): Restyled {
-  const changes = new Changes(new Plan(model, ids), model);
+export function lookOps(model: DocumentModel, units: readonly Unit[], change: LookChange, measure: Measure, ids: NewIds): Restyled {
+  const changes = new Changes(new Plan(model, ids), model, measure);
   const parts = partsOf(model, units);
 
   if ("fill" in change) {
@@ -686,6 +733,15 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
     for (const part of parts.texts) {
       changes.textWrite(part, "font-size", place(change.preset.size));
       changes.textWrite(part, "font-weight", weightText(change.preset.weight));
+    }
+  } else if ("wrap" in change) {
+    const width = wrapValue(change.wrap);
+    for (const part of parts.texts) {
+      if (part.node.details?.wrap !== undefined) changes.text(part, (rich) => ({ ...rich, attrs: { ...rich.attrs, [WRAP]: width } }));
+    }
+  } else if ("form" in change) {
+    for (const part of parts.texts) {
+      if (part.node.details?.textPath === undefined) changes.text(part, (rich) => (change.form === "area" ? areaText(rich, measure) : pointText(rich)));
     }
   } else if ("leading" in change) {
     for (const part of parts.texts) changes.text(part, (rich) => withLeading(rich, change.leading));
@@ -818,8 +874,8 @@ const shown = (...values: Array<string | null>): string | null => values.find((v
 /// colore di un testo e di un tratto a penna è uno solo: prende quello che
 /// si vede dello stile, il riempimento per il testo, il contorno per il
 /// tratto. La selezione resta la stessa.
-export function styleOps(model: DocumentModel, units: readonly Unit[], style: Style, ids: NewIds): Restyled {
-  const changes = new Changes(new Plan(model, ids), model);
+export function styleOps(model: DocumentModel, units: readonly Unit[], style: Style, measure: Measure, ids: NewIds): Restyled {
+  const changes = new Changes(new Plan(model, ids), model, measure);
   const parts = partsOf(model, units);
   for (const part of parts.chosen) changes.opacity(part, style.opacity);
   for (const part of parts.fills) {

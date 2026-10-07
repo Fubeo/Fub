@@ -12,6 +12,7 @@ import { applyOps } from "./apply";
 import { Plan, type Arranged } from "./arrange";
 import { gesture, NewIds } from "./edit";
 import { lookOps } from "./look";
+import { estimate } from "./measure";
 import { nodableOf, rewrite } from "./nodable";
 import { outlineOps } from "./outline";
 import { outlineStrokeOps, simplifyOps } from "./paths";
@@ -234,9 +235,9 @@ describe("la linea negli altri comandi", () => {
   });
 
   it("l'aspetto: il colore del contorno è il suo riempimento, e lo spessore allarga tutto il profilo", () => {
-    const coloured = after(LINE_W, ["w"], (o, units) => lookOps(o.engine.model!, units.map((unit) => unit!), { stroke: "#ff0000" }, ids(o)));
+    const coloured = after(LINE_W, ["w"], (o, units) => lookOps(o.engine.model!, units.map((unit) => unit!), { stroke: "#ff0000" }, estimate, ids(o)));
     expect(element(coloured, "w").attrs.fill).toBe("#ff0000");
-    const wider = after(LINE_W, ["w"], (o, units) => lookOps(o.engine.model!, units.map((unit) => unit!), { width: 8 }, ids(o)));
+    const wider = after(LINE_W, ["w"], (o, units) => lookOps(o.engine.model!, units.map((unit) => unit!), { width: 8 }, estimate, ids(o)));
     expect(profileIn(wider, "w")).toEqual([[0, 2, 6], [1, 0, 0]]);
   });
 

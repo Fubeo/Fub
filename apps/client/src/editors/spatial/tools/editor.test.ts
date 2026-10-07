@@ -3266,6 +3266,30 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     expect(editor.engine.text).toBe(TEXT);
   });
 
+  it("il testo in area: la larghezza del riquadro lo manda di nuovo a capo, e il tipo lo fa da punto", () => {
+    const T = "ot1t1t1t1";
+    // Corpo 10, a stima: dieci caratteri per riga.
+    const AREA = doc(`${LAYER}<text id="${T}" fub:wrap="60" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan fub:join="space" x="20" dy="12.5">va a capo</tspan></text></g>`);
+    mount(AREA, { level: "expert" });
+    editor.select([T]);
+    key("Enter");
+    const segment = (label: string): HTMLButtonElement => property("textForm").querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    expect(propertyInput("wrap").value).toBe("60");
+    expect(segment("In area").getAttribute("aria-pressed")).toBe("true");
+    enter(propertyInput("wrap"), "100");
+    expect(editor.engine.text).toContain('<tspan x="20" dy="0">Il testo va a</tspan>');
+    segment("Da punto").click();
+    expect(editor.engine.text).toMatch(/<text id="ot1t1t1t1" x="20" y="40" font-size="10">\s*<tspan x="20" dy="0">Il testo va a<\/tspan>\s*<tspan x="20" dy="12.5">capo<\/tspan>/);
+    // Da punto non ha riquadro.
+    expect(property("wrap").hidden).toBe(true);
+    const undone = [1, 2].map(() => {
+      editor.undo();
+      return spoken();
+    });
+    expect(undone).toEqual(["Annullato: Tipo di testo.", "Annullato: Larghezza del riquadro."]);
+    expect(editor.engine.text).toBe(AREA);
+  });
+
   it("«Disponi» ha i comandi della barra, che dicono quando non servono", () => {
     mount(TWO, { level: "standard" });
     editor.select([A, B]);

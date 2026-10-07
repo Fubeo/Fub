@@ -4271,7 +4271,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (fix.kind === "describe" || model === null || unit === null || !editable()) return;
     cancelGesture();
     const change: LookChange = fix.kind === "size" ? { size: fix.size } : fix.paint === "fill" ? { fill: fix.color } : { stroke: fix.color };
-    const restyled = lookOps(model, [unit], change, newIds());
+    const restyled = lookOps(model, [unit], change, measureText, newIds());
     if (restyled.ops.length === 0) return;
     const name = accessName(unit.key);
     if (commit(fix.kind === "size" ? "draw.action.font_size" : fix.paint === "fill" ? "draw.action.fill" : "draw.action.outline_color", asGesture(restyled.ops)) === null) return;
@@ -4823,8 +4823,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (model === null || units.length === 0) return null;
     const look = lookChange(id, value, docUnit());
     if (look !== null) {
-      const restyled = lookOps(model, units, look, newIds());
-      return changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
+      const restyled = lookOps(model, units, look, measureText, newIds());
+      const outcome = changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
+      if (outcome === null && restyled.overflow) announce(t("draw.text.overflow"));
+      return outcome;
     }
     const change = outlineChange(id, value);
     if (change === null) return null;
@@ -14030,8 +14032,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.style.empty", { key: displayBinding(COPY_STYLE_BINDING) }));
       return;
     }
-    if (arrange("draw.action.paste_style", styleOps(engine.model!, units, copiedStyle, newIds())) !== null) {
-      announce(plural(units.length, "draw.restyled.one", "draw.restyled.other"));
+    const restyled = styleOps(engine.model!, units, copiedStyle, measureText, newIds());
+    if (arrange("draw.action.paste_style", restyled) !== null) {
+      announce(`${plural(units.length, "draw.restyled.one", "draw.restyled.other")}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
     }
   }
 
