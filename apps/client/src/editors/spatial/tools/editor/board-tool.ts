@@ -460,10 +460,14 @@ export function installBoardTool(ctx: EditorContext): void {
     const text = ctx.engine.text;
     cancelGesture();
     import("../present").then(
-      (module) => module.present({ text, model, page: ctx.scene.root.page, extent: indexer.extent(model), from, images: ctx.options.images, onExit: (id) => {
-        ctx.surface.focus({ preventScroll: true });
-        if (id !== null) goToBoard(id);
-      } }, ctx.life),
+      (module) => {
+        // L'editor se n'è andato mentre il modulo arrivava.
+        if (ctx.disposed) return;
+        module.present({ text, model, page: ctx.scene.root.page, extent: indexer.extent(model), from, images: ctx.options.images, onExit: (id) => {
+          ctx.surface.focus({ preventScroll: true });
+          if (id !== null) goToBoard(id);
+        } }, ctx.life);
+      },
       () => announce(t("draw.present.failed")),
     );
   };
