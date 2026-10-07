@@ -23,7 +23,7 @@
 import { BrushError, parseBrush } from "../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
 import { InkError } from "../ink/sample";
-import { Context, isContainer, Tally, type Role, type Stroke, type Tool } from "./analysis";
+import { Context, isContainer, Tally, type Role, type Stroke, type Swatches, type Tool } from "./analysis";
 import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
 import { parsePath } from "./geometry";
 import { readPolygonal, type Polygonal } from "./parametric";
@@ -56,6 +56,7 @@ import {
   urlIds,
   viewBox,
   wrapWidth,
+  type Rgb,
 } from "./values";
 import { isSvg, NS_FUB, NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "./xml";
 
@@ -990,16 +991,18 @@ export function resourceIndex(doc: XmlDocument): Map<string, ResourceKind> {
   return indexResources(doc).kinds;
 }
 
-/// Le risorse modificabili di un documento: il tipo di ognuna, e il `d` dei
-/// tracciati.
+/// Le risorse modificabili di un documento: il tipo di ognuna, il `d` dei
+/// tracciati e il colore dei campioni.
 interface Resources {
   readonly kinds: Map<string, ResourceKind>;
   readonly paths: Map<string, string>;
+  readonly swatches: Map<string, Rgb>;
 }
 
 function indexResources(doc: XmlDocument): Resources {
   const kinds = new Map<string, ResourceKind>();
   const paths = new Map<string, string>();
+  const swatches = new Map<string, Rgb>();
   const others: Array<[ElementNode, ResourceTag]> = [];
   const judge = (element: ElementNode, tag: ResourceTag | "path", resolve: Resolve): void => {
     const id = valueOf(element, NS_NONE, "id");
@@ -1007,6 +1010,9 @@ function indexResources(doc: XmlDocument): Resources {
     if (tag === "path" ? !pathResourceAllowed(doc, element) : !resourceAllowed(doc, element, tag, resolve)) return;
     kinds.set(id, resourceKind(tag)!);
     if (tag === "path") paths.set(id, valueOf(element, NS_NONE, "d")!);
+    const swatch = valueOf(element, NS_FUB, "role") === "swatch" ? swatchOf(doc, element) : null;
+    const color = swatch === null ? null : paint(swatch.color);
+    if (color !== null && color !== "none") swatches.set(id, color);
   };
   for (const child of doc.children(doc.root)) {
     const defs = doc.element(child);
@@ -1021,7 +1027,7 @@ function indexResources(doc: XmlDocument): Resources {
   }
   const first: Resolve = (id) => kinds.get(id) ?? null;
   for (const [element, tag] of others) judge(element, tag, first);
-  return { kinds, paths };
+  return { kinds, paths, swatches };
 }
 
 /// Le sfumature modificabili fra i figli di `parent`, per un `add` di più
@@ -1404,6 +1410,8 @@ class Builder {
     private readonly resolve: Resolve,
     /// Il `d` dei tracciati delle risorse, per id.
     paths: ReadonlyMap<string, string>,
+    /// I campioni del documento, col loro colore.
+    private readonly swatches: Swatches,
   ) {
     this.tally = new Tally(paths);
   }
@@ -1469,7 +1477,7 @@ class Builder {
   walk(root: NodeId): void {
     const doc = this.doc;
     const stack: Frame[] = [
-      { node: root, place: "root", path: [], next: 0, elements: 0, pending: null, context: Context.root(doc.element(root)!) },
+      { node: root, place: "root", path: [], next: 0, elements: 0, pending: null, context: Context.root(doc.element(root)!, this.swatches) },
     ];
     while (stack.length > 0) {
       const frame = stack[stack.length - 1]!;
@@ -1513,7 +1521,7 @@ class Builder {
 /// serve solo il suo riepilogo.
 export function classifyDocument(doc: XmlDocument, keep: boolean): Classified {
   const resources = indexResources(doc);
-  const builder = new Builder(doc, keep, (id) => resources.kinds.get(id) ?? null, resources.paths);
+  const builder = new Builder(doc, keep, (id) => resources.kinds.get(id) ?? null, resources.paths, resources.swatches);
   let pending: Pending | null = null;
   // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.
   let next = 0;

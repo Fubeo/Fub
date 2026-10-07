@@ -25,6 +25,7 @@ import {
   nonNegativeLength,
   opacity,
   paint,
+  paintReference,
   points,
   transform,
   trim,
@@ -220,6 +221,10 @@ const I64_MAX = 2 ** 63;
 /// colore (formato della scena, risorse).
 const EFFECTS = ["clip-path", "mask", "filter"] as const;
 
+/// I campioni del documento, per id: il colore di ciascuno (formato della
+/// scena, risorse).
+export type Swatches = ReadonlyMap<string, Rgb>;
+
 /// Quello che un contenitore modificabile trasmette ai figli.
 export class Context {
   private constructor(
@@ -241,11 +246,13 @@ export class Context {
     /// Un antenato, o l'elemento, ha un ritaglio, una maschera o un filtro
     /// (formato della scena, risorse): i colori che si vedono non si sanno.
     private readonly effect: boolean,
+    /// I campioni del documento, che danno il colore a chi li usa.
+    private readonly swatches: Swatches,
   ) {}
 
   /// Il contesto dei figli della radice. Della radice contano solo `fill` e
   /// `fill-opacity`, che si ereditano.
-  static root(root: ElementNode): Context {
+  static root(root: ElementNode, swatches: Swatches): Context {
     const fill = valueOf(root, NS_NONE, "fill");
     const alpha = valueOf(root, NS_NONE, "fill-opacity");
     const size = valueOf(root, NS_NONE, "font-size");
@@ -253,12 +260,13 @@ export class Context {
     return new Context(
       IDENTITY,
       false,
-      fill === undefined ? [0, 0, 0] : paint(fill),
+      fill === undefined ? [0, 0, 0] : fillValue(fill, swatches),
       alpha === undefined ? 1 : opacity(alpha),
       1,
       size === undefined ? DEFAULT_FONT_SIZE : nonNegativeLength(size),
       weight !== undefined && bold(weight),
       false,
+      swatches,
     );
   }
 
@@ -285,12 +293,13 @@ export class Context {
     return new Context(
       matrix,
       hidden,
-      fill === undefined ? this.fillValue : paint(fill),
+      fill === undefined ? this.fillValue : fillValue(fill, this.swatches),
       alpha === undefined ? this.fillOpacity : opacity(alpha),
       group === null ? this.opacity : this.opacity * group,
       size === undefined ? this.fontSize : nonNegativeLength(size),
       weight === undefined ? this.bold : bold(weight),
       this.effect || effect,
+      this.swatches,
     );
   }
 
@@ -307,6 +316,7 @@ export class Context {
       line.fontSize,
       line.bold,
       line.effect,
+      this.swatches,
     );
   }
 
@@ -335,6 +345,15 @@ export class Context {
 }
 
 export const WHITE: Rgb = [255, 255, 255];
+
+/// Un `fill` come lo legge §4. Un campione del documento vale il suo colore,
+/// quale che sia il ripiego scritto accanto: è il colore che si vede
+/// (formato della scena, risorse). Le altre risorse non si sanno.
+function fillValue(value: string, swatches: Swatches): Paint | null {
+  const used = paintReference(value);
+  if (used === null) return paint(value);
+  return swatches.get(used.id) ?? null;
+}
 
 /// Vero per un `font-weight` da grassetto: `bold` o da 700 in su.
 function bold(weight: string): boolean {

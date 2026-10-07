@@ -1115,7 +1115,9 @@ fn swatches() -> String {
                         .a("height", 10)
                         .a("fill", "url(#r00000001) #0072b2"),
                 ),
-        );
+        )
+        // Un campione chiaro, per il contrasto (S009).
+        .child(swatch("r0000000c", "Giallo", "#f0e442"));
     let root = svg(800, 600)
         .a(
             "xmlns:inkscape",
@@ -1180,6 +1182,27 @@ fn swatches() -> String {
                         .a("width", 200)
                         .a("height", 120)
                         .a("fill", "url(#r00000004) #808080"),
+                )
+                // Il nero sul blu del campione, che S009 legge come fondo.
+                .child(
+                    El::new("text")
+                        .a("id", "o00000006")
+                        .a("x", 60)
+                        .a("y", 120)
+                        .a("fill", "#000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 60).a("dy", 0).text("Sul blu")),
+                )
+                // Un ripiego rimasto indietro: si vede il giallo del campione,
+                // e S009 misura quello.
+                .child(
+                    El::new("text")
+                        .a("id", "o00000007")
+                        .a("x", 440)
+                        .a("y", 400)
+                        .a("fill", "url(#r0000000c) #000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 440).a("dy", 0).text("Giallo")),
                 ),
         );
     document(&root, "\n")
@@ -1542,6 +1565,20 @@ fn swatches_are_read_with_their_names_and_colors() {
     for at in 0..5 {
         assert!(element(&[3, at]).is_some(), "{at}");
     }
+    // S009 legge il colore del campione: il blu sotto il nero, e il giallo
+    // del testo anche col ripiego nero rimasto indietro.
+    let contrasts: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    assert_eq!(
+        contrasts,
+        [
+            (fub_scene::Code::S009, Some("4.04")),
+            (fub_scene::Code::S009, Some("1.32"))
+        ]
+    );
 }
 
 #[test]

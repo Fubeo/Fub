@@ -132,7 +132,7 @@ impl Legibility {
         doc: &Document<'_>,
         element: &Element<'_>,
         role: Role,
-        context: &Context,
+        context: &Context<'_>,
         span: Span,
         stroke: Option<&Stroke>,
         paths: &HashMap<String, String>,
@@ -217,7 +217,7 @@ impl Legibility {
         &mut self,
         doc: &Document<'_>,
         element: &Element<'_>,
-        context: &Context,
+        context: &Context<'_>,
         span: Span,
         paths: &HashMap<String, String>,
     ) {
