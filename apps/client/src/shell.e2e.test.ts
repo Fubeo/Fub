@@ -2360,7 +2360,6 @@ describe("la palette flussa prima di un comando che scrive", () => {
 
   it("un buffer sporco si salva prima che note.create parta", async () => {
     const host = await start(VAULT, [], undefined, null, [specNoteCreate]);
-    typeInEditor("testo non ancora salvato");
 
     // La palette si apre con la scorciatoia di default, come da un browser.
     document.dispatchEvent(
@@ -2378,6 +2377,11 @@ describe("la palette flussa prima di un comando che scrive", () => {
     // Il comando ha un parametro facoltativo: la palette mostra il form.
     const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
     field.value = "Appunti.md";
+    // Il buffer si sporca subito prima dell'invio, a palette aperta:
+    // l'autosave parte 400 ms dopo l'ultima battuta, e su una macchina carica
+    // aprire la palette ne prende di più. Così non può arrivare prima del
+    // comando, e un `writeDocument` prima di lui è soltanto il flush.
+    typeInEditor("testo non ancora salvato");
     const form = document.querySelector<HTMLFormElement>(".palette-form")!;
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await settle();
@@ -2410,7 +2414,6 @@ describe("la palette flussa prima di un comando che scrive", () => {
       surfaces: [],
     };
     const host = await start(VAULT, [], undefined, null, [specSearchOpen]);
-    typeInEditor("testo non ancora salvato");
 
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
@@ -2424,13 +2427,21 @@ describe("la palette flussa prima di un comando che scrive", () => {
 
     const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
     field.value = "rust";
+    // Come sopra: il buffer si sporca subito prima dell'invio, perché
+    // l'autosave non arrivi prima del comando.
+    typeInEditor("testo non ancora salvato");
     const form = document.querySelector<HTMLFormElement>(".palette-form")!;
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await settle();
 
-    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
+    const invoked = host.calls.findIndex(
+      (c) => c.gate === "invokeCommand" && c.args[0] === "search.open",
+    );
+    expect(invoked, "search.open non è arrivato al kernel").toBeGreaterThan(-1);
+    // L'autosave, 400 ms dopo la battuta, può arrivare dopo il comando; un
+    // flush della palette verrebbe prima.
     expect(
-      host.atGate("writeDocument"),
+      host.calls.slice(0, invoked).filter((c) => c.gate === "writeDocument"),
       "un comando di sola lettura non deve salvare i buffer",
     ).toHaveLength(0);
   });
