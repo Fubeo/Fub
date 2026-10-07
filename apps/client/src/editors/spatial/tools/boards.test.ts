@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Page } from "../painter/paint";
+import { elementChildren, type ContainerNode } from "../scene/model";
 import { readScene } from "../scene/read";
 import { HEAD } from "../scene/test-support";
 import type { Arranged } from "./arrange";
@@ -12,21 +13,29 @@ import {
   boardAt,
   boardsOf,
   carriedBy,
+  copyName,
+  duplicateBoardOps,
+  duplicateSpot,
   freshBoardName,
   moveBoardOps,
   nextBoardRect,
   orientationOf,
   orientedRect,
+  pageRect,
   presetOf,
   presetRect,
   PRESETS,
+  rectBounds,
   removeBoardOps,
   renameBoardOps,
   reorderBoardOps,
   resizeBoardOps,
   type Board,
+  type CopyNames,
+  type DuplicateRefusal,
 } from "./boards";
 import { gesture, NewIds } from "./edit";
+import { NAME_MAX } from "./naming";
 import { open, type Opened } from "./test-support";
 
 const ids = (opened: Opened): NewIds => new NewIds((id) => opened.engine.holder(id) !== null);
@@ -241,6 +250,239 @@ describe("spostare una tavola", () => {
   it("fermo non scrive niente", () => {
     const opened = open(TWO());
     expect(moveBoardOps(opened.engine.model!, boardsNow(opened)[0]!, 0, 0, [], ids(opened), pageOf(opened)).ops).toEqual([]);
+  });
+});
+
+describe("duplicare una tavola", () => {
+  const COPY: CopyNames = {
+    board: (n) => `Tavola ${n}`,
+    copy: (name, n) => (n === 1 ? `${name} copia` : `${name} copia ${n}`),
+  };
+  const STOP = '<stop offset="0" stop-color="#ffffff"/>';
+
+  /// Gli id dei figli della radice, in ordine, letti dal modello: la copia
+  /// di un oggetto entra nel suo livello, scritto qui su una riga sola.
+  const roots = (opened: Opened): string[] => elementChildren(opened.engine.model!.root).flatMap((child) => child.facts.id ?? []);
+
+  /// La copia della tavola `id`, o della pagina con `null`, come la chiede
+  /// l'editor: nel posto di `duplicateSpot`, con ciò che la tavola porta.
+  function duplicated(opened: Opened, id: string | null): Arranged | DuplicateRefusal {
+    const page = pageOf(opened);
+    const source = id === null ? null : board(opened, id);
+    const rect = source?.rect ?? pageRect(page!);
+    const [dx, dy] = duplicateSpot(boardsNow(opened), rect);
+    const carried = carriedBy(source?.box ?? rectBounds(rect), opened.movable());
+    return duplicateBoardOps(opened.engine.model!, source, dx, dy, carried, COPY, ids(opened), page);
+  }
+
+  it("copia la tavola, la sua carta e ciò che porta subito dopo di lei, e allarga la pagina per ultima", () => {
+    const opened = open(TWO(RECT("odentroaa", 100, 50) + RECT("oaltraaaa", 500, 50)));
+    const arranged = duplicated(opened, "b1a2b3c4d");
+    if (typeof arranged === "string") throw new Error(arranged);
+    expect(arranged.ops[arranged.ops.length - 1]!.op).toBe("page");
+    const boards = applied(opened, arranged);
+    expect(boards.map((each) => [each.name, each.rect])).toEqual([
+      ["Copertina", [0, 0, 400, 200]],
+      ["Copertina copia", [960, 0, 400, 200]],
+      ["Evaporazione", [480, 0, 400, 200]],
+    ]);
+    const copy = boards[1]!;
+    expect(copy.id).toMatch(/^b[0-9a-z]{8}$/);
+    expect(arranged.keys).toEqual([copy.id]);
+    const paper = copy.paper!.facts.id!;
+    expect(paper).toMatch(/^c[0-9a-z]{8}$/);
+    expect(opened.engine.text).toContain(`<rect id="${paper}" fub:role="paper" fub:board="${copy.id}" x="960" y="0" width="400" height="200" fill="#fafafa"/>`);
+    // Le carte, poi le tavole, poi i livelli.
+    expect(roots(opened)).toEqual(["fub-paper", "c5e6f7g8h", paper, "b1a2b3c4d", copy.id, "b9i0j1k2l", "laaaaaaaa"]);
+    // Ciò che sta sulla tavola ha la sua copia sulla copia; il resto no.
+    expect(opened.engine.text.match(/x="100" y="50"/g)).toHaveLength(2);
+    expect(opened.engine.text).toMatch(/<rect id="o[0-9a-z]{8}" x="100" y="50" width="20" height="20" transform="matrix\(1 0 0 1 960 0\)"\/>/);
+    expect(opened.engine.text.match(/x="500" y="50"/g)).toHaveLength(1);
+    expect(pageOf(opened)).toEqual({ x: 0, y: 0, width: 1536, height: 256 });
+    expect(readScene(opened.engine.text).summary.boards).toEqual(["Copertina", "Copertina copia", "Evaporazione"]);
+  });
+
+  it("ogni copia viene subito dopo la sua tavola, col primo numero libero, e non si posa su un'altra", () => {
+    const opened = open(TWO());
+    applied(opened, duplicated(opened, "b1a2b3c4d"));
+    let boards = applied(opened, duplicated(opened, "b1a2b3c4d"));
+    expect(boards.map((each) => each.name)).toEqual(["Copertina", "Copertina copia 2", "Copertina copia", "Evaporazione"]);
+    // La copia di una copia è la sua copia.
+    boards = applied(opened, duplicated(opened, boards[2]!.id));
+    expect(boards.map((each) => [each.name, each.rect[0]])).toEqual([
+      ["Copertina", 0],
+      ["Copertina copia 2", 1440],
+      ["Copertina copia", 960],
+      ["Copertina copia copia", 1920],
+      ["Evaporazione", 480],
+    ]);
+  });
+
+  it("in un disegno senza tavole fa della pagina la tavola 1, e la copia le nasce accanto con ciò che porta", () => {
+    const opened = open(PLAIN);
+    const arranged = duplicated(opened, null);
+    if (typeof arranged === "string") throw new Error(arranged);
+    expect(arranged.ops[arranged.ops.length - 1]!.op).toBe("page");
+    const boards = applied(opened, arranged);
+    expect(boards.map((each) => [each.name, each.rect])).toEqual([
+      ["Tavola 1", [0, 0, 400, 200]],
+      ["Tavola 1 copia", [480, 0, 400, 200]],
+    ]);
+    const [first, copy] = boards as [Board, Board];
+    expect(arranged.keys).toEqual([copy.id]);
+    const paper = copy.paper!.facts.id!;
+    expect(opened.engine.text).toContain(`<rect id="fub-paper" fub:role="paper" fub:board="${first.id}" x="0" y="0" width="400" height="200" fill="#ffffff"/>`);
+    expect(opened.engine.text).toContain(`<rect id="${paper}" fub:role="paper" fub:board="${copy.id}" x="480" y="0" width="400" height="200" fill="#ffffff"/>`);
+    expect(roots(opened)).toEqual(["fub-paper", paper, first.id, copy.id, "laaaaaaaa"]);
+    expect(opened.engine.text).toMatch(/<rect id="o[0-9a-z]{8}" x="10" y="0" width="20" height="20" transform="matrix\(1 0 0 1 480 0\)"\/>/);
+    expect(pageOf(opened)).toEqual({ x: 0, y: 0, width: 912, height: 200 });
+
+    // Una pagina senza carta fa tavole senza carta.
+    const bare = open(drawing([LAYER(RECT("oaaaaaaaa", 10))]));
+    expect(applied(bare, duplicated(bare, null)).map((each) => [each.name, each.paper])).toEqual([
+      ["Tavola 1", null],
+      ["Tavola 1 copia", null],
+    ]);
+  });
+
+  it("senza una tavola o una pagina da duplicare non scrive niente", () => {
+    const opened = open(TWO());
+    expect(duplicateBoardOps(opened.engine.model!, null, 480, 0, [], COPY, ids(opened), pageOf(opened))).toEqual({ ops: [], keys: [] });
+    const pageless = open(drawing([LAYER()], null));
+    expect(duplicateBoardOps(pageless.engine.model!, null, 480, 0, [], COPY, ids(pageless), null)).toEqual({ ops: [], keys: [] });
+  });
+
+  it("una tavola senza carta ha una copia senza carta", () => {
+    const opened = open(drawing([V1, LAYER()]));
+    const boards = applied(opened, duplicated(opened, "b1a2b3c4d"));
+    expect(boards.map((each) => [each.name, each.rect, each.paper])).toEqual([
+      ["Copertina", [0, 0, 400, 200], null],
+      ["Copertina copia", [480, 0, 400, 200], null],
+    ]);
+    expect(order(opened)).toEqual(["b1a2b3c4d", boards[1]!.id, "laaaaaaaa"]);
+  });
+
+  it("la carta si copia coi suoi attributi, la tavola con la descrizione e i titoli in altre lingue", () => {
+    const paper = '<rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="400" height="200" fill="#fafafa" fill-opacity="0.5" stroke="#cccccc" stroke-width="2"/>';
+    const view = '<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><desc id="dprima000">La prima</desc><title xml:lang="it">Copertina</title><title xml:lang="en">Cover</title></view>';
+    const opened = open(drawing([paper, view, LAYER()]));
+    const boards = applied(opened, duplicated(opened, "b1a2b3c4d"));
+    const copy = boards[1]!;
+    expect([copy.name, copy.title]).toEqual(["Copertina copia", "Copertina copia"]);
+    expect(opened.engine.text).toContain(`<rect id="${copy.paper!.facts.id!}" fub:role="paper" fub:board="${copy.id}" x="480" y="0" width="400" height="200" fill="#fafafa" fill-opacity="0.5" stroke="#cccccc" stroke-width="2"/>`);
+    // Le parti della tavola la seguono senza id, che è della tavola di prima.
+    expect(opened.engine.text).toMatch(
+      new RegExp(`<view id="${copy.id}" fub:role="board" viewBox="480 0 400 200">\\s*<desc>La prima</desc>\\s*<title xml:lang="it">Copertina copia</title>\\s*<title xml:lang="en">Cover</title>\\s*</view>`),
+    );
+    expect(opened.engine.text.match(/id="dprima000"/g)).toHaveLength(1);
+
+    // Una tavola senza titolo ha una copia che si chiama col suo id.
+    const untitled = open(drawing(['<view id="bzzzzzzzz" fub:role="board" viewBox="0 0 10 10"/>', LAYER()]));
+    expect(applied(untitled, duplicated(untitled, "bzzzzzzzz")).map((each) => [each.name, each.title])).toEqual([
+      ["bzzzzzzzz", ""],
+      ["bzzzzzzzz copia", "bzzzzzzzz copia"],
+    ]);
+  });
+
+  it("una carta che non si sa scrivere ha una copia come la carta di una tavola nuova", () => {
+    const paper = '<rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" xmlns:x="urn:x" x:nota="1" x="0" y="0" width="400" height="200" fill="#fafafa"/>';
+    const opened = open(drawing([paper, V1, LAYER()]));
+    const copy = applied(opened, duplicated(opened, "b1a2b3c4d"))[1]!;
+    expect(opened.engine.text).toContain(`<rect id="${copy.paper!.facts.id!}" fub:role="paper" fub:board="${copy.id}" x="480" y="0" width="400" height="200" fill="#fafafa"/>`);
+  });
+
+  it("la carta e gli oggetti hanno le loro copie delle risorse private, in una defs sola", () => {
+    const defs = `<defs><linearGradient id="rgggggggg" fub:role="private">${STOP}</linearGradient><linearGradient id="rhhhhhhhh" fub:role="private">${STOP}</linearGradient></defs>`;
+    const paper = '<rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="400" height="200" fill="url(#rgggggggg)"/>';
+    const opened = open(drawing([defs, paper, V1, LAYER(RECT("oaaaaaaaa", 10, 10, ' fill="url(#rhhhhhhhh)"'))]));
+    const boards = applied(opened, duplicated(opened, "b1a2b3c4d"));
+    // La defs senza id non riceve niente: ne nasce una sola per tutte e due.
+    expect(opened.engine.text.match(/<defs/g)).toHaveLength(2);
+    const copies = elementChildren(opened.engine.holder("fub-defs") as ContainerNode).map((each) => each.facts.id!);
+    expect(copies).toHaveLength(2);
+    for (const id of copies) expect(id).toMatch(/^r[0-9a-z]{8}$/);
+    const [forPaper, forRect] = copies as [string, string];
+    expect(opened.engine.text).toContain(`fub:board="${boards[1]!.id}" x="480" y="0" width="400" height="200" fill="url(#${forPaper})"/>`);
+    expect(opened.engine.text).toMatch(new RegExp(`<rect id="o[0-9a-z]{8}" x="10" y="10" width="20" height="20" fill="url\\(#${forRect}\\)" transform="matrix\\(1 0 0 1 480 0\\)"/>`));
+    // Gli originali tengono le loro.
+    expect(opened.engine.text).toContain('fub:board="b1a2b3c4d" x="0" y="0" width="400" height="200" fill="url(#rgggggggg)"/>');
+    expect(opened.engine.text).toContain('<rect id="oaaaaaaaa" x="10" y="10" width="20" height="20" fill="url(#rhhhhhhhh)"/>');
+  });
+
+  it("la pagina si allarga anche per ciò che la copia porta fuori dalla tavola", () => {
+    const opened = open(TWO('<rect id="olungoaaa" x="100" y="150" width="20" height="100"/>'));
+    const first = board(opened, "b1a2b3c4d");
+    const carried = carriedBy(first.box, opened.movable());
+    expect(carried.map((unit) => unit.id)).toEqual(["olungoaaa"]);
+    const arranged = duplicateBoardOps(opened.engine.model!, first, 0, 280, carried, COPY, ids(opened), pageOf(opened));
+    if (typeof arranged === "string") throw new Error(arranged);
+    expect(arranged.ops[arranged.ops.length - 1]!.op).toBe("page");
+    applied(opened, arranged);
+    // La copia arriva a 480, ciò che porta a 530: la pagina supera 512.
+    expect(pageOf(opened)).toEqual({ x: 0, y: 0, width: 1024, height: 768 });
+  });
+
+  it("non duplica oltre il limite delle tavole, né una pagina con due carte, né un oggetto che non si copia", () => {
+    const views = (count: number): string[] => Array.from({ length: count }, (_, i) => `<view id="b${i.toString(36).padStart(8, "0")}" fub:role="board" viewBox="${i * 10} 0 5 5"/>`);
+    const full = open(drawing(views(1000)));
+    expect(duplicateBoardOps(full.engine.model!, boardsNow(full)[0]!, 0, 10, [], COPY, ids(full), pageOf(full))).toBe("limit");
+    // L'ultima che ci sta sì.
+    const almost = open(drawing(views(999)));
+    expect(applied(almost, duplicateBoardOps(almost.engine.model!, boardsNow(almost)[998]!, 0, 10, [], COPY, ids(almost), pageOf(almost)))).toHaveLength(1000);
+
+    const two = open(drawing([PAPER, '<rect id="cdoppiaaa" fub:role="paper" x="0" y="0" width="400" height="200"/>', LAYER()]));
+    expect(duplicated(two, null)).toBe("paper");
+
+    // Niente copie a metà.
+    const foreign = open(TWO(`<g id="ogggggggg">${RECT("oaaaaaaaa", 10)}<use href="#oaaaaaaaa"/></g>`));
+    expect(duplicated(foreign, "b1a2b3c4d")).toBe("content");
+  });
+});
+
+describe("il posto e il nome di una copia", () => {
+  const view = (id: string, viewBox: string): string => `<view id="${id}" fub:role="board" viewBox="${viewBox}"/>`;
+  const copy = (name: string, n: number): string => (n === 1 ? `${name} copia` : `${name} copia ${n}`);
+
+  it("la copia va a destra della tavola, a BOARD_GAP, alla stessa altezza", () => {
+    expect(duplicateSpot([], [10, 20, 300, 100])).toEqual([380, 0]);
+    expect(duplicateSpot([], [0.1, 0, 400.2, 200])).toEqual([480.2, 0]);
+  });
+
+  it("e oltre le tavole che toccherebbe, anche una dopo l'altra", () => {
+    const boards = boardsNow(open(TWO()));
+    expect(duplicateSpot(boards, boards[0]!.rect)).toEqual([960, 0]);
+    expect(duplicateSpot(boards, boards[1]!.rect)).toEqual([480, 0]);
+  });
+
+  it("una tavola più in basso di uno spazio intero non la ferma; una più vicina sì", () => {
+    const far = boardsNow(open(drawing([view("baaaaaaaa", "0 0 400 200"), view("bbbbbbbbb", "480 280 400 200")])));
+    expect(duplicateSpot(far, far[0]!.rect)).toEqual([480, 0]);
+    const near = boardsNow(open(drawing([view("baaaaaaaa", "0 0 400 200"), view("bbbbbbbbb", "480 279 400 200")])));
+    expect(duplicateSpot(near, near[0]!.rect)).toEqual([960, 0]);
+  });
+
+  it("il nome è quello della tavola con «copia», e un numero se c'è già", () => {
+    expect(copyName(["Copertina"], "Copertina", copy)).toBe("Copertina copia");
+    expect(copyName(["Copertina", "Copertina copia"], "Copertina", copy)).toBe("Copertina copia 2");
+    expect(copyName(["Copertina copia", "Copertina copia 2"], "Copertina", copy)).toBe("Copertina copia 3");
+    expect(copyName(["Copertina copia 2"], "Copertina", copy)).toBe("Copertina copia");
+    expect(copyName(["Copertina copia"], "Copertina copia", copy)).toBe("Copertina copia copia");
+  });
+
+  it("non supera NAME_MAX caratteri: si accorcia il nome, non ciò che gli si aggiunge", () => {
+    const long = "x".repeat(NAME_MAX);
+    expect(copyName([], long, copy)).toBe(`${"x".repeat(NAME_MAX - 6)} copia`);
+    expect(copyName([`${"x".repeat(NAME_MAX - 6)} copia`], long, copy)).toBe(`${"x".repeat(NAME_MAX - 8)} copia 2`);
+    // Si contano i caratteri, non le unità di UTF-16, e dove si taglia non
+    // resta uno spazio.
+    expect(copyName([], "😀".repeat(NAME_MAX), copy)).toBe(`${"😀".repeat(NAME_MAX - 6)} copia`);
+    expect(copyName([], `${"a".repeat(NAME_MAX - 7)} ${"b".repeat(6)}`, copy)).toBe(`${"a".repeat(NAME_MAX - 7)} copia`);
+  });
+
+  it("un nome nuovo parte dal numero chiesto", () => {
+    expect(freshBoardName([], nameFor, 1)).toBe("Tavola 1");
+    expect(freshBoardName(["Tavola 1"], nameFor, 1)).toBe("Tavola 2");
+    expect(freshBoardName(["Tavola 5", "Tavola 6"], nameFor, 5)).toBe("Tavola 7");
   });
 });
 

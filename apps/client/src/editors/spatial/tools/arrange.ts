@@ -292,10 +292,19 @@ function renamed(elem: Elem, ids: NewIds): Elem {
 
 /// Le copie di `units`, spostate di (`dx`, `dy`) nella scena: per ogni
 /// livello, subito sopra l'originale più in alto, nell'ordine degli
-/// originali. `null` se un oggetto ha parti che non si copiano.
-export function duplicateOps(model: DocumentModel, units: readonly Unit[], dx: number, dy: number, ids: NewIds): Arranged | null {
+/// originali. Le risorse private che usano si copiano con `copies`: un
+/// comando che copia anche altro gli passa le sue, e le loro operazioni
+/// escono qui tutte insieme, prima degli oggetti. `null` se un oggetto ha
+/// parti che non si copiano.
+export function duplicateOps(
+  model: DocumentModel,
+  units: readonly Unit[],
+  dx: number,
+  dy: number,
+  ids: NewIds,
+  copies: ResourceCopies = new ResourceCopies(model, ids, elemOf),
+): Arranged | null {
   const plan = new Plan(model, ids);
-  const copies = new ResourceCopies(model, ids, elemOf);
   const adds: Op[] = [];
   const byParent = new Map<string, Unit[]>();
   for (const unit of units) {

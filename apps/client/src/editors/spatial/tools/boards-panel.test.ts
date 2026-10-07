@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 // Le tavole come pannello, da solo: le righe col numero, il nome e la misura,
 // la tavola di adesso detta non solo col colore, la tastiera dell'elenco e la
-// sola lettura, il campo del nome, il menu della tavola, «Nuova tavola» col
-// suo perché, il pannello vuoto, il fuoco che non si perde, le righe
-// disegnate a pezzi e la lingua.
+// sola lettura, il campo del nome, il menu della tavola, «Duplica» e «Nuova
+// tavola» col loro perché, il pannello vuoto, il fuoco che non si perde, le
+// righe disegnate a pezzi e la lingua.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
@@ -57,6 +57,17 @@ function mount(more: Partial<State> = {}): BoardsPanel {
     onRename: (id, name) => {
       calls.push(`rename ${id} ${name}`);
       state.boards = state.boards.map((board) => (board.id === id ? { ...board, name } : board));
+      panel.update(view());
+    },
+    // La copia va subito dopo la tavola, ed è quella di adesso.
+    onDuplicate: (id) => {
+      calls.push(`duplicate ${id}`);
+      added += 1;
+      const at = state.boards.findIndex((board) => board.id === id);
+      const source = state.boards[at]!;
+      const board = { id: `n${added}`, name: `${source.name} copia`, size: source.size };
+      state.boards = [...state.boards.slice(0, at + 1), board, ...state.boards.slice(at + 1)];
+      state.current = board.id;
       panel.update(view());
     },
     onDelete: (id) => {
@@ -473,6 +484,7 @@ describe("il menu della tavola", () => {
     expect(entries().map(readOf)).toEqual([
       ["Vai", "", "Enter", null],
       ["Rinomina…", "", "F2", null],
+      ["Duplica", "", "Ctrl+D", null],
       ["Sposta su", "", "Alt+↑", null],
       ["Sposta giù", "", "Alt+↓", null],
       ["Elimina", "", "Delete", null],
@@ -535,6 +547,67 @@ describe("il menu della tavola", () => {
     expect(document.querySelector(".context-menu[aria-labelledby]")).toBeNull();
     expect(document.activeElement).toBe(list());
     expect(active()?.dataset.key).toBe("b3");
+  });
+});
+
+describe("Duplica", () => {
+  it("Ctrl+D, o ⌘D, duplica la tavola attiva: la copia viene subito dopo, ed è quella di adesso", () => {
+    mount();
+    const outside: string[] = [];
+    host.addEventListener("keydown", (event) => outside.push(event.key));
+    panel.focus();
+    key("ArrowDown");
+    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(calls).toEqual(["duplicate b2"]);
+    expect(rows().map((item) => item.dataset.key)).toEqual(["b1", "b2", "n1", "b3", "b4", "b5"]);
+    expect(textOf(row("n1"), "name")).toBe("Evaporazione copia");
+    expect(active()?.dataset.key).toBe("n1");
+    expect(current()).toEqual([row("n1")]);
+    expect(document.activeElement).toBe(list());
+    // ⌘D sul Mac; col Bloc Maiusc la lettera arriva maiuscola.
+    expect(key("D", { metaKey: true }).defaultPrevented).toBe(true);
+    expect(calls).toEqual(["duplicate b2", "duplicate n1"]);
+    // Il tasto è della tavola: il foglio non lo vede, e non duplica gli
+    // oggetti scelti.
+    expect(outside).toEqual([]);
+    // Con Maiusc o con Alt non è suo, e va avanti.
+    expect(key("D", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(key("d", { ctrlKey: true, altKey: true }).defaultPrevented).toBe(false);
+    expect(outside).toEqual(["D", "d"]);
+    expect(calls).toEqual(["duplicate b2", "duplicate n1"]);
+  });
+
+  it("la voce del menu duplica la tavola del menu", () => {
+    mount();
+    rightClick(row("b4"));
+    entry("Duplica").click();
+    expect(calls).toEqual(["duplicate b4"]);
+    expect(rows().map((item) => item.dataset.key)).toEqual(["b1", "b2", "b3", "b4", "n1", "b5"]);
+    expect(current()).toEqual([row("n1")]);
+  });
+
+  it("al limite delle tavole la voce è spenta e dice perché, come «Nuova tavola», e Ctrl+D lo dice", () => {
+    mount({ canAdd: false });
+    panel.focus();
+    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(said()).toBe("Il disegno ha già 1000 tavole: è il massimo.");
+    rightClick(row("b2"));
+    expect(readOf(entry("Duplica"))).toEqual(["Duplica", "Il disegno ha già 1000 tavole: è il massimo.", "Ctrl+D", "true"]);
+    // Le altre voci non c'entrano col limite.
+    expect(entry("Rinomina…").getAttribute("aria-disabled")).toBeNull();
+    expect(entry("Elimina").getAttribute("aria-disabled")).toBeNull();
+    entry("Duplica").click();
+    expect(calls).toEqual([]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    closeContextMenu();
+
+    // Un posto libero la riaccende.
+    state.canAdd = true;
+    panel.update(view());
+    rightClick(row("b2"));
+    expect(readOf(entry("Duplica"))).toEqual(["Duplica", "", "Ctrl+D", null]);
+    entry("Duplica").click();
+    expect(calls).toEqual(["duplicate b2"]);
   });
 });
 
@@ -641,7 +714,7 @@ describe("la sola lettura", () => {
     expect(active()?.dataset.key).toBe("b2");
     key("Enter");
     expect(calls).toEqual(["go b2"]);
-    for (const [name, init] of [["F2", {}], ["Delete", {}], ["Backspace", {}], ["ArrowDown", { altKey: true }], ["ArrowUp", { altKey: true }]] as const) {
+    for (const [name, init] of [["F2", {}], ["Delete", {}], ["Backspace", {}], ["ArrowDown", { altKey: true }], ["ArrowUp", { altKey: true }], ["d", { ctrlKey: true }], ["d", { metaKey: true }]] as const) {
       expect(key(name, init).defaultPrevented).toBe(true);
       expect(said()).toBe("Modifica non applicata: il disegno è in sola lettura.");
     }
@@ -653,8 +726,9 @@ describe("la sola lettura", () => {
     // Il menu si apre, e ci si va soltanto: le voci spente non dicono il
     // bordo, perché non è il bordo a fermarle.
     rightClick(row("b5"));
-    expect(entries().map((one) => one.getAttribute("aria-disabled"))).toEqual([null, "true", "true", "true", "true"]);
+    expect(entries().map((one) => one.getAttribute("aria-disabled"))).toEqual([null, "true", "true", "true", "true", "true"]);
     expect(menu().querySelector(".menu-description")).toBeNull();
+    entry("Duplica").click();
     entry("Vai").click();
     expect(calls).toEqual(["go b2", "go b5"]);
     row("b1").click();
@@ -684,7 +758,8 @@ describe("la lingua", () => {
     expect(field()!.getAttribute("aria-label")).toBe("Name of the board “Condensazione”");
     key("Escape", {}, field()!);
     rightClick(row("b3"));
-    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent)).toEqual(["Go to board", "Rename…", "Move up", "Move down", "Delete"]);
+    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent)).toEqual(["Go to board", "Rename…", "Duplicate", "Move up", "Move down", "Delete"]);
+    expect(readOf(entry("Duplicate"))).toEqual(["Duplicate", "The drawing already has 1,000 boards, the most it can have.", "Ctrl+D", "true"]);
     closeContextMenu();
     panel.focus();
     key("Home");

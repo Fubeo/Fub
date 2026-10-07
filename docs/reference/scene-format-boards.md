@@ -101,7 +101,9 @@ Due tavole A4 orizzontali, una accanto all'altra con 80 unità in mezzo:
   nella riga dopo il `view`, rientrato di due spazi.
 - **Dove vanno:** FubDraw scrive la carta di una tavola nuova dopo l'ultima
   carta, e la tavola dopo l'ultima tavola; la prima tavola va subito dopo la
-  carta della pagina che prende.
+  carta della pagina che prende. La copia di una tavola va subito dopo la
+  tavola che copia, e la sua carta, copia di quella della tavola, dopo
+  l'ultima carta.
 - **Numeri:** il `viewBox` di una tavola e la geometria della sua carta si
   scrivono con le regole della geometria (formato della scena, §7), gli
   stessi quattro numeri nei due elementi.

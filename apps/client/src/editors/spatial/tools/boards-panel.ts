@@ -13,10 +13,12 @@
 //   «Tavola 2 di 5: Evaporazione, 1600 × 1000 px, corrente».
 // - **Le tavole si cambiano qui.** F2, o un doppio clic sul nome, apre il
 //   campo del nome: Invio lo scrive, Esc lo lascia com'era, e uscire dal
-//   campo lo scrive anche lui. Alt+↑ e Alt+↓ spostano la tavola fra le sue
-//   vicine, Canc la elimina; il clic destro, Maiusc+F10 o il tasto del menu
-//   aprono il suo menu. In sola lettura le tavole si guardano e ci si va, e
-//   basta: gli altri tasti dicono perché non fanno niente.
+//   campo lo scrive anche lui. Ctrl+D, ⌘D sul Mac, duplica la tavola col suo
+//   contenuto; Alt+↑ e Alt+↓ la spostano fra le sue vicine, Canc la elimina;
+//   il clic destro, Maiusc+F10 o il tasto del menu aprono il suo menu. In
+//   sola lettura le tavole si guardano e ci si va, e basta: gli altri tasti
+//   dicono perché non fanno niente. Al limite delle tavole «Duplica» non
+//   aggiunge, e lo dice come «Nuova tavola».
 // - **Il fuoco resta nel pannello.** «Nuova tavola» non lo prende col
 //   puntatore. Quando ciò che lo aveva se ne va, passa all'elenco, al
 //   pulsante o alla spiegazione del pannello vuoto, e non si perde.
@@ -80,6 +82,9 @@ export interface BoardsPanelOptions {
   /// Il nome nuovo della tavola `id`, già pulito con `cleanName` di
   /// `naming.ts`, non vuoto e diverso da quello di prima.
   onRename(id: string, name: string): void;
+  /// «Duplica»: una copia della tavola `id` col suo contenuto. Arriva solo
+  /// se il disegno si cambia e riceve un'altra tavola.
+  onDuplicate(id: string): void;
   onDelete(id: string): void;
   /// Porta la tavola `id` al posto `to`, contato da 0, nell'ordine delle
   /// tavole.
@@ -409,6 +414,15 @@ export function createBoardsPanel(life: Lifetime, options: BoardsPanelOptions): 
     options.onMove(key, to);
   };
 
+  /// Duplica la tavola `key`; al limite delle tavole dice perché non lo fa,
+  /// come «Nuova tavola».
+  const duplicate = (key: string): void => {
+    if (indexOf(key) < 0) return;
+    if (!editable()) refuse();
+    else if (full()) say(fullText());
+    else options.onDuplicate(key);
+  };
+
   const remove = (key: string): void => {
     if (indexOf(key) < 0) return;
     if (editable()) options.onDelete(key);
@@ -490,6 +504,13 @@ export function createBoardsPanel(life: Lifetime, options: BoardsPanelOptions): 
       { label: t("draw.boards.menu.go"), hint: displayBinding("Enter"), run: () => go(key) },
       { label: t("draw.boards.menu.rename"), hint: displayBinding("F2"), disabled: !canEdit, run: () => void startRename(key) },
       {
+        label: t("draw.boards.menu.duplicate"),
+        hint: displayBinding("Mod-d"),
+        disabled: !canEdit || full(),
+        ...(full() ? { description: fullText() } : {}),
+        run: () => duplicate(key),
+      },
+      {
         label: t("draw.boards.menu.up"),
         separator: true,
         hint: displayBinding("Alt-ArrowUp"),
@@ -526,10 +547,16 @@ export function createBoardsPanel(life: Lifetime, options: BoardsPanelOptions): 
   // --- La tastiera --------------------------------------------------------------
 
   life.listen(list, "keydown", (event) => {
-    if (event.target !== list || event.ctrlKey || event.metaKey) return;
+    if (event.target !== list) return;
     const at = indexOf(active);
     const key = rows[at]?.id ?? null;
-    if (event.altKey) {
+    if (event.ctrlKey || event.metaKey) {
+      // Ctrl+D, ⌘D sul Mac, è della tavola: non arriva al foglio, dove
+      // duplicherebbe gli oggetti scelti. Gli altri tasti con Ctrl vanno
+      // avanti.
+      if (event.altKey || event.shiftKey || event.key.toLowerCase() !== "d") return;
+      if (key !== null) duplicate(key);
+    } else if (event.altKey) {
       if (event.shiftKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
       if (key !== null) shift(key, event.key === "ArrowUp" ? -1 : 1);
     } else if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
