@@ -1774,7 +1774,10 @@ export class SceneEngine {
     const problem = this.problem(built);
     if (problem !== null) reject("invalid-elem", problem);
     this.touched.add(op.id);
-    return joins === null ? { op: "text", id: op.id, lines: previous } : { op: "text", id: op.id, lines: previous, joins: previousJoins };
+    // L'inversa rimette i `fub:join` di prima anche se l'operazione non ne
+    // aveva: una riga che se ne va riprende il suo quando torna.
+    const joined = joins !== null || previousJoins.some((join) => join !== null);
+    return joined ? { op: "text", id: op.id, lines: previous, joins: previousJoins } : { op: "text", id: op.id, lines: previous };
   }
 
   /// `text` di un testo su tracciato: la sua riga sola è il contenuto del

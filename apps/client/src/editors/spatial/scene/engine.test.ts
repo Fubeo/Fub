@@ -1163,7 +1163,17 @@ describe("il testo in area e su tracciato", () => {
         END,
       ),
     );
-    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."] });
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, "space"] });
+  });
+
+  it("senza joins l'inversa rimette il fub:join di una riga che se ne va", () => {
+    const engine = SceneEngine.open(AREA);
+    const out = apply(engine, { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a capo da solo."] });
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, "space"] });
+    expect(apply(engine, out.inverse).text).toBe(AREA);
+    // Un testo senza fub:join ha l'inversa senza joins.
+    const plain = SceneEngine.open(AREA.replace(/ fub:join="space"/g, ""));
+    expect(apply(plain, { op: "text", id: "o5e6f7g8h", lines: ["Uno"] }).inverse).not.toHaveProperty("joins");
   });
 
   it("joins vuole una voce per riga, un testo o null", () => {
