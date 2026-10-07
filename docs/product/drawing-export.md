@@ -122,8 +122,8 @@ che Fub non ha, usa Literata, come il carattere di serie di un browser. Un
 carattere del sistema non entra mai, quindi lo stesso disegno esce uguale su
 ogni computer.
 
-Un peso diverso prende il più vicino dei due, e un corsivo di Inter o di
-JetBrains Mono esce in tondo. Una lettera che nessuno dei tre caratteri
+Un peso diverso prende il più vicino dei due, e ogni carattere ha anche il
+corsivo, nei due pesi. Una lettera che nessuno dei tre caratteri
 disegna esce come un riquadro vuoto.
 
 ## Il file
