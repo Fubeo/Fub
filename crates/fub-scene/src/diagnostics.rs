@@ -36,6 +36,9 @@ pub enum Code {
     S012,
     /// Un testo sotto i 12 pixel a grandezza naturale.
     S013,
+    /// Un riferimento locale, `url(#id)` o `href="#id"`, a un id che il
+    /// documento non ha.
+    S014,
 }
 
 /// La gravità di una diagnostica.
@@ -52,7 +55,7 @@ impl Code {
     pub fn severity(self) -> Severity {
         match self {
             Code::S003 | Code::S004 => Severity::Error,
-            Code::S001 | Code::S005 | Code::S006 | Code::S012 => Severity::Warning,
+            Code::S001 | Code::S005 | Code::S006 | Code::S012 | Code::S014 => Severity::Warning,
             Code::S002
             | Code::S007
             | Code::S008
@@ -79,6 +82,9 @@ impl Code {
             Code::S011 => "unità o guide del documento non valide: si ignorano e restano nel file",
             Code::S012 => "immagine senza descrizione: chi non la vede non sa che cosa mostra",
             Code::S013 => "testo sotto i 12 px a grandezza naturale",
+            Code::S014 => {
+                "riferimento a un id che il documento non ha: si disegna senza la risorsa"
+            }
         }
     }
 }

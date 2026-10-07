@@ -23,7 +23,7 @@ import { pf1 } from "../ink/pf1";
 import { InkError } from "../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer } from "./analysis";
-import { classifyChild, describe, type Details, type Item } from "./classify";
+import { classifyChild, describe, NO_RESOURCES, type Details, type Item, type Place, type Resolve } from "./classify";
 import { sceneOperation } from "./diff";
 import { isNewId } from "./ids";
 import {
@@ -44,6 +44,7 @@ import {
   parseFragment,
   parseSequence,
   pathOf,
+  placeOf,
   rawOf,
   scopeOf,
   tagName,
@@ -355,17 +356,17 @@ function attributeSpan(doc: XmlDocument, element: ElementNode, attr: Attr): [num
 /// valori o il contenuto estraneo. Se anche una sola riga non comincia con
 /// `from`, il rientro del file non è regolare e l'elemento resta com'è: così
 /// la stessa regola, applicata all'indietro, rimette i byte di prima.
-export function reindent(raw: string, scope: NamespaceScope, underRoot: boolean, depth: number, from: string, to: string): string {
+export function reindent(raw: string, scope: NamespaceScope, place: Place, depth: number, from: string, to: string, resolve: Resolve = NO_RESOURCES): string {
   if (from === to || raw.includes("xml:space")) return raw;
   const fragment = parseFragment(raw, scope);
   if (fragment === null) return raw;
   const { doc } = fragment;
   const base = doc.element(fragment.id)!.start;
   const ranges: Array<readonly [number, number]> = [];
-  const stack: Array<readonly [NodeId, boolean, number]> = [[fragment.id, underRoot, depth]];
+  const stack: Array<readonly [NodeId, Place, number]> = [[fragment.id, place, depth]];
   while (stack.length > 0) {
-    const [id, under, level] = stack.pop()!;
-    const found = classifyChild(doc, id, under, level);
+    const [id, at, level] = stack.pop()!;
+    const found = classifyChild(doc, id, at, level, resolve);
     if (found === null) continue;
     const element = doc.element(id)!;
     const container = isContainer(found[1]);
@@ -375,7 +376,7 @@ export function reindent(raw: string, scope: NamespaceScope, underRoot: boolean,
     for (const child of element.children) {
       const node = doc.nodes[child]!;
       if (node.kind === "text" && node.blank) ranges.push([node.start - base, node.end - base]);
-      else if (container && node.kind === "element") stack.push([child, false, level + 1]);
+      else if (container && node.kind === "element") stack.push([child, found[1] === "defs" ? "defs" : "inside", level + 1]);
     }
   }
   ranges.sort((a, b) => a[0] - b[0]);
@@ -1011,7 +1012,7 @@ export class SceneEngine {
     const element = fragment.doc.element(fragment.id)!;
     let details: Details | null = null;
     if (node.parent !== null) {
-      const found = classifyChild(fragment.doc, fragment.id, node.parent.parent === null, node.depth);
+      const found = classifyChild(fragment.doc, fragment.id, placeOf(node.parent), node.depth);
       if (found === null || !isContainer(found[1])) reject("invalid-elem", "il tag riscritto non rientra nel formato");
       details = describe(fragment.doc, fragment.id, found[0], found[1]).details;
     }
@@ -1423,7 +1424,7 @@ export class SceneEngine {
     const { anchor, gap } = this.detach(node);
     const to = destination();
     const owner = to.kind === "point" ? to.point.owner : to.parent;
-    const moved = reindent(raw, oldScope, oldParent === model.root, oldParent.depth + 1, oldIndent, this.indentFor(to));
+    const moved = reindent(raw, oldScope, placeOf(oldParent), oldParent.depth + 1, oldIndent, this.indentFor(to));
     const built = this.build(moved, owner);
     if (built === null) reject("invalid-elem", "lo spostamento lascerebbe un prefisso non dichiarato");
     const newScope = scopeOf(owner);

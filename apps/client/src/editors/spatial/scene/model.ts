@@ -18,7 +18,23 @@
 // e prende il terminatore prevalente quando entra nell'albero.
 
 import { isContainer } from "./analysis";
-import { characterData, classifyChild, describe, elementItem, type Details, type Item, type StrokeProblem, type Tags } from "./classify";
+import {
+  characterData,
+  classifyChild,
+  describe,
+  elementItem,
+  localGradients,
+  NO_RESOURCES,
+  referencesOf,
+  resourceIndex,
+  type Details,
+  type Item,
+  type Place,
+  type Resolve,
+  type StrokeProblem,
+  type Tags,
+} from "./classify";
+import { urlIds } from "./values";
 import { escapeAttribute, NamespaceScope } from "./serialize";
 import { SourceText, type Span } from "./text";
 import {
@@ -62,6 +78,9 @@ export interface ElementFacts {
   readonly local: string;
   /// L'attributo `id`; `null` se manca o è vuoto.
   readonly id: string | null;
+  /// Gli id a cui rimandano gli attributi dell'elemento, senza ripetizioni
+  /// (formato della scena, §15).
+  readonly refs: readonly string[];
 }
 
 /// Un nodo che non è un elemento: commento, istruzione di elaborazione,
@@ -85,6 +104,9 @@ export interface LeafNode extends Placed {
   readonly problems: readonly StrokeProblem[];
   /// Gli id di tutti gli elementi che contiene, il suo compreso.
   readonly ids: readonly string[];
+  /// Gli id a cui rimandano gli attributi di tutti gli elementi che
+  /// contiene, il suo compreso, e i fogli `style`, senza ripetizioni.
+  readonly refs: readonly string[];
   /// Quanti elementi contiene, lui compreso.
   readonly elements: number;
   /// L'indice dopo il `>` del suo tag d'apertura, dall'inizio di `raw`; per
@@ -133,7 +155,15 @@ export function factsOf(doc: XmlDocument, element: ElementNode): ElementFacts {
     uri: doc.namespaces[element.ns]!,
     local: element.local,
     id: id === undefined || id === "" ? null : id,
+    refs: [...new Set(referencesOf(element))],
   };
+}
+
+/// Il posto dei figli di `container`: la radice, una `defs` della radice o
+/// un altro contenitore.
+export function placeOf(container: ContainerNode): Place {
+  if (container.depth === 0) return "root";
+  return container.details?.role === "defs" ? "defs" : "inside";
 }
 
 /// Le dichiarazioni di namespace sul tag di `element`.
@@ -168,7 +198,11 @@ export function tidy(parts: readonly Part[]): Part[] {
 class Builder {
   private readonly text: string;
 
-  constructor(private readonly doc: XmlDocument) {
+  constructor(
+    private readonly doc: XmlDocument,
+    /// Le risorse modificabili a cui gli elementi possono rimandare.
+    private readonly resolve: Resolve,
+  ) {
     this.text = doc.source.text;
   }
 
@@ -210,7 +244,7 @@ class Builder {
     const doc = this.doc;
     const element = doc.element(id)!;
     const depth = parent.depth + 1;
-    const found = classifyChild(doc, id, parent.depth === 0, depth);
+    const found = classifyChild(doc, id, placeOf(parent), depth, this.resolve);
     const facts = factsOf(doc, element);
     if (found !== null && isContainer(found[1])) {
       const container: ContainerNode = {
@@ -231,7 +265,7 @@ class Builder {
       container.parts = this.parts(id, container);
       return container;
     }
-    const [ids, elements] = this.inside(id);
+    const [ids, refs, elements] = this.inside(id);
     const described = found === null ? null : describe(doc, id, found[0], found[1]);
     return {
       kind: "leaf",
@@ -240,6 +274,7 @@ class Builder {
       details: described === null ? null : described.details,
       problems: described === null ? [] : described.problems,
       ids,
+      refs,
       elements,
       openLength: element.openEnd - element.start,
       parent,
@@ -248,21 +283,32 @@ class Builder {
     };
   }
 
-  /// Gli id e il numero degli elementi dentro `id`, lui compreso. La visita
-  /// usa una pila: un'unità estranea può annidare centomila elementi.
-  private inside(id: NodeId): [string[], number] {
+  /// Gli id, i riferimenti e il numero degli elementi dentro `id`, lui
+  /// compreso. La visita usa una pila: un'unità estranea può annidare
+  /// centomila elementi.
+  private inside(id: NodeId): [string[], string[], number] {
+    const doc = this.doc;
     const ids: string[] = [];
+    const refs = new Set<string>();
     let elements = 0;
     const stack = [id];
     while (stack.length > 0) {
-      const element = this.doc.element(stack.pop()!);
+      const element = doc.element(stack.pop()!);
       if (element === null) continue;
       elements++;
       const value = valueOf(element, NS_NONE, "id");
       if (value !== undefined && value !== "") ids.push(value);
+      for (const ref of referencesOf(element)) refs.add(ref);
+      // Un foglio di stile rimanda con `url(#id)` come un attributo.
+      if (element.local === "style") {
+        for (const child of element.children) {
+          const node = doc.nodes[child]!;
+          if (node.kind === "text" || node.kind === "cdata") for (const ref of urlIds(node.value)) refs.add(ref);
+        }
+      }
       for (let i = element.children.length - 1; i >= 0; i--) stack.push(element.children[i]!);
     }
-    return [ids, elements];
+    return [ids, [...refs], elements];
   }
 
   /// La radice e i pezzi che la circondano.
@@ -298,7 +344,8 @@ class Builder {
 
 /// L'albero di un documento letto per intero.
 export function buildDocument(doc: XmlDocument): DocumentModel {
-  const model = new Builder(doc).document();
+  const resources = resourceIndex(doc);
+  const model = new Builder(doc, (id) => resources.get(id) ?? null).document();
   // I testi estranei hanno il genitore solo ora: `textPart` non lo sapeva.
   const adopt = (container: ContainerNode): void => {
     for (const part of container.parts) {
@@ -381,9 +428,16 @@ export function parseSequence(raw: string, scope: NamespaceScope): Sequence | nu
   return { doc, id: doc.root, offset: open.length };
 }
 
-/// I pezzi di una sequenza letta, come figli di `parent`.
-export function buildSequence(sequence: Sequence, parent: ContainerNode): Part[] {
-  const parts = new Builder(sequence.doc).parts(sequence.id, parent);
+/// I pezzi di una sequenza letta, come figli di `parent`, coi riferimenti
+/// risolti da `resolve`. In una `defs` le sfumature della sequenza valgono
+/// anche per le risorse che le seguono.
+export function buildSequence(sequence: Sequence, parent: ContainerNode, resolve: Resolve = NO_RESOURCES): Part[] {
+  let inner = resolve;
+  if (placeOf(parent) === "defs") {
+    const local = localGradients(sequence.doc, sequence.id);
+    if (local.size > 0) inner = (id) => local.get(id) ?? resolve(id);
+  }
+  const parts = new Builder(sequence.doc, inner).parts(sequence.id, parent);
   const adopt = (container: ContainerNode): void => {
     for (const part of container.parts) {
       if (typeof part === "string") continue;
@@ -399,9 +453,10 @@ export function buildSequence(sequence: Sequence, parent: ContainerNode): Part[]
   return parts;
 }
 
-/// Il nodo di un frammento letto, come figlio di `parent`.
-export function buildFragment(fragment: Fragment, parent: ContainerNode): ElementPart {
-  const node = new Builder(fragment.doc).element(fragment.id, parent);
+/// Il nodo di un frammento letto, come figlio di `parent`, coi riferimenti
+/// risolti da `resolve`.
+export function buildFragment(fragment: Fragment, parent: ContainerNode, resolve: Resolve = NO_RESOURCES): ElementPart {
+  const node = new Builder(fragment.doc, resolve).element(fragment.id, parent);
   const adopt = (container: ContainerNode): void => {
     for (const part of container.parts) {
       if (typeof part === "string") continue;

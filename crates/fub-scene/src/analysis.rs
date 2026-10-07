@@ -164,7 +164,14 @@ pub(crate) struct Context {
     font_size: Option<f64>,
     /// Il `font-weight` in vigore è da grassetto: `bold` o da 700 in su.
     bold: bool,
+    /// Un antenato, o l'elemento, ha un ritaglio, una maschera o un filtro
+    /// (§15): i colori che si vedono non si sanno.
+    effect: bool,
 }
+
+/// Gli attributi che cambiano ciò che si vede di un elemento oltre il suo
+/// colore (§15).
+const EFFECTS: [&str; 3] = ["clip-path", "mask", "filter"];
 
 impl Context {
     /// Il contesto dei figli della radice. Della radice contano solo `fill` e
@@ -185,6 +192,7 @@ impl Context {
                 .value(NS_NONE, "font-size")
                 .map_or(Some(DEFAULT_FONT_SIZE), non_negative_length),
             bold: root.value(NS_NONE, "font-weight").is_some_and(bold),
+            effect: false,
         }
     }
 
@@ -213,6 +221,12 @@ impl Context {
         }
         if let Some(weight) = value("font-weight") {
             context.bold = bold(weight);
+        }
+        if EFFECTS
+            .iter()
+            .any(|&name| value(name).is_some_and(|used| trim(used) != "none"))
+        {
+            context.effect = true;
         }
         context
     }
@@ -251,6 +265,9 @@ impl Context {
     /// Il riempimento in vigore, distinguendo ciò che non si sa: `None` se
     /// non si sa, `Some(None)` se è `none`.
     pub fn fill_paint(&self) -> Option<Option<(Rgb, f64)>> {
+        if self.effect {
+            return None;
+        }
         match (self.fill?, self.fill_opacity?) {
             (Paint::Color(rgb), alpha) => Some(Some((rgb, alpha * self.opacity))),
             (Paint::None, _) => Some(None),
@@ -290,6 +307,9 @@ impl Tally {
         stroke: Option<&Stroke>,
     ) {
         match role {
+            // Le risorse non si disegnano da sole: contano gli oggetti che le
+            // usano (§15).
+            Role::Defs | Role::Resource => return,
             Role::Layer => self.layers.push(
                 element
                     .value(NS_FUB, "layer")
@@ -400,6 +420,9 @@ fn paper_color(context: &Context) -> Option<Rgb> {
     if context.hidden {
         return Some(WHITE);
     }
+    if context.effect {
+        return None;
+    }
     match (context.fill?, context.fill_opacity?) {
         (Paint::Color(rgb), alpha) => Some(over(rgb, alpha * context.opacity, WHITE)),
         (Paint::None, _) => Some(WHITE),
@@ -506,7 +529,14 @@ fn bounds(
                 out.include(m.apply([len(tspan, "x").unwrap_or(x), y]));
             }
         }
-        Role::Title | Role::Desc | Role::Paper | Role::Layer | Role::Group | Role::Link => {}
+        Role::Title
+        | Role::Desc
+        | Role::Paper
+        | Role::Layer
+        | Role::Group
+        | Role::Link
+        | Role::Defs
+        | Role::Resource => {}
     }
 }
 

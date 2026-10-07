@@ -11,6 +11,13 @@
 //
 // La visita usa una pila esplicita, non la ricorsione: un SVG con centomila
 // gruppi annidati è un file valido, e non deve esaurire lo stack.
+//
+// Le risorse (§15) stanno nelle `defs` della radice, e un oggetto le usa per
+// riferimento: un oggetto è modificabile solo se ciò a cui rimanda lo è.
+// Per questo la lettura passa due volte: prima giudica le risorse, le
+// sfumature e poi le altre, che possono usare le sfumature nel loro
+// contenuto; poi classifica il documento chiedendo a quell'indice che cosa
+// è ogni id.
 
 import { BrushError, parseBrush } from "../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
@@ -22,20 +29,30 @@ import { readPolygonal, type Polygonal } from "./parametric";
 import { readVarWidth, type VarWidth } from "./varwidth";
 import type { Span } from "./text";
 import {
+  angle,
   dasharray,
+  fraction,
   href,
+  hrefId,
+  isWsp,
   keyword,
   length,
   letterSpacing,
   nonNegativeLength,
+  number,
   numberList,
+  oneOrTwo,
   opacity,
   paint,
+  paintReference,
   points,
   preserveAspectRatio,
+  reference,
   textDecoration,
   transform,
   trim,
+  urlIds,
+  viewBox,
 } from "./values";
 import { isSvg, NS_FUB, NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "./xml";
 
@@ -104,6 +121,8 @@ export interface ElementItem extends Span {
   /// Le righe di un `text`, una per `tspan`, coi pezzi: è il testo che
   /// l'operazione `text` sostituisce.
   readonly lines?: readonly string[];
+  /// Come vive una risorsa, da `fub:role` (§15).
+  readonly lifecycle?: Lifecycle;
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -137,7 +156,64 @@ export type Tag =
   | "polygon"
   | "text"
   | "tspan"
-  | "image";
+  | "image"
+  | "defs"
+  | ResourceTag;
+
+/// I tag delle risorse (§15).
+export type ResourceTag = "linearGradient" | "radialGradient" | "pattern" | "marker" | "clipPath" | "mask" | "filter";
+
+const RESOURCE_TAGS: ReadonlySet<string> = new Set<ResourceTag>([
+  "linearGradient",
+  "radialGradient",
+  "pattern",
+  "marker",
+  "clipPath",
+  "mask",
+  "filter",
+]);
+
+/// Che cosa è una risorsa per chi la usa (§15): `fill` e `stroke` usano
+/// sfumature e motivi, `marker-*` i marcatori, `clip-path`, `mask` e
+/// `filter` ritagli, maschere e filtri.
+export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter";
+
+/// Il tipo di una risorsa dal suo tag.
+export function resourceKind(tag: string): ResourceKind | null {
+  switch (tag) {
+    case "linearGradient":
+    case "radialGradient":
+      return "gradient";
+    case "pattern":
+      return "pattern";
+    case "marker":
+      return "marker";
+    case "clipPath":
+      return "clip";
+    case "mask":
+      return "mask";
+    case "filter":
+      return "filter";
+    default:
+      return null;
+  }
+}
+
+/// Come vive una risorsa, da `fub:role` (§15): `private` è di un oggetto e
+/// duplicarlo la copia, `shared` è di chi usa la stessa cosa; tutte e due se
+/// ne vanno col loro ultimo riferimento. Senza, la risorsa resta.
+export type Lifecycle = "private" | "shared";
+
+/// Il tipo della risorsa modificabile che porta `id`, o `null` se nessuna
+/// risorsa modificabile lo porta.
+export type Resolve = (id: string) => ResourceKind | null;
+
+/// Un documento senza risorse.
+export const NO_RESOURCES: Resolve = () => null;
+
+/// Dove sta un elemento: figlio della radice, di una `defs` della radice, o
+/// di un altro contenitore modificabile.
+export type Place = "root" | "defs" | "inside";
 
 const TAGS: ReadonlySet<string> = new Set<Tag>([
   "title",
@@ -154,6 +230,8 @@ const TAGS: ReadonlySet<string> = new Set<Tag>([
   "text",
   "tspan",
   "image",
+  "defs",
+  ...(RESOURCE_TAGS as ReadonlySet<ResourceTag>),
 ]);
 
 function tagOf(element: ElementNode): Tag | null {
@@ -166,12 +244,27 @@ function hasUrl(value: string): boolean {
   return /[uU][rR][lL]\(/.test(value);
 }
 
-/// Vero se ogni attributo di `element` rientra in §4 per il suo tag.
-function attributesAllowed(element: ElementNode, tag: Tag): boolean {
+/// Gli attributi che possono rimandare a una risorsa con `url(` (§15).
+const REFERENCES: ReadonlySet<string> = new Set([
+  "fill",
+  "stroke",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+  "clip-path",
+  "mask",
+  "filter",
+]);
+
+/// Vero se ogni attributo di `element` rientra in §4 per il suo tag, coi
+/// riferimenti risolti da `resolve`. Con `clip` l'elemento sta in un
+/// ritaglio, dove vale anche `clip-rule`.
+function attributesAllowed(element: ElementNode, tag: Tag, resolve: Resolve, clip = false): boolean {
   return element.attrs.every((attr) => {
     switch (attr.ns) {
       case NS_NONE:
-        return !hasUrl(attr.value) && svgAttribute(tag, attr.local, attr.value);
+        if (clip && attr.local === "clip-rule") return keyword("clip-rule", attr.value);
+        return (REFERENCES.has(attr.local) || !hasUrl(attr.value)) && svgAttribute(tag, attr.local, attr.value, resolve);
       case NS_XLINK:
         return attr.local === "href"
           && (tag === "a" || tag === "image")
@@ -189,16 +282,58 @@ function attributesAllowed(element: ElementNode, tag: Tag): boolean {
   });
 }
 
-/// Il giudizio su un attributo SVG senza namespace. Il painter lo usa per
-/// gli attributi della radice, che non si classifica: ne porta sugli strati
-/// vivi solo quelli che varrebbero su un `g`.
-export function svgAttribute(tag: Tag, name: string, value: string): boolean {
+/// I tag su cui valgono i riferimenti di `fill` e `stroke`, `clip-path`,
+/// `mask` e `filter`: non le righe e i pezzi di un testo, il cui riquadro i
+/// lettori non misurano tutti allo stesso modo.
+const DRAWN: ReadonlySet<string> = new Set([
+  "path",
+  "rect",
+  "ellipse",
+  "circle",
+  "line",
+  "polyline",
+  "polygon",
+  "text",
+  "image",
+  "g",
+  "a",
+]);
+
+/// I tag su cui i browser disegnano i marcatori.
+const MARKED: ReadonlySet<string> = new Set(["path", "line", "polyline", "polygon"]);
+
+/// Vero se `value` è `none` o un `url(#id)` di una risorsa di tipo `kind`.
+function resourceOrNone(value: string, kind: ResourceKind, resolve: Resolve): boolean {
+  if (trim(value) === "none") return true;
+  const id = reference(value);
+  return id !== null && resolve(id) === kind;
+}
+
+/// Il giudizio su un attributo SVG senza namespace, coi riferimenti alle
+/// risorse risolti da `resolve` (§15). Il painter lo usa per gli attributi
+/// della radice, che non si classifica: ne porta sugli strati vivi solo
+/// quelli che varrebbero su un `g`.
+export function svgAttribute(tag: Tag, name: string, value: string, resolve: Resolve = NO_RESOURCES): boolean {
   switch (name) {
     case "id":
       return value !== "";
     case "fill":
-    case "stroke":
-      return paint(value) !== null;
+    case "stroke": {
+      if (paint(value) !== null) return true;
+      const used = DRAWN.has(tag) ? paintReference(value) : null;
+      const kind = used === null ? null : resolve(used.id);
+      return kind === "gradient" || kind === "pattern";
+    }
+    case "marker-start":
+    case "marker-mid":
+    case "marker-end":
+      return MARKED.has(tag) && resourceOrNone(value, "marker", resolve);
+    case "clip-path":
+      return DRAWN.has(tag) && resourceOrNone(value, "clip", resolve);
+    case "mask":
+      return DRAWN.has(tag) && resourceOrNone(value, "mask", resolve);
+    case "filter":
+      return DRAWN.has(tag) && resourceOrNone(value, "filter", resolve);
     case "fill-opacity":
     case "stroke-opacity":
     case "opacity":
@@ -309,24 +444,24 @@ const NOT_IN_PIECE: ReadonlySet<string> = new Set(["id", "x", "dy", "text-anchor
 
 /// Vero se `id` è un pezzo di riga modificabile: un `tspan` con attributi da
 /// pezzo e solo testo dentro.
-function allowedPiece(doc: XmlDocument, id: NodeId): boolean {
+function allowedPiece(doc: XmlDocument, id: NodeId, resolve: Resolve): boolean {
   const element = doc.element(id);
   if (element === null || tagOf(element) !== "tspan") return false;
   if (element.attrs.some((attr) => attr.ns === NS_NONE && NOT_IN_PIECE.has(attr.local))) return false;
-  return attributesAllowed(element, "tspan") && characterDataOnly(doc, element);
+  return attributesAllowed(element, "tspan", resolve) && characterDataOnly(doc, element);
 }
 
 /// Vero se `id` è un `title`, `desc` o, dentro un `text`, una riga
 /// modificabile: attributi ammessi e dentro solo testo, e per una riga anche
 /// pezzi.
-function allowedPart(doc: XmlDocument, id: NodeId, insideText: boolean): boolean {
+function allowedPart(doc: XmlDocument, id: NodeId, insideText: boolean, resolve: Resolve): boolean {
   const element = doc.element(id);
   if (element === null) return false;
   const tag = tagOf(element);
   if (tag !== "title" && tag !== "desc" && !(tag === "tspan" && insideText)) return false;
-  if (!attributesAllowed(element, tag)) return false;
+  if (!attributesAllowed(element, tag, resolve)) return false;
   if (tag !== "tspan") return characterDataOnly(doc, element);
-  return element.children.every((child) => doc.nodes[child]!.kind === "text" || allowedPiece(doc, child));
+  return element.children.every((child) => doc.nodes[child]!.kind === "text" || allowedPiece(doc, child, resolve));
 }
 
 /// Il testo di una riga modificabile, coi suoi pezzi.
@@ -342,13 +477,409 @@ export function lineText(doc: XmlDocument, id: NodeId): string {
 
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
 /// `text`, i `tspan`.
-function unitChildrenAllowed(doc: XmlDocument, element: ElementNode, tag: Tag): boolean {
+function unitChildrenAllowed(doc: XmlDocument, element: ElementNode, tag: Tag, resolve: Resolve): boolean {
   return element.children.every((child) => {
     const node = doc.nodes[child]!;
     if (node.kind === "text") return node.blank;
-    if (node.kind === "element") return allowedPart(doc, child, tag === "text");
+    if (node.kind === "element") return allowedPart(doc, child, tag === "text", resolve);
     return false;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Le risorse (§15).
+// ---------------------------------------------------------------------------
+
+/// Quanti punti ha al più una sfumatura (§11).
+export const MAX_STOPS = 256;
+
+/// Quante primitive ha al più un filtro, coi `feMergeNode` (§11).
+export const MAX_PRIMITIVES = 64;
+
+/// Quanti `g` si annidano al più nel contenuto di una risorsa.
+export const MAX_CONTENT_DEPTH = 32;
+
+/// Le forme di §4, che possono stare nel contenuto di ogni risorsa.
+const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
+
+/// Le primitive dei filtri (§15): un elenco chiuso, quelle di SVG 1.1 che
+/// ogni lettore disegna allo stesso modo e l'ombra di Filter Effects.
+const PRIMITIVES: ReadonlySet<string> = new Set([
+  "feGaussianBlur",
+  "feOffset",
+  "feFlood",
+  "feDropShadow",
+  "feColorMatrix",
+  "feComposite",
+  "feBlend",
+  "feMorphology",
+  "feMerge",
+]);
+
+/// Il resolver del contenuto di una risorsa: solo le sfumature, così le
+/// risorse non si rimandano in cerchio.
+function gradientsOnly(resolve: Resolve): Resolve {
+  return (id) => (resolve(id) === "gradient" ? "gradient" : null);
+}
+
+/// Vero se `element` è una `defs` della radice modificabile: solo `id` fra
+/// gli attributi SVG.
+function defsAllowed(element: ElementNode): boolean {
+  return element.attrs.every((attr) => {
+    if (attr.ns === NS_NONE) return attr.local === "id" && attr.value !== "";
+    return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
+  });
+}
+
+/// Vero se `value`, una coordinata di una risorsa, rientra nelle sue unità:
+/// nel riquadro (`box`) un numero o una percentuale, altrimenti una
+/// lunghezza.
+function coordinate(value: string, box: boolean, nonNegative: boolean): boolean {
+  const n = box ? fraction(value) : length(value);
+  return n !== null && (!nonNegative || n >= 0);
+}
+
+/// Le coordinate di ogni risorsa, nelle sue unità.
+const COORDINATES: Readonly<Partial<Record<ResourceTag, readonly string[]>>> = {
+  linearGradient: ["x1", "y1", "x2", "y2"],
+  radialGradient: ["cx", "cy", "r", "fx", "fy"],
+  pattern: ["x", "y", "width", "height"],
+  mask: ["x", "y", "width", "height"],
+  filter: ["x", "y", "width", "height"],
+};
+
+/// Le coordinate che in `userSpaceOnUse` vanno scritte: mancando, SVG le
+/// prenderebbe in percentuale del viewport.
+const REQUIRED: Readonly<Partial<Record<ResourceTag, readonly string[]>>> = {
+  linearGradient: ["x2"],
+  radialGradient: ["cx", "cy", "r"],
+  mask: ["x", "y", "width", "height"],
+  filter: ["x", "y", "width", "height"],
+};
+
+/// L'attributo delle unità delle coordinate di ogni risorsa.
+const UNITS: Readonly<Partial<Record<ResourceTag, string>>> = {
+  linearGradient: "gradientUnits",
+  radialGradient: "gradientUnits",
+  pattern: "patternUnits",
+  mask: "maskUnits",
+  filter: "filterUnits",
+};
+
+/// Il giudizio su un attributo SVG senza namespace di una risorsa, con le
+/// coordinate nel riquadro se `box`.
+function resourceAttribute(tag: ResourceTag, name: string, value: string, box: boolean): boolean {
+  if (name === "id") return value !== "";
+  if (COORDINATES[tag]?.includes(name)) return coordinate(value, box, name === "r" || name === "width" || name === "height");
+  switch (name) {
+    case "gradientUnits":
+    case "spreadMethod":
+      return (tag === "linearGradient" || tag === "radialGradient") && keyword(name, value);
+    case "gradientTransform":
+      return (tag === "linearGradient" || tag === "radialGradient") && transform(value) !== null;
+    case "patternUnits":
+    case "patternContentUnits":
+      return tag === "pattern" && keyword(name, value);
+    case "patternTransform":
+      return tag === "pattern" && transform(value) !== null;
+    case "viewBox":
+      return (tag === "pattern" || tag === "marker") && viewBox(value) !== null;
+    case "preserveAspectRatio":
+      return (tag === "pattern" || tag === "marker") && preserveAspectRatio(value);
+    case "markerUnits":
+      return tag === "marker" && keyword(name, value);
+    case "refX":
+    case "refY":
+      return tag === "marker" && length(value) !== null;
+    case "markerWidth":
+    case "markerHeight":
+      return tag === "marker" && nonNegativeLength(value) !== null;
+    case "orient": {
+      const text = trim(value);
+      return tag === "marker" && (text === "auto" || text === "auto-start-reverse" || angle(value) !== null);
+    }
+    case "clipPathUnits":
+    case "clip-rule":
+      return tag === "clipPath" && keyword(name, value);
+    case "transform":
+      return tag === "clipPath" && transform(value) !== null;
+    case "maskUnits":
+    case "maskContentUnits":
+      return tag === "mask" && keyword(name, value);
+    case "filterUnits":
+    case "primitiveUnits":
+    case "color-interpolation-filters":
+      return tag === "filter" && keyword(name, value);
+    default:
+      return false;
+  }
+}
+
+/// Vero se `element`, una risorsa di tag `tag` in una `defs` della radice, è
+/// modificabile: attributi, figli e riferimenti del suo contenuto.
+function resourceAllowed(doc: XmlDocument, element: ElementNode, tag: ResourceTag, resolve: Resolve): boolean {
+  const id = valueOf(element, NS_NONE, "id");
+  if (id === undefined || id === "") return false;
+  const unitsName = UNITS[tag];
+  const units = unitsName === undefined ? undefined : valueOf(element, NS_NONE, unitsName);
+  const box = units === undefined || trim(units) !== "userSpaceOnUse";
+  const attributes = element.attrs.every((attr) => {
+    if (attr.ns === NS_NONE) return !hasUrl(attr.value) && resourceAttribute(tag, attr.local, attr.value, box);
+    return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
+  });
+  if (!attributes) return false;
+  if (!box && REQUIRED[tag]?.some((name) => valueOf(element, NS_NONE, name) === undefined)) return false;
+  switch (tag) {
+    case "linearGradient":
+    case "radialGradient":
+      return stopsAllowed(doc, element);
+    case "filter":
+      return primitivesAllowed(doc, element);
+    default: {
+      const inner = gradientsOnly(resolve);
+      const clip = tag === "clipPath";
+      return element.children.every((child) => contentAllowed(doc, child, clip, inner, 1));
+    }
+  }
+}
+
+/// Vero se un nodo è spazio, `title` o `desc` ammessi: i figli che ogni
+/// risorsa può avere.
+function blankOrMeta(doc: XmlDocument, child: NodeId): boolean | null {
+  const node = doc.nodes[child]!;
+  if (node.kind === "text") return node.blank;
+  if (node.kind !== "element") return false;
+  const tag = tagOf(node);
+  return tag === "title" || tag === "desc" ? allowedPart(doc, child, false, NO_RESOURCES) : null;
+}
+
+/// Vero se i figli di una sfumatura sono ammessi: `stop`, al più
+/// [`MAX_STOPS`], ognuno con `offset`, `stop-color` e `stop-opacity`.
+function stopsAllowed(doc: XmlDocument, element: ElementNode): boolean {
+  let stops = 0;
+  for (const child of element.children) {
+    const plain = blankOrMeta(doc, child);
+    if (plain !== null) {
+      if (!plain) return false;
+      continue;
+    }
+    const stop = doc.element(child)!;
+    if (!isSvg(stop, "stop") || ++stops > MAX_STOPS) return false;
+    const attributes = stop.attrs.every((attr) => {
+      if (attr.ns !== NS_NONE) return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
+      switch (attr.local) {
+        case "id":
+          return attr.value !== "";
+        case "offset":
+          return fraction(attr.value) !== null;
+        case "stop-color": {
+          const color = paint(attr.value);
+          return color !== null && color !== "none";
+        }
+        case "stop-opacity":
+          return opacity(attr.value) !== null;
+        default:
+          return false;
+      }
+    });
+    const empty = stop.children.every((inner) => {
+      const node = doc.nodes[inner]!;
+      return node.kind === "text" && node.blank;
+    });
+    if (!attributes || !empty) return false;
+  }
+  return true;
+}
+
+/// Vero se `id`, nel contenuto di una risorsa, è ammesso: spazi, `title`,
+/// `desc`, una forma, un testo e, fuori da un ritaglio, un `g` che ne
+/// contiene, fino a [`MAX_CONTENT_DEPTH`] livelli.
+function contentAllowed(doc: XmlDocument, id: NodeId, clip: boolean, resolve: Resolve, depth: number): boolean {
+  const plain = blankOrMeta(doc, id);
+  if (plain !== null) return plain;
+  const element = doc.element(id)!;
+  const tag = tagOf(element);
+  if (tag === null) return false;
+  if (SHAPES.has(tag) || tag === "text") {
+    return attributesAllowed(element, tag, resolve, clip) && unitChildrenAllowed(doc, element, tag, resolve);
+  }
+  if (tag !== "g" || clip || depth > MAX_CONTENT_DEPTH) return false;
+  return attributesAllowed(element, tag, resolve) && element.children.every((child) => contentAllowed(doc, child, clip, resolve, depth + 1));
+}
+
+/// Vero se `value`, un `result`, è un nome senza spazi.
+function resultName(value: string): boolean {
+  if (value === "") return false;
+  for (let i = 0; i < value.length; i++) if (isWsp(value.charCodeAt(i))) return false;
+  return true;
+}
+
+/// I tipi di `feColorMatrix` e quanti numeri vuole `values` per ognuno.
+const MATRIX_VALUES: ReadonlyMap<string, number> = new Map([
+  ["matrix", 20],
+  ["saturate", 1],
+  ["hueRotate", 1],
+  ["luminanceToAlpha", 0],
+]);
+
+/// Il giudizio su un attributo SVG senza namespace di una primitiva;
+/// `input` dice se un ingresso è ammesso.
+function primitiveAttribute(local: string, name: string, value: string, input: (value: string) => boolean): boolean {
+  switch (name) {
+    case "id":
+      return value !== "";
+    case "result":
+      return local !== "feMergeNode" && resultName(value);
+    case "color-interpolation-filters":
+      return local !== "feMergeNode" && keyword(name, value);
+    case "x":
+    case "y":
+      return local !== "feMergeNode" && length(value) !== null;
+    case "width":
+    case "height":
+      return local !== "feMergeNode" && nonNegativeLength(value) !== null;
+    case "in":
+      return local !== "feFlood" && local !== "feMerge" && input(value);
+    case "in2":
+      return (local === "feComposite" || local === "feBlend") && input(value);
+    case "stdDeviation":
+      return (local === "feGaussianBlur" || local === "feDropShadow") && oneOrTwo(value) !== null;
+    case "dx":
+    case "dy":
+      return (local === "feOffset" || local === "feDropShadow") && number(value) !== null;
+    case "flood-color": {
+      const color = paint(value);
+      return (local === "feFlood" || local === "feDropShadow") && color !== null && color !== "none";
+    }
+    case "flood-opacity":
+      return (local === "feFlood" || local === "feDropShadow") && opacity(value) !== null;
+    case "type":
+      return local === "feColorMatrix" && MATRIX_VALUES.has(value);
+    case "values":
+      // Il numero lo controlla chi conosce il tipo.
+      return local === "feColorMatrix" && numberList(value) !== null;
+    case "operator":
+      if (local === "feComposite") return ["over", "in", "out", "atop", "xor", "arithmetic"].includes(value);
+      return local === "feMorphology" && (value === "erode" || value === "dilate");
+    case "k1":
+    case "k2":
+    case "k3":
+    case "k4":
+      return local === "feComposite" && number(value) !== null;
+    case "mode":
+      return local === "feBlend" && ["normal", "multiply", "screen", "darken", "lighten"].includes(value);
+    case "radius":
+      return local === "feMorphology" && oneOrTwo(value) !== null;
+    default:
+      return false;
+  }
+}
+
+/// Vero se la primitiva `element` è ammessa, con gli ingressi che rimandano
+/// a `results`, i nomi delle primitive che la precedono.
+function primitiveAllowed(doc: XmlDocument, element: ElementNode, results: ReadonlySet<string>): boolean {
+  const input = (value: string): boolean => value === "SourceGraphic" || value === "SourceAlpha" || results.has(value);
+  const local = element.local;
+  const attributes = element.attrs.every((attr) => {
+    if (attr.ns === NS_NONE) return !hasUrl(attr.value) && primitiveAttribute(local, attr.local, attr.value, input);
+    return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
+  });
+  if (!attributes) return false;
+  if ((local === "feComposite" || local === "feBlend") && valueOf(element, NS_NONE, "in2") === undefined) return false;
+  if (local === "feColorMatrix") {
+    const type = valueOf(element, NS_NONE, "type") ?? "matrix";
+    const values = valueOf(element, NS_NONE, "values");
+    const wanted = MATRIX_VALUES.get(type)!;
+    if (values === undefined ? false : numberList(values)!.length !== wanted) return false;
+    if (type === "saturate" && values !== undefined && numberList(values)![0]! < 0) return false;
+  }
+  return element.children.every((child) => {
+    const node = doc.nodes[child]!;
+    if (node.kind === "text") return node.blank;
+    if (local !== "feMerge" || node.kind !== "element" || !isSvg(node, "feMergeNode")) return false;
+    return primitiveAllowed(doc, node, results);
+  });
+}
+
+/// Vero se i figli di un filtro sono ammessi: primitive dell'elenco, al più
+/// [`MAX_PRIMITIVES`] coi `feMergeNode`, ognuna con ingressi che vengono
+/// prima.
+function primitivesAllowed(doc: XmlDocument, element: ElementNode): boolean {
+  const results = new Set<string>();
+  let count = 0;
+  for (const child of element.children) {
+    const plain = blankOrMeta(doc, child);
+    if (plain !== null) {
+      if (!plain) return false;
+      continue;
+    }
+    const primitive = doc.element(child)!;
+    if (primitive.ns !== NS_SVG || !PRIMITIVES.has(primitive.local)) return false;
+    count += 1 + primitive.children.filter((inner) => doc.element(inner) !== null).length;
+    if (count > MAX_PRIMITIVES || !primitiveAllowed(doc, primitive, results)) return false;
+    const result = valueOf(primitive, NS_NONE, "result");
+    if (result !== undefined) results.add(result);
+  }
+  return true;
+}
+
+/// Gli id a cui gli attributi di `element` rimandano: ogni `url(#id)` degli
+/// attributi senza prefisso e `xlink`, anche fuori dal formato, e ogni
+/// `href` locale (`#id`).
+export function referencesOf(element: ElementNode): string[] {
+  const out: string[] = [];
+  for (const attr of element.attrs) {
+    if (attr.ns !== NS_NONE && attr.ns !== NS_XLINK) continue;
+    for (const id of urlIds(attr.value)) out.push(id);
+    if (attr.local === "href") {
+      const id = hrefId(attr.value);
+      if (id !== null) out.push(id);
+    }
+  }
+  return out;
+}
+
+/// L'indice delle risorse modificabili del documento: per ogni id, il tipo
+/// della risorsa (§15). Prima le sfumature, che non rimandano a niente, poi
+/// le altre, che nel contenuto possono usare le sfumature. Di due risorse
+/// con lo stesso id vale la prima, in quest'ordine: il documento è comunque
+/// in sola lettura (S003).
+export function resourceIndex(doc: XmlDocument): Map<string, ResourceKind> {
+  const found = new Map<string, ResourceKind>();
+  const others: Array<[ElementNode, ResourceTag]> = [];
+  const judge = (element: ElementNode, tag: ResourceTag, resolve: Resolve): void => {
+    const id = valueOf(element, NS_NONE, "id");
+    if (id === undefined || found.has(id) || !resourceAllowed(doc, element, tag, resolve)) return;
+    found.set(id, resourceKind(tag)!);
+  };
+  for (const child of doc.children(doc.root)) {
+    const defs = doc.element(child);
+    if (defs === null || tagOf(defs) !== "defs" || !defsAllowed(defs)) continue;
+    for (const inner of defs.children) {
+      const element = doc.element(inner);
+      const tag = element === null ? null : tagOf(element);
+      if (element === null || tag === null || !RESOURCE_TAGS.has(tag)) continue;
+      if (tag === "linearGradient" || tag === "radialGradient") judge(element, tag, NO_RESOURCES);
+      else others.push([element, tag as ResourceTag]);
+    }
+  }
+  const gradients: Resolve = (id) => found.get(id) ?? null;
+  for (const [element, tag] of others) judge(element, tag, gradients);
+  return found;
+}
+
+/// Le sfumature modificabili fra i figli di `parent`, per un `add` di più
+/// risorse in una `defs`: il contenuto di un motivo che le segue le usa.
+export function localGradients(doc: XmlDocument, parent: NodeId): Map<string, ResourceKind> {
+  const found = new Map<string, ResourceKind>();
+  for (const child of doc.children(parent)) {
+    const element = doc.element(child);
+    const tag = element === null ? null : tagOf(element);
+    if (element === null || (tag !== "linearGradient" && tag !== "radialGradient")) continue;
+    const id = valueOf(element, NS_NONE, "id");
+    if (id !== undefined && !found.has(id) && resourceAllowed(doc, element, tag, NO_RESOURCES)) found.set(id, "gradient");
+  }
+  return found;
 }
 
 const UNIT_ROLES: Readonly<Partial<Record<Tag, Role>>> = {
@@ -362,21 +893,30 @@ const UNIT_ROLES: Readonly<Partial<Record<Tag, Role>>> = {
   image: "image",
 };
 
-/// Il ruolo di un figlio di un contenitore, o `null` se è estraneo.
-/// `underRoot` dice se il contenitore è la radice, che decide livelli e
-/// carta; `depth` è la lunghezza del percorso del figlio, che per un
-/// contenitore oltre [`MAX_DEPTH`] lo rende estraneo.
-export function classifyChild(doc: XmlDocument, id: NodeId, underRoot: boolean, depth: number): [Tag, Role] | null {
-  const found = classify(doc, id, underRoot);
+/// Il ruolo di un figlio di un contenitore, o `null` se è estraneo. `place`
+/// dice dov'è il contenitore: la radice decide livelli, carta e `defs`, una
+/// `defs` della radice le risorse. `depth` è la lunghezza del percorso del
+/// figlio, che per un contenitore oltre [`MAX_DEPTH`] lo rende estraneo.
+/// `resolve` dice che cosa è la risorsa di ogni id a cui l'elemento rimanda.
+export function classifyChild(doc: XmlDocument, id: NodeId, place: Place, depth: number, resolve: Resolve = NO_RESOURCES): [Tag, Role] | null {
+  const found = classify(doc, id, place, resolve);
   // Un contenitore oltre la profondità massima è un'unità.
   return found !== null && isContainer(found[1]) && depth > MAX_DEPTH ? null : found;
 }
 
-function classify(doc: XmlDocument, id: NodeId, underRoot: boolean): [Tag, Role] | null {
+function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve): [Tag, Role] | null {
   const element = doc.element(id);
   if (element === null) return null;
   const tag = tagOf(element);
-  if (tag === null || !attributesAllowed(element, tag)) return null;
+  if (tag === null) return null;
+  if (tag === "defs") return place === "root" && defsAllowed(element) ? [tag, "defs"] : null;
+  if (RESOURCE_TAGS.has(tag)) {
+    return place === "defs" && resourceAllowed(doc, element, tag as ResourceTag, resolve) ? [tag, "resource"] : null;
+  }
+  // In una `defs` stanno solo risorse, titolo e descrizione.
+  if (place === "defs" && tag !== "title" && tag !== "desc") return null;
+  if (!attributesAllowed(element, tag, resolve)) return null;
+  const underRoot = place === "root";
   switch (tag) {
     case "g":
       return [tag, underRoot && valueOf(element, NS_FUB, "layer") !== undefined ? "layer" : "group"];
@@ -388,7 +928,7 @@ function classify(doc: XmlDocument, id: NodeId, underRoot: boolean): [Tag, Role]
     case "tspan":
       return null;
     default: {
-      if (!unitChildrenAllowed(doc, element, tag)) return null;
+      if (!unitChildrenAllowed(doc, element, tag, resolve)) return null;
       if (tag === "path") return [tag, pathRole(element)];
       if (tag === "rect" && underRoot && valueOf(element, NS_FUB, "role") === "paper") return [tag, "paper"];
       return [tag, UNIT_ROLES[tag]!];
@@ -452,6 +992,7 @@ export interface Details {
   readonly title?: string;
   readonly text?: string;
   readonly lines?: readonly string[];
+  readonly lifecycle?: Lifecycle;
 }
 
 /// Un problema di un tratto: S004 o S010, col dettaglio.
@@ -520,8 +1061,13 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     };
   }
   // Si bloccano e si nascondono i livelli e ciò che si disegna, non il
-  // titolo, la descrizione o la carta.
-  if (role !== "title" && role !== "desc" && role !== "paper") {
+  // titolo, la descrizione, la carta o le risorse.
+  if (role === "resource") {
+    const lifecycle = valueOf(element, NS_FUB, "role");
+    if (lifecycle === "private" || lifecycle === "shared") details.lifecycle = lifecycle;
+    const title = firstTitle(doc, element);
+    if (title !== null) details.title = title;
+  } else if (role !== "title" && role !== "desc" && role !== "paper" && role !== "defs") {
     if (valueOf(element, NS_FUB, "locked") === "true") details.locked = true;
     const display = valueOf(element, NS_NONE, "display");
     if (display !== undefined && trim(display) === "none") details.hidden = true;
@@ -579,6 +1125,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.title !== undefined) item.title = details.title;
   if (details.text !== undefined) item.text = details.text;
   if (details.lines !== undefined) item.lines = details.lines;
+  if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
   return item;
 }
 
@@ -592,6 +1139,8 @@ interface Pending {
 /// Un contenitore in visita.
 interface Frame {
   readonly node: NodeId;
+  /// Dove stanno i suoi figli.
+  readonly place: Place;
   readonly path: readonly number[];
   next: number;
   elements: number;
@@ -621,6 +1170,8 @@ class Builder {
     /// Falso per un documento oltre il limite di elementi: le voci si
     /// contano e si scartano, e restano solo riepilogo e diagnostica.
     private readonly keep: boolean,
+    /// Le risorse modificabili del documento.
+    private readonly resolve: Resolve,
   ) {}
 
   /// Allunga il blocco in attesa fino a `id`; `element` è l'indice del nodo
@@ -684,7 +1235,7 @@ class Builder {
   walk(root: NodeId): void {
     const doc = this.doc;
     const stack: Frame[] = [
-      { node: root, path: [], next: 0, elements: 0, pending: null, context: Context.root(doc.element(root)!) },
+      { node: root, place: "root", path: [], next: 0, elements: 0, pending: null, context: Context.root(doc.element(root)!) },
     ];
     while (stack.length > 0) {
       const frame = stack[stack.length - 1]!;
@@ -696,7 +1247,6 @@ class Builder {
         continue;
       }
       frame.next++;
-      const underRoot = frame.node === root;
       const node = doc.nodes[child]!;
       if (node.kind === "text" && node.blank) continue;
       if (node.kind !== "element") {
@@ -704,7 +1254,7 @@ class Builder {
         continue;
       }
       const index = frame.elements++;
-      const found = classifyChild(doc, child, underRoot, frame.path.length + 1);
+      const found = classifyChild(doc, child, frame.place, frame.path.length + 1, this.resolve);
       if (found === null) {
         frame.pending = this.extend(frame.pending, child, index, frame.elements);
         continue;
@@ -717,7 +1267,8 @@ class Builder {
       const path = [...frame.path, index];
       this.elementItem(child, tag, role, path, context);
       if (isContainer(role)) {
-        stack.push({ node: child, path, next: 0, elements: 0, pending: null, context });
+        const place: Place = role === "defs" ? "defs" : "inside";
+        stack.push({ node: child, place, path, next: 0, elements: 0, pending: null, context });
       }
     }
   }
@@ -727,7 +1278,8 @@ class Builder {
 /// conservano: un documento oltre il limite di elementi ne avrebbe troppe, e
 /// serve solo il suo riepilogo.
 export function classifyDocument(doc: XmlDocument, keep: boolean): Classified {
-  const builder = new Builder(doc, keep);
+  const resources = resourceIndex(doc);
+  const builder = new Builder(doc, keep, (id) => resources.get(id) ?? null);
   let pending: Pending | null = null;
   // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.
   let next = 0;

@@ -10,7 +10,7 @@
     <path d="M10 20 H200" stroke="#999999" stroke-width="2"/>
     <path d="M10 30 L20"/>
     <rect x="5%" y="0" width="10" height="10"/>
-    <rect x="20" y="40" width="30" height="20" fill="url(#cielo)"/>
+    <rect x="20" y="40" width="30" height="20" filter="url(#cielo)"/>
     <rect x="60" y="40" width="30" height="20" rx="4" fill="#cc79a7" inkscape:label="Piazza"/>
     <circle cx="100" cy="50" r="5" onclick="apri()"/>
     <ellipse cx="120" cy="50" rx="6" ry="4" fill="rgb(0,0,0)"/>

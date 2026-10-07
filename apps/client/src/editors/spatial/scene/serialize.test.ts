@@ -122,7 +122,23 @@ describe("ordine degli attributi (§7, punto 2)", () => {
 
   it("ogni gruppo nell'ordine della specifica", () => {
     const fub = ["layer", "role", "tool", "shape", "geom", "locked", "at", "brush"].map((n) => `fub:${n}`);
-    const geometry = ["x", "y", "dy", "cx", "cy", "r", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d"];
+    const geometry = ["x", "y", "dx", "dy", "cx", "cy", "r", "fx", "fy", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d"];
+    const resource = ["offset", "refX", "refY", "markerWidth", "markerHeight", "orient", "viewBox"];
+    const units = [
+      "gradientUnits",
+      "gradientTransform",
+      "spreadMethod",
+      "patternUnits",
+      "patternContentUnits",
+      "patternTransform",
+      "markerUnits",
+      "clipPathUnits",
+      "maskUnits",
+      "maskContentUnits",
+      "filterUnits",
+      "primitiveUnits",
+    ];
+    const primitives = ["in", "in2", "result", "type", "values", "operator", "k1", "k2", "k3", "k4", "mode", "stdDeviation", "radius"];
     const presentation = [
       "fill",
       "fill-opacity",
@@ -132,15 +148,30 @@ describe("ordine degli attributi (§7, punto 2)", () => {
       "stroke-linecap",
       "stroke-linejoin",
       "stroke-dasharray",
+      "marker-start",
+      "marker-mid",
+      "marker-end",
+      "clip-path",
+      "clip-rule",
+      "mask",
+      "filter",
       "opacity",
       "display",
+      "stop-color",
+      "stop-opacity",
+      "flood-color",
+      "flood-opacity",
+      "color-interpolation-filters",
       "font-family",
       "font-size",
       "font-weight",
+      "font-style",
+      "letter-spacing",
+      "text-decoration",
       "text-anchor",
       "preserveAspectRatio",
     ];
-    const all = ["id", ...fub, ...geometry, ...presentation, "transform", "href"];
+    const all = ["id", ...fub, ...geometry, ...resource, ...units, ...primitives, ...presentation, "transform", "href"];
     const shuffled = [...all].reverse().map((name) => attr(name));
     expect(canonicalOrder(shuffled).map((a) => a.name)).toEqual(all);
   });

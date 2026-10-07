@@ -595,6 +595,54 @@ fn s011_units_or_guides_out_of_grammar() {
 }
 
 #[test]
+fn s014_a_local_reference_to_a_missing_id() {
+    let source = titled(concat!(
+        r##"<defs><linearGradient id="r1"/></defs>"##,
+        r##"<rect fill="url(#r1)" stroke="url(#r2) #000000"/>"##,
+        r##"<g filter="url(#r3)" style="fill: url(#r4); stroke: url('#r4')"><use href="#r5" xlink:href="#r5"/></g>"##,
+        r##"<a href="#r6"><circle r="1" clip-path="url(#r7)" mask="url(#r7)"/></a>"##,
+        r##"<rect fub:nota="url(#r8)"/>"##,
+    ));
+    let scene = load(&source);
+    let found = of(&scene, Code::S014);
+    assert!(found.iter().all(|d| d.severity == Severity::Warning));
+    // Una per id e per attributo, in ordine di elemento e di attributo; un
+    // `href` su un collegamento è un'ancora, e gli altri namespace non
+    // rimandano a niente.
+    assert_eq!(
+        details(&scene, Code::S014),
+        [
+            "stroke #r2",
+            "filter #r3",
+            "style #r4",
+            "href #r5",
+            "xlink:href #r5",
+            "clip-path #r7",
+            "mask #r7"
+        ]
+    );
+    let span = found[0].span.expect("S014 riguarda l'elemento");
+    assert_eq!(
+        text(&source, &span),
+        r##"<rect fill="url(#r1)" stroke="url(#r2) #000000"/>"##
+    );
+    let span = found[4].span.expect("S014 riguarda l'elemento");
+    assert!(text(&source, &span).starts_with("<use"));
+    // Il documento resta modificabile: gli elementi col riferimento rotto
+    // sono estranei.
+    assert!(scene.editable());
+    for body in [
+        r##"<defs><linearGradient id="r1"/></defs><rect fill="url(#r1)"/>"##,
+        r##"<rect id="r2" fill="url(#r2)"/>"##,
+        r##"<a href="#sezione"></a>"##,
+        r##"<image href="a.png#x"/>"##,
+        r##"<rect fill="url(a.svg#r1)"/>"##,
+    ] {
+        assert!(of(&load(&titled(body)), Code::S014).is_empty(), "{body}");
+    }
+}
+
+#[test]
 fn every_code_has_its_severity_and_a_message() {
     use Code::*;
     for (code, severity) in [
@@ -611,6 +659,7 @@ fn every_code_has_its_severity_and_a_message() {
         (S011, Severity::Info),
         (S012, Severity::Warning),
         (S013, Severity::Info),
+        (S014, Severity::Warning),
     ] {
         assert_eq!(code.severity(), severity);
         assert!(!code.message().is_empty());

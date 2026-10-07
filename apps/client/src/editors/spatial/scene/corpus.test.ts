@@ -94,7 +94,13 @@ describe("il corpus di SVG scritti da altri", () => {
       "root",
       "[0] title",
       "[1] desc",
-      "[] foreign [2, 5]",
+      // La `defs` tiene un gradiente modificabile e un `symbol` estraneo;
+      // il `style` è estraneo, e il rettangolo che usa il gradiente no.
+      "[2] defs",
+      "[2, 0] resource",
+      "[2] foreign [1, 2]",
+      "[] foreign [3, 4]",
+      "[4] rect",
       "[5] group",
       "[5] foreign [0, 1]",
       "[5, 1] polyline",
@@ -115,7 +121,11 @@ describe("il corpus di SVG scritti da altri", () => {
       "document foreign [0, 0]",
       "root",
       "[0] title",
-      "[] foreign [1, 3]",
+      "[] foreign [1, 2]",
+      // I gradienti di Inkscape hanno i colori in `style` e si rimandano con
+      // `xlink:href`: estranei, dentro una `defs` che resta un contenitore.
+      "[2] defs",
+      "[2] foreign [0, 2]",
       "[3] group",
       "[3] foreign [0, 1]",
       "[4] group",
@@ -153,20 +163,28 @@ describe("il corpus di SVG scritti da altri", () => {
       expect(scene.readOnly).toEqual([]);
     }
     // Il diagramma di flusso: lo stile, un gruppo di soli estranei (nodi,
-    // archi, etichette in XHTML), poi i marcatori.
+    // archi, etichette in XHTML), poi due `defs` con un'ombra ciascuna, un
+    // filtro modificabile.
     expect(describeScene(load(FLOWCHART))).toEqual([
       "root",
       "[] foreign [0, 1]",
       "[1] group",
       "[1] foreign [0, 13]",
-      "[] foreign [2, 4]",
+      "[2] defs",
+      "[2, 0] resource",
+      "[3] defs",
+      "[3, 0] resource",
     ]);
     // Il diagramma di sequenza: i riquadri dei partecipanti, ognuno un gruppo
-    // senza attributi con un rettangolo e un testo che usano `class`, poi
-    // linee di vita, frecce e messaggi.
+    // senza attributi con un rettangolo e un testo che usano `class`; poi
+    // una `defs` per ogni simbolo, estraneo, e per ogni punta di freccia, un
+    // marcatore modificabile tranne quella con lo `style`; infine linee di
+    // vita, frecce e messaggi.
     const expected = ["root"];
     for (let i = 0; i < 10; i++) expected.push(`[${i}] group`, `[${i}] foreign [0, 2]`);
-    expected.push("[] foreign [10, 11]", "[11] group", "[] foreign [12, 39]");
+    expected.push("[] foreign [10, 11]", "[11] group");
+    for (let i = 12; i < 23; i++) expected.push(`[${i}] defs`, i < 15 || i === 16 ? `[${i}] foreign [0, 1]` : `[${i}, 0] resource`);
+    expected.push("[] foreign [23, 39]");
     expect(describeScene(load(SEQUENCE))).toEqual(expected);
   });
 

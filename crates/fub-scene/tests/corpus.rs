@@ -116,7 +116,14 @@ fn a_browser_export_keeps_what_it_can_edit() {
             "root",
             "[0] title",
             "[1] desc",
-            "[] foreign [2, 5]",
+            // La `defs` tiene un gradiente modificabile e un `symbol`
+            // estraneo; il `style` è estraneo, e il rettangolo che usa il
+            // gradiente no.
+            "[2] defs",
+            "[2, 0] resource",
+            "[2] foreign [1, 2]",
+            "[] foreign [3, 4]",
+            "[4] rect",
             "[5] group",
             "[5] foreign [0, 1]",
             "[5, 1] polyline",
@@ -141,7 +148,12 @@ fn an_inkscape_file_keeps_its_layers_as_groups() {
             "document foreign [0, 0]",
             "root",
             "[0] title",
-            "[] foreign [1, 3]",
+            "[] foreign [1, 2]",
+            // I gradienti di Inkscape hanno i colori in `style` e si rimandano
+            // con `xlink:href`: estranei, dentro una `defs` che resta un
+            // contenitore.
+            "[2] defs",
+            "[2] foreign [0, 2]",
             "[3] group",
             "[3] foreign [0, 1]",
             "[4] group",
@@ -185,7 +197,8 @@ fn mermaid_diagrams_are_mostly_foreign_and_whole() {
         assert!(scene.read_only.is_empty());
     }
     // Il diagramma di flusso: lo stile, un gruppo di soli estranei (nodi,
-    // archi, etichette in XHTML), poi i marcatori.
+    // archi, etichette in XHTML), poi due `defs` con un'ombra ciascuna, un
+    // filtro modificabile.
     assert_eq!(
         describe(&load(FLOWCHART)),
         [
@@ -193,18 +206,32 @@ fn mermaid_diagrams_are_mostly_foreign_and_whole() {
             "[] foreign [0, 1]",
             "[1] group",
             "[1] foreign [0, 13]",
-            "[] foreign [2, 4]"
+            "[2] defs",
+            "[2, 0] resource",
+            "[3] defs",
+            "[3, 0] resource",
         ]
     );
     // Il diagramma di sequenza: i riquadri dei partecipanti, ognuno un gruppo
-    // senza attributi con un rettangolo e un testo che usano `class`, poi
-    // linee di vita, frecce e messaggi.
+    // senza attributi con un rettangolo e un testo che usano `class`; poi
+    // una `defs` per ogni simbolo, estraneo, e per ogni punta di freccia, un
+    // marcatore modificabile tranne quella con lo `style`; infine linee di
+    // vita, frecce e messaggi.
     let mut expected = vec!["root".to_owned()];
     for i in 0..10 {
         expected.push(format!("[{i}] group"));
         expected.push(format!("[{i}] foreign [0, 2]"));
     }
-    expected.extend(["[] foreign [10, 11]", "[11] group", "[] foreign [12, 39]"].map(String::from));
+    expected.extend(["[] foreign [10, 11]", "[11] group"].map(String::from));
+    for i in 12..23 {
+        expected.push(format!("[{i}] defs"));
+        expected.push(if i < 15 || i == 16 {
+            format!("[{i}] foreign [0, 1]")
+        } else {
+            format!("[{i}, 0] resource")
+        });
+    }
+    expected.push("[] foreign [23, 39]".to_owned());
     assert_eq!(describe(&load(SEQUENCE)), expected);
 }
 

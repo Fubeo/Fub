@@ -18,7 +18,8 @@ export type Code =
   | "S010"
   | "S011"
   | "S012"
-  | "S013";
+  | "S013"
+  | "S014";
 
 /// La gravità di una diagnostica.
 export type Severity = "error" | "warning" | "info";
@@ -33,6 +34,7 @@ export function severityOf(code: Code): Severity {
     case "S005":
     case "S006":
     case "S012":
+    case "S014":
       return "warning";
     default:
       return "info";
@@ -54,6 +56,7 @@ export const CODE_MESSAGES: Readonly<Record<Code, string>> = {
   S011: "unità o guide del documento non valide: si ignorano e restano nel file",
   S012: "immagine senza descrizione: chi non la vede non sa che cosa mostra",
   S013: "testo sotto i 12 px a grandezza naturale",
+  S014: "riferimento a un id che il documento non ha: si disegna senza la risorsa",
 };
 
 /// Una diagnostica: il codice, la sua gravità, l'elemento o il blocco a cui
@@ -65,7 +68,7 @@ export interface Diagnostic {
   readonly bytes?: readonly [number, number];
   readonly utf16?: readonly [number, number];
   /// Il dettaglio: l'id ripetuto, l'errore dell'inchiostro, il contrasto
-  /// misurato, la grandezza del testo.
+  /// misurato, la grandezza del testo, l'attributo e l'id che manca.
   readonly detail?: string;
 }
 

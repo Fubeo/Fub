@@ -432,6 +432,37 @@ describe("la diagnostica (§12)", () => {
     expect(of(load(source), "S013")).toEqual([]);
   });
 
+  it("S014: un riferimento locale a un id che manca", () => {
+    const source = titled(
+      '<defs><linearGradient id="r1"/></defs>' +
+        '<rect fill="url(#r1)" stroke="url(#r2) #000000"/>' +
+        '<g filter="url(#r3)" style="fill: url(#r4); stroke: url(\'#r4\')"><use href="#r5" xlink:href="#r5"/></g>' +
+        '<a href="#r6"><circle r="1" clip-path="url(#r7)" mask="url(#r7)"/></a>' +
+        '<rect fub:nota="url(#r8)"/>',
+    );
+    const scene = load(source);
+    const found = of(scene, "S014");
+    expect(found.every((d) => d.severity === "warning")).toBe(true);
+    // Una per id e per attributo, in ordine di elemento e di attributo; un
+    // `href` su un collegamento è un'ancora, e gli altri namespace non
+    // rimandano a niente.
+    expect(details(scene, "S014")).toEqual(["stroke #r2", "filter #r3", "style #r4", "href #r5", "xlink:href #r5", "clip-path #r7", "mask #r7"]);
+    expect(text(source, spanOf(found[0]!))).toBe('<rect fill="url(#r1)" stroke="url(#r2) #000000"/>');
+    expect(text(source, spanOf(found[4]!)).startsWith("<use")).toBe(true);
+    // Il documento resta modificabile: gli elementi col riferimento rotto
+    // sono estranei.
+    expect(isEditable(scene)).toBe(true);
+    for (const body of [
+      '<defs><linearGradient id="r1"/></defs><rect fill="url(#r1)"/>',
+      '<rect id="r2" fill="url(#r2)"/>',
+      '<a href="#sezione"></a>',
+      '<image href="a.png#x"/>',
+      '<rect fill="url(a.svg#r1)"/>',
+    ]) {
+      expect(of(load(titled(body)), "S014"), body).toEqual([]);
+    }
+  });
+
   it("ogni codice ha la sua gravità e un messaggio", () => {
     const table: Array<[Code, Severity]> = [
       ["S001", "warning"],
@@ -447,6 +478,7 @@ describe("la diagnostica (§12)", () => {
       ["S011", "info"],
       ["S012", "warning"],
       ["S013", "info"],
+      ["S014", "warning"],
     ];
     for (const [code, severity] of table) {
       expect(severityOf(code), code).toBe(severity);

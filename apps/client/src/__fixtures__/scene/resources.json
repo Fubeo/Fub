@@ -1,0 +1,694 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        3455
+      ],
+      "utf16": [
+        0,
+        3455
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            193
+          ],
+          "utf16": [
+            0,
+            193
+          ]
+        },
+        "close": {
+          "bytes": [
+            3449,
+            3455
+          ],
+          "utf16": [
+            3449,
+            3455
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        196,
+        218
+      ],
+      "utf16": [
+        196,
+        218
+      ],
+      "indent": "  ",
+      "text": "Risorse"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        221,
+        2014
+      ],
+      "utf16": [
+        221,
+        2014
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            221,
+            241
+          ],
+          "utf16": [
+            221,
+            241
+          ]
+        },
+        "close": {
+          "bytes": [
+            2007,
+            2014
+          ],
+          "utf16": [
+            2007,
+            2014
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000001",
+      "bytes": [
+        246,
+        457
+      ],
+      "utf16": [
+        246,
+        457
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        1
+      ],
+      "tag": "radialGradient",
+      "role": "resource",
+      "id": "r00000002",
+      "bytes": [
+        462,
+        722
+      ],
+      "utf16": [
+        462,
+        722
+      ],
+      "indent": "    ",
+      "title": "Sole",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2
+      ],
+      "tag": "pattern",
+      "role": "resource",
+      "id": "r00000003",
+      "bytes": [
+        727,
+        929
+      ],
+      "utf16": [
+        727,
+        929
+      ],
+      "indent": "    ",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        3
+      ],
+      "tag": "marker",
+      "role": "resource",
+      "id": "r00000004",
+      "bytes": [
+        934,
+        1142
+      ],
+      "utf16": [
+        934,
+        1142
+      ],
+      "indent": "    ",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        4
+      ],
+      "tag": "clipPath",
+      "role": "resource",
+      "id": "r00000005",
+      "bytes": [
+        1147,
+        1283
+      ],
+      "utf16": [
+        1147,
+        1283
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        5
+      ],
+      "tag": "mask",
+      "role": "resource",
+      "id": "r00000006",
+      "bytes": [
+        1288,
+        1439
+      ],
+      "utf16": [
+        1288,
+        1439
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        6
+      ],
+      "tag": "filter",
+      "role": "resource",
+      "id": "r00000007",
+      "bytes": [
+        1444,
+        1788
+      ],
+      "utf16": [
+        1444,
+        1788
+      ],
+      "indent": "    ",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        7
+      ],
+      "tag": "filter",
+      "role": "resource",
+      "id": "r00000008",
+      "bytes": [
+        1793,
+        1943
+      ],
+      "utf16": [
+        1793,
+        1943
+      ],
+      "indent": "    ",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        1
+      ],
+      "bytes": [
+        1948,
+        2004
+      ],
+      "utf16": [
+        1948,
+        2004
+      ],
+      "elements": [
+        8,
+        9
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        2017,
+        2108
+      ],
+      "utf16": [
+        2017,
+        2108
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        2111,
+        3448
+      ],
+      "utf16": [
+        2111,
+        3448
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2111,
+            2151
+          ],
+          "utf16": [
+            2111,
+            2151
+          ]
+        },
+        "close": {
+          "bytes": [
+            3444,
+            3448
+          ],
+          "utf16": [
+            3444,
+            3448
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000001",
+      "bytes": [
+        2156,
+        2248
+      ],
+      "utf16": [
+        2156,
+        2248
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000002",
+      "bytes": [
+        2253,
+        2383
+      ],
+      "utf16": [
+        2253,
+        2383
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "path",
+      "role": "path",
+      "id": "o00000003",
+      "bytes": [
+        2388,
+        2506
+      ],
+      "utf16": [
+        2388,
+        2506
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "image",
+      "role": "image",
+      "id": "o00000004",
+      "bytes": [
+        2511,
+        2660
+      ],
+      "utf16": [
+        2511,
+        2660
+      ],
+      "indent": "    ",
+      "title": "Il porto"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000005",
+      "bytes": [
+        2665,
+        2930
+      ],
+      "utf16": [
+        2665,
+        2930
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2665,
+            2708
+          ],
+          "utf16": [
+            2665,
+            2708
+          ]
+        },
+        "close": {
+          "bytes": [
+            2926,
+            2930
+          ],
+          "utf16": [
+            2926,
+            2930
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000006",
+      "bytes": [
+        2715,
+        2791
+      ],
+      "utf16": [
+        2715,
+        2791
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4,
+        1
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000007",
+      "bytes": [
+        2798,
+        2921
+      ],
+      "utf16": [
+        2798,
+        2921
+      ],
+      "indent": "      ",
+      "lines": [
+        "Ombra"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000008",
+      "bytes": [
+        2935,
+        3072
+      ],
+      "utf16": [
+        2935,
+        3072
+      ],
+      "indent": "    ",
+      "lines": [
+        "Cielo"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000009",
+      "bytes": [
+        3077,
+        3202
+      ],
+      "utf16": [
+        3077,
+        3202
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        3
+      ],
+      "bytes": [
+        3207,
+        3441
+      ],
+      "utf16": [
+        3207,
+        3441
+      ],
+      "elements": [
+        7,
+        10
+      ],
+      "indent": "    "
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Risorse",
+      "bytes": [
+        196,
+        218
+      ],
+      "utf16": [
+        196,
+        218
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Ombra",
+        "bytes": [
+          2798,
+          2921
+        ],
+        "utf16": [
+          2798,
+          2921
+        ]
+      },
+      {
+        "text": "Cielo",
+        "bytes": [
+          2935,
+          3072
+        ],
+        "utf16": [
+          2935,
+          3072
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": [
+      {
+        "path": "foto.png",
+        "bytes": [
+          2511,
+          2660
+        ],
+        "utf16": [
+          2511,
+          2660
+        ],
+        "href": {
+          "bytes": [
+            2607,
+            2615
+          ],
+          "utf16": [
+            2607,
+            2615
+          ]
+        }
+      }
+    ]
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "counts": {
+      "strokes": 0,
+      "shapes": 5,
+      "texts": 2,
+      "images": 1,
+      "links": 0,
+      "foreign": 2
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 40.0,
+      "y": 40.0,
+      "width": 620.0,
+      "height": 360.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1948,
+        2004
+      ],
+      "utf16": [
+        1948,
+        2004
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        3207,
+        3441
+      ],
+      "utf16": [
+        3207,
+        3441
+      ]
+    },
+    {
+      "code": "S014",
+      "severity": "warning",
+      "bytes": [
+        3363,
+        3441
+      ],
+      "utf16": [
+        3363,
+        3441
+      ],
+      "detail": "fill #r0000000z"
+    }
+  ]
+}

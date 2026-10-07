@@ -30,11 +30,11 @@
 import { formatNumber, formatShortest } from "../number";
 import { NON_RENDERING } from "../painter/paint";
 import { isContainer, type Role } from "../scene/analysis";
-import { classifyChild, firstTitle, svgAttribute, type Tag } from "../scene/classify";
+import { classifyChild, firstTitle, svgAttribute, type Place, type Tag } from "../scene/classify";
 import { reindent } from "../scene/engine";
 import type { Bounds } from "../scene/geometry";
 import { compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
-import { declarationsOf, elementChildren, indentOf, parseFragment, scopeOf, type ContainerNode, type DocumentModel } from "../scene/model";
+import { declarationsOf, elementChildren, indentOf, parseFragment, placeOf, scopeOf, type ContainerNode, type DocumentModel } from "../scene/model";
 import { MAX_OP_BYTES, type Op } from "../scene/ops";
 import { MAX_EDIT_BYTES } from "../scene/read";
 import {
@@ -307,12 +307,12 @@ function inheritedOf(element: ElementNode, found: readonly [Tag, Role] | null): 
   return SHAPES.has(element.local) ? inheritedBy(element.local, false) : INHERITED;
 }
 
-/// Il ruolo di `id` come figlio di un contenitore (sotto la radice se
-/// `underRoot`) a profondità `depth`, e gli elementi modificabili che hanno
+/// Il ruolo di `id` come figlio di un contenitore al posto `place`, a
+/// profondità `depth`, e gli elementi modificabili che hanno
 /// bisogno di un id: tutti tranne titoli e descrizioni, sotto di lui e, con
 /// `top`, lui stesso.
-function rolesUnder(doc: XmlDocument, id: NodeId, underRoot: boolean, depth: number, top: boolean, missing: NodeId[]): [Tag, Role] | null {
-  const found = classifyChild(doc, id, underRoot, depth);
+function rolesUnder(doc: XmlDocument, id: NodeId, place: Place, depth: number, top: boolean, missing: NodeId[]): [Tag, Role] | null {
+  const found = classifyChild(doc, id, place, depth);
   if (found === null) return null;
   if (top && found[0] !== "title" && found[0] !== "desc" && !hasId(doc.element(id)!)) missing.push(id);
   const stack: Array<readonly [NodeId, Role, number]> = [[id, found[1], depth]];
@@ -322,7 +322,7 @@ function rolesUnder(doc: XmlDocument, id: NodeId, underRoot: boolean, depth: num
     for (const child of doc.children(at)) {
       const element = doc.element(child);
       if (element === null) continue;
-      const inner = classifyChild(doc, child, false, level + 1);
+      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1);
       if (inner === null) continue;
       if (inner[0] !== "title" && inner[0] !== "desc" && !hasId(element)) missing.push(child);
       stack.push([child, inner[1], level + 1]);
@@ -333,8 +333,8 @@ function rolesUnder(doc: XmlDocument, id: NodeId, underRoot: boolean, depth: num
 
 /// Vero se dentro `id`, giudicato come in [`rolesUnder`], c'è un blocco
 /// estraneo, o lo è lui.
-function holdsForeign(doc: XmlDocument, id: NodeId, underRoot: boolean, depth: number): boolean {
-  const found = classifyChild(doc, id, underRoot, depth);
+function holdsForeign(doc: XmlDocument, id: NodeId, place: Place, depth: number): boolean {
+  const found = classifyChild(doc, id, place, depth);
   if (found === null) return true;
   const stack: Array<readonly [NodeId, Role, number]> = [[id, found[1], depth]];
   while (stack.length > 0) {
@@ -342,7 +342,7 @@ function holdsForeign(doc: XmlDocument, id: NodeId, underRoot: boolean, depth: n
     if (!isContainer(role)) continue;
     for (const child of doc.children(at)) {
       if (doc.element(child) === null) continue;
-      const inner = classifyChild(doc, child, false, level + 1);
+      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1);
       if (inner === null) return true;
       stack.push([child, inner[1], level + 1]);
     }
@@ -728,8 +728,9 @@ export function copySvg(input: CopyInput): string | null {
       const chain = ancestors(doc, id);
       let matrix = IDENTITY;
       for (let i = chain.length - 2; i >= 0; i--) matrix = compose(matrix, parseTransform(valueOf(chain[i]!, NS_NONE, "transform") ?? "") ?? IDENTITY);
-      const found = classifyChild(doc, id, element.parent === doc.root, chain.length);
-      foreign ||= holdsForeign(doc, id, element.parent === doc.root, chain.length);
+      const place = element.parent === doc.root ? "root" : "inside";
+      const found = classifyChild(doc, id, place, chain.length);
+      foreign ||= holdsForeign(doc, id, place, chain.length);
       const set = new Map<string, string | null>();
       let before: string | null = null;
       if (!isIdentity(matrix)) {
@@ -747,7 +748,7 @@ export function copySvg(input: CopyInput): string | null {
       const declarations = needed(scopeOfChain(chain), scope, rewriter.used, element);
       const indent = doc.source.indent(element.start);
       rewriter.head(id, { set, before, canonical: found !== null && set.size > 0, unlayer: false, declarations, id: null, child: null }, indent);
-      pieces.push(reindent(rewriter.slice(element.start, element.end), scope, true, 1, indent, "  "));
+      pieces.push(reindent(rewriter.slice(element.start, element.end), scope, "root", 1, indent, "  "));
     }
 
     const holders = holdersOf(doc, tops, foreign);
@@ -761,7 +762,7 @@ export function copySvg(input: CopyInput): string | null {
         const declarations = needed(scopeOfChain(ancestors(doc, id)), scope, rewriter.used, element);
         const indent = doc.source.indent(element.start);
         rewriter.head(id, { set: new Map(), before: null, canonical: false, unlayer: false, declarations, id: null, child: null }, indent);
-        defs += `\n    ${reindent(rewriter.slice(element.start, element.end), scope, false, 2, indent, "    ")}`;
+        defs += `\n    ${reindent(rewriter.slice(element.start, element.end), scope, "defs", 2, indent, "    ")}`;
       }
       pieces.unshift(`${defs}\n  </${prefix}defs>`);
     }
@@ -1037,7 +1038,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   const scope = scopeOf(container);
   const siblings = elementChildren(container);
   const indent = siblings.length > 0 ? indentOf(model, siblings[siblings.length - 1]!) : `${indentOf(model, container)}  `;
-  const underRoot = container === model.root;
+  const place = placeOf(container);
   const depth = container.depth + 1;
   // Gli attributi che il contenitore e i suoi antenati scrivono: chi entra e
   // prendeva un attributo ereditato dal suo valore di partenza lo scrive.
@@ -1083,7 +1084,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     for (const piece of source.pieces) {
       const element = doc.element(piece)!;
       const missing: NodeId[] = [];
-      const found = rolesUnder(doc, piece, false, depth, false, missing);
+      const found = rolesUnder(doc, piece, "inside", depth, false, missing);
       for (const at of missing) rewriter.fresh.set(at, ids.next("object"));
       const layer = found !== null && isSvg(element, "g") && valueOf(element, NS_FUB, "layer") !== undefined;
       const set = new Map<string, string | null>();
@@ -1115,7 +1116,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
       );
       const key = given ?? renamed.get(piece) ?? null;
       if (key !== null && renders(element)) keys.push(key);
-      emit(rewriter, adds, piece, target.to.parent, key, from, indent, scope, underRoot, depth);
+      emit(rewriter, adds, piece, target.to.parent, key, from, indent, scope, place, depth);
       const step = progress(element.end);
       if (step !== null) yield step;
     }
@@ -1149,7 +1150,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     }
     blank = -1;
     if (node.kind === "element") {
-      const found = inner.length === 0 ? rolesUnder(doc, child, false, depth + 1, true, missing) : null;
+      const found = inner.length === 0 ? rolesUnder(doc, child, "inside", depth + 1, true, missing) : null;
       for (const at of missing) rewriter.fresh.set(at, ids.next("object"));
       missing.length = 0;
       const layer = source.fubdraw && found !== null && isSvg(node, "g") && valueOf(node, NS_FUB, "layer") !== undefined;
@@ -1204,7 +1205,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   } else {
     whole += `${body}</${g}>`;
   }
-  const text = reindent(whole, scope, underRoot, depth, "", indent);
+  const text = reindent(whole, scope, place, depth, "", indent);
   const bytes = jsonBytes(text);
   if (bytes <= CHUNK_BYTES || inner.length > 0) {
     adds.push(target.to.parent, `\n${indent}`, text, bytes);
@@ -1219,7 +1220,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     for (const part of parts) {
       if (part.id === null) continue;
       const from = doc.source.indent(doc.nodes[part.id]!.start);
-      emit(rewriter, adds, part.id, group!, rewriter.idOf(part.id), from, childIndent, inside, false, depth + 1);
+      emit(rewriter, adds, part.id, group!, rewriter.idOf(part.id), from, childIndent, inside, "inside", depth + 1);
     }
   }
   adds.flush();
@@ -1267,14 +1268,14 @@ function emit(
   from: string,
   indent: string,
   scope: NamespaceScope,
-  underRoot: boolean,
+  place: Place,
   depth: number,
 ): void {
   const doc = rewriter.doc;
   const element = doc.element(id)!;
-  const text = reindent(rewriter.slice(element.start, element.end), scope, underRoot, depth, from, indent);
+  const text = reindent(rewriter.slice(element.start, element.end), scope, place, depth, from, indent);
   const bytes = jsonBytes(text);
-  const found = bytes > CHUNK_BYTES ? classifyChild(doc, id, underRoot, depth) : null;
+  const found = bytes > CHUNK_BYTES ? classifyChild(doc, id, place, depth) : null;
   if (key === null || found === null || !isContainer(found[1]) || element.closeStart === null) {
     adds.push(parent, `\n${indent}`, text, bytes);
     return;
@@ -1292,7 +1293,7 @@ function emit(
   for (const child of element.children) {
     const node = doc.element(child);
     if (node === null) continue;
-    emit(rewriter, adds, child, key, rewriter.idOf(child), doc.source.indent(node.start), childIndent, inside, false, depth + 1);
+    emit(rewriter, adds, child, key, rewriter.idOf(child), doc.source.indent(node.start), childIndent, inside, "inside", depth + 1);
   }
   if (locked) adds.then({ op: "set", id: key, attrs: { "fub:locked": "true" } });
 }

@@ -187,7 +187,64 @@ export function escapeText(value: string): string {
 // ---------------------------------------------------------------------------
 
 const FUB_ORDER = ["layer", "role", "tool", "shape", "geom", "locked", "at", "brush"];
-const GEOMETRY_ORDER = ["x", "y", "dy", "cx", "cy", "r", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d"];
+const GEOMETRY_ORDER = [
+  "x",
+  "y",
+  "dx",
+  "dy",
+  "cx",
+  "cy",
+  "r",
+  "fx",
+  "fy",
+  "width",
+  "height",
+  "rx",
+  "ry",
+  "x1",
+  "y1",
+  "x2",
+  "y2",
+  "points",
+  "d",
+  // La geometria delle risorse.
+  "offset",
+  "refX",
+  "refY",
+  "markerWidth",
+  "markerHeight",
+  "orient",
+  "viewBox",
+];
+/// Le unità e le trasformazioni delle risorse, poi gli attributi delle
+/// primitive dei filtri.
+const RESOURCE_ORDER = [
+  "gradientUnits",
+  "gradientTransform",
+  "spreadMethod",
+  "patternUnits",
+  "patternContentUnits",
+  "patternTransform",
+  "markerUnits",
+  "clipPathUnits",
+  "maskUnits",
+  "maskContentUnits",
+  "filterUnits",
+  "primitiveUnits",
+  "in",
+  "in2",
+  "result",
+  "type",
+  "values",
+  "operator",
+  "k1",
+  "k2",
+  "k3",
+  "k4",
+  "mode",
+  "stdDeviation",
+  "radius",
+];
 const PRESENTATION_ORDER = [
   "fill",
   "fill-opacity",
@@ -197,8 +254,20 @@ const PRESENTATION_ORDER = [
   "stroke-linecap",
   "stroke-linejoin",
   "stroke-dasharray",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+  "clip-path",
+  "clip-rule",
+  "mask",
+  "filter",
   "opacity",
   "display",
+  "stop-color",
+  "stop-opacity",
+  "flood-color",
+  "flood-opacity",
+  "color-interpolation-filters",
   "font-family",
   "font-size",
   "font-weight",
@@ -227,27 +296,30 @@ function rank(attr: OutAttr): [group: number, slot: number] | null {
     if (attr.local === "id") return [0, 0];
     const geometry = GEOMETRY_ORDER.indexOf(attr.local);
     if (geometry >= 0) return [2, geometry];
+    const resource = RESOURCE_ORDER.indexOf(attr.local);
+    if (resource >= 0) return [3, resource];
     const presentation = PRESENTATION_ORDER.indexOf(attr.local);
-    if (presentation >= 0) return [3, presentation];
-    if (attr.local === "transform") return [4, 0];
-    if (attr.local === "href") return [4, 1];
+    if (presentation >= 0) return [4, presentation];
+    if (attr.local === "transform") return [5, 0];
+    if (attr.local === "href") return [5, 1];
     return null;
   }
   if (attr.uri === FUB_NS) {
-    if (attr.local === "ink") return [6, 0];
+    if (attr.local === "ink") return [7, 0];
     const fub = FUB_ORDER.indexOf(attr.local);
     return fub >= 0 ? [1, fub] : null;
   }
-  if (attr.uri === XLINK_NS && attr.local === "href") return [4, 2];
+  if (attr.uri === XLINK_NS && attr.local === "href") return [5, 2];
   return null;
 }
 
 /// Gli attributi nell'ordine canonico: `id`; gli attributi `fub:` noti; la
-/// geometria; la presentazione; `transform` e `href`; gli sconosciuti e
-/// quelli di altri namespace nell'ordine in cui arrivano; `fub:ink`.
+/// geometria; le unità delle risorse e gli attributi delle primitive; la
+/// presentazione; `transform` e `href`; gli sconosciuti e quelli di altri
+/// namespace nell'ordine in cui arrivano; `fub:ink`.
 export function canonicalOrder(attrs: readonly OutAttr[]): OutAttr[] {
   const keyed = attrs.map((attr, index) => {
-    const [group, slot] = rank(attr) ?? [5, index];
+    const [group, slot] = rank(attr) ?? [6, index];
     return { attr, group, slot };
   });
   keyed.sort((a, b) => a.group - b.group || a.slot - b.slot);
