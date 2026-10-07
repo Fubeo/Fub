@@ -84,6 +84,8 @@ Lo Standard aggiunge:
 
 - il **Lazo** (`Q`), dopo la Selezione, e la **«Selezione avanzata»**: i
   simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
+- la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del
+  disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
@@ -113,8 +115,8 @@ Lo Standard aggiunge:
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
-il Lazo la Selezione, un colore a piacere torna al colore di partenza e la
-vista girata si raddrizza.
+il Lazo o la Tavola la Selezione, un colore a piacere torna al colore di
+partenza e la vista girata si raddrizza.
 
 ## Disporre
 
@@ -220,13 +222,11 @@ Con l'aggancio:
   dalla griglia anche in una forma disegnata agganciata;
 - tenendo premuto `Ctrl` o `⌘` mentre si trascina, si posa libero;
 - con una selezione, le frecce portano l'angolo in alto a sinistra della
-  geometria alla riga seguente, cinque righe più in là con `Maiusc`; con
-  `Ctrl` o `⌘` portano il lato destro o quello in basso alla riga seguente,
-  ferma l'angolo in alto a sinistra, ma non oltre la prima riga dopo il lato
-  opposto;
+  geometria alla riga seguente, cinque righe più in là con `Maiusc`; con `Ctrl`
+  o `⌘` portano il lato destro o quello in basso alla riga seguente, ferma
+  l'angolo in alto a sinistra, ma non oltre la prima riga dopo il lato opposto;
 - senza selezione le frecce portano il cursore all'incrocio seguente, cinque
-  righe più in là con `Maiusc`; con `Ctrl` o `⌘` lo muovono libero di un
-  pixel;
+  righe più in là con `Maiusc`; con `Ctrl` o `⌘` lo muovono libero di un pixel;
 - **Duplica** scosta le copie di un numero intero di passi, e un'immagine
   incollata ha l'angolo in alto a sinistra sull'incrocio più vicino;
 - la prima linea di base di un testo nuovo comincia sull'incrocio più vicino.
