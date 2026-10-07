@@ -200,6 +200,28 @@ export function preserveAspectRatio(value: string): boolean {
   return align && meet && parts.length <= 2;
 }
 
+/// La matrice che porta il rettangolo `box` (x, y, larghezza, altezza) nel
+/// riquadro `w` × `h` dall'origine, come la decide `preserveAspectRatio`
+/// `aspect`, per un `viewBox` o per i pixel di un'immagine. Un allineamento
+/// che non si legge vale `xMidYMid`.
+export function viewBoxMatrix(box: readonly number[], w: number, h: number, aspect: string): Matrix {
+  const words = trim(aspect).split(/\s+/).filter((word) => word !== "" && word !== "defer");
+  const align = /^(?:none|x(?:Min|Mid|Max)Y(?:Min|Mid|Max))$/.test(words[0] ?? "") ? words[0]! : "xMidYMid";
+  const [x, y, bw, bh] = box as [number, number, number, number];
+  let sx = w / bw;
+  let sy = h / bh;
+  if (align !== "none") sx = sy = words[1] === "slice" ? Math.max(sx, sy) : Math.min(sx, sy);
+  let tx = -x * sx;
+  let ty = -y * sy;
+  if (align !== "none") {
+    const fx = align.includes("xMid") ? 0.5 : align.includes("xMax") ? 1 : 0;
+    const fy = align.includes("YMid") ? 0.5 : align.includes("YMax") ? 1 : 0;
+    tx += (w - bw * sx) * fx;
+    ty += (h - bh * sy) * fy;
+  }
+  return [sx, 0, 0, sy, tx, ty];
+}
+
 /// Salta un separatore `comma-wsp` facoltativo a partire da `i`: restituisce
 /// il nuovo indice e se ha trovato una virgola.
 function skipSeparator(text: string, i: number): [number, boolean] {

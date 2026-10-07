@@ -105,10 +105,10 @@ export default defineConfig({
           // I comandi dei disegni senza DOM: l'indice degli oggetti che gli
           // strumenti toccano, e ciò che fa di una scelta dei passi sul
           // documento: disporre, il contorno, l'aspetto, i tracciati, le
-          // trasformazioni, le booleane, i tagli, lo spessore variabile e i
-          // livelli. Dipendono dal formato e dalla geometria, e l'editor li
-          // chiama.
-          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming)\.ts$/.test(id)) {
+          // trasformazioni, le booleane, i tagli, lo spessore variabile, i
+          // livelli e il gruppo di un ricalco. Dipendono dal formato e dalla
+          // geometria, e l'editor li chiama.
+          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {

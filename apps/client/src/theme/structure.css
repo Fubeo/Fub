@@ -1731,8 +1731,8 @@ html, body, #app {
   flex: none;
   min-height: 44px;
 }
-/* Lo scostamento e la semplificazione: in fondo al foglio come la
-   descrizione delle immagini. Il titolo sopra, i campi in fila coi
+/* Lo scostamento, la semplificazione e il ricalco: in fondo al foglio come
+   la descrizione delle immagini. Il titolo sopra, i campi in fila coi
    pulsanti a destra, e sotto ciò che succederà. */
 .draw-paths {
   position: absolute;
@@ -1770,6 +1770,15 @@ html, body, #app {
 }
 .draw-paths-field input[type="range"] {
   width: min(14rem, 50vw);
+  min-height: 44px;
+}
+/* Il valore di un cursore del ricalco, accanto: le cifre non ballano. */
+.draw-paths-value {
+  min-width: 3ch;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.draw-paths-check {
   min-height: 44px;
 }
 .draw-paths-action {

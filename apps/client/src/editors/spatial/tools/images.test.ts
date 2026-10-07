@@ -8,6 +8,7 @@ import { MAX_EDIT_BYTES } from "../scene/read";
 import {
   budgetFor,
   carriesFiles,
+  dataBlob,
   dataUri,
   imageElem,
   imageFiles,
@@ -107,6 +108,16 @@ describe("il tipo e i file", () => {
     // Oltre il pezzo con cui si converte, il testo resta uno.
     const long = new Uint8Array(0x8000 * 2 + 3).fill(65);
     expect(atob(dataUri("image/gif", long).slice("data:image/gif;base64,".length))).toBe("A".repeat(long.length));
+  });
+
+  it("rilegge i byte di un data URI in base64, anche a capo, e nient'altro", async () => {
+    const blob = dataBlob(" data:Image/PNG;name=a.png;base64,TW\nFu ")!;
+    expect(blob.type).toBe("image/png");
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes("Man"));
+    expect(dataBlob("data:image/svg+xml,%3Csvg%2F%3E")).toBeNull();
+    expect(dataBlob("data:text/plain;base64,TWFu")).toBeNull();
+    expect(dataBlob("data:image/png;base64,***")).toBeNull();
+    expect(dataBlob("immagini/a.png")).toBeNull();
   });
 });
 

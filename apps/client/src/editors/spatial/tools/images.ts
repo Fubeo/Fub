@@ -24,6 +24,8 @@
 //
 // La lettura e la scrittura dei pixel passano da un [`ImageCodec`]: nel
 // browser è quello di `createImageBitmap` e del canvas, nei test uno finto.
+// Lo stesso codec dà a «Ricalca immagine» i pixel di un'immagine del
+// disegno, rimpiccioliti a metà per volta se sono troppi.
 
 import { formatNumber } from "../number";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
@@ -65,6 +67,10 @@ export interface Decoded {
   /// I byte dell'immagine portata a `scale` delle sue misure, nel tipo
   /// chiesto; `null` se il browser non ci riesce o dà un altro tipo.
   encode(type: EncodeType, scale: number): Promise<Uint8Array | null>;
+  /// I pixel del rettangolo `rect`, in RGBA, rimpiccioliti a metà per
+  /// volta finché non sono più di `most`; `null` se il browser non ci
+  /// riesce. Senza, l'immagine non si ricalca.
+  pixels?(rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }, most: number): ImageData | null;
   close(): void;
 }
 
@@ -167,6 +173,21 @@ export function dataUri(type: RasterType, bytes: Uint8Array): string {
     parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
   }
   return `data:${type};base64,${btoa(parts.join(""))}`;
+}
+
+/// I byte del data URI `href` in base64 di un'immagine, col suo tipo;
+/// `null` se non lo è, o non si legge.
+export function dataBlob(href: string): Blob | null {
+  const match = /^data:(image\/[a-z0-9.+-]+)(?:;[^,;]*)*;base64,/i.exec(href.trim());
+  if (match === null) return null;
+  try {
+    const text = atob(href.trim().slice(match[0].length).replace(/[\t\n\f\r ]+/g, ""));
+    const bytes = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+    return new Blob([bytes], { type: match[1]!.toLowerCase() });
+  } catch {
+    return null;
+  }
 }
 
 /// Quanti byte di immagini entrano ancora in un disegno di `docBytes` byte,
@@ -328,6 +349,29 @@ export function browserCodec(): ImageCodec | null {
             }
           }
           return opaque;
+        },
+        pixels(rect, most) {
+          let source: CanvasImageSource = bitmap;
+          let from = { ...rect };
+          let [width, height] = [rect.width, rect.height];
+          for (;;) {
+            const step = width * height > most && (width > 1 || height > 1);
+            if (step) [width, height] = [Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2))];
+            else if (source !== bitmap) break;
+            const canvas = canvasOf(width, height);
+            const context = canvas.getContext("2d");
+            if (context === null) return null;
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = "high";
+            context.drawImage(source, from.x, from.y, from.width, from.height, 0, 0, width, height);
+            source = canvas;
+            from = { x: 0, y: 0, width, height };
+          }
+          try {
+            return (source as HTMLCanvasElement).getContext("2d")?.getImageData(0, 0, width, height) ?? null;
+          } catch {
+            return null;
+          }
         },
         async encode(type, scale) {
           const width = Math.max(1, Math.round(bitmap.width * scale));

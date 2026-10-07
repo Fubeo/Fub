@@ -124,16 +124,17 @@ import { pointAt } from "../scene/curves";
 import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
 import { widthsAt, type WidthPoint } from "../scene/varwidth";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { elementChildren, elementsIn, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
-import { auditScene, MAX_EDIT_BYTES, SVG_NS } from "../scene/read";
+import { auditScene, MAX_EDIT_BYTES, MAX_ELEMENTS, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
 import type { Role, Tool } from "../scene/analysis";
 import type { ElementItem, Item } from "../scene/classify";
-import { ROOT, type Op, type Reason } from "../scene/ops";
+import { MAX_VALUE_BYTES, ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
+import { href as parseHref } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
 import { PaintBuilder, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
@@ -348,6 +349,7 @@ import {
   browserCodec,
   budgetFor,
   carriesFiles,
+  dataBlob,
   dataUri,
   imageElem,
   imageFiles,
@@ -416,6 +418,10 @@ import { constrainEnd, polygonCount, POLYGON_TOOL, shapeElem, stepRatio, withCou
 import { centerOf, heldShape, mapped, regular, shapeOfRecognized, similar, starOf, type Recognized } from "./recognize";
 import { heldShapeOps, inkShapeOps, isPenStroke } from "./inkshape";
 import { keepLook, refused, type Refusal as Unkept } from "./styled";
+import type { Traced } from "./trace";
+import { imageWindow, traceOps, tracedGroup, traceSource, weightOf, type TraceSource } from "./trace-ops";
+import { inlineTracer, workerTracer, type Tracer, type TracerFactory } from "./trace-runner";
+import { MAX_COLORS, MAX_SHAPES, MIN_COLORS, TRACE_PRESETS, type TracePreset, type TraceSettings } from "./trace-settings";
 import { editableText, ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -489,6 +495,9 @@ export interface DrawEditorOptions {
   readonly onChange?: (change: DrawChange) => void;
   /// La selezione è cambiata: altri oggetti, o gli stessi con chiavi nuove.
   readonly onSelectionChange?: () => void;
+  /// Chi ricalca i pixel di un'immagine per «Ricalca immagine»: se non è
+  /// dato, un worker, o la pagina dove i worker non ci sono.
+  readonly tracer?: TracerFactory;
 }
 
 export interface DrawEditor {
@@ -676,8 +685,43 @@ const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
   custom: "draw.level.custom",
 };
 
+/// I pixel di un'immagine che «Ricalca immagine» legge, al più: quattro
+/// volte quelli su cui lavora il ricalco, che li rimpicciolisce con la
+/// media dei pixel, meglio del browser.
+const TRACE_PIXELS = 8_000_000;
+
+/// Chi ricalca se chi monta l'editor non lo dice: un worker e, dove non
+/// ce ne sono, la pagina, col ricalco caricato quando serve.
+const defaultTracer: TracerFactory = (raster) =>
+  typeof Worker === "function"
+    ? workerTracer(raster, () => new Worker(new URL("./trace-worker.ts", import.meta.url), { type: "module" }))
+    : inlineTracer(raster, () => import("./trace"));
+
+/// Un ricalco aperto nella barra di «Ricalca immagine».
+interface Tracing {
+  /// L'immagine, ciò che se ne legge, e il documento in cui la si legge: se
+  /// cambiano, la barra si chiude.
+  readonly key: string;
+  readonly source: TraceSource;
+  readonly loaded: number;
+  /// Chi ricalca, e il rettangolo dove vanno i pixel; `null` finché
+  /// l'immagine si legge.
+  ready: { readonly tracer: Tracer; readonly target: Bounds } | null;
+  /// Il numero dell'ultimo tipo scelto e di quello di cui sono arrivate
+  /// le impostazioni, dell'ultimo ricalco chiesto e di quello arrivato.
+  presets: number;
+  settled: number;
+  asked: number;
+  answered: number;
+  /// L'ultimo ricalco arrivato, col gruppo dell'anteprima.
+  shown: { readonly traced: Traced; readonly group: Elem } | null;
+  /// «Applica» aspetta l'ultimo ricalco.
+  applying: boolean;
+  failed: boolean;
+}
+
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "trace"];
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -886,6 +930,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-to-path": ["M5 19C5 11 11 5 19 5", "M3 17h4v4H3z", "M17 3h4v4h-4z"],
   "draw-to-shape": ["M3 19c2-3 3.5 0 5.5-2.5S12 16 14 13", "M13 3h8v8h-8z"],
   "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
+  // Un'immagine coi suoi monti, e sotto il tracciato che se ne ricava.
+  "draw-trace-image": ["M3 3h11v9H3z", "M3 10l3-3 3 3 2-2 3 3", "M6 21c3 0 4-5 7.5-5s4 3 6.5 3", "M19.5 17.5h3v3h-3z"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
   "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
   // Due anelli in basso, e le lame che si incrociano verso l'alto.
@@ -2322,6 +2368,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const booleanButton = arrangeButton("draw.boolean", "draw-boolean", null, () => openMenu(booleanButton, booleanItems()));
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
+  // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
+  // pieni, regolati in una barra con l'anteprima.
+  const traceButton = arrangeButton("draw.trace_image", "draw-trace-image", null, () => void openTracing());
   for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, outlineButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
@@ -2574,12 +2623,99 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showPaths();
   });
 
+  // «Ricalca immagine», dal livello Esperto: come lo scostamento, in fondo
+  // al foglio. Il tipo, i suoi cursori, ciò che il ricalco trova; al posto
+  // dell'immagine, mentre si regola, il gruppo che si scriverà.
+  const traceBar = document.createElement("div");
+  traceBar.className = "draw-paths";
+  traceBar.setAttribute("role", "group");
+  traceBar.hidden = true;
+  const traceTitle = document.createElement("span");
+  traceTitle.className = "draw-paths-title";
+  traceTitle.id = identifier("draw-trace");
+  traceBar.setAttribute("aria-labelledby", traceTitle.id);
+  const presetSelect = document.createElement("select");
+  const presetOptions = new Map<TracePreset, HTMLOptionElement>();
+  for (const preset of TRACE_PRESETS) {
+    const option = document.createElement("option");
+    option.value = preset;
+    presetOptions.set(preset, option);
+    presetSelect.append(option);
+  }
+  const presetField = pathsField(presetSelect);
+  /// Un cursore da `min` a `max`, col suo valore scritto accanto: `show`
+  /// lo riscrive dopo averlo cambiato da qui.
+  const traceRange = (min: number, max: number): { readonly input: HTMLInputElement; readonly field: HTMLLabelElement; readonly name: HTMLSpanElement; readonly show: () => void } => {
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = String(min);
+    input.max = String(max);
+    input.step = "1";
+    const { field, name } = pathsField(input);
+    const value = document.createElement("span");
+    value.className = "draw-paths-value";
+    value.setAttribute("aria-hidden", "true");
+    field.append(value);
+    const show = (): void => {
+      value.textContent = input.value;
+    };
+    life.listen(input, "input", show);
+    return { input, field, name, show };
+  };
+  const thresholdRange = traceRange(0, 255);
+  const colorsRange = traceRange(MIN_COLORS, MAX_COLORS);
+  const detailRange = traceRange(0, 100);
+  const whiteInput = document.createElement("input");
+  whiteInput.type = "checkbox";
+  const whiteField = document.createElement("label");
+  whiteField.className = "draw-paths-field draw-paths-check";
+  const whiteName = document.createElement("span");
+  whiteField.append(whiteInput, whiteName);
+  const traceStatus = document.createElement("output");
+  traceStatus.className = "draw-paths-status";
+  traceStatus.setAttribute("aria-live", "polite");
+  const traceApply = pathsAction();
+  const traceCancel = pathsAction();
+  traceBar.append(
+    traceTitle,
+    presetField.field,
+    thresholdRange.field,
+    colorsRange.field,
+    detailRange.field,
+    whiteField,
+    traceApply,
+    traceCancel,
+    traceStatus,
+  );
+  /// Il ricalco aperto; `null` se la barra è chiusa.
+  let tracing: Tracing | null = null;
+  /// Le parti dell'immagine che il painter mostra coperte, e da quale
+  /// gruppo.
+  let covered: { readonly paints: readonly PaintNode[]; readonly group: Elem } | null = null;
+  /// Il tipo dell'ultimo ricalco, e le ultime impostazioni di ogni tipo: la
+  /// barra riapre con quelle. La soglia del bianco e nero no: è quella che
+  /// divide meglio i chiari dagli scuri di ogni immagine.
+  let presetLast: TracePreset = "colors";
+  const settingsLast = new Map<TracePreset, TraceSettings>();
+  relabels.push(() => {
+    traceTitle.textContent = t("draw.trace_image.title");
+    presetField.name.textContent = t("draw.trace_image.preset");
+    for (const [preset, option] of presetOptions) option.textContent = t(`draw.trace_image.preset.${preset}`);
+    thresholdRange.name.textContent = t("draw.trace_image.threshold");
+    colorsRange.name.textContent = t("draw.trace_image.colors");
+    detailRange.name.textContent = t("draw.trace_image.detail");
+    whiteName.textContent = t("draw.trace_image.white");
+    traceApply.textContent = t("draw.paths.apply");
+    traceCancel.textContent = t("draw.paths.cancel");
+    showTracing();
+  });
+
   // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
   // oggetti, le proprietà, gli attributi e, in fondo, la cronologia e
   // l'accessibilità.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar, pathsBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar, pathsBar, traceBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
@@ -5033,6 +5169,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     pathButton.hidden = !has("path");
     booleanButton.hidden = !has("boolean");
     outlineButton.hidden = !has("outline");
+    traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
     arrangeBar.hidden = units.length === 0 || arrangeButtons.every((control) => control.hidden);
     arrangeFocus.sync(null);
     syncNodesBar();
@@ -5119,6 +5256,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncAccess();
     syncDescriptions();
     syncPaths();
+    syncTracing();
     syncInspector();
     syncProperties();
     titleInput.disabled = !canEdit;
@@ -11001,6 +11139,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function openPaths(mode: "offset" | "simplify"): void {
     if (arranging("path") === null) return;
     closeDescriptions();
+    closeTracing();
     pathsMode = mode;
     pathsShown = null;
     const unit = docUnit();
@@ -11238,6 +11377,301 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (event.key !== "Enter" || event.isComposing || !(event.target instanceof HTMLInputElement)) return;
     event.preventDefault();
     applyPaths();
+  });
+
+  // --- Ricalca immagine ----------------------------------------------------------
+
+  /// «Ricalca immagine…»: la barra si apre sull'immagine scelta da sola, ne
+  /// legge i pixel che si vedono e la ricalca, col tipo e i valori
+  /// dell'ultima volta.
+  async function openTracing(): Promise<void> {
+    const units = arranging("trace");
+    if (units === null) return;
+    const unit = units.length === 1 && units[0]!.role === "image" ? units[0]! : null;
+    const source = unit === null ? null : traceSource(unit.node);
+    if (unit === null || source === null) {
+      announce(t("draw.trace_image.none"));
+      return;
+    }
+    const kind = parseHref(source.href).kind;
+    if (kind === "remote") {
+      announce(t("draw.trace_image.remote"));
+      return;
+    }
+    if (codec === null || (kind !== "vault" && kind !== "data")) {
+      announce(t("draw.image.unreadable"));
+      return;
+    }
+    closePaths();
+    closeDescriptions();
+    closeTracing();
+    const now: Tracing = { key: unit.key, source, loaded: loads, ready: null, presets: 0, settled: 0, asked: 0, answered: 0, shown: null, applying: false, failed: false };
+    tracing = now;
+    presetSelect.value = presetLast;
+    showTracing();
+    presetSelect.focus({ preventScroll: true });
+    const gone = (): boolean => tracing !== now;
+    const port = options.images;
+    const blob = kind === "data" ? dataBlob(source.href) : port === undefined ? null : await port.read(source.href).catch(() => null);
+    if (gone()) return;
+    const decoded = blob === null ? null : await codec.decode(blob).catch(() => null);
+    if (gone()) {
+      decoded?.close();
+      return;
+    }
+    let seen: ReturnType<typeof imageWindow> = null;
+    let pixels: ImageData | null = null;
+    if (decoded !== null) {
+      try {
+        seen = imageWindow(source.box, source.aspect, [decoded.width, decoded.height]);
+        pixels = seen === null ? null : decoded.pixels?.(seen.pixels, TRACE_PIXELS) ?? null;
+      } finally {
+        decoded.close();
+      }
+    }
+    if (seen === null || pixels === null) {
+      closeTracing();
+      announce(t(blob === null ? "draw.image.gone" : "draw.image.unreadable"));
+      return;
+    }
+    now.ready = { tracer: (options.tracer ?? defaultTracer)({ width: pixels.width, height: pixels.height, data: pixels.data }), target: seen.target };
+    showTracing();
+    await loadPreset(now);
+  }
+
+  /// Le impostazioni del tipo scelto, quelle pronte per l'immagine coi
+  /// valori dell'ultima volta; poi il ricalco. Un tipo scelto nel frattempo
+  /// vince.
+  async function loadPreset(now: Tracing): Promise<void> {
+    const ready = now.ready;
+    if (ready === null) return;
+    const preset = presetNow();
+    const asked = ++now.presets;
+    showTracing();
+    let settings: TraceSettings;
+    try {
+      settings = await ready.tracer.settings(preset);
+    } catch {
+      if (tracing !== now) return;
+      closeTracing();
+      announce(t("draw.trace_image.failed"));
+      return;
+    }
+    if (tracing !== now || asked !== now.presets) return;
+    now.settled = asked;
+    const last = settingsLast.get(preset);
+    showSettings(last === undefined ? settings : { ...last, threshold: preset === "bw" ? settings.threshold : last.threshold });
+    traceNow();
+  }
+
+  /// Il tipo scelto nella barra.
+  function presetNow(): TracePreset {
+    return TRACE_PRESETS.find((preset) => preset === presetSelect.value) ?? "colors";
+  }
+
+  /// Le impostazioni scritte nella barra.
+  function settingsNow(): TraceSettings {
+    return {
+      preset: presetNow(),
+      threshold: Number(thresholdRange.input.value),
+      colors: Number(colorsRange.input.value),
+      detail: Number(detailRange.input.value),
+      ignoreWhite: whiteInput.checked,
+    };
+  }
+
+  /// Scrive `settings` nella barra.
+  function showSettings(settings: TraceSettings): void {
+    presetSelect.value = settings.preset;
+    thresholdRange.input.value = String(Math.round(settings.threshold));
+    colorsRange.input.value = String(settings.colors);
+    detailRange.input.value = String(settings.detail);
+    whiteInput.checked = settings.ignoreWhite;
+    for (const range of [thresholdRange, colorsRange, detailRange]) range.show();
+    showTracing();
+  }
+
+  /// Chiede il ricalco coi valori della barra: quando arriva, lo mostrano
+  /// l'anteprima e la barra. Uno superato da un altro già arrivato non
+  /// conta.
+  function traceNow(): void {
+    const now = tracing;
+    const ready = now?.ready ?? null;
+    // Le impostazioni di un tipo appena scelto ricalcano quando arrivano.
+    if (now === null || ready === null || now.settled < now.presets) return;
+    const asked = ++now.asked;
+    now.failed = false;
+    showTracing();
+    ready.tracer.trace(settingsNow()).then(
+      (traced) => {
+        if (tracing !== now || traced === null || asked <= now.answered) return;
+        const unit = currentIndex().get(now.key);
+        if (unit === null) return;
+        now.answered = asked;
+        now.shown = { traced, group: tracedGroup(unit.node, traced, ready.target, null) };
+        coverTracing();
+        showTracing();
+        if (now.applying && asked === now.asked) applyTracing();
+      },
+      () => {
+        if (tracing !== now || asked !== now.asked) return;
+        now.answered = asked;
+        now.failed = true;
+        now.applying = false;
+        showTracing();
+      },
+    );
+  }
+
+  /// La barra com'è adesso: i campi del tipo scelto, spenti finché
+  /// l'immagine si legge o finché arrivano le impostazioni del tipo, che li
+  /// riscrivono; e ciò che il ricalco ha trovato.
+  function showTracing(): void {
+    const now = tracing;
+    traceBar.hidden = now === null;
+    if (now === null) return;
+    const preset = presetNow();
+    const ink = preset === "bw" || preset === "sketch";
+    thresholdRange.field.hidden = !ink;
+    colorsRange.field.hidden = ink;
+    whiteField.hidden = ink;
+    for (const control of [thresholdRange.input, colorsRange.input, detailRange.input, whiteInput]) control.disabled = now.ready === null || now.settled < now.presets;
+    traceStatus.textContent = tracingStatus(now);
+  }
+
+  /// Ciò che dice la barra: che si legge o si ricalca, o che cosa ha
+  /// trovato il ricalco, e se il disegno non lo regge.
+  function tracingStatus(now: Tracing): string {
+    if (now.ready === null) return t("draw.trace_image.reading");
+    if (now.failed) return t("draw.trace_image.failed");
+    if (now.shown === null || now.settled < now.presets || now.answered < now.asked) return t("draw.trace_image.working");
+    const { traced, group } = now.shown;
+    if (traced.shapes.length === 0) return t("draw.trace_image.empty");
+    const found = t("draw.trace_image.result", {
+      shapes: plural(traced.shapes.length, "draw.trace_image.shapes.one", "draw.trace_image.shapes.other"),
+      nodes: plural(traced.nodes, "draw.trace_image.nodes.one", "draw.trace_image.nodes.other"),
+      tints: plural(traced.colors, "draw.trace_image.tints.one", "draw.trace_image.tints.other"),
+    });
+    const capped = traced.shapes.length >= MAX_SHAPES ? [t("draw.trace_image.capped", { count: MAX_SHAPES })] : [];
+    const problem = traceProblem(group);
+    return [found, ...capped, ...(problem === null ? [] : [problem])].join(" ");
+  }
+
+  /// Perché il gruppo `group` non entra nel disegno; `null` se entra.
+  function traceProblem(group: Elem): string | null {
+    const model = engine.model;
+    const weight = weightOf(group);
+    if (weight.longest > MAX_VALUE_BYTES) return t("draw.trace_image.intricate");
+    if (utf8Length(engine.text) + weight.bytes > MAX_EDIT_BYTES) return t("draw.trace_image.heavy", { limit: sizeText(MAX_EDIT_BYTES) });
+    if (model !== null && elementsIn(model.root) + weight.elements > MAX_ELEMENTS) return t("draw.trace_image.crowded", { count: MAX_ELEMENTS });
+    return null;
+  }
+
+  /// Al posto dell'immagine il gruppo dell'ultimo ricalco, o l'immagine se
+  /// non ce n'è; il painter cambia solo se è cambiato.
+  function coverTracing(): void {
+    const now = tracing;
+    const unit = now === null ? null : currentIndex().get(now.key);
+    const group = now?.shown?.group ?? null;
+    const next = unit === null || group === null ? null : { paints: unit.paints, group };
+    if (next?.paints === covered?.paints && next?.group === covered?.group) return;
+    covered = next;
+    painter.setCovers(next === null ? null : new Map(next.paints.map((paint) => [paint, next.group])));
+  }
+
+  /// Dopo ogni cambio: la barra si chiude se il livello o il documento non
+  /// la vogliono più, se l'immagine non è più scelta da sola, o se cambia
+  /// che cosa se ne vede. Una trasformazione no: l'anteprima la segue.
+  function syncTracing(): void {
+    const now = tracing;
+    if (now === null) return;
+    const unit = currentIndex().get(now.key);
+    const source = unit === null ? null : traceSource(unit.node);
+    const same = source !== null
+      && source.href === now.source.href
+      && source.aspect === now.source.aspect
+      && [0, 1].every((axis) => source.box.min[axis] === now.source.box.min[axis] && source.box.max[axis] === now.source.box.max[axis]);
+    if (!has("trace") || !editable() || loads !== now.loaded || selection.length !== 1 || selection[0] !== now.key || !same) {
+      closeTracing();
+      return;
+    }
+    coverTracing();
+    showTracing();
+  }
+
+  /// Chiude la barra e toglie l'anteprima; il ricalco in corso si ferma, e
+  /// il fuoco, se era nella barra, torna al foglio.
+  function closeTracing(): void {
+    const now = tracing;
+    if (now === null) return;
+    const focused = traceBar.contains(document.activeElement);
+    tracing = null;
+    now.ready?.tracer.dispose();
+    traceBar.hidden = true;
+    coverTracing();
+    if (focused) surface.focus({ preventScroll: true });
+  }
+
+  /// «Applica» e Invio: il ricalco si scrive, in un passo di annulla, e la
+  /// barra si chiude. Se l'ultimo ricalco non è ancora arrivato, lo
+  /// aspetta; se non c'è niente da scrivere, la barra resta e dice perché.
+  function applyTracing(): void {
+    const now = tracing;
+    if (now === null) return;
+    const ready = now.ready;
+    if (ready === null || now.settled < now.presets || now.answered < now.asked) {
+      now.applying = true;
+      return;
+    }
+    now.applying = false;
+    const shown = now.shown;
+    const model = engine.model;
+    const unit = currentIndex().get(now.key);
+    if (model === null || unit === null) return;
+    if (now.failed || shown === null || shown.traced.shapes.length === 0) {
+      announce(tracingStatus(now));
+      return;
+    }
+    const problem = traceProblem(shown.group);
+    if (problem !== null) {
+      announce(problem);
+      return;
+    }
+    const settings = settingsNow();
+    presetLast = settings.preset;
+    settingsLast.set(settings.preset, settings);
+    const arranged = traceOps(model, unit.node, shown.traced, ready.target, newIds());
+    closeTracing();
+    surface.focus({ preventScroll: true });
+    if (arrange("draw.action.trace_image", arranged) !== null) {
+      announce(plural(shown.traced.shapes.length, "draw.trace_image.done.one", "draw.trace_image.done.other"));
+    }
+  }
+
+  life.listen(presetSelect, "change", () => {
+    const now = tracing;
+    if (now !== null) void loadPreset(now);
+  });
+  for (const range of [thresholdRange, colorsRange, detailRange]) life.listen(range.input, "input", () => traceNow());
+  life.listen(whiteInput, "change", () => traceNow());
+  life.listen(traceApply, "click", () => applyTracing());
+  life.listen(traceCancel, "click", () => closeTracing());
+  // Come nella barra dei tracciati: Invio in un campo applica, Esc chiude.
+  life.listen(traceBar, "keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeTracing();
+      surface.focus({ preventScroll: true });
+      return;
+    }
+    if (event.key !== "Enter" || event.isComposing || !(event.target instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    applyTracing();
+  });
+  life.add(() => {
+    tracing?.ready?.tracer.dispose();
+    tracing = null;
   });
 
   /// Vero se `unit` è un tratto a penna, o ne contiene uno che non è
@@ -13559,7 +13993,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const treeField =
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
       (tree.element.contains(event.target) || historyPanel.element.contains(event.target));
-    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target));
+    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target) || traceBar.contains(event.target));
     if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
@@ -13907,6 +14341,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       engine = next;
       loads++;
       closeDescriptions();
+      closeTracing();
       history.clear();
       selection = [];
       chosen = null;

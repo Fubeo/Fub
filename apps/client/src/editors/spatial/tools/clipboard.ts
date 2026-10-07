@@ -49,7 +49,7 @@ import {
   type OutAttr,
 } from "../scene/serialize";
 import { SourceText, utf8Length } from "../scene/text";
-import { href as hrefKind, length, numberList, scanNumber, transform as parseTransform, trim } from "../scene/values";
+import { href as hrefKind, length, numberList, scanNumber, transform as parseTransform, trim, viewBoxMatrix } from "../scene/values";
 import {
   FUB_NS,
   isSvg,
@@ -192,26 +192,6 @@ function viewport(attr: (name: string) => string | undefined, box: readonly numb
     return [box[2]!, box[3]!];
   }
   return [w ?? 300, h ?? 150];
-}
-
-/// La matrice che porta il `viewBox` nel riquadro `w` × `h`, come la decide
-/// `preserveAspectRatio`.
-function viewBoxMatrix(box: readonly number[], w: number, h: number, aspect: string): Matrix {
-  const words = trim(aspect).split(/\s+/).filter((word) => word !== "" && word !== "defer");
-  const align = /^(?:none|x(?:Min|Mid|Max)Y(?:Min|Mid|Max))$/.test(words[0] ?? "") ? words[0]! : "xMidYMid";
-  const [x, y, bw, bh] = box as [number, number, number, number];
-  let sx = w / bw;
-  let sy = h / bh;
-  if (align !== "none") sx = sy = words[1] === "slice" ? Math.max(sx, sy) : Math.min(sx, sy);
-  let tx = -x * sx;
-  let ty = -y * sy;
-  if (align !== "none") {
-    const fx = align.includes("xMid") ? 0.5 : align.includes("xMax") ? 1 : 0;
-    const fy = align.includes("YMid") ? 0.5 : align.includes("YMax") ? 1 : 0;
-    tx += (w - bw * sx) * fx;
-    ty += (h - bh * sy) * fy;
-  }
-  return [sx, 0, 0, sy, tx, ty];
 }
 
 /// `m` coi numeri che stanno a meno di [`SNAP`] da un intero portati

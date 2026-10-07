@@ -202,12 +202,18 @@ function hrefAttributes(node: ElementPart): { readonly plain: string | null; rea
   return { plain, xlink };
 }
 
+/// L'`href` di `node` com'è scritto: come in SVG 2, `href` prevale su
+/// `xlink:href`. `null` se non ce l'ha.
+export function hrefOf(node: ElementPart): string | null {
+  const { plain, xlink } = hrefAttributes(node);
+  return plain ?? xlink;
+}
+
 /// Il percorso del vault a cui porta il collegamento `node`, com'è scritto:
 /// relativo al disegno, o dalla radice del vault se comincia con `/`. Come in
 /// SVG 2, `href` prevale su `xlink:href`. `null` se non porta nel vault.
 export function linkTarget(node: ElementPart): string | null {
-  const { plain, xlink } = hrefAttributes(node);
-  const value = plain ?? xlink;
+  const value = hrefOf(node);
   if (value === null) return null;
   const target = parseHref(value);
   return target.kind === "vault" ? target.url : null;
