@@ -6,8 +6,9 @@
 > **Risultato:** sapere quali oggetti restano modificabili, come si vedono,
 > che cosa ne fanno i comandi e gli appunti.
 
-Una sfumatura, un motivo, un marcatore, un ritaglio, una maschera o un
-filtro non si disegnano da soli: stanno nelle risorse del disegno, e gli
+Una sfumatura, un motivo, un marcatore, un ritaglio, una maschera, un
+filtro o il tracciato che un [testo segue](drawing-typography.md#il-testo-su-tracciato)
+non si disegnano da soli: stanno nelle risorse del disegno, e gli
 oggetti li usano per nome. Un [disegno](drawing.md) li legge, li mostra e
 li tiene veri mentre lo si cambia; come il file li scrive è in [Formato della
 scena, risorse](../reference/scene-format-resources.md).

@@ -285,7 +285,7 @@ Cambiare un testo che c'è riscrive solo le sue righe, e il resto resta come
 l'ha scritto chi l'ha fatto, anche in un altro programma: una riga nuova
 copia la precedente e ne prende l'interlinea. Si cambia sul posto un testo che
 non sta in un gruppo, un `tspan` per riga coi suoi pezzi: grassetto, corsivo,
-colori e il resto sono in [Disegni, tipografia](drawing-typography.md).
+colori e il resto, e all'Esperto i testi in area e su tracciato, sono in [Disegni, tipografia](drawing-typography.md).
 
 ## Collegamenti
 
@@ -340,9 +340,9 @@ non ha segni né «Collega a una nota…», e un collegamento si toglie lo stess
 L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
-strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore e
-«Ricalca immagine»: [Disegni, livello Esperto](drawing-expert.md), [curve e
-tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md).
+strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore,
+«Ricalca immagine» e il testo in area e su tracciato: [Disegni, livello Esperto](drawing-expert.md), [curve e
+tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [tipografia](drawing-typography.md#il-testo-in-area).
 
 ## Il livello Personalizzato
 

@@ -38,6 +38,9 @@ si sposta la selezione o si sceglie col riquadro
 - Gli angoli tengono le proporzioni dei gruppi, dei collegamenti, dei tratti
   a penna, dei testi e delle immagini, che deformati non sarebbero più loro.
   Le forme le tengono con `Maiusc`; per gli altri `Maiusc` le lascia libere.
+- Un [testo in area](drawing-typography.md#il-testo-in-area) scelto da solo
+  cambia la larghezza del suo riquadro, non il corpo: il testo va di nuovo a
+  capo, l'altezza segue le righe e il bordo opposto resta dov'è.
 - Con l'aggancio alla griglia, a cornice dritta, il bordo tirato va sulla
   riga più vicina. Conta la geometria, senza il contorno, come negli
   spostamenti; `Ctrl` o `⌘` lascia libero.
