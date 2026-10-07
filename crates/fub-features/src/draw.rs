@@ -1,15 +1,20 @@
 //! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno
-//! e l'export in PNG e in PDF.
+//! e l'export in PNG, JPEG, SVG e PDF.
 //!
 //! Il comando «Nuovo disegno» è nel modulo [`create`]: un disegno nasce vuoto
 //! dal provider del formato, con un nome libero, e si apre. Il comando «Annota
 //! il PDF» è nel modulo [`annotate`]: apre le annotazioni di un PDF, il file
 //! `.pdf.fubann` accanto, e le fa nascere dal provider `fubann` se non ci sono.
 //!
-//! L'export sono due [`ExportProvider`], uno per formato, che leggono il disegno nello stesso
-//! modo: i byte del documento passano da `usvg`, che ne fa un albero, e da lì
-//! `resvg` rasterizza il PNG e `svg2pdf` scrive il PDF vettoriale. Un disegno
-//! è un documento del formato `svg`; gli altri documenti della selezione si
+//! L'export sono quattro [`ExportProvider`], uno per formato, che leggono il
+//! disegno nello stesso modo. Le opzioni della richiesta ([`choice`]) dicono
+//! che cosa esce: il disegno intero, alcune tavole o gli oggetti scelti, con
+//! la carta o senza. Il disegno intero con la carta sono i byte del
+//! documento; il resto è la derivazione di `fub_scene::export`, la stessa che
+//! il client fa per l'anteprima. Il testo passa da `usvg`, che ne fa un
+//! albero, e da lì `resvg` rasterizza il PNG e il JPEG e `svg2pdf` scrive il
+//! PDF vettoriale; l'SVG è il testo stesso, ripulito per il web. Un disegno è
+//! un documento del formato `svg`; gli altri documenti della selezione si
 //! saltano, e il log dice quanti.
 //!
 //! Le annotazioni di un PDF hanno due export loro, nel modulo [`annotated`]:
@@ -58,14 +63,15 @@
 //!
 //! # Lo stesso disegno, gli stessi byte
 //!
-//! Due export dello stesso disegno producono gli stessi byte. Il PNG non porta
-//! date. Il PDF le date non le ha nemmeno, ma `svg2pdf` scrive i caratteri e le
-//! risorse nell'ordine di due `HashMap`, quindi con due caratteri in un disegno
-//! la numerazione degli oggetti cambia da un export all'altro. Il modulo
-//! [`pdf`] rilegge il pezzo prodotto da `svg2pdf`, ordina le chiavi dei
-//! dizionari e rinumera gli oggetti nell'ordine in cui si raggiungono dalla
-//! radice: lo stesso albero dà sempre lo stesso file.
+//! Due export dello stesso disegno producono gli stessi byte. Il PNG e il JPEG
+//! non portano date. Il PDF le date non le ha nemmeno, ma `svg2pdf` scrive i
+//! caratteri e le risorse nell'ordine di due `HashMap`, quindi con due
+//! caratteri in un disegno la numerazione degli oggetti cambia da un export
+//! all'altro. Il modulo [`pdf`] rilegge il pezzo prodotto da `svg2pdf`, ordina
+//! le chiavi dei dizionari e rinumera gli oggetti nell'ordine in cui si
+//! raggiungono dalla radice: lo stesso albero dà sempre lo stesso file.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, BufWriter, Write};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -77,40 +83,46 @@ use fub_abi::rules::path::strip_ext;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{FolderScope, IndexQuery, IndexResult, ReadApi};
 use fub_abi::transfer::{
-    artifact_key, ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest,
-    ExportTarget, TransferNote,
+    ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget,
+    TransferNote,
 };
 use fub_format_svg::FORMAT_ID;
+use fub_scene::export::{
+    clean, measure, Board, DeriveError, Scope, Size, Source, AREA_MAX, SIDE_MAX,
+};
+use fub_scene::ReadError;
+use image::codecs::jpeg::{JpegEncoder, PixelDensity};
+use image::{GenericImageView, Rgb};
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{self, fontdb, ImageHrefResolver, ImageKind, Node, Tree};
 
 mod annotate;
 mod annotated;
+mod choice;
 mod create;
 
 pub use annotate::PDF_ANNOTATE;
 pub use annotated::{AnnotatedPdfExport, RedactedPdfExport, DRAW_ANNOTATED_PDF, DRAW_REDACTED_PDF};
 pub use create::{DrawCommands, DRAWING_CREATE};
 
+use choice::{board_label, raster_size, Choice, Names, Part, E_BOARD, E_OBJECT, E_ONE_DRAWING};
+
 /// Id del componente.
 pub const DRAW_ID: &str = "fub.draw";
-/// La destinazione PNG: un'immagine per disegno.
+/// La destinazione PNG: un'immagine per disegno, per tavola o per selezione.
 pub const DRAW_PNG: &str = "draw.png";
-/// La destinazione PDF: un file vettoriale per disegno.
+/// La destinazione JPEG: la stessa immagine del PNG, posata sul bianco.
+pub const DRAW_JPEG: &str = "draw.jpeg";
+/// La destinazione SVG: il testo del disegno ripulito per il web.
+pub const DRAW_SVG: &str = "draw.svg";
+/// La destinazione PDF: un file vettoriale per disegno, una pagina per tavola.
 pub const DRAW_PDF: &str = "draw.pdf";
 
-/// L'opzione del PNG: quanti pixel per pixel CSS del disegno.
-const SCALE: &str = "scale";
-/// Di serie 2, cioè la densità di uno schermo ad alta risoluzione: a 1 un
-/// disegno incollato in un documento si vede sgranato.
-const SCALE_DEFAULT: f32 = 2.0;
-const SCALE_MAX: f32 = 8.0;
-/// Il lato più lungo che un PNG può avere, in pixel.
-const SIDE_MAX: f32 = 16_384.0;
-/// Quanti pixel può avere un PNG: 32 milioni, cioè 128 MiB di pixmap.
-const AREA_MAX: f32 = 33_554_432.0;
 /// La densità di riferimento dei pixel CSS: 96 per pollice.
 const CSS_DPI: f32 = 96.0;
+/// La qualità del JPEG, da 1 a 100: a 90 i bordi dei tratti restano puliti, e
+/// il file resta molto più piccolo del PNG di una fotografia.
+const JPEG_QUALITY: u8 = 90;
 /// I byte per scrittura verso il sink.
 const CHUNK: usize = 64 * 1024;
 /// Quanti riferimenti esterni il log elenca per disegno; gli altri li conta.
@@ -118,7 +130,6 @@ const LISTED: usize = 3;
 
 const E_TARGET: &str = "e_target";
 const E_NO_DRAWINGS: &str = "e_no_drawings";
-const E_SCALE: &str = "e_scale";
 const E_NONE_EXPORTED: &str = "e_none_exported";
 const E_WRITE: &str = "e_write";
 
@@ -127,30 +138,26 @@ const E_WRITE: &str = "e_write";
 /// export.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
-        annotated::in_italian(annotate::in_italian(create::in_italian(StringCatalog::new("it"))))
-            .with(E_TARGET, "«{target}» non è una destinazione dei disegni.")
-            .with(E_NO_DRAWINGS, "Nella selezione non c'è nessun disegno.")
-            .with(
-                E_SCALE,
-                "La scala dell'immagine dev'essere un numero maggiore di 0 e al massimo 8, non «{scale}».",
-            )
-            .with(
-                E_NONE_EXPORTED,
-                "Non ho esportato nessun disegno: «{doc}» non è riuscito ({reason}).",
-            )
-            .with(E_WRITE, "Non ho scritto «{path}»: {reason}"),
-        annotated::in_english(annotate::in_english(create::in_english(StringCatalog::new("en"))))
-            .with(E_TARGET, "«{target}» is not a drawing export destination.")
-            .with(E_NO_DRAWINGS, "The selection contains no drawings.")
-            .with(
-                E_SCALE,
-                "The image scale must be a number above 0 and at most 8, not «{scale}».",
-            )
-            .with(
-                E_NONE_EXPORTED,
-                "No drawing was exported: «{doc}» failed ({reason}).",
-            )
-            .with(E_WRITE, "Could not write «{path}»: {reason}"),
+        choice::in_italian(annotated::in_italian(annotate::in_italian(
+            create::in_italian(StringCatalog::new("it")),
+        )))
+        .with(E_TARGET, "«{target}» non è una destinazione dei disegni.")
+        .with(E_NO_DRAWINGS, "Nella selezione non c'è nessun disegno.")
+        .with(
+            E_NONE_EXPORTED,
+            "Non ho esportato nessun disegno: «{doc}» non è riuscito ({reason}).",
+        )
+        .with(E_WRITE, "Non ho scritto «{path}»: {reason}"),
+        choice::in_english(annotated::in_english(annotate::in_english(
+            create::in_english(StringCatalog::new("en")),
+        )))
+        .with(E_TARGET, "«{target}» is not a drawing export destination.")
+        .with(E_NO_DRAWINGS, "The selection contains no drawings.")
+        .with(
+            E_NONE_EXPORTED,
+            "No drawing was exported: «{doc}» failed ({reason}).",
+        )
+        .with(E_WRITE, "Could not write «{path}»: {reason}"),
     ]
 }
 
@@ -159,27 +166,44 @@ pub fn catalog() -> Vec<StringCatalog> {
 pub fn exports() -> Vec<Box<dyn ExportProvider>> {
     vec![
         Box::new(PngExport),
+        Box::new(JpegExport),
+        Box::new(SvgExport),
         Box::new(PdfExport),
         Box::new(AnnotatedPdfExport),
         Box::new(RedactedPdfExport),
     ]
 }
 
-/// L'export in PNG: un'immagine per disegno, con lo sfondo trasparente come
-/// quello del disegno.
+/// L'export in PNG: un'immagine per disegno, per tavola o per la selezione,
+/// con lo sfondo trasparente come quello del disegno.
 ///
-/// Opzione `scale` (numero, di serie 2, oltre 0 e al massimo 8): i pixel
-/// dell'immagine per pixel CSS del disegno. L'immagine dichiara la densità
-/// corrispondente (`pHYs`), quindi incollata in un documento ha la misura del
-/// disegno e non quella dei suoi pixel. Un'immagine che supererebbe 16 384
-/// pixel di lato o 32 milioni di pixel esce alla scala più grande che ci sta, e
-/// il log lo dice.
+/// Le opzioni comuni a ogni formato sono in [`choice`]. La misura la dice
+/// `scale` (numero, di serie 2, oltre 0 e al massimo 8), i pixel
+/// dell'immagine per unità del disegno, o `width` (intero da 1 a 16 384), la
+/// larghezza esatta in pixel. L'immagine dichiara la densità corrispondente
+/// (`pHYs`), quindi incollata in un documento ha la misura del disegno e non
+/// quella dei suoi pixel. Un'immagine che supererebbe 16 384 pixel di lato o
+/// 32 milioni di pixel esce alla scala più grande che ci sta, e il log lo
+/// dice.
 #[derive(Default)]
 pub struct PngExport;
 
+/// L'export in JPEG: l'immagine del PNG posata sul bianco, con la stessa
+/// misura e le stesse opzioni. Qualità 90, il colore senza sottocampionare, e
+/// dei metadati solo la densità.
+#[derive(Default)]
+pub struct JpegExport;
+
+/// L'export in SVG: per disegno, per tavola o per la selezione, il testo
+/// derivato e ripulito per il web (`fub_scene::export::clean`). Le immagini
+/// del vault restano riferimenti per percorso, e il log lo dice.
+#[derive(Default)]
+pub struct SvgExport;
+
 /// L'export in PDF: un file vettoriale per disegno, una pagina della misura del
 /// disegno (96 pixel CSS per pollice), con il testo selezionabile nei caratteri
-/// di Fub incorporati.
+/// di Fub incorporati. Le tavole sono un file solo, una pagina per tavola
+/// nell'ordine del documento, ciascuna con un segnalibro col suo nome.
 #[derive(Default)]
 pub struct PdfExport;
 
@@ -199,14 +223,70 @@ impl ExportProvider for PngExport {
         out: &mut dyn ArtifactSink,
     ) -> Result<ExportReport, PluginError> {
         check_target(request, DRAW_PNG)?;
-        let scale = png_scale(&request.options)?;
+        let choice = Choice::read(&request.options)?;
+        let size = raster_size(&request.options)?;
         export_drawings(
             request,
             host,
             out,
-            "png",
-            &mut |drawing, path, out, report| write_png(drawing, scale, path, out, report),
+            Format::Png,
+            &choice,
+            &mut |drawing, file, out, report| {
+                write_raster(drawing, file, size, Format::Png, out, report)
+            },
         )
+    }
+}
+
+impl ExportProvider for JpegExport {
+    fn targets(&self) -> Vec<ExportTarget> {
+        vec![ExportTarget {
+            id: DRAW_JPEG.to_string(),
+            name: "JPEG (one image per drawing, on white)".to_string(),
+            extension: None,
+        }]
+    }
+
+    fn export(
+        &self,
+        request: &ExportRequest,
+        host: &dyn ReadApi,
+        out: &mut dyn ArtifactSink,
+    ) -> Result<ExportReport, PluginError> {
+        check_target(request, DRAW_JPEG)?;
+        let choice = Choice::read(&request.options)?;
+        let size = raster_size(&request.options)?;
+        export_drawings(
+            request,
+            host,
+            out,
+            Format::Jpeg,
+            &choice,
+            &mut |drawing, file, out, report| {
+                write_raster(drawing, file, size, Format::Jpeg, out, report)
+            },
+        )
+    }
+}
+
+impl ExportProvider for SvgExport {
+    fn targets(&self) -> Vec<ExportTarget> {
+        vec![ExportTarget {
+            id: DRAW_SVG.to_string(),
+            name: "SVG (one clean file per drawing, for the web)".to_string(),
+            extension: None,
+        }]
+    }
+
+    fn export(
+        &self,
+        request: &ExportRequest,
+        host: &dyn ReadApi,
+        out: &mut dyn ArtifactSink,
+    ) -> Result<ExportReport, PluginError> {
+        check_target(request, DRAW_SVG)?;
+        let choice = Choice::read(&request.options)?;
+        export_drawings(request, host, out, Format::Svg, &choice, &mut write_svg)
     }
 }
 
@@ -226,7 +306,8 @@ impl ExportProvider for PdfExport {
         out: &mut dyn ArtifactSink,
     ) -> Result<ExportReport, PluginError> {
         check_target(request, DRAW_PDF)?;
-        export_drawings(request, host, out, "pdf", &mut write_pdf)
+        let choice = Choice::read(&request.options)?;
+        export_drawings(request, host, out, Format::Pdf, &choice, &mut write_pdf)
     }
 }
 
@@ -240,40 +321,91 @@ fn check_target(request: &ExportRequest, target: &str) -> Result<(), PluginError
     )))
 }
 
-/// La scala del PNG dalle opzioni della richiesta: assente è quella di serie,
-/// qualunque altra cosa che non sia un numero in `(0, 8]` è un errore, prima di
-/// leggere un solo disegno.
-fn png_scale(options: &serde_json::Value) -> Result<f32, PluginError> {
-    let Some(value) = options.get(SCALE).filter(|value| !value.is_null()) else {
-        return Ok(SCALE_DEFAULT);
-    };
-    match value.as_f64() {
-        Some(scale) if scale > 0.0 && scale <= f64::from(SCALE_MAX) => Ok(scale as f32),
-        _ => Err(PluginError::BadArgs(Text::message(
-            E_SCALE,
-            vec![Arg::text(SCALE, value.to_string())],
-        ))),
+/// Il formato di una destinazione dei disegni.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Format {
+    Png,
+    Jpeg,
+    Svg,
+    Pdf,
+}
+
+impl Format {
+    fn extension(self) -> &'static str {
+        match self {
+            Format::Png => "png",
+            Format::Jpeg => "jpg",
+            Format::Svg => "svg",
+            Format::Pdf => "pdf",
+        }
+    }
+
+    /// Le tavole stanno in un file solo, una pagina ciascuna.
+    fn has_pages(self) -> bool {
+        self == Format::Pdf
     }
 }
 
-/// Com'è andato un disegno. `Err` del chiamante resta per ciò che ferma
-/// l'export intero, cioè un sink che non accetta più byte.
+/// Com'è andato un file. `Err` del chiamante resta per ciò che ferma l'export
+/// intero, cioè un sink che non accetta più byte.
 enum Outcome {
     Done,
     Failed(String),
 }
 
-/// Scrive un disegno nel formato del provider.
-type Writer<'a> = dyn FnMut(&Drawing, &str, &mut dyn ArtifactSink, &mut ExportReport) -> Result<Outcome, PluginError>
+/// Perché i file di un disegno non si scrivono: una richiesta che non vale
+/// per quel disegno ferma l'export prima di ogni file, un disegno che non si
+/// legge ferma soltanto sé.
+enum Problem {
+    Stop(PluginError),
+    Failed(String),
+}
+
+/// Una pagina di un file: il testo da cui esce, l'ambito con cui è stato
+/// derivato e, per una tavola, il suo nome.
+struct Page<'b> {
+    text: Cow<'b, [u8]>,
+    scope: Scope,
+    board: Option<String>,
+}
+
+/// Un file da scrivere: il percorso, e le pagine, che sono una tranne nel PDF
+/// delle tavole.
+struct File<'b> {
+    path: String,
+    pages: Vec<Page<'b>>,
+}
+
+impl File<'_> {
+    /// Ciò che precede la nota di un file che non è il disegno intero: il
+    /// nome della tavola, quando il disegno ha più file.
+    fn about(&self) -> String {
+        match &self.pages[..] {
+            [Page {
+                board: Some(name), ..
+            }] => format!("{name}: "),
+            _ => String::new(),
+        }
+    }
+}
+
+/// Scrive un file nel formato del provider.
+type Writer<'a> = dyn FnMut(
+        &mut Drawing<'_>,
+        &File<'_>,
+        &mut dyn ArtifactSink,
+        &mut ExportReport,
+    ) -> Result<Outcome, PluginError>
     + 'a;
 
-/// Il percorso comune ai due formati: la selezione ridotta ai disegni, un nome
-/// per ciascuno, la lettura e la scrittura, il log.
+/// Il percorso comune ai formati: la selezione ridotta ai disegni, un nome
+/// per ciascuno, i file di ciascuno, la scrittura, il log.
 fn export_drawings(
     request: &ExportRequest,
     host: &dyn ReadApi,
     out: &mut dyn ArtifactSink,
-    extension: &str,
+    format: Format,
+    choice: &Choice,
     write: &mut Writer<'_>,
 ) -> Result<ExportReport, PluginError> {
     let selected = request.selection.resolve(host)?;
@@ -281,6 +413,12 @@ fn export_drawings(
         selected.into_iter().partition(|doc| is_drawing(host, doc));
     if drawings.is_empty() {
         return Err(PluginError::BadArgs(Text::key(E_NO_DRAWINGS)));
+    }
+    if choice.part != Part::Drawing && drawings.len() > 1 {
+        return Err(PluginError::BadArgs(Text::message(
+            E_ONE_DRAWING,
+            vec![Arg::int("count", drawings.len() as i64)],
+        )));
     }
     let mut report = ExportReport::default();
     if !others.is_empty() {
@@ -291,26 +429,43 @@ fn export_drawings(
     }
     let mut first_failure: Option<(DocId, String)> = None;
     let mut exported = 0usize;
-    for (doc, path) in drawings.iter().zip(artifact_names(&drawings, extension)) {
-        let outcome = match Drawing::load(host, doc) {
-            Ok(drawing) => {
-                let outcome = write(&drawing, &path, out, &mut report)?;
-                if matches!(outcome, Outcome::Done) {
-                    drawing.notes(&mut report);
-                }
-                outcome
-            }
-            Err(reason) => Outcome::Failed(reason),
+    for (doc, path) in drawings
+        .iter()
+        .zip(artifact_names(&drawings, format.extension()))
+    {
+        let mut failed = |reason: String, report: &mut ExportReport| {
+            report
+                .log
+                .push(TransferNote::warning(reason.clone()).about(doc.to_string()));
+            first_failure.get_or_insert((doc.clone(), reason));
         };
-        match outcome {
-            Outcome::Done => exported += 1,
-            Outcome::Failed(reason) => {
-                report
-                    .log
-                    .push(TransferNote::warning(reason.clone()).about(doc.to_string()));
-                first_failure.get_or_insert((doc.clone(), reason));
+        let bytes = match host.read_document_bytes(doc) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                failed(error.to_string(), &mut report);
+                continue;
+            }
+        };
+        let files = match files(doc, &bytes, choice, format, path) {
+            Ok(files) => files,
+            Err(Problem::Stop(error)) => return Err(error),
+            Err(Problem::Failed(reason)) => {
+                failed(reason, &mut report);
+                continue;
+            }
+        };
+        let mut drawing = Drawing::new(host, doc);
+        let mut done = 0usize;
+        for file in &files {
+            match write(&mut drawing, file, out, &mut report)? {
+                Outcome::Done => done += 1,
+                Outcome::Failed(reason) => failed(format!("{}{reason}", file.about()), &mut report),
             }
         }
+        if done > 0 {
+            drawing.notes(&mut report);
+        }
+        exported += done;
     }
     match first_failure {
         // Niente da consegnare: l'esito è un errore, e il primo motivo è
@@ -339,56 +494,207 @@ fn is_drawing(host: &dyn ReadApi, doc: &DocId) -> bool {
 /// l'estensione del formato, così l'esito ripete le cartelle del vault. Ciò che
 /// collide (`Mare.svg` e `mare.svg`, che in una cartella che non distingue le
 /// maiuscole sono un file solo) prende il numero della convenzione D3
-/// (`<nome> 1`), con la stessa chiave [`artifact_key`] con cui il sink
-/// rifiuterebbe il secondo. I nomi si danno prima di leggere, quindi non
+/// (`<nome> 1`), con la stessa chiave con cui il sink rifiuterebbe il
+/// secondo ([`Names`]). I nomi si danno prima di leggere, quindi non
 /// dipendono da quali disegni si lasciano leggere.
 fn artifact_names(docs: &[DocId], extension: &str) -> Vec<String> {
-    let mut taken = BTreeSet::new();
+    let mut names = Names::default();
     docs.iter()
         .map(|doc| {
             let base = strip_ext(doc.as_str());
-            (0u32..)
-                .map(|n| match n {
-                    0 => format!("{base}.{extension}"),
-                    n => format!("{base} {n}.{extension}"),
-                })
-                .find(|name| taken.insert(artifact_key(name)))
-                .expect("la sequenza dei candidati è infinita")
+            names.take(|n| match n {
+                0 => format!("{base}.{extension}"),
+                n => format!("{base} {n}.{extension}"),
+            })
         })
         .collect()
 }
 
-/// Un disegno letto: l'albero di `usvg`, il titolo, e ciò che la lettura ha
-/// lasciato fuori.
-struct Drawing {
-    doc: DocId,
-    title: String,
-    tree: Tree,
-    refused: Refused,
+/// I file di un disegno per `choice`, con il nome `path` del disegno intero.
+///
+/// Il disegno intero con la carta sono i byte del documento, così come sono:
+/// i file di prima. Il resto passa dalla derivazione, che vuole un SVG in
+/// UTF-8; le tavole e gli oggetti chiesti devono esserci tutti prima che si
+/// scriva un file.
+fn files<'b>(
+    doc: &DocId,
+    bytes: &'b [u8],
+    choice: &Choice,
+    format: Format,
+    path: String,
+) -> Result<Vec<File<'b>>, Problem> {
+    let whole = |text: Cow<'b, [u8]>| {
+        vec![File {
+            path: path.clone(),
+            pages: vec![Page {
+                text,
+                scope: Scope::Drawing,
+                board: None,
+            }],
+        }]
+    };
+    if choice.is_whole() {
+        return Ok(whole(Cow::Borrowed(bytes)));
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| Problem::Failed(not_utf8()))?;
+    let source = Source::read(text).map_err(|error| Problem::Failed(unreadable(&error)))?;
+    let derive = |scope: &Scope| {
+        source
+            .derive(scope, choice.background)
+            .map(|text| Cow::Owned(text.into_bytes()))
+            .map_err(|error| derive_problem(doc, error))
+    };
+    let base = strip_ext(doc.as_str());
+    let extension = format.extension();
+    match &choice.part {
+        Part::Drawing => Ok(whole(derive(&Scope::Drawing)?)),
+        Part::Selection { scope, suffix } => Ok(vec![File {
+            path: format!("{base} ({suffix}).{extension}"),
+            pages: vec![Page {
+                text: derive(scope)?,
+                scope: scope.clone(),
+                board: None,
+            }],
+        }]),
+        Part::Boards(ids) => {
+            let boards = source.boards();
+            if let Some(missing) = ids.iter().find(|id| !boards.iter().any(|b| &b.id == *id)) {
+                return Err(derive_problem(
+                    doc,
+                    DeriveError::UnknownBoard(missing.clone()),
+                ));
+            }
+            // L'ordine del documento, non quello della richiesta; il numero
+            // di una tavola senza nome è la sua posizione fra tutte.
+            let chosen: Vec<(usize, &Board)> = boards
+                .iter()
+                .enumerate()
+                .filter(|(_, board)| ids.contains(&board.id))
+                .map(|(at, board)| (at + 1, board))
+                .collect();
+            let mut pages = Vec::with_capacity(chosen.len());
+            for (_, board) in &chosen {
+                let scope = Scope::Board(board.id.clone());
+                pages.push(Page {
+                    text: derive(&scope)?,
+                    scope,
+                    board: Some(board.name.clone()),
+                });
+            }
+            let mut names = Names::default();
+            if format.has_pages() {
+                let path = match &chosen[..] {
+                    [(number, board)] => {
+                        names.labelled(&base, &board_label(&board.name, *number), extension)
+                    }
+                    _ => format!("{base}.{extension}"),
+                };
+                return Ok(vec![File { path, pages }]);
+            }
+            Ok(chosen
+                .iter()
+                .zip(pages)
+                .map(|((number, board), page)| File {
+                    path: names.labelled(&base, &board_label(&board.name, *number), extension),
+                    pages: vec![page],
+                })
+                .collect())
+        }
+    }
 }
 
-impl Drawing {
-    /// Legge un disegno dal vault. `Err` è il motivo, per il log: un disegno che
-    /// non si legge non ferma gli altri.
-    fn load(host: &dyn ReadApi, doc: &DocId) -> Result<Drawing, String> {
-        let bytes = host
-            .read_document_bytes(doc)
-            .map_err(|error| error.to_string())?;
-        let refused = Arc::new(Mutex::new(Refused::default()));
-        let images = VaultImages::new(host, doc);
-        let tree = Tree::from_data(&bytes, &options(&refused, Some(&images)))
-            .map_err(|error| format!("not a readable SVG drawing: {error}"))?;
-        let refused = std::mem::take(&mut *lock(&refused));
-        Ok(Drawing {
+/// Ciò che una derivazione rifiutata vuol dire per l'export.
+fn derive_problem(doc: &DocId, error: DeriveError) -> Problem {
+    let stop =
+        |key: &str, args: Vec<Arg>| Problem::Stop(PluginError::BadArgs(Text::message(key, args)));
+    match error {
+        DeriveError::UnknownBoard(board) => stop(
+            E_BOARD,
+            vec![Arg::text("doc", doc.to_string()), Arg::text("board", board)],
+        ),
+        DeriveError::UnknownObject(id) => stop(
+            E_OBJECT,
+            vec![Arg::text("doc", doc.to_string()), Arg::text("id", id)],
+        ),
+        // Le opzioni le hanno già controllate: qui non arrivano.
+        DeriveError::EmptySelection | DeriveError::BadBox => {
+            Problem::Failed("the selection has no objects or no area".to_string())
+        }
+        DeriveError::Read(error) => Problem::Failed(unreadable(&error)),
+    }
+}
+
+fn not_utf8() -> String {
+    "not a readable SVG drawing: the text is not UTF-8".to_string()
+}
+
+/// Il motivo, per il log, di un testo che la scena non legge.
+fn unreadable(error: &ReadError) -> String {
+    match error {
+        ReadError::Malformed { offset, kind } => {
+            format!("not a readable SVG drawing: malformed XML at byte {offset} ({kind:?})")
+        }
+        ReadError::NotSvg { offset } => format!(
+            "not a readable SVG drawing: the root at byte {offset} is not an SVG svg element"
+        ),
+    }
+}
+
+/// Un disegno che si esporta: il titolo, le immagini del vault che le sue
+/// pagine nominano, lette una volta per tutte, e ciò che la lettura ha
+/// lasciato fuori.
+struct Drawing<'h> {
+    doc: DocId,
+    title: String,
+    images: VaultImages<'h>,
+    refused: Refused,
+    /// I caratteri che i caratteri di Fub non hanno.
+    missing: BTreeSet<char>,
+    /// Le immagini del vault che l'SVG pulito nomina per percorso.
+    by_path: BTreeSet<String>,
+}
+
+impl<'h> Drawing<'h> {
+    fn new(host: &'h dyn ReadApi, doc: &DocId) -> Self {
+        Drawing {
             doc: doc.clone(),
             title: title(host, doc),
-            tree,
-            refused,
-        })
+            images: VaultImages::new(host, doc),
+            refused: Refused::default(),
+            missing: BTreeSet::new(),
+            by_path: BTreeSet::new(),
+        }
     }
 
-    /// Le note di un disegno esportato: ciò che è rimasto fuori e i caratteri
-    /// che i caratteri di Fub non hanno.
+    /// L'albero di una pagina. `Err` è il motivo, per il log: un disegno che
+    /// non si legge non ferma gli altri.
+    fn tree(&mut self, text: &[u8]) -> Result<Tree, String> {
+        let refused = Arc::new(Mutex::new(Refused::default()));
+        let tree = Tree::from_data(text, &options(&refused, Some(&self.images)))
+            .map_err(|error| format!("not a readable SVG drawing: {error}"))?;
+        self.refused.merge(std::mem::take(&mut *lock(&refused)));
+        self.missing.extend(missing_glyphs(&tree));
+        Ok(tree)
+    }
+
+    /// Annota le immagini del vault che `text`, un SVG pulito, nomina per
+    /// percorso: fuori dal vault non portano a niente. Le trova `usvg`, senza
+    /// leggerle, come le trova per gli altri formati.
+    fn references(&mut self, text: &str) {
+        let refused = Arc::new(Mutex::new(Refused::default()));
+        if Tree::from_data(text.as_bytes(), &options(&refused, None)).is_ok() {
+            let refused = std::mem::take(&mut *lock(&refused));
+            self.by_path.extend(
+                refused
+                    .external
+                    .into_iter()
+                    .filter(|href| vault_path(href).is_some()),
+            );
+        }
+    }
+
+    /// Le note di un disegno esportato: ciò che è rimasto fuori, i caratteri
+    /// che i caratteri di Fub non hanno e, nell'SVG, le immagini del vault.
     fn notes(&self, report: &mut ExportReport) {
         let refused = &self.refused;
         let embedded = (refused.embedded > 0).then(|| {
@@ -403,6 +709,11 @@ impl Drawing {
                 if count == 1 { "was" } else { "were" },
             )
         });
+        let by_path = listed(
+            &self.by_path,
+            "image is a vault file named by its path, and the SVG shows it only where that path leads to it",
+            "images are vault files named by their path, and the SVG shows them only where those paths lead to them",
+        );
         let notes = std::iter::once(external_note(&refused.external, "the vault"))
             .chain(
                 refused
@@ -410,7 +721,7 @@ impl Drawing {
                     .iter()
                     .map(|(why, images)| vault_note(*why, images)),
             )
-            .chain([embedded, glyphs_note(&missing_glyphs(&self.tree))]);
+            .chain([embedded, glyphs_note(&self.missing), by_path]);
         for message in notes.flatten() {
             report
                 .log
@@ -530,6 +841,20 @@ struct Refused {
     embedded: usize,
     /// Le immagini del vault rimaste fuori, per motivo.
     vault: BTreeMap<LeftOut, BTreeSet<String>>,
+}
+
+impl Refused {
+    /// Aggiunge ciò che ha lasciato fuori un'altra pagina dello stesso
+    /// disegno. Le pagine sono lo stesso contenuto guardato in punti diversi:
+    /// i riferimenti si contano una volta, e le immagini incorporate rotte
+    /// quante ne ha la pagina che ne ha di più.
+    fn merge(&mut self, other: Refused) {
+        self.external.extend(other.external);
+        self.embedded = self.embedded.max(other.embedded);
+        for (why, images) in other.vault {
+            self.vault.entry(why).or_default().extend(images);
+        }
+    }
 }
 
 /// Quanto di un riferimento esterno finisce nel log.
@@ -849,71 +1174,84 @@ fn missing_glyphs(tree: &Tree) -> BTreeSet<char> {
 }
 
 // ---------------------------------------------------------------------------
-// PNG
+// PNG e JPEG
 // ---------------------------------------------------------------------------
 
-/// La scala a cui il disegno ci sta nei limiti dei pixel: quella chiesta, o la
-/// più grande sotto di lei che non li supera.
-fn fitting_scale(width: f32, height: f32, asked: f32) -> f32 {
-    let fits = |scale: f32| {
-        let (w, h) = ((width * scale).ceil(), (height * scale).ceil());
-        w <= SIDE_MAX && h <= SIDE_MAX && w * h <= AREA_MAX
-    };
-    if fits(asked) {
-        return asked;
-    }
-    let mut scale = (SIDE_MAX / width)
-        .min(SIDE_MAX / height)
-        .min((AREA_MAX / (width * height)).sqrt())
-        .min(asked);
-    // L'arrotondamento per eccesso dei lati può sforare di un pixel.
-    while !fits(scale) && scale > 0.0 {
-        scale *= 0.999;
-    }
-    scale
-}
-
-fn write_png(
-    drawing: &Drawing,
-    asked: f32,
-    path: &str,
+/// Scrive l'immagine di un file in PNG o in JPEG, alla misura `size`.
+fn write_raster(
+    drawing: &mut Drawing<'_>,
+    file: &File<'_>,
+    size: Size,
+    format: Format,
     out: &mut dyn ArtifactSink,
     report: &mut ExportReport,
 ) -> Result<Outcome, PluginError> {
-    let size = drawing.tree.size();
-    let scale = fitting_scale(size.width(), size.height(), asked);
-    let (width, height) = (
-        (size.width() * scale).ceil() as u32,
-        (size.height() * scale).ceil() as u32,
-    );
+    let page = &file.pages[0];
+    let tree = match drawing.tree(&page.text) {
+        Ok(tree) => tree,
+        Err(reason) => return Ok(Outcome::Failed(reason)),
+    };
+    let side = tree.size();
+    let measured = measure(side.width(), side.height(), size);
+    let (width, height, scale) = (measured.width, measured.height, measured.scale);
     let Some(mut pixmap) = Pixmap::new(width.max(1), height.max(1)) else {
         return Ok(Outcome::Failed(format!(
             "the drawing is too large to rasterize ({width} × {height} pixels)"
         )));
     };
-    if scale < asked {
+    if measured.reduced {
+        let instead = match size {
+            Size::Scale(asked) => format!("at scale {scale:.2} instead of {asked}"),
+            Size::Pixels(asked) => format!("{width} pixels wide instead of {asked}"),
+        };
+        let what = match size {
+            Size::Scale(_) => "scale",
+            Size::Pixels(_) => "width",
+        };
         report.log.push(
             TransferNote::warning(format!(
-                "exported at scale {scale:.2} instead of {asked}: at the requested scale the image would exceed {} pixels per side or {} million pixels",
-                SIDE_MAX as u32,
-                AREA_MAX as u32 / 1_048_576,
+                "{}exported {instead}: at the requested {what} the image would exceed {SIDE_MAX} pixels per side or {} million pixels",
+                file.about(),
+                AREA_MAX / 1_048_576,
             ))
             .about(drawing.doc.to_string()),
         );
     }
     resvg::render(
-        &drawing.tree,
+        &tree,
         Transform::from_scale(scale, scale),
         &mut pixmap.as_mut(),
     );
+    drop(tree);
 
-    let handle = out.open_artifact(path, "image/png")?;
+    match format {
+        Format::Jpeg => deliver(out, &file.path, "image/jpeg", report, |sink| {
+            encode_jpeg(&pixmap, scale, sink)
+        })?,
+        _ => deliver(out, &file.path, "image/png", report, |sink| {
+            encode_png(&pixmap, scale, &drawing.title, sink)
+        })?,
+    }
+    Ok(Outcome::Done)
+}
+
+/// Apre l'artefatto `path`, ci scrive quello che `encode` scrive, e lo
+/// consegna. L'errore del sink resta il suo; quello dell'encoder è un
+/// [`E_WRITE`].
+fn deliver<E: std::fmt::Display>(
+    out: &mut dyn ArtifactSink,
+    path: &str,
+    media_type: &str,
+    report: &mut ExportReport,
+    encode: impl FnOnce(&mut SinkWriter<'_>) -> Result<(), E>,
+) -> Result<(), PluginError> {
+    let handle = out.open_artifact(path, media_type)?;
     let mut sink = SinkWriter {
         out,
         handle,
         failure: None,
     };
-    let encoded = encode_png(&pixmap, scale, &drawing.title, &mut sink);
+    let encoded = encode(&mut sink);
     let SinkWriter { out, failure, .. } = sink;
     if let Some(failure) = failure {
         return Err(failure);
@@ -928,7 +1266,7 @@ fn write_png(
         ))
     })?;
     report.artifacts.push(out.close_artifact(handle)?);
-    Ok(Outcome::Done)
+    Ok(())
 }
 
 /// Scrive il PNG a righe, dritto nel sink: la pixmap è già in memoria, una
@@ -973,6 +1311,53 @@ fn encode_png(
     writer.finish()
 }
 
+/// Scrive il JPEG dritto nel sink. L'encoder di `image` legge i pixel a
+/// blocchi di 8 × 8 da [`OnWhite`], quindi l'immagine sul bianco non si
+/// copia; scrive il colore senza sottocampionarlo (4:4:4), e dei segmenti
+/// facoltativi soltanto il JFIF con la densità.
+fn encode_jpeg(pixmap: &Pixmap, scale: f32, sink: &mut SinkWriter<'_>) -> Result<(), String> {
+    let mut buffered = BufWriter::with_capacity(CHUNK, sink);
+    let mut encoder = JpegEncoder::new_with_quality(&mut buffered, JPEG_QUALITY);
+    // I punti per pollice: `scale` pixel per pixel CSS. Il JFIF li scrive
+    // interi; una densità che non ci sta resta non detta, che è meglio di una
+    // sbagliata.
+    let dpi = (CSS_DPI * scale).round();
+    if (1.0..=f32::from(u16::MAX)).contains(&dpi) {
+        encoder.set_pixel_density(PixelDensity::dpi(dpi as u16));
+    }
+    encoder
+        .encode_image(&OnWhite(pixmap))
+        .map_err(|error| error.to_string())?;
+    buffered.flush().map_err(|error| error.to_string())
+}
+
+/// La pixmap posata sul bianco, come `image` legge un'immagine: ciò che è
+/// trasparente diventa bianco, ciò che è velato si schiarisce.
+struct OnWhite<'p>(&'p Pixmap);
+
+impl GenericImageView for OnWhite<'_> {
+    type Pixel = Rgb<u8>;
+
+    fn dimensions(&self) -> (u32, u32) {
+        (self.0.width(), self.0.height())
+    }
+
+    fn get_pixel(&self, x: u32, y: u32) -> Rgb<u8> {
+        // Premoltiplicato, il colore sopra il bianco è `c + (255 - a)`: un
+        // canale non supera mai la sua alfa, quindi la somma sta in un byte.
+        let pixel = self
+            .0
+            .pixel(x, y)
+            .expect("l'encoder legge dentro l'immagine");
+        let white = 255 - pixel.alpha();
+        Rgb([
+            pixel.red().saturating_add(white),
+            pixel.green().saturating_add(white),
+            pixel.blue().saturating_add(white),
+        ])
+    }
+}
+
 /// Un [`ArtifactSink`] visto come `io::Write`, per l'encoder. L'errore del
 /// sink resta qui, tipizzato, invece di diventare un `io::Error` qualunque.
 struct SinkWriter<'a> {
@@ -999,40 +1384,76 @@ impl Write for SinkWriter<'_> {
 }
 
 // ---------------------------------------------------------------------------
+// SVG
+// ---------------------------------------------------------------------------
+
+fn write_svg(
+    drawing: &mut Drawing<'_>,
+    file: &File<'_>,
+    out: &mut dyn ArtifactSink,
+    report: &mut ExportReport,
+) -> Result<Outcome, PluginError> {
+    let page = &file.pages[0];
+    let Ok(text) = std::str::from_utf8(&page.text) else {
+        return Ok(Outcome::Failed(not_utf8()));
+    };
+    let cleaned = match clean(text, &page.scope) {
+        Ok(cleaned) => cleaned,
+        Err(error) => return Ok(Outcome::Failed(unreadable(&error))),
+    };
+    drawing.references(&cleaned);
+    let handle = out.open_artifact(&file.path, "image/svg+xml")?;
+    for piece in cleaned.as_bytes().chunks(CHUNK) {
+        out.write_artifact(handle, piece)?;
+    }
+    report.artifacts.push(out.close_artifact(handle)?);
+    Ok(Outcome::Done)
+}
+
+// ---------------------------------------------------------------------------
 // PDF
 // ---------------------------------------------------------------------------
 
 fn write_pdf(
-    drawing: &Drawing,
-    path: &str,
+    drawing: &mut Drawing<'_>,
+    file: &File<'_>,
     out: &mut dyn ArtifactSink,
     report: &mut ExportReport,
 ) -> Result<Outcome, PluginError> {
-    let (chunk, root) =
-        match svg2pdf::to_chunk(&drawing.tree, svg2pdf::ConversionOptions::default()) {
-            Ok(converted) => converted,
-            Err(error) => {
-                return Ok(Outcome::Failed(format!(
-                    "the drawing could not be converted to PDF: {error}"
-                )))
-            }
-        };
-    let size = drawing.tree.size();
-    let document = match pdf::document(
-        chunk.as_bytes(),
-        root.get(),
-        size.width(),
-        size.height(),
-        &drawing.title,
-    ) {
-        Ok(document) => document,
-        Err(error) => {
-            return Ok(Outcome::Failed(format!(
-                "the drawing could not be converted to PDF: {error}"
-            )))
-        }
+    let failed = |error: String| {
+        Ok(Outcome::Failed(format!(
+            "the drawing could not be converted to PDF: {error}"
+        )))
     };
-    let handle = out.open_artifact(path, "application/pdf")?;
+    // Una pagina alla volta: l'albero di una tavola se ne va appena il suo
+    // pezzo di PDF è scritto.
+    let mut pages = Vec::with_capacity(file.pages.len());
+    for page in &file.pages {
+        let tree = match drawing.tree(&page.text) {
+            Ok(tree) => tree,
+            Err(reason) => return Ok(Outcome::Failed(reason)),
+        };
+        let (chunk, root) = match svg2pdf::to_chunk(&tree, svg2pdf::ConversionOptions::default()) {
+            Ok(converted) => converted,
+            Err(error) => return failed(error.to_string()),
+        };
+        let size = tree.size();
+        match pdf::Page::read(
+            chunk.as_bytes(),
+            root.get(),
+            size.width(),
+            size.height(),
+            page.board.clone(),
+        ) {
+            Ok(read) => pages.push(read),
+            Err(error) => return failed(error),
+        }
+    }
+    let document = match pdf::document(pages, &drawing.title) {
+        Ok(document) => document,
+        Err(error) => return failed(error),
+    };
+    let handle = out.open_artifact(&file.path, "application/pdf")?;
     for piece in document.chunks(CHUNK) {
         out.write_artifact(handle, piece)?;
     }
@@ -1049,7 +1470,9 @@ mod pdf {
     //! scritto `pdf-writer`, quindi la grammatica è quella e nient'altro), si
     //! ordinano le chiavi di ogni dizionario, si rinumerano gli oggetti in
     //! ampiezza dalla radice, e si scrive il file intorno: catalogo, una
-    //! pagina della misura del disegno, i metadati.
+    //! pagina della misura del disegno, i metadati. Le tavole sono un pezzo
+    //! per pagina, nello stesso file, con un segnalibro ciascuna; ciò che i
+    //! pezzi hanno uguale si scrive una volta.
 
     use std::collections::{BTreeMap, VecDeque};
 
@@ -1080,20 +1503,161 @@ mod pdf {
         pub(super) stream: Option<Vec<u8>>,
     }
 
-    /// Il file del disegno: `chunk` sono i byte di `svg2pdf`, `root` il suo
-    /// XObject, `width` e `height` la misura del disegno in pixel CSS.
-    pub(super) fn document(
-        chunk: &[u8],
-        root: i32,
+    /// Una pagina da scrivere: gli oggetti del pezzo di `svg2pdf`, il suo
+    /// XObject, la misura del disegno in pixel CSS e, per una tavola, il
+    /// segnalibro.
+    pub(super) struct Page {
+        objects: Vec<Object>,
+        root: u32,
         width: f32,
         height: f32,
-        title: &str,
-    ) -> Result<Vec<u8>, String> {
-        let root = u32::try_from(root).map_err(|_| "invalid root object".to_string())?;
-        let objects = parse(chunk)?;
-        // I primi cinque numeri sono di questo file; il disegno viene dopo.
-        let drawing = canonical(objects, root, 6)?;
+        bookmark: Option<String>,
+    }
 
+    impl Page {
+        /// Rilegge il pezzo `chunk`, con la radice `root`.
+        pub(super) fn read(
+            chunk: &[u8],
+            root: i32,
+            width: f32,
+            height: f32,
+            bookmark: Option<String>,
+        ) -> Result<Page, String> {
+            let root = u32::try_from(root).map_err(|_| "invalid root object".to_string())?;
+            Ok(Page {
+                objects: parse(chunk)?,
+                root,
+                width,
+                height,
+                bookmark,
+            })
+        }
+    }
+
+    /// Il file: il catalogo, l'albero delle pagine, ogni pagina col suo
+    /// contenuto, i metadati, i segnalibri se le pagine ne hanno, e il
+    /// disegno di ogni pagina.
+    ///
+    /// I numeri degli oggetti sono fissi: 1 il catalogo, 2 le pagine, poi
+    /// pagina e contenuto di ciascuna, i metadati, la radice dei segnalibri e
+    /// un segnalibro per pagina, e dopo il disegno. Con una pagina senza
+    /// segnalibro, cioè il disegno intero o la selezione, è il file di una
+    /// pagina di sempre: catalogo, pagine, pagina, contenuto, metadati, e il
+    /// disegno dal 6.
+    pub(super) fn document(mut pages: Vec<Page>, title: &str) -> Result<Vec<u8>, String> {
+        if pages.is_empty() {
+            return Err("a document without pages".to_string());
+        }
+        let count = pages.len() as u32;
+        let page_id = |at: u32| 3 + 2 * at;
+        let info = 3 + 2 * count;
+        let marked: Vec<(u32, String)> = pages
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(at, page)| Some((at as u32, page.bookmark.take()?)))
+            .collect();
+        let outlines = (!marked.is_empty()).then_some(info + 1);
+        let first = match outlines {
+            Some(outlines) => outlines + 1 + marked.len() as u32,
+            None => info + 1,
+        };
+
+        let sizes: Vec<(f32, f32)> = pages.iter().map(|page| (page.width, page.height)).collect();
+        let (drawing, roots) = drawings(pages, first)?;
+
+        let mut catalog = vec![
+            (name("Type"), raw("/Catalog")),
+            (name("Pages"), Value::Ref(2)),
+            (
+                name("ViewerPreferences"),
+                Value::Dict(vec![(name("DisplayDocTitle"), raw("true"))]),
+            ),
+        ];
+        if let Some(outlines) = outlines {
+            catalog.push((name("Outlines"), Value::Ref(outlines)));
+            catalog.push((name("PageMode"), raw("/UseOutlines")));
+        }
+        let mut objects = vec![
+            Object {
+                id: 1,
+                value: Value::Dict(catalog),
+                stream: None,
+            },
+            Object {
+                id: 2,
+                value: Value::Dict(vec![
+                    (name("Type"), raw("/Pages")),
+                    (
+                        name("Kids"),
+                        Value::Array((0..count).map(|at| Value::Ref(page_id(at))).collect()),
+                    ),
+                    (name("Count"), raw(&count.to_string())),
+                ]),
+                stream: None,
+            },
+        ];
+        for (at, ((width, height), root)) in (0..count).zip(sizes.into_iter().zip(roots)) {
+            let (page, content) = page(width, height, page_id(at) + 1, root);
+            objects.push(Object {
+                id: page_id(at),
+                value: page,
+                stream: None,
+            });
+            objects.push(Object {
+                id: page_id(at) + 1,
+                value: Value::Dict(Vec::new()),
+                stream: Some(content),
+            });
+        }
+        objects.push(Object {
+            id: info,
+            value: Value::Dict(vec![
+                (name("Title"), Value::Raw(text_string(title))),
+                (name("Producer"), raw("(Fub)")),
+            ]),
+            stream: None,
+        });
+        if let Some(outlines) = outlines {
+            let item = |at: usize| outlines + 1 + at as u32;
+            objects.push(Object {
+                id: outlines,
+                value: Value::Dict(vec![
+                    (name("Type"), raw("/Outlines")),
+                    (name("First"), Value::Ref(item(0))),
+                    (name("Last"), Value::Ref(item(marked.len() - 1))),
+                    (name("Count"), raw(&marked.len().to_string())),
+                ]),
+                stream: None,
+            });
+            for (at, (page, bookmark)) in marked.iter().enumerate() {
+                let mut entries = vec![
+                    (name("Title"), Value::Raw(text_string(bookmark))),
+                    (name("Parent"), Value::Ref(outlines)),
+                ];
+                if at > 0 {
+                    entries.push((name("Prev"), Value::Ref(item(at - 1))));
+                }
+                if at + 1 < marked.len() {
+                    entries.push((name("Next"), Value::Ref(item(at + 1))));
+                }
+                entries.push((
+                    name("Dest"),
+                    Value::Array(vec![Value::Ref(page_id(*page)), raw("/Fit")]),
+                ));
+                objects.push(Object {
+                    id: item(at),
+                    value: Value::Dict(entries),
+                    stream: None,
+                });
+            }
+        }
+        objects.extend(drawing);
+        Ok(file(&objects, &format!("/Info {info} 0 R /Root 1 0 R")))
+    }
+
+    /// Una pagina della misura del disegno, `width` × `height` pixel CSS, che
+    /// mostra l'XObject `drawing`, e il suo contenuto, l'oggetto `content`.
+    fn page(width: f32, height: f32, content: u32, drawing: u32) -> (Value, Vec<u8>) {
         // In `f64`: le cifre che si scrivono sono quattro dopo la virgola, e su
         // un lato di 14 400 punti un `f32` ne ha già perse.
         let (width, height) = (f64::from(width) * PT_PER_PX, f64::from(height) * PT_PER_PX);
@@ -1114,7 +1678,7 @@ mod pdf {
                 Value::Dict(vec![
                     (
                         name("XObject"),
-                        Value::Dict(vec![(name("D"), Value::Ref(6))]),
+                        Value::Dict(vec![(name("D"), Value::Ref(drawing))]),
                     ),
                     (
                         name("ProcSet"),
@@ -1122,7 +1686,7 @@ mod pdf {
                     ),
                 ]),
             ),
-            (name("Contents"), Value::Ref(4)),
+            (name("Contents"), Value::Ref(content)),
             (
                 name("Group"),
                 Value::Dict(vec![
@@ -1143,49 +1707,97 @@ mod pdf {
             text(number(height))
         )
         .into_bytes();
-        let mut objects = vec![
-            Object {
-                id: 1,
-                value: Value::Dict(vec![
-                    (name("Type"), raw("/Catalog")),
-                    (name("Pages"), Value::Ref(2)),
-                    (
-                        name("ViewerPreferences"),
-                        Value::Dict(vec![(name("DisplayDocTitle"), raw("true"))]),
-                    ),
-                ]),
-                stream: None,
-            },
-            Object {
-                id: 2,
-                value: Value::Dict(vec![
-                    (name("Type"), raw("/Pages")),
-                    (name("Kids"), Value::Array(vec![Value::Ref(3)])),
-                    (name("Count"), raw("1")),
-                ]),
-                stream: None,
-            },
-            Object {
-                id: 3,
-                value: Value::Dict(page),
-                stream: None,
-            },
-            Object {
-                id: 4,
-                value: Value::Dict(Vec::new()),
-                stream: Some(content),
-            },
-            Object {
-                id: 5,
-                value: Value::Dict(vec![
-                    (name("Title"), Value::Raw(text_string(title))),
-                    (name("Producer"), raw("(Fub)")),
-                ]),
-                stream: None,
-            },
-        ];
-        objects.extend(drawing);
-        Ok(file(&objects, "/Info 5 0 R /Root 1 0 R"))
+        (Value::Dict(page), content)
+    }
+
+    /// Gli oggetti dei disegni delle pagine in forma canonica, numerati da
+    /// `first`, e il numero dell'XObject di ogni pagina.
+    ///
+    /// Un disegno solo è il pezzo di `svg2pdf` rinumerato. Con più pagine, ciò
+    /// che due pagine hanno uguale si scrive una volta ([`merge_equal`]): le
+    /// tavole sono lo stesso disegno guardato in punti diversi, e ogni pezzo
+    /// porta le stesse immagini e spesso gli stessi caratteri.
+    fn drawings(pages: Vec<Page>, first: u32) -> Result<(Vec<Object>, Vec<u32>), String> {
+        if let [_] = &pages[..] {
+            let page = pages.into_iter().next().expect("una pagina");
+            return Ok((canonical(page.objects, page.root, first)?, vec![first]));
+        }
+        // Prima ogni pezzo per sé, con numeri che non si toccano.
+        let mut all = Vec::new();
+        let mut roots = Vec::with_capacity(pages.len());
+        let mut next = first;
+        for page in pages {
+            let objects = canonical(page.objects, page.root, next)?;
+            roots.push(next);
+            next = next
+                .checked_add(objects.len() as u32)
+                .ok_or_else(|| "too many objects".to_string())?;
+            all.extend(objects);
+        }
+        let all = merge_equal(all, &mut roots);
+        canonical_from(all, &roots, first)
+    }
+
+    /// Unisce gli oggetti uguali: lo stesso valore, una volta che i
+    /// riferimenti puntano agli oggetti già uniti, e lo stesso flusso. Si
+    /// ripete finché c'è qualcosa da unire, perché due oggetti diventano
+    /// uguali quando lo diventano quelli a cui puntano. `roots` passano agli
+    /// oggetti che restano.
+    fn merge_equal(objects: Vec<Object>, roots: &mut [u32]) -> Vec<Object> {
+        use sha2::{Digest, Sha256};
+        use std::collections::hash_map::{Entry, HashMap};
+
+        let digests: BTreeMap<u32, [u8; 32]> = objects
+            .iter()
+            .filter_map(|object| Some((object.id, Sha256::digest(object.stream.as_ref()?).into())))
+            .collect();
+        let mut alias: BTreeMap<u32, u32> = BTreeMap::new();
+        let resolve = |alias: &BTreeMap<u32, u32>, mut id: u32| {
+            while let Some(&to) = alias.get(&id) {
+                id = to;
+            }
+            id
+        };
+        let mut objects = objects;
+        loop {
+            let mut seen: HashMap<(Vec<u8>, Option<[u8; 32]>), u32> = HashMap::new();
+            let mut kept = Vec::with_capacity(objects.len());
+            let before = alias.len();
+            for mut object in objects {
+                redirect(&mut object.value, &|id| resolve(&alias, id));
+                let mut key = Vec::new();
+                write_value(&object.value, &mut key);
+                let digest = digests.get(&object.id).copied();
+                match seen.entry((key, digest)) {
+                    Entry::Occupied(twin) => {
+                        alias.insert(object.id, *twin.get());
+                    }
+                    Entry::Vacant(free) => {
+                        free.insert(object.id);
+                        kept.push(object);
+                    }
+                }
+            }
+            objects = kept;
+            if alias.len() == before {
+                break;
+            }
+        }
+        for root in roots.iter_mut() {
+            *root = resolve(&alias, *root);
+        }
+        objects
+    }
+
+    fn redirect(value: &mut Value, to: &dyn Fn(u32) -> u32) {
+        match value {
+            Value::Ref(id) => *id = to(*id),
+            Value::Dict(entries) => entries
+                .iter_mut()
+                .for_each(|(_, value)| redirect(value, to)),
+            Value::Array(items) => items.iter_mut().for_each(|value| redirect(value, to)),
+            Value::Raw(_) => {}
+        }
     }
 
     fn name(key: &str) -> Vec<u8> {
@@ -1511,6 +2123,16 @@ mod pdf {
         root: u32,
         first: u32,
     ) -> Result<Vec<Object>, String> {
+        canonical_from(objects, &[root], first).map(|(objects, _)| objects)
+    }
+
+    /// Come [`canonical`], dalle radici `roots` nel loro ordine; dà anche i
+    /// numeri nuovi delle radici.
+    fn canonical_from(
+        objects: Vec<Object>,
+        roots: &[u32],
+        first: u32,
+    ) -> Result<(Vec<Object>, Vec<u32>), String> {
         let mut by_id = BTreeMap::new();
         for mut object in objects {
             sort_keys(&mut object.value);
@@ -1519,8 +2141,13 @@ mod pdf {
             }
         }
         let mut map = BTreeMap::new();
-        let mut queue = VecDeque::from([root]);
-        map.insert(root, first);
+        let mut queue = VecDeque::new();
+        for &root in roots {
+            if !map.contains_key(&root) {
+                map.insert(root, first + map.len() as u32);
+                queue.push_back(root);
+            }
+        }
         let mut order = Vec::new();
         while let Some(id) = queue.pop_front() {
             let Some(object) = by_id.get(&id) else {
@@ -1537,7 +2164,7 @@ mod pdf {
                 }
             }
         }
-        Ok(order
+        let objects = order
             .into_iter()
             .filter_map(|id| by_id.remove(&id))
             .map(|mut object| {
@@ -1545,7 +2172,8 @@ mod pdf {
                 renumber(&mut object.value, &map);
                 object
             })
-            .collect())
+            .collect();
+        Ok((objects, roots.iter().map(|root| map[root]).collect()))
     }
 
     // --- scrittura ----------------------------------------------------------
@@ -1743,21 +2371,23 @@ mod tests {
 
     #[test]
     fn a_png_scale_stays_within_the_pixel_limits() {
-        assert_eq!(fitting_scale(400.0, 250.0, 2.0), 2.0);
+        let scale = |width: f32, height: f32| measure(width, height, Size::Scale(2.0)).scale;
+        assert_eq!(scale(400.0, 250.0), 2.0);
         // 8192 × 4096 è proprio l'area massima: ci sta a scala 2, il doppio no.
-        assert_eq!(fitting_scale(4096.0, 2048.0, 2.0), 2.0);
-        assert_eq!(fitting_scale(8192.0, 4096.0, 2.0), 1.0);
+        assert_eq!(scale(4096.0, 2048.0), 2.0);
+        assert_eq!(scale(8192.0, 4096.0), 1.0);
+        let (side_max, area_max) = (SIDE_MAX as f32, AREA_MAX as f32);
         for (width, height) in [(40_000.0, 10.0), (10.0, 40_000.0), (10_000.0, 10_000.0)] {
-            let scale = fitting_scale(width, height, 2.0);
+            let scale = scale(width, height);
             let (w, h) = ((width * scale).ceil(), (height * scale).ceil());
             assert!(
-                w <= SIDE_MAX && h <= SIDE_MAX && w * h <= AREA_MAX,
+                w <= side_max && h <= side_max && w * h <= area_max,
                 "{w}×{h}"
             );
             // Ridotta, ma non più del necessario.
             let side = w.max(h);
             assert!(
-                side >= SIDE_MAX * 0.99 || w * h >= AREA_MAX * 0.99,
+                side >= side_max * 0.99 || w * h >= area_max * 0.99,
                 "{w}×{h}"
             );
         }
@@ -1853,7 +2483,8 @@ mod tests {
     #[test]
     fn the_page_has_the_size_of_the_drawing_and_its_title() {
         let chunk = b"1 0 obj\n<</Type /XObject /Subtype /Form /BBox [0 0 401 250] /Length 0>>\nstream\n\nendstream\nendobj\n";
-        let file = pdf::document(chunk, 1, 401.0, 250.0, "Città (1)").unwrap();
+        let page = pdf::Page::read(chunk, 1, 401.0, 250.0, None).unwrap();
+        let file = pdf::document(vec![page], "Città (1)").unwrap();
         let text = String::from_utf8_lossy(&file);
         // 401 × 250 pixel CSS sono 300,75 × 187,5 punti: senza zeri in coda.
         assert!(text.contains("/MediaBox [0 0 300.75 187.5]"), "{text}");

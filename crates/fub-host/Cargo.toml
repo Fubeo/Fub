@@ -190,10 +190,10 @@ base = ["fub-features/base"]
 formatting = ["fub-features/formatting"]
 
 # Il formato `svg` delle scene di FubDraw (ADR 0203), e con lui l'export dei
-# disegni in PNG e PDF (`fub.draw` in `fub-features`): un export di disegni
-# senza disegni nel vault non avrebbe niente da esportare. Fuori dal `default`:
-# la CI lo compila e lo prova in un passo suo (`FUORI_DAL_DEFAULT` in
-# `check-cargo-feature-default.mjs`).
+# disegni in PNG, JPEG, SVG e PDF (`fub.draw` in `fub-features`): un export di
+# disegni senza disegni nel vault non avrebbe niente da esportare. Fuori dal
+# `default`: la CI lo compila e lo prova in un passo suo (`FUORI_DAL_DEFAULT`
+# in `check-cargo-feature-default.mjs`).
 draw = ["dep:fub-format-svg", "fub-features/draw"]
 
 [dev-dependencies]

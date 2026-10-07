@@ -72,8 +72,8 @@ base = ["dep:fub-format-base", "properties"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
-# I disegni: il comando che ne fa nascere uno e l'export in PNG e in PDF. È
-# l'unica feature **fuori** dal default, ed è una scelta e non una
+# I disegni: il comando che ne fa nascere uno e l'export in PNG, JPEG, SVG e
+# PDF. È l'unica feature **fuori** dal default, ed è una scelta e non una
 # dimenticanza: porta un rasterizzatore, un convertitore PDF e i caratteri di
 # Fub incorporati nel binario, e li porta solo con il formato dei disegni, che
 # sta dietro la feature `draw` di `fub-host`. Chi compila senza disegni non
@@ -125,10 +125,15 @@ svg2pdf = { version = "0.13.0", optional = true }
 # L'encoder del PNG: quello di `tiny-skia` non scrive né la risoluzione
 # (`pHYs`) né il titolo (`iTXt`). È la stessa 0.18 che `image` porta già.
 png = { version = "0.18.1", optional = true }
-# Non lo chiama nessuno: c'è per accendere `webp` nella copia di `image` che usa
-# `svg2pdf`, che di suo decodifica solo JPEG, PNG e GIF. Senza questa riga
-# un'immagine WebP in un disegno uscirebbe nel PNG e mancherebbe nel PDF. Il decoder è lo stesso `image-webp` che `resvg` porta già.
-image = { version = "0.25.10", default-features = false, features = ["webp"], optional = true }
+# Due ragioni. La prima è l'encoder del JPEG dell'export (`jpeg`): scrive il
+# colore senza sottocampionarlo e la densità nel JFIF, ed è codice di `image`
+# stesso, senza librerie C; la decodifica del JPEG (`zune-jpeg`) la porta già
+# `svg2pdf`, quindi la feature non aggiunge crate al lockfile. La seconda è
+# accendere `webp` nella copia di `image` che usa `svg2pdf`, che di suo
+# decodifica solo JPEG, PNG e GIF: senza, un'immagine WebP in un disegno
+# uscirebbe nel PNG e mancherebbe nel PDF. Il decoder è lo stesso
+# `image-webp` che `resvg` porta già.
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "webp"], optional = true }
 # La misura di un'immagine raster, presa come la prende `usvg`, che è la stessa
 # crate: un'immagine che `usvg` non sa misurare la scarta senza dirlo, e il
 # risolutore la lascia fuori prima, così il log la nomina.
