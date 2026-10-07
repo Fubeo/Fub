@@ -66,7 +66,14 @@ export const EMBED_IMAGE_BYTES = 16 * 1024 * 1024;
 /// una copia del disegno li porta dentro, da un blob che vive quanto la resa.
 /// Il file non cambia. `null` per un file che non è un disegno, o che non si
 /// legge: si mostra il file.
-async function drawingPicture(port: MediaPort, id: string, life: Lifetime): Promise<string | null> {
+///
+/// `heading` è la sezione che un embed nomina, `![[disegno#Copertina]]`: il
+/// titolo mostra il disegno intero, una tavola il disegno ritagliato su di
+/// lei. `false` se il disegno si legge e non ha quella sezione: l'embed non
+/// si risolve, come il kernel risponde per lo stesso nome.
+function drawingPicture(port: MediaPort, id: string, life: Lifetime): Promise<string | null>;
+function drawingPicture(port: MediaPort, id: string, life: Lifetime, heading: string | null): Promise<string | false | null>;
+async function drawingPicture(port: MediaPort, id: string, life: Lifetime, heading: string | null = null): Promise<string | false | null> {
   const read = port.read;
   if (read === undefined || mimeOfId(id) !== "image/svg+xml") return null;
   try {
@@ -74,8 +81,10 @@ async function drawingPicture(port: MediaPort, id: string, life: Lifetime): Prom
     if (file === null || life.closed) return null;
     const text = await file.text();
     // Il modulo dei disegni arriva solo con un disegno da mostrare.
-    const { selfContained } = await import("../../../spatial/picture");
-    const shown = await selfContained(text, async (path, limit) => {
+    const { section, selfContained } = await import("../../../spatial/picture");
+    const drawing = heading === null ? text : section(text, heading);
+    if (drawing === null) return false;
+    const shown = await selfContained(drawing, async (path, limit) => {
       const target = await port.resolve({ kind: "path", value: path }, id).catch(() => null);
       return target === null || mediaKindOfId(target) !== "image" ? null : read(target, limit);
     }, EMBED_IMAGE_BYTES);
@@ -220,9 +229,15 @@ export async function hydrateVaultMedia(
         slot.classList.add("unresolved");
         return;
       }
-      const drawing = await drawingPicture(port, id, life);
+      const heading = slot.dataset.embedHeading ?? null;
+      const drawing = await drawingPicture(port, id, life, heading);
       if (life.closed) return;
-      showEmbeddedMedia(container, slot, id, drawing ?? url, page);
+      if (drawing === false) {
+        slot.dataset.vaultMedia = "unresolved";
+        slot.classList.add("unresolved");
+        return;
+      }
+      showEmbeddedMedia(container, slot, id, drawing ?? url, heading === null ? page : `${page}#${heading}`);
     }),
     ...placed.map(async (slot) => {
       const path = slot.dataset.embedPath!;

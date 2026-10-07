@@ -12,10 +12,16 @@
 //   volta dopo.
 // - **Un tetto.** I caratteri insieme pesano al più [`MAX_FONT_SHEET_BYTES`]:
 //   tanto in più tiene in memoria ogni immagine che li porta tutti.
+//
+// Una nota può incorporare una sezione sola del disegno, `![[disegno#nome]]`:
+// il titolo è il disegno intero, e una tavola è il disegno ritagliato su di
+// lei, nella copia che va nell'immagine.
 
 import { imageDataUri, imageRefs, withImages, type ImageRef } from "./read-images";
+import { boardBox } from "./scene/classify";
+import { openSource, ReadError, readScene, type Scene } from "./scene/read";
 import { SourceText } from "./scene/text";
-import { isSvg, parseXml } from "./scene/xml";
+import { attrOf, isSvg, NS_NONE, parseXml, type ElementNode } from "./scene/xml";
 import { FONT_FILES, FONT_RANGE } from "./tools/text";
 
 /// Il foglio dei caratteri più grande, coi tre caratteri dell'app in tondo e
@@ -163,6 +169,60 @@ export async function selfContained(
     spent += blob!.size;
   }
   return picture(svg, fonts.now(svg) ?? (await fonts.load(svg)), refs, sources);
+}
+
+/// La sezione `name` di `svg`, come la sceglie `![[disegno#name]]`: il
+/// titolo è il disegno intero; una tavola, la prima che si chiama così, è il
+/// disegno con la radice sul rettangolo della tavola, il suo `viewBox` e la
+/// sua larghezza e altezza. I nomi sono quelli dell'indice della scena, e si
+/// confrontano esatti; il titolo viene prima delle tavole. `null` se `name`
+/// non è una sezione, o se `svg` non è una scena e quindi non ne ha.
+export function section(svg: string, name: string): string | null {
+  let scene: Scene;
+  try {
+    scene = readScene(svg);
+  } catch (error) {
+    if (error instanceof ReadError) return null;
+    throw error;
+  }
+  if (scene.index.title?.text === name) return svg;
+  const board = scene.index.boards.find((excerpt) => excerpt.text === name);
+  if (board === undefined) return null;
+  // L'indice dà il nome e lo span del `view`; il rettangolo si legge dal
+  // `view`, un figlio della radice, che comincia a quel byte.
+  const { doc } = openSource(svg);
+  const root = doc.element(doc.root)!;
+  for (const child of root.children) {
+    const view = doc.element(child);
+    if (view === null || doc.source.byteOf(view.start) !== board.bytes[0]) continue;
+    const box = boardBox(view);
+    return box === null ? null : onBox(svg, root, box);
+  }
+  return null;
+}
+
+/// `svg` con la radice `root` sul rettangolo `box`: il suo `viewBox`, e una
+/// larghezza e un'altezza uguali alle sue. Gli attributi che ci sono cambiano
+/// valore sul posto, quelli che mancano si aggiungono in fondo al tag
+/// d'apertura; una radice con una tavola ha dei figli, e il tag non è
+/// autochiuso.
+function onBox(svg: string, root: ElementNode, box: readonly [number, number, number, number]): string {
+  const edits: { start: number; end: number; text: string }[] = [];
+  let added = "";
+  for (const [local, value] of [["viewBox", box.join(" ")], ["width", String(box[2])], ["height", String(box[3])]] as const) {
+    const attr = attrOf(root, NS_NONE, local);
+    if (attr === undefined) added += ` ${local}="${value}"`;
+    else edits.push({ start: attr.raw[0], end: attr.raw[1], text: value });
+  }
+  if (added !== "") edits.push({ start: root.openEnd - 1, end: root.openEnd - 1, text: added });
+  edits.sort((a, b) => a.start - b.start);
+  let out = "";
+  let at = 0;
+  for (const edit of edits) {
+    out += svg.slice(at, edit.start) + edit.text;
+    at = edit.end;
+  }
+  return out + svg.slice(at);
 }
 
 /// Il nome di un `<style>` SVG figlio di una radice che si chiama `root`:

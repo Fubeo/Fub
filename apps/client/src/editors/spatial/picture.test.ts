@@ -110,3 +110,53 @@ describe("un disegno che si vede da solo, in un colpo", () => {
       + '<text font-family="Inter">x</text></svg>');
   });
 });
+
+describe("la sezione di un disegno", () => {
+  const HEAD = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1"';
+  const BOARDS = '<title>Storia</title>'
+    + '<view id="b00000001" fub:role="board" viewBox="0 0 600 400"><title>Copertina</title></view>'
+    + '<view id="b00000002" fub:role="board" viewBox="700,0,600,400"><title>  Due\n  tavole </title><desc>La seconda</desc></view>'
+    + '<view id="b00000003" fub:role="board" viewBox="0 500 300 200.5"/>'
+    + '<view id="b00000004" fub:role="board" viewBox="700 500 600 400"><title>Copertina</title></view>'
+    + '<view id="b00000005" fub:role="board" viewBox="0 1000 600 400"><title>Storia</title></view>'
+    + '<view id="v1" viewBox="0 0 10 10"><title>Vista</title></view>'
+    + '<rect x="0" y="0" width="10" height="10"/></svg>';
+  const DRAWING = `${HEAD} viewBox="0 0 1300 1400" width="1300" height="1400">${BOARDS}`;
+
+  it("il titolo è il disegno intero, anche se una tavola si chiama come lui", async () => {
+    const { section } = await import("./picture");
+    expect(section(DRAWING, "Storia")).toBe(DRAWING);
+  });
+
+  it("una tavola è il disegno con la radice sul suo rettangolo, e conta la prima con quel nome", async () => {
+    const { section } = await import("./picture");
+    const body = DRAWING.slice(DRAWING.indexOf(">") + 1);
+    expect(section(DRAWING, "Copertina")).toBe(`${HEAD} viewBox="0 0 600 400" width="600" height="400">${body}`);
+    // Il nome è quello dell'indice: spazi ridotti, e l'id se manca il titolo.
+    expect(section(DRAWING, "Due tavole")).toBe(`${HEAD} viewBox="700 0 600 400" width="600" height="400">${body}`);
+    expect(section(DRAWING, "b00000003")).toBe(`${HEAD} viewBox="0 500 300 200.5" width="300" height="200.5">${body}`);
+  });
+
+  it("gli attributi che la radice non ha si aggiungono in fondo al tag d'apertura", async () => {
+    const { section } = await import("./picture");
+    const bare = `${HEAD} height='9mm'\n>${BOARDS}`;
+    expect(section(bare, "Copertina")).toBe(`${HEAD} height='400'\n viewBox="0 0 600 400" width="600">${BOARDS}`);
+  });
+
+  it("trova la tavola anche dopo un BOM, righe CRLF e caratteri fuori dall'ASCII", async () => {
+    const { section } = await import("./picture");
+    const source = `\u{feff}${HEAD} viewBox="0 0 10 10">\r\n<title>Città 𝄞</title>\r\n`
+      + '<view id="b00000001" fub:role="board" viewBox="1 2 3 4"><title>Più è</title></view>\r\n'
+      + '<view id="b00000002" fub:role="board" viewBox="5 6 7 8"><title>Già</title></view></svg>';
+    expect(section(source, "Già")).toBe(source.replace('viewBox="0 0 10 10">', 'viewBox="5 6 7 8" width="7" height="8">'));
+  });
+
+  it("un altro nome non è una sezione, e un file che non è una scena non ne ha", async () => {
+    const { section } = await import("./picture");
+    for (const name of ["Retro", "copertina", "Due  tavole", "Vista", "v1", "La seconda", ""]) {
+      expect(section(DRAWING, name), name).toBeNull();
+    }
+    expect(section(`${HEAD}><title>Storia</title><g></svg>`, "Storia")).toBeNull();
+    expect(section('<html xmlns="http://www.w3.org/1999/xhtml"><title>Storia</title></html>', "Storia")).toBeNull();
+  });
+});
