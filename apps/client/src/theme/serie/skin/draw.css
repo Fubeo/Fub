@@ -674,8 +674,9 @@ button.draw-isolation-crumb:hover {
 /* La presentazione. La tavola sta sulla carta bianca del foglio, come
    nell'editor; il laser e l'inchiostro sono rossi, con un alone chiaro il
    laser, perché si vedono sul disegno e non sul tema, come la carta. Lo
-   schermo di fine è nero in ogni tema: il suo testo ha i bianchi della
-   lightbox. Lo stage è tutto lo schermo, e l'unica cosa col fuoco: un anello
+   schermo di fine è nero in ogni tema, e porta il suo nero anche sotto la
+   riga più tenue, che non si legge su un altro fondo: il suo testo ha i
+   bianchi della lightbox. Lo stage è tutto lo schermo, e l'unica cosa col fuoco: un anello
    attorno allo schermo lo vedrebbe soltanto la sala. Un tratto che svanisce
    va a trasparente; col moto ridotto la presentazione lo toglie di colpo. */
 .draw-present-board {
@@ -700,6 +701,7 @@ button.draw-isolation-crumb:hover {
 .draw-present-end {
   gap: var(--space-3);
   padding: var(--space-6);
+  background: #000000;
   color: rgb(255 255 255 / 92%);
 }
 .draw-present-end-title {
@@ -709,6 +711,7 @@ button.draw-isolation-crumb:hover {
 }
 .draw-present-end-hint {
   margin: 0;
+  background: #000000;
   color: rgb(255 255 255 / 70%);
   font-size: var(--text-lg);
 }
