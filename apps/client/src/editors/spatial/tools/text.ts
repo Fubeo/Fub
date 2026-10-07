@@ -24,6 +24,7 @@
 
 import { formatNumber } from "../number";
 import type { Point } from "../scene/matrix";
+import type { TextLine } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import type { Width } from "./palette";
 
@@ -54,6 +55,9 @@ export const BLANK_LINE = "\u00a0";
 /// Ciò che XML 1.0 non ammette in un testo: i caratteri di controllo tranne
 /// tabulazione e a capo, U+FFFE e U+FFFF, i surrogati spaiati.
 const NOT_XML = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
+/// `text` senza ciò che XML non ammette.
+export const xmlText = (text: string): string => text.replace(NOT_XML, "");
 
 /// Vero se `line` non ha niente da leggere.
 const blank = (line: string): boolean => line.trim() === "";
@@ -89,13 +93,16 @@ export interface TextStyle {
 /// L'elemento di un testo nuovo con le righe `lines`, ancorato in `at` nelle
 /// coordinate del livello che lo riceve: la linea di base della prima riga
 /// comincia lì.
-export function textElem(id: string, at: Point, lines: readonly string[], style: TextStyle): Elem {
+export function textElem(id: string, at: Point, lines: readonly TextLine[], style: TextStyle): Elem {
   const x = formatNumber(at[0], 2);
   const spacing = formatNumber(style.size * LINE_SPACING, 2);
   return {
     tag: "text",
     attrs: { id, x, y: formatNumber(at[1], 2), fill: style.color, "font-family": TEXT_FAMILY, "font-size": formatNumber(style.size, 2) },
-    children: lines.map((line, i) => ({ tag: "tspan", attrs: { x, dy: i === 0 ? "0" : spacing }, text: line })),
+    children: lines.map((line, i) => {
+      const attrs = { x, dy: i === 0 ? "0" : spacing };
+      return typeof line === "string" ? { tag: "tspan", attrs, text: line } : { tag: "tspan", attrs, runs: line };
+    }),
   };
 }
 

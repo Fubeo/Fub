@@ -106,9 +106,10 @@ export default defineConfig({
           // strumenti toccano, e ciò che fa di una scelta dei passi sul
           // documento: disporre, il contorno, l'aspetto, i tracciati, le
           // trasformazioni, le booleane, i tagli, lo spessore variabile, i
-          // livelli e il gruppo di un ricalco. Dipendono dal formato e dalla
-          // geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops)\.ts$/.test(id)) {
+          // livelli, il gruppo di un ricalco e il testo a pezzi del campo in
+          // cui si scrive. Dipendono dal formato e dalla geometria, e
+          // l'editor li chiama.
+          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops|rich)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {

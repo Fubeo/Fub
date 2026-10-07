@@ -52,6 +52,7 @@ import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outli
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
 import { arrowPath } from "./shapes";
+import { INHERITED } from "./rich";
 import { replaceElem } from "./topath";
 
 /// Dove un testo si allinea al suo punto d'ancoraggio.
@@ -154,6 +155,25 @@ function passedBy(node: ElementPart | null): Inherited {
   const passed = out ?? from;
   passes.set(node, { from, out: passed });
   return passed;
+}
+
+/// Ciò che il testo `node` eredita da chi lo contiene, per gli attributi
+/// del testo, coi valori iniziali di SVG dove nessuno li scrive.
+export function textInherited(node: ElementPart): Record<string, string> {
+  const passed = passedBy(node.parent);
+  const out: Record<string, string> = {};
+  for (const name of [...INHERITED, "text-anchor"]) {
+    const value = passed.get(name);
+    if (value !== undefined) out[name] = value;
+  }
+  return out;
+}
+
+/// Ciò che eredita un testo nuovo in un livello che non scrive niente.
+export function initialText(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of [...INHERITED, "text-anchor"]) out[name] = INITIAL.get(name)!;
+  return out;
 }
 
 /// Una parte della selezione: l'elemento, i suoi attributi e ciò che
