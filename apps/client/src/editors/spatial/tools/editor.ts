@@ -126,7 +126,7 @@ import { widthsAt, type WidthPoint } from "../scene/varwidth";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, elementsIn, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
-import { auditScene, MAX_EDIT_BYTES, MAX_ELEMENTS, SVG_NS } from "../scene/read";
+import { auditScene, MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import type { Applied, SceneEngine } from "../scene/engine";
 import type { Role, Tool } from "../scene/analysis";
@@ -192,16 +192,21 @@ import {
   boardsOf,
   boundsRect,
   carriedBy as onBoard,
+  duplicateBoardOps,
+  duplicateSpot,
   MIN_BOARD_SIDE,
   moveBoardOps,
+  nextBoardRect,
   pageRect,
   rectBounds,
   rectText,
   removeBoardOps,
   renameBoardOps,
+  reorderBoardOps,
   resizeBoardOps,
   roundRect,
   type Board,
+  type CopyNames,
   type Rect,
 } from "./boards";
 import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf, type OutlineChange } from "./outline";
@@ -365,6 +370,7 @@ import {
 import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
+import { createBoardsPanel, type BoardRow } from "./boards-panel";
 import { createAccessPanel } from "./accessibility-panel";
 import { overlaps, problemsOf, readingOrder, type AuditCode, type Problem } from "./audit";
 import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "./clipboard";
@@ -980,6 +986,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-back": ["M10 6l-6 6 6 6", "M4 12h16"],
   "draw-history": ["M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5", "M3.5 4v4.5H8", "M12 7.5V12l3 2"],
   "draw-access": ["M12 2.75a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5z", "M5 8.5l7 1.5 7-1.5", "M12 10v4.5", "M8.5 21l3.5-6.5 3.5 6.5"],
+  // L'elenco delle tavole: due fogli affiancati, ognuno col suo nome sopra.
+  "draw-boards": ["M3 8.5h8v11H3z", "M14 8.5h7v7h-7z", "M3 5h5", "M14 5h4"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -2296,6 +2304,34 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncAccess();
   });
 
+  // L'elenco delle tavole, dal livello Standard: chiuso finché qualcuno non
+  // lo apre. Le righe si rifanno quando cambiano le tavole, e restano le
+  // stesse se dicono le stesse cose.
+  let boardsShown: { readonly rows: readonly BoardRow[]; readonly current: string | null; readonly editable: boolean; readonly paged: boolean } | null = null;
+  let boardRows: { readonly list: readonly Board[]; readonly rows: readonly BoardRow[] } | null = null;
+  const boardsPanel = createBoardsPanel(life, {
+    onGo: (id) => goToBoard(id),
+    onAdd: () => newBoard(),
+    onRename: (id, name) => void writeBoardName(id, name),
+    onDuplicate: (id) => {
+      const board = boardById(id);
+      if (board !== null) duplicateBoard(board);
+    },
+    onDelete: (id) => {
+      const board = boardById(id);
+      if (board !== null) removeBoard(board);
+    },
+    onMove: (id, to) => orderBoard(id, to),
+    onLeave: () => surface.focus({ preventScroll: true }),
+  });
+  boardsPanel.element.hidden = true;
+  relabels.push(() => {
+    boardRows = null;
+    boardsShown = null;
+    boardsPanel.relabel();
+    syncBoards();
+  });
+
   // Gli attributi dell'oggetto scelto, dal livello Esperto: chiusi finché
   // qualcuno non li apre, sotto l'albero se è aperto anche quello.
   const inspector = createInspector(life, {
@@ -2368,6 +2404,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const pageButton = button(viewGroup, "draw-button", () => t("draw.page_grid"), "draw-page-grid", () => openMenu(pageButton, pageItems()));
   pageButton.setAttribute("aria-haspopup", "menu");
   pageButton.setAttribute("aria-expanded", "false");
+  // Le tavole, dal livello Standard.
+  const boardsButton = button(viewGroup, "draw-button", () => t("draw.boards"), "draw-boards", () => showBoards(boardsPanel.element.hidden));
+  boardsButton.setAttribute("aria-expanded", "false");
+  boardsButton.setAttribute("aria-controls", boardsPanel.element.id);
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
@@ -2824,7 +2864,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
+  dock.append(boardsPanel.element, tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, dock);
@@ -3034,7 +3074,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// maniglia; `null` se il gesto non la tocca.
   const sheetRect = (board: Board | null): Rect | null => {
     const g = current?.kind === "board" ? current : null;
-    if (g === null || g.sheet === null || g.rect === null || (g.mode !== "move" && g.mode !== "resize")) return null;
+    if (g === null || g.sheet === null || g.rect === null || (g.mode !== "move" && g.mode !== "resize") || boardCopies(g)) return null;
     return (g.sheet.board?.id ?? null) === (board?.id ?? null) ? g.rect : null;
   };
 
@@ -3071,6 +3111,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       placeSheet(boardSheets[at]!, rect);
       placeName(boardNames[at]!, board, rect, board.id === chosen);
     });
+    syncBoards();
   };
 
   /// La griglia sullo schermo, se il livello la offre e la si vuole vedere.
@@ -3784,8 +3825,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Il cursore del foglio sopra una maniglia, o durante il suo gesto; sopra
-  /// una tavola, con lo strumento Tavola, quello che sposta.
-  const showGrip = (cursor: GripCursor | "rotating" | "move" | null): void => {
+  /// una tavola, con lo strumento Tavola, quello che sposta, o con Alt,
+  /// mentre la si sposta, quello che copia.
+  const showGrip = (cursor: GripCursor | "rotating" | "move" | "copy" | null): void => {
     if (cursor === null) delete surface.dataset.grip;
     else surface.dataset.grip = cursor;
   };
@@ -4386,6 +4428,41 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     });
   }
 
+  /// Apre o chiude l'elenco delle tavole; aperto, il fuoco ci va.
+  function showBoards(open: boolean): void {
+    if (open && !has("board")) return;
+    if (!open && boardsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    boardsPanel.element.hidden = !open;
+    boardsButton.setAttribute("aria-expanded", String(open));
+    syncDock();
+    if (open) {
+      boardsShown = null;
+      syncBoards();
+      boardsPanel.focus();
+    }
+  }
+
+  /// Porta l'elenco delle tavole, se è aperto, alle tavole di adesso e a
+  /// quella di adesso (vedi [`currentBoard`]).
+  function syncBoards(): void {
+    if (boardsPanel.element.hidden) return;
+    const list = boardsNow();
+    if (boardRows?.list !== list) {
+      const rows = list.map((board): BoardRow => ({ id: board.id, name: board.name, size: measuresText([board.rect[2], board.rect[3]]) }));
+      const before = boardRows?.rows;
+      const same = before !== undefined && before.length === rows.length && rows.every((row, at) => before[at]!.id === row.id && before[at]!.name === row.name && before[at]!.size === row.size);
+      boardRows = { list, rows: same ? before : rows };
+    }
+    const rows = boardRows.rows;
+    const current = currentBoard()?.id ?? null;
+    const canEdit = editable();
+    const paged = scene.root.page !== null;
+    const shown = boardsShown;
+    if (shown !== null && shown.rows === rows && shown.current === current && shown.editable === canEdit && shown.paged === paged) return;
+    boardsShown = { rows, current, editable: canEdit, paged };
+    boardsPanel.update({ boards: rows, current, editable: canEdit, canAdd: rows.length < MAX_BOARDS, paged });
+  }
+
   /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
   /// Chiusa, dimentica ciò che ha letto.
   function showAccess(open: boolean): void {
@@ -4794,7 +4871,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// attributi, che vogliono più spazio.
   function syncDock(): void {
     const nested = nestedNow();
-    dock.hidden = tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
+    dock.hidden =
+      boardsPanel.element.hidden && tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
     dock.toggleAttribute("data-wide", nested ? !panel.element.hidden : !inspector.element.hidden);
   }
 
@@ -5500,6 +5578,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     historyButton.hidden = !has("history");
     if (historyButton.hidden && !historyPanel.element.hidden) showHistory(false);
     syncHistory();
+    boardsButton.hidden = !has("board");
+    if (boardsButton.hidden && !boardsPanel.element.hidden) showBoards(false);
+    syncBoards();
     accessButton.hidden = !has("accessibility");
     if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
     syncAccess();
@@ -7315,33 +7396,59 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return t("draw.board.chosen", { ...size, name: sheet.board.name, index: list.findIndex((board) => board.id === id) + 1, count: list.length });
   };
 
-  /// La tavola che si guarda, da scegliere quando lo strumento Tavola non ne
-  /// ha una: quella al centro della vista, o la prima che si vede, o la
-  /// prima; in un disegno senza tavole, la pagina.
+  /// La tavola che si guarda: quella al centro della vista, o la prima che
+  /// si vede; `null` se non se ne vede nessuna.
+  const boardInView = (): Board | null => {
+    const list = boardsNow();
+    if (list.length === 0) return null;
+    const here = boardAt(list, toScene(camera, viewCenter()));
+    if (here !== null) return here;
+    const view = viewBounds();
+    return list.find((board) => !disjoint(board.box, view)) ?? null;
+  };
+
+  /// La tavola di adesso, che l'elenco delle tavole segna e accanto alla
+  /// quale «Nuova tavola» ne mette una: quella scelta con lo strumento
+  /// Tavola, o quella che si guarda.
+  const currentBoard = (): Board | null => chosenSheet()?.board ?? boardInView();
+
+  /// La tavola da scegliere quando lo strumento Tavola non ne ha una: quella
+  /// che si guarda, o la prima; in un disegno senza tavole, la pagina.
   const sheetInView = (): string | null => {
     const list = boardsNow();
     if (list.length === 0) return scene.root.page === null ? null : PAGE_SHEET;
-    const here = boardAt(list, toScene(camera, viewCenter()));
-    if (here !== null) return here.id;
-    const view = viewBounds();
-    return (list.find((board) => !disjoint(board.box, view)) ?? list[0]!).id;
+    return (boardInView() ?? list[0]!).id;
   };
+
+  /// Vero se il gesto `g` sposta, con Alt, una copia della tavola presa,
+  /// che resta dov'è.
+  const boardCopies = (g: BoardGesture): boolean => g.mode === "move" && alt;
 
   /// I bersagli delle guide per il gesto `g` dello strumento Tavola, presi
   /// la prima volta e tenuti finché la scena e la vista restano quelle: con
   /// le guide intelligenti gli oggetti che si vedono, tranne quelli che la
   /// tavola porta, le altre tavole, e la pagina di un disegno senza tavole,
   /// se non è lei che si tira; con le guide del documento, quelle.
-  let boardGuideCache: { readonly owner: BoardGesture; readonly index: SceneIndex; readonly view: View; readonly guides: GuideIndex } | null = null;
+  let boardGuideCache: {
+    readonly owner: BoardGesture;
+    readonly index: SceneIndex;
+    readonly view: View;
+    readonly copying: boolean;
+    readonly guides: GuideIndex;
+  } | null = null;
   const boardGuides = (g: BoardGesture): GuideIndex => {
     const index = currentIndex();
-    if (boardGuideCache !== null && boardGuideCache.owner === g && boardGuideCache.index === index && boardGuideCache.view === camera) return boardGuideCache.guides;
+    const copying = boardCopies(g);
+    const cached = boardGuideCache;
+    if (cached !== null && cached.owner === g && cached.index === index && cached.view === camera && cached.copying === copying) return cached.guides;
     const targets: GuideTarget[] = [];
     if (smartOn()) {
       const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
-      targets.push(...seenTargets(new Set(g.carried.map((unit) => unit.key)), [], view));
+      // La copia si allinea anche alla tavola da cui viene, che resta, e a
+      // ciò che porta.
+      targets.push(...seenTargets(new Set(copying ? [] : g.carried.map((unit) => unit.key)), [], view));
       // Una tavola si allinea alle altre, e si distribuisce fra loro.
-      const moving = g.plan === "draw" ? null : (g.sheet?.board?.id ?? null);
+      const moving = g.plan === "draw" || copying ? null : (g.sheet?.board?.id ?? null);
       for (const board of boardsNow()) {
         if (board.id !== moving && (view === null || !disjoint(board.box, view))) targets.push({ kind: "object", box: board.box, key: board.id });
       }
@@ -7350,7 +7457,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     targets.push(...rulerTargets(null));
     const guides = new GuideIndex(targets);
-    boardGuideCache = { owner: g, index, view: camera, guides };
+    boardGuideCache = { owner: g, index, view: camera, copying, guides };
     return guides;
   };
 
@@ -7417,10 +7524,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Il gesto `g` sul foglio prima di scriverlo: la carta della tavola, o
   /// della pagina, al rettangolo di adesso, e gli oggetti che la tavola
-  /// spostata porta con sé.
+  /// spostata porta con sé. Una copia non sposta niente: la sua cornice
+  /// dice dove andrà.
   const boardPreview = (g: BoardGesture): void => {
     const sheet = g.sheet;
-    if (sheet === null || g.rect === null || (g.mode !== "move" && g.mode !== "resize")) {
+    if (sheet === null || g.rect === null || (g.mode !== "move" && g.mode !== "resize") || boardCopies(g)) {
       painter.setDraft(null);
       return;
     }
@@ -7452,11 +7560,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (g.plan === "move") {
         // La tavola che si sposta è quella scelta.
         boardChosen = g.sheet!.board!.id;
-        showGrip("move");
       } else if (g.plan === "resize") {
         showGrip(gripCursor(sheetFrame(g.sheet!.rect), g.grip!, camera.angle));
       }
     }
+    // Alt si prende e si lascia a metà gesto: copia, o sposta.
+    if (g.mode === "move") showGrip(alt ? "copy" : "move");
     if (g.mode === "move") {
       const [dx, dy] = boardDelta(g);
       const [x, y, width, height] = g.sheet!.rect;
@@ -7477,7 +7586,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     current = null;
     showGrip(null);
     const board = g.sheet?.board ?? null;
-    if (delta !== null && board !== null) moveBoard(board, delta[0], delta[1], g.carried, note);
+    // Con Alt la tavola resta, e la copia va dove si posa; posata dov'era,
+    // non c'è niente da copiare.
+    if (delta !== null && board !== null && alt && (delta[0] !== 0 || delta[1] !== 0)) duplicateBoard(board, delta, note);
+    else if (delta !== null && board !== null) moveBoard(board, delta[0], delta[1], g.carried, note);
     else if (g.mode === "resize" && g.sheet !== null && g.rect !== null) resizeSheet(g.sheet, g.rect, note);
     else if (g.mode === "draw" && g.rect !== null) addBoard(g.rect, note);
     // Un tocco su una maniglia non cambia niente.
@@ -7520,20 +7632,106 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Aggiunge una tavola col rettangolo `rect`, in un passo, la sceglie e lo
   /// dice, con `note`; in un disegno senza tavole la pagina diventa prima la
-  /// tavola 1. La carta somiglia a quella della tavola scelta.
-  const addBoard = (rect: Rect, note = ""): void => {
+  /// tavola 1. La carta somiglia a quella di `like`, se ne ha una. Torna la
+  /// tavola nuova; `null` se non c'è.
+  const addBoard = (rect: Rect, note = "", like: Board | null = chosenSheet()?.board ?? null): Board | null => {
     const model = engine.model;
-    if (model === null || !editable()) return;
+    if (model === null || !editable()) return null;
     const before = boardsNow().length;
-    const added = addBoardOps(model, rect, (n) => t("draw.board.name", { n }), newIds(), scene.root.page, chosenSheet()?.board ?? null);
+    const added = addBoardOps(model, rect, (n) => t("draw.board.name", { n }), newIds(), scene.root.page, like);
     if (added === "limit") announce(t("draw.board.limit", { count: before }));
     else if (added === "paper") announce(t("draw.board.paper"));
-    if (typeof added === "string" || !writeBoard("draw.action.board_add", added)) return;
+    if (typeof added === "string" || !writeBoard("draw.action.board_add", added)) return null;
     const list = boardsNow();
     const board = boardById(added.keys[0]!);
-    if (board === null) return;
+    if (board === null) return null;
     const said = { name: board.name, width: lengthSpoken(board.rect[2]), height: lengthSpoken(board.rect[3]) };
     announce(noted(before === 0 && list.length > 1 ? t("draw.board.added.page", { ...said, first: list[0]!.name }) : t("draw.board.added", said), note));
+    return board;
+  };
+
+  /// Il rettangolo della prima tavola di un disegno senza pagina né tavole:
+  /// quello del disegno, o della vista se è vuoto, allargato alle unità
+  /// intere.
+  const looseRect = (): Rect => {
+    const model = engine.model;
+    const box = (model === null ? null : indexer.extent(model)) ?? viewBounds();
+    const left = Math.floor(box.min[0]);
+    const top = Math.floor(box.min[1]);
+    return [left, top, Math.max(MIN_BOARD_SIDE, Math.ceil(box.max[0]) - left), Math.max(MIN_BOARD_SIDE, Math.ceil(box.max[1]) - top)];
+  };
+
+  /// «Nuova tavola», dall'elenco: una tavola della misura di quella di
+  /// adesso, o dell'ultima, a destra di tutte; in un disegno senza tavole la
+  /// pagina diventa la tavola 1 e la nuova le sta accanto, e senza pagina la
+  /// tavola copre il disegno. La si porta in vista e, se l'elenco è aperto,
+  /// se ne apre il nome.
+  const newBoard = (): void => {
+    const like = currentBoard();
+    const board = addBoard(nextBoardRect(boardsNow(), scene.root.page, like) ?? looseRect(), "", like);
+    if (board === null) return;
+    frameBounds(board.box);
+    syncBoards();
+    if (!boardsPanel.element.hidden) boardsPanel.rename(board.id);
+  };
+
+  /// Dall'elenco: sceglie la tavola `id` e la inquadra.
+  const goToBoard = (id: string): void => {
+    const at = boardsNow().findIndex((board) => board.id === id);
+    if (at >= 0) visitBoard(at, true);
+  };
+
+  /// Dall'elenco: porta la tavola `id` al posto `to`, contato da 0, fra le
+  /// tavole, in un passo, e lo dice.
+  const orderBoard = (id: string, to: number): void => {
+    const board = boardById(id);
+    const model = engine.model;
+    if (board === null || model === null || !editable()) return;
+    const ordered = reorderBoardOps(model, board, to);
+    if (ordered.ops.length === 0 || !writeBoard("draw.action.board_order", ordered)) return;
+    const list = boardsNow();
+    announce(t("draw.board.ordered", { name: board.name, index: list.findIndex((each) => each.id === id) + 1, count: list.length }));
+  };
+
+  /// I nomi che danno i duplicati, nella lingua di adesso.
+  const copyNames: CopyNames = {
+    board: (n) => t("draw.board.name", { n }),
+    copy: (name, n) => (n === 1 ? t("draw.board.copy", { name }) : t("draw.board.copy.more", { name, n })),
+  };
+
+  /// Duplica la tavola `board`, o con `null` la pagina di un disegno senza
+  /// tavole, con ciò che ci sta sopra, in un passo: la copia va spostata di
+  /// `delta` o, senza, accanto alla sua, dove c'è posto. La si sceglie, la si
+  /// porta in vista e lo si dice, con `note`; la pagina diventa prima la
+  /// tavola 1.
+  const duplicateBoard = (board: Board | null, delta: readonly [number, number] | null = null, note = ""): void => {
+    const model = engine.model;
+    const page = scene.root.page;
+    if (model === null || !editable()) return;
+    const rect = board?.rect ?? (page === null ? null : pageRect(page));
+    if (rect === null) return;
+    const before = boardsNow();
+    const [dx, dy] = delta ?? duplicateSpot(before, rect);
+    const carried = onBoard(board?.box ?? rectBounds(rect), indexer.movable(model));
+    const copied = duplicateBoardOps(model, board, dx, dy, carried, copyNames, newIds(), page);
+    if (copied === "limit") announce(t("draw.board.limit", { count: before.length }));
+    else if (copied === "paper") announce(t("draw.board.paper"));
+    else if (copied === "content") announce(t("draw.board.content"));
+    if (typeof copied === "string" || !writeBoard("draw.action.board_duplicate", copied)) return;
+    const copy = boardById(copied.keys[0]!);
+    if (copy === null) return;
+    frameBounds(copy.box);
+    const args = { name: copy.name, x: coordText(copy.rect[0]), y: coordText(copy.rect[1]) };
+    const said = carried.length === 0 ? t("draw.board.duplicated", args) : plural(carried.length, "draw.board.duplicated.one", "draw.board.duplicated.other", args);
+    announce(noted(board === null ? `${t("draw.board.paged", { first: boardsNow()[0]!.name })} ${said}` : said, note));
+  };
+
+  /// Ctrl+D, o ⌘D, con lo strumento Tavola: duplica la tavola scelta, o la
+  /// pagina; senza niente di scelto lo dice.
+  const duplicateSheet = (): void => {
+    const sheet = chosenSheet();
+    if (sheet === null) announce(t("draw.board.unchosen"));
+    else duplicateBoard(sheet.board);
   };
 
   /// Dà alla tavola, o alla pagina, di `sheet` il rettangolo `rect`, in un
@@ -7552,11 +7750,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     announce(noted(t("draw.board.resized", { ...said, name: sheet.board.name }), note));
   };
 
-  /// Toglie la tavola scelta, in un passo, e lo dice: il disegno resta, e si
-  /// sceglie la tavola che prende il suo posto. Tolta l'ultima, la sua carta
-  /// torna della pagina, che resta scelta. La pagina non si toglie.
-  const removeBoard = (): void => {
-    const sheet = chosenSheet();
+  /// Elimina la tavola `target`, o quella scelta, in un passo, e lo dice: il
+  /// disegno resta, e si sceglie la tavola che prende il suo posto.
+  /// Eliminata l'ultima, la sua carta torna della pagina, che resta scelta.
+  /// La pagina non si elimina.
+  const removeBoard = (target: Board | null = null): void => {
+    const sheet = target === null ? chosenSheet() : { board: target, rect: target.rect };
     const model = engine.model;
     if (sheet === null || model === null || !editable()) return;
     const board = sheet.board;
@@ -7596,11 +7795,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return true;
   };
 
-  /// F2 con lo strumento Tavola: una finestra chiede il nome nuovo della
-  /// tavola scelta.
+  /// F2 con lo strumento Tavola: il nome della tavola scelta si scrive
+  /// nell'elenco, se è aperto, o in una finestra.
   async function renameBoard(): Promise<void> {
     const board = chosenSheet()?.board ?? null;
     if (asking || board === null || !editable()) return;
+    if (!boardsPanel.element.hidden && boardsPanel.rename(board.id)) return;
     asking = true;
     cancelGesture();
     try {
@@ -7728,6 +7928,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       for (const { grip, at } of shown.view.spots) if (grip !== "rotate") out.push({ kind: "grip", x: at[0], y: at[1] });
     }
     if (g?.mode === "resize") out.push(sizeLabel(rect));
+    // La copia che Alt porta: la sua cornice, dove andrà.
+    if (g !== null && g.rect !== null && boardCopies(g)) {
+      const [left, top, wide, high] = g.rect;
+      out.push({ kind: "box", x: left, y: top, width: wide, height: high, matrix: IDENTITY });
+    }
     return out;
   };
 
@@ -7744,7 +7949,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const shown = sheetView();
     const grip = shown === null ? null : gripAt(shown.view, point, camera.scale, pointer);
     if (shown !== null && grip !== null && grip !== "rotate") showGrip(gripCursor(shown.view.frame, grip, camera.angle));
-    else showGrip(!shift && boardAt(boardsNow(), point) !== null ? "move" : null);
+    else showGrip(!shift && boardAt(boardsNow(), point) !== null ? (alt ? "copy" : "move") : null);
   };
 
   /// La pagina che i righelli segnano: senza tavole la pagina, anche mentre
@@ -14165,10 +14370,33 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ["Home End", t("draw.keys.board.ends")],
               [ARROW_KEYS, t(gridOn(at) ? "draw.keys.board.nudge.grid" : "draw.keys.board.nudge")],
               [`Mod-${ARROW_KEYS}`, t(gridOn(at) ? "draw.keys.board.resize.grid" : "draw.keys.board.resize")],
+              ["Mod-d", t("draw.keys.board.duplicate")],
               ["Delete", t("draw.keys.board.delete")],
               ["F2", t("draw.keys.board.rename")],
               ["Escape", t("draw.keys.board.deselect")],
               ["Shift", t("draw.keys.board.over")],
+              ["Alt", t("draw.keys.board.copy")],
+            ],
+          },
+        ]
+      : [];
+
+  /// I tasti dell'elenco delle tavole, se le parti `at` hanno lo strumento
+  /// Tavola.
+  const boardListKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("board")
+      ? [
+          {
+            title: t("draw.keys.boards.list"),
+            rows: [
+              ["ArrowUp ArrowDown Home End", t("draw.keys.boards.walk")],
+              ["Enter Space", t("draw.keys.boards.go")],
+              ["F2", t("draw.keys.boards.rename")],
+              ["Mod-d", t("draw.keys.boards.duplicate")],
+              ["Alt-ArrowUp Alt-ArrowDown", t("draw.keys.boards.move")],
+              ["Delete", t("draw.keys.boards.delete")],
+              ["Shift-F10", t("draw.keys.boards.menu")],
+              ["Escape", t("draw.keys.boards.leave")],
             ],
           },
         ]
@@ -14264,6 +14492,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["?", t("draw.keys")],
       ],
     },
+    ...boardListKeys(at),
     ...historyKeys(at),
     ...accessKeys(at),
   ];
@@ -15013,6 +15242,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (current?.kind === "select" && (current.mode === "move" || current.mode === "resize" || current.mode === "rotate")) selectUpdate(current);
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);
+    else if (current?.kind === "board" && current.mode !== "pending") boardUpdate(current);
     else if (hover !== null && drawing() !== null) showBezier();
     else if (current?.kind === "builder" || (current === null && regionHover >= 0)) showHandles();
     else if (current === null && (alt || measured)) showHandles();
@@ -15036,7 +15266,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // di testo, annulla e ripeti, raggruppa e separa.
     const treeField =
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
-      (tree.element.contains(event.target) || historyPanel.element.contains(event.target));
+      (tree.element.contains(event.target) || historyPanel.element.contains(event.target) || boardsPanel.element.contains(event.target));
     const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target) || traceBar.contains(event.target));
     if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
@@ -15132,6 +15362,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         else focusAttributes();
       } else if (key === "m" && event.shiftKey && arranges("transform")) {
         if (!focusTransform()) void transformDialog();
+      } else if (key === "d" && !event.shiftKey && tool === "board" && has("board") && editable()) {
+        if (pressed === null && current === null) duplicateSheet();
       } else if (key === "d" && !event.shiftKey && arranges("arrange")) {
         duplicateSelection();
       } else if (key === "j" && !event.shiftKey && tool === "nodes" && nodeKeysOn() && chosenCount() > 0) {

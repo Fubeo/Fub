@@ -72,6 +72,10 @@ export interface BoardsView {
   /// Vero se il disegno riceve un'altra tavola, cioè se è sotto il limite
   /// di 1 000.
   readonly canAdd: boolean;
+  /// Vero se il disegno ha una pagina: senza tavole, «Nuova tavola» la fa
+  /// diventare la tavola 1. Senza pagina, la tavola nuova racchiude il
+  /// disegno.
+  readonly paged: boolean;
 }
 
 export interface BoardsPanelOptions {
@@ -305,8 +309,8 @@ export function createBoardsPanel(life: Lifetime, options: BoardsPanelOptions): 
     setText(counter, plural(total, "draw.boards.count.one", "draw.boards.count.other", { count: numeral(total) }));
     empty.hidden = total > 0;
     scroller.hidden = total === 0;
-    setText(empty, t(canEdit ? "draw.boards.empty" : "draw.boards.empty.read_only"));
-    setText(hint, t(canEdit ? "draw.boards.hint" : "draw.boards.hint.read_only"));
+    setText(empty, t(!canEdit ? "draw.boards.empty.read_only" : (view?.paged ?? true) ? "draw.boards.empty" : "draw.boards.empty.unbounded"));
+    setText(hint, canEdit ? t("draw.boards.hint", { duplicate: displayBinding("Mod-d") }) : t("draw.boards.hint.read_only"));
     // In sola lettura «Nuova tavola» si spegne come gli altri comandi. Al
     // limite delle tavole resta raggiungibile, e dice perché non aggiunge.
     addButton.disabled = !canEdit;

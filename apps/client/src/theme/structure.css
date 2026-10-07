@@ -1301,9 +1301,13 @@ html, body, #app {
 .draw-surface[data-grip="rotating"] {
   cursor: grabbing;
 }
-/* Con lo strumento Tavola, sopra una tavola che si sposta. */
+/* Con lo strumento Tavola, sopra una tavola che si sposta, e con Alt
+   mentre se ne porta una copia. */
 .draw-surface[data-grip="move"] {
   cursor: move;
+}
+.draw-surface[data-grip="copy"] {
+  cursor: copy;
 }
 /* Sopra un righello il cursore è la freccia, anche sopra una maniglia che
    il righello copre; l'angolo fra i due apre un menu. */

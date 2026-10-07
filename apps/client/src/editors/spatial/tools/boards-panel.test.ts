@@ -25,6 +25,7 @@ interface State {
   current: string | null;
   editable: boolean;
   canAdd: boolean;
+  paged: boolean;
 }
 
 let host: HTMLElement;
@@ -39,7 +40,7 @@ const view = (): BoardsView => ({ ...state, boards: [...state.boards] });
 /// Il pannello su un disegno finto, che cambia come gli si chiede, come
 /// farebbe l'editor.
 function mount(more: Partial<State> = {}): BoardsPanel {
-  state = { boards: boardsOf(5), current: "b1", editable: true, canAdd: true, ...more };
+  state = { boards: boardsOf(5), current: "b1", editable: true, canAdd: true, paged: true, ...more };
   panel = createBoardsPanel(life, {
     onGo: (id) => {
       calls.push(`go ${id}`);
@@ -149,6 +150,7 @@ afterEach(() => {
   life.close();
   host.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("le righe", () => {
@@ -175,7 +177,7 @@ describe("le righe", () => {
     expect(rows().map((item) => item.style.top)).toEqual([0, 1, 2, 3, 4].map((index) => `${index * ROW_PX}px`));
     // Il nome intero, quando la riga lo accorcia.
     expect(row("b3").querySelector<HTMLElement>(".draw-board-name")!.title).toBe("Condensazione");
-    expect(hint()).toBe("Invio porta alla tavola; F2 la rinomina, Alt+↑ e Alt+↓ la spostano, Canc la elimina; Maiusc+F10 apre il suo menu.");
+    expect(hint()).toBe("Invio porta alla tavola; F2 la rinomina, Ctrl+D la duplica, Alt+↑ e Alt+↓ la spostano, Canc la elimina; Maiusc+F10 apre il suo menu.");
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
@@ -675,6 +677,15 @@ describe("il pannello vuoto", () => {
     expect(addButton().hasAttribute("aria-describedby")).toBe(false);
   });
 
+  it("in un disegno senza pagina dice che la tavola nuova lo racchiude", () => {
+    mount({ boards: [], current: null, paged: false });
+    expect(empty().textContent).toBe("Il disegno non ha una pagina: è un foglio senza bordi. Con «Nuova tavola» una tavola racchiude tutto ciò che c’è.");
+    expect(addButton().getAttribute("aria-describedby")).toBe(empty().id);
+    vi.stubGlobal("navigator", { language: "en-GB" });
+    panel.relabel();
+    expect(empty().textContent).toBe("The drawing has no page: it’s a sheet without edges. With “New artboard” an artboard encloses everything on it.");
+  });
+
   it("l'ultima tavola eliminata lascia il fuoco nel pannello, a «Nuova tavola»", () => {
     mount({ boards: boardsOf(1) });
     panel.focus();
@@ -738,7 +749,7 @@ describe("la sola lettura", () => {
     state.editable = true;
     panel.update(view());
     expect(addButton().disabled).toBe(false);
-    expect(hint()).toBe("Invio porta alla tavola; F2 la rinomina, Alt+↑ e Alt+↓ la spostano, Canc la elimina; Maiusc+F10 apre il suo menu.");
+    expect(hint()).toBe("Invio porta alla tavola; F2 la rinomina, Ctrl+D la duplica, Alt+↑ e Alt+↓ la spostano, Canc la elimina; Maiusc+F10 apre il suo menu.");
   });
 });
 
@@ -747,27 +758,27 @@ describe("la lingua", () => {
     mount({ boards: boardsOf(1000), current: "b2", canAdd: false });
     vi.stubGlobal("navigator", { language: "en-GB" });
     panel.relabel();
-    expect(host.querySelector("h2")!.textContent).toBe("Boards");
-    expect(host.querySelector(".draw-boards-count")!.textContent).toBe("1,000 boards");
-    expect(addButton().textContent).toBe("New board");
-    expect(addButton().title).toBe("The drawing already has 1,000 boards, the most it can have.");
-    expect(row("b1").getAttribute("aria-label")).toBe("Board 1 of 1,000: Copertina, 1600 × 1000 px");
-    expect(row("b2").getAttribute("aria-label")).toBe("Board 2 of 1,000: Evaporazione, 1600 × 1000 px, current");
-    expect(hint()).toBe("Enter goes to the board; F2 renames it, Alt+↑ and Alt+↓ move it, Delete removes it; Shift+F10 opens its menu.");
+    expect(host.querySelector("h2")!.textContent).toBe("Artboards");
+    expect(host.querySelector(".draw-boards-count")!.textContent).toBe("1,000 artboards");
+    expect(addButton().textContent).toBe("New artboard");
+    expect(addButton().title).toBe("The drawing already has 1,000 artboards, the most it can have.");
+    expect(row("b1").getAttribute("aria-label")).toBe("Artboard 1 of 1,000: Copertina, 1600 × 1000 px");
+    expect(row("b2").getAttribute("aria-label")).toBe("Artboard 2 of 1,000: Evaporazione, 1600 × 1000 px, current");
+    expect(hint()).toBe("Enter goes to the artboard; F2 renames it, Ctrl+D duplicates it, Alt+↑ and Alt+↓ move it, Delete deletes it; Shift+F10 opens its menu.");
     panel.rename("b3");
-    expect(field()!.getAttribute("aria-label")).toBe("Name of the board “Condensazione”");
+    expect(field()!.getAttribute("aria-label")).toBe("Name of the artboard “Condensazione”");
     key("Escape", {}, field()!);
     rightClick(row("b3"));
-    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent)).toEqual(["Go to board", "Rename…", "Duplicate", "Move up", "Move down", "Delete"]);
-    expect(readOf(entry("Duplicate"))).toEqual(["Duplicate", "The drawing already has 1,000 boards, the most it can have.", "Ctrl+D", "true"]);
+    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent)).toEqual(["Go to artboard", "Rename…", "Duplicate", "Move up", "Move down", "Delete"]);
+    expect(readOf(entry("Duplicate"))).toEqual(["Duplicate", "The drawing already has 1,000 artboards, the most it can have.", "Ctrl+D", "true"]);
     closeContextMenu();
     panel.focus();
     key("Home");
     key("ArrowUp", { altKey: true });
-    expect(said()).toBe("It’s already the first board.");
+    expect(said()).toBe("It’s already the first artboard.");
 
     state.boards = [];
     panel.update(view());
-    expect(empty().textContent).toBe("The drawing is a single page. With “New board” the page becomes board 1, and another one appears next to it.");
+    expect(empty().textContent).toBe("The drawing is a single page. With “New artboard” the page becomes artboard 1, and another one appears next to it.");
   });
 });
