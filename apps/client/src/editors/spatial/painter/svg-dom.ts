@@ -168,6 +168,10 @@ export interface PainterDraft {
   /// loro trasformazione: un testo in area mentre la cornice ne cambia il
   /// riquadro, con le righe che andranno a capo.
   readonly replaced?: ReadonlyMap<PaintNode, Elem>;
+  /// Il `d` da mostrare al posto di quello di una risorsa, per id: il
+  /// tracciato di un testo mentre lo strumento Nodi ne sposta i nodi. Chi
+  /// lo segue lo segue già.
+  readonly tracks?: ReadonlyMap<string, string>;
 }
 
 /// Gli attributi che un'anteprima cambia, e che toglierla riporta a com'erano
@@ -412,6 +416,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   let drafted: NodeRecord[] = [];
   /// I `path` e i gruppi che l'anteprima mostra al posto delle forme.
   let standIns: Element[] = [];
+  /// Le risorse a cui l'anteprima ha cambiato il `d`, con quello di prima.
+  let retraced: Array<readonly [Element, string | null]> = [];
   /// I nodi del DOM per nodo della scena, e quelli dei gruppi per
   /// contenitore: ricostruiti solo quando servono.
   let byPaint: { readonly paints: Map<PaintNode, NodeRecord[]>; readonly keys: Map<object, NodeRecord[]> } | null = null;
@@ -488,6 +494,11 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     drafted = [];
     for (const stand of standIns) stand.remove();
     standIns = [];
+    for (const [el, d] of retraced) {
+      if (d === null) el.removeAttribute("d");
+      else el.setAttribute("d", d);
+    }
+    retraced = [];
     for (const record of carriedImages) {
       record.carried = null;
       frozen.add(record);
@@ -586,6 +597,13 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     }
     drafted = [...touched];
     if (draft === null) return;
+    for (const [id, d] of draft.tracks ?? []) {
+      const resource = defs?.resources.find((each) => each.id === id);
+      const el = resource === undefined ? undefined : defs!.nodes.get(resource);
+      if (el?.localName !== "path") continue;
+      retraced.push([el, el.getAttribute("d")]);
+      el.setAttribute("d", d);
+    }
     const { carried, fadedContainers } = draft;
     if (carried === undefined && fadedContainers === undefined) return;
     for (const record of layers) {

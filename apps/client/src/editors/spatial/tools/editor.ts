@@ -174,6 +174,7 @@ import {
   linkTarget,
   nodeOf,
   orderOps,
+  plainAttributes,
   Plan,
   relinkOps,
   ungroupOps,
@@ -429,7 +430,7 @@ import { browserMeasure, estimate, type Measure } from "./measure";
 import { editableRich, JOIN, lineRuns, lineText as richLineText, newLeading, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich, type RichChange } from "./rich";
 import { ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
 import { createTextField, LINES_FORM, type FieldForm } from "./text-field";
-import { flipOps, isAlongPath, pairOf, putOnPathOps, releaseOps, type TextPathRefused } from "./text-path";
+import { flipOps, isAlongPath, pairOf, putOnPathOps, releaseOps, trackOf, type TextPathRefused } from "./text-path";
 import { unwrap, WRAP, wrapParagraphs, wrapValue, type Side } from "./wrap";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -3257,13 +3258,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// I nodi della forma `leaf`, o perché non ne ha. Si ricordano per
   /// elemento: un elemento che cambia è un altro, e il riquadro e il
-  /// passaggio del puntatore li chiedono a ogni passo.
-  const nodables = new WeakMap<LeafNode, Nodable | NoNodes>();
+  /// passaggio del puntatore li chiedono a ogni passo. Quelli di un testo su
+  /// tracciato sono del tracciato, e si ricordano per tracciato: cambia
+  /// senza che cambi il testo.
+  const nodables = new WeakMap<object, Nodable | NoNodes>();
   const nodableAt = (leaf: LeafNode): Nodable | NoNodes => {
-    let found = nodables.get(leaf);
+    const track = engine.model === null ? null : trackOf(engine.model, leaf);
+    let found = nodables.get(track ?? leaf);
     if (found === undefined) {
-      found = nodableOf(leaf, spineOf);
-      nodables.set(leaf, found);
+      found = nodableOf(leaf, spineOf, () => (track === null ? null : plainAttributes(track).get("d") ?? null));
+      nodables.set(track ?? leaf, found);
     }
     return found;
   };
@@ -3278,12 +3282,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// disegno che si scrive. Di ogni oggetto scelto, le forme scelte con lo
   /// strumento, o se non ce n'è nessuna tutte quelle che hanno nodi. Ogni
   /// forma ne ha, anche un rettangolo, una freccia o un tratto a penna; un
-  /// testo e un'immagine no. Senza nessuna forma, una chiave dice perché;
-  /// `null`, che non c'è niente da dire.
+  /// testo su tracciato quelli del suo tracciato, una volta sola se lo
+  /// seguono più testi scelti; un altro testo e un'immagine no. Senza
+  /// nessuna forma, una chiave dice perché; `null`, che non c'è niente da
+  /// dire.
   const nodeTargets = (): readonly Editing[] | DrawKey | null => {
     if (!((tool === "nodes" && has("nodes")) || curveOn()) || !editable() || selection.length === 0) return null;
     const out: Editing[] = [];
     let first: NoNodes | "flat" | null = null;
+    const tracks = new Set<string>();
     for (const unit of selectedUnits()) {
       const found: Editing[] = [];
       const chosen: Editing[] = [];
@@ -3292,6 +3299,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (typeof nodable === "string") {
           first ??= nodable;
           continue;
+        }
+        if (nodable.kind === "track") {
+          if (tracks.has(nodable.target)) continue;
+          tracks.add(nodable.target);
         }
         const inverse = invert(shape.matrix);
         if (inverse === null) {
@@ -8120,12 +8131,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// freccia con la sua punta, il tratto col contorno del pennello.
   const showNodeDraft = (draft: ReadonlyMap<string, readonly Subpath[]>): void => {
     const paths = new Map<PaintNode, string>();
+    // Il tracciato di un testo cambia dove sta, e il testo lo segue.
+    const tracks = new Map<string, string>();
     for (const [key, subs] of draft) {
       const edit = editOf(key);
       const d = edit === undefined ? null : draftOf(edit.nodable, subs);
-      if (d !== null) for (const paint of edit!.paints) paths.set(paint, d);
+      if (d === null) continue;
+      if (edit!.nodable.kind === "track") tracks.set(edit!.nodable.target, d);
+      else for (const paint of edit!.paints) paths.set(paint, d);
     }
-    painter.setDraft(paths.size === 0 ? null : { paths });
+    painter.setDraft(paths.size === 0 && tracks.size === 0 ? null : { paths, tracks });
     showHandles();
   };
 
@@ -11980,11 +11995,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   // --- I comandi dei nodi -----------------------------------------------------
 
+  /// Dove arriva, nella scena, il testo su tracciato di `edit` col tracciato
+  /// `d`: il tracciato, e il corpo del testo da ogni parte.
+  const trackExtent = (edit: Editing, d: string): Bounds | null => {
+    const local = elemBounds({ tag: "path", attrs: { d } }, IDENTITY);
+    if (local === null) return null;
+    const by = edit.unit.look?.size ?? 0;
+    const [x, y] = [local.min[0] - by, local.min[1] - by];
+    const [width, height] = [local.max[0] - local.min[0] + 2 * by, local.max[1] - local.min[1] + 2 * by];
+    return elemBounds({ tag: "rect", attrs: { x: String(x), y: String(y), width: String(width), height: String(height) } }, edit.matrix);
+  };
+
   /// Scrive i nodi nuovi di ogni forma di `changes` col nome `label`, in un
   /// passo di annulla solo, e la pagina cresce se una forma ne esce. Un
   /// tracciato scrive il suo `d`; una forma resta lei finché i nodi ne
   /// disegnano una come lei, altrimenti diventa un tracciato; una freccia
-  /// sposta i capi e un tratto a penna il suo inchiostro. Una forma rimasta
+  /// sposta i capi e un tratto a penna il suo inchiostro; un testo su
+  /// tracciato cambia il tracciato che segue, dove sta. Una forma rimasta
   /// senza nodi se ne va. Una forma che non accetta la modifica resta com'è,
   /// e ciò che si dice dopo aggiunge perché ([`afterEdit`]). Dopo sono scelti
   /// i nodi `selected` di ogni forma, coi tipi `kinds`; quelli di una forma
@@ -12015,7 +12042,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         accepted.push(change);
         continue;
       }
-      if (rewritten.kind === "remove") {
+      if (rewritten.kind === "track") {
+        plan.ops.push({ op: "set", id: rewritten.target, attrs: { d: rewritten.d } });
+        extent = union(extent, trackExtent(edit, rewritten.d));
+      } else if (rewritten.kind === "remove") {
         removed.push(edit.path);
       } else {
         const node = nodeOf(model, edit);
@@ -12262,7 +12292,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// penna restano soli.
   const joinTwo = (chosen: readonly Editing[]): NodeChange[] | DrawKey => {
     const [first, second] = [...chosen].sort((a, b) => comparePaths(a.path, b.path)) as [Editing, Editing];
-    for (const each of [first, second]) if (!cuttable(each.nodable)) return each.nodable.kind === "arrow" || each.nodable.kind === "width" ? NODES_REFUSED[each.nodable.kind] : "draw.nodes.stroke";
+    for (const each of [first, second]) {
+      if (each.nodable.kind === "track") return "draw.nodes.track_join";
+      if (!cuttable(each.nodable)) return each.nodable.kind === "arrow" || each.nodable.kind === "width" ? NODES_REFUSED[each.nodable.kind] : "draw.nodes.stroke";
+    }
     const [a] = pickedIn(first);
     const [b] = pickedIn(second);
     const joined = joinAcross(first.subs, a!, second.subs, b!, compose(first.inverse, second.matrix), joinReach(first));
@@ -14740,11 +14773,12 @@ const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
 };
 
 /// Perché una modifica dei nodi non si fa, a parole.
-const NODES_REFUSED: Readonly<Record<"arrow" | "stroke" | "width" | "long", DrawKey>> = {
+const NODES_REFUSED: Readonly<Record<"arrow" | "stroke" | "width" | "long" | "track", DrawKey>> = {
   arrow: "draw.nodes.arrow",
   stroke: "draw.nodes.stroke",
   width: "draw.nodes.width",
   long: "draw.nodes.long",
+  track: "draw.nodes.track",
 };
 
 /// Quante spine di tratti a penna l'editor ricorda.

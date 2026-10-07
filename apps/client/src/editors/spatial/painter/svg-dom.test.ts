@@ -573,6 +573,23 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  it("mostra il tracciato di un testo con un altro d, e lo riporta", async () => {
+    const engine = SceneEngine.open(
+      doc(`<defs id="fub-defs"><path id="r" fub:role="private" d="M 0 50 L 200 50"/></defs>${LAYER}<text id="t" font-size="10"><textPath href="#r">Sul colle</textPath></text></g>`),
+    );
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, new PaintBuilder()));
+    await decoded();
+    const track = host.querySelector("defs path") as SVGElement;
+    const along = host.querySelector(`[data-scene-id="t"]`)!.firstElementChild!;
+    expect(along.getAttribute("href")).toBe(`#${track.id}`);
+    painter.setDraft({ tracks: new Map([["r", "M0 0 C50 -20 150 -20 200 0"], ["altro", "M0 0 L1 1"]]) });
+    expect(track.getAttribute("d")).toBe("M0 0 C50 -20 150 -20 200 0");
+    painter.setDraft(null);
+    expect(track.getAttribute("d")).toBe("M 0 50 L 200 50");
+    painter.dispose();
+  });
+
   it("mostra un contorno pieno sopra una forma che resta senza contorno, e lo toglie", async () => {
     const engine = SceneEngine.open(
       doc(`${LAYER}<rect id="r" x="1" y="2" width="4" height="4" fill="#ff0000" stroke="#0000ff" stroke-width="2" opacity="0.5"/><circle id="c" r="2"/></g>`),

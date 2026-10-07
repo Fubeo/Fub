@@ -6196,6 +6196,57 @@ describe("i nodi, dal livello Esperto", () => {
     expect(changes).toEqual([]);
   });
 
+  it("su un testo su tracciato modifica il tracciato, e il testo lo segue", () => {
+    const T = "ot3t3t3t3";
+    const K = "rk3k3k3k3";
+    const ALONG = doc(
+      `<defs id="fub-defs"><path id="${K}" fub:role="private" d="M 0 100 L 200 100"/></defs>${LAYER}` +
+        `<text id="${T}" font-size="10"><textPath href="#${K}">Sul colle</textPath></text>${PATH}</g>`,
+    );
+    mount(ALONG, { level: "expert" });
+    editor.select([T]);
+    editor.focus();
+    key("n");
+    expect(spoken()).toMatch(/: 2 nodi da modificare\.$/);
+    expect(nodesBar().hidden).toBe(false);
+    // Mentre si trascina, il testo segue il tracciato che si vedrà.
+    const track = (): string | null => host.querySelector("defs path")!.getAttribute("d");
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 200, clientY: 100, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 200, clientY: 80, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 200, clientY: 60, timeStamp: (clock += 8) }));
+    expect(track()).toBe("M0 100 L200 60");
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 200, clientY: 60, timeStamp: (clock += 8) }));
+    expect(editor.engine.text).toContain(`<path id="${K}" fub:role="private" d="M0 100 L200 60"/>`);
+    expect(editor.engine.text).toContain(`<text id="${T}" font-size="10"><textPath href="#${K}">Sul colle</textPath></text>`);
+    expect(spoken()).toBe("Nodo spostato: x 200, y 60.");
+    expect(editor.selection).toEqual([T]);
+    expect(changes).toHaveLength(1);
+    // La pagina cresce col testo, che sta sul tracciato.
+    expect(editor.engine.text).toContain('viewBox="-256 0 612 356"');
+    // I comandi dei nodi: il segmento diventa una curva.
+    tap(100, 80);
+    expect(spoken()).toBe("2 nodi scelti.");
+    key("U", { shiftKey: true });
+    expect(editor.engine.text).toMatch(new RegExp(`<path id="${K}" fub:role="private" d="M0 100 C[^"]+"/>`));
+    expect(changes).toHaveLength(2);
+    // Il tracciato resta lungo più di zero, e resta suo.
+    tap(0, 100);
+    key("Delete");
+    expect(spoken()).toBe("Il testo ha bisogno di un tracciato lungo più di zero: per lasciarlo, «Togli dal tracciato».");
+    expect(changes).toHaveLength(2);
+    editor.select([T, P]);
+    editor.setTool("nodes");
+    tap(0, 100);
+    tap(10, 10, { shiftKey: true });
+    key("J", { shiftKey: true });
+    expect(spoken()).toBe("Il tracciato di un testo resta suo: non si unisce a un’altra forma.");
+    expect(changes).toHaveLength(2);
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(ALONG);
+  });
+
   it("trascinare un nodo lo sposta, in un passo che si annulla", () => {
     editing();
     drag([[50, 10], [60, 10], [70, 20]]);

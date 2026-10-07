@@ -27,7 +27,7 @@ import { formatNumber } from "../number";
 import { reversed } from "../scene/curves";
 import { parsePath, Track, type Segment } from "../scene/geometry";
 import { compose, invert, type Point } from "../scene/matrix";
-import { elementChildren, pathOf, type DocumentModel, type ElementPart } from "../scene/model";
+import { elementChildren, pathOf, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { pathData, type Elem } from "../scene/serialize";
 import { startOffset } from "../scene/values";
@@ -64,6 +64,15 @@ export const isTrack = (unit: Unit): boolean => TRACKS.has(unit.role);
 
 /// Vero se `unit` è un testo su tracciato.
 export const isAlongPath = (unit: Unit): boolean => unit.role === "text" && unit.node.details?.textPath !== undefined;
+
+/// Il tracciato che segue il testo `node`, la sua risorsa; `null` se non è
+/// un testo su tracciato, o se la risorsa non c'è o non è un `path`.
+export function trackOf(model: DocumentModel, node: ElementPart): LeafNode | null {
+  const target = node.details?.textPath;
+  if (target === undefined) return null;
+  const resource = resourcesOf(model).get(target);
+  return resource?.details?.tag === "path" ? resource : null;
+}
 
 /// Il testo e la forma da seguire fra `units`; perché no, se non ci sono
 /// soltanto loro.

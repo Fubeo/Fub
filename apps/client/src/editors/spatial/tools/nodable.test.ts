@@ -213,6 +213,33 @@ describe("una freccia resta una freccia", () => {
   });
 });
 
+describe("un testo su tracciato ha i nodi del suo tracciato", () => {
+  const ALONG = doc(
+    '<defs id="fub-defs"><path id="rk" fub:role="private" d="M 0 50 L 100 50"/></defs>' +
+      `${LAYER}<text id="t" font-size="10"><textPath href="#rk">Sul colle</textPath></text></g>`,
+  );
+  const tracks = new Map([["rk", "M 0 50 L 100 50"]]);
+
+  it("li mostra se gli si dà il tracciato, e la modifica cambia il tracciato", () => {
+    const o = open(ALONG);
+    const text = o.engine.holder("t")!;
+    expect(nodableOf(text)).toBe("text");
+    expect(nodableOf(text, undefined, () => null)).toBe("unreadable");
+    const n = nodableOf(text, undefined, (id) => tracks.get(id) ?? null);
+    if (typeof n === "string") throw new Error(n);
+    expect(n.kind).toBe("track");
+    expect(n.subs[0]!.nodes).toEqual([[0, 50], [100, 50]]);
+    expect(rewrite(n, move(n.subs, ["0:1"], 0, -20), null)).toEqual({ kind: "track", target: "rk", d: "M0 50 L100 30" });
+    expect(draftOf(n, move(n.subs, ["0:1"], 0, -20))).toBe("M0 50 L100 30");
+  });
+
+  it("e il tracciato resta lungo più di zero", () => {
+    const n = nodableOf(open(ALONG).engine.holder("t")!, undefined, (id) => tracks.get(id) ?? null) as Nodable;
+    expect(rewrite(n, move(n.subs, ["0:1"], -100, 0), null)).toEqual({ kind: "refused", reason: "track" });
+    expect(rewrite(n, [], null)).toEqual({ kind: "refused", reason: "track" });
+  });
+});
+
 describe("un tratto a penna resta un tratto", () => {
   it("e l'inchiostro segue la spina, col contorno ricalcolato dal motore", () => {
     const o = opened(stroke("s"));
