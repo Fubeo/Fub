@@ -1,0 +1,263 @@
+{
+  "id": "disegni/boards.svg",
+  "frontmatter": {},
+  "body": [
+    {
+      "kind": "custom",
+      "custom_kind": "fub.scene.summary",
+      "attrs": {
+        "version": 1,
+        "foreign": false,
+        "truncated": false,
+        "layers": [
+          "Livello 1"
+        ],
+        "boards": [
+          "Copertina",
+          "Mappa del porto",
+          "b00000003",
+          "Copertina"
+        ],
+        "counts": {
+          "strokes": 0,
+          "shapes": 0,
+          "texts": 2,
+          "images": 0,
+          "links": 1,
+          "foreign": 0
+        },
+        "ink": {
+          "samples": 0,
+          "duration": 0
+        },
+        "bbox": {
+          "x": 100.0,
+          "y": 200.0,
+          "width": 700.0,
+          "height": 0.0
+        },
+        "sections": [
+          "Quaderno di viaggio",
+          "Copertina",
+          "Mappa del porto",
+          "b00000003"
+        ]
+      },
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Quaderno di viaggio"
+            }
+          ],
+          "anchor": "quaderno-di-viaggio",
+          "span": {
+            "start": 155,
+            "end": 189
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Quattro tavole"
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 192,
+            "end": 219
+          }
+        },
+        {
+          "kind": "heading",
+          "level": 2,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Copertina"
+            }
+          ],
+          "anchor": "copertina",
+          "span": {
+            "start": 694,
+            "end": 793
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "heading",
+          "level": 2,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Mappa del porto"
+            }
+          ],
+          "anchor": "mappa-del-porto",
+          "span": {
+            "start": 796,
+            "end": 950
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "heading",
+          "level": 2,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "b00000003"
+            }
+          ],
+          "anchor": "b00000003",
+          "span": {
+            "start": 953,
+            "end": 1016
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "heading",
+          "level": 2,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Copertina"
+            }
+          ],
+          "anchor": "copertina-1",
+          "span": {
+            "start": 1019,
+            "end": 1122
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Partenza"
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 1170,
+            "end": 1326
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "../note/Porto.md"
+                },
+                "label": [
+                  {
+                    "kind": "text",
+                    "value": "Il porto"
+                  }
+                ],
+                "embed": false,
+                "span": {
+                  "start": 1331,
+                  "end": 1549
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 1331,
+            "end": 1549
+          }
+        }
+      ],
+      "anchor": null,
+      "span": {
+        "start": 0,
+        "end": 1564
+      }
+    }
+  ],
+  "outline": [
+    {
+      "level": 1,
+      "text": "Quaderno di viaggio",
+      "slug": "quaderno-di-viaggio",
+      "span": {
+        "start": 155,
+        "end": 189
+      },
+      "explicit_anchor": null
+    },
+    {
+      "level": 2,
+      "text": "Copertina",
+      "slug": "copertina",
+      "span": {
+        "start": 694,
+        "end": 793
+      },
+      "explicit_anchor": null
+    },
+    {
+      "level": 2,
+      "text": "Mappa del porto",
+      "slug": "mappa-del-porto",
+      "span": {
+        "start": 796,
+        "end": 950
+      },
+      "explicit_anchor": null
+    },
+    {
+      "level": 2,
+      "text": "b00000003",
+      "slug": "b00000003",
+      "span": {
+        "start": 953,
+        "end": 1016
+      },
+      "explicit_anchor": null
+    },
+    {
+      "level": 2,
+      "text": "Copertina",
+      "slug": "copertina-1",
+      "span": {
+        "start": 1019,
+        "end": 1122
+      },
+      "explicit_anchor": null
+    }
+  ],
+  "links": [
+    {
+      "target": {
+        "kind": "path",
+        "value": "../note/Porto.md"
+      },
+      "embed": false,
+      "span": {
+        "start": 1331,
+        "end": 1549
+      },
+      "context": "Il porto"
+    }
+  ],
+  "tags": [],
+  "anchors": [],
+  "text": "Quaderno di viaggio\nQuattro tavole\nCopertina\nMappa del porto\nb00000003\nCopertina\nPartenza\nIl porto",
+  "frontmatter_present": false
+}

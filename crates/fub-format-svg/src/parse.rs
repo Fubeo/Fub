@@ -1,7 +1,7 @@
 //! Il modello di §9: ciò che indice, ricerca, grafo e outline leggono di una
 //! scena.
 //!
-//! La lettura è di `fub-scene`, che dà titolo, descrizione, testi,
+//! La lettura è di `fub-scene`, che dà titolo, descrizione, tavole, testi,
 //! collegamenti e immagini del vault con lo span del loro elemento. Qui si
 //! mettono in un albero che dice la verità sulla sorgente: il documento intero
 //! è il blocco [`SUMMARY_KIND`], e i suoi figli sono quegli elementi annidati
@@ -9,7 +9,12 @@
 //! quel testo per etichetta; un `a` dentro un `text` è un collegamento in mezzo
 //! al paragrafo. Così le tabelle piatte sono la proiezione dell'albero, e i
 //! fratelli non si sovrappongono.
+//!
+//! Il titolo è l'heading di livello 1 e ogni tavola uno di livello 2, col suo
+//! nome: l'outline elenca le pagine del disegno, e la ricerca trova i loro
+//! nomi.
 
+use std::collections::HashSet;
 use std::iter::Peekable;
 
 use fub_abi::custom::SECTIONS_ATTR;
@@ -39,6 +44,8 @@ pub(crate) fn parse(source: &str, ctx: &ParseContext) -> Result<DocumentModel, F
 enum Piece<'s> {
     /// Il `title` della radice: l'heading di livello 1.
     Title(&'s Excerpt),
+    /// Una tavola, col suo nome sullo span del `view`: un heading di livello 2.
+    Board(&'s Excerpt),
     /// Il `desc` della radice.
     Desc(&'s Excerpt),
     /// Un `text`, con le righe unite.
@@ -50,12 +57,14 @@ enum Piece<'s> {
 }
 
 impl Piece<'_> {
-    /// Il testo di un titolo, di una descrizione o di un testo.
+    /// Il testo di un titolo, del nome di una tavola, di una descrizione o di
+    /// un testo.
     fn text(&self) -> Option<&str> {
         match self {
-            Piece::Title(excerpt) | Piece::Desc(excerpt) | Piece::Text(excerpt) => {
-                Some(&excerpt.text)
-            }
+            Piece::Title(excerpt)
+            | Piece::Board(excerpt)
+            | Piece::Desc(excerpt)
+            | Piece::Text(excerpt) => Some(&excerpt.text),
             Piece::Link(_) | Piece::Embed(_) => None,
         }
     }
@@ -86,6 +95,12 @@ fn model_of(scene: &Scene, source: &str, id: DocId) -> Result<DocumentModel, For
             .desc
             .iter()
             .map(|d| (span_of(&d.span), Piece::Desc(d))),
+    );
+    pieces.extend(
+        index
+            .boards
+            .iter()
+            .map(|b| (span_of(&b.span), Piece::Board(b))),
     );
     pieces.extend(
         index
@@ -127,16 +142,23 @@ fn model_of(scene: &Scene, source: &str, id: DocId) -> Result<DocumentModel, For
 
     let mut attrs = serde_json::to_value(&scene.summary)
         .map_err(|error| FormatError::Parse(format!("riepilogo della scena: {error}")))?;
-    // Un disegno ha una sezione sola, il titolo, ed è il disegno intero:
-    // `![[disegno#Titolo]]` lo incorpora tutto, e un altro nome non è una
-    // sezione del disegno. Senza la dichiarazione il kernel cercherebbe i
-    // blocchi che cominciano dal titolo in poi, e il riepilogo, che contiene
-    // tutto, comincia prima: l'embed sarebbe vuoto.
-    attrs[SECTIONS_ATTR] = model
-        .outline
+    // Le sezioni di un disegno sono il titolo, che è il disegno intero, e le
+    // tavole, ciascuna col suo nome: `![[disegno#Titolo]]` incorpora tutto,
+    // `![[disegno#Copertina]]` la sola tavola «Copertina», e un altro nome
+    // non è una sezione del disegno. Il kernel ne consegna la scelta al
+    // renderer; senza la dichiarazione cercherebbe i blocchi che cominciano
+    // dall'heading in poi, e il riepilogo, che contiene tutto, comincia
+    // prima: l'embed sarebbe vuoto. Un nome che torna vale una volta, per la
+    // prima sezione che lo porta, il titolo prima delle tavole: è quella che
+    // il nome sceglie.
+    let mut seen = HashSet::new();
+    attrs[SECTIONS_ATTR] = index
+        .title
         .iter()
-        .filter(|heading| !heading.text.is_empty())
-        .map(|heading| serde_json::Value::String(heading.text.clone()))
+        .chain(&index.boards)
+        .map(|excerpt| excerpt.text.as_str())
+        .filter(|name| !name.is_empty() && seen.insert(*name))
+        .map(|name| serde_json::Value::String(name.to_owned()))
         .collect();
     let bom = if source.starts_with('\u{feff}') {
         '\u{feff}'.len_utf8()
@@ -184,25 +206,8 @@ where
 /// Il blocco di un elemento che sta direttamente nella scena.
 fn block_of(node: &Node<'_>, model: &mut DocumentModel, slugs: &mut HeadingSlugs) -> Block {
     match node.piece {
-        Piece::Title(excerpt) => {
-            let mut inlines = vec![Inline::Text(excerpt.text.clone())];
-            links_within(&node.children, Some(&excerpt.text), &mut inlines, model);
-            let slug = slugs.next_slug(&excerpt.text);
-            model.outline.push(Heading {
-                level: 1,
-                text: excerpt.text.clone(),
-                slug: slug.clone(),
-                span: node.span,
-                explicit_anchor: None,
-            });
-            Block::Heading {
-                level: 1,
-                inlines,
-                anchor: Some(slug),
-                span: node.span,
-                explicit_anchor: None,
-            }
-        }
+        Piece::Title(excerpt) => heading_of(node, excerpt, 1, model, slugs),
+        Piece::Board(excerpt) => heading_of(node, excerpt, 2, model, slugs),
         Piece::Desc(excerpt) | Piece::Text(excerpt) => {
             let mut inlines = vec![Inline::Text(excerpt.text.clone())];
             links_within(&node.children, Some(&excerpt.text), &mut inlines, model);
@@ -219,6 +224,34 @@ fn block_of(node: &Node<'_>, model: &mut DocumentModel, slugs: &mut HeadingSlugs
             anchor: None,
             span: node.span,
         },
+    }
+}
+
+/// L'heading di livello `level` col testo di `excerpt`, e la sua voce
+/// nell'outline.
+fn heading_of(
+    node: &Node<'_>,
+    excerpt: &Excerpt,
+    level: u8,
+    model: &mut DocumentModel,
+    slugs: &mut HeadingSlugs,
+) -> Block {
+    let mut inlines = vec![Inline::Text(excerpt.text.clone())];
+    links_within(&node.children, Some(&excerpt.text), &mut inlines, model);
+    let slug = slugs.next_slug(&excerpt.text);
+    model.outline.push(Heading {
+        level,
+        text: excerpt.text.clone(),
+        slug: slug.clone(),
+        span: node.span,
+        explicit_anchor: None,
+    });
+    Block::Heading {
+        level,
+        inlines,
+        anchor: Some(slug),
+        span: node.span,
+        explicit_anchor: None,
     }
 }
 
@@ -248,7 +281,7 @@ fn link_of(node: &Node<'_>, around: Option<&str>, model: &mut DocumentModel) -> 
     let (reference, embed) = match node.piece {
         Piece::Link(reference) => (reference, false),
         Piece::Embed(reference) => (reference, true),
-        Piece::Title(_) | Piece::Desc(_) | Piece::Text(_) => {
+        Piece::Title(_) | Piece::Board(_) | Piece::Desc(_) | Piece::Text(_) => {
             unreachable!("un testo non è un riferimento")
         }
     };

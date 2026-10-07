@@ -73,6 +73,9 @@ const INKSCAPE: &str = include_str!("../../fub-scene/tests/corpus/inkscape.svg")
 /// `text`, quello di flusso in XHTML dentro `foreignObject`.
 const SEQUENZA: &str = include_str!("../../fub-scene/tests/corpus/mermaid-sequence.svg");
 const FLUSSO: &str = include_str!("../../fub-scene/tests/corpus/mermaid-flowchart.svg");
+/// Un disegno FubDraw con quattro tavole: «Copertina», «Mappa del porto», una
+/// senza titolo che si chiama col suo id e un'altra «Copertina».
+const QUADERNO: &str = include_str!("../../fub-format-svg/tests/fixtures/boards.svg");
 
 /// L'intestazione di un PNG: un allegato.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
@@ -412,8 +415,8 @@ fn an_embedded_drawing_is_a_placeholder() {
     };
     assert_eq!(embed.doc_id, "disegni/acqua.svg");
     assert_eq!(embed.content.html, rendered.html);
-    // La sola sezione di un disegno è il titolo, ed è il disegno intero
-    // (§9); un altro nome non è una sezione, come in una nota.
+    // Senza tavole la sola sezione di un disegno è il titolo, ed è il
+    // disegno intero (§9); un altro nome non è una sezione, come in una nota.
     let (_, section) = ws
         .render_embed("acqua.svg", Some("Ciclo dell'acqua"), None)
         .unwrap();
@@ -433,6 +436,76 @@ fn an_embedded_drawing_is_a_placeholder() {
     for html in [&rendered.html, &flusso.html, &preview.html] {
         assert!(!html.contains("<img") && !html.contains("src="), "{html}");
     }
+}
+
+/// Ogni tavola è una sezione nominata del disegno: `![[quaderno#Copertina]]`
+/// incorpora la sola tavola «Copertina», la prima con quel nome, e la figura
+/// lo dice alla shell. Il titolo resta il disegno intero, e un nome che non è
+/// né il titolo né una tavola non ha sezione, come un heading che una nota non
+/// ha: i nomi si confrontano esatti.
+#[test]
+fn every_board_is_a_section_of_its_drawing() {
+    let (_dir, root) = vault();
+    write(&root, "disegni/quaderno.svg", QUADERNO);
+    let (mounted, _) = mount(&root);
+    let ws = &mounted.workspace;
+    let board = |name: &str, caption: &str| {
+        format!(
+            r#"<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="disegni/quaderno.svg" data-embed-section="{name}"><figcaption>Quaderno di viaggio · {caption}</figcaption></figure>"#
+        )
+    };
+
+    let (doc, cover) = ws
+        .render_embed("quaderno.svg", Some("Copertina"), None)
+        .unwrap();
+    assert_eq!(doc, id("disegni/quaderno.svg"));
+    assert_eq!(cover.html, board("Copertina", "Copertina"));
+    assert!(cover.parts.is_empty());
+    // Lo stesso dalla domanda della shell, per nome senza estensione.
+    let Ok(IndexResult::RenderEmbed(embed)) = ws.query_index(IndexQuery::RenderEmbed {
+        page: "quaderno".to_owned(),
+        heading: Some("Mappa del porto".to_owned()),
+        block: None,
+    }) else {
+        panic!("l'embed della tavola risponde")
+    };
+    assert_eq!(embed.doc_id, "disegni/quaderno.svg");
+    assert_eq!(
+        embed.content.html,
+        board("Mappa del porto", "Mappa del porto")
+    );
+    let (_, unnamed) = ws
+        .render_embed("quaderno.svg", Some("b00000003"), None)
+        .unwrap();
+    assert_eq!(unnamed.html, board("b00000003", "b00000003"));
+
+    // Il titolo è il disegno intero.
+    let (_, whole) = ws.render_embed("quaderno.svg", None, None).unwrap();
+    let (_, titled) = ws
+        .render_embed("quaderno.svg", Some("Quaderno di viaggio"), None)
+        .unwrap();
+    assert_eq!(titled.html, whole.html);
+    assert!(!whole.html.contains("data-embed-section"), "{}", whole.html);
+
+    // Un altro nome non è una sezione: né lo slug, né le maiuscole cambiate,
+    // né un livello o un testo del disegno.
+    for name in [
+        "Retro",
+        "copertina",
+        "mappa-del-porto",
+        "Livello 1",
+        "Il porto",
+    ] {
+        let error = ws
+            .render_embed("quaderno.svg", Some(name), None)
+            .expect_err(name);
+        assert!(
+            matches!(error, fub_kernel::KernelError::NotFound(_)),
+            "{name}: {error:?}"
+        );
+    }
+    // La ricerca trova i nomi delle tavole.
+    assert!(search(ws, "Copertina").contains(&"disegni/quaderno.svg".to_owned()));
 }
 
 /// La nota di cartella è dentro la cartella, `X/X.<ext>` o `X/index.<ext>`,

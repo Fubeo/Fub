@@ -85,11 +85,11 @@ fn the_whole_document_is_the_summary() {
     assert!(model.tags.is_empty() && model.anchors.is_empty());
 }
 
-/// Un disegno ha una sezione sola, il titolo, che è il disegno intero: il
-/// kernel la sceglie per `![[disegno#Titolo]]` senza cercare blocchi dopo il
-/// titolo, e un altro nome non è una sezione.
+/// Le sezioni di un disegno sono il titolo, che è il disegno intero, e le
+/// tavole: il kernel sceglie fra queste per `![[disegno#Nome]]` senza cercare
+/// blocchi dopo un heading, e un altro nome non è una sezione.
 #[test]
-fn the_title_is_the_only_section() {
+fn the_title_and_the_boards_are_the_sections() {
     let sections = |source: &str| {
         let model = parse(source);
         let Block::Custom { attrs, .. } = &model.body[0] else {
@@ -106,6 +106,105 @@ fn the_title_is_the_only_section() {
     // Senza titolo, o con un titolo vuoto, nessuna sezione.
     assert_eq!(sections(&doc("<desc>Solo</desc>")), serde_json::json!([]));
     assert_eq!(sections(&doc("<title> </title>")), serde_json::json!([]));
+    // Il titolo e poi le tavole in ordine, anche quando il titolo viene
+    // dopo. Un nome che torna vale una volta, per la prima sezione che lo
+    // porta: quella che il nome sceglie.
+    assert_eq!(
+        sections(&doc(concat!(
+            r#"<view id="b00000001" fub:role="board" viewBox="0 0 10 10"><title>Retro</title></view>"#,
+            "<title>Storia</title>",
+            r#"<view id="b00000002" fub:role="board" viewBox="0 0 10 10"><title>Storia</title></view>"#,
+            r#"<view id="b00000003" fub:role="board" viewBox="0 0 10 10"/>"#,
+            r#"<view id="b00000004" fub:role="board" viewBox="0 0 10 10"><title> Retro </title></view>"#,
+        ))),
+        serde_json::json!(["Storia", "Retro", "b00000003"])
+    );
+    // Senza titolo le sezioni sono le sole tavole; un `view` che non è una
+    // tavola non è una sezione.
+    assert_eq!(
+        sections(&doc(concat!(
+            r#"<view id="b00000001" fub:role="board" viewBox="0 0 10 10"><title>Copertina</title></view>"#,
+            r#"<view id="v1" viewBox="0 0 10 10"><title>Vista</title></view>"#,
+        ))),
+        serde_json::json!(["Copertina"])
+    );
+}
+
+/// Ogni tavola è un heading di livello 2 col suo nome, sullo span del suo
+/// `view`: l'outline elenca le pagine del disegno e la ricerca trova i nomi,
+/// in ordine di documento come gli altri testi.
+#[test]
+fn every_board_is_a_heading_of_level_two() {
+    let source = doc(concat!(
+        "<title>Storia</title>",
+        r#"<view id="b00000001" fub:role="board" viewBox="0 0 10 10"><title>Copertina</title></view>"#,
+        r#"<text>In mezzo</text>"#,
+        r#"<view id="b00000002" fub:role="board" viewBox="0 0 10 10"><title>  Due
+  tavole </title><desc>La seconda</desc></view>"#,
+        r#"<view id="b00000003" fub:role="board" viewBox="0 0 10 10"/>"#,
+        r#"<view id="b00000004" fub:role="board" viewBox="0 0 10 10"><title>Copertina</title></view>"#,
+    ));
+    let model = parse(&source);
+    let outline: Vec<_> = model
+        .outline
+        .iter()
+        .map(|heading| (heading.level, heading.text.as_str(), heading.slug.as_str()))
+        .collect();
+    assert_eq!(
+        outline,
+        [
+            (1, "Storia", "storia"),
+            (2, "Copertina", "copertina"),
+            (2, "Due tavole", "due-tavole"),
+            (2, "b00000003", "b00000003"),
+            (2, "Copertina", "copertina-1"),
+        ]
+    );
+    let headings: Vec<_> = inside(&model)
+        .iter()
+        .filter_map(|block| match block {
+            Block::Heading {
+                level,
+                inlines,
+                anchor,
+                span,
+                explicit_anchor,
+            } => Some((
+                *level,
+                inlines.clone(),
+                anchor.clone(),
+                *span,
+                explicit_anchor.clone(),
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(headings.len(), 5);
+    for ((level, inlines, anchor, span, explicit_anchor), heading) in
+        headings.iter().zip(&model.outline)
+    {
+        assert_eq!(*level, heading.level);
+        assert_eq!(inlines, &[Inline::Text(heading.text.clone())]);
+        assert_eq!(anchor.as_deref(), Some(heading.slug.as_str()));
+        assert_eq!(*span, heading.span);
+        assert_eq!(*explicit_anchor, None::<String>);
+    }
+    assert_eq!(
+        slice(&source, headings[2].3),
+        r#"<view id="b00000002" fub:role="board" viewBox="0 0 10 10"><title>  Due
+  tavole </title><desc>La seconda</desc></view>"#
+    );
+    assert_eq!(
+        slice(&source, headings[3].3),
+        r#"<view id="b00000003" fub:role="board" viewBox="0 0 10 10"/>"#
+    );
+    // Il titolo e la descrizione di una tavola sono il suo nome e niente
+    // altro: né paragrafi né testo in più.
+    assert_eq!(
+        model.text,
+        "Storia\nCopertina\nIn mezzo\nDue tavole\nb00000003\nCopertina"
+    );
+    assert_eq!(inside(&model).len(), 6);
 }
 
 #[test]
