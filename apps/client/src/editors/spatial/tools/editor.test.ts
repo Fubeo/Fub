@@ -3021,6 +3021,53 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     expect(editor.engine.text).toBe(TWO);
   });
 
+  it("il testo: lo stile, il peso, l'enfasi, l'interlinea e la spaziatura valgono per il testo intero", () => {
+    const T = "ot1t1t1t1";
+    const TEXT = doc(
+      `${LAYER}<text id="${T}" x="10" y="40" fill="#000000" font-family="Inter, sans-serif" font-size="32">` +
+        `<tspan x="10" dy="0">Uno</tspan><tspan x="10" dy="40">Due <tspan font-weight="bold">tre</tspan></tspan></text></g>`,
+    );
+    mount(TEXT, { level: "standard" });
+    editor.select([T]);
+    key("Enter");
+    const toggle = (label: string): HTMLButtonElement => property("emphasis").querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    const opening = (): string => /<text [^>]*>/.exec(editor.engine.text)![0];
+    // Il grassetto di una parola rende misti il peso e lo stile.
+    expect(property("preset").querySelector("select")!.value).toBe("");
+    expect(property("weight").querySelector("select")!.value).toBe("");
+    expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("mixed");
+    expect(toggle("Corsivo").getAttribute("aria-pressed")).toBe("false");
+    expect(propertyInput("leading").value).toBe("125");
+    expect(propertyInput("spacing").value).toBe("0");
+    toggle("Grassetto").click();
+    expect(opening()).toContain('font-size="32" font-weight="bold">');
+    expect(editor.engine.text).toContain('<tspan x="10" dy="40">Due tre</tspan>');
+    expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("true");
+    choose("preset", "title");
+    expect(opening()).toContain('font-size="64" font-weight="bold">');
+    // L'interlinea segue il corpo.
+    expect(editor.engine.text).toContain('<tspan x="10" dy="80">');
+    enter(propertyInput("leading"), "150");
+    expect(editor.engine.text).toContain('<tspan x="10" dy="96">');
+    enter(propertyInput("spacing"), "5");
+    expect(opening()).toContain('letter-spacing="3.2"');
+    toggle("Corsivo").click();
+    expect(opening()).toContain('font-style="italic"');
+    expect(changes).toHaveLength(5);
+    const undone = [1, 2, 3, 4, 5].map(() => {
+      editor.undo();
+      return spoken();
+    });
+    expect(undone).toEqual([
+      "Annullato: Corsivo.",
+      "Annullato: Spaziatura delle lettere.",
+      "Annullato: Interlinea.",
+      "Annullato: Stile del testo.",
+      "Annullato: Grassetto.",
+    ]);
+    expect(editor.engine.text).toBe(TEXT);
+  });
+
   it("«Disponi» ha i comandi della barra, che dicono quando non servono", () => {
     mount(TWO, { level: "standard" });
     editor.select([A, B]);

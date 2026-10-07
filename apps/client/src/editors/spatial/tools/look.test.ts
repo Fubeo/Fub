@@ -199,6 +199,75 @@ describe("le operazioni", () => {
     expect(look(open(after)).size).toEqual({ count: 2, value: 48 });
   });
 
+  it("leggono il testo intero: una parola di un altro colore o in grassetto lo fa misto", () => {
+    const opened = open(
+      doc(
+        `${LAYER}<text id="oaaaaaaaa" x="10" y="40" font-size="20"><tspan x="10" dy="0">Uno <tspan fill="#0072b2" font-weight="bold">due</tspan></tspan><tspan x="10" dy="25" letter-spacing="1">tre</tspan></text></g>`,
+      ),
+    );
+    const seen = look(opened);
+    expect(seen.fill).toEqual({ count: 1, value: null });
+    expect(seen.weight).toEqual({ count: 1, value: null });
+    expect(seen.size).toEqual({ count: 1, value: 20 });
+    expect(seen.italic).toEqual({ count: 1, value: false });
+    expect(seen.underline).toEqual({ count: 1, value: false });
+    expect(seen.leading).toEqual({ count: 1, value: 1.25 });
+    expect(seen.spacing).toEqual({ count: 1, value: null });
+    // Un testo di una riga non ha interlinea.
+    expect(look(open(doc(`${LAYER}${TEXT("obbbbbbbb", ["Uno"])}</g>`))).leading).toEqual({ count: 0, value: null });
+  });
+
+  it("danno un valore al testo intero: righe e pezzi lasciano il loro, in un passo", () => {
+    const source = doc(
+      `${LAYER}<text id="oaaaaaaaa" x="10" y="40" font-size="20"><tspan x="10" dy="0">Uno <tspan fill="#0072b2" font-weight="bold">due</tspan></tspan><tspan x="10" dy="25" fill="#d55e00">tre</tspan></text></g>`,
+    );
+    const opened = open(source);
+    const blue = applied(opened, restyled(opened, { fill: "#009e73" }));
+    expect(blue).toContain('<text id="oaaaaaaaa" x="10" y="40" fill="#009e73" font-size="20">\n  <tspan x="10" dy="0">Uno <tspan font-weight="bold">due</tspan></tspan>\n  <tspan x="10" dy="25">tre</tspan>\n</text>');
+    expect(look(open(blue)).fill).toEqual({ count: 1, value: "#009e73" });
+    const heavy = open(source);
+    const bold = applied(heavy, restyled(heavy, { weight: 700 }));
+    expect(bold).toContain('font-size="20" font-weight="bold">\n  <tspan x="10" dy="0">Uno <tspan fill="#0072b2">due</tspan></tspan>');
+    const thin = open(source);
+    const light = applied(thin, restyled(thin, { weight: 300 }));
+    expect(light).toContain('font-weight="300"');
+    // Un testo che cambia soltanto i suoi attributi resta lui.
+    const plain = open(doc(`${LAYER}${TEXT("obbbbbbbb", ["Uno", "Due"])}</g>`));
+    const change = restyled(plain, { italic: true });
+    expect(change.ops.map((op) => op.op)).toEqual(["set"]);
+    expect(applied(plain, change)).toContain('font-size="32" font-style="italic">');
+  });
+
+  it("l'interlinea e la spaziatura in volte il corpo; uno stile dà corpo e peso insieme", () => {
+    const source = doc(`${LAYER}${TEXT("oaaaaaaaa", ["Uno", "Due", "Tre"])}</g>`);
+    const opened = open(source);
+    const loose = applied(opened, restyled(opened, { leading: 1.5 }));
+    expect(loose).toContain('<tspan x="10" dy="48">Due</tspan>\n  <tspan x="10" dy="48">Tre</tspan>');
+    expect(look(open(loose)).leading).toEqual({ count: 1, value: 1.5 });
+    const tight = open(source);
+    const spaced = applied(tight, restyled(tight, { spacing: 0.05 }));
+    expect(spaced).toContain('font-size="32" letter-spacing="1.6">');
+    expect(look(open(spaced)).spacing).toEqual({ count: 1, value: 0.05 });
+    // La spaziatura nulla è quella di SVG: non si scrive.
+    const back = open(spaced);
+    expect(applied(back, restyled(back, { spacing: 0 }))).toContain('font-size="32">');
+    const big = open(source);
+    const title = applied(big, restyled(big, { preset: { size: 64, weight: 700 } }));
+    expect(title).toContain('font-size="64" font-weight="bold">\n  <tspan x="10" dy="0">Uno</tspan>\n  <tspan x="10" dy="80">Due</tspan>');
+  });
+
+  it("sottolineato e barrato: il testo tira la linea, righe e pezzi la lasciano", () => {
+    const opened = open(doc(`${LAYER}<text id="oaaaaaaaa" x="10" y="40" font-size="20"><tspan x="10" dy="0">Uno <tspan text-decoration="line-through">due</tspan></tspan></text></g>`));
+    expect(look(opened).strike).toEqual({ count: 1, value: null });
+    const under = applied(opened, restyled(opened, { underline: true }));
+    expect(under).toContain('<text id="oaaaaaaaa" x="10" y="40" font-size="20" text-decoration="underline">\n  <tspan x="10" dy="0">Uno <tspan text-decoration="line-through">due</tspan></tspan>');
+    const struck = open(under);
+    const all = applied(struck, restyled(struck, { strike: true }));
+    expect(all).toContain('text-decoration="underline line-through">\n  <tspan x="10" dy="0">Uno due</tspan>');
+    const none = open(all);
+    expect(applied(none, restyled(none, { underline: false }))).toContain('font-size="20" text-decoration="line-through">');
+  });
+
   it("tengono l'ordine dei fratelli quando riscrivono un testo", () => {
     const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa")}${TEXT("obbbbbbbb", ["Uno", "Due"])}${RECT("occcccccc")}</g>`));
     const after = applied(opened, restyled(opened, { size: 16 }));
@@ -234,8 +303,23 @@ describe("lo stile copiato e incollato", () => {
       stroke: null,
       outline: null,
       opacity: 1,
-      font: { family: "Literata, serif", size: 24, weight: "bold" },
+      font: { family: "Literata, serif", size: 24, weight: "bold", style: "normal", spacing: 0, underline: false, strike: false, leading: null },
     });
+  });
+
+  it("di un testo a pezzi copia il primo carattere, con corsivo, spaziatura, linee e interlinea, e lo dà intero", () => {
+    const opened = open(
+      doc(
+        `${LAYER}<text id="oaaaaaaaa" x="10" y="40" font-size="20" letter-spacing="1"><tspan x="10" dy="0"><tspan font-style="italic" text-decoration="underline">Uno</tspan> due</tspan><tspan x="10" dy="30">Tre</tspan></text>` +
+          `${TEXT("obbbbbbbb", ["Uno", "Due"])}</g>`,
+      ),
+    );
+    const style = copied(opened, "oaaaaaaaa")!;
+    expect(style.font).toEqual({ family: "", size: 20, weight: "normal", style: "italic", spacing: 0.05, underline: true, strike: false, leading: 1.5 });
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], style));
+    expect(after).toContain(
+      '<text id="obbbbbbbb" x="10" y="40" font-size="20" font-style="italic" letter-spacing="1" text-decoration="underline">\n  <tspan x="10" dy="0">Uno</tspan>\n  <tspan x="10" dy="30">Due</tspan>\n</text>',
+    );
   });
 
   it("di un'immagine copia soltanto l'opacità", () => {

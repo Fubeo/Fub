@@ -27,7 +27,7 @@
 import { formatNumber } from "../number";
 import type { TextLine } from "../scene/ops";
 import type { Elem, Run } from "../scene/serialize";
-import { length, nonNegativeLength, textDecoration, trim } from "../scene/values";
+import { length, letterSpacing, nonNegativeLength, textDecoration, trim } from "../scene/values";
 import { BLANK_LINE, LINE_SPACING, xmlText } from "./text";
 
 /// Gli attributi di un elemento, come li nomina un'operazione.
@@ -377,38 +377,169 @@ export function setInRange(rich: Rich, from: Caret, to: Caret, name: string, val
 
 /// `rich` con `value` in `name`, uno di [`INHERITED`], sul testo intero: le
 /// righe e i pezzi che ne scrivevano un altro lo lasciano. Un corpo nuovo
-/// porta con sé, in proporzione, le interlinee e le spaziature delle
-/// lettere: il testo cambia grandezza e non forma.
+/// porta con sé le interlinee e le spaziature delle lettere, ciascuna in
+/// proporzione al corpo su cui si misura: il testo cambia grandezza e non
+/// forma.
 export function restyleWhole(rich: Rich, name: string, value: string): Rich {
-  const before = sizeOf(rich.attrs["font-size"] ?? rich.inherited["font-size"]);
   const after = name === "font-size" ? nonNegativeLength(value) : null;
-  const factor = after === null || before === 0 ? 1 : after / before;
-  const scale = (attrs: Attrs, keys: readonly string[]): Record<string, string> => {
-    const out: Record<string, string> = { ...attrs };
-    delete out[name];
-    if (factor === 1) return out;
-    for (const key of keys) {
-      const now = out[key] === undefined ? null : length(out[key]);
-      if (now !== null) out[key] = formatNumber(now * factor, 2);
-    }
-    return out;
+  const leadings = after === null ? [] : rich.lines.map((_, i) => leadingOf(rich, i));
+  /// La spaziatura scritta in `attrs`, per chi la vede col corpo `size`,
+  /// portata al corpo nuovo.
+  const respace = (attrs: Record<string, string>, size: number): void => {
+    const gap = attrs["letter-spacing"] === undefined ? null : length(attrs["letter-spacing"]);
+    if (after !== null && gap !== null && size > 0) attrs["letter-spacing"] = formatNumber((gap / size) * after, 2);
   };
-  const attrs = scale(rich.attrs, ["letter-spacing"]);
+  const attrs: Record<string, string> = { ...rich.attrs };
+  respace(attrs, sizeOf(rich.attrs["font-size"] ?? rich.inherited["font-size"]));
   attrs[name] = value;
   return {
     ...rich,
     attrs,
-    lines: rich.lines.map((line) => ({
-      attrs: scale(line.attrs, ["dy", "letter-spacing"]),
-      spans: canonicalSpans(
-        line.spans.map((span) => {
-          if (span.attrs === null) return span;
-          const own = scale(span.attrs, ["letter-spacing"]);
-          return { text: span.text, attrs: Object.keys(own).length === 0 ? null : own };
-        }),
-      ),
-    })),
+    lines: rich.lines.map((line, i) => {
+      const own: Record<string, string> = { ...line.attrs };
+      respace(own, sizeIn(rich, line, null));
+      delete own[name];
+      const leading = leadings[i];
+      if (after !== null && leading !== null && leading !== undefined) own.dy = formatNumber(leading * after, 2);
+      return {
+        attrs: own,
+        spans: canonicalSpans(
+          line.spans.map((span) => {
+            if (span.attrs === null) return span;
+            const piece: Record<string, string> = { ...span.attrs };
+            respace(piece, sizeIn(rich, line, span));
+            delete piece[name];
+            return { text: span.text, attrs: Object.keys(piece).length === 0 ? null : piece };
+          }),
+        ),
+      };
+    }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Il testo intero, come lo legge e lo scrive il pannello.
+// ---------------------------------------------------------------------------
+
+/// I tratti che si leggono: con almeno un carattere che non è uno spazio.
+function visibleSpans(rich: Rich): Array<{ readonly line: RichLine; readonly span: Span }> {
+  const out: Array<{ line: RichLine; span: Span }> = [];
+  for (const line of rich.lines) for (const span of line.spans) if (span.text.trim() !== "") out.push({ line, span });
+  return out;
+}
+
+/// I valori di `name`, uno di [`INHERITED`], che vedono i caratteri del
+/// testo, una volta ciascuno; quello del testo se non ha caratteri.
+export function seenValues(rich: Rich, name: string): string[] {
+  const spans = visibleSpans(rich);
+  if (spans.length === 0) {
+    const value = rich.attrs[name] ?? rich.inherited[name];
+    return value === undefined ? [] : [value];
+  }
+  return [...new Set(spans.map(({ line, span }) => seenIn(rich, line, span, name) ?? ""))];
+}
+
+/// Il corpo più grande della riga `line`: quello che la fa alta.
+export function tallestIn(rich: Rich, line: RichLine): number {
+  return Math.max(sizeIn(rich, line, null), ...line.spans.filter((span) => span.text !== "").map((span) => sizeIn(rich, line, span)));
+}
+
+/// L'interlinea della riga `i`, in volte il corpo: quanto scende dalla riga
+/// prima, sul corpo più grande delle due. `null` per la prima riga, o per
+/// una che non scende di una lunghezza.
+export function leadingOf(rich: Rich, i: number): number | null {
+  const line = rich.lines[i];
+  if (i === 0 || line === undefined) return null;
+  const dy = line.attrs.dy === undefined ? null : length(line.attrs.dy);
+  const size = Math.max(tallestIn(rich, rich.lines[i - 1]!), tallestIn(rich, line));
+  return dy === null || size <= 0 ? null : dy / size;
+}
+
+/// `rich` con l'interlinea `leading`, in volte il corpo, su ogni riga dopo
+/// la prima.
+export function withLeading(rich: Rich, leading: number): Rich {
+  return {
+    ...rich,
+    lines: rich.lines.map((line, i) => {
+      if (i === 0) return line;
+      const size = Math.max(tallestIn(rich, rich.lines[i - 1]!), tallestIn(rich, line));
+      return { attrs: { ...line.attrs, dy: formatNumber(leading * size, 2) }, spans: line.spans };
+    }),
+  };
+}
+
+/// La spaziatura delle lettere dei caratteri del testo, in volte il loro
+/// corpo, una volta ciascuna.
+export function spacingsOf(rich: Rich): number[] {
+  const spans = visibleSpans(rich);
+  const seen = spans.length === 0 ? [{ line: rich.lines[0] ?? { attrs: {}, spans: [] }, span: null }] : spans;
+  const out = new Set<number>();
+  for (const { line, span } of seen) {
+    const size = sizeIn(rich, line, span);
+    const gap = letterSpacing(seenIn(rich, line, span, "letter-spacing") ?? "normal") ?? 0;
+    out.add(size > 0 ? Math.round((gap / size) * 1e4) / 1e4 : 0);
+  }
+  return [...out];
+}
+
+/// `rich` con le lettere spaziate di `spacing` volte il corpo, sul testo
+/// intero: il testo la scrive sul suo corpo, e una riga o un pezzo di un
+/// altro corpo sul proprio.
+export function withSpacing(rich: Rich, spacing: number): Rich {
+  const gap = (size: number): string => (spacing === 0 ? "0" : formatNumber(spacing * size, 2));
+  const text = sizeOf(rich.attrs["font-size"] ?? rich.inherited["font-size"]);
+  const base = restyleWhole(rich, "letter-spacing", gap(text));
+  return {
+    ...base,
+    lines: base.lines.map((line, i) => {
+      const before = rich.lines[i]!;
+      const lineSize = sizeIn(rich, before, null);
+      const attrs: Record<string, string> = { ...line.attrs };
+      if (before.attrs["font-size"] !== undefined && gap(lineSize) !== gap(text)) attrs["letter-spacing"] = gap(lineSize);
+      const seenGap = attrs["letter-spacing"] ?? gap(text);
+      return {
+        attrs,
+        spans: canonicalSpans(
+          line.spans.map((span) => {
+            if (span.attrs === null || span.attrs["font-size"] === undefined) return span;
+            const own = gap(sizeIn(rich, before, span));
+            return own === seenGap ? span : { text: span.text, attrs: { ...span.attrs, "letter-spacing": own } };
+          }),
+        ),
+      };
+    }),
+  };
+}
+
+/// Vero se tutti i caratteri del testo hanno l'enfasi `which`, falso se
+/// nessuno, `null` se qualcuno sì e qualcuno no.
+export function emphasisOf(rich: Rich, which: Emphasis): boolean | null {
+  const spans = visibleSpans(rich);
+  const seen = spans.length === 0 ? [{ line: rich.lines[0] ?? { attrs: {}, spans: [] }, span: null }] : spans;
+  const on = seen.map(({ line, span }) => hasEmphasis(rich, line, span, which));
+  return on.every(Boolean) ? true : on.some(Boolean) ? null : false;
+}
+
+/// `rich` con l'enfasi `which` accesa o spenta sul testo intero: il peso o
+/// il corsivo come un altro attributo; una linea la scrive il testo, che la
+/// tira col suo colore sotto tutte le righe, e righe e pezzi la lasciano.
+export function emphasizeWhole(rich: Rich, which: Emphasis, on: boolean): Rich {
+  if (which === "bold") return restyleWhole(rich, "font-weight", on ? "bold" : "normal");
+  if (which === "italic") return restyleWhole(rich, "font-style", on ? "italic" : "normal");
+  const line = LINES[which]!;
+  const strip = (attrs: Attrs | null): Attrs | null => withLine(attrs, line, false);
+  return {
+    ...rich,
+    attrs: withLine(rich.attrs, line, on) ?? {},
+    lines: rich.lines.map((row) => ({ attrs: strip(row.attrs) ?? {}, spans: canonicalSpans(row.spans.map((span) => ({ text: span.text, attrs: strip(span.attrs) }))) })),
+  };
+}
+
+/// L'allineamento che vede ogni riga del testo, una volta ciascuno.
+export function anchorsOf(rich: Rich): string[] {
+  const lines = rich.lines.filter((line) => lineText(line).trim() !== "");
+  const seen = lines.length === 0 ? rich.lines : lines;
+  return [...new Set(seen.map((line) => trim(line.attrs["text-anchor"] ?? rich.attrs["text-anchor"] ?? rich.inherited["text-anchor"] ?? "start")))];
 }
 
 /// Due valori di `name` che si vedono uguali.

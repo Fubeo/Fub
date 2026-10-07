@@ -2057,6 +2057,15 @@ progress::-moz-progress-bar {
     inset 0 -3px 0 var(--text),
     var(--shadow-sm);
 }
+/* Un'enfasi che una parte della scelta ha e un'altra no: il filo sotto a
+   tratti, a metà fra premuto e no. */
+.draw-button[aria-pressed="mixed"] {
+  color: var(--text);
+  background-image: linear-gradient(to right, var(--text) 50%, transparent 0);
+  background-position: left bottom;
+  background-size: 6px 3px;
+  background-repeat: repeat-x;
+}
 /* Un comando che adesso non si usa: sbiadito. Nelle proprietà resta
    raggiungibile (`aria-disabled`), e dice perché. */
 .draw-button:disabled,

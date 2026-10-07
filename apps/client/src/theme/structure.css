@@ -131,6 +131,11 @@
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
+
+  [aria-pressed="mixed"] {
+    outline: 2px dashed Highlight;
+    outline-offset: -2px;
+  }
 }
 
 /* Il fuoco si vede, ovunque e per costruzione (§12.4).

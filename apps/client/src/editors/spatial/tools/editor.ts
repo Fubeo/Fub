@@ -192,7 +192,7 @@ import {
   CAP_LABELS,
   DASH_LABELS,
   JOIN_LABELS,
-  LOOK_ACTIONS,
+  lookAction,
   lookChange,
   outlineChange,
   propertiesView,
@@ -4801,7 +4801,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const look = lookChange(id, value, docUnit());
     if (look !== null) {
       const restyled = lookOps(model, units, look, newIds());
-      return changeFromPanel(LOOK_ACTIONS[id]!, restyled.ops, restyled.keys);
+      return changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
     }
     const change = outlineChange(id, value);
     if (change === null) return null;

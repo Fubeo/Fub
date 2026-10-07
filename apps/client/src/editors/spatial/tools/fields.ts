@@ -49,7 +49,7 @@ import type { Feature } from "./registry";
 import type { ShapeChange, ShapeFacts } from "./reshape";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
 import { MIN_RATIO } from "./shapes";
-import { TEXT_FAMILIES } from "./text";
+import { TEXT_FAMILIES, TEXT_SIZE } from "./text";
 import { MAX_SCALE_PERCENT, MAX_SKEW } from "./transform";
 
 /// Il nome di ogni unità, come lo dicono i menu e il pannello.
@@ -87,6 +87,42 @@ const ANCHOR_LABELS: Readonly<Record<Anchor, DrawKey>> = {
   middle: "draw.properties.anchor.middle",
   end: "draw.properties.anchor.end",
 };
+
+/// Gli stili del testo, dal più grande: il corpo, in unità della scena, e il
+/// peso insieme. «Testo» è il corpo di un testo nuovo, e gli altri stanno
+/// sulle misure della barra.
+export const TEXT_PRESETS: ReadonlyArray<{ readonly id: string; readonly size: number; readonly weight: number; readonly label: DrawKey }> = [
+  { id: "title", size: 64, weight: 700, label: "draw.properties.preset.title" },
+  { id: "subtitle", size: 48, weight: 600, label: "draw.properties.preset.subtitle" },
+  { id: "heading", size: 40, weight: 600, label: "draw.properties.preset.heading" },
+  { id: "body", size: TEXT_SIZE, weight: 400, label: "draw.properties.preset.body" },
+  { id: "caption", size: 24, weight: 400, label: "draw.properties.preset.caption" },
+];
+
+/// I pesi del menu, coi loro nomi: quelli che i caratteri di Fub hanno.
+const WEIGHTS: ReadonlyArray<{ readonly value: number; readonly label: DrawKey }> = [
+  { value: 300, label: "draw.properties.weight.light" },
+  { value: 400, label: "draw.properties.weight.normal" },
+  { value: 500, label: "draw.properties.weight.medium" },
+  { value: 600, label: "draw.properties.weight.semibold" },
+  { value: 700, label: "draw.properties.weight.bold" },
+  { value: 800, label: "draw.properties.weight.extrabold" },
+  { value: 900, label: "draw.properties.weight.black" },
+];
+
+/// Gli interruttori di «Enfasi», coi nomi, che sono anche quelli del passo
+/// di annulla; le icone sono `draw-text-…`.
+const EMPHASES: Readonly<Record<"bold" | "italic" | "underline" | "strike", DrawKey>> = {
+  bold: "draw.text.bold",
+  italic: "draw.text.italic",
+  underline: "draw.text.underline",
+  strike: "draw.text.strike",
+};
+
+const EMPHASIS_IDS = Object.keys(EMPHASES) as Array<keyof typeof EMPHASES>;
+
+/// Da quale peso un testo è in grassetto, per l'interruttore.
+const BOLD = 600;
 
 /// I tipi di forma di un poligono, coi nomi e le icone degli strumenti.
 const SHAPE_KINDS: ReadonlyArray<{ readonly value: PolygonalShape; readonly label: DrawKey; readonly icon: string }> = [
@@ -129,10 +165,22 @@ export const LOOK_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
   stroke: "draw.action.outline_color",
   strokeWidth: "draw.action.stroke_width",
   opacity: "draw.action.opacity",
+  preset: "draw.action.text_style",
   family: "draw.action.font",
   size: "draw.action.font_size",
+  weight: "draw.action.font_weight",
+  leading: "draw.action.leading",
+  spacing: "draw.action.letter_spacing",
   anchor: "draw.action.text_align",
 };
+
+/// Il nome del passo di annulla del campo dell'aspetto `id` scritto con
+/// `value`: per «Enfasi», quello dell'interruttore.
+export function lookAction(id: FieldId, value: number | string | boolean): DrawKey | null {
+  if (id !== "emphasis") return LOOK_ACTIONS[id] ?? null;
+  const which = EMPHASIS_IDS.find((each) => typeof value === "string" && value.startsWith(`${each}:`));
+  return which === undefined ? null : EMPHASES[which];
+}
 
 /// L'unità dello spessore e del corpo del testo: i punti, tranne in un
 /// documento in pixel.
@@ -332,6 +380,16 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     }
 
     // --- Testo ---
+    if (look.size.count > 0) {
+      const { size, weight } = look;
+      const preset = size.value === null || weight.value === null ? undefined : TEXT_PRESETS.find((each) => Math.abs(each.size - size.value!) < 1e-6 && each.weight === weight.value);
+      const presets: ChoiceOption[] = TEXT_PRESETS.map((each) => ({ value: each.id, label: t(each.label) }));
+      // Un testo che non è di nessuno stile è su misura; uno misto non è
+      // nessuno dei due.
+      const mixed = size.value === null || weight.value === null;
+      if (!mixed && preset === undefined) presets.push({ value: "custom", label: t("draw.properties.preset.custom") });
+      fields.preset = { kind: "choice", label: t("draw.properties.preset"), value: mixed ? null : (preset?.id ?? "custom"), options: presets };
+    }
     if (look.family.count > 0) {
       const families: ChoiceOption[] = TEXT_FAMILIES.map((family) => ({ value: family, label: familyName(family) }));
       const current = look.family.value;
@@ -352,6 +410,36 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         places: FIELD_PLACES[thin],
         min: fieldMin(Math.min(look.size.value ?? MIN_SIZE, MIN_SIZE), thin),
       };
+    }
+    if (look.weight.count > 0) {
+      const weights: ChoiceOption[] = WEIGHTS.map((each) => ({ value: String(each.value), label: t(each.label) }));
+      const current = look.weight.value;
+      // Un peso che non è del menu c'è, col suo numero.
+      if (current !== null && !WEIGHTS.some((each) => each.value === current)) {
+        weights.push({ value: String(current), label: String(current) });
+        weights.sort((a, b) => Number(a.value) - Number(b.value));
+      }
+      fields.weight = { kind: "choice", label: t("draw.properties.weight"), value: current === null ? null : String(current), options: weights };
+      const lit: Record<keyof typeof EMPHASES, boolean | null> = {
+        bold: current === null ? null : current >= BOLD,
+        italic: look.italic.value,
+        underline: look.underline.value,
+        strike: look.strike.value,
+      };
+      fields.emphasis = {
+        kind: "toggles",
+        label: t("draw.properties.emphasis"),
+        options: EMPHASIS_IDS.map((which) => ({ value: which, label: t(EMPHASES[which]), icon: `draw-text-${which}`, on: lit[which] })),
+      };
+    }
+    // L'interlinea c'è se un testo scelto ha più righe.
+    if (look.leading.count > 0) {
+      const leading = look.leading.value === null ? null : look.leading.value * 100;
+      fields.leading = { kind: "number", label: t("draw.properties.leading"), value: leading, unit: "%", units: PERCENT_UNITS, relative: true, places: 0, min: Math.min(leading ?? 50, 50) };
+    }
+    if (look.spacing.count > 0) {
+      const spacing = look.spacing.value === null ? null : look.spacing.value * 100;
+      fields.spacing = { kind: "number", label: t("draw.properties.spacing"), value: spacing, unit: "%", units: PERCENT_UNITS, relative: true, places: 1, min: Math.min(spacing ?? -50, -50) };
     }
     if (look.anchor.count > 0) {
       fields.anchor = {
@@ -455,6 +543,27 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
       return typeof value === "string" && value !== "" ? { family: value } : null;
     case "size":
       return typeof value === "number" ? { size: fromUnit(value, lookUnit(unit)) } : null;
+    case "preset": {
+      const preset = TEXT_PRESETS.find((each) => each.id === value);
+      return preset === undefined ? null : { preset: { size: preset.size, weight: preset.weight } };
+    }
+    case "weight": {
+      const weight = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+      return weight >= 1 && weight <= 1000 ? { weight } : null;
+    }
+    case "emphasis": {
+      const [which, on] = typeof value === "string" ? value.split(":") : [];
+      if (on !== "true" && on !== "false") return null;
+      const lit = on === "true";
+      if (which === "bold") return { weight: lit ? 700 : 400 };
+      if (which === "italic") return { italic: lit };
+      if (which === "underline") return { underline: lit };
+      return which === "strike" ? { strike: lit } : null;
+    }
+    case "leading":
+      return typeof value === "number" && value > 0 ? { leading: value / 100 } : null;
+    case "spacing":
+      return typeof value === "number" ? { spacing: value / 100 } : null;
     case "anchor":
       return (ANCHORS as readonly unknown[]).includes(value) ? { anchor: value as Anchor } : null;
     default:

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  anchorsOf,
   emphasisIn,
+  emphasisOf,
+  emphasizeWhole,
+  leadingOf,
   lineRuns,
   newLeading,
   replaceRange,
   restyleWhole,
   richChange,
+  seenValues,
+  spacingsOf,
   richLine,
   richText,
   setInRange,
@@ -13,6 +19,8 @@ import {
   tidyRich,
   toggleEmphasis,
   valuesIn,
+  withLeading,
+  withSpacing,
   type Rich,
 } from "./rich";
 
@@ -98,14 +106,50 @@ describe("formattare", () => {
     expect(lineRuns(both.lines[1]!)[0]).toEqual({ text: "in ", attrs: { "text-decoration": "underline line-through" } });
   });
 
-  it("sul testo intero, righe e pezzi lasciano il loro valore; un corpo nuovo porta in proporzione interlinee e spaziature", () => {
+  it("sul testo intero, righe e pezzi lasciano il loro valore; un corpo nuovo porta interlinee e spaziature, ciascuna sul suo corpo", () => {
     const spaced: Rich = { ...TWO, attrs: { ...TWO.attrs, "letter-spacing": "1" } };
     const blue = restyleWhole(spaced, "fill", "#009e73");
     expect(blue.attrs.fill).toBe("#009e73");
     expect(lineRuns(blue.lines[1]!)).toEqual(["in ", { text: "pioggia", attrs: BOLD }]);
     const big = restyleWhole({ ...spaced, lines: [TWO.lines[0]!, { ...TWO.lines[1]!, attrs: { ...TWO.lines[1]!.attrs, "font-size": "12", "letter-spacing": "0.5" } }] }, "font-size", "30");
     expect(big.attrs).toEqual({ id: "o1", x: "10", y: "40", "font-size": "30", "letter-spacing": "1.5" });
-    expect(big.lines.map((line) => line.attrs)).toEqual([{ x: "10", dy: "0" }, { x: "10", dy: "37.5", "letter-spacing": "0.75" }]);
+    // L'interlinea era 1,25 volte il corpo più grande delle due righe, 20;
+    // la spaziatura della riga 0,5 sul suo corpo 12.
+    expect(big.lines.map((line) => line.attrs)).toEqual([{ x: "10", dy: "0" }, { x: "10", dy: "37.5", "letter-spacing": "1.25" }]);
+  });
+
+  it("il pannello legge il testo intero: i valori dei caratteri, l'interlinea, la spaziatura, le enfasi e l'allineamento", () => {
+    expect(seenValues(TWO, "fill")).toEqual(["#000000", "#0072b2"]);
+    expect(seenValues(TWO, "font-size")).toEqual(["20"]);
+    expect(leadingOf(TWO, 1)).toBe(1.25);
+    expect(leadingOf(TWO, 0)).toBeNull();
+    expect(emphasisOf(TWO, "bold")).toBeNull();
+    expect(emphasisOf(TWO, "italic")).toBe(false);
+    expect(spacingsOf(TWO)).toEqual([0]);
+    expect(anchorsOf(TWO)).toEqual(["start"]);
+    // Un pezzo più grande allarga l'interlinea della sua riga.
+    const big: Rich = { ...TWO, lines: [TWO.lines[0]!, richLine({ x: "10", dy: "25" }, ["in ", { text: "pioggia", attrs: { "font-size": "40" } }])] };
+    expect(leadingOf(big, 1)).toBe(0.625);
+    expect(withLeading(big, 1.2).lines[1]!.attrs.dy).toBe("48");
+    // La spaziatura sul corpo di ciascuno.
+    const spaced = withSpacing(big, 0.05);
+    expect(spaced.attrs["letter-spacing"]).toBe("1");
+    expect(lineRuns(spaced.lines[1]!)).toEqual(["in ", { text: "pioggia", attrs: { "font-size": "40", "letter-spacing": "2" } }]);
+    expect(spacingsOf(spaced)).toEqual([0.05]);
+  });
+
+  it("un'enfasi sul testo intero: il peso sul testo, una linea scritta dal testo e lasciata da righe e pezzi", () => {
+    const bold = emphasizeWhole(TWO, "bold", true);
+    expect(bold.attrs["font-weight"]).toBe("bold");
+    expect(lineRuns(bold.lines[1]!)).toEqual(["in ", { text: "pioggia", attrs: BLUE }]);
+    expect(emphasisOf(bold, "bold")).toBe(true);
+    const under: Rich = { ...TWO, lines: [TWO.lines[0]!, richLine({ x: "10", dy: "25", "text-decoration": "line-through" }, ["in ", { text: "pioggia", attrs: { "text-decoration": "underline" } }])] };
+    const all = emphasizeWhole(under, "underline", true);
+    expect(all.attrs["text-decoration"]).toBe("underline");
+    expect(all.lines[1]!.attrs["text-decoration"]).toBe("line-through");
+    expect(lineRuns(all.lines[1]!)).toBe("in pioggia");
+    expect(emphasisOf(all, "underline")).toBe(true);
+    expect(emphasisOf(emphasizeWhole(all, "strike", false), "strike")).toBe(false);
   });
 
   it("un colore uguale a quello della riga non si scrive nel pezzo", () => {

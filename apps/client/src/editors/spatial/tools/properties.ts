@@ -49,6 +49,8 @@ export type NumberId =
   | "strokeWidth"
   | "opacity"
   | "size"
+  | "leading"
+  | "spacing"
   | TransformId
   | "pageWidth"
   | "pageHeight";
@@ -57,9 +59,9 @@ export type NumberId =
 export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 
 export type PaintId = "fill" | "stroke";
-export type ChoiceId = "dash" | "cap" | "join" | "family" | "unit";
+export type ChoiceId = "dash" | "cap" | "join" | "preset" | "family" | "weight" | "unit";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar";
-export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "anchor" | "desc";
+export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "desc";
 
 export type ActionId =
   | "align-left"
@@ -144,13 +146,26 @@ export interface SegmentState extends FieldBase {
   readonly options: readonly SegmentOption[];
 }
 
+/// Un interruttore di una fila: acceso, spento, o `null` se una parte
+/// della scelta l'ha e un'altra no.
+export interface ToggleOption extends SegmentOption {
+  readonly on: boolean | null;
+}
+
+/// Una fila di interruttori con un'icona, come grassetto e corsivo. Ognuno
+/// scrive `valore:true` o `valore:false`: acceso se era spento o misto.
+export interface TogglesState extends FieldBase {
+  readonly kind: "toggles";
+  readonly options: readonly ToggleOption[];
+}
+
 /// Un testo di più righe.
 export interface TextState extends FieldBase {
   readonly kind: "text";
   readonly value: string;
 }
 
-export type FieldState = NumberState | PaintState | ChoiceState | SwitchState | PressState | SegmentState | TextState;
+export type FieldState = NumberState | PaintState | ChoiceState | SwitchState | PressState | SegmentState | TogglesState | TextState;
 
 /// Un comando: il nome, e perché adesso non si usa.
 export interface ActionState {
@@ -240,8 +255,13 @@ const SPECS: readonly Spec[] = [
   { id: "dash", kind: "choice", section: "look", column: "all" },
   { id: "cap", kind: "choice", section: "look", column: "1" },
   { id: "join", kind: "choice", section: "look", column: "2" },
+  { id: "preset", kind: "choice", section: "text", column: "all" },
   { id: "family", kind: "choice", section: "text", column: "all" },
   { id: "size", kind: "number", section: "text", column: "1" },
+  { id: "weight", kind: "choice", section: "text", column: "2" },
+  { id: "emphasis", kind: "toggles", section: "text", column: "all" },
+  { id: "leading", kind: "number", section: "text", column: "1" },
+  { id: "spacing", kind: "number", section: "text", column: "2" },
   { id: "anchor", kind: "segment", section: "text", column: "all" },
   { id: "turn", kind: "number", section: "transform", column: "1" },
   { id: "scaleX", kind: "number", section: "transform", column: "1" },
@@ -330,6 +350,10 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-anchor-start": ["M4 6h16", "M4 10h10", "M4 14h16", "M4 18h10"],
   "draw-anchor-middle": ["M4 6h16", "M7 10h10", "M4 14h16", "M7 18h10"],
   "draw-anchor-end": ["M4 6h16", "M10 10h10", "M4 14h16", "M10 18h10"],
+  "draw-text-bold": ["M7 5h6a3.5 3.5 0 0 1 0 7H7z", "M7 12h7a3.5 3.5 0 0 1 0 7H7z"],
+  "draw-text-italic": ["M10 5h8", "M6 19h8", "M14 5l-4 14"],
+  "draw-text-underline": ["M7 4v7a5 5 0 0 0 10 0V4", "M5 20h14"],
+  "draw-text-strike": ["M4 12h16", "M16 7.5C15.4 6 13.8 5 12 5c-2.2 0-4 1.2-4 3 0 1.3.8 2.1 2 2.6", "M8 16.5c.6 1.5 2.2 2.5 4 2.5 2.2 0 4-1.2 4-3 0-.7-.2-1.2-.6-1.6"],
   "draw-ratio": ["M9 8V6.5a3 3 0 0 1 6 0V8", "M9 16v1.5a3 3 0 0 0 6 0V16", "M12 10v4"],
   "draw-section": ["M8 10l4 4 4-4"],
 };
@@ -719,7 +743,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         control = button;
         break;
       }
-      case "segment": {
+      case "segment":
+      case "toggles": {
         name = document.createElement("span");
         name.className = "draw-properties-label";
         name.id = identifier("draw-properties-label");
@@ -952,6 +977,34 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     }
   };
 
+  const paintToggles = (line: Line, state: TogglesState): void => {
+    line.name.textContent = state.label;
+    const bar = line.control;
+    const signature = state.options.map((option) => `${option.value}\u0000${option.label}\u0000${option.icon}`).join("\u0002");
+    if (signature !== line.options) {
+      bar.replaceChildren();
+      line.segments.clear();
+      for (const option of state.options) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "draw-button draw-properties-segment";
+        button.setAttribute("aria-label", option.label);
+        button.title = option.label;
+        const glyph = iconEl(option.icon);
+        if (glyph !== null) button.append(glyph);
+        life.listen(button, "click", () => flip(line, option.value));
+        bar.append(button);
+        line.segments.set(option.value, button);
+      }
+      line.options = signature;
+    }
+    for (const option of state.options) {
+      const button = line.segments.get(option.value)!;
+      button.setAttribute("aria-pressed", option.on === null ? "mixed" : String(option.on));
+      showOff(button, !view.editable || state.disabled === true);
+    }
+  };
+
   const paintText = (line: Line, state: TextState, fresh: boolean): void => {
     line.name.textContent = state.label;
     showText(line, state.value, fresh);
@@ -977,6 +1030,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       case "segment":
         paintSegment(line, state);
+        break;
+      case "toggles":
+        paintToggles(line, state);
         break;
       case "text":
         paintText(line, state, fresh);
@@ -1145,6 +1201,18 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const state = line.state;
     if (state === null || state.kind !== "segment" || !view.editable || state.disabled === true || state.value === value) return;
     const failure = options.onChange(line.spec.id, value);
+    if (failure !== null) fail(line, failure, true);
+    else showError(line, null);
+  }
+
+  /// Un interruttore della fila: si accende se era spento o misto, e si
+  /// spegne se era acceso.
+  function flip(line: Line, value: string): void {
+    const state = line.state;
+    if (state === null || state.kind !== "toggles" || !view.editable || state.disabled === true) return;
+    const option = state.options.find((each) => each.value === value);
+    if (option === undefined) return;
+    const failure = options.onChange(line.spec.id, `${value}:${option.on !== true}`);
     if (failure !== null) fail(line, failure, true);
     else showError(line, null);
   }

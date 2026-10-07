@@ -4,11 +4,11 @@
 
 import { describe, expect, it } from "vitest";
 import type { LengthUnit } from "../scene/rulers";
-import { lookChange, outlineChange, propertiesView, shapeChange, type FieldsInput, type SelectionFacts } from "./fields";
+import { lookAction, lookChange, outlineChange, propertiesView, shapeChange, type FieldsInput, type SelectionFacts } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
-import type { ChoiceState, NumberState, SegmentState } from "./properties";
+import type { ChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
 import { featuresFor, type Level } from "./registry";
 import type { ShapeFacts } from "./reshape";
 import { fieldMin, fromUnit } from "./rulers";
@@ -23,6 +23,12 @@ const look = (parts: Partial<Look> = {}): Look => ({
   opacity: NONE,
   family: NONE,
   size: NONE,
+  weight: NONE,
+  italic: NONE,
+  underline: NONE,
+  strike: NONE,
+  leading: NONE,
+  spacing: NONE,
   anchor: NONE,
   ...parts,
 });
@@ -245,7 +251,7 @@ describe("l'aspetto", () => {
 
   it("ciò che nessuno ha non c'è", () => {
     const view = propertiesView(input({ selection: selection({ look: look({ fill: { count: 1, value: "#000000" } }) }) }));
-    expect(["strokeWidth", "opacity", "stroke", "family", "size", "anchor"].filter((id) => id in view.fields)).toEqual([]);
+    expect(["strokeWidth", "opacity", "stroke", "preset", "family", "size", "weight", "emphasis", "leading", "spacing", "anchor"].filter((id) => id in view.fields)).toEqual([]);
   });
 });
 
@@ -294,6 +300,52 @@ describe("il testo", () => {
       "draw-anchor-end",
     ]);
   });
+
+  it("lo stile è quello che ha il corpo e il peso del testo, su misura altrimenti, e niente se sono misti", () => {
+    const preset = (size: number | null, weight: number | null): ChoiceState =>
+      propertiesView(input({ selection: selection({ look: look({ size: { count: 1, value: size }, weight: { count: 1, value: weight } }) }) })).fields.preset as ChoiceState;
+    expect(preset(64, 700)).toMatchObject({ label: "Stile", value: "title" });
+    expect(preset(64, 700).options.map((option) => option.label)).toEqual(["Titolo", "Sottotitolo", "Titoletto", "Testo", "Didascalia"]);
+    expect(preset(32, 400).value).toBe("body");
+    expect(preset(32, 700).value).toBe("custom");
+    expect(preset(32, 700).options.slice(-1)).toEqual([{ value: "custom", label: "Su misura" }]);
+    expect(preset(null, 400).value).toBeNull();
+    expect(preset(null, 400).options).toHaveLength(5);
+  });
+
+  it("il peso ha i suoi nomi, e uno che non è del menu al suo posto col numero", () => {
+    const weight = (value: number | null): ChoiceState => propertiesView(input({ selection: selection({ look: look({ weight: { count: 1, value } }) }) })).fields.weight as ChoiceState;
+    expect(weight(700)).toMatchObject({ label: "Peso", value: "700" });
+    expect(weight(700).options.map((option) => option.label)).toEqual(["Leggero", "Normale", "Medio", "Semigrassetto", "Grassetto", "Extragrassetto", "Nero"]);
+    expect(weight(450).options.map((option) => option.value)).toEqual(["300", "400", "450", "500", "600", "700", "800", "900"]);
+    expect(weight(null).value).toBeNull();
+  });
+
+  it("l'enfasi accende ciò che il testo ha, e il misto è misto; il grassetto è da semigrassetto in su", () => {
+    const emphasis = (parts: Partial<Look>): TogglesState => propertiesView(input({ selection: selection({ look: look(parts) }) })).fields.emphasis as TogglesState;
+    const lit = emphasis({ weight: { count: 2, value: 600 }, italic: { count: 2, value: null }, underline: { count: 2, value: true }, strike: { count: 2, value: false } });
+    expect(lit).toMatchObject({ kind: "toggles", label: "Enfasi" });
+    expect(lit.options.map(({ value, icon, on }) => [value, icon, on])).toEqual([
+      ["bold", "draw-text-bold", true],
+      ["italic", "draw-text-italic", null],
+      ["underline", "draw-text-underline", true],
+      ["strike", "draw-text-strike", false],
+    ]);
+    expect(lit.options.map((option) => option.label)).toEqual(["Grassetto", "Corsivo", "Sottolineato", "Barrato"]);
+    expect(emphasis({ weight: { count: 1, value: 500 } }).options[0]!.on).toBe(false);
+    expect(emphasis({ weight: { count: 2, value: null } }).options[0]!.on).toBeNull();
+  });
+
+  it("l'interlinea c'è per i testi di più righe, e lei e la spaziatura sono in percentuale del corpo", () => {
+    const view = propertiesView(input({ selection: selection({ look: look({ size: { count: 1, value: 32 }, leading: { count: 1, value: 1.25 }, spacing: { count: 1, value: 0.025 } }) }) }));
+    expect(number(view.fields.leading)).toMatchObject({ label: "Interlinea", value: 125, unit: "%", places: 0, min: 50 });
+    expect(number(view.fields.spacing)).toMatchObject({ label: "Spaziatura", value: 2.5, unit: "%", places: 1, min: -50 });
+    // Una sola riga: niente interlinea; una misura già sotto il limite lo
+    // abbassa.
+    const one = propertiesView(input({ selection: selection({ look: look({ size: { count: 1, value: 32 }, spacing: { count: 1, value: -0.8 } }) }) }));
+    expect("leading" in one.fields).toBe(false);
+    expect(number(one.fields.spacing).min).toBe(-80);
+  });
 });
 
 describe("«Disponi»", () => {
@@ -338,6 +390,27 @@ describe("dal valore al cambio", () => {
     expect(lookChange("fill", "#e69f00", "px")).toEqual({ fill: "#e69f00" });
     expect(lookChange("stroke", "none", "px")).toEqual({ stroke: "none" });
     expect(lookChange("anchor", "end", "px")).toEqual({ anchor: "end" });
+  });
+
+  it("il testo: lo stile, il peso, gli interruttori dell'enfasi, e l'interlinea e la spaziatura in volte il corpo", () => {
+    expect(lookChange("preset", "subtitle", "mm")).toEqual({ preset: { size: 48, weight: 600 } });
+    expect(lookChange("preset", "custom", "px")).toBeNull();
+    expect(lookChange("weight", "300", "px")).toEqual({ weight: 300 });
+    expect(lookChange("weight", "1200", "px")).toBeNull();
+    expect(lookChange("emphasis", "bold:true", "px")).toEqual({ weight: 700 });
+    expect(lookChange("emphasis", "bold:false", "px")).toEqual({ weight: 400 });
+    expect(lookChange("emphasis", "italic:true", "px")).toEqual({ italic: true });
+    expect(lookChange("emphasis", "underline:false", "px")).toEqual({ underline: false });
+    expect(lookChange("emphasis", "strike:true", "px")).toEqual({ strike: true });
+    expect(lookChange("emphasis", "overline:true", "px")).toBeNull();
+    expect(lookChange("emphasis", "italic", "px")).toBeNull();
+    expect(lookChange("leading", 150, "px")).toEqual({ leading: 1.5 });
+    expect(lookChange("leading", 0, "px")).toBeNull();
+    expect(lookChange("spacing", -2.5, "px")).toEqual({ spacing: -0.025 });
+    // Il passo di annulla di un interruttore ha il suo nome.
+    expect(lookAction("emphasis", "italic:true")).toBe("draw.text.italic");
+    expect(lookAction("leading", 150)).toBe("draw.action.leading");
+    expect(lookAction("emphasis", "overline:true")).toBeNull();
   });
 
   it("un valore che non è del campo, o un campo che non è dell'aspetto, non cambia niente", () => {
