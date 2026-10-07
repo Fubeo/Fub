@@ -1,7 +1,8 @@
 // Gli id che FubDraw dà agli elementi che crea (formato della scena, §7).
 //
 // Un oggetto ha `o` seguito da 8 caratteri base36 casuali, un livello `l`
-// seguito da 8, la carta `fub-paper`. Il caso viene da `crypto.getRandomValues`
+// seguito da 8, una risorsa `r` seguita da 8; la carta è `fub-paper`, la
+// `defs` di FubDraw `fub-defs`. Il caso viene da `crypto.getRandomValues`
 // e ogni carattere è uniforme: un byte vale solo sotto 252, il più grande
 // multiplo di 36 che sta in un byte, così nessuna cifra esce più spesso delle
 // altre. Un id già usato nel documento si scarta e se ne genera un altro.
@@ -13,13 +14,17 @@
 /// L'id della carta (§2).
 export const PAPER_ID = "fub-paper";
 
-/// Che cosa riceve l'id: un oggetto qualunque o un livello.
-export type IdKind = "object" | "layer";
+/// L'id della `defs` in cui FubDraw mette le risorse nuove (§15).
+export const DEFS_ID = "fub-defs";
+
+/// Che cosa riceve l'id: un oggetto qualunque, un livello o una risorsa e
+/// ciò che contiene.
+export type IdKind = "object" | "layer" | "resource";
 
 /// Quanti caratteri casuali seguono il prefisso.
 export const ID_RANDOM_LENGTH = 8;
 
-const PREFIX: Readonly<Record<IdKind, string>> = { object: "o", layer: "l" };
+const PREFIX: Readonly<Record<IdKind, string>> = { object: "o", layer: "l", resource: "r" };
 
 const BASE36 = "0123456789abcdefghijklmnopqrstuvwxyz";
 
@@ -29,6 +34,7 @@ const UNBIASED = 252;
 const PATTERN: Readonly<Record<IdKind, RegExp>> = {
   object: /^o[0-9a-z]{8}$/,
   layer: /^l[0-9a-z]{8}$/,
+  resource: /^r[0-9a-z]{8}$/,
 };
 
 /// Quante volte si ritenta prima di arrendersi: con 36⁸ id possibili un

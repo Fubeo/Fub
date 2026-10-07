@@ -182,6 +182,7 @@ export type Reason =
   | "missing-parent"
   | "missing-anchor"
   | "duplicate-id"
+  | "in-use"
   | "invalid-elem"
   | "locked"
   | "foreign"

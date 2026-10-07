@@ -1,0 +1,25 @@
+{
+  "name": "collect-keeps-unowned",
+  "description": "una sfumatura senza fub:role resta anche quando nessuno la usa più",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1a2b3c4d\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n      <stop offset=\"0\" stop-color=\"#0072b2\"/>\n      <stop offset=\"1\" stop-color=\"#56b4e9\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"url(#r1a2b3c4d) #0072b2\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "set",
+      "id": "o2b3c4d5e",
+      "attrs": {
+        "fill": "#e69f00"
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1a2b3c4d\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n      <stop offset=\"0\" stop-color=\"#0072b2\"/>\n      <stop offset=\"1\" stop-color=\"#56b4e9\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "set",
+      "id": "o2b3c4d5e",
+      "attrs": {
+        "fill": "url(#r1a2b3c4d) #0072b2"
+      }
+    }
+  }
+}

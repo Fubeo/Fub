@@ -823,18 +823,20 @@ function primitivesAllowed(doc: XmlDocument, element: ElementNode): boolean {
   return true;
 }
 
-/// Gli id a cui gli attributi di `element` rimandano: ogni `url(#id)` degli
-/// attributi senza prefisso e `xlink`, anche fuori dal formato, e ogni
-/// `href` locale (`#id`).
+/// Gli id a cui gli attributi di `element` rimandano, come li legge S014:
+/// ogni `url(#id)` degli attributi senza prefisso e `xlink`, anche fuori dal
+/// formato, e l'`href` locale (`#id`) di un elemento SVG che non è un
+/// collegamento, dove `#id` è un'ancora.
 export function referencesOf(element: ElementNode): string[] {
   const out: string[] = [];
   for (const attr of element.attrs) {
     if (attr.ns !== NS_NONE && attr.ns !== NS_XLINK) continue;
-    for (const id of urlIds(attr.value)) out.push(id);
-    if (attr.local === "href") {
-      const id = hrefId(attr.value);
-      if (id !== null) out.push(id);
+    if (attr.local !== "href") {
+      for (const id of urlIds(attr.value)) out.push(id);
+      continue;
     }
+    const id = element.ns === NS_SVG && element.local !== "a" ? hrefId(attr.value) : null;
+    if (id !== null) out.push(id);
   }
   return out;
 }

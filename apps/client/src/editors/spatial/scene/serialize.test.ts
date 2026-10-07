@@ -282,6 +282,22 @@ describe("dall'elemento di un'operazione alla forma canonica", () => {
     expect(written({ tag: "text", attrs: { "xml:space": "preserve" } })).toBe('<text xml:space="preserve"/>');
   });
 
+  it("scrive le risorse col loro contenuto, e ogni parte sta solo dove la vuole il formato", () => {
+    const stop = { tag: "stop", attrs: { offset: "0", "stop-color": "#0072b2" } };
+    expect(written({ tag: "defs", attrs: { id: "fub-defs" }, children: [{ tag: "linearGradient", attrs: { id: "r1a2b3c4d" }, children: [stop] }] })).toBe(
+      '<defs id="fub-defs">\n  <linearGradient id="r1a2b3c4d">\n    <stop offset="0" stop-color="#0072b2"/>\n  </linearGradient>\n</defs>',
+    );
+    const merge = { tag: "feMerge", attrs: {}, children: [{ tag: "feMergeNode", attrs: { in: "SourceGraphic" } }] };
+    expect(written({ tag: "filter", attrs: { id: "r1a2b3c4d" }, children: [{ tag: "feOffset", attrs: { dx: "2" } }, merge] })).toContain("<feMergeNode in=\"SourceGraphic\"/>");
+    expect(written({ tag: "pattern", attrs: { id: "r1a2b3c4d" }, children: [{ tag: "g", attrs: {}, children: [{ tag: "rect", attrs: {} }] }] })).toContain("<g>");
+    expect(rejection(stop)).toMatch(/stop sta solo dentro un linearGradient o un radialGradient/);
+    expect(rejection({ tag: "g", attrs: {}, children: [stop] })).toMatch(/stop sta solo dentro/);
+    expect(rejection({ tag: "filter", attrs: {}, children: [{ tag: "rect", attrs: {} }] })).toMatch(/rect non può stare dentro filter/);
+    expect(rejection({ tag: "pattern", attrs: {}, children: [{ tag: "feFlood", attrs: {} }] })).toMatch(/feFlood sta solo dentro un filter/);
+    expect(rejection({ tag: "filter", attrs: {}, children: [{ tag: "feMergeNode", attrs: {} }] })).toMatch(/feMergeNode sta solo dentro un feMerge/);
+    expect(rejection({ tag: "filter", attrs: {}, children: [{ tag: "feTurbulence", attrs: {} }] })).toMatch(/tag fuori dal formato/);
+  });
+
   it("rifiuta le forme sbagliate", () => {
     expect(rejection(null)).toMatch(/assente/);
     expect(rejection({ tag: "script", attrs: {} })).toMatch(/tag fuori dal formato/);

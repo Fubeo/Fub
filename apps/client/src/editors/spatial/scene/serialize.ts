@@ -39,8 +39,8 @@ import {
 export interface Elem {
   readonly tag: string;
   readonly attrs: Readonly<Record<string, string>>;
-  /// Per `g`, `a` e `text`; `title` e `desc` sono figli ammessi di
-  /// qualunque elemento.
+  /// Per `g`, `a` e `text`, per la `defs`, le risorse e il loro contenuto;
+  /// `title` e `desc` sono figli ammessi di qualunque elemento.
   readonly children?: readonly Elem[];
   /// Solo per `tspan`, `title` e `desc`.
   readonly text?: string | null;
@@ -67,7 +67,33 @@ export class ElemError extends Error {
   }
 }
 
-/// I tag di §4.
+/// Le primitive dei filtri (formato della scena, §15).
+const PRIMITIVES = [
+  "feGaussianBlur",
+  "feOffset",
+  "feFlood",
+  "feDropShadow",
+  "feColorMatrix",
+  "feComposite",
+  "feBlend",
+  "feMorphology",
+  "feMerge",
+];
+
+/// Gli elementi che stanno solo dentro certi altri: una riga nel suo testo,
+/// un punto nella sua sfumatura, una primitiva nel suo filtro.
+const OWNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["tspan", new Set(["text"])],
+  ["stop", new Set(["linearGradient", "radialGradient"])],
+  ["feMergeNode", new Set(["feMerge"])],
+  ...PRIMITIVES.map((tag): [string, ReadonlySet<string>] => [tag, new Set(["filter"])]),
+]);
+
+/// Gli elementi i cui figli sono elementi qualunque, fra quelli che non
+/// stanno solo dentro un altro: dove vanno lo giudica la classificazione.
+const OPEN_PARENTS: ReadonlySet<string> = new Set(["g", "a", "defs", "pattern", "marker", "clipPath", "mask"]);
+
+/// I tag di §4 e delle risorse (§15).
 export const SCENE_TAGS: ReadonlySet<string> = new Set([
   "title",
   "desc",
@@ -83,6 +109,17 @@ export const SCENE_TAGS: ReadonlySet<string> = new Set([
   "text",
   "tspan",
   "image",
+  "defs",
+  "linearGradient",
+  "radialGradient",
+  "stop",
+  "pattern",
+  "marker",
+  "clipPath",
+  "mask",
+  "filter",
+  "feMergeNode",
+  ...PRIMITIVES,
 ]);
 
 /// I tag che portano testo.
@@ -395,12 +432,12 @@ export function elemToOut(elem: Elem, scope: NamespaceScope, parentTag: string |
   if (elem === null || typeof elem !== "object" || Array.isArray(elem)) throw new ElemError("elemento assente");
   const { tag, attrs, children, text } = elem;
   if (typeof tag !== "string" || !SCENE_TAGS.has(tag)) throw new ElemError(`tag fuori dal formato: ${JSON.stringify(tag)}`);
-  if (tag === "tspan" && parentTag !== "text") throw new ElemError("un tspan sta solo dentro un text");
-  if (parentTag !== null && tag !== "title" && tag !== "desc") {
-    const container = parentTag === "g" || parentTag === "a";
-    if (!(container && tag !== "tspan") && !(parentTag === "text" && tag === "tspan")) {
-      throw new ElemError(`${tag} non può stare dentro ${parentTag}`);
-    }
+  const owners = OWNERS.get(tag);
+  if (owners !== undefined && (parentTag === null || !owners.has(parentTag))) {
+    throw new ElemError(`${tag} sta solo dentro un ${[...owners].join(" o un ")}`);
+  }
+  if (parentTag !== null && tag !== "title" && tag !== "desc" && owners === undefined && !OPEN_PARENTS.has(parentTag)) {
+    throw new ElemError(`${tag} non può stare dentro ${parentTag}`);
   }
   if (attrs === null || typeof attrs !== "object" || Array.isArray(attrs)) throw new ElemError(`attributi assenti su ${tag}`);
   const name = scope.svgName(tag);

@@ -31,6 +31,10 @@ export const MAX_EDIT_BYTES = 20 * 1024 * 1024;
 /// Quanti elementi può avere un documento modificabile (§11).
 export const MAX_ELEMENTS = 50_000;
 
+/// Quante risorse modificabili riceve un documento, al più: uno che ne ha di
+/// più si apre e si modifica, e non ne riceve altre (§15).
+export const MAX_RESOURCES = 10_000;
+
 /// Che documento è: con `fub:version` sulla radice, o un SVG qualunque che
 /// la superficie mostra inerte e adotta con «Modifica» (§2).
 export type Status = "fubdraw" | "foreign";

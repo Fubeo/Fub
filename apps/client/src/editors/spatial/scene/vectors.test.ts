@@ -9,8 +9,10 @@
 // 3. il testo grezzo è quello atteso, byte per byte, terminatori compresi;
 //
 // e in più che la `DocumentSession` accetta la modifica, che l'undo torna al
-// testo di prima byte per byte, che il redo torna a quello di dopo e che
-// l'inversa si applica anche su un motore aperto dal solo testo di dopo.
+// testo di prima byte per byte, che il redo torna a quello di dopo, che
+// l'inversa si applica anche su un motore aperto dal solo testo di dopo e che
+// l'operazione in avanti, raccolta delle risorse compresa, dà lo stesso testo
+// su un motore aperto dal solo testo di prima.
 
 import { describe, expect, it, vi } from "vitest";
 import { tryApplyOperation, type TextEdit } from "../../core/text-operation";
@@ -34,6 +36,9 @@ interface Vector {
     readonly index?: number;
     readonly duplicate?: boolean;
     readonly inverse?: Op;
+    /// L'operazione in avanti, se non è quella chiesta: un `batch` con lei e
+    /// i `remove` della raccolta.
+    readonly forward?: Op;
     /// Le modifiche sul testo a LF, dove §6 ne fissa la forma.
     readonly edits?: readonly TextEdit[];
     /// Il testo che l'inversa dà su un motore aperto dal testo di dopo, se
@@ -69,7 +74,7 @@ function sessionsWith(text: string): DocumentSessionCollection {
 }
 
 describe("i vettori delle operazioni", () => {
-  it("ci sono i 49 vettori di §9, in ordine", () => {
+  it("ci sono i 59 vettori di §9, in ordine", () => {
     expect(vectors.map((v) => v.name)).toEqual([
       "add-first-stroke",
       "add-last-in-layer",
@@ -120,6 +125,16 @@ describe("i vettori delle operazioni", () => {
       "text-runs-canonical",
       "text-runs-foreign-piece",
       "add-text-runs",
+      "add-defs-first",
+      "add-gradient-use",
+      "remove-resource-in-use",
+      "collect-private",
+      "collect-keeps-unowned",
+      "collect-cascade",
+      "add-resource-dangling",
+      "set-missing-resource",
+      "add-raw-resources",
+      "filter-closed-list",
     ]);
   });
 
@@ -148,6 +163,7 @@ describe("i vettori delle operazioni", () => {
         expect(engine.text).toBe(out.text);
         expect(out.duplicate).toBe(vector.expect.duplicate ?? false);
         if (vector.expect.inverse !== undefined) expect(out.inverse).toEqual(vector.expect.inverse);
+        expect(out.forward).toEqual(vector.expect.forward ?? vector.ops[vector.ops.length - 1]);
         if (vector.expect.edits !== undefined) expect(out.operation.edits).toEqual(vector.expect.edits);
 
         // 1: la `TextOperation` sul testo a LF.
@@ -170,6 +186,11 @@ describe("i vettori delle operazioni", () => {
         const inverse = applied(fresh.apply(out.inverse));
         expect(inverse.text).toBe(vector.expect.inverseText ?? before);
         expect(fresh.scene()).toEqual(readScene(inverse.text).items);
+
+        // L'operazione in avanti, come la rimanda la sessione live, dà lo
+        // stesso testo su un motore che conosce solo quello di prima.
+        const replica = SceneEngine.open(before);
+        expect(applied(replica.apply(out.forward)).text).toBe(out.text);
       });
 
       if (vector.expect.outcome === "applied") {

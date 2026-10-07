@@ -23,9 +23,9 @@ import { pf1 } from "../ink/pf1";
 import { InkError } from "../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer } from "./analysis";
-import { classifyChild, describe, NO_RESOURCES, type Details, type Item, type Place, type Resolve } from "./classify";
+import { classifyChild, describe, NO_RESOURCES, resourceKind, type Details, type Item, type Place, type Resolve } from "./classify";
 import { sceneOperation } from "./diff";
-import { isNewId } from "./ids";
+import { DEFS_ID, isNewId, type IdKind } from "./ids";
 import {
   buildDocument,
   buildFragment,
@@ -72,7 +72,7 @@ import {
   type Target,
   type TextLine,
 } from "./ops";
-import { MAX_EDIT_BYTES, MAX_ELEMENTS, openSource, readScene, type ReadOnly, type Status } from "./read";
+import { MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, openSource, readScene, type ReadOnly, type Status } from "./read";
 import { parseGuides, parseUnits } from "./rulers";
 import {
   attributeName,
@@ -119,6 +119,10 @@ import {
 /// Un'operazione applicata.
 export interface Applied {
   readonly outcome: "applied";
+  /// L'operazione come si è applicata: quella chiesta, oppure, se la
+  /// raccolta ha tolto delle risorse, un `batch` con lei e poi i `remove`
+  /// della raccolta (§2).
+  readonly forward: Op;
   /// L'inversa, calcolata sulla scena di prima (§2).
   readonly inverse: Op;
   /// Gli id degli elementi toccati, con quelli dei loro discendenti.
@@ -314,6 +318,41 @@ function isMeta(node: ElementPart): boolean {
   return node.facts.uri === SVG_NS && (node.facts.local === "title" || node.facts.local === "desc");
 }
 
+/// `ops` uno dopo l'altro in un `batch` solo: un `batch` fra loro si apre, e
+/// la sua etichetta passa a quello nuovo.
+function chain(ops: readonly Op[]): BatchOp {
+  const out: Op[] = [];
+  let label: string | undefined;
+  for (const op of ops) {
+    if (op.op !== "batch") {
+      out.push(op);
+      continue;
+    }
+    for (const inner of op.ops) out.push(inner);
+    label ??= op.label;
+  }
+  return label === undefined ? { op: "batch", ops: out } : { op: "batch", ops: out, label };
+}
+
+const ID_NAMES: Readonly<Record<IdKind, string>> = { object: "un oggetto", layer: "un livello", resource: "una risorsa" };
+
+/// Controlla l'id di un elemento nuovo (§4): ogni elemento ne ha uno nella
+/// forma degli id nuovi, tranne `title`, `desc` e `tspan`. Una risorsa l'ha
+/// nella forma delle risorse e una `defs` è quella di FubDraw; ciò che sta
+/// dentro una risorsa può non averlo, e se l'ha è nella forma delle risorse.
+function checkNewId(tag: string, id: string | undefined, layer: boolean, inResource: boolean): void {
+  if (id === undefined) {
+    if (!inResource && tag !== "title" && tag !== "desc" && tag !== "tspan") reject("invalid-elem", `${tag} senza id`);
+    return;
+  }
+  if (tag === "defs" && !inResource) {
+    if (id !== DEFS_ID) reject("invalid-elem", `una defs nuova ha l'id ${DEFS_ID}: ${JSON.stringify(id)}`);
+    return;
+  }
+  const kind: IdKind = inResource || resourceKind(tag) !== null ? "resource" : layer ? "layer" : "object";
+  if (!isNewId(id, kind)) reject("invalid-elem", `id non valido per ${ID_NAMES[kind]}: ${JSON.stringify(id)}`);
+}
+
 /// Il nome espanso di ogni elemento e attributo dell'elemento `id`, in
 /// ordine: due letture con gli stessi nomi dicono la stessa cosa.
 function expandedNames(doc: XmlDocument, id: NodeId): string {
@@ -454,6 +493,9 @@ export class SceneEngine {
   // Lo stato di un'applicazione in corso.
   private touched = new Set<string>();
   private duplicate = false;
+  /// Le `defs` di FubDraw che hanno perso un figlio: la raccolta toglie
+  /// quella rimasta vuota.
+  private emptied = new Set<ContainerNode>();
   /// Vero mentre si applica un'inversa del motore: il limite delle
   /// operazioni di un `batch` vale per ciò che arriva, e l'inversa di un
   /// `add` grande toglie i suoi elementi uno per uno.
@@ -461,6 +503,14 @@ export class SceneEngine {
   /// Vero mentre `undoAll` applica la sua fila: il testo si scrive una volta,
   /// alla fine.
   private quiet = false;
+
+  /// Che cosa è la risorsa modificabile che porta `id` nella scena corrente:
+  /// ogni elemento scritto si legge con le risorse che ci sono (formato della
+  /// scena, §15).
+  private readonly resolve: Resolve = (id) => {
+    const node = this.tree === null ? null : this.tree.element(id);
+    return node !== null && roleOf(node) === "resource" ? resourceKind(node.facts.local) : null;
+  };
 
   private constructor(source: string) {
     const opened = openSource(source);
@@ -530,9 +580,18 @@ export class SceneEngine {
     const mark = tree.mark();
     this.touched = new Set();
     this.duplicate = false;
+    this.emptied = new Set();
+    // La raccolta guarda soltanto i riferimenti che toglie questa operazione.
+    tree.orphans();
+    let forward: Op = op;
     let inverse: Op;
     try {
       inverse = this.run(op);
+      const { removes, restores } = this.collect();
+      if (removes.length > 0) {
+        forward = chain([op, ...removes]);
+        inverse = chain([...restores.reverse(), inverse]);
+      }
     } catch (error) {
       tree.rollback(mark);
       if (!(error instanceof Rejection)) throw error;
@@ -541,7 +600,7 @@ export class SceneEngine {
         ? { outcome: "rejected", reason: error.reason, detail: error.detail }
         : { outcome: "rejected", reason: error.reason, detail: error.detail, index: first };
     }
-    return this.commit(tree.take(mark), op, inverse, [...this.touched], this.duplicate, null);
+    return this.commit(tree.take(mark), forward, inverse, [...this.touched], this.duplicate, null);
   }
 
   /// Annulla l'operazione di `undo`: esattamente, se la scena è quella che
@@ -632,7 +691,7 @@ export class SceneEngine {
     }
     const undo = new Undo(inverse, forward, touched);
     EXACT.set(undo, { engine: this, entries, before, after: this.state });
-    return { outcome: "applied", inverse, touched, operation, text: this.raw, duplicate, undo };
+    return { outcome: "applied", forward, inverse, touched, operation, text: this.raw, duplicate, undo };
   }
 
   // -------------------------------------------------------------------------
@@ -790,6 +849,73 @@ export class SceneEngine {
   }
 
   // -------------------------------------------------------------------------
+  // Risorse (formato della scena, §15).
+  // -------------------------------------------------------------------------
+
+  /// Gli id delle risorse modificabili che `node` è o contiene: una risorsa,
+  /// o i figli di una `defs`.
+  private resourcesIn(node: ElementPart): string[] {
+    const nodes = node.kind === "container" && roleOf(node) === "defs" ? elementChildren(node) : [node];
+    const out: string[] = [];
+    for (const child of nodes) if (roleOf(child) === "resource" && child.facts.id !== null) out.push(child.facts.id);
+    return out;
+  }
+
+  /// Il primo id di una risorsa modificabile che `node` è o contiene a cui
+  /// rimanda qualcosa fuori da `node`; `null` se nessuno.
+  private usedOutside(node: ElementPart): string | null {
+    const ids = this.resourcesIn(node);
+    if (ids.length === 0) return null;
+    // I rimandi da dentro `node`, contati come li conta l'albero.
+    const inside = new Map<string, number>();
+    const count = (part: ElementPart): void => {
+      for (const id of part.kind === "leaf" ? part.refs : part.facts.refs) inside.set(id, (inside.get(id) ?? 0) + 1);
+      if (part.kind !== "container") return;
+      for (const child of part.parts) if (typeof child !== "string" && child.kind !== "other") count(child);
+    };
+    count(node);
+    return ids.find((id) => this.t.referrers(id) > (inside.get(id) ?? 0)) ?? null;
+  }
+
+  /// I controlli sulle risorse che entrano con `nodes` (§2): nessuna ha un
+  /// id a cui il documento rimanda già, perché chi rimanda cambierebbe
+  /// natura, e se `limit` il documento non ne riceve oltre il limite.
+  private checkResources(nodes: readonly ElementPart[], limit: boolean): void {
+    const ids = nodes.flatMap((node) => this.resourcesIn(node));
+    const used = ids.find((id) => this.t.referrers(id) > 0);
+    if (used !== undefined) reject("duplicate-id", `il documento rimanda già a ${used}`);
+    if (limit && ids.length > 0 && this.t.resources + ids.length > MAX_RESOURCES) {
+      reject("limit", `il documento supererebbe ${MAX_RESOURCES} risorse`);
+    }
+  }
+
+  /// La raccolta, alla fine di ogni operazione applicata (§2): le risorse
+  /// `private` e `shared` a cui l'operazione ha tolto l'ultimo riferimento se
+  /// ne vanno, poi quelle rimaste sole per questo, e infine la `defs` di
+  /// FubDraw rimasta vuota. Restituisce i `remove` fatti, in ordine, e le
+  /// loro inverse.
+  private collect(): { removes: Op[]; restores: Op[] } {
+    const removes: Op[] = [];
+    const restores: Op[] = [];
+    const drop = (node: ElementPart): void => {
+      const target = this.targetOf(node);
+      removes.push({ op: "remove", target });
+      restores.push(this.remove({ op: "remove", target }));
+    };
+    for (let lost = this.t.orphans(); lost.length > 0; lost = this.t.orphans()) {
+      for (const id of lost) {
+        const node = this.t.element(id);
+        // Una risorsa senza ciclo di vita resta anche sola.
+        if (node !== null && node.details?.lifecycle !== undefined) drop(node);
+      }
+    }
+    for (const defs of [...this.emptied]) {
+      if (this.t.element(DEFS_ID) === defs && defs.parts.every((part) => typeof part === "string")) drop(defs);
+    }
+    return { removes, restores };
+  }
+
+  // -------------------------------------------------------------------------
   // Testo e pezzi.
   // -------------------------------------------------------------------------
 
@@ -833,6 +959,7 @@ export class SceneEngine {
   /// (§6). Restituisce il punto e gli spazi tolti, per rimetterlo.
   private detach(node: ElementPart): { anchor: Anchor; gap: string } {
     const owner = node.parent!;
+    if (owner.facts.id === DEFS_ID && roleOf(owner) === "defs") this.emptied.add(owner);
     const index = owner.parts.indexOf(node);
     const before = owner.parts[index - 1];
     let from = index;
@@ -920,7 +1047,8 @@ export class SceneEngine {
   }
 
   /// Dove va un elemento nuovo secondo `pos` (§2 e §6), su una riga sua.
-  private destination(parent: ContainerNode, pos: unknown): Destination {
+  /// `defs` dice se è una `defs`, che con `first` va prima della carta.
+  private destination(parent: ContainerNode, pos: unknown, defs = false): Destination {
     const model = this.t.model;
     const line = (point: Point, indent: string): Destination => ({ kind: "point", point, gap: this.eolOf(`\n${indent}`) });
     const after = (anchor: ElementPart): Destination =>
@@ -938,11 +1066,15 @@ export class SceneEngine {
     if (this.collapsed(parent)) return { kind: "empty", parent, indent: inner() };
     const children = elementChildren(parent);
     if (pos.first === true) {
-      // `first` viene dopo titolo e descrizione e, sotto la radice, dopo la
-      // carta: in fondo all'ordine visivo, non prima dei metadati.
+      // `first` viene dopo titolo e descrizione che stanno in testa e, sotto
+      // la radice, dopo le `defs` modificabili e la carta che li seguono: in
+      // fondo all'ordine visivo, non prima dei metadati. Una `defs` va
+      // subito dopo titolo e descrizione, prima della carta.
+      const root = parent === model.root && !defs;
       let anchor: ElementPart | null = null;
       for (const child of children) {
-        if (isMeta(child) || (parent === model.root && roleOf(child) === "paper")) anchor = child;
+        if (!isMeta(child) && !(root && (roleOf(child) === "defs" || roleOf(child) === "paper"))) break;
+        anchor = child;
       }
       return anchor === null ? line({ owner: parent, index: 0, split: 0 }, inner()) : after(anchor);
     }
@@ -988,7 +1120,7 @@ export class SceneEngine {
   /// formato da solo in quello scope.
   private build(raw: string, parent: ContainerNode): ElementPart | null {
     const fragment = parseFragment(raw, scopeOf(parent));
-    return fragment === null ? null : buildFragment(fragment, parent);
+    return fragment === null ? null : buildFragment(fragment, parent, this.resolve);
   }
 
   /// Un elemento del documento riletto da solo; per un contenitore solo i
@@ -1012,7 +1144,7 @@ export class SceneEngine {
     const element = fragment.doc.element(fragment.id)!;
     let details: Details | null = null;
     if (node.parent !== null) {
-      const found = classifyChild(fragment.doc, fragment.id, placeOf(node.parent), node.depth);
+      const found = classifyChild(fragment.doc, fragment.id, placeOf(node.parent), node.depth, this.resolve);
       if (found === null || !isContainer(found[1])) reject("invalid-elem", "il tag riscritto non rientra nel formato");
       details = describe(fragment.doc, fragment.id, found[0], found[1]).details;
     }
@@ -1081,7 +1213,7 @@ export class SceneEngine {
   /// (§4). Il resto lo giudica la classificazione, sull'elemento scritto.
   private prepare(elem: unknown, scope: NamespaceScope, underRoot: boolean): Elem {
     const ids = new Set<string>();
-    const visit = (value: unknown, top: boolean): Elem => {
+    const visit = (value: unknown, top: boolean, inResource: boolean): Elem => {
       if (!isRecord(value) || typeof value.tag !== "string" || !isRecord(value.attrs)) reject("invalid-elem", "elemento non valido");
       const tag = value.tag;
       const attrs: Record<string, string> = {};
@@ -1101,12 +1233,8 @@ export class SceneEngine {
       const layer = tag === "g" && get(FUB_NS, "layer") !== undefined;
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
       const id = get("", "id");
-      if (id === undefined) {
-        if (tag !== "title" && tag !== "desc" && tag !== "tspan") reject("invalid-elem", `${tag} senza id`);
-      } else {
-        if (!isNewId(id, layer ? "layer" : "object")) {
-          reject("invalid-elem", `id non valido per un ${layer ? "livello" : "oggetto"}: ${JSON.stringify(id)}`);
-        }
+      checkNewId(tag, id, layer, inResource);
+      if (id !== undefined) {
         if (ids.has(id) || (!top && this.t.has(id))) reject("duplicate-id", `id già usato: ${id}`);
         ids.add(id);
       }
@@ -1119,7 +1247,8 @@ export class SceneEngine {
       const out: { -readonly [K in keyof Elem]: Elem[K] } = { tag, attrs };
       if (value.children !== undefined) {
         if (!Array.isArray(value.children)) reject("invalid-elem", `figli non validi su ${tag}`);
-        out.children = value.children.map((child) => visit(child, false));
+        const inside = inResource || resourceKind(tag) !== null;
+        out.children = value.children.map((child) => visit(child, false, inside));
       }
       if (value.text !== undefined) out.text = value.text as string | null;
       // I pezzi di una riga: la forma la controlla la scrittura, i valori la
@@ -1127,7 +1256,7 @@ export class SceneEngine {
       if (value.runs !== undefined) out.runs = value.runs as Run[];
       return out;
     };
-    return visit(elem, true);
+    return visit(elem, true, false);
   }
 
   /// `d` di un tratto da inchiostro e pennello; `null` se l'inchiostro ha
@@ -1191,12 +1320,13 @@ export class SceneEngine {
       }
       reject("duplicate-id", `id già usato: ${id}`);
     }
-    const to = this.destination(parent, op.pos);
+    const to = this.destination(parent, op.pos, elem.tag === "defs");
     const node = this.build(this.eolOf(writeElement(out, this.indentFor(to))), parent);
     if (node === null) reject("invalid-elem", "l'elemento scritto non si legge");
     const problem = this.problem(node);
     if (problem !== null) reject("invalid-elem", problem);
     this.checkNesting(node, parent);
+    this.checkResources([node], true);
     this.place(to, [node]);
     this.touch(node);
     return { op: "remove", target: this.targetOf(node) };
@@ -1212,7 +1342,7 @@ export class SceneEngine {
     let text = this.eolOf(raw.replace(/\r\n?/g, "\n"));
     let sequence = parseSequence(text, scope);
     if (sequence === null) reject("invalid-elem", "raw non è una sequenza di elementi ben formata");
-    let parts = buildSequence(sequence, parent);
+    let parts = buildSequence(sequence, parent, this.resolve);
     const edits = this.checkSequence(sequence, parts, parent);
     if (edits.length > 0) {
       let rewritten = "";
@@ -1224,7 +1354,7 @@ export class SceneEngine {
       text = rewritten + text.slice(at);
       sequence = parseSequence(text, scope);
       if (sequence === null) reject("invalid-elem", "il contorno riscritto non si legge");
-      parts = buildSequence(sequence, parent);
+      parts = buildSequence(sequence, parent, this.resolve);
     }
     const nodes = parts.filter((part): part is ElementPart => typeof part !== "string" && part.kind !== "other");
     for (const node of nodes) {
@@ -1251,7 +1381,8 @@ export class SceneEngine {
     }
     const taken = ids.find((id) => this.t.has(id));
     if (taken !== undefined) reject("duplicate-id", `id già usato: ${taken}`);
-    const to = this.destination(parent, pos);
+    this.checkResources(nodes, true);
+    const to = this.destination(parent, pos, nodes.every((node) => roleOf(node) === "defs"));
     for (const node of nodes) this.checkNesting(node, parent);
     this.place(to, parts);
     for (const node of nodes) this.touch(node);
@@ -1271,7 +1402,7 @@ export class SceneEngine {
     const { doc, offset } = sequence;
     const underRoot = parent === this.t.model.root;
     const edits: Array<[number, number, string]> = [];
-    const check = (element: ElementNode, top: boolean): void => {
+    const check = (element: ElementNode, top: boolean, inResource: boolean): void => {
       const tag = element.local;
       for (const attr of element.attrs) {
         if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) continue;
@@ -1280,12 +1411,7 @@ export class SceneEngine {
       if (valueOf(element, NS_FUB, "role") === "paper") reject("invalid-elem", "la carta nasce solo col documento");
       const layer = tag === "g" && valueOf(element, NS_FUB, "layer") !== undefined;
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
-      const id = valueOf(element, NS_NONE, "id");
-      if (id === undefined) {
-        if (tag !== "title" && tag !== "desc" && tag !== "tspan") reject("invalid-elem", `${tag} senza id`);
-      } else if (!isNewId(id, layer ? "layer" : "object")) {
-        reject("invalid-elem", `id non valido per un ${layer ? "livello" : "oggetto"}: ${JSON.stringify(id)}`);
-      }
+      checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource);
       const tool = valueOf(element, NS_FUB, "tool");
       if (tag !== "path" || (tool !== "pen" && tool !== "highlighter")) return;
       const d = this.stroke(valueOf(element, NS_FUB, "ink"), valueOf(element, NS_FUB, "brush"));
@@ -1302,17 +1428,19 @@ export class SceneEngine {
     const visit = (id: NodeId, node: ElementPart, top: boolean): void => {
       if (node.details === null) return;
       const element = doc.element(id)!;
-      check(element, top);
+      check(element, top, false);
       const inner = element.children.filter((child) => doc.element(child) !== null);
       if (node.kind === "container") {
         const children = elementChildren(node);
         inner.forEach((child, i) => visit(child, children[i]!, false));
         return;
       }
+      // Ciò che sta dentro una risorsa ha l'id facoltativo.
+      const inResource = roleOf(node) === "resource";
       const stack = inner.reverse();
       while (stack.length > 0) {
         const child = doc.element(stack.pop()!)!;
-        check(child, false);
+        check(child, false, inResource);
         for (let i = child.children.length - 1; i >= 0; i--) if (doc.element(child.children[i]!) !== null) stack.push(child.children[i]!);
       }
     };
@@ -1353,6 +1481,9 @@ export class SceneEngine {
   private remove(op: Record<string, unknown>): Op {
     const node = this.target(op.target);
     this.guard(node, false);
+    // Chi usa una risorsa diventerebbe estraneo (§2).
+    const used = this.usedOutside(node);
+    if (used !== null) reject("in-use", `qualcosa fuori da ciò che si toglie usa ${used}`);
     this.touch(node);
     const raw = rawOf(node);
     const { anchor, gap } = this.detach(node);
@@ -1368,6 +1499,7 @@ export class SceneEngine {
     if (node === null) reject("invalid-elem", "l'elemento da rimettere non si legge");
     const taken = idsIn(node).find((id) => this.t.has(id));
     if (taken !== undefined) reject("duplicate-id", `id già usato: ${taken}`);
+    this.checkResources([node], false);
     this.insertAt(this.pointOf(anchor), op.gap, [node]);
     this.touch(node);
     return { op: "remove", target: this.targetOf(node) };
@@ -1394,7 +1526,7 @@ export class SceneEngine {
     this.checkNesting(node, parent);
     // Il punto d'arrivo si cerca dopo aver tolto l'elemento: `last` e
     // `first` non contano l'elemento stesso.
-    return this.relocate(node, () => this.destination(parent, op.pos));
+    return this.relocate(node, () => this.destination(parent, op.pos, roleOf(node) === "defs"));
   }
 
   /// L'inversa di `move`: riporta l'elemento al punto da cui è partito.
@@ -1424,7 +1556,7 @@ export class SceneEngine {
     const { anchor, gap } = this.detach(node);
     const to = destination();
     const owner = to.kind === "point" ? to.point.owner : to.parent;
-    const moved = reindent(raw, oldScope, placeOf(oldParent), oldParent.depth + 1, oldIndent, this.indentFor(to));
+    const moved = reindent(raw, oldScope, placeOf(oldParent), oldParent.depth + 1, oldIndent, this.indentFor(to), this.resolve);
     const built = this.build(moved, owner);
     if (built === null) reject("invalid-elem", "lo spostamento lascerebbe un prefisso non dichiarato");
     const newScope = scopeOf(owner);
@@ -1644,6 +1776,8 @@ export class SceneEngine {
     }
     this.guard(node, true);
     const old = node.facts.id;
+    // Senza id una risorsa è estranea, e chi la usa con lei (§2).
+    if (id === null && roleOf(node) === "resource" && this.t.referrers(old!) > 0) reject("in-use", `qualcosa usa ${old}`);
     if (id !== null) {
       // Ogni id che il formato ammette, non solo quelli che FubDraw genera:
       // un id si cambia togliendolo e dandone un altro, e l'undo rimette

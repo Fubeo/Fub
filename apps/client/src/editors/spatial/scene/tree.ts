@@ -1,6 +1,6 @@
 // Il documento su cui lavora il motore delle operazioni: l'albero di
-// `model.ts`, l'indice degli id, il conteggio degli elementi e il registro
-// delle modifiche.
+// `model.ts`, l'indice degli id e dei riferimenti, il conteggio degli
+// elementi e il registro delle modifiche.
 //
 // Ogni modifica all'albero passa da qui e si registra. Il registro serve a
 // due cose: un `batch` rifiutato a metà torna indietro senza lasciare
@@ -57,6 +57,13 @@ export class Tree {
   /// Ogni id del documento e l'elemento che lo porta, oppure l'unità che lo
   /// contiene se l'id è di un elemento dentro un'unità.
   private readonly ids = new Map<string, ElementPart>();
+  /// Per ogni id, quanti elementi vi rimandano: un contenitore col suo tag,
+  /// un'unità con tutto ciò che contiene (formato della scena, §15).
+  private readonly refs = new Map<string, number>();
+  /// Gli id che hanno perso il loro ultimo riferimento dall'ultimo
+  /// [`Tree.orphans`]: la raccolta delle risorse comincia da qui.
+  private lost = new Set<string>();
+  private resourceCount = 0;
   private log: Entry[] = [];
 
   constructor(
@@ -84,13 +91,48 @@ export class Tree {
     return this.ids.has(id);
   }
 
+  /// Quante risorse modificabili ha il documento (formato della scena, §15).
+  get resources(): number {
+    return this.resourceCount;
+  }
+
+  /// Quanti elementi rimandano a `id`, con `url(#id)` o `href="#id"`.
+  referrers(id: string): number {
+    return this.refs.get(id) ?? 0;
+  }
+
+  /// Gli id rimasti senza riferimenti dall'ultima chiamata, nell'ordine in
+  /// cui li hanno persi, e ricomincia a contarli. Un id che nel frattempo ha
+  /// ritrovato un riferimento non c'è.
+  orphans(): string[] {
+    const out = [...this.lost].filter((id) => !this.refs.has(id));
+    this.lost = new Set();
+    return out;
+  }
+
   private index(node: ElementPart, add: boolean): void {
     if (node.kind === "leaf") {
       for (const id of node.ids) this.indexId(id, node, add);
+      this.count(node.refs, add);
+      if (node.details?.role === "resource") this.resourceCount += add ? 1 : -1;
       return;
     }
     if (node.facts.id !== null) this.indexId(node.facts.id, node, add);
+    this.count(node.facts.refs, add);
     for (const part of node.parts) if (typeof part !== "string" && part.kind !== "other") this.index(part, add);
+  }
+
+  /// Conta, o sconta, un rimando a ciascuno di `ids`.
+  private count(ids: readonly string[], add: boolean): void {
+    for (const id of ids) {
+      const now = (this.refs.get(id) ?? 0) + (add ? 1 : -1);
+      if (now > 0) {
+        this.refs.set(id, now);
+        continue;
+      }
+      this.refs.delete(id);
+      this.lost.add(id);
+    }
   }
 
   private indexId(id: string, node: ElementPart, add: boolean): void {
@@ -130,6 +172,8 @@ export class Tree {
   setHead(node: ContainerNode, state: HeadState): void {
     const before = headState(node);
     if (before.facts.id !== null && this.ids.get(before.facts.id) === node) this.ids.delete(before.facts.id);
+    this.count(before.facts.refs, false);
+    this.count(state.facts.refs, true);
     node.head = state.head;
     node.tail = state.tail;
     node.facts = state.facts;

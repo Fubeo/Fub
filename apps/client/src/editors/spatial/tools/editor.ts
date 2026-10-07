@@ -14382,6 +14382,7 @@ const REASONS: Readonly<Record<Reason, DrawKey>> = {
   "missing-parent": "draw.reason.missing_parent",
   "missing-anchor": "draw.reason.missing_target",
   "duplicate-id": "draw.reason.duplicate_id",
+  "in-use": "draw.reason.in_use",
   "invalid-elem": "draw.reason.invalid",
   locked: "draw.reason.locked",
   foreign: "draw.reason.foreign",
