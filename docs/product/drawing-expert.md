@@ -20,9 +20,8 @@ foglio. Nel Personalizzato senza il pannello, «Attributi», nella barra, apre
 accanto al foglio un pannello loro, sotto l'albero degli oggetti se è aperto
 anche quello. È il modo più corto di dare un valore preciso, e per chi non
 vede il foglio una tabella da leggere, col nome dell'attributo come nome del
-campo. Le regole
-stanno in `apps/client/src/editors/spatial/tools/attributes.ts`, il pannello
-in `apps/client/src/editors/spatial/tools/inspector.ts`.
+campo. Le regole stanno in `apps/client/src/editors/spatial/tools/attributes.ts`,
+il pannello in `apps/client/src/editors/spatial/tools/inspector.ts`.
 
 - **Le righe** sono l'id e gli attributi scritti, nell'ordine canonico del
   formato, coi valori come sono scritti: le entità risolte, le unità
@@ -305,8 +304,9 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
   scelti, «Elimina nodi» (`Canc`), «Nodi a spigolo», «Nodi lisci» e «Nodi
   simmetrici» (`Maiusc+C`, `S`, `Y`), «Segmenti in linee» e «Segmenti in
   curve» (`Maiusc+L` e `U`), «Spezza ai nodi» (`Maiusc+B`), «Unisci i capi»
-  (`Maiusc+J`) e «Allinea i nodi», sul bordo o sul centro del loro riquadro,
-  o della pagina per un nodo solo. `Alt+F10` ci va, ed `Esc` torna al foglio.
+  (`Maiusc+J` o `Ctrl+J`, anche di due forme) e «Allinea i nodi», sul bordo o
+  sul centro del loro riquadro, o della pagina per un nodo solo, e distribuiti
+  a passi uguali. `Alt+F10` ci va, ed `Esc` torna al foglio.
 - **Dalla tastiera** `Tab` e `Maiusc+Tab` passano di nodo in nodo, anche da
   una forma all'altra, e oltre l'ultimo all'oggetto dopo; `Home` e `Fine`
   vanno al primo e all'ultimo nodo. `Ctrl+A` sceglie tutti i nodi delle
@@ -314,11 +314,10 @@ le forme che non sono tracciati, in `nodable.ts` accanto.
   scelta dei nodi, poi quella degli oggetti. Ogni nodo si dice col numero, il
   tipo e la posizione, «Nodo 2 di 3, spigolo: x 50, y 10», e con più forme
   prima la sua; i nodi scelti di più oggetti si contano: «2 nodi scelti in 2
-  oggetti». Le frecce spostano i nodi scelti di 1,
-  10 con `Maiusc` e un pixel dello schermo con `Ctrl` o `⌘`, di riga in riga
-  con l'aggancio alla griglia; senza nodi scelti muovono il cursore, mai
-  l'oggetto. `Invio` apre la posizione dei nodi scelti, da scrivere coi
-  numeri.
+  oggetti». Le frecce spostano i nodi scelti di 1, 10 con `Maiusc` e un pixel
+  dello schermo con `Ctrl` o `⌘`, di riga in riga con l'aggancio alla
+  griglia; senza nodi scelti muovono il cursore, mai l'oggetto. `Invio` apre
+  la posizione dei nodi scelti, da scrivere coi numeri.
 - **Ogni segmento resta del suo tipo:** linea, quadratica, cubica o arco.
   Spostare un nodo porta con lui le maniglie delle sue cubiche; un arco
   tiene raggi e rotazione. Piegare una linea la fa diventare la cubica
@@ -403,7 +402,8 @@ si dividono a vicenda. Le regole stanno in
 La penna di Bézier (`B`, come in Inkscape), nella barra dopo le forme,
 disegna un tracciato nodo per nodo: i punti per cui passa e le maniglie delle
 sue curve. Il tracciato si scrive quando si conclude, sul livello corrente,
-col colore e lo spessore della barra. Le regole stanno in
+col colore e lo spessore della barra; `B` di nuovo passa alla
+[Curvatura](drawing-curves.md#curvatura). Le regole stanno in
 `apps/client/src/editors/spatial/tools/bezier.ts`.
 
 - **Col puntatore** un tocco mette uno spigolo, e un trascinamento un nodo

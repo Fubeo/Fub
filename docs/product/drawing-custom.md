@@ -58,12 +58,12 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
 | Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 | Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
-| Nodi, Costruttore di forme, Bézier | Esperto | lo strumento (`N`, `M`, `B`) |
+| Nodi, Costruttore di forme, Forbici, Bézier | Esperto | lo strumento (`N`, `M`, `C`, `B`) |
 | Attributi | Esperto | la loro sezione nelle proprietà, o senza il pannello «Attributi» (`Ctrl+Maiusc+X`) |
 | Contorno: tratteggio, estremi e angoli | Esperto | «Contorno» |
 | Trasforma: rotazione, scala e inclinazione | Esperto | «Trasforma…» (`Ctrl+Maiusc+M`) e la sua sezione nelle proprietà |
 | Applica trasformazione | Esperto | «Applica trasformazione» |
-| Tracciato: oggetti, contorni e inchiostro in tracciato, scostamento, semplifica | Esperto | il menu «Tracciato»: «Oggetto in tracciato», «Contorno in tracciato», «Inchiostro in tracciato», «Scostamento…» e «Semplifica…» |
+| Tracciato: oggetti, contorni e inchiostro in tracciato, scostamento, semplifica, unisci | Esperto | il menu «Tracciato»: «Oggetto in tracciato», «Contorno in tracciato», «Inchiostro in tracciato», «Scostamento…», «Semplifica…» e «Unisci» (`Ctrl+J`) |
 | Operazioni booleane | Esperto | «Operazioni booleane» |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
