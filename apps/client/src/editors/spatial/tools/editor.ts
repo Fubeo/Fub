@@ -13763,15 +13763,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     { label: t("draw.rulers.hide"), hint: displayBinding(RULERS_BINDING), separator: true, run: () => changeGrid({ ...grid, rulers: false }) },
   ];
 
-  /// «Adatta la pagina al disegno»: la pagina va attorno a tutto il disegno,
-  /// livelli bloccati e nascosti compresi, e alle tavole, con un margine. È un passo di
-  /// annulla, e gli oggetti restano dove sono.
+  /// Ciò attorno a cui «Adatta la pagina al disegno» porta la pagina: tutto
+  /// il disegno, livelli bloccati e nascosti compresi, e le tavole, che la
+  /// pagina copre anche quando sono vuote.
+  const fitExtent = (): Bounds | null => {
+    if (engine.model === null) return null;
+    let extent = indexer.extent(engine.model);
+    for (const board of boardsNow()) extent = union(extent, board.box);
+    return extent;
+  };
+
+  /// «Adatta la pagina al disegno»: la pagina va attorno a `fitExtent`, con
+  /// un margine. È un passo di annulla, e gli oggetti restano dove sono.
   function fitPage(): void {
     if (!has("grid") || !editable()) return;
     cancelGesture();
-    // La pagina copre anche le tavole.
-    let extent = indexer.extent(engine.model!);
-    for (const board of boardsNow()) extent = union(extent, board.box);
+    const extent = fitExtent();
     const viewBox = fittedPage(scene.root.page, extent);
     if (viewBox === null) {
       announce(t(extent === null ? "draw.page.fit.empty" : "draw.page.fit.already"));
@@ -13792,7 +13799,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const step = stepNow();
     const offered = unitSteps(unit);
     const steps = offered.some((each) => sameStep(each, step)) ? offered : [...offered, step].sort((a, b) => a - b);
-    const extent = engine.model === null ? null : indexer.extent(engine.model);
+    const extent = fitExtent();
     const viewBox = fittedPage(scene.root.page, extent);
     const fitItem: MenuItem = { label: t("draw.page.fit"), separator: true, disabled: !editable() || viewBox === null, run: () => fitPage() };
     if (extent === null) fitItem.description = t("draw.page.fit.empty");
