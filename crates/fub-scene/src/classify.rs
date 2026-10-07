@@ -84,6 +84,8 @@ pub enum Role {
     /// Una risorsa modificabile in una `defs` della radice (formato della
     /// scena, risorse).
     Resource,
+    /// Una tavola: un `view` della radice (formato della scena, tavole).
+    Board,
 }
 
 impl Role {
@@ -252,6 +254,13 @@ pub struct ElementItem {
     /// Il ciclo di vita di una risorsa, se `fub:role` lo dice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<Lifecycle>,
+    /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
+    /// scena, tavole).
+    #[serde(rename = "box", skip_serializing_if = "Option::is_none")]
+    pub board_box: Option<[f64; 4]>,
+    /// La tavola di una carta: `fub:board`, com'è scritto.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub board: Option<String>,
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -300,6 +309,7 @@ enum Tag {
     TextPath,
     Image,
     Defs,
+    View,
     LinearGradient,
     RadialGradient,
     Pattern,
@@ -331,6 +341,7 @@ impl Tag {
             "textPath" => Tag::TextPath,
             "image" => Tag::Image,
             "defs" => Tag::Defs,
+            "view" => Tag::View,
             "linearGradient" => Tag::LinearGradient,
             "radialGradient" => Tag::RadialGradient,
             "pattern" => Tag::Pattern,
@@ -395,6 +406,7 @@ impl Tag {
             Tag::TextPath => "textPath",
             Tag::Image => "image",
             Tag::Defs => "defs",
+            Tag::View => "view",
             Tag::LinearGradient => "linearGradient",
             Tag::RadialGradient => "radialGradient",
             Tag::Pattern => "pattern",
@@ -1201,6 +1213,11 @@ fn classify(
     if place == Place::Defs && !matches!(tag, Tag::Title | Tag::Desc) {
         return None;
     }
+    // Una tavola è un `view` della radice (formato della scena, tavole).
+    if tag == Tag::View {
+        return (place == Place::Root && board_allowed(doc, element, resolve))
+            .then_some((tag, Role::Board));
+    }
     if !attributes_allowed(element, tag, resolve, false) {
         return None;
     }
@@ -1242,6 +1259,42 @@ fn classify(
         }
     };
     Some((tag, role))
+}
+
+/// Vero se `element`, un `view` della radice, è una tavola (formato della
+/// scena, tavole): `fub:role="board"`, un id, un `viewBox` largo e alto più di
+/// zero, nessun altro attributo SVG e per figli soltanto titoli e
+/// descrizioni.
+fn board_allowed(doc: &Document<'_>, element: &Element<'_>, resolve: Resolve<'_>) -> bool {
+    if element.value(NS_FUB, "role") != Some("board")
+        || element.value(NS_NONE, "id").is_none_or(str::is_empty)
+        || board_box(element).is_none()
+    {
+        return false;
+    }
+    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE => matches!(attr.local, "id" | "viewBox"),
+        NS_SVG | NS_XLINK => false,
+        _ => true,
+    });
+    attributes
+        && element
+            .children
+            .iter()
+            .all(|&child| match doc.nodes[child].kind {
+                Kind::Text { blank, .. } => blank,
+                Kind::Element(_) => allowed_part(doc, child, false, resolve),
+                _ => false,
+            })
+}
+
+/// Il rettangolo di una tavola, dal suo `viewBox`, se è largo e alto più di
+/// zero.
+pub(crate) fn board_box(element: &Element<'_>) -> Option<[f64; 4]> {
+    element
+        .value(NS_NONE, "viewBox")
+        .and_then(view_box)
+        .filter(|b| b[2] > 0.0 && b[3] > 0.0)
 }
 
 /// Il ruolo di un `path`: tratto, freccia o tracciato.
@@ -1453,13 +1506,13 @@ impl Builder<'_, '_> {
         let span = self.map.span(node.start, node.end);
         let stroke = (role == Role::Stroke).then(|| self.stroke(element, span));
         // Si bloccano e si nascondono i livelli e ciò che si disegna, non il
-        // titolo, la descrizione, la carta o le risorse; queste e la `defs`
-        // hanno però un nome.
+        // titolo, la descrizione, la carta, le tavole o le risorse; queste, le
+        // tavole e la `defs` hanno però un nome.
         let object = !matches!(
             role,
-            Role::Title | Role::Desc | Role::Paper | Role::Defs | Role::Resource
+            Role::Title | Role::Desc | Role::Paper | Role::Defs | Role::Resource | Role::Board
         );
-        let named = object || matches!(role, Role::Defs | Role::Resource);
+        let named = object || matches!(role, Role::Defs | Role::Resource | Role::Board);
         self.tally
             .element(doc, element, role, context, span, stroke.as_ref());
         if !self.keep {
@@ -1513,6 +1566,10 @@ impl Builder<'_, '_> {
                     Some("shared") => Some(Lifecycle::Shared),
                     _ => None,
                 })
+                .flatten(),
+            board_box: (role == Role::Board).then(|| board_box(element)).flatten(),
+            board: (role == Role::Paper)
+                .then(|| element.value(NS_FUB, "board").map(str::to_owned))
                 .flatten(),
         };
         self.items.push(Item::Element(Box::new(item)));

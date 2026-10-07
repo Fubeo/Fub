@@ -10,12 +10,12 @@
 //! con [`Legibility`], i controlli su come il disegno si legge (S009, S012,
 //! S013), che riguardano la scena come la modifica FubDraw.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
 use crate::accessibility::Legibility;
-use crate::classify::{Role, Stroke};
+use crate::classify::{board_box, Role, Stroke};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::{parse_path, rect_path, BoundsBuilder, Matrix};
 use crate::text::{Span, Utf16Map};
@@ -94,6 +94,9 @@ pub struct Index {
     /// Ogni `image` con un percorso del vault: un riferimento d'embed. Le
     /// immagini in data URI non ci sono; il riepilogo le conta.
     pub embeds: Vec<Reference>,
+    /// Le tavole modificabili, in ordine, ciascuna col suo nome sullo span del
+    /// suo `view` (formato della scena, tavole).
+    pub boards: Vec<Excerpt>,
 }
 
 /// Quanti oggetti modificabili ha la scena, per tipo.
@@ -140,6 +143,8 @@ pub struct Summary {
     pub truncated: bool,
     /// I nomi dei livelli, in ordine di documento.
     pub layers: Vec<String>,
+    /// I nomi delle tavole, in ordine (formato della scena, tavole).
+    pub boards: Vec<String>,
     pub counts: Counts,
     pub ink: InkTotals,
     /// Il rettangolo che contiene gli elementi modificabili visibili, dopo
@@ -277,10 +282,50 @@ impl Context {
     }
 }
 
+/// Una tavola com'è scritta (formato della scena, tavole).
+struct Board {
+    id: String,
+    name: String,
+    rect: [f64; 4],
+    span: Span,
+}
+
+/// Una carta: `board` è la sua tavola, `fub:board`, e `rect` la sua
+/// geometria.
+struct Paper {
+    id: Option<String>,
+    board: Option<String>,
+    rect: [f64; 4],
+    span: Span,
+}
+
+/// Il nome di una tavola: il testo del suo primo `title`, con gli spazi
+/// ridotti come li disegna SVG; senza, o vuoto, il suo id (formato della
+/// scena, tavole).
+pub(crate) fn board_name(doc: &Document<'_>, element: &Element<'_>) -> String {
+    let title = element
+        .children
+        .iter()
+        .copied()
+        .find(|&child| doc.element(child).is_some_and(|e| e.is_svg("title")));
+    if let Some(title) = title {
+        let mut text = String::new();
+        text_content(doc, title, &mut text);
+        let name = collapse(&text);
+        if !name.is_empty() {
+            return name;
+        }
+    }
+    element.value(NS_NONE, "id").unwrap_or_default().to_owned()
+}
+
 /// Il riepilogo che si accumula durante la classificazione.
 #[derive(Default)]
 pub(crate) struct Tally {
     layers: Vec<String>,
+    /// Le tavole e le carte, in ordine di documento.
+    boards: Vec<Board>,
+    papers: Vec<Paper>,
     counts: Counts,
     ink: InkTotals,
     bounds: BoundsBuilder,
@@ -329,10 +374,26 @@ impl Tally {
                     .unwrap_or_default()
                     .to_owned(),
             ),
+            Role::Board => {
+                self.boards.push(Board {
+                    id: element.value(NS_NONE, "id").unwrap_or_default().to_owned(),
+                    name: board_name(doc, element),
+                    rect: board_box(element).expect("una tavola ha il suo rettangolo"),
+                    span,
+                });
+                return;
+            }
             Role::Paper => {
                 if self.paper.is_none() {
                     self.paper = Some(paper_color(context));
                 }
+                let at = |name: &str| len(element, name).unwrap_or(0.0);
+                self.papers.push(Paper {
+                    id: element.value(NS_NONE, "id").map(str::to_owned),
+                    board: element.value(NS_FUB, "board").map(str::to_owned),
+                    rect: [at("x"), at("y"), at("width"), at("height")],
+                    span,
+                });
                 return;
             }
             Role::Stroke => {
@@ -373,6 +434,45 @@ impl Tally {
         }
     }
 
+    /// Le tavole, in ordine, col loro nome sullo span del `view`: le sezioni
+    /// del disegno (formato della scena, tavole).
+    pub fn boards(&self) -> Vec<Excerpt> {
+        self.boards
+            .iter()
+            .map(|board| Excerpt {
+                text: board.name.clone(),
+                span: board.span,
+            })
+            .collect()
+    }
+
+    /// S015: le carte che non vanno con la loro tavola (formato della scena,
+    /// tavole).
+    fn check_papers(&self, diagnostics: &mut Vec<Diagnostic>) {
+        let mut boards: HashMap<&str, &Board> = HashMap::new();
+        for board in &self.boards {
+            boards.entry(board.id.as_str()).or_insert(board);
+        }
+        let mut owned: HashSet<&str> = HashSet::new();
+        for paper in &self.papers {
+            let reason = match paper.board.as_deref() {
+                None => (!self.boards.is_empty()).then_some("free"),
+                Some(id) => match boards.get(id) {
+                    None => Some("board"),
+                    Some(_) if !owned.insert(id) => Some("second"),
+                    Some(board) => (paper.rect != board.rect).then_some("geometry"),
+                },
+            };
+            if let Some(reason) = reason {
+                let detail = match &paper.id {
+                    Some(id) => format!("{id} {reason}"),
+                    None => reason.to_owned(),
+                };
+                diagnostics.push(Diagnostic::new(Code::S015, Some(paper.span), Some(detail)));
+            }
+        }
+    }
+
     /// Chiude il conteggio: il riepilogo, più i controlli su come il disegno
     /// si legge.
     pub fn finish(
@@ -381,6 +481,7 @@ impl Tally {
         version: Option<u32>,
         diagnostics: &mut Vec<Diagnostic>,
     ) -> Summary {
+        self.check_papers(diagnostics);
         // Senza carta il disegno sta sul bianco della superficie (§12).
         self.legibility
             .finish(self.paper.unwrap_or(Some(WHITE)), diagnostics);
@@ -389,6 +490,7 @@ impl Tally {
             foreign: status == Status::Foreign,
             truncated: false,
             layers: self.layers,
+            boards: self.boards.into_iter().map(|board| board.name).collect(),
             counts: self.counts,
             ink: self.ink,
             bbox: self.bounds.finish().and_then(|b| {
@@ -415,6 +517,7 @@ pub(crate) fn truncated_summary(status: Status, version: Option<u32>) -> Summary
         foreign: status == Status::Foreign,
         truncated: true,
         layers: Vec::new(),
+        boards: Vec::new(),
         counts: Counts::default(),
         ink: InkTotals::default(),
         bbox: None,
@@ -564,7 +667,8 @@ fn bounds(
         | Role::Group
         | Role::Link
         | Role::Defs
-        | Role::Resource => {}
+        | Role::Resource
+        | Role::Board => {}
     }
 }
 
@@ -719,11 +823,14 @@ fn active_content(element: &Element<'_>) -> Vec<String> {
     found
 }
 
-/// Legge l'indice del documento, con S001, S005 e S006.
+/// Legge l'indice del documento, con S001, S005, S006 e S016. `boards` sono
+/// le tavole che la classificazione ha trovato (formato della scena,
+/// tavole).
 pub(crate) fn index(
     doc: &Document<'_>,
     map: &Utf16Map<'_>,
     diagnostics: &mut Vec<Diagnostic>,
+    boards: Vec<Excerpt>,
 ) -> Index {
     let mut index = Index::default();
     let span = |id: NodeId| map.span(doc.nodes[id].start, doc.nodes[id].end);
@@ -808,6 +915,19 @@ pub(crate) fn index(
             _ => {}
         }
     }
+    // Un nome già del disegno o di una tavola prima: `#nome` mostra quella
+    // (S016).
+    let mut names: HashSet<&str> = index.title.iter().map(|t| t.text.as_str()).collect();
+    for board in &boards {
+        if !names.insert(board.text.as_str()) {
+            diagnostics.push(Diagnostic::new(
+                Code::S016,
+                Some(board.span),
+                Some(board.text.clone()),
+            ));
+        }
+    }
+    index.boards = boards;
     index
 }
 

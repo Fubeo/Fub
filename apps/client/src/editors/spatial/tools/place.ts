@@ -98,11 +98,12 @@ export function inheritedBy(local: string, container: boolean): readonly string[
 }
 
 /// Vero se `node` può stare fra i figli di `parent` prima di ciò che va
-/// «per primo»: titolo e descrizione, e sotto la radice la carta e la
-/// `defs` delle risorse.
+/// «per primo»: titolo e descrizione, e sotto la radice le carte, le tavole
+/// e la `defs` delle risorse.
 function heading(parent: ContainerNode, node: ElementPart): boolean {
   if (node.facts.uri === SVG_NS && (node.facts.local === "title" || node.facts.local === "desc")) return true;
-  return parent.parent === null && (node.details?.role === "paper" || node.details?.role === "defs");
+  const role = node.details?.role;
+  return parent.parent === null && (role === "paper" || role === "board" || role === "defs");
 }
 
 /// Il genere di id di `node`: un livello ha il suo.

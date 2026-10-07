@@ -131,6 +131,11 @@ export interface ElementItem extends Span {
   readonly textPath?: string;
   /// Come vive una risorsa, da `fub:role` (formato della scena, risorse).
   readonly lifecycle?: Lifecycle;
+  /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
+  /// scena, tavole).
+  readonly box?: readonly [number, number, number, number];
+  /// La tavola di una carta: `fub:board`, com'è scritto.
+  readonly board?: string;
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -167,6 +172,7 @@ export type Tag =
   | "textPath"
   | "image"
   | "defs"
+  | "view"
   | ResourceTag;
 
 /// I tag delle risorse (formato della scena, risorse).
@@ -251,6 +257,7 @@ const TAGS: ReadonlySet<string> = new Set<Tag>([
   "textPath",
   "image",
   "defs",
+  "view",
   ...(RESOURCE_TAGS as ReadonlySet<ResourceTag>),
 ]);
 
@@ -1025,6 +1032,8 @@ function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve):
   if (tag === "path" && place === "defs") return pathResourceAllowed(doc, element) ? [tag, "resource"] : null;
   // In una `defs` stanno solo risorse, titolo e descrizione.
   if (place === "defs" && tag !== "title" && tag !== "desc") return null;
+  // Una tavola è un `view` della radice (formato della scena, tavole).
+  if (tag === "view") return place === "root" && boardAllowed(doc, element, resolve) ? [tag, "board"] : null;
   if (!attributesAllowed(element, tag, resolve)) return null;
   const underRoot = place === "root";
   switch (tag) {
@@ -1045,6 +1054,39 @@ function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve):
       return [tag, UNIT_ROLES[tag]!];
     }
   }
+}
+
+/// Vero se `element`, un `view` della radice, è una tavola (formato della
+/// scena, tavole): `fub:role="board"`, un id, un `viewBox` largo e alto più di
+/// zero, nessun altro attributo SVG e per figli soltanto titoli e
+/// descrizioni.
+function boardAllowed(doc: XmlDocument, element: ElementNode, resolve: Resolve): boolean {
+  if (valueOf(element, NS_FUB, "role") !== "board" || !valueOf(element, NS_NONE, "id")) return false;
+  if (boardBox(element) === null) return false;
+  const attributes = element.attrs.every((attr) => {
+    switch (attr.ns) {
+      case NS_NONE:
+        return attr.local === "id" || attr.local === "viewBox";
+      case NS_SVG:
+      case NS_XLINK:
+        return false;
+      default:
+        return true;
+    }
+  });
+  return attributes && element.children.every((child) => {
+    const node = doc.nodes[child]!;
+    if (node.kind === "text") return node.blank;
+    return node.kind === "element" && allowedPart(doc, child, false, resolve);
+  });
+}
+
+/// Il rettangolo di una tavola, dal suo `viewBox`, se è largo e alto più di
+/// zero.
+export function boardBox(element: ElementNode): [number, number, number, number] | null {
+  const value = valueOf(element, NS_NONE, "viewBox");
+  const box = value === undefined ? null : viewBox(value);
+  return box !== null && box[2] > 0 && box[3] > 0 ? box : null;
 }
 
 /// Il ruolo di un `path`: tratto, freccia o tracciato.
@@ -1106,6 +1148,8 @@ export interface Details {
   readonly wrap?: number;
   readonly textPath?: string;
   readonly lifecycle?: Lifecycle;
+  readonly box?: readonly [number, number, number, number];
+  readonly board?: string;
 }
 
 /// Un problema di un tratto: S004 o S010, col dettaglio.
@@ -1180,7 +1224,16 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     if (lifecycle === "private" || lifecycle === "shared") details.lifecycle = lifecycle;
     const title = firstTitle(doc, element);
     if (title !== null) details.title = title;
-  } else if (role !== "title" && role !== "desc" && role !== "paper" && role !== "defs") {
+  } else if (role === "board") {
+    // Una tavola non si blocca e non si nasconde (formato della scena,
+    // tavole).
+    details.box = boardBox(element)!;
+    const title = firstTitle(doc, element);
+    if (title !== null) details.title = title;
+  } else if (role === "paper") {
+    const board = valueOf(element, NS_FUB, "board");
+    if (board !== undefined) details.board = board;
+  } else if (role !== "title" && role !== "desc" && role !== "defs") {
     if (valueOf(element, NS_FUB, "locked") === "true") details.locked = true;
     const display = valueOf(element, NS_NONE, "display");
     if (display !== undefined && trim(display) === "none") details.hidden = true;
@@ -1250,6 +1303,8 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.wrap !== undefined) item.wrap = details.wrap;
   if (details.textPath !== undefined) item.textPath = details.textPath;
   if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
+  if (details.box !== undefined) item.box = details.box;
+  if (details.board !== undefined) item.board = details.board;
   return item;
 }
 

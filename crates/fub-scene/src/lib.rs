@@ -284,15 +284,20 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
     // Le voci di un documento enorme costerebbero più del documento: non
     // servono, perché si apre solo in Lettura. Si classifica comunque, per il
     // riepilogo e la diagnostica; di un file troncato c'è solo la testa.
-    let (items, summary) = if truncated {
-        (Vec::new(), analysis::truncated_summary(status, version))
+    let (items, summary, boards) = if truncated {
+        (
+            Vec::new(),
+            analysis::truncated_summary(status, version),
+            Vec::new(),
+        )
     } else {
         let classified = classify::classify_document(&doc, &map, !too_many);
         diagnostics.extend(classified.diagnostics);
+        let boards = classified.tally.boards();
         let summary = classified.tally.finish(status, version, &mut diagnostics);
-        (classified.items, summary)
+        (classified.items, summary, boards)
     };
-    let index = analysis::index(&doc, &map, &mut diagnostics);
+    let index = analysis::index(&doc, &map, &mut diagnostics, boards);
 
     read_only.sort();
     diagnostics::sort(&mut diagnostics);

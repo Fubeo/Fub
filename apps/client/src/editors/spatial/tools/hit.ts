@@ -589,7 +589,7 @@ export class SceneIndexer {
           return;
         }
         const role = child.details.role;
-        if (role === "paper" || role === "title" || role === "desc") return;
+        if (role === "paper" || role === "board" || role === "title" || role === "desc") return;
         visit(child, [index], null, IDENTITY, rootStyle);
         return;
       }
@@ -886,7 +886,7 @@ function pickable(node: ElementPart): boolean {
   return role !== undefined && !NOT_PICKABLE.has(role);
 }
 
-const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "title", "desc", "layer", "defs", "resource"]);
+const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "board", "title", "desc", "layer", "defs", "resource"]);
 
 /// Vero se `node` sta dentro `container`, a qualunque profondità.
 function within(node: ElementPart, container: ContainerNode): boolean {

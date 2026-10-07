@@ -28,7 +28,7 @@ export const MAX_LAYER_NAME = 80;
 export type Shift = "up" | "down";
 
 /// I figli della radice che vengono prima dei livelli.
-const HEAD: ReadonlySet<string> = new Set(["title", "desc", "paper"]);
+const HEAD: ReadonlySet<string> = new Set(["title", "desc", "paper", "board"]);
 
 /// Il nodo del modello di un livello.
 function layerNode(model: DocumentModel, layer: LayerInfo): ContainerNode {

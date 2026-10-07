@@ -39,6 +39,12 @@ pub enum Code {
     /// Un riferimento locale, `url(#id)` o `href="#id"`, a un id che il
     /// documento non ha.
     S014,
+    /// Una carta che non va con la sua tavola: di una tavola che non c'è, la
+    /// seconda della stessa tavola, con un rettangolo diverso dal suo, o
+    /// libera in un disegno con le tavole.
+    S015,
+    /// Il nome di una tavola è già del disegno o di una tavola prima.
+    S016,
 }
 
 /// La gravità di una diagnostica.
@@ -55,14 +61,17 @@ impl Code {
     pub fn severity(self) -> Severity {
         match self {
             Code::S003 | Code::S004 => Severity::Error,
-            Code::S001 | Code::S005 | Code::S006 | Code::S012 | Code::S014 => Severity::Warning,
+            Code::S001 | Code::S005 | Code::S006 | Code::S012 | Code::S014 | Code::S016 => {
+                Severity::Warning
+            }
             Code::S002
             | Code::S007
             | Code::S008
             | Code::S009
             | Code::S010
             | Code::S011
-            | Code::S013 => Severity::Info,
+            | Code::S013
+            | Code::S015 => Severity::Info,
         }
     }
 
@@ -84,6 +93,10 @@ impl Code {
             Code::S013 => "testo sotto i 12 px a grandezza naturale",
             Code::S014 => {
                 "riferimento a un id che il documento non ha: si disegna senza la risorsa"
+            }
+            Code::S015 => "una carta che non va con la sua tavola",
+            Code::S016 => {
+                "il nome della tavola è già del disegno o di una tavola prima: un riferimento a quel nome mostra l'altra"
             }
         }
     }

@@ -26,9 +26,9 @@ function nameOf(path: string): string {
 }
 
 describe("le fixture di fub-scene", () => {
-  it("ci sono le sei coppie che Rust scrive", () => {
-    expect(Object.keys(sources).map(nameOf).sort()).toEqual(["crlf-bom", "doctype", "foreign", "resources", "sparse", "text"]);
-    expect(Object.keys(scenes).map(nameOf).sort()).toEqual(["crlf-bom", "doctype", "foreign", "generated", "resources", "sparse", "text"]);
+  it("ci sono le sette coppie che Rust scrive", () => {
+    expect(Object.keys(sources).map(nameOf).sort()).toEqual(["boards", "crlf-bom", "doctype", "foreign", "resources", "sparse", "text"]);
+    expect(Object.keys(scenes).map(nameOf).sort()).toEqual(["boards", "crlf-bom", "doctype", "foreign", "generated", "resources", "sparse", "text"]);
   });
 
   it("i file arrivano coi loro byte: BOM e CRLF compresi", () => {

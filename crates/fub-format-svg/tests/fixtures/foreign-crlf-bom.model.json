@@ -10,6 +10,7 @@
         "foreign": true,
         "truncated": false,
         "layers": [],
+        "boards": [],
         "counts": {
           "strokes": 0,
           "shapes": 0,

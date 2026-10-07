@@ -664,13 +664,15 @@
         }
       }
     ],
-    "embeds": []
+    "embeds": [],
+    "boards": []
   },
   "summary": {
     "version": null,
     "foreign": true,
     "truncated": false,
     "layers": [],
+    "boards": [],
     "counts": {
       "strokes": 0,
       "shapes": 4,

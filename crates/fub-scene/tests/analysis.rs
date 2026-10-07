@@ -195,6 +195,7 @@ fn the_summary_counts_the_editable_scene() {
             foreign: false,
             truncated: false,
             layers: vec!["Schizzo".to_owned(), "Forme".to_owned()],
+            boards: Vec::new(),
             counts: Counts {
                 strokes: 3,
                 shapes: 5,
@@ -283,6 +284,26 @@ fn the_bbox_ignores_paper_foreign_and_hidden_content() {
 }
 
 #[test]
+fn a_board_without_a_name_is_called_by_its_id_and_its_paper_goes_with_it() {
+    let body = concat!(
+        r#"<rect id="c1" fub:role="paper" fub:board="b1" x="0" y="0" width="10" height="5"/>"#,
+        "<view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 10 5\"><title> \n </title></view>",
+        r#"<view id="b2" fub:role="board" viewBox="20 0 10 5"><title/><title>Due</title></view>"#,
+        r#"<defs><view id="b3" fub:role="board" viewBox="0 0 1 1"/></defs>"#,
+    );
+    let scene = load(&doc(body));
+    assert_eq!(scene.summary.boards, ["b1", "b2"]);
+    let sections: Vec<_> = scene.index.boards.iter().map(|b| b.text.as_str()).collect();
+    assert_eq!(sections, ["b1", "b2"]);
+    // La carta di `b1` non ha da dire; la `view` nella `defs` è estranea.
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    assert_eq!(codes, [S001, S002]);
+    // Una tavola non entra nel rettangolo del disegno.
+    assert_eq!(scene.summary.bbox, None);
+}
+
+#[test]
 fn a_truncated_file_is_summarized_from_its_head() {
     let head = doc("<title>Grande</title><desc>d</desc><g fub:layer=\"Uno\">");
     let head = head.strip_suffix("</svg>").unwrap();
@@ -299,6 +320,7 @@ fn a_truncated_file_is_summarized_from_its_head() {
             foreign: false,
             truncated: true,
             layers: Vec::new(),
+            boards: Vec::new(),
             counts: Counts::default(),
             ink: InkTotals::default(),
             bbox: None,

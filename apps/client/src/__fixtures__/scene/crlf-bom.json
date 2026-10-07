@@ -211,7 +211,8 @@
       }
     ],
     "links": [],
-    "embeds": []
+    "embeds": [],
+    "boards": []
   },
   "summary": {
     "version": 1,
@@ -220,6 +221,7 @@
     "layers": [
       "Livello — uno"
     ],
+    "boards": [],
     "counts": {
       "strokes": 0,
       "shapes": 1,

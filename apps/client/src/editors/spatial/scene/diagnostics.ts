@@ -19,7 +19,9 @@ export type Code =
   | "S011"
   | "S012"
   | "S013"
-  | "S014";
+  | "S014"
+  | "S015"
+  | "S016";
 
 /// La gravità di una diagnostica.
 export type Severity = "error" | "warning" | "info";
@@ -35,6 +37,7 @@ export function severityOf(code: Code): Severity {
     case "S006":
     case "S012":
     case "S014":
+    case "S016":
       return "warning";
     default:
       return "info";
@@ -57,6 +60,8 @@ export const CODE_MESSAGES: Readonly<Record<Code, string>> = {
   S012: "immagine senza descrizione: chi non la vede non sa che cosa mostra",
   S013: "testo sotto i 12 px a grandezza naturale",
   S014: "riferimento a un id che il documento non ha: si disegna senza la risorsa",
+  S015: "una carta che non va con la sua tavola",
+  S016: "il nome della tavola è già del disegno o di una tavola prima: un riferimento a quel nome mostra l'altra",
 };
 
 /// Una diagnostica: il codice, la sua gravità, l'elemento o il blocco a cui

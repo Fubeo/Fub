@@ -438,7 +438,8 @@ fn the_scene_serializes_to_the_documented_shape() {
             "desc": null,
             "texts": [],
             "links": [],
-            "embeds": []
+            "embeds": [],
+            "boards": []
         })
     );
     assert_eq!(
@@ -448,6 +449,7 @@ fn the_scene_serializes_to_the_documented_shape() {
             "foreign": false,
             "truncated": false,
             "layers": ["Uno"],
+            "boards": [],
             "counts": {
                 "strokes": 0,
                 "shapes": 0,
