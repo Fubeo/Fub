@@ -25,6 +25,21 @@ export default defineConfig({
         for (const chunk of Object.values(bundle)) {
           if (chunk.type === "chunk" && chunk.isEntry) visit(chunk.fileName);
         }
+        // Vero se dal chunk `from` si arriva, per import statici, a un chunk
+        // che si chiama `name`.
+        const reaches = (from: string, name: string): boolean => {
+          const seen = new Set<string>();
+          const walk = (fileName: string): boolean => {
+            const chunk = bundle[fileName];
+            if (seen.has(fileName) || chunk?.type !== "chunk") return false;
+            seen.add(fileName);
+            return chunk.imports.some((dependency) => {
+              const next = bundle[dependency];
+              return (next?.type === "chunk" && next.name === name) || walk(dependency);
+            });
+          };
+          return walk(from);
+        };
         for (const chunk of Object.values(bundle)) {
           if (chunk.type !== "chunk") continue;
           const modules = Object.keys(chunk.modules);
@@ -35,6 +50,13 @@ export default defineConfig({
           const parser = parserModules > 0 && parserModules === modules.length;
           if (parserModules > 0 && eager.has(chunk.fileName)) {
             this.error(`${chunk.fileName}: il parser Mermaid deve restare fuori dal caricamento iniziale`);
+          }
+          // I chunk dei disegni stanno sotto la superficie: lei li importa, e
+          // nessuno di loro la importa, nemmeno attraverso un altro. Un ciclo
+          // fra chunk si carica, ma l'ordine in cui i moduli partono non è più
+          // quello del codice.
+          if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, "surface")) {
+            this.error(`${chunk.fileName}: un chunk dei disegni non importa la superficie`);
           }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
           const bytes = Buffer.byteLength(chunk.code, "utf8");
@@ -108,10 +130,21 @@ export default defineConfig({
           // trasformazioni, le booleane, i tagli, lo spessore variabile, i
           // livelli, il gruppo di un ricalco, il testo a pezzi del campo in
           // cui si scrive, i suoi a capo con la misura dei caratteri, il
-          // testo su tracciato e le tavole. Dipendono dal formato e dalla
+          // testo su tracciato e le tavole. Con loro ciò che i pannelli
+          // leggono senza DOM: copiare e incollare, la cronologia, il
+          // controllo dell'accessibilità e la descrizione del disegno, gli
+          // attributi e le misure con le unità. Dipendono dal formato e dalla
           // geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops|rich|wrap|measure|text-path|boards)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops|rich|wrap|measure|text-path|boards|clipboard|history|audit|attributes|quantity)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
+          }
+          // I pannelli dei disegni: le proprietà, gli oggetti, le tavole, la
+          // cronologia, l'accessibilità e l'ispettore degli attributi. Sono
+          // DOM attorno al foglio, che l'editor monta e che leggono i
+          // comandi; non dipendono dall'editor, e cambiano con la loro
+          // interfaccia.
+          if (/\/src\/editors\/spatial\/tools\/(properties|objects|boards-panel|history-panel|accessibility-panel|inspector)\.ts$/.test(id)) {
+            return "drawing-panels";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
             return "theme-series";
