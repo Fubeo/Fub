@@ -53,13 +53,13 @@ come per un collegamento. Una che non si trova, o un indirizzo del web, è un
 riquadro tratteggiato: il disegno non carica niente dalla rete. In Lettura le
 immagini del vault entrano nell'`<img>` coi loro byte, fino a 64 MiB per
 disegno, e oltre restano riquadri; il file non cambia. Lo stesso vale per
-l'[export](drawing-export.md) in PNG e PDF, dove al posto del riquadro non c'è
-niente. Una nota che mostra il
-disegno, con `![[casa.svg]]`, fa lo stesso, fino a 16 MiB di immagini e per un
-disegno fino a 16 MiB: oltre, lo mostra dal file. Un altro programma vede
-l'immagine se vi si risolve il percorso, per esempio aprendo il disegno dalla
-cartella del vault; un disegno che deve viaggiare da solo, con le immagini
-dentro, le riceve incollate.
+l'[export](drawing-export.md), dove al posto del riquadro non c'è niente e
+l'SVG pulito tiene il percorso. Una nota che mostra il disegno, con
+`![[casa.svg]]`, fa lo stesso, fino a 16 MiB di immagini e per un disegno fino
+a 16 MiB: oltre, lo mostra dal file. Un altro programma vede l'immagine se vi
+si risolve il percorso, per esempio aprendo il disegno dalla cartella del
+vault; un disegno che deve viaggiare da solo, con le immagini dentro, le
+riceve incollate, o esce in SVG pulito, che le porta coi loro byte.
 
 Chi monta l'editor apre, legge e sceglie le immagini del vault con `images`;
 senza, un'immagine del vault è un riquadro e «Immagine dal vault…» non c'è.

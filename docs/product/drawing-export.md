@@ -80,8 +80,10 @@ tolte, così una tavola nuova parte scelta.
 - **JPEG:** la stessa immagine posata sul bianco, più leggera, qualità 90.
 - **SVG pulito:** il disegno come lo vuole il web, senza ciò che serve
   soltanto a Fub: gli attributi del namespace `fub`, i commenti, le risorse
-  che nessuno usa, i numeri con più cifre del necessario. Si apre in ogni
-  programma di grafica, e si vede come il disegno.
+  che nessuno usa, i numeri con più cifre del necessario. Le immagini del
+  vault ci entrano coi loro byte, perché fuori dal vault il loro percorso non
+  porta a niente. Si apre in ogni programma di grafica, e si vede come il
+  disegno.
 - **PDF:** vettoriale, le forme e i tratti restano curve, nitide a ogni
   ingrandimento, e il testo resta testo, che si seleziona. Il disegno e la
   selezione sono una pagina; le tavole una pagina per tavola, nell'ordine
@@ -110,21 +112,22 @@ con la carta sotto se lo sfondo è la carta.
   fuori dal vault ([Disegni, immagini](drawing-images.md)).
 - **Il resto:** un'immagine presa da un indirizzo del web, da un file che nel
   vault non c'è o da un percorso che ne esce resta fuori. Al suo posto non c'è
-  niente: il riquadro tratteggiato del foglio non entra nel file.
+  niente: il riquadro tratteggiato del foglio non entra nel file. L'SVG
+  pulito ne tiene l'indirizzo o il percorso, come il disegno.
 
 ### I caratteri
 
 Un disegno esportato usa soltanto i caratteri di Fub, compresi nel programma:
-Literata con le grazie, anche in corsivo, Inter senza grazie e JetBrains Mono a
-spaziatura fissa, in tondo e in grassetto. Le famiglie `serif`, `sans-serif` e
+Literata con le grazie, Inter senza grazie e JetBrains Mono a spaziatura
+fissa, in tondo e in corsivo, normale e grassetto. Le famiglie `serif`, `sans-serif` e
 `monospace` sono i tre caratteri di Fub. Un testo senza carattere, o con uno
 che Fub non ha, usa Literata, come il carattere di serie di un browser. Un
 carattere del sistema non entra mai, quindi lo stesso disegno esce uguale su
 ogni computer.
 
-Un peso diverso prende il più vicino dei due, e ogni carattere ha anche il
-corsivo, nei due pesi. Una lettera che nessuno dei tre caratteri
-disegna esce come un riquadro vuoto.
+Un peso diverso prende il più vicino dei due. Una lettera che nessuno dei tre
+caratteri disegna esce come un riquadro vuoto. L'SVG pulito nomina i caratteri
+e non li porta con sé: li disegna il programma che lo apre.
 
 ## Il file
 
@@ -133,15 +136,18 @@ vault, e un export del testo di prima direbbe il falso. Se il salvataggio non
 riesce, l'export non parte e lo dice.
 
 Il file si chiama come il disegno, con le sue cartelle: `Scienze/acqua.svg`
-diventa `Scienze/acqua.png` o `Scienze/acqua.pdf`.
+diventa `Scienze/acqua.png`, `Scienze/acqua.jpg` o `Scienze/acqua.pdf`.
 
+- **L'SVG del disegno intero** ha la parola fra parentesi,
+  `Scienze/acqua (esportato).svg`: salvato accanto al disegno, col suo nome
+  ne prenderebbe il posto.
 - **La selezione** ha la parola fra parentesi: `Scienze/acqua (selezione).png`.
 - **Le tavole** in PNG, JPEG e SVG sono un file per tavola, col nome della
   tavola: `Scienze/acqua (Copertina).png`. In PDF sono un file solo,
   `Scienze/acqua.pdf`, o `Scienze/acqua (Copertina).pdf` se la tavola è una.
 - **Nel nome del file** i caratteri che un sistema non ammette diventano `-`,
   e un nome lungo si ferma a 40 caratteri; due tavole con lo stesso nome
-  prendono ` 1`, ` 2`.
+  prendono ` 1`, ` 2`, come due disegni.
 
 I file compaiono nel centro attività, che si apre da sé senza prendere il
 fuoco, e «Salva…» chiede dove metterli. Sotto i file ci sono le note
@@ -153,4 +159,6 @@ immagini né il PDF portano date, e l'ordine interno del PDF non cambia da un
 export all'altro.
 
 Il formato dei file e le regole delle risorse sono nel
-[formato della scena](../reference/scene-format.md), §9.
+[formato della scena](../reference/scene-format.md), §9; le opzioni, il
+ritaglio, l'SVG pulito e i nomi nel
+[formato dell'export](../reference/scene-format-export.md).

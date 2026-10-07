@@ -117,7 +117,9 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,
-  salva ciò che è in attesa, chiede `export.run` e apre il centro attività;
+  salva ciò che è in attesa, chiede `export.run` e apre il centro attività.
+  `exportWindow`, finché è disponibile, prende il posto della scelta del
+  formato in «Esporta…»: il disegno vi sceglie anche JPEG, SVG, selezione e tavole;
 - `selections()` dà le selezioni del testo in offset byte UTF-8 del buffer; il
   disegno dà gli intervalli degli elementi degli oggetti scelti;
   `selectedText()` è di chi sceglie elementi che non sono intervalli del
@@ -134,15 +136,13 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   sola lettura. La superficie Markdown le trae dal catalogo del profilo
   (`profiles/markdown/actions.ts`), che la sua keymap condivide; esegue come
   una battuta, con `TextEngine.runCommand`, quindi nella cronologia locale e
-  nella sessione. In Lettura o in sola lettura ogni azione è spenta. La barra di
-  formattazione (`panels/format-bar.ts`) e l'intento `fub.editor.action` sono i
-  suoi clienti;
+  nella sessione. In Lettura o in sola lettura ogni azione è spenta. Ne sono
+  clienti la barra di formattazione (`panels/format-bar.ts`) e `fub.editor.action`;
 - `setSyntaxForms(forms)` riceve le sintassi effettive del documento, cioè
   quelle del provider più gli innesti delle `SyntaxRule` del vault. La tela le
   usa per le card di testo: il canvas dichiara con `fub:embedded-grammar`
   che le card sono Markdown, e il kernel gli dà le forme effettive del
-  Markdown. Una sintassi spenta per le note, per esempio i diagrammi, resta
-  spenta anche nelle card.
+  Markdown. Una sintassi spenta per le note, come i diagrammi, lo è anche nelle card.
 
 Il pannello offre un gesto soltanto se la superficie montata lo dichiara e non
 chiede mai famiglia o profilo. `reveal(doc, location)` in `panels/document.ts`

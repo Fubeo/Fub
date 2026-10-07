@@ -41,15 +41,16 @@ di export, un oggetto JSON; il contratto di export non cambia.
 | `background` | `paper`, `none` | `paper` | tutte |
 | `scale` | numero maggiore di 0, al più 8 | 2 | PNG, JPEG |
 | `width` | intero da 1 a 16 384 | — | PNG, JPEG |
-| `suffix` | parola, al più 40 caratteri | `selection` | `scope: selection` |
+| `suffix` | parola, al più 40 caratteri | `selection`, `exported` | `scope: selection`; SVG del disegno |
 
 - **Un valore sbagliato** ferma l'export prima di aprire un file, con un
   errore del catalogo di `fub.draw` che lo nomina, ripetuto fino a 120
   caratteri. Un'opzione `null` vale come assente.
 - **Le opzioni che la destinazione o l'ambito non usano** si ignorano, come
   quelle sconosciute: `scale` in un PDF, `boards` col disegno intero,
-  `suffix` con le tavole. Senza opzioni i file sono quelli di prima, byte per
-  byte, scritti dal testo del vault così com'è.
+  `suffix` con le tavole o col disegno intero in PNG, JPEG e PDF. Senza
+  opzioni i file sono quelli di prima, byte per byte, scritti dal testo del
+  vault così com'è.
 - **Le tavole:** gli id sono stringhe; uno ripetuto vale una volta, e
   l'ordine della richiesta non conta (§5).
 - **La selezione:** `ids`, gli id degli oggetti, e `box`, il loro riquadro in
@@ -152,8 +153,10 @@ del vault resta l'originale.
   pulito e quello derivato danno con `resvg` gli stessi pixel, a meno dei
   numeri arrotondati: di un livello su un pixel di bordo, e di qualche livello
   in più sulla punta di uno spigolo vivo o di un marker.
-- **Le immagini del vault** restano il loro percorso, e il log lo dice: il
-  file le mostra dove quel percorso arriva a loro.
+- **Le immagini del vault** entrano coi loro byte, come URI `data:`, con le
+  regole degli altri formati (§5): fuori dal vault il loro percorso non
+  porterebbe a niente. Quelle che restano fuori tengono il percorso, e il log
+  le nomina; un indirizzo del web resta un indirizzo.
 
 ## 4. La misura
 
@@ -195,8 +198,11 @@ del vault resta l'originale.
 ## 6. I nomi dei file
 
 - **Il disegno:** `Scienze/acqua.png`, col nome e le cartelle del disegno e
-  l'estensione `.png`, `.jpg`, `.svg` o `.pdf`. **La selezione:**
-  `Scienze/acqua (selezione).png`, con la parola di `suffix`.
+  l'estensione `.png`, `.jpg` o `.pdf`. In SVG il nome sarebbe quello del
+  disegno, che salvato accanto prenderebbe il suo posto: ha la parola di
+  `suffix`, `Scienze/acqua (esportato).svg`, di serie `exported`. **La
+  selezione:** `Scienze/acqua (selezione).png`, con la parola di `suffix`, di
+  serie `selection`.
 - **Le tavole:** in PNG, JPEG e SVG un file per tavola,
   `Scienze/acqua (Copertina).png`; in PDF un file solo, `Scienze/acqua.pdf`,
   o `Scienze/acqua (Copertina).pdf` se la tavola è una.
@@ -207,4 +213,5 @@ del vault resta l'originale.
   quelle del disegno.
 - **Due nomi uguali** prendono ` 1`, ` 2` dentro le parentesi, come
   `Scienze/acqua (Copertina 1).png`; due disegni con lo stesso nome li
-  prendono dopo il nome, come prima.
+  prendono dopo il nome, come prima, anche in SVG:
+  `Scienze/acqua 1 (esportato).svg`.
