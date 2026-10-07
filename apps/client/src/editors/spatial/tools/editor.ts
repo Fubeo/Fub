@@ -202,7 +202,7 @@ import {
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
+import { framedText, initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
@@ -233,6 +233,7 @@ import {
   type FrameView,
   type Grip,
   type GripCursor,
+  type ResizeGrip,
 } from "./frame";
 import {
   anchorsOf,
@@ -429,7 +430,7 @@ import { editableRich, JOIN, lineRuns, lineText as richLineText, newLeading, ric
 import { ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
 import { createTextField, LINES_FORM, type FieldForm } from "./text-field";
 import { flipOps, isAlongPath, pairOf, putOnPathOps, releaseOps, type TextPathRefused } from "./text-path";
-import { unwrap, WRAP, wrapParagraphs, wrapValue } from "./wrap";
+import { unwrap, WRAP, wrapParagraphs, wrapValue, type Side } from "./wrap";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
 /// `EditorChange` (operazioni sulla scena, §6).
@@ -1096,10 +1097,28 @@ interface SelectGesture extends GestureBase {
   grip: { readonly grip: Grip; readonly frame: Frame } | null;
   /// La maniglia degli angoli presa.
   corner: CornerDrag | null;
+  /// Il riquadro del testo in area di cui si tira la cornice.
+  area: AreaDrag | null;
   /// La trasformazione della scena che la cornice mostra, e i gradi della
   /// rotazione.
   matrix: Matrix | null;
   angle: number;
+}
+
+/// La cornice di un testo in area presa da un lato o da un angolo: cambia
+/// la larghezza del riquadro, non il corpo, e il bordo opposto resta fermo
+/// (livello Esperto).
+interface AreaDrag {
+  readonly unit: Unit;
+  readonly fixed: Side;
+  /// Il bordo tirato e la larghezza di partenza, nelle coordinate del testo.
+  readonly edge: number;
+  readonly width: number;
+  /// La larghezza di adesso, il testo che la mostra e la sua cornice nelle
+  /// coordinate del testo.
+  now: number;
+  elem: Elem | null;
+  box: Bounds | null;
 }
 
 /// La maniglia degli angoli presa: l'oggetto, la sua maniglia, dove la si è
@@ -3490,10 +3509,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (tool !== "select" || !editable() || selection.length === 0) return null;
     const g = current?.kind === "select" ? current : null;
     if (g !== null && (g.mode === "move" || g.mode === "marquee")) return null;
-    if (g !== null && g.grip !== null) return frameView(g.matrix === null ? g.grip.frame : movedFrame(g.grip.frame, g.matrix), camera.scale);
+    if (g?.area?.box != null) return areaView(frameView({ matrix: g.area.unit.matrix, box: g.area.box, geometry: g.area.box }, camera.scale));
+    if (g !== null && g.grip !== null) return areaView(frameView(g.matrix === null ? g.grip.frame : movedFrame(g.grip.frame, g.matrix), camera.scale));
     const frame = frameOf(selectedUnits());
-    return frame === null ? null : frameView(frame, camera.scale);
+    return frame === null ? null : areaView(frameView(frame, camera.scale));
   };
+
+  /// Il testo in area scelto da solo, la cui cornice ne cambia il riquadro
+  /// (livello Esperto); `null` per ogni altra selezione.
+  const areaChosen = (): Unit | null => {
+    if (!has("typeset") || selection.length !== 1) return null;
+    const unit = selectedUnits()[0];
+    return unit !== undefined && unit.role === "text" && unit.look?.wrap != null ? unit : null;
+  };
+
+  /// La cornice `view` di un testo in area: senza le maniglie in alto e in
+  /// basso, perché l'altezza la fanno le righe.
+  const areaView = (view: FrameView | null): FrameView | null =>
+    view === null || areaChosen() === null ? view : { ...view, spots: view.spots.filter((spot) => spot.grip !== "n" && spot.grip !== "s") };
+
+  /// Il cursore della maniglia `grip` della cornice `frame`: su un testo in
+  /// area, ogni maniglia tranne quella della rotazione tira in orizzontale.
+  const frameCursor = (frame: Frame, grip: Grip): GripCursor =>
+    grip !== "rotate" && areaChosen() !== null ? gripCursor(frame, pull(grip, 0) < 0 ? "w" : "e", camera.angle) : gripCursor(frame, grip, camera.angle);
 
   /// Le misure e gli angoli come si leggono sulla cornice: le misure
   /// nell'unità del documento, con la sigla una volta in fondo.
@@ -3578,6 +3616,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const move = current?.kind === "select" && current.mode === "move" ? current : null;
     const delta = move === null ? null : moveDelta(move);
     const shaping = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current.matrix : null;
+    // Il testo in area di cui si tira la cornice ha il riquadro di adesso.
+    const area = current?.kind === "select" && current.mode === "resize" ? current.area : null;
     let band: Bounds | null = null;
     const edited = new Set(editedUnits());
     // Col Costruttore le forme si vedono nelle loro regioni; mentre si
@@ -3585,7 +3625,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const builder = current?.kind === "builder" && current.mode === "objects" ? null : builderNow();
     const built = new Set(builder === null ? [] : builder.shapes.filter((_, k) => !builder.cuts[k]).map((unit) => unit.key));
     for (const unit of selectedUnits()) {
-      const frame = unit.frame();
+      const frame = area !== null && area.unit.key === unit.key && area.box !== null ? area.box : unit.frame();
       if (frame === null) continue;
       let matrix = unit.matrix;
       if (delta !== null) {
@@ -6523,6 +6563,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           hit: null,
           grip: null,
           corner: null,
+          area: null,
           matrix: null,
           angle: 0,
         };
@@ -6717,6 +6758,49 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     applyFrame(units, frame, rotationMatrix(frameCenter(frame), degrees), degrees);
   };
 
+  /// La maniglia `grip` della cornice del testo in area scelto da solo:
+  /// tirarla ne cambierà il riquadro. `null` per ogni altra selezione.
+  const areaDrag = (grip: ResizeGrip): AreaDrag | null => {
+    const unit = areaChosen();
+    const look = unit?.look ?? null;
+    if (unit === null || look === null || look.wrap === null) return null;
+    const width = look.wrap;
+    const left = look.x - (look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0);
+    const fixed: Side = pull(grip, 0) < 0 ? "right" : "left";
+    return { unit, fixed, edge: fixed === "left" ? left + width : left, width, now: width, elem: null, box: null };
+  };
+
+  /// Il riquadro mentre la cornice di un testo in area si tira: il bordo
+  /// preso segue il puntatore nelle coordinate del testo, e con la griglia
+  /// si aggancia alla sua riga, non più vicino al bordo fermo del corpo del
+  /// testo. Il testo si vede già andato a capo.
+  const areaUpdate = (g: SelectGesture, drag: AreaDrag): void => {
+    const model = engine.model;
+    const inverse = invert(drag.unit.matrix);
+    if (model === null || inverse === null || g.from === null || g.end === null) return;
+    const from = apply(inverse, g.from);
+    const moved = drag.edge + apply(inverse, g.end)[0] - from[0];
+    const edge = apply(inverse, snapped(apply(drag.unit.matrix, [moved, from[1]])))[0];
+    const width = Math.max(drag.unit.look!.size, drag.fixed === "left" ? drag.width + edge - drag.edge : drag.width - edge + drag.edge);
+    if (drag.elem !== null && Math.abs(width - drag.now) < 1e-9) return;
+    drag.now = width;
+    const framed = framedText(model, drag.unit, width, drag.fixed, measureText);
+    drag.elem = framed?.elem ?? null;
+    drag.box = drag.elem === null ? null : elemBounds(drag.elem, IDENTITY);
+    const elem = drag.elem;
+    painter.setDraft(elem === null ? null : { replaced: new Map(drag.unit.paints.map((paint) => [paint, elem])) });
+  };
+
+  /// Scrive il riquadro della cornice tirata, in un passo, e lo dice.
+  const applyArea = (drag: AreaDrag): void => {
+    const model = engine.model;
+    if (model === null || wrapValue(drag.now) === wrapValue(drag.width)) return;
+    const restyled = lookOps(model, [drag.unit], { wrap: drag.now, fixed: drag.fixed }, measureText, newIds());
+    const extent = drag.elem === null ? null : elemBounds(drag.elem, drag.unit.matrix);
+    if (arrange("draw.action.text_frame", restyled, extent) === null) return;
+    announce(`${t("draw.text.framed", { width: lengthSpoken(drag.now) })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+  };
+
   /// Il primo punto di un gesto di selezione: una maniglia della cornice si
   /// potrà tirare; un oggetto sotto il puntatore si sceglie e si potrà
   /// trascinare; il vuoto comincia un riquadro.
@@ -6735,6 +6819,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (grip !== null) {
       g.grip = { grip, frame: view!.frame };
       g.units = selectedUnits();
+      g.area = grip === "rotate" ? null : areaDrag(grip);
       return;
     }
     // Con Ctrl o ⌘ si sceglie dentro i gruppi: l'oggetto più dentro sotto il
@@ -6838,10 +6923,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       g.mode = g.corner !== null ? "corner" : g.grip === null ? "move" : g.grip.grip === "rotate" ? "rotate" : "resize";
       g.release = null;
       if (g.corner !== null) showGrip(cornerCursor(g.corner.grip, g.corner.unit.matrix, camera.angle));
-      else if (g.grip !== null) showGrip(g.grip.grip === "rotate" ? "rotating" : gripCursor(g.grip.frame, g.grip.grip, camera.angle));
+      else if (g.grip !== null) showGrip(g.grip.grip === "rotate" ? "rotating" : frameCursor(g.grip.frame, g.grip.grip));
     }
     if (g.mode === "corner") {
       cornerUpdate(g.corner!, g.end);
+      showHandles();
+      return;
+    }
+    if (g.mode === "resize" && g.area !== null) {
+      areaUpdate(g, g.area);
       showHandles();
       return;
     }
@@ -6894,7 +6984,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const note = g.mode === "resize" ? snapNote() : "";
       current = null;
       showGrip(null);
-      if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null, note);
+      if (g.mode === "resize" && g.area !== null) applyArea(g.area);
+      else if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null, note);
       showHandles();
       return;
     }
@@ -9226,7 +9317,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
     const grip = gripAt(view, point, camera.scale, pointer);
     const corner = cornerAt(point, pointer, view, grip);
-    showGrip(corner !== null ? cornerCursor(corner.grip, corner.unit.matrix, camera.angle) : grip === null ? null : gripCursor(view.frame, grip, camera.angle));
+    showGrip(corner !== null ? cornerCursor(corner.grip, corner.unit.matrix, camera.angle) : grip === null ? null : frameCursor(view.frame, grip));
   };
   /// La guida del documento sotto il puntatore che passa, con lo strumento
   /// Selezione: si accende, e il cursore dice dove si sposta. Sopra un

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode, type ElementPart } from "../scene/model";
+import type { Elem } from "../scene/serialize";
 import { doc, HEAD } from "../scene/test-support";
 import { IMAGE_PLACEHOLDER, PaintBuilder, resourcesFor, wholeDocumentLayer, type PaintScene, type PaintShape } from "./paint";
 import { createSvgPainter, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
@@ -544,6 +545,31 @@ describe("l'anteprima degli strumenti", () => {
     painter.setDraft(null);
     expect(rect.nextElementSibling?.localName).toBe("circle");
     expect(rect.style.visibility).toBe("");
+    painter.dispose();
+  });
+
+  it("mostra un altro elemento al posto di un testo, con le sue righe e la sua trasformazione, e lo toglie", async () => {
+    const engine = SceneEngine.open(doc(`${LAYER}<text id="t" fub:wrap="60" x="1" y="9" transform="rotate(10)"><tspan x="1" dy="0">Uno due</tspan></text><circle id="c" r="2"/></g>`));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const text = host.querySelector(`[data-scene-id="t"]`) as SVGElement;
+    const [paint] = builder.paintsOf(engine.holder("t")!);
+    const lines: Elem[] = [
+      { tag: "tspan", attrs: { x: "1", dy: "0" }, text: "Uno" },
+      { tag: "tspan", attrs: { "fub:join": "space", x: "1", dy: "10" }, runs: [{ text: "due", attrs: { "font-weight": "bold" } }] },
+    ];
+    painter.setDraft({ replaced: new Map([[paint!, { tag: "text", attrs: { id: "t", "fub:wrap": "30", x: "1", y: "9" }, children: lines }]]) });
+    const stand = text.nextElementSibling as SVGElement;
+    expect(stand.localName).toBe("text");
+    expect(stand.getAttribute("transform")).toBe("rotate(10)");
+    expect(stand.innerHTML).toBe('<tspan x="1" dy="0">Uno</tspan><tspan x="1" dy="10"><tspan font-weight="bold">due</tspan></tspan>');
+    expect(["id", "fub:wrap"].some((name) => stand.hasAttribute(name))).toBe(false);
+    expect(text.style.visibility).toBe("hidden");
+    painter.setDraft(null);
+    expect(text.nextElementSibling?.localName).toBe("circle");
+    expect(text.style.visibility).toBe("");
     painter.dispose();
   });
 

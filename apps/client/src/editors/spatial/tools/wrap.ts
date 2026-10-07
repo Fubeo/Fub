@@ -371,15 +371,9 @@ export function pointText(rich: Rich): Rich {
 /// ogni allineamento del testo.
 const BEFORE_X: Readonly<Record<string, number>> = { start: 0, middle: 0.5, end: 1 };
 
-/// La `x` del testo in area `rich`, che era `before`, perché il bordo
-/// sinistro del riquadro resti dov'era: cambiano l'allineamento o la
-/// larghezza, il riquadro no. Si spostano con lei le righe.
-export function keepBox(before: Rich, rich: Rich): Rich {
-  const was = wrapOf(before);
-  const is = wrapOf(rich);
-  if (was === null || is === null) return rich;
-  const share = (of: Rich): number => BEFORE_X[(of.attrs["text-anchor"] ?? of.inherited["text-anchor"] ?? "start").trim()] ?? 0;
-  const by = share(rich) * is - share(before) * was;
+/// `rich` spostato di `by` in orizzontale: la `x` del testo e quella delle
+/// righe che la scrivono.
+function shiftedX(rich: Rich, by: number): Rich {
   if (Math.abs(by) < 1e-9) return rich;
   const moved = (value: string | undefined): string | undefined => {
     const x = value === undefined ? 0 : length(value);
@@ -390,4 +384,42 @@ export function keepBox(before: Rich, rich: Rich): Rich {
     attrs: { ...rich.attrs, x: moved(rich.attrs.x)! },
     lines: rich.lines.map((line) => (line.attrs.x === undefined ? line : { attrs: { ...line.attrs, x: moved(line.attrs.x)! }, spans: line.spans })),
   };
+}
+
+/// La `x` del testo in area `rich`, che era `before`, perché il bordo
+/// sinistro del riquadro resti dov'era: cambiano l'allineamento o la
+/// larghezza, il riquadro no. Si spostano con lei le righe.
+export function keepBox(before: Rich, rich: Rich): Rich {
+  const was = wrapOf(before);
+  const is = wrapOf(rich);
+  if (was === null || is === null) return rich;
+  const share = (of: Rich): number => BEFORE_X[(of.attrs["text-anchor"] ?? of.inherited["text-anchor"] ?? "start").trim()] ?? 0;
+  return shiftedX(rich, share(rich) * is - share(before) * was);
+}
+
+/// Il bordo del riquadro che resta fermo quando cambia la larghezza.
+export type Side = "left" | "right";
+
+/// `rich`, un testo in area, col riquadro largo `width`. Col bordo `fixed`
+/// a destra il testo si sposta di quanto il riquadro cresce, perché
+/// [`keepBox`], che tiene il sinistro, lasci fermo il destro.
+export function withWrap(rich: Rich, width: number, fixed: Side = "left"): Rich {
+  const was = wrapOf(rich);
+  if (was === null) return rich;
+  const value = wrapValue(width);
+  const sized: Rich = { ...rich, attrs: { ...rich.attrs, [WRAP]: value } };
+  return fixed === "left" ? sized : shiftedX(sized, was - Number(value));
+}
+
+/// `now`, il testo in area che era `before` e che un comando ha cambiato:
+/// il riquadro resta dov'era, e le righe vanno di nuovo a capo se cambia la
+/// larghezza o il carattere di un tratto. Un testo che non era o non è più
+/// in area resta com'è.
+export function rewrapped(before: Rich, now: Rich, measure: Measure): Wrapped {
+  const was = wrapOf(before);
+  const is = wrapOf(now);
+  if (was === null || is === null) return { rich: now, overflow: false };
+  const kept = keepBox(before, now);
+  if (was === is && sameFonts(before, kept)) return { rich: kept, overflow: false };
+  return reflow(kept, is, measure);
 }

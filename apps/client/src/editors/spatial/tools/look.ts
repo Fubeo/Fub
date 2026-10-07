@@ -57,11 +57,13 @@ import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
+import type { Elem } from "../scene/serialize";
 import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
 import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { Unit } from "./hit";
+import type { Measure } from "./measure";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
@@ -89,8 +91,7 @@ import {
   type Rich,
 } from "./rich";
 import { replaceElem } from "./topath";
-import type { Measure } from "./measure";
-import { areaText, keepBox, pointText, reflow, sameFonts, WRAP, wrapOf, wrapValue } from "./wrap";
+import { areaText, pointText, rewrapped, withWrap, type Side } from "./wrap";
 
 /// Dove un testo si allinea al suo punto d'ancoraggio.
 export type Anchor = "start" | "middle" | "end";
@@ -464,8 +465,9 @@ export type LookChange =
   /// Uno stile del testo: il corpo e il peso insieme.
   | { readonly preset: { readonly size: number; readonly weight: number } }
   | { readonly anchor: Anchor }
-  /// La larghezza del riquadro dei testi in area, nelle loro coordinate.
-  | { readonly wrap: number }
+  /// La larghezza del riquadro dei testi in area, nelle loro coordinate, e
+  /// il bordo che resta fermo: il sinistro, se non lo si dice.
+  | { readonly wrap: number; readonly fixed?: Side }
   /// Il tipo dei testi che non seguono un tracciato.
   | { readonly form: TextForm };
 
@@ -653,16 +655,10 @@ class Changes {
     }
   }
 
-  /// Il testo in area `now`, che era `before`: il riquadro resta dov'era, e
-  /// le righe vanno di nuovo a capo se cambia la larghezza o il carattere di
-  /// un tratto.
+  /// Il testo in area `now`, che era `before`, col riquadro dov'era e di
+  /// nuovo a capo se serve.
   private area(before: Rich, now: Rich): Rich {
-    const was = wrapOf(before);
-    const is = wrapOf(now);
-    if (was === null || is === null) return now;
-    const kept = keepBox(before, now);
-    if (was === is && sameFonts(before, kept)) return kept;
-    const flowed = reflow(kept, is, this.measure);
+    const flowed = rewrapped(before, now, this.measure);
     this.overflow ||= flowed.overflow;
     return flowed.rich;
   }
@@ -735,9 +731,8 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
       changes.textWrite(part, "font-weight", weightText(change.preset.weight));
     }
   } else if ("wrap" in change) {
-    const width = wrapValue(change.wrap);
     for (const part of parts.texts) {
-      if (part.node.details?.wrap !== undefined) changes.text(part, (rich) => ({ ...rich, attrs: { ...rich.attrs, [WRAP]: width } }));
+      if (part.node.details?.wrap !== undefined) changes.text(part, (rich) => withWrap(rich, change.wrap, change.fixed));
     }
   } else if ("form" in change) {
     for (const part of parts.texts) {
@@ -758,6 +753,20 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
     for (const part of parts.texts) changes.textEmphasis(part, which, on);
   }
   return changes.finish(units);
+}
+
+/// Il testo in area `unit` col riquadro largo `width`, fermo il bordo
+/// `fixed`, come lo scriverebbe [`lookOps`]: l'anteprima della cornice che
+/// lo allarga o lo stringe, e se una riga supera il riquadro. `null` se
+/// `unit` non è un testo in area che si legge coi suoi pezzi.
+export function framedText(model: DocumentModel, unit: Unit, width: number, fixed: Side, measure: Measure): { readonly elem: Elem; readonly overflow: boolean } | null {
+  const [node] = nodesOf(model, [unit]);
+  if (node === undefined || node.details?.role !== "text" || node.details.wrap === undefined) return null;
+  const rich = richOfPart({ node, role: "text", own: ownOf(node), inherited: passedBy(node.parent) });
+  const old = elemOf(node);
+  if (rich === null || old === null) return null;
+  const flowed = rewrapped(rich, withWrap(rich, width, fixed), measure);
+  return { elem: richElem(old, flowed.rich), overflow: flowed.overflow };
 }
 
 // ---------------------------------------------------------------------------

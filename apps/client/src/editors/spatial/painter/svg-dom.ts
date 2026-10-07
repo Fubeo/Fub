@@ -164,6 +164,10 @@ export interface PainterDraft {
   /// I contenitori che la gomma sta per togliere, per chiave: uno strato
   /// immagine che sta tutto dentro uno di loro si vede sbiadito.
   readonly fadedContainers?: ReadonlySet<object>;
+  /// I nodi da mostrare con un altro elemento al loro posto, che prende la
+  /// loro trasformazione: un testo in area mentre la cornice ne cambia il
+  /// riquadro, con le righe che andranno a capo.
+  readonly replaced?: ReadonlyMap<PaintNode, Elem>;
 }
 
 /// Gli attributi che un'anteprima cambia, e che toglierla riporta a com'erano
@@ -215,12 +219,14 @@ export interface ScenePainter {
   dispose(): void;
 }
 
-/// `elem` nel DOM di `doc`, coi figli che si vedono: i titoli, le
-/// descrizioni e gli id restano fuori.
+/// `elem` nel DOM di `doc`, coi figli e il testo che si vedono: i titoli,
+/// le descrizioni, gli id e gli attributi di FubDraw restano fuori.
 function drawn(doc: Document, elem: Elem): Element {
   const el = doc.createElementNS(SVG, elem.tag);
-  for (const [name, value] of Object.entries(elem.attrs)) if (name !== "id") el.setAttribute(name, value);
+  for (const [name, value] of Object.entries(elem.attrs)) if (name !== "id" && !name.startsWith("fub:")) el.setAttribute(name, value);
   for (const child of elem.children ?? []) if (child.tag !== "title" && child.tag !== "desc") el.append(drawn(doc, child));
+  for (const run of elem.runs ?? []) el.append(typeof run === "string" ? run : drawn(doc, { tag: "tspan", attrs: run.attrs, text: run.text }));
+  if (elem.runs === undefined && typeof elem.text === "string") el.append(elem.text);
   return el;
 }
 
@@ -566,7 +572,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
         touched.add(record);
       }
     }
-    for (const [paint, elem] of covers ?? []) {
+    for (const [paint, elem] of [...(covers ?? []), ...(draft?.replaced ?? [])]) {
       for (const record of recordsOf(paint)) {
         const stand = drawn(record.el.ownerDocument, elem);
         const transform = record.el.getAttribute("transform");

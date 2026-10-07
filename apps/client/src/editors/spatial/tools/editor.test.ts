@@ -2525,6 +2525,68 @@ describe("il testo in area e su tracciato, dal livello Esperto", () => {
   });
 });
 
+describe("la cornice di un testo in area", () => {
+  const T = "ot1t1t1t1";
+  // Corpo 10, a stima: dieci caratteri per riga. Il riquadro va da 20 a 80,
+  // e le righe da 32 a 55; la cornice sta quattro pixel fuori.
+  const AREA = doc(`${LAYER}<text id="${T}" fub:wrap="60" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan fub:join="space" x="20" dy="12.5">va a capo</tspan></text></g>`);
+  const press = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const move = (x: number, y: number, buttons = 1): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const release = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const painted = (): Element => host.querySelector(`[data-scene-id="${T}"]`)!;
+
+  it("cambia la larghezza del riquadro e non il corpo: il testo va di nuovo a capo mentre la si tira", () => {
+    mount(AREA, { level: "expert" });
+    editor.setTool("select");
+    editor.select([T]);
+    // L'angolo in basso a destra tira in orizzontale.
+    move(84, 59, 0);
+    expect(surface().dataset.grip).toBe("ew");
+    press(84, 59);
+    move(104, 70);
+    move(124, 80);
+    // L'anteprima mostra le righe di dopo; il file non cambia ancora.
+    expect([...painted().nextElementSibling!.querySelectorAll("tspan")].map((line) => line.textContent)).toEqual(["Il testo va a", "capo"]);
+    expect(editor.engine.text).toBe(AREA);
+    release(124, 80);
+    expect(editor.engine.text).toContain('fub:wrap="100" x="20" y="40" font-size="10"');
+    expect(editor.engine.text).toMatch(/<tspan x="20" dy="0">Il testo va a<\/tspan>\s*<tspan fub:join="space" x="20" dy="12.5">capo<\/tspan>/);
+    expect(spoken()).toBe("Riquadro largo 100.");
+    expect(changes).toHaveLength(1);
+    expect(painted().nextElementSibling).toBeNull();
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Larghezza del riquadro.");
+    expect(editor.engine.text).toBe(AREA);
+  });
+
+  it("da sinistra resta fermo il bordo destro; in alto e in basso non ci sono maniglie", () => {
+    mount(AREA, { level: "expert" });
+    editor.setTool("select");
+    editor.select([T]);
+    move(50, 28, 0);
+    expect(surface().dataset.grip).toBeUndefined();
+    press(16, 59);
+    move(-24, 59);
+    release(-24, 59);
+    expect(editor.engine.text).toContain('fub:wrap="100" x="-20"');
+    expect(editor.engine.text).toContain('<tspan x="-20" dy="0">Il testo va a</tspan>');
+  });
+
+  it("sotto Esperto la cornice scala il testo come ogni oggetto", () => {
+    mount(AREA, { level: "standard" });
+    editor.setTool("select");
+    editor.select([T]);
+    move(50, 28, 0);
+    expect(surface().dataset.grip).toBe("ns");
+  });
+});
+
 describe("il testo su tracciato, dal menu", () => {
   const T = "ot4t4t4t4";
   const R = "or4r4r4r4";
