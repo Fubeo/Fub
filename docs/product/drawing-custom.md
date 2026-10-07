@@ -40,6 +40,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | --- | --- | --- |
 | Penna, Gomma, Rettangolo, Ellisse, Linea, Freccia | Essenziale | lo strumento, col suo tasto |
 | Lazo | Standard | lo strumento (`Q`) |
+| Tavola | Standard | lo strumento (`F`); il pulsante «Tavole» col suo elenco; `Alt+PagSu` e `Alt+PagGiù`; nel pannello delle proprietà la sezione «Tavola» ([Disegni, tavole](drawing-boards.md)) |
 | Evidenziatore | Standard | lo strumento (`H`) |
 | Poligono | Standard | lo strumento (`Y`), per poligoni e stelle; la sezione «Forma» delle proprietà e la maniglia degli angoli arrotondati |
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
@@ -81,11 +82,12 @@ col suo segno, e «Apri come sorgente».
 
 Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
 basso: chi aveva in mano il suo strumento riprende la penna, o il primo
-strumento che c'è, o la Selezione; chi sceglieva, col Lazo, coi Nodi o col
-Costruttore di forme, riprende la Selezione; un tracciato di Bézier a metà si
-conclude com'è; un colore a piacere torna al colore di partenza; da un gruppo
-isolato si esce; la vista girata si raddrizza; la cronologia si chiude, e la
-si ritrova riaprendola.
+strumento che c'è, o la Selezione; chi sceglieva, col Lazo, coi Nodi, col
+Costruttore di forme o con la Tavola, riprende la Selezione; un tracciato di
+Bézier a metà si conclude com'è; un colore a piacere torna al colore di
+partenza; da un gruppo isolato si esce; la vista girata si raddrizza;
+l'elenco delle tavole si chiude; la cronologia si chiude, e la si ritrova
+riaprendola.
 Il disegno non cambia.
 
 `?` elenca i tasti delle parti scelte, e **Mostra tutto** aggiunge in fondo

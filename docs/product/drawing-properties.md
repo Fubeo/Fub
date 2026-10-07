@@ -30,10 +30,10 @@ con `grid`, `setGrid` e `onGridChange`.
 
 ## Le sezioni
 
-Il pannello ha in cima ciò di cui parla, «Rettangolo», «3 oggetti» o «Il
-disegno», e sotto le sezioni. L'intestazione di una sezione è un pulsante che
-la apre e la chiude; le sezioni chiuse si ricordano con la vista, in
-`grid.closed`. Di partenza sono chiuse «Trasforma» e «Attributi», le due
+Il pannello ha in cima ciò di cui parla, «Rettangolo», «3 oggetti», «Tavola
+2 di 5» o «Il disegno», e sotto le sezioni. L'intestazione di una sezione è un
+pulsante che la apre e la chiude; le sezioni chiuse si ricordano con la vista,
+in `grid.closed`. Di partenza sono chiuse «Trasforma» e «Attributi», le due
 dell'Esperto. Una sezione senza niente da mostrare non c'è.
 
 - **Posizione e misure.** X e Y sono l'angolo in alto a sinistra della
@@ -70,8 +70,13 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   ripete la trasformazione.
 - **Attributi**, all'Esperto: la tabella degli attributi dell'oggetto, dentro
   il pannello.
-- **Documento**, senza selezione: Larghezza e Altezza della pagina, l'unità
-  di misura e la descrizione. Il titolo resta nella barra.
+- **Tavola**, senza selezione, con lo strumento Tavola e una tavola scelta:
+  Nome, Formato, Orientamento, X, Y, Larghezza e Altezza della tavola
+  ([Disegni, tavole](drawing-boards.md#le-proprietà)).
+- **Documento**, senza selezione: in un disegno senza tavole Formato e
+  Orientamento della pagina, con le misure pronte delle tavole; poi Larghezza
+  e Altezza della pagina, l'unità di misura e la descrizione. Il titolo resta
+  nella barra.
 - **Vista**, senza selezione: le caselle della griglia, dell'aggancio, delle
   guide intelligenti, dei righelli e delle guide, e quella della barra della
   selezione, come in «Pagina e griglia».

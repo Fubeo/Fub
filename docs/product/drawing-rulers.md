@@ -25,7 +25,8 @@ ricarica la pagina. Il cambiamento si annuncia, «Righelli visibili.» o
 I righelli coprono il bordo del foglio senza spostare il disegno. Contano
 nell'unità del documento dall'origine della scena, l'angolo della pagina di
 un documento nuovo, e i numeri si diradano o si infittiscono con lo zoom, così
-restano leggibili. Sul righello una fascia grigia dice dove sta la pagina, una
+restano leggibili. Sul righello una fascia grigia dice dove sta la pagina o,
+in un disegno con le [tavole](drawing-boards.md), la tavola scelta, una
 fascia nel colore d'accento dove sta la selezione, e una linea segue il
 puntatore. Inquadrare il disegno, lo zoom coi tasti e il cursore della
 tastiera tengono conto dei righelli: ciò che si inquadra resta nella parte

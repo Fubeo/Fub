@@ -33,6 +33,10 @@ entrano nel file del [disegno](drawing.md)
   fermano in linea con gli oggetti, con la pagina e coi nodi già posati, anche
   prima del tocco, nel segmento che verrebbe; con la Curvatura, il punto che
   si posa o si trascina, anche su un tracciato scelto.
+- Con lo strumento **Tavola**, la tavola che si disegna, si sposta o si tira
+  si ferma in linea con gli oggetti, tranne quelli che porta con sé, e con le
+  altre tavole, e spostandola anche a distanze uguali; la pagina vale
+  soltanto in un disegno senza tavole ([Disegni, tavole](drawing-boards.md)).
 
 Anche le guide tirate dai righelli sono bersagli, finché si vedono, e
 agganciano pure con le guide intelligenti spente: [Disegni, righelli e
