@@ -47,11 +47,11 @@ sta nell'involucro del messaggio live, non nella singola operazione.
 - **`children`:** per `g`, `a` e `text`, per la `defs` della radice, le
   [risorse](scene-format-resources.md) e il loro contenuto; `title` e `desc`
   sono figli ammessi di qualunque elemento.
-- **`text`:** solo per `tspan`, `title` e `desc`.
-- **`runs`:** al posto di `text`, per un `tspan` che è una riga di un `text`:
-  il testo della riga e i suoi pezzi, nella forma dell'operazione `text`
-  ([testo](scene-format-text.md), §5). Tutti e due insieme sono
-  `invalid-elem`.
+- **`text`:** solo per `tspan`, `textPath`, `title` e `desc`.
+- **`runs`:** al posto di `text`, per un `tspan` che è una riga di un `text`,
+  o per il suo `textPath`: il testo della riga e i suoi pezzi, nella forma
+  dell'operazione `text` ([testo](scene-format-text.md), §7). Tutti e due
+  insieme sono `invalid-elem`.
 
 ### Posizione (`Pos`)
 
@@ -88,7 +88,7 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 | `add` | `parent`, `pos`, `elem` oppure `raw` | inserisce l'elemento | `remove` con lo stesso `id`, o col percorso |
 | `remove` | `target` | elimina l'elemento con i suoi figli | `add` con l'elemento tolto e il suo posto |
 | `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere) | cambia attributi | `set` con i valori precedenti |
-| `text` | `id`, `lines` (una riga è una stringa, o la lista del suo testo e dei suoi [pezzi](scene-format-text.md)) | sostituisce le righe di un `text` | `text` con le righe precedenti, pezzi compresi |
+| `text` | `id`, `lines` (una riga è una stringa, o la lista del suo testo e dei suoi [pezzi](scene-format-text.md)), `joins` facoltativo | sostituisce le righe di un `text` | `text` con le righe precedenti, pezzi compresi, e i `joins` di prima se l'operazione ne aveva o una riga aveva un `fub:join` |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
 | `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
 | `page` | `viewBox` (`"x y w h"`) | cambia insieme `viewBox`, `width` e `height` della radice e la geometria della carta | `page` con i valori precedenti |
@@ -153,6 +153,30 @@ Altri dettagli:
   risorsa viene prima di chi la usa, togliere una risorsa usata è `in-use`, e
   le risorse di FubDraw che un'operazione lascia senza riferimenti se ne
   vanno con lei: [risorse](scene-format-resources.md), §9.
+- **`joins` di `text`:** il `fub:join` di ogni riga di un [testo in
+  area](scene-format-text.md#4-il-testo-in-area), una voce per riga, una
+  stringa o `null` per nessuno; con `joins` ogni riga prende il suo, senza le
+  righe che restano tengono il loro e quelle nuove cominciano un paragrafo.
+  Una voce in più o in meno, una voce che non è una stringa o `null`, o un
+  carattere che XML non ammette sono `invalid-elem`.
+- **`text` su un testo su tracciato:** `lines` ha una riga sola, che diventa
+  il contenuto del `textPath`, coi pezzi; il `textPath` tiene i suoi
+  attributi, scritti nell'ordine canonico. Più righe, nessuna, o `joins` sono
+  `invalid-elem` ([testo](scene-format-text.md#5-il-testo-su-tracciato)).
+- **`add` di un testo su tracciato:** il `textPath` non ha id e porta `text`
+  o `runs`, senza figli; fuori da un `text` è `invalid-elem`. Il tracciato
+  che segue è un `path` in una `defs` della radice, con l'id di una risorsa,
+  `r` e otto caratteri, mentre un `path` fra gli oggetti ha l'id di un
+  oggetto, `o` e otto caratteri: l'uno al posto dell'altro è `invalid-elem`,
+  con `elem` come con `raw`. In un `batch` il tracciato viene prima del testo,
+  e un testo che segue un tracciato che non c'è è `invalid-elem`.
+- **Il tracciato di un testo** è una risorsa come le altre: toglierlo, o
+  togliergli l'id con `ident`, mentre un testo lo segue è `in-use`; un `set`
+  del suo `d` sposta il testo, uno che lo renderebbe estraneo, come un
+  `transform` o un `d` fuori grammatica, è `invalid-elem`. Togliere il testo
+  raccoglie il tracciato `private` e la `fub-defs` rimasta vuota: in avanti è
+  un `batch` col `remove` del testo, poi del tracciato e della `fub-defs`, e
+  l'inversa li rimette.
 - **`set` sulla radice:** con `id` uguale a `#root` cambia soltanto l'unità e
   le guide del documento, `fub:units` e `fub:guides`, coi valori nella loro
   grammatica ([unità e guide](scene-format-rulers.md)). Ogni altro attributo
@@ -258,7 +282,7 @@ tiene, per ogni elemento:
 - **`set` su un altro elemento e `text`:** si sostituisce lo span con la nuova
   forma canonica dell'elemento.
 - **Righe nuove di `text`:** una riga nuova copia gli attributi del `tspan`
-  precedente tranne `id` e `dy`. Il `dy` è quello dell'ultimo `tspan` dopo il
+  precedente tranne `id`, `dy` e `fub:join`. Il `dy` è quello dell'ultimo `tspan` dopo il
   primo che lo scrive; se non c'è, è 1,25 volte il corpo con cui si vede
   l'ultima riga: il primo `font-size` che si incontra salendo dal suo `tspan`
   al `text` e ai contenitori, 16 se nessuno lo scrive. I pezzi della riga
@@ -267,7 +291,7 @@ tiene, per ogni elemento:
   partenza, ordinati e non sovrapposti. Le righe interne dell'elemento
   spostato prendono il rientro della nuova profondità, ma solo se cominciano
   tutte con il rientro vecchio; altrimenti, e con `xml:space`, restano come
-  sono. Il testo di `tspan`, `title` e `desc` non si tocca.
+  sono. Il testo di `tspan`, `textPath`, `title` e `desc` non si tocca.
 - **`batch`:** le operazioni si applicano in sequenza a scena e testo. La
   `TextOperation` viene da un diff per righe fra i due testi a LF, che dà a
   ogni blocco la forma delle regole sopra; si verifica applicandola, e se non
@@ -426,6 +450,11 @@ devono verificare renderebbe il test circolare.
 | 57 | `set-missing-resource` | un `fill` verso una risorsa che non c'è: rifiuto `invalid-elem` |
 | 58 | `add-raw-resources` | un `raw` con una sfumatura e un motivo che la usa, nella stessa `defs` |
 | 59 | `filter-closed-list` | un filtro con `feTurbulence`: rifiuto `invalid-elem` |
+| 60 | `text-path-runs` | `text` su un testo su tracciato sostituisce il contenuto del `textPath` coi pezzi e ne tiene gli attributi; l'inversa rimette la riga di prima |
+| 61 | `text-joins` | `text` con `joins` su un testo in area: ogni riga ha il suo `fub:join`, la prima nessuno; l'inversa rimette righe e `joins` di prima |
+| 62 | `text-path-one-line` | un testo su tracciato ha una riga sola: `text` con due righe, rifiuto `invalid-elem` |
+| 63 | `add-text-path` | un `batch` aggiunge la `defs` col tracciato e il testo che lo segue con `xlink:href` e i pezzi; l'inversa toglie l'uno e l'altro |
+| 64 | `remove-text-collects-path` | togliere un testo su tracciato toglie il suo tracciato privato e la `fub-defs` rimasta vuota; l'inversa li rimette |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le
