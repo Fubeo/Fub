@@ -133,17 +133,17 @@ export default defineConfig({
           // testo su tracciato e le tavole. Con loro ciò che i pannelli
           // leggono senza DOM: copiare e incollare, la cronologia, il
           // controllo dell'accessibilità e la descrizione del disegno, gli
-          // attributi e le misure con le unità. Dipendono dal formato e dalla
-          // geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops|rich|wrap|measure|text-path|boards|clipboard|history|audit|attributes|quantity)|describe)\.ts$/.test(id)) {
+          // attributi e le misure con le unità, le scelte dell'export.
+          // Dipendono dal formato e dalla geometria, e l'editor li chiama.
+          if (/\/src\/editors\/spatial\/(tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops|rich|wrap|measure|text-path|boards|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà, gli oggetti, le tavole, la
-          // cronologia, l'accessibilità e l'ispettore degli attributi. Sono
-          // DOM attorno al foglio, che l'editor monta e che leggono i
-          // comandi; non dipendono dall'editor, e cambiano con la loro
-          // interfaccia.
-          if (/\/src\/editors\/spatial\/tools\/(properties|objects|boards-panel|history-panel|accessibility-panel|inspector)\.ts$/.test(id)) {
+          // cronologia, l'accessibilità, l'ispettore degli attributi e la
+          // finestra «Esporta». Sono DOM attorno al foglio, che l'editor e la
+          // superficie montano e che leggono i comandi; non dipendono
+          // dall'editor, e cambiano con la loro interfaccia.
+          if (/\/src\/editors\/spatial\/tools\/(properties|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog)\.ts$/.test(id)) {
             return "drawing-panels";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {

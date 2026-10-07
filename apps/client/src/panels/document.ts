@@ -28,6 +28,7 @@ import {
   type EditorSurface,
   type SourceView,
   type SurfaceExport,
+  type SurfaceExportWindow,
   type SurfaceLocation,
   type SurfaceMode,
   type SurfaceOverride,
@@ -785,9 +786,10 @@ function registerCommands(): void {
     available: () => tabOverride(activeTab()) !== null,
     run: () => void closeSourceView(),
   });
-  // Gli export che la superficie del documento dichiara (`exports`): con uno
-  // solo il comando lo esegue, con più d'uno chiede quale. Nel menu del
-  // riquadro sono una voce ciascuno.
+  // Gli export che la superficie del documento dichiara (`exports`): la sua
+  // finestra, se ne ha una; se no, con uno solo il comando lo esegue, con più
+  // d'uno chiede quale. Nel menu del riquadro sono una voce ciascuno, dopo
+  // quella della finestra.
   registerShellCommand({
     id: "shell.doc.export",
     title: "commands.doc.export",
@@ -2604,6 +2606,13 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
     }] : []),
     ...(doc && surface?.mountPresentation ? [{ label: t("pane.slides"), run: () => presentSlides(r, doc) }] : []),
     ...(doc && surface?.printable ? [{ label: t("pane.print"), run: () => void presentPrint(r, doc) }] : []),
+    ...(exportWindow(r) ? [{
+      label: t("commands.doc.export"),
+      run: () => {
+        focusPane(r.id);
+        void chooseExport(r.id);
+      },
+    }] : []),
     ...offeredExports(r).map((offered) => ({
       label: t("pane.export", { what: offered.label() }),
       run: () => {
@@ -3155,20 +3164,31 @@ function offeredExports(r: Pane | undefined): readonly SurfaceExport[] {
   return state.commandSpecs.some((spec) => spec.id === EXPORT_COMMAND) ? offered : [];
 }
 
-/// «Esporta…»: l'export che la superficie offre, o quello che si sceglie fra
-/// i suoi.
+/// La finestra «Esporta» del riquadro, se la sua superficie ne ha una che si
+/// apre adesso, e l'export si può eseguire.
+function exportWindow(r: Pane | undefined): SurfaceExportWindow | null {
+  const own = r?.surface?.exportWindow;
+  return own !== undefined && offeredExports(r).length > 0 && own.available() ? own : null;
+}
+
+/// «Esporta…»: la finestra della superficie, se ne ha una; se no l'export che
+/// la superficie offre, o quello che si sceglie fra i suoi.
 async function chooseExport(paneId: string): Promise<void> {
   const r = panes.get(paneId);
   const offered = offeredExports(r);
   if (r?.shown?.k !== "doc" || offered.length === 0) return;
   const doc = r.shown.doc;
-  const chosen = offered.length === 1
-    ? offered[0]!
-    : await pickFromList({
+  const own = exportWindow(r);
+  let chosen: SurfaceExport | null | undefined;
+  if (own !== null) chosen = await own.open();
+  else if (offered.length === 1) chosen = offered[0]!;
+  else {
+    chosen = await pickFromList({
       title: t("document.export.title", { doc: docTitle(doc) }),
       placeholder: t("document.export.placeholder"),
       items: offered.map((item) => ({ label: item.label(), detail: item.detail(), value: item })),
     });
+  }
   if (chosen) await runExport(doc, chosen);
 }
 

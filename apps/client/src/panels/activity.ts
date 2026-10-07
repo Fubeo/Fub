@@ -27,7 +27,7 @@
 // [decisione 0035]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 import { api } from "../host/ipc";
 import { activeJobs } from "../host/query";
-import type { ExportArtifact, JobProgress, JobStatus, KernelNotice } from "../host/contract";
+import type { ExportArtifact, JobProgress, JobStatus, KernelNotice, TransferNote } from "../host/contract";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { onAnyEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
@@ -194,6 +194,35 @@ export function exportArtifacts(notice: KernelNotice): ExportArtifact[] | null {
   return parsed;
 }
 
+/** How many notes of one export the panel shows, and how long each may be:
+ * the report comes from a plugin, and the panel stays readable whatever it
+ * says. */
+const NOTES_MAX = 8;
+const NOTE_CHARS = 300;
+
+/** The notes of an export report that read as notes, bounded: what the export
+ * wants the user to know about the files (a size reduced to the limits, a
+ * missing font). */
+export function exportNotes(notice: KernelNotice): TransferNote[] {
+  const log = (exportReport(notice) as { log?: unknown } | null)?.log;
+  if (!Array.isArray(log)) return [];
+  const notes: TransferNote[] = [];
+  for (const note of log as unknown[]) {
+    if (notes.length === NOTES_MAX) break;
+    if (!note || typeof note !== "object") continue;
+    const { level, message, entry } = note as Record<string, unknown>;
+    if ((level !== "info" && level !== "warning" && level !== "error") || typeof message !== "string") continue;
+    const text = message.trim();
+    if (text === "") continue;
+    notes.push({
+      level,
+      message: text.length > NOTE_CHARS ? `${text.slice(0, NOTE_CHARS - 1)}…` : text,
+      entry: typeof entry === "string" ? entry : null,
+    });
+  }
+  return notes;
+}
+
 interface FinishedArtifact extends ExportArtifact {
   state: "ready" | "saving" | "saved" | "failed";
   detail: string;
@@ -201,6 +230,7 @@ interface FinishedArtifact extends ExportArtifact {
 interface FinishedExport {
   id: string;
   artifacts: FinishedArtifact[];
+  notes: TransferNote[];
 }
 // --- da qui in giù è disegno ------------------------------------------------
 
@@ -292,11 +322,13 @@ export function mountActivity(lifetime: Lifetime): void {
       const completed = eventNotice.event;
       if (completed.type === "job_done") {
         const artifacts = exportArtifacts(eventNotice);
-        if (artifacts && artifacts.length > 0 &&
+        const notes = artifacts === null ? [] : exportNotes(eventNotice);
+        if (artifacts && (artifacts.length > 0 || notes.length > 0) &&
             !finished.some((report) => report.id === completed.id)) {
           finished.push({
             id: completed.id,
             artifacts: artifacts.map((artifact) => ({ ...artifact, state: "ready", detail: "" })),
+            notes,
           });
           // Keep at most two completed exports; byte-bearing reports are
           // bounded by the producer's 32 MiB cap and released on vault close.
@@ -438,6 +470,14 @@ function redraw(): void {
         item.append(save);
       }
       item.append(status);
+      list.append(item);
+    }
+    // Le note dell'export, sotto i suoi file: un'informazione è tenue, un
+    // avviso e un errore no, e lo dicono anche a parole.
+    for (const note of report.notes) {
+      const item = document.createElement("li");
+      item.className = note.level === "info" ? "muted" : "activity-row";
+      item.textContent = note.level === "info" ? note.message : t(`activity.note.${note.level}`, { message: note.message });
       list.append(item);
     }
   }

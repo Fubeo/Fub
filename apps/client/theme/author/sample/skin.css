@@ -4003,6 +4003,175 @@ button.draw-isolation-crumb:hover {
   border-color: var(--accent);
 }
 
+/* La finestra «Esporta»: le scelte a sinistra, in gruppi coi loro titoli, e
+   l'anteprima a destra, che prende lo spazio che resta; dove la finestra è
+   stretta l'anteprima va sopra le scelte. Ogni scelta è alta almeno 44px, e
+   una spenta è più tenue. Sotto l'immagine c'è una scacchiera dove il file
+   è trasparente, chiara in ogni tema come quella dei programmi di grafica,
+   e il bianco dove non lo è, il JPEG e il PDF. */
+.modale .palette-box.draw-export {
+  width: min(960px, 94vw);
+  max-height: 82vh;
+}
+.modale .draw-export-layout {
+  display: grid;
+  grid-template-columns: clamp(15rem, 34%, 20rem) 1fr;
+  gap: var(--space-6);
+}
+.modale .draw-export-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.modale .draw-export-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modale .draw-export-group legend {
+  padding: 0 0 var(--space-2);
+  font-weight: var(--weight-bold);
+}
+.modale .draw-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+}
+.modale .palette-form .draw-export-option {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  font-weight: normal;
+  cursor: pointer;
+}
+.modale .draw-export-option input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+.modale .draw-export-option input:disabled,
+.modale .draw-export-option input:disabled + span {
+  cursor: default;
+  opacity: 0.55;
+}
+.modale .draw-export-boards {
+  display: flex;
+  flex-direction: column;
+  max-height: 12rem;
+  padding-inline-start: var(--space-6);
+  overflow: auto;
+}
+.modale .palette-form .draw-export-width {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: normal;
+}
+.modale .draw-export-width input {
+  width: 8rem;
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+.modale .draw-export-width input:disabled {
+  opacity: 0.55;
+}
+.modale .draw-export-width span,
+.modale .draw-export-hint {
+  color: var(--muted);
+}
+.modale .draw-export-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.modale .draw-export-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.modale .draw-export-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: min(52vh, 30rem);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.modale .draw-export-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 0 0 1px var(--doc-rule-soft), 0 12px 32px -20px rgb(0 0 0 / 45%);
+}
+.modale .draw-export-stage[data-backdrop="checker"] .draw-export-image {
+  background-color: rgb(255 255 255);
+  background-image:
+    linear-gradient(45deg, rgb(0 0 0 / 10%) 25%, transparent 25%, transparent 75%, rgb(0 0 0 / 10%) 75%),
+    linear-gradient(45deg, rgb(0 0 0 / 10%) 25%, transparent 25%, transparent 75%, rgb(0 0 0 / 10%) 75%);
+  background-position: 0 0, 8px 8px;
+  background-size: 16px 16px;
+}
+.modale .draw-export-stage[data-backdrop="white"] .draw-export-image {
+  background-color: rgb(255 255 255);
+}
+.modale .draw-export-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.modale .draw-export-turn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+.modale .draw-export-turn:not(:disabled):hover {
+  border-color: var(--accent);
+}
+.modale .draw-export-turn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.modale .draw-export-page {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.modale .draw-export-measure {
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 760px) {
+  .modale .draw-export-layout {
+    grid-template-columns: 1fr;
+  }
+  .modale .draw-export-preview {
+    order: -1;
+  }
+  .modale .draw-export-stage {
+    height: 32vh;
+  }
+}
+
 .modale .palette-actions .keys-show-all {
   margin-inline-end: auto;
 }

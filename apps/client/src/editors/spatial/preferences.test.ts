@@ -362,3 +362,77 @@ describe("la griglia ricordata", () => {
     expect(recentNotices()).toHaveLength(1);
   });
 });
+
+describe("le scelte di «Esporta» ricordate", () => {
+  const EXPORT_KEY = "draw.export";
+  const PNG = { what: "boards", off: ["b2"], format: "png", size: { scale: 3 }, background: "paper" } as const;
+  const PDF = { what: "drawing", off: [], format: "pdf", size: { scale: 2 }, background: "none" } as const;
+
+  it("si ricordano per disegno, l'ultimo davanti", async () => {
+    const host = createFakeHost();
+    const { readExportMemory, saveExportMemory } = await boot(host);
+    expect(await readExportMemory("a.svg")).toBeNull();
+    await saveExportMemory("a.svg", PNG);
+    await saveExportMemory("b.svg", PDF);
+    expect(await readExportMemory("a.svg")).toEqual(PNG);
+    expect(await readExportMemory("b.svg")).toEqual(PDF);
+    await saveExportMemory("a.svg", PDF);
+    expect(await host.module.api.viewState(EXPORT_KEY)).toEqual({
+      drawings: [
+        { doc: "a.svg", memory: PDF },
+        { doc: "b.svg", memory: PDF },
+      ],
+    });
+  });
+
+  it("tiene gli ultimi cento disegni", async () => {
+    const host = createFakeHost();
+    const { EXPORT_MEMORIES, readExportMemory, saveExportMemory } = await boot(host);
+    expect(EXPORT_MEMORIES).toBe(100);
+    await host.module.api.setViewState(EXPORT_KEY, { drawings: Array.from({ length: 100 }, (_, index) => ({ doc: `${index}.svg`, memory: PNG })) });
+    await saveExportMemory("nuovo.svg", PDF);
+    const { drawings } = (await host.module.api.viewState(EXPORT_KEY)) as { drawings: { doc: string }[] };
+    expect(drawings).toHaveLength(100);
+    expect(drawings[0]!.doc).toBe("nuovo.svg");
+    expect(await readExportMemory("99.svg"), "il più vecchio si dimentica").toBeNull();
+    expect(await readExportMemory("98.svg")).toEqual(PNG);
+  });
+
+  it("ciò che non si legge come scelte non conta, e di un disegno conta il primo", async () => {
+    const host = createFakeHost();
+    const { readExportMemory, saveExportMemory } = await boot(host);
+    await host.module.api.setViewState(EXPORT_KEY, {
+      drawings: [null, { doc: "a.svg", memory: { ...PNG, format: "gif" } }, { doc: 7, memory: PNG }, { doc: "a.svg", memory: PDF }, { doc: "a.svg", memory: PNG }],
+    });
+    expect(await readExportMemory("a.svg")).toEqual(PDF);
+    await host.module.api.setViewState(EXPORT_KEY, "rotto");
+    expect(await readExportMemory("a.svg")).toBeNull();
+    await saveExportMemory("b.svg", PNG);
+    expect(await host.module.api.viewState(EXPORT_KEY)).toEqual({ drawings: [{ doc: "b.svg", memory: PNG }] });
+  });
+
+  it("la lettura aspetta le scritture; una che non riesce non dice niente, e la fila va avanti", async () => {
+    const host = createFakeHost();
+    const { clearHistory, readExportMemory, recentNotices, saveExportMemory } = await boot(host);
+    clearHistory();
+    const release = host.throttle("setViewState");
+    const saving = saveExportMemory("a.svg", PNG);
+    const reading = readExportMemory("a.svg");
+    await settle();
+    expect(host.atGate("viewState").filter((call) => call.args[0] === EXPORT_KEY), "letto soltanto dalla scrittura").toHaveLength(1);
+    release();
+    await saving;
+    expect(await reading).toEqual(PNG);
+
+    const heal = host.fault("setViewState", "disco pieno");
+    await saveExportMemory("b.svg", PDF);
+    heal();
+    expect(recentNotices()).toEqual([]);
+    await saveExportMemory("c.svg", PDF);
+    expect(await readExportMemory("c.svg")).toEqual(PDF);
+
+    const broken = host.fault("viewState");
+    expect(await readExportMemory("c.svg"), "uno stato che non si legge").toBeNull();
+    broken();
+  });
+});

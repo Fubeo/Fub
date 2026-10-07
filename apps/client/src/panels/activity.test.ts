@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
 import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
-import { apply, exportArtifacts, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
+import { apply, exportArtifacts, exportNotes, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
 import { api } from "../host/ipc";
 import samples from "../__fixtures__/mirror-samples.json";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
@@ -236,6 +236,58 @@ describe("export artifacts from completed transfer jobs", () => {
     expect(saveButton()).toBeUndefined();
     lifetime.close();
     save.mockRestore();
+    query.mockRestore();
+  });
+});
+
+describe("the notes of an export report", () => {
+  const PNG = { path: "casa.png", media_type: "image/png", content: { kind: "bytes", value: [1] } };
+  const done = (id: string, artifacts: unknown[], log: unknown): KernelNotice =>
+    notice({ type: "job_done", id, job: ARTIFACT_JOB, result: { Ok: { artifacts, log } } });
+
+  it("keeps the notes that read as notes, trimmed and bounded", () => {
+    const long = "x".repeat(400);
+    expect(exportNotes(done("1", [PNG], [
+      { level: "warning", message: "  La misura esce ridotta.  ", entry: "casa.svg" },
+      { level: "info", message: "ok", entry: null },
+      { level: "debug", message: "no" },
+      { level: "error", message: "   " },
+      { level: "error", message: 3 },
+      null,
+      { level: "error", message: long, entry: 7 },
+    ]))).toEqual([
+      { level: "warning", message: "La misura esce ridotta.", entry: "casa.svg" },
+      { level: "info", message: "ok", entry: null },
+      { level: "error", message: `${"x".repeat(299)}…`, entry: null },
+    ]);
+    const many = Array.from({ length: 20 }, (_, index) => ({ level: "info", message: `nota ${index}`, entry: null }));
+    expect(exportNotes(done("2", [PNG], many))).toHaveLength(8);
+    expect(exportNotes(done("3", [PNG], "rotto"))).toEqual([]);
+    expect(exportNotes(notice({ type: "job_done", id: "4", job: "export.run", result: { Ok: { artifacts: [], log: many } } }))).toEqual([]);
+  });
+
+  it("shows them under the files, warnings and errors in words too, even with no file", () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(done("5", [PNG], [
+      { level: "info", message: "Due pagine.", entry: null },
+      { level: "warning", message: "Il carattere Comic Sans manca: esce in Inter.", entry: null },
+    ]));
+    forwardNotice(done("6", [], [{ level: "error", message: "La tavola b9 non c'è.", entry: null }]));
+    document.getElementById("activity-button")!.click();
+    const rows = [...document.querySelectorAll<HTMLLIElement>("#activity-list li")];
+    const texts = rows.map((row) => row.textContent ?? "");
+    const info = texts.indexOf("Due pagine.");
+    expect(info).toBeGreaterThan(texts.findIndex((text) => text.includes("casa.png")));
+    expect(rows[info]!.className).toBe("muted");
+    expect(texts).toContain("Attenzione: Il carattere Comic Sans manca: esce in Inter.");
+    expect(texts).toContain("Errore: La tavola b9 non c'è.");
+    lifetime.close();
     query.mockRestore();
   });
 });

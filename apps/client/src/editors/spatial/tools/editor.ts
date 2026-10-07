@@ -384,6 +384,7 @@ import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
 import { createBoardsPanel, type BoardRow } from "./boards-panel";
 import { createAccessPanel } from "./accessibility-panel";
+import { exportBox, type ExportScene } from "./export-plan";
 import { overlaps, problemsOf, readingOrder, type AuditCode, type Problem } from "./audit";
 import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "./clipboard";
 import {
@@ -580,6 +581,17 @@ export interface DrawEditorOptions {
   readonly tracer?: TracerFactory;
 }
 
+/// Ciò che la finestra «Esporta» chiede al disegno.
+export interface DrawExport {
+  /// La selezione nomina anche gli id che `naming` darebbe.
+  readonly scene: ExportScene;
+  /// Dà un id agli oggetti scelti che non ne hanno; `null` se ce l'hanno
+  /// tutti, o se il disegno non si può scrivere.
+  readonly naming: Op | null;
+  /// Quanti oggetti riceverebbero un id.
+  readonly named: number;
+}
+
 export interface DrawEditor {
   readonly element: HTMLElement;
   readonly engine: SceneEngine;
@@ -642,6 +654,9 @@ export interface DrawEditor {
   /// comandi di chi monta l'editor, come la conferma della versione del PDF.
   /// `false` se non si è potuto.
   perform(label: DrawKey, op: Op): boolean;
+  /// Ciò che la finestra «Esporta» chiede al disegno: gli oggetti scelti,
+  /// per id, col riquadro che li contiene, e le tavole nel loro ordine.
+  exportScene(): DrawExport;
   focus(): void;
   dispose(): void;
 }
@@ -16136,6 +16151,35 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (disposed || !editable()) return false;
       cancelGesture();
       return commit(label, op) !== null;
+    },
+    exportScene() {
+      const units = engine.model === null ? [] : selectedUnits();
+      const bounds = boundsOf(units);
+      // La richiesta trova gli oggetti per id: chi non ne ha uno lo riceve,
+      // se il disegno si può scrivere.
+      const fresh = editable() ? newIds() : null;
+      const naming: Op[] = [];
+      const ids: string[] = [];
+      for (const unit of units) {
+        if (unit.id !== null) {
+          ids.push(unit.id);
+        } else if (fresh !== null) {
+          const id = fresh.next("object");
+          naming.push({ op: "ident", path: [...unit.path], tag: unit.tag, id });
+          ids.push(id);
+        }
+      }
+      return {
+        scene: {
+          selection:
+            units.length === 0
+              ? null
+              : { count: units.length, ids, box: bounds === null ? null : exportBox(bounds.min, bounds.max) },
+          boards: boardsNow().map((board) => ({ id: board.id, name: board.name })),
+        },
+        naming: naming.length === 0 ? null : { op: "batch", ops: naming },
+        named: naming.length,
+      };
     },
     focus() {
       surface.focus({ preventScroll: true });

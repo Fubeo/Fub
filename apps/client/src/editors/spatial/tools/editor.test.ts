@@ -11104,3 +11104,59 @@ describe("le tavole, dal livello Standard", () => {
     expect(boardsButton()?.hidden ?? true).toBe(true);
   });
 });
+
+describe("«Esporta»: ciò che il disegno offre", () => {
+  const SQUARE = "oa1a1a1a1";
+  /// Due tavole, un quadrato con l'id e un triangolo senza.
+  const SOURCE_EXPORT = doc(
+    "<title>Ciclo</title>" +
+      '<rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="400" height="200" fill="#fafafa"/>' +
+      '<rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="480" y="0" width="400" height="200" fill="#fafafa"/>' +
+      '<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><title>Copertina</title></view>' +
+      '<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>' +
+      `${LAYER}<rect id="${SQUARE}" x="600" y="50" width="20" height="20" fill="#000000"/><path d="M10 10 L30 10 L30 30 Z" fill="#000000"/></g>`,
+  ).replace('viewBox="0 0 100 100"', 'viewBox="0 0 1024 256"');
+  const BOARDS_OFFERED = [
+    { id: "b1a2b3c4d", name: "Copertina" },
+    { id: "b9i0j1k2l", name: "Evaporazione" },
+  ];
+
+  it("senza selezione, le tavole nel loro ordine", () => {
+    mount(SOURCE_EXPORT, { level: "standard" });
+    expect(editor.exportScene()).toEqual({ scene: { selection: null, boards: BOARDS_OFFERED }, naming: null, named: 0 });
+  });
+
+  it("la selezione per id, col riquadro sui numeri interi, e gli id che mancano pronti in un passo che non è ancora scritto", () => {
+    mount(SOURCE_EXPORT, { level: "standard" });
+    key("a", { ctrlKey: true });
+    const offer = editor.exportScene();
+    const naming = offer.naming as { op: "batch"; ops: { op: string; path: number[]; tag: string; id: string }[] };
+    expect(naming.op).toBe("batch");
+    expect(naming.ops).toHaveLength(1);
+    const [ident] = naming.ops;
+    expect(ident).toMatchObject({ op: "ident", tag: "path" });
+    expect(ident!.id).toMatch(/^o[0-9a-z]{8}$/);
+    expect(offer.named).toBe(1);
+    expect(offer.scene).toEqual({
+      selection: { count: 2, ids: [SQUARE, ident!.id], box: [10, 10, 610, 60] },
+      boards: BOARDS_OFFERED,
+    });
+    expect(editor.engine.text, "chiedere non scrive").toBe(SOURCE_EXPORT);
+    // Il passo, se lo si fa, dà proprio quegli id, e si annulla.
+    expect(editor.perform("draw.action.export_ids", offer.naming!)).toBe(true);
+    expect(editor.engine.text).toContain(`<path id="${ident!.id}"`);
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE_EXPORT);
+  });
+
+  it("in sola lettura gli id non si danno: la selezione resta con quelli che ha", () => {
+    mount(SOURCE_EXPORT, { level: "standard" });
+    key("a", { ctrlKey: true });
+    editor.setReadOnly(true);
+    expect(editor.exportScene()).toEqual({
+      scene: { selection: { count: 2, ids: [SQUARE], box: [10, 10, 610, 60] }, boards: BOARDS_OFFERED },
+      naming: null,
+      named: 0,
+    });
+  });
+});
