@@ -1,20 +1,20 @@
 # Formato della scena, risorse
 
 > **Ambito:** le risorse di un disegno: sfumature, motivi, marcatori,
-> ritagli, maschere e filtri; dove stanno, come si leggono e si scrivono,
+> ritagli, maschere, filtri e i tracciati che i testi seguono; dove stanno, come si leggono e si scrivono,
 > come gli oggetti le usano e come le operazioni tengono veri i riferimenti.
 > Versione 1.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; i
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
 > scrittura in `scene/serialize.ts`, le operazioni in `scene/engine.ts`, con
-> i vettori di prova da 50 a 59 ([operazioni sulla scena](scene-operations.md),
-> §9), e il disegno in `painter/paint.ts`.
+> i vettori di prova da 50 a 59, 63 e 64 ([operazioni sulla
+> scena](scene-operations.md), §9), e il disegno in `painter/paint.ts`.
 
 Una parte del [formato della scena](scene-format.md), §4. Una risorsa è un
 elemento che non si disegna da solo e che gli oggetti usano per riferimento:
 una sfumatura nel riempimento, una punta di freccia alla fine di una linea,
-un ritaglio, una maschera, un filtro. Che cosa ne fa l'editor sta in
+un ritaglio, una maschera, un filtro, il tracciato che un testo segue. Che cosa ne fa l'editor sta in
 [Disegni, risorse](../product/drawing-resources.md). Le sezioni del formato
 si citano come «formato della scena, §N»; quelle di questa pagina col solo
 numero.
@@ -65,6 +65,7 @@ riempie del colore dopo il riferimento.
 | `clipPath` | `clipPathUnits`, `transform`, `clip-rule` | forme e testi, senza `g` |
 | `mask` | `x y width height`, `maskUnits`, `maskContentUnits` | il contenuto |
 | `filter` | `x y width height`, `filterUnits`, `primitiveUnits`, `color-interpolation-filters` | le primitive (§4), al più 64 |
+| `path` | `d` | nessuno |
 
 - **Ogni risorsa ha un `id`** non vuoto; senza è estranea, e con lei chi la
   usa. Può avere `title`, `desc` e gli attributi `fub:*` e degli altri
@@ -75,6 +76,11 @@ riempie del colore dopo il riferimento.
   dice, e ogni primitiva fuori dall'elenco di §4, come `feImage` o
   `feTurbulence`, rendono estranea la risorsa. Un riferimento a un altro
   file non c'è mai.
+- **Il tracciato** è il `path` che un [testo su
+  tracciato](scene-format-text.md#5-il-testo-su-tracciato) segue: un `d`
+  nella grammatica del formato, anche vuoto, e nessun altro attributo SVG o
+  `xlink`; un `transform` o un `fill` lo rendono estraneo, e con lui il
+  testo. Non si disegna da solo: dice soltanto dove scorre il testo.
 
 ## 3. I valori
 
@@ -169,6 +175,8 @@ le esportazioni di Mermaid usano.
 - **`marker-start`, `marker-mid`, `marker-end`:** `none` o `url(#id)` di un
   `marker`, su `path`, `line`, `polyline` e `polygon`, dove i browser li
   disegnano. Su ogni altro elemento rendono estraneo l'elemento.
+- **`href` e `xlink:href` di un `textPath`:** `#id` di un tracciato delle
+  risorse, e uno solo dei due ([testo](scene-format-text.md), §5).
 - **`clip-path`, `mask`, `filter`:** `none` o `url(#id)` di un `clipPath`, di
   una `mask` o di un `filter`, su forme, testi, immagini, gruppi,
   collegamenti e livelli. Le funzioni dei filtri di CSS, come `blur(4px)`,
@@ -239,7 +247,8 @@ non cambiano mai natura per un'operazione su un altro elemento.
   estraneo, è `in-use`. Le risorse estranee si tolgono come ogni blocco
   estraneo.
 - **`set`** su una risorsa la riscrive (§8) e deve lasciarla modificabile;
-  non ne cambia il tag. **`move`** sposta una risorsa soltanto fra le `defs`
+  non ne cambia il tag; un `set` del `d` di un tracciato sposta i testi che
+  lo seguono. **`move`** sposta una risorsa soltanto fra le `defs`
   modificabili della radice: altrove cambierebbe ruolo, ed è `invalid-elem`.
   **`ident`** non toglie l'id a una risorsa usata, `in-use`; a una che non
   lo è sì, e la risorsa diventa estranea.
@@ -277,6 +286,8 @@ riscritture.
 - **Un lettore che non conosce le risorse** vede estranee la `defs` e gli
   oggetti che la usano, li disegna come strati immagine e li conserva byte
   per byte: per questo la versione resta 1.
-- **`symbol`, `use` e `textPath`** restano estranei. Entreranno nel formato
+- **Un lettore che conosce le risorse ma non i tracciati** vede estranei il
+  `path` nella `defs` e il testo che lo segue, e li conserva byte per byte.
+- **`symbol` e `use`** restano estranei. Entreranno nel formato
   con gli strumenti che li creano e li spostano: così la superficie non
   incontra un oggetto modificabile che non sa misurare.

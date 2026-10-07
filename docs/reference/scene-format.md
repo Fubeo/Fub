@@ -84,12 +84,12 @@ Radice di un documento nuovo:
 | `circle` | `cx cy r` | letto e modificato; la superficie crea ellissi |
 | `line` | `x1 y1 x2 y2` | linea |
 | `polyline`, `polygon` | `points` | letti e modificati |
-| `text` con figli `tspan` | `x y`; ogni riga è un `tspan` con `x` e `dy`, e i suoi [pezzi](scene-format-text.md) | testo |
+| `text` con figli `tspan`, o con un `textPath` | `x y`; ogni riga è un `tspan` con `x` e `dy`, e i suoi [pezzi](scene-format-text.md); `fub:wrap` per il [testo in area](scene-format-text.md#4-il-testo-in-area); un solo `textPath` per il [testo su tracciato](scene-format-text.md#5-il-testo-su-tracciato) | testo |
 | `image` | `x y width height href preserveAspectRatio` | immagine incorporata o del vault |
 | `g` | — | livello o gruppo |
 | `a` | `href` | collegamento a un documento del vault |
 | `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto; il primo `title` di un oggetto è il suo nome |
-| `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere e filtri |
+| `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere, filtri e i tracciati dei testi |
 
 **Attributi di presentazione ammessi:**
 
@@ -153,8 +153,8 @@ Radice di un documento nuovo:
   del vault, con la regola di `href` di `a`, che la superficie mostra con la
   risoluzione dei media della shell. Un'immagine remota non si carica mai: al
   suo posto c'è un segnaposto.
-- **`xlink:href`:** equivale a `href`, con le stesse regole, solo su `image` e
-  `a`. Se un elemento li ha tutti e due vale `href`, come in SVG 2.
+- **`xlink:href`:** equivale a `href` su `image`, `a` e `textPath` ([testo](scene-format-text.md)).
+  Con tutti e due vale `href`, come in SVG 2; un `textPath` ne vuole uno solo.
 
 ### Regola di classificazione
 
@@ -165,7 +165,7 @@ un riferimento a una [risorsa](scene-format-resources.md) modificabile.
 - Per `g`, `a` e la `defs` della radice la regola vale per ogni figlio da sé: un
   livello con un figlio estraneo resta modificabile e contiene un blocco estraneo.
 - Per gli altri elementi l'elemento è un'unità con i suoi figli. Un `text` è
-  modificabile solo se tutti i suoi figli sono `tspan` ammessi ([testo](scene-format-text.md)).
+  modificabile solo coi figli `tspan` ammessi, o un `textPath` ([testo](scene-format-text.md)).
 - `title` e `desc` sono figli ammessi di qualunque elemento modificabile.
 - I nodi di testo fatti solo di spazi fra gli elementi non sono né modificabili
   né estranei: si conservano e non contano per la classificazione.
@@ -342,9 +342,9 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    sta sulla stessa riga del tag, coi pezzi della riga.
 2. **Ordine degli attributi:**
    1. `id`;
-   2. `fub:layer`, `fub:role`, `fub:tool`, `fub:shape`, `fub:geom`,
-      `fub:locked`, `fub:at`, `fub:brush`;
-   3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d`;
+   2. `fub:layer`, `fub:role`, `fub:tool`, `fub:shape`, `fub:geom`, `fub:wrap`,
+      `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
+   3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
       stroke-linejoin stroke-dasharray opacity display font-family font-size font-weight
       font-style letter-spacing text-decoration text-anchor preserveAspectRatio`;
@@ -397,7 +397,7 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
 |---|---|
 | `<title>` della radice | heading di livello 1 e voce di `outline` |
 | `<desc>` della radice | paragrafo |
-| ogni `text`, in ordine di documento | paragrafo, con le righe unite da uno spazio |
+| ogni `text`, in ordine di documento | paragrafo, con le righe unite da uno spazio, o da niente dove un testo in area spezza una parola |
 | `a` con `href` verso il vault | collegamento: backlink e grafo valgono anche per i disegni |
 | `image` con percorso del vault | collegamento con `embed` (le immagini in data URI si contano soltanto) |
 | documento intero | blocco custom `fub.scene.summary` |
@@ -420,7 +420,7 @@ Il blocco `fub.scene.summary` porta in `attrs`:
 - `bbox`: il rettangolo degli elementi modificabili visibili, in coordinate
   della radice dopo ogni `transform`, senza la carta né lo spessore del tratto;
   i tracciati contano per i punti estremi delle curve, i testi per i punti
-  d'ancoraggio; i valori si arrotondano al centesimo (§7);
+  d'ancoraggio o per il tracciato che seguono; i valori si arrotondano al centesimo (§7);
 - `sections`: il titolo, se non è vuoto. È la sola sezione nominata del
   disegno, ed è il disegno intero: `![[disegno#Titolo]]` lo incorpora tutto, e
   un altro nome non è una sezione.
