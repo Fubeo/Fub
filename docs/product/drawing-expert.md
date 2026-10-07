@@ -24,8 +24,7 @@ campo. Le regole stanno in `apps/client/src/editors/spatial/tools/attributes.ts`
 il pannello in `apps/client/src/editors/spatial/tools/inspector.ts`.
 
 - **Le righe** sono l'id e gli attributi scritti, nell'ordine canonico del
-  formato, coi valori come sono scritti: le entità risolte, le unità
-  com'erano.
+  formato, coi valori come sono scritti: le entità risolte, le unità com'erano.
 - **Un valore si cambia** scrivendolo e premendo `Invio`, o lasciando il
   campo; una scelta, come `stroke-linecap` o il carattere di un testo, parte
   quando si fa. Si scrive come lo scrive FubDraw: un colore `#rrggbb` o
@@ -77,27 +76,28 @@ scelti. Le scelte sono di tre gruppi:
 - gli estremi: piatti, arrotondati, quadrati;
 - gli angoli: vivi, arrotondati, smussati.
 
-Le regole stanno in `apps/client/src/editors/spatial/tools/outline.ts`.
+Le regole stanno in `apps/client/src/editors/spatial/tools/outline.ts`. Dopo gli
+angoli vengono i profili dello [spessore variabile](drawing-width.md#i-profili).
 
-- **Un contorno è di una forma**: rettangoli, ellissi, cerchi, linee,
-  spezzate, poligoni, percorsi e frecce, con un `stroke` che si vede. Un
-  gruppo o un collegamento passano la scelta alle forme che contengono. Un
-  tratto a penna è tutto riempimento, e un testo o un'immagine non hanno
-  contorno; se fra gli oggetti scelti non c'è un contorno, il menu lo dice.
+- **Un contorno è di una forma**: rettangoli, ellissi, cerchi, linee, spezzate,
+  poligoni, percorsi e frecce, con un `stroke` che si vede. Un gruppo o un
+  collegamento passano la scelta alle forme che contengono. Un tratto a penna è
+  tutto riempimento, e un testo o un'immagine non hanno contorno; se fra gli
+  oggetti scelti non c'è un contorno, il menu lo dice. Una linea a spessore
+  variabile ha estremi e angoli, non il tratteggio.
 - **Il menu segna ciò che i contorni scelti hanno tutti**, e niente dove sono
   diversi. Un tratteggio che non è del menu, scritto da un altro programma o
   dagli attributi, c'è come «Su misura», segnato e spento, col suo valore.
-- **Il tratteggio si misura in spessori**, così è uguale su un contorno
-  sottile e su uno grosso: trattini di quattro spessori e spazi di tre, punti
-  di uno spessore ogni tre. Un estremo arrotondato o quadrato allunga ogni
-  trattino di mezzo spessore per parte, e il tratteggio lo toglie: i punti
-  diventano tondi o quadrati, e la misura che si vede resta. Per la stessa
-  ragione cambiare gli estremi riscrive un tratteggio del menu; uno su misura
-  resta com'è.
+- **Il tratteggio si misura in spessori**, così è uguale su un contorno sottile
+  e su uno grosso: trattini di quattro spessori e spazi di tre, punti di uno
+  spessore ogni tre. Un estremo arrotondato o quadrato allunga ogni trattino di
+  mezzo spessore per parte, e il tratteggio lo toglie: i punti diventano tondi o
+  quadrati, e la misura che si vede resta. Per la stessa ragione cambiare gli
+  estremi riscrive un tratteggio del menu; uno su misura resta com'è.
 - **Il file resta corto**: un valore che l'oggetto prenderebbe comunque, dal
   gruppo che lo contiene o da SVG, si toglie invece di scriversi.
 - **Ogni scelta è un passo**, che si annulla col suo nome: «Tratteggio»,
-  «Estremi del contorno» o «Angoli del contorno».
+  «Estremi del contorno», «Angoli del contorno» o «Profilo dello spessore».
 
 ## Trasforma
 

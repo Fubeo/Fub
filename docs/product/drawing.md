@@ -327,11 +327,10 @@ da solo, e nella barra «Disponi» lo fa «Apri», col suo nome. L'albero degli
 oggetti dice dove porta un collegamento: «Collegamento a «Ciclo dell'acqua»,
 2 oggetti».
 
-In Lettura l'immagine non si tocca: sotto la descrizione la riga
-«Collegamenti» ha un pulsante per ogni documento a cui il disegno porta, col
-suo nome. Un indirizzo del web non porta nel vault, e non ha segno né
-pulsante. Un documento che non si apre, per esempio perché non c'è più, lo
-dice con un avviso.
+In Lettura l'immagine non si tocca: sotto la descrizione la riga «Collegamenti» ha
+un pulsante per ogni documento a cui il disegno porta, col suo nome. Un indirizzo
+del web non porta nel vault, e non ha segno né pulsante. Un documento che non si
+apre, per esempio perché non c'è più, lo dice con un avviso.
 
 Chi monta l'editor sceglie e apre i documenti con `links`; senza, il disegno
 non ha segni né «Collega a una nota…», e un collegamento si toglie lo stesso.
@@ -341,8 +340,9 @@ non ha segni né «Collega a una nota…», e un collegamento si toglie lo stess
 L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
-strumento Nodi, la penna di Bézier con la Curvatura e le Forbici: [Disegni,
-livello Esperto](drawing-expert.md), [curve e tagli](drawing-curves.md).
+strumento Nodi, la penna di Bézier con la Curvatura, le Forbici e lo
+Spessore: [Disegni, livello Esperto](drawing-expert.md), [curve e
+tagli](drawing-curves.md), [spessore variabile](drawing-width.md).
 
 ## Il livello Personalizzato
 

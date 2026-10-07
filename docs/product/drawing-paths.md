@@ -49,6 +49,9 @@ modifica.
 - **Testi, immagini e tratti a penna restano come sono**, come le forme
   senza contorno: il comando lo dice. Il tratto a penna è già una forma
   piena; per i suoi nodi c'è «Inchiostro in tracciato».
+- **Una linea a [spessore variabile](drawing-width.md)** è già il suo
+  contorno pieno: diventa il tracciato che si vede, con lo stesso id e gli
+  stessi attributi, senza la linea centrale e il profilo.
 - **Un contorno troppo intricato**, come un tratteggio di decine di
   migliaia di trattini, resta com'è, e lo si dice.
 - **È un passo solo**, «Contorno in tracciato», e la selezione resta quella.
@@ -146,6 +149,8 @@ scrive; **Annulla**, o `Esc`, lascia tutto com'era.
 - **I tratti a penna restano**: la penna li ridisegna dall'inchiostro. Per
   semplificarli li si fa prima tracciati con «Inchiostro in tracciato», e la
   barra lo ricorda.
+- **Una linea a spessore variabile** semplifica la sua linea centrale, e il
+  profilo la segue: il contorno si rifà dalla linea nuova.
 - **È un passo solo**, «Semplifica», e la selezione resta quella.
 
 ## Dalla tastiera e con un lettore di schermo
