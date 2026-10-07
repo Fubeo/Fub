@@ -11,7 +11,7 @@
 // della sorgente non arriva al documento vivo nemmeno un nodo.
 
 import type { Measures } from "./accessibility";
-import { index as analyzeIndex, truncatedSummary, type Index, type Summary } from "./analysis";
+import { index as analyzeIndex, truncatedSummary, type Excerpt, type Index, type Summary } from "./analysis";
 import { classifyDocument, type Item } from "./classify";
 import { diagnostic, sortDiagnostics, type Diagnostic } from "./diagnostics";
 import { parseGuides, parseUnits } from "./rulers";
@@ -35,6 +35,10 @@ export const MAX_ELEMENTS = 50_000;
 /// più si apre e si modifica, e non ne riceve altre (formato della scena,
 /// risorse).
 export const MAX_RESOURCES = 10_000;
+
+/// Quante tavole riceve un documento, al più: uno che ne ha di più si apre e
+/// si modifica, e non ne riceve altre (formato della scena, tavole).
+export const MAX_BOARDS = 1_000;
 
 /// Che documento è: con `fub:version` sulla radice, o un SVG qualunque che
 /// la superficie mostra inerte e adotta con «Modifica» (§2).
@@ -239,6 +243,7 @@ export function auditScene(source: string): Audit {
   let items: readonly Item[] = [];
   let summary: Summary;
   let measures: Measures = { contrasts: [], sizes: [] };
+  let boards: readonly Excerpt[] = [];
   if (truncated) {
     summary = truncatedSummary(status === "foreign", version);
   } else {
@@ -246,9 +251,10 @@ export function auditScene(source: string): Audit {
     for (const found of classified.diagnostics) diagnostics.push(found);
     summary = classified.tally.finish(status === "foreign", version, diagnostics);
     measures = classified.tally.measures;
+    boards = classified.tally.boards;
     items = classified.items;
   }
-  const index = analyzeIndex(doc, diagnostics);
+  const index = analyzeIndex(doc, diagnostics, boards);
   sortDiagnostics(diagnostics);
   const scene: Scene = {
     status,

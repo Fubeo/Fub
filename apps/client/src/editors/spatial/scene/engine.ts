@@ -22,7 +22,7 @@ import { decodeInk, inkToQuantized, unknownChannels } from "../ink/codec";
 import { pf1 } from "../ink/pf1";
 import { InkError } from "../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
-import { isContainer } from "./analysis";
+import { isContainer, len } from "./analysis";
 import { classifyChild, describe, isResourceTag, NO_RESOURCES, resourceKind, type Details, type Item, type Place, type Resolve } from "./classify";
 import { sceneOperation } from "./diff";
 import { DEFS_ID, isNewId, type IdKind } from "./ids";
@@ -72,7 +72,7 @@ import {
   type Target,
   type TextLine,
 } from "./ops";
-import { MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, openSource, readScene, type ReadOnly, type Status } from "./read";
+import { MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, openSource, readScene, type ReadOnly, type Status } from "./read";
 import { parseGuides, parseUnits } from "./rulers";
 import {
   attributeName,
@@ -313,6 +313,24 @@ function roleOf(node: ElementPart): string | null {
   return node.details === null ? null : node.details.role;
 }
 
+/// Vero per la carta della pagina: una carta senza `fub:board` (formato della
+/// scena, tavole).
+function isPagePaper(node: ElementPart): boolean {
+  return node.details !== null && node.details.role === "paper" && node.details.board === undefined;
+}
+
+/// Che cosa è, fra tavole e carte, un elemento nuovo con questo tag e questi
+/// `fub:role` e `fub:board`, figlio della radice se `top`; rifiuta una carta
+/// che non è di una tavola o non sta sotto la radice (formato della scena,
+/// tavole).
+function sheetOf(tag: string, role: string | undefined, board: string | undefined, top: boolean): "board" | "paper" | null {
+  if (role === "paper") {
+    if (!top || tag !== "rect" || board === undefined) reject("invalid-elem", "una carta nuova è di una tavola, sotto la radice");
+    return "paper";
+  }
+  return top && tag === "view" && role === "board" ? "board" : null;
+}
+
 /// Vero se un elemento è `title` o `desc` di SVG.
 function isMeta(node: ElementPart): boolean {
   return node.facts.uri === SVG_NS && (node.facts.local === "title" || node.facts.local === "desc");
@@ -334,7 +352,13 @@ function chain(ops: readonly Op[]): BatchOp {
   return label === undefined ? { op: "batch", ops: out } : { op: "batch", ops: out, label };
 }
 
-const ID_NAMES: Readonly<Record<IdKind, string>> = { object: "un oggetto", layer: "un livello", resource: "una risorsa" };
+const ID_NAMES: Readonly<Record<IdKind, string>> = {
+  object: "un oggetto",
+  layer: "un livello",
+  resource: "una risorsa",
+  board: "una tavola",
+  paper: "la carta di una tavola",
+};
 
 /// Vero se un elemento di tag `tag` è una risorsa: un `path` lo è come figlio
 /// di una `defs` (`inDefs`), il tracciato di un testo.
@@ -346,8 +370,10 @@ function isResource(tag: string, inDefs: boolean): boolean {
 /// forma degli id nuovi, tranne `title`, `desc`, `tspan` e `textPath`. Una
 /// risorsa l'ha nella forma delle risorse e una `defs` è quella di FubDraw;
 /// ciò che sta dentro una risorsa può non averlo, e se l'ha è nella forma
-/// delle risorse. `inDefs` dice se l'elemento è figlio di una `defs`.
-function checkNewId(tag: string, id: string | undefined, layer: boolean, inResource: boolean, inDefs: boolean): void {
+/// delle risorse. `inDefs` dice se l'elemento è figlio di una `defs`;
+/// `sheet` se è una tavola o la carta di una tavola (formato della scena,
+/// tavole).
+function checkNewId(tag: string, id: string | undefined, layer: boolean, inResource: boolean, inDefs: boolean, sheet: "board" | "paper" | null = null): void {
   if (id === undefined) {
     if (!inResource && tag !== "title" && tag !== "desc" && tag !== "tspan" && tag !== "textPath") reject("invalid-elem", `${tag} senza id`);
     return;
@@ -356,7 +382,7 @@ function checkNewId(tag: string, id: string | undefined, layer: boolean, inResou
     if (id !== DEFS_ID) reject("invalid-elem", `una defs nuova ha l'id ${DEFS_ID}: ${JSON.stringify(id)}`);
     return;
   }
-  const kind: IdKind = inResource || isResource(tag, inDefs) ? "resource" : layer ? "layer" : "object";
+  const kind: IdKind = inResource || isResource(tag, inDefs) ? "resource" : layer ? "layer" : (sheet ?? "object");
   if (!isNewId(id, kind)) reject("invalid-elem", `id non valido per ${ID_NAMES[kind]}: ${JSON.stringify(id)}`);
 }
 
@@ -503,6 +529,11 @@ export class SceneEngine {
   /// Le `defs` di FubDraw che hanno perso un figlio: la raccolta toglie
   /// quella rimasta vuota.
   private emptied = new Set<ContainerNode>();
+  /// Le tavole che l'operazione tocca, con quelle delle carte che tocca, e
+  /// gli id delle carte: la coerenza le guarda alla fine (formato della
+  /// scena, tavole).
+  private boards = new Set<string>();
+  private papers = new Set<string>();
   /// Vero mentre si applica un'inversa del motore: il limite delle
   /// operazioni di un `batch` vale per ciò che arriva, e l'inversa di un
   /// `add` grande toglie i suoi elementi uno per uno.
@@ -588,13 +619,17 @@ export class SceneEngine {
     this.touched = new Set();
     this.duplicate = false;
     this.emptied = new Set();
+    this.boards = new Set();
+    this.papers = new Set();
     // La raccolta guarda soltanto i riferimenti che toglie questa operazione.
     tree.orphans();
+    const boards = this.boardCount();
     let forward: Op = op;
     let inverse: Op;
     try {
       inverse = this.run(op);
       const { removes, restores } = this.collect();
+      if (!this.inverse) this.checkBoards(boards);
       if (removes.length > 0) {
         forward = chain([op, ...removes]);
         inverse = chain([...restores.reverse(), inverse]);
@@ -836,11 +871,13 @@ export class SceneEngine {
     return container.details?.locked === true || this.lockedAbove(container);
   }
 
-  /// I controlli comuni su un elemento da cambiare: niente carta, niente
-  /// contenitori bloccati sopra e, se `editable`, niente estranei. Un
-  /// elemento bloccato si cambia: è così che si sblocca.
-  private guard(node: ElementPart, editable: boolean): void {
-    if (roleOf(node) === "paper") reject("locked", "la carta cambia solo con page");
+  /// I controlli comuni su un elemento da cambiare: niente carta della
+  /// pagina, niente contenitori bloccati sopra e, se `editable`, niente
+  /// estranei. Un elemento bloccato si cambia: è così che si sblocca. La
+  /// carta di una tavola si cambia (formato della scena, tavole); con
+  /// `pagePaper` passa anche quella della pagina, e la controlla chi chiama.
+  private guard(node: ElementPart, editable: boolean, pagePaper = false): void {
+    if (!pagePaper && isPagePaper(node)) reject("locked", "la carta della pagina cambia solo con page");
     if (this.lockedAbove(node)) reject("locked", "l'elemento sta in un livello o in un gruppo bloccato");
     if (editable && node.details === null) reject("foreign", "l'elemento è estraneo");
   }
@@ -853,6 +890,85 @@ export class SceneEngine {
 
   private touch(node: ElementPart): void {
     for (const id of idsIn(node)) this.touched.add(id);
+  }
+
+  // -------------------------------------------------------------------------
+  // Le tavole (formato della scena, tavole).
+  // -------------------------------------------------------------------------
+
+  /// Annota `node`, se è una tavola o una carta della radice: la coerenza
+  /// guarda la tavola, o quella della carta, alla fine dell'operazione. Si
+  /// chiama prima di cambiare `node`, e dopo averlo aggiunto.
+  private sheet(node: ElementPart): void {
+    if (node.parent !== this.t.model.root || node.details === null) return;
+    const id = node.facts.id;
+    if (node.details.role === "board" && id !== null) this.boards.add(id);
+    if (node.details.role !== "paper") return;
+    if (node.details.board !== undefined) this.boards.add(node.details.board);
+    if (id !== null) this.papers.add(id);
+  }
+
+  /// Quante tavole ha il documento.
+  private boardCount(): number {
+    let count = 0;
+    for (const child of elementChildren(this.t.model.root)) if (roleOf(child) === "board") count++;
+    return count;
+  }
+
+  /// La coerenza delle tavole, alla fine di un'operazione: ogni tavola
+  /// toccata, o di una carta toccata, ha al più una carta, con la sua
+  /// geometria; ogni carta toccata, o di quelle tavole, rimanda a una tavola
+  /// che c'è; in un disegno con le tavole nessuna carta toccata è senza
+  /// tavola, e nessuna lo è dopo la prima tavola. Un file già fuori regola
+  /// altrove si modifica lo stesso. `before` sono le tavole di prima.
+  private checkBoards(before: number): void {
+    if (this.boards.size === 0 && this.papers.size === 0) return;
+    const root = this.t.model.root;
+    const boards = new Map<string, ElementPart>();
+    const papers = new Map<string, ElementPart[]>();
+    const free: ElementPart[] = [];
+    let count = 0;
+    for (const child of elementChildren(root)) {
+      const role = roleOf(child);
+      if (role === "board") {
+        count++;
+        if (!boards.has(child.facts.id!)) boards.set(child.facts.id!, child);
+      } else if (role === "paper") {
+        const board = child.details!.board;
+        if (board === undefined) free.push(child);
+        else papers.set(board, [...(papers.get(board) ?? []), child]);
+      }
+    }
+    if (count > MAX_BOARDS && count > before) reject("limit", `il documento supererebbe ${MAX_BOARDS} tavole`);
+    const involved = new Set(this.boards);
+    for (const id of this.papers) {
+      const paper = this.t.element(id);
+      if (paper === null || paper.parent !== root || roleOf(paper) !== "paper") continue;
+      const board = paper.details!.board;
+      if (board === undefined) {
+        if (count > 0) reject("invalid-elem", `la carta ${id} non ha una tavola in un disegno con le tavole`);
+      } else {
+        involved.add(board);
+      }
+    }
+    if (before === 0 && count > 0 && free.length > 0) {
+      reject("invalid-elem", "con la prima tavola la carta della pagina diventa la sua");
+    }
+    for (const id of involved) {
+      const own = papers.get(id) ?? [];
+      const board = boards.get(id);
+      if (board === undefined) {
+        if (own.length > 0) reject("invalid-elem", `una carta rimanda alla tavola ${id}, che non c'è`);
+        continue;
+      }
+      if (own.length > 1) reject("invalid-elem", `la tavola ${id} ha più di una carta`);
+      const paper = own[0];
+      if (paper === undefined) continue;
+      const element = this.reread(paper).element;
+      const box = board.details!.box!;
+      const rect = [len(element, "x") ?? 0, len(element, "y") ?? 0, len(element, "width") ?? 0, len(element, "height") ?? 0];
+      if (rect.some((v, i) => v !== box[i])) reject("invalid-elem", `la carta della tavola ${id} non ha la sua geometria`);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1074,13 +1190,17 @@ export class SceneEngine {
     const children = elementChildren(parent);
     if (pos.first === true) {
       // `first` viene dopo titolo e descrizione che stanno in testa e, sotto
-      // la radice, dopo le `defs` modificabili e la carta che li seguono: in
-      // fondo all'ordine visivo, non prima dei metadati. Una `defs` va
-      // subito dopo titolo e descrizione, prima della carta.
+      // la radice, dopo le `defs` modificabili, le carte e le tavole che li
+      // seguono: in fondo all'ordine visivo, non prima dei metadati. Una
+      // `defs` va subito dopo titolo e descrizione, prima della carta.
       const root = parent === model.root && !defs;
+      const head = (child: ElementPart): boolean => {
+        const role = roleOf(child);
+        return role === "defs" || role === "paper" || role === "board";
+      };
       let anchor: ElementPart | null = null;
       for (const child of children) {
-        if (!isMeta(child) && !(root && (roleOf(child) === "defs" || roleOf(child) === "paper"))) break;
+        if (!isMeta(child) && !(root && head(child))) break;
         anchor = child;
       }
       return anchor === null ? line({ owner: parent, index: 0, split: 0 }, inner()) : after(anchor);
@@ -1237,11 +1357,11 @@ export class SceneEngine {
         const key = named.get(`${uri} ${local}`);
         return key === undefined ? undefined : attrs[key];
       };
-      if (get(FUB_NS, "role") === "paper") reject("invalid-elem", "la carta nasce solo col documento");
+      const sheet = sheetOf(tag, get(FUB_NS, "role"), get(FUB_NS, "board"), top && underRoot);
       const layer = tag === "g" && get(FUB_NS, "layer") !== undefined;
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
       const id = get("", "id");
-      checkNewId(tag, id, layer, inResource, inDefs);
+      checkNewId(tag, id, layer, inResource, inDefs, sheet);
       if (id !== undefined) {
         if (ids.has(id) || (!top && this.t.has(id))) reject("duplicate-id", `id già usato: ${id}`);
         ids.add(id);
@@ -1338,6 +1458,7 @@ export class SceneEngine {
     this.checkResources([node], true);
     this.place(to, [node]);
     this.touch(node);
+    this.sheet(node);
     return { op: "remove", target: this.targetOf(node) };
   }
 
@@ -1394,7 +1515,10 @@ export class SceneEngine {
     const to = this.destination(parent, pos, nodes.every((node) => roleOf(node) === "defs"));
     for (const node of nodes) this.checkNesting(node, parent);
     this.place(to, parts);
-    for (const node of nodes) this.touch(node);
+    for (const node of nodes) {
+      this.touch(node);
+      this.sheet(node);
+    }
     // Dall'ultimo al primo: togliere un elemento non sposta i percorsi di
     // quelli che lo precedono.
     const removes = nodes.map((node): Op => ({ op: "remove", target: this.targetOf(node) })).reverse();
@@ -1419,10 +1543,10 @@ export class SceneEngine {
         if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) continue;
         this.checkValue(tag, doc.namespaces[attr.ns]!, attr.local, attr.value);
       }
-      if (valueOf(element, NS_FUB, "role") === "paper") reject("invalid-elem", "la carta nasce solo col documento");
+      const sheet = sheetOf(tag, valueOf(element, NS_FUB, "role"), valueOf(element, NS_FUB, "board"), top && underRoot);
       const layer = tag === "g" && valueOf(element, NS_FUB, "layer") !== undefined;
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
-      checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource, inDefs);
+      checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource, inDefs, sheet);
       const tool = valueOf(element, NS_FUB, "tool");
       if (tag !== "path" || (tool !== "pen" && tool !== "highlighter")) return;
       const d = this.stroke(valueOf(element, NS_FUB, "ink"), valueOf(element, NS_FUB, "brush"));
@@ -1496,6 +1620,7 @@ export class SceneEngine {
     const used = this.usedOutside(node);
     if (used !== null) reject("in-use", `qualcosa fuori da ciò che si toglie usa ${used}`);
     this.touch(node);
+    this.sheet(node);
     const raw = rawOf(node);
     const { anchor, gap } = this.detach(node);
     return { op: "add", slot: this.slotOf(anchor), gap, raw };
@@ -1513,6 +1638,7 @@ export class SceneEngine {
     this.checkResources([node], false);
     this.insertAt(this.pointOf(anchor), op.gap, [node]);
     this.touch(node);
+    this.sheet(node);
     return { op: "remove", target: this.targetOf(node) };
   }
 
@@ -1564,6 +1690,7 @@ export class SceneEngine {
     const oldIndent = indentOf(model, node);
     const raw = rawOf(node);
     this.touch(node);
+    this.sheet(node);
     const { anchor, gap } = this.detach(node);
     const to = destination();
     const owner = to.kind === "point" ? to.point.owner : to.parent;
@@ -1591,7 +1718,8 @@ export class SceneEngine {
     if (typeof op.id !== "string" || !isRecord(op.attrs)) reject("invalid-elem", "set non valido");
     if (op.id === ROOT) return this.setRoot(op.attrs);
     const node = this.target(op.id);
-    this.guard(node, true);
+    this.guard(node, true, true);
+    this.sheet(node);
     const { fragment, element, scope } = this.reread(node);
     const doc = fragment.doc;
     const changes = new Map<string, Change>();
@@ -1610,7 +1738,18 @@ export class SceneEngine {
       const change = changes.get(`${uri} ${local}`);
       return change !== undefined ? (change.value ?? undefined) : written(uri, local)?.value;
     };
-    if (current(FUB_NS, "role") === "paper") reject("invalid-elem", "la carta nasce solo col documento");
+    // La carta della pagina diventa quella di una tavola con `fub:board` e
+    // nient'altro; quella di una tavola cambia in geometria e tavola
+    // (formato della scena, tavole).
+    const paper = roleOf(node) === "paper";
+    if (paper) {
+      const allowed = isPagePaper(node) ? [`${FUB_NS} board`] : [" x", " y", " width", " height", `${FUB_NS} board`];
+      const outside = [...changes.keys()].find((key) => !allowed.includes(key));
+      if (outside !== undefined) reject("locked", `la carta cambia solo con page, o in geometria e tavola: ${changes.get(outside)!.key}`);
+      if (isPagePaper(node) && changes.get(`${FUB_NS} board`)?.value === null) reject("locked", "la carta della pagina cambia solo con page");
+    } else if (current(FUB_NS, "role") === "paper") {
+      reject("invalid-elem", "una carta nasce con add");
+    }
     if (isSvg(element, "g") && current(FUB_NS, "layer") !== undefined && node.parent !== this.t.model.root) {
       reject("invalid-elem", "un livello sta solo sotto la radice");
     }
@@ -1646,7 +1785,7 @@ export class SceneEngine {
       }));
       const problem = this.problem(built);
       if (problem !== null) reject("invalid-elem", problem);
-      if (roleOf(built) === "paper") reject("invalid-elem", "la carta nasce solo col documento");
+      if ((roleOf(built) === "paper") !== paper) reject("invalid-elem", "una carta nasce con add");
     }
     // Un gruppo cambia anche come si vedono i suoi figli.
     this.touch(node);
@@ -1841,6 +1980,7 @@ export class SceneEngine {
       reject("missing-target", id === null ? "l'elemento non ha un id da togliere" : "l'elemento ha già un id");
     }
     this.guard(node, true);
+    this.sheet(node);
     const old = node.facts.id;
     // Senza id una risorsa è estranea, e chi la usa con lei (§2).
     if (id === null && roleOf(node) === "resource" && this.t.referrers(old!) > 0) reject("in-use", `qualcosa usa ${old}`);
@@ -1865,7 +2005,7 @@ export class SceneEngine {
       patched = `${raw.slice(0, at)} id="${escapeAttribute(id)}"${raw.slice(at)}`;
     }
     if (node.kind === "container") this.setHead(node, patched, node.tail);
-    else this.replaceLeaf(node, patched);
+    else this.sheet(this.replaceLeaf(node, patched));
     this.touched.add(id ?? old!);
     return { op: "ident", path: [...path], tag, id: id === null ? old : null };
   }
@@ -1876,7 +2016,9 @@ export class SceneEngine {
 
   private page(op: Record<string, unknown>): Op {
     const root = this.t.model.root;
-    const papers = elementChildren(root).filter((child) => roleOf(child) === "paper");
+    // Le carte delle tavole hanno la geometria delle loro tavole (formato
+    // della scena, tavole).
+    const papers = elementChildren(root).filter(isPagePaper);
     const value = (element: ElementNode, local: string): string | null => valueOf(element, NS_NONE, local) ?? null;
     const rootElement = this.reread(root).element;
     const firstPaper = papers[0] === undefined ? null : this.reread(papers[0]).element;

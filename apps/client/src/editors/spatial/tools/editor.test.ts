@@ -59,8 +59,8 @@ function mount(source = SOURCE, options: DrawEditorOptions = {}): DrawEditor {
 
 const surface = (): HTMLElement => host.querySelector<HTMLElement>(".draw-surface")!;
 /// Ciò che l'editor ha detto per ultimo, dalla sua regione viva: l'albero ha
-/// la sua riga di stato.
-const spoken = (): string => (host.querySelector('.sr-only[role="status"]')?.textContent ?? "").trim();
+/// la sua riga di stato, e l'elenco delle tavole la sua.
+const spoken = (): string => (host.querySelector('.draw-editor > .sr-only[role="status"]')?.textContent ?? "").trim();
 
 /// Un trascinamento col mouse, sullo schermo: la camera parte dall'identità,
 /// quindi i punti sono anche quelli della scena.
@@ -361,7 +361,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -1522,6 +1522,26 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(fit.querySelector(".menu-description")!.textContent).toBe("Il disegno è vuoto.");
     fit.click();
     expect(changes).toEqual([]);
+  });
+
+  it("un disegno con le sole tavole porta la pagina attorno alle tavole", () => {
+    mount(
+      doc(
+        '<rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="400" height="200" fill="#fafafa"/>' +
+          '<rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="480" y="0" width="400" height="200" fill="#fafafa"/>' +
+          '<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><title>Copertina</title></view>' +
+          '<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>' +
+          `${LAYER}</g>`,
+      ),
+      { level: "standard" },
+    );
+    pageButton().click();
+    const fit = entry("Adatta la pagina al disegno");
+    expect(fit.hasAttribute("aria-disabled")).toBe(false);
+    expect(fit.querySelector(".menu-description")).toBeNull();
+    fit.click();
+    expect(editor.engine.text).toContain('viewBox="-20 -20 920 240"');
+    expect(spoken()).toBe("Pagina adattata: 920 × 240.");
   });
 
   it("«?» elenca i tasti della griglia, e le frecce dicono dove vanno con l'aggancio", async () => {
@@ -3749,12 +3769,14 @@ describe("da tastiera", () => {
       "Poligono · dal livello Standard",
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
+      "Tavole · dal livello Standard",
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
+      "Elenco delle tavole · dal livello Standard",
       "Cronologia · dal livello Standard",
       "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
@@ -3769,7 +3791,7 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
     // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
@@ -3787,25 +3809,50 @@ describe("da tastiera", () => {
     ]);
     expect(tables[4]!.rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
     expect(tables[5]!.rows).toEqual([["Shift", "Tenuto, la forma dal tratto resta regolare"]]);
-    expect(tables[7]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[8]!.rows).toEqual([
+    // Le tavole, tutte dallo Standard: i passi fra loro valgono con ogni
+    // strumento, il resto con lo strumento Tavola.
+    expect(tables[7]!.rows).toEqual([
+      ["Alt+PgUp o Alt+PgDn", "Va alla tavola prima o dopo, e la inquadra"],
+      ["Tab o Shift+Tab", "Con lo strumento Tavola, la tavola dopo o prima"],
+      ["Home o End", "Con lo strumento Tavola, la prima o l’ultima tavola"],
+      ["←↑→↓", "Con lo strumento Tavola, sposta la tavola scelta di 1, con Maiusc di 10, con ciò che ci sta sopra"],
+      ["Ctrl+←↑→↓", "Con lo strumento Tavola, allarga o stringe la tavola scelta, o la pagina, di 1, con Maiusc di 10"],
+      ["Ctrl+D", "Con lo strumento Tavola, duplica la tavola scelta, o la pagina, con ciò che ci sta sopra"],
+      ["Del", "Con lo strumento Tavola, elimina la tavola scelta; il disegno resta"],
+      ["F2", "Con lo strumento Tavola, rinomina la tavola scelta"],
+      ["Esc", "Con lo strumento Tavola, lascia la tavola scelta"],
+      ["Shift", "Tenuto all’inizio del trascinamento: disegna una tavola anche dentro un’altra"],
+      ["Alt", "Tenuto mentre si sposta una tavola: ne lascia una copia dove la si posa, con ciò che ci sta sopra"],
+    ]);
+    expect(tables[8]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[9]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
     // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
-    expect(tables[11]!.rows).toEqual([
+    expect(tables[12]!.rows).toEqual([
       ["4", "Ruota la vista a sinistra"],
       ["6", "Ruota la vista a destra"],
       ["5", "Raddrizza la vista"],
       ["Shift+F10", "Apre il menu radiale: strumenti, colori, annulla"],
     ]);
     // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[12]!.rows).toEqual([
+    expect(tables[13]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
-    // La cronologia, tutta dallo Standard.
-    expect(tables[13]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
+    // L'elenco delle tavole e la cronologia, tutti dallo Standard.
+    expect(tables[14]!.rows).toEqual([
+      ["↑ o ↓ o Home o End", "Nell’elenco delle tavole, la tavola prima o dopo, la prima o l’ultima"],
+      ["Enter o Space", "Nell’elenco delle tavole, porta alla tavola"],
+      ["F2", "Nell’elenco delle tavole, cambia il nome della tavola"],
+      ["Ctrl+D", "Nell’elenco delle tavole, duplica la tavola col suo contenuto"],
+      ["Alt+↑ o Alt+↓", "Nell’elenco delle tavole, sposta la tavola prima o dopo la sua vicina"],
+      ["Del", "Nell’elenco delle tavole, elimina la tavola"],
+      ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
+      ["Esc", "Dall’elenco delle tavole torna al foglio"],
+    ]);
+    expect(tables[15]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -9618,11 +9665,13 @@ describe("il livello Personalizzato", () => {
       "Poligono · dal livello Standard",
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
+      "Tavole · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
+      "Elenco delle tavole · dal livello Standard",
       "Cronologia · dal livello Standard",
       "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
@@ -9635,8 +9684,8 @@ describe("il livello Personalizzato", () => {
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[14]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[16]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
@@ -10663,5 +10712,392 @@ describe("«Ricalca immagine», dal livello Esperto", () => {
     await vi.waitFor(() => expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere."));
     expect(bar().hidden).toBe(true);
     expect(cover()).toBeNull();
+  });
+});
+
+describe("le tavole, dal livello Standard", () => {
+  const SQUARE = "oa1a1a1a1";
+  /// Due tavole 400 × 200, la seconda a 80 unità dalla prima, con un
+  /// quadrato sopra.
+  const BOARDS = doc(
+    "<title>Ciclo</title>" +
+      '<rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="400" height="200" fill="#fafafa"/>' +
+      '<rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="480" y="0" width="400" height="200" fill="#fafafa"/>' +
+      '<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><title>Copertina</title></view>' +
+      '<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>' +
+      `${LAYER}<rect id="${SQUARE}" x="600" y="50" width="20" height="20" fill="#000000"/></g>`,
+  ).replace('viewBox="0 0 100 100"', 'viewBox="0 0 1024 256"');
+
+  const names = (): Array<[string | null, boolean]> =>
+    [...host.querySelectorAll<HTMLElement>(".draw-sheet-name")].map((name) => [name.textContent, name.hasAttribute("data-chosen")]);
+  const boarding = (source = BOARDS): void => {
+    mount(source, { level: "standard" });
+    size(1000, 500);
+    key("f");
+  };
+  const boardsButton = (): HTMLButtonElement | null => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Tavole"]');
+  const boardsList = (): HTMLElement => host.querySelector<HTMLElement>('.draw-boards [role="listbox"]')!;
+  /// Le righe dell'elenco, dall'alto: il nome e la misura, e `*` su quella
+  /// di adesso.
+  const boardRows = (): string[] =>
+    [...host.querySelectorAll<HTMLElement>('.draw-boards [role="option"]')]
+      .sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index))
+      .map((item) => `${item.querySelector(".draw-board-name")!.textContent} ${item.querySelector(".draw-board-size")!.textContent}${item.getAttribute("aria-current") === "true" ? " *" : ""}`);
+  /// Dove stanno le carte delle tavole sullo schermo.
+  const sheets = (): string[] => [...host.querySelectorAll<HTMLElement>(".draw-sheets .draw-page")].map((sheet) => sheet.style.transform);
+
+  it("F sceglie lo strumento e la tavola che si guarda, e lascia la selezione", () => {
+    mount(BOARDS, { level: "standard" });
+    size(1000, 500);
+    editor.select([SQUARE]);
+    expect(names()).toEqual([["Copertina", false], ["Evaporazione", false]]);
+    key("f");
+    expect(editor.tool).toBe("board");
+    expect(editor.selection).toEqual([]);
+    expect(spoken()).toBe("Strumento: Tavola. Copertina, tavola 1 di 2, 400 × 200.");
+    expect(names()).toEqual([["Copertina", true], ["Evaporazione", false]]);
+    expect(host.querySelectorAll(".draw-sheets .draw-page")).toHaveLength(2);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("un trascinamento fuori dalle tavole ne disegna una, e con Maiusc anche dentro", () => {
+    boarding();
+    drag([[100, 300], [150, 350], [300, 420]]);
+    expect(spoken()).toBe("Tavola 3 aggiunta, 200 × 120.");
+    expect(editor.engine.text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="100 300 200 120">\s*<title>Tavola 3<\/title>\s*<\/view>/);
+    expect(names().map(([name, chosen]) => [name, chosen])).toEqual([["Copertina", false], ["Evaporazione", false], ["Tavola 3", true]]);
+    // Senza Maiusc, dentro una tavola si sposta lei.
+    drag([[50, 50], [100, 100], [150, 120]], { shiftKey: true });
+    expect(spoken()).toBe("Tavola 4 aggiunta, 100 × 70.");
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("spostare una tavola porta con sé ciò che le sta sopra, e annulla la riporta", () => {
+    boarding();
+    drag([[600, 150], [620, 170], [650, 200]]);
+    expect(spoken()).toBe("Evaporazione spostata a x 530, y 50, con 1 oggetto.");
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="530 50 400 200">');
+    expect(editor.engine.text).toContain('<rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="530" y="50" width="400" height="200" fill="#fafafa"/>');
+    expect(names()).toEqual([["Copertina", false], ["Evaporazione", true]]);
+    expect(editor.selection).toEqual([]);
+    editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("una maniglia del bordo allarga la tavola scelta", () => {
+    boarding();
+    drag([[400, 100], [420, 100], [440, 100]]);
+    expect(spoken()).toBe("Copertina, 440 × 200.");
+    expect(editor.engine.text).toContain('<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 440 200">');
+    expect(editor.engine.text).toContain('x="0" y="0" width="440" height="200" fill="#fafafa"/>');
+  });
+
+  it("da tastiera si va di tavola in tavola, si sposta, si allarga e si toglie", () => {
+    boarding();
+    key("Tab");
+    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
+    // Oltre l'ultima, il Tab esce dal foglio.
+    expect(key("Tab").defaultPrevented).toBe(false);
+    key("ArrowRight");
+    expect(spoken()).toBe("Evaporazione spostata a x 481, y 0, con 1 oggetto.");
+    key("ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("Evaporazione, 400 × 210.");
+    key("Home");
+    expect(spoken()).toBe("Copertina, tavola 1 di 2, 400 × 200.");
+    key("Delete");
+    expect(spoken()).toBe("Copertina eliminata; il disegno resta com’era. Evaporazione, tavola 1 di 1, 400 × 210.");
+    expect(names()).toEqual([["Evaporazione", true]]);
+    key("Escape");
+    expect(spoken()).toBe("Nessuna tavola scelta.");
+    expect(names()).toEqual([["Evaporazione", false]]);
+    editor.undo();
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("Alt e Pag vanno di tavola in tavola con ogni strumento", () => {
+    mount(BOARDS, { level: "standard" });
+    size(1000, 500);
+    key("PageDown", { altKey: true });
+    expect(spoken()).toBe("Copertina, tavola 1 di 2, 400 × 200.");
+    key("PageDown", { altKey: true });
+    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
+    key("PageDown", { altKey: true });
+    expect(spoken()).toBe("Evaporazione è l’ultima tavola.");
+    expect(editor.tool).toBe("pen");
+  });
+
+  it("senza tavole sceglie la pagina, e la prima tavola disegnata la fa diventare la tavola 1", () => {
+    boarding(SOURCE);
+    expect(spoken()).toBe("Strumento: Tavola. Pagina, 100 × 100. Disegna una tavola per dividere il disegno in pagine.");
+    drag([[200, 20], [250, 50], [300, 90]]);
+    expect(spoken()).toBe("La pagina è diventata Tavola 1; Tavola 2 aggiunta, 100 × 70.");
+    expect(names()).toEqual([["Tavola 1", false], ["Tavola 2", true]]);
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("con Alt, spostare una tavola ne lascia una copia dove la si posa, con ciò che le sta sopra", () => {
+    boarding();
+    const target = surface();
+    const at = (type: string, x: number, y: number, altKey: boolean): void => {
+      const buttons = type === "pointerup" ? 0 : 1;
+      target.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons, pressure: buttons * 0.5, clientX: x, clientY: y, altKey, timeStamp: (clock += 8) }));
+    };
+    at("pointerdown", 600, 150, true);
+    at("pointermove", 600, 300, true);
+    // La tavola resta dov'è; la cornice della copia dice dove andrà.
+    expect(target.dataset.grip).toBe("copy");
+    expect(sheets()).toEqual(["translate(0px, 0px)", "translate(480px, 0px)"]);
+    // Alt lasciato a metà gesto: la tavola si sposta, e lo si vede.
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
+    expect(target.dataset.grip).toBe("move");
+    expect(sheets()).toEqual(["translate(0px, 0px)", "translate(480px, 150px)"]);
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true, bubbles: true }));
+    expect(target.dataset.grip).toBe("copy");
+    expect(sheets()).toEqual(["translate(0px, 0px)", "translate(480px, 0px)"]);
+    at("pointermove", 600, 450, true);
+    at("pointerup", 600, 450, true);
+    // La copia si aggancia anche alla tavola da cui viene.
+    expect(spoken()).toBe("Evaporazione copia aggiunta a x 480, y 300, con 1 oggetto. Agganciato: il bordo sinistro in linea con quello di Evaporazione.");
+    const text = editor.engine.text;
+    expect(text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>');
+    expect(text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="480 300 400 200">\s*<title>Evaporazione copia<\/title>\s*<\/view>/);
+    expect(text).toMatch(/<rect id="o[0-9a-z]{8}" x="600" y="50" width="20" height="20" fill="#000000" transform="matrix\(1 0 0 1 0 300\)"\/>/);
+    expect(text).toContain(`<rect id="${SQUARE}" x="600" y="50" width="20" height="20" fill="#000000"/>`);
+    expect(names()).toEqual([["Copertina", false], ["Evaporazione", false], ["Evaporazione copia", true]]);
+    editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("Ctrl+D con lo strumento Tavola duplica la tavola scelta accanto, con ciò che le sta sopra", () => {
+    boarding();
+    key("Tab");
+    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(spoken()).toBe("Evaporazione copia aggiunta a x 960, y 0, con 1 oggetto.");
+    const text = editor.engine.text;
+    // La copia sta subito dopo la sua tavola, con la sua carta.
+    expect(text).toMatch(/<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione<\/title><\/view>\s*<view id="b[0-9a-z]{8}" fub:role="board" viewBox="960 0 400 200">/);
+    expect(text).toMatch(/<rect id="c[0-9a-z]{8}" fub:role="paper" fub:board="b[0-9a-z]{8}" x="960" y="0" width="400" height="200" fill="#fafafa"\/>/);
+    expect(text).toMatch(/<rect id="o[0-9a-z]{8}" x="600" y="50" width="20" height="20" fill="#000000" transform="matrix\(1 0 0 1 480 0\)"\/>/);
+    expect(names()).toEqual([["Copertina", false], ["Evaporazione", false], ["Evaporazione copia", true]]);
+    // Ancora: la copia della copia va più in là.
+    key("d", { ctrlKey: true });
+    expect(spoken()).toBe("Evaporazione copia copia aggiunta a x 1440, y 0, con 1 oggetto.");
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+    key("Escape");
+    key("d", { ctrlKey: true });
+    expect(spoken()).toBe("Nessuna tavola scelta.");
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("senza tavole, Ctrl+D duplica la pagina, che prima diventa la tavola 1", () => {
+    boarding(SOURCE);
+    key("d", { ctrlKey: true });
+    expect(spoken()).toBe("La pagina è diventata Tavola 1. Tavola 1 copia aggiunta a x 180, y 0, con 1 oggetto.");
+    expect(names()).toEqual([["Tavola 1", false], ["Tavola 1 copia", true]]);
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("il pulsante Tavole apre l'elenco, che segna la tavola di adesso e porta alle altre", () => {
+    mount(BOARDS, { level: "standard" });
+    size(1000, 500);
+    expect(boardsButton()!.hidden).toBe(false);
+    boardsButton()!.click();
+    expect(boardsButton()!.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(boardsList());
+    // Senza una tavola scelta, quella di adesso è quella che si guarda.
+    expect(boardRows()).toEqual(["Copertina 400 × 200 *", "Evaporazione 400 × 200"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    key("ArrowDown", {}, boardsList());
+    key("Enter", {}, boardsList());
+    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
+    expect(boardRows()).toEqual(["Copertina 400 × 200", "Evaporazione 400 × 200 *"]);
+    expect(document.activeElement).toBe(boardsList());
+    // Esc torna al foglio; il pulsante chiude l'elenco.
+    key("Escape", {}, boardsList());
+    expect(document.activeElement).toBe(surface());
+    boardsButton()!.click();
+    expect(host.querySelector<HTMLElement>(".draw-boards")!.hidden).toBe(true);
+  });
+
+  it("dall'elenco si aggiungono, si rinominano, si riordinano, si duplicano e si eliminano le tavole", () => {
+    mount(BOARDS, { level: "standard" });
+    size(1000, 500);
+    boardsButton()!.click();
+    host.querySelector<HTMLButtonElement>(".draw-boards-add")!.click();
+    // Della misura di quella di adesso, a destra di tutte; il nome si scrive
+    // subito.
+    expect(spoken()).toBe("Tavola 3 aggiunta, 400 × 200.");
+    expect(editor.engine.text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="960 0 400 200">\s*<title>Tavola 3<\/title>/);
+    const name = host.querySelector<HTMLInputElement>(".draw-boards .draw-board-rename")!;
+    expect(document.activeElement).toBe(name);
+    name.value = "Condensazione";
+    key("Enter", {}, name);
+    expect(spoken()).toBe("Ora la tavola si chiama «Condensazione».");
+    expect(boardRows()).toEqual(["Copertina 400 × 200", "Evaporazione 400 × 200", "Condensazione 400 × 200 *"]);
+    key("ArrowUp", { altKey: true }, boardsList());
+    expect(spoken()).toBe("Condensazione ora è la tavola 2 di 3.");
+    expect(boardRows()).toEqual(["Copertina 400 × 200", "Condensazione 400 × 200 *", "Evaporazione 400 × 200"]);
+    key("d", { ctrlKey: true }, boardsList());
+    expect(spoken()).toBe("Condensazione copia aggiunta a x 1440, y 0.");
+    expect(boardRows()).toEqual(["Copertina 400 × 200", "Condensazione 400 × 200", "Condensazione copia 400 × 200 *", "Evaporazione 400 × 200"]);
+    key("Delete", {}, boardsList());
+    expect(spoken()).toBe("Condensazione copia eliminata; il disegno resta com’era. Evaporazione, tavola 3 di 3, 400 × 200.");
+    expect(boardRows()).toEqual(["Copertina 400 × 200", "Condensazione 400 × 200", "Evaporazione 400 × 200 *"]);
+    // Con l'elenco aperto, F2 sul foglio apre il nome lì.
+    key("f");
+    key("F2");
+    expect(document.activeElement).toBe(host.querySelector(".draw-boards .draw-board-rename"));
+    expect(document.querySelector(".modale")).toBeNull();
+    key("Escape", {}, host.querySelector<HTMLElement>(".draw-boards .draw-board-rename")!);
+    for (let step = 0; step < 5; step++) editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("in un disegno senza pagina, «Nuova tavola» ne mette una attorno a ciò che c'è", () => {
+    const loose = SOURCE.replace(' viewBox="0 0 100 100"', "");
+    mount(loose, { level: "standard" });
+    size(1000, 500);
+    boardsButton()!.click();
+    expect(host.querySelector(".draw-boards-empty")!.textContent).toBe(
+      "Il disegno non ha una pagina: è un foglio senza bordi. Con «Nuova tavola» una tavola racchiude tutto ciò che c’è.",
+    );
+    host.querySelector<HTMLButtonElement>(".draw-boards-add")!.click();
+    expect(spoken()).toBe("Tavola 1 aggiunta, 22 × 22.");
+    expect(editor.engine.text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="59 59 22 22">\s*<title>Tavola 1<\/title>/);
+    expect(boardRows()).toEqual(["Tavola 1 22 × 22 *"]);
+    editor.undo();
+    expect(editor.engine.text).toBe(loose);
+  });
+
+  /// Il pannello delle proprietà, aperto, e i suoi campi.
+  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
+  const propertySection = (id: string): HTMLElement => properties().querySelector<HTMLElement>(`.draw-properties-section[data-section="${id}"]`)!;
+  const subject = (): string | null => properties().querySelector(".draw-properties-subject")!.textContent;
+  const preset = (id: string): HTMLSelectElement => property(id).querySelector("select")!;
+  const choosePreset = (id: string, value: string): void => {
+    preset(id).value = value;
+    preset(id).dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const orientations = (id: string): Array<string | null> => [...property(id).querySelectorAll("button")].map((button) => button.getAttribute("aria-pressed"));
+  /// Vero se il pannello mostra il campo `id`: un campo entra nel pannello
+  /// la prima volta che ha di che mostrarsi.
+  const showing = (id: string): boolean => {
+    const field = properties().querySelector<HTMLElement>(`.draw-properties-field[data-field="${id}"]`);
+    return field !== null && !field.hidden;
+  };
+  /// Scrive `text` nel campo `id` del pannello e lo fa partire con Invio.
+  const writeProperty = (id: string, text: string): void => {
+    const input = propertyInput(id);
+    input.focus();
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  };
+
+  it("il pannello delle proprietà mostra la tavola scelta, e la segue", () => {
+    boarding();
+    openProperties();
+    expect(subject()).toBe("Tavola 1 di 2");
+    expect(propertySection("board").hidden).toBe(false);
+    expect(propertyInput("boardName").value).toBe("Copertina");
+    expect(preset("boardPreset").value).toBe("custom");
+    expect(orientations("boardOrientation")).toEqual(["false", "true"]);
+    expect(["boardX", "boardY", "boardWidth", "boardHeight"].map((id) => propertyInput(id).value)).toEqual(["0", "0", "400", "200"]);
+    // Con le tavole la pagina è la tela: non ha un formato.
+    expect(showing("pagePreset")).toBe(false);
+    expect(showing("pageWidth")).toBe(true);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    key("Tab");
+    expect(subject()).toBe("Tavola 2 di 2");
+    expect(propertyInput("boardName").value).toBe("Evaporazione");
+    expect(propertyInput("boardX").value).toBe("480");
+    // Con un altro strumento il pannello torna al disegno.
+    key("v");
+    expect(subject()).toBe("Il disegno");
+    expect(propertySection("board").hidden).toBe(true);
+  });
+
+  it("dal pannello la tavola prende una misura pronta, il verso, il posto con ciò che porta, le misure e il nome", () => {
+    boarding();
+    openProperties();
+    key("Tab");
+    choosePreset("boardPreset", "hd");
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 1280 720">');
+    expect(preset("boardPreset").value).toBe("hd");
+    property("boardOrientation").querySelector<HTMLButtonElement>('button[aria-label="Verticale"]')!.click();
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 720 1280">');
+    expect(orientations("boardOrientation")).toEqual(["true", "false"]);
+    writeProperty("boardX", "500");
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="500 0 720 1280">');
+    expect(editor.engine.text).toContain(`<rect id="${SQUARE}" x="600" y="50" width="20" height="20" fill="#000000" transform="matrix(1 0 0 1 20 0)"/>`);
+    writeProperty("boardWidth", "800");
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="500 0 800 1280">');
+    expect(preset("boardPreset").value).toBe("custom");
+    writeProperty("boardName", "Retro");
+    expect(editor.engine.text).toContain("<title>Retro</title>");
+    expect(names()).toEqual([["Copertina", false], ["Retro", true]]);
+    // Un nome vuoto non cambia niente, come nell'elenco.
+    writeProperty("boardName", "  ");
+    expect(propertyInput("boardName").value).toBe("Retro");
+    for (let step = 0; step < 5; step += 1) editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("senza tavole, il pannello dà alla pagina una misura pronta e un verso", () => {
+    mount(SOURCE, { level: "standard" });
+    openProperties();
+    expect(subject()).toBe("Il disegno");
+    expect(preset("pagePreset").value).toBe("custom");
+    expect(property("pageOrientation").querySelector("button")!.getAttribute("aria-disabled")).toBe("true");
+    choosePreset("pagePreset", "a4");
+    expect(editor.engine.text).toContain('viewBox="0 0 793.7 1122.52"');
+    property("pageOrientation").querySelector<HTMLButtonElement>('button[aria-label="Orizzontale"]')!.click();
+    expect(editor.engine.text).toContain('viewBox="0 0 1122.52 793.7"');
+    expect(preset("pagePreset").value).toBe("a4");
+    expect(orientations("pageOrientation")).toEqual(["false", "true"]);
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
+  it("dall'indice una tavola si sceglie e si inquadra, e la selezione resta", () => {
+    mount(BOARDS, { level: "standard" });
+    size(1000, 500);
+    editor.select([SQUARE]);
+    const before = sheets();
+    expect(editor.reveal(BOARDS.indexOf('<view id="b9i0j1k2l"'))).toBe(true);
+    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
+    expect(sheets()).not.toEqual(before);
+    expect(editor.selection).toEqual([SQUARE]);
+    // Un oggetto si sceglie come sempre.
+    editor.select([]);
+    expect(editor.reveal(BOARDS.indexOf(`<rect id="${SQUARE}"`))).toBe(true);
+    expect(editor.selection).toEqual([SQUARE]);
+    // Il nome è dentro la tavola, e porta a lei; lo strumento Tavola la
+    // trova scelta.
+    expect(editor.reveal(BOARDS.indexOf("<title>Copertina"))).toBe(true);
+    expect(spoken()).toBe("Copertina, tavola 1 di 2, 400 × 200.");
+    key("f");
+    expect(spoken()).toBe("Strumento: Tavola. Copertina, tavola 1 di 2, 400 × 200.");
+    expect(names()).toEqual([["Copertina", true], ["Evaporazione", false]]);
+  });
+
+  it("all'Essenziale le tavole si vedono, ma lo strumento, i suoi tasti e l'elenco non ci sono", () => {
+    mount(BOARDS);
+    size(1000, 500);
+    key("f");
+    key("PageDown", { altKey: true });
+    expect(editor.tool).toBe("pen");
+    expect(spoken()).toBe("");
+    expect(names()).toEqual([["Copertina", false], ["Evaporazione", false]]);
+    expect(boardsButton()?.hidden ?? true).toBe(true);
   });
 });

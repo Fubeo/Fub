@@ -5,8 +5,10 @@
 //
 // - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Testo,
 //   Disponi, e all'Esperto Trasforma e Attributi; senza selezione Documento
-//   e Vista, e Forma se lo strumento è il Poligono. L'intestazione di una sezione è il pulsante che la apre e la
-//   chiude, e il pannello dice all'editor quali sono chiuse, che le ricorda.
+//   e Vista, Forma se lo strumento è il Poligono, e Tavola se è lo strumento
+//   Tavola con una tavola scelta. L'intestazione di una sezione è il
+//   pulsante che la apre e la chiude, e il pannello dice all'editor quali
+//   sono chiuse, che le ricorda.
 // - **Un campo misto dice «Misto»** e non ha valore: scriverlo dà il valore a
 //   tutti gli oggetti scelti, in un passo.
 // - **I numeri si calcolano** (`quantity.ts`): `120+15`, `25mm`, `50%`. Su e
@@ -36,7 +38,7 @@ import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
 
 /// Le sezioni, nell'ordine in cui si vedono.
-export type SectionId = "place" | "shape" | "look" | "text" | "arrange" | "transform" | "attributes" | "document" | "view";
+export type SectionId = "place" | "shape" | "look" | "text" | "arrange" | "transform" | "attributes" | "board" | "document" | "view";
 
 export type NumberId =
   | "x"
@@ -54,6 +56,10 @@ export type NumberId =
   | "spacing"
   | "wrap"
   | TransformId
+  | "boardX"
+  | "boardY"
+  | "boardWidth"
+  | "boardHeight"
   | "pageWidth"
   | "pageHeight";
 
@@ -61,9 +67,9 @@ export type NumberId =
 export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 
 export type PaintId = "fill" | "stroke";
-export type ChoiceId = "dash" | "cap" | "join" | "preset" | "family" | "weight" | "unit";
+export type ChoiceId = "dash" | "cap" | "join" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar";
-export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "desc";
+export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
 
 export type ActionId =
   | "align-left"
@@ -169,7 +175,16 @@ export interface TextState extends FieldBase {
   readonly value: string;
 }
 
-export type FieldState = NumberState | PaintState | ChoiceState | SwitchState | PressState | SegmentState | TogglesState | TextState;
+/// Un testo di una riga, come un nome: parte con Invio, o lasciando il
+/// campo.
+export interface LineState extends FieldBase {
+  readonly kind: "line";
+  readonly value: string;
+  /// Quanti caratteri al più.
+  readonly max?: number;
+}
+
+export type FieldState = NumberState | PaintState | ChoiceState | SwitchState | PressState | SegmentState | TogglesState | TextState | LineState;
 
 /// Un comando: il nome, e perché adesso non si usa.
 export interface ActionState {
@@ -274,6 +289,15 @@ const SPECS: readonly Spec[] = [
   { id: "scaleY", kind: "number", section: "transform", column: "2" },
   { id: "skewX", kind: "number", section: "transform", column: "1" },
   { id: "skewY", kind: "number", section: "transform", column: "2" },
+  { id: "boardName", kind: "line", section: "board", column: "all" },
+  { id: "boardPreset", kind: "choice", section: "board", column: "all" },
+  { id: "boardOrientation", kind: "segment", section: "board", column: "all" },
+  { id: "boardX", kind: "number", section: "board", column: "1" },
+  { id: "boardY", kind: "number", section: "board", column: "2" },
+  { id: "boardWidth", kind: "number", section: "board", column: "1" },
+  { id: "boardHeight", kind: "number", section: "board", column: "2" },
+  { id: "pagePreset", kind: "choice", section: "document", column: "all" },
+  { id: "pageOrientation", kind: "segment", section: "document", column: "all" },
   { id: "pageWidth", kind: "number", section: "document", column: "1" },
   { id: "pageHeight", kind: "number", section: "document", column: "2" },
   { id: "unit", kind: "choice", section: "document", column: "all" },
@@ -294,6 +318,7 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "arrange", label: "draw.properties.arrange" },
   { id: "transform", label: "draw.properties.transform" },
   { id: "attributes", label: "draw.attributes" },
+  { id: "board", label: "draw.properties.board_section" },
   { id: "document", label: "draw.properties.document_section" },
   { id: "view", label: "draw.view" },
 ];
@@ -363,6 +388,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-text-underline": ["M7 4v7a5 5 0 0 0 10 0V4", "M5 20h14"],
   "draw-text-strike": ["M4 12h16", "M16 7.5C15.4 6 13.8 5 12 5c-2.2 0-4 1.2-4 3 0 1.3.8 2.1 2 2.6", "M8 16.5c.6 1.5 2.2 2.5 4 2.5 2.2 0 4-1.2 4-3 0-.7-.2-1.2-.6-1.6"],
   "draw-ratio": ["M9 8V6.5a3 3 0 0 1 6 0V8", "M9 16v1.5a3 3 0 0 0 6 0V16", "M12 10v4"],
+  "draw-portrait": ["M7 3h10v18H7z"],
+  "draw-landscape": ["M3 7h18v10H3z"],
   "draw-section": ["M8 10l4 4 4-4"],
 };
 
@@ -717,6 +744,15 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         control = select;
         break;
       }
+      case "line": {
+        const input = textInput();
+        input.spellcheck = true;
+        input.setAttribute("autocapitalize", "sentences");
+        name = labelFor(input);
+        root.append(name, input, note, error);
+        control = input;
+        break;
+      }
       case "text": {
         const area = document.createElement("textarea");
         area.className = "draw-properties-input";
@@ -1026,6 +1062,15 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     (line.control as HTMLTextAreaElement).readOnly = !view.editable || state.disabled === true;
   };
 
+  const paintOneLine = (line: Line, state: LineState, fresh: boolean): void => {
+    const input = line.control as HTMLInputElement;
+    line.name.textContent = state.label;
+    if (state.max === undefined) input.removeAttribute("maxlength");
+    else input.maxLength = state.max;
+    showText(line, state.value, fresh);
+    input.readOnly = !view.editable || state.disabled === true;
+  };
+
   const paintLine = (line: Line, state: FieldState, fresh: boolean): void => {
     switch (state.kind) {
       case "number":
@@ -1051,6 +1096,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       case "text":
         paintText(line, state, fresh);
+        break;
+      case "line":
+        paintOneLine(line, state, fresh);
         break;
     }
     line.state = state;
@@ -1172,11 +1220,12 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     return send(line, value, paintShown(value), loud);
   }
 
+  /// Scrive il testo di `line`, di più righe o di una, se è cambiato.
   const commitText = (line: Line, loud: boolean): boolean => {
-    const state = line.state as TextState | null;
-    const area = line.control as HTMLTextAreaElement;
-    if (state === null || !view.editable || state.disabled === true || area.value === line.shown) return true;
-    return send(line, area.value, area.value, loud);
+    const state = line.state as TextState | LineState | null;
+    const control = line.control as HTMLTextAreaElement | HTMLInputElement;
+    if (state === null || !view.editable || state.disabled === true || control.value === line.shown) return true;
+    return send(line, control.value, control.value, loud);
   };
 
   /// Una scelta, o un interruttore, parte quando si fa.
@@ -1293,7 +1342,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     return line !== undefined && line.control === target ? line : null;
   };
 
-  const writes = (line: Line): boolean => line.spec.kind === "number" || line.spec.kind === "paint" || line.spec.kind === "text";
+  const writes = (line: Line): boolean => line.spec.kind === "number" || line.spec.kind === "paint" || line.spec.kind === "text" || line.spec.kind === "line";
 
   life.listen(element, "keydown", (event) => {
     const line = lineOf(event.target);
@@ -1319,6 +1368,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         applyTransform();
       } else if (line.spec.kind === "number") {
         commitNumber(line, true);
+      } else if (line.spec.kind === "line") {
+        commitText(line, true);
       } else {
         commitPaint(line, (line.control as HTMLInputElement).value, true);
       }
@@ -1349,7 +1400,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (line === null || isDraft(line) || line.root.hidden) return;
     if (line.spec.kind === "number") commitNumber(line, false);
     else if (line.spec.kind === "paint") commitPaint(line, (line.control as HTMLInputElement).value, false);
-    else if (line.spec.kind === "text") commitText(line, false);
+    else if (line.spec.kind === "text" || line.spec.kind === "line") commitText(line, false);
   });
 
   // Un pulsante preso col puntatore non prende il fuoco: resta al foglio,

@@ -26,6 +26,8 @@ export interface Opened {
   opens(container: ContainerNode): boolean;
   /// Il riquadro di tutto il disegno di adesso.
   extent(): Bounds | null;
+  /// Gli oggetti che una tavola porta con sé, adesso.
+  movable(): Unit[];
   /// I collegamenti che si vedono adesso, a ogni profondità.
   links(): Unit[];
   /// Il riquadro della miniatura dell'elemento di id `id`, adesso.
@@ -56,13 +58,17 @@ export function open(source: string): Opened {
     builder.build(engine);
     return indexer.links(engine.model!);
   };
+  const movable = (): Unit[] => {
+    builder.build(engine);
+    return indexer.movable(engine.model!);
+  };
   const frame = (id: string): Bounds | null => {
     builder.build(engine);
     const node = engine.holder(id);
     if (node === null) throw new Error(`nessun elemento ${id}`);
     return indexer.frameOf(engine.model!, node);
   };
-  return { engine, index: reindex(), reindex, seen, opens, extent, links, frame };
+  return { engine, index: reindex(), reindex, seen, opens, extent, links, movable, frame };
 }
 
 /// Le proprietà che [`appearance`] guarda, oltre a trasformazione e opacità.

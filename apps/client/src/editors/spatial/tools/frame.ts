@@ -31,7 +31,7 @@
 
 import type { InkPointerType } from "../pen/pen-input";
 import type { Bounds } from "../scene/geometry";
-import { apply, compose, invert, type Matrix, type Point } from "../scene/matrix";
+import { apply, compose, IDENTITY, invert, type Matrix, type Point } from "../scene/matrix";
 import { boxMatrix } from "./edit";
 import { lineBeyond, snapValue } from "./grid";
 import { nearer, type GuideIndex } from "./guides";
@@ -219,6 +219,24 @@ export function frameView(frame: Frame, scale: number): FrameView | null {
   const reach = ROTATE_PX / scale;
   spots.push({ grip: "rotate", at: [stem[0] + normal[0] * reach, stem[1] + normal[1] * reach] });
   return { frame, padded, spots, stem, size };
+}
+
+/// La cornice di `box`, un rettangolo dritto della scena come una tavola,
+/// vista a `scale` pixel per unità: le maniglie stanno sui suoi bordi, senza
+/// margine, perché il bordo è quello del foglio, e non ruota. Un lato corto
+/// sullo schermo ha soltanto gli angoli. `null` se la scala non è positiva.
+export function edgeView(box: Bounds, scale: number): FrameView | null {
+  if (!(scale > 0)) return null;
+  const size: [number, number] = [extent(box, 0) * scale, extent(box, 1) * scale];
+  const [cx, cy] = center(box);
+  const spots: GripSpot[] = [];
+  for (const grip of RESIZE_GRIPS) {
+    if (!isCorner(grip) && size[pull(grip, 0) !== 0 ? 1 : 0] < SIDE_PX) continue;
+    const x = pull(grip, 0) < 0 ? box.min[0] : pull(grip, 0) > 0 ? box.max[0] : cx;
+    const y = pull(grip, 1) < 0 ? box.min[1] : pull(grip, 1) > 0 ? box.max[1] : cy;
+    spots.push({ grip, at: [x, y] });
+  }
+  return { frame: { matrix: IDENTITY, box, geometry: box }, padded: box, spots, stem: [cx, box.min[1]], size };
 }
 
 /// La maniglia sotto il punto `p` della scena, o `null`: la più vicina fra

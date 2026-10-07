@@ -169,6 +169,7 @@ describe("l'indice e il riepilogo (§9)", () => {
       foreign: false,
       truncated: false,
       layers: ["Schizzo", "Forme"],
+      boards: [],
       counts: { strokes: 3, shapes: 5, texts: 1, images: 1, links: 1, foreign: 2 },
       ink: { samples: 5, duration: 540 },
       // L'ellisse di raggio 1 intorno all'origine; la carta no.
@@ -215,6 +216,21 @@ describe("l'indice e il riepilogo (§9)", () => {
     expect(bbox('<path d=""/>')).toBeNull();
   });
 
+  it("una tavola senza nome si chiama col suo id, e la carta va con lei", () => {
+    const body =
+      '<rect id="c1" fub:role="paper" fub:board="b1" x="0" y="0" width="10" height="5"/>' +
+      '<view id="b1" fub:role="board" viewBox="0 0 10 5"><title> \n </title></view>' +
+      '<view id="b2" fub:role="board" viewBox="20 0 10 5"><title/><title>Due</title></view>' +
+      '<defs><view id="b3" fub:role="board" viewBox="0 0 1 1"/></defs>';
+    const scene = load(doc(body));
+    expect(scene.summary.boards).toEqual(["b1", "b2"]);
+    expect(scene.index.boards.map((board) => board.text)).toEqual(["b1", "b2"]);
+    // La carta di `b1` non ha da dire; la `view` nella `defs` è estranea.
+    expect(scene.diagnostics.map((d) => d.code)).toEqual(["S001", "S002"]);
+    // Una tavola non entra nel rettangolo del disegno.
+    expect(scene.summary.bbox).toBeNull();
+  });
+
   it("un file troncato si riassume dalla sua testa", () => {
     const head = doc('<title>Grande</title><desc>d</desc><g fub:layer="Uno">').slice(0, -"</svg>".length);
     const filler = "<!-- riempitivo -->".repeat(Math.floor(MAX_EDIT_BYTES / 19) + 1);
@@ -227,6 +243,7 @@ describe("l'indice e il riepilogo (§9)", () => {
       foreign: false,
       truncated: true,
       layers: [],
+      boards: [],
       counts: { strokes: 0, shapes: 0, texts: 0, images: 0, links: 0, foreign: 0 },
       ink: { samples: 0, duration: 0 },
       bbox: null,

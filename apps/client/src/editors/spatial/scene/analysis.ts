@@ -28,6 +28,7 @@ import {
   points,
   transform,
   trim,
+  viewBox,
   wrapWidth,
   type Paint,
   type Rgb,
@@ -100,7 +101,9 @@ export type Role =
   | "defs"
   /// Una risorsa modificabile di una `defs` della radice (formato della scena,
   /// risorse).
-  | "resource";
+  | "resource"
+  /// Una tavola: un `view` della radice (formato della scena, tavole).
+  | "board";
 
 /// Vero per i ruoli i cui figli si classificano uno per uno.
 export function isContainer(role: Role): boolean {
@@ -154,6 +157,9 @@ export interface Index {
   readonly links: readonly Reference[];
   /// Ogni `image` con un percorso del vault.
   readonly embeds: readonly Reference[];
+  /// Le tavole modificabili, in ordine, ciascuna col suo nome sullo span del
+  /// suo `view` (formato della scena, tavole).
+  readonly boards: readonly Excerpt[];
 }
 
 /// Quanti oggetti modificabili ha la scena, per tipo.
@@ -195,6 +201,8 @@ export interface Summary {
   readonly truncated: boolean;
   /// I nomi dei livelli, in ordine di documento.
   readonly layers: readonly string[];
+  /// I nomi delle tavole, in ordine (formato della scena, tavole).
+  readonly boards: readonly string[];
   readonly counts: Readonly<Counts>;
   readonly ink: Readonly<InkTotals>;
   /// Il rettangolo che contiene gli elementi modificabili visibili, dopo ogni
@@ -373,9 +381,44 @@ export function hundredths(v: number): number {
   return Math.floor(v * 100 + 0.5);
 }
 
+/// Una tavola com'è scritta (formato della scena, tavole).
+interface Board {
+  readonly id: string;
+  readonly name: string;
+  readonly box: readonly [number, number, number, number];
+  readonly span: Span;
+}
+
+/// Una carta: `board` è la sua tavola, `fub:board`, e `box` la sua geometria.
+interface Paper {
+  readonly id: string | null;
+  readonly board: string | null;
+  readonly box: readonly [number, number, number, number];
+  readonly span: Span;
+}
+
+/// Il nome di una tavola: il testo del suo primo `title`, con gli spazi
+/// ridotti come li disegna SVG; senza, o vuoto, il suo id (formato della
+/// scena, tavole).
+export function boardName(doc: XmlDocument, element: ElementNode): string {
+  for (const child of element.children) {
+    const node = doc.element(child);
+    if (node === null || !isSvg(node, "title")) continue;
+    const text: string[] = [];
+    textContent(doc, child, text);
+    const name = collapse(text.join(""));
+    if (name !== "") return name;
+    break;
+  }
+  return valueOf(element, NS_NONE, "id") ?? "";
+}
+
 /// Il riepilogo che si accumula durante la classificazione.
 export class Tally {
   private readonly layers: string[] = [];
+  /// Le tavole e le carte, in ordine di documento.
+  private readonly sheets: Board[] = [];
+  private readonly papers: Paper[] = [];
   private readonly counts: Counts = { strokes: 0, shapes: 0, texts: 0, images: 0, links: 0, foreign: 0 };
   private readonly ink: InkTotals = { samples: 0, duration: 0 };
   private readonly bounds = new BoundsBuilder();
@@ -418,8 +461,22 @@ export class Tally {
       case "layer":
         this.layers.push(valueOf(element, NS_FUB, "layer") ?? "");
         break;
+      case "board":
+        this.sheets.push({
+          id: valueOf(element, NS_NONE, "id")!,
+          name: boardName(doc, element),
+          box: viewBox(valueOf(element, NS_NONE, "viewBox")!)!,
+          span,
+        });
+        return;
       case "paper":
         if (this.paper === undefined) this.paper = context.paperColor();
+        this.papers.push({
+          id: valueOf(element, NS_NONE, "id") ?? null,
+          board: valueOf(element, NS_FUB, "board") ?? null,
+          box: [len(element, "x") ?? 0, len(element, "y") ?? 0, len(element, "width") ?? 0, len(element, "height") ?? 0],
+          span,
+        });
         return;
       case "stroke":
         this.counts.strokes++;
@@ -467,11 +524,43 @@ export class Tally {
     return this.legibility.measures;
   }
 
+  /// Le tavole, in ordine, col loro nome sullo span del `view`: le sezioni
+  /// del disegno (formato della scena, tavole).
+  get boards(): Excerpt[] {
+    return this.sheets.map((board) => ({ text: board.name, ...board.span }));
+  }
+
+  /// S015: le carte che non vanno con la loro tavola (formato della scena,
+  /// tavole).
+  private checkPapers(diagnostics: Diagnostic[]): void {
+    const boards = new Map<string, Board>();
+    for (const board of this.sheets) if (!boards.has(board.id)) boards.set(board.id, board);
+    const owned = new Set<string>();
+    for (const paper of this.papers) {
+      let reason: string | null = null;
+      if (paper.board === null) {
+        if (this.sheets.length > 0) reason = "free";
+      } else {
+        const board = boards.get(paper.board);
+        if (board === undefined) {
+          reason = "board";
+        } else if (owned.has(paper.board)) {
+          reason = "second";
+        } else {
+          owned.add(paper.board);
+          if (paper.box.some((v, i) => v !== board.box[i])) reason = "geometry";
+        }
+      }
+      if (reason !== null) diagnostics.push(diagnostic("S015", paper.span, paper.id === null ? reason : `${paper.id} ${reason}`));
+    }
+  }
+
   /// Chiude il conteggio: il riepilogo, più i controlli su come il disegno si
   /// legge.
   finish(foreign: boolean, version: number | null, diagnostics: Diagnostic[]): Summary {
     // Senza carta il disegno sta sul bianco della superficie (§12).
     this.legibility.finish(this.paper === undefined ? WHITE : this.paper, diagnostics);
+    this.checkPapers(diagnostics);
     const b = this.bounds.finish();
     let bbox: BBox | null = null;
     if (b !== null) {
@@ -489,6 +578,7 @@ export class Tally {
       foreign,
       truncated: false,
       layers: this.layers,
+      boards: this.sheets.map((board) => board.name),
       counts: this.counts,
       ink: this.ink,
       bbox,
@@ -503,6 +593,7 @@ export function truncatedSummary(foreign: boolean, version: number | null): Summ
     foreign,
     truncated: true,
     layers: [],
+    boards: [],
     counts: { strokes: 0, shapes: 0, texts: 0, images: 0, links: 0, foreign: 0 },
     ink: { samples: 0, duration: 0 },
     bbox: null,
@@ -736,8 +827,10 @@ function activeContent(element: ElementNode): string[] {
   return found;
 }
 
-/// Legge l'indice del documento, con S001, S005 e S006.
-export function index(doc: XmlDocument, diagnostics: Diagnostic[]): Index {
+/// Legge l'indice del documento, con S001, S005, S006 e S016. `boards` sono
+/// le tavole che la classificazione ha trovato (formato della scena,
+/// tavole).
+export function index(doc: XmlDocument, diagnostics: Diagnostic[], boards: readonly Excerpt[] = []): Index {
   const source = doc.source;
   const span = (id: NodeId): Span => {
     const node = doc.nodes[id]!;
@@ -793,11 +886,19 @@ export function index(doc: XmlDocument, diagnostics: Diagnostic[]): Index {
       }
     }
   }
+  // Un nome già del disegno o di una tavola prima: `#nome` mostra quella
+  // (S016).
+  const names = new Set<string>(title === null || title.text === "" ? [] : [title.text]);
+  for (const board of boards) {
+    if (names.has(board.text)) diagnostics.push(diagnostic("S016", { bytes: board.bytes, utf16: board.utf16 }, board.text));
+    else names.add(board.text);
+  }
   return {
     title: title !== null && title.text !== "" ? title : null,
     desc: desc !== null && desc.text !== "" ? desc : null,
     texts,
     links,
     embeds,
+    boards,
   };
 }

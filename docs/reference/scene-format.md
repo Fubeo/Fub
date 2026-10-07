@@ -48,17 +48,17 @@ Radice di un documento nuovo:
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">
 ```
 
-- `viewBox` copre il contenuto. Quando un oggetto ne esce, si allarga a passi
-  di 256 unità con l'operazione `page`; non si restringe mai da solo, e un
-  comando della superficie lo ricalcola. `width` e `height` valgono quanto le
-  dimensioni del `viewBox`.
+- `viewBox` copre il contenuto e le tavole. Quando un oggetto ne esce, si
+  allarga a passi di 256 unità con l'operazione `page`; non si restringe mai
+  da solo, e un comando della superficie lo ricalcola. `width` e `height`
+  valgono quanto le dimensioni del `viewBox`.
 - I figli della radice, in quest'ordine:
   1. `<title>`: il titolo, cambiato con l'operazione `meta`;
   2. `<desc>`, facoltativo, poi la `defs` delle [risorse](scene-format-resources.md);
   3. la carta: `<rect id="fub-paper" fub:role="paper" …/>`, con la stessa
-     geometria del `viewBox`, `fill="#ffffff"`, bloccata e non selezionabile.
-     Cambia solo con l'operazione `page`, insieme al `viewBox`. Un documento
-     adottato con «Modifica» può non averla;
+     geometria del `viewBox`, `fill="#ffffff"`, bloccata e non selezionabile;
+     cambia solo con `page`, e un documento adottato può non averla. Con le
+     [tavole](scene-format-boards.md), una carta per tavola e poi le tavole;
   4. i livelli.
 
 ## 3. Livelli e gruppi
@@ -90,6 +90,7 @@ Radice di un documento nuovo:
 | `a` | `href` | collegamento a un documento del vault |
 | `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto; il primo `title` di un oggetto è il suo nome |
 | `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere, filtri e i tracciati dei testi |
+| `view` della radice con `fub:role="board"` | `viewBox` | una [tavola](scene-format-boards.md), col nome nel suo `title` |
 
 **Attributi di presentazione ammessi:**
 
@@ -322,8 +323,8 @@ il contorno che si allarga e si stringe: [spessore variabile](scene-format-width
 
 ### Id
 
-- Oggetti: `o` seguito da 8 caratteri base36 casuali. Livelli: `l` seguito da
-  8 caratteri, risorse `r`. Carta: `fub-paper`; `defs` delle risorse: `fub-defs`.
+- Oggetti `o`, livelli `l`, risorse `r`, tavole `b`, carte delle tavole `c`,
+  seguiti da 8 caratteri base36 casuali. Carta: `fub-paper`; `defs`: `fub-defs`.
 - Un id è unico nel documento: un id casuale già usato si rigenera.
 - Un id esistente cambia solo se lo si chiede, dagli attributi del livello
   Esperto. La superficie aggiunge un id solo agli elementi che crea o modifica.
@@ -342,8 +343,8 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    sta sulla stessa riga del tag, coi pezzi della riga.
 2. **Ordine degli attributi:**
    1. `id`;
-   2. `fub:layer`, `fub:role`, `fub:tool`, `fub:shape`, `fub:geom`, `fub:wrap`,
-      `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
+   2. `fub:layer`, `fub:role`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
+      `fub:wrap`, `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
       stroke-linejoin stroke-dasharray opacity display font-family font-size font-weight
@@ -397,6 +398,7 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
 |---|---|
 | `<title>` della radice | heading di livello 1 e voce di `outline` |
 | `<desc>` della radice | paragrafo |
+| ogni [tavola](scene-format-boards.md), in ordine | heading di livello 2 col suo nome e voce di `outline`, sullo span del `view` |
 | ogni `text`, in ordine di documento | paragrafo, con le righe unite da uno spazio, o da niente dove un testo in area spezza una parola |
 | `a` con `href` verso il vault | collegamento: backlink e grafo valgono anche per i disegni |
 | `image` con percorso del vault | collegamento con `embed` (le immagini in data URI si contano soltanto) |
@@ -414,16 +416,15 @@ Gli spazi XML di titolo, descrizione e testi si riducono a uno.
 Il blocco `fub.scene.summary` porta in `attrs`:
 
 - `version`, `foreign`, `truncated`;
-- `layers`: nomi dei livelli;
+- `layers` e `boards`: nomi dei livelli e delle tavole;
 - `counts`: tratti, forme, testi, immagini, collegamenti, blocchi estranei;
 - `ink`: campioni e durata totale;
 - `bbox`: il rettangolo degli elementi modificabili visibili, in coordinate
   della radice dopo ogni `transform`, senza la carta né lo spessore del tratto;
   i tracciati contano per i punti estremi delle curve, i testi per i punti
   d'ancoraggio o per il tracciato che seguono; i valori si arrotondano al centesimo (§7);
-- `sections`: il titolo, se non è vuoto. È la sola sezione nominata del
-  disegno, ed è il disegno intero: `![[disegno#Titolo]]` lo incorpora tutto, e
-  un altro nome non è una sezione.
+- `sections`: il titolo, se non è vuoto, cioè il disegno intero, e le tavole:
+  un altro nome non è una sezione ([tavole](scene-format-boards.md), §6).
 
 Chi non conosce il blocco legge i suoi figli: titolo, descrizione e testi.
 
@@ -476,12 +477,9 @@ descrizione e riepilogo, con `truncated: true` (§11).
   maggiore di 1 apre il documento in sola lettura con S007, anche quando le
   cifre non stanno in 32 bit. Un valore che non è un intero positivo (`0`,
   `1.0`, `+1`, vuoto) apre il documento in sola lettura senza diagnostica.
-- Gli attributi `fub:*` sconosciuti si conservano, anche sugli elementi
-  riscritti (§7, punto 2).
-- Un tratto con canali di `fub:ink` sconosciuti non si può ridisegnare: si
-  sposta o si elimina soltanto (S010, informativo).
-- Una nuova versione può aggiungere elementi, attributi o canali. Non può
-  cambiare il significato di quelli esistenti.
+- Una nuova versione può aggiungere elementi, attributi o canali, che un
+  lettore di prima conserva (§7, punto 2; §8; S010), ma non cambiare il
+  significato di quelli esistenti.
 
 ## 11. Limiti
 
@@ -494,6 +492,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | Campioni per tratto | 10 000 | il tratto si divide |
 | `fub:ink` per tratto | 512 KiB | il tratto si divide; letto da un file, S004 |
 | Risorse modificabili | 10 000 | il documento si modifica, ma non ne riceve altre |
+| Tavole | 1 000 | il documento si modifica, ma non ne riceve altre |
 
 ## 12. Diagnostica
 
@@ -515,6 +514,8 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | S012 | avviso | immagine senza `title` né `desc`, e non decorativa |
 | S013 | info | testo sotto i 12 px a grandezza naturale |
 | S014 | avviso | un riferimento a un id che il documento non ha: si disegna senza la [risorsa](scene-format-resources.md) |
+| S015 | info | una carta che non va con la sua [tavola](scene-format-boards.md) |
+| S016 | avviso | il nome di una [tavola](scene-format-boards.md) è già del disegno o di una tavola prima: un riferimento a quel nome mostra l'altra |
 
 - **S001, S009, S012, S013:** come si misurano sta in
   [accessibilità](scene-format-accessibility.md).
@@ -545,5 +546,4 @@ descrizione e riepilogo, con `truncated: true` (§11).
 </svg>
 ```
 
-Il `d` del tratto è abbreviato per leggibilità; un `d` reale contiene il
-contorno completo calcolato con `pf1`.
+Il `d` del tratto è abbreviato; quello vero è il contorno calcolato con `pf1`.

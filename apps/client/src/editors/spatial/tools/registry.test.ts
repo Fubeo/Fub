@@ -28,8 +28,8 @@ describe("il registro degli strumenti", () => {
     expect(DEFAULT_TOOL).toBe("pen");
   });
 
-  it("aggiunge allo Standard il lazo accanto alla selezione, l'evidenziatore dopo la penna, il poligono dopo le forme e il testo in fondo", () => {
-    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "lasso", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "text"]);
+  it("aggiunge allo Standard il lazo e la Tavola accanto alla selezione, l'evidenziatore dopo la penna, il poligono dopo le forme e il testo in fondo", () => {
+    expect(toolsFor("standard").map((tool) => tool.id)).toEqual(["select", "lasso", "board", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "text"]);
     // Il tasto del lazo è quello di Illustrator.
     expect(toolSpec("lasso")).toMatchObject({ level: "standard", group: "pick", shortcut: "q" });
     expect(toolForKey(toolsFor("essential"), "q")).toBeNull();
@@ -38,6 +38,10 @@ describe("il registro degli strumenti", () => {
     // Il tasto del poligono è quello di CorelDRAW.
     expect(toolSpec("polygon")).toMatchObject({ level: "standard", group: "shape", shortcut: "y" });
     expect(toolForKey(toolsFor("essential"), "y")).toBeNull();
+    // Il tasto della Tavola è quello del Frame di Figma.
+    expect(toolSpec("board")).toMatchObject({ level: "standard", group: "pick", shortcut: "f" });
+    expect(toolForKey(toolsFor("essential"), "f")).toBeNull();
+    expect(toolForKey(toolsFor("standard"), "F")?.id).toBe("board");
     expect(reaches("standard", "essential")).toBe(true);
     expect(reaches("standard", "standard")).toBe(true);
     expect(reaches("standard", "expert")).toBe(false);
@@ -46,7 +50,7 @@ describe("il registro degli strumenti", () => {
 
   it("aggiunge all'Esperto i nodi e il Costruttore accanto alla selezione e la penna di Bézier dopo le forme", () => {
     expect(toolsFor("expert").map((tool) => tool.id)).toEqual([
-      "select", "lasso", "nodes", "builder", "scissors", "width", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "text",
+      "select", "lasso", "nodes", "builder", "scissors", "width", "board", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "text",
     ]);
     expect(toolSpec("nodes")).toMatchObject({ level: "expert", group: "pick", shortcut: "n" });
     expect(toolSpec("bezier")).toMatchObject({ level: "expert", group: "shape", shortcut: "b" });
@@ -82,7 +86,7 @@ describe("il registro degli strumenti", () => {
   it("elenca le parti per livello, prima gli strumenti nell'ordine della barra, ciascuna una volta", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
-      "lasso", "highlighter", "polygon", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility",
+      "lasso", "board", "highlighter", "polygon", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility",
       "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean", "trace", "typeset",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
@@ -113,6 +117,7 @@ describe("il registro degli strumenti", () => {
   it("dopo uno strumento che sceglie riprende la Selezione, dopo gli altri lo strumento di partenza", () => {
     expect(toolAfter(toolsFor("essential"), "lasso")).toBe("select");
     expect(toolAfter(toolsFor("standard"), "nodes")).toBe("select");
+    expect(toolAfter(toolsFor("standard"), "board")).toBe("select");
     expect(toolAfter(toolsFor("essential"), "highlighter")).toBe(DEFAULT_TOOL);
     expect(toolAfter(toolsOf(featuresFor("custom", ["text"])), "pen")).toBe("text");
   });

@@ -302,3 +302,15 @@ jobs:
           name: banco-fedelta-${{ github.sha }}
           path: apps/client/bench/.output/fidelity/
           include-hidden-files: true
+      - name: venti tavole si percorrono senza scatti
+        id: bench_boards
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:boards
+        working-directory: apps/client
+      - name: il referto del banco delle tavole
+        if: ${{ failure() && steps.bench_boards.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-tavole-${{ github.sha }}
+          path: apps/client/bench/.output/boards-20.json
+          include-hidden-files: true

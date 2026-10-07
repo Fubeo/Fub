@@ -43,6 +43,8 @@ let state: {
   ratio: boolean;
   grid: boolean;
   desc: string;
+  /// Il nome di una tavola, che c'è se non è `null`.
+  name: string | null;
   actions: Partial<Record<string, ActionState>>;
   transform: boolean;
   only: FieldId[] | null;
@@ -96,6 +98,7 @@ function view(): PropertiesView {
     grid: { kind: "switch", label: "Mostra la griglia", on: state.grid, note: "Le righe si vedono soltanto qui." },
     desc: { kind: "text", label: "Descrizione", value: state.desc },
   };
+  if (state.name !== null) fields.boardName = { kind: "line", label: "Nome", value: state.name, max: 20 };
   if (state.transform) {
     const draft = (label: string, value: number, unit: string): NumberState => ({ kind: "number", label, value, unit, units: { [unit]: 1 }, relative: false, places: 2 });
     Object.assign(fields, {
@@ -127,6 +130,7 @@ function change(id: FieldId, value: number | string | boolean): string | null {
   else if (id === "ratio") state.ratio = value as boolean;
   else if (id === "grid") state.grid = value as boolean;
   else if (id === "desc") state.desc = value as string;
+  else if (id === "boardName") state.name = value as string;
   panel.update(view());
   return null;
 }
@@ -193,6 +197,7 @@ beforeEach(() => {
     ratio: false,
     grid: false,
     desc: "",
+    name: null,
     actions: {},
     transform: false,
     only: null,
@@ -629,6 +634,33 @@ describe("le sezioni", () => {
     panel.update(view());
     expect(field("x").hidden).toBe(true);
     expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+});
+
+describe("il testo di una riga", () => {
+  it("parte con Invio o lasciandolo, torna com'era con Esc, e non passa la sua misura", () => {
+    state.name = "Copertina";
+    mount();
+    expect(section("board").hidden).toBe(false);
+    const name = input("boardName");
+    expect([name.tagName, name.type, name.value, name.maxLength]).toEqual(["INPUT", "text", "Copertina", 20]);
+    write(name, "Retro");
+    expect(press(name, "Enter").defaultPrevented).toBe(true);
+    expect(calls).toEqual(["boardName=Retro"]);
+    write(name, "Fronte");
+    press(name, "Escape");
+    expect(name.value).toBe("Retro");
+    write(name, "Fronte");
+    name.blur();
+    expect(calls).toEqual(["boardName=Retro", "boardName=Fronte"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("in un documento che si legge soltanto non si scrive", () => {
+    state.name = "Copertina";
+    state.editable = false;
+    mount();
+    expect(input("boardName").readOnly).toBe(true);
   });
 });
 

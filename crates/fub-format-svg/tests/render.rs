@@ -1,8 +1,9 @@
 //! L'anteprima di un disegno è un segnaposto: la figura che la shell riempie,
 //! con il titolo come didascalia, e nessun riferimento a una risorsa.
 
+use fub_abi::custom::SECTION_ATTR;
 use fub_abi::format::{DocumentSource, ParseContext, RenderOptions, RenderTarget};
-use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::model::{Block, DocId, DocumentModel};
 use fub_abi::FormatProvider;
 use fub_format_svg::SvgProvider;
 
@@ -118,4 +119,74 @@ fn a_fragment_renders_like_the_whole_model() {
     // disegno, prende il nome del file.
     assert!(render(&DocumentModel::empty(DocId::new("acqua.svg")))
         .contains("<figcaption>acqua</figcaption>"));
+}
+
+/// Il modello come lo consegna il kernel per `![[disegno#name]]`: il solo
+/// riepilogo, con la sezione scelta.
+fn section(model: &DocumentModel, name: &str) -> DocumentModel {
+    let mut selected = DocumentModel::empty(model.id.clone());
+    selected.body = model.body.clone();
+    let Block::Custom { attrs, .. } = &mut selected.body[0] else {
+        panic!("{:?}", model.body)
+    };
+    attrs[SECTION_ATTR] = serde_json::Value::String(name.to_owned());
+    selected
+}
+
+const BOARDS: &str = concat!(
+    "<title>Storia</title>",
+    r#"<view id="b00000001" fub:role="board" viewBox="0 0 10 10"><title>Copertina</title></view>"#,
+    r#"<view id="b00000002" fub:role="board" viewBox="10 0 10 10"><title>Storia</title></view>"#,
+);
+
+/// L'embed di una tavola dice quale nella figura, perché la shell mostri lei
+/// sola, e nella didascalia, dopo il titolo del disegno.
+#[test]
+fn the_embed_of_a_board_names_it() {
+    let whole = model("disegni/storia.svg", BOARDS);
+    assert_eq!(
+        render(&section(&whole, "Copertina")),
+        concat!(
+            r#"<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="disegni/storia.svg" data-embed-section="Copertina">"#,
+            "<figcaption>Storia · Copertina</figcaption></figure>",
+        )
+    );
+    // La sezione che è il titolo è il disegno intero, anche se una tavola ha
+    // lo stesso nome: il titolo viene prima.
+    assert_eq!(render(&section(&whole, "Storia")), render(&whole));
+    // Senza titolo, il nome del file e quello della tavola.
+    let untitled = model(
+        "disegni/storia.svg",
+        r#"<view id="b00000001" fub:role="board" viewBox="0 0 10 10"/>"#,
+    );
+    assert_eq!(
+        render(&section(&untitled, "b00000001")),
+        concat!(
+            r#"<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="disegni/storia.svg" data-embed-section="b00000001">"#,
+            "<figcaption>storia · b00000001</figcaption></figure>",
+        )
+    );
+}
+
+#[test]
+fn the_board_name_is_escaped_and_names_no_resource() {
+    let whole = model(
+        "a.svg",
+        concat!(
+            "<title>Album</title>",
+            r#"<view id="b00000001" fub:role="board" viewBox="0 0 10 10"><title>A &amp; &lt;b&gt; "c" 'd'</title></view>"#,
+            r#"<image href="foto/mare.png" width="1" height="1"/>"#,
+        ),
+    );
+    let html = render(&section(&whole, r#"A & <b> "c" 'd'"#));
+    assert_eq!(
+        html,
+        concat!(
+            r#"<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="a.svg" data-embed-section="A &amp; &lt;b&gt; &quot;c&quot; &#39;d&#39;">"#,
+            "<figcaption>Album · A &amp; &lt;b&gt; &quot;c&quot; &#39;d&#39;</figcaption></figure>",
+        )
+    );
+    for forbidden in ["<img", "src=", "href=", "url(", "foto/mare.png", "<svg"] {
+        assert!(!html.contains(forbidden), "{forbidden} in {html}");
+    }
 }

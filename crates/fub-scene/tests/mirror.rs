@@ -29,7 +29,11 @@
 //!   testo): due paragrafi in una cornice, con le righe che vanno a capo fra
 //!   le parole e dentro una parola, una larghezza che non si legge, due testi
 //!   su tracciato con `href` e `xlink:href`, e due estranei, un testo su
-//!   tracciato con `x` e uno che segue un tracciato con una trasformazione.
+//!   tracciato con `x` e uno che segue un tracciato con una trasformazione;
+//! - `boards`: un disegno con le tavole (formato della scena, tavole): coi
+//!   nomi, senza nome e con un nome già usato, le carte di ogni tavola, e una
+//!   carta per ogni modo di non andare con la sua tavola; un esempio di ogni
+//!   motivo per cui un `view` è estraneo.
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -1110,6 +1114,75 @@ fn text() -> String {
     document(&root, "\n")
 }
 
+fn boards() -> String {
+    let sheet = |id: &str, board: &str, rect: [u32; 4]| {
+        El::new("rect")
+            .a("id", id)
+            .a("fub:role", "paper")
+            .a("fub:board", board)
+            .a("x", rect[0])
+            .a("y", rect[1])
+            .a("width", rect[2])
+            .a("height", rect[3])
+            .a("fill", "#ffffff")
+    };
+    let board = |id: &str, view_box: &str| {
+        El::new("view")
+            .a("id", id)
+            .a("fub:role", "board")
+            .a("viewBox", view_box)
+    };
+    let root = svg(1300, 900)
+        .child(El::new("title").text("Storia"))
+        .child(sheet("fub-paper", "b00000001", [0, 0, 600, 400]))
+        .child(sheet("c00000001", "b00000002", [700, 0, 600, 400]))
+        // Le carte che non vanno con la loro tavola (S015): la seconda della
+        // stessa tavola, una di una tavola che non c'è, una con un'altra
+        // geometria e una senza tavola.
+        .child(sheet("c00000002", "b00000002", [700, 0, 600, 400]))
+        .child(sheet("c00000003", "b0000000z", [0, 500, 300, 200]))
+        .child(sheet("c00000004", "b00000003", [0, 500, 300, 250]))
+        .raw(r##"<rect fub:role="paper" x="400" y="750" width="100" height="100" fill="#ffffff"/>"##)
+        .child(board("b00000001", "0 0 600 400").child(El::new("title").text("Copertina")))
+        .child(
+            board("b00000002", "700,0,600,400")
+                .child(El::new("title").text("  Due\n  tavole "))
+                .child(El::new("desc").text("La seconda")),
+        )
+        // Senza nome: si chiama col suo id.
+        .child(board("b00000003", "0 500 300 200"))
+        // Il nome del disegno e quello di una tavola prima (S016); un
+        // attributo `fub:*` sconosciuto resta.
+        .child(
+            board("b00000004", "400 500 300 200")
+                .a("fub:note", "sì")
+                .child(El::new("title").text("Storia")),
+        )
+        .child(board("b00000005", "800 500 300 200").child(El::new("title").text("Copertina")))
+        // Estranei: senza ruolo, larga zero, con un altro attributo SVG,
+        // senza id, con un altro figlio.
+        .raw(r#"<view id="v1" viewBox="0 0 10 10"/>"#)
+        .raw(r#"<view id="b00000006" fub:role="board" viewBox="0 0 0 10"/>"#)
+        .raw(r#"<view id="b00000007" fub:role="board" viewBox="0 0 10 10" preserveAspectRatio="none"/>"#)
+        .raw(r#"<view fub:role="board" viewBox="0 0 10 10"/>"#)
+        .raw(r#"<view id="b00000008" fub:role="board" viewBox="0 0 10 10"><g/></view>"#)
+        .child(
+            layer("l00000001", "Livello 1")
+                // Una tavola sta solo nella radice.
+                .raw(r#"<view id="b00000009" fub:role="board" viewBox="0 0 10 10"/>"#)
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000001")
+                        .a("x", 40)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 100)
+                        .a("fill", "#0072b2"),
+                ),
+        );
+    document(&root, "\n")
+}
+
 #[test]
 fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
@@ -1293,6 +1366,72 @@ fn text_is_read_in_a_frame_and_along_a_path() {
     use fub_scene::Code::*;
     // Il tracciato estraneo nella `defs` e i due testi estranei.
     assert_eq!(codes, [S002, S002]);
+}
+
+#[test]
+fn boards_are_read_with_their_papers() {
+    let scene = fixture("boards", &boards());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    // Le cinque tavole, dopo il titolo e le sei carte.
+    for at in 7..12 {
+        assert_eq!(element(&[at]).map(|e| e.role), Some(Role::Board), "{at}");
+    }
+    for at in 12..17 {
+        assert!(element(&[at]).is_none(), "{at}");
+    }
+    assert!(element(&[17, 0]).is_none());
+    let second = element(&[8]).unwrap();
+    assert_eq!(second.board_box, Some([700.0, 0.0, 600.0, 400.0]));
+    assert_eq!(second.title.as_deref(), Some("  Due\n  tavole "));
+    assert!(!second.locked && !second.hidden);
+    assert_eq!(
+        element(&[1]).and_then(|e| e.board.as_deref()),
+        Some("b00000001")
+    );
+    assert_eq!(
+        element(&[6]).map(|e| (e.role, e.board.is_none())),
+        Some((Role::Paper, true))
+    );
+    assert_eq!(
+        scene.summary.boards,
+        [
+            "Copertina",
+            "Due tavole",
+            "b00000003",
+            "Storia",
+            "Copertina"
+        ]
+    );
+    let sections: Vec<_> = scene.index.boards.iter().map(|b| b.text.as_str()).collect();
+    assert_eq!(sections, scene.summary.boards);
+    assert_eq!(scene.index.boards[0].span, element(&[7]).unwrap().span);
+    // Le tavole e le carte non sono oggetti.
+    assert_eq!(scene.summary.counts.shapes, 1);
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    assert_eq!(codes, [S002, S002, S015, S015, S015, S015, S016, S016]);
+    let details: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .filter_map(|d| d.detail.as_deref())
+        .collect();
+    assert_eq!(
+        details,
+        [
+            "c00000002 second",
+            "c00000003 board",
+            "c00000004 geometry",
+            "free",
+            "Storia",
+            "Copertina"
+        ]
+    );
 }
 
 #[test]
@@ -1759,6 +1898,7 @@ fn the_folder_holds_only_what_this_test_writes() {
         "doctype",
         "resources",
         "text",
+        "boards",
     ]
     .iter()
     .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])

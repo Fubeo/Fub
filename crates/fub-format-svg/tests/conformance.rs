@@ -34,8 +34,9 @@ const CORPUS: [(&str, &str); 6] = [
 ];
 
 /// Le fixture che `fub-scene` genera per la superficie: un disegno FubDraw
-/// canonico, uno estraneo, uno con BOM e CRLF, uno con `DOCTYPE`.
-const MIRROR: [(&str, &str); 4] = [
+/// canonico, uno estraneo, uno con BOM e CRLF, uno con `DOCTYPE` e uno con
+/// tavole buone e sbagliate.
+const MIRROR: [(&str, &str); 5] = [
     (
         "sparse",
         include_str!("../../../apps/client/src/__fixtures__/scene/sparse.svg"),
@@ -52,15 +53,20 @@ const MIRROR: [(&str, &str); 4] = [
         "doctype",
         include_str!("../../../apps/client/src/__fixtures__/scene/doctype.svg"),
     ),
+    (
+        "boards",
+        include_str!("../../../apps/client/src/__fixtures__/scene/boards.svg"),
+    ),
 ];
 
 /// Le fixture del modello di questo crate.
-const FIXTURES: [(&str, &str); 2] = [
+const FIXTURES: [(&str, &str); 3] = [
     ("drawing", include_str!("fixtures/drawing.svg")),
     (
         "foreign-crlf-bom",
         include_str!("fixtures/foreign-crlf-bom.svg"),
     ),
+    ("boards", include_str!("fixtures/boards.svg")),
 ];
 
 fn parse(id: &str, source: &str) -> DocumentModel {

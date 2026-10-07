@@ -1301,6 +1301,14 @@ html, body, #app {
 .draw-surface[data-grip="rotating"] {
   cursor: grabbing;
 }
+/* Con lo strumento Tavola, sopra una tavola che si sposta, e con Alt
+   mentre se ne porta una copia. */
+.draw-surface[data-grip="move"] {
+  cursor: move;
+}
+.draw-surface[data-grip="copy"] {
+  cursor: copy;
+}
 /* Sopra un righello il cursore è la freccia, anche sopra una maniglia che
    il righello copre; l'angolo fra i due apre un menu. */
 .draw-surface[data-ruler] {
@@ -1316,6 +1324,26 @@ html, body, #app {
   pointer-events: none;
   transform-origin: 0 0;
   forced-color-adjust: none;
+}
+/* Le carte delle tavole sotto il disegno, e i loro nomi sopra. */
+.draw-sheets {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Il nome sta sopra l'angolo della tavola, largo al più quanto lei, e gira
+   col foglio attorno all'angolo. */
+.draw-sheet-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform-origin: 0 0;
 }
 .draw-preview {
   position: absolute;
@@ -1847,6 +1875,7 @@ html, body, #app {
 .draw-properties,
 .draw-inspector,
 .draw-history,
+.draw-boards,
 .draw-access {
   display: flex;
   flex-direction: column;
@@ -2128,6 +2157,88 @@ html, body, #app {
 }
 .draw-history-list[aria-disabled="true"] > .draw-history-row {
   cursor: default;
+}
+
+/* Le tavole, come la cronologia: il titolo col conteggio e, in fondo alla
+   stessa riga, «Nuova tavola»; sotto, l'elenco delle tavole, che scorre e
+   di cui il pannello disegna solo le righe che si vedono. Una riga è il
+   triangolo della tavola di adesso, il numero, allineato a destra con le
+   cifre della stessa larghezza, il nome, che si accorcia, e la misura, che
+   si accorcia solo quando il pannello è stretto. Il campo del nome prende il
+   posto del nome e della misura. */
+.draw-boards-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.draw-boards-title {
+  margin: 0;
+}
+.draw-boards-add {
+  margin-inline-start: auto;
+}
+.draw-boards-empty {
+  flex: none;
+  margin: 0;
+}
+.draw-boards-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-boards-list {
+  position: relative;
+}
+.draw-board-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.draw-board-glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+}
+.draw-board-number {
+  flex: none;
+  min-width: 2em;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.draw-board-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-board-size {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-board-row[data-renaming] > .draw-board-name,
+.draw-board-row[data-renaming] > .draw-board-size {
+  display: none;
+}
+.draw-board-rename {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
 }
 
 /* La verifica dell'accessibilità scorre tutta insieme, con l'intestazione

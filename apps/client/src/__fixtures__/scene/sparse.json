@@ -907,7 +907,8 @@
           ]
         }
       }
-    ]
+    ],
+    "boards": []
   },
   "summary": {
     "version": 1,
@@ -917,6 +918,7 @@
       "Livello 1",
       "Appunti"
     ],
+    "boards": [],
     "counts": {
       "strokes": 5,
       "shapes": 12,

@@ -517,6 +517,19 @@ export class SceneIndexer {
     return units;
   }
 
+  /// Gli oggetti di `model` che una tavola porta con sé quando si sposta:
+  /// quelli che non sono bloccati né stanno in un livello bloccato, anche
+  /// nascosti o in un livello nascosto, che altrimenti si ritroverebbero
+  /// altrove quando tornano a vedersi. Il riquadro di uno nascosto è quello
+  /// che avrebbe se si vedesse.
+  movable(model: DocumentModel): Unit[] {
+    const units: Unit[] = [];
+    this.walk(model, (layer) => !layer.locked, [], (node, path, layer, parent, style) => {
+      if (node.details!.locked !== true) push(units, this.unit(node, path, layer, parent, style, true));
+    });
+    return units;
+  }
+
   /// Il riquadro di tutto ciò che `model` disegna, contorno compreso: anche
   /// gli oggetti dei livelli bloccati o nascosti, che l'indice non tocca ma
   /// che restano nel disegno. `null` se non disegna niente.
@@ -589,7 +602,7 @@ export class SceneIndexer {
           return;
         }
         const role = child.details.role;
-        if (role === "paper" || role === "title" || role === "desc") return;
+        if (role === "paper" || role === "board" || role === "title" || role === "desc") return;
         visit(child, [index], null, IDENTITY, rootStyle);
         return;
       }
@@ -625,10 +638,10 @@ export class SceneIndexer {
     return styleOf(INITIAL, this.builder.headInfo(model.root).attrs);
   }
 
-  /// L'oggetto `node`, se si vede.
-  private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style): Unit | null {
+  /// L'oggetto `node`, se si vede, o anche nascosto con `shown`.
+  private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, shown = false): Unit | null {
     const attrs = this.attrsOf(node);
-    if (attrs === null || hidden(attrs)) return null;
+    if (attrs === null || (!shown && hidden(attrs))) return null;
     const own = transformOf(attrs);
     const matrix = compose(parent, own);
     const inner = styleOf(style, attrs);
@@ -886,7 +899,7 @@ function pickable(node: ElementPart): boolean {
   return role !== undefined && !NOT_PICKABLE.has(role);
 }
 
-const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "title", "desc", "layer", "defs", "resource"]);
+const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "board", "title", "desc", "layer", "defs", "resource"]);
 
 /// Vero se `node` sta dentro `container`, a qualunque profondità.
 function within(node: ElementPart, container: ContainerNode): boolean {

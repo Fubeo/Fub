@@ -328,12 +328,13 @@ describe("la lettura di un documento (read.rs)", () => {
     expect(diagnostic.severity).toBe("info");
     expect(diagnostic.bytes).toEqual(block.bytes);
     expect("detail" in diagnostic).toBe(false);
-    expect(value.index).toEqual({ title: null, desc: null, texts: [], links: [], embeds: [] });
+    expect(value.index).toEqual({ title: null, desc: null, texts: [], links: [], embeds: [], boards: [] });
     expect(value.summary).toEqual({
       version: 1,
       foreign: false,
       truncated: false,
       layers: ["Uno"],
+      boards: [],
       counts: { strokes: 0, shapes: 0, texts: 0, images: 0, links: 0, foreign: 1 },
       ink: { samples: 0, duration: 0 },
       bbox: null,

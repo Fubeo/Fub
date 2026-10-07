@@ -29,6 +29,7 @@ export type ToolId =
   | "builder"
   | "scissors"
   | "width"
+  | "board"
   | "pen"
   | "highlighter"
   | "eraser"
@@ -70,6 +71,9 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "scissors", level: "expert", group: "pick", icon: "draw-scissors", label: "draw.tool.scissors", description: "draw.tool.scissors.hint", shortcut: "c" },
   // La lettera di Illustrator, che la vuole con Maiusc.
   { id: "width", level: "expert", group: "pick", icon: "draw-width", label: "draw.tool.width", description: "draw.tool.width.hint", shortcut: "w" },
+  // La lettera del Frame di Figma, dove le cornici sono le tavole: quella di
+  // Illustrator è la «O» con Maiusc, e qui la «O» è dell'ellisse.
+  { id: "board", level: "standard", group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
   { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
   { id: "highlighter", level: "standard", group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
   { id: "eraser", level: "essential", group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },

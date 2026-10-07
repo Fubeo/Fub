@@ -899,8 +899,9 @@ export function readPaste(text: string, file: string | null = null): PasteSource
       continue;
     }
     if (!fubdraw) continue;
-    const paper = element.local === "rect" && valueOf(element, NS_FUB, "role") === "paper";
-    if (paper || DOCUMENT_PARTS.has(element.local)) {
+    const role = valueOf(element, NS_FUB, "role");
+    const page = (element.local === "rect" && role === "paper") || (element.local === "view" && role === "board");
+    if (page || DOCUMENT_PARTS.has(element.local)) {
       dropped.add(child);
       continue;
     }

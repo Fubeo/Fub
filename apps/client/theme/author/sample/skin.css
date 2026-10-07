@@ -2126,6 +2126,17 @@ progress::-moz-progress-bar {
     0 0 0 1px var(--border),
     var(--shadow-sm);
 }
+/* Il nome di una tavola, sul tavolo sopra di lei: quello della tavola
+   scelta più scuro. */
+.draw-sheet-name {
+  padding-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-sheet-name[data-chosen] {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
 
 /* La griglia: righe grigie e trasparenti, che si vedono sulla carta bianca e
    sul tavolo di ogni tema. Una ogni cinque è più marcata, per contare. */
@@ -2405,6 +2416,7 @@ button.draw-isolation-crumb:hover {
 .draw-properties,
 .draw-inspector,
 .draw-history,
+.draw-boards,
 .draw-access {
   gap: var(--space-2);
   padding: var(--space-2) 0;
@@ -2603,6 +2615,74 @@ button.draw-isolation-crumb:hover {
   color: var(--text);
 }
 .draw-history-rename {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+/* Le tavole, come la cronologia. La tavola di adesso ha il fondo attivo, il
+   grassetto e il triangolo; la riga attiva, dove sono le frecce, ha l'anello
+   del fuoco quando l'elenco ce l'ha. Il numero e la misura sono in grigio,
+   e nel colore del testo sulla tavola di adesso, che ha il suo fondo. */
+.draw-boards-header,
+.draw-boards-empty {
+  padding: 0 var(--space-4);
+}
+.draw-boards-header {
+  gap: var(--space-1) var(--space-3);
+}
+.draw-boards-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-boards-count,
+.draw-boards-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-boards-add {
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-boards-list:focus-visible {
+  outline: none;
+}
+.draw-board-row {
+  padding: 0 var(--space-3);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-board-row:hover {
+  background: var(--overlay-hover);
+}
+.draw-board-row[aria-current="true"] {
+  background: var(--bg-active);
+  font-weight: var(--weight-bold);
+}
+.draw-boards-list:focus-visible > .draw-board-row[data-active] {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-board-number {
+  margin-inline-end: var(--space-3);
+}
+.draw-board-size {
+  margin-inline-start: var(--space-3);
+}
+.draw-board-glyph,
+.draw-board-number,
+.draw-board-size {
+  color: var(--muted);
+}
+.draw-board-row[aria-current="true"] > .draw-board-glyph,
+.draw-board-row[aria-current="true"] > .draw-board-number,
+.draw-board-row[aria-current="true"] > .draw-board-size {
+  color: var(--text);
+}
+.draw-board-rename {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);

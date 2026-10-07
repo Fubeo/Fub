@@ -50,6 +50,7 @@ import type {
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
+import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -61,6 +62,19 @@ type GraphBenchMetadata = Readonly<{
     nodes: readonly string[];
     edges: readonly { readonly from: string; readonly to: string }[];
     seed: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco delle tavole (`boards.mjs`) legge del disegno che
+/// naviga: dove sta, le tavole nel loro ordine, quanto è grande.
+type BoardsBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    boards: BoardsFixture["boards"];
+    objects: number;
+    elements: number;
+    bytes: number;
     digest: string;
   }> | null;
 }>;
@@ -113,6 +127,30 @@ globalThis.__fubGraphBench = Object.freeze({
         edges: GRAPH_FIXTURE.edges,
         seed: graphSeedParam === null ? 6 : Number(graphSeedParam),
         digest: GRAPH_FIXTURE.digest,
+      })
+    : null,
+});
+
+// `?boards=N` mette nel vault il disegno di N tavole del banco delle tavole
+// (`boards-fixture.ts`), accende la feature `draw`, che apre un `.svg` come
+// disegno, e mette l'editor al livello Standard, il primo che ha le tavole.
+// Senza, il vault e le impostazioni restano quelli che le foto conoscono.
+const boardsParam = params.get("boards");
+let BOARDS: BoardsFixture | null = null;
+if (boardsParam !== null) {
+  if (!/^[1-9]\d*$/.test(boardsParam)) throw new RangeError("boards must be a positive decimal integer");
+  BOARDS = boardsFixture(Number(boardsParam));
+}
+
+globalThis.__fubBoardsBench = Object.freeze({
+  fixture: BOARDS
+    ? Object.freeze({
+        doc: BOARDS_DOC,
+        boards: BOARDS.boards,
+        objects: BOARDS.objects,
+        elements: BOARDS.elements,
+        bytes: new TextEncoder().encode(BOARDS.text).length,
+        digest: BOARDS.digest,
       })
     : null,
 });
@@ -453,6 +491,30 @@ const SETTINGS: SettingEntry[] = [
     source: "default",
   },
 ];
+
+/// Il livello dell'editor dei disegni come lo dichiara il bundle `fub.draw`,
+/// a Standard: serve solo al banco delle tavole, e sta fuori da `SETTINGS`
+/// perché il pannello delle impostazioni si fotografa senza.
+const DRAW_LEVEL: SettingEntry = {
+  spec: {
+    key: "draw.level",
+    label: "Livello d'interfaccia",
+    description: "",
+    group: "Disegni",
+    scope: "vault",
+    kind: {
+      kind: "choice",
+      default: "essential",
+      options: [
+        { value: "essential", label: "Essenziale" },
+        { value: "standard", label: "Standard" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: "standard",
+  source: "vault",
+};
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
@@ -823,14 +885,15 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: CORPUS,
+  file: BOARDS === null ? CORPUS : { ...CORPUS, [BOARDS_DOC]: BOARDS.text },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
   commands: BENCH_COMMANDS,
-  settings: SETTINGS,
+  settings: BOARDS === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
+  ...(BOARDS === null ? {} : { draw: true }),
 };
 
 const host = createFakeHost(options);
@@ -845,6 +908,7 @@ const host = createFakeHost(options);
 /// codice che non condivide il grafo dei moduli con la pagina.
 declare global {
   var __fubGraphBench: GraphBenchMetadata;
+  var __fubBoardsBench: BoardsBenchMetadata;
   interface Window {
     bench: {
       emit: typeof host.emit;
