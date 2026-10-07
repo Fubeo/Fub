@@ -11431,7 +11431,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     if (seen === null || pixels === null) {
       closeTracing();
-      announce(t(blob === null ? "draw.image.gone" : "draw.image.unreadable"));
+      // Un file del vault che non si apre forse non c'è più; un data URI
+      // che non si legge non è un'immagine che il disegno sa leggere.
+      announce(t(blob === null && kind === "vault" ? "draw.image.gone" : "draw.image.unreadable"));
       return;
     }
     now.ready = { tracer: (options.tracer ?? defaultTracer)({ width: pixels.width, height: pixels.height, data: pixels.data }), target: seen.target };

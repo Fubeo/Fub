@@ -10192,4 +10192,13 @@ describe("«Ricalca immagine», dal livello Esperto", () => {
     expect(spoken()).toBe("Un’immagine dal web non si ricalca: mettila nel vault, e ricalca quella.");
     expect(bar().hidden).toBe(true);
   });
+
+  it("un data URI che non si legge lo dice, e la barra si chiude", async () => {
+    mount(DRAWING.replace(PNG_HREF, "data:image/png,%89PNG"), { level: "expert", imageCodec: pixelCodec(), tracer });
+    editor.select([IMAGE]);
+    traceButton().click();
+    await vi.waitFor(() => expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere."));
+    expect(bar().hidden).toBe(true);
+    expect(cover()).toBeNull();
+  });
 });
