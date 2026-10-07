@@ -140,6 +140,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-access": ["M12 2.75a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5z", "M5 8.5l7 1.5 7-1.5", "M12 10v4.5", "M8.5 21l3.5-6.5 3.5 6.5"],
   // L'elenco delle tavole: due fogli affiancati, ognuno col suo nome sopra.
   "draw-boards": ["M3 8.5h8v11H3z", "M14 8.5h7v7h-7z", "M3 5h5", "M14 5h4"],
+  // Presenta: uno schermo sul suo piede, col triangolo del via.
+  "draw-present": ["M3 4.5h18v11H3z", "M12 15.5V20", "M8.5 20h7", "M10.5 7.5l4 2.5-4 2.5z"],
   // Le forme: un quadrato, un cerchio e un triangolo.
   "draw-library": ["M3 3h8v8H3z", "M13 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M12 14l5 7H7z"],
   // I simboli: un rombo, come «Crea simbolo», sopra una pila di fogli.

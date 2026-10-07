@@ -169,6 +169,7 @@ export interface ToolbarContext {
   turnButton: HTMLButtonElement;
   pageButton: HTMLButtonElement;
   boardsButton: HTMLButtonElement;
+  presentButton: HTMLButtonElement;
   libraryButton: HTMLButtonElement;
   symbolsButton: HTMLButtonElement;
   objectsButton: HTMLButtonElement;
@@ -560,6 +561,8 @@ export function installToolbar(ctx: EditorContext): void {
       ctx.orderBoard(id, to);
     },
     onLeave: () => surface.focus({ preventScroll: true }),
+    onPresent: (id) => ctx.present(id),
+    canPresent: () => ctx.has("present"),
   });
   ctx.boardsPanel = boardsPanel;
   boardsPanel.element.hidden = true;
@@ -737,6 +740,10 @@ export function installToolbar(ctx: EditorContext): void {
   ctx.boardsButton = boardsButton;
   boardsButton.setAttribute("aria-expanded", "false");
   boardsButton.setAttribute("aria-controls", boardsPanel.element.id);
+  // Presenta, dal livello Standard: lo schermo intero, tavola per tavola.
+  const presentButton = button(viewGroup, "draw-button", () => t("draw.present"), "draw-present", () => ctx.present(null));
+  ctx.presentButton = presentButton;
+  presentButton.setAttribute("aria-keyshortcuts", "F5");
   // Le forme, dal livello Standard.
   const libraryButton = button(viewGroup, "draw-button", () => t("draw.library"), "draw-library", () => ctx.showLibrary(libraryPanel.element.hidden));
   ctx.libraryButton = libraryButton;

@@ -61,6 +61,7 @@ export interface BoardToolContext {
   boardEnd: (g: BoardGesture) => void;
   newBoard: () => void;
   goToBoard: (id: string) => void;
+  present: (from: string | null) => void;
   orderBoard: (id: string, to: number) => void;
   duplicateBoard: (board: Board | null, delta?: readonly [number, number] | null, note?: string) => void;
   duplicateSheet: () => void;
@@ -449,6 +450,24 @@ export function installBoardTool(ctx: EditorContext): void {
     if (at >= 0) visitBoard(at, true);
   };
   ctx.goToBoard = goToBoard;
+
+  /// Presenta il disegno dalla tavola `from`, o dalla prima, col modulo che
+  /// arriva solo adesso. All'uscita il fuoco torna al foglio, sulla tavola
+  /// dove si era arrivati, scelta e inquadrata.
+  const present = (from: string | null): void => {
+    const model = ctx.engine.model;
+    if (model === null) return;
+    const text = ctx.engine.text;
+    cancelGesture();
+    import("../present").then(
+      (module) => module.present({ text, model, page: ctx.scene.root.page, extent: indexer.extent(model), from, images: ctx.options.images, onExit: (id) => {
+        ctx.surface.focus({ preventScroll: true });
+        if (id !== null) goToBoard(id);
+      } }, ctx.life),
+      () => announce(t("draw.present.failed")),
+    );
+  };
+  ctx.present = present;
 
   /// Dall'elenco: porta la tavola `id` al posto `to`, contato da 0, fra le
   /// tavole, in un passo, e lo dice.

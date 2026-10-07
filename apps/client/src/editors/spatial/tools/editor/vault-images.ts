@@ -417,6 +417,8 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (ctx.current === null) {
         keyboardAdd();
       }
+    } else if (onSurface && event.key === "F5" && !mod && !event.altKey && ctx.has("present")) {
+      ctx.present(event.shiftKey ? ctx.currentBoard()?.id ?? null : null);
     } else if (event.key === "?") {
       void keys();
     } else if ((event.key === "Delete" || event.key === "Backspace") && builderKeysOn() && buildChosen(true)) {

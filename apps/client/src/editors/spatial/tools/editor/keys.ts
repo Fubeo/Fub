@@ -12,7 +12,7 @@ import type { NodeKey } from "../nodes";
 import { GRID_MAJOR } from "../grid";
 import { sceneArrow } from "../../view";
 import type { Unit } from "../hit";
-import { featuresFor, levelsAbove, toolsOf, type Feature, type Level } from "../registry";
+import { featuresFor, levelsAbove, presentKeyGroups, presentStartRows, toolsOf, type Feature, type Level } from "../registry";
 import {
   ATTRIBUTES_BINDING,
   BAR_FEATURES,
@@ -860,6 +860,7 @@ export function installKeys(ctx: EditorContext): void {
         ["-", t("draw.zoom_out")],
         ["0", t("draw.keys.actual")],
         ["Shift-1", t("draw.fit")],
+        ...presentStartRows(at, t),
         ...(at.has("gestures")
           ? ([["4", t("draw.turn.left")], ["6", t("draw.turn.right")], ["5", t("draw.turn.straighten")], ["Shift-F10", t("draw.keys.radial")]] as const)
           : []),
@@ -880,6 +881,7 @@ export function installKeys(ctx: EditorContext): void {
       ],
     },
     ...boardListKeys(at),
+    ...presentKeyGroups(at, t),
     ...historyKeys(at),
     ...accessKeys(at),
   ];

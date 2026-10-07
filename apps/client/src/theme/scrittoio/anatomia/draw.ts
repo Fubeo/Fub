@@ -73,5 +73,13 @@ export const DRAW: PartAnatomy = {
         "pdf-list-marks",
       ],
     },
+    {
+      name: "draw-presentation",
+      states: [S("rest"), S("focused")],
+      hooks: [
+        "draw-present-board", "draw-present-stage", "draw-present-ink", "draw-present-laser", "draw-present-end",
+        "draw-present-end-title", "draw-present-end-hint",
+      ],
+    },
   ],
 };

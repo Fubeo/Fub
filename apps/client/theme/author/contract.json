@@ -783,6 +783,13 @@
     "pdf-list-page",
     "pdf-list-body",
     "pdf-list-marks",
+    "draw-present-board",
+    "draw-present-stage",
+    "draw-present-ink",
+    "draw-present-laser",
+    "draw-present-end",
+    "draw-present-end-title",
+    "draw-present-end-hint",
     "media-image",
     "zoom-view",
     "zoom-stage",
@@ -2974,6 +2981,23 @@
       ]
     },
     {
+      "name": "draw-presentation",
+      "part": "draw",
+      "hooks": [
+        "draw-present-board",
+        "draw-present-stage",
+        "draw-present-ink",
+        "draw-present-laser",
+        "draw-present-end",
+        "draw-present-end-title",
+        "draw-present-end-hint"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "markdown-preview",
       "part": "media",
       "hooks": [
@@ -5026,10 +5050,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1017,
+    "hooks": 1024,
     "state_names": 7,
-    "assigned_states": 606,
-    "components": 178,
+    "assigned_states": 608,
+    "components": 179,
     "preference_tokens": 121
   }
 }

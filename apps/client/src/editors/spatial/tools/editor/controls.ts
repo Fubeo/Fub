@@ -51,7 +51,7 @@ export function installControls(ctx: EditorContext): void {
     life, has, relabels, drawingFonts, styles, style, widthsNow, root, surface, toolButtons, insertGroup, imageButton, colorButtons, customLabel,
     customButton, customChip, moreGroup, moreButton, widthButtons, showWidthLabels, undoButton, redoButton, deleteButton, selectionButton,
     propertiesButton, layerGroup, layersButton, layerText, layerStateText, historyPanel, accessPanel, boardsPanel, libraryPanel, symbolsPanel, inspector,
-    panel, pageButton, boardsButton, libraryButton, symbolsButton, historyButton, accessButton, attributesButton, titleInput, arrangeBar, nameArrange,
+    panel, pageButton, boardsButton, presentButton, libraryButton, symbolsButton, historyButton, accessButton, attributesButton, titleInput, arrangeBar, nameArrange,
     arrangeButtons, textButton, duplicateButton, groupButton, ungroupButton, linkText, openLinkText, linkButton, openLinkButton, unlinkButton, orderButton,
     intoButton, alignButton, opacityField, opacityInput, connectButton, shapeButton, cropButton, uncropButton, transformButton, applyButton, pathButton,
     booleanButton, maskButton, motifButton, symbolButton, detachButton, repeatButton, outlineButton, traceButton, textPathButton, nodesBar,
@@ -548,6 +548,7 @@ export function installControls(ctx: EditorContext): void {
     boardsButton.hidden = !has("board");
     if (boardsButton.hidden && !boardsPanel.element.hidden) showBoards(false);
     syncBoards();
+    presentButton.hidden = !has("present");
     libraryButton.hidden = !has("library");
     if (libraryButton.hidden && !libraryPanel.element.hidden) showLibrary(false);
     libraryPanel.update({ editable: canEdit });

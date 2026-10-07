@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
-import { createBoardsPanel, type BoardRow, type BoardsPanel, type BoardsView } from "./boards-panel";
+import { createBoardsPanel, type BoardRow, type BoardsPanel, type BoardsPanelOptions, type BoardsView } from "./boards-panel";
 import { ROW_PX } from "./objects";
 
 const NAMES = ["Copertina", "Evaporazione", "Condensazione", "Precipitazione", "Raccolta"];
@@ -38,8 +38,8 @@ let added: number;
 const view = (): BoardsView => ({ ...state, boards: [...state.boards] });
 
 /// Il pannello su un disegno finto, che cambia come gli si chiede, come
-/// farebbe l'editor.
-function mount(more: Partial<State> = {}): BoardsPanel {
+/// farebbe l'editor; `extra` aggiunge o cambia ciò che l'editor gli dà.
+function mount(more: Partial<State> = {}, extra: Partial<BoardsPanelOptions> = {}): BoardsPanel {
   state = { boards: boardsOf(5), current: "b1", editable: true, canAdd: true, paged: true, ...more };
   panel = createBoardsPanel(life, {
     onGo: (id) => {
@@ -85,6 +85,7 @@ function mount(more: Partial<State> = {}): BoardsPanel {
       panel.update(view());
     },
     onLeave: () => calls.push("leave"),
+    ...extra,
   });
   host.append(panel.element);
   panel.update(view());
@@ -750,6 +751,30 @@ describe("la sola lettura", () => {
     panel.update(view());
     expect(addButton().disabled).toBe(false);
     expect(hint()).toBe("Invio porta alla tavola; F2 la rinomina, Ctrl+D la duplica, Alt+↑ e Alt+↓ la spostano, Canc la elimina; Maiusc+F10 apre il suo menu.");
+  });
+});
+
+describe("«Presenta da qui»", () => {
+  it("c'è quando l'editor presenta, anche in sola lettura, e presenta da quella tavola", () => {
+    let can = true;
+    mount({ editable: false }, { onPresent: (id) => calls.push(`present ${id}`), canPresent: () => can });
+    rightClick(row("b3"));
+    expect(entries().map(readOf)).toEqual([
+      ["Vai", "", "Enter", null],
+      ["Presenta da qui", "", "", null],
+      ["Rinomina…", "", "F2", "true"],
+      ["Duplica", "", "Ctrl+D", "true"],
+      ["Sposta su", "", "Alt+↑", "true"],
+      ["Sposta giù", "", "Alt+↓", "true"],
+      ["Elimina", "", "Delete", "true"],
+    ]);
+    entry("Presenta da qui").click();
+    expect(calls).toEqual(["present b3"]);
+    // Senza la parte, la voce non c'è: lo chiede quando il menu si apre.
+    can = false;
+    rightClick(row("b2"));
+    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent)).not.toContain("Presenta da qui");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 });
 
