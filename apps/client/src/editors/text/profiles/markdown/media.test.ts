@@ -74,6 +74,61 @@ describe("i media del vault dentro una nota", () => {
     }
   });
 
+  it("un disegno con un heading mostra la sua tavola, o tutto per il titolo, e un altro nome non si risolve", async () => {
+    const HEAD = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1"';
+    const BODY = '<title>Storia</title>'
+      + '<view id="b00000001" fub:role="board" viewBox="0 0 600 400"><title>Copertina</title></view>'
+      + '<view id="b00000002" fub:role="board" viewBox="700 0 600 400"><title>Copertina</title></view>'
+      + '<view id="b00000003" fub:role="board" viewBox="0 500 300 200"><title>Storia</title></view>'
+      + '<text font-family="serif">Casa</text></svg>';
+    const DRAWING = `${HEAD} viewBox="0 0 1300 900" width="1300" height="900">${BODY}`;
+    const blobs = new Map<string, Blob>();
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      const url = `blob:disegno-${blobs.size + 1}`;
+      blobs.set(url, blob as Blob);
+      return url;
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    try {
+      const root = html(
+        '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Copertina">storia.svg</span>'
+          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Storia">storia.svg</span>'
+          + '<span class="embed" data-embed-page="storia.svg">storia.svg</span>'
+          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Retro">storia.svg</span>'
+          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="copertina">storia.svg</span>'
+          + '<span class="embed" data-embed-page="grande.svg" data-embed-heading="Retro">grande.svg</span>',
+      );
+      const { media } = port({ "storia.svg": "Disegni/storia.svg", "grande.svg": "Disegni/grande.svg" });
+      media.read = async (id) => (id === "Disegni/grande.svg" ? null : new Blob([DRAWING], { type: "image/svg+xml" }));
+      await hydrateVaultMedia(root, "Note/qui.md", same, openLifetime(), media);
+      const [cover, titled, whole, unknown, cased, large] = Array.from(root.querySelectorAll<HTMLElement>(".embed"));
+      const shown = (slot: HTMLElement) => blobs.get(slot.querySelector("img")!.getAttribute("src")!)!.text();
+
+      // La tavola: la prima che si chiama così, col suo rettangolo.
+      expect(await shown(cover!)).toBe(`${HEAD} viewBox="0 0 600 400" width="600" height="400">${BODY}`);
+      expect(cover!.querySelector("img")!.alt).toBe("storia.svg#Copertina");
+      expect(cover!.dataset.vaultMedia).toBe("loaded");
+      // Il titolo è il disegno intero, prima della tavola che si chiama come
+      // lui; senza heading, lo stesso.
+      expect(await shown(titled!)).toBe(DRAWING);
+      expect(titled!.querySelector("img")!.alt).toBe("storia.svg#Storia");
+      expect(await shown(whole!)).toBe(DRAWING);
+      expect(whole!.querySelector("img")!.alt).toBe("storia.svg");
+      // Un nome che non è una sezione non si risolve, come un embed che non
+      // si trova: i nomi si confrontano esatti.
+      for (const slot of [unknown!, cased!]) {
+        expect(slot.dataset.vaultMedia).toBe("unresolved");
+        expect(slot.classList.contains("unresolved")).toBe(true);
+        expect(slot.querySelector("img")).toBeNull();
+      }
+      // Un disegno che non si legge si mostra dal file, come oggi.
+      expect(large!.querySelector("img")!.getAttribute("src")).toBe("fub-asset://localhost/h-Disegni/grande.svg");
+      expect(blobs.size).toBe(3);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("risolve col kernel, serve da fub-asset e chiude i lease allo smontaggio", async () => {
     const root = html(
       '<p><img data-vault-src="Risorse/a.png" alt="a"><img src="https://esterno/b.png"></p>'
